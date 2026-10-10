@@ -9,8 +9,11 @@ import { onScreen } from "../window-management/floating/float";
 import type { Geometry, Screenful } from "../window-management/placement";
 import { placementsOf } from "../window-management/placement";
 import type { Rect } from "../window-management/rect";
+import { NodeKind, windowsIn } from "../window-management/tree/node";
 import type { WindowState } from "../window-management/window-state";
 import { currentOn, workspaceOn } from "../window-management/window-state";
+import type { Workspace } from "../window-management/workspace";
+import { fullscreenOn } from "../window-management/workspace";
 
 /** One screen, as the stage draws windows on it. */
 export type StageScreen = {
@@ -22,8 +25,11 @@ export type StageScreen = {
    * moves and resizes are converted back.
    */
   floats: readonly Float[];
-  /** The fullscreen window, or `undefined` if none. */
-  fullscreenId: string | undefined;
+  /**
+   * The fullscreen window or group: whether it is a group, and every window
+   * in it. `undefined` if none.
+   */
+  fullscreen: { group: boolean; windows: readonly string[] } | undefined;
   geometry: Geometry;
   /** The layout of every window on it, and the tabs of any container. */
   screenful: Screenful;
@@ -47,11 +53,21 @@ export const stageScreensOf = (
         floats: workspace.floats.map((float) =>
           onScreen(float, geometry.screen),
         ),
-        fullscreenId: workspace.fullscreen?.id,
+        fullscreen: fullscreenOf(workspace),
         geometry,
         screenful: placementsOf(state, geometry),
       };
     });
+
+const fullscreenOf = (workspace: Workspace): StageScreen["fullscreen"] => {
+  const full = fullscreenOn(workspace);
+  return full?.tiling.root === undefined
+    ? undefined
+    : {
+        group: full.tiling.root.kind === NodeKind.Container,
+        windows: windowsIn(full.tiling.root),
+      };
+};
 
 /**
  * The rectangles a window can fill on a screen: the workspace (screen minus the

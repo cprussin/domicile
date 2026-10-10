@@ -908,6 +908,7 @@ describe("the keyed commands", () => {
     expect(workspaceHere(state).fullscreen).toEqual({
       global: false,
       id: APP("kitty"),
+      up: 0,
     });
   });
 
@@ -1269,6 +1270,56 @@ describe("a tiled window dragged across screens", () => {
   });
 });
 
+describe("the buttons on a tab group's strip", () => {
+  /** Kitty and the editor tabbed on the left screen; a terminal on the right. */
+  const twoScreens = () =>
+    reduce(
+      desktop("kitty", "editor"),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
+      WindowAction.WorkspaceSelected("2"),
+      WindowAction.AppAppeared("term", "term"),
+    );
+  /** The tab group, named by its open tab, as its strip names it. */
+  const GROUP = { id: APP("editor"), up: 1 };
+
+  it("floats the whole group, from another screen", () => {
+    const state = reduce(twoScreens(), WindowAction.GroupFloated(GROUP));
+    const left = workspaceOn(state, "left");
+
+    expect(windowsOf(left.tiling)).toEqual([]);
+    expect(left.floats.map(({ root }) => windowsIn(root))).toEqual([
+      [APP("kitty"), APP("editor")],
+    ]);
+    expect(state.focused).toBe("left");
+  });
+
+  it("fills the screen with the whole group, and gives it back", () => {
+    const full = reduce(twoScreens(), WindowAction.GroupFullscreened(GROUP));
+
+    expect(workspaceOn(full, "left").fullscreen).toEqual({
+      global: false,
+      ...GROUP,
+    });
+    expect(
+      workspaceOn(reduce(full, WindowAction.GroupFullscreened(GROUP)), "left")
+        .fullscreen,
+    ).toBeUndefined();
+  });
+
+  it("fills the screen with a floating group", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.FloatToggled(),
+      WindowAction.GroupFullscreened(GROUP),
+    );
+
+    expect(workspaceHere(state).fullscreen).toEqual({
+      global: false,
+      ...GROUP,
+    });
+  });
+});
+
 describe("a tab group dragged by its strip", () => {
   /** Kitty and the editor tabbed on the left screen; a terminal on the right. */
   const twoScreens = () =>
@@ -1423,6 +1474,7 @@ describe("the buttons on a window's own title bar", () => {
     expect(workspaceHere(state).fullscreen).toEqual({
       global: false,
       id: APP("kitty"),
+      up: 0,
     });
     expect(activeIdOf(state)).toBe(APP("kitty"));
   });

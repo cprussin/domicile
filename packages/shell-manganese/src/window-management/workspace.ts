@@ -29,12 +29,13 @@ import { movedBy, pushedOff, pushedOn } from "./tree/move";
 import type { LayoutNode } from "./tree/node";
 import { Layout, LayoutNode as Node, NodeKind, windowsIn } from "./tree/node";
 import type { NodeRef } from "./tree/path";
-import { nodeAt, pathToRef } from "./tree/path";
+import { nodeAt, pathTo, pathToRef } from "./tree/path";
 import { removed, removedAt } from "./tree/remove";
 import { resized } from "./tree/resize";
 import { stretched } from "./tree/stretch";
 import type { Tiling } from "./tree/tiling";
 import {
+  focusChainOf,
   focusedChild,
   focusedIdOf,
   focusedNodeOf,
@@ -49,11 +50,13 @@ import {
   withFocusOn,
 } from "./tree/tiling";
 
-/** A window filling the screen, and how much of the desktop it fills. */
-export type Fullscreen = {
+/**
+ * A window or group filling the screen, and how much of the desktop it fills.
+ * A group is named by a window inside it, as a {@link NodeRef}.
+ */
+export type Fullscreen = NodeRef & {
   /** Whether it covers every screen rather than the one it is on. */
   global: boolean;
-  id: string;
 };
 
 export type Workspace = {
@@ -67,7 +70,7 @@ export type Workspace = {
    * windows.
    */
   floatFocus: string | undefined;
-  /** The window filling the screen, or `undefined` when none is. */
+  /** The window or group filling the screen, or `undefined` when none is. */
   fullscreen: Fullscreen | undefined;
   /** The workspace's name in the config, `1` through `10`. */
   name: string;
@@ -164,7 +167,7 @@ export const nodeTiledIn = (
 export const sentOff = (
   workspace: Workspace,
 ): { node: LayoutNode; rest: Workspace } | undefined => {
-  const { floatFocus, fullscreen, tiling } = workspace;
+  const { floatFocus, tiling } = workspace;
   if (floatFocus !== undefined) {
     return {
       node: Node.Window(floatFocus),
@@ -176,14 +179,10 @@ export const sentOff = (
     const node = focusedNodeOf(tiling);
     return {
       node,
-      rest: {
+      rest: fullscreenKept(workspace, {
         ...workspace,
-        fullscreen:
-          fullscreen !== undefined && windowsIn(node).includes(fullscreen.id)
-            ? undefined
-            : fullscreen,
         tiling: removedAt(tiling.root, focusPathOf(tiling.root, tiling.depth)),
-      },
+      }),
     };
   }
 };
@@ -191,8 +190,8 @@ export const sentOff = (
 /**
  * The workspace without the window `id`, wherever it was.
  *
- * Clears fullscreen if it was that window, and moves the keyboard to a window
- * that still exists.
+ * Keeps the rest of a fullscreen group fullscreen (see {@link keptFrom}), and
+ * moves the keyboard to a window that still exists.
  */
 export const closed = (workspace: Workspace, id: string): Workspace => {
   const from = floatOn(workspace, id);
@@ -200,7 +199,7 @@ export const closed = (workspace: Workspace, id: string): Workspace => {
   const floats = workspace.floats
     .map((float) => (float === from ? left : float))
     .filter((float) => float !== undefined);
-  return {
+  const rest = {
     ...workspace,
     // Focus the rest of its group, else the front float, else the tiling.
     floatFocus:
@@ -208,10 +207,9 @@ export const closed = (workspace: Workspace, id: string): Workspace => {
         ? focusIn(left ?? floats.at(-1))
         : workspace.floatFocus,
     floats,
-    fullscreen:
-      workspace.fullscreen?.id === id ? undefined : workspace.fullscreen,
     tiling: removed(workspace.tiling, id),
   };
+  return fullscreenKept(workspace, rest);
 };
 
 /**
@@ -467,20 +465,76 @@ export const containerLaidOut = (
 export const splitFlipped = (workspace: Workspace): Workspace =>
   inLayer(workspace, splitToggled);
 
-/** `fullscreen` / `fullscreen toggle global` on the focused window. */
+/**
+ * `fullscreen` / `fullscreen toggle global` on the focused window or
+ * `focus parent` selection.
+ */
 export const fullscreenToggled = (
   workspace: Workspace,
   global: boolean,
 ): Workspace => {
-  const id = focusedOn(workspace);
+  const target = commandedOn(workspace);
   const was = workspace.fullscreen;
-  if (id === undefined) {
+  if (target === undefined) {
     return workspace;
-  } else if (was?.id === id && was.global === global) {
+  } else if (
+    was !== undefined &&
+    was.global === global &&
+    sameNode(workspace, was, target)
+  ) {
     return { ...workspace, fullscreen: undefined };
   } else {
-    return { ...workspace, fullscreen: { global, id } };
+    return { ...workspace, fullscreen: { ...target, global } };
   }
+};
+
+/**
+ * The fullscreen window or group as a tiling of its own, and whether it fills
+ * every screen. `undefined` when none is fullscreen. Commands target inside it
+ * as they do in its tiling or float.
+ */
+export const fullscreenOn = (
+  workspace: Workspace,
+): { global: boolean; tiling: Tiling } | undefined => {
+  const { fullscreen } = workspace;
+  if (fullscreen === undefined) {
+    return undefined;
+  } else {
+    const layer = floatOn(workspace, fullscreen.id) ?? workspace.tiling;
+    const root = rootHolding(workspace, fullscreen.id);
+    const path = pathToRef(root, fullscreen);
+    const node = nodeAt(root, path);
+    // Whether the keyboard is inside it, so a selection inside it carries over.
+    const focused =
+      focusChainOf(root).slice(0, path.length).join() === path.join();
+    return {
+      global: fullscreen.global,
+      tiling: {
+        // A selection above it selects all of it.
+        depth: focused
+          ? Math.max(0, layer.depth - path.length)
+          : focusChainOf(node).length,
+        root: node,
+      },
+    };
+  }
+};
+
+/**
+ * `after`, a change to `before`, with the fullscreen it kept. See
+ * {@link keptFrom}. A fullscreen `after` set itself is kept as is.
+ */
+export const fullscreenKept = (
+  before: Workspace,
+  after: Workspace,
+): Workspace => {
+  const was = before.fullscreen;
+  const kept =
+    was === undefined || after.fullscreen !== was
+      ? after.fullscreen
+      : keptFrom(before, after, was);
+  // The same object when nothing changed, so React skips re-rendering.
+  return kept === after.fullscreen ? after : { ...after, fullscreen: kept };
 };
 
 /** A floating window dragged to a new corner of the desktop. */
@@ -527,14 +581,26 @@ export const floatSized = (
   );
 
 /**
- * Focuses the tiled node `held` names, with commands on it, as `focus parent`
- * would select it.
+ * Focuses the node `held` names, tiled or floating, with commands on it, as
+ * `focus parent` would select it.
  */
-export const tiledHeld = (workspace: Workspace, held: NodeRef): Workspace => ({
-  ...workspace,
-  floatFocus: undefined,
-  tiling: withCommandsOn(workspace.tiling, tiledNodeOf(workspace, held)),
-});
+export const nodeHeld = (workspace: Workspace, held: NodeRef): Workspace => {
+  const float = floatOn(workspace, held.id);
+  if (float === undefined) {
+    return {
+      ...workspace,
+      floatFocus: undefined,
+      tiling: withCommandsOn(workspace.tiling, tiledNodeOf(workspace, held)),
+    };
+  } else {
+    const node = nodeAt(float.root, pathToRef(float.root, held));
+    return withFloat(
+      floatFocused(workspace, focusedWindowIn(node)),
+      held.id,
+      (focused) => retiled(focused, (tiling) => withCommandsOn(tiling, node)),
+    );
+  }
+};
 
 /**
  * A tiled window or group dragged onto a window and let go: onto its `edge`,
@@ -704,6 +770,100 @@ const withFloat = (
       float === held ? into(float) : float,
     ),
   };
+};
+
+/**
+ * The node commands target, in the float with the keyboard or else the
+ * tiling. `undefined` on an empty workspace.
+ */
+const commandedOn = (workspace: Workspace): NodeRef | undefined => {
+  const { floatFocus } = workspace;
+  const { depth, root } =
+    floatFocus === undefined
+      ? workspace.tiling
+      : floatHolding(workspace, floatFocus);
+  return root === undefined
+    ? undefined
+    : {
+        id: focusedWindowIn(root),
+        up: focusChainOf(root).length - focusPathOf(root, depth).length,
+      };
+};
+
+/** Whether `a` and `b` name one node, tiled or floating. */
+const sameNode = (workspace: Workspace, a: NodeRef, b: NodeRef): boolean => {
+  const root = rootHolding(workspace, a.id);
+  return (
+    root === rootHolding(workspace, b.id) &&
+    pathToRef(root, a).join() === pathToRef(root, b).join()
+  );
+};
+
+/** The root of the tiling or float the window `id` is in. */
+const rootHolding = (workspace: Workspace, id: string): LayoutNode => {
+  const root = floatOn(workspace, id)?.root ?? workspace.tiling.root;
+  if (root === undefined) {
+    throw new Error(`workspace ${workspace.name}: no window ${id}`);
+  } else {
+    return root;
+  }
+};
+
+/**
+ * The fullscreen `was` of `before`, as it stands in `after`.
+ *
+ * A window stays fullscreen while it is on the workspace. A group keeps the
+ * highest node over one of its windows that holds no window but its own and
+ * any opened since, so it follows its windows through splits, moves and
+ * closes. It ends with its last window.
+ */
+const keptFrom = (
+  before: Workspace,
+  after: Workspace,
+  was: Fullscreen,
+): Fullscreen | undefined => {
+  const present = windowsOn(after);
+  if (was.up === 0) {
+    return present.includes(was.id) ? was : undefined;
+  } else {
+    const root = rootHolding(before, was.id);
+    const opened = present.filter((id) => !holds(before, id));
+    const own = [...windowsIn(nodeAt(root, pathToRef(root, was))), ...opened];
+    const left = own.filter((id) => present.includes(id));
+    const anchor = left.includes(was.id) ? was.id : left[0];
+    if (anchor === undefined) {
+      return undefined;
+    } else {
+      const up = ownedAbove(rootHolding(after, anchor), anchor, left);
+      return anchor === was.id && up === was.up
+        ? was
+        : { ...was, id: anchor, up };
+    }
+  }
+};
+
+/**
+ * How many levels above window `id` the highest node is that holds only
+ * windows in `own`.
+ */
+const ownedAbove = (
+  root: LayoutNode,
+  id: string,
+  own: readonly string[],
+): number => {
+  const path = pathTo(root, id);
+  if (path === undefined) {
+    throw new Error(`layout tree: no window ${id}`);
+  } else {
+    // The window itself when no container qualifies.
+    const top =
+      [...path.keys()].find((length) =>
+        windowsIn(nodeAt(root, path.slice(0, length))).every((inside) =>
+          own.includes(inside),
+        ),
+      ) ?? path.length;
+    return path.length - top;
+  }
 };
 
 /** The box the window `id` floats in. Throws for a window that is tiled. */

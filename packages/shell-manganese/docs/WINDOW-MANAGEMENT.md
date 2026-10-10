@@ -92,6 +92,14 @@ The pointer follows keyboard focus (sway's `mouse_warping container`):
 For how warping, browser-window focus and modifier drags work, see
 [FOCUS-INTERNALS.md](FOCUS-INTERNALS.md).
 
+## Fullscreen
+
+- **Meta+F** fills the screen with the focused window, or with the group after
+  **Meta+A**. A fullscreen group keeps its layout and tab strips.
+- A fullscreen group follows its windows: it takes in windows opened inside it
+  and survives splits, moves and closes inside it (`fullscreenKept`). It ends
+  with its last window.
+
 ## Floating windows
 
 - **Meta+Shift+Tab** floats the window, or tiles it again at the tiling focus.
@@ -152,7 +160,8 @@ For how warping, browser-window focus and modifier drags work, see
   does not make the window transparent.
 - **Shared edges resize without a modifier**, over the window's border and the
   gap beside it (`tiled/borders.ts`).
-- Fullscreen windows and hidden tabs cannot be dragged.
+- Fullscreen windows and hidden tabs cannot be dragged, nor can a fullscreen
+  group by its strip.
 
 ## Title bars
 
@@ -178,6 +187,8 @@ For how warping, browser-window focus and modifier drags work, see
 - Tabs are at most 240px wide, so the strip always runs on past the last one.
 - A "+" past a tabbed strip's last tab focuses the strip's open tab and opens
   the launcher, so the launched window opens as a tab beside it.
+- Two buttons at the far end of a tabbed strip float/tile and fullscreen the
+  whole group (`StripEnd.tsx`). Each selects the group as Meta+A does.
 - A hidden tab shows only its close button. Dividers separate hidden tabs.
 - A tab for a nested container shows the name of its last-focused window, an
   icon for its layout and its window count.

@@ -77,6 +77,10 @@ type Props = {
   onGrab: (id: string) => void;
   /** A tiled group dropped where it was aimed, on any screen. */
   onGroupDropOn: (group: NodeRef, aim: Aim) => void;
+  /** Toggles floating from a tab group's strip. */
+  onGroupFloat: (group: NodeRef) => void;
+  /** Toggles fullscreen from a tab group's strip. */
+  onGroupFullscreen: (group: NodeRef) => void;
   /** A tiled group taken hold of by the empty end of its tab strip. */
   onGroupGrab: (group: NodeRef) => void;
   /**
@@ -134,6 +138,8 @@ export const Stage = ({
   onFullscreen,
   onGrab,
   onGroupDropOn,
+  onGroupFloat,
+  onGroupFullscreen,
   onGroupGrab,
   onHover,
   onIcon,
@@ -185,7 +191,7 @@ export const Stage = ({
       {motions.drawn.map(({ motion, placement, restack, screen, window }) => {
         const float = floats.find((found) => floatHolds(found, window.id));
         return placement !== undefined &&
-          !fillsScreen(screens, window.id) &&
+          !inFullscreen(screens, window.id) &&
           float !== undefined ? (
           <Sliding
             frame={placement.frame}
@@ -330,6 +336,7 @@ export const Stage = ({
             <StripEnd
               depth={strip.open ? raised(depth) : depth}
               float={floating}
+              fullscreen={groupFills(screens, strip.group.windows)}
               group={strip.group}
               // By group: a strip's last tab and its parent strip's last tab can
               // name one window.
@@ -338,6 +345,12 @@ export const Stage = ({
               onDrop={onDrop}
               onDropOn={(aim) => {
                 onGroupDropOn(strip.group.node, aim);
+              }}
+              onFloat={() => {
+                onGroupFloat(strip.group.node);
+              }}
+              onFullscreen={() => {
+                onGroupFullscreen(strip.group.node);
               }}
               onGrab={() => {
                 if (floating === undefined) {
@@ -489,8 +502,8 @@ export const Stage = ({
       )}
       {/*
         Floating window borders, at each float's depth so windows above cover
-        them. None for fullscreen floats. One set per float, since a floating
-        group is one box.
+        them. None for fullscreen floats, alone or in a group. One set per
+        float, since a floating group is one box.
       */}
       {motions.drawn.map(({ placement, screen, window }) => {
         const on = screenNamed(screens, screen);
@@ -500,7 +513,7 @@ export const Stage = ({
         return placement === undefined ||
           on === undefined ||
           floating === undefined ||
-          fillsScreen(screens, window.id)
+          inFullscreen(screens, window.id)
           ? undefined
           : floatBordersOf(floating).map(({ cursor, grip, rect }) => (
               <FloatBorder
@@ -722,9 +735,27 @@ const hangingOn = (
         )),
   );
 
-/** Whether the window `id` is fullscreen. */
+/** Whether the window `id` is fullscreen on its own. */
 const fillsScreen = (screens: readonly StageScreen[], id: string): boolean =>
-  screens.some(({ fullscreenId }) => fullscreenId === id);
+  screens.some(
+    ({ fullscreen }) =>
+      fullscreen?.group === false && fullscreen.windows.includes(id),
+  );
+
+/** Whether the window `id` is fullscreen, on its own or in a group. */
+const inFullscreen = (screens: readonly StageScreen[], id: string): boolean =>
+  screens.some(({ fullscreen }) => fullscreen?.windows.includes(id) === true);
+
+/** Whether the group of `windows` is fullscreen. */
+const groupFills = (
+  screens: readonly StageScreen[],
+  windows: readonly string[],
+): boolean =>
+  screens.some(
+    ({ fullscreen }) =>
+      fullscreen?.group === true &&
+      fullscreen.windows.join() === windows.join(),
+  );
 
 /** The screen named `name`, if any. */
 const screenNamed = (
@@ -752,7 +783,7 @@ const tiledTargets = (placements: Screenful["placements"]): readonly Target[] =>
  */
 const tabTargets = (screens: readonly StageScreen[]): readonly TabTarget[] =>
   screens
-    .filter(({ fullscreenId }) => fullscreenId === undefined)
+    .filter(({ fullscreen }) => fullscreen === undefined)
     .flatMap(({ screenful }) => screenful.placements)
     .flatMap(({ bar, depth, id, strip, tabbed }) =>
       depth === TILED && strip !== undefined && tabbed !== undefined
@@ -769,8 +800,8 @@ const emptyScreens = (
 ): DropTargets["screens"] =>
   screens
     .filter(
-      ({ fullscreenId, screenful }) =>
-        fullscreenId === undefined &&
+      ({ fullscreen, screenful }) =>
+        fullscreen === undefined &&
         tiledTargets(screenful.placements).length === 0,
     )
     .map(({ geometry }) => ({

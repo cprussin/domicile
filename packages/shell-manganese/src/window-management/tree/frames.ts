@@ -377,8 +377,11 @@ const titled = (
 /** The widest a tab grows, as in a browser. */
 const TAB_WIDTH = 240;
 
-/** The empty strip kept past the last tab, so the strip's end always shows. */
-const STRIP_END = 24;
+/**
+ * The empty strip kept past the last tab, so the strip's end always shows. It
+ * fits the new-tab button and the group's buttons (see `StripEnd`).
+ */
+const STRIP_END = 72;
 
 // Tabs share the top row, each at most `TAB_WIDTH`; a stack gives each child a
 // full-width bar. The bars meet, so together they draw one tab strip. See

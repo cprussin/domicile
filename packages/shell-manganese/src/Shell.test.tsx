@@ -432,7 +432,7 @@ const windowsOnScreen = (container: HTMLElement): string[] =>
 /** Every window's title bar, in opening order. */
 const titleBars = (container: HTMLElement): HTMLElement[] => [
   ...container.querySelectorAll<HTMLElement>(
-    "[data-window]:not([aria-hidden])",
+    "[data-window]:not([aria-hidden]):not([data-group-handle])",
   ),
 ];
 
@@ -1527,6 +1527,56 @@ describe("Shell", () => {
       expect(shadows(container)).toHaveLength(1);
 
       await user.click(screen.getByRole("button", { name: "Tile" }));
+      expect(shadows(container)).toHaveLength(0);
+    });
+
+    it("fills the screen with a whole tab group from its strip's button", async () => {
+      const user = userEvent.setup();
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+
+      await user.click(screen.getByRole("button", { name: "Maximize group" }));
+
+      // The strip sits at the screen's top, over the top bar.
+      expect(
+        Number.parseFloat(barFor(container, "app:one").style.insetBlockStart),
+      ).toBe(0);
+      expect(boxOf(appElement(container, "two"))).toMatchObject({
+        y: `${(TITLE_BAR - SURFACE_TUCK).toString()}px`,
+      });
+
+      await user.click(screen.getByRole("button", { name: "Restore group" }));
+
+      expect(boxOf(appElement(container, "two"))).toMatchObject({
+        y: `${(TOP_BAR + GAP + TITLE_BAR - SURFACE_TUCK).toString()}px`,
+      });
+    });
+
+    it("floats and tiles a whole tab group from its strip's button", async () => {
+      const user = userEvent.setup();
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+
+      await user.click(screen.getByRole("button", { name: "Float group" }));
+      // A shadow for each window in it.
+      expect(shadows(container)).toHaveLength(2);
+
+      await user.click(screen.getByRole("button", { name: "Tile group" }));
+      expect(shadows(container)).toHaveLength(0);
+    });
+
+    it("drops a floating group's shadows while it fills the screen", async () => {
+      // They would spill onto the next display.
+      const user = userEvent.setup();
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+
+      await user.click(screen.getByRole("button", { name: "Float group" }));
+      await user.click(screen.getByRole("button", { name: "Maximize group" }));
+
       expect(shadows(container)).toHaveLength(0);
     });
 

@@ -356,6 +356,12 @@ export const Desktop = ({
               }
             }
           }}
+          onGroupFloat={(group) => {
+            act(WindowAction.GroupFloated(group));
+          }}
+          onGroupFullscreen={(group) => {
+            act(WindowAction.GroupFullscreened(group));
+          }}
           onGroupGrab={(group) => {
             act(WindowAction.GroupGrabbed(group));
           }}

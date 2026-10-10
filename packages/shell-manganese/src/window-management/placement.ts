@@ -8,19 +8,20 @@ import type { Float } from "./floating/float";
 import { floatHolds, onScreen, rectOf } from "./floating/float";
 import { floatingGapOf, INNER_GAP, tiledAreaOf } from "./gaps";
 import type { Rect } from "./rect";
-import { barOf, surfaceOf } from "./rect";
 import type {
   FocusBox,
   Frame,
   StripPlace,
   Tab,
   TabLayout,
+  Tiled,
 } from "./tree/frames";
 import { focusBoxOf, framesOf } from "./tree/frames";
 import { focusedWindowIn } from "./tree/tiling";
 import type { WindowState } from "./window-state";
 import { workspaceOn } from "./window-state";
 import type { Workspace } from "./workspace";
+import { fullscreenOn } from "./workspace";
 
 /** Where one window is drawn, and how it stacks against the others. */
 export type Placement = {
@@ -136,9 +137,9 @@ const FULLSCREEN = 2000;
 /**
  * Everything the screen shows, fullscreen included.
  *
- * A fullscreen window is placed at {@link FULLSCREEN} over the normal layout,
- * which stays in place. That lets it animate from its tiled box and back (see
- * `settlingStyles`) while the other windows stay drawn underneath.
+ * A fullscreen window or group is placed at {@link FULLSCREEN} over the normal
+ * layout, which stays in place. That lets it animate from its tiled box and
+ * back (see `settlingStyles`) while the other windows stay drawn underneath.
  */
 export const placementsOf = (
   state: WindowState,
@@ -164,23 +165,30 @@ export const placementsOf = (
       inFloat.map((frame) => placed(frame, depth)),
     ),
   ];
-  const full = fullscreen(workspace, geometry);
-  // Replace the fullscreen window's tiled rectangle instead of adding a second.
-  const placements =
-    full === undefined
-      ? laidOut
-      : [...laidOut.filter(({ id }) => id !== full.id), full];
+  const filled = fullscreenIn(workspace, geometry);
+  // Replace the fullscreen windows' rectangles instead of adding a second.
+  const covered = filled.frames.map(({ id }) => id);
   return {
     focusBox:
-      full === undefined
+      workspace.fullscreen === undefined
         ? focusBoxIn(workspace, geometry, floating)
         : undefined,
-    placements,
+    placements: [
+      ...laidOut.filter(({ id }) => !covered.includes(id)),
+      ...filled.frames.map((frame) => placed(frame, FULLSCREEN)),
+    ],
     tabs: [
-      ...tabs.map((tab) => ({ ...tab, depth: TILED })),
-      ...floating.flatMap(({ depth, tabs: inFloat }) =>
-        inFloat.map((tab) => ({ ...tab, depth })),
+      // Tabs are keyed by window, so the strips a fullscreen group draws again
+      // over itself go.
+      ...[
+        ...tabs.map((tab) => ({ ...tab, depth: TILED })),
+        ...floating.flatMap(({ depth, tabs: inFloat }) =>
+          inFloat.map((tab) => ({ ...tab, depth })),
+        ),
+      ].filter(({ strip }) =>
+        strip.group.windows.some((id) => !covered.includes(id)),
       ),
+      ...filled.tabs.map((tab) => ({ ...tab, depth: FULLSCREEN })),
     ],
   };
 };
@@ -246,30 +254,19 @@ export const contentsOf = (
   }
 };
 
-// The workspace's fullscreen window, or `undefined` when there is none.
-const fullscreen = (
-  workspace: Workspace,
-  geometry: Geometry,
-): Placement | undefined => {
-  const { fullscreen: full } = workspace;
-  if (full === undefined) {
-    return undefined;
-  } else {
-    const area = full.global ? geometry.desktop : geometry.screen;
-    return placed(
-      {
-        bar: barOf(area),
-        behind: undefined,
-        id: full.id,
-        selected: false,
-        soleTab: false,
-        strip: undefined,
-        surface: surfaceOf(area),
-        tabbed: undefined,
-      },
-      FULLSCREEN,
-    );
-  }
+/**
+ * The fullscreen window or group laid out over the screen, or the desktop for
+ * `fullscreen global`. Nothing when none is fullscreen.
+ */
+const fullscreenIn = (workspace: Workspace, geometry: Geometry): Tiled => {
+  const full = fullscreenOn(workspace);
+  return full === undefined
+    ? { frames: [], tabs: [] }
+    : framesOf(
+        full.tiling,
+        full.global ? geometry.desktop : geometry.screen,
+        INNER_GAP,
+      );
 };
 
 /**
