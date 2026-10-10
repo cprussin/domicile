@@ -123,11 +123,14 @@ rm -f "$ENGINE_LOG"
   --domicile-broker-socket="$BROKER" >"$ENGINE_LOG" 2>&1 &
 STARTED+=($!)
 
-# 3. Wait for the last reader, or a crash. The pages report to the server's
-#    log: content does not log a private page's console.
+# 3. Wait for the last reader and the setter's own report, or a crash. The
+#    pages report to the server's log: content does not log a private page's
+#    console. The readers start once the setter commits, so its report can
+#    land after all three reads.
 TRIES=$((FOR_SECONDS * 4))
 for _ in $(seq 1 "$TRIES"); do
-  [ "$(grep -cF "GUARD read as=" "$HTTP_LOG" 2>/dev/null)" -ge 3 ] && break
+  [ "$(grep -cF "GUARD read as=" "$HTTP_LOG" 2>/dev/null)" -ge 3 ] &&
+    grep -qF "GUARD set-loaded" "$HTTP_LOG" 2>/dev/null && break
   grep -qF "Received signal" "$ENGINE_LOG" 2>/dev/null && break
   sleep 0.25
 done
