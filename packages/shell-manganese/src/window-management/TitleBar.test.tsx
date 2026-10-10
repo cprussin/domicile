@@ -396,6 +396,22 @@ describe("TitleBar", () => {
       );
     });
 
+    // The open tab is drawn over the rest of its strip, so an edge run on to
+    // the strip's end would cover the tabs after it.
+    it("runs the edge on to the strip's end from the last tab only", () => {
+      const runsOn = css({
+        insetInlineEnd: "calc(-1 * var(--strip-rest, 0px))",
+      });
+      const edge = (strip: StripPlace) =>
+        bar(tab({ strip }).container).querySelector("[data-strip-edge]")
+          ?.className;
+
+      expect(edge(LAST_TAB)).toContain(runsOn);
+      expect(edge({ ...MIDDLE_TAB, open: true, rest: 540 })).not.toContain(
+        runsOn,
+      );
+    });
+
     it("raises the open tab to match the address bar it meets", () => {
       const raised = css({ backgroundColor: RAISED });
 
