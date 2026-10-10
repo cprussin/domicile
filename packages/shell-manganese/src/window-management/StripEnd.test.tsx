@@ -38,8 +38,6 @@ const endProps = {
   onAim: nothing,
   onDrop: nothing,
   onDropOn: nothing,
-  onFloat: nothing,
-  onFullscreen: nothing,
   onGrab: nothing,
   onMove: nothing,
   rect: END,
@@ -98,45 +96,6 @@ describe("StripEnd", () => {
       const { container } = render(<StripEnd {...endProps} onGrab={onGrab} />);
       fireEvent.pointerDown(endOf(container), {
         button: MIDDLE_BUTTON,
-        pointerId: 1,
-      });
-      expect(onGrab).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("the group's buttons", () => {
-    it("float the group", async () => {
-      await new Promise<void>((resolve) => {
-        const { getByRole } = render(
-          <StripEnd {...endProps} onFloat={resolve} />,
-        );
-        fireEvent.click(getByRole("button", { name: "Float group" }));
-      });
-    });
-
-    it("fill the screen with the group", async () => {
-      await new Promise<void>((resolve) => {
-        const { getByRole } = render(
-          <StripEnd {...endProps} onFullscreen={resolve} />,
-        );
-        fireEvent.click(getByRole("button", { name: "Maximize group" }));
-      });
-    });
-
-    it("offer to tile a floating group and give a fullscreen one back", () => {
-      const { queryByRole } = render(
-        <StripEnd {...endProps} float={FLOAT} fullscreen />,
-      );
-
-      expect(queryByRole("button", { name: "Tile group" })).not.toBeNull();
-      expect(queryByRole("button", { name: "Restore group" })).not.toBeNull();
-    });
-
-    it("do not pick the group up", () => {
-      const onGrab = mock(nothing);
-      const { getByRole } = render(<StripEnd {...endProps} onGrab={onGrab} />);
-      fireEvent.pointerDown(getByRole("button", { name: "Float group" }), {
-        button: 0,
         pointerId: 1,
       });
       expect(onGrab).not.toHaveBeenCalled();

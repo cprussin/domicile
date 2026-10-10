@@ -379,7 +379,7 @@ const TAB_WIDTH = 240;
 
 /**
  * The empty strip kept past the last tab, so the strip's end always shows. It
- * fits the new-tab button and the group's buttons (see `StripEnd`).
+ * fits the new-tab button and the group's buttons (see `StripButtons`).
  */
 const STRIP_END = 72;
 

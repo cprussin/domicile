@@ -23,6 +23,7 @@ import type { Spot } from "./pointer-warp";
 import type { Popup } from "./popup";
 import { popupsOver } from "./popup";
 import type { Rect } from "./rect";
+import { StripButtons } from "./StripButtons";
 import { StripEnd } from "./StripEnd";
 import { stripEndOf } from "./strip-end";
 import { TitleBar } from "./TitleBar";
@@ -176,6 +177,7 @@ export const Stage = ({
   const targets = screens.flatMap(({ screenful }) =>
     tiledTargets(screenful.placements),
   );
+  const ends = stripEndsOf(motions);
   const dropTargets: DropTargets = {
     screens: emptyScreens(screens),
     tabs: tabTargets(screens),
@@ -320,54 +322,36 @@ export const Stage = ({
         The empty ends of tabbed strips, which drag a whole group. Before the
         bars, so the new-tab button over an end wins the `z-index` tie.
       */}
-      {[
-        ...motions.drawn.flatMap(({ motion, placement }) =>
-          placement === undefined || isLeaving(motion) ? [] : [placement],
-        ),
-        ...motions.tabs.flatMap(({ motion, tab }) =>
-          isLeaving(motion) ? [] : [{ ...tab, bar: tab.rect }],
-        ),
-      ].map(({ bar, depth, id, strip }) => {
-        const end = stripEndOf(bar, strip);
-        if (end === undefined || strip === undefined) {
-          return undefined;
-        } else {
-          const floating = floats.find((float) => floatHolds(float, id));
-          return (
-            <StripEnd
-              depth={strip.open ? raised(depth) : depth}
-              float={floating}
-              fullscreen={groupFills(screens, strip.group.windows)}
-              group={strip.group}
-              // By group: a strip's last tab and its parent strip's last tab can
-              // name one window.
-              key={`${strip.group.node.id}-${strip.group.node.up.toString()}`}
-              onAim={setAim}
-              onDrop={onDrop}
-              onDropOn={(aim) => {
-                onGroupDropOn(strip.group.node, aim);
-              }}
-              onFloat={() => {
-                onGroupFloat(strip.group.node);
-              }}
-              onFullscreen={() => {
-                onGroupFullscreen(strip.group.node);
-              }}
-              onGrab={() => {
-                if (floating === undefined) {
-                  onGroupGrab(strip.group.node);
-                } else {
-                  onGrab(id);
-                }
-              }}
-              onMove={(x, y) => {
-                onMove(id, x, y);
-              }}
-              rect={end}
-              targets={dropTargets}
-            />
-          );
-        }
+      {ends.map(({ depth, end, id, strip }) => {
+        const floating = floats.find((float) => floatHolds(float, id));
+        return (
+          <StripEnd
+            depth={depth}
+            float={floating}
+            fullscreen={groupFills(screens, strip.group.windows)}
+            group={strip.group}
+            // By group: a strip's last tab and its parent strip's last tab can
+            // name one window.
+            key={`${strip.group.node.id}-${strip.group.node.up.toString()}`}
+            onAim={setAim}
+            onDrop={onDrop}
+            onDropOn={(aim) => {
+              onGroupDropOn(strip.group.node, aim);
+            }}
+            onGrab={() => {
+              if (floating === undefined) {
+                onGroupGrab(strip.group.node);
+              } else {
+                onGrab(id);
+              }
+            }}
+            onMove={(x, y) => {
+              onMove(id, x, y);
+            }}
+            rect={end}
+            targets={dropTargets}
+          />
+        );
       })}
       {/*
         Every bar after every window's contents, so bars win the `z-index`
@@ -671,6 +655,26 @@ export const Stage = ({
           </Sliding>
         );
       })}
+      {/*
+        The group buttons at the ends of tabbed strips. After every bar and
+        tab, so they win the `z-index` tie with the strip the last tab draws
+        past itself.
+      */}
+      {ends.map(({ depth, end, id, strip }) => (
+        <StripButtons
+          depth={depth}
+          floating={floats.some((float) => floatHolds(float, id))}
+          fullscreen={groupFills(screens, strip.group.windows)}
+          key={`${strip.group.node.id}-${strip.group.node.up.toString()}`}
+          onFloat={() => {
+            onGroupFloat(strip.group.node);
+          }}
+          onFullscreen={() => {
+            onGroupFullscreen(strip.group.node);
+          }}
+          rect={end}
+        />
+      ))}
       {aim !== undefined && <DropIndicator rect={aim.rect} />}
       {/*
         Last, so a popup wins the `z-index` tie at its window's depth but
@@ -735,6 +739,25 @@ const hangingOn = (
           (float) => float.scratchpad && floatHolds(float, window.id),
         )),
   );
+
+/**
+ * The empty ends of the tabbed strips drawn, each with its last tab's window
+ * and depth, for the drag handle and buttons there.
+ */
+const stripEndsOf = (motions: ReturnType<typeof useWindowMotion>) =>
+  [
+    ...motions.drawn.flatMap(({ motion, placement }) =>
+      placement === undefined || isLeaving(motion) ? [] : [placement],
+    ),
+    ...motions.tabs.flatMap(({ motion, tab }) =>
+      isLeaving(motion) ? [] : [{ ...tab, bar: tab.rect }],
+    ),
+  ].flatMap(({ bar, depth, id, strip }) => {
+    const end = stripEndOf(bar, strip);
+    return end === undefined || strip === undefined
+      ? []
+      : [{ depth: strip.open ? raised(depth) : depth, end, id, strip }];
+  });
 
 /** Whether the window `id` is fullscreen on its own. */
 const fillsScreen = (screens: readonly StageScreen[], id: string): boolean =>
