@@ -93,6 +93,9 @@ For how warping, browser-window focus and modifier drags work, see
 
 - **Meta+Shift+Tab** floats the window, or tiles it again at the tiling focus.
   New floats cascade from the previous ones. A click raises a float.
+- A floated window goes in a tabbed container, so new windows opened while it
+  has the keyboard join it as tabs. Tiling it again drops the container when
+  it holds one window.
 - After **Meta+A**, the whole selected container floats as one box and keeps
   its layout. Tiling keys work inside it. A new window opened while the
   keyboard is in a floating group joins that group.
