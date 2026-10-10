@@ -189,6 +189,6 @@ Understood and not scheduled.
 
 ### Engine CI
 
-- **Engine CI is one machine.** `crux` has one compile slot; a cold release
-  build takes ~4h30m (#604).
-  [BUILD-MACHINE.md](packages/domicile-engine/docs/BUILD-MACHINE.md).
+- **Engine CI is one machine.** `crux` runs one cold build at a time, and a
+  build from scratch takes 4h 16m.
+  [BUILD-MACHINE.md](packages/domicile-engine/docs/BUILD-MACHINE.md#build-cost).
