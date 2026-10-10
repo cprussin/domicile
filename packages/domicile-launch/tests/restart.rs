@@ -8,10 +8,11 @@ use std::cell::Cell;
 use std::time::Duration;
 
 use domicile_launch::restart::{
-    clear_the_last_engine, clear_the_last_one, keep_a_desktop_up, keep_the_engine_up, Attempt,
-    Ending, Policy,
+    clear_the_last_engine, clear_the_last_one, keep_a_desktop_up, keep_the_engine_up,
+    restarts_the_engine, Attempt, Ending, Policy, CLEANLY,
 };
 use domicile_launch::spawn::Runtime;
+use domicile_launch::supervise::Exit;
 
 #[test]
 fn a_desktop_that_ends_cleanly_is_not_started_again() {
@@ -332,6 +333,40 @@ fn a_compositor_that_outlives_its_engines_ends_the_run_rather_than_the_engine() 
 }
 
 #[test]
+fn an_engine_on_a_tty_that_exits_0_is_started_again() {
+    // Chromium exits 0 on `SIGTERM`, and a TTY engine has no window to close.
+    let exit = exited("engine", CLEANLY);
+
+    assert!(restarts_the_engine(&exit, "drm"));
+}
+
+#[test]
+fn a_nested_engine_that_exits_0_ends_the_run() {
+    // Closing the window exits 0, and that is how a nested desktop is closed.
+    let exit = exited("engine", CLEANLY);
+
+    assert!(!restarts_the_engine(&exit, "wayland"));
+    assert!(!restarts_the_engine(&exit, "headless"));
+}
+
+#[test]
+fn an_engine_that_fails_is_started_again_on_any_platform() {
+    let exit = exited("engine", "exit status: 3");
+
+    assert!(restarts_the_engine(&exit, "drm"));
+    assert!(restarts_the_engine(&exit, "wayland"));
+}
+
+#[test]
+fn a_compositor_exit_never_restarts_the_engine() {
+    assert!(!restarts_the_engine(&exited("compositor", CLEANLY), "drm"));
+    assert!(!restarts_the_engine(
+        &exited("compositor", "exit status: 4"),
+        "drm"
+    ));
+}
+
+#[test]
 fn what_the_last_engine_left_goes_and_what_the_compositor_bound_stays() {
     // The engine restarts under a compositor that is still serving. The
     // engine's paths go so the next engine can bind them. The compositor's
@@ -379,5 +414,12 @@ fn runtime(directory: &std::path::Path) -> Runtime {
         profile: directory.join("profile"),
         shims: directory.join("bin"),
         session: directory.join("session.json"),
+    }
+}
+
+fn exited(what: &'static str, how: &str) -> Exit {
+    Exit {
+        what,
+        how: how.to_string(),
     }
 }

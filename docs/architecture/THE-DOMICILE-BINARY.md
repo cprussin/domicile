@@ -172,6 +172,11 @@ starting the engine again in 1s — that is failure 1 of 5 in a row.
 
 Engine restart:
 
+- An engine that fails restarts. One that exits 0 restarts only on `drm`
+  (`restart::restarts_the_engine`): there is no window to close there, and
+  Chromium exits 0 on `SIGTERM`, so `pkill` reads as a clean exit. A nested
+  engine exits 0 when its window closes, which ends the run with
+  `the engine exited (exit status: 0)`.
 - The launcher removes the dead engine's broker socket. The new engine creates
   one at the same path.
 - `EngineSession::reconnect` joins it and re-sends the desktop state: a frame
@@ -184,6 +189,9 @@ Engine restart:
 
 Compositor restart:
 
+- A compositor that exits 0 ends the run, with
+  `the compositor exited (exit status: 0)`. Any other exit restarts the
+  desktop.
 - The page's control channel closes when either end exits
   (`components/domicile/browser/control_channel.h`). It only retries at
   startup, so a page cannot reconnect to a new compositor. Fixing that needs

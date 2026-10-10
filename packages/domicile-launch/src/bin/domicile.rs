@@ -38,8 +38,8 @@ use domicile_launch::platform::platform;
 use domicile_launch::profile_claim::claim;
 use domicile_launch::profile_path::profile_directory;
 use domicile_launch::restart::{
-    clear_the_last_engine, clear_the_last_one, keep_a_desktop_up, keep_the_engine_up, Attempt,
-    Ending, Policy,
+    clear_the_last_engine, clear_the_last_one, keep_a_desktop_up, keep_the_engine_up,
+    restarts_the_engine, Attempt, Ending, Policy, CLEANLY,
 };
 use domicile_launch::session::Session;
 use domicile_launch::shell_path::Shell;
@@ -659,7 +659,7 @@ fn one_engine(
     }
     *first = false;
     let exit = running.until_one_exits();
-    match exit.what == "engine" && exit.how != CLEANLY {
+    match restarts_the_engine(&exit, desktop.platform) {
         // The compositor keeps serving and reconnects to the next engine; see
         // `engine_restart` in the compositor.
         true => {
@@ -673,7 +673,11 @@ fn one_engine(
         }
         false => {
             *over = Some(match exit.how == CLEANLY {
-                true => Ok(()),
+                // Said here, since ending the run cleanly prints nothing else.
+                true => {
+                    eprintln!("domicile: {exit}");
+                    Ok(())
+                }
                 false => Err(exit.to_string()),
             });
             Attempt::Ended
@@ -713,12 +717,6 @@ fn wait_or_notice_a_stop(wait: Duration) {
         std::thread::sleep(ASK_EVERY);
     }
 }
-
-/// The `ExitStatus` text for a clean exit.
-///
-/// A string because [`Exit`](domicile_launch::supervise::Exit) stores the
-/// status as displayed, which tells signals apart from exit codes.
-const CLEANLY: &str = "exit status: 0";
 
 /// Serves the control socket on a thread, routing engine commands to `engine`
 /// and screenshots and shell commands to the compositor's `chrome` socket.
