@@ -2,10 +2,10 @@
 
 import type { Container, LayoutNode } from "./node";
 import {
+  lastFocusIn,
   LayoutNode as Node,
   NodeKind,
   renormalized,
-  showsOneChild,
 } from "./node";
 import type { Path } from "./path";
 import { pathTo } from "./path";
@@ -80,31 +80,30 @@ const collapsed = (
     return Node.Container(
       container.layout,
       children,
-      focusAfter(container, index, children.length),
+      focusAfter(container, index, children),
       renormalized(container.fractions.filter((_, at) => at !== index)),
     );
   }
 };
 
 /**
- * The focused index after child `removed` is gone.
+ * The focused index after child `removed` is gone from `rest`.
  *
- * Closing the focused child focuses the next one in a split and the previous
- * one in a tab stack, falling back to the other side at the ends.
+ * Closing the focused child focuses the child focused most recently before
+ * it, as sway does; the first on a tie.
  */
 const focusAfter = (
-  { focused, layout }: Container,
+  { focused }: Container,
   removed: number,
-  length: number,
+  rest: readonly LayoutNode[],
 ): number => {
   if (removed < focused) {
     return focused - 1;
   } else if (removed > focused) {
     return focused;
   } else {
-    return showsOneChild(layout)
-      ? Math.max(focused - 1, 0)
-      : Math.min(focused, length - 1);
+    const latest = rest.map((child) => lastFocusIn(child));
+    return latest.indexOf(Math.max(...latest));
   }
 };
 

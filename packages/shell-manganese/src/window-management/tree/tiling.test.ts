@@ -82,7 +82,21 @@ describe("withFocusOn", () => {
   it("leaves the focus on the window rather than on a container", () => {
     const focused = withFocusOn(focusedParent(NESTED), "c");
 
-    expect(focusedNodeOf(focused)).toEqual(LayoutNode.Window("c"));
+    expect(focusedNodeOf(focused)).toEqual(LayoutNode.Window("c", 1));
+  });
+
+  it("stamps the window it focuses as focused last", () => {
+    const visited = withFocusOn(withFocusOn(NESTED, "a"), "b");
+
+    expect(focusedNodeOf(visited)).toEqual(LayoutNode.Window("b", 2));
+  });
+
+  it("keeps the stamp of a window focused again", () => {
+    const visited = withFocusOn(NESTED, "a");
+
+    expect(focusedNodeOf(withFocusOn(visited, "a"))).toEqual(
+      LayoutNode.Window("a", 1),
+    );
   });
 
   it("throws for a window the tree does not hold", () => {

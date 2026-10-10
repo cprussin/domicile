@@ -1,8 +1,14 @@
 import { describe, expect, it } from "bun:test";
-
+import { inserted } from "./insert";
 import { Layout, LayoutNode } from "./node";
 import { removed } from "./remove";
-import { focusedIdOf, NOTHING_TILED, windowsOf, withFocusOn } from "./tiling";
+import {
+  focusedIdOf,
+  NOTHING_TILED,
+  shownOver,
+  windowsOf,
+  withFocusOn,
+} from "./tiling";
 
 const COLUMN = LayoutNode.Container(Layout.SplitV, [
   LayoutNode.Window("b"),
@@ -39,12 +45,16 @@ describe("removed", () => {
     expect(windowsOf(removed(ROW, "b"))).toEqual(["a", "c"]);
   });
 
-  it("hands the focus to the next window along", () => {
-    expect(focusedIdOf(removed(ROW, "b"))).toBe("c");
+  it("hands the focus to the window focused before it, as sway does", () => {
+    const visited = withFocusOn(withFocusOn(ROW, "a"), "c");
+
+    expect(focusedIdOf(removed(visited, "c"))).toBe("a");
   });
 
-  it("falls back to the one before where there is no next", () => {
-    expect(focusedIdOf(removed(withFocusOn(ROW, "c"), "c"))).toBe("b");
+  it("hands the focus back to the window a new one opened beside", () => {
+    const opened = inserted(withFocusOn(ROW, "a"), "d");
+
+    expect(focusedIdOf(removed(opened, "d"))).toBe("a");
   });
 
   it("leaves the focus where it was when something else closed", () => {
@@ -65,15 +75,34 @@ describe("removed", () => {
       ),
     });
 
-    it("hands the focus to the tab before", () => {
-      expect(focusedIdOf(removed(tabs(Layout.Tabbed), "b"))).toBe("a");
-      expect(focusedIdOf(removed(tabs(Layout.Stacking), "b"))).toBe("a");
+    it("hands the focus to the tab focused before it, as sway does", () => {
+      const visited = (layout: Layout) =>
+        withFocusOn(withFocusOn(tabs(layout), "c"), "a");
+
+      expect(focusedIdOf(removed(visited(Layout.Tabbed), "a"))).toBe("c");
+      expect(focusedIdOf(removed(visited(Layout.Stacking), "a"))).toBe("c");
     });
 
-    it("falls back to the one after when the first tab closed", () => {
-      expect(
-        focusedIdOf(removed(withFocusOn(tabs(Layout.Tabbed), "a"), "a")),
-      ).toBe("b");
+    it("shows the tab focused before a closed open tab", () => {
+      // Focus is in another group, so only which tab shows changes.
+      const beside = {
+        depth: 1,
+        root: LayoutNode.Container(
+          Layout.SplitH,
+          [
+            LayoutNode.Container(Layout.Tabbed, [
+              LayoutNode.Window("a", 2),
+              LayoutNode.Window("b"),
+              LayoutNode.Window("c", 1),
+            ]),
+            LayoutNode.Window("d", 3),
+          ],
+          1,
+        ),
+      };
+      const { root } = removed(beside, "a");
+
+      expect(root === undefined ? undefined : shownOver(root, "b")).toBe("c");
     });
   });
 

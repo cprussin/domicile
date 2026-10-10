@@ -9,8 +9,11 @@ Manganese uses sway's layout model. For the key bindings, see
   children split, tabbed or stacking.
 - Tiled windows have a 20px gap between them and at the screen's edges, which
   the focus glow lights. A lone window keeps the gap at the edges.
-- A new window opens beside the focused one. Closing a window gives its space
-  to the rest.
+- A new window or tab opens just after the focused one. Closing a window
+  gives its space to the rest.
+- Closing the focused window focuses the one in its group focused most
+  recently before it, as sway's focus stack does. Each window records when it
+  last took focus, and keeps that when it moves.
 - Every tiled window is in a group. The first window on a workspace opens in a
   tab group of one, so the next window's place shows.
 - A group changes only on request (a layout or split command, a move or a

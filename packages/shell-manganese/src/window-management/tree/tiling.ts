@@ -7,7 +7,7 @@
 // keeps it consistent with the chain.
 
 import type { Container, LayoutNode } from "./node";
-import { NodeKind, showsOneChild, windowsIn } from "./node";
+import { lastFocusIn, NodeKind, showsOneChild, windowsIn } from "./node";
 import type { Path } from "./path";
 import { ancestorsOf, nodeAt, pathTo } from "./path";
 
@@ -105,7 +105,10 @@ export const withFocusOn = (tiling: Tiling, id: string): Tiling => {
   if (root === undefined || path === undefined) {
     throw new Error(`layout tree: no tiled window ${id} to focus`);
   } else {
-    return { depth: path.length, root: pointedAt(root, path) };
+    // Stamp only a focus change, so the focused window stays the latest.
+    const stamp =
+      focusedWindowIn(root) === id ? undefined : lastFocusIn(root) + 1;
+    return { depth: path.length, root: pointedAt(root, path, stamp) };
   }
 };
 
@@ -167,17 +170,23 @@ export const focusedChildIn = (container: Container): LayoutNode => {
   }
 };
 
-// Sets each container's focus along `path`. Nodes off the path keep their
-// identity.
-const pointedAt = (root: LayoutNode, path: Path): LayoutNode => {
+// Sets each container's focus along `path`, and stamps the window at its end
+// with `stamp` if given. Nodes off the path keep their identity.
+const pointedAt = (
+  root: LayoutNode,
+  path: Path,
+  stamp: number | undefined,
+): LayoutNode => {
   const [index, ...rest] = path;
-  if (index === undefined || root.kind === NodeKind.Window) {
-    return root;
+  if (root.kind === NodeKind.Window) {
+    return stamp === undefined ? root : { ...root, focusedAt: stamp };
+  } else if (index === undefined) {
+    throw new Error("layout tree: a focus path ends at a container");
   } else {
     return {
       ...root,
       children: root.children.map((child, at) =>
-        at === index ? pointedAt(child, rest) : child,
+        at === index ? pointedAt(child, rest, stamp) : child,
       ),
       focused: index,
     };
