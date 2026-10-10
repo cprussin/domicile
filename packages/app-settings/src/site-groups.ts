@@ -1,7 +1,7 @@
 // The engine's site settings arranged two ways: the sites with a setting of
 // their own for one permission, and each site with all its permissions.
 
-import type { Permission, Setting, SiteSettings } from "./host";
+import type { Permission, Setting, SitePermission, SiteSettings } from "./host";
 
 /** A site's own setting for one permission. */
 export type SiteSetting = { origin: string; setting: Setting };
@@ -46,6 +46,19 @@ export const sites = (settings: SiteSettings): Site[] =>
       };
     })
     .toSorted((a, b) => siteName(a.origin).localeCompare(siteName(b.origin)));
+
+/** The changes that remove `origin`'s own settings: each set to the default. */
+export const resetSite = (
+  settings: SiteSettings,
+  origin: string,
+): SitePermission[] =>
+  settings.sites
+    .filter((site) => site.origin === origin)
+    .map(({ permission }) => ({
+      origin,
+      permission,
+      setting: settings.defaults[permission],
+    }));
 
 /** A site as a person reads it: a web site's host, or the whole origin. */
 export const siteName = (origin: string): string => {

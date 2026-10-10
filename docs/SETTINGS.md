@@ -12,8 +12,9 @@ launcher, opens it in an app window
   `chrome.management`. Install and uninstall by editing the config's
   `extensions` lists.
 - **Site permissions:** each permission with the sites that have a setting of
-  their own for it, or each site with all its permissions. Changes take effect
-  at once in open browser windows.
+  their own for it, or each site with all its permissions. **Remove site**
+  clears all of a site's own settings. Changes take effect at once in open
+  browser windows.
 - **Code:** the config file and the shell's source in a plain text editor
   (line numbers, Tab indents, Enter keeps indentation, Ctrl+S saves).
 - Source and design: [`packages/app-settings`](/packages/app-settings/README.md).

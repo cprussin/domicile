@@ -33,5 +33,15 @@ export const useSiteSettings = (host: SettingsHost, report: Report) => {
     [host, reload, report],
   );
 
-  return { failure, set, settings };
+  const remove = useCallback(
+    (sites: SitePermission[]) => {
+      Promise.all(sites.map((site) => host.setSitePermission(site))).then(
+        reload,
+        report("Couldn't remove the site"),
+      );
+    },
+    [host, reload, report],
+  );
+
+  return { failure, remove, set, settings };
 };

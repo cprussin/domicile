@@ -352,6 +352,26 @@ describe(App, () => {
         within(detail).getByRole("combobox", { name: "Notifications" }),
       ).toHaveTextContent("Allow");
     });
+
+    it("removes a site's own settings", async () => {
+      const { host, user } = await renderApp("Site permissions");
+      await user.click(screen.getByRole("tab", { name: "By site" }));
+      await user.click(
+        await screen.findByRole("button", { name: /^meet\.example/ }),
+      );
+      await user.click(
+        await screen.findByRole("button", { name: "Remove site" }),
+      );
+      await waitFor(() => {
+        expect(host.state.sites.sites).toEqual([SITES.sites[2]]);
+      });
+      expect(
+        await screen.findByRole("button", { name: /^maps\.example/ }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /^meet\.example/ }),
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe("code", () => {
