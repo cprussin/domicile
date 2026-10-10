@@ -108,8 +108,6 @@ Understood and not scheduled.
   `domicile-host`).
 - **Clients only get 8-bit formats** (`FOURCCS` in `engine.rs`).
 - **A chrome repaint damages the whole output.**
-- **A window cast shows a pre-rotated buffer unturned.**
-  [WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md#pre-rotated-buffers).
 - **A cast of a hidden window drops to a frame a second.**
   [WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md#hidden-windows).
 - **Windows under a fullscreen window keep drawing,** so manganese can animate

@@ -1,5 +1,8 @@
 //! Copies a crop of a frame on the CPU into a stream's shm buffer.
 
+use smithay::utils::Transform;
+
+use crate::buffer_transform::{crop_in_buffer, upright_size};
 use crate::casting::negotiation::{Pixel, BYTES_PER_PIXEL};
 use crate::casting::pacing::Rect;
 
@@ -15,22 +18,33 @@ pub struct Client<'a> {
 /// rows `stride` bytes apart, scaling to the nearest pixel when the two
 /// differ in size.
 ///
+/// `from` is in the client's buffer pixels and `transform` is its
+/// `wl_surface.set_buffer_transform`: `to` gets it upright.
+///
 /// A `Bgra` stream of a client without alpha gets opaque pixels, since the
 /// client's fourth byte is undefined.
-pub fn copy(client: &Client, from: Rect, target: &mut [u8], stride: usize, pixel: Pixel, to: Rect) {
+pub fn copy(
+    client: &Client,
+    from: Rect,
+    target: &mut [u8],
+    stride: usize,
+    pixel: Pixel,
+    to: Rect,
+    transform: Transform,
+) {
     let bytes = BYTES_PER_PIXEL as usize;
     let opaque = pixel == Pixel::Bgra && !client.alpha;
     for row in 0..to.3 as usize {
-        let from_row = from.1 as usize + row * from.3 as usize / to.3 as usize;
         let start = (to.1 as usize + row) * stride + to.0 as usize * bytes;
         let line = &mut target[start..start + to.2 as usize * bytes];
-        if from.2 == to.2 {
+        if transform == Transform::Normal && from.2 == to.2 {
+            let from_row = from.1 as usize + row * from.3 as usize / to.3 as usize;
             let source = from_row * client.stride + from.0 as usize * bytes;
             line.copy_from_slice(&client.bytes[source..source + line.len()]);
         } else {
             for (column, out) in line.chunks_exact_mut(bytes).enumerate() {
-                let from_column = from.0 as usize + column * from.2 as usize / to.2 as usize;
-                let source = from_row * client.stride + from_column * bytes;
+                let (x, y) = source_pixel(from, to, transform, (column, row));
+                let source = y * client.stride + x * bytes;
                 out.copy_from_slice(&client.bytes[source..source + bytes]);
             }
         }
@@ -43,8 +57,19 @@ pub fn copy(client: &Client, from: Rect, target: &mut [u8], stride: usize, pixel
     }
 }
 
+/// The client pixel that `to`'s pixel at `(column, row)` shows.
+fn source_pixel(from: Rect, to: Rect, transform: Transform, at: (usize, usize)) -> (usize, usize) {
+    let upright = upright_size((from.2 as u32, from.3 as u32), transform);
+    let x = at.0 as i32 * upright.0 as i32 / to.2;
+    let y = at.1 as i32 * upright.1 as i32 / to.3;
+    let (x, y, _, _) = crop_in_buffer((x, y, 1, 1), upright, transform);
+    ((from.0 + x) as usize, (from.1 + y) as usize)
+}
+
 #[cfg(test)]
 mod tests {
+    use smithay::utils::Transform;
+
     use super::{copy, Client};
     use crate::casting::negotiation::Pixel;
 
@@ -77,12 +102,39 @@ mod tests {
             8,
             Pixel::Bgra,
             (0, 0, 2, 2),
+            Transform::Normal,
         );
 
         assert_eq!(
             target,
             [[1, 0, 7, 9], [2, 0, 7, 9], [1, 1, 7, 9], [2, 1, 7, 9]].concat()
         );
+    }
+
+    /// A buffer drawn a quarter turn counterclockwise: the upright frame's top
+    /// row is the buffer's right column, as Weston maps it.
+    #[test]
+    fn a_turned_frame_is_copied_upright() {
+        let bytes = client_bytes();
+        let client = Client {
+            bytes: &bytes,
+            stride: 14,
+            alpha: true,
+        };
+        let mut target = vec![0; 2 * 4 * 3];
+
+        copy(
+            &client,
+            (0, 0, 3, 2),
+            &mut target,
+            8,
+            Pixel::Bgra,
+            (0, 0, 2, 3),
+            Transform::_90,
+        );
+
+        let pixels: Vec<[u8; 2]> = target.chunks(4).map(|pixel| [pixel[0], pixel[1]]).collect();
+        assert_eq!(pixels, [[2, 0], [2, 1], [1, 0], [1, 1], [0, 0], [0, 1]]);
     }
 
     #[test]
@@ -102,6 +154,7 @@ mod tests {
             4,
             Pixel::Bgra,
             (0, 0, 1, 1),
+            Transform::Normal,
         );
 
         assert_eq!(target, [2, 1, 7, 255]);
@@ -124,6 +177,7 @@ mod tests {
             8,
             Pixel::Bgra,
             (1, 1, 1, 1),
+            Transform::Normal,
         );
 
         assert_eq!(target[..12], [0; 12]);
@@ -147,6 +201,7 @@ mod tests {
             16,
             Pixel::Bgra,
             (0, 0, 4, 2),
+            Transform::Normal,
         );
 
         let row = [[1, 0, 7, 9], [1, 0, 7, 9], [2, 0, 7, 9], [2, 0, 7, 9]].concat();

@@ -22,11 +22,14 @@ use std::time::Instant;
 
 use domicile_protocol::ShotWindow;
 use pipewire as pw;
+use smithay::backend::allocator::Buffer as _;
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::reexports::calloop::channel::Sender;
 use smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer;
+use smithay::utils::Transform;
 use tracing::{debug, warn};
 
+use crate::buffer_transform::Sampled;
 use crate::casting::captured;
 use crate::casting::captures::{Capturer, Captures, Frame};
 use crate::casting::cursor::{arrow, embed, plan, CursorMode, Plan, Sprite};
@@ -45,8 +48,9 @@ use crate::engine::{CaptureId, CapturedFrame};
 pub struct Committed<'a> {
     pub app_id: &'a str,
     pub buffer: &'a WlBuffer,
-    /// The part of the buffer that is the window, in buffer pixels.
-    pub crop: Rect,
+    /// The part of the buffer that is the window, in buffer pixels, and the
+    /// turn that makes it upright.
+    pub sampled: Sampled,
     /// The buffer's scale, for the pointer's position.
     pub scale: i32,
     /// The bounding box of the commit's damage, in buffer pixels.
@@ -117,7 +121,7 @@ struct Shooting {
 /// A window's last frame and how to read it.
 struct Shot {
     snapshot: Snapshot,
-    crop: Rect,
+    sampled: Sampled,
     scale: i32,
 }
 
@@ -665,8 +669,8 @@ impl Streams {
         mut renderer: Option<&mut GlesRenderer>,
         now: Instant,
     ) -> Option<Instant> {
-        let size = (frame.crop.2 as u32, frame.crop.3 as u32);
-        self.sizes.insert(frame.app_id.to_string(), size);
+        self.sizes
+            .insert(frame.app_id.to_string(), frame.sampled.upright_size());
         let streams: Vec<_> = self
             .casts
             .iter()
@@ -682,7 +686,7 @@ impl Streams {
                     frame.app_id.to_string(),
                     Shot {
                         snapshot,
-                        crop: frame.crop,
+                        sampled: frame.sampled,
                         scale: frame.scale,
                     },
                 );
@@ -694,10 +698,7 @@ impl Streams {
                 return self.next_due();
             }
         }
-        let damage = frame
-            .damage
-            .and_then(|damage| within(damage, frame.crop))
-            .map_or_else(Vec::new, |damage| vec![damage]);
+        let damage = damage_in_view(frame.damage, frame.sampled);
         for stream in streams {
             self.offer(stream, damage.clone(), renderer.as_deref_mut(), now);
         }
@@ -1011,11 +1012,24 @@ fn on_desk(point: (f64, f64), target: Rect, layout: &Layout) -> Option<(f64, f64
 }
 
 /// The size a stream's frames are, once its source has drawn.
+/// A commit's `damage` in the frame of a window cast showing `sampled`.
+///
+/// Damage is not mapped through a turn, so a turned window damages its whole
+/// frame, as it does in the engine.
+fn damage_in_view(damage: Option<Rect>, sampled: Sampled) -> Vec<Rect> {
+    if sampled.transform == Transform::Normal {
+        damage
+            .and_then(|damage| within(damage, sampled.crop))
+            .map_or_else(Vec::new, |damage| vec![damage])
+    } else {
+        let (width, height) = sampled.upright_size();
+        vec![(0, 0, width as i32, height as i32)]
+    }
+}
+
 fn view_size(shows: &Shows, shots: &HashMap<String, Shot>) -> Option<(u32, u32)> {
     match shows {
-        Shows::Window(app_id) => shots
-            .get(app_id)
-            .map(|shot| (shot.crop.2 as u32, shot.crop.3 as u32)),
+        Shows::Window(app_id) => shots.get(app_id).map(|shot| shot.sampled.upright_size()),
         Shows::Desk { layout, .. } => Some(layout.size),
     }
 }
@@ -1034,12 +1048,8 @@ fn view<'a>(
         Shows::Window(app_id) => {
             let shot = shots.get(app_id)?;
             Some(View {
-                size: (shot.crop.2 as u32, shot.crop.3 as u32),
-                layers: vec![Layer {
-                    snapshot: &shot.snapshot,
-                    from: shot.crop,
-                    to: (0, 0, shot.crop.2, shot.crop.3),
-                }],
+                size: shot.sampled.upright_size(),
+                layers: vec![Layer::upright(&shot.snapshot, shot.sampled)],
                 pointer: pointer
                     .filter(|(id, _)| id == app_id)
                     .map(|(_, point)| in_window(*point, shot.scale)),
@@ -1058,6 +1068,7 @@ fn view<'a>(
                         snapshot: &frame.snapshot,
                         from: in_frame(piece.from, (screen.desk.2, screen.desk.3), frame.content),
                         to: piece.to,
+                        transform: Transform::Normal,
                     })
                 })
                 .collect::<Option<Vec<_>>>()?;
@@ -1145,6 +1156,7 @@ fn fill(
             renderer.ok_or(FillError::NoGpu)?,
             layers,
             dmabuf,
+            (dmabuf.width(), dmabuf.height()),
             cursor,
             sprite,
         ),
@@ -1163,7 +1175,10 @@ mod tests {
 
     use domicile_protocol::ShotWindow;
 
-    use super::Streams;
+    use smithay::utils::Transform;
+
+    use super::{damage_in_view, Streams};
+    use crate::buffer_transform::Sampled;
     use crate::casting::captures::Capturer;
     use crate::casting::region::Screen;
     use crate::casting::shots::Desk;
@@ -1420,5 +1435,22 @@ mod tests {
 
         assert!(heard.try_recv().expect("developed").is_err());
         assert_eq!(engine.stopped, [1]);
+    }
+
+    #[test]
+    fn a_turned_windows_damage_is_its_whole_frame() {
+        let upright = Sampled {
+            crop: (10, 0, 30, 20),
+            transform: Transform::Normal,
+        };
+        assert_eq!(damage_in_view(Some((15, 5, 2, 2)), upright), [(5, 5, 2, 2)]);
+        let turned = Sampled {
+            transform: Transform::_90,
+            ..upright
+        };
+        assert_eq!(
+            damage_in_view(Some((15, 5, 2, 2)), turned),
+            [(0, 0, 20, 30)]
+        );
     }
 }

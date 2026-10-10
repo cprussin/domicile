@@ -86,9 +86,14 @@ A client may draw its buffer turned to match a rotated monitor and say so with
   (`surface_transform.cc`). Viz turns it on the GPU, so no pixel is copied.
 - **Older engines** lack the symbol. The compositor submits unturned and logs
   once when a buffer is turned.
+- **Casts:** a window cast and a shot of one window turn the frame upright too
+  (`Layer::upright` in `casting/gpu.rs`). The CPU copy maps each pixel as
+  `buffer_transform.rs` does; the GPU draw gives Smithay the inverse transform,
+  which its GLES frame expects. A turned frame's damage is the whole frame.
 - **Checks:** `surface_transform_unittest.cc` maps each of the eight transforms
-  as Weston does. `guard-buffer-transform.sh` shows a turned shm buffer upright.
-  No check covers a turned dmabuf, because none has a render node.
+  as Weston does. `guard-buffer-transform.sh` shows a turned shm buffer upright,
+  and `e2e-a-window-casts-to-pipewire.sh` casts one upright. No check covers a
+  turned dmabuf, because none has a render node.
 
 ## What is open
 

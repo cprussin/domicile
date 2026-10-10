@@ -6,11 +6,10 @@
 
 use std::os::fd::OwnedFd;
 
-use smithay::backend::allocator::dmabuf::Dmabuf;
-use smithay::backend::allocator::{Buffer as _, Fourcc};
+use smithay::backend::allocator::Fourcc;
 use smithay::backend::renderer::gles::{GlesError, GlesRenderer, GlesTexture};
 use smithay::backend::renderer::{
-    Bind as _, Color32F, ExportMem as _, Frame, ImportDma as _, ImportMem as _, ImportMemWl as _,
+    Bind, Color32F, ExportMem as _, Frame, ImportDma as _, ImportMem as _, ImportMemWl as _,
     Renderer as _,
 };
 use smithay::reexports::wayland_server::protocol::{wl_buffer::WlBuffer, wl_shm};
@@ -19,6 +18,7 @@ use smithay::wayland::dmabuf::get_dmabuf;
 use smithay::wayland::shm::with_buffer_contents;
 use thiserror::Error;
 
+use crate::buffer_transform::Sampled;
 use crate::casting::cursor::{Plan, Sprite};
 use crate::casting::pacing::Rect;
 
@@ -36,11 +36,26 @@ pub enum Snapshot {
 }
 
 /// Part of a stream frame: `from` of `snapshot`, in its pixels, drawn over
-/// `to`, in the stream's.
+/// `to`, in the stream's, turned upright by `transform`.
 pub struct Layer<'a> {
     pub snapshot: &'a Snapshot,
     pub from: Rect,
     pub to: Rect,
+    /// The buffer's `wl_surface.set_buffer_transform`.
+    pub transform: Transform,
+}
+
+impl<'a> Layer<'a> {
+    /// `sampled` of `snapshot`, upright at the stream's corner.
+    pub fn upright(snapshot: &'a Snapshot, sampled: Sampled) -> Self {
+        let (width, height) = sampled.upright_size();
+        Self {
+            snapshot,
+            from: sampled.crop,
+            to: (0, 0, width as i32, height as i32),
+            transform: sampled.transform,
+        }
+    }
 }
 
 /// Why a frame could not be kept or filled.
@@ -137,18 +152,22 @@ pub fn read_back(
     Ok(())
 }
 
-/// Draws `layers` over `target`, cleared, and the pointer if `cursor` embeds
-/// it.
+/// Draws `layers` over `target`, `size` big and cleared, and the pointer if
+/// `cursor` embeds it.
 ///
 /// Returns the fence that signals when the draw lands. A driver without
 /// native fences is waited on here instead.
-pub fn draw(
+pub fn draw<T: Clone>(
     renderer: &mut GlesRenderer,
     layers: &[Layer],
-    target: &Dmabuf,
+    target: &T,
+    size: (u32, u32),
     cursor: Plan,
     sprite: &Sprite,
-) -> Result<Option<OwnedFd>, FillError> {
+) -> Result<Option<OwnedFd>, FillError>
+where
+    GlesRenderer: Bind<T>,
+{
     let textures = layers
         .iter()
         .map(|layer| texture_of(renderer, layer.snapshot))
@@ -166,7 +185,7 @@ pub fn draw(
         Plan::Nothing | Plan::Metadata { .. } => None,
     };
     let mut target = target.clone();
-    let size: Size<i32, Physical> = Size::from((target.width() as i32, target.height() as i32));
+    let size: Size<i32, Physical> = Size::from((size.0 as i32, size.1 as i32));
     let whole = Rectangle::from_size(size);
     let mut framebuffer = renderer.bind(&mut target)?;
     let mut frame = renderer.render(&mut framebuffer, size, Transform::Normal)?;
@@ -187,7 +206,10 @@ pub fn draw(
             place,
             &[place],
             &[],
-            Transform::Normal,
+            // Smithay's GLES frame turns the texture by the inverse of the
+            // transform it is given; `a_turned_frame_is_drawn_upright` says
+            // which way.
+            layer.transform.invert(),
             1.0,
         )?;
     }
@@ -240,7 +262,10 @@ fn texture_of(renderer: &mut GlesRenderer, snapshot: &Snapshot) -> Result<GlesTe
 
 #[cfg(test)]
 mod tests {
+    use smithay::backend::renderer::Offscreen as _;
+
     use super::*;
+    use crate::casting::cursor::arrow;
     use crate::dmabuf_import::headless_renderer;
 
     /// Four opaque pixels in `Argb8888` byte order, one color per corner, so
@@ -263,5 +288,40 @@ mod tests {
         read_back(&mut renderer, &texture, (0, 0, 2, 2), &mut target, 8).expect("read back");
 
         assert_eq!(target, CORNERS);
+    }
+
+    /// [`CORNERS`] drawn a quarter turn counterclockwise: the upright frame's
+    /// top row is the buffer's right column.
+    #[test]
+    fn a_turned_frame_is_drawn_upright() {
+        let (mut renderer, _) = headless_renderer().expect("EGL: llvmpipe will do");
+        let snapshot = Snapshot::Pixels {
+            bytes: CORNERS.to_vec(),
+            stride: 8,
+            alpha: true,
+            size: (2, 2),
+        };
+        let turned = Sampled {
+            crop: (0, 0, 2, 2),
+            transform: Transform::_90,
+        };
+        let target: GlesTexture = renderer
+            .create_buffer(Fourcc::Argb8888, Size::from((2, 2)))
+            .expect("a texture to draw into");
+
+        draw(
+            &mut renderer,
+            &[Layer::upright(&snapshot, turned)],
+            &target,
+            (2, 2),
+            Plan::Nothing,
+            &arrow(),
+        )
+        .expect("drawn");
+
+        let mut drawn = [0; 16];
+        read_back(&mut renderer, &target, (0, 0, 2, 2), &mut drawn, 8).expect("read back");
+        let [red, green, blue, white] = [0, 1, 2, 3].map(|corner| &CORNERS[corner * 4..][..4]);
+        assert_eq!(drawn, [green, white, red, blue].concat()[..]);
     }
 }
