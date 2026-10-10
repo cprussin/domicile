@@ -49,7 +49,7 @@ export const FloatShadow = ({
     className={cx(
       shadowStyles({ hanging }),
       movingStyles({ motion }),
-      settlingStyles({ dragging }),
+      settlingStyles({ box: dragging ? "snapped" : "eased" }),
     )}
     data-shadow
     style={{

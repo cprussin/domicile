@@ -31,16 +31,19 @@ import { useHistoryAvailability } from "./useHistoryAvailability";
 import { useLoading } from "./useLoading";
 import { usePageIcon } from "./usePageIcon";
 import { useReclaimFocus } from "./useReclaimFocus";
+import type { Settler } from "./useSettling";
+import { useSettling } from "./useSettling";
 import { useShownPage } from "./useShownPage";
 import { useTargetUrl } from "./useTargetUrl";
 import { useZoom } from "./useZoom";
 import type { WindowMotion } from "./window-motion";
-import { isLeaving } from "./window-motion";
+import { isLeaving, isMoving } from "./window-motion";
 import {
   bottomCornerStyles,
   clickThroughStyles,
   edgeStyles,
   movingStyles,
+  originOf,
   placedAt,
   scaledAbout,
   settlingStyles,
@@ -71,7 +74,10 @@ type Props = {
   covered: boolean;
   /** The window's `z-index`, which the SDK reports to the host. */
   depth: number;
-  /** Whether the user is dragging this window. */
+  /**
+   * Whether the user is dragging or resizing this window, so its box follows
+   * the pointer.
+   */
   dragging: boolean;
   /** Whether the shell considers this window focused. */
   focused: boolean;
@@ -128,6 +134,8 @@ type Props = {
   rect: Rect | undefined;
   /** The restack shuffle in progress, if any. See `shuffledBy`. */
   restack?: Restack | undefined;
+  /** Eases the window into a new box; see `useSettling`. */
+  settler?: Settler | undefined;
   /**
    * The page's URL from the engine's last list. The bar shows it until the
    * view reports one.
@@ -166,6 +174,7 @@ export const BrowserWindow = ({
   popupWindow,
   rect,
   restack,
+  settler,
   url,
   window,
 }: Props) => {
@@ -178,9 +187,18 @@ export const BrowserWindow = ({
   const unclickable = covered || behindPanel;
   // `null` because React passes `null` to a callback ref on unmount.
   const [view, setView] = useState<HTMLWebViewElement | null>(null);
-  // The whole window, used to check whether focus is inside it. A ref because
-  // only effects read it.
+  // The whole window, used to check whether focus is inside it and to ease it
+  // into a new box. A ref because only effects read it.
   const element = useRef<HTMLElement>(null);
+  useSettling(
+    element,
+    rect,
+    rect === undefined || frame === undefined
+      ? undefined
+      : originOf(frame, rect),
+    dragging || isMoving(motion),
+    settler,
+  );
   // The URL the shell last navigated to. The bar shows it until the page
   // reports its own URL.
   const [sent, setSent] = useState(url);
@@ -447,9 +465,9 @@ export const BrowserWindow = ({
         noTopEdgeStyles,
         movingStyles({ motion }),
         (clickThrough || leaving) && clickThroughStyles,
-        // A dragged window gets a new box on every pointer move, so it skips
-        // easing. Colors still ease; see `settlingStyles`.
-        settlingStyles({ dragging }),
+        // The page's box takes its new size at once; `useSettling` eases it.
+        // Colors still ease; see `settlingStyles`.
+        settlingStyles({ box: "snapped" }),
       )}
       // Exposes the motion on the element for tests and debugging.
       data-motion={motion}

@@ -5,19 +5,22 @@ import {
 } from "@domicile-desktop/sdk/app-element";
 import type { CursorShape } from "@domicile-desktop/sdk/cursor-shape";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { css, cx } from "../../styled-system/css";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
+import type { Settler } from "./useSettling";
+import { useSettling } from "./useSettling";
 import { appWindowId } from "./window";
 import type { WindowMotion } from "./window-motion";
-import { isLeaving } from "./window-motion";
+import { isLeaving, isMoving } from "./window-motion";
 import {
   bottomCornerStyles,
   clickThroughStyles,
   edgeStyles,
   movingStyles,
+  originOf,
   placedAt,
   scaledAbout,
   settlingStyles,
@@ -38,7 +41,10 @@ type Props = {
    * shell cannot track a drag over it otherwise.
    */
   clickThrough: boolean;
-  /** Whether the user is dragging this window. */
+  /**
+   * Whether the user is dragging or resizing this window, so its box follows
+   * the pointer.
+   */
   dragging: boolean;
   /** The host's id for this window's client. */
   appId: string;
@@ -85,6 +91,8 @@ type Props = {
   rect: Rect | undefined;
   /** The restack shuffle in progress, if any. See `shuffledBy`. */
   restack?: Restack | undefined;
+  /** Eases the window into a new box; see `useSettling`. */
+  settler?: Settler | undefined;
 };
 
 /**
@@ -114,11 +122,28 @@ export const AppWindow = ({
   onMotionEnded,
   rect,
   restack,
+  settler,
 }: Props) => {
   // A closed window that is still animating out.
   const leaving = isLeaving(motion);
   // `null` because React passes `null` to a callback ref on unmount.
   const [element, setElement] = useState<HTMLAppElement | null>(null);
+  // The same element as a ref, which the layout effect in `useSettling` reads
+  // before this render's state could reach it.
+  const settling = useRef<HTMLAppElement | null>(null);
+  const attach = useCallback((node: HTMLAppElement | null) => {
+    settling.current = node;
+    setElement(node);
+  }, []);
+  useSettling(
+    settling,
+    rect,
+    rect === undefined || frame === undefined
+      ? undefined
+      : originOf(frame, rect),
+    dragging || isMoving(motion),
+    settler,
+  );
 
   // Keeps the compositor's keyboard focus in line with the shell's.
   //
@@ -215,9 +240,9 @@ export const AppWindow = ({
         !fullscreen && bottomCornerStyles,
         movingStyles({ motion }),
         (clickThrough || leaving) && clickThroughStyles,
-        // A dragged window gets a new box on every pointer move, so it skips
-        // easing. Colors still ease; see `settlingStyles`.
-        settlingStyles({ dragging }),
+        // The client's box takes its new size at once; `useSettling` eases
+        // it. Colors still ease; see `settlingStyles`.
+        settlingStyles({ box: "snapped" }),
       )}
       // Exposes the motion on the element for tests and debugging.
       data-motion={motion}
@@ -230,7 +255,7 @@ export const AppWindow = ({
           onMotionEnded();
         }
       }}
-      ref={setElement}
+      ref={attach}
       // Inline because the box and the cursor are runtime values that Panda
       // cannot extract at build time.
       style={{

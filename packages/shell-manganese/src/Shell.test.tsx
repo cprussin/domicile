@@ -2429,6 +2429,22 @@ describe("Shell", () => {
       );
     });
 
+    it("resizes a float's window with the pointer rather than easing after it", () => {
+      // An eased window would trail the pointer; see `useSettling`.
+      const { container } = renderShell();
+      clientAppears("term");
+      press("Tab", true);
+      pageHolds({});
+
+      fireEvent.pointerDown(rightBorder(container), {
+        clientX: 100,
+        clientY: 100,
+      });
+      fireEvent.pointerMove(window, { clientX: 140, clientY: 130 });
+
+      expect(appElement(container, "term").getAnimations()).toHaveLength(0);
+    });
+
     it("keeps a float's glow on it while it is dragged rather than easing after it", () => {
       // A transitioning glow would trail the window during a drag.
       const { container } = renderShell();
@@ -2441,7 +2457,7 @@ describe("Shell", () => {
       fireEvent.pointerMove(window, { clientX: 140, clientY: 100 });
 
       expect(glowing(container).className).toContain(
-        settlingStyles({ dragging: true }),
+        settlingStyles({ box: "snapped" }),
       );
     });
 

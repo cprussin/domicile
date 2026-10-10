@@ -55,7 +55,7 @@ export const FocusGlow = ({
       glowStyles,
       fadeStyles({ leaving }),
       movingStyles({ motion }),
-      settlingStyles({ dragging }),
+      settlingStyles({ box: dragging ? "snapped" : "eased" }),
     )}
     data-focus-box={windows.join(" ")}
     data-leaving={leaving || undefined}

@@ -270,7 +270,7 @@ export const Stage = ({
                   cursor={window.cursor}
                   depth={depth}
                   domicile={domicile}
-                  dragging={window.id === movingId}
+                  dragging={stretching || window.id === movingId}
                   focused={focused}
                   frame={placement?.frame}
                   fullscreen={fillsScreen(screens, window.id)}
@@ -287,7 +287,7 @@ export const Stage = ({
                   covered={placement?.behind !== undefined}
                   depth={depth}
                   domicile={domicile}
-                  dragging={window.id === movingId}
+                  dragging={stretching || window.id === movingId}
                   focused={focused}
                   frame={placement?.frame}
                   fullscreen={fillsScreen(screens, window.id)}
@@ -675,7 +675,8 @@ export const Stage = ({
 /**
  * Disables transitions during a resize drag, since easing would open gaps
  * between the resized window and its neighbors. Covers the whole stage because
- * the neighbors move too.
+ * the neighbors move too. Window contents ease with `useSettling` instead, so
+ * every window is passed as `dragging`.
  */
 const stageStyles = css({
   "&[data-stretching] *": { transition: "none" },

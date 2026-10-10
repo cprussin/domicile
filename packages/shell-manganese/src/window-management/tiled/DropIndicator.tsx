@@ -16,7 +16,7 @@ type Props = {
  */
 export const DropIndicator = ({ rect }: Props) => (
   <div
-    className={cx(indicatorStyles, settlingStyles({ dragging: false }))}
+    className={cx(indicatorStyles, settlingStyles({ box: "eased" }))}
     data-drop
     style={placedAt(rect, TILED)}
   />

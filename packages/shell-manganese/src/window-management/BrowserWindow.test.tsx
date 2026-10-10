@@ -22,6 +22,7 @@ import userEvent from "@testing-library/user-event";
 import { css } from "../../styled-system/css";
 import { loadEmittedStylesheet } from "../emitted-stylesheet";
 import { BrowserWindow } from "./BrowserWindow";
+import { recordedSettles } from "./recorded-settles";
 
 const silentDomicile = {
   // Taken by the window's system calls, which these tests never answer.
@@ -1815,21 +1816,45 @@ describe("BrowserWindow", () => {
       expect(browser()).toHaveStyle({ transformOrigin: "600px 385px" });
     });
 
-    it("eases to a new box rather than jumping to it", () => {
-      render(<BrowserWindow {...windowProps} />);
-
-      expect(globalThis.getComputedStyle(browser()).transition).toContain(
-        "inline-size",
+    // Resizing the box every frame would lay its page out at every size in
+    // between; see `useSettling`.
+    it("takes its new box at once, and eases into it from the old one", () => {
+      const { played, settler } = recordedSettles();
+      const { rerender } = render(
+        <BrowserWindow {...windowProps} settler={settler} />,
       );
-    });
 
-    it("follows the pointer exactly while it is being dragged", () => {
-      // Easing would make the window trail the pointer.
-      render(<BrowserWindow {...windowProps} dragging />);
+      rerender(
+        <BrowserWindow
+          {...windowProps}
+          rect={{ ...ON_SCREEN, width: 600 }}
+          settler={settler}
+        />,
+      );
 
       expect(globalThis.getComputedStyle(browser()).transition).not.toContain(
         "inline-size",
       );
+      expect(played).toStrictEqual([{ scaleX: 2, scaleY: 1, x: 600, y: 0 }]);
+    });
+
+    it("follows the pointer exactly while it is being dragged", () => {
+      // Easing would make the window trail the pointer.
+      const { played, settler } = recordedSettles();
+      const { rerender } = render(
+        <BrowserWindow {...windowProps} dragging settler={settler} />,
+      );
+
+      rerender(
+        <BrowserWindow
+          {...windowProps}
+          dragging
+          rect={{ ...ON_SCREEN, x: 40 }}
+          settler={settler}
+        />,
+      );
+
+      expect(played).toStrictEqual([undefined]);
     });
 
     it("stays opaque while it is being dragged", () => {
