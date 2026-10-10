@@ -21,6 +21,9 @@ const drawer = (
         asked.push(["dismiss", ids]);
       }}
       onOpenChange={() => undefined}
+      onReply={(id, text) => {
+        asked.push(["reply", id, text]);
+      }}
       open
       screen={undefined}
     />,
@@ -71,6 +74,26 @@ describe("NotificationDrawer", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reply" }));
 
     expect(asked).toEqual([["action", 7, "reply"]]);
+  });
+
+  it("replies to a notification", () => {
+    const asked: Asked = [];
+    drawer(
+      [
+        notification({
+          actions: [{ key: "inline-reply", label: "Reply" }],
+          id: 7,
+        }),
+      ],
+      asked,
+    );
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Reply" }), {
+      target: { value: "On my way" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(asked).toEqual([["reply", 7, "On my way"]]);
   });
 
   it("says there is nothing, and offers nothing to clear", () => {

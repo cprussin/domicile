@@ -19,6 +19,8 @@ export type NotificationCenter = {
   dismiss: (ids: readonly number[]) => void;
   /** Press `action` on `id`; `"default"` for the notification itself. */
   invoke: (id: number, action: string) => void;
+  /** Send `text` from `id`'s reply field. */
+  reply: (id: number, text: string) => void;
 };
 
 /** The notifications and how far the user has read. */
@@ -100,11 +102,19 @@ export const useNotifications = (
     [domicile],
   );
 
+  const reply = useCallback(
+    (id: number, text: string) => {
+      domicile.replyToNotification(id, text);
+    },
+    [domicile],
+  );
+
   return {
     dismiss,
     invoke,
     items: desk.items.toReversed(),
     read,
+    reply,
     unread: desk.items.filter(({ time }) => time > (desk.readUpTo ?? 0)).length,
   };
 };

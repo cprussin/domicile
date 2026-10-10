@@ -299,6 +299,10 @@ fn read_chrome_messages(
                 hub.send_request(ClientRequest::InvokeNotificationAction { id, action });
                 Vec::new()
             }
+            Ok(ChromeMessage::ReplyToNotification { id, text }) => {
+                hub.send_request(ClientRequest::ReplyToNotification { id, text });
+                Vec::new()
+            }
             // Sent to the Wayland thread so a locked desktop can refuse it:
             // an answer grants an application what it asked for.
             Ok(ChromeMessage::AnswerPortalRequest { id, answer }) => {

@@ -1,7 +1,10 @@
 import { Avatar } from "@domicile-desktop/component-library/Avatar";
 import { Button } from "@domicile-desktop/component-library/Button";
 import type { Notification } from "@domicile-desktop/sdk/notification";
-import { DEFAULT_NOTIFICATION_ACTION } from "@domicile-desktop/sdk/notification";
+import {
+  DEFAULT_NOTIFICATION_ACTION,
+  INLINE_REPLY_NOTIFICATION_ACTION,
+} from "@domicile-desktop/sdk/notification";
 import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import type { MouseEvent, ReactNode } from "react";
@@ -9,6 +12,7 @@ import type { MouseEvent, ReactNode } from "react";
 import { css, cva } from "../../styled-system/css";
 import { grid, hstack } from "../../styled-system/patterns";
 import { ago } from "./ago";
+import { NotificationReply } from "./NotificationReply";
 
 type Props = {
   notification: Notification;
@@ -28,10 +32,13 @@ type Props = {
    */
   onAction: (key: string, event: MouseEvent<HTMLElement>) => void;
   onClose: () => void;
+  /** Called with what is typed in the reply field. */
+  onReply: (text: string) => void;
 };
 
 /**
- * One notification: sender, time, summary, body, actions and a close button.
+ * One notification: sender, time, summary, body, actions, a reply field if it
+ * offers one, and a close button.
  * Shared by toasts and the drawer, which each draw their own surface.
  *
  * If the notification has a default action, a press anywhere on the card takes
@@ -48,11 +55,18 @@ export const NotificationCard = ({
   now,
   onAction,
   onClose,
+  onReply,
   summary,
 }: Props) => {
   const pressed = (event: MouseEvent<HTMLElement>) => {
     onAction(DEFAULT_NOTIFICATION_ACTION, event);
   };
+  const reply = notification.actions.find(
+    ({ key }) => key === INLINE_REPLY_NOTIFICATION_ACTION,
+  );
+  const buttons = notification.actions.filter(
+    ({ key }) => key !== INLINE_REPLY_NOTIFICATION_ACTION,
+  );
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the card is not a control and is not being made into one — the press is the pointer's way to the default action, and the summary is the keyboard's
     // biome-ignore lint/a11y/noNoninteractiveElementInteractions: the same press, and the same reason
@@ -105,9 +119,9 @@ export const NotificationCard = ({
         {notification.body !== "" && (
           <span className={bodyStyles}>{body ?? notification.body}</span>
         )}
-        {notification.actions.length > 0 && (
+        {buttons.length > 0 && (
           <div className={actionsStyles}>
-            {notification.actions.map(({ key, label }) => (
+            {buttons.map(({ key, label }) => (
               <Button
                 key={key}
                 onClick={(event) => {
@@ -123,6 +137,9 @@ export const NotificationCard = ({
               </Button>
             ))}
           </div>
+        )}
+        {reply !== undefined && (
+          <NotificationReply label={reply.label} onReply={onReply} />
         )}
       </div>
       <button

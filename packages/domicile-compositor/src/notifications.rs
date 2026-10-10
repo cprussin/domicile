@@ -5,9 +5,10 @@
 //! bus access, so this process owns the name and sends the notifications to
 //! every chrome as
 //! [`HostMessage::Notifications`](domicile_protocol::HostMessage::Notifications).
-//! Presses and clears come back as `invoke_notification_action` and
-//! `dismiss_notifications`, and the application gets `ActionInvoked` and
-//! `NotificationClosed`. See `docs/architecture/NOTIFICATIONS.md`.
+//! Presses, replies and clears come back as `invoke_notification_action`,
+//! `reply_to_notification` and `dismiss_notifications`, and the application
+//! gets `ActionInvoked`, `NotificationReplied` and `NotificationClosed`. See
+//! `docs/architecture/NOTIFICATIONS.md`.
 //!
 //! The notification model is in `domicile_host::notifications`; this module
 //! is only the bus. The notification portal (`crate::portals`) adds to the same
@@ -48,6 +49,7 @@ const SERVER_PATH: &str = "/org/freedesktop/Notifications";
 ///
 /// - No `body-markup`: bodies are drawn as plain text, and senders such as
 ///   Chromium then send no markup.
+/// - `inline-reply`: an `inline-reply` action is a reply field.
 /// - `persistence`: a notification stays until it is cleared.
 /// - `x-kde-origin-name`: Chromium then sends a Web Notification's site as a
 ///   hint instead of prepending it to the body.
@@ -55,6 +57,7 @@ const CAPABILITIES: &[&str] = &[
     "actions",
     "body",
     "icon-static",
+    "inline-reply",
     "persistence",
     "x-kde-origin-name",
 ];
@@ -79,6 +82,8 @@ enum Event {
     Dismiss { ids: Vec<u32> },
     /// The user pressed `action` on `id`.
     Invoke { id: u32, action: String },
+    /// The user replied `text` to `id`.
+    Reply { id: u32, text: String },
     /// A portal notification pushed this one out of the history.
     Expired { id: u32 },
 }
@@ -129,6 +134,11 @@ impl NotificationServer {
     /// The user pressed `action` on `id`.
     pub fn invoke(&self, id: u32, action: String) {
         let _ = self.told.send(Event::Invoke { id, action });
+    }
+
+    /// The user replied `text` to `id`.
+    pub fn reply(&self, id: u32, text: String) {
+        let _ = self.told.send(Event::Reply { id, text });
     }
 
     /// Add or replace `app_id`'s notification `id`, from the notification
@@ -255,6 +265,12 @@ impl Store {
         })
     }
 
+    /// Reply to `id`. Returns whether it closes, or `None` if it has no
+    /// reply field. Portal notifications never have one.
+    fn reply(&self, id: u32) -> Option<bool> {
+        self.change(|held| held.notifications.reply(id))
+    }
+
     /// Press `action` on `id`.
     fn press(&self, id: u32, action: &str) -> Pressed {
         self.change(|held| {
@@ -310,6 +326,15 @@ fn answer(store: Arc<Store>, events: &Receiver<Event>) -> zbus::Result<()> {
                     debug!(%id, %action, "an action on a notification that does not offer it")
                 }
             },
+            Event::Reply { id, text } => match store.reply(id) {
+                Some(closes) => {
+                    replied(&server, id, &text);
+                    if closes {
+                        closed(&server, id, Reason::Dismissed);
+                    }
+                }
+                None => debug!(%id, "a reply to a notification with no reply field"),
+            },
             Event::Expired { id } => closed(&server, id, Reason::Expired),
         }
     }
@@ -334,6 +359,18 @@ fn invoked(server: &InterfaceRef<Server>, id: u32, action: &str) {
     let said = zbus::block_on(Server::action_invoked(server.signal_emitter(), id, action));
     if let Err(why) = said {
         warn!(%why, %id, "a notification's action could not be said");
+    }
+}
+
+/// Emit `NotificationReplied`.
+fn replied(server: &InterfaceRef<Server>, id: u32, text: &str) {
+    let said = zbus::block_on(Server::notification_replied(
+        server.signal_emitter(),
+        id,
+        text,
+    ));
+    if let Err(why) = said {
+        warn!(%why, %id, "a reply to a notification could not be said");
     }
 }
 
@@ -475,6 +512,13 @@ impl Server {
         id: u32,
         action_key: &str,
     ) -> zbus::Result<()>;
+
+    #[zbus(signal)]
+    async fn notification_replied(
+        emitter: &SignalEmitter<'_>,
+        id: u32,
+        text: &str,
+    ) -> zbus::Result<()>;
 }
 
 #[cfg(test)]
@@ -552,6 +596,11 @@ mod tests {
                 .and_then(|shown| shown.icon)
         });
         assert_eq!(icon, Some("data:image/svg+xml;base64,PHN2Zy8+".into()));
+    }
+
+    #[test]
+    fn a_reply_field_is_offered_to_applications() {
+        assert!(CAPABILITIES.contains(&"inline-reply"));
     }
 
     #[test]
