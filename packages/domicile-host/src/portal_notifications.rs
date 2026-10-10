@@ -200,7 +200,7 @@ mod tests {
     use domicile_protocol::{Notification, Urgency};
 
     fn held() -> Notifications {
-        Notifications::new(TrayIcons::new(Vec::new()))
+        Notifications::new(TrayIcons::new(Vec::new(), None))
     }
 
     fn sent(title: &str) -> PortalNotification<&'static str> {

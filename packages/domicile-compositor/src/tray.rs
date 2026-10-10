@@ -57,6 +57,8 @@ enum Event {
     },
     /// A shell clicked an icon.
     Activate { id: String, action: TrayAction },
+    /// The config's icon theme changed.
+    Rethemed { theme: Option<String> },
 }
 
 /// A handle that forwards clicks to tray items.
@@ -74,17 +76,27 @@ impl Tray {
         // A closed channel means the worker stopped and already logged why.
         let _ = self.told.send(Event::Activate { id, action });
     }
+
+    /// Redraws every icon in the icon theme `theme`.
+    pub fn retheme(&self, theme: Option<String>) {
+        let _ = self.told.send(Event::Rethemed { theme });
+    }
 }
 
 /// Starts the watcher and host, calling `publish` whenever the tray changes.
-/// Icons are looked up under `data_dirs`.
+/// Icons are looked up under `data_dirs`, in the icon theme `theme`.
 ///
 /// Returns once the thread is spawned, so startup does not wait on the bus.
-pub fn serve(data_dirs: Vec<PathBuf>, publish: impl Fn(Vec<TrayItem>) + Send + 'static) -> Tray {
+pub fn serve(
+    data_dirs: Vec<PathBuf>,
+    theme: Option<String>,
+    publish: impl Fn(Vec<TrayItem>) + Send + 'static,
+) -> Tray {
     let (told, events) = channel();
     let heard = told.clone();
     thread::spawn(move || {
-        if let Err(why) = answer(heard, &events, TrayIcons::new(data_dirs), &publish) {
+        let icons = TrayIcons::new(data_dirs, theme);
+        if let Err(why) = answer(heard, &events, icons, &publish) {
             warn!(
                 %why,
                 "the system tray is not being hosted; this desktop's applications \
@@ -197,6 +209,14 @@ fn answer(
             }
             Event::Activate { id, action } => {
                 activate(&connection, &registry, &id, action);
+            }
+            // Read every item again: the registry keeps what it drew, not the
+            // names it drew from.
+            Event::Rethemed { theme } => {
+                icons.retheme(theme);
+                for id in registry.ids() {
+                    read(&connection, &told, &mut asked, &registry, &id);
+                }
             }
         }
         publish(registry.items());

@@ -128,6 +128,12 @@ impl Notifications {
         }
     }
 
+    /// Look up icons in the icon theme `theme` from now on. Notifications
+    /// already held keep their pictures.
+    pub fn retheme(&mut self, theme: Option<String>) {
+        self.icons.retheme(theme);
+    }
+
     /// Add `notify`, received at `now` (milliseconds since the epoch).
     ///
     /// A replacement for a held notification keeps its id and moves to the
@@ -373,7 +379,7 @@ mod tests {
     }
 
     fn held(dirs: Vec<PathBuf>) -> Notifications {
-        Notifications::new(TrayIcons::new(dirs))
+        Notifications::new(TrayIcons::new(dirs, None))
     }
 
     fn notify(summary: &str) -> Notify {
@@ -788,6 +794,31 @@ mod tests {
             );
 
             assert_eq!(icon, Some(data_url("image/svg+xml", b"<svg/>")));
+        }
+
+        #[test]
+        fn a_name_is_looked_for_in_a_new_icon_theme() {
+            let dir = data_dir(&[
+                ("icons/hicolor/scalable/apps/thunderbird.svg", b"<svg/>"),
+                (
+                    "icons/Papirus/index.theme",
+                    b"[Icon Theme]\nDirectories=48x48/apps\n\
+                      [48x48/apps]\nSize=48\nContext=Applications\n",
+                ),
+                ("icons/Papirus/48x48/apps/thunderbird.png", PNG_BYTES),
+            ]);
+            let mut notifications = held(vec![dir.path().to_path_buf()]);
+
+            notifications.retheme(Some("Papirus".into()));
+            let icon = icon_of(
+                &mut notifications,
+                Notify {
+                    app_icon: "thunderbird".into(),
+                    ..notify("")
+                },
+            );
+
+            assert_eq!(icon, Some(data_url("image/png", PNG_BYTES)));
         }
 
         #[test]

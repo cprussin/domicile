@@ -37,8 +37,12 @@ shell menu ─ dbusCall / dbusMatch (callSystem) ─▶ compositor ─▶ com.ca
 - **The compositor sends the full tray** on every change and on connect, as it
   does for `clipboard`. `Host::set_tray` sends nothing when nothing changed.
 - **Icons are sent as `data:` URLs.**
-  - Named icons are looked up in `hicolor` (`status`, `apps`, `devices`,
-    `panel`) and in the item's `IconThemePath`.
+  - Named icons are looked up at 16 pixels, scale 2, in the item's
+    `IconThemePath`, then in the config's `theme.icon_theme`, its parents and
+    `hicolor` (`status`, `apps`, `devices`, `panel`), as
+    `domicile_host::icon_theme` reads their `index.theme`. A reload that
+    changes the theme redraws every icon. Notification icons use the same
+    lookup.
   - Pixmaps are encoded as uncompressed (stored-deflate) PNGs, with no new
     dependency.
 - **Items are keyed by their `Id`.** The bus name changes every run; the `Id`
