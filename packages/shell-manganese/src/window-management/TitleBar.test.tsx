@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
 import { readFileSync } from "node:fs";
 import { fireEvent, render, screen } from "@testing-library/react";
 
@@ -613,6 +613,21 @@ describe("TitleBar", () => {
         new MouseEvent("auxclick", { bubbles: true, button: 1 }),
       );
     });
+  });
+
+  // A press reaching the window frame selects the window, which would open a
+  // hidden tab for an instant before the click closes it.
+  it("keeps a middle press from the window around it", () => {
+    const onReach = mock(() => undefined);
+    const { container } = render(
+      <div onPointerDown={onReach}>
+        <TitleBar {...barProps} strip={MIDDLE_TAB} />
+      </div>,
+    );
+
+    fireEvent.pointerDown(bar(container), { button: 1, pointerId: 1 });
+
+    expect(onReach).not.toHaveBeenCalled();
   });
 
   describe("the button that fills the screen", () => {

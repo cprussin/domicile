@@ -233,7 +233,15 @@ export const TitleBar = ({
         }
       }}
       onContextMenu={onContextMenu}
-      onPointerDown={onPointerDown}
+      // A middle press closes the window, so it does not reach `WindowFrame`:
+      // selecting a hidden tab would show it for an instant first.
+      onPointerDown={(event) => {
+        if (event.button === MIDDLE_BUTTON) {
+          event.stopPropagation();
+        } else {
+          onPointerDown?.(event);
+        }
+      }}
       style={{
         // Over the rest of the strip, which slides under it when tabs swap.
         ...placedAt(rect, strip?.open === true ? raised(depth) : depth),
