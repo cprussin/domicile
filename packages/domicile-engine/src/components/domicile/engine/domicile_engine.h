@@ -52,6 +52,19 @@ typedef uint32_t DomicileDisplayTransform;
 #define DOMICILE_DISPLAY_TRANSFORM_ROTATE_180 2u
 #define DOMICILE_DISPLAY_TRANSFORM_ROTATE_270 3u
 
+// A client's wl_surface.set_buffer_transform: the turn and flip it drew its
+// buffer with. Values follow `wl_output.transform` order.
+typedef uint32_t DomicileBufferTransform;
+
+#define DOMICILE_BUFFER_TRANSFORM_NORMAL 0u
+#define DOMICILE_BUFFER_TRANSFORM_ROTATE_90 1u
+#define DOMICILE_BUFFER_TRANSFORM_ROTATE_180 2u
+#define DOMICILE_BUFFER_TRANSFORM_ROTATE_270 3u
+#define DOMICILE_BUFFER_TRANSFORM_FLIPPED 4u
+#define DOMICILE_BUFFER_TRANSFORM_FLIPPED_90 5u
+#define DOMICILE_BUFFER_TRANSFORM_FLIPPED_180 6u
+#define DOMICILE_BUFFER_TRANSFORM_FLIPPED_270 7u
+
 // A surface id. Zero is never valid and is domicile_surface_create's failure
 // return.
 typedef uint32_t DomicileSurfaceId;
@@ -345,6 +358,27 @@ DOMICILE_ENGINE_EXPORT void domicile_surface_submit_for_box(
     int32_t damage_width,
     int32_t damage_height,
     uint64_t box);
+
+// Like domicile_surface_submit_for_box, but shows a buffer the client drew
+// with `transform`, turned upright. `crop` is in the buffer's own pixels,
+// before the turn.
+//
+// Implements wl_surface.set_buffer_transform. A transform past
+// DOMICILE_BUFFER_TRANSFORM_FLIPPED_270 is a caller bug and aborts.
+DOMICILE_ENGINE_EXPORT void domicile_surface_submit_transformed(
+    DomicileEngine* engine,
+    DomicileSurfaceId surface,
+    DomicileBufferId buffer,
+    int32_t crop_x,
+    int32_t crop_y,
+    int32_t crop_width,
+    int32_t crop_height,
+    int32_t damage_x,
+    int32_t damage_y,
+    int32_t damage_width,
+    int32_t damage_height,
+    uint64_t box,
+    DomicileBufferTransform transform);
 
 // Tells the browser which connectors to light and where, in answer to the
 // `displays` callback.

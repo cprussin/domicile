@@ -267,6 +267,7 @@ if wanted engine; then
     scripts/engine-guard-shortcuts-inhibitor.sh \
     scripts/engine-guard-client-window.sh \
     scripts/engine-guard-two-windows.sh \
+    scripts/engine-guard-buffer-transform.sh \
     scripts/engine-guard-webview-permissions.sh \
     scripts/engine-guard-app-survives-load-shell.sh \
     scripts/engine-guard-shell.sh \

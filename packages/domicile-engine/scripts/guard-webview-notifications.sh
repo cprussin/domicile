@@ -137,7 +137,10 @@ measure() { # $1 which run, $2 the permission the page asks about
       --for-seconds="$FOR_SECONDS" 2>&1 | tee "$probe_log"
   local status="${PIPESTATUS[0]}"
 
+  # Waited for: an engine still shutting down writes its Preferences into the
+  # next run's fresh profile, over that run's seed.
   kill "$engine" 2>/dev/null
+  wait "$engine" 2>/dev/null
   echo
   echo "the $which probe exited $status"
   return "$status"

@@ -191,7 +191,7 @@ Calls (compositor → engine):
 |---|---|
 | `domicile_surface_create(engine, app_id)` → `DomicileSurfaceId` | a window appearing. The page's embed waits for this call. |
 | `domicile_surface_import(surface, dmabuf)` → `DomicileBufferId` | `zwp_linux_dmabuf_v1` |
-| `domicile_surface_submit_for_box(surface, buffer, crop, damage, box)` | `wl_surface.commit` with `xdg_surface.set_window_geometry`, shown at the box of the acked configure |
+| `domicile_surface_submit_transformed(surface, buffer, crop, damage, box, transform)` | `wl_surface.commit` with `xdg_surface.set_window_geometry` and `wl_surface.set_buffer_transform`, shown at the box of the acked configure |
 | `domicile_displays_configure(layout, count)` | output configuration |
 | `domicile_clipboard_set(clipboard, text, length)` | `wl_data_offer.receive`. The compositor sends the selection text it already read. |
 | `domicile_display_capture_start(engine, display, width, height, max_fps)`, `_resize`, `_stop` | none: a screen cast of a monitor (see [Display capture](#display-capture)) |
