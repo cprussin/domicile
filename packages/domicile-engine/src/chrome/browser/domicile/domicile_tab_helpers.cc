@@ -18,8 +18,9 @@
 #include "extensions/common/mojom/view_type.mojom.h"
 
 namespace domicile {
+namespace {
 
-void AttachTabHelpers(content::WebContents& guest) {
+void Attach(content::WebContents& guest, bool records_history) {
   // Before the popup check: a popup's page may ask for permissions too.
   AttachPermissionPrompts(guest);
 
@@ -48,8 +49,10 @@ void AttachTabHelpers(content::WebContents& guest) {
   CreateSessionServiceTabHelper(&guest);
 
   // Visits and their favicons go into the profile's history, which the
-  // History app reads. See docs/HISTORY.md.
-  HistoryTabHelper::GetOrCreateForWebContents(&guest)->set_desk_tab();
+  // History app reads, except an app window's. See docs/HISTORY.md.
+  if (records_history) {
+    HistoryTabHelper::GetOrCreateForWebContents(&guest)->set_desk_tab();
+  }
   favicon::CreateContentFaviconDriverForWebContents(&guest);
 
   // Set the view type before extensions::TabHelper, as Chrome's
@@ -66,6 +69,16 @@ void AttachTabHelpers(content::WebContents& guest) {
 
   // So this guest can become a DevTools window.
   WatchForDevTools(guest);
+}
+
+}  // namespace
+
+void AttachTabHelpers(content::WebContents& guest) {
+  Attach(guest, /*records_history=*/true);
+}
+
+void AttachAppTabHelpers(content::WebContents& guest) {
+  Attach(guest, /*records_history=*/false);
 }
 
 }  // namespace domicile

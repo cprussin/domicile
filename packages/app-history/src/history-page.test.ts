@@ -20,7 +20,6 @@ describe(loadPage, () => {
     ]);
     const page = await loadPage(source, {
       endTime: at(10, 0),
-      hiddenOrigin: OWN,
       maxResults: 10,
       text: "",
     });
@@ -61,7 +60,6 @@ describe(loadPage, () => {
     ]);
     const first = await loadPage(source, {
       endTime: at(10, 0),
-      hiddenOrigin: OWN,
       maxResults: 2,
       text: "",
     });
@@ -73,7 +71,6 @@ describe(loadPage, () => {
 
     const second = await loadPage(source, {
       endTime: at(9, 12),
-      hiddenOrigin: OWN,
       maxResults: 2,
       text: "",
     });
@@ -84,16 +81,20 @@ describe(loadPage, () => {
     expect(second.next).toBe(at(7, 9));
   });
 
-  it("leaves out the app's own pages and Domicile's", async () => {
+  it("leaves out extensions' pages and Domicile's", async () => {
     // The shell's own window is a Chrome tab too, so its visits are recorded.
     const source = fakeHistory([
       { title: "History", url: `${OWN}history.html`, visits: [at(9, 9)] },
+      {
+        title: "Vault",
+        url: "chrome-extension://vault/popup.html",
+        visits: [at(9, 11)],
+      },
       { title: "domicile", url: "domicile://shell/", visits: [at(9, 10)] },
       { title: "A", url: "https://a.test/", visits: [at(9, 8)] },
     ]);
     const page = await loadPage(source, {
       endTime: at(10, 0),
-      hiddenOrigin: OWN,
       maxResults: 10,
       text: "",
     });
@@ -107,7 +108,6 @@ describe(loadPage, () => {
     ]);
     const page = await loadPage(source, {
       endTime: at(10, 0),
-      hiddenOrigin: OWN,
       maxResults: 10,
       text: "Dogs",
     });
@@ -122,7 +122,6 @@ describe(loadPage, () => {
     await expect(
       loadPage(source, {
         endTime: at(9, 0),
-        hiddenOrigin: OWN,
         maxResults: 1,
         text: "",
       }),
@@ -140,7 +139,6 @@ describe(loadSince, () => {
     ]);
     const page = await loadSince(source, at(9, 12), {
       endTime: at(10, 0),
-      hiddenOrigin: OWN,
       maxResults: 1,
       text: "",
     });
