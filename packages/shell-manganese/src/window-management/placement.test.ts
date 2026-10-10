@@ -74,6 +74,10 @@ describe("placementsOf", () => {
         box: { height: TITLE_BAR, width: 1880, x: 20, y: 52 },
         divided: false,
         first: true,
+        group: {
+          node: { id: appWindowId("kitty"), up: 1 },
+          windows: [appWindowId("kitty")],
+        },
         open: true,
         rest: 1640,
         tabs: 1,

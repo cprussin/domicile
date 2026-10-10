@@ -13,7 +13,8 @@ type Drag = {
   aim: Aim | undefined;
   /** The edges a resize drags. */
   corner: Corner | undefined;
-  id: string;
+  /** The windows it moves. See `aimAt`. */
+  dragged: readonly string[];
   /** The pointer at the last move; the next delta is measured from it. */
   last: { x: number; y: number };
   onAim: (aim: Aim | undefined) => void;
@@ -48,9 +49,10 @@ export type TileDrag = {
 };
 
 type Options = {
+  /** The windows it moves: one, or every window in a group. */
+  dragged: readonly string[];
   /** The window's box; the pointer's quarter picks the resize corner. */
   frame: Rect;
-  id: string;
   /** Reports where a drop would land, for drawing. */
   onAim: (aim: Aim | undefined) => void;
   onDrop: () => void;
@@ -75,8 +77,8 @@ type Options = {
  * `useFloatDrag` explains.
  */
 export const useTileDrag = ({
+  dragged,
   frame,
-  id,
   onAim,
   onDrop,
   onDropOn,
@@ -137,7 +139,7 @@ export const useTileDrag = ({
       running.current = {
         aim: undefined,
         corner,
-        id,
+        dragged,
         last: { x: event.clientX, y: event.clientY },
         onAim,
         onDrop,
@@ -184,7 +186,7 @@ const aimed = (
   x: number,
   y: number,
 ): Drag => {
-  const aim = aimAt(targets, drag.id, x, y);
+  const aim = aimAt(targets, drag.dragged, x, y);
   // Once per slot: the targets update only after the move renders.
   if (aim?.kind === AimKind.Strip && !landsAlike(aim, drag.aim)) {
     drag.onDropOn(aim);

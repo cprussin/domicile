@@ -1,4 +1,5 @@
-// Dropping a dragged tiled window onto another, as in sway's `tiling_drag`.
+// Dropping a dragged tiled window or group onto a window, as in sway's
+// `tiling_drag`.
 //
 // Dropping on the middle swaps the two. Dropping on an edge puts the window on
 // that side: in the target's container if it runs that way, else in a new
@@ -12,47 +13,53 @@ import {
   LayoutNode as Node,
   NodeKind,
   splitFor,
+  windowsIn,
   withChildAt,
 } from "./node";
-import type { Path } from "./path";
-import { nodeAt, pathTo, replacedAt } from "./path";
+import type { NodeRef, Path } from "./path";
+import { nodeAt, pathTo, pathToRef, replacedAt } from "./path";
 import { withoutAt } from "./remove";
 import type { Tiling } from "./tiling";
-import { withFocusOn } from "./tiling";
+import { withCommandsOn } from "./tiling";
 
 /**
- * The tiling with window `id` dropped on `target`'s `edge`, or its middle when
- * `edge` is `undefined`, with focus on the moved window.
+ * The tiling with the node `moving` names dropped on window `target`'s
+ * `edge`, or its middle when `edge` is `undefined`. Focus and commands go to
+ * the moved node, so a dropped group stays selected.
  *
- * Throws if either window is not tiled here.
+ * Unchanged when `target` is inside `moving`. Throws if either is not tiled
+ * here.
  */
 export const droppedOn = (
   tiling: Tiling,
-  id: string,
+  moving: NodeRef,
   target: string,
   edge: Direction | undefined,
 ): Tiling => {
-  if (id === target) {
+  const root = tiledRoot(tiling);
+  const from = pathToRef(root, moving);
+  const node = nodeAt(root, from);
+  if (windowsIn(node).includes(target)) {
     return tiling;
   } else {
-    const root = tiledRoot(tiling);
     const moved =
       edge === undefined
-        ? traded(root, id, target)
-        : besideTarget(root, id, target, edge);
-    return withFocusOn({ ...tiling, root: moved }, id);
+        ? traded(root, from, target)
+        : besideTarget(root, from, target, edge);
+    return withCommandsOn({ ...tiling, root: moved }, node);
   }
 };
 
 /**
- * The tiling with window `id`, dragged in from another workspace, dropped on
- * `target`'s `edge`, or in its place when `edge` is `undefined`. Focuses `id`.
+ * The tiling with `node`, dragged in from another workspace, dropped on
+ * `target`'s `edge`, or in its place when `edge` is `undefined`. Focus and
+ * commands go to `node`.
  *
  * Throws if `target` is not tiled here.
  */
 export const arrivedOn = (
   tiling: Tiling,
-  id: string,
+  node: LayoutNode,
   target: string,
   edge: Direction | undefined,
 ): Tiling => {
@@ -60,28 +67,31 @@ export const arrivedOn = (
   const at = pathOf(root, target);
   const moved =
     edge === undefined
-      ? replacedAt(root, at, () => Node.Window(id))
-      : placedBeside(root, at, Node.Window(id), edge);
-  return withFocusOn({ ...tiling, root: moved }, id);
+      ? replacedAt(root, at, () => node)
+      : placedBeside(root, at, node, edge);
+  return withCommandsOn({ ...tiling, root: moved }, node);
 };
 
 /**
- * The tiling with window `id` replaced by `by`, the window it was dropped on
- * in the middle of on another workspace.
+ * The tiling with the node `moving` names replaced by `by`, the window it was
+ * dropped in the middle of on another workspace.
  *
- * Throws if `id` is not tiled here.
+ * Throws if `moving` is not tiled here.
  */
-export const tradedFor = (tiling: Tiling, id: string, by: string): Tiling => {
+export const tradedFor = (
+  tiling: Tiling,
+  moving: NodeRef,
+  by: string,
+): Tiling => {
   const root = tiledRoot(tiling);
   return {
     ...tiling,
-    root: replacedAt(root, pathOf(root, id), () => Node.Window(by)),
+    root: replacedAt(root, pathToRef(root, moving), () => Node.Window(by)),
   };
 };
 
-/** Swaps the two windows, keeping both boxes' sizes. */
-const traded = (root: LayoutNode, id: string, target: string): LayoutNode => {
-  const from = pathOf(root, id);
+/** Swaps the node at `from` with window `target`, keeping both boxes' sizes. */
+const traded = (root: LayoutNode, from: Path, target: string): LayoutNode => {
   const to = pathOf(root, target);
   const moving = nodeAt(root, from);
   return replacedAt(
@@ -92,23 +102,23 @@ const traded = (root: LayoutNode, id: string, target: string): LayoutNode => {
 };
 
 /**
- * Removes window `id` and puts it on the `edge` side of `target`.
+ * Removes the node at `from` and puts it on the `edge` side of `target`.
  *
  * Removes it first, like a keyed `move`, so the tree collapses as after a
  * close before the target is located.
  */
 const besideTarget = (
   root: LayoutNode,
-  id: string,
+  from: Path,
   target: string,
   edge: Direction,
 ): LayoutNode => {
-  const rest = withoutAt(root, pathOf(root, id));
+  const rest = withoutAt(root, from);
   if (rest === undefined) {
     // Unreachable: the target is still in the tree.
-    throw new Error(`layout tree: dropping ${id} left nothing to drop it on`);
+    throw new Error(`layout tree: dropping on ${target} left nothing`);
   } else {
-    return placedBeside(rest, pathOf(rest, target), Node.Window(id), edge);
+    return placedBeside(rest, pathOf(rest, target), nodeAt(root, from), edge);
   }
 };
 

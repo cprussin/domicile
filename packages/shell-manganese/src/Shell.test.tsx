@@ -485,9 +485,19 @@ const motionsPlayOut = (container: HTMLElement): void => {
 /** The drag-catching sheets over floating windows. */
 const grabSheets = (container: HTMLElement): HTMLElement[] => [
   ...container.querySelectorAll<HTMLElement>(
-    "[data-window][aria-hidden]:not([data-border])",
+    "[data-window][aria-hidden]:not([data-border]):not([data-group-handle])",
   ),
 ];
+
+/** The one tab strip's empty end, which drags its group. */
+const stripEnd = (container: HTMLElement): Element => {
+  const end = container.querySelector("[data-group-handle]");
+  if (end === null) {
+    throw new Error("test: no strip has an empty end to drag");
+  } else {
+    return end;
+  }
+};
 
 /** A floating window's right border: its rightmost vertical strip. */
 const rightBorder = (container: HTMLElement): HTMLElement => {
@@ -1449,6 +1459,27 @@ describe("Shell", () => {
       fireEvent.pointerUp(window, { clientX: GAP + 600, clientY: y });
 
       expect(tabOrder(container)).toEqual(["app:two", "app:three", "app:one"]);
+    });
+
+    it("drags a whole tab group by its strip's empty end onto another screen", () => {
+      const { container } = renderShell([LEFT, RIGHT]);
+      clientAppears("one");
+      clientAppears("two");
+
+      fireEvent.pointerDown(stripEnd(container), {
+        clientX: GAP + 600,
+        clientY: TOP_BAR,
+      });
+      fireEvent.pointerMove(window, {
+        clientX: LEFT.width + 600,
+        clientY: 500,
+      });
+      fireEvent.pointerUp(window, { clientX: LEFT.width + 600, clientY: 500 });
+
+      expect(tabOrder(container)).toEqual(["app:one", "app:two"]);
+      expect(
+        Number.parseFloat(barFor(container, "app:one").style.insetInlineStart),
+      ).toBeGreaterThan(LEFT.width);
     });
 
     it("asks a client to close its own window", async () => {

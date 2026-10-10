@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { Axis, Direction } from "./direction";
 import { SURFACE_TUCK, TITLE_BAR } from "./rect";
 import { Layout, LayoutNode, windowsIn } from "./tree/node";
-import { windowsOf } from "./tree/tiling";
+import { focusedNodeOf, windowsOf } from "./tree/tiling";
 import { appWindowId, browserWindowId } from "./window";
 import type { WindowState } from "./window-state";
 import {
@@ -1265,6 +1265,59 @@ describe("a tiled window dragged across screens", () => {
     ]);
     expect(windowsOf(workspaceOn(state, "right").tiling)).toEqual([
       APP("kitty"),
+    ]);
+  });
+});
+
+describe("a tab group dragged by its strip", () => {
+  /** Kitty and the editor tabbed on the left screen; a terminal on the right. */
+  const twoScreens = () =>
+    reduce(
+      desktop("kitty", "editor"),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
+      WindowAction.WorkspaceSelected("2"),
+      WindowAction.AppAppeared("term", "term"),
+      WindowAction.ScreenHovered("left"),
+    );
+  const GROUP = { id: APP("kitty"), up: 1 };
+
+  it("selects and holds the group a drag takes hold of", () => {
+    const state = reduce(twoScreens(), WindowAction.GroupGrabbed(GROUP));
+
+    expect(state.draggingId).toBe(APP("kitty"));
+    expect(activeIdOf(state)).toBe(APP("kitty"));
+    expect(focusedNodeOf(workspaceHere(state).tiling)).toMatchObject({
+      layout: Layout.Tabbed,
+    });
+  });
+
+  it("goes whole beside the window it is dropped on, on another screen", () => {
+    const state = reduce(
+      twoScreens(),
+      WindowAction.GroupDroppedOn(GROUP, APP("term"), Direction.Left),
+    );
+
+    expect(state.focused).toBe("right");
+    expect(windowsOf(workspaceOn(state, "left").tiling)).toEqual([]);
+    expect(windowsOf(workspaceOn(state, "right").tiling)).toEqual([
+      APP("kitty"),
+      APP("editor"),
+      APP("term"),
+    ]);
+  });
+
+  it("fills a screen with nothing tiled on it", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
+      WindowAction.GroupDroppedOnScreen(GROUP, "right"),
+    );
+
+    expect(state.focused).toBe("right");
+    expect(windowsOf(workspaceOn(state, "left").tiling)).toEqual([]);
+    expect(windowsOf(workspaceOn(state, "right").tiling)).toEqual([
+      APP("kitty"),
+      APP("editor"),
     ]);
   });
 });

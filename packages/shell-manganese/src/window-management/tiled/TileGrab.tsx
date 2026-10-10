@@ -31,7 +31,12 @@ type Props = {
  * Mounted only while the modifier is held or a drag is running.
  */
 export const TileGrab = ({ frame, id, resizes, ...handlers }: Props) => {
-  const { drag, ...events } = useTileDrag({ frame, id, resizes, ...handlers });
+  const { drag, ...events } = useTileDrag({
+    dragged: [id],
+    frame,
+    resizes,
+    ...handlers,
+  });
   const { cursor, onPointerMove } = useGrabCursor({ drag, frame, resizes });
   return (
     // `aria-hidden`: the keyboard offers everything this does.

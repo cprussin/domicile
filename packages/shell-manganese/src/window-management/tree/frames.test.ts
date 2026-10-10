@@ -257,6 +257,11 @@ describe("framesOf", () => {
   });
 
   describe("the tab strip", () => {
+    /** The group `strip` lays out, which holds `count` windows. */
+    const groupOf = (count: number) => ({
+      node: { id: "0", up: 1 },
+      windows: Array.from({ length: count }, (_, at) => at.toString()),
+    });
     const strip = (layout: Layout, count: number) =>
       framesOf(
         {
@@ -283,6 +288,7 @@ describe("framesOf", () => {
             box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
             divided: false,
             first: true,
+            group: groupOf(1),
             open: true,
             rest: 760,
             tabs: 1,
@@ -298,6 +304,7 @@ describe("framesOf", () => {
             box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
             divided: false,
             first: true,
+            group: groupOf(2),
             open: true,
             rest: 760,
             tabs: 2,
@@ -311,6 +318,7 @@ describe("framesOf", () => {
             box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
             divided: false,
             first: false,
+            group: groupOf(2),
             open: false,
             rest: 520,
             tabs: 2,
@@ -332,6 +340,7 @@ describe("framesOf", () => {
         box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
         divided: true,
         first: false,
+        group: groupOf(8),
         open: false,
         rest: 24,
         tabs: 8,
@@ -346,6 +355,7 @@ describe("framesOf", () => {
             box: { height: TITLE_BAR * 2, width: 1000, x: 0, y: 0 },
             divided: false,
             first: true,
+            group: groupOf(2),
             open: true,
             rest: undefined,
             tabs: 2,
@@ -359,6 +369,7 @@ describe("framesOf", () => {
             box: { height: TITLE_BAR * 2, width: 1000, x: 0, y: 0 },
             divided: false,
             first: false,
+            group: groupOf(2),
             open: false,
             rest: undefined,
             tabs: 2,
@@ -422,6 +433,7 @@ describe("framesOf", () => {
           box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
           divided: false,
           first: true,
+          group: { node: { id: "a", up: 2 }, windows: ["a", "b", "c"] },
           open: true,
           rest: 760,
           tabs: 2,
@@ -467,6 +479,7 @@ describe("framesOf", () => {
           box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
           divided: false,
           first: true,
+          group: { node: { id: "c", up: 1 }, windows: ["a", "b", "c"] },
           open: false,
           rest: 760,
           tabs: 2,

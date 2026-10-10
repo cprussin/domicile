@@ -28,6 +28,8 @@ import { laidOut, split, splitToggled } from "./tree/layout";
 import { movedBy, pushedOff, pushedOn } from "./tree/move";
 import type { LayoutNode } from "./tree/node";
 import { Layout, LayoutNode as Node, NodeKind, windowsIn } from "./tree/node";
+import type { NodeRef } from "./tree/path";
+import { nodeAt, pathToRef } from "./tree/path";
 import { removed, removedAt } from "./tree/remove";
 import { resized } from "./tree/resize";
 import { stretched } from "./tree/stretch";
@@ -42,6 +44,7 @@ import {
   NOTHING_TILED,
   shownOver,
   windowsOf,
+  withCommandsOn,
   withCommandsOnWindow,
   withFocusOn,
 } from "./tree/tiling";
@@ -135,7 +138,7 @@ export const opened = (workspace: Workspace, id: string): Workspace => {
 };
 
 /** A window arriving in the tiling beside its focus, and focused. */
-export const tiledIn = (workspace: Workspace, id: string): Workspace => ({
+const tiledIn = (workspace: Workspace, id: string): Workspace => ({
   ...workspace,
   floatFocus: undefined,
   floats: onWindows(workspace.floats),
@@ -524,47 +527,73 @@ export const floatSized = (
   );
 
 /**
- * A tiled window dragged onto another and let go: onto its `edge`, or its
- * middle where that is `undefined` — see `tree/drop.ts`.
+ * Focuses the tiled node `held` names, with commands on it, as `focus parent`
+ * would select it.
+ */
+export const tiledHeld = (workspace: Workspace, held: NodeRef): Workspace => ({
+  ...workspace,
+  floatFocus: undefined,
+  tiling: withCommandsOn(workspace.tiling, tiledNodeOf(workspace, held)),
+});
+
+/**
+ * A tiled window or group dragged onto a window and let go: onto its `edge`,
+ * or its middle where that is `undefined` — see `tree/drop.ts`.
  */
 export const tiledDropped = (
   workspace: Workspace,
-  id: string,
+  moving: NodeRef,
   target: string,
   edge: Direction | undefined,
 ): Workspace => ({
   ...workspace,
   floatFocus: undefined,
-  tiling: droppedOn(workspace.tiling, id, target, edge),
+  tiling: droppedOn(workspace.tiling, moving, target, edge),
 });
 
 /**
- * A tiled window dragged in from another workspace and dropped on `target` —
- * see `arrivedOn`.
+ * The tiled node `moving` names, taken out to drop on another workspace, and
+ * the workspace without it.
+ */
+export const tiledLifted = (
+  workspace: Workspace,
+  moving: NodeRef,
+): { node: LayoutNode; rest: Workspace } => {
+  const root = tiledRootOf(workspace, moving);
+  const path = pathToRef(root, moving);
+  return {
+    node: nodeAt(root, path),
+    rest: { ...workspace, tiling: removedAt(root, path) },
+  };
+};
+
+/**
+ * A tiled window or group dragged in from another workspace and dropped on
+ * `target` — see `arrivedOn`.
  */
 export const tiledArrived = (
   workspace: Workspace,
-  id: string,
+  node: LayoutNode,
   target: string,
   edge: Direction | undefined,
 ): Workspace => ({
   ...workspace,
   floatFocus: undefined,
   floats: onWindows(workspace.floats),
-  tiling: arrivedOn(workspace.tiling, id, target, edge),
+  tiling: arrivedOn(workspace.tiling, node, target, edge),
 });
 
 /**
- * The tiled window `id` swapped for `by`, from another workspace, which it was
- * dropped in the middle of.
+ * The tiled node `moving` names swapped for `by`, from another workspace,
+ * which it was dropped in the middle of.
  */
 export const tiledTraded = (
   workspace: Workspace,
-  id: string,
+  moving: NodeRef,
   by: string,
 ): Workspace => ({
   ...workspace,
-  tiling: tradedFor(workspace.tiling, id, by),
+  tiling: tradedFor(workspace.tiling, moving, by),
 });
 
 /**
@@ -696,3 +725,18 @@ const floatWithout = (float: Float, id: string): Float | undefined => {
 /** The window a float's own focus is on, or `undefined` for no float. */
 const focusIn = (float: Float | undefined): string | undefined =>
   float === undefined ? undefined : focusedWindowIn(float.root);
+
+/** The tiled node `ref` names. Throws if it is not tiled here. */
+const tiledNodeOf = (workspace: Workspace, ref: NodeRef): LayoutNode => {
+  const root = tiledRootOf(workspace, ref);
+  return nodeAt(root, pathToRef(root, ref));
+};
+
+const tiledRootOf = (workspace: Workspace, ref: NodeRef): LayoutNode => {
+  const { root } = workspace.tiling;
+  if (root === undefined) {
+    throw new Error(`workspace ${workspace.name}: nothing tiled at ${ref.id}`);
+  } else {
+    return root;
+  }
+};
