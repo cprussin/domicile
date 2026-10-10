@@ -19,12 +19,12 @@ namespace domicile {
 
 class FrameSinkBroker;
 
-// The single broker method a renderer may call.
+// The broker methods a renderer may call.
 //
 // A FrameSinkBroker pipe can allocate any frame sink in the browser's
 // namespace, so pages must not hold one. A page may only announce a
-// LocalSurfaceId and size it allocated; the resulting embed_token is what the
-// producer needs.
+// LocalSurfaceId and size it allocated, whose embed_token is what the producer
+// needs, and hear why a surface ended.
 class ExternalSurfaceProvider : public mojom::ExternalSurfaceProvider {
  public:
   explicit ExternalSurfaceProvider(FrameSinkBroker* broker);
@@ -46,6 +46,8 @@ class ExternalSurfaceProvider : public mojom::ExternalSurfaceProvider {
              const gfx::Size& size,
              double scale,
              EmbedCallback callback) override;
+  void WaitForEnd(const viz::FrameSinkId& frame_sink_id,
+                  WaitForEndCallback callback) override;
 
  private:
   const raw_ptr<FrameSinkBroker> broker_;

@@ -176,7 +176,11 @@ void HTMLAppElement::Embed() {
 
   const bool reconfiguring = !!external_surface_embedder_;
   if (!reconfiguring) {
-    external_surface_embedder_ = std::make_unique<ExternalSurfaceEmbedder>();
+    // WrapWeakPersistent: the element owns the embedder, which owns this
+    // callback.
+    external_surface_embedder_ = std::make_unique<ExternalSurfaceEmbedder>(
+        BindRepeating(&HTMLAppElement::OnSurfaceLost,
+                      WrapWeakPersistent(this)));
   }
   embed_in_flight_ = true;
   embed_stale_ = false;
@@ -220,6 +224,14 @@ void HTMLAppElement::OnEmbedded(
     // app-id or the box changed while the request was in flight.
     Embed();
   }
+}
+
+// A restarted compositor brokers the app a new frame sink. Ask again: the
+// browser holds the request until it does, and the embedder has dropped the
+// embed token viz would refuse on the new sink.
+void HTMLAppElement::OnSurfaceLost() {
+  embedded_app_id_ = g_null_atom;
+  Embed();
 }
 
 void HTMLAppElement::OnWebLayerUpdated() {

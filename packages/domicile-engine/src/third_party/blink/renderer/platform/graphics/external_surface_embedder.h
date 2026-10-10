@@ -45,7 +45,11 @@ class PLATFORM_EXPORT ExternalSurfaceEmbedder {
     kReconfigure,
   };
 
-  ExternalSurfaceEmbedder();
+  // `lost` runs when the producer of the last surface embedded disconnects,
+  // not when it closes the window. The app's next Embed() gets a new embed
+  // token, so a caller can embed again and wait for a new producer.
+  explicit ExternalSurfaceEmbedder(
+      base::RepeatingClosure lost = base::RepeatingClosure());
 
   ExternalSurfaceEmbedder(const ExternalSurfaceEmbedder&) = delete;
   ExternalSurfaceEmbedder& operator=(const ExternalSurfaceEmbedder&) = delete;
@@ -76,6 +80,15 @@ class PLATFORM_EXPORT ExternalSurfaceEmbedder {
                   const String& app_id,
                   const viz::LocalSurfaceId& local_surface_id,
                   const std::optional<viz::FrameSinkId>& frame_sink_id);
+  void OnEnded(const String& app_id,
+               const viz::SurfaceId& surface_id,
+               domicile::mojom::blink::FrameSinkEnd end);
+
+  const base::RepeatingClosure lost_;
+
+  // The frame sink of the last surface embedded, whose loss runs `lost_`.
+  // Invalid before an embed and after the sink ends.
+  viz::FrameSinkId watched_frame_sink_id_;
 
   mojo::Remote<domicile::mojom::blink::ExternalSurfaceProvider> provider_;
 };

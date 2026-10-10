@@ -468,6 +468,125 @@ TEST_F(FrameSinkBrokerTest, ARendererNamingAnotherRenderersFrameSinkIsBad) {
               testing::HasSubstr("parent frame sink is not the renderer's"));
 }
 
+// A renderer hears when the producer of a surface it embeds disconnects, and
+// hears nothing of another producer's. A restarted compositor reuses app ids,
+// so the page must drop its embed token before it embeds again.
+TEST_F(FrameSinkBrokerTest, ARendererHearsWhenItsProducerDisconnects) {
+  mojo::Remote<mojom::FrameSinkBroker> lost_producer;
+  broker()->Bind(lost_producer.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient lost_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> lost_sink;
+  const viz::FrameSinkId lost_id =
+      BrokerASink(lost_producer, lost_client, lost_sink, mojo::NullRemote());
+
+  mojo::Remote<mojom::FrameSinkBroker> kept_producer;
+  broker()->Bind(kept_producer.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient kept_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> kept_sink;
+  const viz::FrameSinkId kept_id =
+      BrokerASink(kept_producer, kept_client, kept_sink, mojo::NullRemote());
+
+  ExternalSurfaceProvider provider(broker());
+  mojo::Remote<mojom::ExternalSurfaceProvider> page;
+  provider.Bind(page.BindNewPipeAndPassReceiver(),
+                kPageFrameSinkId.client_id());
+  base::test::TestFuture<mojom::FrameSinkEnd> lost;
+  page->WaitForEnd(lost_id, lost.GetCallback());
+  base::test::TestFuture<mojom::FrameSinkEnd> kept;
+  page->WaitForEnd(kept_id, kept.GetCallback());
+  RunUntilIdle();
+  ASSERT_FALSE(lost.IsReady());
+
+  lost_producer.reset();
+
+  EXPECT_EQ(mojom::FrameSinkEnd::kProducerGone, lost.Get());
+  RunUntilIdle();
+  EXPECT_FALSE(kept.IsReady());
+}
+
+// A window closing ends its sink as closed, so the page does not embed it
+// again and leave a request waiting for an app that never returns.
+TEST_F(FrameSinkBrokerTest, DestroyingASinkEndsItAsClosed) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+
+  base::test::TestFuture<mojom::FrameSinkEnd> ended;
+  broker()->WaitForEnd(frame_sink_id, ended.GetCallback());
+  ASSERT_FALSE(ended.IsReady());
+
+  remote->DestroyFrameSink(frame_sink_id);
+
+  EXPECT_EQ(mojom::FrameSinkEnd::kClosed, ended.Get());
+}
+
+// The producer can disconnect while the embed reply naming its sink is on the
+// way, so a wait on a sink already lost that way is answered at once, and
+// says so.
+TEST_F(FrameSinkBrokerTest, WaitingOnASinkAlreadyDisconnectedSaysSo) {
+  auto remote = std::make_unique<mojo::Remote<mojom::FrameSinkBroker>>();
+  broker()->Bind(remote->BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(*remote, sink_client, sink, mojo::NullRemote());
+  remote.reset();
+  RunUntilIdle();
+
+  base::test::TestFuture<mojom::FrameSinkEnd> ended;
+  broker()->WaitForEnd(frame_sink_id, ended.GetCallback());
+
+  ASSERT_TRUE(ended.IsReady());
+  EXPECT_EQ(mojom::FrameSinkEnd::kProducerGone, ended.Get());
+}
+
+// Any other sink not brokered, closed or never brokered, is answered at once
+// as closed.
+TEST_F(FrameSinkBrokerTest, WaitingOnASinkNeverBrokeredIsClosed) {
+  base::test::TestFuture<mojom::FrameSinkEnd> ended;
+  broker()->WaitForEnd(allocator_.NextFrameSinkId(), ended.GetCallback());
+
+  ASSERT_TRUE(ended.IsReady());
+  EXPECT_EQ(mojom::FrameSinkEnd::kClosed, ended.Get());
+}
+
+// An embed sent before the page heard of the disconnect carries the old embed
+// token. Viz would refuse it on the new compositor's sink, so it is answered
+// null and never reaches the new producer.
+TEST_F(FrameSinkBrokerTest, AnEmbedWithATokenFromADisconnectedSinkIsRefused) {
+  auto old_producer = std::make_unique<mojo::Remote<mojom::FrameSinkBroker>>();
+  broker()->Bind(old_producer->BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient old_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> old_sink;
+  BrokerASink(*old_producer, old_client, old_sink, mojo::NullRemote());
+  base::test::TestFuture<const std::optional<viz::FrameSinkId>&> first;
+  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+                  kEmbeddedSize, kEmbeddedScale, first.GetCallback());
+  ASSERT_TRUE(first.Get().has_value());
+  old_producer.reset();
+  RunUntilIdle();
+
+  mojo::Remote<mojom::FrameSinkBroker> new_producer;
+  broker()->Bind(new_producer.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient new_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> new_sink;
+  FakeSurfaceObserver observer;
+  BrokerASink(new_producer, new_client, new_sink, observer.BindRemote());
+
+  // The same allocator, so the same embed token.
+  base::test::TestFuture<const std::optional<viz::FrameSinkId>&> stale;
+  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+                  kEmbeddedSize, kEmbeddedScale, stale.GetCallback());
+
+  ASSERT_TRUE(stale.IsReady());
+  EXPECT_EQ(std::nullopt, stale.Get());
+  RunUntilIdle();
+  EXPECT_TRUE(observer.told_.empty());
+}
+
 // Each <app> element gets the surface for its own app id.
 TEST_F(FrameSinkBrokerTest, EachAppEmbedsItsOwnSurface) {
   mojo::Remote<mojom::FrameSinkBroker> remote;

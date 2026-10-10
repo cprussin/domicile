@@ -7,7 +7,18 @@ import "services/viz/public/mojom/compositing/frame_sink_id.mojom";
 import "services/viz/public/mojom/compositing/local_surface_id.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
 
-// Renderer to browser: tells a page which surface to embed.
+// Why a brokered frame sink ended.
+enum FrameSinkEnd {
+  // Its producer destroyed it: the window closed. Also the answer for a sink
+  // never brokered.
+  kClosed,
+  // Its producer disconnected: the compositor went away. A new compositor
+  // brokers the same app ids again.
+  kProducerGone,
+};
+
+// Renderer to browser: tells a page which surface to embed, and when it is
+// gone.
 //
 // The browser allocates the FrameSinkId, in its own namespace (client id 0).
 // blink.mojom.EmbeddedFrameSinkProvider rejects ids not in the calling
@@ -22,7 +33,10 @@ interface ExternalSurfaceProvider {
   // Replies with the brokered FrameSinkId, which the page combines with its
   // LocalSurfaceId into the SurfaceId to embed. The reply waits until a
   // producer has a sink for this app, because an <app> element can exist
-  // before its client window. Null only if the connection drops first.
+  // before its client window. Null if the connection drops first.
+  //
+  // Also null, at once, for an embed token used on a frame sink whose producer
+  // disconnected. Viz would refuse it on the new sink.
   //
   // Naming another window's surface gains nothing: the page allocated the
   // LocalSurfaceId, so no producer submits to the resulting surface.
@@ -40,4 +54,12 @@ interface ExternalSurfaceProvider {
         gfx.mojom.Size size,
         double scale)
       => (viz.mojom.FrameSinkId? frame_sink_id);
+
+  // Replies once the browser no longer brokers `frame_sink_id`, saying why.
+  // Replies at once if it is not brokered.
+  //
+  // A restarted compositor reuses app ids, and viz refuses one embed token on
+  // two frame sinks, so on kProducerGone the page needs a new LocalSurfaceId
+  // before it embeds that app again.
+  WaitForEnd(viz.mojom.FrameSinkId frame_sink_id) => (FrameSinkEnd end);
 };

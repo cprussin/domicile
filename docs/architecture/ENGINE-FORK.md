@@ -125,11 +125,11 @@ lists two undocumented transport constraints.
   the element return null and `<app>` never embeds.
   `scripts/test-fork-elements-know-their-type.sh` checks this.
 
-Two mojo interfaces carry the ids, each with one method:
+Two mojo interfaces carry the ids:
 
 | Interface | Direction | Carries |
 |---|---|---|
-| `domicile.mojom.ExternalSurfaceProvider` | renderer → browser | The page's `LocalSurfaceId` and size. Returns the `FrameSinkId`. A page naming a surface it was not offered gets an empty one. A parent frame sink outside the calling renderer is a bad message (patch `0107`). |
+| `domicile.mojom.ExternalSurfaceProvider` | renderer → browser | `Embed`: the page's `LocalSurfaceId` and size. Returns the `FrameSinkId`. A page naming a surface it was not offered gets an empty one. A parent frame sink outside the calling renderer is a bad message (patch `0107`). `WaitForEnd`: replies when a brokered `FrameSinkId` ends, and whether the window closed or the compositor went away. |
 | `domicile.mojom.SurfaceObserver` | browser → producer | A `LocalSurfaceId` and a size, sent again whenever the box changes. |
 
 ### One engine, many surfaces
@@ -142,6 +142,28 @@ Two mojo interfaces carry the ids, each with one method:
   different surfaces.
 - `third_party/blink/renderer/platform/graphics/external_surface_embedder.h`
   has the details.
+
+### A compositor restart
+
+App ids come from a counter that restarts with the compositor, so the new
+compositor's `app-1` gets a new `FrameSinkId`. Viz refuses one embed token on
+two frame sinks, so the page needs a new token for it.
+
+- After each embed, `ExternalSurfaceEmbedder` calls `WaitForEnd` on the
+  `FrameSinkId`, once per frame sink.
+- The broker replies `kClosed` when the producer destroys the sink, and
+  `kProducerGone` when the producer disconnects. A wait on a sink already gone
+  gets the same answer at once; the broker keeps the ids of sinks lost to a
+  disconnect.
+- On `kProducerGone`, the embedder invalidates the app's allocator with a new
+  embed token, and `<app>` embeds again. The browser holds that embed until the
+  new compositor brokers the app. On `kClosed` nothing embeds again, since a
+  closed window's app id never returns.
+- An embed sent before the page heard of the disconnect carries the old token.
+  The broker answers it null at once instead of passing it to the new
+  producer, and `<app>` retries with the new token.
+- The page still cannot reconnect its control channel to a new compositor
+  ([ROADMAP.md](/ROADMAP.md), item 2).
 
 ### Embed deadlines
 
@@ -315,9 +337,3 @@ items:
   Domicile's routing, with the page reporting the box. Unknown: whether viz's
   hit-test data must agree with Domicile's to keep the engine from swallowing
   events.
-- **A compositor restart breaks every embed.** App ids come from a counter that
-  restarts with the compositor. After a restart, `app-1` gets a new
-  `FrameSinkId`, but the page still holds the old token, and every embed of it
-  is refused. `FrameSinkBroker::OnProducerDisconnected` drops the sinks but does
-  not tell the renderer. Recommendation: invalidate the renderer's tokens on
-  disconnect. This is the first reload case a shell hits.
