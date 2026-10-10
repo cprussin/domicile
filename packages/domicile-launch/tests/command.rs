@@ -1,8 +1,12 @@
 //! Tests for the engine command socket protocol.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
-use domicile_launch::command::{load_shell_line, open_url_line, reply, Reply};
+use domicile_launch::command::{
+    load_shell_line, open_url_line, reply, set_site_permission_line, site_permissions_line, Reply,
+};
+use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
 #[test]
 fn a_load_shell_names_the_version_it_is_written_in() {
@@ -49,4 +53,59 @@ fn an_answer_that_is_not_one_is_not_read_as_a_refusal() {
     // An unknown reply, such as from an older engine, is an error, not a
     // refusal.
     assert!(reply("{\"type\":\"loading\"}").is_err());
+}
+
+#[test]
+fn a_question_about_site_permissions_names_the_version_it_is_written_in() {
+    assert_eq!(
+        site_permissions_line(),
+        "{\"type\":\"site_permissions\",\"version\":1}\n"
+    );
+}
+
+#[test]
+fn a_site_permission_is_set_by_origin_permission_and_setting() {
+    assert_eq!(
+        set_site_permission_line(&SitePermission {
+            origin: "https://meet.example".to_string(),
+            permission: Permission::Camera,
+            setting: Setting::Block,
+        }),
+        "{\"type\":\"set_site_permission\",\"version\":1,\"origin\":\"https://meet.example\",\"permission\":\"camera\",\"setting\":\"block\"}\n"
+    );
+}
+
+#[test]
+fn an_engine_lists_each_site_s_stored_permissions() {
+    assert_eq!(
+        reply(
+            "{\"type\":\"site_permissions\",\"defaults\":{\"camera\":\"ask\",\"notifications\":\"allow\"},\"sites\":[\
+             {\"origin\":\"https://meet.example\",\"permission\":\"microphone\",\"setting\":\"allow\"},\
+             {\"origin\":\"https://maps.example\",\"permission\":\"location\",\"setting\":\"block\"}]}"
+        )
+        .unwrap(),
+        Reply::SitePermissions(SiteSettings {
+            defaults: BTreeMap::from([
+                (Permission::Camera, Setting::Ask),
+                (Permission::Notifications, Setting::Allow),
+            ]),
+            sites: vec![
+                SitePermission {
+                    origin: "https://meet.example".to_string(),
+                    permission: Permission::Microphone,
+                    setting: Setting::Allow,
+                },
+                SitePermission {
+                    origin: "https://maps.example".to_string(),
+                    permission: Permission::Location,
+                    setting: Setting::Block,
+                },
+            ]
+        })
+    );
+}
+
+#[test]
+fn an_engine_that_stored_a_setting_says_so() {
+    assert_eq!(reply("{\"type\":\"set\"}").unwrap(), Reply::Set);
 }

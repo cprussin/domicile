@@ -33,20 +33,24 @@ out="$(nix build --no-link --print-out-paths .#domicile)"
   echo "libexec/domicile/engine holds no chrome" >&2
   exit 1
 }
-[ -x "$out/bin/domicile-history" ] && [ ! -L "$out/bin/domicile-history" ] || {
-  echo "bin/domicile-history is missing or a symlink, so it cannot find the" >&2
-  echo "  \`domicile\` beside it" >&2
-  exit 1
-}
-[ -f "$out/libexec/domicile/apps/history/manifest.json" ] || {
-  echo "libexec/domicile/apps/history holds no manifest.json, so no desktop" >&2
-  echo "  installs the History app" >&2
-  exit 1
-}
+for program in domicile-history domicile-settings domicile-settings-host; do
+  [ -x "$out/bin/$program" ] && [ ! -L "$out/bin/$program" ] || {
+    echo "bin/$program is missing or a symlink, so it cannot find the" >&2
+    echo "  \`domicile\` beside it" >&2
+    exit 1
+  }
+done
+for app in history settings; do
+  [ -f "$out/libexec/domicile/apps/$app/manifest.json" ] || {
+    echo "libexec/domicile/apps/$app holds no manifest.json, so no desktop" >&2
+    echo "  installs it" >&2
+    exit 1
+  }
+done
 
 # Each launcher entry's program, icon and preview, which a launcher finds by
 # path.
-for entry in history screenshot shutdown reboot; do
+for entry in history settings screenshot shutdown reboot; do
   file="$out/share/applications/domicile-$entry.desktop"
   [ -f "$file" ] || {
     echo "no launcher entry domicile-$entry.desktop" >&2

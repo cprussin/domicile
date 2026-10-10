@@ -387,6 +387,23 @@ fn the_compositor_carries_this_desktops_control_socket_to_everything_it_starts()
 }
 
 #[test]
+fn the_engine_carries_this_desktops_control_socket_to_the_settings_host() {
+    // The engine starts `domicile-settings-host` for the Settings app, which
+    // asks this desktop for its files and site permissions.
+    let spawned = engine(
+        Path::new("/l/engine"),
+        &shell(),
+        "wayland",
+        &runtime(),
+        None,
+    );
+    assert_eq!(
+        env_of(&spawned, "DOMICILE_SOCK").unwrap(),
+        "/run/d/domicile-ipc.4242.sock"
+    );
+}
+
+#[test]
 fn a_link_an_app_opens_opens_in_this_desktop() {
     // Programs run `BROWSER` to open a link, and every app inherits the
     // compositor's environment, so links open in this desktop.

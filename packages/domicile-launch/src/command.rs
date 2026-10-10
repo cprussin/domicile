@@ -1,5 +1,5 @@
-//! The protocol the supervisor uses to send `load-shell` and `open-url` to the
-//! engine.
+//! The protocol the supervisor uses to send `load-shell`, `open-url` and the
+//! Settings app's site permissions to the engine.
 //!
 //! One JSON line each way per connection:
 //!
@@ -9,6 +9,12 @@
 //!
 //! {"type":"open_url","version":1,"url":"https://example.com/"}
 //! {"type":"opened"}   |   {"type":"refused","why":"…"}
+//!
+//! {"type":"site_permissions","version":1}
+//! {"type":"site_permissions","defaults":{"camera":"ask",…},"sites":[{"origin":"https://meet.example","permission":"camera","setting":"allow"}]}
+//!
+//! {"type":"set_site_permission","version":1,"origin":"https://meet.example","permission":"camera","setting":"block"}
+//! {"type":"set"}   |   {"type":"refused","why":"…"}
 //! ```
 //!
 //! The engine side is C++ in the fork
@@ -20,6 +26,8 @@
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
+
+use crate::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
 /// The protocol version the supervisor sends and the engine checks.
 ///
@@ -37,6 +45,10 @@ pub enum Reply {
     Loaded,
     /// The engine passed the address to the shell.
     Opened,
+    /// Every permission's default and every site's own setting.
+    SitePermissions(SiteSettings),
+    /// The engine stored a site's setting.
+    Set,
     /// The engine refused, with its reason.
     Refused { why: String },
 }
@@ -46,25 +58,34 @@ pub enum Reply {
 /// `root` must be absolute; the engine refuses relative paths. Resolve user
 /// input with [`crate::shell_path`] first.
 pub fn load_shell_line(root: &Path, module: &Path) -> String {
-    let mut line = serde_json::to_string(&Command::LoadShell {
+    line(&Command::LoadShell {
         module,
         root,
         version: VERSION,
     })
-    .expect("a command is plain data and always serializes");
-    line.push('\n');
-    line
 }
 
 /// The request to open `url` in the shell. The engine validates `url`.
 pub fn open_url_line(url: &str) -> String {
-    let mut line = serde_json::to_string(&Command::OpenUrl {
+    line(&Command::OpenUrl {
         url,
         version: VERSION,
     })
-    .expect("a command is plain data and always serializes");
-    line.push('\n');
-    line
+}
+
+/// The request for every site's stored permissions.
+pub fn site_permissions_line() -> String {
+    line(&Command::SitePermissions { version: VERSION })
+}
+
+/// The request to store `site`'s setting.
+pub fn set_site_permission_line(site: &SitePermission) -> String {
+    line(&Command::SetSitePermission {
+        version: VERSION,
+        origin: &site.origin,
+        permission: site.permission,
+        setting: site.setting,
+    })
 }
 
 /// Parses one reply line, without its trailing newline.
@@ -91,4 +112,21 @@ enum Command<'a> {
         version: u32,
         url: &'a str,
     },
+    SitePermissions {
+        version: u32,
+    },
+    SetSitePermission {
+        version: u32,
+        origin: &'a str,
+        permission: Permission,
+        setting: Setting,
+    },
+}
+
+/// `command` as one newline-terminated line.
+fn line(command: &Command) -> String {
+    let mut line =
+        serde_json::to_string(command).expect("a command is plain data and always serializes");
+    line.push('\n');
+    line
 }

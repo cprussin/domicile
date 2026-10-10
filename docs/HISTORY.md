@@ -37,6 +37,7 @@ window.
 | Entry | Runs |
 |---|---|
 | `domicile-history.desktop` | `domicile-history` |
+| `domicile-settings.desktop` | `domicile-settings` ([SETTINGS.md](SETTINGS.md)) |
 | `domicile-screenshot.desktop` | `domicile screenshot` |
 | `domicile-shutdown.desktop` | `systemctl poweroff`, after a yes in Domicile's Access dialog |
 | `domicile-reboot.desktop` | `systemctl reboot`, after the same |
