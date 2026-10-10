@@ -39,6 +39,19 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   (manganese has a file picker, a launcher with desktop entries, a
   notification drawer). A fallback would give one session two looks and two
   keyboard models. The NixOS and home-manager modules offer no gtk backend.
+- **The frontend starts under this desktop's name.** `xdg-desktop-portal`
+  reads `XDG_CURRENT_DESKTOP` once, at startup. Without `domicile` it routes
+  every interface to gtk as a last resort.
+  - The launcher exports `XDG_CURRENT_DESKTOP` to the systemd user manager
+    before starting any component (`graphical_session::name`). The engine
+    starts first and can D-Bus activate the frontend.
+  - The compositor sets it in the D-Bus and systemd activation environments,
+    then restarts `xdg-desktop-portal.service` if its main process lacks the
+    name (`portals::reroute_frontend`). It finds the process by the unit's
+    `MainPID`, not the bus name, so a frontend still loading its backends is
+    caught.
+  - Check with `tr '\0' '\n' </proc/$(systemctl --user show -p MainPID
+    --value xdg-desktop-portal)/environ | grep XDG_CURRENT_DESKTOP`.
 - **`Secret` goes to the keyring.** `gnome-keyring` or `oo7-portal` implements
   it. It has no UI, and the store must outlive the session.
   `domicile-portals.conf` routes it to the keyring.

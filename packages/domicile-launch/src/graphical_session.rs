@@ -1,8 +1,11 @@
 //! Registers a desktop as the graphical session with the systemd user manager.
 //!
 //! Services such as the portal require `graphical-session.target`, which
-//! only a session can start. [`begin`] exports the desktop's environment and
-//! then starts [`TARGET`], so services started by it inherit that environment.
+//! only a session can start. [`name`] exports the desktop's name before any
+//! component starts, since the engine can D-Bus activate the portal frontend
+//! before the compositor is up. [`begin`] exports the rest of the desktop's
+//! environment and then starts [`TARGET`], so services started by it inherit
+//! that environment.
 //! [`end`] stops the session and unsets the environment, so later services do
 //! not find a dead socket or display.
 //!
@@ -35,6 +38,21 @@ const VARIABLES: [&str; 4] = [
     VARIABLE,
     "XDG_SESSION_TYPE",
 ];
+
+/// Exports `XDG_CURRENT_DESKTOP` and `XDG_SESSION_TYPE` to `manager`.
+///
+/// The portal frontend reads `XDG_CURRENT_DESKTOP` once, when it starts, and
+/// routes every interface by it. Neither value waits on the compositor.
+pub fn name(manager: &zbus::blocking::Connection) -> Result<(), zbus::Error> {
+    call(
+        manager,
+        "SetEnvironment",
+        &(vec![
+            format!("XDG_CURRENT_DESKTOP={CURRENT_DESKTOP}"),
+            "XDG_SESSION_TYPE=wayland".to_string(),
+        ],),
+    )
+}
 
 /// Exports the desktop's environment to `manager`, then starts [`TARGET`].
 pub fn begin(
