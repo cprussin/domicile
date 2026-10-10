@@ -147,12 +147,17 @@ For how warping, browser-window focus and modifier drags work, see
   window.
 - **Dropping on a tab** puts the window before or after it in its strip, by
   which half of the tab the pointer is over.
+- **Dropping on the edge of a window in a tab group** of several puts the
+  window beside the group, as in sway. A group of one becomes a split.
+- **Dragging a tab over its own group** breaks it out of the group: it goes
+  beside the group, on the half under the pointer.
 - **Dragging the empty end of a tab strip**, past its last tab, picks up the
   whole tab group. It is selected as by Meta+A and drops like a window, but
   never on a window inside it (`StripEnd.tsx`).
 - **Dragging a tab along its strip** moves it at once into the slot under the
   pointer, with no overlay.
-- The pointer shows `grabbing` while a window moves.
+- The pointer shows `grabbing` anywhere on the desktop while a window moves
+  (`GrabbingSheet.tsx`).
 - A move aims only once the pointer is 8px from the press, so clicking a tab
   never drops it beside its container's open tab.
 - **Meta+right-drag** or **Meta+Shift+drag** resizes from the

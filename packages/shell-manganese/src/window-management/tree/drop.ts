@@ -12,6 +12,7 @@ import {
   axisOf,
   LayoutNode as Node,
   NodeKind,
+  showsOneChild,
   splitFor,
   windowsIn,
   withChildAt,
@@ -123,9 +124,9 @@ const besideTarget = (
 };
 
 /**
- * Puts `moving` on the `edge` side of the node at `at`: in its parent if the
- * parent runs along that axis, else in a new split with the node (also when
- * there is no parent).
+ * Puts `moving` on the `edge` side of the node at `at`: beside its parent if
+ * that is a tab group of several, in its parent if that is a split along that
+ * axis, else in a new split with the node (also when there is no parent).
  */
 const placedBeside = (
   root: LayoutNode,
@@ -140,7 +141,15 @@ const placedBeside = (
   const forward = isForward(edge);
   if (
     parent?.kind === NodeKind.Container &&
+    showsOneChild(parent.layout) &&
+    parent.children.length > 1
+  ) {
+    // An edge of a tab group's window is an edge of the group, as in sway.
+    return placedBeside(root, around, moving, edge);
+  } else if (
+    parent?.kind === NodeKind.Container &&
     index !== undefined &&
+    !showsOneChild(parent.layout) &&
     axisOf(parent.layout) === axis
   ) {
     return replacedAt(root, around, () =>

@@ -135,6 +135,12 @@ export const LEAVING = 1000;
 const FULLSCREEN = 2000;
 
 /**
+ * The depth of the sheet that shows the cursor while a window moves, over
+ * every window. See `GrabbingSheet`.
+ */
+export const GRABBING = 3000;
+
+/**
  * Everything the screen shows, fullscreen included.
  *
  * A fullscreen window or group is placed at {@link FULLSCREEN} over the normal

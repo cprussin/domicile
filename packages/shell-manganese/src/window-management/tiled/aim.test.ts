@@ -136,6 +136,26 @@ describe("aimAt", () => {
     expect(aimAt(TABS, ["b"], 250, 10)).toBeUndefined();
   });
 
+  it("aims a tab over its own group at the half of the group it is in", () => {
+    // Beside one of its tabs, which the drop puts it beside the group of.
+    expect(aimAt(TABS, ["a"], 900, 200)).toEqual(
+      Aim.Window("b", Direction.Right, {
+        height: 400,
+        width: 500,
+        x: 500,
+        y: 0,
+      }),
+    );
+    expect(aimAt(TABS, ["a"], 500, 210)).toEqual(
+      Aim.Window("b", Direction.Down, {
+        height: 200,
+        width: 1000,
+        x: 0,
+        y: 200,
+      }),
+    );
+  });
+
   it("aims a dragged group at nothing inside it, and beside the rest", () => {
     // The group is the strip of "a", "b" and "c": its tabs and the window
     // they open over.

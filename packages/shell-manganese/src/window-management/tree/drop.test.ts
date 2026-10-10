@@ -99,6 +99,30 @@ describe("droppedOn", () => {
     );
   });
 
+  it("goes beside a tab group dropped on the edge of its window, not into it", () => {
+    const tabs = {
+      depth: 1,
+      root: LayoutNode.Container(Layout.Tabbed, [
+        LayoutNode.Window("a"),
+        LayoutNode.Window("b"),
+        LayoutNode.Window("c"),
+      ]),
+    };
+
+    expect(
+      droppedOn(tabs, { id: "c", up: 0 }, "a", Direction.Right).root,
+    ).toMatchObject({
+      children: [
+        {
+          children: [LayoutNode.Window("a"), LayoutNode.Window("b")],
+          layout: Layout.Tabbed,
+        },
+        LayoutNode.Window("c"),
+      ],
+      layout: Layout.SplitH,
+    });
+  });
+
   describe("a group", () => {
     /** A tab group of "a" and "b" beside "c", focus on "a". */
     const TABS_BESIDE = withFocusOn(
