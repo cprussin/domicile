@@ -1,8 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
+import config from "../../panda.config";
 import { Layout } from "./tree/node";
 import {
   collapsedAlong,
+  movingStyles,
   placedAt,
   scaledAbout,
   shuffledBy,
@@ -28,6 +30,13 @@ describe("placedAt", () => {
   it("writes the depth as the element's own z-index", () => {
     // The compositor stacks the client's surface by the element's own z-index.
     expect(placedAt(RECT, 3).zIndex).toBe(3);
+  });
+
+  it("hands its corner to the keyframes that clip it to its screen", () => {
+    expect(placedAt(RECT, 0)).toMatchObject({
+      "--placed-x": "10px",
+      "--placed-y": "20px",
+    });
   });
 });
 
@@ -83,5 +92,27 @@ describe("collapsedAlong", () => {
 
   it("is nothing for a bar that is not a tab", () => {
     expect(collapsedAlong(undefined)).toStrictEqual({});
+  });
+});
+
+describe("movingStyles", () => {
+  // The page spans every monitor, so a window sliding off its screen would
+  // otherwise show on the next one.
+  it.each([
+    "arriving-from-end",
+    "arriving-from-start",
+    "leaving-to-end",
+    "leaving-to-start",
+  ] as const)("clips a %s window to its screen", (motion) => {
+    const { animation } = movingStyles.raw({ motion });
+    const animated = String(animation)
+      .split(",")
+      .flatMap((entry) => {
+        const name = entry.trim().split(" ")[0] ?? "";
+        return Object.values(config.theme?.extend?.keyframes?.[name] ?? {});
+      })
+      .flatMap((frame) => Object.keys(frame));
+
+    expect(animated).toContain("clipPath");
   });
 });

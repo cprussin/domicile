@@ -210,6 +210,7 @@ For how warping, browser-window focus and modifier drags work, see
 - Sending to the scratchpad: slide up off the top of the screen. Showing it
   slides the window back down.
 - Workspace switch: the new workspace slides in; the old one slides out.
+  Each window is clipped to its screen, so it never shows on the next one.
 - Tab switch: crossfade.
 
 Rules:

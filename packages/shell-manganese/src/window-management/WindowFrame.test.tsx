@@ -80,6 +80,17 @@ describe("WindowFrame", () => {
       expect(styleOf()?.getPropertyValue("--workspace-width")).toBe("1280px");
     });
 
+    it("bounds its parts' slides by the screen", () => {
+      // A workspace switch clips each part to its screen.
+      const style = styleOf();
+
+      expect([
+        style?.getPropertyValue("--screen-x"),
+        style?.getPropertyValue("--screen-y"),
+        style?.getPropertyValue("--screen-height"),
+      ]).toStrictEqual(["0px", "100px", "800px"]);
+    });
+
     it("lifts its parts far enough to clear the top of the screen", () => {
       // The scratchpad slides a window up off the screen and back down.
       expect(styleOf()?.getPropertyValue("--lift")).toBe("600px");

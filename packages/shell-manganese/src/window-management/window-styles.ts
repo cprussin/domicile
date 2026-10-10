@@ -27,8 +27,16 @@ export const windowStyles = css({
  * Inline because Panda only extracts build-time literals. `depth` must be the
  * element's own `z-index`, since that is what stacks the client's surface.
  * Coordinates are the desktop's: the viewport spans every display.
+ *
+ * Also hands the corner to the keyframes as `--placed-x` and `--placed-y`, so
+ * a workspace switch can clip the part to its screen (see {@link slidAcross}).
  */
-export const placedAt = (rect: Rect, depth: number): CSSProperties => ({
+export const placedAt = (
+  rect: Rect,
+  depth: number,
+): CSSProperties & Record<`--${string}`, string> => ({
+  "--placed-x": `${rect.x.toString()}px`,
+  "--placed-y": `${rect.y.toString()}px`,
   blockSize: `${rect.height.toString()}px`,
   inlineSize: `${rect.width.toString()}px`,
   insetBlockStart: `${rect.y.toString()}px`,
@@ -133,6 +141,9 @@ export const collapsedAlong = (
  *
  * - `--workspace-width`: the screen width, so the two workspaces of a switch
  *   stay side by side.
+ * - `--screen-x`, `--screen-y` and `--screen-height`: the rest of the screen,
+ *   which a switch clips each part to. The page spans every monitor, so a
+ *   part sliding off its screen would otherwise show on the next one.
  * - `--lift`: how far up `frame` must move to clear the screen's top edge, for
  *   the scratchpad's slides. None for a window not drawn.
  */
@@ -140,6 +151,9 @@ export const slidAcross = (
   screen: Rect,
   frame: Rect | undefined,
 ): Record<`--${string}`, string> => ({
+  "--screen-height": `${screen.height.toString()}px`,
+  "--screen-x": `${screen.x.toString()}px`,
+  "--screen-y": `${screen.y.toString()}px`,
   "--workspace-width": `${screen.width.toString()}px`,
   ...(frame === undefined
     ? {}
@@ -164,13 +178,15 @@ export const movingStyles = cva({
     motion: {
       // Both workspaces share timing so they stay side by side. `emphasized`,
       // not `outQuart`: a full-screen slide that starts at full speed jumps.
+      // The clip to the screen is a second animation on the same timing, so
+      // the compositor thread can still run the slide.
       "arriving-from-end": {
         animation:
-          "windowArrivingFromEnd {durations.slower} {easings.emphasized}",
+          "windowArrivingFromEnd {durations.slower} {easings.emphasized}, windowClippedArrivingFromEnd {durations.slower} {easings.emphasized}",
       },
       "arriving-from-start": {
         animation:
-          "windowArrivingFromStart {durations.slower} {easings.emphasized}",
+          "windowArrivingFromStart {durations.slower} {easings.emphasized}, windowClippedArrivingFromStart {durations.slower} {easings.emphasized}",
       },
       closing: {
         animation: "windowClosing {durations.fast} {easings.outQuart} forwards",
@@ -191,11 +207,11 @@ export const movingStyles = cva({
       },
       "leaving-to-end": {
         animation:
-          "windowLeavingToEnd {durations.slower} {easings.emphasized} forwards",
+          "windowLeavingToEnd {durations.slower} {easings.emphasized} forwards, windowClippedLeavingToEnd {durations.slower} {easings.emphasized} forwards",
       },
       "leaving-to-start": {
         animation:
-          "windowLeavingToStart {durations.slower} {easings.emphasized} forwards",
+          "windowLeavingToStart {durations.slower} {easings.emphasized} forwards, windowClippedLeavingToStart {durations.slower} {easings.emphasized} forwards",
       },
       opening: {
         animation: "windowOpening {durations.fast} {easings.outQuart}",
