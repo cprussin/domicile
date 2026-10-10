@@ -76,7 +76,7 @@ describe("Brightness", () => {
     expect(backlight.asked).toEqual([1]);
   });
 
-  it("draws a plain sun that dims with the level", () => {
+  it("draws a bulb that dims with the level", () => {
     const backlight = heldBacklight();
     render(<Brightness backlight={backlight.backlight} />);
     const icon = () => screen.getByRole("button", { name: /^Brightness/ });

@@ -1,12 +1,12 @@
 import { Slider } from "@domicile-desktop/component-library/Slider";
-import { SunIcon } from "@phosphor-icons/react/dist/ssr/Sun";
-import { SunDimIcon } from "@phosphor-icons/react/dist/ssr/SunDim";
+import { LightbulbIcon } from "@phosphor-icons/react/dist/ssr/Lightbulb";
+import { LightbulbFilamentIcon } from "@phosphor-icons/react/dist/ssr/LightbulbFilament";
 
 import { css } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
 import type { BrightnessControl } from "./useBrightness";
 
-/** The brightness slider between a dim and a bright sun, with the percentage. */
+/** The brightness slider between an unlit and a lit bulb, with the percentage. */
 export const BrightnessSlider = ({
   control,
 }: {
@@ -15,7 +15,7 @@ export const BrightnessSlider = ({
   const percent = Math.round(control.shown * 100);
   return (
     <span className={rowStyles}>
-      <SunDimIcon size={13} />
+      <LightbulbIcon size={13} />
       <Slider
         label="Brightness"
         max={100}
@@ -27,7 +27,7 @@ export const BrightnessSlider = ({
         step={1}
         value={percent}
       />
-      <SunIcon size={15} />
+      <LightbulbFilamentIcon size={15} />
       <span className={percentStyles}>{percent}%</span>
     </span>
   );

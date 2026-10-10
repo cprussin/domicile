@@ -127,7 +127,7 @@ Every bar and the lock screen share one watch per system readout. See
 
 ## Brightness
 
-- A sun icon: dotted, rayed or filled by level. Hidden with no backlight.
+- A light bulb icon: empty, lit filament or filled by level. Hidden with no backlight.
 - Click for a slider in a popover. Scroll over it to step by 5%.
 - The level never goes to zero. See [Host readouts](HOST-READOUTS.md#brightness).
 - The slider shows the level `/sys` reports. During a drag it stays under the
