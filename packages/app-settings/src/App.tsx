@@ -158,6 +158,7 @@ const PageContent = ({
           {...named}
           editor={editor}
           extensions={extensions}
+          host={host}
           readOnly={state === undefined ? undefined : whyReadOnly(state)}
           report={report}
         />

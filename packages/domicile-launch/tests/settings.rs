@@ -153,6 +153,52 @@ fn a_site_permission_is_set_on_the_desktop() {
 }
 
 #[test]
+fn an_unpacked_extension_is_loaded_from_a_folder_under_home() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({"id": 11, "type": "load_unpacked", "directory": "~/src/my-extension"})),
+        json!({"id": 11, "type": "loaded_unpacked", "extension": ID})
+    );
+    assert_eq!(
+        host.asked.take().last(),
+        Some(&Request::LoadUnpacked {
+            directory: PathBuf::from("/home/me/src/my-extension")
+        })
+    );
+}
+
+#[test]
+fn a_folder_that_is_not_absolute_is_not_loaded() {
+    let host = a_host(FILES.clone());
+    let reply =
+        host.answer(&json!({"id": 12, "type": "load_unpacked", "directory": "src/my-extension"}));
+    assert_eq!(reply["type"], json!("refused"));
+    assert!(host.asked.take().is_empty());
+}
+
+#[test]
+fn an_extension_is_uninstalled_on_the_desktop() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({"id": 13, "type": "uninstall_extension", "extension": ID})),
+        json!({"id": 13, "type": "uninstalled"})
+    );
+    assert_eq!(
+        host.asked.take().last(),
+        Some(&Request::UninstallExtension { id: ID.to_string() })
+    );
+}
+
+#[test]
+fn the_config_s_extensions_are_the_desktop_s() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({"id": 14, "type": "config_extensions"})),
+        json!({"id": 14, "type": "config_extensions", "ids": [ID]})
+    );
+}
+
+#[test]
 fn a_desktop_that_refused_is_quoted() {
     let host = Fake {
         refuse: true,
@@ -185,6 +231,9 @@ fn the_host_watches_the_directory_of_each_file_once() {
         vec![PathBuf::from("/home/me/.config/domicile")]
     );
 }
+
+/// An extension id.
+const ID: &str = "abcdefghijklmnopabcdefghijklmnop";
 
 static FILES: std::sync::LazyLock<SettingsFiles> = std::sync::LazyLock::new(|| SettingsFiles {
     config: Some(PathBuf::from("/home/me/.config/domicile/domicile.json")),
@@ -239,6 +288,13 @@ impl Fake {
                             }],
                         }),
                         Request::SetSitePermission { .. } => Response::Stored,
+                        Request::LoadUnpacked { .. } => {
+                            Response::LoadedUnpacked { id: ID.to_string() }
+                        }
+                        Request::UninstallExtension { .. } => Response::Uninstalled,
+                        Request::ConfigExtensions => Response::ConfigExtensions {
+                            ids: vec![ID.to_string()],
+                        },
                         other => panic!("the host never asks {other:?}"),
                     })
                 },
@@ -255,6 +311,7 @@ impl Fake {
                     }
                     _ => Err(std::io::Error::from(std::io::ErrorKind::NotFound)),
                 },
+                home: Some(Path::new("/home/me")),
                 writable: &|path: &Path| !path.starts_with("/nix/store"),
                 write: &|path, text| {
                     self.written

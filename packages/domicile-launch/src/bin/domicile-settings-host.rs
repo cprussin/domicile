@@ -39,8 +39,10 @@ fn run() -> Result<(), String> {
     let output = Arc::new(Mutex::new(std::io::stdout()));
     let _watching = watching(&asking, Arc::clone(&output))?;
 
+    let home = std::env::var_os("HOME").map(PathBuf::from);
     let host = Host {
         ask: &asking,
+        home: home.as_deref(),
         read: &|path| std::fs::read_to_string(path),
         writable: &writable,
         write: &|path, text| std::fs::write(path, text),

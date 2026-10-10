@@ -47,6 +47,14 @@ pub enum Request {
     SitePermissions,
     /// Store one site's setting in the engine.
     SetSitePermission { site: SitePermission },
+    /// Load the unpacked extension in this absolute directory into the
+    /// engine's profile. It stays until uninstalled.
+    LoadUnpacked { directory: PathBuf },
+    /// Uninstall an extension the config did not install.
+    UninstallExtension { id: String },
+    /// Report the ids of the extensions the config installed, which only the
+    /// config uninstalls.
+    ConfigExtensions,
 }
 
 /// The files the Settings app edits, as the desktop found them at startup.
@@ -95,6 +103,15 @@ pub enum Response {
 
     /// The engine stored the site's setting.
     Stored,
+
+    /// The engine loaded the unpacked extension, which has this id.
+    LoadedUnpacked { id: String },
+
+    /// The engine uninstalled the extension.
+    Uninstalled,
+
+    /// Answers `config_extensions`.
+    ConfigExtensions { ids: Vec<String> },
 
     /// The request was unknown or could not be carried out.
     ///
@@ -150,6 +167,23 @@ pub type SitePermissions<'a> = &'a dyn Fn() -> Result<SiteSettings, String>;
 /// tests.
 pub type SetSitePermission<'a> = &'a dyn Fn(&SitePermission) -> Result<(), String>;
 
+/// Tells the engine to load an unpacked extension, returning its id.
+///
+/// [`crate::command_socket::load_unpacked`] in a desktop; a closure in tests.
+pub type LoadUnpacked<'a> = &'a dyn Fn(&Path) -> Result<String, String>;
+
+/// Tells the engine to uninstall an extension.
+///
+/// [`crate::command_socket::uninstall_extension`] in a desktop; a closure in
+/// tests.
+pub type UninstallExtension<'a> = &'a dyn Fn(&str) -> Result<(), String>;
+
+/// Asks the engine for the ids of the extensions the config installed.
+///
+/// [`crate::command_socket::config_extensions`] in a desktop; a closure in
+/// tests.
+pub type ConfigExtensions<'a> = &'a dyn Fn() -> Result<Vec<String>, String>;
+
 /// What a request can learn about or do to the running desktop.
 ///
 /// The dials reach the engine and the compositor; they are injected so
@@ -165,6 +199,9 @@ pub struct Desktop<'a> {
     pub send: SendShell<'a>,
     pub permissions: SitePermissions<'a>,
     pub set_permission: SetSitePermission<'a>,
+    pub load_unpacked: LoadUnpacked<'a>,
+    pub uninstall_extension: UninstallExtension<'a>,
+    pub config_extensions: ConfigExtensions<'a>,
 }
 
 /// How a screenshot the compositor took ended.
@@ -220,6 +257,22 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
                 Err(why) => Response::Refused { why },
             })
         }
+        Ok(Request::LoadUnpacked { directory }) => {
+            to_line(&match (desktop.load_unpacked)(&directory) {
+                Ok(id) => Response::LoadedUnpacked { id },
+                Err(why) => Response::Refused { why },
+            })
+        }
+        Ok(Request::UninstallExtension { id }) => {
+            to_line(&match (desktop.uninstall_extension)(&id) {
+                Ok(()) => Response::Uninstalled,
+                Err(why) => Response::Refused { why },
+            })
+        }
+        Ok(Request::ConfigExtensions) => to_line(&match (desktop.config_extensions)() {
+            Ok(ids) => Response::ConfigExtensions { ids },
+            Err(why) => Response::Refused { why },
+        }),
         Err(why) => to_line(&Response::Refused {
             why: format!(
                 "'{}' is not a request this desktop knows: {why}",

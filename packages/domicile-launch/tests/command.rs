@@ -4,8 +4,8 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use domicile_launch::command::{
-    load_shell_line, open_app_line, open_url_line, reply, set_site_permission_line,
-    site_permissions_line, Reply,
+    config_extensions_line, load_shell_line, load_unpacked_line, open_app_line, open_url_line,
+    reply, set_site_permission_line, site_permissions_line, uninstall_extension_line, Reply,
 };
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
@@ -119,4 +119,46 @@ fn an_engine_lists_each_site_s_stored_permissions() {
 #[test]
 fn an_engine_that_stored_a_setting_says_so() {
     assert_eq!(reply("{\"type\":\"set\"}").unwrap(), Reply::Set);
+}
+
+#[test]
+fn an_unpacked_extension_is_loaded_from_its_directory() {
+    assert_eq!(
+        load_unpacked_line(Path::new("/home/me/src/my-extension")),
+        "{\"type\":\"load_unpacked\",\"version\":1,\"directory\":\"/home/me/src/my-extension\"}\n"
+    );
+    assert_eq!(
+        reply("{\"type\":\"loaded_unpacked\",\"id\":\"abcdefghijklmnopabcdefghijklmnop\"}")
+            .unwrap(),
+        Reply::LoadedUnpacked {
+            id: "abcdefghijklmnopabcdefghijklmnop".to_string()
+        }
+    );
+}
+
+#[test]
+fn an_extension_is_uninstalled_by_id() {
+    assert_eq!(
+        uninstall_extension_line("abcdefghijklmnopabcdefghijklmnop"),
+        "{\"type\":\"uninstall_extension\",\"version\":1,\"id\":\"abcdefghijklmnopabcdefghijklmnop\"}\n"
+    );
+    assert_eq!(
+        reply("{\"type\":\"uninstalled\"}").unwrap(),
+        Reply::Uninstalled
+    );
+}
+
+#[test]
+fn an_engine_lists_the_extensions_the_config_installed() {
+    assert_eq!(
+        config_extensions_line(),
+        "{\"type\":\"config_extensions\",\"version\":1}\n"
+    );
+    assert_eq!(
+        reply("{\"type\":\"config_extensions\",\"ids\":[\"abcdefghijklmnopabcdefghijklmnop\"]}")
+            .unwrap(),
+        Reply::ConfigExtensions {
+            ids: vec!["abcdefghijklmnopabcdefghijklmnop".to_string()]
+        }
+    );
 }

@@ -12,8 +12,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::command::{
-    load_shell_line, open_app_line, open_url_line, reply, set_site_permission_line,
-    site_permissions_line, Reply,
+    config_extensions_line, load_shell_line, load_unpacked_line, open_app_line, open_url_line,
+    reply, set_site_permission_line, site_permissions_line, uninstall_extension_line, Reply,
 };
 use crate::site_permissions::{SitePermission, SiteSettings};
 
@@ -99,6 +99,42 @@ pub fn set_site_permission(
         Reply::Set,
         patience,
     )
+}
+
+/// Tells the engine at `socket` to load the unpacked extension in
+/// `directory`, and returns its id.
+pub fn load_unpacked(
+    socket: &Path,
+    directory: &Path,
+    patience: Duration,
+) -> Result<String, CommandError> {
+    match answered(socket, &load_unpacked_line(directory), patience)? {
+        Reply::LoadedUnpacked { id } => Ok(id),
+        other => Err(unexpected(socket, &other)),
+    }
+}
+
+/// Tells the engine at `socket` to uninstall extension `id`.
+pub fn uninstall_extension(
+    socket: &Path,
+    id: &str,
+    patience: Duration,
+) -> Result<(), CommandError> {
+    carry_out(
+        socket,
+        &uninstall_extension_line(id),
+        Reply::Uninstalled,
+        patience,
+    )
+}
+
+/// Asks the engine at `socket` for the ids of the extensions the desk's config
+/// installed.
+pub fn config_extensions(socket: &Path, patience: Duration) -> Result<Vec<String>, CommandError> {
+    match answered(socket, &config_extensions_line(), patience)? {
+        Reply::ConfigExtensions { ids } => Ok(ids),
+        other => Err(unexpected(socket, &other)),
+    }
 }
 
 /// Sends one command and succeeds only if the engine replies `done`.
