@@ -12,9 +12,11 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::command::{
-    config_extensions_line, load_shell_line, load_unpacked_line, open_app_line, open_url_line,
-    reply, set_site_permission_line, site_permissions_line, uninstall_extension_line, Reply,
+    config_extensions_line, load_shell_line, load_unpacked_line, media_devices_line, open_app_line,
+    open_url_line, reply, set_media_device_line, set_site_permission_line, site_permissions_line,
+    uninstall_extension_line, Reply,
 };
+use crate::media_devices::{MediaDevices, MediaKind};
 use crate::site_permissions::{SitePermission, SiteSettings};
 
 /// Why the engine did not carry out a command.
@@ -135,6 +137,31 @@ pub fn config_extensions(socket: &Path, patience: Duration) -> Result<Vec<String
         Reply::ConfigExtensions { ids } => Ok(ids),
         other => Err(unexpected(socket, &other)),
     }
+}
+
+/// Asks the engine at `socket` for its cameras and microphones, most preferred
+/// first.
+pub fn media_devices(socket: &Path, patience: Duration) -> Result<MediaDevices, CommandError> {
+    match answered(socket, &media_devices_line(), patience)? {
+        Reply::MediaDevices(devices) => Ok(devices),
+        other => Err(unexpected(socket, &other)),
+    }
+}
+
+/// Tells the engine at `socket` to give device `id` to sites that ask for a
+/// `kind` without naming one.
+pub fn set_media_device(
+    socket: &Path,
+    kind: MediaKind,
+    id: &str,
+    patience: Duration,
+) -> Result<(), CommandError> {
+    carry_out(
+        socket,
+        &set_media_device_line(kind, id),
+        Reply::Set,
+        patience,
+    )
 }
 
 /// Sends one command and succeeds only if the engine replies `done`.

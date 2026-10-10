@@ -4,9 +4,11 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use domicile_launch::command::{
-    config_extensions_line, load_shell_line, load_unpacked_line, open_app_line, open_url_line,
-    reply, set_site_permission_line, site_permissions_line, uninstall_extension_line, Reply,
+    config_extensions_line, load_shell_line, load_unpacked_line, media_devices_line, open_app_line,
+    open_url_line, reply, set_media_device_line, set_site_permission_line, site_permissions_line,
+    uninstall_extension_line, Reply,
 };
+use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
 #[test]
@@ -160,5 +162,38 @@ fn an_engine_lists_the_extensions_the_config_installed() {
         Reply::ConfigExtensions {
             ids: vec!["abcdefghijklmnopabcdefghijklmnop".to_string()]
         }
+    );
+}
+
+#[test]
+fn a_question_about_media_devices_names_the_version_it_is_written_in() {
+    assert_eq!(
+        media_devices_line(),
+        "{\"type\":\"media_devices\",\"version\":1}\n"
+    );
+}
+
+#[test]
+fn a_media_device_is_preferred_by_kind_and_id() {
+    assert_eq!(
+        set_media_device_line(MediaKind::Camera, "/dev/video2"),
+        "{\"type\":\"set_media_device\",\"version\":1,\"kind\":\"camera\",\"id\":\"/dev/video2\"}\n"
+    );
+}
+
+#[test]
+fn an_engine_lists_each_kind_s_devices_most_preferred_first() {
+    assert_eq!(
+        reply(
+            "{\"type\":\"media_devices\",\"cameras\":[{\"id\":\"/dev/video2\",\"name\":\"USB Camera\"}],\"microphones\":[]}"
+        )
+        .unwrap(),
+        Reply::MediaDevices(MediaDevices {
+            cameras: vec![MediaDevice {
+                id: "/dev/video2".to_string(),
+                name: "USB Camera".to_string(),
+            }],
+            microphones: vec![],
+        })
     );
 }

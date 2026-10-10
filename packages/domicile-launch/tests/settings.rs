@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use domicile_launch::control::{Request, Response, SettingsFiles};
+use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::settings::{answer, read_message, watched, write_message, Host};
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 use serde_json::{json, Value};
@@ -153,6 +154,36 @@ fn a_site_permission_is_set_on_the_desktop() {
 }
 
 #[test]
+fn media_devices_are_the_desktops() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({"id": 9, "type": "media_devices"})),
+        json!({
+            "id": 9,
+            "type": "media_devices",
+            "cameras": [{"id": "/dev/video2", "name": "USB Camera"}],
+            "microphones": [],
+        })
+    );
+}
+
+#[test]
+fn a_media_device_is_preferred_on_the_desktop() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({"id": 10, "type": "set_media_device", "kind": "camera", "device": "/dev/video2"})),
+        json!({"id": 10, "type": "stored"})
+    );
+    assert_eq!(
+        host.asked.take().last(),
+        Some(&Request::SetMediaDevice {
+            kind: MediaKind::Camera,
+            id: "/dev/video2".to_string(),
+        })
+    );
+}
+
+#[test]
 fn an_unpacked_extension_is_loaded_from_a_folder_under_home() {
     let host = a_host(FILES.clone());
     assert_eq!(
@@ -288,6 +319,14 @@ impl Fake {
                             }],
                         }),
                         Request::SetSitePermission { .. } => Response::Stored,
+                        Request::MediaDevices => Response::MediaDevices(MediaDevices {
+                            cameras: vec![MediaDevice {
+                                id: "/dev/video2".to_string(),
+                                name: "USB Camera".to_string(),
+                            }],
+                            microphones: vec![],
+                        }),
+                        Request::SetMediaDevice { .. } => Response::Stored,
                         Request::LoadUnpacked { .. } => {
                             Response::LoadedUnpacked { id: ID.to_string() }
                         }

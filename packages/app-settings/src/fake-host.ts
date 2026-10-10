@@ -2,7 +2,13 @@
 // app's tests.
 
 import type { Extensions, InstalledExtension } from "./extensions";
-import type { SettingsFiles, SettingsHost, SiteSettings, Target } from "./host";
+import type {
+  MediaDevices,
+  SettingsFiles,
+  SettingsHost,
+  SiteSettings,
+  Target,
+} from "./host";
 
 /** What a fake host starts with. */
 export type FakeHostState = {
@@ -10,6 +16,7 @@ export type FakeHostState = {
   /** The ids the engine says the config installed. */
   configExtensions: string[];
   sites: SiteSettings;
+  media: MediaDevices;
   /** The reason every write is refused, if any. */
   refuse?: string | undefined;
 };
@@ -26,6 +33,7 @@ export const fakeHost = (state: FakeHostState) => {
       loaded.push(directory);
       return Promise.resolve("c".repeat(32));
     },
+    mediaDevices: () => Promise.resolve(structuredClone(state.media)),
     onChange: (listener) => {
       changes.add(listener);
       return () => {
@@ -33,6 +41,13 @@ export const fakeHost = (state: FakeHostState) => {
       };
     },
     read: () => Promise.resolve(structuredClone(state.files)),
+    setMediaDevice: (kind, id) => {
+      const list = kind === "camera" ? "cameras" : "microphones";
+      const preferred = state.media[list].filter((device) => device.id === id);
+      const others = state.media[list].filter((device) => device.id !== id);
+      state.media = { ...state.media, [list]: [...preferred, ...others] };
+      return Promise.resolve();
+    },
     setSitePermission: (site) => {
       const others = state.sites.sites.filter(
         (stored) =>

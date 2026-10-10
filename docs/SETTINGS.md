@@ -17,6 +17,9 @@ launcher, opens it in an app window
   their own for it, or each site with all its permissions. **Remove site**
   clears all of a site's own settings. Changes take effect at once in open
   browser windows.
+- **Camera and microphone device:** under Camera and Microphone, the device a
+  site gets when it does not ask for a particular one. A site that names a
+  device still gets that device.
 - **Code:** the config file and the shell's source in a plain text editor
   (line numbers, Tab indents, Enter keeps indentation, Ctrl+S saves).
 - Source and design: [`packages/app-settings`](/packages/app-settings/README.md).
@@ -44,9 +47,11 @@ launcher, opens it in an app window
 Settings page ─ native messaging ─▶ domicile-settings-host ─ DOMICILE_SOCK ─▶ domicile ─ command socket ─▶ engine
  (extension)                          reads and writes the files    settings_files,                site_permissions,
                                                                      site_permissions,              set_site_permission,
-                                                                     extensions                     load_unpacked,
-                                                                                                    uninstall_extension,
-                                                                                                    config_extensions
+                                                                     extensions,                    load_unpacked,
+                                                                     media_devices                  uninstall_extension,
+                                                                                                    config_extensions,
+                                                                                                    media_devices,
+                                                                                                    set_media_device
 ```
 
 | Part | Where |
@@ -58,6 +63,7 @@ Settings page ─ native messaging ─▶ domicile-settings-host ─ DOMICILE_SO
 | Writable | `access(W_OK)` on the file, following links. |
 | Extensions | The engine's `load_unpacked`, `uninstall_extension` and `config_extensions` commands. |
 | Site permissions | The engine's `site_permissions` and `set_site_permission` commands ([CONTROL-CHANNEL.md](/packages/domicile-engine/docs/CONTROL-CHANNEL.md#command-socket)). They read and write the shell profile's content settings as the address bar's panel does. |
+| Camera and microphone | The engine's `media_devices` and `set_media_device` commands. They read and write Chrome's device ranking in the shell profile's prefs, which Chrome uses for a site that names no device. |
 | Opening it | `domicile-settings` runs `domicile open-app chrome-extension://acpgnhiblklkgbkcjgbabkcmdmchdphk/settings.html`. |
 
 ## Key decisions

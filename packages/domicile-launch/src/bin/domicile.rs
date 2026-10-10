@@ -22,8 +22,8 @@ use domicile_launch::apps::list_the_settings_host;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
 use domicile_launch::cli::{invocation, CliError, Invocation};
 use domicile_launch::command_socket::{
-    config_extensions, load_shell, load_unpacked, open_app, open_url, set_site_permission,
-    site_permissions, uninstall_extension,
+    config_extensions, load_shell, load_unpacked, media_devices, open_app, open_url,
+    set_media_device, set_site_permission, site_permissions, uninstall_extension,
 };
 use domicile_launch::components::{apps, builder, components, our_shell, Components};
 use domicile_launch::compositor_socket::{screenshot, send_shell};
@@ -364,7 +364,8 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         | Response::Stored
         | Response::LoadedUnpacked { .. }
         | Response::Uninstalled
-        | Response::ConfigExtensions { .. } => Err(format!(
+        | Response::ConfigExtensions { .. }
+        | Response::MediaDevices(_) => Err(format!(
             "the desktop answered {answer:?}, which no command asks for"
         )),
         // Print the desktop's own reason.
@@ -865,6 +866,12 @@ fn answer_a_command(
                 },
                 config_extensions: &|| {
                     config_extensions(engine, ANSWER_WITHIN).map_err(|why| why.to_string())
+                },
+                media_devices: &|| {
+                    media_devices(engine, ANSWER_WITHIN).map_err(|why| why.to_string())
+                },
+                set_media_device: &|kind, id| {
+                    set_media_device(engine, kind, id, ANSWER_WITHIN).map_err(|why| why.to_string())
                 },
             },
         )
