@@ -6,6 +6,8 @@ import { WEBVIEW_CLOSE_EVENT } from "@domicile-desktop/sdk/webview-element";
 import { useEffect, useState } from "react";
 
 import { css } from "../../styled-system/css";
+import { PermissionAsk } from "../window-management/browser/PermissionAsk";
+import { usePermissionRequest } from "../window-management/browser/usePermissionRequest";
 import { useContentSize } from "./useContentSize";
 
 type Props = {
@@ -71,6 +73,7 @@ export const ExtensionAction = ({
       }
     >
       <PopupView
+        name={extension.name}
         onClose={() => {
           onOpen(undefined);
         }}
@@ -104,6 +107,8 @@ const Icon = ({ extension }: { extension: Extension }) => (
 );
 
 type PopupViewProps = {
+  /** The extension's name, for its permission requests. */
+  name: string;
   /** The popup called `window.close()`. */
   onClose: () => void;
   popup: string;
@@ -115,11 +120,15 @@ type PopupViewProps = {
  * The view reports `window.close()` as `domicile-close` and leaves closing to
  * the shell. Like Chrome's popup, it sizes to its content, capped at
  * `viewStyles`' box (also its size until the page reports one).
+ *
+ * The page's permission requests are asked above it. A grant is the
+ * extension's, so it holds in the extension's other pages too.
  */
-const PopupView = ({ onClose, popup }: PopupViewProps) => {
+const PopupView = ({ name, onClose, popup }: PopupViewProps) => {
   // `null` because React passes it to a callback ref on unmount.
   const [view, setView] = useState<HTMLWebViewElement | null>(null);
   const size = useContentSize(view);
+  const request = usePermissionRequest(view);
 
   useEffect(() => {
     if (view === null) {
@@ -133,21 +142,28 @@ const PopupView = ({ onClose, popup }: PopupViewProps) => {
   }, [onClose, view]);
 
   return (
-    <webview
-      className={viewStyles}
-      // Marks the page as an action popup rather than a tab, so extensions
-      // that lay out differently in a tab match Chrome. Read once, when the
-      // view loads its page.
-      extensionpopup=""
-      ref={setView}
-      src={popup}
-      // Inline because Panda can't read runtime values. `viewStyles` caps it.
-      style={
-        size === undefined
-          ? undefined
-          : { blockSize: size.height, inlineSize: size.width }
-      }
-    />
+    <>
+      {request === undefined ? undefined : (
+        <div className={askStyles}>
+          <PermissionAsk asker={name} request={request} />
+        </div>
+      )}
+      <webview
+        className={viewStyles}
+        // Marks the page as an action popup rather than a tab, so extensions
+        // that lay out differently in a tab match Chrome. Read once, when the
+        // view loads its page.
+        extensionpopup=""
+        ref={setView}
+        src={popup}
+        // Inline because Panda can't read runtime values. `viewStyles` caps it.
+        style={
+          size === undefined
+            ? undefined
+            : { blockSize: size.height, inlineSize: size.width }
+        }
+      />
+    </>
   );
 };
 
@@ -172,6 +188,9 @@ const badgeStyles = css({
   position: "absolute",
   whiteSpace: "nowrap",
 });
+
+// The panel is flush, so the request gets its own inset.
+const askStyles = css({ padding: 2 });
 
 // A `<webview>` defaults to 300x150, so this sets its size until the popup
 // reports one and caps how far it grows. The cap fits typical popups
