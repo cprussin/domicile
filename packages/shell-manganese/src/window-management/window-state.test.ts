@@ -48,6 +48,7 @@ const listed = (
 ) => ({
   height: popup.height,
   id,
+  isApp: false,
   isPrivate: false,
   popupWindow: popup.popupWindow === 0 ? null : popup.popupWindow,
   title: "",

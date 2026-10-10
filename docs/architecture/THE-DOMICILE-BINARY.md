@@ -29,6 +29,7 @@ domicile --config <path> <shell>  # ...with this compositor config
 domicile which-shell              # ask the running desktop which shell it serves
 domicile load-shell <shell>       # replace the running desktop's shell
 domicile open-url <url>           # open a URL in the running desktop (BROWSER)
+domicile open-app <url>           # open a URL as an app: no address bar (WEB-APPS.md)
 domicile screenshot               # the shell's interactive screenshot (Print in manganese)
 domicile screenshot <file>        # write a PNG of the running desk
 domicile send-shell <word>…       # run a shell command, as a SendShell keybinding does
@@ -251,8 +252,8 @@ running one. The first argument decides which.
   the socket.
 - The supervisor answers each connection on its own thread, since an
   interactive screenshot waits on the user.
-- The supervisor answers and routes. `load-shell` and `open-url` go to the
-  engine. `screenshot` and `send-shell` go to the compositor's chrome socket
+- The supervisor answers and routes. `load-shell`, `open-url` and
+  `open-app` go to the engine. `screenshot` and `send-shell` go to the compositor's chrome socket
   as the `screenshot` and `send_shell` system calls a page makes
   (`domicile_launch::compositor_socket`). The connection never says `hello`,
   so it is not a chrome. See
@@ -267,6 +268,7 @@ running one. The first argument decides which.
 domicile which-shell ─▶ $DOMICILE_SOCK ─▶ supervisor
 domicile load-shell  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine ─▶ page
 domicile open-url    ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
+domicile open-app    ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
 domicile screenshot  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor
 domicile send-shell  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor ─▶ every page
 domicile-settings-host ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine   (site permissions; settings_files stops at the supervisor)

@@ -169,6 +169,13 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
    alone, keeping the event-loop state and the order it changes in clear from
    `main.rs`.
 
+10. **Web apps.** `domicile open-app` opens a URL as an app window, without an
+    address bar; Settings and History open this way. Left: showing the
+    address off the app's origin, `domicile install-app` from a web app
+    manifest, and a home-manager option for desktop entries.
+    No guard checks the engine lists an app window with `isApp`.
+    [WEB-APPS.md](docs/architecture/WEB-APPS.md).
+
 ## In the engine fork (the agent on `crux`)
 
 1. **shm upload on a GPU.** An shm client's frame is copied into a compositor

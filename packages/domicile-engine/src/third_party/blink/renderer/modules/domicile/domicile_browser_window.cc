@@ -12,14 +12,16 @@ DomicileBrowserWindow::DomicileBrowserWindow(
     std::optional<int32_t> popup_window,
     int32_t width,
     int32_t height,
-    bool is_private)
+    bool is_private,
+    bool is_app)
     : id_(id),
       url_(url),
       title_(title),
       popup_window_(popup_window),
       width_(width),
       height_(height),
-      is_private_(is_private) {}
+      is_private_(is_private),
+      is_app_(is_app) {}
 
 DomicileBrowserWindow::~DomicileBrowserWindow() = default;
 

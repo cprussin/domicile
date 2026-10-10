@@ -156,16 +156,15 @@ class Desk {
 
   /**
    * Opens a browser window as the engine does unasked: for a page's
-   * target="_blank", `domicile open-url`, or, with `popupWindow`, an
-   * extension's popup window.
+   * target="_blank", `domicile open-url`, with `popupWindow` an extension's
+   * popup window, or with `isApp` `domicile open-app`.
    */
   engineOpens(
     url: string,
-    popupWindow: number | null = null,
-    isPrivate = false,
+    options: Parameters<FakeDomicileHost["openBrowser"]>[1] = {},
   ): void {
     act(() => {
-      this.fake.openBrowser(url, popupWindow, isPrivate);
+      this.fake.openBrowser(url, options);
     });
   }
 
@@ -1777,9 +1776,23 @@ describe("Shell", () => {
     it("says a private browser window is private", () => {
       renderShell();
 
-      domicile.engineOpens("https://example.com/", null, true);
+      domicile.engineOpens("https://example.com/", { isPrivate: true });
 
       expect(screen.getByText("Private")).toBeInTheDocument();
+    });
+
+    // `domicile open-app`, as Settings and History open.
+    it("draws an app window without an address bar", () => {
+      const { container } = renderShell();
+
+      domicile.engineOpens("chrome-extension://settings/settings.html", {
+        isApp: true,
+      });
+
+      expect(container.querySelector("webview[window='1']")).not.toBeNull();
+      expect(
+        screen.queryByRole("combobox", { name: "Address" }),
+      ).not.toBeInTheDocument();
     });
 
     // Bitwarden's "Unlock", end to end: `chrome.windows.create` opens a browser
@@ -1792,7 +1805,9 @@ describe("Shell", () => {
         .type(screen.getByRole("combobox"), "example.com{Enter}");
       await launched();
 
-      domicile.engineOpens("chrome-extension://vault/popup.html", 7);
+      domicile.engineOpens("chrome-extension://vault/popup.html", {
+        popupWindow: 7,
+      });
 
       expect(windowsOnScreen(container)).toEqual(["Browser", "Browser"]);
       expect(container.querySelector("webview[window='2']")).not.toBeNull();

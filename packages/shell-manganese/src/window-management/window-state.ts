@@ -1228,6 +1228,7 @@ const takeUpBrowser = (
   {
     height,
     id,
+    isApp,
     isPrivate,
     popupWindow,
     title,
@@ -1241,6 +1242,7 @@ const takeUpBrowser = (
     title,
     popupWindow ?? undefined,
     isPrivate,
+    isApp,
   );
   if (windowOf(state, window.id) !== undefined) {
     return {

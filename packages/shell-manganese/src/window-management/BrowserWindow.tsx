@@ -117,6 +117,11 @@ type Props = {
    */
   popupWindow?: number | undefined;
   /**
+   * Whether this is an app window (`domicile open-app`), drawn without an
+   * address bar. See docs/architecture/WEB-APPS.md.
+   */
+  isApp?: boolean;
+  /**
    * Whether the page is private. The address bar says so, and the page's new
    * windows are private too.
    */
@@ -157,6 +162,7 @@ export const BrowserWindow = ({
   focused,
   frame,
   fullscreen,
+  isApp = false,
   isPrivate = false,
   listDirectory = defaultListDirectory,
   motion,
@@ -487,7 +493,7 @@ export const BrowserWindow = ({
             }
       }
     >
-      {popupWindow === undefined && (
+      {popupWindow === undefined && !isApp && (
         <AddressBar
           address={addressOf(shown.url, sent)}
           canGoBack={canGoBack}

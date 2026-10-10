@@ -34,6 +34,7 @@ struct Told {
   std::string module;
   bool opened = false;
   std::string url;
+  bool app = false;
   bool set = false;
   std::string origin;
   std::optional<WebViewPermission> permission;
@@ -64,9 +65,10 @@ std::string Answer(std::string_view line,
     told->module = module;
     return has_window;
   };
-  auto open_url = [told, has_window](const GURL& url) {
+  auto open_url = [told, has_window](const GURL& url, bool app) {
     told->opened = true;
     told->url = url.spec();
+    told->app = app;
     return has_window;
   };
   auto list_site_permissions =
@@ -237,7 +239,30 @@ TEST(CommandProtocolTest, HandsTheShellTheAddressARequestNames) {
   EXPECT_EQ(TypeOf(reply), "opened");
   EXPECT_TRUE(told.opened);
   EXPECT_EQ(told.url, "https://example.com/a?b=c");
+  EXPECT_FALSE(told.app);
   EXPECT_FALSE(told.asked);
+}
+
+TEST(CommandProtocolTest, OpensAnAppWindowWhenARequestAsksForOne) {
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"open_url","version":1,"url":"https://example.com/",)"
+      R"("app":true})",
+      &told);
+  EXPECT_EQ(TypeOf(reply), "opened");
+  EXPECT_TRUE(told.app);
+}
+
+TEST(CommandProtocolTest, RefusesAnAppThatIsNotABoolean) {
+  // A typo must not open a browser window and report success.
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"open_url","version":1,"url":"https://example.com/",)"
+      R"("app":"yes"})",
+      &told);
+  EXPECT_EQ(TypeOf(reply), "refused");
+  EXPECT_THAT(WhyOf(reply), HasSubstr("\"app\""));
+  EXPECT_FALSE(told.opened);
 }
 
 TEST(CommandProtocolTest, RefusesAnAddressThatIsNotAUrl) {

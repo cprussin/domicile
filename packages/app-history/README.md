@@ -12,7 +12,7 @@ The History app: an unpacked MV3 Chrome extension whose page,
   sets from the desktop.
 
 The manifest's `key` pins the id, so
-`domicile open-url chrome-extension://dimbckmbklbplcobppahmnepgiponamj/history.html`
+`domicile open-app chrome-extension://dimbckmbklbplcobppahmnepgiponamj/history.html`
 opens it.
 
 ## Removing a row

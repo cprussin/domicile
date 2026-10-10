@@ -113,12 +113,22 @@ class DeskWindows final : public base::SupportsUserData::Data,
   // window in the off-the-record profile. Returns false and opens nothing
   // when the profile has no shell to own it.
   bool Open(const GURL& url, bool private_browsing) {
-    return Make(url, /*popup_window=*/std::nullopt, 0, 0, private_browsing);
+    return Make(url, /*popup_window=*/std::nullopt, 0, 0, private_browsing,
+                /*app=*/false);
+  }
+
+  // Opens an app window at `url`: a window of the desk's own window that the
+  // shell draws without an address bar. Its page's new windows are browser
+  // windows, as a link out of a Chrome app opens in the browser.
+  bool OpenApp(const GURL& url) {
+    return Make(url, /*popup_window=*/std::nullopt, 0, 0,
+                /*private_browsing=*/false, /*app=*/true);
   }
 
   // Opens a window at `url` as popup window `window_id`'s one tab.
   bool OpenPopupWindow(int window_id, const GURL& url, int width, int height) {
-    return Make(url, window_id, width, height, /*private_browsing=*/false);
+    return Make(url, window_id, width, height, /*private_browsing=*/false,
+                /*app=*/false);
   }
 
   // The off-the-record profile private windows live in, made on first use.
@@ -167,7 +177,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
           window.id, entry == nullptr ? GURL() : entry->GetVirtualURL(),
           base::UTF16ToUTF8(contents.GetTitle()),
           window.guest->popup_window().value_or(0), window.width,
-          window.height, contents.GetBrowserContext()->IsOffTheRecord()));
+          window.height, contents.GetBrowserContext()->IsOffTheRecord(),
+          window.app));
     }
     return list;
   }
@@ -203,13 +214,15 @@ class DeskWindows final : public base::SupportsUserData::Data,
     std::unique_ptr<Watch> watch;
     int width = 0;
     int height = 0;
+    bool app = false;
   };
 
   bool Make(const GURL& url,
             std::optional<int> popup_window,
             int width,
             int height,
-            bool private_browsing) {
+            bool private_browsing,
+            bool app) {
     // The shell owns every guest, browser windows included: content's guest
     // machinery reads the owner's WebContents when making a guest. A desk with
     // no shell has nothing to draw a window in anyway.
@@ -229,7 +242,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
         base::BindRepeating(&DeskWindows::Changed, base::Unretained(this)));
     guest->Navigate(url);
     windows_.push_back(
-        Window{id, std::move(guest), std::move(watch), width, height});
+        Window{id, std::move(guest), std::move(watch), width, height, app});
     Changed();
     return true;
   }
@@ -374,13 +387,15 @@ void StartBrowserWindows() {
   WebViewGuest::SetBrowserWindowHost(host.get());
 }
 
-bool OpenBrowserWindow(const GURL& url) {
+bool OpenBrowserWindow(const GURL& url, bool app) {
   content::WebContents* shell = ShellContentsIn(nullptr);
   if (shell == nullptr) {
     return false;
   }
-  return DeskWindows::For(Profile::FromBrowserContext(shell->GetBrowserContext()))
-      .Open(url, /*private_browsing=*/false);
+  DeskWindows& windows =
+      DeskWindows::For(Profile::FromBrowserContext(shell->GetBrowserContext()));
+  return app ? windows.OpenApp(url)
+             : windows.Open(url, /*private_browsing=*/false);
 }
 
 void BindBrowserWindows(content::RenderFrameHost* frame,

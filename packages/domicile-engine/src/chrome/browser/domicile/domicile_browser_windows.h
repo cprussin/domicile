@@ -35,8 +35,9 @@ namespace domicile {
 void StartBrowserWindows();
 
 // Opens a browser window at `url` in the shell's profile, for `domicile
-// open-url`. Returns false when there is no shell to own it.
-bool OpenBrowserWindow(const GURL& url);
+// open-url`, or with `app` an app window, for `domicile open-app`. Returns
+// false when there is no shell to own it.
+bool OpenBrowserWindow(const GURL& url, bool app);
 
 // Binds BrowserWindows for `frame`. Sends the whole list on binding and on
 // every change, and takes the shell's opens and closes.
