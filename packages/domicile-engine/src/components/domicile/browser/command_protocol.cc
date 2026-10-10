@@ -3,17 +3,21 @@
 
 #include "components/domicile/browser/command_protocol.h"
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "base/check.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/types/expected.h"
 #include "base/values.h"
 #include "components/domicile/browser/site_permissions.h"
 
@@ -25,6 +29,9 @@ constexpr char kLoadShell[] = "load_shell";
 constexpr char kOpenUrl[] = "open_url";
 constexpr char kListSitePermissionsCommand[] = "site_permissions";
 constexpr char kSetSitePermissionCommand[] = "set_site_permission";
+constexpr char kLoadUnpacked[] = "load_unpacked";
+constexpr char kUninstallExtension[] = "uninstall_extension";
+constexpr char kConfigExtensions[] = "config_extensions";
 
 std::string Line(base::DictValue reply) {
   std::string line;
@@ -47,6 +54,13 @@ std::string AnswerOpenUrl(const base::DictValue& request, OpenUrl open_url);
 std::string AnswerSitePermissions(ListSitePermissions list_site_permissions);
 std::string AnswerSetSitePermission(const base::DictValue& request,
                                     SetSitePermission set_site_permission);
+void AnswerLoadUnpacked(const base::DictValue& request,
+                        LoadUnpacked load_unpacked,
+                        CommandReply reply);
+std::string AnswerUninstallExtension(const base::DictValue& request,
+                                     UninstallExtension uninstall_extension);
+std::string AnswerConfigExtensions(
+    ListConfigExtensions list_config_extensions);
 
 }  // namespace
 
@@ -111,10 +125,25 @@ void AnswerCommand(std::string_view line,
         AnswerSetSitePermission(*request, actions.set_site_permission));
     return;
   }
+  if (*type == kLoadUnpacked) {
+    AnswerLoadUnpacked(*request, actions.load_unpacked, std::move(reply));
+    return;
+  }
+  if (*type == kUninstallExtension) {
+    std::move(reply).Run(
+        AnswerUninstallExtension(*request, actions.uninstall_extension));
+    return;
+  }
+  if (*type == kConfigExtensions) {
+    std::move(reply).Run(
+        AnswerConfigExtensions(actions.list_config_extensions));
+    return;
+  }
   std::move(reply).Run(RefusedCommand(base::StrCat(
       {"\"", *type, "\" is not a command this engine knows; it takes \"",
        kLoadShell, "\", \"", kOpenUrl, "\", \"", kListSitePermissionsCommand,
-       "\" and \"", kSetSitePermissionCommand, "\""})));
+       "\", \"", kSetSitePermissionCommand, "\", \"", kLoadUnpacked, "\", \"",
+       kUninstallExtension, "\" and \"", kConfigExtensions, "\""})));
 }
 
 namespace {
@@ -244,6 +273,84 @@ std::string AnswerSetSitePermission(const base::DictValue& request,
         "this engine has no shell, and so no profile to store the setting in");
   }
   return Done("set");
+}
+
+void AnswerLoadUnpacked(const base::DictValue& request,
+                        LoadUnpacked load_unpacked,
+                        CommandReply reply) {
+  const std::string* directory = request.FindString("directory");
+  if (directory == nullptr || directory->empty()) {
+    std::move(reply).Run(RefusedCommand(
+        "load_unpacked needs a \"directory\": the folder holding the "
+        "extension's manifest.json"));
+    return;
+  }
+  const base::FilePath path = base::FilePath::FromUTF8Unsafe(*directory);
+  if (!path.IsAbsolute()) {
+    std::move(reply).Run(RefusedCommand(base::StrCat(
+        {"\"", *directory,
+         "\" is not an absolute path, and the engine's working directory is "
+         "not the sender's"})));
+    return;
+  }
+  load_unpacked(
+      path, base::BindOnce(
+                [](CommandReply reply,
+                   base::expected<std::string, std::string> loaded) {
+                  if (!loaded.has_value()) {
+                    std::move(reply).Run(RefusedCommand(loaded.error()));
+                    return;
+                  }
+                  base::DictValue done;
+                  done.Set("type", "loaded_unpacked");
+                  done.Set("id", loaded.value());
+                  std::move(reply).Run(Line(std::move(done)));
+                },
+                std::move(reply)));
+}
+
+// Whether `id` is an extension id: 32 letters from a to p.
+bool IsExtensionId(std::string_view id) {
+  return id.size() == 32 &&
+         std::ranges::all_of(id, [](char c) { return c >= 'a' && c <= 'p'; });
+}
+
+std::string AnswerUninstallExtension(const base::DictValue& request,
+                                     UninstallExtension uninstall_extension) {
+  const std::string* id = request.FindString("id");
+  if (id == nullptr) {
+    return RefusedCommand(
+        "uninstall_extension needs an \"id\": the extension to uninstall");
+  }
+  if (!IsExtensionId(*id)) {
+    return RefusedCommand(base::StrCat(
+        {"\"", *id,
+         "\" is not an extension id, which is 32 letters from a to p"}));
+  }
+  const base::expected<void, std::string> uninstalled =
+      uninstall_extension(*id);
+  if (!uninstalled.has_value()) {
+    return RefusedCommand(uninstalled.error());
+  }
+  return Done("uninstalled");
+}
+
+std::string AnswerConfigExtensions(
+    ListConfigExtensions list_config_extensions) {
+  const std::optional<std::vector<std::string>> ids = list_config_extensions();
+  if (!ids) {
+    return RefusedCommand(
+        "this engine has no shell, and so no profile whose extensions to "
+        "list");
+  }
+  base::ListValue listed;
+  for (const std::string& id : *ids) {
+    listed.Append(id);
+  }
+  base::DictValue reply;
+  reply.Set("type", kConfigExtensions);
+  reply.Set("ids", std::move(listed));
+  return Line(std::move(reply));
 }
 
 }  // namespace

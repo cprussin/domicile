@@ -11,6 +11,7 @@
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
+#include "base/types/expected.h"
 #include "base/values.h"
 #include "components/domicile/mojom/web_view_guest.mojom-shared.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -39,7 +40,13 @@ struct Told {
   std::string origin;
   std::optional<WebViewPermission> permission;
   std::optional<WebViewPermissionSetting> setting;
+  base::FilePath unpacked;
+  std::string uninstalled;
 };
+
+// The id the recording `load_unpacked` gives what it loads, and the one the
+// recording `config_extensions` lists.
+constexpr char kExtensionId[] = "abcdefghijklmnopabcdefghijklmnop";
 
 // What the recording `list_site_permissions` answers: camera's default is
 // ask and notifications' allow, and one site has the camera.
@@ -88,12 +95,40 @@ std::string Answer(std::string_view line,
     told->setting = setting;
     return has_window;
   };
+  auto load_unpacked = [told, has_window](const base::FilePath& directory,
+                                          UnpackedLoaded loaded) {
+    told->unpacked = directory;
+    if (!has_window) {
+      std::move(loaded).Run(base::unexpected("no shell"));
+      return;
+    }
+    std::move(loaded).Run(base::ok(std::string(kExtensionId)));
+  };
+  auto uninstall_extension =
+      [told, has_window](
+          const std::string& id) -> base::expected<void, std::string> {
+    told->uninstalled = id;
+    if (!has_window) {
+      return base::unexpected("no shell");
+    }
+    return base::ok();
+  };
+  auto list_config_extensions =
+      [has_window]() -> std::optional<std::vector<std::string>> {
+    if (!has_window) {
+      return std::nullopt;
+    }
+    return std::vector<std::string>{kExtensionId};
+  };
   std::string reply;
   AnswerCommand(line,
                 {.load_shell = load_shell,
                  .open_url = open_url,
                  .list_site_permissions = list_site_permissions,
-                 .set_site_permission = set_site_permission},
+                 .set_site_permission = set_site_permission,
+                 .load_unpacked = load_unpacked,
+                 .uninstall_extension = uninstall_extension,
+                 .list_config_extensions = list_config_extensions},
                 base::BindOnce([](std::string* out,
                                   std::string line) { *out = std::move(line); },
                                &reply));
@@ -355,6 +390,88 @@ TEST(CommandProtocolTest, RefusesSitePermissionsWithNoProfileToKeepThem) {
   EXPECT_EQ(TypeOf(Answer(R"({"type":"set_site_permission","version":1,)"
                           R"("origin":"https://meet.example",)"
                           R"("permission":"camera","setting":"block"})",
+                          &told, /*has_window=*/false)),
+            "refused");
+}
+
+TEST(CommandProtocolTest, LoadsTheUnpackedExtensionARequestNames) {
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"load_unpacked","version":1,)"
+      R"("directory":"/home/someone/src/an-extension"})",
+      &told);
+  EXPECT_EQ(base::JSONReader::ReadDict(reply, base::JSON_PARSE_RFC),
+            base::JSONReader::ReadDict(
+                R"({"type":"loaded_unpacked",)"
+                R"("id":"abcdefghijklmnopabcdefghijklmnop"})",
+                base::JSON_PARSE_RFC));
+  EXPECT_EQ(told.unpacked,
+            base::FilePath("/home/someone/src/an-extension"));
+}
+
+TEST(CommandProtocolTest, RefusesAnUnpackedExtensionItCannotFind) {
+  Told told;
+  const std::string missing =
+      Answer(R"({"type":"load_unpacked","version":1})", &told);
+  EXPECT_EQ(TypeOf(missing), "refused");
+  EXPECT_THAT(WhyOf(missing), HasSubstr("directory"));
+
+  // Relative to the engine's working directory, which the sender does not
+  // know.
+  const std::string relative = Answer(
+      R"({"type":"load_unpacked","version":1,"directory":"src/x"})", &told);
+  EXPECT_EQ(TypeOf(relative), "refused");
+  EXPECT_THAT(WhyOf(relative), HasSubstr("src/x"));
+
+  EXPECT_TRUE(told.unpacked.empty());
+}
+
+TEST(CommandProtocolTest, SaysWhyAnUnpackedExtensionDidNotLoad) {
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"load_unpacked","version":1,)"
+      R"("directory":"/home/someone/src/an-extension"})",
+      &told, /*has_window=*/false);
+  EXPECT_EQ(TypeOf(reply), "refused");
+  EXPECT_THAT(WhyOf(reply), HasSubstr("no shell"));
+}
+
+TEST(CommandProtocolTest, UninstallsTheExtensionARequestNames) {
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"uninstall_extension","version":1,)"
+      R"("id":"abcdefghijklmnopabcdefghijklmnop"})",
+      &told);
+  EXPECT_EQ(TypeOf(reply), "uninstalled");
+  EXPECT_EQ(told.uninstalled, kExtensionId);
+
+  const std::string refused = Answer(
+      R"({"type":"uninstall_extension","version":1,)"
+      R"("id":"abcdefghijklmnopabcdefghijklmnop"})",
+      &told, /*has_window=*/false);
+  EXPECT_EQ(TypeOf(refused), "refused");
+  EXPECT_THAT(WhyOf(refused), HasSubstr("no shell"));
+}
+
+TEST(CommandProtocolTest, RefusesAnIdThatNamesNoExtension) {
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"uninstall_extension","version":1,"id":"../x"})", &told);
+  EXPECT_EQ(TypeOf(reply), "refused");
+  EXPECT_THAT(WhyOf(reply), HasSubstr("../x"));
+  EXPECT_TRUE(told.uninstalled.empty());
+}
+
+TEST(CommandProtocolTest, ListsTheExtensionsTheConfigInstalled) {
+  Told told;
+  EXPECT_EQ(base::JSONReader::ReadDict(
+                Answer(R"({"type":"config_extensions","version":1})", &told),
+                base::JSON_PARSE_RFC),
+            base::JSONReader::ReadDict(
+                R"({"type":"config_extensions",)"
+                R"("ids":["abcdefghijklmnopabcdefghijklmnop"]})",
+                base::JSON_PARSE_RFC));
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"config_extensions","version":1})",
                           &told, /*has_window=*/false)),
             "refused");
 }
