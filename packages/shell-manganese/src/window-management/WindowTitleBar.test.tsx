@@ -1,10 +1,14 @@
 import { describe, expect, it, mock } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
 
+import { loadEmittedStylesheet } from "../emitted-stylesheet";
 import { Direction } from "./direction";
+import { scratchpadFloatFor } from "./floating/float";
 import { Aim } from "./tiled/aim";
-import { Layout } from "./tree/node";
+import { Layout, LayoutNode } from "./tree/node";
 import { WindowTitleBar } from "./WindowTitleBar";
+
+loadEmittedStylesheet(document);
 
 /** The tab's box, one bar tall. */
 const TAB = { height: 30, width: 300, x: 0, y: 0 };
@@ -74,6 +78,24 @@ const middleClick = (element: HTMLElement): void => {
 };
 
 describe("WindowTitleBar", () => {
+  // It hangs from the screen's top edge.
+  it("squares the top corners of a scratchpad window's bar", () => {
+    const { container } = render(
+      <WindowTitleBar
+        {...tabProps}
+        float={scratchpadFloatFor(LayoutNode.Window("a"), FRAME)}
+        strip={undefined}
+        tabbed={undefined}
+      />,
+    );
+    const face = bar(container).querySelector("[data-face]");
+    if (face === null) {
+      throw new Error("test: the title bar rendered no face");
+    } else {
+      expect(globalThis.getComputedStyle(face).borderStartStartRadius).toBe("");
+    }
+  });
+
   describe("a middle click", () => {
     it("closes a tab", async () => {
       await new Promise<void>((resolve) => {

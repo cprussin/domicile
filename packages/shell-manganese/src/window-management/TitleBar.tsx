@@ -79,6 +79,11 @@ type Props = {
    */
   frame: Rect;
   /**
+   * Whether the window hangs from the screen's top edge, as a scratchpad
+   * window does, which squares the bar's top corners.
+   */
+  hanging?: boolean;
+  /**
    * The window's icon URL, drawn before its title, or `undefined` for a
    * stand-in.
    */
@@ -151,6 +156,7 @@ export const TitleBar = ({
   fullscreen,
   group,
   groupSelected = false,
+  hanging = false,
   icon,
   motion,
   onClose,
@@ -254,7 +260,7 @@ export const TitleBar = ({
             ? cx(
                 barStyles({ focus }),
                 !fullscreen && edgeStyles,
-                !fullscreen && topCornerStyles,
+                !fullscreen && !hanging && topCornerStyles,
               )
             : tabStyles({ focus, open: !hidden }),
           opensOnStrip && movingStyles({ motion }),

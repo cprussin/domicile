@@ -17,6 +17,7 @@ import type {
   TabLayout,
 } from "./tree/frames";
 import { focusBoxOf, framesOf } from "./tree/frames";
+import { focusedWindowIn } from "./tree/tiling";
 import type { WindowState } from "./window-state";
 import { workspaceOn } from "./window-state";
 import type { Workspace } from "./workspace";
@@ -185,7 +186,8 @@ export const placementsOf = (
 };
 
 /**
- * The focus box of the focused float, at its depth, or else of the tiling.
+ * The focus box of the focused float, at its depth, or else of the tiling. A
+ * scratchpad window gets none: the box stays on the window under it.
  *
  * Throws if the focused float is not among `floating`: both come from the
  * same workspace.
@@ -203,12 +205,29 @@ const focusBoxIn = (
     const focused = floating.find(({ float }) => floatHolds(float, floatFocus));
     if (focused === undefined) {
       throw new Error(`placement: no float holds focused ${floatFocus}`);
+    } else if (focused.float.scratchpad) {
+      return focusBoxIn(
+        { ...workspace, floatFocus: focusUnder(floating) },
+        geometry,
+        floating,
+      );
     } else {
       const { depth, float } = focused;
       const box = focusBoxOf(float, rectOf(float), floatingGapOf(float));
       return box === undefined ? undefined : { ...box, depth };
     }
   }
+};
+
+/**
+ * The window a scratchpad window sits over: the front other float's, else the
+ * tiling's (`undefined`).
+ */
+const focusUnder = (
+  floating: readonly { float: Float }[],
+): string | undefined => {
+  const under = floating.filter(({ float }) => !float.scratchpad).at(-1);
+  return under === undefined ? undefined : focusedWindowIn(under.float.root);
 };
 
 /**

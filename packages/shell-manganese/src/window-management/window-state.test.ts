@@ -683,6 +683,20 @@ describe("the scratchpad", () => {
     expect(second.scratchpad).toEqual([APP("editor")]);
   });
 
+  // A click on the backdrop behind it, even after focus has moved on.
+  it("hides a window it shows when the window is dismissed", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.WindowSentToScratchpad(),
+      WindowAction.ScratchpadShown(),
+      WindowAction.WindowSelected(APP("kitty")),
+      WindowAction.ScratchpadDismissed(APP("editor")),
+    );
+
+    expect(state.scratchpad).toEqual([APP("editor")]);
+    expect(windowsOn(workspaceHere(state))).toEqual([APP("kitty")]);
+  });
+
   it("has nothing to show on an empty scratchpad", () => {
     const state = desktop("kitty");
 

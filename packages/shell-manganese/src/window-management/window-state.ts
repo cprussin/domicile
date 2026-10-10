@@ -328,6 +328,7 @@ export enum WindowActionKind {
   NewTabPressed,
   ParentFocused,
   PopupPlaced,
+  ScratchpadDismissed,
   ScratchpadShown,
   ScreenHovered,
   ScreenshotTaken,
@@ -594,6 +595,12 @@ export const WindowAction = {
   PopupPlaced: (popup: Popup) => ({
     kind: WindowActionKind.PopupPlaced as const,
     popup,
+  }),
+
+  /** A click on the backdrop behind scratchpad window `id`, which hides it. */
+  ScratchpadDismissed: (id: string) => ({
+    id,
+    kind: WindowActionKind.ScratchpadDismissed as const,
   }),
 
   /** `scratchpad show`. */
@@ -947,6 +954,9 @@ const reduceAction = (
     }
     case WindowActionKind.ParentFocused: {
       return onCurrent(state, parentFocused);
+    }
+    case WindowActionKind.ScratchpadDismissed: {
+      return restowed(state, action.id);
     }
     case WindowActionKind.ScratchpadShown: {
       return showScratchpad(state);
@@ -1641,10 +1651,7 @@ const showScratchpad = (state: WindowState): WindowState => {
   const up = id === undefined ? undefined : floatOn(workspace, id);
   const [hidden, ...rest] = state.scratchpad;
   if (up?.scratchpad === true && id !== undefined) {
-    return onCurrent(
-      { ...state, scratchpad: [...state.scratchpad, id] },
-      (found) => closed(found, id),
-    );
+    return restowed(state, id);
   } else if (hidden === undefined) {
     return state;
   } else {
@@ -1653,6 +1660,14 @@ const showScratchpad = (state: WindowState): WindowState => {
     );
   }
 };
+
+// Hides the shown scratchpad window `id` at the back of the scratchpad.
+const restowed = (state: WindowState, id: string): WindowState =>
+  onWorkspaceWith(
+    { ...state, scratchpad: [...state.scratchpad, id] },
+    id,
+    (found) => closed(found, id),
+  );
 
 /**
  * Updates {@link WindowState.homes} after a reduction. Returns the same object

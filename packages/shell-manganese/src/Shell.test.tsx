@@ -529,6 +529,18 @@ const floatShadow = (container: HTMLElement): HTMLElement => {
   }
 };
 
+/** The backdrop under a scratchpad window. Throws if there is none. */
+const scratchpadBackdrop = (container: HTMLElement): HTMLElement => {
+  const backdrop = container.querySelector<HTMLElement>(
+    "[data-scratchpad-backdrop]",
+  );
+  if (backdrop === null) {
+    throw new Error("test: no backdrop under a scratchpad window");
+  } else {
+    return backdrop;
+  }
+};
+
 const appElement = (container: HTMLElement, appId: string): HTMLElement => {
   const element = container.querySelector<HTMLElement>(
     `${APP_TAG_NAME}[app-id="${appId}"]`,
@@ -2679,6 +2691,64 @@ describe("Shell", () => {
       expect(
         Number(appElement(container, "term").style.zIndex),
       ).toBeGreaterThan(0);
+    });
+    // It hangs from the top edge, so its top corners are square.
+    it("hangs a window it shows from the top edge of the screen", () => {
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      press("minus", true);
+      motionsPlayOut(container);
+
+      press("minus");
+
+      expect(floatShadow(container).className).not.toContain(
+        css({ borderRadius: "lg" }),
+      );
+    });
+
+    it("dims the screen under a window it shows, which a press there hides", () => {
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      press("minus", true);
+      motionsPlayOut(container);
+      press("minus");
+      motionsPlayOut(container);
+      const backdrop = scratchpadBackdrop(container);
+      // Over every title bar under it, by document order at equal depths.
+      const bar = barFor(container, "app:one");
+
+      expect(Number(backdrop.style.zIndex)).toBeLessThan(
+        Number(appElement(container, "two").style.zIndex),
+      );
+      expect(Number(backdrop.style.zIndex)).toBeGreaterThanOrEqual(
+        Number(bar.style.zIndex),
+      );
+      expect(
+        bar.compareDocumentPosition(backdrop) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+
+      fireEvent.pointerDown(backdrop);
+      expect(appElement(container, "two")).toHaveAttribute(
+        "data-motion",
+        "stowing",
+      );
+      motionsPlayOut(container);
+      expect(container.querySelector("[data-scratchpad-backdrop]")).toBeNull();
+    });
+
+    it("keeps the focus ring on the window under a scratchpad window", () => {
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      press("minus", true);
+      motionsPlayOut(container);
+
+      press("minus");
+
+      expect(glowing(container).dataset.focusBox).toBe("app:one");
     });
   });
 

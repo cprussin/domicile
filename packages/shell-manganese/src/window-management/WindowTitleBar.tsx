@@ -134,6 +134,7 @@ export const WindowTitleBar = ({
       frame={frame}
       fullscreen={fullscreen}
       groupSelected={groupSelected}
+      hanging={float?.scratchpad === true}
       icon={icon}
       motion={motion}
       onClose={onClose}
