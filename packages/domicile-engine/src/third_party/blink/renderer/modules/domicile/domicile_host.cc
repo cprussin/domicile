@@ -625,6 +625,15 @@ void DomicileHost::invokeNotificationAction(ScriptState*,
   }
 }
 
+void DomicileHost::replyToNotification(ScriptState*,
+                                       uint32_t id,
+                                       const String& text,
+                                       ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    channel_->ReplyToNotification(id, text);
+  }
+}
+
 void DomicileHost::setTheme(ScriptState*, V8DomicileTheme theme,
                             ExceptionState& exception_state) {
   // `Ready` first, which every other member here does and this one did not:

@@ -25,6 +25,10 @@ pub const HISTORY: usize = 100;
 /// The action key the spec reserves for a press on the notification itself.
 pub const DEFAULT_ACTION: &str = "default";
 
+/// The action key of a reply field, under the `inline-reply` capability. Its
+/// label labels the field.
+pub const INLINE_REPLY_ACTION: &str = "inline-reply";
+
 /// The key of the button the browser adds to every Web Notification. It opens
 /// the browser's settings page, which the desktop has no window for, so it is
 /// dropped from page notifications only.
@@ -196,6 +200,11 @@ impl Notifications {
             }
             closed
         })
+    }
+
+    /// Reply to `id`, which [`Self::invoke`] answers as an action.
+    pub fn reply(&mut self, id: u32) -> Option<bool> {
+        self.invoke(id, INLINE_REPLY_ACTION)
     }
 
     /// The notifications to send a shell, oldest first.
@@ -942,6 +951,23 @@ mod tests {
 
             assert_eq!(notifications.invoke(1, "play"), Some(false));
             assert_eq!(summaries(&notifications), ["Now playing"]);
+        }
+
+        #[test]
+        fn only_a_notification_with_a_reply_field_takes_a_reply() {
+            let mut notifications = held(Vec::new());
+            notifications.notify(notify("Plain"), 0);
+            notifications.notify(
+                Notify {
+                    actions: ["inline-reply", "Reply"].map(String::from).to_vec(),
+                    ..notify("Chat")
+                },
+                0,
+            );
+
+            assert_eq!(notifications.reply(1), None);
+            assert_eq!(notifications.reply(2), Some(true));
+            assert_eq!(summaries(&notifications), ["Plain"]);
         }
 
         #[test]

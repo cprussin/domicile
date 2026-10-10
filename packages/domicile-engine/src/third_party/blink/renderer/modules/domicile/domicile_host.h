@@ -132,6 +132,10 @@ class MODULES_EXPORT DomicileHost final
                                 uint32_t id,
                                 const String& action,
                                 ExceptionState&);
+  void replyToNotification(ScriptState*,
+                           uint32_t id,
+                           const String& text,
+                           ExceptionState&);
   void focusApp(ScriptState*, const String& app_id, ExceptionState&);
   void focusChrome(ScriptState*, ExceptionState&);
   void warpPointer(ScriptState*, double x, double y, ExceptionState&);

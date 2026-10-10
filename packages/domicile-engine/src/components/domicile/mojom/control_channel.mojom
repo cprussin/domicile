@@ -193,7 +193,8 @@ enum TrayAction {
 // One button of a Notification.
 //
 // `key` is what InvokeNotificationAction names it by; `label` is what the
-// button says.
+// button says. Key "inline-reply" is a reply field rather than a button, and
+// `label` labels the field.
 struct NotificationAction {
   string key;
   string label;
@@ -283,6 +284,11 @@ interface ControlChannel {
   // itself. The application hears `action`, if it offered it; what the press
   // does is the application's.
   InvokeNotificationAction(uint32 id, string action);
+
+  // Send `text` from a notification's reply field: the field an
+  // "inline-reply" action stands for. The application hears it, if it offered
+  // the field.
+  ReplyToNotification(uint32 id, string text);
 
   // Which window has the keyboard. FocusChrome takes it back to the page.
   FocusApp(string app_id);

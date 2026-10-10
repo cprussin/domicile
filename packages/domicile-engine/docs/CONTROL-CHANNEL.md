@@ -21,7 +21,8 @@ The engine has two channels to the rest of Domicile:
 
 - **Outbound:** `spawn`, `search_files`, `call_system`,
   `answer_portal_request`, `copy_clipboard_entry`, `activate_tray_item`,
-  `dismiss_notifications`, `invoke_notification_action`, `focus_app`,
+  `dismiss_notifications`, `invoke_notification_action`,
+  `reply_to_notification`, `focus_app`,
   `focus_chrome`, `close_app`, `set_app_bounds`, `set_desktop_size`,
   `set_device_pixel_ratio`, `set_theme`, `theme_captured`, `unlock`, `lock`,
   `key`, `pointer_motion`, `pointer_leave`, `pointer_button`, `pointer_axis`.

@@ -618,6 +618,7 @@ impl Host {
             | ChromeMessage::ActivateTrayItem { .. }
             | ChromeMessage::DismissNotifications { .. }
             | ChromeMessage::InvokeNotificationAction { .. }
+            | ChromeMessage::ReplyToNotification { .. }
             | ChromeMessage::SetTheme { .. }
             | ChromeMessage::ThemeCaptured { .. }
             | ChromeMessage::PointerMotion { .. }

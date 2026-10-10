@@ -338,6 +338,14 @@ void ControlChannel::InvokeNotificationAction(uint32_t id,
   SendMessage(std::move(message));
 }
 
+void ControlChannel::ReplyToNotification(uint32_t id,
+                                         const std::string& text) {
+  base::DictValue message = Typed("reply_to_notification");
+  message.Set("id", static_cast<int>(id));
+  message.Set("text", text);
+  SendMessage(std::move(message));
+}
+
 void ControlChannel::FocusChrome() {
   SendMessage(Typed("focus_chrome"));
 }

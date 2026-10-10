@@ -10,9 +10,11 @@
     Exposed=Window,
     RuntimeEnabled=DomicileControlChannel
 ] interface DomicileNotificationAction {
-  // The id DomicileHost.invokeNotificationAction() takes.
+  // The id DomicileHost.invokeNotificationAction() takes. "inline-reply" is a
+  // reply field rather than a button: DomicileHost.replyToNotification() sends
+  // what is typed in it.
   readonly attribute DOMString key;
 
-  // The button's label.
+  // The button's label, or the reply field's.
   readonly attribute DOMString label;
 };

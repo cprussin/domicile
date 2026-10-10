@@ -14,11 +14,14 @@ export const notificationUrgencySchema = z.enum(["low", "normal", "critical"]);
 
 export type NotificationUrgency = z.infer<typeof notificationUrgencySchema>;
 
-/** One button of a notification. */
+/**
+ * One button of a notification, or its reply field when `key` is
+ * {@link INLINE_REPLY_NOTIFICATION_ACTION}.
+ */
 export type NotificationAction = {
   /** The key for `DomicileHost.invokeNotificationAction`. */
   key: string;
-  /** The button text. */
+  /** The button text, or the reply field's label. */
   label: string;
 };
 
@@ -57,3 +60,9 @@ export type Notification = {
 
 /** The action key for a press on a {@link Notification.clickable} body. */
 export const DEFAULT_NOTIFICATION_ACTION = "default";
+
+/**
+ * The action key for a reply field. Send what is typed with
+ * `DomicileHost.replyToNotification`, not `invokeNotificationAction`.
+ */
+export const INLINE_REPLY_NOTIFICATION_ACTION = "inline-reply";

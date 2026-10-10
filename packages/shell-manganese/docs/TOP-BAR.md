@@ -160,6 +160,8 @@ Every bar and the lock screen share one watch per system readout. See
   under its bar, and fan out on hover.
 - Clicking a toast runs its action. The close button or a right swipe
   dismisses it.
+- A notification that offers a reply has a reply field, in its toast and in
+  the drawer.
 - Critical toasts stay up and have a red ring.
 - No toasts show while locked.
 - The bell shows the count since it was last opened. It opens a drawer of

@@ -18,6 +18,7 @@ describe("NotificationToasts", () => {
         onAction={(id, key) => {
           pressed.push([id, key]);
         }}
+        onReply={() => undefined}
         screen={SCREEN}
         shown
       />,
@@ -44,6 +45,41 @@ describe("NotificationToasts", () => {
     expect(pressed).toEqual([[7, "default"]]);
   });
 
+  it("replies from a toast", async () => {
+    const manager = createToastManager();
+    const replied: (readonly unknown[])[] = [];
+    render(
+      <NotificationToasts
+        manager={manager}
+        now={0}
+        onAction={() => undefined}
+        onReply={(id, text) => {
+          replied.push([id, text]);
+        }}
+        screen={SCREEN}
+        shown
+      />,
+      { wrapper: OnOneScreen },
+    );
+
+    act(() => {
+      manager.add({
+        data: notification({
+          actions: [{ key: "inline-reply", label: "Reply" }],
+          id: 7,
+        }),
+        id: "7",
+        title: "New message",
+      });
+    });
+
+    fireEvent.change(await screen.findByRole("textbox", { name: "Reply" }), {
+      target: { value: "On my way" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(replied).toEqual([[7, "On my way"]]);
+  });
+
   it("draws nothing while it is not to be shown", () => {
     const manager = createToastManager();
     render(
@@ -51,6 +87,7 @@ describe("NotificationToasts", () => {
         manager={manager}
         now={0}
         onAction={() => undefined}
+        onReply={() => undefined}
         screen={SCREEN}
         shown={false}
       />,
@@ -84,6 +121,7 @@ describe("NotificationToasts", () => {
           manager={createToastManager()}
           now={0}
           onAction={() => undefined}
+          onReply={() => undefined}
           screen="right"
           shown
         />
