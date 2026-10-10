@@ -75,8 +75,6 @@ struct EngineEvent {
     // xdg_toplevel.configure: the page's layout box changed, so the producer
     // renders at the new size.
     kConfigure,
-    // wl_surface.frame: viz asked for a frame.
-    kFrame,
     // wl_buffer.release: viz is done sampling a buffer, so the client may
     // draw into it again. Reusing it earlier would tear.
     kReleased,
@@ -93,7 +91,7 @@ struct EngineEvent {
     kCaptureEnded,
   };
 
-  Type type = Type::kFrame;
+  Type type = Type::kConfigure;
   uint32_t surface = 0;
   // kConfigure.
   uint32_t width = 0;
@@ -102,8 +100,6 @@ struct EngineEvent {
   double scale = 1.0;
   // kConfigure: the box's number, which a submit names to be shown at it.
   uint64_t box = 0;
-  // kFrame.
-  uint64_t deadline_us = 0;
   // kReleased.
   uint64_t buffer = 0;
   // kDisplays. Never empty: the browser does not send an empty list.

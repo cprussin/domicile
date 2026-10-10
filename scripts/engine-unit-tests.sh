@@ -20,7 +20,7 @@ require_engine_out
 
 FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*:CommandProtocolTest.*:DomicileDisplayListTest.*:DomicileKeyboardLayoutTest.*:ShellWindowsTest.*:ShellWindowPlacesTest.*:LineFramerTest.*:DesktopPrefsTest.*:SurfaceCropTest.*:SurfaceTransformTest.*:SurfaceAlphaTest.*:ExtensionInstallerTest.*:ExtensionTrayEntryTest.*:DeskTabsTest.*:DeskGeometryTest.*:DomicileDisplayRegionsTest.*:DomicileDeskTargeterTest.*:PlaceholderStageTest.*:SystemCallTest.*:PortalRequestTest.*:FileChoiceTest.*:DisplayCaptureTest.*:CapturedFourccTest.*:DisplayCaptureTargetTest.*:HeldChordsTest.*:SitePermissionsTest.*:ControlChannelTest.*'
 
-# Every suite in the filter, counted rather than estimated: FrameSinkBroker 27,
+# Every suite in the filter, counted rather than estimated: FrameSinkBroker 29,
 # WindowDiff 7, EngineEventQueue 7, ShortcutRegistry 10, ShellURLLoaderFactory
 # 12, ShellDocument 14, ShellSource 3, CursorShape 3, CommandProtocol 15,
 # DomicileDisplayList 6, DomicileKeyboardLayout 3, ShellWindows 8,
@@ -31,7 +31,9 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, SitePermissions 11,
 # ControlChannel 1.
 #
-# 246, and it was 241 — turning a client's transformed buffer upright is three
+# 248, and it was 246 — a window that asks viz for no BeginFrames and answers
+# the ones viz sends anyway is two more FrameSinkBroker cases. Before that 246,
+# and it was 241 — turning a client's transformed buffer upright is three
 # SurfaceTransform cases, and SurfaceAlphaTest was never in the filter, so its
 # two cases compiled and ran nowhere. Before that 241, and it was 235 — the Settings app's site permissions are four
 # CommandProtocol cases and two SitePermissions ones. Before that 235, and it
@@ -88,7 +90,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=246
+FLOOR=248
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

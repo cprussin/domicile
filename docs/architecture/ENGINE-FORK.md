@@ -202,7 +202,6 @@ Callbacks (engine → compositor):
 | C ABI | Wayland equivalent |
 |---|---|
 | `released(surface, buffer)` | `wl_buffer.release` |
-| `frame(surface, deadline_us)` | `wl_surface.frame` |
 | `configure(surface, width, height)`, `configure_at(…, scale)`, `configure_box(…, box)` | `xdg_toplevel.configure` |
 | `displays(displays, count)` | `wl_output`. Primary first, never empty. |
 | `copied(clipboard, text, length)` | `wl_data_device.set_selection` for a copy made in a page |
@@ -212,6 +211,12 @@ Callbacks (engine → compositor):
   empty rectangle means the whole buffer or surface. `domicile_surface_submit`
   takes no crop.
 - `released` stops the compositor from reusing a buffer viz is still sampling.
+- **No BeginFrames.** A window's frame is submitted when its client commits,
+  with a manual `BeginFrameAck`, so the engine asks viz for no BeginFrames and
+  the compositor is not woken each vsync. Viz still sends one after a frame to
+  deliver its timing; the engine answers `DidNotProduceFrame` so the display
+  does not wait for the window. Releases come with the frame's ack or
+  `ReclaimResources`. The ABI's `frame` callback is never called.
 - `domicile_engine.h` is the full ABI, including the lifetime calls.
 
 ### Buffer import

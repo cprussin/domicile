@@ -31,12 +31,6 @@ interface SurfaceObserver {
                     gfx.mojom.Size size,
                     double scale);
 
-  // Viz requested a frame. Sent only to producers whose sink the browser owns
-  // (no receiver passed to CreateFrameSink); others hear it from viz directly.
-  //
-  // This is wl_surface.frame.
-  OnFrame(int64 deadline_us);
-
   // Viz no longer samples `buffer_id`, so the producer may draw into it.
   // Reusing a dmabuf viz is still reading causes tearing.
   //
@@ -217,7 +211,7 @@ interface FrameSinkBroker {
   // **Pass neither to have the browser own the sink.** A dmabuf producer has
   // no GPU channel to mint mailboxes, so it imports buffers with ImportBuffer
   // and names them in SubmitBuffer, and the browser builds the frame.
-  // BeginFrames and releases then arrive through SurfaceObserver.
+  // Releases then arrive through SurfaceObserver.
   CreateFrameSink(
       pending_remote<viz.mojom.CompositorFrameSinkClient>? client,
       pending_receiver<viz.mojom.CompositorFrameSink>? receiver,
