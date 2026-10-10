@@ -91,7 +91,28 @@ case "$*" in
   *) echo "unexpected: ccache $*" >&2; exit 1 ;;
 esac
 CCACHE
-chmod +x "$WORK/bin/df" "$WORK/bin/ccache"
+# `stat` reports another user as the owner of `*.theirs`, and `chmod` cannot
+# change `agent/browser`, as on `crux` where another user's job left them.
+# Neither can be set up for real without root.
+cat >"$WORK/bin/stat" <<'STAT'
+#!/usr/bin/env bash
+case "$*" in
+  (*"%u "*.theirs) echo 65534 ;;
+  (*) exec "$REAL_STAT" "$@" ;;
+esac
+STAT
+cat >"$WORK/bin/chmod" <<'CHMOD'
+#!/usr/bin/env bash
+if [ -n "$(find "${@: -1}" -path '*/agent/browser' 2>/dev/null)" ]; then
+  echo "chmod: changing permissions of '${@: -1}/agent/browser': Operation not permitted" >&2
+  exit 1
+fi
+exec "$REAL_CHMOD" "$@"
+CHMOD
+chmod +x "$WORK/bin/df" "$WORK/bin/ccache" "$WORK/bin/stat" "$WORK/bin/chmod"
+REAL_STAT="$(command -v stat)"
+REAL_CHMOD="$(command -v chmod)"
+export REAL_STAT REAL_CHMOD
 export PATH="$WORK/bin:$PATH"
 export FAKE_TMP="$TMP" FAKE_LEGACY="$LEGACY" FAKE_TREES="$TREES" \
   FAKE_CCACHE="$WORK/ccache"
@@ -176,6 +197,23 @@ expect "but what is in /build/tmp that neither made stays" yes \
 expect "and nothing dearer was reached for" yesyesyes \
   "$(published)$(stage 0)$(staged 0)"
 contains "it says what it dropped" "nix-shell.leaked" "$SAID"
+
+# A temp directory the runner does not own, or cannot make writable, is
+# skipped and logged, and the reclaim goes on to the tarballs.
+a_pool
+mkdir -p "$TMP/nix-shell.theirs" "$TMP/nix-shell.locked/qa-fixture-1/agent/browser"
+SAID="$(DOMICILE_NOW=$TWO_DAYS_ON room 3)"
+expect "a temp directory it cannot delete does not stop the reclaim" ok \
+  "$(status "$SAID")"
+expect "another user's temp directory is left alone" yes \
+  "$(there "$TMP/nix-shell.theirs")"
+expect "and is not listed as going" no \
+  "$(case "$SAID" in (*nix-shell.theirs*) echo yes ;; (*) echo no ;; esac)"
+expect "one it cannot make writable stays" yes "$(there "$TMP/nix-shell.locked")"
+contains "and it says it skipped it" "could not remove $TMP/nix-shell.locked" "$SAID"
+expect "the leaks it could delete still go" no "$(leaked)"
+expect "and the reclaim reaches the tarballs" no "$(published)"
+rm -rf "$TMP/nix-shell.locked"
 
 # --- short, and the published tarballs are enough ---------------------------
 

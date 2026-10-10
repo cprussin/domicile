@@ -68,23 +68,26 @@ done_if_room() {
 }
 
 # `rm -rf` that also removes read-only files copied from the nix store. Skips
-# missing paths, including unmatched globs.
+# missing paths, including unmatched globs. A path it cannot make writable or
+# delete, such as files another user's job left, is logged and kept, so the
+# reclaim goes on to the next source of space; the floor check still fails the
+# run if that is not enough.
 remove() {
   local path
   for path in "$@"; do
-    if [ -e "$path" ]; then
-      chmod -R u+w "$path"
-      rm -rf "$path"
+    if [ -e "$path" ] && ! { chmod -R u+w "$path" && rm -rf "$path"; }; then
+      echo "::warning::could not remove $path, so it stays"
     fi
   done
 }
 
-# Stale nix and job temp directories in the shared TMPDIR. Only these name
-# patterns are considered.
+# Stale nix and job temp directories in the shared TMPDIR that this user owns.
+# Only these name patterns are considered.
 stale_tmp() {
-  local entry
+  local entry uid
+  uid="$(id -u)"
   for entry in "$TMP"/nix-shell.* "$TMP"/nix-develop.* "$TMP"/dj.*; do
-    if [ -e "$entry" ] &&
+    if [ -e "$entry" ] && [ "$(stat -c %u "$entry")" = "$uid" ] &&
       [ $((NOW - $(stat -c %Z "$entry"))) -gt $((STALE_TMP_MINUTES * 60)) ]; then
       printf '%s\n' "$entry"
     fi
