@@ -21,8 +21,9 @@ nix run github:cprussin/domicile/stable#simple      # floating windows only
 - Each desktop documents its own keys and settings:
   [simple](/packages/shell-simple/README.md),
   [manganese](/packages/shell-manganese/README.md).
-- Clients that draw in software are copied into a GPU buffer. This path is
-  untested on real GPUs ([status](/ROADMAP.md)).
+- Clients that draw in software are copied into a GPU buffer. This is tested
+  only on NVIDIA's driver
+  ([status](/docs/architecture/WINDOW-COMPOSITING.md#wl_shm-clients-on-a-gpu)).
 - To run your own shell: `nix run github:cprussin/domicile/stable -- ./dist/shell.js`.
   See [WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md).
 

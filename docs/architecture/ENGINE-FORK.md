@@ -299,10 +299,11 @@ in it. The compositor draws the pointer from its own state.
 Ozone/DRM is tracked in [A-DESKTOP-ON-A-TTY.md](A-DESKTOP-ON-A-TTY.md). Open
 items:
 
-- [ ] **shm clients on a GPU.** The compositor copies each shm frame into one
+- [x] **shm clients on a GPU.** The compositor copies each shm frame into one
       of its own GBM buffers (`packages/domicile-compositor/src/uploads.rs`)
-      and submits it like a dmabuf. This is tested only on llvmpipe; no check
-      has a render node.
+      and submits it like a dmabuf. The compositing guards drive a `wl_shm`
+      client on `crux`'s render node
+      ([WINDOW-COMPOSITING.md](WINDOW-COMPOSITING.md#wl_shm-clients-on-a-gpu)).
 - [ ] **Presentation, measured.** Every measurement reads pixels from
       a `CopyOutputRequest`. Nothing reads a lit CRTC yet, so overlay
       promotion, damage and the presentation half of latency are unmeasured.

@@ -68,37 +68,33 @@ item when it ships.
 
 ## In the engine fork (the agent on `crux`)
 
-1. **shm upload on a GPU.** The GBM allocation and the browser's import
-   (`uploads.rs`) have never run on a render node.
-   [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#plan).
-
-2. **Measure presentation.** Nothing reads a lit CRTC, so overlay promotion,
+1. **Measure presentation.** Nothing reads a lit CRTC, so overlay promotion,
    damage and presentation latency are unmeasured.
    [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#plan).
 
-3. **Two tty tasks.** [A-DESKTOP-ON-A-TTY.md](docs/architecture/A-DESKTOP-ON-A-TTY.md#plan).
+2. **Two tty tasks.** [A-DESKTOP-ON-A-TTY.md](docs/architecture/A-DESKTOP-ON-A-TTY.md#plan).
    - Take `/dev/dri/card0` from logind (`TakeDevice`, `PauseDevice`,
      `ResumeDevice`) instead of `open()`.
    - Stop the evdev thread blocking during a console switch.
 
-4. **Overlay promotion under `backdrop-filter`.** Show that viz declines it
-   for an `<app>`. Needs a lit CRTC, like item 2.
+3. **Overlay promotion under `backdrop-filter`.** Show that viz declines it
+   for an `<app>`. Needs a lit CRTC, like item 1.
    [WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md).
 
-5. **Strip what a desktop never runs.** Tab strip, New Tab page, settings,
+4. **Strip what a desktop never runs.** Tab strip, New Tab page, settings,
    sign-in and sync. Measure each subsystem's size first. Keep PDFium.
 
-6. **Shortcuts inhibitor (patch `0038`) beyond sway.**
+5. **Shortcuts inhibitor (patch `0038`) beyond sway.**
    [ENGINE-FORK-MEASUREMENTS.md](docs/architecture/ENGINE-FORK-MEASUREMENTS.md#host-shortcut-inhibitor).
    - Untested on other hosts. mutter may show an unseen permission dialog.
    - Untested with a physical keyboard.
    - A host that sends no keymap crashes the browser on its first modifiers
      event (`WaylandKeyboard::OnModifiers`).
 
-7. **`guard-shell.sh` launches through `domicile`.** Do this last.
+6. **`guard-shell.sh` launches through `domicile`.** Do this last.
    [THE-DOMICILE-BINARY.md](docs/architecture/THE-DOMICILE-BINARY.md).
 
-8. **A compositor restart breaks every embed.** App ids restart, so the page's
+7. **A compositor restart breaks every embed.** App ids restart, so the page's
    tokens point at dead `FrameSinkId`s. Invalidate the renderer's tokens on
    disconnect. Needed before item 2 of the repository list.
    [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#open-questions).
