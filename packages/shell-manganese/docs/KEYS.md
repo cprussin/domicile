@@ -49,7 +49,7 @@ Build commands with the exported helpers (`focus`, `move`, `workspace`,
 | `focus parent` / `focus child` | Select the enclosing container, or go back to the window. |
 | `focus mode_toggle` | Switch between floating and tiled windows. |
 | `move left/right/up/down` | Move the window. |
-| `move scratchpad` / `scratchpad show` | Hide the window / show the last hidden one. |
+| `move scratchpad` / `scratchpad show` | Hide the window / show the oldest hidden one, or hide the shown one, so presses rotate through them. |
 | `move container to workspace <name>` | Send the window, or the `focus parent` selection, to workspace `1`–`10`. |
 | `workspace <name>` | Go to workspace `1`–`10`, or back to the previous one if it is already shown. |
 | `split h` / `split v` | Wrap the focus in a new container. |
