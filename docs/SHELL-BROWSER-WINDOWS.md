@@ -297,7 +297,7 @@ frame.addEventListener(WEBVIEW_PERMISSION_REQUEST_EVENT, (event) => {
   `allow` or `block` for the page's site, `{}` for a page that is not `http` or
   `https`. `view.setSitePermission(permission, setting)` stores one.
   `domicile-site-permissions-change` signals a change.
-- **Notifications** default to allowed
+- **Notifications** default to `ask`, like the rest
   ([NOTIFICATIONS.md](/docs/architecture/NOTIFICATIONS.md)).
 - **Screen capture** (`getDisplayMedia`) is refused.
 
