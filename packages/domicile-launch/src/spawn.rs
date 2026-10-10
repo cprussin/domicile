@@ -136,7 +136,9 @@ pub fn engine(
     );
     Spawn {
         args,
-        env: Vec::new(),
+        // For `domicile-settings-host`, which the engine starts for the
+        // Settings app and which asks this desktop for its files.
+        env: vec![(VARIABLE.to_string(), runtime.control.clone().into())],
         program: engine.join("chrome"),
     }
 }
