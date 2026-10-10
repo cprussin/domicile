@@ -22,6 +22,7 @@ import {
   holds,
   modeToggled,
   opened,
+  pageFullscreened,
   parentFocused,
   reached,
   windowGrown,
@@ -475,6 +476,35 @@ describe("fullscreenToggled", () => {
       id: "a",
       up: 0,
     });
+  });
+});
+
+describe("pageFullscreened", () => {
+  it("fills the screen with the window while its page is fullscreen", () => {
+    const full = pageFullscreened(tiling("a", "b"), "a", true);
+
+    expect(full.fullscreen).toEqual({
+      byPage: true,
+      global: false,
+      id: "a",
+      up: 0,
+    });
+    expect(pageFullscreened(full, "a", false).fullscreen).toBeUndefined();
+  });
+
+  it("keeps a window the user made fullscreen when its page leaves", () => {
+    const full = fullscreenToggled(tiling("a", "b"), false);
+
+    expect(
+      pageFullscreened(pageFullscreened(full, "b", true), "b", false)
+        .fullscreen,
+    ).toEqual(full.fullscreen);
+  });
+
+  it("keeps another window fullscreen when a page leaves", () => {
+    const full = pageFullscreened(tiling("a", "b"), "a", true);
+
+    expect(pageFullscreened(full, "b", false)).toBe(full);
   });
 });
 

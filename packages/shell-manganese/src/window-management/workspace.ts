@@ -55,6 +55,11 @@ import {
  * A group is named by a window inside it, as a {@link NodeRef}.
  */
 export type Fullscreen = NodeRef & {
+  /**
+   * Whether the window's page asked for it, so the page leaving fullscreen
+   * ends it. See {@link pageFullscreened}.
+   */
+  byPage?: true;
   /** Whether it covers every screen rather than the one it is on. */
   global: boolean;
 };
@@ -485,6 +490,30 @@ export const fullscreenToggled = (
     return { ...workspace, fullscreen: undefined };
   } else {
     return { ...workspace, fullscreen: { ...target, global } };
+  }
+};
+
+/**
+ * Window `id`'s page entered or left fullscreen, as a video's fullscreen
+ * button does. The window fills its screen while its page is fullscreen. A
+ * window the user made fullscreen stays so when its page leaves.
+ */
+export const pageFullscreened = (
+  workspace: Workspace,
+  id: string,
+  fullscreen: boolean,
+): Workspace => {
+  const was = workspace.fullscreen;
+  const own = was !== undefined && was.id === id && was.up === 0;
+  if (fullscreen && !own) {
+    return {
+      ...workspace,
+      fullscreen: { byPage: true, global: false, id, up: 0 },
+    };
+  } else if (!fullscreen && own && was.byPage === true) {
+    return { ...workspace, fullscreen: undefined };
+  } else {
+    return workspace;
   }
 };
 

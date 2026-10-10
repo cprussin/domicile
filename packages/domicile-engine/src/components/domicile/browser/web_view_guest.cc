@@ -46,6 +46,7 @@
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/unowned_inner_web_contents_client.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/common/referrer.h"
@@ -61,6 +62,7 @@
 #include "third_party/blink/public/mojom/context_menu/context_menu.mojom.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom.h"
 #include "third_party/blink/public/mojom/frame/find_in_page.mojom.h"
+#include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/page_transition_types.h"
@@ -732,6 +734,9 @@ void WebViewGuest::ReportEverything() {
     client_->ContentSizeChanged(content_size_->width(),
                                 content_size_->height());
   }
+  if (page_fullscreen_) {
+    client_->PageFullscreenChanged(true);
+  }
   reported_site_permissions_.clear();
   ReportSitePermissions();
 }
@@ -1033,6 +1038,14 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
     return content::KeyboardEventProcessingResult::NOT_HANDLED;
   }
 
+  // Escape leaves page fullscreen before the page sees it, as in Chrome, so a
+  // page cannot keep the user in.
+  if (page_fullscreen_ &&
+      static_cast<ui::DomCode>(event.dom_code) == ui::DomCode::ESCAPE) {
+    guest_contents_->ExitFullscreen(/*will_cause_resize=*/true);
+    return content::KeyboardEventProcessingResult::HANDLED;
+  }
+
   // A matched chord is HANDLED so the page never sees it and cannot override a
   // desktop shortcut.
   return ShortcutRegistry::Get().Press(chord, page)
@@ -1212,6 +1225,13 @@ void WebViewGuest::EditWhenFocused(EditCommand command, int tries) {
 
 void WebViewGuest::PointerLeft() {
   ReportTargetUrl(GURL());
+}
+
+void WebViewGuest::ExitPageFullscreen() {
+  CHECK(guest_contents_);
+  if (page_fullscreen_) {
+    guest_contents_->ExitFullscreen(/*will_cause_resize=*/true);
+  }
 }
 
 void WebViewGuest::Inspect() {
@@ -1672,6 +1692,41 @@ void WebViewGuest::Close() {
   } else {
     Host().Close(*guest_contents_->GetBrowserContext(), window_id_);
   }
+}
+
+void WebViewGuest::EnterFullscreenModeForTab(
+    content::RenderFrameHost* requesting_frame,
+    const blink::mojom::FullscreenOptions& options) {
+  SetPageFullscreen(true);
+}
+
+void WebViewGuest::ExitFullscreenModeForTab(
+    content::WebContents* web_contents) {
+  SetPageFullscreen(false);
+}
+
+bool WebViewGuest::IsFullscreenForTabOrPending(
+    const content::WebContents* web_contents) {
+  return page_fullscreen_;
+}
+
+void WebViewGuest::SetPageFullscreen(bool fullscreen) {
+  if (fullscreen == page_fullscreen_) {
+    return;
+  }
+  page_fullscreen_ = fullscreen;
+  // Guards read this line. engine-diagnostics.sh greps for the `domicile:`
+  // prefix.
+  LOG(INFO) << "domicile: a <webview>'s page "
+            << (fullscreen ? "entered" : "left") << " fullscreen.";
+  // The renderer finishes requestFullscreen() or exitFullscreen() when its
+  // visual properties say so. Nothing resizes the guest by itself, so send
+  // them now.
+  guest_contents_->GetPrimaryMainFrame()
+      ->GetRenderViewHost()
+      ->GetWidget()
+      ->SynchronizeVisualProperties();
+  client_->PageFullscreenChanged(fullscreen);
 }
 
 void WebViewGuest::ActivateContents(content::WebContents* contents) {

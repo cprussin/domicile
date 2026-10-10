@@ -114,6 +114,10 @@ class CORE_EXPORT HTMLWebViewElement final
   // Opens DevTools on the guest's page. See WebViewGuest.Inspect.
   void inspect();
 
+  // Whether the page is fullscreen, from PageFullscreenChanged.
+  bool pageFullscreen() const { return page_fullscreen_; }
+  void exitPageFullscreen();
+
   // Runs `action` for `menu`. Throws InvalidStateError if a newer menu has
   // replaced it. See domicile_context_menu_event.h.
   void RunContextMenuAction(
@@ -238,6 +242,7 @@ class CORE_EXPORT HTMLWebViewElement final
   // Sent only on change, like HistoryChanged.
   void FindChanged(int32_t matches, int32_t active_match) override;
   void ContentSizeChanged(int32_t width, int32_t height) override;
+  void PageFullscreenChanged(bool fullscreen) override;
 
   // Dispatches `domicile-file-chooser` for the shell to answer. If no listener
   // calls `preventDefault()`, the chooser is canceled after dispatch. See
@@ -313,6 +318,7 @@ class CORE_EXPORT HTMLWebViewElement final
   int32_t find_active_match_ = 0;
   int32_t content_width_ = 0;
   int32_t content_height_ = 0;
+  bool page_fullscreen_ = false;
 
   // The newest context menu dispatched; the browser acts only on it. 0 before
   // the first.

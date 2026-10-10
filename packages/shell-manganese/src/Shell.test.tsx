@@ -14,6 +14,7 @@ import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import {
   WEBVIEW_FAVICON_CHANGE_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
+  WEBVIEW_PAGE_FULLSCREEN_CHANGE_EVENT,
 } from "@domicile-desktop/sdk/webview-element";
 import {
   act,
@@ -616,6 +617,18 @@ const boxOf = (element: HTMLElement) => ({
   x: element.style.insetInlineStart,
   y: element.style.insetBlockStart,
 });
+
+/** The first browser window's frame. */
+const browserWindow = (container: HTMLElement): HTMLElement => {
+  const element = container.querySelector<HTMLElement>(
+    "[aria-label='Browser']",
+  );
+  if (element === null) {
+    throw new Error("test: no browser window");
+  } else {
+    return element;
+  }
+};
 
 /** The compositor reports the clipboard history, newest first. */
 const copied = (entries: readonly { id: number; preview: string }[]): void => {
@@ -1954,6 +1967,43 @@ describe("Shell", () => {
       expect(
         titleBars(container)[0]?.querySelector("img")?.getAttribute("src"),
       ).toBe("https://example.com/icon.svg");
+    });
+
+    // A video's fullscreen button: the page fills its window, and the window
+    // fills the screen until the page leaves fullscreen.
+    it("fills the screen with a browser window while its page is fullscreen", async () => {
+      const { container } = renderShell();
+      press("space");
+      await userEvent
+        .setup()
+        .type(screen.getByRole("combobox"), "example.com{Enter}");
+      await launched();
+      const view = container.querySelector("webview");
+      if (view === null) {
+        throw new Error("test: no browser window");
+      }
+      const fullscreens = (fullscreen: boolean) => {
+        // `defineProperty` because `pageFullscreen` is readonly on the real
+        // element.
+        Object.defineProperty(view, "pageFullscreen", {
+          configurable: true,
+          value: fullscreen,
+        });
+        act(() => {
+          view.dispatchEvent(new Event(WEBVIEW_PAGE_FULLSCREEN_CHANGE_EVENT));
+        });
+      };
+      const tiled = boxOf(browserWindow(container));
+
+      fullscreens(true);
+      // A fullscreen window covers the top bar too.
+      expect(boxOf(browserWindow(container))).toMatchObject({
+        height: `${(1080 - TITLE_BAR + SURFACE_TUCK).toString()}px`,
+        y: `${(TITLE_BAR - SURFACE_TUCK).toString()}px`,
+      });
+
+      fullscreens(false);
+      expect(boxOf(browserWindow(container))).toEqual(tiled);
     });
 
     // `window.close()` or `chrome.tabs.remove`: the engine closes the window,

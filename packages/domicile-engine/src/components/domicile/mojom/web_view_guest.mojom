@@ -347,6 +347,11 @@ interface WebViewGuestClient {
   // navigated. Its answer, if one is sent, is ignored.
   PermissionRequestWithdrawn();
 
+  // The page entered or left fullscreen, as a video's fullscreen button does.
+  // The page fills the element's box; the shell decides whether the element
+  // fills the screen. Sent only when it changes; a fresh guest sends nothing.
+  PageFullscreenChanged(bool fullscreen);
+
   // The page's site's permission settings, one per WebViewPermission. Empty
   // for a page that is not http, https or an extension's, which has none.
   //
@@ -431,6 +436,11 @@ interface WebViewGuest {
   // under it is cleared until the pointer is back over the page. See
   // WebViewGuestClient.TargetUrlChanged.
   PointerLeft();
+
+  // Takes the page out of fullscreen, as Escape does. Reported back as
+  // WebViewGuestClient.PageFullscreenChanged. Does nothing when the page is
+  // not fullscreen.
+  ExitPageFullscreen();
 
   // Stores `setting` for `permission` on the page's site. Reported back as
   // WebViewGuestClient.SitePermissionsChanged. Dropped, and logged, when the

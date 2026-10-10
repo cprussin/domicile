@@ -347,6 +347,10 @@ class WebViewGuest : public mojom::WebViewGuest,
   // when the pointer is back over the page.
   void PointerLeft() override;
 
+  // Leaves page fullscreen through content, which calls
+  // ExitFullscreenModeForTab.
+  void ExitPageFullscreen() override;
+
   // Stores the setting through the profile's HostContentSettingsMap, as
   // Chrome's page info does. The change reaches the shell through
   // OnContentSettingChanged.
@@ -483,6 +487,21 @@ class WebViewGuest : public mojom::WebViewGuest,
                                   const url::Origin& security_origin,
                                   blink::mojom::MediaStreamType type) override;
 
+  // Page fullscreen (`requestFullscreen()`, a video's fullscreen button).
+  // Content's default refuses it, so the page waits forever.
+  //
+  // The page goes fullscreen within the element's box at once, and the
+  // element hears PageFullscreenChanged so the shell can grow it. As in
+  // //extensions' WebViewGuest, but with no permission prompt: the page needs
+  // a user gesture, as in Chrome, and the shell can leave with
+  // ExitPageFullscreen.
+  void EnterFullscreenModeForTab(
+      content::RenderFrameHost* requesting_frame,
+      const blink::mojom::FullscreenOptions& options) override;
+  void ExitFullscreenModeForTab(content::WebContents* web_contents) override;
+  bool IsFullscreenForTabOrPending(
+      const content::WebContents* web_contents) override;
+
   // Handles `window.focus()` or `client.focus()` (e.g. after a notification
   // click) by asking the shell, which decides window order.
   void ActivateContents(content::WebContents* contents) override;
@@ -591,6 +610,10 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Sends the link under the pointer to the element if it changed.
   void ReportTargetUrl(const GURL& url);
 
+  // Sets page fullscreen and tells the renderer and the element, if it
+  // changed. The renderer reads it from the widget's visual properties.
+  void SetPageFullscreen(bool fullscreen);
+
   // Opens a browser window at `target_url` for a page that asked for one.
   // Never opens an empty window.
   void ReportNewWindow(const GURL& target_url);
@@ -695,6 +718,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   // The renderer's last link, which stays set while the pointer is outside the
   // page. See PreHandleMouseEvent.
   GURL renderer_target_url_;
+  // Whether the page is fullscreen. Also what IsFullscreenForTabOrPending
+  // answers, so the renderer's state and the element's never differ.
+  bool page_fullscreen_ = false;
 
   // The current find's text, or empty. Decides whether a Find is the next
   // match or a new search.
