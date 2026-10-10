@@ -3,6 +3,7 @@
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
 import type {
+  DbusBody,
   DirEntry,
   Ran,
   Stat,
@@ -36,13 +37,18 @@ export type FakeSystem = System & {
 
 type Tree = Readonly<Record<string, Node>>;
 
+/** The Settings portal interface `readIconTheme` reads. */
+const SETTINGS = "org.freedesktop.impl.portal.Settings";
+
 /**
  * A system whose files are `tree`, keyed by path, with the directories
- * between them implied. `spawned` answers `spawn` and `run`.
+ * between them implied. `spawned` answers `spawn` and `run`. Its Settings
+ * portal serves `iconTheme`, or no icon theme when `undefined`.
  */
 export const fakeSystem = (
   tree: Tree,
   spawned: (argv: readonly string[]) => Spawned = unexpected,
+  iconTheme: string | undefined = undefined,
 ): FakeSystem => {
   const touched: string[] = [];
   const at = (path: string): Result<Found, SystemError> => {
@@ -56,7 +62,10 @@ export const fakeSystem = (
         : Err({ kind: SystemErrorKind.IsADirectory, message: path }),
     );
   return {
-    dbusCall: unexpected,
+    dbusCall: (call) =>
+      call.interface === SETTINGS && call.member === "ReadAll"
+        ? Promise.resolve(Ok(settings(iconTheme)))
+        : unexpected(),
     dbusMatch: unexpected,
     readDir: (path) =>
       Promise.resolve(
@@ -105,6 +114,20 @@ export const fakeSystem = (
     writeFile: unexpected,
   };
 };
+
+/** `ReadAll`'s answer for `org.gnome.desktop.interface`. */
+const settings = (iconTheme: string | undefined): DbusBody => ({
+  body: [
+    iconTheme === undefined
+      ? {}
+      : {
+          "org.gnome.desktop.interface": {
+            "icon-theme": { signature: "s", value: iconTheme },
+          },
+        },
+  ],
+  signature: "a{sa{sv}}",
+});
 
 /** A file's contents, or the directory a path resolved to. */
 type Found = string | Uint8Array | { directory: string };

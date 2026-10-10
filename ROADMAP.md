@@ -411,8 +411,6 @@ Understood and not scheduled.
   also serve font and cursor theme there; Domicile has no values for those. An
   unanswered key falls through to the next backend, which is correct, so
   `nix/domicile.portal` lists only what Domicile implements.
-- **Portal dialogs draw applications from `hicolor` only.** `describeApps`
-  does not read `theme.icon_theme`.
 
 - **Wayland capture tools cannot capture the desk.** Portal clients, the
   shell (`system(host).screenshot()`) and `domicile screenshot` all

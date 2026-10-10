@@ -3,6 +3,7 @@
 
 import type { Option } from "@cprussin/option-result";
 import { None, Ok, Result } from "@cprussin/option-result";
+import { readIconTheme } from "@domicile-desktop/sdk/icon-theme";
 import type { System, SystemError } from "@domicile-desktop/sdk/system";
 
 import type { IconLookup } from "./app-icons";
@@ -21,24 +22,45 @@ export type DescribedApp = {
   icon: string | undefined;
 };
 
-/** Each of `ids`, in order, described by its installed desktop entry. */
+/**
+ * Each of `ids`, in order, described by its installed desktop entry, with its
+ * icon from the config's icon theme.
+ */
 export const describeApps = async (
   system: System,
   ids: readonly string[],
+): Promise<Result<DescribedApp[], SystemError>> => {
+  const [dirs, theme] = await Promise.all([
+    dataDirs(system),
+    readIconTheme(system),
+  ]);
+  return dirs.andThenAsync((found) =>
+    theme.andThenAsync((named) =>
+      describedIn(
+        system,
+        found,
+        appIcons(system, found, ["apps"], {
+          theme: named.match({ None: () => undefined, Some: (name) => name }),
+        }),
+        ids,
+      ),
+    ),
+  );
+};
+
+/** Each of `ids` described by its entry under `dirs`, drawn by `icons`. */
+const describedIn = async (
+  system: System,
+  dirs: readonly string[],
+  icons: IconLookup,
+  ids: readonly string[],
 ): Promise<Result<DescribedApp[], SystemError>> =>
-  (await dataDirs(system)).andThenAsync(async (dirs) => {
-    const icons = appIcons(system, dirs);
-    return (await installedApps(system, dirs)).andThenAsync(
-      async (installed) => {
-        const entries = new Map(
-          installed.map((entry) => [entry.id.replace(/\.desktop$/, ""), entry]),
-        );
-        return Result.collect(
-          await Promise.all(
-            ids.map((id) => described(icons, id, entries.get(id))),
-          ),
-        );
-      },
+  (await installedApps(system, dirs)).andThenAsync(async (installed) => {
+    const entries = new Map(
+      installed.map((entry) => [entry.id.replace(/\.desktop$/, ""), entry]),
+    );
+    return Result.collect(
+      await Promise.all(ids.map((id) => described(icons, id, entries.get(id)))),
     );
   });
 
