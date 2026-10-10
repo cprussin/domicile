@@ -123,3 +123,7 @@ export const barMotion = (motion: WindowMotion): WindowMotion => {
     }
   }
 };
+
+/** Whether `motion` moves or scales the window, rather than only fading it. */
+export const isMoving = (motion: WindowMotion): boolean =>
+  barMotion(motion) !== "resting";

@@ -8,7 +8,9 @@ import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { fireEvent, render } from "@testing-library/react";
 
 import { css } from "../../styled-system/css";
+import { token } from "../../styled-system/tokens";
 import { AppWindow } from "./AppWindow";
+import { recordedSettles } from "./recorded-settles";
 
 // Records `focusApp` calls. Pointer mapping is the engine's, checked by
 // `guard-app-routes-input.sh`.
@@ -256,25 +258,99 @@ describe("AppWindow", () => {
       expect(lengthOf(style.animation)).toBe(lengthOf(style.transition));
     });
 
-    it("eases to a new box rather than jumping to it", () => {
-      const { container } = render(
-        <AppWindow {...windowProps} focused={false} />,
+    // Resizing the box every frame would have the client draw at every size
+    // in between; see `useSettling`.
+    it("takes its new box at once, and eases into it from the old one", () => {
+      const { played, settler } = recordedSettles();
+      const { container, rerender } = render(
+        <AppWindow {...windowProps} focused={false} settler={settler} />,
       );
 
-      expect(
-        globalThis.getComputedStyle(portal(container)).transition,
-      ).toContain("inline-size");
-    });
-
-    it("follows the pointer exactly while it is being dragged", () => {
-      // Easing would make the window trail the pointer.
-      const { container } = render(
-        <AppWindow {...windowProps} dragging focused={false} />,
+      rerender(
+        <AppWindow
+          {...windowProps}
+          focused={false}
+          rect={{ ...ON_SCREEN, width: 600 }}
+          settler={settler}
+        />,
       );
 
       expect(
         globalThis.getComputedStyle(portal(container)).transition,
       ).not.toContain("inline-size");
+      expect(played).toStrictEqual([{ scaleX: 2, scaleY: 1, x: 600, y: 0 }]);
+    });
+
+    // `scale` applies outside the motion's `transform`, so it would scale the
+    // motion's travel and pull the contents off their title bar.
+    it("takes its new box without easing while it plays a motion", () => {
+      const { played, settler } = recordedSettles();
+      const { rerender } = render(
+        <AppWindow
+          {...windowProps}
+          focused={false}
+          motion="opening"
+          settler={settler}
+        />,
+      );
+
+      rerender(
+        <AppWindow
+          {...windowProps}
+          focused={false}
+          motion="opening"
+          rect={{ ...ON_SCREEN, x: 40 }}
+          settler={settler}
+        />,
+      );
+
+      expect(played).toStrictEqual([undefined]);
+    });
+
+    // Its title bar's transitions take the shortest duration then.
+    it("eases as briefly as reduced motion asks", () => {
+      document.documentElement.toggleAttribute("data-reduced-motion", true);
+      const { container, rerender } = render(
+        <AppWindow {...windowProps} focused={false} />,
+      );
+
+      rerender(
+        <AppWindow
+          {...windowProps}
+          focused={false}
+          rect={{ ...ON_SCREEN, x: 40 }}
+        />,
+      );
+      document.documentElement.toggleAttribute("data-reduced-motion", false);
+
+      expect(
+        portal(container).getAnimations()[0]?.effect?.getTiming().duration,
+      ).toBe(Number.parseInt(token("durations.fastest"), 10));
+    });
+
+    it("follows the pointer exactly while it is being dragged", () => {
+      // Easing would make the window trail the pointer.
+      const { played, settler } = recordedSettles();
+      const { rerender } = render(
+        <AppWindow
+          {...windowProps}
+          dragging
+          focused={false}
+          settler={settler}
+        />,
+      );
+
+      rerender(
+        <AppWindow
+          {...windowProps}
+          dragging
+          focused={false}
+          rect={{ ...ON_SCREEN, x: 40 }}
+          settler={settler}
+        />,
+      );
+
+      expect(played).toStrictEqual([undefined]);
     });
 
     it("stays opaque while it is being dragged", () => {

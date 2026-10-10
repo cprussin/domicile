@@ -206,7 +206,7 @@ export const TitleBar = ({
         movingStyles({ motion: opensOnStrip ? "resting" : motion }),
         isLeaving(motion) && clickThroughStyles,
         // Two slots easing past each other would open a hole in the strip.
-        settlingStyles({ dragging: dragging || sliding }),
+        settlingStyles({ box: dragging || sliding ? "snapped" : "eased" }),
         // The bar holds pointer capture during a drag, so its cursor shows.
         dragging && grabCursorStyles[GrabCursor.Grabbing],
       )}
@@ -265,7 +265,7 @@ export const TitleBar = ({
             : tabStyles({ focus, open: !hidden }),
           opensOnStrip && movingStyles({ motion }),
           sliding && slidingStyles({ again: move.again }),
-          settlingStyles({ dragging }),
+          settlingStyles({ box: dragging ? "snapped" : "eased" }),
         )}
         data-face
         // Ignore animations bubbling up from the buttons.

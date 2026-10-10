@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import { css, cva } from "../../styled-system/css";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
+import type { Point } from "./settle";
 import type { TabLayout } from "./tree/frames";
 import { Layout } from "./tree/node";
 
@@ -73,8 +74,15 @@ export const clickThroughStyles = css({ pointerEvents: "none" });
  * keeps them together. Pointer mapping is unaffected: the engine maps a
  * pointer through the `<app>`'s whole transform, origin included.
  */
-export const scaledAbout = (frame: Rect, rect: Rect): CSSProperties => ({
-  transformOrigin: `${(frame.x + frame.width / 2 - rect.x).toString()}px ${(frame.y + frame.height / 2 - rect.y).toString()}px`,
+export const scaledAbout = (frame: Rect, rect: Rect): CSSProperties => {
+  const { x, y } = originOf(frame, rect);
+  return { transformOrigin: `${x.toString()}px ${y.toString()}px` };
+};
+
+/** The center of `frame`, from the corner of `rect`; see {@link scaledAbout}. */
+export const originOf = (frame: Rect, rect: Rect): Point => ({
+  x: frame.x + frame.width / 2 - rect.x,
+  y: frame.y + frame.height / 2 - rect.y,
 });
 
 /**
@@ -238,9 +246,10 @@ export const movingStyles = cva({
 /**
  * Transitions that ease a window between layouts instead of snapping.
  *
- * - Box: animates size and inset, not a transform, so the client is
- *   configured at each intermediate size. Off while dragging, or the window
- *   would trail the pointer.
+ * - Box: animates size and inset, not a transform. Only for parts that no
+ *   client draws into; the client's own box takes its new size at once and
+ *   eases with `useSettling` (`snapped`). Also `snapped` while dragging, or
+ *   the part would trail the pointer.
  * - Depth: `z-index` eases with the box, so a window leaving fullscreen stays
  *   above the windows it still covers until it has shrunk (see
  *   `placement.ts`).
@@ -255,12 +264,12 @@ export const movingStyles = cva({
  */
 export const settlingStyles = cva({
   variants: {
-    dragging: {
-      false: {
+    box: {
+      eased: {
         transition:
           "inline-size {durations.fast} {easings.out}, block-size {durations.fast} {easings.out}, inset-block-start {durations.fast} {easings.out}, inset-inline-start {durations.fast} {easings.out}, z-index {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}, opacity {durations.fast} {easings.out}, --strip-rest {durations.fast} {easings.out}",
       },
-      true: {
+      snapped: {
         transition:
           "z-index {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}, opacity {durations.fast} {easings.out}",
       },

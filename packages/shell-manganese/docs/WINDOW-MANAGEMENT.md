@@ -204,9 +204,17 @@ For how warping, browser-window focus and modifier drags work, see
 Rules:
 
 - Open and close use transforms. Resizing the element would reconfigure the
-  client every frame. Rearranging changes the real box, since the client must
-  resize anyway.
-- A window being dragged follows the pointer without easing.
+  client every frame.
+- Rearranging gives a window's contents their new box at once, so the client
+  is configured once. The contents then ease from the old box with `translate`
+  and `scale` (`useSettling`), stretched until they arrive. Eased boxes would
+  hold every frame: the engine waits for a resized client to draw.
+  Contents snap while a motion plays, since `scale` would scale the motion's
+  travel. The ease takes `durations.fastest` under reduced motion, as the
+  title bar's transitions do.
+- Title bars, glows and shadows ease their real box on the same timing. No
+  client draws into them.
+- A window being dragged or resized follows the pointer without easing.
 - The title bar and contents scale about one shared center (`scaledAbout`).
 - Only windows new since the last render animate open.
 - Hidden windows (behind a tab, on another workspace) stay mounted, so client
@@ -221,5 +229,5 @@ Rules:
   animation on the compositor thread only if it can run every property there,
   and `z-index` cannot. A motion that holds or swaps depth adds a second,
   depth-only animation.
-- Durations live in the stylesheet only. The shell waits for each animation's
-  end event.
+- Durations live in the Panda tokens only. The shell waits for each CSS
+  animation's end event.
