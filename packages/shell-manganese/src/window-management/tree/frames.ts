@@ -8,10 +8,10 @@ import type { Rect } from "../rect";
 import { barOf, surfaceOf, TITLE_BAR, tuckedUnderBar } from "../rect";
 import type { Container, LayoutNode } from "./node";
 import { Layout, NodeKind, showsOneChild, windowsIn } from "./node";
-import type { Path } from "./path";
+import type { NodeRef, Path } from "./path";
 import { nodeAt } from "./path";
 import type { Tiling } from "./tiling";
-import { focusedWindowIn, focusPathOf } from "./tiling";
+import { focusChainOf, focusedWindowIn, focusPathOf } from "./tiling";
 
 /** One window's title bar and contents. */
 export type Frame = {
@@ -61,6 +61,8 @@ export type StripPlace = {
   divided: boolean;
   /** Whether it starts the strip, which rounds that end. */
   first: boolean;
+  /** The container the strip belongs to. */
+  group: StripGroup;
   /**
    * Whether its container shows it: the open tab, raised to join its window.
    * Hidden tabs lie flat on the strip.
@@ -74,6 +76,13 @@ export type StripPlace = {
   rest: number | undefined;
   /** How many tabs the strip holds. */
   tabs: number;
+};
+
+/** A tab strip's container, which dragging the strip's empty end moves. */
+export type StripGroup = {
+  node: NodeRef;
+  /** Every window inside it, which it cannot be dropped on. */
+  windows: readonly string[];
 };
 
 /** The layouts that give each child a tab instead of a share of the area. */
@@ -401,6 +410,13 @@ const stripPlaceOf = (
       at !== container.focused &&
       at - 1 !== container.focused,
     first: at === 0,
+    group: {
+      node: {
+        id: focusedWindowIn(container),
+        up: focusChainOf(container).length,
+      },
+      windows: windowsIn(container),
+    },
     open: at === container.focused,
     rest:
       container.layout === Layout.Tabbed

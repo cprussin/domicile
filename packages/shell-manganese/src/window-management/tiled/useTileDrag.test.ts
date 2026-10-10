@@ -50,8 +50,8 @@ const dragging = (resizes = false) => {
   };
   const { result } = renderHook(() =>
     useTileDrag({
+      dragged: [DRAGGED.id],
       frame: DRAGGED.frame,
-      id: DRAGGED.id,
       resizes,
       targets: { screens: [], tabs: [], windows: [DRAGGED, OTHER] },
       ...calls,
@@ -175,8 +175,8 @@ describe("useTileDrag", () => {
       const { rerender, result } = renderHook(
         ({ targets }) =>
           useTileDrag({
+            dragged: ["a"],
             frame: DRAGGED.frame,
-            id: "a",
             onAim,
             onDrop: () => undefined,
             onDropOn,

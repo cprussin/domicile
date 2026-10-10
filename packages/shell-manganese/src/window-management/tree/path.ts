@@ -10,6 +10,12 @@ import { NodeKind } from "./node";
 
 export type Path = readonly number[];
 
+/**
+ * A node named by window `id` inside it: the window itself when `up` is 0,
+ * else its ancestor `up` levels above it.
+ */
+export type NodeRef = { id: string; up: number };
+
 /** The path to window `id`, or `undefined` if it is not in `node`. */
 export const pathTo = (node: LayoutNode, id: string): Path | undefined => {
   switch (node.kind) {
@@ -26,6 +32,20 @@ export const pathTo = (node: LayoutNode, id: string): Path | undefined => {
     case NodeKind.Window: {
       return node.id === id ? [] : undefined;
     }
+  }
+};
+
+/**
+ * The path to the node `ref` names.
+ *
+ * Throws if its window is not in `node` or has fewer than `up` ancestors.
+ */
+export const pathToRef = (node: LayoutNode, { id, up }: NodeRef): Path => {
+  const path = pathTo(node, id);
+  if (path === undefined || path.length < up) {
+    throw new Error(`layout tree: no node ${up.toString()} above ${id}`);
+  } else {
+    return path.slice(0, path.length - up);
   }
 };
 

@@ -335,6 +335,27 @@ export const Desktop = ({
           onGrab={(id) => {
             act(WindowAction.WindowGrabbed(id));
           }}
+          onGroupDropOn={(group, aim) => {
+            switch (aim.kind) {
+              case AimKind.Screen: {
+                act(WindowAction.GroupDroppedOnScreen(group, aim.name));
+                break;
+              }
+              case AimKind.Strip: {
+                // `aimAt` aims only a single dragged tab along its strip.
+                throw new Error(
+                  `desktop: group ${group.id} aimed along a strip`,
+                );
+              }
+              case AimKind.Window: {
+                act(WindowAction.GroupDroppedOn(group, aim.id, aim.edge));
+                break;
+              }
+            }
+          }}
+          onGroupGrab={(group) => {
+            act(WindowAction.GroupGrabbed(group));
+          }}
           // Only when the pointer actually moved. A window sliding under a
           // still pointer also fires `pointerover`, and following it would
           // steal focus. See `usePointerWarp`.

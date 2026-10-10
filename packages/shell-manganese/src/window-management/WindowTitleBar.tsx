@@ -115,8 +115,8 @@ export const WindowTitleBar = ({
     resizes: false,
   });
   const tileDrag = useTileDrag({
+    dragged: [window],
     frame,
-    id: window,
     onAim,
     onDrop,
     onDropOn,

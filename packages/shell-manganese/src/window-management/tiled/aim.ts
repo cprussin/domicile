@@ -92,8 +92,9 @@ export type Corner = {
 const EDGE_ZONE = 0.3;
 
 /**
- * What dropping `dragged` at `x`, `y` would do, or `undefined` over itself or
- * over nothing to drop it on.
+ * What dropping the `dragged` windows at `x`, `y` would do, or `undefined` over
+ * one of them or over nothing to drop them on. `dragged` is one window, or
+ * every window in a dragged group.
  *
  * A window goes before or after the tab under the pointer, by which half of it
  * the pointer is in. A tab over its own strip takes the slot under the pointer.
@@ -101,18 +102,18 @@ const EDGE_ZONE = 0.3;
  */
 export const aimAt = (
   { screens, tabs, windows }: DropTargets,
-  dragged: string,
+  dragged: readonly string[],
   x: number,
   y: number,
 ): Aim | undefined => {
   const tab = tabs.find(({ rect }) => contains(rect, x, y));
   const target = windows.find(({ frame }) => contains(frame, x, y));
   if (tab !== undefined) {
-    return tab.id === dragged
+    return dragged.includes(tab.id)
       ? undefined
       : aimAtTab(
           tab,
-          tabs.find(({ id }) => id === dragged),
+          tabs.find(({ id }) => dragged.includes(id)),
           x,
           y,
         );
@@ -122,7 +123,7 @@ export const aimAt = (
       ? undefined
       : Aim.Screen(screen.name, screen.area);
   } else {
-    return target.id === dragged ? undefined : aimAtWindow(target, x, y);
+    return dragged.includes(target.id) ? undefined : aimAtWindow(target, x, y);
   }
 };
 

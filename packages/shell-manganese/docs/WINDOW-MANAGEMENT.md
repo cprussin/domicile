@@ -102,6 +102,8 @@ For how warping, browser-window focus and modifier drags work, see
 - After **Meta+A**, the whole selected container floats as one box and keeps
   its layout. Tiling keys work inside it. A new window opened while the
   keyboard is in a floating group joins that group.
+- **Dragging the empty end of a float's tab strip** moves the whole float, as
+  its title bars do.
 - **Meta+drag** moves a float. **Meta+Shift+drag** or **Meta+right-drag**
   resizes from the nearest corner. The mode is fixed when the drag starts.
 - The Shift used to float a window does not count as the resize modifier until
@@ -133,6 +135,9 @@ For how warping, browser-window focus and modifier drags work, see
   window.
 - **Dropping on a tab** puts the window before or after it in its strip, by
   which half of the tab the pointer is over.
+- **Dragging the empty end of a tab strip**, past its last tab, picks up the
+  whole tab group. It is selected as by Meta+A and drops like a window, but
+  never on a window inside it (`StripEnd.tsx`).
 - **Dragging a tab along its strip** moves it at once into the slot under the
   pointer, with no overlay.
 - The pointer shows `grabbing` while a window moves.

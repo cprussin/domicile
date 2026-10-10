@@ -17,11 +17,13 @@ import { FloatShadow } from "./floating/FloatShadow";
 import { floatHolds } from "./floating/float";
 import { floatBordersOf } from "./floating/float-borders";
 import type { Geometry, PlacedFocusBox, Screenful } from "./placement";
-import { contentsOf, TILED } from "./placement";
+import { contentsOf, raised, TILED } from "./placement";
 import type { Spot } from "./pointer-warp";
 import type { Popup } from "./popup";
 import { popupsOver } from "./popup";
 import type { Rect } from "./rect";
+import { StripEnd } from "./StripEnd";
+import { stripEndOf } from "./strip-end";
 import { TitleBar } from "./TitleBar";
 import type { Aim, DropTargets, TabTarget, Target } from "./tiled/aim";
 import { bordersOf } from "./tiled/borders";
@@ -29,6 +31,7 @@ import { DropIndicator } from "./tiled/DropIndicator";
 import { TileBorder } from "./tiled/TileBorder";
 import { TileGrab } from "./tiled/TileGrab";
 import { titleFocus } from "./title-focus";
+import type { NodeRef } from "./tree/path";
 import { focusedWindowIn } from "./tree/tiling";
 import { keyOf, useFocusGlows } from "./useFocusGlows";
 import { useWindowMotion } from "./useWindowMotion";
@@ -36,7 +39,7 @@ import { WindowFrame } from "./WindowFrame";
 import { WindowTitleBar } from "./WindowTitleBar";
 import type { ShellWindow } from "./window";
 import { browserIdOf, WindowKind } from "./window";
-import { barMotion } from "./window-motion";
+import { barMotion, isLeaving } from "./window-motion";
 import { slidAcross } from "./window-styles";
 
 type Props = {
@@ -68,6 +71,10 @@ type Props = {
   /** Toggles fullscreen from a window's title bar. */
   onFullscreen: (id: string) => void;
   onGrab: (id: string) => void;
+  /** A tiled group dropped where it was aimed, on any screen. */
+  onGroupDropOn: (group: NodeRef, aim: Aim) => void;
+  /** A tiled group taken hold of by the empty end of its tab strip. */
+  onGroupGrab: (group: NodeRef) => void;
   /**
    * The pointer entered a window. `at` tells a real pointer move from a window
    * appearing under a still pointer.
@@ -121,6 +128,8 @@ export const Stage = ({
   onFloat,
   onFullscreen,
   onGrab,
+  onGroupDropOn,
+  onGroupGrab,
   onHover,
   onIcon,
   onMove,
@@ -293,6 +302,52 @@ export const Stage = ({
           );
         },
       )}
+      {/*
+        The empty ends of tabbed strips, which drag a whole group. Before the
+        bars, so the new-tab button over an end wins the `z-index` tie.
+      */}
+      {[
+        ...motions.drawn.flatMap(({ motion, placement }) =>
+          placement === undefined || isLeaving(motion) ? [] : [placement],
+        ),
+        ...motions.tabs.flatMap(({ motion, tab }) =>
+          isLeaving(motion) ? [] : [{ ...tab, bar: tab.rect }],
+        ),
+      ].map(({ bar, depth, id, strip }) => {
+        const end = stripEndOf(bar, strip);
+        if (end === undefined || strip === undefined) {
+          return undefined;
+        } else {
+          const floating = floats.find((float) => floatHolds(float, id));
+          return (
+            <StripEnd
+              depth={strip.open ? raised(depth) : depth}
+              float={floating}
+              group={strip.group}
+              // By group: a strip's last tab and its parent strip's last tab can
+              // name one window.
+              key={`${strip.group.node.id}-${strip.group.node.up.toString()}`}
+              onAim={setAim}
+              onDrop={onDrop}
+              onDropOn={(aim) => {
+                onGroupDropOn(strip.group.node, aim);
+              }}
+              onGrab={() => {
+                if (floating === undefined) {
+                  onGroupGrab(strip.group.node);
+                } else {
+                  onGrab(id);
+                }
+              }}
+              onMove={(x, y) => {
+                onMove(id, x, y);
+              }}
+              rect={end}
+              targets={dropTargets}
+            />
+          );
+        }
+      })}
       {/*
         Every bar after every window's contents, so bars win the `z-index`
         tie by document order. A shown tab's contents tuck under its whole

@@ -79,6 +79,7 @@ const MIDDLE_TAB = {
   box: { height: 30, width: 1000, x: 0, y: 0 },
   divided: false,
   first: false,
+  group: { node: { id: "a", up: 1 }, windows: ["a", "b", "c"] },
   open: false,
   rest: undefined,
   tabs: 3,
