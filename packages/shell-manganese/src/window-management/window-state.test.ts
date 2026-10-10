@@ -217,6 +217,24 @@ describe("the browser windows the engine lists", () => {
     expect(state.windows[0]).toMatchObject({ title: "Docs.rs" });
   });
 
+  it("fills the screen with a window while its page is fullscreen", () => {
+    const listing = WindowAction.BrowserWindowsListed([
+      listed("1", "https://example.com/"),
+    ]);
+    const full = reduce(
+      desktop("kitty"),
+      listing,
+      WindowAction.PageFullscreened(BROWSER("1"), true),
+    );
+
+    expect(workspaceHere(full).fullscreen).toMatchObject({ id: BROWSER("1") });
+    expect(
+      workspaceHere(
+        reduce(full, WindowAction.PageFullscreened(BROWSER("1"), false)),
+      ).fullscreen,
+    ).toBeUndefined();
+  });
+
   it("takes a window away when the engine no longer lists it", () => {
     const state = reduce(
       desktop("kitty"),

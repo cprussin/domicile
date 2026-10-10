@@ -165,6 +165,13 @@ export const WEBVIEW_FIND_CHANGE_EVENT = "domicile-find-change";
 export const WEBVIEW_CONTENT_SIZE_CHANGE_EVENT = "domicile-content-size-change";
 
 /**
+ * Fired when {@link HTMLWebViewElement.pageFullscreen} changes. Carries no
+ * payload. Bubbles.
+ */
+export const WEBVIEW_PAGE_FULLSCREEN_CHANGE_EVENT =
+  "domicile-page-fullscreen-change";
+
+/**
  * Fired when the page needs a file picked: an `<input type="file">` or a
  * download. Bubbles.
  *
@@ -384,6 +391,15 @@ declare global {
      */
     readonly contentWidth: number;
     readonly contentHeight: number;
+    /**
+     * Whether the page is fullscreen, as a video's fullscreen button makes it.
+     * The page fills the view's box; the shell grows the view to fill the
+     * screen. Escape in the page ends it. Changes fire
+     * {@link WEBVIEW_PAGE_FULLSCREEN_CHANGE_EVENT}.
+     */
+    readonly pageFullscreen: boolean;
+    /** Take the page out of fullscreen, as Escape does. */
+    exitPageFullscreen(): void;
     /**
      * Open DevTools for the page in a new browser window. If DevTools is
      * already open, the view showing it fires

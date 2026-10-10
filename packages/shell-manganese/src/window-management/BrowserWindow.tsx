@@ -29,6 +29,7 @@ import type { Restack } from "./restacking";
 import { useFindResult } from "./useFindResult";
 import { useHistoryAvailability } from "./useHistoryAvailability";
 import { useLoading } from "./useLoading";
+import { usePageFullscreen } from "./usePageFullscreen";
 import { usePageIcon } from "./usePageIcon";
 import { useReclaimFocus } from "./useReclaimFocus";
 import type { Settler } from "./useSettling";
@@ -108,6 +109,11 @@ type Props = {
    */
   onIcon: (window: string, icon: string) => void;
   /**
+   * The page entered or left fullscreen, as a video's fullscreen button does.
+   * The window should fill its screen while it is. See `usePageFullscreen`.
+   */
+  onPageFullscreen: (fullscreen: boolean) => void;
+  /**
    * Called when the user moves focus into this window (page or address bar).
    * Fires for every click, since a click raises the window even when it is
    * already focused.
@@ -176,6 +182,7 @@ export const BrowserWindow = ({
   motion,
   onIcon,
   onMotionEnded,
+  onPageFullscreen,
   onReach,
   popupWindow,
   rect,
@@ -216,6 +223,7 @@ export const BrowserWindow = ({
   const loading = useLoading(view);
   const zoom = useZoom(view);
   const targetUrl = useTargetUrl(view);
+  usePageFullscreen(view, fullscreen, onPageFullscreen);
   // Zoom count; each change re-shows the zoom indicator (see `ZoomIndicator`).
   const [zoomsAnnounced, setZoomsAnnounced] = useState(0);
   // True while `focusOwn` is calling `focus()`. Focus events fire

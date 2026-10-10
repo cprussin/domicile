@@ -83,6 +83,8 @@ class PointerMovedListener final : public NativeEventListener {
 }  // namespace
 constexpr char kFindChangeEvent[] = "domicile-find-change";
 constexpr char kContentSizeChangeEvent[] = "domicile-content-size-change";
+constexpr char kPageFullscreenChangeEvent[] =
+    "domicile-page-fullscreen-change";
 
 // A request the shell answers on the event. See
 // domicile_file_chooser_event.h.
@@ -423,6 +425,12 @@ void HTMLWebViewElement::inspect() {
   }
 }
 
+void HTMLWebViewElement::exitPageFullscreen() {
+  if (guest_.is_bound()) {
+    guest_->ExitPageFullscreen();
+  }
+}
+
 // Only the guest dispatches menus, so a guest exists here.
 void HTMLWebViewElement::RunContextMenuAction(
     const DomicileContextMenuEvent& menu,
@@ -575,6 +583,13 @@ void HTMLWebViewElement::ContentSizeChanged(int32_t width, int32_t height) {
   content_height_ = height;
 
   DispatchEvent(*Event::CreateBubble(AtomicString(kContentSizeChangeEvent)));
+}
+
+void HTMLWebViewElement::PageFullscreenChanged(bool fullscreen) {
+  page_fullscreen_ = fullscreen;
+
+  DispatchEvent(
+      *Event::CreateBubble(AtomicString(kPageFullscreenChangeEvent)));
 }
 
 void HTMLWebViewElement::ZoomRequested(bool zoom_in) {

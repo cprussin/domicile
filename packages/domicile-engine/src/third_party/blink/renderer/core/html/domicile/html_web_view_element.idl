@@ -78,6 +78,15 @@
   readonly attribute long contentWidth;
   readonly attribute long contentHeight;
 
+  // Whether the page is fullscreen, as a video's fullscreen button makes it.
+  // The page fills the element's box; the shell decides whether the element
+  // fills the screen. `domicile-page-fullscreen-change` signals a change.
+  readonly attribute boolean pageFullscreen;
+
+  // Takes the page out of fullscreen, as Escape does. Does nothing when it is
+  // not fullscreen.
+  undefined exitPageFullscreen();
+
   // Open DevTools for the page in a new browser window. If DevTools is already
   // open, the <webview> showing it dispatches `domicile-focus-request`.
   undefined inspect();
