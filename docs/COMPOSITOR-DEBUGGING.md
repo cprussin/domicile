@@ -82,6 +82,10 @@ fills monitor and region casts with one color instead
 - **A client buffer may be upside down.** GL clients set `Y_INVERT`. Smithay
   records it but does not expose it, so the compositor carries it from the
   import.
+- **A window drawing once a second may be hidden.** The page reports a
+  window it does not draw with an empty box, and the compositor holds its
+  frames until it is shown. `RUST_LOG=domicile_compositor=debug` logs `hidden: frames
+  held` and `shown: frames released` with the app id.
 - **Clients do not report missing globals.** A missing
   `wl_data_device_manager` made the chrome freeze when a tab was dragged.
 - **Honor every advertised global.** Example: `wp_viewporter` must apply the

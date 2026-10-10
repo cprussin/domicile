@@ -18,11 +18,12 @@ export type Frame = {
   /** Its title bar, or its tab in a tabbed or stacking container. */
   bar: Rect;
   /**
-   * For a hidden tab, the box it is drawn in, under the shown one.
-   * `undefined` when `surface` is set.
+   * For a hidden tab, the shown tab's box, which it is drawn in while the
+   * tab hiding it comes in (`tab-switch.ts`). `undefined` when `surface` is
+   * set.
    *
-   * Hidden tabs stay drawn so a switch shows them at once. A window drawn
-   * from nothing takes a frame or two, and the desktop would show through.
+   * Otherwise a hidden tab is not drawn, so the compositor stops its client
+   * drawing.
    */
   behind: Rect | undefined;
   id: string;

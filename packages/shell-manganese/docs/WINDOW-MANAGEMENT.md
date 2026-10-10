@@ -240,7 +240,11 @@ Rules:
 - The title bar and contents scale about one shared center (`scaledAbout`).
 - Only windows new since the last render animate open.
 - Hidden windows (behind a tab, on another workspace) stay mounted, so client
-  surfaces and pages stay alive.
+  surfaces and pages stay alive. They are not drawn, and `AppWindow` reports an
+  empty box so the compositor stops their clients drawing. A tab switch or a
+  new tab draws the tab it hides under the new one until that one is in
+  (`tab-switch.ts`). A closing tab's contents wait a moment before fading, so
+  the tab it uncovers is drawn first (`movingStyles`).
 - A closed or sent-away window keeps rendering from a saved record
   (`closing.ts`) at its old place in the document, so React does not remount
   a `<webview>`. It takes no input while it leaves. A closed client's surface

@@ -115,7 +115,8 @@ the display holding most of it, as in sway. Other monitors resample its buffer.
 
 - The shell reports each window's box with the desktop's `setAppBounds`
   (`set_app_bounds` on the wire). Manganese's `AppWindow` sends it whenever the
-  box changes.
+  box changes, and an empty box for a hidden window, which keeps its displays
+  and scale ([WINDOW-COMPOSITING.md](WINDOW-COMPOSITING.md#hidden-windows)).
 - The compositor enters the window on every display the box overlaps and sends
   `wp_fractional_scale_v1.preferred_scale` for the one with the largest overlap
   (`Screens::scale_for`). A client without that protocol gets the rounded-up

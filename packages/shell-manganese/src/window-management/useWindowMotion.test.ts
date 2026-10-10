@@ -79,7 +79,7 @@ describe("useWindowMotion", () => {
       });
 
       act(() => {
-        result.current.onPlayedOut(EDITOR.id, "opening", SCREEN);
+        result.current.onPlayedOut(EDITOR.id, "opening", SCREEN, "contents");
       });
 
       expect(motionOf(result, EDITOR.id)).toBe("resting");
@@ -125,7 +125,7 @@ describe("useWindowMotion", () => {
       });
 
       act(() => {
-        result.current.onPlayedOut(EDITOR.id, "closing", SCREEN);
+        result.current.onPlayedOut(EDITOR.id, "closing", SCREEN, "contents");
       });
 
       expect(motionOf(result, EDITOR.id)).toBeUndefined();
@@ -161,7 +161,7 @@ describe("useWindowMotion", () => {
       });
 
       act(() => {
-        result.current.onPlayedOut(EDITOR.id, "sending", SCREEN);
+        result.current.onPlayedOut(EDITOR.id, "sending", SCREEN, "contents");
       });
 
       expect(drawnOf(result, EDITOR.id)).toMatchObject({
@@ -213,6 +213,36 @@ describe("useWindowMotion", () => {
       });
 
       expect(motionOf(result, EDITOR.id)).toBe("sending-tab");
+    });
+
+    // Its contents fade after its bar collapses; see `movingStyles`.
+    it("is let go of when its contents finish, not its bar", () => {
+      const tabs = (showing: readonly ShellWindow[]): Shown => ({
+        ...desktop("1", [TERMINAL, EDITOR], showing),
+        placements: showing.map(({ id }) => ({
+          ...placementOf(id),
+          tabbed: Layout.Tabbed,
+        })),
+      });
+      const { rerender, result } = showing(tabs([TERMINAL, EDITOR]));
+      act(() => {
+        rerender(tabs([TERMINAL]));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "sending-tab", SCREEN, "bar");
+      });
+      expect(motionOf(result, EDITOR.id)).toBe("sending-tab");
+
+      act(() => {
+        result.current.onPlayedOut(
+          EDITOR.id,
+          "sending-tab",
+          SCREEN,
+          "contents",
+        );
+      });
+      expect(motionOf(result, EDITOR.id)).toBe("resting");
     });
   });
 
@@ -267,7 +297,7 @@ describe("useWindowMotion", () => {
       });
 
       act(() => {
-        result.current.onPlayedOut(EDITOR.id, "stowing", SCREEN);
+        result.current.onPlayedOut(EDITOR.id, "stowing", SCREEN, "contents");
       });
 
       expect(
@@ -337,7 +367,7 @@ describe("useWindowMotion", () => {
           rerender(desktop("1", [TERMINAL, EDITOR]));
         });
         act(() => {
-          result.current.onPlayedOut(EDITOR.id, "dropping", SCREEN);
+          result.current.onPlayedOut(EDITOR.id, "dropping", SCREEN, "contents");
         });
         clock.now = 200;
 
@@ -400,7 +430,7 @@ describe("useWindowMotion", () => {
       });
 
       act(() => {
-        result.current.onPlayedOut(EDITOR.id, "dropping", SCREEN);
+        result.current.onPlayedOut(EDITOR.id, "dropping", SCREEN, "contents");
       });
 
       expect(motionOf(result, EDITOR.id)).toBe("resting");
@@ -435,7 +465,12 @@ describe("useWindowMotion", () => {
       });
 
       act(() => {
-        result.current.onPlayedOut(EDITOR.id, "opening-tab", SCREEN);
+        result.current.onPlayedOut(
+          EDITOR.id,
+          "opening-tab",
+          SCREEN,
+          "contents",
+        );
       });
 
       expect(motionOf(result, EDITOR.id)).toBe("resting");
@@ -470,7 +505,49 @@ describe("useWindowMotion", () => {
       });
 
       act(() => {
-        result.current.onPlayedOut(EDITOR.id, "closing-tab", SCREEN);
+        result.current.onPlayedOut(
+          EDITOR.id,
+          "closing-tab",
+          SCREEN,
+          "contents",
+        );
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBeUndefined();
+    });
+
+    // Its contents fade after its bar collapses; see `movingStyles`. Ending
+    // with the bar would cut the fade short and show the desktop.
+    it("waits for its contents to fade, not its bar", () => {
+      const { rerender, result } = showing(tabs([TERMINAL, EDITOR]));
+      act(() => {
+        rerender(tabs([TERMINAL]));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "closing-tab", SCREEN, "bar");
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("closing-tab");
+    });
+
+    it("is let go of with its bar when it was hidden", () => {
+      const hiddenTab = (windows: readonly ShellWindow[]): Shown => ({
+        ...tabs(windows),
+        placements: windows.map(({ id }) => ({
+          ...placementOf(id),
+          behind: id === EDITOR.id ? placementOf(id).surface : undefined,
+          surface: id === EDITOR.id ? undefined : placementOf(id).surface,
+          tabbed: Layout.Tabbed,
+        })),
+      });
+      const { rerender, result } = showing(hiddenTab([TERMINAL, EDITOR]));
+      act(() => {
+        rerender(hiddenTab([TERMINAL]));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "closing-tab", SCREEN, "bar");
       });
 
       expect(motionOf(result, EDITOR.id)).toBeUndefined();
@@ -513,7 +590,7 @@ describe("useWindowMotion", () => {
       });
 
       act(() => {
-        result.current.onPlayedOut(EDITOR.id, "restacking", SCREEN);
+        result.current.onPlayedOut(EDITOR.id, "restacking", SCREEN, "contents");
       });
 
       expect(motionOf(result, EDITOR.id)).toBe("resting");
@@ -543,8 +620,13 @@ describe("useWindowMotion", () => {
         rerender(floating(EDITOR.id, TERMINAL.id));
       });
       act(() => {
-        result.current.onPlayedOut(EDITOR.id, "restacking", SCREEN);
-        result.current.onPlayedOut(TERMINAL.id, "restacking", SCREEN);
+        result.current.onPlayedOut(EDITOR.id, "restacking", SCREEN, "contents");
+        result.current.onPlayedOut(
+          TERMINAL.id,
+          "restacking",
+          SCREEN,
+          "contents",
+        );
       });
 
       act(() => {
@@ -553,8 +635,18 @@ describe("useWindowMotion", () => {
       expect(motionOf(result, TERMINAL.id)).toBe("restacking-again");
 
       act(() => {
-        result.current.onPlayedOut(TERMINAL.id, "restacking-again", SCREEN);
-        result.current.onPlayedOut(EDITOR.id, "restacking-again", SCREEN);
+        result.current.onPlayedOut(
+          TERMINAL.id,
+          "restacking-again",
+          SCREEN,
+          "contents",
+        );
+        result.current.onPlayedOut(
+          EDITOR.id,
+          "restacking-again",
+          SCREEN,
+          "contents",
+        );
       });
       act(() => {
         rerender(floating(EDITOR.id, TERMINAL.id));
@@ -594,8 +686,13 @@ describe("useWindowMotion", () => {
       });
 
       act(() => {
-        result.current.onPlayedOut(EDITOR.id, "revealing", SCREEN);
-        result.current.onPlayedOut(TERMINAL.id, "concealing", SCREEN);
+        result.current.onPlayedOut(EDITOR.id, "revealing", SCREEN, "contents");
+        result.current.onPlayedOut(
+          TERMINAL.id,
+          "concealing",
+          SCREEN,
+          "contents",
+        );
       });
 
       expect(motionOf(result, EDITOR.id)).toBe("resting");
@@ -643,6 +740,17 @@ describe("useWindowMotion", () => {
       expect(motionOf(result, EDITOR.id)).toBe("uncovering");
     });
 
+    it("holds its depth while a tab sent away fades", () => {
+      const { rerender, result } = showing(shownOver(EDITOR));
+
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR], [EDITOR]));
+      });
+
+      expect(motionOf(result, TERMINAL.id)).toBe("sending");
+      expect(motionOf(result, EDITOR.id)).toBe("uncovering");
+    });
+
     it("is done when it says it has finished", () => {
       const { rerender, result } = showing(shownOver(EDITOR));
       act(() => {
@@ -650,7 +758,7 @@ describe("useWindowMotion", () => {
       });
 
       act(() => {
-        result.current.onPlayedOut(EDITOR.id, "uncovering", SCREEN);
+        result.current.onPlayedOut(EDITOR.id, "uncovering", SCREEN, "contents");
       });
 
       expect(motionOf(result, EDITOR.id)).toBe("resting");
@@ -724,7 +832,12 @@ describe("useWindowMotion", () => {
       });
 
       act(() => {
-        result.current.onPlayedOut(EDITOR.id, "arriving-from-end", SCREEN);
+        result.current.onPlayedOut(
+          EDITOR.id,
+          "arriving-from-end",
+          SCREEN,
+          "contents",
+        );
       });
 
       expect(motionOf(result, EDITOR.id)).toBe("resting");
@@ -770,12 +883,22 @@ describe("useWindowMotion", () => {
       });
 
       act(() => {
-        result.current.onPlayedOut(TERMINAL.id, "leaving-to-start", "right");
+        result.current.onPlayedOut(
+          TERMINAL.id,
+          "leaving-to-start",
+          "right",
+          "contents",
+        );
       });
       expect(motionOf(result, TERMINAL.id)).toBe("leaving-to-start");
 
       act(() => {
-        result.current.onPlayedOut(TERMINAL.id, "leaving-to-start", "left");
+        result.current.onPlayedOut(
+          TERMINAL.id,
+          "leaving-to-start",
+          "left",
+          "contents",
+        );
       });
       expect(motionOf(result, TERMINAL.id)).toBe("resting");
     });

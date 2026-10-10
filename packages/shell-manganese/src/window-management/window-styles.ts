@@ -185,7 +185,27 @@ export const slidAcross = (
  * before it is removed.
  */
 export const movingStyles = cva({
+  compoundVariants: [
+    {
+      contents: true,
+      css: {
+        animationDelay: "token(durations.fastest)",
+        animationFillMode: "both",
+      },
+      motion: ["closing-tab", "sending-tab", "uncovering"],
+    },
+  ],
   variants: {
+    /**
+     * Whether this is the window's contents, rather than its bar or glow.
+     *
+     * The tab a close or send uncovers was not drawn while hidden, and an
+     * `<app>` drawn anew takes a frame or two to show. The leaving tab's
+     * contents wait that long before fading, so the desktop does not show
+     * through. Its bar collapses at once, with its neighbors, and the window
+     * is done when its contents are (see `useWindowMotion`).
+     */
+    contents: { false: {}, true: {} },
     motion: {
       // Both workspaces share timing so they stay side by side. `emphasized`,
       // not `outQuart`: a full-screen slide that starts at full speed jumps.

@@ -473,8 +473,9 @@ impl Client {
                     self.globals.subcompositor =
                         Some(registry.bind(name, version.min(1), handle, ()));
                 }
+                // 6 for the `suspended` state, sent only to clients that bind 6.
                 "xdg_wm_base" => {
-                    self.globals.wm_base = Some(registry.bind(name, version.min(3), handle, ()));
+                    self.globals.wm_base = Some(registry.bind(name, version.min(6), handle, ()));
                 }
                 "wp_cursor_shape_manager_v1" => {
                     self.globals.cursor = Some(registry.bind(name, version.min(1), handle, ()));
@@ -1392,6 +1393,13 @@ impl Dispatch<xdg_toplevel::XdgToplevel, ()> for Client {
                     u32::from_ne_bytes(*state) == xdg_toplevel::State::Activated as u32
                 });
             crate::say!(toplevel.id(), "activated({activated})");
+            // Traced on every configure, so a check can tell "never
+            // suspended" from "suspended and then resumed".
+            let suspended =
+                states.as_chunks::<4>().0.iter().any(|state| {
+                    u32::from_ne_bytes(*state) == xdg_toplevel::State::Suspended as u32
+                });
+            crate::say!(toplevel.id(), "suspended({suspended})");
             // Zero means "client chooses". Negative is invalid and would cast
             // to a huge `u32`.
             if client.follow_configure && width > 0 && height > 0 {

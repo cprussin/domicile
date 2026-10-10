@@ -208,8 +208,8 @@ const sheetStyles = css({
   // The viewport is sized to the whole desktop, so the screens' page-space
   // regions land on their monitors.
   position: "fixed",
-  // The depth of windows hidden behind a tab (`COVERED` in `placement.ts`).
-  // They come later in the document, so they draw over the wallpaper. Higher,
+  // The depth of a tab a tab switch is hiding (`COVERED` in `placement.ts`).
+  // It comes later in the document, so it draws over the wallpaper. Higher,
   // the wallpaper would show through a window opening or closing in front.
   zIndex: -2,
 });

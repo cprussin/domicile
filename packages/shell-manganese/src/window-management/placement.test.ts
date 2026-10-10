@@ -379,41 +379,38 @@ describe("placementsOf", () => {
     expect(placementFor(state, "kitty")?.tabbed).toBe(Layout.Tabbed);
   });
 
-  // A hidden tab is drawn under the shown one, so it is ready when switched
-  // to. See `Placement.behind`.
-  it("draws a window a tab is hiding under the one it shows", () => {
+  // A hidden tab has no box, so the compositor stops its client drawing.
+  it("draws nothing for a window a tab is hiding", () => {
     const state = reduce(
       desktop("kitty", "editor"),
       WindowAction.LayoutSet(Layout.Tabbed),
     );
     const shown = placementFor(state, "editor");
 
-    const covered = contentsOf(placementFor(state, "kitty"));
-
-    expect(covered?.rect).toEqual(shown?.surface ?? GEOMETRY.screen);
-    expect(covered?.depth ?? TILED).toBeLessThan(TILED);
-    expect(contentsOf(shown)).toEqual({
+    expect(contentsOf(placementFor(state, "kitty"), "resting")).toBeUndefined();
+    expect(contentsOf(shown, "resting")).toEqual({
       depth: TILED,
       rect: shown?.surface ?? GEOMETRY.screen,
     });
   });
 
-  // A tab switch holds the outgoing tab at -1 while the new one fades in
-  // (`windowConcealing`). At the hidden-tab depth, another hidden tab could
-  // draw over it and show through.
-  it("leaves a depth free between the hidden tabs and the tiled windows", () => {
+  // A tab switch fades the new tab in over the one it hides, so that one stays
+  // drawn under it until the fade ends.
+  it("draws the tab a switch is hiding under the one it shows", () => {
     const state = reduce(
       desktop("kitty", "editor"),
       WindowAction.LayoutSet(Layout.Tabbed),
     );
+    const shown = placementFor(state, "editor");
 
-    expect(
-      contentsOf(placementFor(state, "kitty"))?.depth ?? TILED,
-    ).toBeLessThan(TILED - 1);
+    const concealing = contentsOf(placementFor(state, "kitty"), "concealing");
+
+    expect(concealing?.rect).toEqual(shown?.surface ?? GEOMETRY.screen);
+    expect(concealing?.depth ?? TILED).toBeLessThan(TILED);
   });
 
   it("draws nothing for a window that is not on screen", () => {
-    expect(contentsOf(undefined)).toBeUndefined();
+    expect(contentsOf(undefined, "resting")).toBeUndefined();
   });
 });
 

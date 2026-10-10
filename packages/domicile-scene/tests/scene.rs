@@ -91,6 +91,15 @@ fn two_boxes_over_each_other_overlap() {
     assert!(box_of((0.0, 0.0), (100.0, 100.0)).overlaps(&box_of((50.0, 50.0), (150.0, 150.0))));
 }
 
+#[test]
+fn a_box_without_width_or_height_is_empty() {
+    // The page reports a window it does not draw as a box of no size.
+    assert!(box_of((0.0, 0.0), (0.0, 0.0)).is_empty());
+    assert!(box_of((10.0, 10.0), (10.0, 50.0)).is_empty());
+    assert!(box_of((10.0, 10.0), (50.0, 10.0)).is_empty());
+    assert!(!box_of((10.0, 10.0), (11.0, 11.0)).is_empty());
+}
+
 // ---- keyboard focus -------------------------------------------------------
 
 #[test]

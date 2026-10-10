@@ -144,6 +144,12 @@ impl Bounds {
             && self.min.y < other.max.y
             && other.min.y < self.max.y
     }
+
+    /// Whether the box has no area: the page's report of a window it does not
+    /// draw.
+    pub fn is_empty(&self) -> bool {
+        self.max.x <= self.min.x || self.max.y <= self.min.y
+    }
 }
 
 /// Where keyboard input should be delivered.

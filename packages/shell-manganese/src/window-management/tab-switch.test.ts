@@ -54,14 +54,16 @@ describe("tabSwitched", () => {
     ).toStrictEqual({ concealed: ["a"], revealed: ["b"], uncovered: [] });
   });
 
-  // A window from another workspace or the scratchpad is not a tab switch.
-  it("leaves a window that was not on screen at all alone", () => {
+  // A window opened as a tab, or brought from another workspace, is not
+  // revealed. The tab it hides stays drawn under it while it arrives, so the
+  // desktop does not show through.
+  it("conceals the tab a window arriving in its box hides", () => {
     expect(
       tabSwitched(
         desktop([shownIn("a")]),
         desktop([hiddenIn("a"), shownIn("b")]),
       ),
-    ).toStrictEqual({ concealed: [], revealed: [], uncovered: [] });
+    ).toStrictEqual({ concealed: ["a"], revealed: [], uncovered: [] });
   });
 
   // A tab closing is not a switch; fading both would show the desktop

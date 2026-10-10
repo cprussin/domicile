@@ -5,6 +5,7 @@ import { token } from "../../styled-system/tokens";
 import type { Closing, Leaving } from "./closing";
 import { departed, movesAsTab, sentAway, withClosing } from "./closing";
 import type { PlacedTab, Placement } from "./placement";
+import { contentsOf } from "./placement";
 import type { Restack } from "./restacking";
 import { restacked } from "./restacking";
 import type { Shown } from "./shown";
@@ -56,17 +57,21 @@ export type WindowMotions = {
   /** The windows to draw, in the order they were opened. */
   drawn: readonly DrawnWindow[];
   /**
-   * Called when a window or bar on `screen` finishes an animation. `screen`
+   * Called when a window's `part` on `screen` finishes an animation. `screen`
    * identifies which workspace switch ended.
    */
   onPlayedOut: (
     id: string,
     motion: WindowMotion,
     screen: string | undefined,
+    part: Part,
   ) => void;
   /** The tabs to draw, including ones sliding off. */
   tabs: readonly DrawnTab[];
 };
+
+/** Which element of a window reported an animation's end. */
+export type Part = "bar" | "contents";
 
 /** A playing shuffle and which of the two animation names it uses. */
 type Shuffling = { motion: Shuffle; restack: Restack };
@@ -155,9 +160,14 @@ export const useWindowMotion = (
   }
 
   const onPlayedOut = useCallback(
-    (id: string, motion: WindowMotion, screen: string | undefined) => {
+    (
+      id: string,
+      motion: WindowMotion,
+      screen: string | undefined,
+      part: Part,
+    ) => {
       setState((now) => {
-        const next = played(now.playing, id, motion, screen);
+        const next = played(now.playing, id, motion, screen, part);
         return next === now.playing ? now : { ...now, playing: next };
       });
     },
@@ -386,13 +396,15 @@ const nextShuffle = (playing: Playing, id: string): Shuffle =>
  * What is left playing after `id` on `screen` finishes `motion`.
  *
  * Returns the same object when nothing changed so React skips the re-render.
- * Every element of an animating window reports, and only the first matters.
+ * Every element of an animating window reports, and the first matters, except
+ * that a leaving tab's drawn contents outlast its bar (see `movingStyles`).
  */
 const played = (
   playing: Playing,
   id: string,
   motion: WindowMotion,
   screen: string | undefined,
+  part: Part,
 ): Playing => {
   switch (motion) {
     case "arriving-from-end":
@@ -414,7 +426,10 @@ const played = (
     }
     case "closing":
     case "closing-tab": {
-      const closing = playing.closing.filter(({ window }) => window.id !== id);
+      const closing = playing.closing.filter(
+        ({ placement, window }) =>
+          window.id !== id || outlastsBar(placement, motion, part),
+      );
       return closing.length === playing.closing.length
         ? playing
         : { ...playing, closing };
@@ -422,7 +437,10 @@ const played = (
     case "sending":
     case "sending-tab":
     case "stowing": {
-      const sending = playing.sending.filter(({ window }) => window.id !== id);
+      const sending = playing.sending.filter(
+        ({ placement, window }) =>
+          window.id !== id || outlastsBar(placement, motion, part),
+      );
       return sending.length === playing.sending.length
         ? playing
         : { ...playing, sending };
@@ -467,6 +485,19 @@ const played = (
     }
   }
 };
+
+/**
+ * Whether a report from `part` leaves the window playing `motion`: its bar
+ * finished, but its contents are drawn and fade later.
+ */
+const outlastsBar = (
+  placement: Placement,
+  motion: WindowMotion,
+  part: Part,
+): boolean =>
+  part === "bar" &&
+  (motion === "closing-tab" || motion === "sending-tab") &&
+  contentsOf(placement, motion) !== undefined;
 
 /** Where each window is, by id, built once per render. */
 type Index = {

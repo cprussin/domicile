@@ -29,6 +29,9 @@ const placed = (): unknown[] =>
 /** An arbitrary on-screen box. */
 const ON_SCREEN = { height: 800, width: 1200, x: 0, y: 32 };
 
+/** What a window off screen reports. */
+const NO_BOX = { height: 0, width: 0, x: 0, y: 0 };
+
 /** The box spanning title bar and contents. */
 const FRAME = { height: 830, width: 1200, x: 0, y: 2 };
 
@@ -207,10 +210,15 @@ describe("AppWindow", () => {
     ]);
   });
 
-  it("says nothing about where a window off screen is", () => {
-    render(<AppWindow {...windowProps} focused={false} rect={undefined} />);
+  // An empty box tells the compositor to stop the client drawing.
+  it("tells the compositor a window off screen has no box", () => {
+    const { rerender } = render(<AppWindow {...windowProps} focused={false} />);
+    rerender(<AppWindow {...windowProps} focused={false} rect={undefined} />);
 
-    expect(placed()).toStrictEqual([]);
+    expect(placed()).toStrictEqual([
+      ["term", ON_SCREEN],
+      ["term", NO_BOX],
+    ]);
   });
 
   it("shows the cursor the client asked for", () => {
