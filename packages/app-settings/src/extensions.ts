@@ -1,6 +1,6 @@
 // The browser's extensions through `chrome.management`, with every answer
-// parsed. Installing and removing go through the config instead; see
-// `config-extensions.ts`.
+// parsed. Installing and removing go through the config or the settings host
+// instead; see `host.ts`.
 
 import { z } from "zod";
 

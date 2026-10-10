@@ -134,6 +134,35 @@ describe(nativeHost, () => {
     await stored;
   });
 
+  it("loads and uninstalls extensions, and lists the config's", async () => {
+    const { ports, runtime } = fakeRuntime();
+    const host = nativeHost(runtime);
+    const id = "b".repeat(32);
+
+    const loaded = host.loadUnpacked("~/src/my-extension");
+    expect(ports[0]?.sent.at(-1)).toEqual({
+      directory: "~/src/my-extension",
+      id: 1,
+      type: "load_unpacked",
+    });
+    ports[0]?.answer({ extension: id, id: 1, type: "loaded_unpacked" });
+    expect(await loaded).toBe(id);
+
+    const uninstalled = host.uninstallExtension(id);
+    expect(ports[0]?.sent.at(-1)).toEqual({
+      extension: id,
+      id: 2,
+      type: "uninstall_extension",
+    });
+    ports[0]?.answer({ id: 2, type: "uninstalled" });
+    await uninstalled;
+
+    const listed = host.configExtensions();
+    expect(ports[0]?.sent.at(-1)).toEqual({ id: 3, type: "config_extensions" });
+    ports[0]?.answer({ id: 3, ids: [id], type: "config_extensions" });
+    expect(await listed).toEqual([id]);
+  });
+
   it("tells listeners a file changed on disk", async () => {
     const { ports, runtime } = fakeRuntime();
     const host = nativeHost(runtime);
