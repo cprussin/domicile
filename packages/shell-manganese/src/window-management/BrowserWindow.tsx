@@ -482,7 +482,7 @@ export const BrowserWindow = ({
         !fullscreen && edgeStyles,
         !fullscreen && bottomCornerStyles,
         noTopEdgeStyles,
-        movingStyles({ motion }),
+        movingStyles({ contents: true, motion }),
         (clickThrough || leaving) && clickThroughStyles,
         // The page's box takes its new size at once; `useSettling` eases it.
         // Colors still ease; see `settlingStyles`.

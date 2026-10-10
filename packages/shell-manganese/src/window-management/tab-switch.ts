@@ -1,8 +1,8 @@
 // Detects a tabbed or stacking container switching its shown child, so the
 // page can crossfade, or showing the next child after a close.
 //
-// A hidden tab is drawn under the shown one (see `Frame.behind`), so a switch
-// is just a depth swap. No event announces it, so this compares two renders.
+// A hidden tab keeps the shown one's box (see `Frame.behind`), which pairs the
+// two tabs of a switch. No event announces it, so this compares two renders.
 
 import type { Placement } from "./placement";
 import { TILED } from "./placement";
@@ -11,7 +11,10 @@ import type { Shown } from "./shown";
 
 /** The windows a tab switch has swapped, by id. */
 export type TabSwitch = {
-  /** Shown before, hidden now. */
+  /**
+   * Shown before, hidden now under a window revealed or arrived in its box.
+   * Drawn under that window until it is in.
+   */
   concealed: readonly string[];
   /** Hidden before, shown now. */
   revealed: readonly string[];
@@ -26,7 +29,9 @@ export type TabSwitch = {
  * The windows tabs swapped since `before`.
  *
  * Only pairs count as a switch: one hidden and one shown in the same box. A
- * window shown unpaired is uncovered, as when the tab over it closes.
+ * window shown unpaired is uncovered, as when the tab over it closes. A tab
+ * hidden by a window new to the screen, such as a tab just opened, is
+ * concealed too, though that window is not revealed.
  *
  * Tiled windows only, since the crossfade holds the pair at tiled depths (see
  * `windowHeldTiled`). Workspace switches are skipped.
@@ -34,11 +39,18 @@ export type TabSwitch = {
 export const tabSwitched = (before: Shown, shown: Shown): TabSwitch => {
   const concealed = swapped(before, shown, isShown, isHidden);
   const revealed = swapped(before, shown, isHidden, isShown);
+  const arrived = shown.placements.filter(
+    (placement) =>
+      isShown(placement) &&
+      !before.placements.some(
+        (then) => then.id === placement.id && isShown(then),
+      ),
+  );
   return before.current === shown.current
     ? {
         concealed: concealed
           .filter((hidden) =>
-            revealed.some(({ surface }) => sameBox(surface, hidden.behind)),
+            arrived.some(({ surface }) => sameBox(surface, hidden.behind)),
           )
           .map(({ id }) => id),
         revealed: revealed

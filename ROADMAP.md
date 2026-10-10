@@ -277,6 +277,11 @@ Understood and not scheduled.
   cast (`cast_frame`, `casting::Shown`) copies the buffer unturned. The cast
   needs the transform beside its crop.
   [WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md#pre-rotated-buffers).
+- **A cast of a hidden window drops to a frame a second.** The compositor
+  holds a hidden window's frame callbacks, cast or not.
+  [WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md#hidden-windows).
+- **Windows under a fullscreen window keep drawing.** Manganese keeps their
+  boxes so the fullscreen window can animate back to its own.
 - **Browser window context menus have Chrome's core items only.** No
   spelling suggestions and no items a page or extension adds. DevTools' own
   menus get the page menu. Each needs a field on `WebViewContextMenu` in

@@ -83,6 +83,10 @@ pub enum ChromeMessage {
     /// The compositor enters the window on the displays it overlaps and gives
     /// it the scale of the one holding most of it. It does not move the
     /// window: the page's layout does that.
+    ///
+    /// A size with no area is a window the page does not draw. The compositor
+    /// sends its frame callbacks once a second and marks it `suspended` until
+    /// the next box with an area, or the next `Hello`.
     SetAppBounds {
         app_id: String,
         position: [f64; 2],

@@ -14,6 +14,10 @@ Event names and full types are in `src/app-element.ts` and
   the element's box in page pixels whenever it moves or resizes. The client
   draws at the scale of the monitor holding most of the box. An unreported
   window draws for the densest monitor.
+- **Hidden:** call `domicile.setAppBounds(appId, 0, 0, 0, 0)` for an `<app>`
+  the page does not draw. The client gets a frame callback once a second and
+  is `suspended` until the next box with an area. It keeps its monitor and
+  scale.
 - **Pointer:** the element sends pointer and wheel events over it to the
   client, in the client's surface coordinates, through its layout box and
   every transform above it (`zoom` and perspective included). A

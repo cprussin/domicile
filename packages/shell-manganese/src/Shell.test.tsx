@@ -1866,9 +1866,12 @@ describe("Shell", () => {
         .setup()
         .type(screen.getByRole("combobox"), "example.com{Enter}");
       await launched();
+      motionsPlayOut(container);
 
       domicile.engineOpens("https://example.com/opened");
 
+      // It opens as a tab over the first, which stays drawn under it until it
+      // is in.
       expect(windowsOnScreen(container)).toEqual(["Browser", "Browser"]);
       expect(addressesShowing()).toContain("https://example.com/opened");
     });
@@ -2240,19 +2243,14 @@ describe("Shell", () => {
 
       press("w");
 
-      // One tab each across the top, at most 240px wide, in one strip. Both
-      // contents share a box, the focused one on top, so the other is ready
-      // when its tab is picked.
+      // One tab each across the top, at most 240px wide, in one strip. Only
+      // the focused tab's contents are drawn, so the other client stops
+      // drawing.
       expect(boxOf(barFor(container, "app:one"))).toMatchObject({
         width: "240px",
         x: "20px",
       });
-      expect(boxOf(appElement(container, "one"))).toEqual(
-        boxOf(appElement(container, "two")),
-      );
-      expect(Number(appElement(container, "one").style.zIndex)).toBeLessThan(
-        Number(appElement(container, "two").style.zIndex),
-      );
+      expect(windowsOnScreen(container)).toEqual(["two"]);
     });
 
     it("lights the whole group `focus parent` selects, and back", () => {

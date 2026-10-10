@@ -379,6 +379,10 @@ impl DomicileCompositor {
                 // desktop one page starting releases keys held through another.
                 // `held` is cleared on the same terms.
                 self.release_pressed_keys();
+                // The new page has reported no boxes, so it has hidden
+                // nothing. One that never reports them would otherwise leave
+                // windows suspended for good.
+                self.show_every_window();
                 // A hello is the only sign the engine was replaced; see
                 // [`crate::which_engine`]. Rejoin before announcing windows, so
                 // each has a frame sink again.
@@ -404,12 +408,16 @@ impl DomicileCompositor {
             }
             ClientRequest::SetOutputSize { logical } => self.set_output_size(logical),
             ClientRequest::SetAppBounds { app_id, bounds } => match self.toplevel_for(&app_id) {
+                // An empty box is a window the page does not draw. It keeps
+                // its displays and scale for when it is shown.
+                Some(toplevel) if bounds.is_empty() => self.hide(&app_id, &toplevel),
                 Some(toplevel) => {
                     // Only this window moved. Its popups are on every display
                     // whatever its bounds; see
                     // `enter_the_displays_each_window_is_on`.
                     self.place_window(toplevel.wl_surface(), Some(bounds));
-                    self.app_bounds.insert(app_id, bounds);
+                    self.app_bounds.insert(app_id.clone(), bounds);
+                    self.show(&app_id, &toplevel);
                 }
                 // Usually the window closed while the message was in flight.
                 // Logged in case the chrome sent a bogus id.
@@ -421,6 +429,7 @@ impl DomicileCompositor {
             ClientRequest::CloseApp { app_id } => match self.toplevel_for(&app_id) {
                 Some(toplevel) => {
                     debug!(%app_id, "close -> client");
+                    self.release_before_closing(&app_id);
                     toplevel.send_close();
                 }
                 // Dismiss a popup instead; the client then destroys it

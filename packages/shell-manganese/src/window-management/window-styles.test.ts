@@ -116,6 +116,39 @@ describe("movingStyles", () => {
 
     expect(animated).toContain("clipPath");
   });
+
+  const classes = (styles: string): readonly string[] => styles.split(" ");
+
+  /** What a closing tab's contents have that its bar lacks: the delay. */
+  const delayed = (): readonly string[] => {
+    const bar = classes(movingStyles({ motion: "closing-tab" }));
+    return classes(
+      movingStyles({ contents: true, motion: "closing-tab" }),
+    ).filter((name) => !bar.includes(name));
+  };
+
+  // The tab a close uncovers takes a frame or two to show; see `contents`.
+  it("starts a closing tab's contents fading after its bar collapses", () => {
+    expect(delayed()).not.toHaveLength(0);
+  });
+
+  it("starts a sent tab's contents fading as late", () => {
+    expect(
+      classes(movingStyles({ contents: true, motion: "sending-tab" })),
+    ).toEqual(expect.arrayContaining([...delayed()]));
+  });
+
+  it("holds the uncovered tab under the closing one for as long", () => {
+    expect(
+      classes(movingStyles({ contents: true, motion: "uncovering" })),
+    ).toEqual(expect.arrayContaining([...delayed()]));
+  });
+
+  it("starts other motions at once", () => {
+    expect(movingStyles({ contents: true, motion: "closing" })).toBe(
+      movingStyles({ motion: "closing" }),
+    );
+  });
 });
 
 describe("slidAcross", () => {

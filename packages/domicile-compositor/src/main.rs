@@ -45,7 +45,7 @@ use smithay::reexports::{
     },
     wayland_server::{
         backend::{ClientData, ClientId, DisconnectReason},
-        protocol::{wl_buffer, wl_seat, wl_surface::WlSurface},
+        protocol::{wl_buffer, wl_callback::WlCallback, wl_seat, wl_surface::WlSurface},
         Client, Display, DisplayHandle, Resource as _, WEnum,
     },
 };
@@ -130,6 +130,7 @@ mod engine_waiting;
 mod file_indexing;
 mod frame_report;
 mod gbm;
+mod held_frames;
 mod idle;
 mod keymap;
 mod latency;
@@ -162,6 +163,7 @@ use crate::engine::{Bounds, Capture, Clipboard, NEWEST_BOX};
 use crate::engine_buffers::Returned;
 use crate::engine_session::{EngineSession, Submission, Submitted};
 use crate::gbm::Gbm;
+use crate::held_frames::{HeldFrames, TRICKLE};
 use crate::latency::{Latency, Step as LatencyStep};
 use crate::shm_upload::{render_modifiers, shm_shape, CopyError};
 use crate::uploads::{UploadId, Uploads};
@@ -426,8 +428,13 @@ struct DomicileCompositor {
     toplevels: Vec<(String, ToplevelSurface)>,
     /// Where the page last said each window is, in desktop logical units
     /// (`ChromeMessage::SetAppBounds`). Decides its displays and scale; see
-    /// [`place_window`](DomicileCompositor::place_window).
+    /// [`place_window`](DomicileCompositor::place_window). A hidden window
+    /// keeps its last box here; input and casts read
+    /// [`HeldFrames::shown`].
     app_bounds: HashMap<String, domicile_scene::Bounds>,
+    /// Frame callbacks of the windows the page hides. See
+    /// [`crate::held_frames`].
+    held_frames: HeldFrames<WlCallback>,
     /// Every announced popup (menus), by its host-assigned id.
     ///
     /// The engine treats each as its own app, placed rather than laid out; see
@@ -681,8 +688,8 @@ impl DomicileCompositor {
         let state = self;
         let focused = state.seat.get_keyboard().unwrap().current_focus();
         let windows = state
-            .app_bounds
-            .iter()
+            .held_frames
+            .shown(&state.app_bounds)
             .filter_map(|(app_id, bounds)| {
                 state.toplevel_for(app_id).map(|toplevel| eis::Window {
                     app_id: app_id.clone(),
@@ -1009,6 +1016,96 @@ impl DomicileCompositor {
         self.prefer_scale(surface, bounds);
     }
 
+    /// Stop the window `app_id` drawing: the page hid it. See
+    /// [`crate::held_frames`].
+    fn hide(&mut self, app_id: &str, toplevel: &ToplevelSurface) {
+        if self.held_frames.hide(app_id) {
+            debug!(%app_id, "hidden: frames held");
+            suspend(toplevel, true);
+            if self.held_frames.start_trickling() {
+                self.start_trickling();
+            }
+        }
+    }
+
+    /// Let the window `app_id` draw again, starting with the frames it was
+    /// held at.
+    fn show(&mut self, app_id: &str, toplevel: &ToplevelSurface) {
+        if let Some(held) = self.held_frames.show(app_id) {
+            debug!(%app_id, held = held.len(), "shown: frames released");
+            suspend(toplevel, false);
+            self.send_frames(held);
+        }
+    }
+
+    /// Send hidden windows' held callbacks every [`TRICKLE`], so a client
+    /// blocked on one wakes, until no window is hidden. See
+    /// [`crate::held_frames`].
+    fn start_trickling(&self) {
+        self.loop_handle
+            .insert_source(
+                Timer::from_duration(TRICKLE),
+                |_, _, data: &mut CalloopData| match data.state.held_frames.trickle() {
+                    Some(held) => {
+                        data.state.send_frames(held);
+                        TimeoutAction::ToDuration(TRICKLE)
+                    }
+                    None => TimeoutAction::Drop,
+                },
+            )
+            // Timers register nothing with the kernel, so inserting cannot
+            // fail.
+            .expect("the compositor's own loop takes a timer");
+    }
+
+    /// Send `app_id`'s held callbacks before closing it, so a client blocked
+    /// on one reads the close.
+    fn release_before_closing(&mut self, app_id: &str) {
+        let held = self.held_frames.take(app_id);
+        self.send_frames(held);
+    }
+
+    /// Show every hidden window: a new page has reported no boxes, and may
+    /// never.
+    fn show_every_window(&mut self) {
+        for (app_id, held) in self.held_frames.show_all() {
+            let toplevel = self
+                .toplevel_for(&app_id)
+                // Closing a window forgets it; see `forget`.
+                .expect("a hidden window is open");
+            suspend(&toplevel, false);
+            self.send_frames(held);
+        }
+    }
+
+    fn send_frames(&self, callbacks: Vec<WlCallback>) {
+        let time = self.now_ms();
+        for callback in callbacks {
+            callback.done(time);
+        }
+    }
+
+    /// The window `surface` draws for: itself, or the window under the popup
+    /// or bubble it is. `None` for the chrome.
+    fn window_of(&self, surface: &WlSurface) -> Option<String> {
+        match self.by_surface.get(surface) {
+            Some((app_id, Role::Toplevel(_))) => Some(app_id.clone()),
+            Some((_, Role::Bubble)) => self
+                .bubbles
+                .iter()
+                .find(|bubble| bubble.surface == *surface)
+                .and_then(|bubble| self.window_of(&bubble.parent)),
+            // A popup, announced or not, or a surface with no role yet.
+            Some((_, Role::Popup(_))) | None => {
+                let window = self.window_under_menus(surface);
+                match self.by_surface.get(&window) {
+                    Some((app_id, Role::Toplevel(_))) => Some(app_id.clone()),
+                    Some((_, Role::Popup(_) | Role::Bubble)) | None => None,
+                }
+            }
+        }
+    }
+
     /// Send `wp_fractional_scale_v1.preferred_scale` for a window in `bounds`.
     /// See [`Screens::scale_for`].
     fn prefer_scale(&self, surface: &WlSurface, bounds: Option<domicile_scene::Bounds>) {
@@ -1096,13 +1193,16 @@ impl DomicileCompositor {
                     .and_then(|app| app.title.clone())
                     .unwrap_or_default(),
                 app_id: app_id.unwrap_or_default(),
-                bounds: self.app_bounds.get(id).map(|bounds| casting::Region {
-                    position: (bounds.min.x.round() as i32, bounds.min.y.round() as i32),
-                    size: (
-                        (bounds.max.x - bounds.min.x).round() as i32,
-                        (bounds.max.y - bounds.min.y).round() as i32,
-                    ),
-                }),
+                bounds: self
+                    .held_frames
+                    .shown_box(&self.app_bounds, id)
+                    .map(|bounds| casting::Region {
+                        position: (bounds.min.x.round() as i32, bounds.min.y.round() as i32),
+                        size: (
+                            (bounds.max.x - bounds.min.x).round() as i32,
+                            (bounds.max.y - bounds.min.y).round() as i32,
+                        ),
+                    }),
             }
         });
         windows.chain(self.screens.cast_monitors()).collect()
@@ -1121,7 +1221,7 @@ impl DomicileCompositor {
         // The same point on the desktop, for monitor and region streams. The
         // compositor knows the pointer only over a window.
         let desk = at.as_ref().and_then(|(app_id, (x, y))| {
-            let bounds = self.app_bounds.get(app_id)?;
+            let bounds = self.held_frames.shown_box(&self.app_bounds, app_id)?;
             Some((bounds.min.x + x, bounds.min.y + y))
         });
         let renderer = self.gpu.as_mut().map(Gpu::renderer);
@@ -1281,6 +1381,7 @@ impl DomicileCompositor {
         self.shown.missed(app_id);
         self.size_limits.remove(app_id);
         self.app_bounds.remove(app_id);
+        self.held_frames.forget(app_id);
         self.casting.window_gone(app_id);
         // An app id can return (a reconnecting client), but it then names a
         // different window.
@@ -2953,7 +3054,13 @@ impl DomicileCompositor {
             (Step::Wait, _) | (_, None) => {}
             (Step::Announce, Some(turnover)) => {
                 self.hub.portals.announce(turnover.theme());
-                let windows = self.toplevels.iter().map(|(app_id, _)| app_id.clone());
+                // A hidden window cannot repaint until it is shown, and is not
+                // on screen to turn.
+                let windows = self
+                    .toplevels
+                    .iter()
+                    .filter(|(app_id, _)| !self.held_frames.is_hidden(app_id))
+                    .map(|(app_id, _)| app_id.clone());
                 let step = turnover.announced(windows.collect::<Vec<_>>());
                 self.arm_the_turnover_deadline(REPAINT_WITHIN, Turnover::repaint_deadline);
                 self.follow_the_turnover(step);
@@ -3353,6 +3460,22 @@ struct Bubble {
     placed: ((f64, f64), (f64, f64)),
 }
 
+/// Set or clear `xdg_toplevel`'s `suspended` state. Smithay leaves it out for
+/// clients older than version 6.
+fn suspend(toplevel: &ToplevelSurface, suspended: bool) {
+    toplevel.with_pending_state(|state| {
+        if suspended {
+            state.states.set(xdg_toplevel::State::Suspended);
+        } else {
+            state.states.unset(xdg_toplevel::State::Suspended);
+        }
+    });
+    // Before the first configure, that configure carries it.
+    if toplevel.is_initial_configure_sent() {
+        toplevel.send_pending_configure();
+    }
+}
+
 /// Which of the two kinds of client committed a buffer.
 #[derive(Debug)]
 enum Committer {
@@ -3734,8 +3857,13 @@ impl CompositorHandler for DomicileCompositor {
         // Whether the client took its buffer away, unmapping the window.
         let (attached, unmapped) = attached;
 
-        // Ask the client to draw its next frame (keeps it animating).
-        let time = self.start.elapsed().as_millis() as u32;
+        // Ask the client to draw its next frame (keeps it animating), unless
+        // the page hid its window.
+        let callbacks = match self.window_of(surface) {
+            Some(window) => self.held_frames.pass(&window, callbacks),
+            None => callbacks,
+        };
+        let time = self.now_ms();
         for callback in callbacks {
             callback.done(time);
         }
@@ -5635,6 +5763,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         apps,
         toplevels: Vec::new(),
         app_bounds: HashMap::new(),
+        held_frames: HeldFrames::new(),
         popups: Vec::new(),
         grabbing: Vec::new(),
         bubbles: Vec::new(),

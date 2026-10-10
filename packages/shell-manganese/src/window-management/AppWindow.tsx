@@ -28,6 +28,12 @@ import {
   windowStyles,
 } from "./window-styles";
 
+/**
+ * The box a window off screen reports. Empty, so the compositor stops its
+ * client drawing; it keeps its last monitor.
+ */
+const OFF_SCREEN: Rect = { height: 0, width: 0, x: 0, y: 0 };
+
 type Props = {
   /**
    * Whether a shell panel (such as the launcher) is open over the windows.
@@ -98,8 +104,8 @@ type Props = {
 /**
  * A Wayland client's window, rendered as an `<app>` element.
  *
- * Hiding the element takes the window off screen: it has no box, so the
- * engine tells the host it is no longer composited.
+ * Hiding the element takes the window off screen. The empty box it reports
+ * then stops its client drawing.
  *
  * `<app>` has no hyphen, so React treats it as a plain HTML element and drops
  * unknown properties and `on…` listeners. Focus events are therefore bound
@@ -171,17 +177,10 @@ export const AppWindow = ({
 
   // Tells the compositor where the window is, so the client draws at the
   // scale of the monitor under it. Keyed on the numbers, since `rect` is a new
-  // object on every render. A window off screen keeps its last monitor.
-  const { x, y, width, height } = rect ?? {};
+  // object on every render.
+  const { x, y, width, height } = rect ?? OFF_SCREEN;
   useEffect(() => {
-    if (
-      x !== undefined &&
-      y !== undefined &&
-      width !== undefined &&
-      height !== undefined
-    ) {
-      domicile.setAppBounds(appId, x, y, width, height);
-    }
+    domicile.setAppBounds(appId, x, y, width, height);
   }, [appId, domicile, height, width, x, y]);
 
   // Cancels the engine's default focus-on-click. The shell owns focus:
@@ -238,7 +237,7 @@ export const AppWindow = ({
         // Neither a line nor rounded corners around the screen's own edge.
         !fullscreen && edgeStyles,
         !fullscreen && bottomCornerStyles,
-        movingStyles({ motion }),
+        movingStyles({ contents: true, motion }),
         (clickThrough || leaving) && clickThroughStyles,
         // The client's box takes its new size at once; `useSettling` eases
         // it. Colors still ease; see `settlingStyles`.

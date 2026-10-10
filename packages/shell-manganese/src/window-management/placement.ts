@@ -18,6 +18,7 @@ import type {
 } from "./tree/frames";
 import { focusBoxOf, framesOf } from "./tree/frames";
 import { focusedWindowIn } from "./tree/tiling";
+import type { WindowMotion } from "./window-motion";
 import type { Workspace } from "./workspace";
 import { fullscreenOn } from "./workspace";
 
@@ -26,7 +27,7 @@ export type Placement = {
   /** Its title bar, or its tab in a tabbed container. */
   bar: Rect;
   /**
-   * For a hidden tab, where it is drawn under the shown one, at
+   * For a hidden tab, where a tab switch draws it under the shown one, at
    * {@link COVERED}. `undefined` when `surface` is set. See `Frame.behind`.
    */
   behind: Rect | undefined;
@@ -87,14 +88,12 @@ export type Screenful = {
 };
 
 /**
- * The depth of hidden tabs, under every tiled window. See
- * {@link Placement.behind}.
+ * The depth a tab switch draws the tab it hides at, under every tiled window.
+ * See {@link Placement.behind}.
  *
  * The wallpaper shares this depth but comes first in the document, so it stays
- * underneath. It is two below the tiling, leaving -1 for the tab a tab switch
- * is hiding while the new one fades in (`windowConcealing`). If it shared -2
- * with the other hidden tabs, one later in the document would draw over it and
- * show through the fade.
+ * underneath. `windowConcealing` then holds the tab at -1 while the new one
+ * fades in.
  */
 const COVERED = -2;
 
@@ -242,15 +241,20 @@ const focusUnder = (
 };
 
 /**
- * Where a window's contents are drawn and at what depth: its `surface`, its
- * `behind` rect for a hidden tab, or `undefined` when off screen.
+ * Where a window's contents are drawn and at what depth: its `surface`, or
+ * `undefined` when not drawn.
+ *
+ * A hidden tab is drawn only while it is `concealing` (see `tab-switch.ts`),
+ * at its `behind` rect under the tab taking its place. Otherwise it has no
+ * box, so the compositor stops its client drawing.
  */
 export const contentsOf = (
   placement: Placement | undefined,
+  motion: WindowMotion,
 ): { depth: number; rect: Rect } | undefined => {
   if (placement?.surface !== undefined) {
     return { depth: placement.depth, rect: placement.surface };
-  } else if (placement?.behind === undefined) {
+  } else if (placement?.behind === undefined || motion !== "concealing") {
     return undefined;
   } else {
     return { depth: COVERED, rect: placement.behind };

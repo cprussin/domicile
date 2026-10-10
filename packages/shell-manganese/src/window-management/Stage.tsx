@@ -698,7 +698,7 @@ const WindowContents = memo(
     window,
   }: WindowContentsProps) => {
     const { id } = window;
-    const contents = contentsOf(placement);
+    const contents = contentsOf(placement, motion);
     const hovered = useCallback(
       (at: Spot) => {
         onHover(id, at);
@@ -709,7 +709,7 @@ const WindowContents = memo(
       onSelect(id);
     }, [id, onSelect]);
     const ended = useCallback(() => {
-      onPlayedOut(id, motion, screen);
+      onPlayedOut(id, motion, screen, "contents");
     }, [id, motion, onPlayedOut, screen]);
     const pageFilled = useCallback(
       (fullscreen: boolean) => {
@@ -843,7 +843,7 @@ const WindowBar = memo(
       onSelect(id);
     }, [id, onSelect]);
     const ended = useCallback(() => {
-      onPlayedOut(id, motion, screen);
+      onPlayedOut(id, motion, screen, "bar");
     }, [id, motion, onPlayedOut, screen]);
     const closed = useCallback(() => {
       onClose(id);
@@ -970,7 +970,7 @@ const ContainerTab = memo(
       onFullscreen(id);
     }, [id, onFullscreen]);
     const ended = useCallback(() => {
-      onPlayedOut(id, motion, screen);
+      onPlayedOut(id, motion, screen, "bar");
     }, [id, motion, onPlayedOut, screen]);
     const tabbed = useCallback(() => {
       onNewTab(id);

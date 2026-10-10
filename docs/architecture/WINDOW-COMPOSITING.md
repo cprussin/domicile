@@ -38,6 +38,29 @@ The page and the compositor share only a `viz::SurfaceId`.
   requests to it. Messages from the page about a frame are not synchronized
   with that frame's commit.
 
+## Hidden windows
+
+A window the page does not draw (another workspace, a background tab) draws
+about once a second.
+
+- **The page:** reports it with an empty box, `setAppBounds(appId, 0, 0, 0,
+  0)`. The engine never says whether an `<app>` is composited.
+- **The compositor:** holds the `wl_surface.frame` callbacks of the window,
+  its popups and its bubbles (`held_frames.rs`), and sets `xdg_toplevel`'s
+  `suspended` state. A box with an area clears `suspended` and sends the held
+  callbacks.
+- **Not stopped:** held callbacks still go out once a second, and before a
+  close. A client blocked in `eglSwapBuffers` reads nothing else until one
+  arrives: not a close, and not its other windows' events. At most 16 are
+  held per window; a client that commits without waiting gets the oldest
+  back.
+- **A new page** (`hello`) has hidden nothing, so every window is shown.
+  Otherwise a shell that never reports boxes would leave them suspended.
+- **Cost:** a window shown again can take a frame or two to appear. Its
+  client starts its next frame only then. Manganese delays a closing tab's
+  fade by as long, so the tab it uncovers is drawn first.
+- **Theme changes** do not wait for hidden windows to repaint.
+
 ## What CSS does to a window
 
 Anything that works on a hardware-composited `<video>` works on an `<app>`. Both

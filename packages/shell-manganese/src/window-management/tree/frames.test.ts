@@ -173,8 +173,8 @@ describe("framesOf", () => {
     });
   });
 
-  // Hidden tabs stay drawn, so a switch shows them without a blank frame.
-  it("draws the tabs it is not showing under the one it is", () => {
+  // A tab switch draws the tab it hides there while the new one fades in.
+  it("gives the tabs it is not showing the box of the one it is", () => {
     const tiled = framesOf(
       {
         depth: 1,
