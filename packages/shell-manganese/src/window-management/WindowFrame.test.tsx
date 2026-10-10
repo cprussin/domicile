@@ -23,6 +23,7 @@ describe("WindowFrame", () => {
           crossed.push(at);
         }}
         onReach={noReach}
+        rewound={0}
         screen={undefined}
       >
         <button type="button">part</button>
@@ -48,6 +49,7 @@ describe("WindowFrame", () => {
         onReach={() => {
           reached.push("reach");
         }}
+        rewound={0}
         screen={undefined}
       >
         <button type="button">part</button>
@@ -67,6 +69,7 @@ describe("WindowFrame", () => {
           frame={{ height: 400, width: 600, x: 40, y: 300 }}
           onHover={noHover}
           onReach={noReach}
+          rewound={0}
           screen={SCREEN}
         >
           <button type="button">part</button>

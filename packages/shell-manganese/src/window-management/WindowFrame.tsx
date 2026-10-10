@@ -21,6 +21,8 @@ type Props = {
    * focus follows the cursor, but only a press raises the window.
    */
   onReach: () => void;
+  /** How far into its motion the window starts. See `slidAcross`. */
+  rewound: number;
   /** Its screen, which the window's slides move it off. See `slidAcross`. */
   screen: Rect | undefined;
 };
@@ -43,6 +45,7 @@ export const WindowFrame = ({
   frame,
   onHover,
   onReach,
+  rewound,
   screen,
 }: Props) => (
   <div
@@ -53,7 +56,9 @@ export const WindowFrame = ({
     onPointerOver={(event) => {
       onHover([event.clientX, event.clientY]);
     }}
-    style={screen === undefined ? undefined : slidAcross(screen, frame)}
+    style={
+      screen === undefined ? undefined : slidAcross(screen, frame, rewound)
+    }
   >
     {children}
   </div>

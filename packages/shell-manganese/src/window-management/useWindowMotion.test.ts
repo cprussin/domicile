@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { act, renderHook } from "@testing-library/react";
 
+import { token } from "../../styled-system/tokens";
 import type { Placement } from "./placement";
 import { LEAVING } from "./placement";
 import type { Shown } from "./shown";
@@ -273,6 +274,79 @@ describe("useWindowMotion", () => {
         result.current.drawn.find((drawn) => drawn.window.id === EDITOR.id)
           ?.placement,
       ).toBeUndefined();
+    });
+
+    // Each slide is the other played backwards, so the new one starts where
+    // the one it cuts short had got to.
+    describe("a slide cut short by the other", () => {
+      const SLIDE = Number.parseFloat(token("durations.slow"));
+
+      const clocked = (shown: Shown) => {
+        const clock = { now: 0 };
+        const hook = renderHook(
+          (next: Shown) => useWindowMotion({ [SCREEN]: next }, () => clock.now),
+          { initialProps: shown },
+        );
+        return { ...hook, clock };
+      };
+
+      const drawnOf = (
+        result: { current: ReturnType<typeof useWindowMotion> },
+        id: string,
+      ) => result.current.drawn.find((drawn) => drawn.window.id === id);
+
+      it("slides a window hidden partway down back up from where it is", () => {
+        const { clock, rerender, result } = clocked(stowed);
+        act(() => {
+          rerender(desktop("1", [TERMINAL, EDITOR]));
+        });
+        clock.now = 200;
+
+        act(() => {
+          rerender(stowed);
+        });
+
+        expect(drawnOf(result, EDITOR.id)).toMatchObject({
+          motion: "stowing",
+          rewound: SLIDE - 200,
+        });
+      });
+
+      it("slides a window shown partway up back down from where it is", () => {
+        const { clock, rerender, result } = clocked(
+          desktop("1", [TERMINAL, EDITOR]),
+        );
+        act(() => {
+          rerender(stowed);
+        });
+        clock.now = 100;
+
+        act(() => {
+          rerender(desktop("1", [TERMINAL, EDITOR]));
+        });
+
+        expect(drawnOf(result, EDITOR.id)).toMatchObject({
+          motion: "dropping",
+          rewound: SLIDE - 100,
+        });
+      });
+
+      it("starts a slide from the top when the other has finished", () => {
+        const { clock, rerender, result } = clocked(stowed);
+        act(() => {
+          rerender(desktop("1", [TERMINAL, EDITOR]));
+        });
+        act(() => {
+          result.current.onPlayedOut(EDITOR.id, "dropping", SCREEN);
+        });
+        clock.now = 200;
+
+        act(() => {
+          rerender(stowed);
+        });
+
+        expect(drawnOf(result, EDITOR.id)?.rewound).toBe(0);
+      });
     });
 
     it("slides a window it shows down onto the screen", () => {
