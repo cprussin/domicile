@@ -1,258 +1,112 @@
 # Domicile roadmap
 
-Open work and known gaps. Each item links to the design doc with the detail.
-For what Domicile is, see [README.md](README.md) and
-[ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md).
+Open work and known gaps. Each item links to the doc with the detail. Remove an
+item when it ships.
 
-## Status
-
-- There is no supported end-user release.
-- CI publishes alpha npm packages (`0.0.0-alpha-<sha>`) and prebuilt engines
-  for the pinned fork. Neither is a supported release.
-- The wire protocol is at `PROTOCOL_VERSION = 1`.
-- `packages/domicile-engine/engine-pin.nix` picks the engine users get. See
-  [RELEASES.md](packages/domicile-engine/docs/RELEASES.md).
-
-What works:
-
-- A desktop runs on a bare tty or nested in a Wayland session, on the forked
-  Chromium the flake pins.
-- A client window is an `<app>` element in the shell's page. Seven CSS
-  properties render bit-exact against a plain element.
-- `<webview>` draws a browser window the engine owns and the shell lays out.
-  It reports history and loading to the page.
-- Keyboard, trackpad and clicks work on real hardware.
-- An idle desktop blanks and locks. The user's password unlocks it through
-  PAM.
-- A shell is a module named in the config and built by `domicile`. manganese
-  is a library, and `@domicile-desktop/*` is on npm.
-- Extensions named in the config run. Their actions show in the shell's tray,
-  and every `<webview>` but a private one is a tab to them.
-- Shells reach files, processes and D-Bus. Battery, backlight, audio,
-  network, Bluetooth and apps are libraries on them
-  ([SHELL-SYSTEM-ACCESS.md](docs/SHELL-SYSTEM-ACCESS.md)).
-- Domicile is the only portal backend. The compositor answers `Settings`,
-  `Access`, `AppChooser`, `FileChooser`, `Notification`, `Inhibit`,
-  `RemoteDesktop`, `Clipboard`, `InputCapture`, `Account`, `Email`,
-  `Lockdown`, `GlobalShortcuts`, `Background`, `Wallpaper`, `DynamicLauncher`,
-  `Usb`, `Print`, `ScreenCast` and `Screenshot` over the request channel to
-  the shell. `Secret` goes to the keyring, and no other backend is routed
-  ([PORTALS.md](docs/PORTALS.md)).
-
-Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
-[A-DESKTOP-ON-A-TTY.md](docs/architecture/A-DESKTOP-ON-A-TTY.md),
-[COMPOSABLE-SHELLS.md](docs/architecture/COMPOSABLE-SHELLS.md),
-[EXTENSIONS.md](docs/architecture/EXTENSIONS.md) and the
-`packages/domicile-engine/scripts/guard-*.sh` scripts.
-
-## Trust
-
-- **A shell is trusted native code.** It reads and writes the user's files,
-  spawns any program, and calls the session and system D-Bus.
-- Installing a third-party shell is running a native program with the user's
-  rights. It is not a sandboxed theme.
-- Only the shell page's `domicile` has this access. `<webview>` guests,
-  extensions and `domicile://home` do not.
-- [SHELL-SYSTEM-ACCESS.md](docs/SHELL-SYSTEM-ACCESS.md#security) has the rules.
-
-## Validation
-
-- **CI proves:** unit tests, end-to-end scripts on a headless display, and
-  the engine guards on `crux`'s GPU. Pixel checks read back an offscreen
-  buffer. `./scripts/check.sh` runs the non-engine set locally
-  ([AGENTS.md](AGENTS.md#checking-your-work)).
-- **Only a physical machine proves:** anything on a lit panel, the DRM
-  scanout path, and several real displays. No agent or CI runner has one.
-  [HARDWARE-CHECKS.md](docs/HARDWARE-CHECKS.md) lists the checks a person
-  with a laptop must run.
+- No supported end-user release yet.
+- Wire protocol: `PROTOCOL_VERSION = 1`.
+- Checks that need a physical machine: [HARDWARE-CHECKS.md](docs/HARDWARE-CHECKS.md).
 
 ## In this repository
 
-1. **Keystroke to pixel, on a screen** (#206). `guard-latency.sh` reads 19–29
-   ms commit to pixel against a 16.67 ms frame on `crux`. That run is nested,
-   with nothing presenting, and every figure includes the probe's own round
-   trip. The guard waits until nothing else on `crux` is compiling or running
-   guards, because load inflates the result (#601).
-   - `PLATFORM=drm` runs the same probe on the scanout platform, sized to the
-     CRTC. The guard refuses to run a platform in the wrong environment.
-   - Left: run it on a machine with a panel. See
-     [Latency on a panel](docs/HARDWARE-CHECKS.md#latency-on-a-panel).
-   - The probe is a `CopyOutputRequest` that forces the draw it reads, so it
-     does not measure presentation, even on a panel.
-   - [ENGINE-FORK-MEASUREMENTS.md](docs/architecture/ENGINE-FORK-MEASUREMENTS.md#keystroke-to-pixel).
+1. **Keystroke-to-pixel latency on a panel** (#206). Run `guard-latency.sh`
+   with `PLATFORM=drm` on a machine with a panel
+   ([Latency on a panel](docs/HARDWARE-CHECKS.md#latency-on-a-panel)). The
+   probe still won't measure presentation.
+   [ENGINE-FORK-MEASUREMENTS.md](docs/architecture/ENGINE-FORK-MEASUREMENTS.md#keystroke-to-pixel).
 
-2. **A compositor crash still loses every window.** An engine crash is
-   recovered: the compositor reconnects to the new engine, re-imports every
-   client buffer and restores each window's last frame. Clients keep their
-   `wl_display` connection. On a tty the screens go dark for a second or two
-   during an engine restart, because the engine holds DRM master. See
+2. **A compositor crash loses every window.**
+   - The page's control channel only retries at startup (`kReachFor`).
+     Reconnecting to a new compositor needs a change in `control_channel.cc`.
+   - No `disconnected` callback in `domicile_engine.h`. The compositor spots a
+     new engine by `SO_PEERCRED` (`which_engine.rs`).
+   - Engine-restart recovery is untested against a real engine and GPU
+     ([Dead engine with windows open](docs/HARDWARE-CHECKS.md#dead-engine-with-windows-open)).
+
    [THE-DOMICILE-BINARY.md](docs/architecture/THE-DOMICILE-BINARY.md).
 
-   Left:
+3. **Lock.** [LOCK.md](docs/LOCK.md),
+   [SHELL-IDLE-AND-LOCK.md](docs/SHELL-IDLE-AND-LOCK.md#locking).
+   - A wrong passphrase only re-sends `locked: true`. A shell can't tell it
+     from a verifier error, or count or rate-limit attempts.
+   - A config reload doesn't change `lock`. It applies on the next run.
+   - No warning before blanking. `HostMessage::Idle` arrives when the screens
+     go dark.
+   - `lock.passphrase` is world-readable and not compared in constant time.
 
-   - **Compositor restart.** A compositor crash starts a new desktop and the
-     apps exit. The page's control channel to the compositor closes when
-     either end exits, and the page only retries at startup (`kReachFor`).
-     Reconnecting the page to a new compositor needs a C++ change in
-     `control_channel.cc` in the fork.
-   - **No disconnect callback.** `domicile_engine.h` has six callbacks and none
-     reports a disconnect. The compositor detects a new engine by the
-     `SO_PEERCRED` of the process that says hello
-     (`packages/domicile-compositor/src/which_engine.rs`). A `disconnected`
-     callback would be more direct, and would also cover an engine that dies
-     with no replacement.
-   - **Untested against a real engine.** Unit tests cover every decision in
-     the rejoin. The `dlopen`, the second `domicile_engine_connect` and the
-     re-import need a built `libdomicile_engine.so` and a GPU. See
-     [Dead engine with windows open](docs/HARDWARE-CHECKS.md#dead-engine-with-windows-open).
-
-3. **Lock follow-ups.** Idle blanking, the lock and a
-   PAM verifier all work. See [IDLE.md](docs/IDLE.md), [LOCK.md](docs/LOCK.md), and
-   [SHELL-IDLE-AND-LOCK.md](docs/SHELL-IDLE-AND-LOCK.md#locking) for the shell
-   side. A shell can lock on demand with `ChromeMessage::Lock`; manganese binds
-   it to Meta+Shift+Return. `lock.passphrase` remains for machines with no PAM
-   service; it is world-readable and not compared in constant time. Left:
-   - **A wrong passphrase only re-sends `locked: true`.** A shell can show
-     "wrong password" from that. It cannot tell a wrong password from a
-     verifier error, or count or rate-limit attempts. That needs its own event
-     in the engine.
-   - **A config reload does not change the lock.** `lock` is read only at
-     startup. Rebuilding the verifier while locked would either unlock by file
-     edit or leave no way to unlock. A changed verifier applies on the next
-     run.
-   - **No warning before blanking.** `HostMessage::Idle` is sent when the
-     screens go dark, so a shell cannot dim, count down or warn first. Two
-     options, neither written: a second timer in `crate::idle` with a config
-     field for the lead time, or sending the timeout to the shell so it can
-     count. The lock makes this more pressing: a user about to touch the
-     keyboard gets a lock screen with no warning.
-
-4. **Notification follow-ups.** The compositor serves
-   `org.freedesktop.Notifications`, including web notifications, and manganese
-   shows toasts on the focused monitor and a drawer. Left:
+4. **Notifications.** [NOTIFICATIONS.md](docs/architecture/NOTIFICATIONS.md).
    - Inline reply.
-   - Chrome's notification bridge looks for the server once at startup. A slow
-     bus can leave it showing its own popups.
+   - Chrome's notification bridge looks for the server once at startup, so a
+     slow bus leaves it showing its own popups.
 
-   [NOTIFICATIONS.md](docs/architecture/NOTIFICATIONS.md).
-
-5. **Native density on every monitor.** On a tty the shell is one page over
-   all monitors. It is hosted on the fastest monitor, rastered at the largest
-   scale, and each lower-density monitor's region is also rastered at its own
-   scale. Left: test on hardware.
+5. **Native density on every monitor: test on hardware.**
    [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
 
-6. **Composable shells, phase 3.** Phases 1, 2 and 4 are done. Left:
-   `nix/home-manager.nix` building a TS config directory with `bun2nix`. It
-   writes `domicile.json` today.
-
+6. **home-manager builds a TS config.** `nix/home-manager.nix` should build a
+   TS config directory with `bun2nix`; it writes `domicile.json`.
    [COMPOSABLE-SHELLS.md](docs/architecture/COMPOSABLE-SHELLS.md).
 
-7. **Split manganese into small packages.** `@domicile-desktop/manganese` is
-   one package with the layout, the bar and every bar item. Split the clock,
-   tray, mixer and window management into their own packages, with manganese
-   the shell that composes them. No design doc yet.
+7. **Split manganese into small packages.** Clock, tray, mixer and window
+   management as their own packages; manganese composes them. No design doc.
 
-8. **Settings app follow-ups.** The app edits the config, the shell, extensions
-   and site permissions ([SETTINGS.md](docs/SETTINGS.md)). Left:
-   - Shell options a shell declares and the app edits
-     ([SHELL-OPTIONS.md](docs/architecture/SHELL-OPTIONS.md)).
+8. **Settings app.** [SETTINGS.md](docs/SETTINGS.md).
+   - Shell options ([SHELL-OPTIONS.md](docs/architecture/SHELL-OPTIONS.md)).
    - A persistent theme choice, which needs a store for desktop state.
-   - Cookies and site data, which `chrome://settings` manages in Chrome.
-   - No guard runs the app's native messaging host in the engine.
+   - Cookies and site data.
+   - A guard that runs the app's native messaging host in the engine.
 
-9. **Split up the compositor's `main.rs`.** The lock, portals, screens, chrome
-   hub, chrome connection, frame report and request handling are their own
-   modules. `main.rs` still holds the event-loop state, startup (`run`), the
-   surface commit path, casting, the engine pump and the Wayland protocol
-   handlers. Left: extract cohesive subsystems so each can be read and tested
-   alone, keeping the event-loop state and the order it changes in clear from
-   `main.rs`.
+9. **Split up the compositor's `main.rs`.** Left in it: event-loop state,
+   startup (`run`), the surface commit path, casting, the engine pump and the
+   Wayland protocol handlers.
 
-10. **Web apps.** `domicile open-app` opens a URL as an app window, without an
-    address bar; Settings and History open this way. Left: showing the
-    address off the app's origin, `domicile install-app` from a web app
-    manifest, and a home-manager option for desktop entries.
-    No guard checks the engine lists an app window with `isApp`, or that it
-    records no visits.
-    [WEB-APPS.md](docs/architecture/WEB-APPS.md).
+10. **Web apps.** [WEB-APPS.md](docs/architecture/WEB-APPS.md).
+    - Show the address when an app leaves its origin.
+    - `domicile install-app` from a web app manifest.
+    - A home-manager option for desktop entries.
+    - A guard that the engine lists an app window with `isApp` and records no
+      visits for it.
 
 ## In the engine fork (the agent on `crux`)
 
-1. **shm upload on a GPU.** An shm client's frame is copied into a compositor
-   GBM buffer (`uploads.rs`) and submitted like a dmabuf. The copy is tested on
-   llvmpipe. The allocation and the browser's import have never run, because no
-   guard drives an shm client on `crux`'s render node.
+1. **shm upload on a GPU.** The GBM allocation and the browser's import
+   (`uploads.rs`) have never run on a render node.
    [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#plan).
 
-2. **Measure presentation.** Every number in the fork's docs comes from a
-   `CopyOutputRequest`. Nothing reads a lit CRTC, so overlay promotion, damage
-   and the presentation part of latency are unmeasured.
+2. **Measure presentation.** Nothing reads a lit CRTC, so overlay promotion,
+   damage and presentation latency are unmeasured.
    [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#plan).
 
-3. **Two tty tasks.**
-   - Take `/dev/dri/card0` from logind (`TakeDevice` plus
-     `PauseDevice`/`ResumeDevice`) instead of the browser's own `open()`. This
-     closes the gap where a console switch beats the master drop by a D-Bus
-     round trip.
-   - Stop the evdev thread blocking for the length of a console switch.
+3. **Two tty tasks.** [A-DESKTOP-ON-A-TTY.md](docs/architecture/A-DESKTOP-ON-A-TTY.md#plan).
+   - Take `/dev/dri/card0` from logind (`TakeDevice`, `PauseDevice`,
+     `ResumeDevice`) instead of `open()`.
+   - Stop the evdev thread blocking during a console switch.
 
-   [A-DESKTOP-ON-A-TTY.md](docs/architecture/A-DESKTOP-ON-A-TTY.md#plan).
+4. **Overlay promotion under `backdrop-filter`.** Show that viz declines it
+   for an `<app>`. Needs a lit CRTC, like item 2.
+   [WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md).
 
-4. **`backdrop-filter` over an `<app>`: overlay promotion.**
-   `guard-css-and-resize.sh` checks every CSS property again under a
-   `backdrop-filter`, and the `<app>` renders correctly. Left: show that viz
-   declines overlay promotion under a filter. The guard is headless and
-   software-composited, so it never uses hardware planes. This needs a lit
-   CRTC, like item 2. [WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md).
+5. **Strip what a desktop never runs.** Tab strip, New Tab page, settings,
+   sign-in and sync. Measure each subsystem's size first. Keep PDFium.
 
-5. **Strip what a desktop never runs.** The tab strip, New Tab page, settings,
-   sign-in and sync are built and shipped, and add attack surface, but nothing
-   on a desktop can reach them.
-   - Measure each subsystem's size before patching. The saving could be 5% or
-     40%.
-   - Keep PDFium so PDFs render in a window. The viewer UI is a separate
-     question.
-   - Already disabled (#608), but still built: Chrome's accelerators, context
-     menu, zoom, overscroll navigation, password manager, autofill, translate
-     and WebAuthn UI.
-
-6. **Shortcuts inhibitor tested only on sway with a virtual keyboard.** Patch
-   `0038` asks the host compositor to stop handling its own bindings while the
-   desktop window has focus, so the shell gets Meta chords when nested. Two
-   guards cover it; see
+6. **Shortcuts inhibitor (patch `0038`) beyond sway.**
    [ENGINE-FORK-MEASUREMENTS.md](docs/architecture/ENGINE-FORK-MEASUREMENTS.md#host-shortcut-inhibitor).
-   Untested:
-   - Hosts other than sway. mutter asks the user before granting an
-     inhibitor, so a nested desktop on GNOME may show an unseen dialog.
-   - A physical keyboard, which reaches sway through a different device than
-     `wtype`.
-   - Chromium bug: a host that sends no keymap crashes the browser on its
-     first modifiers event (`xkb_state_update_mask` under
-     `WaylandKeyboard::OnModifiers`). The guard avoids it by holding the seat
-     before the engine starts.
+   - Untested on other hosts. mutter may show an unseen permission dialog.
+   - Untested with a physical keyboard.
+   - A host that sends no keymap crashes the browser on its first modifiers
+     event (`WaylandKeyboard::OnModifiers`).
 
-7. **`guard-shell.sh` should launch through `domicile`** instead of repeating
-   the launch steps. Do this last, so a mistake there cannot block what
-   ordinary CI covers. [THE-DOMICILE-BINARY.md](docs/architecture/THE-DOMICILE-BINARY.md).
+7. **`guard-shell.sh` launches through `domicile`.** Do this last.
+   [THE-DOMICILE-BINARY.md](docs/architecture/THE-DOMICILE-BINARY.md).
 
-8. **A compositor restart breaks every embed.** App ids restart with the
-   compositor, so `app-1` gets a new `FrameSinkId` while the page holds the
-   old token, and every embed of it is refused.
-   `FrameSinkBroker::OnProducerDisconnected` drops the sinks but does not tell
-   the renderer. Plan: invalidate the renderer's tokens on disconnect. Needed
-   before item 2's compositor restart can work.
+8. **A compositor restart breaks every embed.** App ids restart, so the page's
+   tokens point at dead `FrameSinkId`s. Invalidate the renderer's tokens on
+   disconnect. Needed before item 2 of the repository list.
    [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#open-questions).
 
-9. **Keeping the fork current.** The fork is a patch series on the Chromium
-   named in `CHROMIUM_PIN`. A Chromium security fix reaches users only in a
-   new engine release, by moving the pin or carrying the fix as a patch.
-   Moving the pin rebases every patch and rebuilds on `crux`, the one build
-   machine ([Engine CI](#engine-ci)).
-   See [BUILDING-CHROMIUM.md](packages/domicile-engine/docs/BUILDING-CHROMIUM.md#rolling-the-pin),
-   [BUILD-MACHINE.md](packages/domicile-engine/docs/BUILD-MACHINE.md),
-   [RELEASES.md](packages/domicile-engine/docs/RELEASES.md) and
-   [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md).
+9. **Keep the fork current.** A Chromium security fix ships only in a new
+   engine release: move `CHROMIUM_PIN` or carry the fix as a patch.
+   [BUILDING-CHROMIUM.md](packages/domicile-engine/docs/BUILDING-CHROMIUM.md#rolling-the-pin),
+   [RELEASES.md](packages/domicile-engine/docs/RELEASES.md).
 
 ## Known gaps
 
@@ -260,194 +114,90 @@ Understood and not scheduled.
 
 ### Windows and clients
 
-- **Popups near a screen edge are not moved back on screen.** The compositor
-  places a menu where its positioner asks, relative to its window, because it
-  does not know where the page put the window. `constraint_adjustment` (flip,
-  slide, resize) is never applied. A fix needs the page to report each window's
-  screen box, or the shell to solve the positioner. See `popup_placed` in
-  `domicile-host`.
-- **Clients only get 8-bit formats.** The engine imports four fourccs
-  (`FOURCCS` in `engine.rs`). Adding 10-bit needs a `FormatFromFourcc` case in
-  the fork and an entry in `FOURCCS`.
-  `scripts/test-the-engines-fourccs-agree.sh` keeps them in sync.
-- **A chrome repaint marks the whole output damaged.** The chrome is one layer
-  over the desktop, and it repaints for a clock, a caret or a hover.
-- **A window cast shows a pre-rotated buffer as drawn.** The engine turns a
-  buffer drawn with `wl_surface.set_buffer_transform` upright, but a window
-  cast (`cast_frame`, `casting::Shown`) copies the buffer unturned. The cast
-  needs the transform beside its crop.
+- **Popups near a screen edge aren't moved back on screen.**
+  `constraint_adjustment` is never applied (`popup_placed` in
+  `domicile-host`).
+- **Clients only get 8-bit formats** (`FOURCCS` in `engine.rs`).
+- **A chrome repaint damages the whole output.**
+- **A window cast shows a pre-rotated buffer unturned.**
   [WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md#pre-rotated-buffers).
-- **A cast of a hidden window drops to a frame a second.** The compositor
-  holds a hidden window's frame callbacks, cast or not.
+- **A cast of a hidden window drops to a frame a second.**
   [WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md#hidden-windows).
-- **Windows under a fullscreen window keep drawing.** Manganese keeps their
-  boxes so the fullscreen window can animate back to its own.
-- **Browser window context menus have Chrome's core items only.** No
-  spelling suggestions and no items a page or extension adds. DevTools' own
-  menus get the page menu. Each needs a field on `WebViewContextMenu` in
-  `web_view_guest.mojom`.
+- **Windows under a fullscreen window keep drawing,** so manganese can animate
+  the fullscreen window back to its box.
+- **Browser window context menus have only Chrome's core items.** No spelling
+  suggestions, page or extension items.
 - **Client-drawn cursor surfaces show a plain arrow.**
-- **The engine's `frame` callback is never called.** The engine asks viz for no
-  BeginFrames ([ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#the-c-abi)),
-  and the compositor ignores `Event::Frame`. Removing the field moves the
+- **The engine's `frame` callback is never called.** Removing it moves the
   callbacks after it, so `domicile_engine.h` and `engine.rs` change together.
-- **Unknown: whether viz hit testing must agree with Domicile's.** Domicile
-  routes input itself from the box the page reports. If viz's hit-test data
-  disagrees, the engine may swallow events.
+- **Unknown: whether viz hit testing must agree with Domicile's.**
   [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#open-questions).
 
 ### Displays
 
-- **A client without `wp_fractional_scale_v1` draws at `wl_output.scale`,
-  rounded up.** Intended: a client rendered at 2× and downscaled is sharper
-  than one at 1× and stretched. Clients with it get the exact scale.
-- **A monitor profile can require a mode but not set it.** `mode = [3840,
-  2160]` on a placement names the mode the positions assume. A monitor that
-  comes up in another mode leaves the desktop unchanged and logs both modes.
-  Without `mode`, the monitor's native mode is used. Setting a mode needs a
-  field on `DomicileDisplayLayout` and a mode lookup in
-  `ModesetParamsFromSnapshots`, which uses `native_mode()` today. That is fork
-  work. Refresh rate is the same item.
-  [A-DESKTOP-ON-A-TTY.md](docs/architecture/A-DESKTOP-ON-A-TTY.md).
-- **A monitor with no make, model or serial is named `drm-<id>`.** Other
-  monitors get names like `Dell Inc. DELL U3219Q 2ZLS413` from hwdata's
-  `pnp.ids`, and a profile can match that or the EDID's `DEL …`.
-- **A non-panel `wl_output` reports zero physical size and refresh.** That is
-  what `wl_output` specifies for unknown values. On a tty they come from the
-  panel's `DisplaySnapshot`.
-- **Engine popups are kept inside their window, not their CRTC.** A
-  `<select>`, context menu or extension popup is its own widget (patch 0051).
-  Plan: open it on the display under the anchor, kept inside that CRTC.
-- **Filter quality on lower-density displays is unmeasured.** The desk draws
-  once for all displays. If a blurred bar or shadow looks soft on the
-  lower-density one, the fix is a render pass per display.
-- **The desk rasters what no monitor shows.** The high-res tiling covers the
-  gaps between monitors, and a display tiling the bounds of its monitors.
+- **A monitor profile can require a mode but not set it.** Same for refresh
+  rate. [A-DESKTOP-ON-A-TTY.md](docs/architecture/A-DESKTOP-ON-A-TTY.md).
+- **A monitor with no make, model or serial is named `drm-<id>`.**
+- **Engine popups are kept inside their window, not their CRTC.**
+- **Filter quality on lower-density displays is unmeasured.**
+- **The desk rasters what no monitor shows.**
   [DISPLAY-TILINGS.md](docs/architecture/DISPLAY-TILINGS.md#cost).
-- **No guard runs two CRTCs.** Headless has one screen. gtests cover the
-  logic, and [Several monitors](docs/HARDWARE-CHECKS.md#several-monitors) the
-  rest. [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md#open-questions).
+- **No guard runs two CRTCs.**
+  [Several monitors](docs/HARDWARE-CHECKS.md#several-monitors).
 
 ### Browser windows
 
-- **Browser windows draw no dialogs.** A `<webview>` guest's
-  `WebContentsDelegate` gives the default answer: `alert`, `confirm` and
-  `prompt` show nothing and return at once. `window.open` is the exception:
-  the engine opens a browser window at the address. But `window.open` returns
-  `null`, the opener and target name are dropped, and a form POST to a new
-  target arrives as a GET.
-- **Some permission requests are refused.** The shell answers camera,
-  microphone, location, notifications, clipboard and MIDI (patch 0103).
-  Other requests are ignored, and screen capture (`getDisplayMedia`) is
-  refused.
-- **Some file dialogs are refused.** Every file dialog goes to the shell
-  (`domicile-file-chooser`): file inputs, downloads, File System Access pickers
-  and the PDF viewer's save (patch 0086). Not covered:
-  - Dialogs from the shell's own page (not in a `<webview>`) are refused.
-  - A directory dropped on a page (`EnumerateDirectory`) is refused.
-  - Download progress is not reported.
-- **No settings page.** Browser windows block every `chrome://` page (patch
-  0083), so nothing can clear cookies and site data. Site permissions are set
-  from the address bar and the Settings app ([SETTINGS.md](docs/SETTINGS.md)).
-  Printing is also blocked: `window.print()` opens `chrome://print`.
-- **Some extension calls are refused.** `tabs.move`, `group`, `ungroup`,
-  `discard`, `duplicate` and splits; `tabs.update`'s `pinned`, `openerTabId`
-  and `autoDiscardable`; `windows.update` bounds and state; and any
-  `windows.create` but a one-`url` popup fail with `not supported on a
-  Domicile desk`. [EXTENSIONS.md](docs/architecture/EXTENSIONS.md).
-- **Private data lasts until the engine exits.** Every private page shares
-  the profile's one off-the-record profile, which is never destroyed while
-  the engine runs. Chrome drops it when the last private window closes.
+- **No dialogs.** `alert`, `confirm` and `prompt` show nothing.
+  `window.open` returns `null` and drops the opener and target name; a form
+  POST to a new target arrives as a GET.
+- **Some permission requests are refused,** including `getDisplayMedia`.
+- **Some file dialogs are refused:** from the shell's own page, and a
+  directory dropped on a page. Download progress isn't reported.
+- **No `chrome://` pages,** so no cookie clearing and no printing.
+- **Some extension calls are refused.**
+  [EXTENSIONS.md](docs/architecture/EXTENSIONS.md).
+- **Private data lasts until the engine exits.**
   [SHELL-BROWSER-WINDOWS.md](docs/SHELL-BROWSER-WINDOWS.md#private-browsing).
-- **Resize cost is unmeasured.** A resized `<app>` or `<webview>` holds the
-  shell's frame until it draws at the new size
-  ([ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#embed-deadlines)). No
-  guard times a resize of either.
-- **A browser window attached while hidden is visible for a moment.**
-  `WebViewGuest::AttachWindowTo` shows the page before the element's frame
-  reports `display: none`, so the page sees `visibilitychange` twice. The
-  browser learns whether a `<webview>` is rendered only from the frame the
-  attach creates. `guard-webview-hidden.sh` checks the state it settles in.
-- **The padlock state is not fully tested.** `PageChanged` carries the address
-  and `security_state::GetSecurityLevel` for the visible entry, the same source
-  as Chrome's omnibox. The fixture serves plain http from localhost, so the
-  guard only checks that a level arrives. Testing expired certificates,
-  name mismatches and mixed content needs an https fixture with an untrusted
-  cert. Until then, `dangerous` is untested.
+- **A browser window attached while hidden is visible for a moment,** so the
+  page sees `visibilitychange` twice (`WebViewGuest::AttachWindowTo`).
+- **Resize cost is unmeasured.**
+  [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#embed-deadlines).
+- **The padlock's `dangerous` state is untested.** Needs an https fixture with
+  an untrusted cert.
 
 ### Clipboard
 
-- **A nested desktop's browser uses the host's clipboard.** On a tty, the
-  browser's drm platform (`ui/ozone/platform/drm/domicile/`) uses the
-  compositor's clipboard. Nested, the browser uses Wayland ozone, which uses
-  the host session's clipboard, so a copy in a terminal does not reach a tab.
-  Fix: implement the same clipboard `OzonePlatform` entry points on the
-  Wayland platform.
-- **Only text crosses to the browser.** The engine ABI carries a string. An
-  image copied in a page gives other windows no text to paste, and an image
-  copied in a terminal does not reach a tab. Supporting it needs bytes and a
-  mime type in the ABI.
-- **Clipboard history stores text only.** Selections that offer only an image
-  or a file list are not recorded. The primary (middle-click) selection is not
-  in the history, because it changes on every drag-select. It still works
-  between clients: `zwp_primary_selection_device_manager_v1` is advertised,
-  and `packages/domicile-compositor/tests/selection.rs` tests it.
+- **A nested desktop's browser uses the host's clipboard.**
+- **Only text crosses to the browser.**
+- **Clipboard history stores text only,** and not the primary selection.
 
 ### Theme
 
-- **A theme picked from the toggle lasts only until restart.** `theme.mode` is
-  the startup value. The config file is generated (by a shell, or by
-  home-manager on NixOS), so the desktop does not write to it. Persisting the
-  choice needs a separate store for desktop state (item 8).
+- **A theme picked from the toggle lasts only until restart.** Needs the
+  desktop-state store (repository item 8).
 
 ### Session and portals
 
-- **The session portal setup is only checked at evaluation.** A desktop that
-  is the session tells the user manager and starts `domicile-session.target`
-  (`domicile_launch::graphical_session`), which binds
-  `graphical-session.target` so the portal can start. Links from sandboxed
-  (Flatpak) apps reach the desktop through `domicile-mimeapps.list` and
-  `DOMICILE_SOCK`. Not covered:
-  - Nothing here runs a user manager.
-  - A desktop that exits uncleanly leaves its environment variables until the
-    next one replaces them.
-  - A nested desktop does not register, so the host session keeps its portal.
-- **The settings portal answers little of `org.gnome.desktop.interface`.**
-  It serves `icon-theme` when `theme.icon_theme` is set. Desktop backends often
-  also serve font and cursor theme there; Domicile has no values for those. An
-  unanswered key falls through to the next backend, which is correct, so
-  `nix/domicile.portal` lists only what Domicile implements.
-
-- **Wayland capture copies monitors only, into shm, one shot per frame.**
-  No toplevel sources, no cursor sessions and no dmabuf buffers. Each frame
-  starts and stops the display captures, so `wf-recorder` records slowly.
-  A session could keep them running ([PORTALS.md](docs/PORTALS.md)).
+- **The session portal setup is only checked at evaluation.** Nothing here
+  runs a user manager, an unclean exit leaves stale environment variables,
+  and a nested desktop doesn't register.
+- **The settings portal answers only `icon-theme`** of
+  `org.gnome.desktop.interface`.
+- **Wayland capture is monitors only, into shm, one shot per frame.** No
+  toplevel sources, cursor sessions or dmabufs; `wf-recorder` is slow.
+  [PORTALS.md](docs/PORTALS.md).
 
 ### System tray
 
-- **Left click never opens a dbusmenu.** Manganese opens an item's menu on
-  right click and sends `Activate` on left click. Items that set `ItemIsMenu`
-  expect left click to open the menu, but `TrayItem` does not carry it; adding
-  it changes the protocol, the compositor and the engine's IDL.
+- **Left click never opens a dbusmenu,** for items that set `ItemIsMenu`.
 
 ### Shell reload
 
-- **Hot-swapping the shell reloads the page.** `domicile load-shell` triggers
-  it, and `announce_open_apps` re-sends the desktop state to the new page. A
-  shell loses any state kept in its page. App windows survive because the
-  compositor is not involved. Browser windows survive because the engine owns
-  their pages.
+- **Hot-swapping the shell reloads the page,** so a shell loses state kept in
+  its page.
 
 ### Engine CI
 
-- **Engine CI is one machine.** `crux` has one compile slot. Engine pull
-  requests queue for it. A cold release build takes ~4h30m (#604). The latency
-  guard can wait up to 10h for a quiet machine. See
-  [BUILD-MACHINE.md](packages/domicile-engine/docs/BUILD-MACHINE.md) and
-  [RELEASES.md](packages/domicile-engine/docs/RELEASES.md).
-
----
-
-Working in this repository: [AGENTS.md](AGENTS.md) has the rules, and
-[docs/DEVELOPING.md](docs/DEVELOPING.md) covers running, testing and
-debugging.
+- **Engine CI is one machine.** `crux` has one compile slot; a cold release
+  build takes ~4h30m (#604).
+  [BUILD-MACHINE.md](packages/domicile-engine/docs/BUILD-MACHINE.md).
