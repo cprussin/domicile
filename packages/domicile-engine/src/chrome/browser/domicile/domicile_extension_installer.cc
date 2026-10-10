@@ -7,6 +7,7 @@
 #include <set>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -14,6 +15,7 @@
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/one_shot_event.h"
+#include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
@@ -48,6 +50,28 @@ void Remember(PrefService& pref_service, const std::string& id) {
   if (!added->contains(id)) {
     added->Append(id);
   }
+}
+
+// Chromium disables unpacked extensions without developer mode
+// (`ExtensionManagement::IsAllowedByUnpackedDeveloperModePolicy`), and a desk
+// has no chrome://extensions to enable it. Never turned off, since the user
+// may have set it.
+void AllowUnpacked(PrefService& pref_service) {
+  pref_service.SetBoolean(prefs::kExtensionsUIDeveloperMode, true);
+}
+
+void OnLoadedForSettings(
+    base::OnceCallback<void(base::expected<std::string, std::string>)> loaded,
+    const extensions::Extension* extension,
+    const base::FilePath& directory,
+    const std::u16string& error) {
+  if (!extension) {
+    std::move(loaded).Run(base::unexpected(
+        base::StrCat({directory.value(), " did not load: ",
+                      base::UTF16ToUTF8(error)})));
+    return;
+  }
+  std::move(loaded).Run(base::ok(extension->id()));
 }
 
 // Resolves unpacked directories the way `UnpackedInstaller` does, so they
@@ -149,12 +173,8 @@ void Reconcile(base::WeakPtr<Profile> profile, const ExtensionList& wanted) {
         ->CheckForUpdatesSoon();
   }
 
-  // Chromium disables unpacked extensions without developer mode
-  // (`ExtensionManagement::IsAllowedByUnpackedDeveloperModePolicy`), and a
-  // desk has no chrome://extensions to enable it. Never turned off, since the
-  // user may have set it.
   if (!changes.load_unpacked.empty()) {
-    pref_service.SetBoolean(prefs::kExtensionsUIDeveloperMode, true);
+    AllowUnpacked(pref_service);
   }
   for (const std::string& directory : changes.load_unpacked) {
     scoped_refptr<extensions::UnpackedInstaller> installer =
@@ -181,6 +201,51 @@ void ReconcileWhenReady(base::WeakPtr<Profile> profile, ExtensionList wanted) {
 }
 
 }  // namespace
+
+void LoadUnpackedInto(
+    Profile& profile,
+    const base::FilePath& directory,
+    base::OnceCallback<void(base::expected<std::string, std::string>)> loaded) {
+  AllowUnpacked(*profile.GetPrefs());
+  scoped_refptr<extensions::UnpackedInstaller> installer =
+      extensions::UnpackedInstaller::Create(&profile);
+  // A desk has no window for an error dialog; the Settings app shows the
+  // error.
+  installer->set_be_noisy_on_failure(false);
+  installer->set_completion_callback(
+      base::BindOnce(&OnLoadedForSettings, std::move(loaded)));
+  installer->Load(directory);
+}
+
+base::expected<void, std::string> UninstallFrom(Profile& profile,
+                                                const std::string& id) {
+  for (const base::Value& added : profile.GetPrefs()->GetList(kAddedPref)) {
+    if (added.GetString() == id) {
+      return base::unexpected(
+          "the desk's config installs this extension, so it uninstalls only "
+          "when the config's extensions no longer list it");
+    }
+  }
+  if (extensions::ExtensionRegistry::Get(&profile)->GetInstalledExtension(
+          id) == nullptr) {
+    return base::unexpected(
+        base::StrCat({"no extension ", id, " is installed"}));
+  }
+  std::u16string error;
+  if (!extensions::ExtensionRegistrar::Get(&profile)->UninstallExtension(
+          id, extensions::UNINSTALL_REASON_USER_INITIATED, &error)) {
+    return base::unexpected(base::UTF16ToUTF8(error));
+  }
+  return base::ok();
+}
+
+std::vector<std::string> ConfigExtensionsOf(Profile& profile) {
+  std::vector<std::string> ids;
+  for (const base::Value& id : profile.GetPrefs()->GetList(kAddedPref)) {
+    ids.push_back(id.GetString());
+  }
+  return ids;
+}
 
 void RegisterExtensionInstallerPrefs(PrefRegistrySimple* registry) {
   registry->RegisterListPref(kAddedPref);

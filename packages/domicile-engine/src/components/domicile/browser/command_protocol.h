@@ -13,6 +13,7 @@
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
 #include "base/functional/function_ref.h"
+#include "base/types/expected.h"
 #include "components/domicile/mojom/web_view_guest.mojom-shared.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -42,8 +43,20 @@ namespace domicile {
 //   -> {"type":"set"}
 //   -> {"type":"refused","why":"..."}
 //
-// The site permissions are the Settings app's, relayed by the supervisor
-// (docs/SETTINGS.md). Names are site_permissions.h's.
+//   {"type":"load_unpacked","version":1,"directory":"/home/me/src/x"}
+//   -> {"type":"loaded_unpacked","id":"..."}
+//   -> {"type":"refused","why":"..."}
+//
+//   {"type":"uninstall_extension","version":1,"id":"..."}
+//   -> {"type":"uninstalled"}
+//   -> {"type":"refused","why":"..."}
+//
+//   {"type":"config_extensions","version":1}
+//   -> {"type":"config_extensions","ids":["..."]}
+//   -> {"type":"refused","why":"..."}
+//
+// The site permissions and extensions are the Settings app's, relayed by the
+// supervisor (docs/SETTINGS.md). Names are site_permissions.h's.
 //
 // This file only parses and answers lines; the actions are injected so it can
 // be tested with strings. chrome/browser/domicile/domicile_command_socket.cc
@@ -100,19 +113,45 @@ using SetSitePermission =
                            mojom::WebViewPermission permission,
                            mojom::WebViewPermissionSetting setting)>;
 
+// Runs once with the id of the extension `load_unpacked` loaded, or the
+// reason it did not load.
+using UnpackedLoaded =
+    base::OnceCallback<void(base::expected<std::string, std::string>)>;
+
+// Carries out `load_unpacked`: loads the extension in `directory` into the
+// shell's profile, where it stays until uninstalled. Runs `loaded` once,
+// possibly after returning.
+using LoadUnpacked =
+    base::FunctionRef<void(const base::FilePath& directory,
+                           UnpackedLoaded loaded)>;
+
+// Carries out `uninstall_extension`, or says why it did not.
+using UninstallExtension =
+    base::FunctionRef<base::expected<void, std::string>(const std::string& id)>;
+
+// Carries out `config_extensions`: the ids the desk's config installed, which
+// only the config uninstalls. Returns nothing if there is no shell, and so no
+// profile to read.
+using ListConfigExtensions =
+    base::FunctionRef<std::optional<std::vector<std::string>>()>;
+
 // What each command does, injected so this file can be tested with strings.
 struct CommandActions {
   LoadShell load_shell;
   OpenUrl open_url;
   ListSitePermissions list_site_permissions;
   SetSitePermission set_site_permission;
+  LoadUnpacked load_unpacked;
+  UninstallExtension uninstall_extension;
+  ListConfigExtensions list_config_extensions;
 };
 
 // Receives the reply line, including its trailing newline.
 using CommandReply = base::OnceCallback<void(std::string)>;
 
-// Answers one request line (without its newline). `reply` runs once, before
-// this returns.
+// Answers one request line (without its newline). `reply` runs once: before
+// this returns, except for `load_unpacked`, which answers once the extension
+// has loaded.
 void AnswerCommand(std::string_view line,
                    const CommandActions& actions,
                    CommandReply reply);
