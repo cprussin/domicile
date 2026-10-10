@@ -93,6 +93,7 @@ stale state.
 | `url`, `security` | `domicile-page-change` | The address the page is at, and its connection security |
 | `zoom` | `domicile-zoom-change` | Zoom factor; 1 is 100% |
 | `favicon` | `domicile-favicon-change` | Icon URL, or `""` |
+| `targetUrl` | `domicile-target-url-change` | The link under the pointer, or `""`. The engine draws no status bubble; manganese's is `browser/LinkTarget.tsx` |
 | `findMatches`, `findActiveMatch` | `domicile-find-change` | Find-in-page results |
 | `contentWidth`, `contentHeight` | `domicile-content-size-change` | Page content size (for popups) |
 
