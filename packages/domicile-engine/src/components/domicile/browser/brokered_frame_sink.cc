@@ -128,11 +128,6 @@ void BrokeredFrameSink::Embed(const viz::FrameSinkId& parent_frame_sink_id,
   local_surface_id_ = local_surface_id;
   size_ = size;
 
-  // A producer holding its own sink calls SetNeedsBeginFrame itself.
-  if (sink_) {
-    sink_->SetNeedsBeginFrame(true);
-  }
-
   if (observer_) {
     observer_->OnSurfaceEmbedded(local_surface_id, size, scale);
   }
@@ -281,9 +276,11 @@ void BrokeredFrameSink::OnBeginFrame(
     const viz::FrameTimingDetailsMap& timing_details,
     std::vector<viz::ReturnedResource> resources) {
   ReleaseReturnedResources(resources);
-  if (observer_) {
-    observer_->OnFrame(args.deadline.since_origin().InMicroseconds());
-  }
+  // Frames follow the client's commits, so this sink never asks for
+  // BeginFrames. Viz still sends one to deliver a frame's presentation timing.
+  // Viz then expects damage from this surface (SurfaceDamageExpected), so an
+  // unanswered one makes the display wait for this window until the deadline.
+  sink_->DidNotProduceFrame(viz::BeginFrameAck(args, /*has_damage=*/false));
 }
 
 void BrokeredFrameSink::ReclaimResources(

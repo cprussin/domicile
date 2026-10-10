@@ -95,8 +95,7 @@ class SurfaceProducer : public viz::mojom::CompositorFrameSinkClient,
                          const gfx::Size& size,
                          double scale) override;
   // Sent only to producers whose sink the browser owns. This one holds its
-  // own sink and gets BeginFrames from viz, so these are no-ops.
-  void OnFrame(int64_t deadline_us) override;
+  // own sink, so it is a no-op.
   void OnBufferReleased(uint64_t buffer_id) override;
 
   // viz::mojom::CompositorFrameSinkClient:
