@@ -57,11 +57,13 @@ can animate the switch:
    sets `windowsTheme` and fires `windowsthemechanged`.
 4. If no shell calls it, windows switch after about a second.
 
-Browser windows change behind the wipe. Wayland windows change before it
-([ROADMAP.md](../ROADMAP.md#theme)).
+In a view transition, call `themeCaptured` once `transition.ready` resolves,
+and pause the animation until `windowsthemechanged`. Calling it from the
+update callback is too early:
 
-In a view transition, call `themeCaptured` inside the update callback and
-return a promise that resolves on `windowsthemechanged`.
+- The engine runs the update callback before it has drawn the capture.
+- Until `ready`, the screen shows the live page, and an `<app>` in it turns at
+  once.
 
 `ThemeProvider` in `@domicile-desktop/component-library` runs the view
 transition. Implement its `ThemeSource.turnWindows` to call

@@ -140,24 +140,40 @@ describe(ThemeProvider, () => {
 
   describe("with a wipe", () => {
     // A stand-in for happy-dom's missing `startViewTransition`. It runs the
-    // update at once and keeps its promise.
-    const held: { update?: Promise<unknown> | undefined } = {};
+    // update at once, and the test settles `ready` and `finished`.
+    const wipe: {
+      start?: ((ready: boolean) => void) | undefined;
+      end?: (() => void) | undefined;
+    } = {};
     beforeEach(() => {
       Object.assign(document, {
-        startViewTransition: (update: () => Promise<unknown>) => {
-          held.update = update();
-          return { finished: held.update };
+        startViewTransition: (update: () => void) => {
+          update();
+          return {
+            finished: new Promise<void>((resolve) => {
+              wipe.end = resolve;
+            }),
+            ready: new Promise<void>((resolve, reject) => {
+              wipe.start = (ready) => {
+                if (ready) {
+                  resolve();
+                } else {
+                  reject(new Error("skipped"));
+                }
+              };
+            }),
+          };
         },
       });
     });
     afterEach(() => {
       Reflect.deleteProperty(document, "startViewTransition");
-      held.update = undefined;
+      wipe.start = undefined;
+      wipe.end = undefined;
     });
 
-    it("turns the windows inside it, and holds the old frame until they have", async () => {
-      // The old frame is captured before the update, so windows must repaint
-      // before the wipe starts. The update's promise waits for them.
+    /** Renders a provider whose windows turn when the test says so. */
+    const renderTurning = () => {
       const turning: { theme?: string; done?: () => void } = {};
       const source = {
         ...standaloneThemeSource("dark"),
@@ -172,26 +188,59 @@ describe(ThemeProvider, () => {
           <Probe />
         </ThemeProvider>,
       );
+      return turning;
+    };
+
+    const isHeld = () =>
+      document.documentElement.hasAttribute("data-theme-holding");
+
+    it("turns the windows once the old frame is on screen, and holds the wipe until they have", async () => {
+      // Windows are drawn live until the transition is ready: an `<app>` in
+      // the old frame would turn on screen, and the capture may not have run.
+      const turning = renderTurning();
 
       await userEvent.click(screen.getByTestId("theme"));
+      await waitFor(() => {
+        expect(wipe.start).toBeDefined();
+      });
+      // The page itself turned in the update.
+      expect(isLight()).toBe(true);
+      expect(turning.theme).toBeUndefined();
+
+      wipe.start?.(true);
+      await waitFor(() => {
+        expect(turning.theme).toBe("light");
+      });
+      expect(isHeld()).toBe(true);
+
+      turning.done?.();
+      await waitFor(() => {
+        expect(isHeld()).toBe(false);
+      });
+
+      // Ending the wipe commits state, so `act`.
+      await act(async () => {
+        wipe.end?.();
+        await Promise.resolve();
+      });
+    });
+
+    it("turns the windows when the wipe is skipped", async () => {
+      const turning = renderTurning();
+
+      await userEvent.click(screen.getByTestId("theme"));
+      await waitFor(() => {
+        expect(wipe.start).toBeDefined();
+      });
+      wipe.start?.(false);
 
       await waitFor(() => {
         expect(turning.theme).toBe("light");
       });
-      // The page itself turned in the same update, ahead of the windows.
-      expect(isLight()).toBe(true);
-      const update = held.update ?? Promise.reject(new Error("no wipe ran"));
-      expect(
-        await Promise.race([
-          update.then(() => "wiped"),
-          Promise.resolve("held"),
-        ]),
-      ).toBe("held");
-
-      // Finishing the windows ends the wipe, which commits state, so `act`.
+      turning.done?.();
       await act(async () => {
-        turning.done?.();
-        await update;
+        wipe.end?.();
+        await Promise.resolve();
       });
     });
   });

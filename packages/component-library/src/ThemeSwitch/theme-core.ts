@@ -27,6 +27,9 @@ export const DEFAULT_THEME: Theme = "dark";
 /** What the preset's `_light` condition selects on. */
 const THEME_ATTRIBUTE = "data-theme";
 
+/** What the preset pauses the wipe on while windows turn. */
+const HOLDING_ATTRIBUTE = "data-theme-holding";
+
 /**
  * Applies a theme to `<html>` so the tokens resolve to it.
  *
@@ -58,7 +61,7 @@ export type FlipThemeOptions = {
    */
   applyNextTheme: () => void;
   /**
-   * Repaints the other windows after the wipe's start frame is captured. See
+   * Repaints the other windows once the wipe's start frame is on screen. See
    * {@link ThemeSource.turnWindows}.
    */
   turnWindows: () => Promise<void>;
@@ -114,12 +117,23 @@ export const flipThemeWithAnimation = ({
       // `data-theme-flip-to` sets the wipe direction.
       root.setAttribute("data-theme-flipping", "");
       root.setAttribute("data-theme-flip-to", next);
-      // The old frame is captured before this runs, and the wipe waits for
-      // it to settle, so the windows repaint behind the old frame.
-      const transition = document.startViewTransition(() => {
-        applyNextTheme();
-        return turnWindows();
-      });
+      // `data-theme-holding` pauses the wipe at its start, so only the old
+      // frame shows.
+      root.setAttribute(HOLDING_ATTRIBUTE, "");
+      const transition = document.startViewTransition(applyNextTheme);
+      // Turn the windows once the old frame is on screen. Until `ready`, the
+      // screen shows the page's live frame, with `<app>` windows in it, and
+      // the update callback runs before the capture has been drawn.
+      const turnWindowsBehindWipe = () =>
+        turnWindows().finally(() => {
+          root.removeAttribute(HOLDING_ATTRIBUTE);
+        });
+      transition.ready
+        .then(turnWindowsBehindWipe, turnWindowsBehindWipe)
+        .catch((error: unknown) => {
+          // biome-ignore lint/suspicious/noConsole: surfacing a failed turnover
+          console.error("Failed to turn the desk's windows", error);
+        });
       const cleanup = () => {
         root.removeAttribute("data-theme-flipping");
         root.removeAttribute("data-theme-flip-to");

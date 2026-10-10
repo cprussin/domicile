@@ -384,15 +384,6 @@ Understood and not scheduled.
   the startup value. The config file is generated (by a shell, or by
   home-manager on NixOS), so the desktop does not write to it. Persisting the
   choice needs a separate store for desktop state (item 8).
-- **A Wayland window changes theme before the wipe reaches it.** An `<app>`
-  is not frozen in the view transition's old frame; a `<webview>` is. Seen on
-  a tty with gnome-calculator: the shell changed behind the wipe, the window
-  at once. The compositor signals clients only after every chrome calls
-  `themeCaptured` (`domicile_host::theme_turnover`), and manganese calls it
-  from the transition's update callback, after the capture. So the client
-  redraws after the capture, and the old frame shows the `<app>`'s live
-  `SurfaceLayer`. The fix is likely in the engine's view-transition capture
-  of that layer ([WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md)).
 
 ### Session and portals
 

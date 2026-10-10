@@ -69,6 +69,11 @@ export const domicilePreset = definePreset({
     "html[data-theme-flip-to='light']::view-transition-new(root)": {
       animationName: "themeSwipeFromBottom",
     },
+    // Held at the start, so only the old frame shows, while windows repaint
+    // behind it (`flipThemeWithAnimation`).
+    "html[data-theme-holding]::view-transition-new(root)": {
+      animationPlayState: "paused",
+    },
     // Disable element transitions during a theme change. Otherwise they are
     // mid-flight when the new snapshot is captured, so the snapshot shows the
     // old colors and the elements snap at the end. `!important` beats more

@@ -34,9 +34,9 @@ export type ThemeSource = {
   /**
    * Repaints the other windows in `theme` and settles once they have.
    *
-   * {@link flipThemeWithAnimation} calls this after capturing the wipe's start
-   * frame and holds that frame until it settles. Otherwise windows would
-   * change before or during the wipe.
+   * {@link flipThemeWithAnimation} calls this once the wipe's start frame is
+   * on screen and holds the wipe at its start until it settles. Otherwise
+   * windows would change before or during the wipe.
    */
   turnWindows: (theme: Theme) => Promise<void>;
 };
