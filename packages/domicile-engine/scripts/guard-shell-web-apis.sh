@@ -5,8 +5,8 @@
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-shell-web-apis.sh /build/chromium/src
 #
-# Patch 0068 allows notifications for the profile, and patch 0066 classes the
-# shell as loopback.
+# Patch 0105 allows notifications for `domicile://shell`, and patch 0066 classes
+# the shell as loopback.
 #
 # Headless and software-composited, like guard-webview-notifications.sh, which
 # tests where notifications go.
@@ -178,7 +178,7 @@ answer another origin shares, so a bar item can notify and call a web API"
   ;;
 "granted 1")
   FAILURE="the shell drew but its box did not: notifications are not granted \
-to the shell's origin (patch 0068), or the fetch of /cors was refused -- the \
+to the shell's origin (patch 0105), or the fetch of /cors was refused -- the \
 engine log's GUARD line says which, and the server's log whether it was asked"
   ;;
 "granted 2")
