@@ -183,11 +183,11 @@ export const movingStyles = cva({
       concealing: {
         animation: "windowConcealing {durations.fast} {easings.in-out}",
       },
-      // The scratchpad's slides take `slowest` and avoid front-loaded curves,
-      // so a slide of up to a screen's height is seen: `out` settles the
-      // window into place, and `in` starts its exit where it can be seen.
+      // The scratchpad's slides avoid front-loaded curves, so a slide of up
+      // to a screen's height is seen: `out` settles the window into place,
+      // and `in` starts its exit where it can be seen.
       dropping: {
-        animation: "windowDropping {durations.slowest} {easings.out}",
+        animation: "windowDropping {durations.slow} {easings.out}",
       },
       "leaving-to-end": {
         animation:
@@ -225,15 +225,14 @@ export const movingStyles = cva({
       // leaving rather than vanishing. It draws over the windows moving into
       // its space, so it need not keep pace with them.
       sending: {
-        animation:
-          "windowSending {durations.slowest} {easings.in-out} forwards",
+        animation: "windowSending {durations.slow} {easings.in-out} forwards",
       },
       // A tab leaves its strip as it does when closed.
       "sending-tab": {
         animation: "windowClosingTab {durations.fast} {easings.out} forwards",
       },
       stowing: {
-        animation: "windowStowing {durations.slowest} {easings.in} forwards",
+        animation: "windowStowing {durations.slow} {easings.in} forwards",
       },
       // Lasts as long as `closing-tab`, which it is drawn under.
       uncovering: {
