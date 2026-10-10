@@ -1,6 +1,6 @@
 import { Popover } from "@domicile-desktop/component-library/Popover";
-import { SunIcon } from "@phosphor-icons/react/dist/ssr/Sun";
-import { SunDimIcon } from "@phosphor-icons/react/dist/ssr/SunDim";
+import { LightbulbIcon } from "@phosphor-icons/react/dist/ssr/Lightbulb";
+import { LightbulbFilamentIcon } from "@phosphor-icons/react/dist/ssr/LightbulbFilament";
 import type { WheelEvent } from "react";
 
 import { css } from "../../styled-system/css";
@@ -17,7 +17,7 @@ type Props = {
 };
 
 /**
- * The brightness control on the bar: a sun icon that reflects the level,
+ * The brightness control on the bar: a light bulb icon that reflects the level,
  * opens a slider, and responds to the wheel. See {@link useBrightness}.
  */
 export const Brightness = ({ backlight }: Props) => {
@@ -42,7 +42,7 @@ export const Brightness = ({ backlight }: Props) => {
             }}
             type="button"
           >
-            <Sun level={control.shown} />
+            <Bulb level={control.shown} />
           </button>
         }
       >
@@ -80,7 +80,7 @@ const panelStyles = css({
   inlineSize: 60,
 });
 
-/** The sun icon's three brightness steps. */
+/** The bulb icon's three brightness steps. */
 type Intensity = "dim" | "half" | "full";
 
 const intensityOf = (level: number): Intensity => {
@@ -93,15 +93,15 @@ const intensityOf = (level: number): Intensity => {
   }
 };
 
-/** A sun whose style follows the level: dotted, rayed, then filled. */
-const Sun = ({ level }: { level: number }) => {
+/** A bulb whose style follows the level: empty, lit filament, then filled. */
+const Bulb = ({ level }: { level: number }) => {
   switch (intensityOf(level)) {
     case "dim":
-      return <SunDimIcon size={15} weight="bold" />;
+      return <LightbulbIcon size={15} weight="bold" />;
     case "half":
-      return <SunIcon size={15} weight="bold" />;
+      return <LightbulbFilamentIcon size={15} weight="bold" />;
     case "full":
-      return <SunIcon size={15} weight="fill" />;
+      return <LightbulbIcon size={15} weight="fill" />;
   }
 };
 
