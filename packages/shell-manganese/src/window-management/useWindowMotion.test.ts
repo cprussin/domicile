@@ -238,6 +238,27 @@ describe("useWindowMotion", () => {
       });
     });
 
+    // It slides off whole, so it lifts by the whole window, not its tab.
+    it("slides a tab sent to it up with its contents", () => {
+      const tab = (placement: Placement): Placement => ({
+        ...placement,
+        tabbed: Layout.Tabbed,
+      });
+      const { rerender, result } = showing({
+        ...desktop("1", [TERMINAL, EDITOR]),
+        placements: [TERMINAL, EDITOR].map(({ id }) => tab(placementOf(id))),
+      });
+
+      act(() => {
+        rerender({ ...stowed, placements: [tab(placementOf(TERMINAL.id))] });
+      });
+
+      expect(
+        result.current.drawn.find((drawn) => drawn.window.id === EDITOR.id)
+          ?.placement?.frame,
+      ).toEqual(placementOf(EDITOR.id).frame);
+    });
+
     it("hides the window once it has slid off", () => {
       const { rerender, result } = showing(desktop("1", [TERMINAL, EDITOR]));
       act(() => {

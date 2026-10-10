@@ -56,7 +56,12 @@ export const departed = (
     return windows.some((open) => open.id === window.id) ||
       placement === undefined
       ? []
-      : [{ ...leavingFrom(before, window, placement), at }];
+      : [
+          {
+            ...leavingFrom(before, window, placement, movesAsTab(placement)),
+            at,
+          },
+        ];
   });
 
 /**
@@ -76,7 +81,15 @@ export const sentAway = (
         const window = now.windows.find(({ id }) => id === placement.id);
         return window === undefined || placedOn(desk, placement.id)
           ? []
-          : [leavingFrom(before, window, placement)];
+          : [
+              leavingFrom(
+                before,
+                window,
+                placement,
+                // One sent to the scratchpad slides off whole.
+                movesAsTab(placement) && !now.scratchpad.includes(window.id),
+              ),
+            ];
       })
     : [];
 
@@ -111,11 +124,15 @@ export const withClosing = (
       windows,
     );
 
-/** The snapshot of `window`, last drawn at `placement`, as it leaves. */
+/**
+ * The snapshot of `window`, last drawn at `placement`, as it leaves. A tab that
+ * `collapses` along its strip turns about the tab, not the window.
+ */
 const leavingFrom = (
   before: Shown,
   window: ShellWindow,
   placement: Placement,
+  collapses: boolean,
 ): Leaving => ({
   focused: before.activeId === window.id,
   placement: {
@@ -124,8 +141,7 @@ const leavingFrom = (
     // window.
     behind: undefined,
     depth: LEAVING,
-    // A tab collapses about its own middle, not the window's.
-    frame: movesAsTab(placement) ? placement.bar : placement.frame,
+    frame: collapses ? placement.bar : placement.frame,
   },
   window,
 });
