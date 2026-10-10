@@ -1,4 +1,11 @@
+import { Button } from "@domicile-desktop/component-library/Button";
+import { BrowsersIcon } from "@phosphor-icons/react/dist/ssr/Browsers";
+import { CornersInIcon } from "@phosphor-icons/react/dist/ssr/CornersIn";
+import { CornersOutIcon } from "@phosphor-icons/react/dist/ssr/CornersOut";
+import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour";
+
 import { css, cx } from "../../styled-system/css";
+import { hstack } from "../../styled-system/patterns";
 import type { Float } from "./floating/float";
 import { useFloatDrag } from "./floating/useFloatDrag";
 import { grabCursorStyles } from "./grab-cursor-styles";
@@ -17,12 +24,21 @@ type Props = {
   depth: number;
   /** The float holding the group, or `undefined` while it is tiled. */
   float: Float | undefined;
+  /**
+   * Whether the group fills the screen, which switches its button to
+   * "Restore" and keeps the group from being dragged.
+   */
+  fullscreen: boolean;
   group: StripGroup;
   /** Where the dragged group would land if dropped now. */
   onAim: (aim: Aim | undefined) => void;
   onDrop: () => void;
   /** A tiled group dropped where it was aimed. See `useTileDrag`. */
   onDropOn: (aim: Aim) => void;
+  /** Floats or tiles the whole group. */
+  onFloat: () => void;
+  /** Fills the screen with the whole group, or gives it back. */
+  onFullscreen: () => void;
   onGrab: () => void;
   /** A float's new top-left corner. */
   onMove: (x: number, y: number) => void;
@@ -35,7 +51,8 @@ type Props = {
 /**
  * The empty end of a tabbed strip, which drags the strip's whole group with
  * the primary button: a tiled group like a tiled window's bar, a float like
- * its bar.
+ * its bar. A fullscreen group does not drag, as a fullscreen window does not.
+ * Buttons at its end float and fullscreen the group.
  *
  * Drawn under the strip's last tab, whose end is click-through, so the
  * new-tab button over it stays on top.
@@ -43,10 +60,13 @@ type Props = {
 export const StripEnd = ({
   depth,
   float,
+  fullscreen,
   group,
   onAim,
   onDrop,
   onDropOn,
+  onFloat,
+  onFullscreen,
   onGrab,
   onMove,
   rect,
@@ -74,9 +94,7 @@ export const StripEnd = ({
   });
   const drag = float === undefined ? tileDrag : floatDrag;
   return (
-    // `aria-hidden`: the keyboard offers everything this does.
     <div
-      aria-hidden
       className={cx(
         endStyles,
         // It holds pointer capture during a drag, so its cursor shows.
@@ -88,16 +106,64 @@ export const StripEnd = ({
       // the focus handling in `AppWindow`.
       data-window={group.node.id}
       onPointerDown={(event) => {
-        if (event.button === PRIMARY_BUTTON) {
+        if (event.button === PRIMARY_BUTTON && !fullscreen) {
           drag.onPointerDown(event);
         }
       }}
       style={placedAt(rect, depth)}
-    />
+    >
+      {/*
+        A press on a button must not start a drag: drag pointer capture would
+        retarget the click to the end.
+      */}
+      <span
+        className={controlStyles}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+        }}
+      >
+        <Button
+          label={float === undefined ? "Float group" : "Tile group"}
+          onClick={onFloat}
+          size="xs"
+          variant="ghost"
+        >
+          {float === undefined ? (
+            <BrowsersIcon size={12} />
+          ) : (
+            <SquaresFourIcon size={12} />
+          )}
+        </Button>
+        <Button
+          label={fullscreen ? "Restore group" : "Maximize group"}
+          onClick={onFullscreen}
+          size="xs"
+          variant="ghost"
+        >
+          {fullscreen ? (
+            <CornersInIcon size={12} />
+          ) : (
+            <CornersOutIcon size={12} />
+          )}
+        </Button>
+      </span>
+    </div>
   );
 };
 
 const endStyles = css({ position: "absolute" });
+
+/**
+ * The group's buttons, at the strip's far end, level with the new-tab button
+ * at its start (see `newTabStyles` in `TitleBar`).
+ */
+const controlStyles = hstack({
+  gap: 0,
+  insetBlockEnd: "1px",
+  insetBlockStart: 1,
+  insetInlineEnd: 1,
+  position: "absolute",
+});
 
 /** Never called: the end only moves its group. */
 const doesNotResize = () => {

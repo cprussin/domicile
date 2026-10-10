@@ -253,6 +253,8 @@ describe("placementsOf", () => {
       WindowAction.ParentFocused(),
       WindowAction.ParentFocused(),
       WindowAction.LayoutSet(Layout.Tabbed),
+      WindowAction.ChildFocused(),
+      WindowAction.ChildFocused(),
     );
     const state = reduce(tabbed, WindowAction.FullscreenToggled(false));
 
@@ -270,6 +272,52 @@ describe("placementsOf", () => {
     );
 
     expect(placementFor(state, "editor")?.depth).toBeGreaterThan(LEAVING);
+  });
+
+  describe("a fullscreen group", () => {
+    // Kitty and the editor tabbed, the group selected and filling the screen.
+    const full = () =>
+      reduce(
+        desktop("kitty", "editor"),
+        WindowAction.ParentFocused(),
+        WindowAction.FullscreenToggled(false),
+      );
+
+    it("lays the group out over the whole screen", () => {
+      expect(placementFor(full(), "editor")).toMatchObject({
+        bar: { width: 240, x: 240, y: 0 },
+        surface: {
+          height: 1080 - TITLE_BAR + SURFACE_TUCK,
+          width: 1920,
+          x: 0,
+          y: TITLE_BAR - SURFACE_TUCK,
+        },
+      });
+    });
+
+    it("stacks every window in it, hidden tabs too, over everything", () => {
+      expect(placementFor(full(), "kitty")).toMatchObject({
+        bar: { width: 240, x: 0, y: 0 },
+        depth: placementFor(full(), "editor")?.depth,
+      });
+      expect(placementFor(full(), "editor")?.depth).toBeGreaterThan(LEAVING);
+    });
+
+    it("draws the tabs of the groups inside it over everything", () => {
+      const state = reduce(
+        desktop("kitty", "editor"),
+        WindowAction.ContainerSplit(Axis.Vertical),
+        WindowAction.AppAppeared("mail", "mail"),
+        WindowAction.ParentFocused(),
+        WindowAction.LayoutSet(Layout.Tabbed),
+        WindowAction.ParentFocused(),
+        WindowAction.FullscreenToggled(false),
+      );
+
+      expect(placementsOf(state, GEOMETRY).tabs).toMatchObject([
+        { depth: placementFor(state, "kitty")?.depth, rect: { y: 0 } },
+      ]);
+    });
   });
 
   it("fills every screen when the fullscreen is global", () => {

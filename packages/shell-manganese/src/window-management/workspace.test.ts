@@ -16,6 +16,8 @@ import {
   focusedOn,
   focusLeaves,
   focusStepped,
+  fullscreenKept,
+  fullscreenOn,
   fullscreenToggled,
   holds,
   modeToggled,
@@ -85,6 +87,26 @@ describe("closed", () => {
     const full = fullscreenToggled(tiling("a", "b"), false);
 
     expect(closed(full, "b").fullscreen).toBeUndefined();
+  });
+
+  describe("in a fullscreen group", () => {
+    const full = () => fullscreenToggled(parentFocused(grouped()), false);
+
+    it("keeps the rest of the group fullscreen", () => {
+      expect(closed(full(), "c").fullscreen).toEqual({
+        global: false,
+        id: "b",
+        up: 1,
+      });
+    });
+
+    it("keeps the group fullscreen when a window outside it closes", () => {
+      expect(closed(full(), "a").fullscreen).toEqual(full().fullscreen);
+    });
+
+    it("gives up fullscreen with the group's last window", () => {
+      expect(closed(closed(full(), "c"), "b").fullscreen).toBeUndefined();
+    });
   });
 });
 
@@ -418,14 +440,30 @@ describe("fullscreenToggled", () => {
   it("fills the screen with the window being worked in, and stops", () => {
     const full = fullscreenToggled(tiling("a", "b"), false);
 
-    expect(full.fullscreen).toEqual({ global: false, id: "b" });
+    expect(full.fullscreen).toEqual({ global: false, id: "b", up: 0 });
     expect(fullscreenToggled(full, false).fullscreen).toBeUndefined();
+  });
+
+  it("fills the screen with a `focus parent` selection, and stops", () => {
+    const full = fullscreenToggled(parentFocused(grouped()), false);
+
+    expect(full.fullscreen).toEqual({ global: false, id: "c", up: 1 });
+    expect(fullscreenToggled(full, false).fullscreen).toBeUndefined();
+  });
+
+  it("stops for the group after focus moved inside it", () => {
+    const full = fullscreenToggled(parentFocused(grouped()), false);
+
+    expect(
+      fullscreenToggled(parentFocused(reached(full, "b")), false).fullscreen,
+    ).toBeUndefined();
   });
 
   it("fills every screen when asked globally", () => {
     expect(fullscreenToggled(tiling("a"), true).fullscreen).toEqual({
       global: true,
       id: "a",
+      up: 0,
     });
   });
 
@@ -435,6 +473,33 @@ describe("fullscreenToggled", () => {
     expect(fullscreenToggled(reached(full, "a"), false).fullscreen).toEqual({
       global: false,
       id: "a",
+      up: 0,
+    });
+  });
+});
+
+describe("fullscreenKept", () => {
+  /** The group of "b" and "c", fullscreen with "c" focused in it. */
+  const full = () =>
+    childFocused(fullscreenToggled(parentFocused(grouped()), false));
+  const groupOf = (workspace: Workspace) =>
+    windowsIn(fullscreenOn(workspace)?.tiling.root ?? Node.Window("none"));
+
+  it("follows a fullscreen group through a split inside it", () => {
+    const before = full();
+    const after = fullscreenKept(
+      before,
+      containerSplit(before, Axis.Horizontal),
+    );
+
+    expect(groupOf(after)).toEqual(["b", "c"]);
+  });
+
+  it("keeps a fullscreen window as long as it is there", () => {
+    const before = fullscreenToggled(tiling("a", "b"), false);
+
+    expect(fullscreenKept(before, opened(before, "c"))).toMatchObject({
+      fullscreen: { id: "b", up: 0 },
     });
   });
 });

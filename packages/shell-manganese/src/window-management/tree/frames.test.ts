@@ -329,11 +329,12 @@ describe("framesOf", () => {
       ]);
     });
 
+    // The end holds the new-tab button and the group's buttons.
     it("shares out a crowded strip, keeping room for its end", () => {
       const crowded = strip(Layout.Tabbed, 8);
 
       expect(crowded.map(({ width }) => width)).toEqual(
-        Array.from({ length: 8 }, () => 122),
+        Array.from({ length: 8 }, () => 116),
       );
       expect(crowded.at(-1)?.strip).toEqual({
         at: 7,
@@ -342,7 +343,7 @@ describe("framesOf", () => {
         first: false,
         group: groupOf(8),
         open: false,
-        rest: 24,
+        rest: 72,
         tabs: 8,
       });
     });

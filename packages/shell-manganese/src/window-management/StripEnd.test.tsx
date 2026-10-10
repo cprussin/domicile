@@ -14,15 +14,32 @@ const OTHER = { frame: { height: 400, width: 600, x: 600, y: 0 }, id: "c" };
 
 const MIDDLE_BUTTON = 1;
 
+/** The group floating, at (100, 100). */
+const FLOAT = {
+  depth: 1,
+  height: 400,
+  root: LayoutNode.Container(Layout.Tabbed, [
+    LayoutNode.Window("a"),
+    LayoutNode.Window("b"),
+  ]),
+  scratchpad: false,
+  width: 600,
+  x: 100,
+  y: 100,
+};
+
 const nothing = () => undefined;
 
 const endProps = {
   depth: 0,
   float: undefined,
+  fullscreen: false,
   group: { node: { id: "a", up: 1 }, windows: ["a", "b"] },
   onAim: nothing,
   onDrop: nothing,
   onDropOn: nothing,
+  onFloat: nothing,
+  onFullscreen: nothing,
   onGrab: nothing,
   onMove: nothing,
   rect: END,
@@ -87,24 +104,60 @@ describe("StripEnd", () => {
     });
   });
 
+  describe("the group's buttons", () => {
+    it("float the group", async () => {
+      await new Promise<void>((resolve) => {
+        const { getByRole } = render(
+          <StripEnd {...endProps} onFloat={resolve} />,
+        );
+        fireEvent.click(getByRole("button", { name: "Float group" }));
+      });
+    });
+
+    it("fill the screen with the group", async () => {
+      await new Promise<void>((resolve) => {
+        const { getByRole } = render(
+          <StripEnd {...endProps} onFullscreen={resolve} />,
+        );
+        fireEvent.click(getByRole("button", { name: "Maximize group" }));
+      });
+    });
+
+    it("offer to tile a floating group and give a fullscreen one back", () => {
+      const { queryByRole } = render(
+        <StripEnd {...endProps} float={FLOAT} fullscreen />,
+      );
+
+      expect(queryByRole("button", { name: "Tile group" })).not.toBeNull();
+      expect(queryByRole("button", { name: "Restore group" })).not.toBeNull();
+    });
+
+    it("do not pick the group up", () => {
+      const onGrab = mock(nothing);
+      const { getByRole } = render(<StripEnd {...endProps} onGrab={onGrab} />);
+      fireEvent.pointerDown(getByRole("button", { name: "Float group" }), {
+        button: 0,
+        pointerId: 1,
+      });
+      expect(onGrab).not.toHaveBeenCalled();
+    });
+  });
+
+  it("does not pick up a fullscreen group", () => {
+    const onGrab = mock(nothing);
+    const { container } = render(
+      <StripEnd {...endProps} fullscreen onGrab={onGrab} />,
+    );
+    fireEvent.pointerDown(endOf(container), { button: 0, pointerId: 1 });
+    expect(onGrab).not.toHaveBeenCalled();
+  });
+
   it("moves a floating group's whole box", async () => {
-    const float = {
-      depth: 1,
-      height: 400,
-      root: LayoutNode.Container(Layout.Tabbed, [
-        LayoutNode.Window("a"),
-        LayoutNode.Window("b"),
-      ]),
-      scratchpad: false,
-      width: 600,
-      x: 100,
-      y: 100,
-    };
     const moved = await new Promise<readonly number[]>((resolve) => {
       const { container } = render(
         <StripEnd
           {...endProps}
-          float={float}
+          float={FLOAT}
           onMove={(x, y) => {
             resolve([x, y]);
           }}

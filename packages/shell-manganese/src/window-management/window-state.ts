@@ -44,9 +44,11 @@ import {
   focusedOn,
   focusLeaves,
   focusStepped,
+  fullscreenKept,
   fullscreenToggled,
   holds,
   modeToggled,
+  nodeHeld,
   nodeTiledIn,
   opened,
   openedFloating,
@@ -60,7 +62,6 @@ import {
   splitFlipped,
   tiledArrived,
   tiledDropped,
-  tiledHeld,
   tiledLifted,
   tiledStretched,
   tiledTraded,
@@ -323,6 +324,8 @@ export enum WindowActionKind {
   FullscreenToggled,
   GroupDroppedOn,
   GroupDroppedOnScreen,
+  GroupFloated,
+  GroupFullscreened,
   GroupGrabbed,
   KeyPressed,
   LauncherDismissed,
@@ -570,6 +573,25 @@ export const WindowAction = {
     group,
     kind: WindowActionKind.GroupDroppedOnScreen as const,
     screen,
+  }),
+
+  /**
+   * The user pressed the float button on the tab strip of group `group`. It is
+   * selected, as by `focus parent`, and floated or tiled whole.
+   */
+  GroupFloated: (group: NodeRef) => ({
+    group,
+    kind: WindowActionKind.GroupFloated as const,
+  }),
+
+  /**
+   * The user pressed the fullscreen button on the tab strip of group `group`.
+   * It is selected, as by `focus parent`, and fills its screen or gives it
+   * back. Never global, as for {@link WindowAction.WindowFullscreened}.
+   */
+  GroupFullscreened: (group: NodeRef) => ({
+    group,
+    kind: WindowActionKind.GroupFullscreened as const,
   }),
 
   /**
@@ -959,11 +981,24 @@ const reduceAction = (
     case WindowActionKind.GroupDroppedOnScreen: {
       return dropOnScreen(state, action.group, action.screen);
     }
+    case WindowActionKind.GroupFloated: {
+      const held = groupHeld(state, action.group);
+      return onWorkspaceWith(held, action.group.id, (workspace) =>
+        floatToggled(workspace, screenHere(held)),
+      );
+    }
+    case WindowActionKind.GroupFullscreened: {
+      return onWorkspaceWith(
+        groupHeld(state, action.group),
+        action.group.id,
+        (workspace) => fullscreenToggled(workspace, false),
+      );
+    }
     case WindowActionKind.GroupGrabbed: {
       const { id } = action.group;
       return {
         ...onWorkspaceWith(reachWindow(state, id), id, (workspace) =>
-          tiledHeld(workspace, action.group),
+          nodeHeld(workspace, action.group),
         ),
         draggingId: id,
       };
@@ -1132,6 +1167,8 @@ const onCurrent = (
   into: (workspace: Workspace) => Workspace,
 ): WindowState => onWorkspace(state, currentHere(state), into);
 
+// Applies `into` to workspace `name`. A fullscreen group follows its windows
+// through the change; see `fullscreenKept`.
 const onWorkspace = (
   state: WindowState,
   name: string,
@@ -1139,7 +1176,9 @@ const onWorkspace = (
 ): WindowState => ({
   ...state,
   workspaces: state.workspaces.map((workspace) =>
-    workspace.name === name ? into(workspace) : workspace,
+    workspace.name === name
+      ? fullscreenKept(workspace, into(workspace))
+      : workspace,
   ),
 });
 
@@ -1299,6 +1338,15 @@ const followFocus = (
   focusedId === undefined || windowOf(state, focusedId) === undefined
     ? state
     : reachWindow({ ...state, replayed: true }, focusedId);
+
+/**
+ * Reaches the group `group` names and selects it, tiled or floating, as
+ * `focus parent` would.
+ */
+const groupHeld = (state: WindowState, group: NodeRef): WindowState =>
+  onWorkspaceWith(reachWindow(state, group.id), group.id, (workspace) =>
+    nodeHeld(workspace, group),
+  );
 
 /**
  * Focuses a window, raising it if it floats, and shows its workspace.
