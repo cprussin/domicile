@@ -146,6 +146,15 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 
 {"type":"set_site_permission","version":1,"origin":"https://meet.example","permission":"camera","setting":"block"}
 {"type":"set"}   |   {"type":"refused","why":"…"}
+
+{"type":"load_unpacked","version":1,"directory":"/home/me/src/my-extension"}
+{"type":"loaded_unpacked","id":"…"}   |   {"type":"refused","why":"…"}
+
+{"type":"uninstall_extension","version":1,"id":"…"}
+{"type":"uninstalled"}   |   {"type":"refused","why":"…"}
+
+{"type":"config_extensions","version":1}
+{"type":"config_extensions","ids":["…"]}
 ```
 
 - Without the switch, the engine binds nothing. Every desktop `domicile`
@@ -165,6 +174,10 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
   shell profile's content settings for each of `kSitePermissions`, as the
   address bar's panel does: user settings for one origin. Setting a
   permission's default removes the site's own.
+- `load_unpacked`, `uninstall_extension` and `config_extensions` are the
+  Settings app's too ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md#from-the-settings-app)).
+  `load_unpacked` replies once the extension has loaded, or with why it did
+  not.
 - It is its own socket because the compositor has no part in choosing the
   shell. The supervisor also passes it at
   launch as `--domicile-shell-root` and `--domicile-shell-module`. See
@@ -180,6 +193,7 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 | `components/domicile/browser/shell_source.{h,cc}` | the shell being served; set from the two switches, replaced by `load_shell` |
 | `chrome/browser/domicile/domicile_browser_windows.{h,cc}` | the desk's browser windows; `open_url` opens one |
 | `components/domicile/browser/site_permissions.{h,cc}` | permission and setting names; unit tested |
+| `chrome/browser/domicile/domicile_extension_installer.{h,cc}` | loads, uninstalls and lists extensions for the extension commands |
 
 ### Dev reload
 

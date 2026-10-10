@@ -9,8 +9,10 @@ launcher, opens it in an app window
   ([SHELL-CONFIG.md](SHELL-CONFIG.md)). A change is written to the file as soon
   as it is made, and the desktop reloads it.
 - **Extensions:** switch an extension on or off and open its options through
-  `chrome.management`. Install and uninstall by editing the config's
-  `extensions` lists.
+  `chrome.management`. Load an unpacked folder, or uninstall an extension the
+  config did not install, through the engine; this works with a read-only
+  config. Install and uninstall the config's by editing its `extensions`
+  lists ([EXTENSIONS.md](architecture/EXTENSIONS.md#from-the-settings-app)).
 - **Site permissions:** each permission with the sites that have a setting of
   their own for it, or each site with all its permissions. Changes take effect
   at once in open browser windows.
@@ -40,7 +42,10 @@ launcher, opens it in an app window
 ```
 Settings page ─ native messaging ─▶ domicile-settings-host ─ DOMICILE_SOCK ─▶ domicile ─ command socket ─▶ engine
  (extension)                          reads and writes the files    settings_files,                site_permissions,
-                                                                     site_permissions               set_site_permission
+                                                                     site_permissions,              set_site_permission,
+                                                                     extensions                     load_unpacked,
+                                                                                                    uninstall_extension,
+                                                                                                    config_extensions
 ```
 
 | Part | Where |
@@ -50,6 +55,7 @@ Settings page ─ native messaging ─▶ domicile-settings-host ─ DOMICILE_SO
 | Finding the host | On every start `domicile` writes `<profile>/NativeMessagingHosts/domicile.settings.json`, whose `allowed_origins` is the app alone (`domicile_launch::apps`). |
 | Which files | The host asks the desktop (`settings_files` on the control socket) on every request. The page never names a path. |
 | Writable | `access(W_OK)` on the file, following links. |
+| Extensions | The engine's `load_unpacked`, `uninstall_extension` and `config_extensions` commands. |
 | Site permissions | The engine's `site_permissions` and `set_site_permission` commands ([CONTROL-CHANNEL.md](/packages/domicile-engine/docs/CONTROL-CHANNEL.md#command-socket)). They read and write the shell profile's content settings as the address bar's panel does. |
 | Opening it | `domicile-settings` runs `domicile open-app chrome-extension://acpgnhiblklkgbkcjgbabkcmdmchdphk/settings.html`. |
 
