@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Fri, 9 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a webview's visits go into history
+
+HistoryTabHelper records a visit only for a tab it finds in a Browser.
+A <webview> guest is a tab of the desk and is in no Browser, so its
+visits were dropped. //chrome/browser/domicile gives each guest a
+HistoryTabHelper; the helper's one way past the Browser lookup is for
+tests, so this adds one that is not.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ chrome/browser/history/history_tab_helper.cc | 2 +-
+ chrome/browser/history/history_tab_helper.h  | 8 ++++++++
+ 2 files changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/chrome/browser/history/history_tab_helper.cc b/chrome/browser/history/history_tab_helper.cc
+index cff7c39..22749fa 100644
+--- a/chrome/browser/history/history_tab_helper.cc
++++ b/chrome/browser/history/history_tab_helper.cc
+@@ -679,7 +679,7 @@ void HistoryTabHelper::WebContentsDestroyed() {
+ 
+ bool HistoryTabHelper::IsEligibleTab(
+     const history::HistoryAddPageArgs& add_page_args) const {
+-  if (force_eligible_tab_for_testing_) {
++  if (force_eligible_tab_for_testing_ || desk_tab_) {
+     return true;
+   }
+ 
+diff --git a/chrome/browser/history/history_tab_helper.h b/chrome/browser/history/history_tab_helper.h
+index aed6337..121ab13 100644
+--- a/chrome/browser/history/history_tab_helper.h
++++ b/chrome/browser/history/history_tab_helper.h
+@@ -64,6 +64,11 @@ class HistoryTabHelper
+     force_eligible_tab_for_testing_ = force;
+   }
+ 
++  // DOMICILE: marks a <webview> guest as a tab. A guest is a tab of the desk,
++  // not of a Browser, so IsEligibleTab's Browser lookup never finds it. See
++  // //chrome/browser/domicile/domicile_tab_helpers.h.
++  void set_desk_tab() { desk_tab_ = true; }
++
+ #if BUILDFLAG(IS_ANDROID)
+   // Sets App ID that that goes into visit database.
+   void SetAppId(std::optional<std::string> app_id) { app_id_ = app_id; }
+@@ -148,6 +153,9 @@ class HistoryTabHelper
+   // Set to true in unit tests to avoid need for a Browser instance.
+   bool force_eligible_tab_for_testing_ = false;
+ 
++  // DOMICILE: set by set_desk_tab().
++  bool desk_tab_ = false;
++
+   // The `WebContents` that opened the `WebContents` associated with `this` via
+   // "Open in New Tab", "Open in New Window", window.open(), etc.
+   base::WeakPtr<content::WebContents> opener_web_contents_;
+-- 
+2.43.0
+
