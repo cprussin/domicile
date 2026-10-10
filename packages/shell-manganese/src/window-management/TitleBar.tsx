@@ -240,6 +240,7 @@ export const TitleBar = ({
       {strip !== undefined && (
         <span
           className={stripEdgeStyles({
+            ends: endsStrip,
             // A stack's bars sit over each other, not over the window. A
             // sliding tab joins its window once it is there.
             joined: strip.open && tabbed === Layout.Tabbed && !sliding,
@@ -527,12 +528,18 @@ const stripEdgeStyles = cva({
     insetBlockEnd: "-1px",
     // Below the strip's rounded corners.
     insetBlockStart: "{radii.lg}",
-    insetInlineEnd: "calc(-1 * var(--strip-rest, 0px))",
     pointerEvents: "none",
     position: "absolute",
     zIndex: -1,
   },
   variants: {
+    // Every slot keeps `--strip-rest` (see `StripPlace.rest`), but only the
+    // last runs the edge on: the open tab, drawn over its strip, would cover
+    // the tabs after it.
+    ends: {
+      false: { insetInlineEnd: 0 },
+      true: { insetInlineEnd: "calc(-1 * var(--strip-rest, 0px))" },
+    },
     joined: {
       false: { insetInlineStart: 0 },
       true: { insetInlineStart: "100%" },
