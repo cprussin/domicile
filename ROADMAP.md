@@ -95,10 +95,7 @@ item when it ships.
    - A host that sends no keymap crashes the browser on its first modifiers
      event (`WaylandKeyboard::OnModifiers`).
 
-7. **`guard-shell.sh` launches through `domicile`.** Do this last.
-   [THE-DOMICILE-BINARY.md](docs/architecture/THE-DOMICILE-BINARY.md).
-
-8. **A compositor restart breaks every embed.** App ids restart, so the page's
+7. **A compositor restart breaks every embed.** App ids restart, so the page's
    tokens point at dead `FrameSinkId`s. Invalidate the renderer's tokens on
    disconnect. Needed before item 2 of the repository list.
    [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#open-questions).

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Tests that every engine guard and spike starts Chrome with
-# --disable-component-update.
+# --disable-component-update, directly or through `domicile`'s
+# `DOMICILE_ENGINE_ARGS`.
 #
 # Otherwise each engine downloads components into
 # $TMPDIR/.org.chromium.Chromium.chromium_chrome_url_fetcher_.*, 85-195M each.
@@ -14,7 +15,8 @@ SCRIPTS="$ROOT/packages/domicile-engine/scripts"
 checked=0
 failed=0
 for script in "$SCRIPTS"/*.sh; do
-  launches=$(grep -c 'OUT/chrome" \\$' "$script")
+  launches=$(( $(grep -c 'OUT/chrome" \\$' "$script") +
+                $(grep -c '^ *DOMICILE_ENGINE_ARGS=' "$script") ))
   [ "$launches" -gt 0 ] || continue
   checked=$((checked + launches))
   disabled=$(grep -c -- '--disable-component-update' "$script")

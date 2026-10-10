@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Builds the compositor that the guards run.
+# Builds the compositor that the guards run, and `domicile`, which
+# `guard-shell.sh` starts its desktop with.
 #
 # The guards only check for the binary, and the `crux` runner deletes its work
 # directory on every start. A check, not a workflow step, so `check.sh engine`
@@ -22,4 +23,4 @@ if [ -n "${DOMICILE_CARGO_TARGET:-}" ] && { [ -L target ] || [ ! -e target ]; };
   mkdir -p "$DOMICILE_CARGO_TARGET"
   ln -sfn "$DOMICILE_CARGO_TARGET" target
 fi
-cargo build -p domicile-compositor
+cargo build -p domicile-compositor -p domicile-launch
