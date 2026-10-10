@@ -7,10 +7,11 @@ import { rememberedTheme, rememberTheme } from "./remembered-theme";
 
 /**
  * How long to wait for sites in browser windows to repaint after the engine
- * learns the windows' theme. They repaint within a frame or two, but nothing
- * reports when.
+ * learns the windows' theme. Nothing reports when they do. A busy site can take
+ * well over 100ms, and one that misses this is captured in the old theme and
+ * flashes at the end of the wipe.
  */
-const SITES_REPAINT_WITHIN_MS = 100;
+const SITES_REPAINT_WITHIN_MS = 300;
 
 /**
  * Adapts the host's theme to the component library's theme source, as

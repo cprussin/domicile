@@ -127,4 +127,23 @@ describe("the windows a shell's wipe passes across", () => {
     host.turnsItsWindows("light");
     await turning;
   });
+
+  it("give sites in browser windows time to repaint once the desk says so", async () => {
+    // The wipe's new frame is captured when this settles. Sites a frame or two
+    // late would be captured in the old theme, then flash at the end.
+    const [client, host] = connected();
+    const turning = hostTheme(client).turnWindows("light");
+
+    host.turnsItsWindows("light");
+
+    expect(
+      await Promise.race([
+        turning.then(() => "turned"),
+        new Promise((resolve) => {
+          setTimeout(resolve, 200, "held");
+        }),
+      ]),
+    ).toBe("held");
+    await turning;
+  });
 });
