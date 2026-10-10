@@ -156,7 +156,8 @@ Every bar and the lock screen share one watch per system readout. See
 
 ## Notifications
 
-- Toasts stack in the top-right corner under the bar and fan out on hover.
+- Toasts stack in the top-right corner of the screen with the keyboard,
+  under its bar, and fan out on hover.
 - Clicking a toast runs its action. The close button or a right swipe
   dismisses it.
 - Critical toasts stay up and have a red ring.
