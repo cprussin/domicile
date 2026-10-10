@@ -264,6 +264,11 @@ interface WebViewGuestClient {
   // the compositor's anonymous fetch cannot see. Sent only when it changes.
   FaviconChanged(url.mojom.Url icon);
 
+  // The address of the link under the pointer, for a status bubble like
+  // Chrome's. Empty when the pointer leaves the link or the page, or the page
+  // navigates. Sent only when it changes.
+  TargetUrlChanged(url.mojom.Url url);
+
   // The user pressed Ctrl+wheel and the page did not consume the wheel.
   //
   // A request, not a zoom: unlike Chrome, the shell applies the step so
@@ -421,6 +426,11 @@ interface WebViewGuest {
   // already open, its window's element gets FocusRequested instead. See
   // //chrome/browser/domicile/domicile_devtools.h.
   Inspect();
+
+  // The shell's document saw the pointer move off the element, so the link
+  // under it is cleared until the pointer is back over the page. See
+  // WebViewGuestClient.TargetUrlChanged.
+  PointerLeft();
 
   // Stores `setting` for `permission` on the page's site. Reported back as
   // WebViewGuestClient.SitePermissionsChanged. Dropped, and logged, when the
