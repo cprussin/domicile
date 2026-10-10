@@ -22,7 +22,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 
 # Every suite in the filter, counted rather than estimated: FrameSinkBroker 25,
 # WindowDiff 7, EngineEventQueue 7, ShortcutRegistry 10, ShellURLLoaderFactory
-# 11, ShellDocument 12, ShellSource 3, CursorShape 3, CommandProtocol 11,
+# 12, ShellDocument 14, ShellSource 3, CursorShape 3, CommandProtocol 11,
 # DomicileDisplayList 6, DomicileKeyboardLayout 3, ShellWindows 8,
 # ShellWindowPlaces 7, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
 # ExtensionInstaller 3, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 13,
@@ -31,7 +31,9 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, SitePermissions 9,
 # ControlChannel 1.
 #
-# 230, and it was 229 — the compositor's lines held until the page binds are
+# 233, and it was 230 — a shell crossfading from the one before, and served
+# fresh to the navigation that loads it, is two ShellDocument cases and one
+# ShellURLLoaderFactory. Before that 230, and it was 229 — the compositor's lines held until the page binds are
 # one ControlChannel case. Before that 229, and it was 220 — a <webview>'s permissions are nine SitePermissions
 # cases. Before that 220, and it was 223 — the engine takes no screenshots, which was three
 # CommandProtocol cases. Before that 223, and it was 215 — pairing a chord's press with its release is six
@@ -81,7 +83,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=230
+FLOOR=233
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.
