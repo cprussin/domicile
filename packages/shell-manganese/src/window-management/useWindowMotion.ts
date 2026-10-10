@@ -1,7 +1,13 @@
 import { useCallback, useState } from "react";
 
-import type { Closing } from "./closing";
-import { departed, movesAsTab, withClosing } from "./closing";
+import type { Closing, Leaving } from "./closing";
+import {
+  departed,
+  movesAsTab,
+  placedOn,
+  sentAway,
+  withClosing,
+} from "./closing";
 import type { PlacedTab, Placement } from "./placement";
 import type { Restack } from "./restacking";
 import { restacked } from "./restacking";
@@ -66,13 +72,23 @@ type Shuffling = { motion: Shuffle; restack: Restack };
 /** A closing window and its screen. */
 type ClosingOn = Closing & { screen: string };
 
+/** An open window sent off the screen, how it leaves, and from which screen. */
+type SendingOn = Leaving & {
+  motion: "sending" | "sending-tab" | "stowing";
+  screen: string;
+};
+
 /** Animations still playing. */
 type Playing = {
   closing: readonly ClosingOn[];
+  /** Windows still sliding down from the scratchpad. */
+  dropping: readonly string[];
   /** Windows still playing their opening animation. */
   opening: readonly string[];
   /** Floats still shuffling in the stack. */
   restacking: readonly Shuffling[];
+  /** Open windows leaving the screen. */
+  sending: readonly SendingOn[];
   /**
    * Each window's last shuffle name, kept after it ends so the next uses the
    * other (see {@link nextShuffle}).
@@ -86,8 +102,10 @@ type Playing = {
 
 const NOTHING_PLAYING: Playing = {
   closing: [],
+  dropping: [],
   opening: [],
   restacking: [],
+  sending: [],
   shuffled: [],
   switching: {},
   tabbing: [],
@@ -197,10 +215,22 @@ const advanced = (playing: Playing, before: Desk, shown: Desk): Playing => {
         })),
       ),
     ],
-    // Drop closed windows: a window closed while opening never reports the
+    // Drop windows no longer shown: they never report the slide finished.
+    dropping: [
+      ...playing.dropping.filter((id) => placedOn(Object.values(shown), id)),
+      ...windows
+        .filter(
+          ({ id }) =>
+            stowed(before, id) &&
+            !stowed(shown, id) &&
+            placedOn(Object.values(shown), id),
+        )
+        .map(({ id }) => id),
+    ],
+    // Drop windows closed or hidden while opening: they never report the
     // opening finished.
     opening: [
-      ...playing.opening.filter((id) => holds(windows, id)),
+      ...playing.opening.filter((id) => placedOn(Object.values(shown), id)),
       ...windows
         .filter(({ id }) => !holds(windowsOf(before), id))
         .map(({ id }) => id),
@@ -212,6 +242,21 @@ const advanced = (playing: Playing, before: Desk, shown: Desk): Playing => {
           holds(windows, restack.id) && !shuffling(shuffles, restack.id),
       ),
       ...shuffles,
+    ],
+    // Drop windows shown again or closed: neither finishes leaving.
+    sending: [
+      ...playing.sending.filter(
+        ({ window }) =>
+          holds(windows, window.id) &&
+          !placedOn(Object.values(shown), window.id),
+      ),
+      ...screens.flatMap(({ name, now, was }) =>
+        sentAway(was, now, Object.values(shown)).map((sending) => ({
+          ...sending,
+          motion: sendingMotion(shown, sending),
+          screen: name,
+        })),
+      ),
     ],
     shuffled: [
       ...playing.shuffled.filter(
@@ -234,6 +279,25 @@ const advanced = (playing: Playing, before: Desk, shown: Desk): Playing => {
       ...fades,
     ],
   };
+};
+
+/** Whether the desk has the window `id` in the scratchpad. */
+const stowed = (desk: Desk, id: string): boolean =>
+  Object.values(desk)[0]?.scratchpad.includes(id) ?? false;
+
+/**
+ * How a window leaves the screen: up to the scratchpad, or off to another
+ * workspace.
+ */
+const sendingMotion = (
+  desk: Desk,
+  { placement }: Leaving,
+): SendingOn["motion"] => {
+  if (stowed(desk, placement.id)) {
+    return "stowing";
+  } else {
+    return movesAsTab(placement) ? "sending-tab" : "sending";
+  }
 };
 
 const holds = (windows: readonly ShellWindow[], id: string): boolean =>
@@ -290,6 +354,20 @@ const played = (
       return closing.length === playing.closing.length
         ? playing
         : { ...playing, closing };
+    }
+    case "sending":
+    case "sending-tab":
+    case "stowing": {
+      const sending = playing.sending.filter(({ window }) => window.id !== id);
+      return sending.length === playing.sending.length
+        ? playing
+        : { ...playing, sending };
+    }
+    case "dropping": {
+      const dropping = playing.dropping.filter((shown) => shown !== id);
+      return dropping.length === playing.dropping.length
+        ? playing
+        : { ...playing, dropping };
     }
     case "opening":
     case "opening-tab": {
@@ -350,7 +428,19 @@ const drawnWindow = (
       window,
     };
   } else if (placed === undefined) {
-    return leavingWindow(playing.switching, window);
+    const sending = playing.sending.find(
+      (gone) => gone.window.id === window.id,
+    );
+    return sending === undefined
+      ? leavingWindow(playing.switching, window)
+      : {
+          focused: sending.focused,
+          motion: sending.motion,
+          placement: sending.placement,
+          restack: undefined,
+          screen: sending.screen,
+          window,
+        };
   } else {
     const motion = arriving(playing, placed.screen, placed.placement);
     return {
@@ -383,6 +473,8 @@ const arriving = (
     return arrivalFrom(switching.towards);
   } else if (playing.opening.includes(id)) {
     return movesAsTab(placement) ? "opening-tab" : "opening";
+  } else if (playing.dropping.includes(id)) {
+    return "dropping";
   } else {
     return (
       playing.tabbing.find((fade) => fade.id === id)?.motion ??

@@ -15,6 +15,7 @@ import {
   grown,
   movedTo,
   retiled,
+  scratchpadFloatFor,
   shifted,
   sizedTo,
 } from "./floating/float";
@@ -276,17 +277,14 @@ const untabbed = (node: LayoutNode): LayoutNode => {
   }
 };
 
-/** Shows a scratchpad window as the front float. */
+/** Shows a scratchpad window as the front float. See `scratchpadFloatFor`. */
 export const shown = (
   workspace: Workspace,
   id: string,
   screen: Rect,
 ): Workspace => ({
   ...floatFocused(workspace, id),
-  floats: [
-    ...workspace.floats,
-    floatFor(Node.Window(id), workspace.floats.length, screen, true),
-  ],
+  floats: [...workspace.floats, scratchpadFloatFor(Node.Window(id), screen)],
 });
 
 /**

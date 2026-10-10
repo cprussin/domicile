@@ -12,6 +12,8 @@ export type Shown = {
   /** The workspace on screen. */
   current: string;
   placements: readonly Placement[];
+  /** The windows hidden in the scratchpad. */
+  scratchpad: readonly string[];
   tabs: readonly PlacedTab[];
   windows: readonly ShellWindow[];
 };

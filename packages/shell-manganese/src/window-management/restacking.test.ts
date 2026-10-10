@@ -28,6 +28,7 @@ const desktop = (placements: readonly Placement[], current = "1"): Shown => ({
   activeId: undefined,
   current,
   placements,
+  scratchpad: [],
   tabs: [],
   windows: [],
 });

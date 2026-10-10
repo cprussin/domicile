@@ -19,12 +19,16 @@ export type WindowMotion =
   | "arriving-from-start"
   | "closing"
   | "closing-tab"
+  | "dropping"
   | "leaving-to-end"
   | "leaving-to-start"
   | "opening"
   | "opening-tab"
   | Shuffle
   | "resting"
+  | "sending"
+  | "sending-tab"
+  | "stowing"
   | TabFade;
 
 /**
@@ -65,12 +69,16 @@ export const isLeaving = (motion: WindowMotion): boolean => {
     case "closing":
     case "closing-tab":
     case "leaving-to-end":
-    case "leaving-to-start": {
+    case "leaving-to-start":
+    case "sending":
+    case "sending-tab":
+    case "stowing": {
       return true;
     }
     case "arriving-from-end":
     case "arriving-from-start":
     case "concealing":
+    case "dropping":
     case "opening":
     case "opening-tab":
     case "restacking":
@@ -100,13 +108,17 @@ export const barMotion = (motion: WindowMotion): WindowMotion => {
     case "arriving-from-start":
     case "closing":
     case "closing-tab":
+    case "dropping":
     case "leaving-to-end":
     case "leaving-to-start":
     case "opening":
     case "opening-tab":
     case "restacking":
     case "restacking-again":
-    case "resting": {
+    case "resting":
+    case "sending":
+    case "sending-tab":
+    case "stowing": {
       return motion;
     }
   }

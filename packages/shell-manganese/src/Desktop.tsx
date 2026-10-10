@@ -373,6 +373,7 @@ export const Desktop = ({
             act(WindowAction.WindowStretched(id, edge, by, on.workspace));
           }}
           popups={windows.popups}
+          scratchpad={windows.scratchpad}
           screens={screens}
           windows={windows.windows}
         />

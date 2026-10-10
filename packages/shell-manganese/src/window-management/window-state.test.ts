@@ -638,6 +638,21 @@ describe("the scratchpad", () => {
     expect(activeIdOf(state)).toBe(APP("editor"));
   });
 
+  // A drop-down: it hangs from the top of the screen, which it slides down
+  // from.
+  it("shows it as wide and tall as the screen, less a gutter but at the top", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
+      WindowAction.WindowSentToScratchpad(),
+      WindowAction.ScratchpadShown(),
+    );
+
+    expect(workspaceHere(state).floats).toMatchObject([
+      { height: 1080 - 48, width: 1920 - 2 * 48, x: 48, y: 0 },
+    ]);
+  });
+
   it("hides the one it is showing rather than fetching another", () => {
     const state = reduce(
       desktop("kitty", "editor"),

@@ -341,11 +341,14 @@ describe("TitleBar", () => {
 
     // The tab before it already runs the strip on to its end. Collapsing the
     // strip with the tab would shrink the strip's end.
-    it("leaves the strip past it to the tab before it as it closes", () => {
-      expect(
-        bar(tab({ motion: "closing-tab", strip: LAST_TAB }).container),
-      ).not.toHaveAttribute("data-strip-end");
-    });
+    it.each(["closing-tab", "sending-tab"] as const)(
+      "leaves the strip past it to the tab before it while %s",
+      (motion) => {
+        expect(
+          bar(tab({ motion, strip: LAST_TAB }).container),
+        ).not.toHaveAttribute("data-strip-end");
+      },
+    );
 
     // A tab opening or closing before the last moves the last tab's slot. The
     // rest eases with it, so the strip's end stays put.

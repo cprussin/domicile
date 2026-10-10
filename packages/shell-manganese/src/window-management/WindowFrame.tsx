@@ -2,11 +2,14 @@ import type { ReactNode } from "react";
 
 import { css } from "../../styled-system/css";
 import type { Spot } from "./pointer-warp";
+import type { Rect } from "./rect";
 import { slidAcross } from "./window-styles";
 
 type Props = {
   /** The window's contents or its bar. */
   children: ReactNode;
+  /** The window's frame, which the scratchpad slides lift. */
+  frame: Rect | undefined;
   /**
    * Called when the pointer enters any part of this window, with the page
    * position. Focus follows the cursor; `usePointerWarp` uses the position to
@@ -18,8 +21,8 @@ type Props = {
    * focus follows the cursor, but only a press raises the window.
    */
   onReach: () => void;
-  /** Its screen's width, which a workspace switch slides it by. */
-  width: number | undefined;
+  /** Its screen, which the window's slides move it off. See `slidAcross`. */
+  screen: Rect | undefined;
 };
 
 /**
@@ -33,9 +36,15 @@ export const WINDOW_FRAME = "data-window-frame";
  * every kind of window in one place.
  *
  * Uses `display: contents`, so it has no box and does not affect layout,
- * stacking or hit-testing. Its children inherit the slide width from it.
+ * stacking or hit-testing. Its children inherit the slide distances from it.
  */
-export const WindowFrame = ({ children, onHover, onReach, width }: Props) => (
+export const WindowFrame = ({
+  children,
+  frame,
+  onHover,
+  onReach,
+  screen,
+}: Props) => (
   <div
     className={frameStyles}
     {...{ [WINDOW_FRAME]: "" }}
@@ -44,7 +53,7 @@ export const WindowFrame = ({ children, onHover, onReach, width }: Props) => (
     onPointerOver={(event) => {
       onHover([event.clientX, event.clientY]);
     }}
-    style={width === undefined ? undefined : slidAcross(width)}
+    style={screen === undefined ? undefined : slidAcross(screen, frame)}
   >
     {children}
   </div>

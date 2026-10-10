@@ -163,6 +163,18 @@ export default defineConfig({
           "0%": { zIndex: "-1" },
           "100%": { zIndex: "-1" },
         },
+        // The scratchpad is a drop-down: a window shown from it slides down
+        // from above the screen's top edge, `--lift` away (see `slidAcross`).
+        // It is clear of the edge only in the last stretch, so it fades in
+        // there and does not show on a screen above.
+        windowDropping: {
+          "0%": {
+            opacity: "0",
+            transform: "translateY(calc(-1 * var(--lift)))",
+          },
+          "15%": { opacity: "1" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
         // The workspace being left slides out by one screen width.
         windowLeavingToEnd: {
           "0%": { transform: "translateX(0)" },
@@ -201,8 +213,23 @@ export default defineConfig({
           "0%": { opacity: "0", zIndex: "0" },
           "100%": { opacity: "1", zIndex: "0" },
         },
+        // A window sent to a workspace no screen shows. It shrinks further
+        // than `windowClosing`, so it does not look closed.
+        windowSending: {
+          "0%": { opacity: "1", transform: "scale(1)" },
+          "100%": { opacity: "0", transform: "scale(0.6)" },
+        },
         windowSlidingTab: SLIDING_TAB,
         windowSlidingTabAgain: SLIDING_TAB,
+        // The reverse of `windowDropping`: a window sent to the scratchpad.
+        windowStowing: {
+          "0%": { opacity: "1", transform: "translateY(0)" },
+          "85%": { opacity: "1" },
+          "100%": {
+            opacity: "0",
+            transform: "translateY(calc(-1 * var(--lift)))",
+          },
+        },
         // The tab a close uncovers holds the tiled depth while the closed tab
         // fades over it. Otherwise `settlingStyles` would ease its depth up
         // from the hidden tabs', and one of them would show through.
