@@ -26,7 +26,7 @@ desktop treats it.
 | Input | `Key`, pointer motion, buttons, axis, leave; the same from EIS clients (`crate::eis`) | Dropped (`debug` log) |
 | Commands | `CloseApp`, `Spawn`, `CopyClipboardEntry`, tray, notifications | Refused (`warn` log) |
 | Reads on the connection | `SearchFiles` | Answered with nothing (`warn` log) |
-| System calls | `SystemRequest`, except reads under `/sys`, lock screen readouts and calls that stop something running | A call that starts something is answered `locked`; `stdin` is dropped (`warn` log) |
+| System calls | `SystemRequest`, except reads under `/sys`, lock screen readouts, listening for shell commands and calls that stop something running | A call that starts something is answered `locked`; `stdin` is dropped (`warn` log) |
 | Allowed | `ChromeHello`, `Lock`, `Unlock`, `KeyboardFocus`, output scale and size, window bounds, `ClipboardCopied`, theme | Handled normally |
 
 Why some requests are allowed:
@@ -45,6 +45,8 @@ Why some requests are allowed:
   battery and Bluetooth and sets the brightness and volume. See
   [Lock screen readouts](#lock-screen-readouts).
 - `unwatch`, `close_stdin`, `kill`: they stop what the shell started.
+- `shell_commands`: it only listens. A page reloaded while locked still hears
+  `domicile send-shell` after unlock. `send_shell` itself is refused.
 
 ## Lock screen readouts
 

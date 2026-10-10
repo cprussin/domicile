@@ -70,6 +70,8 @@ Manganese-only commands:
 
 - `mode(name)` comes from the SDK's `bindKeys`. Each monitor's page keeps its
   own mode. The bar shows any mode other than `default`.
+- `domicile send-shell <command>` runs a command from a terminal:
+  `domicile send-shell workspace 2`.
 - An unknown command logs to the console and does nothing.
 - While the launcher is open, only the `launcher` command and mode changes
   run.

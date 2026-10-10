@@ -425,6 +425,26 @@ describe("screenshots", () => {
   });
 });
 
+describe("shell commands", () => {
+  it("streams each command `domicile send-shell` sends until it is stopped", async () => {
+    const host = new FakeHost();
+    const listening = system(host).shellCommands();
+    host.reply(1, { kind: "started" });
+    const commands = started(await listening);
+    host.event(1, { command: ["focus", "right"], kind: "shell_command" });
+    commands.stop();
+    host.end(1, { kind: "stopped" });
+
+    expect(host.calls).toStrictEqual([
+      [1, { call: "shell_commands" }],
+      [1, { call: "unwatch" }],
+    ]);
+    expect(await Array.fromAsync(commands.items)).toStrictEqual([
+      ["focus", "right"],
+    ]);
+  });
+});
+
 describe("ids", () => {
   // The compositor names calls per connection, and a page has one.
   it("are shared by every system on one host", () => {

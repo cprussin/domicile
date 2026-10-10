@@ -1,5 +1,7 @@
-//! Files, watches, processes, D-Bus and screenshots for one chrome connection.
-//! The compositor takes the screenshots ([`System::screenshotting_with`]).
+//! Files, watches, processes, D-Bus, screenshots and shell commands for one
+//! chrome connection. The compositor takes the screenshots
+//! ([`System::screenshotting_with`]) and shares the shell commands between
+//! connections ([`System::sharing_shell_commands`]).
 //!
 //! [`System::handle`] runs a `ChromeMessage::SystemRequest` and sends every
 //! answer through the callback it was built with. Nothing here blocks the
@@ -31,6 +33,7 @@ use zbus::zvariant::{Signature, Structure, StructureBuilder};
 use crate::base64::{decoded, encoded};
 use crate::dbus_json::{self, NotABody};
 use crate::lock_screen_readouts::is_a_readout;
+use crate::shell_commands::{Listener, ShellCommands};
 
 /// How much of a process's output one event carries at most.
 const CHUNK: usize = 64 * 1024;
@@ -55,6 +58,8 @@ pub struct System {
     buses: Arc<Mutex<HashMap<Bus, Connection>>>,
     /// Takes screenshots; `None` on a system that takes none.
     screenshot: Option<Screenshot>,
+    /// The pages that hear a `SystemRequest::SendShell`.
+    shell_commands: ShellCommands,
 }
 
 /// Takes a screenshot, into the file if one is given, and returns where it
@@ -75,6 +80,8 @@ enum Running {
     Watch(notify::RecommendedWatcher),
     /// A D-Bus match, on a connection of its own so closing it ends the match.
     Match(Connection),
+    /// The page hears shell commands.
+    ShellCommands(Listener),
 }
 
 /// What [`System::handle`] did with a request.
@@ -101,6 +108,8 @@ pub enum Reach {
     /// A lock screen's battery, brightness, volume or Bluetooth readout. See
     /// `crate::lock_screen_readouts`.
     Readout,
+    /// It only hears what the desktop sends it later.
+    Listens,
     /// Anything else.
     Acts,
 }
@@ -140,9 +149,11 @@ pub fn reach(request: &SystemRequest) -> Reach {
             true => Reach::Readout,
             false => Reach::Acts,
         },
+        SystemRequest::ShellCommands => Reach::Listens,
         SystemRequest::WriteFile { .. }
         | SystemRequest::Stdin { .. }
-        | SystemRequest::Screenshot { .. } => Reach::Acts,
+        | SystemRequest::Screenshot { .. }
+        | SystemRequest::SendShell { .. } => Reach::Acts,
     }
 }
 
@@ -162,7 +173,9 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::Spawn { .. }
         | SystemRequest::DbusCall { .. }
         | SystemRequest::DbusMatch { .. }
-        | SystemRequest::Screenshot { .. } => Some(HostMessage::SystemReply {
+        | SystemRequest::Screenshot { .. }
+        | SystemRequest::ShellCommands
+        | SystemRequest::SendShell { .. } => Some(HostMessage::SystemReply {
             id,
             reply: SystemReply::Failed {
                 error: SystemError {
@@ -199,6 +212,7 @@ impl System {
             }),
             buses: Arc::default(),
             screenshot: None,
+            shell_commands: ShellCommands::default(),
         }
     }
 
@@ -218,6 +232,13 @@ impl System {
         screenshot: impl Fn(Option<PathBuf>) -> Result<PathBuf, SystemError> + Send + Sync + 'static,
     ) -> System {
         self.screenshot = Some(Arc::new(screenshot));
+        self
+    }
+
+    /// This system, sending and hearing shell commands through `commands`
+    /// instead of only its own.
+    pub fn sharing_shell_commands(mut self, commands: ShellCommands) -> System {
+        self.shell_commands = commands;
         self
     }
 
@@ -385,6 +406,17 @@ impl System {
                         let _ = connection.close();
                         Handled::Done
                     }
+                    Some(Running::ShellCommands(listener)) => {
+                        (self.tell)(HostMessage::SystemEnd {
+                            id,
+                            end: SystemEnd::Stopped,
+                        });
+                        // Dropped outside the lock, which a command being
+                        // heard waits for.
+                        drop(running);
+                        drop(listener);
+                        Handled::Done
+                    }
                     Some(process) => {
                         running.insert(id, process);
                         Handled::Malformed
@@ -413,7 +445,9 @@ impl System {
                     stdin.take();
                     Handled::Done
                 }
-                Some(Running::Watch(_) | Running::Match(_)) => Handled::Malformed,
+                Some(Running::Watch(_) | Running::Match(_) | Running::ShellCommands(_)) => {
+                    Handled::Malformed
+                }
                 None => Handled::NothingRunning,
             },
             SystemRequest::Kill { signal } => match self.running.lock().unwrap().get(&id) {
@@ -424,7 +458,9 @@ impl System {
                     unsafe { libc::kill(-group, number(signal)) };
                     Handled::Done
                 }
-                Some(Running::Watch(_) | Running::Match(_)) => Handled::Malformed,
+                Some(Running::Watch(_) | Running::Match(_) | Running::ShellCommands(_)) => {
+                    Handled::Malformed
+                }
                 None => Handled::NothingRunning,
             },
             SystemRequest::Screenshot { file } => {
@@ -439,6 +475,39 @@ impl System {
                         path: path.display().to_string(),
                     })
                 })
+            }
+            SystemRequest::ShellCommands => self.starting(id, |system| {
+                let (tell, running) = (system.tell.clone(), Arc::downgrade(&system.running));
+                let listener = system.shell_commands.listen(Arc::new(move |command| {
+                    let Some(running) = running.upgrade() else {
+                        return;
+                    };
+                    // Under the lock, so no command is told before the reply
+                    // or after `Unwatch` ends it.
+                    let running = running.lock().unwrap();
+                    if matches!(running.get(&id), Some(Running::ShellCommands(_))) {
+                        tell(HostMessage::SystemEvent {
+                            id,
+                            event: SystemEvent::ShellCommand {
+                                command: command.to_vec(),
+                            },
+                        });
+                    }
+                }));
+                Ok((Running::ShellCommands(listener), Box::new(|| {})))
+            }),
+            SystemRequest::SendShell { command } => {
+                let reply = match self.shell_commands.send(&command) {
+                    0 => failed(SystemError {
+                        kind: SystemErrorKind::Other,
+                        message: "no page of this desktop listens for commands; a shell hears \
+                                  them through bindKeys"
+                            .into(),
+                    }),
+                    _ => SystemReply::Sent,
+                };
+                (self.tell)(HostMessage::SystemReply { id, reply });
+                Handled::Done
             }
         }
     }
@@ -629,6 +698,7 @@ impl Drop for System {
                 Running::Match(connection) => {
                     let _ = connection.close();
                 }
+                Running::ShellCommands(listener) => drop(listener),
             }
         }
     }

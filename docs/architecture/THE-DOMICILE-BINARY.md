@@ -31,6 +31,7 @@ domicile load-shell <shell>       # replace the running desktop's shell
 domicile open-url <url>           # open a URL in the running desktop (BROWSER)
 domicile screenshot               # the shell's interactive screenshot (Print in manganese)
 domicile screenshot <file>        # write a PNG of the running desk
+domicile send-shell <word>…       # run a shell command, as a SendShell keybinding does
 domicile check-config <file>      # exit 1 with the reason if the compositor refuses this JSON config
 ```
 
@@ -240,10 +241,12 @@ running one. The first argument decides which.
 - The supervisor answers each connection on its own thread, since an
   interactive screenshot waits on the user.
 - The supervisor answers and routes. `load-shell` and `open-url` go to the
-  engine. `screenshot` goes to the compositor's chrome socket as the
-  `screenshot` system call a page makes, with the file or without one
+  engine. `screenshot` and `send-shell` go to the compositor's chrome socket
+  as the `screenshot` and `send_shell` system calls a page makes
   (`domicile_launch::compositor_socket`). The connection never says `hello`,
-  so it is not a chrome.
+  so it is not a chrome. See
+  [KEYBINDINGS.md](KEYBINDINGS.md#commands-from-a-terminal) for where a
+  shell command goes from there.
 - A whole-desk screenshot times out. An interactive one waits until the shell
   answers or the compositor hangs up. A shell that answers no portal requests
   leaves it waiting until the desktop exits. Ending `domicile screenshot`
@@ -254,6 +257,7 @@ domicile which-shell ─▶ $DOMICILE_SOCK ─▶ supervisor
 domicile load-shell  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine ─▶ page
 domicile open-url    ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
 domicile screenshot  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor
+domicile send-shell  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor ─▶ every page
 ```
 
 Several desktops per session:

@@ -142,35 +142,30 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
    scale. Left: test on hardware.
    [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
 
-6. **`domicile send-shell` from a terminal.** Keybindings are shell props and
-   their commands reach the shell. The same command typed as
-   `domicile send-shell focus right` has no route yet (supervisor → compositor
-   → every page). [KEYBINDINGS.md](docs/architecture/KEYBINDINGS.md).
-
-7. **Composable shells, phase 3.** Phases 1, 2 and 4 are done. Left:
+6. **Composable shells, phase 3.** Phases 1, 2 and 4 are done. Left:
    - A `schemars` schema with generated `@domicile-desktop/sdk/config` types.
    - `nix/home-manager.nix` building a TS config directory with `bun2nix`. It
      writes `domicile.json` today.
 
    [COMPOSABLE-SHELLS.md](docs/architecture/COMPOSABLE-SHELLS.md).
 
-8. **Split manganese into small packages.** `@domicile-desktop/manganese` is
+7. **Split manganese into small packages.** `@domicile-desktop/manganese` is
    one package with the layout, the bar and every bar item. Split the clock,
    tray, mixer and window management into their own packages, with manganese
    the shell that composes them. No design doc yet.
 
-9. **A Settings app.** Extensions and config values can only be set by editing
+8. **A Settings app.** Extensions and config values can only be set by editing
    the config. A Settings app would manage both. It would also hold the
    *Known gaps* that need a place to store state: a persistent theme choice,
    and the cookies and site data that `chrome://settings` manages in
    Chrome. No design doc yet.
 
-10. **Split up the compositor's `main.rs`.** Subsystems such as the lock,
-    portals and screens are their own modules. `main.rs` still holds the
-    event-loop state, the chrome hub, frame reporting and most request
-    handling. Left: extract cohesive subsystems so each can be read and tested
-    alone, keeping the event-loop state and the order it changes in clear from
-    `main.rs`.
+9. **Split up the compositor's `main.rs`.** Subsystems such as the lock,
+   portals and screens are their own modules. `main.rs` still holds the
+   event-loop state, the chrome hub, frame reporting and most request
+   handling. Left: extract cohesive subsystems so each can be read and tested
+   alone, keeping the event-loop state and the order it changes in clear from
+   `main.rs`.
 
 ## In the engine fork (the agent on `crux`)
 

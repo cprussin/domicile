@@ -148,6 +148,7 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                 &|_, _| panic!("a question about this desktop reaches no engine"),
                 &|_| panic!("a question about this desktop reaches no engine"),
                 &|_| panic!("a question about this desktop reaches no engine"),
+                &|_| panic!("a question about this desktop reaches no compositor"),
             )
         })
         .expect("the client asked and read the answer");

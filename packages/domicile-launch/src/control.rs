@@ -32,6 +32,8 @@ pub enum Request {
     /// The client makes the path absolute, as for `LoadShell`. See
     /// `SystemRequest::Screenshot` for where the interactive one is saved.
     Screenshot { file: Option<PathBuf> },
+    /// Send this command to the shell, as a `send-shell` keybinding would.
+    SendShell { command: Vec<String> },
 }
 
 /// A desktop's response.
@@ -54,6 +56,11 @@ pub enum Response {
 
     /// The user dismissed the shell's screenshot dialog.
     Canceled,
+
+    /// The compositor sent the command to every page listening for one.
+    ///
+    /// The shell does not report whether it knew the command.
+    Sent,
 
     /// The request was unknown or could not be carried out.
     ///
@@ -90,6 +97,11 @@ pub type OpenUrl<'a> = &'a dyn Fn(&str) -> Result<(), String>;
 /// [`crate::compositor_socket::screenshot`] in a desktop; a closure in tests.
 pub type Screenshot<'a> = &'a dyn Fn(Option<&Path>) -> Result<Shot, String>;
 
+/// Tells the compositor to send the shell a command.
+///
+/// [`crate::compositor_socket::send_shell`] in a desktop; a closure in tests.
+pub type SendShell<'a> = &'a dyn Fn(&[String]) -> Result<(), String>;
+
 /// How a screenshot the compositor took ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Shot {
@@ -101,14 +113,15 @@ pub enum Shot {
 
 /// Answers one request line, given the current shell `module`.
 ///
-/// `load` and `open` reach the engine and `capture` the compositor; they are
-/// injected so this can be tested without sockets.
+/// `load` and `open` reach the engine, and `capture` and `send` the
+/// compositor; they are injected so this can be tested without sockets.
 pub fn answer(
     line: &str,
     module: &Path,
     load: LoadShell,
     open: OpenUrl,
     capture: Screenshot,
+    send: SendShell,
 ) -> String {
     match parse_request(line.trim()) {
         Ok(Request::WhichShell) => to_line(&Response::Shell {
@@ -129,6 +142,10 @@ pub fn answer(
         Ok(Request::Screenshot { file }) => to_line(&match capture(file.as_deref()) {
             Ok(Shot::Saved(file)) => Response::Captured { file },
             Ok(Shot::Canceled) => Response::Canceled,
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::SendShell { command }) => to_line(&match send(&command) {
+            Ok(()) => Response::Sent,
             Err(why) => Response::Refused { why },
         }),
         Err(why) => to_line(&Response::Refused {

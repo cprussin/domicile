@@ -184,6 +184,7 @@ use domicile_config::{
 use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
 use domicile_host::data_dirs::data_dirs;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
+use domicile_host::shell_commands::ShellCommands;
 use domicile_host::system::{locked_out, reach, Environment, Handled, System};
 use domicile_host::theme_turnover::{Step, Turnover, CAPTURE_WITHIN, REPAINT_WITHIN};
 use domicile_host::Host;
@@ -463,6 +464,9 @@ struct ChromeHub {
     /// Opens EIS contexts for the RemoteDesktop and InputCapture portals. Set
     /// once, when the Wayland loop starts serving. See [`crate::eis`].
     eis: OnceLock<eis::Eis>,
+    /// The pages listening for `domicile send-shell`, shared by every
+    /// connection's `System`.
+    shell_commands: ShellCommands,
 }
 
 impl ChromeHub {
@@ -487,6 +491,7 @@ impl ChromeHub {
             tray: OnceLock::new(),
             notifications: OnceLock::new(),
             eis: OnceLock::new(),
+            shell_commands: ShellCommands::default(),
         });
         (hub, outbound_rx)
     }
@@ -890,7 +895,8 @@ fn read_chrome_messages(
     .screenshotting_with({
         let portals = hub.portals.clone();
         move |file| portals.screenshot(file)
-    });
+    })
+    .sharing_shell_commands(hub.shell_commands.clone());
     let mut ready = false;
     // Whether this connection is in the broadcast list. Separate from `ready`
     // because a socket can send `hello` twice, and the writer must not be added

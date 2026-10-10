@@ -31,6 +31,9 @@ export const Shell = async (root, domicile) => {
 - `screenshot()` takes an interactive Screenshot portal screenshot as if the
   shell were the app: `<PortalDialogs />` draws the dialog, and the call
   resolves with the saved PNG's path, or fails `canceled`.
+- `shellCommands()` streams each command `domicile send-shell` sends.
+  `bindKeys` listens for you and passes them to `onCommand`; see
+  [KEYBINDINGS.md](architecture/KEYBINDINGS.md#commands-from-a-terminal).
 - Spawned programs are found on the compositor's `PATH`. The Nix wrapper
   appends `pactl`, `parec` and `curl`, so a user's own copies win.
 - A reload starts every library from nothing: each reads its state again, so a
@@ -69,8 +72,9 @@ recorded output.
 
 - Page to compositor: `system_request { id, request }`. `request` starts a
   call (`read_file`, `write_file`, `read_dir`, `stat`, `watch`, `spawn`,
-  `dbus_call`, `dbus_match`, `screenshot`) or drives one running under the
-  same `id` (`unwatch`, `stdin`, `close_stdin`, `kill`). `read_file` takes an
+  `dbus_call`, `dbus_match`, `screenshot`, `shell_commands`, `send_shell`) or
+  drives one running under the same `id` (`unwatch`, `stdin`, `close_stdin`,
+  `kill`). `read_file` takes an
   optional byte range, `offset` and `length`.
 - Compositor to page: one `system_reply` per call that starts something
   (`failed` included), then for a watch or process any number of
@@ -106,6 +110,8 @@ that trust from reaching anything else.
       and `system-bluetooth`'s watch, matched field by field, so a lock screen
       shows the battery and Bluetooth and sets the brightness and volume
       ([LOCK.md](LOCK.md#lock-screen-readouts))
+    - `shell_commands`, so a page reloaded while locked hears commands after
+      unlock
   - `stdin` is dropped; `unwatch`, `close_stdin` and `kill` are allowed
   - processes and watches started before the lock keep running
 - **Lifetime:** a page's processes, watches and matches end when its

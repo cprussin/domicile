@@ -43,6 +43,7 @@ pub mod portals;
 pub mod print_media;
 pub mod print_settings;
 pub mod screenshot;
+pub mod shell_commands;
 pub mod system;
 pub mod theme_turnover;
 pub mod tray;
