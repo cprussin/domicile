@@ -15,6 +15,7 @@ import { useState } from "react";
 
 import { css, cva, cx } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
+import { raised } from "./placement";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
 import type { TitleFocus } from "./title-focus";
@@ -217,7 +218,8 @@ export const TitleBar = ({
       onContextMenu={onContextMenu}
       onPointerDown={onPointerDown}
       style={{
-        ...placedAt(rect, depth),
+        // Over the rest of the strip, which slides under it when tabs swap.
+        ...placedAt(rect, strip?.open === true ? raised(depth) : depth),
         ...scaledAbout(frame, rect),
         ...shuffledBy(restack),
         ...collapsedAlong(tabbed),

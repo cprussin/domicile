@@ -101,8 +101,18 @@ const COVERED = -2;
 /** The `z-index` all tiled windows share. */
 export const TILED = 0;
 
-/** The lowest floating `z-index`, above every tiled window. */
-const FLOATING = 1;
+/**
+ * The lowest floating `z-index`, above every tiled window and its open tabs.
+ * Floats are two apart, leaving each one's {@link raised} depth free.
+ */
+const FLOATING = 2;
+
+/**
+ * The depth of a window's open tab and popups: over the window, under the next
+ * window up. The open tab slides over its neighbors when tabs swap, since the
+ * whole strip shares the window's depth.
+ */
+export const raised = (depth: number): number => depth + 1;
 
 /**
  * The depth of a closing window, over every open one.
@@ -143,7 +153,7 @@ export const placementsOf = (
   const floating = workspace.floats
     .map((float) => onScreen(float, geometry.screen))
     .map((float, at) => ({
-      depth: FLOATING + at,
+      depth: FLOATING + 2 * at,
       float,
       ...framesOf(float, rectOf(float), floatingGapOf(float)),
     }));

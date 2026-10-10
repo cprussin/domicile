@@ -1,6 +1,7 @@
 // Places client popups, such as menus and tooltips, on screen.
 
 import type { Placement } from "./placement";
+import { raised } from "./placement";
 import type { Rect } from "./rect";
 import { appWindowId } from "./window";
 
@@ -22,7 +23,8 @@ export type PlacedPopup = {
 
 /**
  * Places each popup at its offset from its parent chain's window, at that
- * window's depth. Popups come later in the document, so they draw on top.
+ * window's {@link raised} depth, so it covers the window's open tab. Popups
+ * come later in the document, so they draw on top.
  *
  * Skips popups whose window has no contents on this screen; embedding one here
  * would take its pixels from the page that shows the window.
@@ -38,7 +40,7 @@ export const popupsOver = (
       : [
           {
             appId: popup.appId,
-            depth: over.depth,
+            depth: raised(over.depth),
             rect: {
               height: popup.size[1],
               width: popup.size[0],

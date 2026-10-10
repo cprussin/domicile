@@ -110,6 +110,8 @@ For how warping, browser-window focus and modifier drags work, see
 - A float casts a shadow (`FloatShadow.tsx`), except when fullscreen.
 - Stacking order is the `z-index` of the window's element, so drawing order and
   hit-testing order match.
+- A window's open tab and popups draw one above the window (`raised`), so
+  tabs that swap slide under the open one. Floats are two apart to leave room.
 - Raising a float over one it overlaps animates the two swapping places.
 
 ## Dragging tiled windows

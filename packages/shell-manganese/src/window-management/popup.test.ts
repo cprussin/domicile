@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { Placement } from "./placement";
+import { raised } from "./placement";
 import { popupsOver } from "./popup";
 
 /** A window's placement with contents at `surface` and depth `depth`. */
@@ -22,7 +23,8 @@ const placed = (
 });
 
 describe("where a popup goes", () => {
-  it("is its offset from its window's contents, at the window's depth", () => {
+  // Over its window's open tab, which is drawn just over the window.
+  it("is its offset from its window's contents, just over the window", () => {
     const [menu] = popupsOver(
       [
         {
@@ -37,7 +39,7 @@ describe("where a popup goes", () => {
 
     expect(menu).toStrictEqual({
       appId: "menu",
-      depth: 3,
+      depth: raised(3),
       rect: { height: 240, width: 180, x: 112, y: 80 },
     });
   });

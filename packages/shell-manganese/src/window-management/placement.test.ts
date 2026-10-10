@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { Axis } from "./direction";
 import type { Geometry } from "./placement";
-import { contentsOf, LEAVING, placementsOf, TILED } from "./placement";
+import { contentsOf, LEAVING, placementsOf, raised, TILED } from "./placement";
 import { SURFACE_TUCK, TITLE_BAR } from "./rect";
 import { Layout } from "./tree/node";
 import { appWindowId } from "./window";
@@ -156,6 +156,22 @@ describe("placementsOf", () => {
     const front = placementFor(state, "kitty")?.depth ?? 0;
     const behind = placementFor(state, "editor")?.depth ?? 0;
     expect(front).toBeGreaterThan(behind);
+  });
+
+  // A window's open tab is drawn just over it, so it must stay under the next
+  // window up.
+  it("leaves a depth free over each window for its open tab", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.FloatToggled(),
+      WindowAction.WindowSelected(appWindowId("kitty")),
+      WindowAction.FloatToggled(),
+    );
+
+    const front = placementFor(state, "kitty")?.depth ?? 0;
+    const behind = placementFor(state, "editor")?.depth ?? 0;
+    expect(raised(TILED)).toBeLessThan(behind);
+    expect(raised(behind)).toBeLessThan(front);
   });
 
   it("lays a floating group out inside its box, all at one depth", () => {
