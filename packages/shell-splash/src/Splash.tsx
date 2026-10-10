@@ -289,11 +289,8 @@ const sceneStyles = css({
 });
 
 const auroraStyles = css({
-  "[data-stage=built] &": { opacity: 0, transform: "scale(1.15)" },
   inset: 0,
   position: "absolute",
-  transition:
-    "opacity {durations.ending} {easings.in}, transform {durations.ending} {easings.in}",
 });
 
 // Percentages, so the aurora fills a display of any size the same way.
@@ -366,20 +363,10 @@ const vignetteStyles = css({
 });
 
 const contentStyles = vstack({
-  "[data-stage=built] &": {
-    filter: "blur({spacing.2})",
-    opacity: 0,
-    transform: "scale(1.06)",
-  },
   gap: 0,
   inset: 0,
   justify: "center",
   position: "absolute",
-  transition: `
-    opacity {durations.ending} {easings.in},
-    transform {durations.ending} {easings.in},
-    filter {durations.ending} {easings.in}
-  `,
 });
 
 const markStyles = center({

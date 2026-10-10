@@ -30,13 +30,15 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
-#include "content/public/browser/reload_type.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/socket/stream_socket.h"
 #include "net/socket/unix_domain_server_socket_posix.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 
 namespace domicile {
@@ -79,10 +81,15 @@ content::WebContents* FindShellContents() {
   return shell;
 }
 
-// Serves the shell at `root`/`module` and reloads the shell window.
+// Serves the shell at `root`/`module` and loads it into the shell window.
 //
-// The source is set before the reload because the reload reads it.
-// BYPASSING_CACHE because a rebuilt shell has the same URLs with new content.
+// The source is set before the navigation because the navigation reads it.
+//
+// A renderer-initiated replacement rather than a reload: Chromium runs a
+// cross-document view transition only for that kind of navigation, and the
+// shell document's `@view-transition` crossfades the splash into the built
+// shell. Shell files are served `no-store` (ShellURLLoaderFactory), so a
+// rebuilt shell with the same URLs is read fresh.
 bool LoadShellIntoTheShellWindow(const base::FilePath& root,
                                  const std::string& module) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -93,8 +100,15 @@ bool LoadShellIntoTheShellWindow(const base::FilePath& root,
   }
 
   ShellSource::Get().Set(root, module);
-  shell->GetController().Reload(content::ReloadType::BYPASSING_CACHE,
-                                /*check_for_repost=*/false);
+  content::RenderFrameHost* page = shell->GetPrimaryMainFrame();
+  content::NavigationController::LoadURLParams params(
+      shell->GetLastCommittedURL());
+  params.transition_type = ui::PAGE_TRANSITION_LINK;
+  params.should_replace_current_entry = true;
+  params.is_renderer_initiated = true;
+  params.initiator_origin = page->GetLastCommittedOrigin();
+  params.source_site_instance = page->GetSiteInstance();
+  shell->GetController().LoadURLWithParams(params);
   LOG(INFO) << "domicile: now serving " << module << " out of " << root;
   return true;
 }
