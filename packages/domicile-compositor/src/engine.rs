@@ -13,9 +13,11 @@ use std::os::fd::{BorrowedFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::buffer_transform::Sampled;
 use crate::dmabuf_descriptor::DmabufDescriptor;
 use domicile_config::{Desk, Transform};
 use libloading::{Library, Symbol};
+use smithay::utils::Transform as BufferTransform;
 use thiserror::Error;
 
 /// The default library name, looked up on `LD_LIBRARY_PATH`.
@@ -345,6 +347,8 @@ pub struct Engine {
     said_it_cannot_crop: Cell<bool>,
     /// Whether the missing `domicile_surface_submit_for_box` was logged.
     said_it_cannot_wait: Cell<bool>,
+    /// Whether the missing `domicile_surface_submit_transformed` was logged.
+    said_it_cannot_turn: Cell<bool>,
 }
 
 /// `DomicileDisplay`, laid out as in the C header. 48 bytes, including 4 of
@@ -467,6 +471,7 @@ impl Engine {
             path,
             said_it_cannot_crop: Cell::new(false),
             said_it_cannot_wait: Cell::new(false),
+            said_it_cannot_turn: Cell::new(false),
         })
     }
 
@@ -588,13 +593,79 @@ impl Engine {
         };
     }
 
-    /// Submits a frame showing the `crop` of `buffer` (`wl_surface.commit`) at
-    /// the newest box numbered at most `at_box` (see [`Event::Configure`]).
+    /// Submits a frame showing the `sampled` part of `buffer`
+    /// (`wl_surface.commit`), turned upright, at the newest box numbered at
+    /// most `at_box` (see [`Event::Configure`]).
     ///
     /// The crop is the window geometry, which excludes client-drawn shadows
     /// (see [`crate::window_geometry`]). An empty crop means the whole buffer;
     /// empty damage means the whole surface.
     pub fn submit(
+        &self,
+        surface: SurfaceId,
+        buffer: BufferId,
+        sampled: Sampled,
+        damage: (i32, i32, i32, i32),
+        at_box: u64,
+    ) {
+        #[allow(clippy::type_complexity)] // the C signature, spelled out
+        let f: Symbol<
+            unsafe extern "C" fn(
+                *mut Handle,
+                SurfaceId,
+                BufferId,
+                i32,
+                i32,
+                i32,
+                i32,
+                i32,
+                i32,
+                i32,
+                i32,
+                u64,
+                u32,
+            ),
+        > = match self.symbol(
+            b"domicile_surface_submit_transformed\0",
+            "domicile_surface_submit_transformed",
+        ) {
+            Ok(symbol) => symbol,
+            // An older engine shows every buffer as drawn, so a client that
+            // turned its buffer for a rotated monitor is shown turned.
+            Err(why) => {
+                if sampled.transform != BufferTransform::Normal
+                    && !self.said_it_cannot_turn.replace(true)
+                {
+                    tracing::warn!(%why, "windows drawn turned are shown turned");
+                }
+                return self.submit_unturned(surface, buffer, sampled.crop, damage, at_box);
+            }
+        };
+        let (crop_x, crop_y, crop_width, crop_height) = sampled.crop;
+        let (x, y, width, height) = damage;
+        // SAFETY: as above.
+        unsafe {
+            f(
+                self.handle,
+                surface,
+                buffer,
+                crop_x,
+                crop_y,
+                crop_width,
+                crop_height,
+                x,
+                y,
+                width,
+                height,
+                at_box,
+                abi_transform(sampled.transform),
+            )
+        };
+    }
+
+    /// Submits without a transform, for an engine without
+    /// `domicile_surface_submit_transformed`.
+    fn submit_unturned(
         &self,
         surface: SurfaceId,
         buffer: BufferId,
@@ -1175,6 +1246,21 @@ fn displays_from(records: &[RawDisplay]) -> Vec<Display> {
         .collect()
 }
 
+/// A buffer transform as the ABI's `DomicileBufferTransform`: the
+/// `wl_output.transform` order.
+fn abi_transform(transform: BufferTransform) -> u32 {
+    match transform {
+        BufferTransform::Normal => 0,
+        BufferTransform::_90 => 1,
+        BufferTransform::_180 => 2,
+        BufferTransform::_270 => 3,
+        BufferTransform::Flipped => 4,
+        BufferTransform::Flipped90 => 5,
+        BufferTransform::Flipped180 => 6,
+        BufferTransform::Flipped270 => 7,
+    }
+}
+
 /// Converts connectors to the ABI's layout records.
 fn layouts_from(connectors: &[Connector]) -> Vec<RawLayout> {
     connectors
@@ -1394,6 +1480,25 @@ mod tests {
             [0, 1, 2, 3]
         );
         assert_eq!(layouts_from(&[LIT])[0].scale, 1.2);
+    }
+
+    #[test]
+    fn a_buffer_transform_crosses_in_the_wl_output_order() {
+        // `DomicileBufferTransform` uses the `wl_output.transform` order.
+        assert_eq!(
+            [
+                BufferTransform::Normal,
+                BufferTransform::_90,
+                BufferTransform::_180,
+                BufferTransform::_270,
+                BufferTransform::Flipped,
+                BufferTransform::Flipped90,
+                BufferTransform::Flipped180,
+                BufferTransform::Flipped270,
+            ]
+            .map(abi_transform),
+            [0, 1, 2, 3, 4, 5, 6, 7]
+        );
     }
 
     #[test]

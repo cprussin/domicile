@@ -262,9 +262,11 @@ Understood and not scheduled.
   `scripts/test-the-engines-fourccs-agree.sh` keeps them in sync.
 - **A chrome repaint marks the whole output damaged.** The chrome is one layer
   over the desktop, and it repaints for a clock, a caret or a hover.
-- **Clients that pre-rotate their buffer render wrong.** Clients may
-  pre-rotate their buffer to match `wl_output.transform`, but nothing reads
-  `wl_surface.set_buffer_transform`. The fix is in the dmabuf submit path.
+- **A window cast shows a pre-rotated buffer as drawn.** The engine turns a
+  buffer drawn with `wl_surface.set_buffer_transform` upright, but a window
+  cast (`cast_frame`, `casting::Shown`) copies the buffer unturned. The cast
+  needs the transform beside its crop.
+  [WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md#pre-rotated-buffers).
 - **Browser window context menus have Chrome's core items only.** No
   spelling suggestions and no items a page or extension adds. DevTools' own
   menus get the page menu. Each needs a field on `WebViewContextMenu` in
