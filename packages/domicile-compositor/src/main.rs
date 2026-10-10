@@ -16,9 +16,9 @@ use std::os::fd::OwnedFd;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -33,7 +33,7 @@ use smithay::input::{
 use smithay::output::{Mode as OutputMode, Output, PhysicalProperties, Scale, Subpixel};
 use smithay::reexports::{
     calloop::{
-        channel::{channel, Event as ChannelEvent, Sender},
+        channel::{channel, Event as ChannelEvent},
         generic::Generic,
         timer::{TimeoutAction, Timer},
         EventLoop, InsertError, Interest, LoopHandle, Mode, PostAction, RegistrationToken,
@@ -112,6 +112,7 @@ use tracing::{debug, error, info, warn};
 mod activation;
 mod app_scope;
 mod casting;
+mod chrome_hub;
 mod clipboard;
 mod coalesce;
 mod configure_answers;
@@ -161,20 +162,22 @@ use crate::latency::{Latency, Step as LatencyStep};
 use crate::shm_upload::{render_modifiers, shm_shape, CopyError};
 use crate::uploads::{UploadId, Uploads};
 
+use crate::chrome_hub::{
+    announce_open_apps, broadcast_closed, broadcast_focus_decision, broadcast_focus_request,
+    serve_outbound, Chrome, ChromeHub,
+};
 use crate::coalesce::last_of_burst;
 use crate::configure_answers::ConfigureAnswers;
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::eis::barriers::Zone;
-use crate::file_indexing::{keep_the_index, kept_at, Heard, Offered};
-use crate::frame_report::{report, FrameTimings, FrameWindow, REPORT_EVERY};
+use crate::file_indexing::{keep_the_index, kept_at, Heard};
 use crate::idle::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
 use crate::keymap::compiled_keymap;
-use crate::lock::{Asked, Lock, Offer, Refusal, Seen, Unlocking, Verdict};
+use crate::lock::{Asked, Lock, Offer, Refusal, Unlocking, Verdict};
 use crate::modifiers::{Held, Modifiers};
-use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::peer_process::peer_pid;
-use crate::portals::{shell_appearance, Portals, Selection, CURRENT_DESKTOP};
+use crate::portals::{shell_appearance, Selection, CURRENT_DESKTOP};
 use crate::restatement::Restatement;
 use crate::scale::{logical_size, output_scale};
 use crate::screens::{Advertised, Screens, Slot};
@@ -186,7 +189,6 @@ use domicile_config::{
 use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
 use domicile_host::data_dirs::data_dirs;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
-use domicile_host::shell_commands::ShellCommands;
 use domicile_host::system::{locked_out, reach, Environment, Handled, System};
 use domicile_host::theme_turnover::{Step, Turnover, CAPTURE_WITHIN, REPAINT_WITHIN};
 use domicile_host::Host;
@@ -416,193 +418,6 @@ enum ConnectionRequest {
     SetTheme { theme: Theme },
 }
 
-/// One connected chrome: where to write to it.
-struct Chrome {
-    writer: Arc<Mutex<UnixStream>>,
-}
-
-/// State shared by the Wayland thread and the chrome connection threads.
-struct ChromeHub {
-    host: Mutex<Host>,
-    chromes: Mutex<Vec<Chrome>>,
-    request_tx: Mutex<Sender<ClientRequest>>,
-    outbound: OutboundSender,
-    timings: Mutex<FrameTimings>,
-    /// The highest output scale to advertise.
-    ///
-    /// Atomic because a config reload changes it on the Wayland thread while
-    /// connection threads read it.
-    max_scale: AtomicU32,
-    /// Our Wayland socket name, which spawned clients connect to.
-    wayland_display: OsString,
-    /// The latest file index snapshot, for answering `search_files`.
-    ///
-    /// Lives here because connection threads answer searches without waiting
-    /// for the Wayland thread. Readers clone the `Arc` and search after
-    /// releasing the lock. See [`crate::file_indexing`].
-    ///
-    /// `None` means no index (no `HOME`, or it was unreadable). `search_files`
-    /// then answers nothing, so a launcher does not show a broken desktop as an
-    /// empty home.
-    offered: Mutex<Option<Arc<Offered>>>,
-    /// The lock state, for [`answer_on_the_connection`]. Set once at startup,
-    /// only if the desktop can lock.
-    lock: OnceLock<Seen>,
-    /// The desktop portal: tells clients the theme, and takes the shell's
-    /// answers to their dialogs.
-    ///
-    /// The theme is driven by the Wayland thread's theme turnover, not the
-    /// broadcast: clients switch only after every chrome has captured its
-    /// starting frame. See [`crate::portals`].
-    portals: Portals,
-    /// The tray worker that activates items.
-    ///
-    /// Set once after the hub exists, because the tray publishes through the
-    /// hub. See [`crate::tray`]. Unset in unit tests, which have no bus.
-    tray: OnceLock<tray::Tray>,
-    /// The notification server's worker. Set once, like `tray`. See
-    /// [`crate::notifications`].
-    notifications: OnceLock<notifications::NotificationServer>,
-    /// Opens EIS contexts for the RemoteDesktop and InputCapture portals. Set
-    /// once, when the Wayland loop starts serving. See [`crate::eis`].
-    eis: OnceLock<eis::Eis>,
-    /// The pages listening for `domicile send-shell`, shared by every
-    /// connection's `System`.
-    shell_commands: ShellCommands,
-}
-
-impl ChromeHub {
-    fn new(
-        request_tx: Sender<ClientRequest>,
-        max_scale: u32,
-        wayland_display: OsString,
-        portals: Portals,
-    ) -> (Arc<Self>, OutboundReceiver) {
-        let (outbound, outbound_rx) = outbound();
-        let hub = Arc::new(ChromeHub {
-            host: Mutex::new(Host::new()),
-            chromes: Mutex::new(Vec::new()),
-            request_tx: Mutex::new(request_tx),
-            outbound,
-            timings: Mutex::new(FrameTimings::default()),
-            max_scale: AtomicU32::new(max_scale),
-            wayland_display,
-            offered: Mutex::new(None),
-            lock: OnceLock::new(),
-            portals,
-            tray: OnceLock::new(),
-            notifications: OnceLock::new(),
-            eis: OnceLock::new(),
-            shell_commands: ShellCommands::default(),
-        });
-        (hub, outbound_rx)
-    }
-
-    /// Set the theme, tell every chrome, and start switching the windows.
-    ///
-    /// Both a config reload and [`ChromeMessage::SetTheme`] call this. Windows
-    /// switch later, once every chrome has captured its starting frame; see
-    /// `domicile_host::theme_turnover`.
-    ///
-    /// Does nothing if the theme is unchanged, so rewriting the config does not
-    /// replay the theme transition. See `Host::set_theme`.
-    fn take_up_the_theme(&self, theme: Theme) {
-        let told = self.host.lock().unwrap().set_theme(theme);
-        if let Some(message) = told {
-            self.broadcast(message);
-            // Read after the broadcast. A chrome that joins in between is then
-            // waited on for a theme it already got in its handshake, which at
-            // worst costs a deadline.
-            let chromes = self
-                .chromes
-                .lock()
-                .unwrap()
-                .iter()
-                .map(|chrome| chrome_key(&chrome.writer))
-                .collect();
-            self.send_request(ClientRequest::TurnTheWindows { theme, chromes });
-        }
-    }
-
-    /// Whether the desktop is locked, for chrome connection threads.
-    ///
-    /// A desktop that cannot lock is never locked.
-    fn the_desk_is_locked(&self) -> bool {
-        self.lock.get().is_some_and(Seen::locked)
-    }
-
-    /// Forward an input event to the Wayland thread.
-    fn send_request(&self, event: ClientRequest) {
-        let _ = self.request_tx.lock().unwrap().send(event);
-    }
-
-    /// Queue a host message for every connected chrome.
-    fn broadcast(&self, message: HostMessage) {
-        self.outbound.message(message);
-    }
-}
-
-/// Apply a focus change made by the compositor and tell every chrome.
-///
-/// Broadcast because [`Host::focus_change`] reports each change once, and a
-/// chrome that misses it shows the wrong window as active.
-fn broadcast_focus_decision(hub: &ChromeHub, decision: ChromeMessage) {
-    let moved = {
-        let mut host = hub.host.lock().unwrap();
-        let mut ready = true;
-        let _ = apply_chrome_message(&mut host, &mut ready, decision);
-        host.focus_change()
-    };
-    if let Some(message) = moved {
-        hub.broadcast(message);
-    }
-}
-
-/// Tell every chrome that a client asked for keyboard focus, without granting
-/// it.
-///
-/// A shell grants it by sending `focus_app` back. A shell can refuse, so
-/// windows cannot steal focus from what the user is typing in. Broadcast
-/// because the compositor does not know which chrome shows the desktop.
-fn broadcast_focus_request(hub: &ChromeHub, app_id: &str) {
-    let asked = hub.host.lock().unwrap().focus_requested(app_id);
-    if let Some(message) = asked {
-        hub.broadcast(message);
-    }
-}
-
-/// Forget a closed client and tell every chrome.
-///
-/// Sends the close first, then any focus change it caused. The fallback hands
-/// focus to the chrome, so a shell that wants to focus another window can
-/// answer after it and have the last word.
-fn broadcast_closed(hub: &ChromeHub, app_id: &str) {
-    let (closed, focus) = {
-        let mut host = hub.host.lock().unwrap();
-        let closed = host.app_closed(app_id);
-        // After the close, because closing the focused window moves focus.
-        (closed, host.focus_change())
-    };
-    for message in closed.into_iter().chain(focus) {
-        hub.broadcast(message);
-    }
-}
-
-/// Tell every chrome which apps are already open.
-///
-/// `app_appeared` is sent once, so a page that loads or reloads after a client
-/// maps would never learn of it. Broadcast because shells ignore apps they
-/// already know.
-///
-/// Releases the `host` lock before broadcasting, so a slow chrome cannot block
-/// the Wayland thread.
-fn announce_open_apps(hub: &ChromeHub) {
-    let announcements = hub.host.lock().unwrap().open_apps();
-    for announcement in announcements {
-        hub.broadcast(announcement);
-    }
-}
-
 /// Write a message's responses to the connection that asked, in order.
 ///
 /// Returns false if the socket is gone, which ends the connection. Separate
@@ -660,36 +475,6 @@ fn freshened(hub: &ChromeHub, message: HostMessage) -> HostMessage {
     };
     debug!("told the chrome about {} display(s)", displays.len());
     HostMessage::Displays { displays }
-}
-
-/// Write everything bound for the chromes, off the Wayland thread.
-///
-/// The only place that blocks on a chrome socket, so a slow chrome cannot stall
-/// `commit()` and every client with it.
-fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
-    let mut window = FrameWindow::default();
-    // Wake on a timeout too: compositing sends nothing outbound, so the report
-    // would otherwise never run.
-    while let Some(next) = outbound.recv_until(REPORT_EVERY) {
-        let Some(item) = next else {
-            report(&mut window, &hub);
-            continue;
-        };
-        let Outbound::Message(message) = item;
-        // Encoded once; every chrome gets the same line.
-        let line = to_line(&message);
-        let mut chromes = hub.chromes.lock().unwrap();
-        chromes.retain(|chrome| {
-            let mut stream = chrome.writer.lock().unwrap();
-            stream
-                .write_all(line.as_bytes())
-                .and_then(|_| stream.flush())
-                .is_ok()
-        });
-        drop(chromes);
-
-        report(&mut window, &hub);
-    }
 }
 
 /// Maximum file search results sent. `matched` still reports the full count.
@@ -7225,18 +7010,21 @@ mod tests {
 
     use domicile_protocol::CursorShape;
 
+    use crate::chrome_hub::fixture::{hub_with_an_app, queued};
+    use crate::file_indexing::Offered;
+    use crate::portals::Portals;
+
     use super::{
-        announce_open_apps, answer_on_the_connection, answers_keystroke, at, broadcast_closed,
-        broadcast_focus_decision, broadcast_focus_request, channel, chrome_connection,
+        answer_on_the_connection, answers_keystroke, at, channel, chrome_connection,
         client_command, clipboard_of, cursor_shape, freshened, hand_over_the_extensions,
         parse_find_colors, to_line, write_responses, Chrome, ChromeHub, ClientRequest, Clipboard,
-        Committer, ConnectionRequest, Handshake, Lock, Offer, Offered, Outbound, Passphrase,
-        Portals, SelectionTarget, Unlocking, BOTH,
+        Committer, ConnectionRequest, Handshake, Lock, Offer, Passphrase, SelectionTarget,
+        Unlocking, BOTH,
     };
 
     use std::sync::Arc;
 
-    use domicile_protocol::{ChromeMessage, HostMessage, Theme};
+    use domicile_protocol::HostMessage;
 
     #[test]
     fn a_chrome_that_goes_away_is_forgotten() {
@@ -7527,106 +7315,6 @@ mod tests {
     }
 
     #[test]
-    fn a_theme_the_shell_picked_reaches_every_page_on_the_desk() {
-        // A click on one monitor's page must switch every page. The compositor
-        // broadcasts the answer to all chromes, including the sender.
-        let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, outbound) = ChromeHub::new(
-            request_tx,
-            1,
-            OsString::from("wayland-1"),
-            Portals::to_nobody(),
-        );
-
-        hub.take_up_the_theme(Theme::Light);
-
-        assert!(
-            matches!(
-                outbound.recv_until(Duration::from_millis(100)),
-                Some(Some(Outbound::Message(HostMessage::Theme {
-                    theme: Theme::Light
-                })))
-            ),
-            "the theme is broadcast"
-        );
-        assert_eq!(
-            hub.host.lock().unwrap().describe_theme(),
-            HostMessage::Theme {
-                theme: Theme::Light
-            },
-            "and remembered, so the chrome that connects next is told it too"
-        );
-    }
-
-    #[test]
-    fn a_theme_that_is_already_the_desks_is_not_restated() {
-        // Reloads re-apply the theme often. Broadcasting an unchanged theme
-        // would replay the transition on every page.
-        let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, outbound) = ChromeHub::new(
-            request_tx,
-            1,
-            OsString::from("wayland-1"),
-            Portals::to_nobody(),
-        );
-
-        hub.take_up_the_theme(Theme::Dark);
-
-        assert!(
-            matches!(outbound.recv_until(Duration::from_millis(100)), Some(None)),
-            "a host that came up dark is already dark, so nothing is queued"
-        );
-    }
-
-    #[test]
-    fn a_page_that_says_hello_is_told_what_is_already_running() {
-        // Nothing else re-sends `app_appeared`, so a reloaded page would see an
-        // empty screen.
-        let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, outbound) = ChromeHub::new(
-            request_tx,
-            1,
-            OsString::from("wayland-1"),
-            Portals::to_nobody(),
-        );
-        let (first, _) = hub
-            .host
-            .lock()
-            .unwrap()
-            .app_appeared(Some("a terminal".to_string()), Some((640.0, 480.0)));
-        let (second, _) = hub
-            .host
-            .lock()
-            .unwrap()
-            .app_appeared(None, Some((100.0, 200.0)));
-
-        announce_open_apps(&hub);
-
-        // Two windows plus a focus message, then one read that confirms nothing
-        // followed.
-        let mut announced = Vec::new();
-        for _ in 0..4 {
-            match outbound.recv_until(Duration::from_millis(100)) {
-                Some(Some(Outbound::Message(HostMessage::AppAppeared { app_id, .. }))) => {
-                    announced.push(app_id);
-                }
-                // Focus is sent with the windows; tested in `domicile-host`,
-                // skipped here.
-                Some(Some(Outbound::Message(HostMessage::FocusChanged { .. }))) => {}
-                Some(Some(_)) => panic!("something other than an announcement was queued"),
-                Some(None) => break,
-                None => panic!("the queue's sending half went away"),
-            }
-        }
-
-        assert_eq!(
-            announced,
-            vec![first, second],
-            "both open windows, in the order they arrived"
-        );
-    }
-
-    #[test]
     fn a_chrome_asking_for_focus_is_answered_to_every_chrome() {
         // `chrome_connection` asks `Host` what changed after each message and
         // broadcasts it, so focus reaches every chrome, not only the sender.
@@ -7739,133 +7427,6 @@ mod tests {
                 ] if app_id == "term"
             ),
             "the handshake, and then the one client asked to close"
-        );
-    }
-
-    /// Drain the hub's queued messages, in order.
-    ///
-    /// Reads until a read times out. Callers that know the expected count
-    /// should assert the length.
-    fn queued(outbound: &crate::outbound::OutboundReceiver) -> Vec<HostMessage> {
-        let mut seen = Vec::new();
-        while let Some(Some(item)) = outbound.recv_until(Duration::from_millis(100)) {
-            let Outbound::Message(message) = item;
-            seen.push(message);
-        }
-        seen
-    }
-
-    /// A hub with one app, ready to be focused.
-    fn hub_with_an_app() -> (Arc<ChromeHub>, crate::outbound::OutboundReceiver, String) {
-        let (request_tx, _requests) = channel::<ClientRequest>();
-        let (hub, outbound) = ChromeHub::new(
-            request_tx,
-            1,
-            OsString::from("wayland-1"),
-            Portals::to_nobody(),
-        );
-        let app_id = {
-            let mut host = hub.host.lock().unwrap();
-            let (app_id, _) = host.app_appeared(None, Some((100.0, 100.0)));
-            app_id
-        };
-        (hub, outbound, app_id)
-    }
-
-    #[test]
-    fn a_focus_the_compositor_decided_reaches_every_chrome() {
-        // Focus decided by the compositor is invisible to the chrome otherwise,
-        // and `focus_change` reports it once.
-        let (hub, outbound, app_id) = hub_with_an_app();
-
-        broadcast_focus_decision(
-            &hub,
-            ChromeMessage::FocusApp {
-                app_id: app_id.clone(),
-            },
-        );
-
-        assert_eq!(
-            queued(&outbound),
-            vec![HostMessage::FocusChanged {
-                app_id: Some(app_id)
-            }]
-        );
-    }
-
-    #[test]
-    fn a_click_on_the_desktop_says_the_keyboard_came_back() {
-        // Focus returning to the chrome must be announced, or the window stays
-        // marked active.
-        let (hub, outbound, app_id) = hub_with_an_app();
-        broadcast_focus_decision(&hub, ChromeMessage::FocusApp { app_id });
-        let _ = queued(&outbound);
-
-        broadcast_focus_decision(&hub, ChromeMessage::FocusChrome);
-
-        assert_eq!(
-            queued(&outbound),
-            vec![HostMessage::FocusChanged { app_id: None }]
-        );
-    }
-
-    #[test]
-    fn a_client_asking_for_the_keyboard_reaches_every_chrome_and_moves_nothing() {
-        // Granting `xdg-activation` here would take the policy from the shell.
-        // It is broadcast as a question and focus does not move.
-        let (hub, outbound, app_id) = hub_with_an_app();
-        broadcast_focus_decision(&hub, ChromeMessage::FocusChrome);
-        let _ = queued(&outbound);
-
-        broadcast_focus_request(&hub, &app_id);
-
-        assert_eq!(
-            queued(&outbound),
-            vec![HostMessage::FocusRequested {
-                app_id: app_id.clone()
-            }],
-            "the request goes out, and no `focus_changed` with it"
-        );
-        assert_eq!(
-            hub.host.lock().unwrap().focus_holder(),
-            None,
-            "the keyboard is where it was"
-        );
-    }
-
-    #[test]
-    fn a_request_from_a_window_this_compositor_never_announced_goes_nowhere() {
-        // A shell has no element for it and could not answer.
-        let (hub, outbound, _) = hub_with_an_app();
-
-        broadcast_focus_request(&hub, "app-404");
-
-        assert_eq!(queued(&outbound), vec![]);
-    }
-
-    #[test]
-    fn a_focused_window_closing_says_both_things_in_order() {
-        // Both the close and the focus return, in that order, or the chrome
-        // marks a closed window active.
-        let (hub, outbound, app_id) = hub_with_an_app();
-        broadcast_focus_decision(
-            &hub,
-            ChromeMessage::FocusApp {
-                app_id: app_id.clone(),
-            },
-        );
-        let _ = queued(&outbound);
-
-        broadcast_closed(&hub, &app_id);
-
-        assert_eq!(
-            queued(&outbound),
-            vec![
-                HostMessage::AppClosed {
-                    app_id: app_id.clone()
-                },
-                HostMessage::FocusChanged { app_id: None },
-            ]
         );
     }
 
