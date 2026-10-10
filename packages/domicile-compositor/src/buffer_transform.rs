@@ -15,6 +15,15 @@ pub struct Sampled {
     pub transform: Transform,
 }
 
+impl Sampled {
+    /// The size of the crop once turned upright. The crop must be a
+    /// rectangle, not the whole-buffer `(0, 0, 0, 0)`.
+    pub fn upright_size(&self) -> (u32, u32) {
+        let (_, _, width, height) = self.crop;
+        upright_size((width as u32, height as u32), self.transform)
+    }
+}
+
 /// The size of `buffer` once turned upright: a quarter turn swaps its sides.
 pub fn upright_size(buffer: (u32, u32), transform: Transform) -> (u32, u32) {
     if quarter_turned(transform) {

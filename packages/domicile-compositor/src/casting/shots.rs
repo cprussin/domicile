@@ -13,6 +13,7 @@ use smithay::backend::allocator::Buffer as _;
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::backend::renderer::ImportDma as _;
 
+use crate::buffer_transform::Sampled;
 use crate::casting::gpu::{FillError, Layer, Snapshot};
 use crate::casting::negotiation::Pixel;
 use crate::casting::pacing::Rect;
@@ -42,9 +43,9 @@ pub type DevelopedWindow = Box<dyn FnOnce(Result<Shot, String>) + Send>;
 /// The last frame a window showed, which the engine still holds.
 pub struct Shown {
     pub dmabuf: Dmabuf,
-    /// The part of the buffer that is the window, in buffer pixels. Empty
-    /// for all of it.
-    pub crop: Rect,
+    /// The part of the buffer that is the window, in buffer pixels, with
+    /// `(0, 0, 0, 0)` for all of it, and the turn that makes it upright.
+    pub sampled: Sampled,
 }
 
 /// The rectangle every monitor fits in, in logical pixels. `None` without
@@ -80,21 +81,24 @@ pub fn compose(
 pub fn window(shown: &Shown, renderer: Option<&mut GlesRenderer>) -> Result<Shot, String> {
     let renderer = renderer.ok_or("no GPU renderer to read the window's frame")?;
     let size = shown.dmabuf.size();
-    let crop = match shown.crop {
-        (_, _, 0, 0) => (0, 0, size.w, size.h),
-        crop => crop,
+    let sampled = match shown.sampled.crop {
+        (_, _, 0, 0) => Sampled {
+            crop: (0, 0, size.w, size.h),
+            ..shown.sampled
+        },
+        _ => shown.sampled,
     };
     let snapshot = Snapshot::Texture(
         renderer
             .import_dmabuf(&shown.dmabuf, None)
             .map_err(|why| why.to_string())?,
     );
-    let layer = Layer {
-        snapshot: &snapshot,
-        from: crop,
-        to: (0, 0, crop.2, crop.3),
-    };
-    compose((crop.2 as u32, crop.3 as u32), &[layer], Some(renderer)).map_err(|why| why.to_string())
+    compose(
+        sampled.upright_size(),
+        &[Layer::upright(&snapshot, sampled)],
+        Some(renderer),
+    )
+    .map_err(|why| why.to_string())
 }
 
 /// The monitors of a shot of `desk` at `scale` shot pixels per logical
@@ -127,6 +131,8 @@ pub fn monitors(
 
 #[cfg(test)]
 mod tests {
+    use smithay::utils::Transform;
+
     use super::*;
     use crate::casting::gpu::Snapshot;
 
@@ -174,11 +180,13 @@ mod tests {
                 snapshot: &one,
                 from: (0, 0, 2, 1),
                 to: (0, 2, 4, 2),
+                transform: Transform::Normal,
             },
             Layer {
                 snapshot: &two,
                 from: (0, 0, 2, 2),
                 to: (4, 0, 2, 2),
+                transform: Transform::Normal,
             },
         ];
 

@@ -124,9 +124,9 @@ window so each can rotate and scale on its own.
   pixels a configure uses.
 - `rotate-270` turns content a quarter clockwise, for a panel on its left side.
   This matches `wl_output` and kanshi. `RotationOf` in `drm_screen.cc` converts.
-- **Known gap:** the compositor ignores `wl_surface.set_buffer_transform`. A
-  client that pre-rotates its buffer would be rotated twice. The fix belongs in
-  the dmabuf submit path.
+- A client that pre-rotates its buffer for a rotated panel
+  (`wl_surface.set_buffer_transform`) is shown and cast upright. See
+  [WINDOW-COMPOSITING.md](architecture/WINDOW-COMPOSITING.md#pre-rotated-buffers).
 
 ## Shell windows
 

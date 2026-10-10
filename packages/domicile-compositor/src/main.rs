@@ -1302,17 +1302,17 @@ impl DomicileCompositor {
         }
     }
 
-    /// Hands a window's committed frame to its casts. `crop` is the engine's:
-    /// `(0, 0, 0, 0)` is the whole buffer.
+    /// Hands a window's committed frame to its casts. `sampled` is the
+    /// engine's: a crop of `(0, 0, 0, 0)` is the whole buffer.
     fn cast_frame(
         &mut self,
         app_id: &str,
         buffer: &wl_buffer::WlBuffer,
-        crop: (i32, i32, i32, i32),
+        sampled: Sampled,
         scale: i32,
         damage: Option<Region>,
     ) {
-        let crop = match (crop, committed_buffer(buffer)) {
+        let crop = match (sampled.crop, committed_buffer(buffer)) {
             ((_, _, 0, 0), Some(committed)) => {
                 let (width, height) = committed.size();
                 (0, 0, width as i32, height as i32)
@@ -1324,7 +1324,7 @@ impl DomicileCompositor {
             casting::Committed {
                 app_id,
                 buffer,
-                crop,
+                sampled: Sampled { crop, ..sampled },
                 scale,
                 damage: damage.map(|region| {
                     (
@@ -1954,7 +1954,7 @@ impl DomicileCompositor {
                         app_id,
                         casting::Shown {
                             dmabuf: dmabuf.clone(),
-                            crop: commit.sampled.crop,
+                            sampled: commit.sampled,
                         },
                     );
                 }
@@ -2048,7 +2048,7 @@ impl DomicileCompositor {
                 app_id,
                 casting::Shown {
                     dmabuf,
-                    crop: commit.sampled.crop,
+                    sampled: commit.sampled,
                 },
             );
         }
@@ -3949,7 +3949,11 @@ impl CompositorHandler for DomicileCompositor {
                             buffer_transform,
                         )
                     });
-                    self.cast_frame(app_id, &buffer, crop, buffer_scale, damage);
+                    let sampled = Sampled {
+                        crop,
+                        transform: buffer_transform,
+                    };
+                    self.cast_frame(app_id, &buffer, sampled, buffer_scale, damage);
                     // Surface damage maps to buffer pixels by the scale alone
                     // only when nothing turns or scales the buffer.
                     let upright =
@@ -3957,10 +3961,7 @@ impl CompositorHandler for DomicileCompositor {
                     let commit = Commit {
                         surface,
                         buffer: &buffer,
-                        sampled: Sampled {
-                            crop,
-                            transform: buffer_transform,
-                        },
+                        sampled,
                         at_box,
                         box_size,
                         damage: damage.filter(|_| upright).map(|region| {
