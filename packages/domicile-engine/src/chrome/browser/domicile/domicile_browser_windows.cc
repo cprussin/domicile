@@ -233,9 +233,9 @@ class DeskWindows final : public base::SupportsUserData::Data,
       return false;
     }
     const std::string id = base::NumberToString(next_id_++);
-    std::unique_ptr<WebViewGuest> guest =
-        WebViewGuest::MakeWindow(*shell, id, popup_window, private_browsing,
-                                 base::BindRepeating(&AttachTabHelpers));
+    std::unique_ptr<WebViewGuest> guest = WebViewGuest::MakeWindow(
+        *shell, id, popup_window, private_browsing,
+        base::BindRepeating(app ? &AttachAppTabHelpers : &AttachTabHelpers));
     // `windows_` owns `guest` and the watch from here.
     auto watch = std::make_unique<Watch>(
         guest->contents(),

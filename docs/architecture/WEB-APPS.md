@@ -16,7 +16,8 @@ Exec=domicile open-app <url>
 ```
 
 - **An app window** is a browser window with `isApp` set. It shares the
-  profile, extensions, site permissions and history of every other window.
+  profile, extensions and site permissions of every other window. Its visits
+  stay out of the history ([HISTORY.md](/docs/HISTORY.md)).
 - **Its page's new windows** (`target="_blank"`, `window.open`) are browser
   windows, as a link out of a Chrome app opens in the browser.
 - **Settings and History** open this way: `domicile-settings` and
