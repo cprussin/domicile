@@ -6,6 +6,7 @@ import { Select } from "@domicile-desktop/component-library/Select";
 import { Tabs } from "@domicile-desktop/component-library/Tabs";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
 import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
+import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
 import { useState } from "react";
 
 import { css } from "../../styled-system/css";
@@ -27,7 +28,7 @@ import {
   settingTitle,
 } from "../permission-names";
 import { SettingRow } from "../SettingRow";
-import { siteName, sites, sitesWith } from "../site-groups";
+import { resetSite, siteName, sites, sitesWith } from "../site-groups";
 import { useSiteSettings } from "../useSiteSettings";
 
 type Props = {
@@ -47,7 +48,7 @@ export const PermissionsPage = ({
   report,
   title,
 }: Props) => {
-  const { failure, set, settings } = useSiteSettings(host, report);
+  const { failure, remove, set, settings } = useSiteSettings(host, report);
   return (
     <Page description={description} title={title}>
       {failure !== undefined && (
@@ -68,7 +69,9 @@ export const PermissionsPage = ({
               value: "permission",
             },
             {
-              content: <BySite onSet={set} settings={settings} />,
+              content: (
+                <BySite onRemove={remove} onSet={set} settings={settings} />
+              ),
               label: "By site",
               value: "site",
             },
@@ -173,8 +176,12 @@ const PermissionDetail = ({
   );
 };
 
+type BySiteProps = ViewProps & {
+  onRemove: (sites: SitePermission[]) => void;
+};
+
 /** Each site with a setting of its own, opening onto its permissions. */
-const BySite = ({ onSet, settings }: ViewProps) => {
+const BySite = ({ onRemove, onSet, settings }: BySiteProps) => {
   const [open, setOpen] = useState<string | undefined>(undefined);
   const listed = sites(settings);
   const shown = listed.find((site) => site.origin === open);
@@ -210,6 +217,19 @@ const BySite = ({ onSet, settings }: ViewProps) => {
                         </SettingRow>
                       ))}
                     </fieldset>
+                    <div className={removeStyles}>
+                      <Button
+                        beforeIcon={<TrashIcon size={14} />}
+                        onClick={() => {
+                          onRemove(resetSite(settings, open));
+                          setOpen(undefined);
+                        }}
+                        size="sm"
+                        variant="outline"
+                      >
+                        Remove site
+                      </Button>
+                    </div>
                   </Card>
                 ),
                 title: siteName(open),
@@ -382,6 +402,12 @@ const fieldsetStyles = flex({
   direction: "column",
   margin: 0,
   padding: 0,
+});
+
+const removeStyles = flex({
+  borderBlockStart: "1px solid {colors.border}",
+  justify: "flex-end",
+  paddingBlockStart: 3,
 });
 
 const addStyles = grid({
