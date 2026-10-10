@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Checks that a real shell (shell-simple by default, built by its own vite
-# config) embeds a real client's window via `<app>`.
+# config) embeds a real client's window via `<app>`, on a desktop started by
+# `domicile` as a user starts one.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/under-wayland.sh /build/chromium/src \
@@ -12,7 +13,8 @@
 # - the shell reaching the compositor through the desktop handed to `Shell`
 # - `<app>` calling `embedExternalSurface` for an app id the host announced
 #
-# See `docs/architecture/DOMICILE-SCHEME.md`.
+# See `docs/architecture/DOMICILE-SCHEME.md` and
+# `docs/architecture/THE-DOMICILE-BINARY.md`.
 #
 # Asserts the client's color appears anywhere in the window, not at a
 # coordinate, since the shell's CSS decides layout. See
@@ -56,16 +58,24 @@ NEGATIVE="${NEGATIVE:-0}"
 CLIENT_LIVES_FOR="${CLIENT_LIVES_FOR:-420}"
 
 OUT="${OUT:-out/Domicile}"
-RUNTIME="${XDG_RUNTIME_DIR:-/tmp}"
-BROKER="${BROKER:-/tmp/domicile-shell-broker}"
-PROFILE="${PROFILE:-/tmp/domicile-shell-profile}"
 COMPOSITOR="$ROOT/target/debug/domicile-compositor"
+DOMICILE="$ROOT/target/debug/domicile"
 WIDTH="${WIDTH:-1024}"
 HEIGHT="${HEIGHT:-768}"
 
+# `domicile` writes the engine's, the compositor's and its own lines to one
+# stream. `split_the_run` sorts them into these logs.
+RUN_LOG=$(mktemp)
 ENGINE_LOG=$(mktemp)
 COMP_LOG=$(mktemp)
 CLI_LOG=$(mktemp)
+# An empty config home, so the compositor runs on defaults whatever the
+# runner's user has configured.
+NO_CONFIG=$(mktemp -d)
+# The engine profile, under `$XDG_STATE_HOME/domicile`. In `/tmp`, since Chrome
+# puts a socket beside the profile and the job's `$TMPDIR` is too deep for the
+# 107-byte socket path limit (see `spike.sh`).
+STATE=$(mktemp -d /tmp/domicile-shell-state.XXXXXX)
 STARTED=()
 # A run and its negative control write separate logs, so both can be read side
 # by side.
@@ -76,16 +86,55 @@ WHICH=""
 WHOSE="shell-$SHELL_NAME$WHICH"
 LOG_COPY="${LOG_COPY:-/tmp/domicile-$WHOSE-compositor.log}"
 ENGINE_LOG_COPY="${ENGINE_LOG_COPY:-/tmp/domicile-$WHOSE-engine.log}"
+RUN_LOG_COPY="${RUN_LOG_COPY:-/tmp/domicile-$WHOSE-run.log}"
+# Waits for `domicile`, which stops each component's process group, so the
+# next guard does not start beside this one's engine.
 cleanup() {
-  cp "$COMP_LOG" "$LOG_COPY" 2>/dev/null
-  cp "$ENGINE_LOG" "$ENGINE_LOG_COPY" 2>/dev/null
   if [ ${#STARTED[@]} -gt 0 ]; then
     kill "${STARTED[@]}" 2>/dev/null
+    wait "${STARTED[@]}" 2>/dev/null
   fi
-  rm -f "$ENGINE_LOG" "$COMP_LOG" "$CLI_LOG"
-  rm -rf "$PROFILE"
+  cp "$COMP_LOG" "$LOG_COPY" 2>/dev/null
+  cp "$ENGINE_LOG" "$ENGINE_LOG_COPY" 2>/dev/null
+  cp "$RUN_LOG" "$RUN_LOG_COPY" 2>/dev/null
+  rm -f "$RUN_LOG" "$ENGINE_LOG" "$COMP_LOG" "$CLI_LOG"
+  rm -rf "$NO_CONFIG" "$STATE"
 }
 trap cleanup EXIT
+
+# Copies `domicile`'s output on stdin to the run log, and each line to the log
+# of the process that wrote it:
+#
+# - the compositor: tracing's lines, which start with a UTC timestamp, and its
+#   fatal `domicile-compositor:` line
+# - `domicile`: its `domicile:` lines, which stay in the run log only
+# - the engine: everything else, which includes `domicile`'s few unprefixed
+#   startup lines
+#
+# Flushes each line, since the guard polls the logs while the run goes on.
+split_the_run() {
+  awk -v run="$RUN_LOG" -v comp="$COMP_LOG" -v engine="$ENGINE_LOG" '
+    { print > run; fflush(run) }
+    /^[0-9]+-[0-9]+-[0-9]+T[0-9:.]+Z +(TRACE|DEBUG|INFO|WARN|ERROR) / ||
+    /^domicile-compositor: / { print > comp; fflush(comp); next }
+    /^domicile: / { next }
+    { print > engine; fflush(engine) }
+  '
+}
+
+# Whether the desktop `domicile` started is still up. `domicile` restarts a
+# component that dies, under the same pid, and a restarted engine or
+# compositor has lost the shell and the client. That ends the run here, so it
+# is not reported later as a missing window.
+RESTARTED='^domicile: starting the [a-z]+ again in'
+desktop_up() {
+  if grep -aqE "$RESTARTED" "$RUN_LOG" 2>/dev/null; then
+    annotate_from "guard-shell: domicile restarted a component, so this is no longer the desktop the guard started" \
+      "$RUN_LOG"
+    exit 1
+  fi
+  kill -0 "$DOMICILE_PID" 2>/dev/null
+}
 
 [ -x "$CHROMIUM/$OUT/chrome" ] || {
   annotate "guard-shell: no engine at $CHROMIUM/$OUT/chrome; build it with ./packages/domicile-engine/scripts/build.sh"
@@ -97,6 +146,10 @@ trap cleanup EXIT
 }
 [ -x "$COMPOSITOR" ] || {
   annotate "guard-shell: no compositor at $COMPOSITOR; build it with cargo build -p domicile-compositor"
+  exit 1
+}
+[ -x "$DOMICILE" ] || {
+  annotate "guard-shell: no domicile at $DOMICILE; build it with cargo build -p domicile-launch --bin domicile"
   exit 1
 }
 if command -v kitty >/dev/null; then
@@ -146,77 +199,55 @@ if [ ! -f "$MODULE" ]; then
   exit 1
 fi
 
-export XDG_RUNTIME_DIR="$RUNTIME"
-COMP_SOCK="$RUNTIME/domicile-shell.sock"
-rm -f "$BROKER" "$COMP_SOCK" "$COMP_SOCK.session"
-rm -rf "$PROFILE"; mkdir -p "$PROFILE"
-
-# 1. The engine serves the shell from `--domicile-shell-root` and writes the
-#    document itself, as `spawn::engine` does.
+# The desktop, as `domicile` starts it: the engine on the shell, served from
+# `--domicile-shell-root`, then the compositor once the engine's broker socket
+# is up. The compositor searches the browser's window for one color.
 #
-# Start chrome first: the compositor connects to the broker socket chrome
-# creates. `ControlChannel` retries while the compositor's socket is missing.
-
-# 2. The engine, on the shell. The page's console lines in the engine log show
-#    whether the shell was handed a desktop. This is the only automated check
-#    of that handover.
-#
-#    `--app` hides the tab strip, as `domicile` does, so the guard runs the
-#    product's configuration.
-"$CHROMIUM/$OUT/chrome" \
-  --ozone-platform=wayland \
-  --app=domicile://shell/ \
-  --domicile-shell-root="$PAGE_DIR" \
-  --domicile-shell-module="$(basename "$MODULE")" \
-  --domicile-control-socket="$COMP_SOCK" \
-  --no-sandbox --password-store=basic --no-first-run --disable-component-update \
-  --user-data-dir="$PROFILE" \
-  --window-size="$WIDTH,$HEIGHT" \
-  --enable-blink-features=DomicileExternalSurface \
-  --enable-logging=stderr --log-level=0 \
-  --domicile-broker-socket="$BROKER" >"$ENGINE_LOG" 2>&1 &
-STARTED+=($!)
-
-for _ in $(seq 1 240); do [ -S "$BROKER" ] && break; sleep 0.5; done
-[ -S "$BROKER" ] || {
-  annotate_from "guard-shell: the engine never opened its broker socket at $BROKER" "$ENGINE_LOG"
-  echo "the engine never opened its broker socket. It said:" >&2
-  tail -20 "$ENGINE_LOG" >&2
-  exit 1
-}
-
-# 3. The compositor, which produces frames for the engine and searches the
-#    browser's window for one color.
-LD_LIBRARY_PATH="$CHROMIUM/$OUT${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+# `DOMICILE_ENGINE_ARGS`:
+# - `--log-level=0` keeps the renderer's INFO lines, such as
+#   `domicile: embedding`, and the page's console lines, which show whether
+#   the shell was handed a desktop. This is the only automated check of that
+#   handover.
+# - `--no-sandbox` and no component updates, as every guard runs; see
+#   `packages/domicile-engine/docs/GUARDS.md`.
+DOMICILE_ENGINE="$CHROMIUM/$OUT" \
+DOMICILE_COMPOSITOR="$COMPOSITOR" \
+DOMICILE_ENGINE_ARGS="--no-sandbox --disable-component-update --log-level=0 --window-size=$WIDTH,$HEIGHT" \
+OZONE=wayland \
+XDG_CONFIG_HOME="$NO_CONFIG" \
+XDG_STATE_HOME="$STATE" \
 RUST_LOG="${RUST_LOG:-info,domicile_compositor=debug}" \
 DOMICILE_SPIKE_FIND="$COLOR" \
-  "$COMPOSITOR" \
-    --chrome-socket "$COMP_SOCK" \
-    --session "$COMP_SOCK.session" \
-    --engine-socket "$BROKER" >"$COMP_LOG" 2>&1 &
-COMP=$!
-STARTED+=("$COMP")
+  "$DOMICILE" "$MODULE" > >(split_the_run) 2>&1 &
+DOMICILE_PID=$!
+STARTED+=("$DOMICILE_PID")
 
-for _ in $(seq 1 120); do
-  grep -aq "wayland-[0-9]" "$COMP_LOG" 2>/dev/null && break
-  kill -0 $COMP 2>/dev/null || break
+# `domicile` waits for the broker socket and the compositor's session, and
+# says which never turned up. The compositor names its display when it binds
+# it. A desktop `domicile` had to restart ends the wait as a failure.
+for _ in $(seq 1 360); do
+  grep -aq "apps connect here" "$COMP_LOG" 2>/dev/null && break
+  grep -aqE "$RESTARTED" "$RUN_LOG" 2>/dev/null && break
+  kill -0 "$DOMICILE_PID" 2>/dev/null || break
   sleep 0.5
 done
-if ! kill -0 $COMP 2>/dev/null; then
-  annotate_from "guard-shell: the compositor did not start" "$COMP_LOG"
-  echo "the compositor did not start. It said:" >&2
-  tail -20 "$COMP_LOG" >&2
+# Only the apps' display. No fallback to `wayland-1`: that may be the
+# compositor this guard runs inside, and a client there would draw a window
+# nobody measures.
+CLIENT_DISPLAY=$(grep -a "apps connect here" "$COMP_LOG" 2>/dev/null |
+                   grep -aoE "wayland-[0-9]+" | head -1)
+if [ -z "$CLIENT_DISPLAY" ]; then
+  if grep -aqE "the engine's broker socket|could not start the engine" "$RUN_LOG" 2>/dev/null; then
+    annotate_from "guard-shell: the engine never opened its broker socket" "$RUN_LOG"
+  elif [ -s "$COMP_LOG" ]; then
+    annotate_from "guard-shell: the compositor never named its Wayland display" "$RUN_LOG"
+  else
+    annotate_from "guard-shell: the compositor did not start" "$RUN_LOG"
+  fi
+  echo "the desktop never came up. domicile said:" >&2
+  tail -20 "$RUN_LOG" >&2
   exit 1
 fi
-# No fallback to `wayland-1`: that may be the compositor this guard runs
-# inside, and a client there would draw a window nobody measures.
-CLIENT_DISPLAY=$(grep -aoE "wayland-[0-9]+" "$COMP_LOG" | head -1)
-[ -n "$CLIENT_DISPLAY" ] || {
-  annotate "guard-shell: the compositor never named its Wayland display"
-  echo "the compositor never named its Wayland display. It said:" >&2
-  tail -20 "$COMP_LOG" >&2
-  exit 1
-}
 
 # Wait for the shell to join. The host announces windows only after a chrome
 # agrees the protocol, so a client started earlier is announced to nobody.
@@ -227,7 +258,7 @@ for _ in $(seq 1 90); do
     JOINED=1
     break
   fi
-  kill -0 $COMP 2>/dev/null || break
+  desktop_up || break
   sleep 1
 done
 [ "$JOINED" = "1" ] || {
@@ -278,7 +309,7 @@ for _ in $(seq 1 60); do
     EMBEDDED=1
     break
   fi
-  kill -0 $COMP 2>/dev/null || break
+  desktop_up || break
   sleep 1
 done
 # Check once more after the loop, so an announcement logged during the last
@@ -324,7 +355,7 @@ for _ in $(seq 1 "$LOOKS"); do
   FOUND=$(grep -aoE "engine found #[0-9A-F]{8} over .*" "$COMP_LOG" 2>/dev/null |
             tail -1)
   [ -n "$FOUND" ] && break
-  kill -0 $COMP 2>/dev/null || break
+  desktop_up || break
   sleep 1
   WAITED=$((WAITED + 1))
 done

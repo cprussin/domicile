@@ -136,3 +136,12 @@ fn only_a_bare_specifier_is_a_package_import() {
     assert!(!imports_a_package(r#"import x from "https://esm.sh/zod";"#));
     assert!(!imports_a_package("export const importance = 1;"));
 }
+
+/// From manganese's bundle, which a checkout has no builder to rebuild.
+#[test]
+fn a_keyword_inside_a_longer_word_is_no_import() {
+    assert!(!imports_a_package(
+        r#"{"--restack-from":e.from,"--restack-to":e.to}"#
+    ));
+    assert!(imports_a_package(r#"import{a}from"zod";"#));
+}
