@@ -274,6 +274,71 @@
         '';
       };
 
+      # One of Domicile's own apps: an unpacked Chrome extension that every
+      # desktop installs from `libexec/domicile/apps`. See
+      # docs/HISTORY.md.
+      appExtension = name: pkgs.stdenv.mkDerivation {
+        pname = "domicile-app-${name}";
+        version = "0.0.0";
+        src = self;
+        nativeBuildInputs = [ pkgs.bun pkgs.nodejs_24 ];
+        configurePhase = sharedShellConfigure;
+        buildPhase = ''
+          runHook preBuild
+          node_modules/.bin/turbo build:vite \
+            --filter "./packages/app-${name}" --no-daemon
+          runHook postBuild
+        '';
+        installPhase = ''
+          runHook preInstall
+          cp -R "packages/app-${name}/.vite/extension" "$out"
+          runHook postInstall
+        '';
+        # The engine logs a directory without a manifest and loads nothing.
+        doInstallCheck = true;
+        installCheckPhase = ''
+          [ -f "$out/manifest.json" ] || {
+            echo "${name} built no manifest.json; it has:" >&2
+            ls "$out" >&2
+            exit 1
+          }
+        '';
+      };
+
+      # Asks `title` in Domicile's own yes/no dialog, its Access portal, and
+      # runs `command` only on a yes. Esc, the deny button or no shell to
+      # ask all leave it be.
+      confirmed = { name, title, subtitle, grant, command }:
+        pkgs.writeShellScript "domicile-${name}" ''
+          reply=$(${pkgs.systemd}/bin/busctl --user --timeout=infinity call \
+            org.freedesktop.impl.portal.desktop.domicile \
+            /org/freedesktop/portal/desktop \
+            org.freedesktop.impl.portal.Access AccessDialog 'osssssa{sv}' \
+            "/org/freedesktop/portal/desktop/request/launcher/${name}_$$" \
+            domicile-${name} "" \
+            ${pkgs.lib.escapeShellArg title} ${pkgs.lib.escapeShellArg subtitle} "" \
+            2 grant_label s ${pkgs.lib.escapeShellArg grant} deny_label s Cancel)
+          if [ "$reply" = 'ua{sv} 0 0' ]; then
+            exec ${command}
+          fi
+        '';
+
+      # A launcher entry, `domicile-<id>.desktop`, for something Domicile
+      # does. The icon is `<icon>` and the launcher's preview `<preview>`,
+      # both SVGs.
+      launcherEntry = { id, name, comment, exec, icon, preview }: ''
+        cat >"$out/share/applications/domicile-${id}.desktop" <<DESKTOP
+        [Desktop Entry]
+        Type=Application
+        Name=${name}
+        Comment=${comment}
+        Exec=${exec}
+        Icon=${icon}
+        X-Domicile-Preview=${preview}
+        Terminal=false
+        DESKTOP
+      '';
+
       # The built workspace a shell is built against: the builder's
       # `--domicile`, from which it resolves manganese and React. Laid out like
       # this repository, because that is the layout the builder reads.
@@ -316,11 +381,16 @@
       #   bin/domicile-compositor
       #   bin/domicile-open-url       what `BROWSER` names inside a desktop
       #   bin/domicile-xdg-open       what `xdg-open` is inside a desktop
+      #   bin/domicile-history        opens the History app
       #   libexec/domicile/engine     the Chromium tree, `chrome` inside it
       #   libexec/domicile/builder    builds a shell from an entry or a package
       #   libexec/domicile/shells/    Domicile's prebuilt shells, which
       #                               `@domicile-desktop/manganese` names,
       #                               and the splash
+      #   libexec/domicile/apps/      Domicile's own apps, which every
+      #                               desktop installs
+      #   share/applications/         launcher entries for History,
+      #                               Screenshot, Shutdown and Reboot
       #
       # The binaries are copied, not symlinked. `domicile` finds its siblings
       # from `current_exe`, which resolves symlinks, so a symlink would point
@@ -348,6 +418,8 @@
         cp ${domicileBinaries}/bin/domicile-open-url "$out/bin/domicile-open-url"
         # `xdg-open` inside a desktop, first on every app's PATH.
         cp ${domicileBinaries}/bin/domicile-xdg-open "$out/bin/domicile-xdg-open"
+        # Opens the History app. Copied for the same reason as above.
+        cp ${domicileBinaries}/bin/domicile-history "$out/bin/domicile-history"
         # Registers `domicile-open-url` as the web link handler, so links open
         # in a browser window of the current desktop. Hidden from launchers.
         mkdir -p "$out/share/applications"
@@ -377,6 +449,55 @@
         ln -s ${shellPage "simple"} "$out/libexec/domicile/shells/simple"
         # What a desktop shows while it builds its shell on first start.
         ln -s ${shellPage "splash"} "$out/libexec/domicile/shells/splash"
+        mkdir -p "$out/libexec/domicile/apps"
+        ln -s ${appExtension "history"} "$out/libexec/domicile/apps/history"
+        # What the launcher offers of Domicile's own.
+        ${launcherEntry {
+          id = "history";
+          name = "History";
+          comment = "Browse, search and clear the pages browser windows visited";
+          exec = "$out/bin/domicile-history";
+          icon = ./packages/app-history/icons/history.svg;
+          preview = ./packages/app-history/icons/history-preview.svg;
+        }}
+        # The shell's picker, as Print in manganese: a monitor, a window or an
+        # area.
+        ${launcherEntry {
+          id = "screenshot";
+          name = "Screenshot";
+          comment = "Save a picture of a monitor, a window or an area";
+          exec = "$out/bin/domicile screenshot";
+          icon = ./nix/launcher/screenshot.svg;
+          preview = ./nix/launcher/screenshot-preview.svg;
+        }}
+        ${launcherEntry {
+          id = "shutdown";
+          name = "Shutdown";
+          comment = "Turn the computer off";
+          exec = confirmed {
+            name = "shutdown";
+            title = "Shut down?";
+            subtitle = "Every open window closes.";
+            grant = "Shut down";
+            command = "${pkgs.systemd}/bin/systemctl poweroff -i";
+          };
+          icon = ./nix/launcher/shutdown.svg;
+          preview = ./nix/launcher/shutdown-preview.svg;
+        }}
+        ${launcherEntry {
+          id = "reboot";
+          name = "Reboot";
+          comment = "Restart the computer";
+          exec = confirmed {
+            name = "reboot";
+            title = "Reboot?";
+            subtitle = "Every open window closes.";
+            grant = "Reboot";
+            command = "${pkgs.systemd}/bin/systemctl reboot -i";
+          };
+          icon = ./nix/launcher/reboot.svg;
+          preview = ./nix/launcher/reboot-preview.svg;
+        }}
         # Tells `xdg-desktop-portal` which interfaces Domicile implements. The
         # compositor owns the D-Bus name and sets the matching
         # `XDG_CURRENT_DESKTOP` on clients.
@@ -480,7 +601,7 @@
         # binary is not installed.
         cargoBuildFlags = [
           "-p" "domicile-compositor" "--bin" "domicile-compositor"
-          "-p" "domicile-launch" "--bin" "domicile" "--bin" "domicile-open-url" "--bin" "domicile-xdg-open"
+          "-p" "domicile-launch" "--bin" "domicile" "--bin" "domicile-open-url" "--bin" "domicile-xdg-open" "--bin" "domicile-history"
         ];
 
         # CI's `cargo-test` job runs the tests on every push; repeating them
@@ -564,7 +685,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-0Vd81Tb6iaiHVXNi8GxuzZTftVqPop96t9lDkclPJyQ=";
+        outputHash = "sha256-/Z5/N96n6JTKBwHuqhaHOFfcQQDRLNHKLJoNTsaqCWM=";
       };
 
 
