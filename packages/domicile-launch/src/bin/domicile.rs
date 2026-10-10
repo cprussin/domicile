@@ -1020,12 +1020,32 @@ struct SaidSession {
 }
 
 impl SaidSession {
+    /// Names the desktop to the user manager when it is the session, before
+    /// any component starts; see `graphical_session::name`.
     fn new(platform: &str) -> Self {
         let is_the_session = platform == "drm";
         SaidSession {
             is_the_session,
             scope_clients: is_the_session && Self::a_user_manager_answers(),
-            manager: Mutex::new(None),
+            manager: Mutex::new(is_the_session.then(Self::named).flatten()),
+        }
+    }
+
+    /// Exports the desktop's name. Says why on stderr when it cannot.
+    fn named() -> Option<zbus::blocking::Connection> {
+        let named = notification::session_bus().and_then(|manager| {
+            graphical_session::name(&manager)?;
+            Ok(manager)
+        });
+        match named {
+            Ok(manager) => Some(manager),
+            Err(why) => {
+                eprintln!(
+                    "domicile: the user manager was not told this desktop's name before the \
+                     desktop started: {why}"
+                );
+                None
+            }
         }
     }
 

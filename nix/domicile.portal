@@ -2,9 +2,11 @@
 #
 # `xdg-desktop-portal` reads this from `share/xdg-desktop-portal/portals/` and
 # matches `UseIn` against its own `XDG_CURRENT_DESKTOP`, not the client's. The
-# compositor exports that variable to the D-Bus and systemd activation
-# environments (`portals::say_which_desktop`), and restarts a frontend that
-# started under another desktop's name.
+# launcher exports that variable to the systemd user manager before starting
+# the desk (`graphical_session::name`). The compositor exports it to the D-Bus
+# and systemd activation environments (`portals::say_which_desktop`), and
+# restarts a frontend that started under another desktop's name. See
+# `docs/PORTALS.md`.
 #
 # Domicile implements `Settings`, `Access`, `AppChooser`, `FileChooser`,
 # `Notification`, `Inhibit`, `RemoteDesktop`, `Clipboard`, `InputCapture`,

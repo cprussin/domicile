@@ -960,13 +960,12 @@ fn say_which_desktop(connection: &zbus::blocking::Connection, environment: &[(&s
 
     // A desk in another session's window names nothing, so leaves that
     // session's frontend alone too.
-    if let (false, Ok(bus), Ok(systemd)) = (environment.is_empty(), &bus, &systemd) {
-        reroute_frontend(bus, systemd);
+    if let (false, Ok(systemd)) = (environment.is_empty(), &systemd) {
+        reroute_frontend(connection, systemd);
     }
 }
 
-/// The portal frontend's bus name and systemd user unit.
-const FRONTEND: &str = "org.freedesktop.portal.Desktop";
+/// The portal frontend's systemd user unit.
 const FRONTEND_UNIT: &str = "xdg-desktop-portal.service";
 
 /// Restarts a portal frontend that started under another desktop's name.
@@ -974,35 +973,66 @@ const FRONTEND_UNIT: &str = "xdg-desktop-portal.service";
 /// The frontend reads `XDG_CURRENT_DESKTOP` once, at startup, and routes by it
 /// until it exits. One started before this desk named itself (by an app or
 /// service at login) routes elsewhere, and every interface only this backend
-/// implements is missing from it. Its environment is read from
-/// `/proc/<pid>/environ`; only one that does not name this desktop is
-/// restarted, so a compositor restart leaves running casts alone. A frontend
-/// D-Bus started directly, not as a unit, is left running.
-fn reroute_frontend(bus: &zbus::blocking::Proxy<'_>, systemd: &zbus::blocking::Proxy<'_>) {
-    let Ok(pid) = bus.call::<_, _, u32>("GetConnectionUnixProcessID", &(FRONTEND,)) else {
-        // Not running: it reads the new environment when it starts.
-        return;
-    };
-    let environ = match std::fs::read(format!("/proc/{pid}/environ")) {
-        Ok(environ) => environ,
+/// implements is missing from it. See [`must_reroute`] for which is restarted.
+/// A frontend D-Bus started directly, not as a unit, is left running.
+fn reroute_frontend(connection: &zbus::blocking::Connection, systemd: &zbus::blocking::Proxy<'_>) {
+    let main_pid = systemd
+        .call::<_, _, OwnedObjectPath>("GetUnit", &(FRONTEND_UNIT,))
+        .and_then(|unit| {
+            zbus::blocking::Proxy::new(
+                connection,
+                "org.freedesktop.systemd1",
+                unit,
+                "org.freedesktop.systemd1.Service",
+            )?
+            .get_property::<u32>("MainPID")
+        });
+    let main_pid = match main_pid {
+        Ok(main_pid) => main_pid,
+        // Not loaded: it reads the new environment when it starts.
         Err(why) => {
-            tracing::debug!(%why, pid, "could not read the portal frontend's environment");
+            tracing::debug!(%why, "the portal frontend's unit is not loaded");
             return;
         }
     };
-    if names_this_desktop(&environ) {
-        return;
+    let rerouting = must_reroute(main_pid, |pid| {
+        std::fs::read(format!("/proc/{pid}/environ"))
+    });
+    match rerouting {
+        Ok(false) => {}
+        Ok(true) => match systemd
+            .call::<_, _, OwnedObjectPath>("TryRestartUnit", &(FRONTEND_UNIT, "replace"))
+        {
+            Ok(_) => tracing::info!(
+                "restarted the portal frontend, which had started under another desktop's name"
+            ),
+            Err(why) => tracing::debug!(
+                %why,
+                "the portal frontend started under another desktop's name and could not be \
+                 restarted"
+            ),
+        },
+        Err(why) => {
+            tracing::debug!(%why, main_pid, "could not read the portal frontend's environment");
+        }
     }
-    let restarted =
-        systemd.call::<_, _, OwnedObjectPath>("TryRestartUnit", &(FRONTEND_UNIT, "replace"));
-    match restarted {
-        Ok(_) => tracing::info!(
-            "restarted the portal frontend, which had started under another desktop's name"
-        ),
-        Err(why) => tracing::debug!(
-            %why,
-            "the portal frontend started under another desktop's name and could not be restarted"
-        ),
+}
+
+/// Whether the frontend unit's main process, `main_pid`, must restart to route
+/// to this desktop. `environ` reads a process's `/proc/<pid>/environ`.
+///
+/// Found by its unit, not its bus name: a frontend still loading its backends
+/// owns no name yet but already has its environment. `main_pid` is 0 when the
+/// unit runs nothing; a frontend started later reads the new environment. Only
+/// one that does not name this desktop restarts, so a compositor restart leaves
+/// running casts alone.
+fn must_reroute(
+    main_pid: u32,
+    environ: impl FnOnce(u32) -> std::io::Result<Vec<u8>>,
+) -> std::io::Result<bool> {
+    match main_pid {
+        0 => Ok(false),
+        pid => environ(pid).map(|environ| !names_this_desktop(&environ)),
     }
 }
 
@@ -1977,6 +2007,23 @@ mod tests {
             activation_environment("wayland-1", Some(OsStr::new(""))),
             activation_environment("wayland-1", None)
         );
+    }
+
+    #[test]
+    fn a_frontend_that_is_not_running_reads_the_new_environment_when_it_starts() {
+        assert!(!must_reroute(0, |_| unreachable!("no process to read")).unwrap());
+    }
+
+    #[test]
+    fn a_frontend_still_starting_under_another_desktops_name_is_restarted() {
+        // A frontend forked before this desk named itself owns no bus name
+        // until it has loaded its backends, which takes seconds. Its unit's
+        // main process is what gives it away.
+        let environ = |pid| {
+            assert_eq!(pid, 4242);
+            Ok(b"HOME=/home/ada\0".to_vec())
+        };
+        assert!(must_reroute(4242, environ).unwrap());
     }
 
     #[test]
