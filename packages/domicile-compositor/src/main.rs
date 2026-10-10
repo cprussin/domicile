@@ -110,6 +110,7 @@ use tracing::{debug, error, info, warn};
 
 mod activation;
 mod app_scope;
+mod buffer_transform;
 mod casting;
 mod chrome_connection;
 mod chrome_hub;
@@ -154,6 +155,7 @@ mod which_engine;
 mod window_geometry;
 mod xdg_foreign;
 
+use crate::buffer_transform::{crop_in_buffer, upright_size, Sampled};
 use crate::dmabuf_descriptor::DmabufDescriptor;
 use crate::engine::{Bounds, Capture, Clipboard, NEWEST_BOX};
 use crate::engine_buffers::Returned;
@@ -1841,7 +1843,7 @@ impl DomicileCompositor {
         &mut self,
         app_id: &str,
         buffer: &wl_buffer::WlBuffer,
-        crop: (i32, i32, i32, i32),
+        sampled: Sampled,
         at_box: u64,
     ) -> Published {
         let Some(committed) = committed_buffer(buffer) else {
@@ -1856,7 +1858,7 @@ impl DomicileCompositor {
                     app_id,
                     Submitted::Client(buffer.clone()),
                     &descriptor_from(dmabuf),
-                    crop,
+                    sampled,
                     at_box,
                     Published::Held,
                 );
@@ -1865,13 +1867,15 @@ impl DomicileCompositor {
                         app_id,
                         casting::Shown {
                             dmabuf: dmabuf.clone(),
-                            crop,
+                            crop: sampled.crop,
                         },
                     );
                 }
                 published
             }
-            CommittedBuffer::Pixels { .. } => self.publish_shm_frame(app_id, buffer, crop, at_box),
+            CommittedBuffer::Pixels { .. } => {
+                self.publish_shm_frame(app_id, buffer, sampled, at_box)
+            }
         };
         if matches!(published, Published::Held | Published::Copied) {
             self.frame_shown(app_id);
@@ -1886,7 +1890,7 @@ impl DomicileCompositor {
         app_id: &str,
         submitted: Submitted,
         descriptor: &DmabufDescriptor,
-        crop: (i32, i32, i32, i32),
+        sampled: Sampled,
         at_box: u64,
         shown: Published,
     ) -> Published {
@@ -1899,7 +1903,7 @@ impl DomicileCompositor {
             app_id,
             submitted,
             descriptor,
-            crop,
+            sampled,
             (0, 0, 0, 0),
             at_box,
             Instant::now(),
@@ -1926,7 +1930,7 @@ impl DomicileCompositor {
         &mut self,
         app_id: &str,
         buffer: &wl_buffer::WlBuffer,
-        crop: (i32, i32, i32, i32),
+        sampled: Sampled,
         at_box: u64,
     ) -> Published {
         let copied = match self.copy_shm_frame(app_id, buffer) {
@@ -1942,7 +1946,7 @@ impl DomicileCompositor {
             app_id,
             Submitted::Upload(copied.id),
             &copied.descriptor,
-            crop,
+            sampled,
             at_box,
             Published::Copied,
         );
@@ -1955,7 +1959,13 @@ impl DomicileCompositor {
                 .get(copied.id)
                 .expect("a buffer the engine holds is there")
                 .clone();
-            self.casting.shown(app_id, casting::Shown { dmabuf, crop });
+            self.casting.shown(
+                app_id,
+                casting::Shown {
+                    dmabuf,
+                    crop: sampled.crop,
+                },
+            );
         }
         published
     }
@@ -3681,7 +3691,7 @@ impl CompositorHandler for DomicileCompositor {
         // Take the new buffer and the frame callbacks. Taking the buffer gives
         // us its release; otherwise Smithay holds it until the next buffer,
         // which the client may need the release to draw.
-        let (attached, callbacks, buffer_scale, viewport, geometry, damage) =
+        let (attached, callbacks, buffer_scale, buffer_transform, viewport, geometry, damage) =
             with_states(surface, |states| {
                 // Read with the buffer: the viewport is double-buffered and
                 // applies to this commit.
@@ -3709,12 +3719,14 @@ impl CompositorHandler for DomicileCompositor {
                 // The scale this buffer was drawn at. Read now; a client
                 // mid-scale-change may commit the next one differently.
                 let scale = attrs.buffer_scale;
+                let transform = Transform::from(attrs.buffer_transform);
                 drop(guard);
                 // Double-buffered too; see `crate::window_geometry`.
                 (
                     attached,
                     callbacks,
                     scale,
+                    transform,
                     viewport,
                     window_geometry(states),
                     damage,
@@ -3787,18 +3799,28 @@ impl CompositorHandler for DomicileCompositor {
                         // Sized by its own buffer.
                         Role::Bubble => (None, NEWEST_BOX),
                     };
+                    // Measured on the upright buffer, then mapped back into
+                    // the buffer the engine samples.
                     let crop = committed_buffer(&buffer).map_or((0, 0, 0, 0), |committed| {
-                        let size = committed.size();
-                        crate::window_geometry::crop(
-                            geometry,
-                            configured,
-                            surface_size(size, buffer_scale, viewport.destination),
+                        let size = upright_size(committed.size(), buffer_transform);
+                        crop_in_buffer(
+                            crate::window_geometry::crop(
+                                geometry,
+                                configured,
+                                surface_size(size, buffer_scale, viewport.destination),
+                                size,
+                                source_pixels(size, buffer_scale, viewport.source),
+                            ),
                             size,
-                            source_pixels(size, buffer_scale, viewport.source),
+                            buffer_transform,
                         )
                     });
                     self.cast_frame(app_id, &buffer, crop, buffer_scale, damage);
-                    let published = self.publish_frame(app_id, &buffer, crop, at_box);
+                    let sampled = Sampled {
+                        crop,
+                        transform: buffer_transform,
+                    };
+                    let published = self.publish_frame(app_id, &buffer, sampled, at_box);
                     // After the submit, so there is something to sample, but
                     // timed from `started` so the import and submit count as
                     // ours.
@@ -4995,7 +5017,10 @@ fn drawn_size(surface: &WlSurface) -> Option<(f64, f64)> {
             return None;
         };
         let (width, height) = surface_size(
-            committed_buffer(buffer)?.size(),
+            upright_size(
+                committed_buffer(buffer)?.size(),
+                Transform::from(attributes.buffer_transform),
+            ),
             attributes.buffer_scale,
             destination,
         );

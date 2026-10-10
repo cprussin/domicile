@@ -15,7 +15,9 @@ pub mod arguments;
 pub mod trace;
 mod window;
 
-pub use window::{BUBBLE, BUBBLE_GROWN, POPUP, POPUP_COLOR, TRANSLUCENT_ALPHA, TRANSLUCENT_COLORS};
+pub use window::{
+    BUBBLE, BUBBLE_GROWN, POPUP, POPUP_COLOR, TRANSLUCENT_ALPHA, TRANSLUCENT_COLORS, TURNED_COLORS,
+};
 
 /// Run the client: open a window on `WAYLAND_DISPLAY` and draw until killed.
 ///
@@ -26,7 +28,7 @@ pub fn run(command_line: impl IntoIterator<Item = OsString>) -> ExitCode {
         Err(err) => {
             eprintln!("domicile-test-client: {err}");
             eprintln!(
-                "usage: domicile-test-client [--title NAME] [--trace] [--translucent] [--follow-configure] [--ask-for-focus | --ask-for-focus-when-entered | --ask-for-focus-when-left] [--hold-the-screens-on] [--hold-the-screens-on-before-it-has-a-window] [--outlive-its-window] [--copy TEXT] [--copy-primary TEXT] [--paste] [--popup] [--popup-grab] [--bubble] [--min-size WxH] [--max-size WxH]"
+                "usage: domicile-test-client [--title NAME] [--trace] [--translucent] [--follow-configure] [--ask-for-focus | --ask-for-focus-when-entered | --ask-for-focus-when-left] [--hold-the-screens-on] [--hold-the-screens-on-before-it-has-a-window] [--outlive-its-window] [--copy TEXT] [--copy-primary TEXT] [--paste] [--popup] [--popup-grab] [--bubble] [--min-size WxH] [--max-size WxH] [--buffer-transform TURN]"
             );
             return ExitCode::from(2);
         }

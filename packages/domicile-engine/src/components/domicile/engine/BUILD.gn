@@ -46,6 +46,34 @@ source_set("surface_crop_unit_tests") {
   ]
 }
 
+# Turns a client's transformed buffer upright in its box.
+source_set("surface_transform") {
+  sources = [
+    "surface_transform.cc",
+    "surface_transform.h",
+  ]
+
+  deps = [ "//base" ]
+
+  public_deps = [
+    "//ui/gfx/geometry",
+    "//ui/gfx/geometry:geometry_skia",
+  ]
+}
+
+source_set("surface_transform_unit_tests") {
+  testonly = true
+
+  sources = [ "surface_transform_unittest.cc" ]
+
+  deps = [
+    ":surface_transform",
+    "//testing/gtest",
+    "//ui/gfx/geometry",
+    "//ui/gfx/geometry:geometry_skia",
+  ]
+}
+
 # Decides from the pixel format whether a client's buffer is blended or opaque.
 source_set("surface_alpha") {
   sources = [
@@ -90,6 +118,7 @@ shared_library("domicile_engine") {
     ":event_queue",
     ":surface_alpha",
     ":surface_crop",
+    ":surface_transform",
     "//base",
     "//components/domicile/mojom",
     "//components/domicile/spike/mojom",

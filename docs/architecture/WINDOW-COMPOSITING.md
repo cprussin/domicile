@@ -49,6 +49,24 @@ pixel for pixel on the GPU for `z-index`, `transform`, `border-radius`,
 `opacity`, `filter: blur()`, `mix-blend-mode` and resize. See
 [ENGINE-FORK-MEASUREMENTS.md](ENGINE-FORK-MEASUREMENTS.md#css-parity).
 
+## Pre-rotated buffers
+
+A client may draw its buffer turned to match a rotated monitor and say so with
+`wl_surface.set_buffer_transform`. The engine turns it upright.
+
+- **Compositor:** sizes the surface by the upright buffer, a quarter turn
+  swapping its sides, and maps the window-geometry crop into the buffer's own
+  pixels (`buffer_transform.rs`). Both dmabuf and `wl_shm` frames take this
+  path; an shm frame is copied unturned (`uploads.rs`).
+- **Engine:** `domicile_surface_submit_transformed` draws the quad in the
+  buffer's orientation and gives it a `quad_to_target_transform` onto the box
+  (`surface_transform.cc`). Viz turns it on the GPU, so no pixel is copied.
+- **Older engines** lack the symbol. The compositor submits unturned and logs
+  once when a buffer is turned.
+- **Checks:** `surface_transform_unittest.cc` maps each of the eight transforms
+  as Weston does. `guard-buffer-transform.sh` shows a turned shm buffer upright.
+  No check covers a turned dmabuf, because none has a render node.
+
 ## What is open
 
 ### `backdrop-filter` over a window
