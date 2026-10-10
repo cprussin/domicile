@@ -8,9 +8,11 @@
 #include <string>
 
 #include "base/files/file_path.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/self_deleting.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "net/http/http_response_headers.h"
 #include "services/network/public/cpp/self_deleting_url_loader_factory.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "url/gurl.h"
@@ -48,6 +50,10 @@ class ShellURLLoaderFactory : public network::SelfDeletingURLLoaderFactory {
 
   // The response head ShellDocument is served with. Exposed for testing.
   static network::mojom::URLResponseHeadPtr ShellDocumentHead();
+
+  // The headers every file under the shell root is served with, new for each
+  // request because the file loader adds to them. Exposed for testing.
+  static scoped_refptr<net::HttpResponseHeaders> ShellFileHeaders();
 
   // Resolves a domicile:// URL to a file under `shell_root`, or fails. Exposed
   // for testing.

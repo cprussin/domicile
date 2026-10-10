@@ -65,8 +65,8 @@ const SEND_WITHIN: Duration = Duration::from_secs(2);
 /// answers well within it, so the desk starts on its shell.
 const SPLASH_AFTER: Duration = Duration::from_millis(500);
 
-/// How long the splash plays its ending before the built shell replaces it.
-/// Matches `ENDING_MS` in `packages/shell-splash`.
+/// How long the splash shows "Ready" before the built shell crossfades in.
+/// Matches the `ending` duration in `packages/shell-splash`.
 const SPLASH_ENDING: Duration = Duration::from_millis(900);
 
 /// How many of the compositor's last stderr lines to repeat when a run gives
