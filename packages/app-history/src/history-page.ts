@@ -4,6 +4,9 @@
 import { startOfDay } from "./day";
 import { appendEntries } from "./entries";
 
+/** The scheme of Domicile's own pages, such as the shell's `domicile://shell/`. */
+const DOMICILE_SCHEME = "domicile:";
+
 /** A page in the history, as `chrome.history.search` gives it. */
 export type HistoryItem = { title: string; url: string };
 
@@ -80,7 +83,7 @@ export const loadPage = async (
   const cutoff = next ?? Number.NEGATIVE_INFINITY;
   return {
     entries: visited
-      .filter(({ item }) => !item.url.startsWith(hiddenOrigin))
+      .filter(({ item }) => !hidden(item.url, hiddenOrigin))
       .flatMap(({ item, visits }) =>
         byDay(
           item,
@@ -140,3 +143,11 @@ const latest = (
     return visit;
   }
 };
+
+/**
+ * Whether `url` is a page the list leaves out: the app's own, and Domicile's
+ * `domicile://` pages. The shell runs in a Chrome window, so Chrome records its
+ * visits like any tab's.
+ */
+const hidden = (url: string, hiddenOrigin: string): boolean =>
+  url.startsWith(hiddenOrigin) || url.startsWith(DOMICILE_SCHEME);
