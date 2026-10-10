@@ -1552,6 +1552,21 @@ describe("Shell", () => {
       });
     });
 
+    // Tabs draw the strip past the last tab, at the same depth, so the buttons
+    // come after them to win the tie.
+    it("draws a tab group's buttons over its strip", () => {
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      const button = screen.getByRole("button", { name: "Float group" });
+
+      for (const bar of titleBars(container)) {
+        expect(bar.compareDocumentPosition(button)).toBe(
+          Node.DOCUMENT_POSITION_FOLLOWING,
+        );
+      }
+    });
+
     it("floats and tiles a whole tab group from its strip's button", async () => {
       const user = userEvent.setup();
       const { container } = renderShell();
