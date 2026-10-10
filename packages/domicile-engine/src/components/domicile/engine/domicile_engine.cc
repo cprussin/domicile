@@ -239,10 +239,6 @@ class Surface : public mojom::SurfaceObserver,
     boxes_.push_back({.number = ++last_box_,
                       .local_surface_id = local_surface_id,
                       .size = size});
-    if (!wants_begin_frames_) {
-      wants_begin_frames_ = true;
-      sink_->SetNeedsBeginFrame(true);
-    }
     queue_->Push({.type = EngineEvent::Type::kConfigure,
                   .surface = id_,
                   .width = static_cast<uint32_t>(size.width()),
@@ -252,18 +248,21 @@ class Surface : public mojom::SurfaceObserver,
   }
 
   // Sent only when the browser owns the sink, which this does not request.
-  void OnFrame(int64_t deadline_us) override {}
   void OnBufferReleased(uint64_t buffer_id) override {}
 
   // viz::mojom::CompositorFrameSinkClient:
+  //
+  // Frames follow the client's commits, so this sink never asks for
+  // BeginFrames and the compositor is not woken each vsync. Viz still sends
+  // one to deliver a frame's presentation timing. Viz then expects damage from
+  // this surface (SurfaceDamageExpected), so an unanswered one makes the
+  // display wait for this window until the deadline. Releases do not depend on
+  // it: viz returns them with a frame's ack or in ReclaimResources.
   void OnBeginFrame(const viz::BeginFrameArgs& args,
                     const viz::FrameTimingDetailsMap& timing_details,
                     std::vector<viz::ReturnedResource> resources) override {
     Release(resources);
-    queue_->Push({.type = EngineEvent::Type::kFrame,
-                  .surface = id_,
-                  .deadline_us = static_cast<uint64_t>(
-                      args.deadline.since_origin().InMicroseconds())});
+    sink_->DidNotProduceFrame(viz::BeginFrameAck(args, /*has_damage=*/false));
   }
   void DidReceiveCompositorFrameAck(
       std::vector<viz::ReturnedResource> resources) override {
@@ -316,7 +315,6 @@ class Surface : public mojom::SurfaceObserver,
   // The box shown last, then every newer one, oldest first.
   base::circular_deque<Box> boxes_;
   uint64_t last_box_ = 0;
-  bool wants_begin_frames_ = false;
   base::flat_map<uint64_t, Adopted> buffers_;
   base::flat_map<viz::ResourceId, uint64_t> resource_to_buffer_;
   viz::ResourceId next_resource_id_{1};
@@ -626,12 +624,6 @@ struct DomicileEngine {
           } else if (callbacks_.configure) {
             callbacks_.configure(callbacks_.user_data, event.surface,
                                  event.width, event.height);
-          }
-          break;
-        case domicile::EngineEvent::Type::kFrame:
-          if (callbacks_.frame) {
-            callbacks_.frame(callbacks_.user_data, event.surface,
-                             event.deadline_us);
           }
           break;
         case domicile::EngineEvent::Type::kReleased:

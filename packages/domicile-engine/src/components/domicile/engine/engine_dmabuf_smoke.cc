@@ -85,7 +85,6 @@ constexpr int kSampleTries = 60;
 
 struct Seen {
   int configures = 0;
-  int frames = 0;
   int releases = 0;
   uint32_t width = 0;
   uint32_t height = 0;
@@ -101,13 +100,6 @@ void OnConfigure(void* user_data,
   seen->width = width;
   seen->height = height;
   printf("configure: surface %u at %ux%u\n", surface, width, height);
-}
-
-void OnFrame(void* user_data, DomicileSurfaceId surface, uint64_t deadline_us) {
-  Seen* seen = static_cast<Seen*>(user_data);
-  if (seen->frames++ == 0) {
-    printf("frame: surface %u, first of many\n", surface);
-  }
 }
 
 void OnReleased(void* user_data,
@@ -239,7 +231,6 @@ int main(int argc, char** argv) {
   memset(&callbacks, 0, sizeof(callbacks));
   callbacks.user_data = &seen;
   callbacks.configure = OnConfigure;
-  callbacks.frame = OnFrame;
   callbacks.released = OnReleased;
 
   DomicileEngine* engine =

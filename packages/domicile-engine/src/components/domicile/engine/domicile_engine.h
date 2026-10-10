@@ -191,7 +191,6 @@ typedef struct DomicileDisplayLayout {
 // Events from the browser, each mapped to a Wayland request:
 //
 //   configure  xdg_toplevel.configure — the page's layout box changed
-//   frame      wl_surface.frame       — viz asked for a frame
 //   released   wl_buffer.release      — viz is done sampling a buffer, so the
 //                                       client may draw into it again
 //   displays   wl_output              — the whole display list, primary first
@@ -214,6 +213,9 @@ typedef struct DomicileEngineCallbacks {
                     DomicileSurfaceId surface,
                     uint32_t width,
                     uint32_t height);
+  // Never called: the engine asks viz for no BeginFrames, since a window draws
+  // when its client commits. Kept so the fields after it stay where the
+  // compositor's binding expects them.
   void (*frame)(void* user_data,
                 DomicileSurfaceId surface,
                 uint64_t deadline_us);

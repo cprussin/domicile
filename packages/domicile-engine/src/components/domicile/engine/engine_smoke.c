@@ -12,9 +12,9 @@
 //
 // It stands in for the calloop domicile-compositor runs: poll the engine's fd,
 // dispatch when it wakes, and take the callbacks from there. Exits 0 only once
-// both a configure and a frame have arrived — which together mean the
-// invitation was accepted, the broker brokered, a page embedded the surface,
-// viz is driving it, and both events crossed the fd onto this thread.
+// a configure has arrived, which means the invitation was accepted, the broker
+// brokered, a page embedded the surface, and the event crossed the fd onto
+// this thread.
 
 #ifdef UNSAFE_BUFFERS_BUILD
 // This walks argv, which is a pointer and a count and cannot be anything else
@@ -40,7 +40,6 @@ static const int kTimeoutMs = 60000;
 
 struct Seen {
   int configures;
-  int frames;
   int releases;
   uint32_t width;
   uint32_t height;
@@ -55,15 +54,6 @@ static void OnConfigure(void* user_data,
   seen->width = width;
   seen->height = height;
   printf("configure: surface %u at %ux%u\n", surface, width, height);
-}
-
-static void OnFrame(void* user_data,
-                    DomicileSurfaceId surface,
-                    uint64_t deadline_us) {
-  struct Seen* seen = (struct Seen*)user_data;
-  if (seen->frames++ == 0) {
-    printf("frame: surface %u, first of many\n", surface);
-  }
 }
 
 static void OnReleased(void* user_data,
@@ -100,7 +90,6 @@ int main(int argc, char** argv) {
   memset(&callbacks, 0, sizeof(callbacks));
   callbacks.user_data = &seen;
   callbacks.configure = OnConfigure;
-  callbacks.frame = OnFrame;
   callbacks.released = OnReleased;
 
   DomicileEngine* engine = domicile_engine_connect(socket_path, callbacks);
@@ -124,7 +113,7 @@ int main(int argc, char** argv) {
   // The loop the compositor already runs, standing in for calloop.
   const int fd = domicile_engine_fd(engine);
   const int64_t deadline = NowMs() + kTimeoutMs;
-  while ((seen.configures == 0 || seen.frames == 0) && NowMs() < deadline) {
+  while (seen.configures == 0 && NowMs() < deadline) {
     struct pollfd descriptor;
     descriptor.fd = fd;
     descriptor.events = POLLIN;
@@ -134,17 +123,15 @@ int main(int argc, char** argv) {
     }
   }
 
-  const int ok = seen.configures > 0 && seen.frames > 0;
+  const int ok = seen.configures > 0;
   if (ok) {
-    printf("configured %d time(s), %d frame callback(s), %d release(s)\n",
-           seen.configures, seen.frames, seen.releases);
+    printf("configured %d time(s), %d release(s)\n", seen.configures,
+           seen.releases);
     printf("the C ABI carried it: invitation, broker, fd, dispatch\n");
   } else {
     fprintf(stderr,
-            "within %ds: %d configure(s) and %d frame callback(s); both are "
-            "needed, and a configure with no frames means BeginFrames are not "
-            "flowing\n",
-            kTimeoutMs / 1000, seen.configures, seen.frames);
+            "within %ds: no configure, so no page embedded the surface\n",
+            kTimeoutMs / 1000);
   }
 
   domicile_surface_destroy(engine, surface);
