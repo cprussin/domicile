@@ -8,6 +8,7 @@ use domicile_launch::control::{
     answer, parse_response, Desktop, LoadShell, OpenUrl, Response, Screenshot, SendShell,
     SettingsFiles, Shot,
 };
+use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
 #[test]
@@ -281,6 +282,41 @@ fn a_desktop_told_to_set_a_site_permission_tells_the_engine() {
 }
 
 #[test]
+fn a_desktop_asked_for_media_devices_asks_the_engine() {
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"media_devices\"}",
+            &Desktop {
+                media_devices: &|| Ok(a_camera()),
+                ..nothing_dialed()
+            }
+        ),
+        Response::MediaDevices(a_camera())
+    );
+}
+
+#[test]
+fn a_desktop_told_to_prefer_a_media_device_tells_the_engine() {
+    let told = RefCell::new(None);
+    let answered = reply_to(
+        "{\"type\":\"set_media_device\",\"kind\":\"camera\",\"id\":\"/dev/video2\"}",
+        &Desktop {
+            set_media_device: &|kind, id| {
+                told.replace(Some((kind, id.to_string())));
+                Ok(())
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(
+        told.take(),
+        Some((MediaKind::Camera, "/dev/video2".to_string()))
+    );
+    assert_eq!(answered, Response::Stored);
+}
+
+#[test]
 fn an_engine_that_would_not_set_a_site_permission_is_quoted() {
     let Response::Refused { why } = reply_to(
         "{\"type\":\"set_site_permission\",\"site\":{\"origin\":\"https://meet.example\",\"permission\":\"camera\",\"setting\":\"block\"}}",
@@ -361,6 +397,16 @@ fn a_desktop_asked_which_extensions_the_config_installed_asks_the_engine() {
 }
 
 /// What the engine stores: camera's default, and one site's camera.
+fn a_camera() -> MediaDevices {
+    MediaDevices {
+        cameras: vec![MediaDevice {
+            id: "/dev/video2".to_string(),
+            name: "USB Camera".to_string(),
+        }],
+        microphones: vec![],
+    }
+}
+
 fn stored() -> SiteSettings {
     SiteSettings {
         defaults: BTreeMap::from([(Permission::Camera, Setting::Ask)]),
@@ -391,11 +437,13 @@ fn nothing_dialed() -> Desktop<'static> {
         files: &NO_FILES,
         load: &|_, _| panic!("only load_shell loads anything"),
         load_unpacked: &|_| panic!("only load_unpacked loads an extension"),
+        media_devices: &|| panic!("only media_devices lists media devices"),
         module: Path::new("/shell.js"),
         open: &|_| panic!("only open_url opens a browser window"),
         open_app: &|_| panic!("only open_app opens an app window"),
         permissions: &|| panic!("only site_permissions lists site permissions"),
         send: &|_| panic!("only send_shell sends anything"),
+        set_media_device: &|_, _| panic!("only set_media_device prefers one"),
         set_permission: &|_| panic!("only set_site_permission sets one"),
         uninstall_extension: &|_| panic!("only uninstall_extension uninstalls one"),
     }

@@ -1,6 +1,6 @@
 // The app's native messaging host, `domicile-settings-host`: the desktop's
-// config and shell files, its site permissions and the extensions it loads and
-// uninstalls. Every reply is parsed.
+// config and shell files, its site permissions, the extensions it loads and
+// uninstalls, and its cameras and microphones. Every reply is parsed.
 // The protocol is `domicile_launch::settings`'s.
 
 import { z } from "zod";
@@ -74,6 +74,25 @@ const siteSettingsSchema = z.object({
 /** Every permission's default and every site's own setting. */
 export type SiteSettings = z.infer<typeof siteSettingsSchema>;
 
+const mediaDeviceSchema = z.object({ id: z.string(), name: z.string() });
+
+/** A camera or microphone. */
+export type MediaDevice = z.infer<typeof mediaDeviceSchema>;
+
+const mediaDevicesSchema = z.object({
+  cameras: z.array(mediaDeviceSchema),
+  microphones: z.array(mediaDeviceSchema),
+});
+
+/**
+ * Each kind's devices, most preferred first. A site that names no device gets
+ * the first.
+ */
+export type MediaDevices = z.infer<typeof mediaDevicesSchema>;
+
+/** Which list a device is in. */
+export type MediaKind = "camera" | "microphone";
+
 /**
  * The files the desktop runs: its config (none when it runs the defaults),
  * the JSON a module config evaluated to, and the shell's source (none for a
@@ -102,6 +121,9 @@ export type SettingsHost = {
   uninstallExtension: (id: string) => Promise<void>;
   /** The ids of the extensions the config installed, which only it removes. */
   configExtensions: () => Promise<string[]>;
+  mediaDevices: () => Promise<MediaDevices>;
+  /** Gives device `id` to sites that ask for a `kind` without naming one. */
+  setMediaDevice: (kind: MediaKind, id: string) => Promise<void>;
   /** Calls `listener` when a file changes on disk. Returns an unsubscribe. */
   onChange: (listener: () => void) => () => void;
 };
@@ -165,6 +187,14 @@ export const nativeHost = (
         throw unexpected(reply, "loaded_unpacked");
       }
     },
+    mediaDevices: async () => {
+      const reply = await ask({ type: "media_devices" });
+      if (reply.type === "media_devices") {
+        return { cameras: reply.cameras, microphones: reply.microphones };
+      } else {
+        throw unexpected(reply, "media_devices");
+      }
+    },
     onChange: (listener) => {
       changes.add(listener);
       connected();
@@ -182,6 +212,12 @@ export const nativeHost = (
         };
       } else {
         throw unexpected(reply, "files");
+      }
+    },
+    setMediaDevice: async (kind, device) => {
+      const reply = await ask({ device, kind, type: "set_media_device" });
+      if (reply.type !== "stored") {
+        throw unexpected(reply, "stored");
       }
     },
     setSitePermission: async (site) => {
@@ -243,6 +279,10 @@ const replySchema = z.discriminatedUnion("type", [
     id: z.number(),
     ids: z.array(z.string()),
     type: z.literal("config_extensions"),
+  }),
+  mediaDevicesSchema.extend({
+    id: z.number(),
+    type: z.literal("media_devices"),
   }),
   z.object({ id: z.number(), type: z.literal("refused"), why: z.string() }),
   z.object({ type: z.literal("changed") }),

@@ -32,6 +32,8 @@ constexpr char kSetSitePermissionCommand[] = "set_site_permission";
 constexpr char kLoadUnpacked[] = "load_unpacked";
 constexpr char kUninstallExtension[] = "uninstall_extension";
 constexpr char kConfigExtensions[] = "config_extensions";
+constexpr char kMediaDevices[] = "media_devices";
+constexpr char kSetMediaDevice[] = "set_media_device";
 
 std::string Line(base::DictValue reply) {
   std::string line;
@@ -61,6 +63,9 @@ std::string AnswerUninstallExtension(const base::DictValue& request,
                                      UninstallExtension uninstall_extension);
 std::string AnswerConfigExtensions(
     ListConfigExtensions list_config_extensions);
+std::string AnswerMediaDevices(ListMediaDevices list_media_devices);
+std::string AnswerSetMediaDevice(const base::DictValue& request,
+                                 SetMediaDevice set_media_device);
 
 }  // namespace
 
@@ -69,6 +74,11 @@ SitePermissionList::SitePermissionList(const SitePermissionList&) = default;
 SitePermissionList& SitePermissionList::operator=(const SitePermissionList&) =
     default;
 SitePermissionList::~SitePermissionList() = default;
+
+MediaDeviceList::MediaDeviceList() = default;
+MediaDeviceList::MediaDeviceList(const MediaDeviceList&) = default;
+MediaDeviceList& MediaDeviceList::operator=(const MediaDeviceList&) = default;
+MediaDeviceList::~MediaDeviceList() = default;
 
 std::string RefusedCommand(std::string_view why) {
   base::DictValue reply;
@@ -139,11 +149,21 @@ void AnswerCommand(std::string_view line,
         AnswerConfigExtensions(actions.list_config_extensions));
     return;
   }
+  if (*type == kMediaDevices) {
+    std::move(reply).Run(AnswerMediaDevices(actions.list_media_devices));
+    return;
+  }
+  if (*type == kSetMediaDevice) {
+    std::move(reply).Run(
+        AnswerSetMediaDevice(*request, actions.set_media_device));
+    return;
+  }
   std::move(reply).Run(RefusedCommand(base::StrCat(
       {"\"", *type, "\" is not a command this engine knows; it takes \"",
        kLoadShell, "\", \"", kOpenUrl, "\", \"", kListSitePermissionsCommand,
        "\", \"", kSetSitePermissionCommand, "\", \"", kLoadUnpacked, "\", \"",
-       kUninstallExtension, "\" and \"", kConfigExtensions, "\""})));
+       kUninstallExtension, "\", \"", kConfigExtensions, "\", \"",
+       kMediaDevices, "\" and \"", kSetMediaDevice, "\""})));
 }
 
 namespace {
@@ -351,6 +371,64 @@ std::string AnswerConfigExtensions(
   reply.Set("type", kConfigExtensions);
   reply.Set("ids", std::move(listed));
   return Line(std::move(reply));
+}
+
+base::ListValue DeviceEntries(const std::vector<MediaDevice>& devices) {
+  base::ListValue entries;
+  for (const MediaDevice& device : devices) {
+    base::DictValue entry;
+    entry.Set("id", device.id);
+    entry.Set("name", device.name);
+    entries.Append(std::move(entry));
+  }
+  return entries;
+}
+
+std::string AnswerMediaDevices(ListMediaDevices list_media_devices) {
+  const std::optional<MediaDeviceList> list = list_media_devices();
+  if (!list) {
+    return RefusedCommand(
+        "this engine has no shell, and so no profile whose media devices to "
+        "list");
+  }
+  base::DictValue reply;
+  reply.Set("type", kMediaDevices);
+  reply.Set("cameras", DeviceEntries(list->cameras));
+  reply.Set("microphones", DeviceEntries(list->microphones));
+  return Line(std::move(reply));
+}
+
+std::optional<MediaDeviceKind> MediaDeviceKindNamed(std::string_view name) {
+  if (name == "camera") {
+    return MediaDeviceKind::kCamera;
+  }
+  if (name == "microphone") {
+    return MediaDeviceKind::kMicrophone;
+  }
+  return std::nullopt;
+}
+
+std::string AnswerSetMediaDevice(const base::DictValue& request,
+                                 SetMediaDevice set_media_device) {
+  const std::string* kind_name = request.FindString("kind");
+  const std::string* id = request.FindString("id");
+  if (kind_name == nullptr || id == nullptr) {
+    return RefusedCommand(
+        "set_media_device needs a \"kind\" and an \"id\": the device sites "
+        "get when they name none");
+  }
+  const std::optional<MediaDeviceKind> kind = MediaDeviceKindNamed(*kind_name);
+  if (!kind) {
+    return RefusedCommand(
+        base::StrCat({"\"", *kind_name,
+                      "\" is not a kind of device; it is \"camera\" or "
+                      "\"microphone\""}));
+  }
+  const base::expected<void, std::string> set = set_media_device(*kind, *id);
+  if (!set.has_value()) {
+    return RefusedCommand(set.error());
+  }
+  return Done("set");
 }
 
 }  // namespace
