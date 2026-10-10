@@ -238,7 +238,8 @@ const traySchema = z.looseObject({
 
 // All uncleared notifications, oldest first. Pushed on change and on connect.
 // Clear with `dismiss_notifications`; press an action with
-// `invoke_notification_action`. `icon` is a `data:` URL. Without
+// `invoke_notification_action`; send an `inline-reply` action's text with
+// `reply_to_notification`. `icon` is a `data:` URL. Without
 // `timeout_ms`, the shell picks the timeout. See
 // `docs/architecture/NOTIFICATIONS.md`.
 const notificationSchema = z.looseObject({

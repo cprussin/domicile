@@ -334,6 +334,7 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::ActivateTrayItem { .. }
             | ClientRequest::DismissNotifications { .. }
             | ClientRequest::InvokeNotificationAction { .. }
+            | ClientRequest::ReplyToNotification { .. }
             // Grants an application what its dialog asked for.
             | ClientRequest::AnswerPortalRequest { .. },
         )
@@ -698,6 +699,13 @@ mod tests {
                 ClientRequest::InvokeNotificationAction {
                     id: 7,
                     action: "default".into(),
+                },
+            ),
+            (
+                "a notification replied to",
+                ClientRequest::ReplyToNotification {
+                    id: 7,
+                    text: "On my way".into(),
                 },
             ),
             (

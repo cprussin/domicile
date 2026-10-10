@@ -9,22 +9,23 @@ keeps a history in a drawer.
 ```
 application ─────── Notify / CloseNotification ──────▶ compositor
 page: new Notification() ─▶ engine (Chrome's Linux bridge) ─Notify─▶ │
-            ◀── ActionInvoked, NotificationClosed ──                  │ HostMessage::Notifications { items }
+      ◀── ActionInvoked, NotificationReplied, NotificationClosed ──   │ HostMessage::Notifications { items }
                                                                       ▼
                                        engine: `notifications` attribute
                                                                       ▼
             shell: domicile.notifications, notificationschanged → toasts, bell, drawer
-shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key) ─▶ engine ─▶ compositor
+shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key)
+        / replyToNotification(id, text) ─▶ engine ─▶ compositor
 ```
 
 | Piece | Where |
 |---|---|
-| Wire types: `HostMessage::Notifications`, `ChromeMessage::DismissNotifications`, `InvokeNotificationAction`, `Notification`, `Urgency` | `packages/domicile-protocol` |
+| Wire types: `HostMessage::Notifications`, `ChromeMessage::DismissNotifications`, `InvokeNotificationAction`, `ReplyToNotification`, `Notification`, `Urgency` | `packages/domicile-protocol` |
 | History; mapping a `Notify` call to a notification (images, actions, urgency, page origin) | `packages/domicile-host/src/notifications.rs` |
 | D-Bus: the name, `Notify`, the signals | `packages/domicile-compositor/src/notifications.rs` |
-| `notifications` attribute, `dismissNotifications()`, `invokeNotificationAction()` | `control_channel.mojom`, `modules/domicile/domicile_notification*`, patch 0067 |
+| `notifications` attribute, `dismissNotifications()`, `invokeNotificationAction()`, `replyToNotification()` | `control_channel.mojom`, `modules/domicile/domicile_notification*`, patch 0067 |
 | Sites ask before they notify; the shell page is allowed; a notification that stays up is not marked critical | patch 0105, `guard-webview-notifications.sh`; for the shell page, `guard-shell-web-apis.sh` |
-| SDK: `DomicileNotification`, `notifications`, `dismissNotifications`, `invokeNotificationAction`; `Notification` | `@domicile-desktop/sdk/domicile-host`, `@domicile-desktop/sdk/notification` |
+| SDK: `DomicileNotification`, `notifications`, `dismissNotifications`, `invokeNotificationAction`, `replyToNotification`; `Notification` | `@domicile-desktop/sdk/domicile-host`, `@domicile-desktop/sdk/notification` |
 | `Toaster` component | `@domicile-desktop/component-library/Toaster` |
 | Manganese toasts, bell and drawer | `packages/shell-manganese/src/notifications/` |
 
@@ -66,6 +67,16 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key) ─▶ e
   action is dropped.
 - **Clicking an action** runs it and closes the notification, unless the
   notification is `resident`.
+- **Inline reply.** The server advertises `inline-reply`. An `inline-reply`
+  action stays in `actions`, so the engine carries it unchanged. The shell
+  draws it as a text field labeled with the action's label, with a send
+  button. Sending emits `NotificationReplied` and closes the notification as
+  an action does.
+  - The `x-kde-reply-placeholder-text` hint is dropped: the field's label is
+    its placeholder.
+  - Portal notifications have no reply field.
+  - Chrome sends a Web Notification's text action (`type: "text"`) as
+    `inline-reply`, and takes the reply back from `NotificationReplied`.
 - **A site raises its own window.** Its `client.focus()` or `window.focus()`
   fires `domicile-focus-request` on the `<webview>`
   (`WebViewGuest::ActivateContents`), and the shell raises it.
@@ -84,5 +95,3 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key) ─▶ e
   when its bridge starts. The compositor takes the name long before the engine
   starts, but a slow bus could leave Chrome using its own popups.
   Recommendation: wait until it is seen in practice.
-- **Inline reply** (`inline-reply`) is not supported. Recommendation: add it,
-  with a text field on the card, when an application needs it.

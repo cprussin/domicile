@@ -20,6 +20,8 @@ type Props = {
   now: number;
   /** Press `key` on `id`. */
   onAction: (id: number, key: string) => void;
+  /** Send `text` from `id`'s reply field. */
+  onReply: (id: number, text: string) => void;
   /** The screen to toast on: the one with the keyboard. */
   screen: string;
   /**
@@ -40,6 +42,7 @@ export const NotificationToasts = ({
   manager,
   now,
   onAction,
+  onReply,
   screen,
   shown,
 }: Props) => {
@@ -52,7 +55,7 @@ export const NotificationToasts = ({
             className={regionStyles}
             style={{ insetBlockStart: `${TOP_BAR}px` }}
           >
-            <Deck now={now} onAction={onAction} />
+            <Deck now={now} onAction={onAction} onReply={onReply} />
           </div>
         </div>
       )}
@@ -61,7 +64,11 @@ export const NotificationToasts = ({
 };
 
 /** Renders the toasts inside their provider. */
-const Deck = ({ now, onAction }: Pick<Props, "now" | "onAction">) => {
+const Deck = ({
+  now,
+  onAction,
+  onReply,
+}: Pick<Props, "now" | "onAction" | "onReply">) => {
   const { close } = useToastManager();
   return (
     <Toaster<Notification> label="Notifications">
@@ -83,6 +90,9 @@ const Deck = ({ now, onAction }: Pick<Props, "now" | "onAction">) => {
             }}
             onClose={() => {
               close(toast.id);
+            }}
+            onReply={(text) => {
+              onReply(notification.id, text);
             }}
             summary={<Toaster.Title />}
           />

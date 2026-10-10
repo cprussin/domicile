@@ -35,7 +35,6 @@ item when it ships.
    - `lock.passphrase` is world-readable and not compared in constant time.
 
 4. **Notifications.** [NOTIFICATIONS.md](docs/architecture/NOTIFICATIONS.md).
-   - Inline reply.
    - Chrome's notification bridge looks for the server once at startup, so a
      slow bus leaves it showing its own popups.
 

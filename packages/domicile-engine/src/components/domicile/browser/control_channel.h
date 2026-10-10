@@ -104,6 +104,7 @@ class ControlChannel : public mojom::ControlChannel {
   void DismissNotifications(const std::vector<uint32_t>& ids) override;
   void InvokeNotificationAction(uint32_t id,
                                 const std::string& action) override;
+  void ReplyToNotification(uint32_t id, const std::string& text) override;
   void FocusApp(const std::string& app_id) override;
   void FocusChrome() override;
   void WarpPointer(double x, double y) override;
