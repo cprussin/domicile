@@ -222,8 +222,8 @@ Done:
 - [x] Phase 2: `domicile` builds shells (`packages/domicile-builder`)
 - [x] Phase 3: JSON and TS config, config watch and reload
 - [x] Phase 4: packages published to npm
+- [x] `schemars` schema and generated `@domicile-desktop/sdk/config` types
 
 Open:
 
-- [ ] `schemars` schema and generated `@domicile-desktop/sdk/config` types
 - [ ] `nix/home-manager.nix` builds a TS config directory with `bun2nix`

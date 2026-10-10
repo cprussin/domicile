@@ -4,6 +4,10 @@
 //!   against `HOME` and validates.
 //! - [`ConfigStore`] holds the live config. A failed reload keeps the last
 //!   good config and records the error.
+//! - Each type derives `schemars::JsonSchema`. `examples/schema.rs` prints the
+//!   schema the SDK ships as `config.schema.json`. Doc comments on config
+//!   types become its descriptions, which config authors read, so notes about
+//!   this crate's code are `//` comments.
 //!
 //! The shell generates this JSON file; people do not edit it. See
 //! `docs/SHELL-CONFIG.md`.
@@ -21,6 +25,7 @@ pub use startup::StartupConfig;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 /// An error loading a config.
@@ -50,10 +55,9 @@ pub enum ConfigError {
 /// The string fields go to xkb verbatim, so sway's multi-layout form
 /// (`xkb_layout = "us,de"`) works. Empty `xkb_rules` and `xkb_model` use the
 /// libxkbcommon defaults. The default layout is `us`.
-///
-/// `PartialEq` lets a reload detect a change; see the compositor's
-/// `Restatement`.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+// `PartialEq` lets a reload detect a change; see the compositor's
+// `Restatement`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct KeyboardConfig {
     pub xkb_rules: String,
@@ -101,7 +105,7 @@ impl KeyboardConfig {
 }
 
 /// Input-device settings.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct InputConfig {
     pub keyboard: KeyboardConfig,
@@ -112,7 +116,7 @@ pub struct InputConfig {
 /// A nested compositor has no monitors to enumerate. Each display becomes a
 /// `wl_output` and a region of the chrome page, which the shell addresses by
 /// `name`. `position` and `size` are logical units.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct DisplayConfig {
     /// The name the chrome and the compositor use for this display.
@@ -121,13 +125,13 @@ pub struct DisplayConfig {
     pub name: String,
     /// The top-left corner in the config's coordinate space.
     ///
-    /// May be negative. [`Desktop`] normalizes it; these values do not leave
-    /// this crate.
+    /// May be negative.
+    // [`Desktop`] normalizes it; these values do not leave this crate.
     #[serde(default)]
     pub position: (i32, i32),
     /// The `wl_output` scale for clients on this display.
     ///
-    /// [`OutputConfig::max_scale`] does not apply to described displays.
+    /// `output.max_scale` does not apply to described displays.
     #[serde(default = "one")]
     pub scale: u32,
     /// Width and height in logical units. The `wl_output` mode is this times
@@ -227,7 +231,7 @@ fn overlap((start, end): (i64, i64), (other_start, other_end): (i64, i64)) -> bo
 }
 
 /// Output settings.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct OutputConfig {
     /// The displays that make up the desktop.
@@ -237,14 +241,13 @@ pub struct OutputConfig {
     /// The highest `wl_output` scale to advertise.
     ///
     /// Limits cost: a client at scale N renders N² times the pixels. `1` turns
-    /// scaling off. Applies only while [`displays`](OutputConfig::displays) is
-    /// empty.
+    /// scaling off. Applies only while `displays` is empty.
     pub max_scale: u32,
     /// Placements for real monitors, matched against what is connected.
     ///
-    /// Re-read on every hotplug; see [`OutputConfig::layout`]. Empty leaves
-    /// the monitors where the engine placed them. See
-    /// `docs/DISPLAYS.md#profiles`.
+    /// Re-read on every hotplug. Empty leaves the monitors where the engine
+    /// placed them. See `docs/DISPLAYS.md#profiles`.
+    // Matched by [`OutputConfig::layout`].
     pub profiles: Vec<Profile>,
 }
 
@@ -380,14 +383,13 @@ impl std::fmt::Display for Axis {
 /// When an idle desktop turns its screens off.
 ///
 /// Absent means never, and that is the default: a blank screen looks like a
-/// crash, so a shell must opt in. When [`LockConfig`] sets a verifier,
+/// crash, so a shell must opt in. When `lock` sets a verifier,
 /// blanking also locks the desk. See `docs/IDLE.md`.
 ///
 /// The unit is in the key name because a generator writes this file.
-///
-/// `PartialEq` lets a reload detect a change; see the compositor's
-/// `Restatement`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+// `PartialEq` lets a reload detect a change; see the compositor's
+// `Restatement`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct IdleConfig {
     /// Seconds without input before the screens go dark.
@@ -430,17 +432,15 @@ impl IdleConfig {
 /// A config with both is refused, so a passphrase is never mistaken for a PAM
 /// fallback. A PAM service that does not exist stops the compositor from
 /// starting. See `docs/LOCK.md#verifiers`.
-///
-/// `PartialEq` lets a reload detect a change; see the compositor's
-/// `Restatement`.
-#[derive(Clone, Default, PartialEq, Eq, Deserialize)]
+// `PartialEq` lets a reload detect a change; see the compositor's
+// `Restatement`.
+#[derive(Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct LockConfig {
     /// A passphrase that unlocks this desk. An empty string is refused.
-    ///
-    /// The `Debug` impl below redacts it. It is `pub` so
-    /// `scripts/test-the-home-manager-module-agrees.sh` can check that this
-    /// struct accepts every key the home-manager module writes.
+    // The `Debug` impl below redacts it. It is `pub` so
+    // `scripts/test-the-home-manager-module-agrees.sh` can check that this
+    // struct accepts every key the home-manager module writes.
     pub passphrase: Option<String>,
     /// The PAM service the desk's user authenticates against.
     ///
@@ -534,12 +534,13 @@ impl std::fmt::Debug for LockVerifier<'_> {
 /// There is no "follow the system" option: the chrome is the system, so there
 /// is nothing to follow. Clients follow this value through the settings
 /// portal; see the compositor's `portals::settings`.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum ThemeMode {
     /// Light text on a dark background, which the chrome is designed for.
     #[default]
     Dark,
+    /// Dark text on a light background.
     Light,
 }
 
@@ -547,10 +548,9 @@ pub enum ThemeMode {
 ///
 /// Clients read every field but `mode` through the settings portal; see the
 /// compositor's `portals::settings`.
-///
-/// `PartialEq` lets a reload detect a change; see the compositor's
-/// `Restatement`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+// `PartialEq` lets a reload detect a change; see the compositor's
+// `Restatement`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct ThemeConfig {
     pub mode: ThemeMode,
@@ -581,8 +581,9 @@ impl ThemeConfig {
 }
 
 /// An sRGB color, written `"#rrggbb"`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(try_from = "String")]
+#[schemars(schema_with = "accent_color_schema")]
 pub struct AccentColor(pub [u8; 3]);
 
 impl TryFrom<String> for AccentColor {
@@ -599,8 +600,16 @@ impl TryFrom<String> for AccentColor {
     }
 }
 
+/// The written form `AccentColor::try_from` accepts.
+fn accent_color_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({
+        "type": "string",
+        "pattern": "^#[0-9a-fA-F]{6}$",
+    })
+}
+
 /// How strongly clients set text and edges apart from their background.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum Contrast {
     #[default]
@@ -613,10 +622,9 @@ pub enum Contrast {
 ///
 /// Listing an extension is consent: there is no install prompt. Removing one
 /// from the list uninstalls it.
-///
-/// `PartialEq` lets a reload detect a change; see the compositor's
-/// `Restatement`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+// `PartialEq` lets a reload detect a change; see the compositor's
+// `Restatement`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct ExtensionsConfig {
     /// Chrome Web Store ids, installed from the Store and updated from it.
@@ -689,10 +697,9 @@ fn under_home(path: PathBuf, home: Option<&Path>) -> Result<PathBuf, ConfigError
 ///
 /// Applications enforce these themselves; the compositor only reports them.
 /// See `docs/SHELL-CONFIG.md#lockdown`.
-///
-/// `PartialEq` lets a reload detect a change; see the compositor's
-/// `Restatement`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+// `PartialEq` lets a reload detect a change; see the compositor's
+// `Restatement`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct LockdownConfig {
     pub disable_printing: bool,
@@ -705,7 +712,7 @@ pub struct LockdownConfig {
 }
 
 /// The full compositor configuration.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub extensions: ExtensionsConfig,
@@ -720,6 +727,9 @@ pub struct Config {
     /// The shell `domicile` runs when given none: a path or a package, as
     /// `domicile load-shell` takes. The compositor ignores it.
     pub shell: Option<String>,
+    /// Where editors find this file's JSON Schema. Domicile ignores it.
+    #[serde(rename = "$schema")]
+    pub schema: Option<String>,
 }
 
 impl Config {

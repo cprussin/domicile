@@ -4,6 +4,7 @@
 //
 // The output is unformatted; the caller runs a formatter over it.
 
+import { jsDoc } from "./js-doc";
 import type {
   Idl,
   IdlArgument,
@@ -303,18 +304,5 @@ const namedType = (name: string, names: ReadonlySet<string>): string => {
     return name;
   } else {
     throw new Error(`unknown type ${name}`);
-  }
-};
-
-/** A JSDoc comment, indented, or nothing for no lines. */
-const jsDoc = (lines: readonly string[], indent: string): string => {
-  const escaped = lines.map((line) => line.replaceAll("*/", "*\\/"));
-  const [only] = escaped;
-  if (only === undefined) {
-    return "";
-  } else if (escaped.length === 1) {
-    return `${indent}/** ${only} */\n`;
-  } else {
-    return `${indent}/**\n${escaped.map((line) => `${indent} * ${line}`.trimEnd()).join("\n")}\n${indent} */\n`;
   }
 };
