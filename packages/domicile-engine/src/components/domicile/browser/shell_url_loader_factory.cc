@@ -33,6 +33,11 @@ namespace {
 // Styles stay open: shells inline their CSS. See docs/SHELL-PACKAGING.md.
 constexpr char kShellContentSecurityPolicy[] = "script-src 'self'";
 
+// A shell is loaded by a navigation, not a cache-bypassing reload, and Blink
+// keeps non-HTTP responses in its memory cache without limit. A rebuilt shell
+// keeps its file names, so without this the shell before would run again.
+constexpr char kShellCacheControl[] = "no-store";
+
 // Resolves a domicile:// URL for `host` to a file under `root`. Returns false
 // if the URL does not resolve inside `root`. Shared by the shell and home
 // hosts.
@@ -135,6 +140,9 @@ std::string ShellURLLoaderFactory::ShellDocument(const std::string& module) {
   //   - a viewport, so layout and compositor coordinates share a scale
   //   - a full-window root with no margin, so the page and compositor agree on
   //     where windows are
+  //   - a cross-document view transition, so `load_shell` crossfades the shell
+  //     before, such as the splash, into this one. The new side is live, so
+  //     the shell draws during the fade. A shell's CSS can restyle it.
   //
   // The shell's CSS comes from its module, so nothing paints before it runs.
   //
@@ -169,6 +177,12 @@ std::string ShellURLLoaderFactory::ShellDocument(const std::string& module) {
       "        overflow: hidden;\n"
       "        padding: 0;\n"
       "      }\n"
+      "      @view-transition {\n"
+      "        navigation: auto;\n"
+      "      }\n"
+      "      ::view-transition-group(root) {\n"
+      "        animation-duration: 600ms;\n"
+      "      }\n"
       "    </style>\n"
       "  </head>\n"
       "  <body></body>\n"
@@ -183,8 +197,17 @@ network::mojom::URLResponseHeadPtr ShellURLLoaderFactory::ShellDocumentHead() {
   head->headers =
       net::HttpResponseHeaders::Builder(net::HttpVersion(1, 1), "200 OK")
           .AddHeader("Content-Security-Policy", kShellContentSecurityPolicy)
+          .AddHeader("Cache-Control", kShellCacheControl)
           .Build();
   return head;
+}
+
+// static
+scoped_refptr<net::HttpResponseHeaders>
+ShellURLLoaderFactory::ShellFileHeaders() {
+  return net::HttpResponseHeaders::Builder(net::HttpVersion(1, 1), "200 OK")
+      .AddHeader("Cache-Control", kShellCacheControl)
+      .Build();
 }
 
 void ShellURLLoaderFactory::ServeDocument(
@@ -192,7 +215,7 @@ void ShellURLLoaderFactory::ServeDocument(
   mojo::Remote<network::mojom::URLLoaderClient> client_remote(
       std::move(client));
 
-  // Read per request so a reload serves whatever `domicile load-shell` last
+  // Read per request so each load serves whatever `domicile load-shell` last
   // set. ShellSource starts with the command-line values.
   const std::string module = ShellSource::Get().Module();
   if (module.empty()) {
@@ -281,7 +304,9 @@ void ShellURLLoaderFactory::CreateLoaderAndStart(
       file_request, std::move(loader), std::move(client),
       /*observer=*/nullptr,
       // A listing would expose the tree's layout.
-      /*allow_directory_listing=*/false);
+      /*allow_directory_listing=*/false,
+      // Home files are not the shell's, and a rebuild does not change them.
+      home ? nullptr : ShellFileHeaders());
 }
 
 // static
