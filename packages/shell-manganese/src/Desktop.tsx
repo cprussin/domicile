@@ -310,6 +310,9 @@ export const Desktop = ({
           onClose={(id) => {
             act(WindowAction.WindowClosed(id));
           }}
+          onDismiss={(id) => {
+            act(WindowAction.ScratchpadDismissed(id));
+          }}
           onDrop={() => {
             act(WindowAction.WindowDropped());
           }}

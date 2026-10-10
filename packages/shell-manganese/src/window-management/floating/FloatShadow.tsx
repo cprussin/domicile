@@ -1,4 +1,4 @@
-import { css, cx } from "../../../styled-system/css";
+import { cva, cx } from "../../../styled-system/css";
 import type { Rect } from "../rect";
 import type { Restack } from "../restacking";
 import type { WindowMotion } from "../window-motion";
@@ -17,6 +17,11 @@ type Props = {
   dragging: boolean;
   /** The window's whole box, bar included. */
   frame: Rect;
+  /**
+   * Whether the window hangs from the screen's top edge, as a scratchpad
+   * window does, which squares its top corners.
+   */
+  hanging?: boolean;
   /** The window's motion, which the shadow plays too. */
   motion: WindowMotion;
   /** The window's restack animation, if any. */
@@ -36,12 +41,13 @@ export const FloatShadow = ({
   depth,
   dragging,
   frame,
+  hanging = false,
   motion,
   restack,
 }: Props) => (
   <div
     className={cx(
-      shadowStyles,
+      shadowStyles({ hanging }),
       movingStyles({ motion }),
       settlingStyles({ dragging }),
     )}
@@ -58,8 +64,12 @@ export const FloatShadow = ({
  * An outer `box-shadow` only, which is never drawn under its own box. Rounded
  * like the frame, and ignores the pointer.
  */
-const shadowStyles = css({
-  borderRadius: "lg",
-  boxShadow: "lifted",
-  pointerEvents: "none",
+const shadowStyles = cva({
+  base: { boxShadow: "lifted", pointerEvents: "none" },
+  variants: {
+    hanging: {
+      false: { borderRadius: "lg" },
+      true: { borderEndEndRadius: "lg", borderEndStartRadius: "lg" },
+    },
+  },
 });

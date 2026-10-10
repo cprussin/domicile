@@ -115,6 +115,10 @@ For how warping, browser-window focus and modifier drags work, see
   (`floatDragged`). A browser window crosses screens without reloading.
 - A scratchpad window shows as wide and tall as the screen, less 48px at the
   sides and bottom, flush with the screen's top edge (`scratchpadFloatFor`).
+  Its top corners are square.
+- **A scratchpad window is modal.** A backdrop dims the screen under it
+  (`ScratchpadBackdrop.tsx`); a press on the backdrop hides the window. The
+  focus ring stays on the window focus returns to when it hides.
 - A float casts a shadow (`FloatShadow.tsx`), except when fullscreen.
 - Stacking order is the `z-index` of the window's element, so drawing order and
   hit-testing order match.

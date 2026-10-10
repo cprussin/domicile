@@ -570,6 +570,17 @@ describe("TitleBar", () => {
     expect(square.borderTopWidth).not.toBe("1px");
   });
 
+  // A scratchpad window hangs from the screen's top edge.
+  it("squares its top corners but keeps its edge while its window hangs", () => {
+    const style = globalThis.getComputedStyle(
+      face(render(<TitleBar {...barProps} hanging />).container),
+    );
+
+    expect(style.borderStartStartRadius).toBe("");
+    expect(style.borderStartEndRadius).toBe("");
+    expect(style.borderTopWidth).toBe("1px");
+  });
+
   it("says when it is middle-clicked", async () => {
     await new Promise<void>((resolve) => {
       const { container } = render(

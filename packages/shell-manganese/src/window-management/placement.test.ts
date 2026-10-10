@@ -422,6 +422,18 @@ describe("the focus box", () => {
     });
   });
 
+  // The scratchpad window sits over the screen behind a backdrop, so the box
+  // stays where focus goes back to when it is hidden.
+  it("stays on the window under a scratchpad window", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.WindowSentToScratchpad(),
+      WindowAction.ScratchpadShown(),
+    );
+
+    expect(focusBoxOf(state)?.windows).toEqual([appWindowId("kitty")]);
+  });
+
   // A fullscreen window covers the screen, so there is nothing to set apart.
   it("is missing while a window is fullscreen", () => {
     const state = reduce(

@@ -29,4 +29,22 @@ describe("FloatShadow", () => {
     // Unset, so it draws at full opacity.
     expect(globalThis.getComputedStyle(shadow(container)).opacity).toBe("");
   });
+
+  // A scratchpad window hangs from the screen's top edge.
+  it("squares its top corners while its window hangs", () => {
+    const { container } = render(
+      <FloatShadow
+        depth={0}
+        dragging={false}
+        frame={{ height: 300, width: 400, x: 20, y: 0 }}
+        hanging
+        motion="resting"
+      />,
+    );
+    const style = globalThis.getComputedStyle(shadow(container));
+
+    expect(style.borderStartStartRadius).toBe("");
+    expect(style.borderStartEndRadius).toBe("");
+    expect(style.borderEndStartRadius).not.toBe("");
+  });
 });

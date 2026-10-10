@@ -16,6 +16,7 @@ import { FloatGrab } from "./floating/FloatGrab";
 import { FloatShadow } from "./floating/FloatShadow";
 import { floatHolds } from "./floating/float";
 import { floatBordersOf } from "./floating/float-borders";
+import { ScratchpadBackdrop } from "./floating/ScratchpadBackdrop";
 import type { Geometry, PlacedFocusBox, Screenful } from "./placement";
 import { contentsOf, TILED } from "./placement";
 import type { Spot } from "./pointer-warp";
@@ -31,6 +32,7 @@ import { TileGrab } from "./tiled/TileGrab";
 import { titleFocus } from "./title-focus";
 import { focusedWindowIn } from "./tree/tiling";
 import { keyOf, useFocusGlows } from "./useFocusGlows";
+import type { DrawnWindow } from "./useWindowMotion";
 import { useWindowMotion } from "./useWindowMotion";
 import { WindowFrame } from "./WindowFrame";
 import { WindowTitleBar } from "./WindowTitleBar";
@@ -60,6 +62,8 @@ type Props = {
   /** Held modifiers, which decide who gets the pointer. */
   modifiers: Modifiers;
   onClose: (id: string) => void;
+  /** A press on the backdrop under scratchpad window `id`. */
+  onDismiss: (id: string) => void;
   onDrop: () => void;
   /** A tiled window dropped where it was aimed, on any screen. */
   onDropOn: (id: string, aim: Aim) => void;
@@ -116,6 +120,7 @@ export const Stage = ({
   focusedId,
   modifiers: { meta, shift },
   onClose,
+  onDismiss,
   onDrop,
   onDropOn,
   onFloat,
@@ -142,7 +147,7 @@ export const Stage = ({
     ),
   );
   const floats = screens.flatMap((screen) => screen.floats);
-  const glows = useFocusGlows(focusBoxHolding(screens, activeId));
+  const glows = useFocusGlows(focusBoxShowing(screens, activeId));
   const active = motions.drawn.find(({ window }) => window.id === activeId);
   // Drawn over every window, not by the dragged one: see `DropIndicator`.
   const [aim, setAim] = useState<Aim | undefined>(undefined);
@@ -168,10 +173,11 @@ export const Stage = ({
         order. See `FloatShadow`. Skipped for fullscreen floats, whose shadow
         would spill onto the next display.
       */}
-      {motions.drawn.map(({ motion, placement, restack, screen, window }) =>
-        placement !== undefined &&
-        !fillsScreen(screens, window.id) &&
-        floats.some((float) => floatHolds(float, window.id)) ? (
+      {motions.drawn.map(({ motion, placement, restack, screen, window }) => {
+        const float = floats.find((found) => floatHolds(found, window.id));
+        return placement !== undefined &&
+          !fillsScreen(screens, window.id) &&
+          float !== undefined ? (
           <Sliding
             frame={placement.frame}
             key={window.id}
@@ -181,12 +187,13 @@ export const Stage = ({
               depth={placement.depth}
               dragging={window.id === movingId}
               frame={placement.frame}
+              hanging={float.scratchpad}
               motion={motion}
               restack={restack}
             />
           </Sliding>
-        ) : undefined,
-      )}
+        ) : undefined;
+      })}
       {/*
         Before every window too, so the windows at its depth cover all but its
         glow. Only the glow fading in follows the focused window's motion.
@@ -381,6 +388,25 @@ export const Stage = ({
           }
         },
       )}
+      {/*
+        After every bar, so it covers the bars at its depth by document order.
+      */}
+      {screens.flatMap((on) => {
+        const hanging = hangingOn(motions.drawn, on);
+        return hanging?.placement === undefined
+          ? []
+          : [
+              <ScratchpadBackdrop
+                depth={hanging.placement.depth - 1}
+                key={on.geometry.name}
+                leaving={hanging.motion === "stowing"}
+                onDismiss={() => {
+                  onDismiss(hanging.window.id);
+                }}
+                screen={on.geometry.screen}
+              />,
+            ];
+      })}
       {/*
         Tiled window borders, which resize without a modifier. After the
         windows, so a border wins the pointer over the edge it overlaps; before
@@ -623,6 +649,23 @@ const Sliding = ({
 
 const slidingStyles = css({ display: "contents" });
 
+/**
+ * The scratchpad window shown on screen `on`, or one sliding off it back to the
+ * scratchpad, if any.
+ */
+const hangingOn = (
+  drawn: readonly DrawnWindow[],
+  on: StageScreen,
+): DrawnWindow | undefined =>
+  drawn.find(
+    ({ motion, screen, window }) =>
+      screen === on.geometry.name &&
+      (motion === "stowing" ||
+        on.floats.some(
+          (float) => float.scratchpad && floatHolds(float, window.id),
+        )),
+  );
+
 /** Whether the window `id` is fullscreen. */
 const fillsScreen = (screens: readonly StageScreen[], id: string): boolean =>
   screens.some(({ fullscreenId }) => fullscreenId === id);
@@ -679,16 +722,17 @@ const emptyScreens = (
       name: geometry.name,
     }));
 
-/** The focus box around window `id`, on whichever screen shows it. */
-const focusBoxHolding = (
+/**
+ * The focus box of whichever screen shows window `id`. It is around `id` unless
+ * `id` is a scratchpad window; see `focusBoxIn`.
+ */
+const focusBoxShowing = (
   screens: readonly StageScreen[],
   id: string | undefined,
 ): PlacedFocusBox | undefined =>
-  id === undefined
-    ? undefined
-    : screens
-        .map(({ screenful }) => screenful.focusBox)
-        .find((box) => box?.windows.includes(id) === true);
+  screens.find(({ screenful }) =>
+    screenful.placements.some((placement) => placement.id === id),
+  )?.screenful.focusBox;
 
 /**
  * Window `id`, which a container's tab is named and marked after.
