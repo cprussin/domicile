@@ -10,10 +10,13 @@
 #include <vector>
 
 #include "base/containers/flat_map.h"
+#include "base/containers/flat_set.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
+#include "base/unguessable_token.h"
 #include "components/domicile/browser/brokered_frame_sink.h"
 #include "components/domicile/browser/display_capture.h"
+#include "components/domicile/mojom/external_surface.mojom.h"
 #include "components/domicile/mojom/frame_sink_broker.mojom.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
@@ -93,12 +96,23 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   // `app_id` matches the one the producer passed to CreateFrameSink. If that
   // app has no sink yet, `callback` waits until it does: an <app> element can
   // exist before its client window.
+  //
+  // Runs `callback` with nullopt at once if the embed token was used on a sink
+  // whose producer disconnected: viz would refuse it on the new sink.
   void Embed(const std::string& app_id,
              const viz::FrameSinkId& parent_frame_sink_id,
              const viz::LocalSurfaceId& local_surface_id,
              const gfx::Size& size,
              double scale,
              EmbedCallback callback);
+
+  // Runs `callback` once `frame_sink_id` is no longer brokered, with why. Runs
+  // it at once if it is not brokered.
+  //
+  // A restarted compositor reuses app ids, and viz refuses one embed token on
+  // two frame sinks. On kProducerGone the page drops its token for the sink.
+  using EndCallback = base::OnceCallback<void(mojom::FrameSinkEnd)>;
+  void WaitForEnd(const viz::FrameSinkId& frame_sink_id, EndCallback callback);
 
   // Forwards the browser's displays to observers and stores them for
   // observers that connect later.
@@ -176,6 +190,13 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   // Destroys and unregisters every sink of the disconnected producer.
   void OnProducerDisconnected();
 
+  // Destroys the sink `iter` names and runs its WaitForEnd callbacks with
+  // `end`.
+  void EraseFrameSink(
+      base::flat_map<viz::FrameSinkId,
+                     std::unique_ptr<BrokeredFrameSink>>::iterator iter,
+      mojom::FrameSinkEnd end);
+
   // The sink `frame_sink_id` names, if this producer owns one.
   BrokeredFrameSink* OwnedFrameSink(const viz::FrameSinkId& frame_sink_id);
 
@@ -195,6 +216,19 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       frame_sink_map_;
 
   std::vector<PendingEmbed> pending_embeds_;
+
+  // WaitForEnd callbacks, by the brokered sink they wait on.
+  base::flat_map<viz::FrameSinkId, std::vector<EndCallback>> end_waiters_;
+
+  // Every embed token each brokered sink was embedded with.
+  base::flat_map<viz::FrameSinkId, base::flat_set<base::UnguessableToken>>
+      embed_tokens_;
+
+  // Sinks whose producer disconnected, and the embed tokens used on them. Kept
+  // for the browser's lifetime: they grow only by the windows open at each
+  // compositor restart. See WaitForEnd and Embed.
+  base::flat_set<viz::FrameSinkId> disconnected_frame_sinks_;
+  base::flat_set<base::UnguessableToken> disconnected_embed_tokens_;
 
   mojo::RemoteSet<mojom::DisplayListObserver> display_observers_;
 

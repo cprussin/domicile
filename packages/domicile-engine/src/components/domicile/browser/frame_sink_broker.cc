@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/containers/flat_map.h"
+#include "base/containers/flat_set.h"
 #include "base/functional/bind.h"
 #include "components/domicile/browser/brokered_frame_sink.h"
 #include "mojo/public/cpp/bindings/clone_traits.h"
@@ -69,6 +70,11 @@ void FrameSinkBroker::Embed(const std::string& app_id,
                             const gfx::Size& size,
                             double scale,
                             EmbedCallback callback) {
+  // Sent before the page heard its compositor went away.
+  if (disconnected_embed_tokens_.contains(local_surface_id.embed_token())) {
+    std::move(callback).Run(std::nullopt);
+    return;
+  }
   BrokeredFrameSink* frame_sink = SinkForApp(app_id);
   if (!frame_sink) {
     // The <app> element can exist before its client connects, as on a shell
@@ -79,6 +85,8 @@ void FrameSinkBroker::Embed(const std::string& app_id,
   }
 
   frame_sink->Embed(parent_frame_sink_id, local_surface_id, size, scale);
+  embed_tokens_[frame_sink->frame_sink_id()].insert(
+      local_surface_id.embed_token());
   std::move(callback).Run(frame_sink->frame_sink_id());
 }
 
@@ -114,6 +122,7 @@ void FrameSinkBroker::CreateFrameSink(
     }
     raw_frame_sink->Embed(embed.parent_frame_sink_id, embed.local_surface_id,
                           embed.size, embed.scale);
+    embed_tokens_[frame_sink_id].insert(embed.local_surface_id.embed_token());
     std::move(embed.callback).Run(frame_sink_id);
   }
   pending_embeds_ = std::move(still_waiting);
@@ -129,7 +138,18 @@ void FrameSinkBroker::DestroyFrameSink(const viz::FrameSinkId& frame_sink_id) {
     receivers_.ReportBadMessage("FrameSinkId belongs to another producer");
     return;
   }
-  frame_sink_map_.erase(iter);
+  EraseFrameSink(iter, mojom::FrameSinkEnd::kClosed);
+}
+
+void FrameSinkBroker::WaitForEnd(const viz::FrameSinkId& frame_sink_id,
+                                 EndCallback callback) {
+  if (!frame_sink_map_.contains(frame_sink_id)) {
+    std::move(callback).Run(disconnected_frame_sinks_.contains(frame_sink_id)
+                                ? mojom::FrameSinkEnd::kProducerGone
+                                : mojom::FrameSinkEnd::kClosed);
+    return;
+  }
+  end_waiters_[frame_sink_id].push_back(std::move(callback));
 }
 
 // A producer may only use its own sinks, because a FrameSinkId is guessable.
@@ -289,9 +309,47 @@ BrokeredFrameSink* FrameSinkBroker::SinkForApp(const std::string& app_id) {
 
 void FrameSinkBroker::OnProducerDisconnected() {
   const mojo::ReceiverId owner = receivers_.current_receiver();
-  base::EraseIf(frame_sink_map_, [owner](const auto& entry) {
-    return entry.second->owner() == owner;
-  });
+  std::vector<viz::FrameSinkId> owned;
+  for (const auto& [id, sink] : frame_sink_map_) {
+    if (sink->owner() == owner) {
+      owned.push_back(id);
+    }
+  }
+  for (const viz::FrameSinkId& id : owned) {
+    EraseFrameSink(frame_sink_map_.find(id),
+                   mojom::FrameSinkEnd::kProducerGone);
+  }
+}
+
+void FrameSinkBroker::EraseFrameSink(
+    base::flat_map<viz::FrameSinkId,
+                   std::unique_ptr<BrokeredFrameSink>>::iterator iter,
+    mojom::FrameSinkEnd end) {
+  // Copied: `iter` is invalid after the erase.
+  const viz::FrameSinkId frame_sink_id = iter->first;
+  frame_sink_map_.erase(iter);
+
+  auto tokens = embed_tokens_.find(frame_sink_id);
+  if (end == mojom::FrameSinkEnd::kProducerGone) {
+    disconnected_frame_sinks_.insert(frame_sink_id);
+    if (tokens != embed_tokens_.end()) {
+      disconnected_embed_tokens_.insert(tokens->second.begin(),
+                                        tokens->second.end());
+    }
+  }
+  if (tokens != embed_tokens_.end()) {
+    embed_tokens_.erase(tokens);
+  }
+
+  auto waiters = end_waiters_.find(frame_sink_id);
+  if (waiters == end_waiters_.end()) {
+    return;
+  }
+  std::vector<EndCallback> callbacks = std::move(waiters->second);
+  end_waiters_.erase(waiters);
+  for (EndCallback& callback : callbacks) {
+    std::move(callback).Run(end);
+  }
 }
 
 }  // namespace domicile
