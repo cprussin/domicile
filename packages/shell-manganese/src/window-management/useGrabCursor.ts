@@ -9,6 +9,8 @@ import type { Corner } from "./tiled/aim";
 import { cornerOf } from "./tiled/aim";
 
 export enum GrabCursor {
+  /** A move under way. */
+  Grabbing,
   Move,
   /** The left or right edge. */
   ResizeEw,
@@ -64,7 +66,7 @@ const cursorFor = (
     return resizes ? hovered : GrabCursor.Move;
   } else {
     return drag.corner === undefined
-      ? GrabCursor.Move
+      ? GrabCursor.Grabbing
       : diagonalOf(drag.corner);
   }
 };

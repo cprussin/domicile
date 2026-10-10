@@ -2,6 +2,7 @@ import { describe, expect, it, mock } from "bun:test";
 import { act, fireEvent, renderHook } from "@testing-library/react";
 
 import { Direction } from "../direction";
+import { Layout } from "../tree/node";
 import { Aim } from "./aim";
 import { useTileDrag } from "./useTileDrag";
 
@@ -150,6 +151,75 @@ describe("useTileDrag", () => {
       });
       expect(calls.onDropOn).toHaveBeenCalledTimes(1);
       expect(calls.onDrop).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("moving a tab along its strip", () => {
+    const STRIP = { height: 30, width: 1000, x: 0, y: 0 };
+    const tabAt = (id: string, at: number) => ({
+      at,
+      id,
+      rect: { height: 30, width: 200, x: 200 * at, y: 0 },
+      strip: STRIP,
+      tabbed: Layout.Tabbed as const,
+    });
+    const targetsOf = (tabs: readonly string[]) => ({
+      screens: [],
+      tabs: tabs.map(tabAt),
+      windows: [],
+    });
+
+    const draggingTab = () => {
+      const onAim = mock((_aim: Aim | undefined) => undefined);
+      const onDropOn = mock((_aim: Aim) => undefined);
+      const { rerender, result } = renderHook(
+        ({ targets }) =>
+          useTileDrag({
+            frame: DRAGGED.frame,
+            id: "a",
+            onAim,
+            onDrop: () => undefined,
+            onDropOn,
+            onGrab: () => undefined,
+            onStretch: () => undefined,
+            resizes: false,
+            targets,
+          }),
+        { initialProps: { targets: targetsOf(["a", "b"]) } },
+      );
+      act(() => {
+        result.current.onPointerDown(press(100, 10));
+      });
+      return { onAim, onDropOn, rerender };
+    };
+
+    it("moves it at once, with no drop indicator", () => {
+      const { onAim, onDropOn } = draggingTab();
+      act(() => {
+        moveTo(300, 10);
+      });
+      expect(onDropOn.mock.calls).toEqual([
+        [Aim.Strip("b", Direction.Right, tabAt("b", 1).rect)],
+      ]);
+      act(() => {
+        release();
+      });
+      expect(onDropOn).toHaveBeenCalledTimes(1);
+      expect(onAim.mock.calls).toEqual([[undefined]]);
+    });
+
+    it("aims at the tabs where they are after the move", () => {
+      const { onDropOn, rerender } = draggingTab();
+      act(() => {
+        moveTo(300, 10);
+      });
+      rerender({ targets: targetsOf(["b", "a"]) });
+      act(() => {
+        moveTo(100, 10);
+      });
+      expect(onDropOn).toHaveBeenLastCalledWith(
+        Aim.Strip("b", Direction.Left, tabAt("b", 0).rect),
+      );
     });
   });
 

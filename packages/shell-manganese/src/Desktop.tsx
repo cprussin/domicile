@@ -319,6 +319,7 @@ export const Desktop = ({
                 act(WindowAction.WindowDroppedOnScreen(id, aim.name));
                 break;
               }
+              case AimKind.Strip:
               case AimKind.Window: {
                 act(WindowAction.WindowDroppedOn(id, aim.id, aim.edge));
                 break;

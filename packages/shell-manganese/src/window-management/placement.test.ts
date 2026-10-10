@@ -71,6 +71,7 @@ describe("placementsOf", () => {
       soleTab: true,
       strip: {
         at: 0,
+        box: { height: TITLE_BAR, width: 1880, x: 20, y: 52 },
         divided: false,
         first: true,
         open: true,

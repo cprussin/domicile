@@ -3,6 +3,7 @@
 
 import { Direction } from "../direction";
 import type { Rect } from "../rect";
+import { sameRect } from "../rect";
 import type { TabLayout } from "../tree/frames";
 import { Layout } from "../tree/node";
 
@@ -21,8 +22,12 @@ export type EmptyScreen = {
 
 /** A tiled window's tab, hidden or open, which a dragged one goes beside. */
 export type TabTarget = {
+  /** Its index in its strip. */
+  at: number;
   id: string;
   rect: Rect;
+  /** Its strip's box, which tabs in one strip share. */
+  strip: Rect;
   /** The layout of the container whose tab this is. */
   tabbed: TabLayout;
 };
@@ -36,6 +41,7 @@ export type DropTargets = {
 
 export enum AimKind {
   Screen,
+  Strip,
   Window,
 }
 
@@ -48,6 +54,16 @@ export const Aim = {
   Screen: (name: string, rect: Rect) => ({
     kind: AimKind.Screen as const,
     name,
+    rect,
+  }),
+  /**
+   * Moves along its own strip into tab `id`'s slot, `rect`, on its `edge`
+   * side. Moves at once, with no drop indicator.
+   */
+  Strip: (id: string, edge: Direction, rect: Rect) => ({
+    edge,
+    id,
+    kind: AimKind.Strip as const,
     rect,
   }),
   /**
@@ -79,8 +95,9 @@ const EDGE_ZONE = 0.3;
  * What dropping `dragged` at `x`, `y` would do, or `undefined` over itself or
  * over nothing to drop it on.
  *
- * A tab goes before or after the tab under the pointer, by which half of it the
- * pointer is in. Tabs come before windows, whose frames hold their strips.
+ * A window goes before or after the tab under the pointer, by which half of it
+ * the pointer is in. A tab over its own strip takes the slot under the pointer.
+ * Tabs come before windows, whose frames hold their strips.
  */
 export const aimAt = (
   { screens, tabs, windows }: DropTargets,
@@ -91,7 +108,14 @@ export const aimAt = (
   const tab = tabs.find(({ rect }) => contains(rect, x, y));
   const target = windows.find(({ frame }) => contains(frame, x, y));
   if (tab !== undefined) {
-    return tab.id === dragged ? undefined : aimAtTab(tab, x, y);
+    return tab.id === dragged
+      ? undefined
+      : aimAtTab(
+          tab,
+          tabs.find(({ id }) => id === dragged),
+          x,
+          y,
+        );
   } else if (target === undefined) {
     const screen = screens.find(({ area }) => contains(area, x, y));
     return screen === undefined
@@ -116,13 +140,32 @@ const aimAtWindow = ({ frame, id }: Target, x: number, y: number): Aim => {
   return Aim.Window(id, edge, edge === undefined ? frame : halfOf(frame, edge));
 };
 
+/** Aims at `tab`, along the strip if `dragged` is a tab in the same one. */
 const aimAtTab = (
-  { id, rect, tabbed }: TabTarget,
+  tab: TabTarget,
+  dragged: TabTarget | undefined,
   x: number,
   y: number,
 ): Aim => {
-  const edge = tabEdgeNear(rect, tabbed, x, y);
-  return Aim.Window(id, edge, halfOf(rect, edge));
+  const { id, rect, tabbed } = tab;
+  if (dragged !== undefined && sameRect(dragged.strip, tab.strip)) {
+    return Aim.Strip(id, alongStrip(tabbed, tab.at > dragged.at), rect);
+  } else {
+    const edge = tabEdgeNear(rect, tabbed, x, y);
+    return Aim.Window(id, edge, halfOf(rect, edge));
+  }
+};
+
+/** The side a tab moving along its strip goes on, by which way it moves. */
+const alongStrip = (tabbed: TabLayout, forward: boolean): Direction => {
+  switch (tabbed) {
+    case Layout.Tabbed: {
+      return forward ? Direction.Right : Direction.Left;
+    }
+    case Layout.Stacking: {
+      return forward ? Direction.Down : Direction.Up;
+    }
+  }
 };
 
 /** The end of the tab the point is nearer, along its strip. */

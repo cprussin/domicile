@@ -1,18 +1,15 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import type { Direction } from "../direction";
 import type { Rect } from "../rect";
+import { sameRect } from "../rect";
 import type { Aim, Corner, DropTargets } from "./aim";
-import { aimAt, cornerOf } from "./aim";
+import { AimKind, aimAt, cornerOf } from "./aim";
 
-/**
- * A drag in progress, fixed when it started. See `useFloatDrag`.
- *
- * Holds the drop targets too, since nothing retiles during a move.
- */
+/** A drag in progress, fixed when it started. See `useFloatDrag`. */
 type Drag = {
-  /** Where a move would land if dropped now. */
+  /** What the pointer is over: a drop it would land, or a strip move made. */
   aim: Aim | undefined;
   /** The edges a resize drags. */
   corner: Corner | undefined;
@@ -28,7 +25,6 @@ type Drag = {
    * aim, so a click is not a drop.
    */
   pulled: boolean;
-  targets: DropTargets;
 };
 
 /** The secondary button, which resizes. */
@@ -73,8 +69,9 @@ type Options = {
  * Moves or resizes a tiled window by Meta+drag, like sway's
  * `floating_modifier` drag.
  *
- * A move retiles only on drop (see `aim.ts`). A resize drags the corner of the
- * pointer's quarter and updates the tree on each move. Listens on `window`, as
+ * A move retiles only on drop (see `aim.ts`), except a tab moving along its
+ * strip, which moves at once. A resize drags the corner of the pointer's
+ * quarter and updates the tree on each move. Listens on `window`, as
  * `useFloatDrag` explains.
  */
 export const useTileDrag = ({
@@ -89,6 +86,8 @@ export const useTileDrag = ({
   targets,
 }: Options): TileDrag => {
   const running = useRef<Drag | undefined>(undefined);
+  // The targets as drawn now: a tab moving along its strip moves the others.
+  const targetsNow = useEffectEvent(() => targets);
   const [drag, setDrag] = useState<{ corner: Corner | undefined } | undefined>(
     undefined,
   );
@@ -97,7 +96,12 @@ export const useTileDrag = ({
     const moved = (event: PointerEvent) => {
       const started = running.current;
       if (started !== undefined) {
-        running.current = followed(started, event.clientX, event.clientY);
+        running.current = followed(
+          started,
+          targetsNow(),
+          event.clientX,
+          event.clientY,
+        );
       }
     };
     // Idempotent: one drag can get both a release and a cancel.
@@ -140,7 +144,6 @@ export const useTileDrag = ({
         onDropOn,
         onStretch,
         pulled: false,
-        targets,
       };
       setDrag({ corner });
       onGrab(corner !== undefined);
@@ -149,12 +152,17 @@ export const useTileDrag = ({
 };
 
 /** The drag with the pointer at `x`, `y`: resized, or re-aimed. */
-const followed = (drag: Drag, x: number, y: number): Drag => {
+const followed = (
+  drag: Drag,
+  targets: DropTargets,
+  x: number,
+  y: number,
+): Drag => {
   const { corner } = drag;
   if (corner === undefined) {
     // `last` stays at the press until pulled, so this is measured from it.
     return drag.pulled || Math.hypot(x - drag.last.x, y - drag.last.y) >= SLOP
-      ? aimed(drag, x, y)
+      ? aimed(drag, targets, x, y)
       : drag;
   } else {
     const dx = x - drag.last.x;
@@ -170,14 +178,30 @@ const followed = (drag: Drag, x: number, y: number): Drag => {
 };
 
 /** The move with the pointer at `x`, `y`, aimed at what is under it. */
-const aimed = (drag: Drag, x: number, y: number): Drag => {
-  const aim = aimAt(drag.targets, drag.id, x, y);
+const aimed = (
+  drag: Drag,
+  targets: DropTargets,
+  x: number,
+  y: number,
+): Drag => {
+  const aim = aimAt(targets, drag.id, x, y);
+  // Once per slot: the targets update only after the move renders.
+  if (aim?.kind === AimKind.Strip && !landsAlike(aim, drag.aim)) {
+    drag.onDropOn(aim);
+  }
   // Report only changes, to avoid a redraw on every move.
-  if (!landsAlike(aim, drag.aim)) {
-    drag.onAim(aim);
+  if (!landsAlike(pending(aim), pending(drag.aim))) {
+    drag.onAim(pending(aim));
   }
   return { ...drag, aim, last: { x, y }, pulled: true };
 };
+
+/**
+ * The drop a release would make, which the indicator shows. A strip move is
+ * already made.
+ */
+const pending = (aim: Aim | undefined): Aim | undefined =>
+  aim?.kind === AimKind.Strip ? undefined : aim;
 
 /**
  * Whether two aims put the window in the same place. Each target and edge has
@@ -186,14 +210,11 @@ const aimed = (drag: Drag, x: number, y: number): Drag => {
 const landsAlike = (one: Aim | undefined, other: Aim | undefined): boolean =>
   one === undefined || other === undefined
     ? one === other
-    : one.rect.x === other.rect.x &&
-      one.rect.y === other.rect.y &&
-      one.rect.width === other.rect.width &&
-      one.rect.height === other.rect.height;
+    : sameRect(one.rect, other.rect);
 
 /** Ends a drag, dropping onto its aim if it has one. */
 const dropped = (drag: Drag): void => {
-  const { aim } = drag;
+  const aim = pending(drag.aim);
   if (aim !== undefined) {
     drag.onDropOn(aim);
   }

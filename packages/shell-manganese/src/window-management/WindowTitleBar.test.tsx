@@ -40,6 +40,7 @@ const tabProps = {
   rect: TAB,
   strip: {
     at: 0,
+    box: { ...TAB, width: 600 },
     divided: false,
     first: true,
     open: true,
