@@ -27,7 +27,8 @@ window.
 - **Private browser windows record nothing**, as in Chrome: they are in the
   off-the-record profile, which has no history.
 - **Extension pages are visits too.** Chrome records `chrome-extension://`
-  URLs. The app hides its own page from the list.
+  URLs, and the shell's window records `domicile://shell/`. The app hides
+  its own pages and every `domicile://` page from the list.
 
 ## Launcher entries
 

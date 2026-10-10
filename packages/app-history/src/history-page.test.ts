@@ -84,9 +84,11 @@ describe(loadPage, () => {
     expect(second.next).toBe(at(7, 9));
   });
 
-  it("leaves out the app's own pages", async () => {
+  it("leaves out the app's own pages and Domicile's", async () => {
+    // The shell's own window is a Chrome tab too, so its visits are recorded.
     const source = fakeHistory([
       { title: "History", url: `${OWN}history.html`, visits: [at(9, 9)] },
+      { title: "domicile", url: "domicile://shell/", visits: [at(9, 10)] },
       { title: "A", url: "https://a.test/", visits: [at(9, 8)] },
     ]);
     const page = await loadPage(source, {
