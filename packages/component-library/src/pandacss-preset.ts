@@ -57,7 +57,7 @@ export const domicilePreset = definePreset({
       animationName: "none",
     },
     "::view-transition-new(root)": {
-      animationDuration: "{durations.slowest}",
+      animationDuration: "{durations.wipe}",
       animationTimingFunction: "{easings.outQuart}",
       // The default `plus-lighter` blend leaves a bright seam at the clip
       // edge.
@@ -379,6 +379,8 @@ export const domicilePreset = definePreset({
           pulse: { value: "1.5s" },
           // One turn of `spin`. A slower spinner looks stuck.
           spin: { value: "1s" },
+          // The theme change wipe.
+          wipe: { value: "1.6s" },
         },
         easings: {
           // Ease-out with a small overshoot, for a landing bounce.

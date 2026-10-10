@@ -250,6 +250,7 @@ equivalent (`background`, `card`, `foreground`, …) instead.
 | `borderWidths.fauxBold` | Domicile preset. A stroke width for bold that doesn't widen the text: `paintOrder: "stroke"` with `WebkitTextStroke: "{borderWidths.fauxBold} currentColor"`. For emphasis that must not shift the text around it, like a launcher row's matched letters. |
 | `durations.fastest/faster/fast/normal/slow/slower/slowest/pulse` | Used in `transition` shorthands. |
 | `durations.crossfade` | Domicile preset. A 2s dissolve between two pictures — far longer than the scale above, which measures how long a control takes to answer. |
+| `durations.wipe` | Domicile preset. The 1.6s theme change wipe. |
 | `easings.default/linear/in/out/in-out` | Used in `transition` shorthands. |
 | `easings.outBack`, `easings.outQuart` | Domicile preset. `outBack` is a back-out with a ~15% overshoot, for a landing that should bounce; `outQuart` is a settling ease-out for when `easings.out` reads too linear. |
 | `opacity.disabled` (0.6), `opacity.dragging` (0.4), `opacity.pulseMin` (0.3) | Domicile preset. |
