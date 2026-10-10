@@ -9,9 +9,9 @@
 #
 # Fields are named by dotted path from `Config`, with `[]` for a list's
 # elements: `output.profiles[].displays[].mode`, as `removedSettings` names
-# them. In a struct reached from `Config`, anything it cannot read fails rather
-# than hiding the fields below it: a `#[serde(...)]` that renames, flattens or
-# skips, a field that is not `pub`, a type over several lines, a type it cannot
+# them. A field's lone `#[serde(rename = "...")]` names its path. In a struct
+# reached from `Config`, anything it cannot read fails rather than hiding the
+# fields below it: any other `#[serde(...)]` that renames, flattens or skips, a field that is not `pub`, a type over several lines, a type it cannot
 # name (`Box<T>`, `crate::T`).
 #
 # Compares against the base: `DOMICILE_PR_BASE_SHA` on a pull request
@@ -63,7 +63,7 @@ trap 'rm -rf "$WORK"' EXIT
 #   lines.
 # - `F struct field type`: a `pub` field of an `S`.
 # - `! struct what`: something in an `S` this check cannot read: a
-#   `#[serde(...)]` that renames, flattens or skips, a field that is not `pub`,
+#   `#[serde(...)]` other than a lone rename that renames, flattens or skips, a field that is not `pub`,
 #   a type over several lines.
 fields() {
   awk '
@@ -91,6 +91,9 @@ fields() {
     name == "" { next }
     /^\}/ { name = ""; next }
     /^[ \t]*$/ || /^[ \t]*\/\// { next }
+    /^    #\[serde\(rename = "[^"]*"\)\]$/ {
+      renamed = $0; sub(/^[^"]*"/, "", renamed); sub(/".*$/, "", renamed); next
+    }
     /^    #\[.*\]$/ { if (/rename|alias|flatten|skip/) { attr = $0 }; next }
     match($0, /^    pub [a-z0-9_]+: /) {
       field = substr($0, RSTART + 8, RLENGTH - 10)
@@ -98,8 +101,11 @@ fields() {
       sub(/[ \t]*\/\/.*$/, "", type)
       if (type !~ /,$/) { refuse($0) }
       else if (attr != "") { refuse(attr " on " field) }
-      else { sub(/,$/, "", type); print "F\t" name "\t" field "\t" type }
-      attr = ""
+      else {
+        sub(/,$/, "", type)
+        print "F\t" name "\t" (renamed != "" ? renamed : field) "\t" type
+      }
+      attr = ""; renamed = ""
       next
     }
     { refuse($0) }

@@ -1463,3 +1463,15 @@ fn keys_are_a_shell_s_now_and_the_tables_are_refused() {
         assert!(matches!(err, ConfigError::Parse(_)), "{table}: {err:?}");
     }
 }
+
+// ---- schema -----------------------------------------------------------------
+
+#[test]
+fn a_config_may_name_its_json_schema() {
+    // Editors read `$schema`; the compositor ignores it.
+    let config = Config::parse(
+        r#"{ "$schema": "https://unpkg.com/@domicile-desktop/sdk/config.schema.json" }"#,
+    )
+    .unwrap();
+    assert_eq!(config.input.keyboard.xkb_layout, "us");
+}

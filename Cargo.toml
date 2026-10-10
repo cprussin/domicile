@@ -51,3 +51,5 @@ zbus = { version = "5.0", default-features = false, features = [
 libc = "0.2"
 # Encodes screenshots (see `domicile_host::screenshot`).
 png = "0.18"
+# The config's JSON Schema, from which the SDK's config types are generated.
+schemars = "1"

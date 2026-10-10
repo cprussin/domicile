@@ -143,9 +143,8 @@ Evidence is in [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md),
    [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
 
 6. **Composable shells, phase 3.** Phases 1, 2 and 4 are done. Left:
-   - A `schemars` schema with generated `@domicile-desktop/sdk/config` types.
-   - `nix/home-manager.nix` building a TS config directory with `bun2nix`. It
-     writes `domicile.json` today.
+   `nix/home-manager.nix` building a TS config directory with `bun2nix`. It
+   writes `domicile.json` today.
 
    [COMPOSABLE-SHELLS.md](docs/architecture/COMPOSABLE-SHELLS.md).
 

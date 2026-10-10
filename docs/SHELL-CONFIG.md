@@ -41,14 +41,25 @@ A `.ts`, `.tsx`, `.js` or `.mjs` config is evaluated to JSON.
 ```tsx
 // ~/.config/domicile/domicile.tsx
 import { runManganese } from "@domicile-desktop/manganese";
+import type { InputConfig } from "@domicile-desktop/sdk/config";
 
-export const input = { keyboard: { xkb_variant: "dvp" } };
+export const input: InputConfig = { keyboard: { xkb_variant: "dvp" } };
 export const Shell = runManganese();
 ```
 
 - Styling custom manganese bar items:
   [CUSTOM-BAR-ITEMS.md](/packages/shell-manganese/docs/CUSTOM-BAR-ITEMS.md).
 - Design: [COMPOSABLE-SHELLS.md](/docs/architecture/COMPOSABLE-SHELLS.md).
+
+## Types and schema
+
+- `@domicile-desktop/sdk/config` has a type for each section (`InputConfig`,
+  `OutputConfig`, …) and `Config` for the whole file.
+- `@domicile-desktop/sdk/config.schema.json` is the JSON Schema. A JSON config
+  names it for editors, and the compositor ignores the key:
+  `{ "$schema": "https://unpkg.com/@domicile-desktop/sdk/config.schema.json" }`.
+- Both are generated from `domicile-config`'s Rust types; see the SDK's
+  [Generated types](/packages/chrome-sdk/README.md#generated-types).
 
 ## Home-manager
 

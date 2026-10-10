@@ -52,6 +52,7 @@ See [docs/ELEMENTS.md](docs/ELEMENTS.md) for `<app>` input and focus, and the
 | Module | What it is |
 | --- | --- |
 | `./domicile-host` | `DomicileHost`: the type of the desktop `Shell` is handed. Generated from the engine's IDL; see [Generated types](#generated-types). |
+| `./config` | Types for the config file's sections, for a TypeScript config module. Generated; see [Generated types](#generated-types). `./config.schema.json` is the JSON Schema they come from. |
 | `./shell` | `Shell`: the export a shell module must provide. Domicile calls it once with the element to draw in. |
 | `./app-element`, `./webview-element` | Types and event names for `<app>` and `<webview>`. |
 | `./bind-keys` | `bindKeys`: grab a shell's own chords by name and handle them by mode. `./key-action` and `./own-keybindings` are its parts. |
@@ -94,7 +95,7 @@ speaks it.
 with the IDL's comments as its docs. Do not edit it.
 
 ```sh
-bun run generate    # after changing the IDL
+bun run generate    # after changing the IDL or domicile-config
 ```
 
 - `codegen/` holds the generator: a parser for the IDL subset the engine uses,
@@ -102,6 +103,16 @@ bun run generate    # after changing the IDL
 - `EVENT_TYPES` in `codegen/generate-domicile-host.ts` names the event type
   each `on<name>` handler dispatches, which WebIDL cannot express.
 - `scripts/test-host-types-match-the-idl.sh` fails when the file is stale.
+
+`config.schema.json` is the JSON Schema `schemars` derives from
+`domicile-config`'s Rust types, and `src/config.ts` is generated from it, with
+the Rust doc comments as its docs. `bun run generate` writes both and needs
+`cargo`.
+
+- `codegen/json-schema.ts` parses the schema subset `schemars` emits. It
+  throws on a keyword outside it.
+- `scripts/test-config-types-match-the-schema.sh` fails when either file is
+  stale.
 
 ## Dependencies
 
