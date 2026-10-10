@@ -341,11 +341,9 @@ fn a_locked_desk_answers_no_search_and_the_passphrase_lets_the_next_one_find_the
     };
     assert_eq!(files, vec!["plan.org".to_string()]);
 
-    let said = compositor.complaint();
-    assert!(
-        said.contains("this desktop is locked; what the shell asked for is not done"),
-        "the locked desk refused the search without saying so:\n{said}"
-    );
+    // Awaited: the log reaches the test through a pipe, which can lag behind
+    // the answer on the socket.
+    compositor.wait_for_log("this desktop is locked; what the shell asked for is not done");
 }
 
 /// A shell can request the lock directly, without the idle timeout.
