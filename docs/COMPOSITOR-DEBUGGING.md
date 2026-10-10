@@ -5,23 +5,20 @@ pitfalls. For running and testing, see [DEVELOPING.md](DEVELOPING.md).
 
 ## Frame report
 
-The compositor logs one `DEBUG` line (`frames`) per window of frames. The
-launcher's default `RUST_LOG` hides it. Show it with
-`RUST_LOG=info,domicile_compositor=debug`.
+The compositor logs one `DEBUG` line (`frames`) every 5 seconds in which a
+client committed a buffer. The launcher's default `RUST_LOG` hides it. Show it
+with `RUST_LOG=info,domicile_compositor=debug`.
 
 ```
-composited fps commit_ms composite_ms composite_worst_ms
-submit_ms submit_worst_ms idle_ms response_ms response_worst_ms chromes
+commits commit_ms idle_ms response_ms response_worst_ms chromes
 ```
 
-- **`composite_ms`:** importing the client's buffer and drawing every layer.
-  Excludes the submit.
-- **`submit_ms`:** the submit alone. On a nested window it blocks for a frame
-  callback, so it is excluded from `composite_ms` to keep that number
-  comparable.
-- **`response_ms`:** the client's own redraw time. Use it as a control for the
-  other two.
-- **`idle_ms`:** time in the window with no activity.
+- **`commit_ms`:** handling one commit end to end, including handing its buffer
+  to the engine.
+- **`idle_ms`:** the gap between one commit finishing and the next arriving.
+  Large means waiting on clients.
+- **`response_ms`:** keystroke to the client's next commit. Subtract it from
+  the chrome's `rt_ms` for the time a key takes to reach the client.
 
 Container numbers come from a software rasterizer; see `AGENTS.md`,
 *Checking your work*.

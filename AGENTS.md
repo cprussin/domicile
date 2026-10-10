@@ -232,7 +232,7 @@ Three things this cannot reach, so do not read a green run as covering them:
   own tests — and anything you put *inside* it is not covered by anything.
 - **Presentation.** The pixel tests read an offscreen buffer back; no check
   puts a window on a screen.
-- **Hardware timing.** `composite_ms`, `submit_ms` and the rest come off a
+- **Hardware timing.** `commit_ms`, `response_ms` and the rest come off a
   software rasterizer here, which flatters some stages and punishes others.
   Numbers from this container are directional, not results.
 

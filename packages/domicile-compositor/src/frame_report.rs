@@ -3,7 +3,7 @@
 //!
 //! How to read it: `docs/COMPOSITOR-DEBUGGING.md`.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use tracing::debug;
@@ -16,17 +16,12 @@ pub const REPORT_EVERY: Duration = Duration::from_secs(5);
 
 /// Print one line, if the window that just closed saw anything.
 pub fn report(window: &mut FrameWindow, hub: &Arc<ChromeHub>) {
-    let Some(report) = window.due(hub) else {
+    let Some(report) = window.due(&hub.timings) else {
         return;
     };
     debug!(
-        composited = report.composited,
-        fps = report.fps,
+        commits = report.commits,
         commit_ms = report.commit_ms,
-        composite_ms = report.composite_ms,
-        composite_worst_ms = report.composite_worst_ms,
-        submit_ms = report.submit_ms,
-        submit_worst_ms = report.submit_worst_ms,
         idle_ms = report.idle_ms,
         response_ms = report.response_ms,
         response_worst_ms = report.response_worst_ms,
@@ -52,14 +47,6 @@ pub struct FrameTimings {
     /// takes to reach the client. Measured from the oldest unanswered
     /// keystroke, as the chrome does, so the two compare.
     pub response: TimingWindow,
-    /// Drawing time, up to but not including the submit. Excludes the
-    /// client-buffer import, which is on the commit path.
-    composite: TimingWindow,
-    /// The submit alone. See `docs/COMPOSITOR-DEBUGGING.md` for reading it with
-    /// `composite`.
-    submit: TimingWindow,
-    /// Frames composited in this window.
-    composited: usize,
 }
 
 /// When the writer thread last reported.
@@ -70,52 +57,36 @@ pub struct FrameWindow {
 
 /// One window's worth of numbers, rounded for reading.
 struct FrameReport {
-    /// Frames drawn into the window.
-    composited: usize,
-    fps: u32,
+    /// Buffer commits handled in the window.
+    commits: usize,
     commit_ms: u32,
     idle_ms: u32,
     response_ms: u32,
     response_worst_ms: u32,
-    /// Drawing time, excluding the submit. See `docs/COMPOSITOR-DEBUGGING.md`.
-    composite_ms: u32,
-    composite_worst_ms: u32,
-    /// The submit, which on a nested window blocks for a frame callback.
-    submit_ms: u32,
-    submit_worst_ms: u32,
 }
 
 impl FrameWindow {
-    fn due(&mut self, hub: &ChromeHub) -> Option<FrameReport> {
+    fn due(&mut self, timings: &Mutex<FrameTimings>) -> Option<FrameReport> {
         let since = *self.since.get_or_insert_with(Instant::now);
         let elapsed = since.elapsed();
         if elapsed < REPORT_EVERY {
             None
         } else {
-            let mut timings = hub.timings.lock().unwrap();
-            // Stay quiet when nothing was composited, so an idle desktop does
+            let mut timings = timings.lock().unwrap();
+            // Stay quiet when nothing was committed, so an idle desktop does
             // not fill the log.
-            let composited = std::mem::take(&mut timings.composited);
-            let report = (composited > 0).then(|| {
+            let report = timings.commit.take().map(|commit| {
                 // A stage that recorded nothing reports zero.
-                let (commit, idle, response, composite) = (
-                    timings.commit.take().unwrap_or_default(),
+                let (idle, response) = (
                     timings.idle.take().unwrap_or_default(),
                     timings.response.take().unwrap_or_default(),
-                    timings.composite.take().unwrap_or_default(),
                 );
-                let submit = timings.submit.take().unwrap_or_default();
                 FrameReport {
-                    composited,
-                    fps: (composited as f64 / elapsed.as_secs_f64()).round() as u32,
+                    commits: commit.count,
                     commit_ms: commit.average.as_millis() as u32,
                     idle_ms: idle.average.as_millis() as u32,
                     response_ms: response.average.as_millis() as u32,
                     response_worst_ms: response.worst.as_millis() as u32,
-                    composite_ms: composite.average.as_millis() as u32,
-                    composite_worst_ms: composite.worst.as_millis() as u32,
-                    submit_ms: submit.average.as_millis() as u32,
-                    submit_worst_ms: submit.worst.as_millis() as u32,
                 }
             });
             drop(timings);
@@ -124,5 +95,37 @@ impl FrameWindow {
             };
             report
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
+
+    use super::{FrameTimings, FrameWindow, REPORT_EVERY};
+
+    fn closed_window() -> FrameWindow {
+        FrameWindow {
+            since: Some(Instant::now() - REPORT_EVERY),
+        }
+    }
+
+    #[test]
+    fn a_window_with_commits_reports_them() {
+        let timings = Mutex::new(FrameTimings::default());
+        timings
+            .lock()
+            .unwrap()
+            .commit
+            .record(Duration::from_millis(4));
+        let report = closed_window().due(&timings);
+        assert_eq!(report.map(|report| report.commits), Some(1));
+    }
+
+    #[test]
+    fn a_window_without_commits_stays_quiet() {
+        let timings = Mutex::new(FrameTimings::default());
+        assert!(closed_window().due(&timings).is_none());
     }
 }
