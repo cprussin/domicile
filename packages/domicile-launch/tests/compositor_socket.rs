@@ -1,11 +1,12 @@
-//! Tests for asking the compositor for a screenshot over its chrome socket.
+//! Tests for asking the compositor for a screenshot, or to send the shell a
+//! command, over its chrome socket.
 
 use std::io::{BufRead as _, BufReader, Write as _};
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use domicile_launch::compositor_socket::{screenshot, ScreenshotError};
+use domicile_launch::compositor_socket::{screenshot, send_shell, CompositorError};
 use domicile_launch::control::Shot;
 
 /// Reply timeout: long enough for a loaded machine, short enough for a fast
@@ -52,7 +53,7 @@ fn a_compositor_that_could_not_save_it_is_carried_back_in_its_own_words() {
 
     assert_eq!(
         why,
-        ScreenshotError::Refused {
+        CompositorError::Refused {
             why: "the desktop is locked".to_string()
         }
     );
@@ -68,7 +69,7 @@ fn a_compositor_that_is_not_there_is_said_rather_than_waited_for() {
 
     assert_eq!(
         why,
-        ScreenshotError::NoCompositor {
+        CompositorError::NoCompositor {
             path: path.display().to_string()
         }
     );
@@ -84,7 +85,7 @@ fn a_compositor_that_says_nothing_did_not_save_it() {
 
     assert_eq!(
         why,
-        ScreenshotError::NoAnswer {
+        CompositorError::NoAnswer {
             path: path.display().to_string()
         }
     );
@@ -102,7 +103,7 @@ fn a_compositor_that_stays_silent_past_the_patience_did_not_save_it() {
 
     assert_eq!(
         why,
-        ScreenshotError::NoAnswer {
+        CompositorError::NoAnswer {
             path: path.display().to_string()
         }
     );
@@ -124,7 +125,7 @@ fn an_answer_that_is_not_a_reply_is_unreadable() {
 
     assert_eq!(
         why,
-        ScreenshotError::Unreadable {
+        CompositorError::Unreadable {
             path: path.display().to_string(),
             said: "{\"type\":\"welcome\"}".to_string(),
         }
@@ -172,6 +173,51 @@ fn a_screenshot_the_user_dismissed_is_canceled_rather_than_refused() {
     );
 
     assert_eq!(screenshot(&path, None, None), Ok(Shot::Canceled));
+    heard.join().expect("the compositor was listening");
+}
+
+#[test]
+fn the_compositor_is_told_to_send_the_command_and_says_it_did() {
+    let (_scratch, path) = scratch();
+    let heard = a_compositor(
+        &path,
+        Duration::ZERO,
+        Some("{\"type\":\"system_reply\",\"id\":1,\"reply\":{\"kind\":\"sent\"}}\n"),
+    );
+
+    assert_eq!(
+        send_shell(
+            &path,
+            &["focus".to_string(), "right".to_string()],
+            Some(BRIEFLY)
+        ),
+        Ok(())
+    );
+    assert_eq!(
+        heard.join().expect("the compositor was listening"),
+        "{\"type\":\"system_request\",\"id\":1,\"request\":{\"call\":\"send_shell\",\
+         \"command\":[\"focus\",\"right\"]}}\n"
+    );
+}
+
+#[test]
+fn a_command_the_compositor_did_not_send_is_carried_back_in_its_own_words() {
+    let (_scratch, path) = scratch();
+    let heard = a_compositor(
+        &path,
+        Duration::ZERO,
+        Some(
+            "{\"type\":\"system_reply\",\"id\":1,\"reply\":{\"kind\":\"failed\",\
+             \"error\":{\"kind\":\"locked\",\"message\":\"the desktop is locked\"}}}\n",
+        ),
+    );
+
+    assert_eq!(
+        send_shell(&path, &["focus".to_string()], Some(BRIEFLY)),
+        Err(CompositorError::Refused {
+            why: "the desktop is locked".to_string()
+        })
+    );
     heard.join().expect("the compositor was listening");
 }
 

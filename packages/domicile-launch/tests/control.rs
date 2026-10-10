@@ -4,7 +4,7 @@ use std::cell::Cell;
 use std::path::{Path, PathBuf};
 
 use domicile_launch::control::{
-    answer, parse_response, LoadShell, OpenUrl, Response, Screenshot, Shot,
+    answer, parse_response, LoadShell, OpenUrl, Response, Screenshot, SendShell, Shot,
 };
 
 #[test]
@@ -174,6 +174,38 @@ fn a_compositor_that_could_not_take_the_screenshot_is_quoted() {
     );
 }
 
+#[test]
+fn a_desktop_told_to_send_the_shell_a_command_tells_the_compositor() {
+    let told = Cell::new(None);
+    let answered = answered_sending(
+        "{\"type\":\"send_shell\",\"command\":[\"focus\",\"right\"]}",
+        &|command| {
+            told.set(Some(command.to_vec()));
+            Ok(())
+        },
+    );
+
+    assert_eq!(
+        told.take(),
+        Some(vec!["focus".to_string(), "right".to_string()])
+    );
+    assert_eq!(answered, Response::Sent);
+}
+
+#[test]
+fn a_compositor_that_did_not_send_the_command_is_quoted() {
+    let Response::Refused { why } = answered_sending(
+        "{\"type\":\"send_shell\",\"command\":[\"focus\",\"right\"]}",
+        &|_| Err("no page of this desktop listens for commands".to_string()),
+    ) else {
+        panic!("a compositor that refused the command is not one that sent it");
+    };
+    assert!(
+        why.contains("no page"),
+        "the refusal did not carry the compositor's own words: {why}"
+    );
+}
+
 /// Sends one request line and parses the one reply line.
 fn answered(line: &str, module: &Path, load: LoadShell) -> Response {
     parse_response(
@@ -183,6 +215,7 @@ fn answered(line: &str, module: &Path, load: LoadShell) -> Response {
             load,
             &|_| panic!("only open_url opens anything"),
             &|_| panic!("only screenshot captures anything"),
+            &|_| panic!("only send_shell sends anything"),
         )
         .trim(),
     )
@@ -198,6 +231,7 @@ fn answered_opening(line: &str, open: OpenUrl) -> Response {
             &|_, _| panic!("only load_shell loads anything"),
             open,
             &|_| panic!("only screenshot captures anything"),
+            &|_| panic!("only send_shell sends anything"),
         )
         .trim(),
     )
@@ -213,6 +247,23 @@ fn answered_capturing(line: &str, capture: Screenshot) -> Response {
             &|_, _| panic!("only load_shell loads anything"),
             &|_| panic!("only open_url opens anything"),
             capture,
+            &|_| panic!("only send_shell sends anything"),
+        )
+        .trim(),
+    )
+    .expect("a desktop answers with a response")
+}
+
+/// [`answered`], for `send_shell`.
+fn answered_sending(line: &str, send: SendShell) -> Response {
+    parse_response(
+        answer(
+            line,
+            Path::new("/shell.js"),
+            &|_, _| panic!("only load_shell loads anything"),
+            &|_| panic!("only open_url opens anything"),
+            &|_| panic!("only screenshot captures anything"),
+            send,
         )
         .trim(),
     )

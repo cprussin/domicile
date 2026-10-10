@@ -407,12 +407,14 @@ const systemReplySchema = z.looseObject({
     }),
     z.looseObject({ kind: z.literal("started") }),
     z.looseObject({ kind: z.literal("saved"), path: z.string() }),
+    z.looseObject({ kind: z.literal("sent") }),
     z.looseObject({ error: systemErrorSchema, kind: z.literal("failed") }),
   ]),
   type: z.literal("system_reply"),
 });
 
-// Output from a running process, or a change a watch saw.
+// Output from a running process, a change a watch saw, a D-Bus signal, or a
+// shell command.
 const systemEventSchema = z.looseObject({
   event: z.discriminatedUnion("kind", [
     z.looseObject({
@@ -429,6 +431,10 @@ const systemEventSchema = z.looseObject({
       path: z.string(),
       sender: z.string(),
       signature: z.string(),
+    }),
+    z.looseObject({
+      command: z.array(z.string()),
+      kind: z.literal("shell_command"),
     }),
   ]),
   id: z.number(),

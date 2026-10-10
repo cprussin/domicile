@@ -6,6 +6,8 @@
 
 mod running;
 
+use std::io::{BufRead as _, BufReader, Write as _};
+use std::os::unix::net::UnixStream;
 use std::time::{Duration, Instant};
 
 use domicile_protocol::{
@@ -174,4 +176,60 @@ fn a_locked_desk_runs_nothing_but_reads_the_kernel() {
         },
     );
     assert!(matches!(reply(&mut chrome, 2), SystemReply::Stat { .. }));
+
+    // A page reloaded while locked still hears commands after unlock.
+    call(&mut chrome, 3, SystemRequest::ShellCommands);
+    assert_eq!(reply(&mut chrome, 3), SystemReply::Started);
+    call(
+        &mut chrome,
+        4,
+        SystemRequest::SendShell {
+            command: vec!["focus".into(), "right".into()],
+        },
+    );
+    let SystemReply::Failed { error } = reply(&mut chrome, 4) else {
+        panic!("a command was sent while locked");
+    };
+    assert_eq!(error.kind, SystemErrorKind::Locked);
+}
+
+/// `domicile send-shell` writes one line on the chrome socket without saying
+/// `hello`, and every page listening hears the command.
+#[test]
+fn a_command_sent_on_the_socket_reaches_every_page_listening() {
+    let compositor = Compositor::started_with(A_DESK);
+    let mut pages = [compositor.chrome(), compositor.chrome()];
+    for page in &mut pages {
+        call(page, 7, SystemRequest::ShellCommands);
+        assert_eq!(reply(page, 7), SystemReply::Started);
+    }
+
+    let mut sender = UnixStream::connect(compositor.socket()).expect("the chrome socket is up");
+    sender
+        .write_all(
+            b"{\"type\":\"system_request\",\"id\":1,\"request\":{\"call\":\"send_shell\",\
+              \"command\":[\"focus\",\"right\"]}}\n",
+        )
+        .expect("the compositor reads the command");
+    let mut answer = String::new();
+    BufReader::new(sender)
+        .read_line(&mut answer)
+        .expect("the compositor answers");
+
+    assert_eq!(
+        answer,
+        "{\"type\":\"system_reply\",\"id\":1,\"reply\":{\"kind\":\"sent\"}}\n"
+    );
+    for page in &mut pages {
+        page.wait_for(|message| {
+            *message
+                == HostMessage::SystemEvent {
+                    id: 7,
+                    event: SystemEvent::ShellCommand {
+                        command: vec!["focus".into(), "right".into()],
+                    },
+                }
+        })
+        .expect("every page listening hears the command");
+    }
 }

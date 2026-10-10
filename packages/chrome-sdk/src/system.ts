@@ -204,6 +204,13 @@ export type System = {
    * `$XDG_PICTURES_DIR/Screenshots/`. Resolves with the saved PNG's path.
    */
   screenshot: () => Promise<Result<string, SystemError>>;
+  /**
+   * Hear each command `domicile send-shell` sends, as its words. Every page
+   * listening hears every command. Allowed while the desktop is locked.
+   */
+  shellCommands: () => Promise<
+    Result<Listening<readonly string[]>, SystemError>
+  >;
 };
 
 /** What {@link system} needs of the desktop `Shell` is handed. */
@@ -285,6 +292,10 @@ export const system = (host: SystemHost): System => {
     screenshot: () =>
       oneShot(calls, { call: "screenshot" }, (reply) =>
         reply.kind === "saved" ? reply.path : unexpected(reply),
+      ),
+    shellCommands: () =>
+      listening(calls, { call: "shell_commands" }, (event) =>
+        event.kind === "shell_command" ? event.command : unexpected(event),
       ),
     spawn: (argv, options) => spawn(calls, argv, options),
     stat: (path) =>

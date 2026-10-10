@@ -380,6 +380,9 @@ bindKeys(
   `shortcut` event by its `chord` whether the press landed on the page or in a
   `<webview>`, handles `Mode` itself, and passes every `SendShell` to
   `onCommand`.
+- `domicile send-shell <word>…` from a terminal reaches `onCommand` too, on
+  every page bound. A page that cannot listen calls `report`, which logs by
+  default.
 - It returns `{ setMode, unbind }`. `setMode` keeps one mode across a desktop
   of several pages.
 - Command meanings are yours. Document them in your README, as

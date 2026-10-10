@@ -22,7 +22,7 @@ use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
 use domicile_launch::cli::{invocation, CliError, Invocation};
 use domicile_launch::command_socket::{load_shell, open_url};
 use domicile_launch::components::{apps, builder, components, our_shell, Components};
-use domicile_launch::compositor_socket::screenshot;
+use domicile_launch::compositor_socket::{screenshot, send_shell};
 use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
 use domicile_launch::config_watch;
@@ -55,6 +55,11 @@ const PATIENCE: Duration = Duration::from_secs(30);
 /// How long a screenshot may take: the compositor reads back every monitor
 /// and encodes a PNG, which for several 4K monitors takes seconds.
 const CAPTURE_WITHIN: Duration = Duration::from_secs(10);
+
+/// How long the compositor may take to send a shell command. Shorter than the
+/// client waits for the supervisor, so the compositor's failure reaches the
+/// terminal rather than a timeout.
+const SEND_WITHIN: Duration = Duration::from_secs(2);
 
 /// How long a first build may take before the splash shows. A cached build
 /// answers well within it, so the desk starts on its shell.
@@ -314,7 +319,7 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
             println!("{}", module.display());
             Ok(ExitCode::SUCCESS)
         }
-        Response::Opened => Ok(ExitCode::SUCCESS),
+        Response::Opened | Response::Sent => Ok(ExitCode::SUCCESS),
         Response::Captured { file } => {
             println!("{}", file.display());
             Ok(ExitCode::SUCCESS)
@@ -716,7 +721,7 @@ fn wait_or_notice_a_stop(wait: Duration) {
 const CLEANLY: &str = "exit status: 0";
 
 /// Serves the control socket on a thread, routing engine commands to `engine`
-/// and screenshots to the compositor's `chrome` socket.
+/// and screenshots and shell commands to the compositor's `chrome` socket.
 ///
 /// A separate thread because the supervisor blocks on its children, and a
 /// thread per connection because an interactive screenshot waits on the user.
@@ -762,6 +767,9 @@ fn answer_a_command(stream: UnixStream, serving: &Mutex<Shell>, engine: &Path, c
             &|file| {
                 screenshot(chrome, file, file.map(|_| CAPTURE_WITHIN))
                     .map_err(|why| why.to_string())
+            },
+            &|command| {
+                send_shell(chrome, command, Some(SEND_WITHIN)).map_err(|why| why.to_string())
             },
         )
     }) {

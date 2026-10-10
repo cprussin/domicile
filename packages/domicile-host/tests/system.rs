@@ -624,13 +624,147 @@ mod screenshots {
     }
 }
 
+/// `domicile send-shell` commands, sent on one connection and heard on every
+/// connection listening.
+mod shell_commands {
+    use domicile_host::shell_commands::ShellCommands;
+
+    use super::*;
+
+    fn focus_right() -> Vec<String> {
+        vec!["focus".into(), "right".into()]
+    }
+
+    /// Two systems sharing `commands`, as two chrome connections do.
+    fn two_pages(
+        commands: &ShellCommands,
+    ) -> (
+        (System, Receiver<HostMessage>),
+        (System, Receiver<HostMessage>),
+    ) {
+        let home = std::env::temp_dir();
+        let (first, first_heard) = system_in(&home);
+        let (second, second_heard) = system_in(&home);
+        (
+            (first.sharing_shell_commands(commands.clone()), first_heard),
+            (
+                second.sharing_shell_commands(commands.clone()),
+                second_heard,
+            ),
+        )
+    }
+
+    #[test]
+    fn a_command_sent_on_one_connection_is_heard_on_every_page_listening() {
+        let commands = ShellCommands::default();
+        let ((page, page_heard), (sender, sender_heard)) = two_pages(&commands);
+        page.handle(7, SystemRequest::ShellCommands);
+        assert_eq!(reply(&page_heard, 7), SystemReply::Started);
+
+        sender.handle(
+            1,
+            SystemRequest::SendShell {
+                command: focus_right(),
+            },
+        );
+
+        assert_eq!(reply(&sender_heard, 1), SystemReply::Sent);
+        assert_eq!(
+            next(&page_heard),
+            HostMessage::SystemEvent {
+                id: 7,
+                event: SystemEvent::ShellCommand {
+                    command: focus_right()
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn a_command_nobody_listens_for_says_so() {
+        let commands = ShellCommands::default();
+        let (_, (sender, sender_heard)) = two_pages(&commands);
+
+        sender.handle(
+            1,
+            SystemRequest::SendShell {
+                command: focus_right(),
+            },
+        );
+
+        assert_eq!(failure(reply(&sender_heard, 1)), SystemErrorKind::Other);
+    }
+
+    #[test]
+    fn a_page_that_stopped_listening_hears_no_more() {
+        let commands = ShellCommands::default();
+        let ((page, page_heard), (sender, sender_heard)) = two_pages(&commands);
+        page.handle(7, SystemRequest::ShellCommands);
+        reply(&page_heard, 7);
+
+        page.handle(7, SystemRequest::Unwatch);
+        sender.handle(
+            1,
+            SystemRequest::SendShell {
+                command: focus_right(),
+            },
+        );
+
+        assert_eq!(
+            next(&page_heard),
+            HostMessage::SystemEnd {
+                id: 7,
+                end: SystemEnd::Stopped,
+            }
+        );
+        assert_eq!(failure(reply(&sender_heard, 1)), SystemErrorKind::Other);
+    }
+
+    #[test]
+    fn a_page_that_went_away_hears_no_more() {
+        let commands = ShellCommands::default();
+        let ((page, page_heard), (sender, sender_heard)) = two_pages(&commands);
+        page.handle(7, SystemRequest::ShellCommands);
+        reply(&page_heard, 7);
+
+        drop(page);
+        sender.handle(
+            1,
+            SystemRequest::SendShell {
+                command: focus_right(),
+            },
+        );
+
+        assert_eq!(failure(reply(&sender_heard, 1)), SystemErrorKind::Other);
+    }
+
+    /// A reloaded page listens again while the desktop is locked, so commands
+    /// still reach it once it unlocks.
+    #[test]
+    fn listening_is_its_own_reach_and_sending_acts() {
+        assert_eq!(reach(&SystemRequest::ShellCommands), Reach::Listens);
+        assert_eq!(
+            reach(&SystemRequest::SendShell {
+                command: focus_right()
+            }),
+            Reach::Acts
+        );
+    }
+}
+
 /// What a refused request gets while the desktop is locked.
 mod locked {
     use super::*;
 
     #[test]
     fn a_call_that_would_start_something_is_told_it_is_locked() {
-        for starts in [spawn(&["true"]), SystemRequest::Screenshot { file: None }] {
+        for starts in [
+            spawn(&["true"]),
+            SystemRequest::Screenshot { file: None },
+            SystemRequest::SendShell {
+                command: vec!["focus".into(), "right".into()],
+            },
+        ] {
             let Some(HostMessage::SystemReply {
                 id: 4,
                 reply: SystemReply::Failed { error },

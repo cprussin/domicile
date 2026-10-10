@@ -4,6 +4,7 @@ import type { KeyHost } from "./bind-keys";
 import { bindKeys } from "./bind-keys";
 import { KeyAction } from "./key-action";
 import type { ShellKeybindings } from "./own-keybindings";
+import { SystemErrorKind } from "./system";
 
 /** The shell's keybindings. */
 const DESK: ShellKeybindings = {
@@ -20,25 +21,45 @@ const DESK: ShellKeybindings = {
 };
 
 /**
- * A host that records grabs and dispatches `shortcut` events. The engine
- * resolves presses, so `pressed` sends any chord.
+ * A host that records grabs and system calls, and dispatches `shortcut` and
+ * `system` events. The engine resolves presses, so `pressed` sends any chord.
  */
 class FakeHost extends EventTarget {
   readonly grabbed: string[] = [];
+  readonly calls: [id: number, request: unknown][] = [];
 
   grabShortcut(chord: string): void {
     this.grabbed.push(chord);
   }
 
+  callSystem(id: number, request: string): void {
+    this.calls.push([id, JSON.parse(request)]);
+  }
+
   pressed(chord: string): void {
     this.dispatchEvent(Object.assign(new Event("shortcut"), { chord }));
+  }
+
+  /** Send a compositor line for system call 1, the one `bindKeys` makes. */
+  answer(line: object): void {
+    this.dispatchEvent(
+      new MessageEvent("system", { data: JSON.stringify({ id: 1, ...line }) }),
+    );
+  }
+
+  /** Let the system call's promise settle. */
+  settled(): Promise<void> {
+    return new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
   }
 }
 
 /** The handler calls, in order. */
 type Heard =
   | readonly ["command", readonly string[]]
-  | readonly ["mode", string];
+  | readonly ["mode", string]
+  | readonly ["report", unknown];
 
 let unbind: () => void = () => undefined;
 
@@ -55,6 +76,9 @@ const bound = (own: ShellKeybindings = DESK) => {
     },
     onModeChanged: (mode) => {
       heard.push(["mode", mode]);
+    },
+    report: (error) => {
+      heard.push(["report", error]);
     },
   });
   unbind = binding.unbind;
@@ -77,7 +101,11 @@ describe("bindKeys", () => {
       bindKeys(
         host as unknown as KeyHost,
         { keybindings: { "Hyper+l": KeyAction.Mode("x") } },
-        { onCommand: () => undefined, onModeChanged: () => undefined },
+        {
+          onCommand: () => undefined,
+          onModeChanged: () => undefined,
+          report: () => undefined,
+        },
       ),
     ).toThrow("Hyper+l");
     expect(host.grabbed).toStrictEqual([]);
@@ -107,6 +135,62 @@ describe("bindKeys", () => {
     host.pressed("Meta+Return");
 
     expect(heard).toStrictEqual([]);
+  });
+
+  describe("commands from a terminal", () => {
+    it("runs a command `domicile send-shell` sent, as its binding would", async () => {
+      const { heard, host } = bound();
+      host.answer({ reply: { kind: "started" }, type: "system_reply" });
+      await host.settled();
+
+      host.answer({
+        event: { command: ["focus", "right"], kind: "shell_command" },
+        type: "system_event",
+      });
+      await host.settled();
+
+      expect(host.calls).toStrictEqual([[1, { call: "shell_commands" }]]);
+      expect(heard).toStrictEqual([["command", ["focus", "right"]]]);
+    });
+
+    it("stops hearing them once unbound", async () => {
+      const { host } = bound();
+      host.answer({ reply: { kind: "started" }, type: "system_reply" });
+      await host.settled();
+
+      unbind();
+
+      expect(host.calls.at(-1)).toStrictEqual([1, { call: "unwatch" }]);
+    });
+
+    it("stops hearing them once listening starts, if unbound before", async () => {
+      const { host } = bound();
+
+      unbind();
+      host.answer({ reply: { kind: "started" }, type: "system_reply" });
+      await host.settled();
+
+      expect(host.calls.at(-1)).toStrictEqual([1, { call: "unwatch" }]);
+    });
+
+    it("reports a page that cannot hear them, and keeps its keys", async () => {
+      const { heard, host } = bound();
+
+      host.answer({
+        reply: {
+          error: { kind: "other", message: "no" },
+          kind: "failed",
+        },
+        type: "system_reply",
+      });
+      await host.settled();
+      host.pressed("Meta+Return");
+
+      expect(heard).toStrictEqual([
+        ["report", { kind: SystemErrorKind.Other, message: "no" }],
+        ["command", ["terminal"]],
+      ]);
+    });
   });
 
   describe("modes", () => {

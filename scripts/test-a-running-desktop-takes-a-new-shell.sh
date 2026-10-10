@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Checks a running desktop loads a new shell, opens URLs and takes screenshots
-# on command, via `domicile load-shell`, `BROWSER`, the `xdg-open` shim on its
-# apps' PATH, and `domicile screenshot` with and without a file.
+# Checks a running desktop loads a new shell, opens URLs, takes screenshots and
+# sends the shell commands on command, via `domicile load-shell`, `BROWSER`,
+# the `xdg-open` shim on its apps' PATH, `domicile screenshot` with and without
+# a file, and `domicile send-shell`.
 #
 #   ./scripts/test-a-running-desktop-takes-a-new-shell.sh
 #
@@ -9,12 +10,13 @@
 # the line sent, `tests/command_socket.rs` and `tests/compositor_socket.rs` the
 # reply. This covers the wiring: the supervisor gives the engine a command
 # socket, a command from another terminal reaches it, or the compositor's chrome
-# socket for a screenshot, over DOMICILE_SOCK, and a refusal is printed in that
-# terminal.
+# socket for a screenshot or a shell command, over DOMICILE_SOCK, and a refusal
+# is printed in that terminal.
 #
 # The engine and the compositor are small Python stubs of their sockets. The
 # real sides, `components/domicile/browser/command_protocol.cc` and the
-# compositor's `screenshot` system call, have their own unit tests.
+# compositor's `screenshot` and `send_shell` system calls, have their own unit
+# tests.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -100,9 +102,10 @@ while True:
 ENGINE
 chmod +x "$WORK/engine/chrome"
 
-# Stub compositor: binds the chrome socket, publishes the session, and saves
-# every screenshot it is asked for. With no file, it is the user picking: it
-# waits for \$WORK/picked, which names the file saved or says "cancel".
+# Stub compositor: binds the chrome socket, publishes the session, sends every
+# shell command, and saves every screenshot it is asked for. With no file, it is
+# the user picking: it waits for \$WORK/picked, which names the file saved or
+# says "cancel".
 cat >"$WORK/domicile-compositor" <<COMPOSITOR
 #!/usr/bin/env python3
 import json, os, socket, sys, time
@@ -130,6 +133,11 @@ while True:
     with open("$WORK/compositor-heard", "a") as heard:
         heard.write(line.decode())
     asked = json.loads(line)
+    if asked["request"]["call"] == "send_shell":
+        connection.sendall((json.dumps(
+            {"type": "system_reply", "id": asked["id"], "reply": {"kind": "sent"}}) + "\n").encode())
+        connection.close()
+        continue
     file = asked["request"]["file"]
     if file is None:
         while not os.path.exists("$WORK/picked"):
@@ -312,6 +320,23 @@ elif [ "$CANCELED" = "domicile: the screenshot was canceled" ]; then
   echo "PASS: $CANCELED"
 else
   echo "FAIL: it failed for some other reason: $CANCELED"
+  FAILED=1
+fi
+
+echo "== send-shell reaches the compositor as the line the protocol says it is =="
+if SAID="$(ask_desktop send-shell focus right)"; then
+  echo "PASS: send-shell exited 0"
+else
+  echo "FAIL: send-shell failed: $SAID"
+  FAILED=1
+fi
+HEARD="$(tail -n 1 "$WORK/compositor-heard" 2>/dev/null)"
+WANT='{"type":"system_request","id":1,"request":{"call":"send_shell","command":["focus","right"]}}'
+if [ "$HEARD" = "$WANT" ]; then
+  echo "PASS: $HEARD"
+else
+  echo "FAIL: the compositor heard '$HEARD'"
+  echo "      and the protocol says  $WANT"
   FAILED=1
 fi
 
