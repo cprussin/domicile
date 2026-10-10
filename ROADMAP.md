@@ -18,6 +18,10 @@ item when it ships.
 2. **A compositor crash loses every window.**
    - The page's control channel only retries at startup (`kReachFor`).
      Reconnecting to a new compositor needs a change in `control_channel.cc`.
+     Embeds are ready: each `<app>` embeds again when the old compositor
+     disconnects
+     ([ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#a-compositor-restart)).
+     No guard covers that re-embed.
    - No `disconnected` callback in `domicile_engine.h`. The compositor spots a
      new engine by `SO_PEERCRED` (`which_engine.rs`).
    - Engine-restart recovery is untested against a real engine and GPU
@@ -87,11 +91,6 @@ item when it ships.
    [ENGINE-FORK-MEASUREMENTS.md](docs/architecture/ENGINE-FORK-MEASUREMENTS.md#host-shortcut-inhibitor).
    - Untested on other hosts. mutter may show an unseen permission dialog.
    - Untested with a physical keyboard.
-
-6. **A compositor restart breaks every embed.** App ids restart, so the page's
-   tokens point at dead `FrameSinkId`s. Invalidate the renderer's tokens on
-   disconnect. Needed before item 2 of the repository list.
-   [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#open-questions).
 
 ## Known gaps
 

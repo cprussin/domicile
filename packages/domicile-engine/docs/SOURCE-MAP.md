@@ -8,7 +8,7 @@ under `src/`. Design: [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md).
 | File | Role |
 |---|---|
 | `components/domicile/mojom/frame_sink_broker.mojom` | the interface a non-renderer producer calls, plus `SurfaceObserver`, which tells it which surface an embedder chose |
-| `components/domicile/mojom/external_surface.mojom` | the interface a page calls. One method, grant only. A renderer never gets a `FrameSinkBroker` pipe |
+| `components/domicile/mojom/external_surface.mojom` | the interface a page calls: grant a surface, and hear why it ended. A renderer never gets a `FrameSinkBroker` pipe |
 | `components/domicile/browser/frame_sink_broker.{h,cc}` | the broker. Takes its `HostFrameSinkManager` and `FrameSinkId` allocator from the embedder, so tests need no browser |
 | `components/domicile/browser/brokered_frame_sink.{h,cc}` | one registered `FrameSinkId`; also code ported from `exo::Buffer` that turns a dmabuf into a `SharedImage` and `TransferableResource` |
 | `components/domicile/browser/display_capture.{h,cc}` | one display capture: a viz `FrameSinkVideoCapturer` whose frames go to the producer |
