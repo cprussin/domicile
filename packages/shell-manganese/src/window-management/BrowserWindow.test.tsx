@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import {
   WEBVIEW_CONTEXT_MENU_EVENT,
+  WEBVIEW_DEVICE_REQUEST_EVENT,
   WEBVIEW_FILE_CHOOSER_EVENT,
   WEBVIEW_FIND_CHANGE_EVENT,
   WEBVIEW_FOCUS_REQUEST_EVENT,
@@ -1514,6 +1515,58 @@ describe("BrowserWindow", () => {
       await userEvent.click(screen.getByRole("option", { name: "Block" }));
 
       expect(stored).toStrictEqual(["camera block"]);
+    });
+  });
+
+  // The engine draws no chooser for WebHID, WebUSB or Web Serial.
+  describe("a device its page asks for", () => {
+    it("connects the device picked over the page", async () => {
+      const answers: string[] = [];
+      const { container } = render(
+        <BrowserWindow
+          behindPanel={false}
+          clickThrough={false}
+          covered={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          fullscreen={false}
+          isApp
+          motion="resting"
+          onIcon={noIcon}
+          onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          url="https://example.com"
+          window="1"
+        />,
+      );
+      fireEvent(
+        view(container),
+        Object.assign(
+          new Event(WEBVIEW_DEVICE_REQUEST_EVENT, { cancelable: true }),
+          {
+            cancel: () => undefined,
+            choose: (ids: readonly number[]) => {
+              answers.push(`choose ${ids.join(",")}`);
+            },
+            devices: () => [{ id: 1, name: "Nano X" }],
+            listed: true,
+            multiple: false,
+            title: "example.com wants to connect to a HID device",
+          },
+        ),
+      );
+
+      await userEvent.click(
+        await screen.findByRole("radio", { name: "Nano X" }),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+      expect(answers).toStrictEqual(["choose 1"]);
     });
   });
 

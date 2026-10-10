@@ -20,6 +20,7 @@
 namespace blink {
 
 class DomicileContextMenuEvent;
+class DomicileDeviceRequestEvent;
 class DomicileFileChooserEvent;
 class DomicilePermissionRequestEvent;
 class ExceptionState;
@@ -140,6 +141,9 @@ class CORE_EXPORT HTMLWebViewElement final
   // Releases the permission request once answered. See
   // `permission_request_`.
   void PermissionRequestAnswered(DomicilePermissionRequestEvent&);
+
+  // Releases the device request once answered. See `device_request_`.
+  void DeviceRequestAnswered(DomicileDeviceRequestEvent&);
 
   void Trace(Visitor*) const override;
 
@@ -270,6 +274,22 @@ class CORE_EXPORT HTMLWebViewElement final
       Vector<domicile::mojom::blink::WebViewSitePermissionPtr> permissions)
       override;
 
+  // Dispatches `domicile-device-request`. If no listener calls
+  // `preventDefault()`, the request is canceled after dispatch. See
+  // domicile_device_request_event.h.
+  void DeviceRequested(const String& title,
+                       bool multiple,
+                       DeviceRequestedCallback callback) override;
+
+  // Gives the held request its devices and dispatches
+  // `domicile-device-request-change`.
+  void DevicesOffered(
+      Vector<domicile::mojom::blink::WebViewDevicePtr> devices) override;
+
+  // Cancels the held request and dispatches
+  // `domicile-device-request-withdrawn`, so the shell stops showing it.
+  void DeviceRequestWithdrawn() override;
+
   // Dispatches `domicile-context-menu`. See domicile_context_menu_event.h.
   void ContextMenuRequested(
       domicile::mojom::blink::WebViewContextMenuPtr menu) override;
@@ -333,6 +353,11 @@ class CORE_EXPORT HTMLWebViewElement final
   // The permission request the shell has not answered, if any. The browser
   // sends one at a time. Held for `waiting_choosers_`' reason.
   Member<DomicilePermissionRequestEvent> permission_request_;
+
+  // The device request the shell has not answered, if any. The browser sends
+  // one at a time. Held for `waiting_choosers_`' reason, and so DevicesOffered
+  // reaches it.
+  Member<DomicileDeviceRequestEvent> device_request_;
 
   // See sitePermissions().
   Vector<std::pair<String, String>> site_permissions_;
