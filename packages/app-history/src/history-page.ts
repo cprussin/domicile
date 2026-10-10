@@ -4,8 +4,11 @@
 import { startOfDay } from "./day";
 import { appendEntries } from "./entries";
 
-/** The scheme of Domicile's own pages, such as the shell's `domicile://shell/`. */
-const DOMICILE_SCHEME = "domicile:";
+/**
+ * Schemes of pages the list leaves out: Domicile's own, such as the shell's
+ * `domicile://shell/`, and extensions', this app's included.
+ */
+const HIDDEN_SCHEMES = ["domicile:", "chrome-extension:"];
 
 /** A page in the history, as `chrome.history.search` gives it. */
 export type HistoryItem = { title: string; url: string };
@@ -41,8 +44,6 @@ export type Entry = {
 export type PageQuery = {
   /** Only visits before this time. */
   endTime: number;
-  /** Pages under this origin, the app's own, are left out. */
-  hiddenOrigin: string;
   maxResults: number;
   text: string;
 };
@@ -63,7 +64,7 @@ export type Page = {
  */
 export const loadPage = async (
   source: HistorySource,
-  { endTime, hiddenOrigin, maxResults, text }: PageQuery,
+  { endTime, maxResults, text }: PageQuery,
 ): Promise<Page> => {
   const items = await source.search({ endTime, maxResults, text });
   const visited = await Promise.all(
@@ -83,7 +84,7 @@ export const loadPage = async (
   const cutoff = next ?? Number.NEGATIVE_INFINITY;
   return {
     entries: visited
-      .filter(({ item }) => !hidden(item.url, hiddenOrigin))
+      .filter(({ item }) => !hidden(item.url))
       .flatMap(({ item, visits }) =>
         byDay(
           item,
@@ -145,9 +146,9 @@ const latest = (
 };
 
 /**
- * Whether `url` is a page the list leaves out: the app's own, and Domicile's
- * `domicile://` pages. The shell runs in a Chrome window, so Chrome records its
- * visits like any tab's.
+ * Whether `url` is a page the list leaves out. Chrome records the shell's
+ * window and extensions' pages like any tab's. App windows record nothing
+ * (docs/HISTORY.md).
  */
-const hidden = (url: string, hiddenOrigin: string): boolean =>
-  url.startsWith(hiddenOrigin) || url.startsWith(DOMICILE_SCHEME);
+const hidden = (url: string): boolean =>
+  HIDDEN_SCHEMES.some((scheme) => url.startsWith(scheme));

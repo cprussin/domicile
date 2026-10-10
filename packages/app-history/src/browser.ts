@@ -47,8 +47,6 @@ export type Browser = HistorySource & {
   deleteVisits: (visits: readonly number[]) => Promise<void>;
   /** A 32px icon for `pageUrl`, from the browser's favicon cache. */
   faviconUrl: (pageUrl: string) => string;
-  /** The app's own origin, whose pages the list leaves out. */
-  hiddenOrigin: string;
   /** Calls `listener` whenever a visit is added or removed. */
   onChange: (listener: () => void) => () => void;
   openInNewWindow: (url: string) => Promise<void>;
@@ -88,7 +86,6 @@ export const chromeBrowser = (
       visitsSchema
         .parse(await api.history.getVisits({ url: pageUrl }))
         .map((visit) => visit.visitTime),
-    hiddenOrigin: url("/"),
     onChange: (listener) => {
       api.history.onVisited.addListener(listener);
       api.history.onVisitRemoved.addListener(listener);
