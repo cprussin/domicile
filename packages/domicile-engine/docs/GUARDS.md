@@ -23,7 +23,8 @@ toolchain shell ([BUILD-MACHINE.md](BUILD-MACHINE.md#toolchain-shell)).
 | Script | Role |
 |---|---|
 | `under-wayland.sh` | runs another script under a nested wlroots compositor on the GPU, the only setup that can import a dmabuf |
-| `guard_webview_devtools.py` | sends keys and clicks to a running engine over the debugging port |
+| `guard_webview_devtools.py` | sends commands to a running engine over the debugging port: keys, clicks and captures |
+| `guard-webview-resize-pixel.py` | reads one pixel of the shell window with `Page.captureScreenshot` |
 | `guard-webview-guest-page.py` | the guest page for the keyboard and click guards |
 | `lib-annotate.sh` | reports where a guard stopped as a GitHub annotation |
 | `lib-last-words.sh` | prints the end of an engine's log, reaching back to a crash's fatal line |
@@ -93,6 +94,7 @@ Headless.
 | `guard-webview-new-window.sh` | a `target="_blank"` link opens a browser window, and the shell's `<webview window>` shows it |
 | `guard-webview-private.sh` | a cookie set in a `<webview private>` reaches private pages and windows, never ordinary ones; a private window is listed `isPrivate` |
 | `guard-webview-survives-load-shell.sh` | a browser window's page keeps running across `load_shell`, and the new shell's `<webview window>` shows it |
+| `guard-webview-resize.sh` | a browser window resized many times in a row keeps the element's size, takes a press and draws its next frame. Its page is `guard-webview-resize-server.py` |
 | `guard-webview-permissions.sh` | a page's `getUserMedia` asks the shell over `domicile-permission-request`; the shell's allow reaches the page and is stored for the site (patch 0103) |
 | `guard-webview-upload.sh` | `<input type="file">` asks the shell over `domicile-file-chooser`, and the page reads the chosen file (patch 0053) |
 | `guard-webview-download.sh` | a download asks the shell and lands at the chosen path (patch 0053) |
