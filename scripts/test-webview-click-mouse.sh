@@ -8,6 +8,7 @@
 #     mask, so the press does nothing.
 #   - A press with no release, which leaves a button held for the rest of the
 #     run.
+#   - A move with a button held, which drags instead of hovering.
 #
 # The transport is covered by `test-webview-devtools.sh`.
 set -u
@@ -120,6 +121,19 @@ expect(
 )
 # Answers are matched by id, so reusing an id would match the wrong reply.
 expect("each asking under its own id", [1, 2], [message["id"] for message in sent])
+client.close()
+server.close()
+
+print()
+print("what a move is")
+client, server = socket.socketpair()
+server.sendall(server_frame(json.dumps({"id": 1, "result": {}}).encode()))
+driver.move(client, 512, 400)
+moved = read_client_frame(server)["params"]
+expect("the pointer moving", "mouseMoved", moved["type"])
+# A held button would make it a drag, which hovers nothing.
+expect("with no button held", ("none", 0), (moved["button"], moved["buttons"]))
+expect("to the point it was given", (512, 400), (moved["x"], moved["y"]))
 client.close()
 server.close()
 

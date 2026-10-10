@@ -132,6 +132,12 @@ export const WEBVIEW_ZOOM_CHANGE_EVENT = "domicile-zoom-change";
 export const WEBVIEW_FAVICON_CHANGE_EVENT = "domicile-favicon-change";
 
 /**
+ * Fired when {@link HTMLWebViewElement.targetUrl} changes. Carries no payload.
+ * Bubbles.
+ */
+export const WEBVIEW_TARGET_URL_CHANGE_EVENT = "domicile-target-url-change";
+
+/**
  * Fired on Ctrl+wheel over a page that did not handle the wheel.
  *
  * The engine does not zoom; the shell picks the step and calls `setZoom`, so
@@ -352,6 +358,11 @@ declare global {
      * URL, or `""` if none. Changes fire {@link WEBVIEW_FAVICON_CHANGE_EVENT}.
      */
     readonly favicon: string;
+    /**
+     * The address of the link under the pointer, or `""` if none, for a status
+     * bubble like Chrome's. Changes fire {@link WEBVIEW_TARGET_URL_CHANGE_EVENT}.
+     */
+    readonly targetUrl: string;
     /**
      * Find `text` and select the next match, or the previous one when
      * `backward` is true. Repeating the same text steps through matches; `""`
