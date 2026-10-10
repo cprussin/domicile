@@ -65,8 +65,9 @@ export type StripPlace = {
    */
   open: boolean;
   /**
-   * For a tabbed container's last tab, how much empty strip runs past it to
-   * the strip's end. `undefined` for other tabs and in stacks.
+   * For a tab of a tabbed container, how much strip runs past it to the
+   * strip's end. The last tab draws it; the others keep it so the tab left
+   * last when the last closes already reaches the end. `undefined` in stacks.
    */
   rest: number | undefined;
   /** How many tabs the strip holds. */
@@ -399,8 +400,8 @@ const stripPlaceOf = (
     first: at === 0,
     open: at === container.focused,
     rest:
-      container.layout === Layout.Tabbed && at === count - 1
-        ? area.width - tabWidthOf(container, area) * count
+      container.layout === Layout.Tabbed
+        ? area.width - tabWidthOf(container, area) * (at + 1)
         : undefined,
     tabs: count,
   };

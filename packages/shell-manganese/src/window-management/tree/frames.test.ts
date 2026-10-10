@@ -272,6 +272,8 @@ describe("framesOf", () => {
         0,
       ).frames.map(({ bar, strip }) => ({ strip, width: bar.width, x: bar.x }));
 
+    // Every tab knows its distance to the strip's end, so the tab that becomes
+    // last when the last closes already runs the strip on to it.
     it("caps each tab's width, leaving the rest of the strip after the last", () => {
       // The strip always shows past the tabs, so even one tab reads as a tab.
       expect(strip(Layout.Tabbed, 1)).toEqual([
@@ -295,7 +297,7 @@ describe("framesOf", () => {
             divided: false,
             first: true,
             open: true,
-            rest: undefined,
+            rest: 760,
             tabs: 2,
           },
           width: 240,
@@ -414,7 +416,7 @@ describe("framesOf", () => {
           divided: false,
           first: true,
           open: true,
-          rest: undefined,
+          rest: 760,
           tabs: 2,
         },
         tabbed: Layout.Tabbed,
@@ -458,7 +460,7 @@ describe("framesOf", () => {
           divided: false,
           first: true,
           open: false,
-          rest: undefined,
+          rest: 760,
           tabs: 2,
         },
         tabbed: Layout.Tabbed,

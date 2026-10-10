@@ -83,6 +83,9 @@ const MIDDLE_TAB = {
   tabs: 3,
 };
 
+/** The last tab of a tabbed strip, with the strip running on past it. */
+const LAST_TAB = { ...MIDDLE_TAB, at: 2, rest: 300 };
+
 // The bar and the contents are separate elements, so they must animate
 // identically or the window splits apart.
 describe("TitleBar's icon", () => {
@@ -320,17 +323,27 @@ describe("TitleBar", () => {
     });
 
     it("runs the strip on past the last tab to the strip's end", () => {
-      const last = bar(tab({ strip: { ...MIDDLE_TAB, rest: 300 } }).container);
+      const last = bar(tab({ strip: LAST_TAB }).container);
 
       expect(last.style.getPropertyValue("--strip-rest")).toBe("300px");
       expect(last).toHaveAttribute("data-strip-end");
-      expect(bar(tab({}).container)).not.toHaveAttribute("data-strip-end");
+      expect(
+        bar(tab({ strip: { ...MIDDLE_TAB, rest: 540 } }).container),
+      ).not.toHaveAttribute("data-strip-end");
+    });
+
+    // The tab before it already runs the strip on to its end. Collapsing the
+    // strip with the tab would shrink the strip's end.
+    it("leaves the strip past it to the tab before it as it closes", () => {
+      expect(
+        bar(tab({ motion: "closing-tab", strip: LAST_TAB }).container),
+      ).not.toHaveAttribute("data-strip-end");
     });
 
     // A tab opening or closing before the last moves the last tab's slot. The
     // rest eases with it, so the strip's end stays put.
     it("eases the strip it runs on along with its own box", () => {
-      const last = bar(tab({ strip: { ...MIDDLE_TAB, rest: 300 } }).container);
+      const last = bar(tab({ strip: LAST_TAB }).container);
 
       expect(stylesheet.textContent).toMatch(
         /@property --strip-rest\s*\{[^}]*syntax:\s*['"]<length>['"]/,
@@ -427,7 +440,7 @@ describe("TitleBar", () => {
       // Two tabs trading places would cross, opening a hole in the strip, and
       // the strip's end would move to the new last slot.
       it("moves its piece of the strip at once", () => {
-        const container = moved({ ...MIDDLE_TAB, at: 2, rest: 300 });
+        const container = moved(LAST_TAB);
 
         const { transition } = globalThis.getComputedStyle(bar(container));
         expect(transition).not.toContain("inset-inline-start");
@@ -508,12 +521,15 @@ describe("TitleBar", () => {
     });
 
     it("offers a new tab at the end of a tabbed strip only", async () => {
-      const middle = tab({ onNewTab: () => undefined });
+      const middle = tab({
+        onNewTab: () => undefined,
+        strip: { ...MIDDLE_TAB, rest: 540 },
+      });
       expect(middle.queryByRole("button", { name: "New tab" })).toBeNull();
       middle.unmount();
 
       const added = new Promise<void>((resolve) => {
-        tab({ onNewTab: resolve, strip: { ...MIDDLE_TAB, rest: 300 } });
+        tab({ onNewTab: resolve, strip: LAST_TAB });
       });
       fireEvent.click(screen.getByRole("button", { name: "New tab" }));
       await added;
