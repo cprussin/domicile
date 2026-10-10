@@ -8,6 +8,7 @@ import { appWindowId, browserWindowId } from "./window";
 import type { WindowState } from "./window-state";
 import {
   activeIdOf,
+  activeIsPrivate,
   currentHere,
   currentOn,
   NO_WINDOWS,
@@ -155,6 +156,18 @@ describe("the browser windows the engine lists", () => {
     );
 
     expect(state.windows[1]).toMatchObject({ isPrivate: true });
+  });
+
+  it("says whether the active window is a private one", () => {
+    const listedPrivate = reduce(
+      desktop("kitty"),
+      WindowAction.BrowserWindowsListed([
+        { ...listed("1", "https://example.com/"), isPrivate: true },
+      ]),
+    );
+
+    expect(activeIsPrivate(listedPrivate)).toBe(true);
+    expect(activeIsPrivate(desktop("kitty"))).toBe(false);
   });
 
   it("names a window after the site its page is at now", () => {

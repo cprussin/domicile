@@ -131,12 +131,14 @@ const launcher = (
   indexing = false,
   apps: readonly DesktopEntry[] = [],
   bookmarks: readonly Bookmark[] = [],
+  fromPrivate = false,
 ) => {
   previewed.length = 0;
   const launched: Launch[] = [];
   const dismissed: true[] = [];
   const { unmount } = render(
     <Launcher
+      fromPrivate={fromPrivate}
       onClosed={() => undefined}
       onDismiss={() => {
         dismissed.push(true);
@@ -187,6 +189,7 @@ describe("Launcher", () => {
   it("shows nothing at all while it is shut", () => {
     render(
       <Launcher
+        fromPrivate={false}
         onClosed={() => undefined}
         onDismiss={() => undefined}
         onLaunch={() => undefined}
@@ -205,6 +208,7 @@ describe("Launcher", () => {
 
   it("says when it has finished closing", async () => {
     const props = {
+      fromPrivate: false,
       onDismiss: () => undefined,
       onLaunch: () => undefined,
       opening: { apps: [], bookmarks: [] },
@@ -323,6 +327,7 @@ describe("Launcher", () => {
   it("draws the applications it opens onto without waiting on the host", () => {
     const { unmount } = render(
       <Launcher
+        fromPrivate={false}
         onClosed={() => undefined}
         onDismiss={() => undefined}
         onLaunch={() => undefined}
@@ -564,6 +569,12 @@ describe("Launcher", () => {
       "Search for cprussin on GitHub in a private browser",
       "Search for !gh cprussin in a private browser",
     ]);
+  });
+
+  it("starts with !p when opened from a private browser", () => {
+    using panel = launcher(FILES, false, [], [], true);
+
+    expect(panel.box()).toHaveValue("!p ");
   });
 
   it("goes to a site in a private browser with !p", async () => {

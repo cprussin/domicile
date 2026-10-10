@@ -52,7 +52,11 @@ import { useClientIcons } from "./window-management/useClientIcons";
 import { usePointerWarp } from "./window-management/usePointerWarp";
 import { useWindows } from "./window-management/useWindows";
 import { WindowKind } from "./window-management/window";
-import { screenOfApp, WindowAction } from "./window-management/window-state";
+import {
+  activeIsPrivate,
+  screenOfApp,
+  WindowAction,
+} from "./window-management/window-state";
 
 type Props = {
   /** What the launcher offers beside files. */
@@ -410,6 +414,7 @@ export const Desktop = ({
       )}
       {/* Panels cover the whole desktop, not one screen. */}
       <Launcher
+        fromPrivate={activeIsPrivate(windows)}
         onClosed={() => {
           if (picked !== undefined) {
             setPicked(undefined);

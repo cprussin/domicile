@@ -18,7 +18,8 @@ Every row is something Enter can do. Source: `src/launcher/`.
 
 The site (2) and the search (6) each have a row beside them that opens them in
 a private browser. `!p` anywhere in the line offers only the web rows (1, 2
-and 6), all private. A private browser's address bar is tinted the `private`
+and 6), all private. Opened over a private browser window, the box starts
+with `!p `. A private browser's address bar is tinted the `private`
 color and says "Private"; its new windows are private too. See
 [private browsing](../../../docs/SHELL-BROWSER-WINDOWS.md#private-browsing).
 
