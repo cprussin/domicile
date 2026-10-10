@@ -120,6 +120,12 @@ const fn translucent(color: u32) -> u32 {
     (alpha << 24) | (red << 16) | (green << 8) | blue
 }
 
+/// The two halves of a `--buffer-transform` window's buffer, left then right
+/// as drawn, before the turn.
+///
+/// Public because `guard-buffer-transform.sh` finds them on the page.
+pub const TURNED_COLORS: [u32; 2] = [0x00_33_66_cc, 0x00_cc_66_33];
+
 /// The only MIME type this client offers and requests.
 ///
 /// The compositor's `TEXT_MIMES` accepts it.
@@ -142,6 +148,29 @@ const fn shm_format(translucent: bool) -> wl_shm::Format {
     } else {
         wl_shm::Format::Xrgb8888
     }
+}
+
+/// The buffer for a `size` window drawn with `transform`: on its side for a
+/// quarter turn.
+fn buffer_size(size: (u32, u32), transform: Option<wl_output::Transform>) -> (u32, u32) {
+    match transform {
+        Some(
+            wl_output::Transform::_90
+            | wl_output::Transform::_270
+            | wl_output::Transform::Flipped90
+            | wl_output::Transform::Flipped270,
+        ) => (size.1, size.0),
+        _ => size,
+    }
+}
+
+/// A `width` by `height` buffer's bytes, [`TURNED_COLORS`]`[0]` on its left
+/// half and `[1]` on its right.
+fn halves(width: u32, height: u32) -> Vec<u8> {
+    let row: Vec<u8> = (0..width)
+        .flat_map(|x| TURNED_COLORS[usize::from(x >= width / 2)].to_ne_bytes())
+        .collect();
+    row.repeat(height as usize)
 }
 
 /// Open a window on `$WAYLAND_DISPLAY` and draw until killed.
@@ -195,6 +224,9 @@ struct Client {
     /// See [`crate::arguments::Arguments::translucent`]. Kept because buffers
     /// are remade on every rescale and resize.
     translucent: bool,
+    /// See [`crate::arguments::Arguments::buffer_transform`]. Kept for the
+    /// same reason.
+    buffer_transform: Option<wl_output::Transform>,
     /// See [`crate::arguments::Arguments::follow_configure`].
     follow_configure: bool,
     /// See [`crate::arguments::Arguments::ask_for_focus`].
@@ -321,6 +353,17 @@ struct Window {
     scale: i32,
 }
 
+/// What a window's buffers hold.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Paint {
+    /// [`COLORS`], alternating per frame.
+    Opaque,
+    /// [`TRANSLUCENT_COLORS`], alternating per frame.
+    Translucent,
+    /// [`halves`], for a `--buffer-transform` window. Opaque.
+    Halves,
+}
+
 /// Two buffers in one shared file, used alternately.
 ///
 /// Allocated once rather than per frame, to keep memory traffic out of
@@ -387,6 +430,7 @@ impl Client {
             min_size: asked.min_size,
             max_size: asked.max_size,
             translucent: asked.translucent,
+            buffer_transform: asked.buffer_transform,
             follow_configure: asked.follow_configure,
             ask_for_focus: asked.ask_for_focus,
             entered_at: None,
@@ -551,7 +595,16 @@ impl Client {
         }
         // Scale 1: the surface has entered no output until it maps. `follow`
         // rescales on `wl_surface.enter`.
-        let pixels = Pixels::new(shm, handle, SIZE.0, SIZE.1, self.translucent)?;
+        if let Some(transform) = self.buffer_transform {
+            surface.set_buffer_transform(transform);
+            crate::say!(surface.id(), "set_buffer_transform({:?})", transform);
+        }
+        let pixels = Pixels::new(
+            shm,
+            handle,
+            buffer_size(SIZE, self.buffer_transform),
+            self.paint(),
+        )?;
         // The initial commit must carry no buffer; the compositor answers it
         // with the first configure.
         surface.commit();
@@ -714,6 +767,7 @@ impl Client {
     /// The buffer grows and the surface does not; `tests/density.rs` checks
     /// this.
     fn follow(&mut self, handle: &QueueHandle<Client>) -> Result<(), ClientError> {
+        let paint = self.paint();
         // On no output: keep the current scale.
         let Some(wanted) = self.wanted_scale() else {
             return Ok(());
@@ -743,9 +797,11 @@ impl Client {
         window.pixels = Pixels::new(
             shm,
             handle,
-            window.size.0 * wanted as u32,
-            window.size.1 * wanted as u32,
-            self.translucent,
+            buffer_size(
+                (window.size.0 * wanted as u32, window.size.1 * wanted as u32),
+                self.buffer_transform,
+            ),
+            paint,
         )?;
         window.scale = wanted;
         Ok(())
@@ -757,6 +813,7 @@ impl Client {
     /// must fill the size the compositor gives it. Returns `false` when there
     /// is nothing to do.
     fn resize(&mut self, handle: &QueueHandle<Client>) -> Result<bool, ClientError> {
+        let paint = self.paint();
         let Some(wanted) = self.configured_size.take() else {
             return Ok(false);
         };
@@ -779,12 +836,26 @@ impl Client {
         window.pixels = Pixels::new(
             shm,
             handle,
-            wanted.0 * window.scale as u32,
-            wanted.1 * window.scale as u32,
-            self.translucent,
+            buffer_size(
+                (
+                    wanted.0 * window.scale as u32,
+                    wanted.1 * window.scale as u32,
+                ),
+                self.buffer_transform,
+            ),
+            paint,
         )?;
         window.size = wanted;
         Ok(true)
+    }
+
+    /// What the window's buffers hold.
+    fn paint(&self) -> Paint {
+        match (self.buffer_transform, self.translucent) {
+            (Some(_), _) => Paint::Halves,
+            (None, true) => Paint::Translucent,
+            (None, false) => Paint::Opaque,
+        }
     }
 
     /// Draw one frame and ask to be woken for the next.
@@ -828,10 +899,10 @@ impl Pixels {
     fn new(
         shm: &wl_shm::WlShm,
         handle: &QueueHandle<Client>,
-        width: u32,
-        height: u32,
-        translucent: bool,
+        (width, height): (u32, u32),
+        paint: Paint,
     ) -> Result<Pixels, ClientError> {
+        let translucent = paint == Paint::Translucent;
         let each = (width as usize) * (height as usize) * 4;
         let file = anonymous(each * 2)
             .map_err(|err| ClientError::NoBuffer(format!("no memory to draw in: {err}")))?;
@@ -849,20 +920,22 @@ impl Pixels {
         });
         // The buffers keep the pool alive on the compositor side.
         pool.destroy();
-        let painted = if translucent {
-            TRANSLUCENT_COLORS
-        } else {
-            COLORS
+        let flat = |painted: [u32; 2]| {
+            painted.map(|color| {
+                color
+                    .to_ne_bytes()
+                    .iter()
+                    .copied()
+                    .cycle()
+                    .take(each)
+                    .collect()
+            })
         };
-        let colors = painted.map(|color| {
-            color
-                .to_ne_bytes()
-                .iter()
-                .copied()
-                .cycle()
-                .take(each)
-                .collect()
-        });
+        let colors = match paint {
+            Paint::Opaque => flat(COLORS),
+            Paint::Translucent => flat(TRANSLUCENT_COLORS),
+            Paint::Halves => [halves(width, height), halves(width, height)],
+        };
         Ok(Pixels {
             file,
             buffers,
@@ -2061,9 +2134,38 @@ fn layout_named_by(fd: std::os::fd::OwnedFd, size: u32) -> String {
 
 #[cfg(test)]
 mod tests {
+    use wayland_client::protocol::wl_output::Transform;
     use wayland_client::protocol::wl_shm;
 
-    use super::{shm_format, COLORS, TRANSLUCENT_ALPHA, TRANSLUCENT_COLORS};
+    use super::{
+        buffer_size, halves, shm_format, COLORS, TRANSLUCENT_ALPHA, TRANSLUCENT_COLORS,
+        TURNED_COLORS,
+    };
+
+    #[test]
+    fn a_buffer_drawn_on_its_side_is_the_window_on_its_side() {
+        assert_eq!(buffer_size((320, 240), Some(Transform::_90)), (240, 320));
+        assert_eq!(
+            buffer_size((320, 240), Some(Transform::Flipped270)),
+            (240, 320)
+        );
+        assert_eq!(buffer_size((320, 240), Some(Transform::_180)), (320, 240));
+        assert_eq!(buffer_size((320, 240), None), (320, 240));
+    }
+
+    #[test]
+    fn a_turned_buffer_is_one_color_on_the_left_and_the_other_on_the_right() {
+        let pixel = |bytes: &[u8], at: usize| {
+            u32::from_ne_bytes(bytes[at * 4..at * 4 + 4].try_into().unwrap())
+        };
+        let drawn = halves(4, 2);
+        assert_eq!(drawn.len(), 4 * 2 * 4);
+        // Row by row: two pixels of each color.
+        assert_eq!(
+            (0..8).map(|at| pixel(&drawn, at)).collect::<Vec<_>>(),
+            [0, 0, 1, 1, 0, 0, 1, 1].map(|half| TURNED_COLORS[half])
+        );
+    }
 
     #[test]
     fn a_see_through_window_is_premultiplied_and_actually_see_through() {

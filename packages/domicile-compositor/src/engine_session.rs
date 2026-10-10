@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::time::Instant;
 
+use crate::buffer_transform::Sampled;
 use crate::dmabuf_descriptor::DmabufDescriptor;
 use smithay::reexports::wayland_server::backend::ObjectId;
 use smithay::reexports::wayland_server::protocol::wl_buffer;
@@ -66,7 +67,7 @@ pub enum Submission {
 struct Frame {
     buffer: Submitted,
     descriptor: DmabufDescriptor,
-    crop: (i32, i32, i32, i32),
+    sampled: Sampled,
     at_box: u64,
 }
 
@@ -112,8 +113,9 @@ pub struct EngineSession {
     /// repeatedly, so importing per commit would send new fds every frame.
     imports: HashMap<ImportKey, (SurfaceId, BufferId)>,
     held: HeldBuffers<Submitted>,
-    /// Each app's last crop, reused when a reconnect resubmits its frame.
-    crops: HashMap<String, (i32, i32, i32, i32)>,
+    /// Each app's last crop and transform, reused when a reconnect
+    /// resubmits its frame.
+    sampled: HashMap<String, Sampled>,
     /// The frame each surface committed before a page embedded it. See
     /// `engine_waiting`.
     waiting: Waiting<Frame>,
@@ -131,7 +133,7 @@ impl EngineSession {
             surfaces: Surfaces::default(),
             imports: HashMap::new(),
             held: HeldBuffers::default(),
-            crops: HashMap::new(),
+            sampled: HashMap::new(),
             waiting: Waiting::default(),
         })
     }
@@ -232,13 +234,13 @@ impl EngineSession {
         let Some(descriptor) = describe(buffer) else {
             return Submission::Refused;
         };
-        let crop = self.crops.get(app_id).copied().unwrap_or_default();
+        let sampled = self.sampled.get(app_id).copied().unwrap_or_default();
         // A new engine numbers its boxes afresh.
         self.submit(
             app_id,
             buffer.clone(),
             &descriptor,
-            crop,
+            sampled,
             (0, 0, 0, 0),
             NEWEST_BOX,
             now,
@@ -275,7 +277,7 @@ impl EngineSession {
         app_id: &str,
         buffer: Submitted,
         descriptor: &DmabufDescriptor,
-        crop: (i32, i32, i32, i32),
+        sampled: Sampled,
         damage: (i32, i32, i32, i32),
         at_box: u64,
         now: Instant,
@@ -290,7 +292,7 @@ impl EngineSession {
             let frame = Frame {
                 buffer,
                 descriptor: descriptor.clone(),
-                crop,
+                sampled,
                 at_box,
             };
             return Submission::Waiting {
@@ -301,7 +303,7 @@ impl EngineSession {
             };
         }
         match self.put_up(
-            app_id, surface, buffer, descriptor, crop, damage, at_box, now,
+            app_id, surface, buffer, descriptor, sampled, damage, at_box, now,
         ) {
             true => Submission::Taken,
             false => Submission::Refused,
@@ -334,7 +336,7 @@ impl EngineSession {
             surface,
             frame.buffer,
             &frame.descriptor,
-            frame.crop,
+            frame.sampled,
             (0, 0, 0, 0),
             frame.at_box,
             now,
@@ -353,7 +355,7 @@ impl EngineSession {
         surface: SurfaceId,
         buffer: Submitted,
         descriptor: &DmabufDescriptor,
-        crop: (i32, i32, i32, i32),
+        sampled: Sampled,
         damage: (i32, i32, i32, i32),
         at_box: u64,
         now: Instant,
@@ -361,8 +363,8 @@ impl EngineSession {
         let Some(id) = self.import(surface, &buffer, descriptor) else {
             return false;
         };
-        self.engine.submit(surface, id, crop, damage, at_box);
-        self.crops.insert(app_id.to_owned(), crop);
+        self.engine.submit(surface, id, sampled, damage, at_box);
+        self.sampled.insert(app_id.to_owned(), sampled);
         // A replaced hold is the same buffer, since `imports` is keyed on the
         // object. Drop it without releasing: viz holds it again.
         drop(self.held.hold(surface, id, buffer, now));
@@ -410,7 +412,7 @@ impl EngineSession {
     /// Destroys the app's surface and returns its buffers at once, since no
     /// release will arrive for them.
     pub fn window_gone(&mut self, app_id: &str) -> Vec<Release> {
-        self.crops.remove(app_id);
+        self.sampled.remove(app_id);
         let Some(surface) = self.surfaces.forget(app_id) else {
             return Vec::new();
         };
