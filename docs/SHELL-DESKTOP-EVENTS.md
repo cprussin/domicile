@@ -56,6 +56,9 @@ can animate the switch:
    sets `windowsTheme` and fires `windowsthemechanged`.
 4. If no shell calls it, windows switch after about a second.
 
+Browser windows change behind the wipe. Wayland windows change before it
+([ROADMAP.md](../ROADMAP.md#theme)).
+
 In a view transition, call `themeCaptured` inside the update callback and
 return a promise that resolves on `windowsthemechanged`.
 

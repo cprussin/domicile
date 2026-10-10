@@ -1,14 +1,16 @@
 //! The order of steps in a theme change.
 //!
 //! A shell animates a theme change by capturing the old frame and wiping the
-//! new one in over it. Client windows are in that frame, so they must switch
-//! after the capture and before the wipe:
+//! new one in over it. Windows switch after the capture and before the wipe:
 //!
 //! 1. Every chrome gets the theme and starts its wipe.
 //! 2. Once every chrome has captured ([`Turnover::captured`]), the settings
 //!    portal tells Wayland clients.
 //! 3. Once every mapped window has committed a frame
 //!    ([`Turnover::repainted`]), the chromes are told the windows switched.
+//!
+//! Browser windows are in the old frame. Wayland windows are not, so they
+//! change before the wipe reaches them (`ROADMAP.md`, "Theme").
 //!
 //! Each phase has a deadline, because some shells never capture and some
 //! windows never repaint. Past it, the theme switches without animation.
