@@ -245,11 +245,6 @@ pub enum Event {
         scale: Option<f64>,
         number: Option<u64>,
     },
-    /// `wl_surface.frame`: viz asked for a frame.
-    Frame {
-        surface: SurfaceId,
-        deadline_us: u64,
-    },
     /// `wl_buffer.release`: viz has stopped reading the dmabuf, so the client
     /// may reuse it.
     Released {
@@ -316,7 +311,6 @@ fn clipboard_from(raw: u32) -> Clipboard {
 struct Callbacks {
     user_data: *mut c_void,
     configure: Option<extern "C" fn(*mut c_void, SurfaceId, u32, u32)>,
-    frame: Option<extern "C" fn(*mut c_void, SurfaceId, u64)>,
     released: Option<extern "C" fn(*mut c_void, SurfaceId, BufferId)>,
     displays: Option<extern "C" fn(*mut c_void, *const RawDisplay, u32)>,
     copied: Option<extern "C" fn(*mut c_void, u32, *const c_char, usize)>,
@@ -1002,7 +996,6 @@ fn join(
     let callbacks = Callbacks {
         user_data: (events as *const RefCell<Vec<Event>>) as *mut c_void,
         configure: Some(on_configure),
-        frame: Some(on_frame),
         released: Some(on_released),
         displays: Some(on_displays),
         copied: Some(on_copied),
@@ -1093,16 +1086,6 @@ extern "C" fn on_configure_box(
             height,
             scale: Some(scale),
             number: Some(number),
-        },
-    );
-}
-
-extern "C" fn on_frame(user_data: *mut c_void, surface: SurfaceId, deadline_us: u64) {
-    push(
-        user_data,
-        Event::Frame {
-            surface,
-            deadline_us,
         },
     );
 }
@@ -1338,6 +1321,13 @@ mod tests {
         // 16 (four `uint32_t`) + 8 (modifier) + 4 (count) + 48 (four planes)
         // + 32 (content and damage) + 4 tail padding.
         assert_eq!(std::mem::size_of::<RawCapturedFrame>(), 112);
+    }
+
+    #[test]
+    fn the_callbacks_are_the_user_data_and_eight_pointers_the_c_header_declares() {
+        // `released` follows `configure`, as in the header.
+        assert_eq!(std::mem::size_of::<Callbacks>(), 9 * 8);
+        assert_eq!(std::mem::offset_of!(Callbacks, released), 2 * 8);
     }
 
     /// A pipe's read end, standing in for a buffer's fd.
