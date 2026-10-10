@@ -8,6 +8,7 @@ use std::ffi::OsString;
 use domicile_test_client::arguments::{
     arguments, ArgumentError, Arguments, AskForFocus, HoldTheScreensOn,
 };
+use wayland_client::protocol::wl_output::Transform;
 
 /// Parse a command line given as strings.
 fn given(args: &[&str]) -> Result<Arguments, ArgumentError> {
@@ -327,6 +328,34 @@ fn an_argument_this_does_not_know_is_named_rather_than_ignored() {
         given(&["--fullscreen"]),
         Err(ArgumentError::Unknown {
             argument: "--fullscreen".to_string()
+        })
+    );
+}
+
+#[test]
+fn a_client_can_be_asked_to_draw_its_buffer_turned() {
+    let asked = given(&["--buffer-transform", "90"]).expect("a buffer drawn on its side");
+
+    assert_eq!(asked.buffer_transform, Some(Transform::_90));
+    assert_eq!(
+        given(&["--buffer-transform", "flipped-270"])
+            .unwrap()
+            .buffer_transform,
+        Some(Transform::Flipped270)
+    );
+    assert_eq!(
+        given(&[]).unwrap().buffer_transform,
+        None,
+        "and drawn as it is unless asked"
+    );
+}
+
+#[test]
+fn a_turn_wl_output_has_no_name_for_is_refused() {
+    assert_eq!(
+        given(&["--buffer-transform", "45"]),
+        Err(ArgumentError::NotATransform {
+            value: "45".to_string(),
         })
     );
 }
