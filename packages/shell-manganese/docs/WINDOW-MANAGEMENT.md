@@ -214,7 +214,7 @@ For how warping, browser-window focus and modifier drags work, see
   its new place.
 - Closing: shrink and fade out.
 - Sending to a workspace no screen shows: shrink further and fade out. A tab
-  closes up along its strip.
+  collapses toward the start of its strip as the tabs after it slide back.
 - Sending to the scratchpad: slide up off the top of the screen. Showing it
   slides the window back down. Each slide is the other played backwards, so
   one that cuts the other short starts where the window is

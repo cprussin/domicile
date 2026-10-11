@@ -163,6 +163,24 @@ describe("TitleBar", () => {
     expect(bar(container).style.getPropertyValue("--collapse-x")).toBe("0");
   });
 
+  // The next tab slides back on the same curve, so its start meets this tab's
+  // end throughout and no gap opens in the strip.
+  it.each(["closing-tab", "sending-tab"] as const)(
+    "closes up toward the start of its strip while %s",
+    (motion) => {
+      const { container } = render(
+        <TitleBar
+          {...barProps}
+          motion={motion}
+          strip={MIDDLE_TAB}
+          tabbed={Layout.Tabbed}
+        />,
+      );
+
+      expect(bar(container)).toHaveStyle({ transformOrigin: "0 0" });
+    },
+  );
+
   // The slot is the tab's piece of the strip, which must stay whole; only the
   // tab on it opens out.
   it("opens out across a tabbed container's strip, leaving the strip whole", () => {

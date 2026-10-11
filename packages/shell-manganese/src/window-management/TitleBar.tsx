@@ -44,6 +44,9 @@ const MIDDLE_BUTTON = 1;
 /** The keyframes a moved tab slides by, under either of its two names. */
 const SLIDING_TAB = "windowSlidingTab";
 
+/** The `transform-origin` of a tab collapsing along its strip. */
+const STRIP_START = { transformOrigin: "0 0" };
+
 /** What a tab's group mark calls each layout. */
 const GROUP_NAMES: Record<Layout, string> = {
   [Layout.SplitH]: "Row",
@@ -184,13 +187,11 @@ export const TitleBar = ({
     rect,
   );
   const sliding = move !== undefined;
+  const collapsing = motion === "closing-tab" || motion === "sending-tab";
   // A last tab leaving its strip leaves the strip past it to the tab before
   // it.
   const endsStrip =
-    strip?.rest !== undefined &&
-    strip.at === strip.tabs - 1 &&
-    motion !== "closing-tab" &&
-    motion !== "sending-tab";
+    strip?.rest !== undefined && strip.at === strip.tabs - 1 && !collapsing;
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: a press only raises the window; its buttons are the keyboard-reachable controls
     // biome-ignore lint/a11y/noNoninteractiveElementInteractions: same as above
@@ -245,7 +246,9 @@ export const TitleBar = ({
       style={{
         // Over the rest of the strip, which slides under it when tabs swap.
         ...placedAt(rect, strip?.open === true ? raised(depth) : depth),
-        ...scaledAbout(frame, rect),
+        // A collapsing tab closes up toward its strip's start, as the tabs
+        // after it ease back on the same curve, so the strip has no gap.
+        ...(collapsing ? STRIP_START : scaledAbout(frame, rect)),
         ...shuffledBy(restack),
         ...collapsedAlong(tabbed),
         ...stripRestOf(strip),
