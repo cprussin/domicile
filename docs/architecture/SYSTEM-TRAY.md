@@ -57,8 +57,9 @@ shell menu ─ dbusCall / dbusMatch (callSystem) ─▶ compositor ─▶ com.ca
   because zbus 4 has no method timeout.
 - **Secondary click opens the item's dbusmenu**, as KDE's and waybar's trays
   do. An item with no `Menu` (`menu` empty, for none or `/NO_DBUSMENU`) gets
-  `ContextMenu` and opens its own. Primary click stays `Activate`.
-  `ItemIsMenu` is not read.
+  `ContextMenu` and opens its own. Primary click is `Activate`, except for an
+  item that sets `ItemIsMenu` (`itemIsMenu`): it gets the secondary click's
+  menu, as the spec asks.
 - **Menus are drawn by the shell, through the system calls.** Most
   libappindicator items only expose `com.canonical.dbusmenu`. The page reaches
   any session bus name with `dbusCall` and `dbusMatch`, so menus need no

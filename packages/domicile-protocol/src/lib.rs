@@ -1733,6 +1733,9 @@ pub struct TrayItem {
     /// `Menu` property. Absent when it has none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub menu: Option<String>,
+    /// Its `ItemIsMenu` property: the item only has a menu, so a primary click
+    /// should open it rather than send `Activate`.
+    pub item_is_menu: bool,
 }
 
 /// Which StatusNotifierItem action a tray click requests.

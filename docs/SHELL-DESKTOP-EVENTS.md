@@ -77,7 +77,7 @@ bus) are `domicile.tray`, the full list; `traychanged` reports changes.
 
 ```ts
 domicile.addEventListener("traychanged", () => {
-  drawTray(domicile.tray ?? []); // { id, title, icon, bus, menu }
+  drawTray(domicile.tray ?? []); // { id, title, icon, bus, menu, itemIsMenu }
 });
 domicile.activateTrayItem(id, "primary"); // or "secondary", "context"
 ```
@@ -87,6 +87,8 @@ domicile.activateTrayItem(id, "primary"); // or "secondary", "context"
   `com.canonical.dbusmenu` object path on `bus`, or `""`. Read it with
   `watchMenu` from `@domicile-desktop/sdk/dbusmenu`
   ([SYSTEM-TRAY.md](/docs/architecture/SYSTEM-TRAY.md)).
+- `itemIsMenu` is the item's `ItemIsMenu`: open its menu on the primary
+  button instead of sending `"primary"`.
 - Manganese's: [`tray/Tray.tsx`](/packages/shell-manganese/src/tray/Tray.tsx).
 
 ## Notifications

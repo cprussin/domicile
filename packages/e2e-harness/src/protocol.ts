@@ -222,11 +222,13 @@ const clipboardSchema = z.looseObject({
 // The full system tray (StatusNotifierItem), in registration order. Pushed on
 // change and on connect. Activate an item with `activate_tray_item`. `icon` is
 // a `data:` URL, absent when it could not be rendered. `menu` is the object
-// path of its dbusmenu on `bus`, absent when it has none.
+// path of its dbusmenu on `bus`, absent when it has none. `item_is_menu` is its
+// `ItemIsMenu` property.
 const trayItemSchema = z.looseObject({
   bus: z.string(),
   icon: z.string().optional(),
   id: z.string(),
+  item_is_menu: z.boolean(),
   menu: z.string().optional(),
   title: z.string(),
 });

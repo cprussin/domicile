@@ -23,7 +23,8 @@ class MODULES_EXPORT DomicileTrayItem final : public ScriptWrappable {
                    const String& title,
                    const String& icon,
                    const String& bus,
-                   const String& menu);
+                   const String& menu,
+                   bool item_is_menu);
   ~DomicileTrayItem() override;
 
   const String& id() const { return id_; }
@@ -31,6 +32,7 @@ class MODULES_EXPORT DomicileTrayItem final : public ScriptWrappable {
   const String& icon() const { return icon_; }
   const String& bus() const { return bus_; }
   const String& menu() const { return menu_; }
+  bool itemIsMenu() const { return item_is_menu_; }
 
   void Trace(Visitor*) const override;
 
@@ -44,6 +46,8 @@ class MODULES_EXPORT DomicileTrayItem final : public ScriptWrappable {
   String bus_;
   // Its dbusmenu's object path on `bus_`, or empty for none.
   String menu_;
+  // Whether the item only has a menu.
+  bool item_is_menu_;
 };
 
 }  // namespace blink

@@ -112,8 +112,8 @@ wanted = {
     "shiftKey": True,
     "theme": "light",
     "tray": [
-        {"bus": ":1.42", "id": "nm", "menu": "/MenuBar", "title": "Network"},
-        {"bus": "org.kde.StatusNotifierItem-7-1", "id": "sync", "menu": "", "title": "Sync"},
+        {"bus": ":1.42", "id": "nm", "itemIsMenu": False, "menu": "/MenuBar", "title": "Network"},
+        {"bus": "org.kde.StatusNotifierItem-7-1", "id": "sync", "itemIsMenu": True, "menu": "", "title": "Sync"},
     ],
     "windowsTheme": "dark",
 }
