@@ -16,6 +16,7 @@ use std::sync::Arc;
 use crate::buffer_transform::Sampled;
 use crate::dmabuf_descriptor::DmabufDescriptor;
 use domicile_config::{Desk, Transform};
+use domicile_host::clipboard::{Contents, TEXT_MIMES};
 use libloading::{Library, Symbol};
 use smithay::utils::Transform as BufferTransform;
 use thiserror::Error;
@@ -255,7 +256,10 @@ pub enum Event {
     ///
     /// The engine is not a Wayland client of this compositor, so this is how
     /// its copies reach Wayland clients.
-    Copied { clipboard: Clipboard, text: String },
+    Copied {
+        clipboard: Clipboard,
+        contents: Contents,
+    },
 
     /// The full display list, primary first, for `wl_output`.
     ///
@@ -318,6 +322,91 @@ struct Callbacks {
     captured: Option<extern "C" fn(*mut c_void, CaptureId, u64, *const RawCapturedFrame)>,
     capture_ended: Option<extern "C" fn(*mut c_void, CaptureId)>,
     configure_box: Option<extern "C" fn(*mut c_void, SurfaceId, u32, u32, f64, u64)>,
+    copied_items: Option<extern "C" fn(*mut c_void, u32, *const RawClipboardItem, u32)>,
+}
+
+/// `DomicileClipboardItem`, laid out as in the C header: one type a copy can be
+/// pasted as. Borrowed for the call it crosses in.
+#[repr(C)]
+struct RawClipboardItem {
+    /// A nul-terminated MIME type. Never null.
+    mime_type: *const c_char,
+    /// `length` bytes; null only when `length` is zero.
+    data: *const u8,
+    length: usize,
+}
+
+/// Contents as `DomicileClipboardItem`s, with the storage the records point
+/// into.
+struct Items {
+    /// The MIME types the records name, kept alive for them.
+    _mimes: Vec<CString>,
+    records: Vec<RawClipboardItem>,
+}
+
+impl Items {
+    /// One item per part of `contents`: the text once, under the first of
+    /// [`TEXT_MIMES`], and the image under its type. Borrows `contents`'
+    /// bytes.
+    fn of(contents: &Contents) -> Items {
+        let parts: Vec<(&str, &[u8])> = contents
+            .text
+            .iter()
+            .map(|text| (TEXT_MIMES[0], text.as_bytes()))
+            .chain(
+                contents
+                    .image
+                    .iter()
+                    .map(|image| (image.mime.as_str(), image.bytes.as_slice())),
+            )
+            .collect();
+        let mimes: Vec<CString> = parts
+            .iter()
+            .map(|(mime, _)| {
+                CString::new(*mime).expect("a MIME type read off a selection holds no nul")
+            })
+            .collect();
+        let records = parts
+            .iter()
+            .zip(&mimes)
+            .map(|((_, bytes), mime)| RawClipboardItem {
+                mime_type: mime.as_ptr(),
+                data: bytes.as_ptr(),
+                length: bytes.len(),
+            })
+            .collect();
+        Items {
+            _mimes: mimes,
+            records,
+        }
+    }
+
+    fn raw(&self) -> &[RawClipboardItem] {
+        &self.records
+    }
+}
+
+/// The contents `items` describe, copied out of the borrowed records.
+fn contents_from(items: &[RawClipboardItem]) -> Contents {
+    Contents::from_offers(items.iter().map(|item| {
+        assert!(
+            !item.mime_type.is_null(),
+            "the engine names the type of every item it copies"
+        );
+        // SAFETY: the ABI says `mime_type` is a nul-terminated string, valid
+        // for this call.
+        let mime = unsafe { std::ffi::CStr::from_ptr(item.mime_type) }
+            .to_string_lossy()
+            .into_owned();
+        let bytes = if item.length == 0 {
+            Vec::new()
+        } else {
+            // SAFETY: the ABI says `data` points at `length` bytes, valid
+            // for this call.
+            unsafe { std::slice::from_raw_parts(item.data, item.length) }.to_vec()
+        };
+        (mime, bytes)
+    }))
 }
 
 /// The engine's opaque handle.
@@ -566,10 +655,44 @@ impl Engine {
     /// Tells the browser the contents of a clipboard.
     ///
     /// The compositor reads every new selection eagerly, so the browser can
-    /// paste from memory. Send empty text for an empty clipboard, or the
-    /// browser keeps the old contents. Passed with a length because copied
-    /// text may contain a nul; the browser copies it before returning.
-    pub fn set_clipboard(&self, clipboard: Clipboard, text: &str) {
+    /// paste from memory. Send empty contents for an empty clipboard, or the
+    /// browser keeps the old contents. The browser copies the bytes before
+    /// returning.
+    ///
+    /// An engine without `domicile_clipboard_set_items` is told only the text.
+    pub fn set_clipboard(&self, clipboard: Clipboard, contents: &Contents) {
+        #[allow(clippy::type_complexity)] // the C signature, spelled out
+        let items: Result<
+            Symbol<unsafe extern "C" fn(*mut Handle, u32, *const RawClipboardItem, u32)>,
+            _,
+        > = self.symbol(
+            b"domicile_clipboard_set_items\0",
+            "domicile_clipboard_set_items",
+        );
+        match items {
+            Ok(f) => {
+                let items = Items::of(contents);
+                // SAFETY: as above, and the records and what they point at
+                // outlive the call because `items` and `contents` do.
+                unsafe {
+                    f(
+                        self.handle,
+                        clipboard.as_raw(),
+                        items.raw().as_ptr(),
+                        items.raw().len() as u32,
+                    );
+                };
+            }
+            Err(_) => {
+                self.set_clipboard_text(clipboard, contents.text.as_deref().unwrap_or_default())
+            }
+        }
+    }
+
+    /// Tells an engine that predates `domicile_clipboard_set_items` the text
+    /// on a clipboard. Passed with a length because copied text may contain a
+    /// nul.
+    fn set_clipboard_text(&self, clipboard: Clipboard, text: &str) {
         let f: Symbol<unsafe extern "C" fn(*mut Handle, u32, *const c_char, usize)> =
             match self.symbol(b"domicile_clipboard_set\0", "domicile_clipboard_set") {
                 Ok(symbol) => symbol,
@@ -1003,6 +1126,7 @@ fn join(
         captured: Some(on_captured),
         capture_ended: Some(on_capture_ended),
         configure_box: Some(on_configure_box),
+        copied_items: Some(on_copied_items),
     };
     let socket_c = CString::new(socket.as_os_str().as_encoded_bytes())?;
     let connect: Symbol<unsafe extern "C" fn(*const c_char, Callbacks) -> *mut Handle> = symbol(
@@ -1105,10 +1229,11 @@ extern "C" fn on_displays(user_data: *mut c_void, displays: *const RawDisplay, c
     push(user_data, Event::Displays(displays_from(records)));
 }
 
-/// Queues a copy made in the browser.
+/// Queues a copy made in the browser, from an engine that predates
+/// `copied_items`.
 ///
 /// The text has a length rather than a nul terminator, because copied text
-/// may contain a nul. `domicile_clipboard_set` works the same way.
+/// may contain a nul.
 extern "C" fn on_copied(
     user_data: *mut c_void,
     clipboard: u32,
@@ -1122,13 +1247,40 @@ extern "C" fn on_copied(
     // SAFETY: the ABI says `text` points at `length` bytes, valid for this
     // call. `String::from_utf8_lossy` copies them.
     let bytes = unsafe { std::slice::from_raw_parts(text.cast::<u8>(), length) };
+    // Mojo already validates the text as UTF-8; lossy conversion avoids a
+    // panic if that ever changes.
+    let text = String::from_utf8_lossy(bytes).into_owned();
     push(
         user_data,
         Event::Copied {
             clipboard: clipboard_from(clipboard),
-            // Mojo already validates the text as UTF-8; lossy conversion
-            // avoids a panic if that ever changes.
-            text: String::from_utf8_lossy(bytes).into_owned(),
+            contents: Contents {
+                text: (!text.is_empty()).then_some(text),
+                image: None,
+            },
+        },
+    );
+}
+
+/// Queues a copy made in the browser: each type it can be pasted as.
+extern "C" fn on_copied_items(
+    user_data: *mut c_void,
+    clipboard: u32,
+    items: *const RawClipboardItem,
+    count: u32,
+) {
+    let records = if count == 0 {
+        &[][..]
+    } else {
+        // SAFETY: the ABI says `items` points at `count` records, valid for
+        // this call. `contents_from` copies them.
+        unsafe { std::slice::from_raw_parts(items, count as usize) }
+    };
+    push(
+        user_data,
+        Event::Copied {
+            clipboard: clipboard_from(clipboard),
+            contents: contents_from(records),
         },
     );
 }
@@ -1324,10 +1476,12 @@ mod tests {
     }
 
     #[test]
-    fn the_callbacks_are_the_user_data_and_eight_pointers_the_c_header_declares() {
-        // `released` follows `configure`, as in the header.
-        assert_eq!(std::mem::size_of::<Callbacks>(), 9 * 8);
+    fn the_callbacks_are_the_user_data_and_nine_pointers_the_c_header_declares() {
+        // `released` follows `configure`, and `copied_items` is last, as in
+        // the header.
+        assert_eq!(std::mem::size_of::<Callbacks>(), 10 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, released), 2 * 8);
+        assert_eq!(std::mem::offset_of!(Callbacks, copied_items), 9 * 8);
     }
 
     /// A pipe's read end, standing in for a buffer's fd.
@@ -1425,6 +1579,67 @@ mod tests {
         assert_eq!(Clipboard::Primary.as_raw(), 1);
         assert_eq!(clipboard_from(0), Clipboard::Copy);
         assert_eq!(clipboard_from(1), Clipboard::Primary);
+    }
+
+    /// `DomicileClipboardItem` is a pointer, a pointer and a `size_t`.
+    #[test]
+    fn a_clipboard_item_is_the_record_the_c_header_declares() {
+        assert_eq!(std::mem::size_of::<RawClipboardItem>(), 24);
+    }
+
+    /// What the browser copied, as items, becomes the text and image it holds.
+    #[test]
+    fn copied_items_are_read_as_text_and_an_image() {
+        let text = c"text/plain;charset=utf-8";
+        let image = c"image/png";
+        let items = [
+            RawClipboardItem {
+                mime_type: text.as_ptr(),
+                data: b"words".as_ptr(),
+                length: 5,
+            },
+            RawClipboardItem {
+                mime_type: image.as_ptr(),
+                data: [1u8, 2].as_ptr(),
+                length: 2,
+            },
+        ];
+
+        assert_eq!(
+            contents_from(&items),
+            Contents {
+                text: Some("words".into()),
+                image: Some(domicile_host::clipboard::Image {
+                    mime: "image/png".into(),
+                    bytes: vec![1, 2],
+                }),
+            }
+        );
+    }
+
+    /// Contents cross as one item per part: the text once, as UTF-8, and the
+    /// image under its own type. The browser offers the text under every
+    /// text type itself.
+    #[test]
+    fn contents_cross_as_one_item_per_part() {
+        let contents = Contents {
+            text: Some("words".into()),
+            image: Some(domicile_host::clipboard::Image {
+                mime: "image/png".into(),
+                bytes: vec![3],
+            }),
+        };
+
+        let items = Items::of(&contents);
+
+        assert_eq!(contents_from(items.raw()), contents);
+        assert_eq!(items.raw().len(), 2);
+    }
+
+    /// Empty contents cross as no items, which clears the clipboard.
+    #[test]
+    fn empty_contents_cross_as_no_items() {
+        assert!(Items::of(&Contents::default()).raw().is_empty());
     }
 
     /// An undeclared clipboard number panics rather than guessing.

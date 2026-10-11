@@ -128,9 +128,11 @@ enum Clipboard {
 // The browser is not a Wayland client, so without this its copies would not
 // reach the seat. See ui/ozone/platform/drm/domicile/drm_clipboard.h.
 interface ClipboardObserver {
-  // The copied text. The producer puts it on the seat; nothing waits for
-  // that.
-  OnCopied(Clipboard clipboard, string text);
+  // What was copied, by MIME type: its text under
+  // "text/plain;charset=utf-8" and its image under the image's type. Empty
+  // when the copy was neither. The producer puts it on the seat; nothing
+  // waits for that.
+  OnCopied(Clipboard clipboard, map<string, array<uint8>> contents);
 };
 
 // A captured frame's pixels.
@@ -270,9 +272,10 @@ interface FrameSinkBroker {
   // Pushed rather than fetched because the producer reads each selection as it
   // arrives, so pastes in a page are answered from this process's memory.
   //
-  // An empty string means an empty clipboard. Send it, or the browser keeps
-  // offering the previous contents.
-  SetClipboard(Clipboard clipboard, string text);
+  // `contents` is keyed by MIME type, as `OnCopied` sends it: text under any
+  // text type, an image under its own. An empty map means an empty
+  // clipboard. Send it, or the browser keeps offering the previous contents.
+  SetClipboard(Clipboard clipboard, map<string, array<uint8>> contents);
 
   // Registers `observer` for copies made in the browser.
   //

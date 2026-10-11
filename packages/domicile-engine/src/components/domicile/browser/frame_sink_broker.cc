@@ -211,13 +211,13 @@ void FrameSinkBroker::ConfigureDisplays(
 }
 
 void FrameSinkBroker::SetClipboard(mojom::Clipboard clipboard,
-                                  const std::string& text) {
+                                  const ClipboardContents& contents) {
   if (!set_clipboard_) {
     // No desktop clipboard inside another session. Not an error: the producer
     // cannot know which clipboard the browser reads.
     return;
   }
-  set_clipboard_.Run(clipboard, text);
+  set_clipboard_.Run(clipboard, contents);
 }
 
 void FrameSinkBroker::ObserveClipboard(
@@ -226,9 +226,9 @@ void FrameSinkBroker::ObserveClipboard(
 }
 
 void FrameSinkBroker::OnCopied(mojom::Clipboard clipboard,
-                               const std::string& text) {
+                               const ClipboardContents& contents) {
   for (auto& observer : clipboard_observers_) {
-    observer->OnCopied(clipboard, text);
+    observer->OnCopied(clipboard, contents);
   }
 }
 
