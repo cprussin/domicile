@@ -15,10 +15,11 @@ use smithay::reexports::wayland_server::protocol::wl_buffer;
 use smithay::reexports::wayland_server::Resource as _;
 
 use crate::engine::{
-    BufferId, Capture, Clipboard, Connector, Dmabuf, Engine, EngineError, Event, SurfaceId,
-    LIBRARY, NEWEST_BOX,
+    BufferId, Capture, Clipboard, Connector, Dmabuf, Engine, EngineError, Event, Request,
+    SurfaceId, LIBRARY, NEWEST_BOX,
 };
 use crate::engine_buffers::{HeldBuffers, Returned};
+use crate::engine_imports::{Imports, Route, Then};
 use crate::engine_surfaces::Surfaces;
 use crate::engine_waiting::Waiting;
 use crate::uploads::UploadId;
@@ -53,11 +54,12 @@ impl Submitted {
 /// What became of a frame handed to [`EngineSession::submit`].
 #[derive(Debug, PartialEq)]
 pub enum Submission {
-    /// Viz has it. The caller must not release the buffer.
-    Taken,
-    /// No page has embedded the surface yet, so the frame waits for the embed
-    /// (see `engine_waiting`). The caller must not release the buffer, and
-    /// must release `replaced`.
+    /// Viz has it. The caller must not release the buffer, and must release
+    /// `replaced`, an older frame that was waiting.
+    Taken { replaced: Option<Submitted> },
+    /// The frame waits for a page to embed the surface (see
+    /// `engine_waiting`) or for its buffer's import (see `engine_imports`).
+    /// The caller must not release the buffer, and must release `replaced`.
     Waiting { replaced: Option<Submitted> },
     /// Nothing was submitted; the buffer is still the caller's.
     Refused,
@@ -70,6 +72,27 @@ struct Frame {
     descriptor: DmabufDescriptor,
     sampled: Sampled,
     at_box: u64,
+}
+
+/// What became of a frame handed to [`EngineSession::put_up`].
+enum PutUp {
+    /// As [`Submission::Taken`].
+    Taken { replaced: Option<Submitted> },
+    /// Its buffer is being imported, and it goes up when that finishes.
+    Importing { replaced: Option<Submitted> },
+    /// The engine refused its buffer. The frame is handed back.
+    Refused(Frame),
+}
+
+/// What [`EngineSession::dispatch`] found.
+#[derive(Debug)]
+pub struct Dispatched {
+    /// The events for the caller to act on.
+    pub events: Vec<Event>,
+    /// The buffers to give back.
+    pub releases: Vec<Release>,
+    /// Apps whose frame went up once its buffer was imported.
+    pub shown: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -110,9 +133,10 @@ pub struct EngineSession {
     /// One surface per app, brokered on the app's first commit, and which of
     /// them a page has embedded.
     surfaces: Surfaces,
-    /// The engine id of each imported buffer. Clients commit the same buffer
-    /// repeatedly, so importing per commit would send new fds every frame.
-    imports: HashMap<ImportKey, (SurfaceId, BufferId)>,
+    /// The engine id of each imported buffer, and the frames waiting for an
+    /// import. Clients commit the same buffer repeatedly, so importing per
+    /// commit would send new fds every frame.
+    imports: Imports<ImportKey, Frame>,
     held: HeldBuffers<Submitted>,
     /// Each app's last crop and transform, reused when a reconnect
     /// resubmits its frame.
@@ -132,7 +156,7 @@ impl EngineSession {
             engine: Engine::load(LIBRARY, socket)?,
             socket: socket.to_path_buf(),
             surfaces: Surfaces::default(),
-            imports: HashMap::new(),
+            imports: Imports::default(),
             held: HeldBuffers::default(),
             sampled: HashMap::new(),
             waiting: Waiting::default(),
@@ -160,7 +184,7 @@ impl EngineSession {
             .drain()
             .map(|(app_id, surface)| (surface, app_id))
             .collect();
-        self.imports.clear();
+        let importing = self.imports.clear();
 
         let dialed = self.engine.reconnect(&self.socket);
         if dialed.is_ok() {
@@ -176,16 +200,13 @@ impl EngineSession {
         let mut releases = returned(taken.superseded, Returned::Abandoned);
         // Waiting frames name old surfaces, so release them. The client draws
         // again once the new surface is embedded and configured.
-        releases.extend(
-            self.waiting
-                .take_all()
-                .into_iter()
-                .map(|(surface, frame)| Release {
-                    buffer: frame.buffer,
-                    surface,
-                    why: Returned::Abandoned,
-                }),
-        );
+        releases.extend(self.waiting.take_all().into_iter().chain(importing).map(
+            |(surface, frame)| Release {
+                buffer: frame.buffer,
+                surface,
+                why: Returned::Abandoned,
+            },
+        ));
         let mut session = Reconnected {
             releases,
             dialed,
@@ -204,9 +225,9 @@ impl EngineSession {
                 continue;
             };
             match self.show_again(app_id, &buffer, describe, now) {
-                Submission::Taken => session.shown.push(app_id.clone()),
-                // Held until the page embeds the surface again. It replaced
-                // nothing, since it is the surface's only frame.
+                // Each replaced nothing, since it is the surface's only frame.
+                Submission::Taken { .. } => session.shown.push(app_id.clone()),
+                // Held until the page embeds the surface again.
                 Submission::Waiting { .. } => session.blank.push(app_id.clone()),
                 Submission::Refused => {
                     session.blank.push(app_id.clone());
@@ -272,7 +293,7 @@ impl EngineSession {
     /// Submits a buffer as `app_id`'s window, at the box `at_box` names (see
     /// [`crate::engine::Engine::submit`]). See [`Submission`] for who owns the
     /// buffer afterward.
-    #[allow(clippy::too_many_arguments)] // One frame's worth, as `put_up` takes it.
+    #[allow(clippy::too_many_arguments)] // One frame's worth.
     pub fn submit(
         &mut self,
         app_id: &str,
@@ -286,16 +307,16 @@ impl EngineSession {
         let Some(surface) = self.surface_for(app_id) else {
             return Submission::Refused;
         };
+        let frame = Frame {
+            buffer,
+            descriptor: descriptor.clone(),
+            sampled,
+            at_box,
+        };
         // The engine drops frames for unembedded surfaces and never releases
         // them (see `engine_surfaces`), so the frame waits for the embed. See
         // `engine_waiting`.
         if !self.surfaces.takes_frames(surface) {
-            let frame = Frame {
-                buffer,
-                descriptor: descriptor.clone(),
-                sampled,
-                at_box,
-            };
             return Submission::Waiting {
                 replaced: self
                     .waiting
@@ -303,18 +324,18 @@ impl EngineSession {
                     .map(|replaced| replaced.buffer),
             };
         }
-        match self.put_up(
-            app_id, surface, buffer, descriptor, sampled, damage, at_box, now,
-        ) {
-            true => Submission::Taken,
-            false => Submission::Refused,
+        match self.put_up(app_id, surface, frame, damage, now) {
+            PutUp::Taken { replaced } => Submission::Taken { replaced },
+            PutUp::Importing { replaced } => Submission::Waiting { replaced },
+            PutUp::Refused(_) => Submission::Refused,
         }
     }
 
     /// Submits the frame waiting for `surface` after a page embeds it.
     ///
-    /// Returns `Ok(false)` if nothing was waiting, and `Err` with the buffer
-    /// to release if the engine refused it.
+    /// Returns `Ok(false)` if nothing was waiting or the frame now waits for
+    /// its import, and `Err` with the buffer to release if the engine refused
+    /// it.
     pub fn show_what_was_waiting(
         &mut self,
         surface: SurfaceId,
@@ -331,78 +352,170 @@ impl EngineSession {
         let Some(app_id) = self.surfaces.app_for(surface).map(str::to_owned) else {
             return Err(refused(frame.buffer));
         };
-        let buffer = frame.buffer.clone();
-        match self.put_up(
-            &app_id,
-            surface,
-            frame.buffer,
-            &frame.descriptor,
-            frame.sampled,
-            (0, 0, 0, 0),
-            frame.at_box,
-            now,
-        ) {
-            true => Ok(true),
-            false => Err(refused(buffer)),
+        // A frame waits for an import only on an embedded surface, and this
+        // one was not embedded until now, so none is replaced.
+        match self.put_up(&app_id, surface, frame, (0, 0, 0, 0), now) {
+            PutUp::Taken { replaced: None } => Ok(true),
+            PutUp::Importing { replaced: None } => Ok(false),
+            PutUp::Taken { replaced: Some(_) } | PutUp::Importing { replaced: Some(_) } => {
+                unreachable!("a surface embedded just now had a frame waiting for an import")
+            }
+            PutUp::Refused(frame) => Err(refused(frame.buffer)),
         }
     }
 
-    /// Imports, submits and holds a frame for an embedded surface. Returns
-    /// `false` if the engine refused the import.
-    #[allow(clippy::too_many_arguments)] // One frame's worth, as `submit` takes it.
+    /// Submits and holds a frame for an embedded surface, or starts importing
+    /// its buffer and holds it back until the import finishes.
+    ///
+    /// An engine without `domicile_surface_import_async` imports while the
+    /// caller waits.
     fn put_up(
         &mut self,
         app_id: &str,
         surface: SurfaceId,
-        buffer: Submitted,
-        descriptor: &DmabufDescriptor,
-        sampled: Sampled,
+        frame: Frame,
         damage: (i32, i32, i32, i32),
-        at_box: u64,
         now: Instant,
-    ) -> bool {
-        let Some(id) = self.import(surface, &buffer, descriptor) else {
-            return false;
+    ) -> PutUp {
+        let key = frame.buffer.key();
+        let dmabuf = match self.imports.knows(&key) {
+            true => None,
+            false => match Dmabuf::from_descriptor(&frame.descriptor) {
+                Some(dmabuf) => Some(dmabuf),
+                None => {
+                    tracing::error!(
+                        planes = frame.descriptor.planes.len(),
+                        "a dmabuf with this many planes cannot cross the engine ABI"
+                    );
+                    return PutUp::Refused(frame);
+                }
+            },
         };
-        self.engine.submit(surface, id, sampled, damage, at_box);
-        self.sampled.insert(app_id.to_owned(), sampled);
-        // A replaced hold is the same buffer, since `imports` is keyed on the
-        // object. Drop it without releasing: viz holds it again.
-        drop(self.held.hold(surface, id, buffer, now));
-        true
+        if let Some(dmabuf) = &dmabuf {
+            if !self.engine.imports_in_the_background() {
+                match self.engine.import(surface, dmabuf) {
+                    Some(id) => self.imports.imported(key.clone(), surface, id),
+                    None => {
+                        say_it_was_refused(&frame.descriptor);
+                        return PutUp::Refused(frame);
+                    }
+                }
+            }
+        }
+        match self.imports.route(surface, key, frame) {
+            Route::Submit {
+                id,
+                frame,
+                replaced,
+            } => {
+                self.show(app_id, surface, id, frame, damage, now);
+                PutUp::Taken {
+                    replaced: replaced.map(|frame| frame.buffer),
+                }
+            }
+            Route::Wait { replaced, start } => {
+                if let Some(request) = start {
+                    let dmabuf = dmabuf
+                        .as_ref()
+                        .expect("an import starts only for a buffer not yet imported");
+                    self.engine
+                        .import_in_the_background(surface, dmabuf, request);
+                }
+                PutUp::Importing {
+                    replaced: replaced.map(|frame| frame.buffer),
+                }
+            }
+        }
     }
 
-    /// Runs the engine's pending work.
-    ///
-    /// Returns the events for the caller to act on and the buffers viz
-    /// released.
-    pub fn dispatch(&mut self) -> (Vec<Event>, Vec<Release>) {
+    /// Submits and holds a frame whose buffer is imported as `id`.
+    fn show(
+        &mut self,
+        app_id: &str,
+        surface: SurfaceId,
+        id: BufferId,
+        frame: Frame,
+        damage: (i32, i32, i32, i32),
+        now: Instant,
+    ) {
+        self.engine
+            .submit(surface, id, frame.sampled, damage, frame.at_box);
+        self.sampled.insert(app_id.to_owned(), frame.sampled);
+        // A replaced hold is the same buffer, since `imports` is keyed on the
+        // object. Drop it without releasing: viz holds it again.
+        drop(self.held.hold(surface, id, frame.buffer, now));
+    }
+
+    /// Runs the engine's pending work, and puts up the frames whose imports
+    /// finished.
+    pub fn dispatch(&mut self, now: Instant) -> Dispatched {
         let events = self.engine.dispatch();
-        let releases = events
-            .iter()
-            .filter_map(|event| match event {
+        let mut dispatched = Dispatched {
+            events: Vec::new(),
+            releases: Vec::new(),
+            shown: Vec::new(),
+        };
+        for event in &events {
+            match event {
                 Event::Released { surface, buffer } => {
-                    self.held.release(*surface, *buffer).map(|buffer| Release {
-                        buffer,
-                        surface: *surface,
-                        why: Returned::Released,
-                    })
+                    if let Some(buffer) = self.held.release(*surface, *buffer) {
+                        dispatched.releases.push(Release {
+                            buffer,
+                            surface: *surface,
+                            why: Returned::Released,
+                        });
+                    }
                 }
                 // A page embedded this surface, so `submit` may now hold
                 // buffers for it. See `engine_surfaces`.
-                Event::Configure { surface, .. } => {
-                    self.surfaces.embedded(*surface);
-                    None
-                }
+                Event::Configure { surface, .. } => self.surfaces.embedded(*surface),
+                Event::Imported {
+                    request, buffer, ..
+                } => self.import_finished(*request, *buffer, now, &mut dispatched),
                 Event::Copied { .. }
                 | Event::Displays(_)
                 | Event::Captured { .. }
-                | Event::CaptureEnded { .. } => None,
-            })
-            .collect();
-        (events, releases)
+                | Event::CaptureEnded { .. } => {}
+            }
+        }
+        dispatched.events = events;
+        dispatched
     }
 
+    /// Puts up or hands back the frames that waited on `request`.
+    fn import_finished(
+        &mut self,
+        request: Request,
+        buffer: Option<BufferId>,
+        now: Instant,
+        dispatched: &mut Dispatched,
+    ) {
+        let finished = self.imports.finished(request, buffer);
+        if let Some((surface, id)) = finished.forget {
+            self.engine.forget(surface, id);
+        }
+        for then in finished.then {
+            match then {
+                Then::Submit { surface, id, frame } => {
+                    let app_id = self
+                        .surfaces
+                        .app_for(surface)
+                        .expect("`window_gone` takes the frames of the surfaces it forgets")
+                        .to_owned();
+                    self.show(&app_id, surface, id, frame, (0, 0, 0, 0), now);
+                    dispatched.shown.push(app_id);
+                }
+                Then::Refused { surface, frame } => {
+                    say_it_was_refused(&frame.descriptor);
+                    dispatched.releases.push(Release {
+                        buffer: frame.buffer,
+                        surface,
+                        why: Returned::Abandoned,
+                    });
+                }
+            }
+        }
+    }
     /// Buffers viz kept past the deadline, taken back so the client can draw.
     /// Each one is an engine bug, and the caller logs it.
     pub fn overdue(&mut self, now: Instant) -> Vec<Release> {
@@ -423,25 +536,27 @@ impl EngineSession {
         };
         // The GPU process keeps each imported buffer's fds until told to
         // forget it. Leaked imports exhaust its fds and crash it on a `CHECK`.
-        for buffer in take_imports_of(&mut self.imports, surface) {
+        let gone = self.imports.surface_gone(surface);
+        for buffer in gone.ids {
             self.engine.forget(surface, buffer);
         }
         self.engine.destroy_surface(surface);
-        let waited = self.waiting.take(surface).map(|frame| Release {
-            buffer: frame.buffer,
-            surface,
-            why: Returned::Abandoned,
-        });
+        let waited = self.waiting.take(surface).into_iter().chain(gone.waited);
         returned(self.held.abandon(surface), Returned::Abandoned)
             .into_iter()
-            .chain(waited)
+            .chain(waited.map(|frame| Release {
+                buffer: frame.buffer,
+                surface,
+                why: Returned::Abandoned,
+            }))
             .collect()
     }
 
     /// Drops the import for a destroyed `wl_buffer` and returns its hold, if
     /// any, since no release will arrive for it.
     pub fn buffer_destroyed(&mut self, buffer: &wl_buffer::WlBuffer) -> Option<Release> {
-        // A waiting frame was never imported, so there is nothing else to drop.
+        // A frame waiting for an embed was never imported, so there is nothing
+        // else to drop.
         let key = ImportKey::Client(buffer.id());
         if let Some((surface, frame)) = self.waiting.take_where(|frame| frame.buffer.key() == key) {
             return Some(Release {
@@ -450,19 +565,38 @@ impl EngineSession {
                 why: Returned::Abandoned,
             });
         }
-        let (surface, id) = self.imports.remove(&key)?;
-        self.engine.forget(surface, id);
-        self.held.release(surface, id).map(|buffer| Release {
-            buffer,
-            surface,
-            why: Returned::Abandoned,
+        let forgotten = self.imports.forget(&key);
+        let held = forgotten.id.and_then(|(surface, id)| {
+            self.engine.forget(surface, id);
+            self.held.release(surface, id).map(|buffer| Release {
+                buffer,
+                surface,
+                why: Returned::Abandoned,
+            })
+        });
+        held.or_else(|| {
+            forgotten
+                .waited
+                .into_iter()
+                .next()
+                .map(|(surface, frame)| Release {
+                    buffer: frame.buffer,
+                    surface,
+                    why: Returned::Abandoned,
+                })
         })
     }
 
     /// Drops the import for a freed compositor buffer so the browser closes its
-    /// fds. [`crate::uploads`] frees only buffers viz is not holding.
+    /// fds. [`crate::uploads`] frees only buffers the engine is not holding or
+    /// waiting to show.
     pub fn upload_dropped(&mut self, upload: UploadId) {
-        if let Some((surface, id)) = self.imports.remove(&ImportKey::Upload(upload)) {
+        let forgotten = self.imports.forget(&ImportKey::Upload(upload));
+        assert!(
+            forgotten.waited.is_empty(),
+            "a freed upload had a frame waiting for its import"
+        );
+        if let Some((surface, id)) = forgotten.id {
             self.engine.forget(surface, id);
         }
     }
@@ -506,35 +640,15 @@ impl EngineSession {
             }
         }
     }
+}
 
-    /// The buffer's id, importing it the first time it is seen.
-    fn import(
-        &mut self,
-        surface: SurfaceId,
-        buffer: &Submitted,
-        descriptor: &DmabufDescriptor,
-    ) -> Option<BufferId> {
-        if let Some((_, id)) = self.imports.get(&buffer.key()) {
-            return Some(*id);
-        }
-        let dmabuf = Dmabuf::from_descriptor(descriptor).or_else(|| {
-            tracing::error!(
-                planes = descriptor.planes.len(),
-                "a dmabuf with this many planes cannot cross the engine ABI"
-            );
-            None
-        })?;
-        let id = self.engine.import(surface, &dmabuf).or_else(|| {
-            tracing::error!(
-                fourcc = descriptor.fourcc,
-                modifier = descriptor.modifier,
-                "the browser refused this dmabuf"
-            );
-            None
-        })?;
-        self.imports.insert(buffer.key(), (surface, id));
-        Some(id)
-    }
+/// Logs a dmabuf the browser would not import.
+fn say_it_was_refused(descriptor: &DmabufDescriptor) {
+    tracing::error!(
+        fourcc = descriptor.fourcc,
+        modifier = descriptor.modifier,
+        "the browser refused this dmabuf"
+    );
 }
 
 /// Converts removed holds into releases.
@@ -546,17 +660,6 @@ fn returned(holds: Vec<((SurfaceId, BufferId), Submitted)>, why: Returned) -> Ve
             surface,
             why,
         })
-        .collect()
-}
-
-/// Removes `surface`'s imports and returns the ids the engine must forget.
-fn take_imports_of<K>(
-    imports: &mut HashMap<K, (SurfaceId, BufferId)>,
-    surface: SurfaceId,
-) -> Vec<BufferId> {
-    imports
-        .extract_if(|_, (held, _)| *held == surface)
-        .map(|(_, (_, id))| id)
         .collect()
 }
 
@@ -585,21 +688,5 @@ impl crate::casting::Capturer for EngineSession {
 
     fn release(&mut self, capture: crate::engine::CaptureId, frame: u64) {
         self.engine.release_captured(capture, frame);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_surface_s_imports_are_taken_out_and_no_other_s() {
-        let mut imports = HashMap::from([(1, (7, 10)), (2, (7, 11)), (3, (8, 12))]);
-
-        let mut taken = take_imports_of(&mut imports, 7);
-
-        taken.sort();
-        assert_eq!(taken, vec![10, 11]);
-        assert_eq!(imports, HashMap::from([(3, (8, 12))]));
     }
 }
