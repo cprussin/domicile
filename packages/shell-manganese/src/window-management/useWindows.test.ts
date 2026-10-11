@@ -254,6 +254,39 @@ describe("a command", () => {
     expect(host.screenshots).toEqual([{ call: "screenshot" }]);
   });
 
+  describe("searching the clipboard", () => {
+    const searched = (copied: readonly string[]) => {
+      const { host, result } = desktop([LEFT, RIGHT]);
+      act(() => {
+        host.fake.set({
+          clipboard: copied.map((preview, at) => ({ id: at, preview })),
+        });
+      });
+
+      act(() => {
+        result.current.act(WindowAction.ClipboardSearched());
+      });
+
+      return host.opened;
+    };
+
+    it("opens the newest copy as a site when it is a URL", () => {
+      expect(searched(["example.com/page", "older words"])).toEqual([
+        "https://example.com/page",
+      ]);
+    });
+
+    it("searches Google for the newest copy otherwise", () => {
+      expect(searched(["hello world", "example.com"])).toEqual([
+        "https://google.com/search?q=hello%20world",
+      ]);
+    });
+
+    it("opens nothing when nothing was copied", () => {
+      expect(searched([])).toEqual([]);
+    });
+  });
+
   it("runs the command of an application the launcher chose", () => {
     const { host, result } = desktop([LEFT, RIGHT]);
 

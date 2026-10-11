@@ -7,6 +7,7 @@ import {
   DEFAULT_MODES,
   exec,
   screenshot,
+  searchClipboard,
 } from "./commands";
 
 describe("manganese's default keys", () => {
@@ -54,6 +55,14 @@ describe("manganese's default keys", () => {
     expect(DEFAULT_KEYBINDINGS.Print).toEqual(screenshot());
     expect(screenshot()).toEqual({
       args: ["screenshot"],
+      kind: KeyActionKind.SendShell,
+    });
+  });
+
+  it("search the clipboard on Meta+Shift+space", () => {
+    expect(DEFAULT_KEYBINDINGS["Meta+Shift+space"]).toEqual(searchClipboard());
+    expect(searchClipboard()).toEqual({
+      args: ["search-clipboard"],
       kind: KeyActionKind.SendShell,
     });
   });
