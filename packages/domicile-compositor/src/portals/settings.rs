@@ -6,8 +6,8 @@
 //! signal. Theme changes are announced once every shell has captured its
 //! wipe's start frame (see `domicile_host::theme_turnover`). `accent-color`,
 //! `contrast` and `reduced-motion` come from the config's `theme` section and
-//! change on reload. So does `org.gnome.desktop.interface`'s `icon-theme`,
-//! which shells read too.
+//! change on reload. `org.gnome.desktop.interface` repeats the color scheme
+//! and motion for GTK 3, and carries `icon-theme`, which shells read too.
 
 use std::collections::HashMap;
 
@@ -19,7 +19,7 @@ use zbus::zvariant::{OwnedValue, Value};
 /// The standard namespace toolkits read the color scheme from.
 const NAMESPACE: &str = "org.freedesktop.appearance";
 
-/// The color scheme key in [`NAMESPACE`].
+/// The color scheme key in [`NAMESPACE`] and [`INTERFACE`].
 const COLOR_SCHEME: &str = "color-scheme";
 
 /// GNOME's interface settings, where GTK reads the icon theme.
@@ -27,6 +27,9 @@ const INTERFACE: &str = "org.gnome.desktop.interface";
 
 /// The icon theme key in [`INTERFACE`].
 const ICON_THEME: &str = "icon-theme";
+
+/// GNOME's animation switch in [`INTERFACE`], the inverse of `reduced-motion`.
+const ENABLE_ANIMATIONS: &str = "enable-animations";
 
 /// The theme every icon theme inherits, signaled when the config's is unset.
 const HICOLOR: &str = "hicolor";
@@ -95,7 +98,7 @@ impl From<&Appearance> for domicile_protocol::Appearance {
     }
 }
 
-/// The `Settings` backend object, serving [`NAMESPACE`] and the icon theme.
+/// The `Settings` backend object, serving [`NAMESPACE`] and [`INTERFACE`].
 ///
 /// Other keys are left to the next backend rather than answered with
 /// invented values.
@@ -199,6 +202,7 @@ type Setting = (&'static str, &'static str, OwnedValue);
 /// Every key served and its value. `icon-theme` is served only when set.
 fn values(theme: Theme, appearance: &Appearance) -> Vec<Setting> {
     let mut served = looks(theme, appearance);
+    served.extend(gnome_looks(theme, appearance));
     served.extend(appearance.icon_theme.as_deref().map(icon_theme));
     served
 }
@@ -239,6 +243,26 @@ fn looks(theme: Theme, appearance: &Appearance) -> Vec<Setting> {
     ]
 }
 
+/// The keys in [`INTERFACE`] that GTK 3 reads instead of [`NAMESPACE`]'s.
+fn gnome_looks(theme: Theme, appearance: &Appearance) -> [Setting; 2] {
+    let scheme = match theme {
+        Theme::Dark => "prefer-dark",
+        Theme::Light => "prefer-light",
+    };
+    [
+        (
+            INTERFACE,
+            COLOR_SCHEME,
+            OwnedValue::try_from(Value::from(scheme)).expect("a string holds no file descriptors"),
+        ),
+        (
+            INTERFACE,
+            ENABLE_ANIMATIONS,
+            OwnedValue::from(!appearance.reduced_motion),
+        ),
+    ]
+}
+
 fn icon_theme(name: &str) -> Setting {
     (
         INTERFACE,
@@ -254,6 +278,7 @@ fn icon_theme(name: &str) -> Setting {
 fn moved(was_theme: Theme, was: &Appearance, theme: Theme, now: &Appearance) -> Vec<Setting> {
     let signaled = |theme: Theme, appearance: &Appearance| {
         let mut signaled = looks(theme, appearance);
+        signaled.extend(gnome_looks(theme, appearance));
         signaled.push(icon_theme(
             appearance.icon_theme.as_deref().unwrap_or(HICOLOR),
         ));
@@ -271,6 +296,10 @@ fn moved(was_theme: Theme, was: &Appearance, theme: Theme, now: &Appearance) -> 
 mod tests {
     use super::*;
     use domicile_config::{AccentColor, Contrast};
+
+    fn string(text: &str) -> OwnedValue {
+        OwnedValue::try_from(Value::from(text)).expect("a string")
+    }
 
     fn value(settings: &Settings, key: &str) -> OwnedValue {
         settings.read_one(NAMESPACE, key).expect("a setting")
@@ -341,11 +370,17 @@ mod tests {
 
         assert_eq!(
             moved(Theme::Dark, &was, Theme::Dark, &now),
-            [(NAMESPACE, "reduced-motion", OwnedValue::from(1u32))]
+            [
+                (NAMESPACE, "reduced-motion", OwnedValue::from(1u32)),
+                (INTERFACE, ENABLE_ANIMATIONS, OwnedValue::from(false)),
+            ]
         );
         assert_eq!(
             moved(Theme::Dark, &was, Theme::Light, &was),
-            [(NAMESPACE, COLOR_SCHEME, OwnedValue::from(2u32))]
+            [
+                (NAMESPACE, COLOR_SCHEME, OwnedValue::from(2u32)),
+                (INTERFACE, COLOR_SCHEME, string("prefer-light")),
+            ]
         );
     }
 
@@ -361,11 +396,7 @@ mod tests {
 
         assert_eq!(
             settings.read_one(INTERFACE, ICON_THEME),
-            Ok(OwnedValue::try_from(Value::from("Papirus")).expect("a string"))
-        );
-        assert_eq!(
-            settings.read_all(vec![INTERFACE.to_string()])[INTERFACE].len(),
-            1
+            Ok(string("Papirus"))
         );
         assert_eq!(settings.read_all(Vec::new()).len(), 2);
     }
@@ -378,7 +409,7 @@ mod tests {
         };
 
         assert!(settings.read_one(INTERFACE, ICON_THEME).is_err());
-        assert!(settings.read_all(vec![INTERFACE.to_string()]).is_empty());
+        assert!(!settings.read_all(vec![INTERFACE.to_string()])[INTERFACE].contains_key(ICON_THEME));
     }
 
     #[test]
@@ -388,7 +419,6 @@ mod tests {
             icon_theme: Some("Papirus".into()),
             ..Appearance::default()
         };
-        let string = |name: &str| OwnedValue::try_from(Value::from(name)).expect("a string");
 
         assert_eq!(
             moved(Theme::Dark, &was, Theme::Dark, &now),
@@ -397,6 +427,30 @@ mod tests {
         assert_eq!(
             moved(Theme::Dark, &now, Theme::Dark, &was),
             [(INTERFACE, ICON_THEME, string("hicolor"))]
+        );
+    }
+
+    #[test]
+    fn gnome_reads_the_theme_and_motion_from_its_interface_settings() {
+        let settings = Settings {
+            theme: Theme::Dark,
+            appearance: Appearance {
+                reduced_motion: true,
+                ..Appearance::default()
+            },
+        };
+
+        assert_eq!(
+            settings.read_one(INTERFACE, COLOR_SCHEME),
+            Ok(string("prefer-dark"))
+        );
+        assert_eq!(
+            settings.read_one(INTERFACE, ENABLE_ANIMATIONS),
+            Ok(OwnedValue::from(false))
+        );
+        assert_eq!(
+            settings.read_all(vec![INTERFACE.to_string()])[INTERFACE].len(),
+            2
         );
     }
 
