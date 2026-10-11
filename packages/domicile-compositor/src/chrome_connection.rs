@@ -672,7 +672,7 @@ mod tests {
         .expect("a passphrase needs nothing from the machine")
         .expect("a passphrase was stated");
         let (told, heard) = std::sync::mpsc::channel();
-        let mut lock = Lock::held_by(verifier, move |verdict| {
+        let mut lock = Lock::held_by(Some(verifier), move |verdict| {
             told.send(verdict).expect("the test is listening")
         });
         hub.lock.set(lock.seen()).expect("the hub has no lock yet");

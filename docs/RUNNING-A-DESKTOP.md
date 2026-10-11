@@ -191,7 +191,8 @@ Configure it with `files.omit` and manganese's `applications` option:
   service is missing, Domicile does not start and names the line to add.
 - `lock.passphrase` is world-readable in the Nix store. It only stops someone
   at the keyboard.
-- `lock` is read at startup. Changes apply on the next run.
+- A `lock` edit applies on reload. It never unlocks a locked desktop
+  ([LOCK.md](LOCK.md#reloading)).
 
 Reference: [idle](SHELL-CONFIG.md#idle), [lock](SHELL-CONFIG.md#lock). Design:
 [IDLE.md](IDLE.md), [LOCK.md](LOCK.md). Open work: [ROADMAP.md](/ROADMAP.md).

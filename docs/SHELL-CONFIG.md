@@ -117,13 +117,16 @@ An edit applies to the running desktop, and windows stay open:
 | `files.omit` | Launcher file index rebuilt |
 | `extensions` | Extensions installed or removed ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)) |
 | `lockdown` | Applications told through the Lockdown portal |
+| `lock` | The next passphrase is checked against the new verifier. The desktop never unlocks from a reload ([LOCK.md](LOCK.md#reloading)) |
 
-- `lock` and `startup` are read only at startup. Rerunning `startup` would
-  duplicate its commands.
+- `startup` is read only at startup. Rerunning it would duplicate its
+  commands.
 - A file that fails to parse is rejected and logged. The last good config
   stays.
 - A keyboard xkb cannot compile is rejected and logged. The current layout
   stays.
+- A `lock.pam_service` the machine does not declare is rejected and logged.
+  The current lock stays.
 
 ## Other sections
 

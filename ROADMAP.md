@@ -33,8 +33,7 @@ item when it ships.
    [SHELL-IDLE-AND-LOCK.md](docs/SHELL-IDLE-AND-LOCK.md#locking).
    - A wrong passphrase only re-sends `locked: true`. A shell can't tell it
      from a verifier error, or count or rate-limit attempts.
-   - A config reload doesn't change `lock`. It applies on the next run.
-   - `lock.passphrase` is world-readable and not compared in constant time.
+   - `lock.passphrase` is world-readable.
 
 4. **Notifications.** [NOTIFICATIONS.md](docs/architecture/NOTIFICATIONS.md).
    - Chrome's notification bridge looks for the server once at startup, so a

@@ -19,6 +19,7 @@
 //! | `theme.accent_color`, `contrast`, `reduced_motion`, `icon_theme` | sent to the desk's clients (`Portals::restyle`); `icon_theme` also redraws tray and notification icons |
 //! | `files.omit` | sent to the index, which rewalks the home (`omit_from_the_index`) |
 //! | `extensions.*` | sent to every chrome, whose browser installs them (`hand_over_the_extensions`) |
+//! | `lock.*` | the verifier replaced; the desktop stays as locked as it was (`rekey_the_lock`, `Lock::rekeyed`) |
 //! | `lockdown.*` | sent to the Lockdown portal, which signals the change (`Portals::lock_down`) |
 //! | `keybindings` | resolved on the keyboard and sent to every chrome (`rebind_the_keys`) |
 //! | `modes` | the same, with `keybindings` |
@@ -32,6 +33,8 @@
 //!   window. A described display sets its own scale.
 //! - A keyboard xkb cannot compile, or a keysym it cannot type, is refused
 //!   (see `retype_the_desktop` and `rebind_the_keys`).
+//! - A `lock.pam_service` the machine lacks is refused (see
+//!   `rekey_the_lock`).
 //! - Changing the idle timeout wakes blanked screens (see
 //!   `reset_the_idle_clock`).
 //!
@@ -41,8 +44,8 @@
 //! restated and an unchanged one is not.
 
 use domicile_config::{
-    Config, ExtensionsConfig, IdleConfig, KeyboardConfig, LockdownConfig, Omit, ThemeConfig,
-    ThemeMode,
+    Config, ExtensionsConfig, IdleConfig, KeyboardConfig, LockConfig, LockdownConfig, Omit,
+    ThemeConfig, ThemeMode,
 };
 
 /// What a reloaded config asks the compositor to restate.
@@ -72,6 +75,8 @@ pub struct Restatement {
     pub extensions: Option<ExtensionsConfig>,
     /// What applications are asked not to do, or `None` if unchanged.
     pub lockdown: Option<LockdownConfig>,
+    /// What opens the lock, or `None` if unchanged.
+    pub lock: Option<LockConfig>,
     /// Whether to resend the key config to the chromes, because keysyms
     /// depend on the layout.
     pub shell_config: bool,
@@ -95,6 +100,7 @@ impl Restatement {
             omit: (was.files.omit != now.files.omit).then(|| now.files.omit.clone()),
             extensions: (was.extensions != now.extensions).then(|| now.extensions.clone()),
             lockdown: (was.lockdown != now.lockdown).then(|| now.lockdown.clone()),
+            lock: (was.lock != now.lock).then(|| now.lock.clone()),
             shell_config: was.input.keyboard != now.input.keyboard,
         }
     }
@@ -226,6 +232,18 @@ mod tests {
     }
 
     #[test]
+    fn a_lock_that_moved_is_restated() {
+        let was = parsed(A_DVORAK_DESK);
+        let now = parsed(A_DESK_THAT_LOCKS);
+
+        assert_eq!(
+            Restatement::between(&was, &now).lock,
+            Some(now.lock),
+            "the lock handed back is the new one, not the one being replaced"
+        );
+    }
+
+    #[test]
     fn the_keys_are_restated_when_the_keyboard_moved() {
         // A chord names a keysym, and the layout decides which key that is.
         let was = parsed(A_DVORAK_DESK);
@@ -292,6 +310,17 @@ mod tests {
     "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:swapescape"] }
   },
   "lockdown": { "disable_camera": true },
+  "output": { "displays": [{ "name": "one", "size": [1024, 768] }] }
+}
+"#;
+
+    /// The same desk, locked by a passphrase.
+    const A_DESK_THAT_LOCKS: &str = r#"
+{
+  "input": {
+    "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:swapescape"] }
+  },
+  "lock": { "passphrase": "friend" },
   "output": { "displays": [{ "name": "one", "size": [1024, 768] }] }
 }
 "#;

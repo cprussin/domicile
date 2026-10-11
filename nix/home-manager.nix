@@ -352,8 +352,8 @@ in {
                 lock holds across a shell reload or an engine restart.
 
                 The desk locks when `idle.blank_after_seconds` elapses or when
-                its shell asks. Read at startup only, so editing the file cannot
-                unlock a locked desk; changes apply on the next run.
+                its shell asks. Applied on reload to the next unlock; a reload
+                never unlocks a locked desk.
               '';
               type = lib.types.nullOr lib.types.str;
               default = null;

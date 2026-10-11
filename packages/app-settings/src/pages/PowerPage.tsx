@@ -71,7 +71,7 @@ export const PowerPage = ({ description, editor, title }: ConfigPageProps) => {
       </Card>
       <Card title="Lock">
         <SettingRow
-          hint="Read when the desktop starts, so a change applies at the next start."
+          hint="Applies when saved. Saving never unlocks a locked desktop."
           title="Unlock with"
         >
           <Select
