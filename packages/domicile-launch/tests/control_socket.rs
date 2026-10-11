@@ -161,6 +161,10 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                     config_extensions: &|| {
                         panic!("a question about this desktop reaches no engine")
                     },
+                    media_devices: &|| panic!("a question about this desktop reaches no engine"),
+                    set_media_device: &|_, _| {
+                        panic!("a question about this desktop reaches no engine")
+                    },
                 },
             )
         })

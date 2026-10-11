@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 10 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the Settings app ranks cameras and microphones
+
+The Settings app picks the camera and microphone a site gets when it
+names none. Chrome keeps that choice as a ranking in the profile's
+prefs, and //chrome/browser/media/prefs reads and writes it.
+
+Its visibility lists the targets that may use it. The fork's command
+socket in //chrome/browser/domicile is added.
+---
+ chrome/browser/media/prefs/BUILD.gn | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/chrome/browser/media/prefs/BUILD.gn b/chrome/browser/media/prefs/BUILD.gn
+index d5e830b..6314026 100644
+--- a/chrome/browser/media/prefs/BUILD.gn
++++ b/chrome/browser/media/prefs/BUILD.gn
+@@ -9,6 +9,7 @@ source_set("prefs") {
+     "//chrome/browser",
+     "//chrome/browser:core",
+     "//chrome/browser:core_unit_tests",
++    "//chrome/browser/domicile:*",
+     "//chrome/browser/media/webrtc:*",
+     "//chrome/browser/prefs:impl",
+     "//chrome/browser/ui",
+-- 
+2.43.0
+

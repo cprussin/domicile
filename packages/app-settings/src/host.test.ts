@@ -134,6 +134,29 @@ describe(nativeHost, () => {
     await stored;
   });
 
+  it("lists media devices and prefers one", async () => {
+    const { ports, runtime } = fakeRuntime();
+    const host = nativeHost(runtime);
+    const devices = {
+      cameras: [{ id: "/dev/video2", name: "USB Camera" }],
+      microphones: [],
+    };
+    const listed = host.mediaDevices();
+    expect(ports[0]?.sent.at(-1)).toEqual({ id: 1, type: "media_devices" });
+    ports[0]?.answer({ ...devices, id: 1, type: "media_devices" });
+    expect(await listed).toEqual(devices);
+
+    const stored = host.setMediaDevice("camera", "/dev/video2");
+    expect(ports[0]?.sent.at(-1)).toEqual({
+      device: "/dev/video2",
+      id: 2,
+      kind: "camera",
+      type: "set_media_device",
+    });
+    ports[0]?.answer({ id: 2, type: "stored" });
+    await stored;
+  });
+
   it("loads and uninstalls extensions, and lists the config's", async () => {
     const { ports, runtime } = fakeRuntime();
     const host = nativeHost(runtime);
