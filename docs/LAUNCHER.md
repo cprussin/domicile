@@ -46,6 +46,9 @@ export const Shell = runManganese({
 - `Icon` is drawn beside the row.
 - `X-Domicile-Preview` names a PNG or SVG under 128 KiB, found the same way as
   `Icon`. It fills the preview while the row is highlighted.
+- `StartupWMClass` names the Wayland app id of the window the entry opens. Set
+  it when the entry's file name differs from that app id, so the window's
+  title bar finds the entry's `Icon`.
 
 ```ini
 [Desktop Entry]

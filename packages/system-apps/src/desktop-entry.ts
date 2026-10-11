@@ -29,6 +29,8 @@ export type DesktopEntry = {
   icon: string | undefined;
   /** `X-Domicile-Preview`, in the same form as `icon`. */
   preview: string | undefined;
+  /** `StartupWMClass`: the app id of the window it opens, if not its own id. */
+  windowClass: string | undefined;
 };
 
 /**
@@ -64,6 +66,7 @@ export const parseDesktopEntry = (
           .filter((type) => type !== ""),
         name: unescaped(name),
         preview: optional(keys.get("X-Domicile-Preview")),
+        windowClass: optional(keys.get("StartupWMClass")),
         words: [name, keys.get("GenericName") ?? "", keys.get("Keywords") ?? ""]
           .map(unescaped)
           .join("\n")

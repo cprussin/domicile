@@ -178,8 +178,9 @@ For how warping, browser-window focus and modifier drags work, see
 - A browser window's name is its page's title, or its site when the page has
   none.
 - Each bar and tab draws its window's icon before the name, else a stand-in:
-  - A client's: the `Icon` of the desktop entry its Wayland app id names
-    (matched in any case), else the icon named after the app id, in
+  - A client's: the `Icon` of the desktop entry its Wayland app id names,
+    else of the entry whose `StartupWMClass` is the app id (both matched in
+    any case), else the icon named after the app id, in
     `theme.icon_theme`. Entries are read again when a new app id appears.
   - A browser window's: its page's icon.
 - A middle click on a bar or tab closes its window.
