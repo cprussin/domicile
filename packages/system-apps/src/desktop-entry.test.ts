@@ -11,7 +11,7 @@ const entry = (name: string, exec: string): string =>
   `[Desktop Entry]\nType=Application\nName=${name}\nExec=${exec}\n`;
 
 describe("parseDesktopEntry", () => {
-  it("reads an application's name, comment, command, types, icon and preview", () => {
+  it("reads an application's name, comment, command, types, icon, preview and window class", () => {
     expect(
       parseDesktopEntry(
         "firefox.desktop",
@@ -28,6 +28,7 @@ describe("parseDesktopEntry", () => {
           "MimeType=text/html;x-scheme-handler/http;",
           "Icon=firefox",
           "X-Domicile-Preview=/usr/share/firefox/preview.svg",
+          "StartupWMClass=Navigator",
           "[Desktop Action new-window]",
           "Name=New Window",
           "Exec=firefox --new-window",
@@ -43,6 +44,7 @@ describe("parseDesktopEntry", () => {
         mimeTypes: ["text/html", "x-scheme-handler/http"],
         name: "Firefox",
         preview: "/usr/share/firefox/preview.svg",
+        windowClass: "Navigator",
         words: "firefox\nweb browser\ninternet;www;",
       }),
     );
@@ -76,6 +78,7 @@ describe("parseDesktopEntry", () => {
         ],
         name: "LibreOffice",
         preview: undefined,
+        windowClass: "libreoffice-startcenter",
         words: "libreoffice\noffice\n",
       }),
     );

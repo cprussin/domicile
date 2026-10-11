@@ -69,6 +69,33 @@ describe("clientIcons", () => {
     ).toStrictEqual(SVG);
   });
 
+  // An entry named for its launcher names its client with `StartupWMClass`.
+  it("finds an entry by its window class", async () => {
+    expect(
+      await iconFor(
+        {
+          "/share/applications/launch-slack.desktop": `${entry("chat")}StartupWMClass=Slack\n`,
+          "/share/icons/hicolor/scalable/apps/chat.svg": "svg",
+        },
+        "slack",
+      ),
+    ).toStrictEqual(SVG);
+  });
+
+  it("prefers the entry a client's app id names to one claiming it by class", async () => {
+    expect(
+      await iconFor(
+        {
+          "/share/applications/agenda.desktop": `${entry("agenda")}StartupWMClass=emacs\n`,
+          "/share/applications/emacs.desktop": entry("emacs"),
+          "/share/icons/hicolor/scalable/apps/agenda.svg": "agenda",
+          "/share/icons/hicolor/scalable/apps/emacs.svg": "svg",
+        },
+        "emacs",
+      ),
+    ).toStrictEqual(SVG);
+  });
+
   // Apps often install an icon named after their app id, entry or not.
   it("draws a client with no entry with the icon named after it", async () => {
     expect(

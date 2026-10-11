@@ -32,9 +32,10 @@ export const desktopClientIcons: ClientIcons = (domicile) =>
 /**
  * A lookup of client icons in the desktop's data directories, in `iconTheme`.
  *
- * Draws the icon of the entry the desktop id names, matched in any case, since
- * some clients' app ids differ from their entry's name in case. A client with
- * no entry gets the icon named after its desktop id, which many apps install.
+ * Draws the icon of the entry the desktop id names, or else of the entry whose
+ * `StartupWMClass` is the desktop id, matched in any case, since some clients'
+ * app ids differ from their entry's name in case. A client with no entry gets
+ * the icon named after its desktop id, which many apps install.
  */
 export const clientIcons = async (
   host: System,
@@ -44,9 +45,18 @@ export const clientIcons = async (
   return (await dataDirs(host)).andThenAsync(async (dirs) => {
     const icons = appIcons(host, dirs, ["apps"], { size: SIZE, theme });
     return (await installedApps(host, dirs)).map((installed) => {
-      const entries = new Map(
-        installed.map((entry) => [desktopIdOf(entry), entry]),
-      );
+      // Ids last, so an entry an app id names beats one claiming it by class.
+      const entries = new Map<string, DesktopEntry>([
+        ...installed.flatMap((entry): [string, DesktopEntry][] =>
+          entry.windowClass === undefined
+            ? []
+            : [[entry.windowClass.toLowerCase(), entry]],
+        ),
+        ...installed.map((entry): [string, DesktopEntry] => [
+          desktopIdOf(entry),
+          entry,
+        ]),
+      ]);
       return (desktopId) =>
         icons(entries.get(desktopId.toLowerCase())?.icon ?? desktopId);
     });
