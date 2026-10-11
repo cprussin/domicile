@@ -211,7 +211,10 @@ struct Client {
     wants_popup: bool,
     /// See [`crate::arguments::Arguments::popup_grab`].
     popup_grab: bool,
-    popup: Option<Popup>,
+    /// See [`crate::arguments::Arguments::sliding_menu`].
+    sliding_menu: bool,
+    /// The open popups, each over the one before it or the window.
+    popups: Vec<Popup>,
     /// Whether to open a bubble once the window is up. See
     /// [`crate::arguments::Arguments::bubble`].
     wants_bubble: bool,
@@ -314,7 +317,8 @@ struct CopyRole;
 /// from the window's.
 struct PopupRole;
 
-/// An open `--popup`: one surface drawn once in [`POPUP_COLOR`].
+/// An open `--popup` or `--sliding-menu`: one surface drawn once in
+/// [`POPUP_COLOR`].
 struct Popup {
     surface: wl_surface::WlSurface,
     xdg: xdg_surface::XdgSurface,
@@ -423,7 +427,8 @@ impl Client {
             title: asked.title.clone(),
             wants_popup: asked.popup,
             popup_grab: asked.popup_grab,
-            popup: None,
+            sliding_menu: asked.sliding_menu,
+            popups: Vec::new(),
             wants_bubble: asked.bubble,
             bubble: None,
             pointer_over: None,
@@ -998,19 +1003,54 @@ fn ask_for_focus_or_stop(
 }
 
 /// Open the `--popup` over the window, once.
-///
-/// Anchored by a positioner, with a first commit carrying no buffer.
 fn open_popup(client: &mut Client, handle: &QueueHandle<Client>) {
     if !client.wants_popup {
         return;
     }
     client.wants_popup = false;
-    let (Some(compositor), Some(wm_base), Some(window)) = (
+    let window = client
+        .window
+        .as_ref()
+        .expect("a popup opens once the window is mapped")
+        .xdg
+        .clone();
+    open_a_popup(client, handle, &window, false);
+}
+
+/// Open a `--sliding-menu` over the surface just pressed, the window or a
+/// menu.
+fn open_a_sliding_menu(client: &mut Client, handle: &QueueHandle<Client>) {
+    let pressed = client.pointer_over.as_ref();
+    let parent = client
+        .window
+        .iter()
+        .map(|window| (&window.surface, &window.xdg))
+        .chain(
+            client
+                .popups
+                .iter()
+                .map(|popup| (&popup.surface, &popup.xdg)),
+        )
+        .find(|(surface, _)| Some(*surface) == pressed)
+        .map(|(_, xdg)| xdg.clone())
+        .expect("a press is over the window or one of its menus");
+    open_a_popup(client, handle, &parent, true);
+}
+
+/// Open a [`POPUP`] over `parent`, sliding on both axes if `slides`.
+///
+/// Anchored by a positioner, with a first commit carrying no buffer.
+fn open_a_popup(
+    client: &mut Client,
+    handle: &QueueHandle<Client>,
+    parent: &xdg_surface::XdgSurface,
+    slides: bool,
+) {
+    let (Some(compositor), Some(wm_base)) = (
         client.globals.compositor.as_ref(),
         client.globals.wm_base.as_ref(),
-        client.window.as_ref(),
     ) else {
-        unreachable!("open() refuses a compositor without these, and made the window");
+        unreachable!("open() refuses a compositor without these");
     };
     let (x, y, width, height) = POPUP;
     let positioner = wm_base.create_positioner(handle, ());
@@ -1018,9 +1058,15 @@ fn open_popup(client: &mut Client, handle: &QueueHandle<Client>) {
     positioner.set_anchor_rect(x, y, 1, 1);
     positioner.set_anchor(xdg_positioner::Anchor::TopLeft);
     positioner.set_gravity(xdg_positioner::Gravity::BottomRight);
+    if slides {
+        positioner.set_constraint_adjustment(
+            xdg_positioner::ConstraintAdjustment::SlideX
+                | xdg_positioner::ConstraintAdjustment::SlideY,
+        );
+    }
     let surface = compositor.create_surface(handle, PopupRole);
     let xdg = wm_base.get_xdg_surface(&surface, handle, PopupRole);
-    let popup = xdg.get_popup(Some(&window.xdg), &positioner, handle, PopupRole);
+    let popup = xdg.get_popup(Some(parent), &positioner, handle, PopupRole);
     positioner.destroy();
     // Grab before the first commit, as xdg-shell requires. The serial
     // should be the press that opened the menu; there is none, and a
@@ -1034,7 +1080,7 @@ fn open_popup(client: &mut Client, handle: &QueueHandle<Client>) {
     // Traced with its surface, which input events name.
     crate::say!(popup.id(), "opened({})", surface.id());
     surface.commit();
-    client.popup = Some(Popup {
+    client.popups.push(Popup {
         surface,
         xdg,
         popup,
@@ -1042,16 +1088,21 @@ fn open_popup(client: &mut Client, handle: &QueueHandle<Client>) {
     });
 }
 
-/// Draw the popup's single frame, or exit with the error.
-fn draw_popup_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
+/// Draw the single frame of the popup `xdg` is, or exit with the error.
+fn draw_popup_or_stop(
+    client: &mut Client,
+    handle: &QueueHandle<Client>,
+    xdg: &xdg_surface::XdgSurface,
+) {
     let shm = client
         .globals
         .shm
         .as_ref()
         .expect("open() refuses a compositor without wl_shm");
     let popup = client
-        .popup
-        .as_mut()
+        .popups
+        .iter_mut()
+        .find(|popup| popup.xdg == *xdg)
         .expect("only a popup this client opened is configured");
     if popup.drawn.is_some() {
         return;
@@ -1330,7 +1381,7 @@ impl Dispatch<xdg_surface::XdgSurface, PopupRole> for Client {
     ) {
         if let xdg_surface::Event::Configure { serial } = event {
             xdg.ack_configure(serial);
-            draw_popup_or_stop(client, handle);
+            draw_popup_or_stop(client, handle, xdg);
         }
     }
 }
@@ -1357,11 +1408,15 @@ impl Dispatch<xdg_popup::XdgPopup, PopupRole> for Client {
             // Destroy a dismissed popup, as toolkits do.
             xdg_popup::Event::PopupDone => {
                 crate::say!(popup.id(), "popup_done()");
-                if let Some(open) = client.popup.take() {
-                    open.popup.destroy();
-                    open.xdg.destroy();
-                    open.surface.destroy();
-                }
+                let at = client
+                    .popups
+                    .iter()
+                    .position(|open| open.popup == *popup)
+                    .expect("only a popup this client has open is dismissed");
+                let open = client.popups.remove(at);
+                open.popup.destroy();
+                open.xdg.destroy();
+                open.surface.destroy();
             }
             _ => {}
         }
@@ -2031,7 +2086,7 @@ impl Dispatch<wl_pointer::WlPointer, ()> for Client {
         event: wl_pointer::Event,
         (): &(),
         _: &Connection,
-        _: &QueueHandle<Client>,
+        handle: &QueueHandle<Client>,
     ) {
         match event {
             wl_pointer::Event::Enter {
@@ -2090,8 +2145,12 @@ impl Dispatch<wl_pointer::WlPointer, ()> for Client {
                     .bubble
                     .as_ref()
                     .is_some_and(|bubble| client.pointer_over.as_ref() == Some(&bubble.surface));
-                if on_the_bubble && state == WEnum::Value(wl_pointer::ButtonState::Pressed) {
+                let pressed = state == WEnum::Value(wl_pointer::ButtonState::Pressed);
+                if on_the_bubble && pressed {
                     hide_bubble(client);
+                }
+                if client.sliding_menu && pressed {
+                    open_a_sliding_menu(client, handle);
                 }
             }
             _ => {}

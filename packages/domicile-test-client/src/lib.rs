@@ -28,7 +28,7 @@ pub fn run(command_line: impl IntoIterator<Item = OsString>) -> ExitCode {
         Err(err) => {
             eprintln!("domicile-test-client: {err}");
             eprintln!(
-                "usage: domicile-test-client [--title NAME] [--trace] [--translucent] [--follow-configure] [--ask-for-focus | --ask-for-focus-when-entered | --ask-for-focus-when-left] [--hold-the-screens-on] [--hold-the-screens-on-before-it-has-a-window] [--outlive-its-window] [--copy TEXT] [--copy-primary TEXT] [--paste] [--popup] [--popup-grab] [--bubble] [--min-size WxH] [--max-size WxH] [--buffer-transform TURN]"
+                "usage: domicile-test-client [--title NAME] [--trace] [--translucent] [--follow-configure] [--ask-for-focus | --ask-for-focus-when-entered | --ask-for-focus-when-left] [--hold-the-screens-on] [--hold-the-screens-on-before-it-has-a-window] [--outlive-its-window] [--copy TEXT] [--copy-primary TEXT] [--paste] [--popup] [--popup-grab] [--sliding-menu] [--bubble] [--min-size WxH] [--max-size WxH] [--buffer-transform TURN]"
             );
             return ExitCode::from(2);
         }

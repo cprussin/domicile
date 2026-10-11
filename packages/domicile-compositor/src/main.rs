@@ -49,7 +49,7 @@ use smithay::reexports::{
         Client, Display, DisplayHandle, Resource as _, WEnum,
     },
 };
-use smithay::utils::{Serial, Transform, SERIAL_COUNTER};
+use smithay::utils::{Logical, Point, Rectangle, Serial, Transform, SERIAL_COUNTER};
 use smithay::wayland::viewporter::{ViewportCachedState, ViewporterState};
 use smithay::wayland::{
     buffer::BufferHandler,
@@ -4321,6 +4321,51 @@ impl DomicileCompositor {
         self.report_running_apps(focused.as_ref());
     }
 
+    /// Where `positioner` puts `popup`, adjusted as its
+    /// `constraint_adjustment` allows to stay on its window's screen
+    /// ([`Screens::screen_of`]).
+    ///
+    /// As given when there is no screen to keep it on: it has no parent yet (a
+    /// layer surface's popup), or the page has not put its window on a screen.
+    fn kept_on_screen(
+        &self,
+        popup: &PopupSurface,
+        positioner: PositionerState,
+    ) -> Rectangle<i32, Logical> {
+        let placed = popup.get_parent_surface().and_then(|parent| {
+            let window = self.bounds_of(&self.window_under_menus(&parent))?;
+            Some((parent, window, self.screens.screen_of(window)?))
+        });
+        match placed {
+            None => positioner.get_geometry(),
+            Some((parent, window, screen)) => {
+                // The positioner works relative to the parent's geometry.
+                let parent_at =
+                    Point::from((window.min.x, window.min.y)) + self.menu_offset(&parent).to_f64();
+                let target = Rectangle::<f64, Logical>::new(
+                    Point::from((screen.min.x, screen.min.y)) - parent_at,
+                    (screen.max.x - screen.min.x, screen.max.y - screen.min.y).into(),
+                );
+                positioner.get_unconstrained_geometry(target.to_i32_round())
+            }
+        }
+    }
+
+    /// Where `surface` is relative to the window under its menus: the sum of
+    /// their positions, or zero for a surface that is not a menu.
+    fn menu_offset(&self, surface: &WlSurface) -> Point<i32, Logical> {
+        self.xdg_shell_state
+            .popup_surfaces()
+            .iter()
+            .find(|popup| popup.wl_surface() == surface)
+            .map_or_else(Point::default, |popup| {
+                let at = popup.with_pending_state(|state| state.geometry.loc);
+                popup
+                    .get_parent_surface()
+                    .map_or(at, |parent| at + self.menu_offset(&parent))
+            })
+    }
+
     /// The window a menu (or nested menu) was opened over, or `surface` itself
     /// if it is not a menu.
     ///
@@ -4631,11 +4676,9 @@ impl XdgShellHandler for DomicileCompositor {
     fn new_popup(&mut self, surface: PopupSurface, positioner: PositionerState) {
         // Configure immediately: a popup cannot attach a buffer until
         // configured, and an unconfigured menu hangs the client silently.
-        //
-        // The positioner's geometry is used as given, without constraining it
-        // to the output.
+        let geometry = self.kept_on_screen(&surface, positioner);
         surface.with_pending_state(|state| {
-            state.geometry = positioner.get_geometry();
+            state.geometry = geometry;
             state.positioner = positioner;
         });
         if let Err(err) = surface.send_configure() {
@@ -4653,8 +4696,9 @@ impl XdgShellHandler for DomicileCompositor {
         positioner: PositionerState,
         token: u32,
     ) {
+        let geometry = self.kept_on_screen(&surface, positioner);
         surface.with_pending_state(|state| {
-            state.geometry = positioner.get_geometry();
+            state.geometry = geometry;
             state.positioner = positioner;
         });
         surface.send_repositioned(token);

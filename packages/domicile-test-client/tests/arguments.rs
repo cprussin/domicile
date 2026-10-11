@@ -299,6 +299,16 @@ fn a_menu_can_be_asked_to_take_the_keyboard_and_pointer() {
 }
 
 #[test]
+fn a_client_can_be_asked_to_open_sliding_menus_on_presses() {
+    assert!(
+        given(&["--sliding-menu"])
+            .expect("a client whose menus slide")
+            .sliding_menu
+    );
+    assert!(!given(&[]).unwrap().sliding_menu);
+}
+
+#[test]
 fn a_client_can_be_given_limits_on_its_size() {
     // Limits an Electron app with a minimum window size sends (these are
     // Bitwarden's).
