@@ -9,8 +9,14 @@ DomicileTrayItem::DomicileTrayItem(const String& id,
                                    const String& title,
                                    const String& icon,
                                    const String& bus,
-                                   const String& menu)
-    : id_(id), title_(title), icon_(icon), bus_(bus), menu_(menu) {}
+                                   const String& menu,
+                                   bool item_is_menu)
+    : id_(id),
+      title_(title),
+      icon_(icon),
+      bus_(bus),
+      menu_(menu),
+      item_is_menu_(item_is_menu) {}
 
 DomicileTrayItem::~DomicileTrayItem() = default;
 

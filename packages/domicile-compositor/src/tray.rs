@@ -329,6 +329,10 @@ fn parse(mut properties: HashMap<String, OwnedValue>) -> Properties {
         .and_then(|value| OwnedObjectPath::try_from(value).ok())
         .map(|path| path.to_string())
         .unwrap_or_default();
+    let item_is_menu = properties
+        .remove("ItemIsMenu")
+        .and_then(|value| bool::try_from(value).ok())
+        .unwrap_or_default();
     let mut pixmaps = |name: &str| {
         properties
             .remove(name)
@@ -367,6 +371,7 @@ fn parse(mut properties: HashMap<String, OwnedValue>) -> Properties {
         attention_pixmaps,
         icon_theme_path,
         menu,
+        item_is_menu,
     }
 }
 
@@ -499,6 +504,7 @@ mod tests {
                 "Menu",
                 Value::from(ObjectPath::try_from("/MenuBar").expect("a path")),
             ),
+            ("ItemIsMenu", Value::from(true)),
             ("IconPixmap", Value::from(pixmaps.clone())),
             ("AttentionIconPixmap", Value::from(pixmaps)),
             (
@@ -530,6 +536,7 @@ mod tests {
                 attention_pixmaps: vec![pixel],
                 icon_theme_path: "/opt/nm/icons".into(),
                 menu: "/MenuBar".into(),
+                item_is_menu: true,
             }
         );
     }
@@ -555,6 +562,7 @@ mod tests {
                 attention_pixmaps: Vec::new(),
                 icon_theme_path: String::new(),
                 menu: String::new(),
+                item_is_menu: false,
             }
         );
     }

@@ -13,6 +13,7 @@ const sync: DomicileTrayItem = {
   bus: ":1.9",
   icon: "data:image/png;base64,iVBORw0KGgo=",
   id: "syncthing",
+  itemIsMenu: false,
   menu: "",
   title: "Syncthing",
 };

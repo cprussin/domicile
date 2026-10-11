@@ -167,10 +167,6 @@ Understood and not scheduled.
   toplevel sources, cursor sessions or dmabufs; `wf-recorder` is slow.
   [PORTALS.md](docs/PORTALS.md).
 
-### System tray
-
-- **Left click never opens a dbusmenu,** for items that set `ItemIsMenu`.
-
 ### Shell reload
 
 - **Hot-swapping the shell reloads the page,** so a shell loses state kept in

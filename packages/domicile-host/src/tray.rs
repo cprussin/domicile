@@ -79,6 +79,8 @@ pub struct Properties {
     pub icon_theme_path: String,
     /// The object path of its `com.canonical.dbusmenu` menu.
     pub menu: String,
+    /// Its `ItemIsMenu`: it only has a menu.
+    pub item_is_menu: bool,
 }
 
 /// The bus name and object path for a `RegisterStatusNotifierItem(service)`
@@ -260,6 +262,7 @@ pub fn item(
         icon: picture(&properties, icons),
         bus: bus.to_string(),
         menu: (!["", NO_MENU].contains(&properties.menu.as_str())).then(|| properties.menu.clone()),
+        item_is_menu: properties.item_is_menu,
         title: [properties.tooltip, properties.title, properties.id]
             .into_iter()
             .find(|said| !said.is_empty())

@@ -34,8 +34,9 @@ type Props = {
  *
  * Clicks go to the application: primary is `Activate`, middle
  * `SecondaryActivate`. Secondary opens the application's dbusmenu under the
- * icon, or sends `ContextMenu` for an application without one. The page's
- * context menu is suppressed so it does not cover the application's.
+ * icon, or sends `ContextMenu` for an application without one; so does primary
+ * for an item that is only a menu (`ItemIsMenu`). The page's context menu is
+ * suppressed so it does not cover the application's.
  *
  * An icon without an image shows the first letter of its title, so it can still
  * be clicked.
@@ -43,13 +44,21 @@ type Props = {
 export const TrayIcon = ({
   domicile,
   icons = desktopMenuIcons,
-  item: { bus, icon, id, menu, title },
+  item: { bus, icon, id, itemIsMenu, menu, title },
   watch = watchMenu,
 }: Props) => {
   // Where the open menu hangs from, or `undefined` while it is closed.
   const [at, setAt] = useState<Point | undefined>(undefined);
   const opened = useTrayMenu(domicile, bus, menu, at !== undefined, watch);
   const pictures = useMenuIcons(domicile, opened?.menu, icons);
+  const showMenu = (button: HTMLElement) => {
+    if (menu === "") {
+      domicile.activateTrayItem(id, "context");
+    } else {
+      const box = button.getBoundingClientRect();
+      setAt({ x: box.left, y: box.bottom });
+    }
+  };
   return (
     <>
       <Button
@@ -59,17 +68,16 @@ export const TrayIcon = ({
             domicile.activateTrayItem(id, "secondary");
           }
         }}
-        onClick={() => {
-          domicile.activateTrayItem(id, "primary");
+        onClick={(event) => {
+          if (itemIsMenu) {
+            showMenu(event.currentTarget);
+          } else {
+            domicile.activateTrayItem(id, "primary");
+          }
         }}
         onContextMenu={(event) => {
           event.preventDefault();
-          if (menu === "") {
-            domicile.activateTrayItem(id, "context");
-          } else {
-            const box = event.currentTarget.getBoundingClientRect();
-            setAt({ x: box.left, y: box.bottom });
-          }
+          showMenu(event.currentTarget);
         }}
         size="sm"
         variant="ghost"

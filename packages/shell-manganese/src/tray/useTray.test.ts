@@ -22,6 +22,7 @@ const icon = (id: string): DomicileTrayItem => ({
   bus: ":1.9",
   icon: "",
   id,
+  itemIsMenu: false,
   menu: "",
   title: id,
 });

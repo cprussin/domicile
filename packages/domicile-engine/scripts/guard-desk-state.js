@@ -26,9 +26,10 @@ export const Shell = (_root, desktop) => {
       locked: host.locked,
       shiftKey: host.shiftKey,
       theme: host.theme,
-      tray: host.tray?.map(({ bus, id, menu, title }) => ({
+      tray: host.tray?.map(({ bus, id, itemIsMenu, menu, title }) => ({
         bus,
         id,
+        itemIsMenu,
         menu,
         title,
       })),
