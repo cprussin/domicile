@@ -215,7 +215,7 @@ Calls (compositor → engine):
 | `domicile_surface_import(surface, dmabuf)` → `DomicileBufferId` | `zwp_linux_dmabuf_v1` |
 | `domicile_surface_submit_transformed(surface, buffer, crop, damage, box, transform)` | `wl_surface.commit` with `xdg_surface.set_window_geometry` and `wl_surface.set_buffer_transform`, shown at the box of the acked configure |
 | `domicile_displays_configure(layout, count)` | output configuration |
-| `domicile_clipboard_set(clipboard, text, length)` | `wl_data_offer.receive`. The compositor sends the selection text it already read. |
+| `domicile_clipboard_set_items(clipboard, items, count)` | `wl_data_offer.receive`. The compositor sends the selection it already read: its text and its image, each a `DomicileClipboardItem`. `domicile_clipboard_set(clipboard, text, length)` is the text-only form an older compositor calls. |
 | `domicile_display_capture_start(engine, display, width, height, max_fps)`, `_resize`, `_stop` | none: a screen cast of a monitor (see [Display capture](#display-capture)) |
 | `domicile_captured_frame_release(engine, capture, frame)` | none: the compositor is done reading a captured frame |
 
@@ -226,7 +226,7 @@ Callbacks (engine → compositor):
 | `released(surface, buffer)` | `wl_buffer.release` |
 | `configure(surface, width, height)`, `configure_at(…, scale)`, `configure_box(…, box)` | `xdg_toplevel.configure` |
 | `displays(displays, count)` | `wl_output`. Primary first, never empty. |
-| `copied(clipboard, text, length)` | `wl_data_device.set_selection` for a copy made in a page |
+| `copied_items(clipboard, items, count)` | `wl_data_device.set_selection` for a copy made in a page: its text and its image. `copied(clipboard, text, length)` is the text-only form, called when `copied_items` is unset. |
 | `captured(capture, frame, record)`, `capture_ended(capture)` | none: a monitor's frame for a screen cast, and the browser ending the capture |
 
 - Only `crop` fills the `<app>` box, so client-side shadows are not drawn. An

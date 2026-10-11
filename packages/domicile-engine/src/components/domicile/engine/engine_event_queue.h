@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/files/scoped_file.h"
 #include "base/synchronization/lock.h"
 #include "base/thread_annotations.h"
@@ -104,10 +105,10 @@ struct EngineEvent {
   uint64_t buffer = 0;
   // kDisplays. Never empty: the browser does not send an empty list.
   std::vector<EngineDisplay> displays;
-  // kCopied: the DomicileClipboard and the copied text. Empty when the copy
-  // was not text.
+  // kCopied: the DomicileClipboard and each type the copy can be pasted as,
+  // by MIME type. Empty when the copy was neither text nor an image.
   uint32_t clipboard = 0;
-  std::string copied;
+  base::flat_map<std::string, std::vector<uint8_t>> copied;
   // kCaptured and kCaptureEnded: the DomicileCaptureId.
   uint32_t capture = 0;
   // kCaptured: the frame's id, which releases it, and the frame.
