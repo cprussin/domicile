@@ -41,6 +41,7 @@ const endProps = {
   onMove: nothing,
   rect: END,
   targets: {
+    floats: [],
     screens: [],
     tabs: [],
     windows: [{ frame: GROUP_FRAME, id: "a" }, OTHER],

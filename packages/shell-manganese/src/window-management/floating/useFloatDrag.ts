@@ -2,7 +2,8 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { useRef, useState } from "react";
 
 import type { Rect } from "../rect";
-import type { Corner } from "../tiled/aim";
+import { sameRect } from "../rect";
+import type { Aim, Corner } from "../tiled/aim";
 import { cornerOf } from "../tiled/aim";
 import type { Float } from "./float";
 import { rectOf, stretched } from "./float";
@@ -14,6 +15,7 @@ import { rectOf, stretched } from "./float";
  * unmounts.
  */
 type Drag = {
+  aimer: Aimer | undefined;
   /** The box when the drag started; the pointer delta applies to it. */
   box: Float;
   /** The corner being dragged, or `undefined` for a move. */
@@ -27,6 +29,17 @@ type Drag = {
 /** The secondary button, which resizes without a second modifier. */
 const SECONDARY_BUTTON = 2;
 
+/**
+ * Where a moved float would land other than where it is dragged, such as
+ * beside another group's tab, and what to do when it is let go there.
+ */
+export type Aimer = {
+  at: (x: number, y: number) => Aim | undefined;
+  /** Reports where it would land, for drawing. */
+  onAim: (aim: Aim | undefined) => void;
+  onDropOn: (aim: Aim) => void;
+};
+
 export type FloatDrag = {
   /**
    * The running drag, if any, with the corner it resizes from (`undefined`
@@ -39,6 +52,8 @@ export type FloatDrag = {
 };
 
 type Options = {
+  /** Where a move would land the float instead; see {@link Aimer}. */
+  aimer?: Aimer | undefined;
   /**
    * The window to drag, or `undefined` for a tiled window's title bar.
    *
@@ -76,6 +91,7 @@ type Options = {
  * missed before the effect runs.
  */
 export const useFloatDrag = ({
+  aimer,
   float,
   onDrop,
   onGrab,
@@ -109,6 +125,7 @@ export const useFloatDrag = ({
         running.current?.();
         running.current = follow(
           {
+            aimer,
             box: float,
             corner,
             from: { x: event.clientX, y: event.clientY },
@@ -136,11 +153,19 @@ export const useFloatDrag = ({
  * and a second drop would raise whatever is underneath.
  */
 const follow = (drag: Drag, ended: () => void): (() => void) => {
+  // Mutable: the aim changes with every move, and the release reads it.
+  let aim: Aim | undefined;
   const moved = (event: PointerEvent) => {
     const dx = event.clientX - drag.from.x;
     const dy = event.clientY - drag.from.y;
     if (drag.corner === undefined) {
       drag.onMove(drag.box.x + dx, drag.box.y + dy);
+      const now = drag.aimer?.at(event.clientX, event.clientY);
+      // Report only changes, to avoid a redraw on every move.
+      if (!aimsAlike(now, aim)) {
+        drag.aimer?.onAim(now);
+      }
+      aim = now;
     } else {
       drag.onResize(rectOf(stretched(drag.box, drag.corner, dx, dy)));
     }
@@ -153,6 +178,10 @@ const follow = (drag: Drag, ended: () => void): (() => void) => {
   const released = () => {
     stop();
     ended();
+    if (aim !== undefined) {
+      drag.aimer?.onAim(undefined);
+      drag.aimer?.onDropOn(aim);
+    }
     drag.onDrop();
   };
   window.addEventListener("pointermove", moved);
@@ -160,3 +189,8 @@ const follow = (drag: Drag, ended: () => void): (() => void) => {
   window.addEventListener("pointercancel", released);
   return stop;
 };
+
+const aimsAlike = (one: Aim | undefined, other: Aim | undefined): boolean =>
+  one === undefined || other === undefined
+    ? one === other
+    : sameRect(one.rect, other.rect);

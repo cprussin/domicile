@@ -518,6 +518,21 @@ const stripEnd = (container: HTMLElement): Element => {
   }
 };
 
+/**
+ * The empty end of the strip whose group last focused `id`, which drags the
+ * group.
+ */
+const stripEndOf = (container: HTMLElement, id: string): Element => {
+  const end = container.querySelector(
+    `[data-group-handle][data-window="${id}"]`,
+  );
+  if (end === null) {
+    throw new Error(`test: no strip with an empty end holds ${id}`);
+  } else {
+    return end;
+  }
+};
+
 /** A floating window's right border: its rightmost vertical strip. */
 const rightBorder = (container: HTMLElement): HTMLElement => {
   const upright = [
@@ -1495,6 +1510,81 @@ describe("Shell", () => {
       expect(tabOrder(container)).toEqual(["app:two", "app:three", "app:one"]);
       // Still one group: only its open tab's window shows.
       expect(windowsOnScreen(container)).toHaveLength(1);
+    });
+
+    describe("between a floating group and a tiled one", () => {
+      /** The pointer at the middle of `id`'s tab. */
+      const middleOf = (container: HTMLElement, id: string) => {
+        const tab = barFor(container, id);
+        return {
+          clientX:
+            Number.parseFloat(tab.style.insetInlineStart) +
+            Number.parseFloat(tab.style.inlineSize) / 4,
+          clientY: Number.parseFloat(tab.style.insetBlockStart) + 15,
+        };
+      };
+
+      const dragTab = (container: HTMLElement, id: string, onto: string) => {
+        const from = middleOf(container, id);
+        const to = middleOf(container, onto);
+        fireEvent.pointerDown(barFor(container, id), from);
+        fireEvent.pointerMove(window, to);
+        fireEvent.pointerUp(window, to);
+      };
+
+      /** Tiled "one"; floating "two" and `rest` as its tabs, clear of it. */
+      const layered = (...rest: readonly string[]) => {
+        const rendered = renderShell();
+        clientAppears("one");
+        clientAppears("two");
+        press("Tab", true);
+        for (const id of rest) {
+          clientAppears(id);
+        }
+        const { container } = rendered;
+        // Off the tiled group, by the float's strip's empty end.
+        const focused = rest.at(-1) ?? "two";
+        fireEvent.pointerDown(stripEndOf(container, `app:${focused}`), {
+          clientX: 1000,
+          clientY: 60,
+        });
+        fireEvent.pointerMove(window, { clientX: 1400, clientY: 460 });
+        fireEvent.pointerUp(window, { clientX: 1400, clientY: 460 });
+        return container;
+      };
+
+      it("pulls a tab out of a floating group into a tiled one", () => {
+        const container = layered("three");
+
+        dragTab(container, "app:three", "app:one");
+
+        expect(tabOrder(container)).toEqual([
+          "app:three",
+          "app:one",
+          "app:two",
+        ]);
+        expect(windowsOnScreen(container)).toEqual(["two", "three"]);
+      });
+
+      it("drags a tiled tab into a floating group", () => {
+        const container = layered();
+
+        dragTab(container, "app:one", "app:two");
+
+        expect(windowsOnScreen(container)).toEqual(["one"]);
+        expect(
+          Number.parseFloat(barFor(container, "app:one").style.insetBlockStart),
+        ).toBeGreaterThan(400);
+      });
+
+      it("lets go of a lone float beside a tab it is dragged onto", () => {
+        const container = layered();
+
+        dragTab(container, "app:two", "app:one");
+
+        expect(tabOrder(container)).toEqual(["app:two", "app:one"]);
+        expect(container.querySelectorAll("[data-shadow]")).toHaveLength(0);
+      });
     });
 
     it("breaks a tab out of its group into a split when dragged over the group", () => {
@@ -2704,11 +2794,11 @@ describe("Shell", () => {
       expect(parts()).toHaveLength(3);
       const before = parts().map((part) => part.style.insetInlineStart);
 
-      fireEvent.pointerDown(barFor(container, "app:two"), {
+      fireEvent.pointerDown(stripEndOf(container, "app:two"), {
         clientX: 600,
-        clientY: 300,
+        clientY: 60,
       });
-      fireEvent.pointerMove(window, { clientX: 700, clientY: 340 });
+      fireEvent.pointerMove(window, { clientX: 700, clientY: 100 });
 
       expect(parts().map((part) => part.style.insetInlineStart)).not.toEqual(
         before,

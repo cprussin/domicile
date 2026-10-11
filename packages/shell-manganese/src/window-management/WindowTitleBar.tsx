@@ -7,10 +7,12 @@ import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
 import { TitleBar } from "./TitleBar";
 import type { Aim, DropTargets } from "./tiled/aim";
+import { tabAimAt } from "./tiled/aim";
 import type { TileDrag } from "./tiled/useTileDrag";
 import { useTileDrag } from "./tiled/useTileDrag";
 import type { TitleFocus } from "./title-focus";
 import type { StripPlace, TabLayout } from "./tree/frames";
+import { windowsIn } from "./tree/node";
 import type { WindowMotion } from "./window-motion";
 
 /** The primary button, as `PointerEvent.button` numbers it. */
@@ -70,10 +72,11 @@ type Props = {
  * One component for both, so toggling floating does not remount the bar and
  * make it jump while the contents ease to the new box.
  *
- * A floating window's bar drags it without the modifier; a bar never resizes.
- * A tiled window's bar or tab drags like a modifier drag (`useTileDrag`), with
- * the primary button only, onto any screen. A middle click closes the window. A
- * fullscreen window's bar does not drag.
+ * A lone floating window's bar drags it without the modifier, and lets it go
+ * beside a tab it is over; a bar never resizes. A tiled window's bar or tab,
+ * and a tab of a floating group of several, drags like a modifier drag
+ * (`useTileDrag`), with the primary button only, onto any screen. A middle
+ * click closes the window. A fullscreen window's bar does not drag.
  */
 export const WindowTitleBar = ({
   depth,
@@ -104,6 +107,11 @@ export const WindowTitleBar = ({
 }: Props) => {
   // Both hooks run for every bar, since hooks cannot be conditional.
   const floatDrag = useFloatDrag({
+    aimer: {
+      at: (x, y) => tabAimAt(targets, [window], x, y),
+      onAim,
+      onDropOn,
+    },
     float,
     onDrop,
     onGrab,
@@ -145,7 +153,7 @@ export const WindowTitleBar = ({
       tabbed={tabbed}
       title={title}
       window={window}
-      {...dragOf(float, fullscreen, floatDrag, tileDrag)}
+      {...dragOf(float, fullscreen, floatDrag, tileDrag, strip !== undefined)}
     />
   );
 };
@@ -161,19 +169,24 @@ const doesNotStretch = () => {
 };
 
 /**
- * The drag handlers for a bar: a float's, a tiled window's (primary button
- * only), or none for a fullscreen window.
+ * The drag handlers for a bar: a lone float's, which moves it; a tiled
+ * window's or a tab pulled out of a floating group (primary button only); or
+ * none for a fullscreen window.
+ *
+ * As in a browser, a tab of a floating group of several moves only itself, and
+ * the strip's empty end moves the group (see `StripEnd`).
  */
 const dragOf = (
   float: Float | undefined,
   fullscreen: boolean,
   { drag: _floatDrag, ...floatHandlers }: FloatDrag,
   tileDrag: TileDrag,
+  isTab: boolean,
 ): {
   onContextMenu?: (event: { preventDefault: () => void }) => void;
   onPointerDown?: (event: ReactPointerEvent<HTMLElement>) => void;
 } => {
-  if (float !== undefined) {
+  if (float !== undefined && !(isTab && windowsIn(float.root).length > 1)) {
     return floatHandlers;
   } else if (fullscreen) {
     return {};

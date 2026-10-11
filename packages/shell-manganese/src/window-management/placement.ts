@@ -8,6 +8,7 @@ import type { Float } from "./floating/float";
 import { floatHolds, onScreen, rectOf } from "./floating/float";
 import { floatingGapOf, INNER_GAP, tiledAreaOf } from "./gaps";
 import type { Rect } from "./rect";
+import { spanning } from "./rect";
 import type {
   FocusBox,
   Frame,
@@ -295,15 +296,3 @@ const placed = (
   surface,
   tabbed,
 });
-
-/** The smallest box holding both. */
-const spanning = (bar: Rect, surface: Rect): Rect => {
-  const x = Math.min(bar.x, surface.x);
-  const y = Math.min(bar.y, surface.y);
-  return {
-    height: Math.max(bar.y + bar.height, surface.y + surface.height) - y,
-    width: Math.max(bar.x + bar.width, surface.x + surface.width) - x,
-    x,
-    y,
-  };
-};

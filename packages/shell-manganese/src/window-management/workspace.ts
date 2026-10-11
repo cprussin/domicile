@@ -632,64 +632,104 @@ export const nodeHeld = (workspace: Workspace, held: NodeRef): Workspace => {
 };
 
 /**
- * A tiled window or group dragged onto a window or its group and let go: onto
- * its `edge`, or its middle where that is `undefined` — see `tree/drop.ts`.
+ * A window or group dragged onto a window or its group and let go: onto its
+ * `edge`, or its middle where that is `undefined` — see `tree/drop.ts`. Either
+ * may be tiled or floating. Focus goes with the moved node, and a float it
+ * lands in comes to the front. A float left empty goes.
  */
-export const tiledDropped = (
+export const nodeDropped = (
   workspace: Workspace,
   moving: NodeRef,
   target: NodeRef,
   edge: Direction | undefined,
-): Workspace => ({
-  ...workspace,
-  floatFocus: undefined,
-  tiling: droppedOn(workspace.tiling, moving, target, edge),
-});
+): Workspace => {
+  const from = floatOn(workspace, moving.id);
+  const to = floatOn(workspace, target.id);
+  const node = nodeIn(workspace, from, moving);
+  if (from === to) {
+    return landedIn(
+      inLayerOf(workspace, from, (tiling) =>
+        droppedOn(tiling, moving, target, edge),
+      ),
+      to,
+      node,
+    );
+  } else if (edge === undefined) {
+    // A swap: each takes the other's place, in the other's layer.
+    const swapped = inLayerOf(workspace, from, (tiling) =>
+      tradedFor(tiling, moving, target.id),
+    );
+    return landedIn(
+      inLayerOf(swapped, to, (tiling) =>
+        arrivedOn(tiling, node, target, undefined),
+      ),
+      to,
+      node,
+    );
+  } else {
+    return nodeArrived(nodeLifted(workspace, moving).rest, node, target, edge);
+  }
+};
 
 /**
- * The tiled node `moving` names, taken out to drop on another workspace, and
- * the workspace without it.
+ * The node `moving` names, tiled or floating, taken out to drop elsewhere, and
+ * the workspace without it. A float left empty goes.
  */
-export const tiledLifted = (
+export const nodeLifted = (
   workspace: Workspace,
   moving: NodeRef,
 ): { node: LayoutNode; rest: Workspace } => {
-  const root = tiledRootOf(workspace, moving);
+  const from = floatOn(workspace, moving.id);
+  const root = rootOfLayer(workspace, from, moving);
   const path = pathToRef(root, moving);
+  const rest = inLayerOf(workspace, from, () => removedAt(root, path));
   return {
     node: nodeAt(root, path),
-    rest: { ...workspace, tiling: removedAt(root, path) },
+    rest:
+      from === undefined
+        ? rest
+        : {
+            ...rest,
+            floatFocus:
+              rest.floatFocus !== undefined &&
+              windowsOn(rest).includes(rest.floatFocus)
+                ? rest.floatFocus
+                : focusIn(rest.floats.at(-1)),
+          },
   };
 };
 
 /**
- * A tiled window or group dragged in from another workspace and dropped on
- * `target` — see `arrivedOn`.
+ * `node`, dragged in from elsewhere, dropped on `target`'s `edge`, or in its
+ * place when `edge` is `undefined` — see `arrivedOn`. The target may be tiled
+ * or floating.
  */
-export const tiledArrived = (
+export const nodeArrived = (
   workspace: Workspace,
   node: LayoutNode,
   target: NodeRef,
   edge: Direction | undefined,
-): Workspace => ({
-  ...workspace,
-  floatFocus: undefined,
-  floats: onWindows(workspace.floats),
-  tiling: arrivedOn(workspace.tiling, node, target, edge),
-});
+): Workspace => {
+  const to = floatOn(workspace, target.id);
+  return landedIn(
+    inLayerOf(workspace, to, (tiling) => arrivedOn(tiling, node, target, edge)),
+    to,
+    node,
+  );
+};
 
 /**
- * The tiled node `moving` names swapped for `by`, from another workspace,
- * which it was dropped in the middle of.
+ * The node `moving` names, tiled or floating, swapped for `by`, from another
+ * workspace, which it was dropped in the middle of.
  */
-export const tiledTraded = (
+export const nodeTraded = (
   workspace: Workspace,
   moving: NodeRef,
   by: string,
-): Workspace => ({
-  ...workspace,
-  tiling: tradedFor(workspace.tiling, moving, by),
-});
+): Workspace =>
+  inLayerOf(workspace, floatOn(workspace, moving.id), (tiling) =>
+    tradedFor(tiling, moving, by),
+  );
 
 /**
  * A tiled window's `edge` dragged `by` pixels, on a workspace laid out in
@@ -928,4 +968,66 @@ const tiledRootOf = (workspace: Workspace, ref: NodeRef): LayoutNode => {
   } else {
     return root;
   }
+};
+
+/**
+ * The workspace with `into` applied to the tiling, or to `float`'s tree. A
+ * float `into` empties goes.
+ */
+const inLayerOf = (
+  workspace: Workspace,
+  float: Float | undefined,
+  into: (tiling: Tiling) => Tiling,
+): Workspace => {
+  if (float === undefined) {
+    return { ...workspace, tiling: into(workspace.tiling) };
+  } else {
+    const { depth, root } = into(float);
+    return {
+      ...workspace,
+      floats: workspace.floats.flatMap((found) => {
+        if (found === float) {
+          return root === undefined ? [] : [{ ...float, depth, root }];
+        } else {
+          return [found];
+        }
+      }),
+    };
+  }
+};
+
+/** The tiling's root, or `float`'s. Throws for an empty tiling. */
+const rootOfLayer = (
+  workspace: Workspace,
+  float: Float | undefined,
+  ref: NodeRef,
+): LayoutNode => float?.root ?? tiledRootOf(workspace, ref);
+
+/** The node `ref` names in the tiling or in `float`. */
+const nodeIn = (
+  workspace: Workspace,
+  float: Float | undefined,
+  ref: NodeRef,
+): LayoutNode => {
+  const root = rootOfLayer(workspace, float, ref);
+  return nodeAt(root, pathToRef(root, ref));
+};
+
+/**
+ * Gives the keyboard to `node`, just dropped in the tiling or in the float
+ * that was `float`, which comes to the front.
+ */
+const landedIn = (
+  workspace: Workspace,
+  float: Float | undefined,
+  node: LayoutNode,
+): Workspace => {
+  const id = focusedWindowIn(node);
+  return float === undefined
+    ? {
+        ...workspace,
+        floatFocus: undefined,
+        floats: onWindows(workspace.floats),
+      }
+    : reached(workspace, id);
 };

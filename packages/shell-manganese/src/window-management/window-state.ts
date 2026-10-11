@@ -48,8 +48,12 @@ import {
   fullscreenToggled,
   holds,
   modeToggled,
+  nodeArrived,
+  nodeDropped,
   nodeHeld,
+  nodeLifted,
   nodeTiledIn,
+  nodeTraded,
   opened,
   openedFloating,
   pageFullscreened,
@@ -61,11 +65,7 @@ import {
   sentOff,
   shown,
   splitFlipped,
-  tiledArrived,
-  tiledDropped,
-  tiledLifted,
   tiledStretched,
-  tiledTraded,
   windowGrown,
   windowMoved,
   windowsOn,
@@ -995,7 +995,7 @@ const reduceAction = (
       );
     }
     case WindowActionKind.GroupDroppedOn: {
-      return dropTiled(state, action.group, action.target, action.edge);
+      return dropNode(state, action.group, action.target, action.edge);
     }
     case WindowActionKind.GroupDroppedOnScreen: {
       return dropOnScreen(state, action.group, action.screen);
@@ -1099,7 +1099,7 @@ const reduceAction = (
       return { ...state, draggingId: undefined };
     }
     case WindowActionKind.WindowDroppedOn: {
-      return dropTiled(
+      return dropNode(
         state,
         { id: action.id, up: 0 },
         action.target,
@@ -1669,10 +1669,11 @@ const floatDragged = (
 };
 
 /**
- * A tiled window or group dropped on `target`, on its own workspace or another
- * screen's. Focus goes with it. No-op if either closed during the drag.
+ * A window or group, tiled or floating, dropped on `target`, on its own
+ * workspace or another screen's. Focus goes with it. No-op if either closed
+ * during the drag.
  */
-const dropTiled = (
+const dropNode = (
   state: WindowState,
   moving: NodeRef,
   target: NodeRef,
@@ -1685,23 +1686,23 @@ const dropTiled = (
     return state;
   } else if (from.name === to.name) {
     return onWorkspace(state, from.name, (workspace) =>
-      tiledDropped(workspace, moving, target, edge),
+      nodeDropped(workspace, moving, target, edge),
     );
   } else {
-    const { node, rest } = tiledLifted(from, moving);
+    const { node, rest } = nodeLifted(from, moving);
     // A middle drop swaps, so the target takes its place.
     const left = onWorkspace(state, from.name, (workspace) =>
-      edge === undefined ? tiledTraded(workspace, moving, target.id) : rest,
+      edge === undefined ? nodeTraded(workspace, moving, target.id) : rest,
     );
     return onWorkspace({ ...left, focused: screen }, to.name, (workspace) =>
-      tiledArrived(workspace, node, target, edge),
+      nodeArrived(workspace, node, target, edge),
     );
   }
 };
 
 /**
- * A tiled window or group dropped on a screen with nothing tiled on it. Focus
- * goes with it. No-op if it closed during the drag.
+ * A window or group, tiled or floating, dropped on a screen with nothing tiled
+ * on it. Focus goes with it. No-op if it closed during the drag.
  */
 const dropOnScreen = (
   state: WindowState,
@@ -1712,7 +1713,7 @@ const dropOnScreen = (
   if (from === undefined) {
     return state;
   } else {
-    const { node, rest } = tiledLifted(from, moving);
+    const { node, rest } = nodeLifted(from, moving);
     return onWorkspace(
       onWorkspace({ ...state, focused: screen }, from.name, () => rest),
       currentOn(state, screen),

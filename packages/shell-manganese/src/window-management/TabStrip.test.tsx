@@ -35,7 +35,7 @@ const stripProps = {
   onMove: nothing,
   onNewTab: nothing,
   selected: false,
-  targets: { screens: [], tabs: [], windows: [] },
+  targets: { floats: [], screens: [], tabs: [], windows: [] },
 } as const;
 
 const stripOf = (container: HTMLElement): HTMLElement => {

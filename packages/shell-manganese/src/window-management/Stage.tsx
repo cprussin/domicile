@@ -31,11 +31,18 @@ import type { Spot } from "./pointer-warp";
 import type { Popup } from "./popup";
 import { popupsOver } from "./popup";
 import type { Rect } from "./rect";
+import { spanning } from "./rect";
 import type { Restack } from "./restacking";
 import { SettleHandoffs } from "./SettleHandoffs";
 import { TabStrip } from "./TabStrip";
 import { TitleBar } from "./TitleBar";
-import type { Aim, DropTargets, TabTarget, Target } from "./tiled/aim";
+import type {
+  Aim,
+  DropTargets,
+  FloatCover,
+  TabTarget,
+  Target,
+} from "./tiled/aim";
 import { bordersOf } from "./tiled/borders";
 import { DropIndicator } from "./tiled/DropIndicator";
 import { TileBorder } from "./tiled/TileBorder";
@@ -655,6 +662,7 @@ const deskOf = (screens: readonly StageScreen[]): Desk => {
   );
   return {
     dropTargets: {
+      floats: floatCovers(screens),
       screens: emptyScreens(screens),
       tabs: tabTargets(screens),
       windows: targets,
@@ -1260,18 +1268,52 @@ const tiledTargets = (placements: Screenful["placements"]): readonly Target[] =>
     .map(({ frame, id }) => ({ frame, id }));
 
 /**
- * The tiled windows' tabs, hidden ones too, which a tiled window can be
- * dropped beside. Excludes fullscreen screens, whose tiling is hidden.
+ * Every window's tab, tiled or floating, hidden ones too, which a window can
+ * be dropped beside. Excludes fullscreen screens, whose windows are hidden.
  */
 const tabTargets = (screens: readonly StageScreen[]): readonly TabTarget[] =>
+  shownPlacements(screens).flatMap(({ bar, depth, id, strip, tabbed }) =>
+    strip !== undefined && tabbed !== undefined
+      ? [{ at: strip.at, depth, id, rect: bar, strip: strip.box, tabbed }]
+      : [],
+  );
+
+/**
+ * Each float's box, spanning its windows' frames, which hides the targets
+ * behind it. Excludes fullscreen screens, as {@link tabTargets} does.
+ */
+const floatCovers = (screens: readonly StageScreen[]): readonly FloatCover[] =>
   screens
     .filter(({ fullscreen }) => fullscreen === undefined)
-    .flatMap(({ screenful }) => screenful.placements)
-    .flatMap(({ bar, depth, id, strip, tabbed }) =>
-      depth === TILED && strip !== undefined && tabbed !== undefined
-        ? [{ at: strip.at, id, rect: bar, strip: strip.box, tabbed }]
-        : [],
+    .flatMap(({ floats, screenful }) =>
+      floats.flatMap((float) => {
+        const windows = windowsIn(float.root);
+        const inside = screenful.placements.filter(({ id }) =>
+          windows.includes(id),
+        );
+        const [first, ...rest] = inside;
+        return first === undefined
+          ? []
+          : [
+              {
+                depth: first.depth,
+                frame: rest.reduce(
+                  (box, { frame }) => spanning(box, frame),
+                  first.frame,
+                ),
+                windows,
+              },
+            ];
+      }),
     );
+
+/** The placements of screens with nothing fullscreen. */
+const shownPlacements = (
+  screens: readonly StageScreen[],
+): readonly Placement[] =>
+  screens
+    .filter(({ fullscreen }) => fullscreen === undefined)
+    .flatMap(({ screenful }) => screenful.placements);
 
 /**
  * The screens with no tiled window to drop on, which a dropped window fills.

@@ -61,3 +61,15 @@ export const sameRect = (one: Rect, other: Rect): boolean =>
   one.y === other.y &&
   one.width === other.width &&
   one.height === other.height;
+
+/** The smallest box holding both. */
+export const spanning = (one: Rect, other: Rect): Rect => {
+  const x = Math.min(one.x, other.x);
+  const y = Math.min(one.y, other.y);
+  return {
+    height: Math.max(one.y + one.height, other.y + other.height) - y,
+    width: Math.max(one.x + one.width, other.x + other.width) - x,
+    x,
+    y,
+  };
+};

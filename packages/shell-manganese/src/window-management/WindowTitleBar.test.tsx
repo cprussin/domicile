@@ -52,6 +52,7 @@ const tabProps = {
   },
   tabbed: Layout.Tabbed,
   targets: {
+    floats: [],
     screens: [],
     tabs: [],
     windows: [{ frame: FRAME, id: "a" }, OTHER],
@@ -175,6 +176,78 @@ describe("WindowTitleBar", () => {
       );
       fireEvent.pointerDown(bar(container), { button: 0, pointerId: 1 });
       expect(onGrab).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("a drag of a floating window's tab", () => {
+    /** A float at (100, 100) holding `windows` as tabs. */
+    const floatOf = (...windows: readonly string[]) => ({
+      depth: 1,
+      height: 400,
+      root: LayoutNode.Container(
+        Layout.Tabbed,
+        windows.map((id) => LayoutNode.Window(id)),
+      ),
+      scratchpad: false,
+      width: 600,
+      x: 100,
+      y: 100,
+    });
+
+    /** A tiled group's tab "t" at (700, 0), to drop on. */
+    const TILED_TAB = {
+      at: 0,
+      depth: 0,
+      id: "t",
+      rect: { height: 30, width: 200, x: 700, y: 0 },
+      strip: { height: 30, width: 600, x: 700, y: 0 },
+      tabbed: Layout.Tabbed as const,
+    };
+
+    const dragged = (float: ReturnType<typeof floatOf>) => {
+      const onDropOn = mock((_aim: Aim) => undefined);
+      const onMove = mock((_x: number, _y: number) => undefined);
+      const { container } = render(
+        <WindowTitleBar
+          {...tabProps}
+          float={float}
+          onDropOn={onDropOn}
+          onMove={onMove}
+          targets={{ ...tabProps.targets, tabs: [TILED_TAB] }}
+        />,
+      );
+      fireEvent.pointerDown(bar(container), {
+        button: 0,
+        clientX: 110,
+        clientY: 110,
+        pointerId: 1,
+      });
+      fireEvent.pointerMove(window, {
+        clientX: 720,
+        clientY: 10,
+        pointerId: 1,
+      });
+      fireEvent.pointerUp(window, { pointerId: 1 });
+      return { onDropOn, onMove };
+    };
+
+    // As in a browser: the strip's empty end moves the group.
+    it("pulls the tab out of a group of several", () => {
+      const { onDropOn, onMove } = dragged(floatOf("a", "b"));
+
+      expect(onMove).not.toHaveBeenCalled();
+      expect(onDropOn).toHaveBeenCalledWith(
+        Aim.Window("t", Direction.Left, { ...TILED_TAB.rect, width: 100 }),
+      );
+    });
+
+    it("moves a lone float, and puts it beside a tab it is let go over", () => {
+      const { onDropOn, onMove } = dragged(floatOf("a"));
+
+      expect(onMove).toHaveBeenCalledWith(710, 0);
+      expect(onDropOn).toHaveBeenCalledWith(
+        Aim.Window("t", Direction.Left, { ...TILED_TAB.rect, width: 100 }),
+      );
     });
   });
 });
