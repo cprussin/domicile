@@ -145,15 +145,17 @@ describe("useNotifications", () => {
   });
 
   describe("asking the compositor", () => {
-    it("clears and presses through the host", () => {
+    it("clears, presses and replies through the host", () => {
       const { host, result } = mounted();
 
       result.current.dismiss([7, 8]);
       result.current.invoke(7, "reply");
+      result.current.reply(7, "On my way");
 
       expect(host.asked).toEqual([
         ["dismissNotifications", [7, 8]],
         ["invokeNotificationAction", 7, "reply"],
+        ["replyToNotification", 7, "On my way"],
       ]);
     });
   });

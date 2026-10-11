@@ -263,6 +263,7 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         | ClientRequest::ActivateTrayItem { .. }
         | ClientRequest::DismissNotifications { .. }
         | ClientRequest::InvokeNotificationAction { .. }
+        | ClientRequest::ReplyToNotification { .. }
         | ClientRequest::AnswerPortalRequest { .. }
         // An application, not a person.
         | ClientRequest::HeldAwakeByThePortal { .. }
@@ -879,6 +880,13 @@ mod tests {
                 ClientRequest::InvokeNotificationAction {
                     id: 7,
                     action: "default".into(),
+                },
+            ),
+            (
+                "the shell replying to a notification",
+                ClientRequest::ReplyToNotification {
+                    id: 7,
+                    text: "On my way".into(),
                 },
             ),
             (

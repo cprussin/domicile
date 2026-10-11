@@ -22,6 +22,9 @@ const card = (
       onClose={() => {
         pressed.push("closed");
       }}
+      onReply={(text) => {
+        pressed.push(`replied ${text}`);
+      }}
     />,
   );
 
@@ -97,6 +100,32 @@ describe("NotificationCard", () => {
       fireEvent.click(screen.getByRole("button", { name: "Mute" }));
 
       expect(pressed).toEqual(["mute"]);
+    });
+
+    it("replies from its reply field, which is no button", () => {
+      const pressed: string[] = [];
+      card(
+        {
+          actions: [
+            { key: "inline-reply", label: "Reply" },
+            { key: "mute", label: "Mute" },
+          ],
+          clickable: true,
+        },
+        pressed,
+      );
+
+      expect(
+        screen.queryByRole("button", { name: "Reply" }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+      fireEvent.change(screen.getByRole("textbox", { name: "Reply" }), {
+        target: { value: "On my way" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+      expect(pressed).toEqual(["replied On my way"]);
+      expect(screen.getByRole("textbox", { name: "Reply" })).toHaveValue("");
     });
 
     it("closes, and only closes", () => {

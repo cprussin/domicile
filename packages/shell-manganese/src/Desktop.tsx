@@ -387,6 +387,7 @@ export const Desktop = ({
         manager={toasts}
         now={now}
         onAction={notifications.invoke}
+        onReply={notifications.reply}
         screen={windows.focused}
         shown={!lock.locked}
       />
@@ -402,6 +403,7 @@ export const Desktop = ({
             setNotificationsOpen(false);
           }
         }}
+        onReply={notifications.reply}
         open={notificationsOpen && !lock.locked}
         screen={notificationsOn}
       />

@@ -101,12 +101,15 @@ domicile.addEventListener("notificationschanged", () => {
   draw(domicile.notifications ?? []);
 });
 domicile.invokeNotificationAction(id, "default"); // a click (if clickable), or an action's key
+domicile.replyToNotification(id, "On my way");    // the text of an "inline-reply" action's field
 domicile.dismissNotifications([id]);              // clear; the app is told
 ```
 
 - The shell decides which are new. The first list is history.
 - The shell decides how long a toast stays up. A notification stays in the
   list until cleared.
+- An action with key `"inline-reply"` (`INLINE_REPLY_NOTIFICATION_ACTION`) is
+  a reply field, not a button. Its `label` labels the field.
 - Design: [NOTIFICATIONS.md](/docs/architecture/NOTIFICATIONS.md).
   Manganese's: [`notifications/`](/packages/shell-manganese/src/notifications/).
 

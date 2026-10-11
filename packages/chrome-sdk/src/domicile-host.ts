@@ -428,6 +428,12 @@ export type DomicileHost = {
    */
   invokeNotificationAction(id: number, action: string): void;
   /**
+   * Send `text` from a notification's reply field: the field its
+   * "inline-reply" action stands for. The application hears it, if it offered
+   * the field.
+   */
+  replyToNotification(id: number, text: string): void;
+  /**
    * Which window has the keyboard: the compositor's seat, and where the keys
    * this page hears are sent. focusChrome() takes it back to the page.
    */
@@ -688,9 +694,13 @@ export type DomicileNotification = {
  * DomicileNotification's array; see DomicileTrayItem.
  */
 export type DomicileNotificationAction = {
-  /** The id DomicileHost.invokeNotificationAction() takes. */
+  /**
+   * The id DomicileHost.invokeNotificationAction() takes. "inline-reply" is a
+   * reply field rather than a button: DomicileHost.replyToNotification() sends
+   * what is typed in it.
+   */
   readonly key: string;
-  /** The button's label. */
+  /** The button's label, or the reply field's. */
   readonly label: string;
 };
 

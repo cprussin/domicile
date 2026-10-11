@@ -21,6 +21,8 @@ type Props = {
   onDismiss: (ids: readonly number[]) => void;
   /** Press `key` on `id`. */
   onAction: (id: number, key: string) => void;
+  /** Send `text` from `id`'s reply field. */
+  onReply: (id: number, text: string) => void;
 };
 
 /**
@@ -36,6 +38,7 @@ export const NotificationDrawer = ({
   onAction,
   onDismiss,
   onOpenChange,
+  onReply,
   open,
   screen,
 }: Props) => (
@@ -89,6 +92,9 @@ export const NotificationDrawer = ({
               }}
               onClose={() => {
                 onDismiss([notification.id]);
+              }}
+              onReply={(text) => {
+                onReply(notification.id, text);
               }}
             />
           </li>

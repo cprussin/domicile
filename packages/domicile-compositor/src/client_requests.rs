@@ -133,6 +133,12 @@ pub enum ClientRequest {
         id: u32,
         action: String,
     },
+    /// The shell replied to a notification. Routed here so a locked desktop
+    /// can refuse it.
+    ReplyToNotification {
+        id: u32,
+        text: String,
+    },
     /// The shell answered a portal dialog. Routed here so a locked desktop can
     /// refuse it.
     AnswerPortalRequest {
@@ -322,6 +328,11 @@ impl DomicileCompositor {
             ClientRequest::InvokeNotificationAction { id, action } => {
                 if let Some(server) = self.hub.notifications.get() {
                     server.invoke(id, action);
+                }
+            }
+            ClientRequest::ReplyToNotification { id, text } => {
+                if let Some(server) = self.hub.notifications.get() {
+                    server.reply(id, text);
                 }
             }
             ClientRequest::AnswerPortalRequest { id, answer } => {

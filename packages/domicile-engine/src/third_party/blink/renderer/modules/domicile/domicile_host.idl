@@ -76,6 +76,12 @@
   [CallWith=ScriptState, RaisesException] undefined invokeNotificationAction(
       unsigned long id, DOMString action);
 
+  // Send `text` from a notification's reply field: the field its
+  // "inline-reply" action stands for. The application hears it, if it offered
+  // the field.
+  [CallWith=ScriptState, RaisesException] undefined replyToNotification(
+      unsigned long id, DOMString text);
+
   // Which window has the keyboard: the compositor's seat, and where the keys
   // this page hears are sent. focusChrome() takes it back to the page.
   [CallWith=ScriptState, RaisesException] undefined focusApp(DOMString appId);

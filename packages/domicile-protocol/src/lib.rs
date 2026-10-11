@@ -215,6 +215,13 @@ pub enum ChromeMessage {
     /// `ActionInvoked`, then the notification closes, as other servers do.
     InvokeNotificationAction { id: u32, action: String },
 
+    /// The user typed `text` into a notification's reply field.
+    ///
+    /// Only a notification whose actions include `inline-reply` has one. The
+    /// application receives `NotificationReplied`, then the notification
+    /// closes, as for an action.
+    ReplyToNotification { id: u32, text: String },
+
     /// A call on the system: a file, a directory, a watch or a process.
     ///
     /// `id` is the page's, and names the call in every answer. A watch or a
@@ -1760,7 +1767,9 @@ pub struct Notification {
     pub icon: Option<String>,
     pub urgency: Urgency,
     /// Its buttons, in the application's order. The `default` action is
-    /// excluded; see [`Notification::clickable`].
+    /// excluded; see [`Notification::clickable`]. An `inline-reply` action is
+    /// a reply field labeled `label`, answered with
+    /// [`ChromeMessage::ReplyToNotification`].
     pub actions: Vec<NotificationAction>,
     /// Whether the application offered a `default` action.
     pub clickable: bool,
@@ -1879,6 +1888,19 @@ mod wire_names {
             ChromeMessage::InvokeNotificationAction {
                 id: 7,
                 action: "reply".to_string(),
+            }
+        );
+    }
+
+    /// The exact JSON the SDK sends for an inline reply.
+    #[test]
+    fn the_notification_reply_the_sdk_sends_parses() {
+        let sent = r#"{"type":"reply_to_notification","id":7,"text":"On my way"}"#;
+        assert_eq!(
+            serde_json::from_str::<ChromeMessage>(sent).expect("the SDK's own wire form"),
+            ChromeMessage::ReplyToNotification {
+                id: 7,
+                text: "On my way".to_string(),
             }
         );
     }
