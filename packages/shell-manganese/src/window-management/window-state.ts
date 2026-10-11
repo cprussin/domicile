@@ -561,11 +561,11 @@ export const WindowAction = {
 
   /**
    * The user dropped the tiled group `group`, dragged by its tab strip, on
-   * window `target`. See {@link WindowAction.WindowDroppedOn}.
+   * `target`. See {@link WindowAction.WindowDroppedOn}.
    */
   GroupDroppedOn: (
     group: NodeRef,
-    target: string,
+    target: NodeRef,
     edge: Direction | undefined,
   ) => ({
     edge,
@@ -730,14 +730,14 @@ export const WindowAction = {
   WindowDropped: () => ({ kind: WindowActionKind.WindowDropped as const }),
 
   /**
-   * The user dropped a tiled window on `target`'s `edge`, or its middle when
-   * `edge` is `undefined`.
+   * The user dropped a tiled window on the `edge` of the node `target` names,
+   * or its middle when `edge` is `undefined`.
    *
    * Sent alongside {@link WindowAction.WindowDropped}, which ends the drag.
    */
   WindowDroppedOn: (
     id: string,
-    target: string,
+    target: NodeRef,
     edge: Direction | undefined,
   ) => ({
     edge,
@@ -1675,11 +1675,11 @@ const floatDragged = (
 const dropTiled = (
   state: WindowState,
   moving: NodeRef,
-  target: string,
+  target: NodeRef,
   edge: Direction | undefined,
 ): WindowState => {
   const from = workspaceHolding(state, moving.id);
-  const to = workspaceHolding(state, target);
+  const to = workspaceHolding(state, target.id);
   const screen = to === undefined ? undefined : screenShowing(state, to.name);
   if (from === undefined || to === undefined || screen === undefined) {
     return state;
@@ -1691,7 +1691,7 @@ const dropTiled = (
     const { node, rest } = tiledLifted(from, moving);
     // A middle drop swaps, so the target takes its place.
     const left = onWorkspace(state, from.name, (workspace) =>
-      edge === undefined ? tiledTraded(workspace, moving, target) : rest,
+      edge === undefined ? tiledTraded(workspace, moving, target.id) : rest,
     );
     return onWorkspace({ ...left, focused: screen }, to.name, (workspace) =>
       tiledArrived(workspace, node, target, edge),

@@ -40,6 +40,7 @@ export type DropTargets = {
 };
 
 export enum AimKind {
+  Group,
   Screen,
   Strip,
   Window,
@@ -50,6 +51,13 @@ export enum AimKind {
  * drawing.
  */
 export const Aim = {
+  /** Goes on the `edge` of the tab group window `id` is in. */
+  Group: (id: string, edge: Direction, rect: Rect) => ({
+    edge,
+    id,
+    kind: AimKind.Group as const,
+    rect,
+  }),
   /** Fills the empty screen `name`. */
   Screen: (name: string, rect: Rect) => ({
     kind: AimKind.Screen as const,
@@ -126,7 +134,7 @@ export const aimAt = (
   } else if (dragged.includes(target.id)) {
     return aimOutOfGroup(tabs, dragged, target.frame, x, y);
   } else {
-    return aimAtWindow(target, x, y);
+    return aimAtWindow(target, sharesStrip(tabs, target.id), x, y);
   }
 };
 
@@ -139,9 +147,24 @@ export const cornerOf = (frame: Rect, x: number, y: number): Corner => ({
   vertical: y > frame.y + frame.height / 2 ? Direction.Down : Direction.Up,
 });
 
-const aimAtWindow = ({ frame, id }: Target, x: number, y: number): Aim => {
+/**
+ * Aims at `target`'s edge or middle. The edge of a window that shares its tab
+ * strip, `tabbed`, is its group's, as in sway.
+ */
+const aimAtWindow = (
+  { frame, id }: Target,
+  tabbed: boolean,
+  x: number,
+  y: number,
+): Aim => {
   const edge = edgeNear(frame, x, y);
-  return Aim.Window(id, edge, edge === undefined ? frame : halfOf(frame, edge));
+  if (edge === undefined) {
+    return Aim.Window(id, edge, frame);
+  } else {
+    return tabbed
+      ? Aim.Group(id, edge, halfOf(frame, edge))
+      : Aim.Window(id, edge, halfOf(frame, edge));
+  }
 };
 
 /**
@@ -170,8 +193,17 @@ const aimOutOfGroup = (
     return undefined;
   } else {
     const edge = edgeNearest(frame, x, y);
-    return Aim.Window(other.id, edge, halfOf(frame, edge));
+    return Aim.Group(other.id, edge, halfOf(frame, edge));
   }
+};
+
+/** Whether window `id` is a tab with others in its strip. */
+const sharesStrip = (tabs: readonly TabTarget[], id: string): boolean => {
+  const tab = tabs.find((found) => found.id === id);
+  return (
+    tab !== undefined &&
+    tabs.some((other) => other.id !== id && sameRect(other.strip, tab.strip))
+  );
 };
 
 /** Aims at `tab`, along the strip if `dragged` is a tab in the same one. */
