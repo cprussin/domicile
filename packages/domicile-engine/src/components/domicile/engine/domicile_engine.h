@@ -202,11 +202,26 @@ typedef struct DomicileDisplayLayout {
   int32_t desk_height;
 } DomicileDisplayLayout;
 
+// How a frame reached the screen, for `presented`. The values are
+// wp_presentation_feedback.kind's.
+typedef uint32_t DomicilePresentedFlags;
+
+#define DOMICILE_PRESENTED_VSYNC 0x1u
+#define DOMICILE_PRESENTED_HW_CLOCK 0x2u
+#define DOMICILE_PRESENTED_HW_COMPLETION 0x4u
+#define DOMICILE_PRESENTED_ZERO_COPY 0x8u
+// Never shown: a newer frame replaced it first, or its surface was not drawn.
+// No other flag is set with it.
+#define DOMICILE_PRESENTED_DISCARDED 0x80000000u
+
 // Events from the browser, each mapped to a Wayland request:
 //
 //   configure  xdg_toplevel.configure — the page's layout box changed
 //   released   wl_buffer.release      — viz is done sampling a buffer, so the
 //                                       client may draw into it again
+//   frame_done wl_surface.frame       — viz took a frame and will take the next
+//   presented  wp_presentation_feedback — a frame reached the screen, or never
+//                                       will
 //   displays   wl_output              — the whole display list, primary first
 //   copied     wl_data_device.set_selection — something was copied in a page
 //   captured   a frame of a display capture, for a screen cast
@@ -283,7 +298,31 @@ typedef struct DomicileEngineCallbacks {
                        DomicileClipboard clipboard,
                        const DomicileClipboardItem* items,
                        uint32_t count);
+  // Viz acked `frame` of `surface`: it drew or dropped it, and takes the next.
+  //
+  // `frame` counts the surface's submits, from 1, including any the engine
+  // could not send to viz. Each submit gets one call, in order.
+  void (*frame_done)(void* user_data,
+                     DomicileSurfaceId surface,
+                     uint64_t frame);
+  // `frame` of `surface`, numbered as in `frame_done`, reached the screen at
+  // `time_ns` on CLOCK_MONOTONIC. `refresh_ns` is the display's frame interval,
+  // zero if unknown. With DOMICILE_PRESENTED_DISCARDED, both are zero.
+  //
+  // Viz reports a frame on its next BeginFrame, so this follows the frame's
+  // `frame_done`. A frame that never reached viz is reported discarded at
+  // once.
+  void (*presented)(void* user_data,
+                    DomicileSurfaceId surface,
+                    uint64_t frame,
+                    int64_t time_ns,
+                    int64_t refresh_ns,
+                    DomicilePresentedFlags flags);
 } DomicileEngineCallbacks;
+
+// Returns nonzero. Exists so a compositor can tell an engine that calls
+// `frame_done` and `presented` from an older one that ignores them.
+DOMICILE_ENGINE_EXPORT int domicile_engine_reports_frames(void);
 
 // Connects to the browser's mojo socket. Returns null on failure, and the
 // library logs why.

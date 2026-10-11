@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -29,10 +30,12 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread.h"
+#include "base/time/time.h"
 #include "components/domicile/engine/engine_event_queue.h"
 #include "components/domicile/engine/domicile_engine_spike.h"
 #include "components/domicile/engine/surface_alpha.h"
 #include "components/domicile/engine/surface_crop.h"
+#include "components/domicile/engine/surface_frames.h"
 #include "components/domicile/engine/surface_transform.h"
 #include "components/domicile/mojom/control_channel.mojom.h"
 #include "components/domicile/mojom/frame_sink_broker.mojom.h"
@@ -64,6 +67,7 @@
 #include "ui/gfx/gpu_memory_buffer_handle.h"
 #include "ui/gfx/geometry/transform.h"
 #include "ui/gfx/native_pixmap_handle.h"
+#include "ui/gfx/presentation_feedback.h"
 
 namespace domicile {
 namespace {
@@ -174,6 +178,16 @@ class Surface : public mojom::SurfaceObserver,
               domicile::BufferTransform transform) {
     auto iter = buffers_.find(buffer_id);
     if (iter == buffers_.end() || boxes_.empty()) {
+      // Viz never sees it, so nothing else reports it, and the compositor
+      // counts every submit.
+      const uint64_t number = frames_.Dropped();
+      queue_->Push({.type = EngineEvent::Type::kFrameDone,
+                    .surface = id_,
+                    .frame = number});
+      queue_->Push({.type = EngineEvent::Type::kPresented,
+                    .surface = id_,
+                    .frame = number,
+                    .flags = DOMICILE_PRESENTED_DISCARDED});
       return false;
     }
     // Viz refuses a frame at an older LocalSurfaceId than one it has, so a
@@ -220,6 +234,7 @@ class Surface : public mojom::SurfaceObserver,
         viz::BeginFrameAck::CreateManualAckWithDamage();
     frame.metadata.device_scale_factor = 1.f;
     frame.metadata.frame_token = ++next_frame_token_;
+    frames_.Sent(frame.metadata.frame_token);
     frame.resource_list.push_back(iter->second.resource);
     frame.render_pass_list.push_back(std::move(pass));
 
@@ -259,19 +274,36 @@ class Surface : public mojom::SurfaceObserver,
   //
   // Frames follow the client's commits, so this sink never asks for
   // BeginFrames and the compositor is not woken each vsync. Viz still sends
-  // one to deliver a frame's presentation timing. Viz then expects damage from
-  // this surface (SurfaceDamageExpected), so an unanswered one makes the
-  // display wait for this window until the deadline. Releases do not depend on
-  // it: viz returns them with a frame's ack or in ReclaimResources.
+  // one to deliver a frame's presentation timing, which goes to the
+  // compositor as `presented`. Viz then expects damage from this surface
+  // (SurfaceDamageExpected), so an unanswered one makes the display wait for
+  // this window until the deadline. Releases do not depend on it: viz returns
+  // them with a frame's ack or in ReclaimResources.
   void OnBeginFrame(const viz::BeginFrameArgs& args,
                     const viz::FrameTimingDetailsMap& timing_details,
                     std::vector<viz::ReturnedResource> resources) override {
     Release(resources);
+    for (const auto& [frame_token, details] : timing_details) {
+      const std::optional<uint64_t> number = frames_.Presented(frame_token);
+      if (number.has_value()) {
+        Present(*number, details.presentation_feedback);
+      }
+    }
     sink_->DidNotProduceFrame(viz::BeginFrameAck(args, /*has_damage=*/false));
   }
+  // Viz takes the next frame once it acks this one, so the compositor answers
+  // the client's wl_surface.frame then.
   void DidReceiveCompositorFrameAck(
       std::vector<viz::ReturnedResource> resources) override {
     Release(resources);
+    const std::optional<uint64_t> number = frames_.Acked();
+    if (!number.has_value()) {
+      LOG(ERROR) << "domicile: viz acked a frame this window never sent";
+      return;
+    }
+    queue_->Push({.type = EngineEvent::Type::kFrameDone,
+                  .surface = id_,
+                  .frame = *number});
   }
   void ReclaimResources(
       std::vector<viz::ReturnedResource> resources) override {
@@ -281,6 +313,22 @@ class Surface : public mojom::SurfaceObserver,
   void OnCompositorFrameTransitionDirectiveProcessed(
       uint32_t sequence_id) override {}
   void OnSurfaceEvicted(const viz::LocalSurfaceId& local_surface_id) override {}
+
+  // Forwards a frame's presentation feedback as wp_presentation_feedback.
+  // TimeTicks counts CLOCK_MONOTONIC on Linux, so it crosses as is.
+  void Present(uint64_t number, const gfx::PresentationFeedback& feedback) {
+    const uint32_t flags = PresentedFlagsOf(feedback.flags);
+    const bool shown = flags != DOMICILE_PRESENTED_DISCARDED;
+    queue_->Push(
+        {.type = EngineEvent::Type::kPresented,
+         .surface = id_,
+         .frame = number,
+         .time_ns = shown ? (feedback.timestamp - base::TimeTicks())
+                                .InNanoseconds()
+                          : 0,
+         .refresh_ns = shown ? feedback.interval.InNanoseconds() : 0,
+         .flags = flags});
+  }
 
   // Forwards returned resources as wl_buffer.release, so the client may draw
   // into the buffer again.
@@ -324,6 +372,7 @@ class Surface : public mojom::SurfaceObserver,
   base::flat_map<viz::ResourceId, uint64_t> resource_to_buffer_;
   viz::ResourceId next_resource_id_{1};
   viz::FrameTokenGenerator next_frame_token_;
+  SurfaceFrames frames_;
 };
 
 // The planes DomicileCapturedFrame carries.
@@ -699,6 +748,19 @@ struct DomicileEngine {
         case domicile::EngineEvent::Type::kCaptureEnded:
           if (callbacks_.capture_ended) {
             callbacks_.capture_ended(callbacks_.user_data, event.capture);
+          }
+          break;
+        case domicile::EngineEvent::Type::kFrameDone:
+          if (callbacks_.frame_done) {
+            callbacks_.frame_done(callbacks_.user_data, event.surface,
+                                  event.frame);
+          }
+          break;
+        case domicile::EngineEvent::Type::kPresented:
+          if (callbacks_.presented) {
+            callbacks_.presented(callbacks_.user_data, event.surface,
+                                 event.frame, event.time_ns, event.refresh_ns,
+                                 event.flags);
           }
           break;
       }
@@ -1231,6 +1293,10 @@ DomicileEngine* domicile_engine_connect(const char* socket_path,
 
 void domicile_engine_destroy(DomicileEngine* engine) {
   delete engine;
+}
+
+int domicile_engine_reports_frames(void) {
+  return 1;
 }
 
 int domicile_engine_fd(DomicileEngine* engine) {
