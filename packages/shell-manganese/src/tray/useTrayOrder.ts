@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   ORDER_KEY,
@@ -56,5 +56,6 @@ export const useTrayOrder = (shown: readonly string[]): TrayOrder => {
     [order],
   );
 
-  return { move, order };
+  // Memoized, since every bar takes it.
+  return useMemo(() => ({ move, order }), [move, order]);
 };

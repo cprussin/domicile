@@ -1,4 +1,4 @@
-import { describe, expect, it, mock } from "bun:test";
+import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { act, fireEvent, renderHook } from "@testing-library/react";
 
 import { Direction } from "../direction";
@@ -31,7 +31,38 @@ const dragging = (edge: Direction) => {
   return calls;
 };
 
+afterEach(() => {
+  mock.restore();
+});
+
 describe("useBorderDrag", () => {
+  // Every tiled border has the hook, so only a drag listens to the page.
+  it("listens for the pointer only while a drag runs", () => {
+    const added = spyOn(window, "addEventListener");
+    const removed = spyOn(window, "removeEventListener");
+    const moves = (spy: typeof added) =>
+      spy.mock.calls.filter(([type]) => type === "pointermove").length;
+    const { result } = renderHook(() =>
+      useBorderDrag({
+        edge: Direction.Right,
+        onDrop: () => undefined,
+        onGrab: () => undefined,
+        onStretch: () => undefined,
+      }),
+    );
+    expect(moves(added)).toBe(0);
+
+    act(() => {
+      result.current.onPointerDown(press(100, 100));
+    });
+    expect(moves(added)).toBe(1);
+
+    act(() => {
+      fireEvent.pointerUp(window, { pointerId: 1 });
+    });
+    expect(moves(removed)).toBe(1);
+  });
+
   it("grabs the window as soon as its border is pressed", () => {
     const calls = dragging(Direction.Right);
     expect(calls.onGrab).toHaveBeenCalledTimes(1);

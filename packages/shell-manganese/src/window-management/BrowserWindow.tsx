@@ -30,7 +30,6 @@ import { useSitePermissions } from "./browser/useSitePermissions";
 import { zoomedIn, zoomedOut } from "./browser/zoom-steps";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
-import { useFindResult } from "./useFindResult";
 import { useHistoryAvailability } from "./useHistoryAvailability";
 import { useLoading } from "./useLoading";
 import { useLowered } from "./useLowered";
@@ -40,7 +39,6 @@ import { useReclaimFocus } from "./useReclaimFocus";
 import type { Settler } from "./useSettling";
 import { useSettling } from "./useSettling";
 import { useShownPage } from "./useShownPage";
-import { useTargetUrl } from "./useTargetUrl";
 import { useZoom } from "./useZoom";
 import type { WindowMotion } from "./window-motion";
 import { isLeaving, isMoving } from "./window-motion";
@@ -233,7 +231,6 @@ export const BrowserWindow = ({
   const { canGoBack, canGoForward } = useHistoryAvailability(view);
   const loading = useLoading(view);
   const zoom = useZoom(view);
-  const targetUrl = useTargetUrl(view);
   // A fullscreen page, such as a video, fills the window without its bar.
   const pageFullscreen = usePageFullscreen(view, fullscreen, onPageFullscreen);
   // Zoom count; each change re-shows the zoom indicator (see `ZoomIndicator`).
@@ -254,7 +251,6 @@ export const BrowserWindow = ({
   // Whether the find bar is open, and its input.
   const [finding, setFinding] = useState(false);
   const [findBox, setFindBox] = useState<HTMLInputElement | null>(null);
-  const found = useFindResult(view);
   // The context menu the page asked for. The engine draws none.
   const [menu, dismissMenu] = usePageMenu(view);
   // The page's site's permissions, and the request it is waiting on. The
@@ -596,10 +592,9 @@ export const BrowserWindow = ({
           // See `window`.
           window={window}
         />
-        <LinkTarget url={targetUrl} />
+        <LinkTarget view={view} />
         {finding && (
           <FindBar
-            found={found}
             onClose={stopFinding}
             onFind={(text, backward) => {
               withView((loaded) => {
@@ -607,6 +602,7 @@ export const BrowserWindow = ({
               });
             }}
             ref={setFindBox}
+            view={view}
           />
         )}
         {menu !== undefined && (

@@ -4,7 +4,7 @@ import {
 } from "@domicile-desktop/component-library/DisplayProvider";
 import type { Theme } from "@domicile-desktop/component-library/theme-core";
 import { THEMES } from "@domicile-desktop/component-library/theme-core";
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 
 import { css } from "../../styled-system/css";
 import { token } from "../../styled-system/tokens";
@@ -27,7 +27,12 @@ type Props = {
    * on every screen in place of the rotation.
    */
   picture?: string | undefined;
+  /** The theme shown, whose rotation advances. */
+  theme: Theme;
 };
+
+/** Each rotation's first step. */
+const STARTS: Readonly<Record<Theme, number>> = { dark: 0, light: 0 };
 
 /**
  * The desktop wallpaper: a photograph rotation that changes every minute, or
@@ -40,21 +45,24 @@ type Props = {
  *   `data-screen`.
  * - Every copy shows the same step, so the screens change together.
  * - Both themes' rotations stay mounted and CSS shows one, so a theme switch
- *   shows loaded photographs and needs only the `data-theme` attribute. Each
- *   rotation mounts only the photographs on screen and the next one.
+ *   shows a loaded photograph and needs only the `data-theme` attribute. The
+ *   shown rotation mounts only the photographs on screen and the next one.
+ *   The other holds its photograph and loads no next one until it is shown.
  * - It takes no pointer events.
  */
-export const Wallpaper = ({ picture }: Props) => {
+export const Wallpaper = ({ picture, theme }: Props) => {
   const displays = useDisplays();
-  const [step, setStep] = useState(0);
-  // Whether this step's fade has finished.
+  const [steps, setSteps] = useState(STARTS);
+  // Whether the shown rotation's fade has finished.
   const [settled, setSettled] = useState(true);
+  // An effect event, so a theme switch does not restart the minute.
+  const advance = useEffectEvent(() => {
+    setSteps((previous) => ({ ...previous, [theme]: previous[theme] + 1 }));
+    setSettled(false);
+  });
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setStep((previous) => previous + 1);
-      setSettled(false);
-    }, DWELL_MS);
+    const timer = setInterval(advance, DWELL_MS);
     return () => {
       clearInterval(timer);
     };
@@ -81,7 +89,8 @@ export const Wallpaper = ({ picture }: Props) => {
           picture={picture}
           screen={undefined}
           settled={settled}
-          step={step}
+          shown={theme}
+          steps={steps}
         />
       ) : (
         displays.map(({ name }) => (
@@ -90,7 +99,8 @@ export const Wallpaper = ({ picture }: Props) => {
             picture={picture}
             screen={name}
             settled={settled}
-            step={step}
+            shown={theme}
+            steps={steps}
           />
         ))
       )}
@@ -98,24 +108,30 @@ export const Wallpaper = ({ picture }: Props) => {
   );
 };
 
+type RotationProps = {
+  /** Whether the shown rotation's fade has finished. */
+  settled: boolean;
+  /** The theme shown. */
+  shown: Theme;
+  /** Each theme's step. */
+  steps: Readonly<Record<Theme, number>>;
+};
+
 /**
- * The rotation on display `screen`, or the whole page, at `step`; or
- * `picture` in its place.
+ * The rotation on display `screen`, or the whole page; or `picture` in its
+ * place.
  */
 const ScreenWallpaper = ({
   picture,
   screen,
-  settled,
-  step,
-}: {
+  ...rotation
+}: RotationProps & {
   picture: string | undefined;
   screen: string | undefined;
-  settled: boolean;
-  step: number;
 }) => (
   <div className={screenStyles} style={useScreenRegion(screen)}>
     {picture === undefined ? (
-      <Rotation settled={settled} step={step} />
+      <Rotation {...rotation} />
     ) : (
       // Empty `alt` because the wallpaper is decorative.
       <img
@@ -129,10 +145,10 @@ const ScreenWallpaper = ({
 );
 
 /**
- * Both themes' photographs at `step`, over each theme's photograph from the
- * repository.
+ * Both themes' photographs at their steps, over each theme's photograph from
+ * the repository.
  */
-const Rotation = ({ settled, step }: { settled: boolean; step: number }) => (
+const Rotation = ({ settled, shown, steps }: RotationProps) => (
   <>
     {THEMES.map((theme) => (
       <div
@@ -150,10 +166,21 @@ const Rotation = ({ settled, step }: { settled: boolean; step: number }) => (
           src={WALLPAPER_FALLBACKS[theme]}
         />
         {WALLPAPER_PHOTOS[theme].map((photo, index, photos) =>
-          isMounted(index, step, photos.length, settled) ? (
+          isMounted(
+            index,
+            steps[theme],
+            photos.length,
+            settled,
+            theme === shown,
+          ) ? (
             <Photo
               key={photo}
-              layer={layerOf(index, step, photos.length, settled)}
+              layer={layerOf(
+                index,
+                steps[theme],
+                photos.length,
+                settled || theme !== shown,
+              )}
               src={photo}
             />
           ) : undefined,
@@ -165,18 +192,22 @@ const Rotation = ({ settled, step }: { settled: boolean; step: number }) => (
 
 /**
  * Whether the photograph at `index` is mounted on this `step`: it is on
- * screen, fading out, or next. The next one mounts a whole step early so it
- * has loaded before it fades in. The rest stay unmounted, so the page does not
- * hold every 4K photograph at once.
+ * screen, fading out, or next in the `shown` rotation. The next one mounts a
+ * whole step early so it has loaded before it fades in. The rest stay
+ * unmounted, so the page does not hold every 4K photograph at once. A hidden
+ * rotation mounts only its photograph on screen, which does not change.
  */
 const isMounted = (
   index: number,
   step: number,
   length: number,
   settled: boolean,
+  shown: boolean,
 ): boolean =>
-  index === (step + 1) % length ||
-  layerOf(index, step, length, settled) !== Layer.Waiting;
+  shown
+    ? index === (step + 1) % length ||
+      layerOf(index, step, length, settled) !== Layer.Waiting
+    : index === step % length;
 
 /**
  * The role of the photograph at `index` on this `step` of the rotation.

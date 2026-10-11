@@ -8,7 +8,7 @@ import { PopoverContainer } from "@domicile-desktop/component-library/Popover";
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock";
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 
 import { css, cva } from "../../styled-system/css";
 import { hstack, vstack } from "../../styled-system/patterns";
@@ -64,158 +64,152 @@ type Props = {
  * Nothing dismisses it except unlocking: not Escape, an outside click or
  * submit. That is why it does not use `ModalDialog`.
  */
-export const Lock = ({
-  bar,
-  checking,
-  locked,
-  onUnlock,
-  picture,
-  refusals,
-  screen,
-}: Props) => {
-  const displays = useDisplays();
-  const [typed, setTyped] = useState("");
-  const [wrong, setWrong] = useState(false);
-  const field = useRef<HTMLInputElement>(null);
-  // `null` is React's value for a ref with no element.
-  const [panels, setPanels] = useState<HTMLDivElement | null>(null);
+export const Lock = memo(
+  ({ bar, checking, locked, onUnlock, picture, refusals, screen }: Props) => {
+    const displays = useDisplays();
+    const [typed, setTyped] = useState("");
+    const [wrong, setWrong] = useState(false);
+    const field = useRef<HTMLInputElement>(null);
+    // `null` is React's value for a ref with no element.
+    const [panels, setPanels] = useState<HTMLDivElement | null>(null);
 
-  // Focus the field when the desktop locks, so the first keys typed are not
-  // lost. Done on the transition because the sheet is always mounted.
-  //
-  // Clear the field on unlock: the sheet stays mounted to fade out.
-  useEffect(() => {
-    if (locked) {
-      field.current?.focus();
-    } else {
-      setTyped("");
-      setWrong(false);
-    }
-  }, [locked]);
+    // Focus the field when the desktop locks, so the first keys typed are not
+    // lost. Done on the transition because the sheet is always mounted.
+    //
+    // Clear the field on unlock: the sheet stays mounted to fade out.
+    useEffect(() => {
+      if (locked) {
+        field.current?.focus();
+      } else {
+        setTyped("");
+        setWrong(false);
+      }
+    }, [locked]);
 
-  // Clear the field on a refusal, so a wrong guess is not left on a locked
-  // screen.
-  useEffect(() => {
-    if (refusals > 0) {
-      setTyped("");
-      setWrong(true);
-    }
-  }, [refusals]);
+    // Clear the field on a refusal, so a wrong guess is not left on a locked
+    // screen.
+    useEffect(() => {
+      if (refusals > 0) {
+        setTyped("");
+        setWrong(true);
+      }
+    }, [refusals]);
 
-  return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the sheet is not a control and is not being made into one — these keep the focus in the field, which is the only thing on a locked desk to type into
-    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: the same handlers, and the same reason
-    <div
-      className={sheetStyles}
-      inert={!locked}
-      // Take the focus back from a slider, which focuses itself on a click.
-      onFocus={(event) => {
-        if (!keepsFocus(event.target, field.current, panels)) {
-          field.current?.focus();
-        }
-      }}
-      // Keep focus in the field. The button still submits on click, and Tab has
-      // nowhere else to go.
-      onKeyDown={(event) => {
-        if (event.key === "Tab") {
-          event.preventDefault();
-        }
-      }}
-      onMouseDown={(event) => {
-        if (!keepsFocus(event.target, field.current, panels)) {
-          event.preventDefault();
-        }
-      }}
-    >
-      {displays === undefined ? (
-        // The whole page until the host describes the screens, so a desk
-        // that locks while starting is not left readable.
-        <Veil screen={undefined} />
-      ) : (
-        displays.map(({ name }) => <Veil key={name} screen={name} />)
-      )}
-      {picture !== undefined &&
-        (displays === undefined ? (
-          <LockPicture picture={picture} screen={undefined} />
-        ) : (
-          displays.map(({ name }) => (
-            <LockPicture key={name} picture={picture} screen={name} />
-          ))
-        ))}
+    return (
+      // biome-ignore lint/a11y/noStaticElementInteractions: the sheet is not a control and is not being made into one — these keep the focus in the field, which is the only thing on a locked desk to type into
+      // biome-ignore lint/a11y/noNoninteractiveElementInteractions: the same handlers, and the same reason
       <div
-        className={contentStyles}
-        data-lock-content=""
-        style={useScreenRegion(screen)}
+        className={sheetStyles}
+        inert={!locked}
+        // Take the focus back from a slider, which focuses itself on a click.
+        onFocus={(event) => {
+          if (!keepsFocus(event.target, field.current, panels)) {
+            field.current?.focus();
+          }
+        }}
+        // Keep focus in the field. The button still submits on click, and Tab has
+        // nowhere else to go.
+        onKeyDown={(event) => {
+          if (event.key === "Tab") {
+            event.preventDefault();
+          }
+        }}
+        onMouseDown={(event) => {
+          if (!keepsFocus(event.target, field.current, panels)) {
+            event.preventDefault();
+          }
+        }}
       >
-        <LockClock />
-        <div className={entryStyles}>
-          <form
-            className={formStyles({ shaken: shaken(refusals), wrong })}
-            onSubmit={(event) => {
-              // Prevent navigation: reloading would drop the connection the
-              // shell runs on.
-              event.preventDefault();
-              // One submission at a time; the compositor drops a second one
-              // sent while the first is being checked.
-              if (!checking) {
-                onUnlock(typed);
-              }
-            }}
-          >
-            <Input
-              aria-label={PASSPHRASE}
-              name="passphrase"
-              onChange={(event) => {
-                setTyped(event.target.value);
-                setWrong(false);
+        {displays === undefined ? (
+          // The whole page until the host describes the screens, so a desk
+          // that locks while starting is not left readable.
+          <Veil screen={undefined} />
+        ) : (
+          displays.map(({ name }) => <Veil key={name} screen={name} />)
+        )}
+        {picture !== undefined &&
+          (displays === undefined ? (
+            <LockPicture picture={picture} screen={undefined} />
+          ) : (
+            displays.map(({ name }) => (
+              <LockPicture key={name} picture={picture} screen={name} />
+            ))
+          ))}
+        <div
+          className={contentStyles}
+          data-lock-content=""
+          style={useScreenRegion(screen)}
+        >
+          <LockClock />
+          <div className={entryStyles}>
+            <form
+              className={formStyles({ shaken: shaken(refusals), wrong })}
+              onSubmit={(event) => {
+                // Prevent navigation: reloading would drop the connection the
+                // shell runs on.
+                event.preventDefault();
+                // One submission at a time; the compositor drops a second one
+                // sent while the first is being checked.
+                if (!checking) {
+                  onUnlock(typed);
+                }
               }}
-              placeholder={PASSPHRASE}
-              prefixIcon={<LockIcon />}
-              // Read-only while checking, so the screen shows what is being
-              // checked.
-              readOnly={checking}
-              ref={field}
-              rounded
-              size="lg"
-              // Keep the passphrase hidden from anyone looking at the screen.
-              type="password"
-              value={typed}
-            />
-            <Button
-              label="Unlock"
-              loading={checking}
-              rounded
-              size="lg"
-              type="submit"
             >
-              <ArrowRightIcon />
-            </Button>
-          </form>
-          {wrong ? (
-            <p className={refusalStyles} role="alert">
-              Wrong passphrase
-            </p>
-          ) : undefined}
+              <Input
+                aria-label={PASSPHRASE}
+                name="passphrase"
+                onChange={(event) => {
+                  setTyped(event.target.value);
+                  setWrong(false);
+                }}
+                placeholder={PASSPHRASE}
+                prefixIcon={<LockIcon />}
+                // Read-only while checking, so the screen shows what is being
+                // checked.
+                readOnly={checking}
+                ref={field}
+                rounded
+                size="lg"
+                // Keep the passphrase hidden from anyone looking at the screen.
+                type="password"
+                value={typed}
+              />
+              <Button
+                label="Unlock"
+                loading={checking}
+                rounded
+                size="lg"
+                type="submit"
+              >
+                <ArrowRightIcon />
+              </Button>
+            </form>
+            {wrong ? (
+              <p className={refusalStyles} role="alert">
+                Wrong passphrase
+              </p>
+            ) : undefined}
+          </div>
         </div>
-      </div>
-      {/*
+        {/*
         After the content, which covers a whole screen, so the bar is on top.
         Only while locked: the desktop's own bar has the same controls.
       */}
-      {locked && bar !== undefined && (
-        <PopoverContainer value={panels ?? undefined}>
-          {(displays ?? []).map(({ name }) => (
-            <BarRegion key={name} screen={name}>
-              {bar}
-            </BarRegion>
-          ))}
-        </PopoverContainer>
-      )}
-      {/* Last, so the bar's panels draw over everything on the sheet. */}
-      <div ref={setPanels} />
-    </div>
-  );
-};
+        {locked && bar !== undefined && (
+          <PopoverContainer value={panels ?? undefined}>
+            {(displays ?? []).map(({ name }) => (
+              <BarRegion key={name} screen={name}>
+                {bar}
+              </BarRegion>
+            ))}
+          </PopoverContainer>
+        )}
+        {/* Last, so the bar's panels draw over everything on the sheet. */}
+        <div ref={setPanels} />
+      </div>
+    );
+  },
+);
 
 /**
  * The bar on display `screen`. `data-screen` keeps its panels on that

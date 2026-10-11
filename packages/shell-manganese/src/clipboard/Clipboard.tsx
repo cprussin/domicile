@@ -1,6 +1,6 @@
 import { ModalDialog } from "@domicile-desktop/component-library/ModalDialog";
 import type { DomicileClipboardEntry } from "@domicile-desktop/sdk/domicile-host";
-import { useEffect, useId, useRef, useState } from "react";
+import { memo, useEffect, useId, useRef, useState } from "react";
 
 import { css } from "../../styled-system/css";
 import { flex, vstack } from "../../styled-system/patterns";
@@ -31,29 +31,25 @@ type Props = {
  * reports both the choice and the dismissal, so the panel is gone before the
  * paste.
  */
-export const Clipboard = ({
-  entries,
-  onCopy,
-  onDismiss,
-  open,
-  screen,
-}: Props) => (
-  <ModalDialog
-    onOpenChange={(next) => {
-      if (!next) {
-        onDismiss();
-      }
-    }}
-    open={open}
-    screen={screen}
-    title="Clipboard"
-  >
-    {/*
+export const Clipboard = memo(
+  ({ entries, onCopy, onDismiss, open, screen }: Props) => (
+    <ModalDialog
+      onOpenChange={(next) => {
+        if (!next) {
+          onDismiss();
+        }
+      }}
+      open={open}
+      screen={screen}
+      title="Clipboard"
+    >
+      {/*
       Inside the dialog so it unmounts on close, and every open starts with
       nothing highlighted.
     */}
-    <History entries={entries} onCopy={onCopy} onDismiss={onDismiss} />
-  </ModalDialog>
+      <History entries={entries} onCopy={onCopy} onDismiss={onDismiss} />
+    </ModalDialog>
+  ),
 );
 
 type HistoryProps = {

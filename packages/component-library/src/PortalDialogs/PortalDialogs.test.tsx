@@ -337,7 +337,7 @@ const drawnAtHalfSize = (element: HTMLElement): HTMLElement => {
   return element;
 };
 
-describe(PortalDialogs, () => {
+describe("PortalDialogs", () => {
   describe("rendering", () => {
     it("draws nothing while no application asks", () => {
       const host = new FakeHost();

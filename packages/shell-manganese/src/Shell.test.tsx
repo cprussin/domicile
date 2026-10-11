@@ -33,6 +33,7 @@ import type { ApplicationsConfig } from "./launcher/applications-config";
 import { answerOpening } from "./launcher/fixture";
 import { Shell } from "./Shell";
 import { hostDisplays } from "./screens/host-displays";
+import { useBar, useBarReadouts } from "./top-bar/bar-context";
 import { BarClock, BarLauncher, BarWorkspaces } from "./top-bar/bar-items";
 import type { TopBarLayout } from "./top-bar/layout";
 import { grabCursorStyles } from "./window-management/grab-cursor-styles";
@@ -264,6 +265,20 @@ const launched = () =>
 const clientAppears = (appId: string, title = appId): void => {
   domicile.appear(appId, { title });
 };
+
+/** A notification as the engine holds one. */
+const arrived = (id: number, summary: string) => ({
+  actions: [],
+  appName: "chat.example.com",
+  body: "",
+  clickable: true,
+  icon: "",
+  id,
+  summary,
+  time: id,
+  timeoutMs: -1,
+  urgency: "normal",
+});
 
 /**
  * One binding in the README sample's form: Meta, Shift if `shift`, the
@@ -823,6 +838,37 @@ describe("Shell", () => {
       ).toBeInTheDocument();
     });
 
+    it("redraws only the items that read what changed", async () => {
+      const drawn = { bar: 0, readouts: 0 };
+      const ReadsBar = () => {
+        drawn.bar += 1;
+        return <span>{useBar().current}</span>;
+      };
+      const ReadsReadouts = () => {
+        drawn.readouts += 1;
+        useBarReadouts();
+        return undefined;
+      };
+      renderingShell([LEFT], {
+        left: [<ReadsBar key="bar" />, <ReadsReadouts key="readouts" />],
+        middle: [],
+        right: [],
+      });
+      clientAppears("term");
+      domicile.set({ notifications: [] });
+      const before = { ...drawn };
+
+      domicile.change("term", { title: "vim" });
+      expect(drawn).toEqual(before);
+
+      domicile.set({ notifications: [arrived(7, "New message")] });
+      // The bar's unread count changes; the readouts do not.
+      await waitFor(() => {
+        expect(drawn.bar).toBeGreaterThan(before.bar);
+      });
+      expect(drawn.readouts).toBe(before.readouts);
+    });
+
     it("draws its text white, with a shadow to keep it off the wallpaper", () => {
       // The bar has no background, so the shadow separates text from the
       // wallpaper. Checked by declarations because Panda hashes class names.
@@ -1269,20 +1315,6 @@ describe("Shell", () => {
   });
 
   describe("the notifications", () => {
-    /** A notification as the engine holds one. */
-    const arrived = (id: number, summary: string) => ({
-      actions: [],
-      appName: "chat.example.com",
-      body: "",
-      clickable: true,
-      icon: "",
-      id,
-      summary,
-      time: id,
-      timeoutMs: -1,
-      urgency: "normal",
-    });
-
     it("toasts what arrives, and the bell counts it", async () => {
       renderShell();
       domicile.set({ notifications: [] });

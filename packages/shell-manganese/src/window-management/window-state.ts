@@ -246,17 +246,16 @@ const screenNamed = (state: WindowState, name: string): DeskScreen => {
 
 /** The screen showing `workspace`, or `undefined` while none is. */
 export const screenShowing = (
-  state: WindowState,
+  state: Pick<WindowState, "screens">,
   workspace: string,
 ): string | undefined =>
   state.screens.find(({ current }) => current === workspace)?.name;
 
 /** The workspaces `screen`'s bar lists, in order. */
 export const workspacesOn = (
-  state: WindowState,
+  { homes }: Pick<WindowState, "homes">,
   screen: string,
-): readonly string[] =>
-  WORKSPACES.filter((name) => state.homes[name] === screen);
+): readonly string[] => WORKSPACES.filter((name) => homes[name] === screen);
 
 /** The workspace called `name`. Throws for an unknown name. */
 export const workspaceNamed = (state: WindowState, name: string): Workspace => {
@@ -270,7 +269,7 @@ export const workspaceNamed = (state: WindowState, name: string): Workspace => {
 
 /** The workspace the window `id` is on, or `undefined` for a hidden one. */
 export const workspaceHolding = (
-  state: WindowState,
+  state: Pick<WindowState, "workspaces">,
   id: string,
 ): Workspace | undefined =>
   state.workspaces.find((workspace) => holds(workspace, id));
@@ -280,7 +279,7 @@ export const workspaceHolding = (
  * is.
  */
 export const screenOfApp = (
-  state: WindowState,
+  state: Pick<WindowState, "screens" | "workspaces">,
   appId: string,
 ): string | undefined => {
   const workspace = workspaceHolding(state, appWindowId(appId));

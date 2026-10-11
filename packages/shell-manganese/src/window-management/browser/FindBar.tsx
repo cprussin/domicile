@@ -8,14 +8,12 @@ import { useState } from "react";
 
 import { css } from "../../../styled-system/css";
 import { hstack } from "../../../styled-system/patterns";
-import type { FindResult } from "../useFindResult";
+import { useFindResult } from "../useFindResult";
 
 /** The accessible name of the bar and its box. */
 const NAME = "Find in page";
 
 type Props = {
-  /** The browser's match count. */
-  found: FindResult;
   /** Ends the find. */
   onClose: () => void;
   /**
@@ -28,6 +26,11 @@ type Props = {
    * open. See `BrowserWindow`.
    */
   ref?: Ref<HTMLInputElement> | undefined;
+  /**
+   * The page it finds in, whose match count it shows. Read here, so a new
+   * count redraws only the bar.
+   */
+  view: HTMLWebViewElement | null;
 };
 
 /**
@@ -37,7 +40,8 @@ type Props = {
  * matches, Escape closes. The count comes from the browser, since it covers
  * cross-site frames.
  */
-export const FindBar = ({ found, onClose, onFind, ref }: Props) => {
+export const FindBar = ({ onClose, onFind, ref, view }: Props) => {
+  const found = useFindResult(view);
   const [text, setText] = useState("");
   const nothingToStep = found.matches === 0;
 

@@ -5,6 +5,7 @@ import {
   useToastManager,
 } from "@domicile-desktop/component-library/Toaster";
 import type { Notification } from "@domicile-desktop/sdk/notification";
+import { memo } from "react";
 
 import { css } from "../../styled-system/css";
 import { TOP_BAR } from "../top-bar/TopBar";
@@ -38,30 +39,25 @@ type Props = {
  * Dismissing a toast (close, swipe or timeout) leaves the notification in the
  * drawer. Pressing one takes its action.
  */
-export const NotificationToasts = ({
-  manager,
-  now,
-  onAction,
-  onReply,
-  screen,
-  shown,
-}: Props) => {
-  const region = useScreenRegion(screen);
-  return (
-    <Toaster.Provider limit={MOST_SHOWN} toastManager={manager}>
-      {shown && (
-        <div className={screenStyles} style={region}>
-          <div
-            className={regionStyles}
-            style={{ insetBlockStart: `${TOP_BAR}px` }}
-          >
-            <Deck now={now} onAction={onAction} onReply={onReply} />
+export const NotificationToasts = memo(
+  ({ manager, now, onAction, onReply, screen, shown }: Props) => {
+    const region = useScreenRegion(screen);
+    return (
+      <Toaster.Provider limit={MOST_SHOWN} toastManager={manager}>
+        {shown && (
+          <div className={screenStyles} style={region}>
+            <div
+              className={regionStyles}
+              style={{ insetBlockStart: `${TOP_BAR}px` }}
+            >
+              <Deck now={now} onAction={onAction} onReply={onReply} />
+            </div>
           </div>
-        </div>
-      )}
-    </Toaster.Provider>
-  );
-};
+        )}
+      </Toaster.Provider>
+    );
+  },
+);
 
 /** Renders the toasts inside their provider. */
 const Deck = ({

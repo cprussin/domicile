@@ -6,6 +6,7 @@ import { css } from "../../styled-system/css";
 
 import type { Modifiers } from "../keyboard/useModifiers";
 import type { StageScreen } from "../screens/stage-screens";
+import { useShared } from "../screens/useShared";
 import { AppPopup } from "./AppPopup";
 import { AppWindow } from "./AppWindow";
 import { BrowserWindow } from "./BrowserWindow";
@@ -189,6 +190,8 @@ export const Stage = memo(
     // Looked up once per change rather than once per window. Apart from the
     // windows, so a retitled window keeps the drop targets every bar takes.
     const desk = useMemo(() => deskOf(screens), [screens]);
+    // Shared, so a change that moves no drop target keeps every bar's.
+    const targets = useShared(desk.dropTargets);
     const named = useMemo(
       () => new Map(windows.map((window) => [window.id, window])),
       [windows],
@@ -359,7 +362,7 @@ export const Stage = memo(
                   rewound={rewound}
                   selected={placement.selected}
                   strip={placement.strip}
-                  targets={desk.dropTargets}
+                  targets={targets}
                 />
               ) : undefined,
           )}
@@ -388,7 +391,7 @@ export const Stage = memo(
                 rewound={0}
                 selected={tab.selected}
                 strip={tab.strip}
-                targets={desk.dropTargets}
+                targets={targets}
               />
             ) : undefined,
           )}
@@ -434,7 +437,7 @@ export const Stage = memo(
                   rewound={rewound}
                   screen={screen}
                   screenBox={screenNamed(desk, screen)?.geometry.screen}
-                  targets={desk.dropTargets}
+                  targets={targets}
                   window={window}
                 />
               ),
@@ -560,7 +563,7 @@ export const Stage = memo(
                           onStretch(window.id, edge, by, on.geometry);
                         }}
                         resizes={shift}
-                        targets={desk.dropTargets}
+                        targets={targets}
                       />
                     )}
                   {/*

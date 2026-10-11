@@ -289,11 +289,15 @@ identity, so each step keeps unchanged objects:
   state for a report that changes nothing.
 - `useStageScreens` lays a screen out again only when its workspace or the
   desk changes. Key presses, modes and titles keep every placement.
+- A screen laid out again keeps every placement, float and tab equal to the
+  last one (`structural-sharing.ts`). A focus change or a float drag redraws
+  only the windows whose box changed.
 - `Stage` and its per-window parts are memoized, with callbacks that take a
-  window id.
+  window id. So are each monitor's bar and the desktop's panels.
 - `useReclaimFocus` does not wait for a redraw: it watches the page for
   focus dropped by chrome unmounting or going inert anywhere. It does not
   reclaim behind a desktop panel or the lock screen, whose keys must not
   reach the page.
 - Listeners every window would add exist only while needed: a tile drag's
-  while it runs, `useReclaimFocus`'s while its window is focused.
+  and a border drag's while it runs, `useReclaimFocus`'s while its window is
+  focused.
