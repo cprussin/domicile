@@ -9,6 +9,9 @@
 # - An <app> embeds the surface for its new box with the default deadline
 #   (`html_app_element.cc`, through the `EmbedSurface` overload patch 0102
 #   adds).
+# - While its `resizing` attribute is set (patch 0113), it embeds with
+#   deadline 0, so an interactive resize never waits on the client. Removing
+#   the attribute re-embeds with the default deadline.
 # - A <webview>'s guest keeps upstream's default deadline: no patch changes
 #   how a child frame is embedded.
 #
@@ -18,7 +21,9 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ENGINE="$ROOT/packages/domicile-engine"
 APP="$ENGINE/src/third_party/blink/renderer/core/html/domicile/html_app_element.cc"
+IDL="$ENGINE/src/third_party/blink/renderer/core/html/domicile/html_app_element.idl"
 [ -f "$APP" ] || { echo "no $APP" >&2; exit 1; }
+[ -f "$IDL" ] || { echo "no $IDL" >&2; exit 1; }
 
 FAILED=0
 ok() { printf '  ok    %s\n' "$1"; }
@@ -39,6 +44,23 @@ if grep -q 'const cc::DeadlinePolicy& deadline_policy' "$ENGINE"/patches/*.patch
 else
   fail "and SurfaceLayerBridge takes the deadline" \
     "no patch gives SurfaceLayerBridge::EmbedSurface a DeadlinePolicy"
+fi
+
+if grep -q 'kResizingAttr' "$APP" &&
+  grep -q 'DeadlinePolicy::UseSpecifiedDeadline(0u)' "$APP"; then
+  ok "a resizing <app> does not wait for its window"
+else
+  fail "a resizing <app> does not wait for its window" \
+    "html_app_element.cc embeds nothing with deadline 0 for \`resizing\`"
+fi
+
+if grep -q 'Reflect\] attribute boolean resizing' "$IDL" &&
+  grep -l '^diff --git a/third_party/blink/renderer/core/html/html_attribute_names.json5' "$ENGINE"/patches/*.patch |
+  xargs -r grep -q '^+    "resizing",$'; then
+  ok "and the page can set \`resizing\`"
+else
+  fail "and the page can set \`resizing\`" \
+    "html_app_element.idl reflects no \`resizing\`, or no patch names the attribute"
 fi
 
 touching="$(grep -l '^diff --git a/third_party/blink/renderer/core/frame/child_frame_compositing_helper' "$ENGINE"/patches/*.patch)"
