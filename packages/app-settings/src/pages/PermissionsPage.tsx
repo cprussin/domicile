@@ -12,6 +12,7 @@ import { useState } from "react";
 import { css } from "../../styled-system/css";
 import { flex, grid, hstack } from "../../styled-system/patterns";
 import type { Report } from "../config-editor";
+import type { Extensions } from "../extensions";
 import type {
   MediaDevices,
   MediaKind,
@@ -30,7 +31,9 @@ import {
   settingTitle,
 } from "../permission-names";
 import { SettingRow } from "../SettingRow";
+import type { ExtensionNames } from "../site-groups";
 import { resetSite, siteName, sites, sitesWith } from "../site-groups";
+import { useExtensionNames } from "../useExtensionNames";
 import { useMediaDevices } from "../useMediaDevices";
 import { useSiteSettings } from "../useSiteSettings";
 
@@ -38,6 +41,7 @@ type Props = {
   title: string;
   description: string;
   host: SettingsHost;
+  extensions: Extensions;
   report: Report;
 };
 
@@ -48,12 +52,14 @@ type Props = {
  */
 export const PermissionsPage = ({
   description,
+  extensions,
   host,
   report,
   title,
 }: Props) => {
   const { failure, remove, set, settings } = useSiteSettings(host, report);
   const media = useMediaDevices(host, report);
+  const names = useExtensionNames(extensions, report);
   return (
     <Page description={description} title={title}>
       {failure !== undefined && (
@@ -70,6 +76,7 @@ export const PermissionsPage = ({
               content: (
                 <ByPermission
                   devices={media.devices}
+                  names={names}
                   onPrefer={media.prefer}
                   onSet={set}
                   report={report}
@@ -81,7 +88,12 @@ export const PermissionsPage = ({
             },
             {
               content: (
-                <BySite onRemove={remove} onSet={set} settings={settings} />
+                <BySite
+                  names={names}
+                  onRemove={remove}
+                  onSet={set}
+                  settings={settings}
+                />
               ),
               label: "By site",
               value: "site",
@@ -95,6 +107,7 @@ export const PermissionsPage = ({
 
 type ViewProps = {
   settings: SiteSettings;
+  names: ExtensionNames;
   onSet: (site: SitePermission) => void;
 };
 
@@ -106,6 +119,7 @@ type DeviceProps = {
 /** Each permission, opening onto the sites with a setting for it. */
 const ByPermission = ({
   devices,
+  names,
   onPrefer,
   onSet,
   report,
@@ -122,6 +136,7 @@ const ByPermission = ({
                 content: (
                   <PermissionDetail
                     devices={devices}
+                    names={names}
                     onPrefer={onPrefer}
                     onSet={onSet}
                     permission={open}
@@ -140,7 +155,10 @@ const ByPermission = ({
           <ul className={listStyles}>
             {PERMISSIONS.map((permission) => (
               <Entry
-                count={plural(sitesWith(settings, permission).length, "site")}
+                count={plural(
+                  sitesWith(settings, permission, names).length,
+                  "site",
+                )}
                 key={permission}
                 onOpen={() => {
                   setOpen(permission);
@@ -167,6 +185,7 @@ type PermissionDetailProps = ViewProps &
  */
 const PermissionDetail = ({
   devices,
+  names,
   onPrefer,
   onSet,
   permission,
@@ -174,7 +193,7 @@ const PermissionDetail = ({
   settings,
 }: PermissionDetailProps) => {
   const fallback = settings.defaults[permission];
-  const listed = sitesWith(settings, permission);
+  const listed = sitesWith(settings, permission, names);
   const kind = mediaKindOf(permission);
   return (
     <Card>
@@ -191,9 +210,9 @@ const PermissionDetail = ({
         a site to {settingTitle(fallback)} removes its own.
       </p>
       {listed.map(({ origin, setting }) => (
-        <SettingRow key={origin} title={siteName(origin)}>
+        <SettingRow key={origin} title={siteName(origin, names)}>
           <SettingSelect
-            label={siteName(origin)}
+            label={siteName(origin, names)}
             onChange={(next) => {
               onSet({ origin, permission, setting: next });
             }}
@@ -216,9 +235,9 @@ type BySiteProps = ViewProps & {
 };
 
 /** Each site with a setting of its own, opening onto its permissions. */
-const BySite = ({ onRemove, onSet, settings }: BySiteProps) => {
+const BySite = ({ names, onRemove, onSet, settings }: BySiteProps) => {
   const [open, setOpen] = useState<string | undefined>(undefined);
-  const listed = sites(settings);
+  const listed = sites(settings, names);
   const shown = listed.find((site) => site.origin === open);
   return (
     <div className={viewStyles}>
@@ -230,7 +249,7 @@ const BySite = ({ onRemove, onSet, settings }: BySiteProps) => {
                 content: (
                   <Card>
                     <fieldset
-                      aria-label={siteName(open)}
+                      aria-label={siteName(open, names)}
                       className={fieldsetStyles}
                     >
                       {PERMISSIONS.map((permission) => (
@@ -267,7 +286,7 @@ const BySite = ({ onRemove, onSet, settings }: BySiteProps) => {
                     </div>
                   </Card>
                 ),
-                title: siteName(open),
+                title: siteName(open, names),
               }
         }
         onBack={() => {
@@ -289,7 +308,7 @@ const BySite = ({ onRemove, onSet, settings }: BySiteProps) => {
                   onOpen={() => {
                     setOpen(site.origin);
                   }}
-                  title={siteName(site.origin)}
+                  title={siteName(site.origin, names)}
                 />
               ))}
             </ul>

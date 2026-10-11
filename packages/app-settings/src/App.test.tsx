@@ -50,6 +50,11 @@ const SITES = {
       permission: "location",
       setting: "block",
     },
+    {
+      origin: `chrome-extension://${UBLOCK}`,
+      permission: "notifications",
+      setting: "block",
+    },
   ],
 } as const satisfies FakeHostState["sites"];
 
@@ -389,6 +394,16 @@ describe(App, () => {
       });
     });
 
+    it("names an extension by its name", async () => {
+      const { user } = await renderApp("Site permissions");
+      await user.click(
+        await screen.findByRole("button", { name: /^Notifications/ }),
+      );
+      expect(
+        await screen.findByRole("combobox", { name: "uBlock Origin Lite" }),
+      ).toHaveTextContent("Block");
+    });
+
     it("picks the camera a site gets when it names none", async () => {
       const { host, user } = await renderApp("Site permissions");
       await user.click(await screen.findByRole("button", { name: /^Camera/ }));
@@ -428,7 +443,10 @@ describe(App, () => {
         await screen.findByRole("button", { name: "Remove site" }),
       );
       await waitFor(() => {
-        expect(host.state.sites.sites).toEqual([SITES.sites[2]]);
+        expect(host.state.sites.sites).toEqual([
+          SITES.sites[2],
+          SITES.sites[3],
+        ]);
       });
       expect(
         await screen.findByRole("button", { name: /^maps\.example/ }),

@@ -14,18 +14,24 @@ export type Site = {
   settings: Readonly<Record<Permission, Setting>>;
 };
 
-/** The sites with a setting of their own for `permission`, by origin. */
+/** Installed extensions' names by id. */
+export type ExtensionNames = ReadonlyMap<string, string>;
+
+/** The sites with a setting of their own for `permission`, by name. */
 export const sitesWith = (
   settings: SiteSettings,
   permission: Permission,
+  names: ExtensionNames,
 ): SiteSetting[] =>
   settings.sites
     .filter((site) => site.permission === permission)
     .map(({ origin, setting }) => ({ origin, setting }))
-    .toSorted((a, b) => siteName(a.origin).localeCompare(siteName(b.origin)));
+    .toSorted((a, b) =>
+      siteName(a.origin, names).localeCompare(siteName(b.origin, names)),
+    );
 
 /** Every site with a setting of its own, by name. */
-export const sites = (settings: SiteSettings): Site[] =>
+export const sites = (settings: SiteSettings, names: ExtensionNames): Site[] =>
   [...new Set(settings.sites.map((site) => site.origin))]
     .map((origin) => {
       const own = settings.sites.filter((site) => site.origin === origin);
@@ -45,7 +51,9 @@ export const sites = (settings: SiteSettings): Site[] =>
         },
       };
     })
-    .toSorted((a, b) => siteName(a.origin).localeCompare(siteName(b.origin)));
+    .toSorted((a, b) =>
+      siteName(a.origin, names).localeCompare(siteName(b.origin, names)),
+    );
 
 /** The changes that remove `origin`'s own settings: each set to the default. */
 export const resetSite = (
@@ -60,10 +68,19 @@ export const resetSite = (
       setting: settings.defaults[permission],
     }));
 
-/** A site as a person reads it: a web site's host, or the whole origin. */
-export const siteName = (origin: string): string => {
+/**
+ * A site as a person reads it: a web site's host, an installed extension's
+ * name, or the whole origin.
+ */
+export const siteName = (origin: string, names: ExtensionNames): string => {
   const url = new URL(origin);
-  return url.protocol === "http:" || url.protocol === "https:"
-    ? url.host
-    : origin;
+  switch (url.protocol) {
+    case "http:":
+    case "https:":
+      return url.host;
+    case "chrome-extension:":
+      return names.get(url.host) ?? origin;
+    default:
+      return origin;
+  }
 };
