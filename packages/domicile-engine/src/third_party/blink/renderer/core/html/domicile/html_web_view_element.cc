@@ -23,6 +23,7 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_context_menu_event.h"
+#include "third_party/blink/renderer/core/html/domicile/domicile_device_request_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_file_chooser_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_permission_request_event.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
@@ -100,6 +101,13 @@ constexpr char kPermissionRequestWithdrawnEvent[] =
     "domicile-permission-request-withdrawn";
 constexpr char kSitePermissionsChangeEvent[] =
     "domicile-site-permissions-change";
+
+// A request the shell answers on the event, a change to its devices, and its
+// withdrawal. See domicile_device_request_event.h.
+constexpr char kDeviceRequestEvent[] = "domicile-device-request";
+constexpr char kDeviceRequestChangeEvent[] = "domicile-device-request-change";
+constexpr char kDeviceRequestWithdrawnEvent[] =
+    "domicile-device-request-withdrawn";
 
 // The values of a site permission's setting. Strings, as for `security`.
 constexpr char kSettingAsk[] = "ask";
@@ -213,6 +221,7 @@ void HTMLWebViewElement::Trace(Visitor* visitor) const {
   visitor->Trace(client_receiver_);
   visitor->Trace(waiting_choosers_);
   visitor->Trace(permission_request_);
+  visitor->Trace(device_request_);
   visitor->Trace(pointer_listener_);
   HTMLFrameElementBase::Trace(visitor);
 }
@@ -650,6 +659,52 @@ void HTMLWebViewElement::PermissionRequestAnswered(
     DomicilePermissionRequestEvent& event) {
   if (permission_request_ == &event) {
     permission_request_ = nullptr;
+  }
+}
+
+// Held in `device_request_` until answered. If no listener calls
+// `preventDefault()`, the shell draws no chooser, so cancel immediately.
+void HTMLWebViewElement::DeviceRequested(const String& title,
+                                         bool multiple,
+                                         DeviceRequestedCallback callback) {
+  // The browser withdraws a request before sending the next one. Answer a
+  // stale one anyway, so its callback is never dropped unrun.
+  if (device_request_) {
+    device_request_->CancelIfUnanswered();
+  }
+  auto* event = MakeGarbageCollected<DomicileDeviceRequestEvent>(
+      AtomicString(kDeviceRequestEvent), title, multiple, std::move(callback),
+      *this);
+  device_request_ = event;
+  DispatchEvent(*event);
+  if (!event->defaultPrevented()) {
+    event->CancelIfUnanswered();
+  }
+}
+
+// Only for a request still held: devices for one already answered are stale.
+void HTMLWebViewElement::DevicesOffered(
+    Vector<domicile::mojom::blink::WebViewDevicePtr> devices) {
+  if (device_request_) {
+    device_request_->Offer(devices);
+    DispatchEvent(
+        *Event::CreateBubble(AtomicString(kDeviceRequestChangeEvent)));
+  }
+}
+
+// Only for a request still held: one the shell answered is already gone.
+void HTMLWebViewElement::DeviceRequestWithdrawn() {
+  if (device_request_) {
+    device_request_->CancelIfUnanswered();
+    DispatchEvent(
+        *Event::CreateBubble(AtomicString(kDeviceRequestWithdrawnEvent)));
+  }
+}
+
+void HTMLWebViewElement::DeviceRequestAnswered(
+    DomicileDeviceRequestEvent& event) {
+  if (device_request_ == &event) {
+    device_request_ = nullptr;
   }
 }
 
