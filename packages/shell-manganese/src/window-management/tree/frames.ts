@@ -55,13 +55,17 @@ export type StripPlace = {
   /** The whole strip's box. Tabs in one strip share it. */
   box: Rect;
   /**
+   * The empty end of a tabbed strip, past its last tab, which holds the
+   * new-tab button and the group's buttons and drags the group. `undefined`
+   * for a stack, whose bars span the strip.
+   */
+  end: Rect | undefined;
+  /**
    * Whether a divider marks its start: a hidden tab of a tabbed container
-   * after another hidden tab. The open tab's own edge divides it from its
-   * neighbors.
+   * after another hidden tab, or any but the first bar of a stack. The open
+   * tab's own edge divides it from its neighbors.
    */
   divided: boolean;
-  /** Whether it starts the strip, which rounds that end. */
-  first: boolean;
   /** The container the strip belongs to. */
   group: StripGroup;
   /**
@@ -69,12 +73,6 @@ export type StripPlace = {
    * Hidden tabs lie flat on the strip.
    */
   open: boolean;
-  /**
-   * For a tab of a tabbed container, how much strip runs past it to the
-   * strip's end. The last tab draws it; the others keep it so the tab left
-   * last when the last closes already reaches the end. `undefined` in stacks.
-   */
-  rest: number | undefined;
   /** How many tabs the strip holds. */
   tabs: number;
 };
@@ -409,11 +407,10 @@ const stripPlaceOf = (
     at,
     box: { ...area, height: TITLE_BAR * barsOf(container) },
     divided:
-      container.layout === Layout.Tabbed &&
       at > 0 &&
-      at !== container.focused &&
-      at - 1 !== container.focused,
-    first: at === 0,
+      (container.layout === Layout.Stacking ||
+        (at !== container.focused && at - 1 !== container.focused)),
+    end: endOf(container, area),
     group: {
       node: {
         id: focusedWindowIn(container),
@@ -422,12 +419,17 @@ const stripPlaceOf = (
       windows: windowsIn(container),
     },
     open: at === container.focused,
-    rest:
-      container.layout === Layout.Tabbed
-        ? area.width - tabWidthOf(container, area) * (at + 1)
-        : undefined,
     tabs: count,
   };
+};
+
+const endOf = (container: Container, area: Rect): Rect | undefined => {
+  if (container.layout === Layout.Stacking) {
+    return undefined;
+  } else {
+    const tabs = tabWidthOf(container, area) * container.children.length;
+    return { ...barOf(area), width: area.width - tabs, x: area.x + tabs };
+  }
 };
 
 // The area under the titles.

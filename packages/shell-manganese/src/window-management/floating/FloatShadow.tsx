@@ -1,9 +1,15 @@
+import { useRef } from "react";
+
 import { cva, cx } from "../../../styled-system/css";
 import type { Rect } from "../rect";
 import type { Restack } from "../restacking";
+import type { Settler } from "../useSettling";
+import { useSettling } from "../useSettling";
 import type { WindowMotion } from "../window-motion";
+import { isMoving } from "../window-motion";
 import {
   movingStyles,
+  originOf,
   placedAt,
   scaledAbout,
   settlingStyles,
@@ -13,7 +19,7 @@ import {
 type Props = {
   /** The stacking depth of the window casting it. */
   depth: number;
-  /** Whether the window is being dragged, which stops its box easing. */
+  /** Whether the window is being dragged, so the shadow follows the pointer. */
   dragging: boolean;
   /** The window's whole box, bar included. */
   frame: Rect;
@@ -26,6 +32,8 @@ type Props = {
   motion: WindowMotion;
   /** The window's restack animation, if any. */
   restack?: Restack | undefined;
+  /** Eases the shadow into a new box with its window; see `useSettling`. */
+  settler?: Settler | undefined;
 };
 
 /**
@@ -35,7 +43,7 @@ type Props = {
  * contents separately would overlap each other at the seam.
  *
  * Drawn at the window's depth but before every window in the document, so its
- * window covers it by document order. It animates with the window.
+ * window covers it by document order. It animates and moves with the window.
  */
 export const FloatShadow = ({
   depth,
@@ -44,21 +52,33 @@ export const FloatShadow = ({
   hanging = false,
   motion,
   restack,
-}: Props) => (
-  <div
-    className={cx(
-      shadowStyles({ hanging }),
-      movingStyles({ motion }),
-      settlingStyles({ box: dragging ? "snapped" : "eased" }),
-    )}
-    data-shadow
-    style={{
-      ...placedAt(frame, depth),
-      ...scaledAbout(frame, frame),
-      ...shuffledBy(restack),
-    }}
-  />
-);
+  settler,
+}: Props) => {
+  const element = useRef<HTMLDivElement>(null);
+  useSettling({
+    element,
+    origin: originOf(frame, frame),
+    rect: frame,
+    settler,
+    still: dragging || isMoving(motion),
+  });
+  return (
+    <div
+      className={cx(
+        shadowStyles({ hanging }),
+        movingStyles({ motion }),
+        settlingStyles,
+      )}
+      data-shadow
+      ref={element}
+      style={{
+        ...placedAt(frame, depth),
+        ...scaledAbout(frame, frame),
+        ...shuffledBy(restack),
+      }}
+    />
+  );
+};
 
 /**
  * An outer `box-shadow` only, which is never drawn under its own box. Rounded

@@ -46,6 +46,18 @@ export const placedAt = (
 });
 
 /**
+ * Inline style placing part of a window at `rect` inside the element that
+ * holds it, such as a strip's end inside the strip. See {@link within}.
+ */
+export const placedIn = (rect: Rect): CSSProperties => ({
+  blockSize: `${rect.height.toString()}px`,
+  inlineSize: `${rect.width.toString()}px`,
+  insetBlockStart: `${rect.y.toString()}px`,
+  insetInlineStart: `${rect.x.toString()}px`,
+  position: "absolute",
+});
+
+/**
  * The border that makes a window's edge visible. Focus is shown by `FocusGlow`,
  * not by this border's color.
  */
@@ -82,10 +94,13 @@ export const clickThroughStyles = css({ pointerEvents: "none" });
  * keeps them together. Pointer mapping is unaffected: the engine maps a
  * pointer through the `<app>`'s whole transform, origin included.
  */
-export const scaledAbout = (frame: Rect, rect: Rect): CSSProperties => {
-  const { x, y } = originOf(frame, rect);
-  return { transformOrigin: `${x.toString()}px ${y.toString()}px` };
-};
+export const scaledAbout = (frame: Rect, rect: Rect): CSSProperties =>
+  originAt(originOf(frame, rect));
+
+/** Inline style setting part of a window's `transform-origin` to `point`. */
+export const originAt = ({ x, y }: Point): CSSProperties => ({
+  transformOrigin: `${x.toString()}px ${y.toString()}px`,
+});
 
 /** The center of `frame`, from the corner of `rect`; see {@link scaledAbout}. */
 export const originOf = (frame: Rect, rect: Rect): Point => ({
@@ -294,35 +309,20 @@ export const movingStyles = cva({
 });
 
 /**
- * Transitions that ease a window between layouts instead of snapping.
+ * Transitions for what a part of a window changes in place. Its box moves
+ * with `useSettling` instead, on the compositor's thread, so every part keeps
+ * with its client's contents.
  *
- * - Box: animates size and inset, not a transform. Only for parts that no
- *   client draws into; the client's own box takes its new size at once and
- *   eases with `useSettling` (`snapped`). Also `snapped` while dragging, or
- *   the part would trail the pointer.
- * - Depth: `z-index` eases with the box, so a window leaving fullscreen stays
- *   above the windows it still covers until it has shrunk (see
- *   `placement.ts`).
- * - Colors: always eased; focus follows the pointer, so snapping would
- *   flicker.
- * - Opacity: always eased, so `FocusGlow` fades rather than blinks.
- * - Strip rest: eases with the box, so the end of a tab strip stays put while
- *   its last tab moves (see `stripStyles` in `TitleBar`).
+ * - Depth: `z-index` eases on the settle's timing, so a window leaving
+ *   fullscreen stays above the windows it still covers until it has shrunk
+ *   (see `placement.ts`).
+ * - Colors: focus follows the pointer, so snapping would flicker.
+ * - Opacity: so `FocusGlow` fades rather than blinks.
  *
- * One recipe because two rules setting `transition` on one element race on
+ * One rule because two rules setting `transition` on one element race on
  * Panda's emit order.
  */
-export const settlingStyles = cva({
-  variants: {
-    box: {
-      eased: {
-        transition:
-          "inline-size {durations.fast} {easings.out}, block-size {durations.fast} {easings.out}, inset-block-start {durations.fast} {easings.out}, inset-inline-start {durations.fast} {easings.out}, z-index {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}, opacity {durations.fast} {easings.out}, --strip-rest {durations.fast} {easings.out}",
-      },
-      snapped: {
-        transition:
-          "z-index {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}, opacity {durations.fast} {easings.out}",
-      },
-    },
-  },
+export const settlingStyles = css({
+  transition:
+    "z-index {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}, opacity {durations.fast} {easings.out}",
 });

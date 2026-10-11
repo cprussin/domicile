@@ -1,26 +1,15 @@
 import { describe, expect, it, mock } from "bun:test";
-import { readFileSync } from "node:fs";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 
 import { css } from "../../styled-system/css";
+import { loadEmittedStylesheet } from "../emitted-stylesheet";
 import { raised } from "./placement";
+import { recordedSettles } from "./recorded-settles";
 import { TitleBar } from "./TitleBar";
 import type { StripPlace } from "./tree/frames";
 import { Layout } from "./tree/node";
 
-// Loads the real stylesheet, since the computed animation depends on the
-// emitted CSS, not on any one class name.
-//
-// happy-dom drops `@layer` blocks, so they are rewritten to `@media all`.
-// Panda emits layers weakest first, so source order gives the same cascade.
-const stylesheet = document.createElement("style");
-stylesheet.textContent = readFileSync(
-  new URL("../../styled-system/styles.css", import.meta.url),
-  "utf8",
-)
-  .replaceAll(/@layer [^;{]+;/g, "")
-  .replaceAll(/@layer [^{]+\{/g, "@media all{");
-document.head.append(stylesheet);
+loadEmittedStylesheet(document);
 
 /** The address bar's background, which the bar or open tab above matches. */
 const RAISED =
@@ -78,15 +67,11 @@ const MIDDLE_TAB = {
   at: 1,
   box: { height: 30, width: 1000, x: 0, y: 0 },
   divided: false,
-  first: false,
+  end: { height: 30, width: 280, x: 720, y: 0 },
   group: { node: { id: "a", up: 1 }, windows: ["a", "b", "c"] },
   open: false,
-  rest: undefined,
   tabs: 3,
 };
-
-/** The last tab of a tabbed strip, with the strip running on past it. */
-const LAST_TAB = { ...MIDDLE_TAB, at: 2, rest: 300 };
 
 // The bar and the contents are separate elements, so they must animate
 // identically or the window splits apart.
@@ -163,9 +148,25 @@ describe("TitleBar", () => {
     expect(bar(container).style.getPropertyValue("--collapse-x")).toBe("0");
   });
 
-  // The slot is the tab's piece of the strip, which must stay whole; only the
-  // tab on it opens out.
-  it("opens out across a tabbed container's strip, leaving the strip whole", () => {
+  // The tabs after it ease along on the same curve, so its end meets the next
+  // tab's start throughout and the strip shows no gap.
+  it.each(["closing-tab", "opening-tab", "sending-tab"] as const)(
+    "turns about the start of its strip while %s",
+    (motion) => {
+      const { container } = render(
+        <TitleBar
+          {...barProps}
+          motion={motion}
+          strip={MIDDLE_TAB}
+          tabbed={Layout.Tabbed}
+        />,
+      );
+
+      expect(bar(container)).toHaveStyle({ transformOrigin: "0px 0px" });
+    },
+  );
+
+  it("opens out along a tabbed container's strip", () => {
     const { container } = render(
       <TitleBar
         {...barProps}
@@ -175,29 +176,10 @@ describe("TitleBar", () => {
       />,
     );
 
-    expect(globalThis.getComputedStyle(bar(container)).animation).not.toContain(
+    expect(globalThis.getComputedStyle(bar(container)).animation).toContain(
       "windowOpeningTab",
     );
-    expect(globalThis.getComputedStyle(face(container)).animation).toContain(
-      "windowOpeningTab",
-    );
-  });
-
-  it("says when its tab has opened out", async () => {
-    await new Promise<void>((resolve) => {
-      const { container } = render(
-        <TitleBar
-          {...barProps}
-          motion="opening-tab"
-          onMotionEnded={() => {
-            resolve();
-          }}
-          strip={MIDDLE_TAB}
-          tabbed={Layout.Tabbed}
-        />,
-      );
-      fireEvent.animationEnd(face(container));
-    });
+    expect(bar(container).style.getPropertyValue("--collapse-x")).toBe("0");
   });
 
   // A closing bar's buttons would do nothing.
@@ -225,22 +207,50 @@ describe("TitleBar", () => {
     });
   });
 
-  it("eases to a new box rather than jumping to it", () => {
-    const { container } = render(<TitleBar {...barProps} />);
+  describe("moved to a new box", () => {
+    const AWAY = { ...ON_SCREEN, x: 100 };
+    const moved = (props: Partial<Parameters<typeof TitleBar>[0]>) => {
+      const { played, settler } = recordedSettles();
+      const rendered = render(
+        <TitleBar {...barProps} {...props} settler={settler} />,
+      );
+      rendered.rerender(
+        <TitleBar
+          {...barProps}
+          {...props}
+          frame={{ ...FRAME, x: 100 }}
+          rect={AWAY}
+          settler={settler}
+        />,
+      );
+      return { container: rendered.container, played };
+    };
 
-    expect(globalThis.getComputedStyle(bar(container)).transition).toContain(
-      "inline-size",
-    );
-  });
+    // On the contents' timing and the compositor's thread, so the bar keeps
+    // with its window.
+    it("eases there as its window's contents do", () => {
+      const { container, played } = moved({});
 
-  it("follows the pointer exactly while its window is being dragged", () => {
-    // Easing the box would make the bar trail the pointer. Colors still ease,
-    // since a drag crosses many windows.
-    const { container } = render(<TitleBar {...barProps} dragging />);
+      expect(played).toStrictEqual([{ scaleX: 1, scaleY: 1, x: -100, y: 0 }]);
+      expect(
+        globalThis.getComputedStyle(bar(container)).transition,
+      ).not.toContain("inset-inline-start");
+    });
 
-    const { transition } = globalThis.getComputedStyle(bar(container));
-    expect(transition).not.toContain("inline-size");
-    expect(transition).toContain("background-color");
+    // Easing would make the bar trail the pointer. Colors still ease, since a
+    // drag crosses many windows.
+    it("goes there at once while its window is being dragged", () => {
+      const { container, played } = moved({ dragging: true });
+
+      expect(played).toStrictEqual([undefined]);
+      expect(globalThis.getComputedStyle(bar(container)).transition).toContain(
+        "background-color",
+      );
+    });
+
+    it("goes there at once while it plays a motion", () => {
+      expect(moved({ motion: "opening" }).played).toStrictEqual([undefined]);
+    });
   });
 
   it("shows a grabbing pointer while its window is being dragged", () => {
@@ -321,96 +331,24 @@ describe("TitleBar", () => {
         />,
       );
 
-    it("rounds the strip at the end it starts", () => {
-      const rounded = css({ borderStartStartRadius: "lg" });
+    // The strip draws the window's top edge along its bottom row. The open
+    // tab covers it there to join its window; a stack's bars sit over each
+    // other, not over the window.
+    it("covers the strip's bottom edge only where it is the open tab", () => {
+      const covers = css({ marginBlockEnd: "-1px" });
 
       expect(
-        bar(tab({ strip: { ...MIDDLE_TAB, first: true } }).container).className,
-      ).toContain(rounded);
-      expect(bar(tab({}).container).className).not.toContain(rounded);
-    });
-
-    it("runs the strip on past the last tab to the strip's end", () => {
-      const last = bar(tab({ strip: LAST_TAB }).container);
-
-      expect(last.style.getPropertyValue("--strip-rest")).toBe("300px");
-      expect(last).toHaveAttribute("data-strip-end");
+        face(tab({ strip: { ...MIDDLE_TAB, open: true } }).container).className,
+      ).toContain(covers);
+      expect(face(tab({}).container).className).not.toContain(covers);
       expect(
-        bar(tab({ strip: { ...MIDDLE_TAB, rest: 540 } }).container),
-      ).not.toHaveAttribute("data-strip-end");
-    });
-
-    // The tab before it already runs the strip on to its end. Collapsing the
-    // strip with the tab would shrink the strip's end.
-    it.each(["closing-tab", "sending-tab"] as const)(
-      "leaves the strip past it to the tab before it while %s",
-      (motion) => {
-        expect(
-          bar(tab({ motion, strip: LAST_TAB }).container),
-        ).not.toHaveAttribute("data-strip-end");
-      },
-    );
-
-    // A tab opening or closing before the last moves the last tab's slot. The
-    // rest eases with it, so the strip's end stays put.
-    it("eases the strip it runs on along with its own box", () => {
-      const last = bar(tab({ strip: LAST_TAB }).container);
-
-      expect(stylesheet.textContent).toMatch(
-        /@property --strip-rest\s*\{[^}]*syntax:\s*['"]<length>['"]/,
-      );
-      expect(globalThis.getComputedStyle(last).transition).toContain(
-        "--strip-rest",
-      );
-    });
-
-    // Each slot draws the edge as the same straight band, which every slot
-    // shades alike between device pixels. The window's top row is tucked
-    // under the slot's bottom row, so the open tab leaves that row to it.
-    it("draws the window's top edge along the strip, broken only by the open tab", () => {
-      const line = css({ borderBlockEndWidth: "1px" });
-      const pastSlot = css({ insetInlineStart: "100%" });
-      const leavesBottomRow = [
-        css({ borderBlockEndColor: "transparent" }),
-        css({ backgroundClip: "padding-box" }),
-      ];
-      const edge = (container: HTMLElement) =>
-        bar(container).querySelector("[data-strip-edge]");
-
-      const hidden = tab({});
-      for (const style of leavesBottomRow) {
-        expect(bar(hidden.container).className).toContain(style);
-      }
-      expect(edge(hidden.container)?.className).toContain(line);
-      expect(edge(hidden.container)?.className).not.toContain(pastSlot);
-      expect(bar(hidden.container).className).toContain(
-        css({ "--strip-edge": "{colors.borderStrong}" }),
-      );
-
-      const open = tab({ strip: { ...MIDDLE_TAB, open: true } });
-      for (const style of leavesBottomRow) {
-        expect(bar(open.container).className).toContain(style);
-      }
-      expect(edge(open.container)?.className).toContain(pastSlot);
-      expect(face(open.container).className).not.toContain(
-        css({ marginBlockEnd: "-1px" }),
-      );
-    });
-
-    // The open tab is drawn over the rest of its strip, so an edge run on to
-    // the strip's end would cover the tabs after it.
-    it("runs the edge on to the strip's end from the last tab only", () => {
-      const runsOn = css({
-        insetInlineEnd: "calc(-1 * var(--strip-rest, 0px))",
-      });
-      const edge = (strip: StripPlace) =>
-        bar(tab({ strip }).container).querySelector("[data-strip-edge]")
-          ?.className;
-
-      expect(edge(LAST_TAB)).toContain(runsOn);
-      expect(edge({ ...MIDDLE_TAB, open: true, rest: 540 })).not.toContain(
-        runsOn,
-      );
+        face(
+          tab({
+            strip: { ...MIDDLE_TAB, open: true },
+            tabbed: Layout.Stacking,
+          }).container,
+        ).className,
+      ).not.toContain(covers);
     });
 
     it("raises the open tab to match the address bar it meets", () => {
@@ -443,92 +381,6 @@ describe("TitleBar", () => {
       ).not.toBe("pointer");
     });
 
-    describe("moved along its strip", () => {
-      const SLOT = { height: 30, width: 240, x: 260, y: 32 };
-      const moved = (strip: StripPlace) => {
-        const props: Parameters<typeof TitleBar>[0] = {
-          ...barProps,
-          frame: SLOT,
-          rect: SLOT,
-          strip: MIDDLE_TAB,
-          tabbed: Layout.Tabbed,
-        };
-        const rendered = render(<TitleBar {...props} />);
-        rendered.rerender(
-          <TitleBar
-            {...props}
-            rect={{ ...SLOT, x: SLOT.x + 240 * (strip.at - MIDDLE_TAB.at) }}
-            strip={strip}
-          />,
-        );
-        return rendered.container;
-      };
-
-      // Two tabs trading places would cross, opening a hole in the strip, and
-      // the strip's end would move to the new last slot.
-      it("moves its piece of the strip at once", () => {
-        const container = moved(LAST_TAB);
-
-        const { transition } = globalThis.getComputedStyle(bar(container));
-        expect(transition).not.toContain("inset-inline-start");
-        expect(transition).not.toContain("--strip-rest");
-      });
-
-      it("slides the tab over from where it was", () => {
-        const container = moved({ ...MIDDLE_TAB, at: 2 });
-
-        expect(
-          globalThis.getComputedStyle(face(container)).animation,
-        ).toContain("windowSlidingTab");
-        expect(face(container).style.getPropertyValue("--slide-x")).toBe(
-          "-240px",
-        );
-      });
-
-      // The gap in the edge under an open tab would wait at its new place.
-      it("joins its window once it is there", () => {
-        const pastSlot = css({ insetInlineStart: "100%" });
-        const edge = (container: HTMLElement) =>
-          bar(container).querySelector("[data-strip-edge]")?.className;
-        const container = moved({ ...MIDDLE_TAB, at: 2, open: true });
-        expect(edge(container)).not.toContain(pastSlot);
-
-        fireEvent.animationEnd(face(container), {
-          animationName: "windowSlidingTab",
-        });
-
-        expect(edge(container)).toContain(pastSlot);
-      });
-
-      it("stops sliding once it is there", () => {
-        const container = moved({ ...MIDDLE_TAB, at: 2 });
-
-        fireEvent.animationEnd(face(container), {
-          animationName: "windowSlidingTab",
-        });
-
-        expect(
-          globalThis.getComputedStyle(face(container)).animation,
-        ).not.toContain("windowSlidingTab");
-        expect(
-          globalThis.getComputedStyle(bar(container)).transition,
-        ).toContain("inset-inline-start");
-      });
-
-      // A tab opening before it moves every slot after it the same way, so
-      // the slots ease together and the strip stays whole.
-      it("eases with the strip when a tab opens before it", () => {
-        const container = moved({ ...MIDDLE_TAB, at: 2, tabs: 4 });
-
-        expect(
-          globalThis.getComputedStyle(face(container)).animation,
-        ).not.toContain("windowSlidingTab");
-        expect(
-          globalThis.getComputedStyle(bar(container)).transition,
-        ).toContain("inset-inline-start");
-      });
-    });
-
     it("marks off a hidden tab from the hidden tab before it", () => {
       expect(
         bar(tab({ strip: { ...MIDDLE_TAB, divided: true } }).container),
@@ -545,21 +397,6 @@ describe("TitleBar", () => {
       const open = tab({ strip: { ...MIDDLE_TAB, open: true } });
       expect(open.queryByRole("button", { name: "Maximize" })).not.toBeNull();
       expect(open.queryByRole("button", { name: "Float" })).not.toBeNull();
-    });
-
-    it("offers a new tab at the end of a tabbed strip only", async () => {
-      const middle = tab({
-        onNewTab: () => undefined,
-        strip: { ...MIDDLE_TAB, rest: 540 },
-      });
-      expect(middle.queryByRole("button", { name: "New tab" })).toBeNull();
-      middle.unmount();
-
-      const added = new Promise<void>((resolve) => {
-        tab({ onNewTab: resolve, strip: LAST_TAB });
-      });
-      fireEvent.click(screen.getByRole("button", { name: "New tab" }));
-      await added;
     });
 
     it("shows the layout and size of a group it stands for", () => {

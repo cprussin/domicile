@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { render } from "@testing-library/react";
 
 import { loadEmittedStylesheet } from "../../emitted-stylesheet";
+import { recordedSettles } from "../recorded-settles";
 import { FloatShadow } from "./FloatShadow";
 
 loadEmittedStylesheet(document);
@@ -28,6 +29,37 @@ describe("FloatShadow", () => {
 
     // Unset, so it draws at full opacity.
     expect(globalThis.getComputedStyle(shadow(container)).opacity).toBe("");
+  });
+
+  it("moves with its window, following it exactly while it is dragged", () => {
+    const frame = { height: 300, width: 400, x: 20, y: 52 };
+    const played = (dragging: boolean) => {
+      const settles = recordedSettles();
+      const { rerender } = render(
+        <FloatShadow
+          depth={0}
+          dragging={dragging}
+          frame={frame}
+          motion="resting"
+          settler={settles.settler}
+        />,
+      );
+      rerender(
+        <FloatShadow
+          depth={0}
+          dragging={dragging}
+          frame={{ ...frame, x: 120 }}
+          motion="resting"
+          settler={settles.settler}
+        />,
+      );
+      return settles.played;
+    };
+
+    expect(played(false)).toStrictEqual([
+      { scaleX: 1, scaleY: 1, x: -100, y: 0 },
+    ]);
+    expect(played(true)).toStrictEqual([undefined]);
   });
 
   // A scratchpad window hangs from the screen's top edge.

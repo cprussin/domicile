@@ -78,13 +78,12 @@ describe("placementsOf", () => {
         at: 0,
         box: { height: TITLE_BAR, width: 1880, x: 20, y: 52 },
         divided: false,
-        first: true,
+        end: { height: TITLE_BAR, width: 1640, x: 260, y: 52 },
         group: {
           node: { id: appWindowId("kitty"), up: 1 },
           windows: [appWindowId("kitty")],
         },
         open: true,
-        rest: 1640,
         tabs: 1,
       },
       surface: {
