@@ -113,8 +113,11 @@ For how warping, browser-window focus and modifier drags work, see
 - After **Meta+A**, the whole selected container floats as one box and keeps
   its layout. Tiling keys work inside it. A new window opened while the
   keyboard is in a floating group joins that group.
-- **Dragging the empty end of a float's tab strip** moves the whole float, as
-  its title bars do.
+- **Dragging a lone float's bar** moves it. Let go over another group's tab,
+  it joins that group beside the tab.
+- **Dragging a tab of a floating group of several** pulls it out, as dragging
+  a tiled window does (see below). **Dragging the strip's empty end** moves
+  the whole float.
 - **Meta+drag** moves a float. **Meta+Shift+drag** or **Meta+right-drag**
   resizes from the nearest corner. The mode is fixed when the drag starts.
 - The Shift used to float a window does not count as the resize modifier until
@@ -139,7 +142,7 @@ For how warping, browser-window focus and modifier drags work, see
   tabs that swap slide under the open one. Floats are two apart to leave room.
 - Raising a float over one it overlaps animates the two swapping places.
 
-## Dragging tiled windows
+## Dragging windows and tabs
 
 - **Meta+drag**, or dragging its title bar, picks up a tiled window. An
   overlay shows where it will land: half of a target puts it on that side; the
@@ -148,8 +151,9 @@ For how warping, browser-window focus and modifier drags work, see
 - **A drop can land on any screen.** Targets include tiled windows on other
   screens, and the whole of a screen with nothing tiled. Focus follows the
   window.
-- **Dropping on a tab** puts the window before or after it in its strip, by
-  which half of the tab the pointer is over.
+- **Dropping on a tab**, tiled or floating, puts the window before or after
+  it in its strip, by which half of the tab the pointer is over. A float hides
+  the targets behind it.
 - **Dropping on the edge of a window in a tab group** of several puts the
   window beside the group, as in sway. A group of one becomes a split.
 - **Dragging a tab over its own group** breaks it out of the group: it goes
@@ -168,8 +172,8 @@ For how warping, browser-window focus and modifier drags work, see
   does not make the window transparent.
 - **Shared edges resize without a modifier**, over the window's border and the
   gap beside it (`tiled/borders.ts`).
-- Fullscreen windows and hidden tabs cannot be dragged, nor can a fullscreen
-  group by its strip.
+- Fullscreen windows cannot be dragged, nor can a fullscreen group by its
+  strip.
 
 ## Title bars
 

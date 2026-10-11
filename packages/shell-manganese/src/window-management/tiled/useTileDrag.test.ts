@@ -53,7 +53,7 @@ const dragging = (resizes = false) => {
       dragged: [DRAGGED.id],
       frame: DRAGGED.frame,
       resizes,
-      targets: { screens: [], tabs: [], windows: [DRAGGED, OTHER] },
+      targets: { floats: [], screens: [], tabs: [], windows: [DRAGGED, OTHER] },
       ...calls,
     }),
   );
@@ -180,12 +180,14 @@ describe("useTileDrag", () => {
     const STRIP = { height: 30, width: 1000, x: 0, y: 0 };
     const tabAt = (id: string, at: number) => ({
       at,
+      depth: 0,
       id,
       rect: { height: 30, width: 200, x: 200 * at, y: 0 },
       strip: STRIP,
       tabbed: Layout.Tabbed as const,
     });
     const targetsOf = (tabs: readonly string[]) => ({
+      floats: [],
       screens: [],
       tabs: tabs.map(tabAt),
       windows: [],

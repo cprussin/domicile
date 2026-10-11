@@ -21,6 +21,7 @@ import {
   fullscreenToggled,
   holds,
   modeToggled,
+  nodeDropped,
   opened,
   pageFullscreened,
   parentFocused,
@@ -541,5 +542,119 @@ describe("holds", () => {
     expect(holds(workspace, "a")).toBe(true);
     expect(holds(workspace, "b")).toBe(true);
     expect(holds(workspace, "z")).toBe(false);
+  });
+});
+
+describe("nodeDropped", () => {
+  /** A tabbed group of `ids`, the last focused. */
+  const tabsOf = (ids: readonly string[]) =>
+    Node.Container(
+      Layout.Tabbed,
+      ids.map((id) => Node.Window(id)),
+      ids.length - 1,
+    );
+
+  /**
+   * A workspace with `tiled` in one tab group and each of `floating` in a
+   * floating one, the last float focused.
+   */
+  const desk = (
+    tiled: readonly string[],
+    ...floating: readonly (readonly string[])[]
+  ): Workspace => {
+    const root = tiled.length === 0 ? undefined : tabsOf(tiled);
+    return {
+      ...emptyWorkspace("1"),
+      floatFocus: floating.at(-1)?.at(-1),
+      floats: floating.map((ids, at) => ({
+        depth: 1,
+        height: 400,
+        root: tabsOf(ids),
+        scratchpad: false,
+        width: 600,
+        x: 40 * at,
+        y: 40 * at,
+      })),
+      tiling: { depth: root === undefined ? 0 : 1, root },
+    };
+  };
+
+  const tiled = (workspace: Workspace) => windowsOf(workspace.tiling);
+  const floating = (workspace: Workspace) =>
+    workspace.floats.map(({ root }) => windowsIn(root));
+
+  it("moves a floating tab into a tiled group", () => {
+    const workspace = nodeDropped(
+      desk(["a"], ["b", "c"]),
+      { id: "c", up: 0 },
+      { id: "a", up: 0 },
+      Direction.Right,
+    );
+
+    expect(tiled(workspace)).toEqual(["a", "c"]);
+    expect(floating(workspace)).toEqual([["b"]]);
+    expect(focusedOn(workspace)).toBe("c");
+    expect(workspace.floatFocus).toBeUndefined();
+  });
+
+  it("moves a tiled tab into a floating group, raising it", () => {
+    const workspace = nodeDropped(
+      desk(["a", "b"], ["c", "d"], ["e"]),
+      { id: "a", up: 0 },
+      { id: "c", up: 0 },
+      Direction.Left,
+    );
+
+    expect(tiled(workspace)).toEqual(["b"]);
+    expect(floating(workspace)).toEqual([["e"], ["a", "c", "d"]]);
+    expect(focusedOn(workspace)).toBe("a");
+  });
+
+  it("takes a lone float into a group, and its box goes", () => {
+    const workspace = nodeDropped(
+      desk(["a"], ["b"]),
+      { id: "b", up: 0 },
+      { id: "a", up: 0 },
+      Direction.Left,
+    );
+
+    expect(tiled(workspace)).toEqual(["b", "a"]);
+    expect(workspace.floats).toEqual([]);
+  });
+
+  it("moves a tab from one floating group to another", () => {
+    const workspace = nodeDropped(
+      desk([], ["b", "c"], ["d", "e"]),
+      { id: "b", up: 0 },
+      { id: "e", up: 0 },
+      Direction.Right,
+    );
+
+    expect(floating(workspace)).toEqual([["c"], ["d", "e", "b"]]);
+    expect(focusedOn(workspace)).toBe("b");
+  });
+
+  it("moves a tab along a floating group's strip", () => {
+    const workspace = nodeDropped(
+      desk(["a"], ["b", "c"]),
+      { id: "c", up: 0 },
+      { id: "b", up: 0 },
+      Direction.Left,
+    );
+
+    expect(floating(workspace)).toEqual([["c", "b"]]);
+    expect(focusedOn(workspace)).toBe("c");
+  });
+
+  it("swaps a floating window with a tiled one it is dropped in the middle of", () => {
+    const workspace = nodeDropped(
+      desk(["a"], ["b", "c"]),
+      { id: "c", up: 0 },
+      { id: "a", up: 0 },
+      undefined,
+    );
+
+    expect(tiled(workspace)).toEqual(["c"]);
+    expect(floating(workspace)).toEqual([["b", "a"]]);
   });
 });

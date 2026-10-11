@@ -3,17 +3,23 @@ import { describe, expect, it } from "bun:test";
 import { Direction } from "../direction";
 import { Layout } from "../tree/node";
 import type { TabTarget } from "./aim";
-import { Aim, aimAt, cornerOf } from "./aim";
+import { Aim, aimAt, cornerOf, tabAimAt } from "./aim";
 
 const LEFT = { frame: { height: 400, width: 500, x: 0, y: 0 }, id: "a" };
 const RIGHT = { frame: { height: 400, width: 500, x: 500, y: 0 }, id: "b" };
 /** A screen below the two with nothing tiled on it. */
 const EMPTY = { area: { height: 400, width: 1000, x: 0, y: 500 }, name: "low" };
-const TARGETS = { screens: [EMPTY], tabs: [], windows: [LEFT, RIGHT] };
+const TARGETS = {
+  floats: [],
+  screens: [EMPTY],
+  tabs: [],
+  windows: [LEFT, RIGHT],
+};
 
 /** Three tabs along the top of a tabbed `ROW`, "a" open over all of it. */
 const tabAt = (id: string, at: number): TabTarget => ({
   at,
+  depth: 0,
   id,
   rect: { height: 30, width: 200, x: 200 * at, y: 0 },
   strip: { height: 30, width: 1000, x: 0, y: 0 },
@@ -21,12 +27,93 @@ const tabAt = (id: string, at: number): TabTarget => ({
 });
 const ROW = { frame: { height: 400, width: 1000, x: 0, y: 0 }, id: "a" };
 const TABS = {
+  floats: [],
   screens: [],
   tabs: [tabAt("a", 0), tabAt("b", 1), tabAt("c", 2)],
   windows: [ROW],
 };
 
 describe("aimAt", () => {
+  describe("with a floating group over the windows", () => {
+    /** A float over "a" and "b", its strip's one tab "f" at its top. */
+    const FLOAT = {
+      depth: 2,
+      frame: { height: 300, width: 400, x: 300, y: 100 },
+      windows: ["f"],
+    };
+    const floatTab = (id: string, at: number, depth: number): TabTarget => ({
+      at,
+      depth,
+      id,
+      rect: { height: 30, width: 200, x: 300 + 200 * at, y: 100 },
+      strip: { height: 30, width: 400, x: 300, y: 100 },
+      tabbed: Layout.Tabbed,
+    });
+    const FLOATING = {
+      ...TARGETS,
+      floats: [FLOAT],
+      tabs: [floatTab("f", 0, 2)],
+    };
+
+    it("aims at its tabs", () => {
+      expect(aimAt(FLOATING, ["a"], 350, 110)).toEqual(
+        Aim.Window("f", Direction.Left, {
+          height: 30,
+          width: 100,
+          x: 300,
+          y: 100,
+        }),
+      );
+    });
+
+    it("aims at nothing under it", () => {
+      expect(aimAt(FLOATING, ["a"], 600, 300)).toBeUndefined();
+    });
+
+    // A lone float moves under the pointer as it is dragged.
+    it("hides nothing from a drag that carries it", () => {
+      expect(aimAt(FLOATING, ["f"], 600, 300)).toMatchObject({ id: "b" });
+    });
+
+    it("aims at the front one of two strips", () => {
+      const front = {
+        ...FLOAT,
+        depth: 4,
+        frame: { ...FLOAT.frame, x: 350 },
+        windows: ["g"],
+      };
+      expect(
+        aimAt(
+          {
+            ...FLOATING,
+            floats: [FLOAT, front],
+            tabs: [
+              floatTab("f", 0, 2),
+              {
+                ...floatTab("g", 0, 4),
+                rect: { height: 30, width: 200, x: 350, y: 100 },
+              },
+            ],
+          },
+          ["a"],
+          380,
+          110,
+        ),
+      ).toMatchObject({ id: "g" });
+    });
+
+    it("aims at nothing for a tab behind another float", () => {
+      const front = {
+        depth: 4,
+        frame: { height: 300, width: 400, x: 200, y: 50 },
+        windows: ["g"],
+      };
+      expect(
+        aimAt({ ...FLOATING, floats: [FLOAT, front] }, ["a"], 350, 110),
+      ).toBeUndefined();
+    });
+  });
+
   it("aims at the middle of the window under the pointer", () => {
     expect(aimAt(TARGETS, ["a"], 750, 200)).toEqual(
       Aim.Window("b", undefined, RIGHT.frame),
@@ -95,12 +182,14 @@ describe("aimAt", () => {
   it("moves a stacked tab up or down its strip", () => {
     const stackedAt = (id: string, at: number): TabTarget => ({
       at,
+      depth: 0,
       id,
       rect: { height: 30, width: 1000, x: 0, y: 30 * at },
       strip: { height: 60, width: 1000, x: 0, y: 0 },
       tabbed: Layout.Stacking,
     });
     const targets = {
+      floats: [],
       screens: [],
       tabs: [stackedAt("a", 0), stackedAt("b", 1)],
       windows: [],
@@ -116,12 +205,13 @@ describe("aimAt", () => {
   it("aims a tab above or below a stacked one, by its half", () => {
     const stacked: TabTarget = {
       at: 1,
+      depth: 0,
       id: "b",
       rect: { height: 30, width: 1000, x: 0, y: 30 },
       strip: { height: 60, width: 1000, x: 0, y: 0 },
       tabbed: Layout.Stacking,
     };
-    const targets = { screens: [], tabs: [stacked], windows: [] };
+    const targets = { floats: [], screens: [], tabs: [stacked], windows: [] };
     expect(aimAt(targets, ["a"], 500, 50)).toEqual(
       Aim.Window("b", Direction.Down, {
         height: 15,
@@ -188,5 +278,17 @@ describe("cornerOf", () => {
       horizontal: Direction.Right,
       vertical: Direction.Up,
     });
+  });
+});
+
+// A lone float moves as it is dragged, and joins a group only over its tabs.
+describe("tabAimAt", () => {
+  it("aims beside the tab under the pointer", () => {
+    expect(tabAimAt(TABS, ["f"], 250, 10)).toEqual(aimAt(TABS, ["f"], 250, 10));
+  });
+
+  it("aims at nothing over a window or a screen", () => {
+    expect(tabAimAt(TABS, ["f"], 250, 200)).toBeUndefined();
+    expect(tabAimAt(TARGETS, ["f"], 250, 600)).toBeUndefined();
   });
 });

@@ -1,5 +1,5 @@
-// Drop zones for dragging a tiled window, as in sway's `tiling_drag`, and the
-// corner a tiled resize drags.
+// Drop zones for dragging a window or its tab, as in sway's `tiling_drag`, and
+// the corner a tiled resize drags.
 
 import { Direction } from "../direction";
 import type { Rect } from "../rect";
@@ -20,10 +20,15 @@ export type EmptyScreen = {
   name: string;
 };
 
-/** A tiled window's tab, hidden or open, which a dragged one goes beside. */
+/**
+ * A tiled or floating window's tab, hidden or open, which a dragged one goes
+ * beside.
+ */
 export type TabTarget = {
   /** Its index in its strip. */
   at: number;
+  /** Its window's depth, so the front of two overlapping strips wins. */
+  depth: number;
   id: string;
   rect: Rect;
   /** Its strip's box, which tabs in one strip share. */
@@ -32,8 +37,17 @@ export type TabTarget = {
   tabbed: TabLayout;
 };
 
-/** Everything on every screen a dragged tiled window can be dropped on. */
+/** A float's box, which hides every target behind it. */
+export type FloatCover = {
+  depth: number;
+  frame: Rect;
+  /** Its windows. A float the drag carries hides nothing. */
+  windows: readonly string[];
+};
+
+/** Everything on every screen a dragged window can be dropped on. */
 export type DropTargets = {
+  floats: readonly FloatCover[];
   screens: readonly EmptyScreen[];
   tabs: readonly TabTarget[];
   windows: readonly Target[];
@@ -107,16 +121,30 @@ const EDGE_ZONE = 0.3;
  * A window goes before or after the tab under the pointer, by which half of it
  * the pointer is in. A tab over its own strip takes the slot under the pointer,
  * and over its own window goes beside its group. Tabs come before windows,
- * whose frames hold their strips.
+ * whose frames hold their strips. A float hides what is behind it, but not
+ * from a drag that carries it.
  */
 export const aimAt = (
-  { screens, tabs, windows }: DropTargets,
+  { floats, screens, tabs, windows }: DropTargets,
   dragged: readonly string[],
   x: number,
   y: number,
 ): Aim | undefined => {
-  const tab = tabs.find(({ rect }) => contains(rect, x, y));
-  const target = windows.find(({ frame }) => contains(frame, x, y));
+  const cover = coverAt(floats, dragged, x, y);
+  const tab = tabs
+    .filter(
+      ({ depth, rect }) =>
+        contains(rect, x, y) && (cover === undefined || depth >= cover),
+    )
+    .reduce<TabTarget | undefined>(
+      (front, next) =>
+        front === undefined || next.depth > front.depth ? next : front,
+      undefined,
+    );
+  const target =
+    cover === undefined
+      ? windows.find(({ frame }) => contains(frame, x, y))
+      : undefined;
   if (tab !== undefined) {
     return dragged.includes(tab.id)
       ? undefined
@@ -126,6 +154,8 @@ export const aimAt = (
           x,
           y,
         );
+  } else if (cover !== undefined) {
+    return undefined;
   } else if (target === undefined) {
     const screen = screens.find(({ area }) => contains(area, x, y));
     return screen === undefined
@@ -137,6 +167,39 @@ export const aimAt = (
     return aimAtWindow(target, sharesStrip(tabs, target.id), x, y);
   }
 };
+
+/**
+ * {@link aimAt}, but only beside a tab: what dropping a moved float there
+ * would do. Elsewhere the float just moves.
+ */
+export const tabAimAt = (
+  targets: DropTargets,
+  dragged: readonly string[],
+  x: number,
+  y: number,
+): Aim | undefined =>
+  aimAt({ ...targets, screens: [], windows: [] }, dragged, x, y);
+
+/**
+ * The depth of the front float under the point, if any, leaving out a float
+ * whose windows are all being dragged.
+ */
+const coverAt = (
+  floats: readonly FloatCover[],
+  dragged: readonly string[],
+  x: number,
+  y: number,
+): number | undefined =>
+  floats
+    .filter(
+      ({ frame, windows }) =>
+        contains(frame, x, y) && !windows.every((id) => dragged.includes(id)),
+    )
+    .reduce<number | undefined>(
+      (front, { depth }) =>
+        front === undefined || depth > front ? depth : front,
+      undefined,
+    );
 
 /**
  * The corner a resize from `x`, `y` drags: the one in the pointer's quarter,
