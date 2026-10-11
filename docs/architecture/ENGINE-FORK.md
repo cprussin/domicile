@@ -212,7 +212,7 @@ Calls (compositor → engine):
 | C ABI | Wayland equivalent |
 |---|---|
 | `domicile_surface_create(engine, app_id)` → `DomicileSurfaceId` | a window appearing. The page's embed waits for this call. |
-| `domicile_surface_import(surface, dmabuf)` → `DomicileBufferId` | `zwp_linux_dmabuf_v1` |
+| `domicile_surface_import_async(surface, dmabuf, request)`, answered by `imported` | `zwp_linux_dmabuf_v1`. `domicile_surface_import` is the blocking form an older compositor calls. |
 | `domicile_surface_submit_transformed(surface, buffer, crop, damage, box, transform)` | `wl_surface.commit` with `xdg_surface.set_window_geometry` and `wl_surface.set_buffer_transform`, shown at the box of the acked configure |
 | `domicile_displays_configure(layout, count)` | output configuration |
 | `domicile_clipboard_set_items(clipboard, items, count)` | `wl_data_offer.receive`. The compositor sends the selection it already read: its text and its image, each a `DomicileClipboardItem`. `domicile_clipboard_set(clipboard, text, length)` is the text-only form an older compositor calls. |
@@ -224,6 +224,7 @@ Callbacks (engine → compositor):
 | C ABI | Wayland equivalent |
 |---|---|
 | `released(surface, buffer)` | `wl_buffer.release` |
+| `imported(surface, request, buffer)` | none: the answer to `domicile_surface_import_async`; zero is a refusal |
 | `configure(surface, width, height)`, `configure_at(…, scale)`, `configure_box(…, box)` | `xdg_toplevel.configure` |
 | `displays(displays, count)` | `wl_output`. Primary first, never empty. |
 | `copied_items(clipboard, items, count)` | `wl_data_device.set_selection` for a copy made in a page: its text and its image. `copied(clipboard, text, length)` is the text-only form, called when `copied_items` is unset. |
@@ -245,8 +246,10 @@ Callbacks (engine → compositor):
 
 The browser imports each dmabuf. The producer submits its own frames.
 
-1. `domicile_surface_import` sends the dmabuf fds, DRM fourcc and layout over
-   the existing socket.
+1. `domicile_surface_import_async` sends the dmabuf fds, DRM fourcc and layout
+   over the existing socket and returns at once. The compositor holds the
+   frame back until `imported` answers (`engine_imports.rs`), so a new buffer
+   never stalls the Wayland thread.
 2. The browser imports it the way `exo::Buffer` does
    (`components/exo/buffer.cc`). That code needs `aura::Env`, which only the
    browser has.
