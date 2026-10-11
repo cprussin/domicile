@@ -36,6 +36,8 @@ Exec=domicile open-app https://music.example/
 ```
 
 Launchers list it like any application ([LAUNCHER.md](/docs/LAUNCHER.md)).
+The home-manager module writes one for each of `programs.domicile.webApps`
+([SHELL-CONFIG.md](/docs/SHELL-CONFIG.md#home-manager)).
 
 An app that needs the system (files, native programs) is an unpacked MV3
 extension, as Settings is ([SETTINGS.md](/docs/SETTINGS.md)): `chrome.*` APIs,
@@ -69,7 +71,7 @@ manifest `key` pins the id.
 - [ ] `domicile install-app <url>`: read the site's web app manifest (`name`,
   `icons`, `start_url`) and write a desktop entry to
   `~/.local/share/applications`
-- [ ] home-manager `webApps.<name> = { url; icon; }`, which writes desktop
+- [x] home-manager `webApps.<name> = { url; icon; }`, which writes desktop
   entries
 - [ ] `DomicileHost.openAppWindow(url)`, for a shell's own launcher
 

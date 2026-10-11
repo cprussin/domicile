@@ -837,6 +837,10 @@
                   type = lib.types.listOf lib.types.package;
                   default = [ ];
                 };
+                xdg.desktopEntries = lib.mkOption {
+                  type = lib.types.attrsOf lib.types.attrs;
+                  default = { };
+                };
               };
             };
             # A config using each part of the schema: a rotated monitor at a
@@ -898,6 +902,30 @@
             # reaches a desk. Its log is the compositor's reason.
             refused = pkgs.testers.testBuildFailure
               (deskWith { no_such_section = { }; }).config.xdg.configFile."domicile/domicile.json".source;
+
+            # A web app whose address holds characters an `Exec` line must
+            # quote or escape.
+            withApp = pkgs.lib.evalModules {
+              modules = [
+                stub
+                self.homeManagerModules.domicile
+                desk
+                {
+                  programs.domicile.webApps.Music = {
+                    url = "https://music.example/play?list=a%20b&shuffle$1#top";
+                    icon = "music";
+                  };
+                }
+              ];
+              specialArgs = { inherit pkgs; };
+            };
+            appEntry = withApp.config.xdg.desktopEntries.Music;
+            # Built as home-manager builds it, so `desktop-file-validate` runs.
+            appFile = pkgs.makeDesktopItem {
+              name = "Music";
+              desktopName = appEntry.name;
+              inherit (appEntry) exec icon;
+            };
 
             # The same module with a `domicile` that prints its arguments, to
             # test the wrapper's command lines. The real binary needs a
@@ -1024,6 +1052,19 @@
               { option = "extraPortals"; package = evaluated.config.programs.domicile.finalPackage; }
               { option = "configPackages"; package = evaluated.config.programs.domicile.finalPackage; }
             ]}
+
+            # A web app's entry opens its address in an app window. The
+            # address is quoted, `$` escaped and `%` doubled, as the desktop
+            # entry spec asks.
+            [ ${pkgs.lib.escapeShellArg appEntry.exec} = ${pkgs.lib.escapeShellArg ''${domicilePackage}/bin/domicile open-app "https://music.example/play?list=a%%20b&shuffle\\$1#top"''} ] || {
+              echo "the Music web app's Exec is: "${pkgs.lib.escapeShellArg appEntry.exec} >&2
+              exit 1
+            }
+            [ ${pkgs.lib.escapeShellArg "${appEntry.name} ${appEntry.icon}"} = "Music music" ] || {
+              echo "the Music web app's entry has the wrong Name or Icon" >&2
+              exit 1
+            }
+            test -e ${appFile}/share/applications/Music.desktop
 
             touch "$out"
           '';

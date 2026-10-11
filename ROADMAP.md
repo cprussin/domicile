@@ -67,7 +67,6 @@ item when it ships.
 10. **Web apps.** [WEB-APPS.md](docs/architecture/WEB-APPS.md).
     - Show the address when an app leaves its origin.
     - `domicile install-app` from a web app manifest.
-    - A home-manager option for desktop entries.
     - A guard that the engine lists an app window with `isApp` and records no
       visits for it.
 
