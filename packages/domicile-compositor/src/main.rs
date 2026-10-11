@@ -175,7 +175,7 @@ use crate::chrome_hub::{
 };
 use crate::client_requests::ClientRequest;
 use crate::coalesce::last_of_burst;
-use crate::configure_answers::ConfigureAnswers;
+use crate::configure_answers::{ConfigureAnswers, Resize, Resized};
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::eis::barriers::Zone;
@@ -1066,6 +1066,45 @@ impl DomicileCompositor {
             .expect("the compositor's own loop takes a timer");
     }
 
+    /// Configure `toplevel` at the engine's box. Sent even at an unchanged
+    /// size, so the client's commit names the new box and the page stops
+    /// waiting for it. See [`crate::configure_answers`].
+    fn send_resize(&mut self, app_id: &str, toplevel: &ToplevelSurface, resize: Resize) {
+        toplevel.with_pending_state(|state| {
+            state.size = Some((resize.size.0 as i32, resize.size.1 as i32).into());
+        });
+        let serial = toplevel.send_configure();
+        self.configure_answers
+            .get_mut(app_id)
+            .expect("a resize comes from the window's configure answers")
+            .sent(serial, resize, Instant::now());
+    }
+
+    /// Send `app_id`'s waiting resize at `until` if its client has not
+    /// answered the last one by then.
+    fn resize_when_overdue(&self, app_id: String, until: Instant) {
+        self.loop_handle
+            .insert_source(
+                Timer::from_deadline(until),
+                move |_, _, data: &mut CalloopData| {
+                    let state = &mut data.state;
+                    let overdue = state
+                        .configure_answers
+                        .get_mut(&app_id)
+                        .and_then(|answers| answers.overdue(Instant::now()));
+                    // The window may have closed meanwhile.
+                    if let (Some(resize), Some(toplevel)) = (overdue, state.toplevel_for(&app_id)) {
+                        tracing::debug!(%app_id, "a client did not answer its last resize in time");
+                        state.send_resize(&app_id, &toplevel, resize);
+                    }
+                    TimeoutAction::Drop
+                },
+            )
+            // Timers register nothing with the kernel, so inserting cannot
+            // fail.
+            .expect("the compositor's own loop takes a timer");
+    }
+
     /// Send `app_id`'s held callbacks before closing it, so a client blocked
     /// on one reads the close.
     fn release_before_closing(&mut self, app_id: &str) {
@@ -1655,23 +1694,32 @@ impl DomicileCompositor {
                         scale.unwrap_or(self.device_pixel_ratio),
                     );
                     tracing::debug!(%app_id, width, height, "engine configure -> client");
-                    toplevel.with_pending_state(|state| {
-                        state.size = Some((width as i32, height as i32).into());
-                    });
                     match number {
-                        // Sent even at an unchanged size, so the client's
-                        // commit names the new box and the page stops waiting
-                        // for it.
                         Some(number) => {
-                            let serial = toplevel.send_configure();
-                            self.configure_answers
-                                .entry(app_id)
+                            let resize = Resize {
+                                number,
+                                device_size,
+                                size: (width, height),
+                            };
+                            let resized = self
+                                .configure_answers
+                                .entry(app_id.clone())
                                 .or_insert_with(ConfigureAnswers::new)
-                                .sent(serial, number, device_size);
+                                .resize(resize, Instant::now());
+                            match resized {
+                                Resized::Send(resize) => {
+                                    self.send_resize(&app_id, &toplevel, resize)
+                                }
+                                Resized::Waits(until) => self.resize_when_overdue(app_id, until),
+                                Resized::Coalesced => {}
+                            }
                         }
                         // Sends only if the size differs from the last
                         // acknowledged configure.
                         None => {
+                            toplevel.with_pending_state(|state| {
+                                state.size = Some((width as i32, height as i32).into());
+                            });
                             toplevel.send_pending_configure();
                         }
                     }
@@ -3955,6 +4003,26 @@ impl CompositorHandler for DomicileCompositor {
 
         if let Committer::App(app_id) = &committer {
             self.tell_the_size_limits(app_id, surface);
+        }
+        // A commit answers the client's last resize, so the newest one may go
+        // out.
+        if let (Committer::App(app_id), Role::Toplevel(toplevel)) = (&committer, &role) {
+            let acked = with_states(surface, |states| {
+                states
+                    .data_map
+                    .get::<XdgToplevelSurfaceData>()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .current_serial
+            });
+            let waiting = self
+                .configure_answers
+                .get_mut(app_id)
+                .and_then(|answers| answers.committed(acked));
+            if let Some(resize) = waiting {
+                self.send_resize(app_id, toplevel, resize);
+            }
         }
 
         // Take the new buffer and the frame callbacks. Taking the buffer gives
