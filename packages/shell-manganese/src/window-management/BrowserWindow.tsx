@@ -225,7 +225,8 @@ export const BrowserWindow = ({
   const loading = useLoading(view);
   const zoom = useZoom(view);
   const targetUrl = useTargetUrl(view);
-  usePageFullscreen(view, fullscreen, onPageFullscreen);
+  // A fullscreen page, such as a video, fills the window without its bar.
+  const pageFullscreen = usePageFullscreen(view, fullscreen, onPageFullscreen);
   // Zoom count; each change re-shows the zoom indicator (see `ZoomIndicator`).
   const [zoomsAnnounced, setZoomsAnnounced] = useState(0);
   // True while `focusOwn` is calling `focus()`. Focus events fire
@@ -529,7 +530,7 @@ export const BrowserWindow = ({
             }
       }
     >
-      {popupWindow === undefined && !isApp && (
+      {popupWindow === undefined && !isApp && !pageFullscreen && (
         <AddressBar
           address={addressOf(shown.url, sent)}
           canGoBack={canGoBack}

@@ -1,8 +1,9 @@
 import { WEBVIEW_PAGE_FULLSCREEN_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-element";
-import { useEffect, useEffectEvent, useRef } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 /**
- * Keeps a `<webview>`'s page fullscreen in step with its window.
+ * Keeps a `<webview>`'s page fullscreen in step with its window, and returns
+ * whether the page is fullscreen.
  *
  * - Reports the page's fullscreen to `onFullscreen` as it mounts, then on each
  *   change, as `usePageIcon` does.
@@ -17,7 +18,9 @@ export const usePageFullscreen = (
   view: HTMLWebViewElement | null,
   fullscreen: boolean,
   onFullscreen: (fullscreen: boolean) => void,
-): void => {
+): boolean => {
+  const [pageFullscreen, setPageFullscreen] = useState(false);
+
   // An effect event, so a new `onFullscreen` each render does not report
   // again.
   const report = useEffectEvent((pageFullscreen: boolean) => {
@@ -29,6 +32,7 @@ export const usePageFullscreen = (
       return undefined;
     } else {
       const read = () => {
+        setPageFullscreen(view.pageFullscreen);
         report(view.pageFullscreen);
       };
       read();
@@ -46,4 +50,6 @@ export const usePageFullscreen = (
     }
     wasFullscreen.current = fullscreen;
   }, [fullscreen, view]);
+
+  return pageFullscreen;
 };

@@ -100,8 +100,8 @@ For how warping, browser-window focus and modifier drags work, see
   and survives splits, moves and closes inside it (`fullscreenKept`). It ends
   with its last window.
 - A browser window fills its screen while its page is fullscreen, such as
-  after a video's fullscreen button (`pageFullscreened`). Leaving fullscreen
-  with Meta+F or the title bar takes the page out too.
+  after a video's fullscreen button (`pageFullscreened`), and hides its address
+  bar. Leaving fullscreen with Meta+F or the title bar takes the page out too.
 
 ## Floating windows
 

@@ -53,6 +53,17 @@ describe("usePageFullscreen", () => {
     expect(reports).toEqual([false, true]);
   });
 
+  it("says whether the page is fullscreen", () => {
+    const view = guest();
+    const { result } = renderHook(() =>
+      usePageFullscreen(view.element, false, () => undefined),
+    );
+    expect(result.current).toBe(false);
+    view.fullscreens(true);
+    view.changed();
+    expect(result.current).toBe(true);
+  });
+
   it("takes the page out of fullscreen when the window leaves it", () => {
     const view = guest();
     view.fullscreens(true);

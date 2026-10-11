@@ -11,6 +11,7 @@ import {
   WEBVIEW_HISTORY_CHANGE_EVENT,
   WEBVIEW_LOADING_CHANGE_EVENT,
   WEBVIEW_PAGE_CHANGE_EVENT,
+  WEBVIEW_PAGE_FULLSCREEN_CHANGE_EVENT,
   WEBVIEW_PERMISSION_REQUEST_EVENT,
   WEBVIEW_SITE_PERMISSIONS_CHANGE_EVENT,
   WEBVIEW_TARGET_URL_CHANGE_EVENT,
@@ -405,6 +406,49 @@ describe("BrowserWindow", () => {
       expect(view(container).getAttribute("src")).toBe(
         "https://docs.example.com",
       );
+    });
+
+    // A video's fullscreen button: the page fills the window, as in Chrome.
+    it("hides while its page is fullscreen, and comes back after", () => {
+      const { container } = render(
+        <BrowserWindow
+          behindPanel={false}
+          clickThrough={false}
+          covered={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          fullscreen
+          motion="resting"
+          onIcon={noIcon}
+          onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          url="https://example.com"
+          window="1"
+        />,
+      );
+      const fullscreens = (fullscreen: boolean) => {
+        Object.defineProperty(view(container), "pageFullscreen", {
+          configurable: true,
+          value: fullscreen,
+        });
+        fireEvent(
+          view(container),
+          new Event(WEBVIEW_PAGE_FULLSCREEN_CHANGE_EVENT),
+        );
+      };
+
+      fullscreens(true);
+      expect(
+        screen.queryByRole("combobox", { name: "Address" }),
+      ).not.toBeInTheDocument();
+
+      fullscreens(false);
+      expect(address()).toBeInTheDocument();
     });
 
     // The address bar shows the page's actual URL.
