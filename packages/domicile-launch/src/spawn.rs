@@ -64,6 +64,10 @@ const NESTED_PLATFORM: &str = "wayland";
 /// `--app` hides the browser's tab strip, address bar and shortcuts.
 /// `--no-sandbox` is not passed by default because it shows an "unsupported
 /// flag" bar. A machine that needs it adds it through `extra`.
+///
+/// `extra` is split on whitespace. Its `--enable-features` and
+/// `--disable-features` values are merged into one switch each, since the
+/// last copy of a switch wins and would drop the built-in features.
 pub fn engine(
     engine: &Path,
     shell: &Shell,
@@ -71,6 +75,7 @@ pub fn engine(
     runtime: &Runtime,
     extra: Option<&str>,
 ) -> Spawn {
+    let extra = Extra::parse(extra.unwrap_or_default());
     let mut args: Vec<OsString> = vec![
         format!("--ozone-platform={platform}").into(),
         format!("--app={SHELL_DOCUMENT}").into(),
@@ -96,10 +101,12 @@ pub fn engine(
         // build handles them with `EventConverterEvdevImpl`, which ignores
         // touchpad motion and the mouse wheel, and has no pointer
         // acceleration. Both features are off by default.
-        //
-        // A second `--enable-features` in `extra` replaces this one, since the
-        // last copy of a switch wins. Repeat these features there.
-        "--enable-features=LibinputHandleTouchpad,LibinputHandleMouse".into(),
+        ["--enable-features=LibinputHandleTouchpad,LibinputHandleMouse"]
+            .into_iter()
+            .chain(extra.enabled)
+            .collect::<Vec<_>>()
+            .join(",")
+            .into(),
         "--password-store=basic".into(),
         "--no-first-run".into(),
         format!("--user-data-dir={}", runtime.profile.display()).into(),
@@ -127,13 +134,10 @@ pub fn engine(
     if platform == NESTED_PLATFORM {
         args.push("--domicile-inhibit-host-shortcuts".into());
     }
-    // Split on whitespace; runs of spaces produce no empty arguments.
-    args.extend(
-        extra
-            .unwrap_or_default()
-            .split_whitespace()
-            .map(OsString::from),
-    );
+    if !extra.disabled.is_empty() {
+        args.push(format!("{DISABLE_FEATURES}{}", extra.disabled.join(",")).into());
+    }
+    args.extend(extra.rest.into_iter().map(OsString::from));
     Spawn {
         args,
         // For `domicile-settings-host`, which the engine starts for the
@@ -233,5 +237,38 @@ pub fn compositor(
             ),
         ],
         program: compositor.to_path_buf(),
+    }
+}
+
+const ENABLE_FEATURES: &str = "--enable-features=";
+
+const DISABLE_FEATURES: &str = "--disable-features=";
+
+/// The `extra` engine switches, with the feature lists apart from the rest.
+struct Extra<'a> {
+    enabled: Vec<&'a str>,
+    disabled: Vec<&'a str>,
+    rest: Vec<&'a str>,
+}
+
+impl<'a> Extra<'a> {
+    /// Splits on whitespace; runs of spaces produce no empty arguments.
+    fn parse(extra: &'a str) -> Self {
+        let mut parsed = Extra {
+            enabled: Vec::new(),
+            disabled: Vec::new(),
+            rest: Vec::new(),
+        };
+        for arg in extra.split_whitespace() {
+            match (
+                arg.strip_prefix(ENABLE_FEATURES),
+                arg.strip_prefix(DISABLE_FEATURES),
+            ) {
+                (Some(features), _) => parsed.enabled.push(features),
+                (_, Some(features)) => parsed.disabled.push(features),
+                (None, None) => parsed.rest.push(arg),
+            }
+        }
+        parsed
     }
 }

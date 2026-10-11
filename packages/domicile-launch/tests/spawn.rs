@@ -640,6 +640,49 @@ fn the_engine_is_told_a_mouse_is_libinputs() {
     }
 }
 
+#[test]
+fn a_machine_that_enables_features_keeps_libinput() {
+    // The last `--enable-features` wins, so the extra features join the
+    // built-in ones in one flag.
+    let args = args_of(&engine(
+        Path::new("/l/engine"),
+        &shell(),
+        "drm",
+        &runtime(),
+        Some("--enable-features=Vulkan --v=1 --enable-features=DefaultANGLEVulkan"),
+    ));
+    assert_eq!(
+        features_of(&args),
+        [
+            "LibinputHandleTouchpad",
+            "LibinputHandleMouse",
+            "Vulkan",
+            "DefaultANGLEVulkan",
+        ]
+    );
+    assert!(args.contains(&"--v=1".to_string()), "{args:?}");
+}
+
+#[test]
+fn a_machine_that_disables_features_gets_one_flag_for_them() {
+    let args = args_of(&engine(
+        Path::new("/l/engine"),
+        &shell(),
+        "drm",
+        &runtime(),
+        Some("--disable-features=Vulkan --disable-features=LibinputHandleMouse"),
+    ));
+    let lists: Vec<&String> = args
+        .iter()
+        .filter(|arg| arg.starts_with("--disable-features="))
+        .collect();
+    assert_eq!(
+        lists,
+        ["--disable-features=Vulkan,LibinputHandleMouse"],
+        "{args:?}"
+    );
+}
+
 /// The features in the single `--enable-features` flag. A second flag would
 /// replace the first.
 fn features_of(args: &[String]) -> Vec<&str> {
