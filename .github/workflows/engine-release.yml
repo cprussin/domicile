@@ -39,7 +39,7 @@ concurrency:
 # DOMICILE_WRITEBACK_TOKEN's, not this token's.
 permissions:
   contents: write
-  # The compile slot asks whether its holder's run is over.
+  # The compile slot and the tree pool ask whether a holder's run is over.
   actions: read
 
 jobs:
@@ -92,6 +92,10 @@ jobs:
       # `$CHROMIUM` and `$STAGE` come from the pool. Each tree has its own ~3G
       # `out/Release`, which the "Room to build in" step accounts for.
       - name: Take a tree
+        env:
+          # A holder whose run is over holds nothing (crux-run-finished.sh).
+          DOMICILE_TREE_HOLDER_DONE: '.github/scripts/crux-run-finished.sh "$HOLDER"'
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           tree="$(.github/scripts/engine-tree-pool.sh pick \

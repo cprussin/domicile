@@ -171,6 +171,35 @@ holder_of() { # slot
     echo "someone who did not write their name in it"
 }
 
+# Clears each tree whose holder's run is over. A runner shut down mid-build
+# never runs its drop step, so its tree stays locked until someone clears it.
+#
+# `DOMICILE_TREE_HOLDER_DONE` is the workflow's check, given HOLDER, as for the
+# compile slot (crux-run-finished.sh). Only a definite yes clears a lock: a
+# running holder may be mid-build, and a person's lock names no run.
+#
+# The lock is renamed aside before it is removed, so a run that took the tree
+# between the check and the clear keeps its lock.
+clear_finished() {
+  [ -n "${DOMICILE_TREE_HOLDER_DONE:-}" ] || return 0
+  local slot lock held why aside
+  for slot in $(usable); do
+    lock="$("$LOCK_SH" path "$slot/src")"
+    [ -d "$lock" ] || continue
+    held="$(holder_of "$slot")"
+    why="$(HOLDER="$held" sh -c "$DOMICILE_TREE_HOLDER_DONE" 2>&1)" || continue
+    aside="$lock.cleared.$$"
+    mv -T "$lock" "$aside" 2>/dev/null || continue
+    if [ "$(cat "$aside/owner" 2>/dev/null)" != "$held" ]; then
+      mv -T "$aside" "$lock" 2>/dev/null ||
+        echo "::error::took ${slot##*/}'s lock from '$(cat "$aside/owner" 2>/dev/null)' while clearing '$held' and could not put it back: $aside" >&2
+      continue
+    fi
+    rm -rf "$aside"
+    echo "::warning::cleared ${slot##*/}, which '$held' held, because its run is over: $why" >&2
+  done
+}
+
 case "$action" in
   pick)
     pin="${2:-}"
@@ -209,6 +238,7 @@ case "$action" in
       done
       return 1
     }
+    clear_finished
     take_best && exit 0
 
     # Every tree is held. Wait for one instead of failing.
@@ -262,6 +292,7 @@ case "$action" in
     echo "every Chromium tree under $TREES is held; waiting up to ${WAIT}s for one" >&2
     waited=0
     asked=0
+    cleared_at=0
     while [ "$waited" -lt "$WAIT" ]; do
       sleep "$POLL"
       waited=$((waited + POLL))
@@ -282,6 +313,10 @@ case "$action" in
             ;;
           *) echo "could not ask whether this run is still wanted, so it carries on: $why" >&2 ;;
         esac
+      fi
+      if [ $((waited - cleared_at)) -ge "${DOMICILE_TREE_RECHECK:-60}" ]; then
+        cleared_at="$waited"
+        clear_finished
       fi
       if take_best; then
         echo "took a tree after ${waited}s" >&2

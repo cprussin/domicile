@@ -211,6 +211,9 @@ jobs:
                 || '' }}
           HEAD_REF: ${{ github.head_ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # A holder whose run is over holds nothing (crux-run-finished.sh).
+          DOMICILE_TREE_HOLDER_DONE: '.github/scripts/crux-run-finished.sh "$HOLDER"'
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           tree="$(.github/scripts/engine-tree-pool.sh pick \
