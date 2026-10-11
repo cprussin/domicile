@@ -91,6 +91,15 @@ export const Shell = runManganese();
 - The build runs `domicile check-config` on the file, so a key the compositor
   refuses fails `home-manager switch` instead of the desk. Run it yourself on
   a hand-written config: `domicile check-config ~/.config/domicile/domicile.json`.
+- `webApps` installs sites as apps. Each gets a desktop entry that runs
+  `domicile open-app <url>` ([WEB-APPS.md](/docs/architecture/WEB-APPS.md)):
+
+  ```nix
+  programs.domicile.webApps.Music = {
+    url = "https://music.example/";
+    icon = "multimedia-audio-player"; # an icon theme name or a file
+  };
+  ```
 
 ## Reloading
 

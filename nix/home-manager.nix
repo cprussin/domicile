@@ -1,10 +1,10 @@
 # Home-manager module for Domicile.
 #
 # Writes `~/.config/domicile/domicile.json` and installs a `domicile` that runs
-# the configured shell by default. `settings` mirrors the `domicile-config`
-# crate's schema; `scripts/test-the-home-manager-module-agrees.sh` checks that
-# they match. `settings` is freeform so a newer domicile works with an older
-# module.
+# the configured shell by default, plus a desktop entry for each of `webApps`.
+# `settings` mirrors the `domicile-config` crate's schema;
+# `scripts/test-the-home-manager-module-agrees.sh` checks that they match.
+# `settings` is freeform so a newer domicile works with an older module.
 #
 # The login session belongs to the NixOS module (`nix/nixos.nix`).
 #
@@ -170,6 +170,13 @@
     fi
     exec ${cfg.package}/bin/domicile "$@" ${lib.escapeShellArg (toString cfg.shell)}
   '';
+
+  # One argument of a desktop entry's `Exec`, quoted as the spec asks: `"`,
+  # `` ` ``, `$` and `\` escaped inside the quotes, then `\` escaped again as a
+  # string value, and `%` doubled so it is not a field code.
+  execArgument = word:
+    lib.replaceStrings ["\\" "%"] ["\\\\" "%%"]
+    ''"${lib.escape ["\\" "\"" "`" "$"] word}"'';
 
   # Settings the compositor no longer reads, by dotted path, and where each
   # went. `nix/removed-settings.nix` makes them hidden options that fail an
@@ -506,6 +513,29 @@ in {
       };
     };
 
+    webApps = lib.mkOption {
+      description = ''
+        Sites to install as apps, by the name launchers show. Each gets a
+        desktop entry that runs `domicile open-app <url>`, which opens the site
+        in a window with no address bar. See docs/architecture/WEB-APPS.md.
+      '';
+      type = lib.types.attrsOf (lib.types.submodule {
+        options = {
+          url = lib.mkOption {
+            description = "The address the app opens.";
+            type = lib.types.str;
+            example = "https://music.example/";
+          };
+          icon = lib.mkOption {
+            description = "The entry's icon: a name from the icon theme or a file. `null` leaves launchers their default.";
+            type = lib.types.nullOr (lib.types.either lib.types.str lib.types.path);
+            default = null;
+          };
+        };
+      });
+      default = {};
+    };
+
     finalPackage = lib.mkOption {
       description = "The installed package: `package`, wrapped if `shell` is set.";
       type = lib.types.package;
@@ -549,6 +579,14 @@ in {
       extraPortals = [cfg.finalPackage];
       configPackages = [cfg.finalPackage];
     };
+
+    xdg.desktopEntries =
+      lib.mapAttrs (name: app: {
+        inherit name;
+        inherit (app) icon;
+        exec = "${cfg.package}/bin/domicile open-app ${execArgument app.url}";
+      })
+      cfg.webApps;
 
     assertions = removed.assertions cfg.settings;
 
