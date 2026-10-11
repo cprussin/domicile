@@ -37,6 +37,7 @@ use smithay::reexports::{
         timer::{TimeoutAction, Timer},
         EventLoop, InsertError, Interest, LoopHandle, Mode, PostAction, RegistrationToken,
     },
+    wayland_protocols::wp::presentation_time::server::wp_presentation_feedback::Kind as PresentedKind,
     wayland_protocols::xdg::decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode as XdgDecorationMode,
     wayland_protocols::xdg::shell::server::xdg_toplevel,
     wayland_protocols_misc::server_decoration::server::{
@@ -49,7 +50,12 @@ use smithay::reexports::{
         Client, Display, DisplayHandle, Resource as _, WEnum,
     },
 };
-use smithay::utils::{Logical, Point, Rectangle, Serial, Transform, SERIAL_COUNTER};
+use smithay::utils::{
+    Clock, Logical, Monotonic, Point, Rectangle, Serial, Transform, SERIAL_COUNTER,
+};
+use smithay::wayland::presentation::{
+    PresentationFeedbackCachedState, PresentationFeedbackCallback, PresentationState, Refresh,
+};
 use smithay::wayland::viewporter::{ViewportCachedState, ViewporterState};
 use smithay::wayland::{
     buffer::BufferHandler,
@@ -102,9 +108,9 @@ use smithay::wayland::{
 use smithay::{
     delegate_compositor, delegate_content_type, delegate_cursor_shape, delegate_data_control,
     delegate_data_device, delegate_dmabuf, delegate_ext_data_control, delegate_fractional_scale,
-    delegate_idle_inhibit, delegate_kde_decoration, delegate_output, delegate_primary_selection,
-    delegate_seat, delegate_shm, delegate_single_pixel_buffer, delegate_viewporter,
-    delegate_xdg_activation, delegate_xdg_decoration, delegate_xdg_shell,
+    delegate_idle_inhibit, delegate_kde_decoration, delegate_output, delegate_presentation,
+    delegate_primary_selection, delegate_seat, delegate_shm, delegate_single_pixel_buffer,
+    delegate_viewporter, delegate_xdg_activation, delegate_xdg_decoration, delegate_xdg_shell,
 };
 use tracing::{debug, error, info, warn};
 
@@ -128,6 +134,7 @@ mod engine_session;
 mod engine_surfaces;
 mod engine_waiting;
 mod file_indexing;
+mod frame_callbacks;
 mod frame_report;
 mod gbm;
 mod held_frames;
@@ -163,6 +170,7 @@ use crate::dmabuf_descriptor::DmabufDescriptor;
 use crate::engine::{Bounds, Capture, Clipboard, NEWEST_BOX};
 use crate::engine_buffers::Returned;
 use crate::engine_session::{EngineSession, Release, Submission, Submitted};
+use crate::frame_callbacks::{FrameCallbacks, Presented, Unreported};
 use crate::gbm::Gbm;
 use crate::held_frames::{HeldFrames, TRICKLE};
 use crate::latency::{Latency, Step as LatencyStep};
@@ -441,6 +449,14 @@ struct DomicileCompositor {
     /// Frame callbacks of the windows the page hides. See
     /// [`crate::held_frames`].
     held_frames: HeldFrames<WlCallback>,
+    /// Frame callbacks and presentation feedback waiting for the engine to
+    /// report their frame. See [`crate::frame_callbacks`].
+    frame_callbacks: FrameCallbacks<WlCallback, PresentationFeedbackCallback>,
+    /// Whether the timer that answers frames past
+    /// [`crate::frame_callbacks::DEADLINE`] is armed.
+    frame_deadline_armed: bool,
+    /// `wp_presentation`'s clock, which the engine's presentation times use.
+    clock: Clock<Monotonic>,
     /// Every announced popup (menus), by its host-assigned id.
     ///
     /// The engine treats each as its own app, placed rather than laid out; see
@@ -1129,6 +1145,134 @@ impl DomicileCompositor {
         }
     }
 
+    /// Sends a commit's frame callbacks once the engine reports its frame, and
+    /// its presentation feedback once the frame reaches the screen. Without a
+    /// frame the engine reports, sends the callbacks now and discards the
+    /// feedback. See [`crate::frame_callbacks`].
+    fn answer_when_shown(
+        &mut self,
+        shown: Option<(String, u64)>,
+        callbacks: Vec<WlCallback>,
+        feedback: Vec<PresentationFeedbackCallback>,
+    ) {
+        let reported = self
+            .engine
+            .as_ref()
+            .is_some_and(EngineSession::reports_frames);
+        match shown.filter(|_| reported) {
+            Some((app_id, frame)) => {
+                let now = self.monotonic();
+                self.frame_callbacks
+                    .wait(&app_id, frame, callbacks, feedback, now);
+                self.watch_the_frame_deadline();
+            }
+            None => self.answer_unreported(Unreported {
+                callbacks,
+                discarded: feedback,
+            }),
+        }
+    }
+
+    /// Answers frames the engine will not report.
+    fn answer_unreported(&self, unreported: Unreported<WlCallback, PresentationFeedbackCallback>) {
+        self.send_frames(unreported.callbacks);
+        for feedback in unreported.discarded {
+            feedback.discarded();
+        }
+    }
+
+    /// `CLOCK_MONOTONIC`, as `wp_presentation` and the engine read it.
+    fn monotonic(&self) -> Duration {
+        self.clock.now().into()
+    }
+
+    /// Arms the timer that answers frames the engine has not reported by
+    /// [`crate::frame_callbacks::DEADLINE`], unless it is armed or nothing
+    /// waits.
+    fn watch_the_frame_deadline(&mut self) {
+        let Some(deadline) = self.frame_callbacks.next_deadline() else {
+            return;
+        };
+        if self.frame_deadline_armed {
+            return;
+        }
+        self.frame_deadline_armed = true;
+        self.loop_handle
+            .insert_source(
+                Timer::from_duration(deadline.saturating_sub(self.monotonic())),
+                |_, _, data: &mut CalloopData| data.state.answer_overdue_frames(),
+            )
+            // Timers register nothing with the kernel, so inserting cannot
+            // fail.
+            .expect("the compositor's own loop takes a timer");
+    }
+
+    /// Answers frames past the deadline, and rearms for the next.
+    fn answer_overdue_frames(&mut self) -> TimeoutAction {
+        let overdue = self.frame_callbacks.overdue(self.monotonic());
+        if !overdue.callbacks.is_empty() || !overdue.discarded.is_empty() {
+            debug!(
+                callbacks = overdue.callbacks.len(),
+                feedback = overdue.discarded.len(),
+                "the engine did not report these frames in time; answering them anyway"
+            );
+        }
+        self.answer_unreported(overdue);
+        match self.frame_callbacks.next_deadline() {
+            Some(deadline) => TimeoutAction::ToDuration(deadline.saturating_sub(self.monotonic())),
+            None => {
+                self.frame_deadline_armed = false;
+                TimeoutAction::Drop
+            }
+        }
+    }
+
+    /// Sends a presented frame's feedback, synced to the output most of its
+    /// window is on, or discards it if it was never shown.
+    fn present(
+        &self,
+        app_id: &str,
+        presented: Presented<PresentationFeedbackCallback>,
+        shown: Option<engine::Shown>,
+    ) {
+        let output = self
+            .outputs
+            .iter()
+            .zip(
+                self.screens
+                    .entered_by(self.app_bounds.get(app_id).copied()),
+            )
+            .find(|(_, entered)| *entered)
+            .map(|(live, _)| &live.output)
+            .or_else(|| self.outputs.first().map(|live| &live.output));
+        match (shown, output) {
+            (Some(shown), Some(output)) => {
+                self.hub
+                    .timings
+                    .lock()
+                    .unwrap()
+                    .present
+                    .record(shown.time.saturating_sub(presented.committed));
+                let refresh = shown.refresh.map_or(Refresh::Unknown, Refresh::fixed);
+                for feedback in presented.feedback {
+                    // Viz reports no vblank count, so `seq` is zero.
+                    feedback.presented(
+                        output,
+                        shown.time,
+                        refresh,
+                        0,
+                        PresentedKind::from_bits_truncate(shown.kind),
+                    );
+                }
+            }
+            (None, _) | (_, None) => {
+                for feedback in presented.feedback {
+                    feedback.discarded();
+                }
+            }
+        }
+    }
+
     /// The window `surface` draws for: itself, or the window under the popup
     /// or bubble it is. `None` for the chrome.
     fn window_of(&self, surface: &WlSurface) -> Option<String> {
@@ -1456,6 +1600,8 @@ impl DomicileCompositor {
         self.size_limits.remove(app_id);
         self.app_bounds.remove(app_id);
         self.held_frames.forget(app_id);
+        let unreported = self.frame_callbacks.forget(app_id);
+        self.answer_unreported(unreported);
         self.casting.window_gone(app_id);
         self.shm_refused.forget(app_id);
         self.first_frame_logged.forget(app_id);
@@ -1727,6 +1873,36 @@ impl DomicileCompositor {
                 }
                 // Handled above, with the buffers.
                 engine::Event::Released { .. } => {}
+                engine::Event::FrameDone { surface, frame } => {
+                    let app_id = self
+                        .engine
+                        .as_ref()
+                        .and_then(|session| session.app_for(surface))
+                        .map(str::to_owned);
+                    if let Some(app_id) = app_id {
+                        let callbacks = self.frame_callbacks.done(&app_id, frame);
+                        self.send_frames(callbacks);
+                    }
+                }
+                engine::Event::Presented {
+                    surface,
+                    frame,
+                    shown,
+                } => {
+                    let app_id = self
+                        .engine
+                        .as_ref()
+                        .and_then(|session| session.app_for(surface))
+                        .map(str::to_owned);
+                    let presented = app_id.as_deref().and_then(|app_id| {
+                        self.frame_callbacks
+                            .presented(app_id, frame)
+                            .map(|presented| (app_id, presented))
+                    });
+                    if let Some((app_id, presented)) = presented {
+                        self.present(app_id, presented, shown);
+                    }
+                }
                 engine::Event::Captured {
                     capture,
                     frame,
@@ -2655,8 +2831,11 @@ impl DomicileCompositor {
             served_by,
             "the engine this desktop was drawing through has been replaced; rejoining it"
         );
-        // The old engine's captures are gone with it.
+        // The old engine's captures are gone with it, and it reports no more
+        // frames.
         self.casting.engine_replaced();
+        let unreported = self.frame_callbacks.take_all();
+        self.answer_unreported(unreported);
         let session = self
             .engine
             .as_mut()
@@ -4084,17 +4263,22 @@ impl CompositorHandler for DomicileCompositor {
             });
         // Whether the client took its buffer away, unmapping the window.
         let (attached, unmapped) = attached;
+        let feedback = with_states(surface, |states| {
+            std::mem::take(
+                &mut states
+                    .cached_state
+                    .get::<PresentationFeedbackCachedState>()
+                    .current()
+                    .callbacks,
+            )
+        });
 
         // Ask the client to draw its next frame (keeps it animating), unless
-        // the page hid its window.
+        // the page hid its window. Sent once its frame is shown, below.
         let callbacks = match self.window_of(surface) {
             Some(window) => self.held_frames.pass(&window, callbacks),
             None => callbacks,
         };
-        let time = self.now_ms();
-        for callback in callbacks {
-            callback.done(time);
-        }
 
         // A theme turnover waits for each window to draw a new frame.
         if let (Some(_), Committer::App(app_id), Some(turnover)) =
@@ -4112,7 +4296,7 @@ impl CompositorHandler for DomicileCompositor {
             }
         }
 
-        if let Some(buffer) = attached {
+        let shown = attached.and_then(|buffer| {
             // The gap since the last commit is time spent waiting on clients or
             // the throttle.
             let started = Instant::now();
@@ -4124,7 +4308,7 @@ impl CompositorHandler for DomicileCompositor {
                 .then(|| self.pending_key.take())
                 .flatten()
                 .map(|keyed| started.duration_since(keyed));
-            let engine_holds = match &committer {
+            let (engine_holds, shown) = match &committer {
                 Committer::App(app_id) => {
                     // The size this commit was drawn for, and the engine's box
                     // at that size. See `crop` and `crate::configure_answers`.
@@ -4228,14 +4412,26 @@ impl CompositorHandler for DomicileCompositor {
                         started,
                         matches!(published, Published::Held | Published::Copied { .. }),
                     );
-                    matches!(
-                        published,
-                        Published::Held | Published::Waiting { held: true }
+                    // The frame the engine will report, if it reached viz.
+                    let shown = matches!(published, Published::Held | Published::Copied { .. })
+                        .then(|| {
+                            self.engine
+                                .as_ref()
+                                .and_then(|session| session.frame_of(app_id))
+                                .map(|frame| (app_id.clone(), frame))
+                        })
+                        .flatten();
+                    (
+                        matches!(
+                            published,
+                            Published::Held | Published::Waiting { held: true }
+                        ),
+                        shown,
                     )
                 }
                 Committer::Chrome => {
                     self.publish_chrome_frame(&buffer, buffer_scale, viewport);
-                    false
+                    (false, None)
                 }
             };
             // Release after the pixels are out, since the client may redraw
@@ -4261,7 +4457,9 @@ impl CompositorHandler for DomicileCompositor {
                 timings.commit.record(done - started);
             }
             self.last_commit = Some(done);
-        }
+            shown
+        });
+        self.answer_when_shown(shown, callbacks, feedback);
     }
 
     /// A destroyed bubble goes at once: no commit will come to notice it.
@@ -4327,6 +4525,7 @@ impl DmabufHandler for DomicileCompositor {
 
 delegate_compositor!(DomicileCompositor);
 delegate_viewporter!(DomicileCompositor);
+delegate_presentation!(DomicileCompositor);
 
 impl FractionalScaleHandler for DomicileCompositor {
     /// A client asked for its surface's scale, often before the surface has a
@@ -5644,6 +5843,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // buffer scale. If ignored, every surface on a dense display is twice its
     // size. See `viewport`.
     ViewporterState::new::<DomicileCompositor>(&dh);
+    // Presentation times come from viz, on `CLOCK_MONOTONIC`. See
+    // `crate::frame_callbacks`.
+    PresentationState::new::<DomicileCompositor>(&dh, Clock::<Monotonic>::new().id() as u32);
     // A window's exact scale, which `wl_output.scale` rounds up. Clients that
     // use it draw through `wp_viewporter`. See `place_window`.
     FractionalScaleManagerState::new::<DomicileCompositor>(&dh);
@@ -6045,6 +6247,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         toplevels: Vec::new(),
         app_bounds: HashMap::new(),
         held_frames: HeldFrames::new(),
+        frame_callbacks: FrameCallbacks::new(),
+        frame_deadline_armed: false,
+        clock: Clock::new(),
         popups: Vec::new(),
         grabbing: Vec::new(),
         bubbles: Vec::new(),
