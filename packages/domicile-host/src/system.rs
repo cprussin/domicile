@@ -35,6 +35,7 @@ use crate::base64::{decoded, encoded};
 use crate::dbus_json::{self, NotABody};
 use crate::idle_warnings::{self, IdleWarnings};
 use crate::lock_screen_readouts::is_a_readout;
+use crate::priority;
 use crate::shell_commands::{Listener, ShellCommands};
 
 /// How much of a process's output one event carries at most.
@@ -53,6 +54,9 @@ pub type Environment = Vec<(OsString, Option<OsString>)>;
 pub struct System {
     home: PathBuf,
     environment: Environment,
+    /// What processes start at, rather than the spawning thread's nice
+    /// value; see [`crate::priority::starting_at`].
+    nice: i32,
     tell: Tell,
     running: Arc<Mutex<HashMap<u32, Running>>>,
     connect: Connect,
@@ -210,16 +214,18 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
 impl System {
     /// A system for one connection. Relative paths and processes start from
     /// `home`. Processes inherit this process's environment changed by
-    /// `environment`, then the page's `env`. Answers go to `tell`, from any
-    /// thread.
+    /// `environment`, then the page's `env`, at nice value `nice`. Answers go
+    /// to `tell`, from any thread.
     pub fn new(
         home: PathBuf,
         environment: Environment,
+        nice: i32,
         tell: impl Fn(HostMessage) + Send + Sync + 'static,
     ) -> System {
         System {
             home,
             environment,
+            nice,
             tell: Arc::new(tell),
             running: Arc::new(Mutex::new(HashMap::new())),
             connect: Arc::new(|bus| match bus {
@@ -340,6 +346,7 @@ impl System {
                     .stderr(Stdio::piped())
                     // Its own group, so a kill reaches what it started too.
                     .process_group(0);
+                priority::starting_at(&mut command, system.nice);
                 Ok(system.spawned(id, command.spawn()?)?)
             }),
             SystemRequest::DbusCall {

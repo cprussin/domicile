@@ -168,6 +168,7 @@ fn read_chrome_messages(
             &hub.wayland_display,
             std::env::var_os("LD_LIBRARY_PATH").as_deref(),
         ),
+        hub.child_nice,
         {
             let writer = writer.clone();
             move |message| {
@@ -591,6 +592,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
+            0,
             Portals::to_nobody(),
         );
         let (page, compositor) = UnixStream::pair().expect("a socket pair");
@@ -626,6 +628,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
+            0,
             Portals::to_nobody(),
         );
         let (page, compositor) = UnixStream::pair().expect("a socket pair");
@@ -659,6 +662,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
+            0,
             Portals::to_nobody(),
         );
         *hub.offered.lock().unwrap() = Some(Arc::new(Offered {
@@ -709,6 +713,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
+            0,
             Portals::to_nobody(),
         );
         let (_page, compositor) = UnixStream::pair().expect("a socket pair");
@@ -754,6 +759,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
+            0,
             Portals::to_nobody(),
         );
         let (page, compositor) = UnixStream::pair().expect("a socket pair");
@@ -812,6 +818,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
+            0,
             Portals::to_nobody(),
         );
         let described = vec![window_following("domicile-0", [1280, 800], 2)];
@@ -842,6 +849,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
+            0,
             Portals::to_nobody(),
         );
         let welcome = HostMessage::Welcome {
@@ -932,6 +940,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
+            0,
             Portals::to_nobody(),
         );
         let (page, compositor) = UnixStream::pair().expect("a socket pair");

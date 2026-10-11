@@ -6,6 +6,7 @@ use std::path::Path;
 use std::sync::mpsc::{channel, Receiver};
 use std::time::{Duration, Instant};
 
+use domicile_host::priority;
 use domicile_host::system::{locked_out, reach, Handled, Reach, System};
 use domicile_protocol::{
     Bus, FileType, HostMessage, Signal, Stream, SystemEnd, SystemErrorKind, SystemEvent,
@@ -17,12 +18,22 @@ const PATIENCE: Duration = Duration::from_secs(10);
 
 /// A [`System`] in `home`, and what it sends.
 fn system_in(home: &Path) -> (System, Receiver<HostMessage>) {
+    system_starting_at(home, ours())
+}
+
+/// As [`system_in`], starting processes at nice `nice`.
+fn system_starting_at(home: &Path, nice: i32) -> (System, Receiver<HostMessage>) {
     let (told, heard) = channel();
-    let system = System::new(home.to_path_buf(), Vec::new(), move |message| {
+    let system = System::new(home.to_path_buf(), Vec::new(), nice, move |message| {
         // A test that has finished stops listening; the process may still talk.
         let _ = told.send(message);
     });
     (system, heard)
+}
+
+/// This thread's nice value, which a process may always start at.
+fn ours() -> i32 {
+    priority::nice(priority::this_thread()).unwrap()
 }
 
 fn next(heard: &Receiver<HostMessage>) -> HostMessage {
@@ -292,6 +303,20 @@ mod processes {
         assert_eq!(end, exited(0));
     }
 
+    /// The compositor raises its own threads; a page's processes start at the
+    /// nice value they are given instead.
+    #[test]
+    fn a_process_starts_at_the_nice_value_the_system_was_given() {
+        let home = tempfile::tempdir().unwrap();
+        let (system, heard) = system_starting_at(home.path(), ours() + 3);
+
+        system.handle(1, spawn(&["nice"]));
+
+        assert_eq!(reply(&heard, 1), SystemReply::Started);
+        let (out, _, end) = run_out(&heard, 1);
+        assert_eq!((out, end), (format!("{}\n", ours() + 3), exited(0)));
+    }
+
     /// The desktop's own variables, such as its `WAYLAND_DISPLAY`, are set or
     /// removed before the page's.
     #[test]
@@ -305,6 +330,7 @@ mod processes {
                 ("HOME".into(), None),
                 ("PAGE_WINS".into(), Some("desk".into())),
             ],
+            ours(),
             move |message| {
                 let _ = told.send(message);
             },
@@ -935,7 +961,7 @@ mod dbus {
     fn connected(home: &Path) -> (System, Receiver<HostMessage>, Services) {
         let services: Services = Arc::default();
         let (told, heard) = channel();
-        let system = System::new(home.to_path_buf(), Vec::new(), move |message| {
+        let system = System::new(home.to_path_buf(), Vec::new(), ours(), move |message| {
             let _ = told.send(message);
         })
         .connecting_with({

@@ -197,6 +197,42 @@ Configure it with `files.omit` and manganese's `applications` option:
 Reference: [idle](SHELL-CONFIG.md#idle), [lock](SHELL-CONFIG.md#lock). Design:
 [IDLE.md](IDLE.md), [LOCK.md](LOCK.md). Open work: [ROADMAP.md](/ROADMAP.md).
 
+## Thread priorities
+
+The threads every frame and input event pass through ask for nice -8, so the
+desktop stays smooth while the machine is busy.
+
+| Process | Threads | How |
+|---|---|---|
+| compositor | the Wayland thread; `domicile-engine`, the engine library's IO thread | `setpriority`, then rtkit's `MakeThreadHighPriority` |
+| engine | the threads that draw and present frames | `setpriority`; the page-flip thread asks for `SCHED_RR` 6 |
+
+- `setpriority` to -8 needs an `RLIMIT_NICE` of at least 28, or
+  `CAP_SYS_NICE`. Most sessions have 0.
+- **NixOS:** join the [`domicile` group](#the-machines-half).
+- **Elsewhere:** grant the same limits in
+  `/etc/security/limits.d/domicile.conf` and log in again:
+
+  ```
+  @domicile - nice -10
+  @domicile - rtprio 8
+  ```
+
+- **Home Manager alone** cannot grant limits; PAM is system configuration. If
+  rtkit runs (`security.rtkit.enable = true`, common with PipeWire), the
+  compositor's threads get -8 through it. The engine's threads still need the
+  limit.
+- Without either, the compositor logs `could not raise the thread to nice -8`
+  once per thread and runs at the nice value it started at.
+- Apps and the shell's processes start at the compositor's starting nice
+  value, not at -8.
+- Threads the Wayland thread starts after it is raised (clipboard copies, the
+  lock's passphrase check) inherit -8. The service threads started before it
+  do not.
+- `domicile` does not raise the soft `RLIMIT_NICE` to the hard one: pam_limits
+  (`-`) and systemd's `LimitNICE=` set both together, so there is nothing to
+  raise.
+
 ## On NixOS
 
 `homeManagerModules.default` writes the config and sets the shell. It
@@ -225,9 +261,8 @@ It provides:
   `services.displayManager.sessionPackages = [domicile]` adds it.
 - **The `domicile` PAM service**, for `lock.pam_service = "domicile"`.
 - **The `domicile` group.** Its members' login sessions may lower nice values
-  to -10 and use realtime priority 8. The engine asks for nice -8 on the
-  threads that draw and present frames, so animations stay smooth while the
-  machine is busy. Add yourself with
+  to -10 and use realtime priority 8; see
+  [Thread priorities](#thread-priorities). Add yourself with
   `users.users.<you>.extraGroups = ["domicile"]` and log in again.
 - **UPower**, which the battery readout reads. Without it, manganese shows no
   battery. Set `services.upower.enable = false` to opt out.
