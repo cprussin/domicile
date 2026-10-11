@@ -64,8 +64,8 @@ describe(App, () => {
           .getAllByRole("listitem")
           .map((item) => item.textContent),
       ).toEqual([
-        "2:05 PMCatscats.test",
-        "1:00 PMhttps://untitled.test/pageuntitled.test",
+        "2:05 PMCatshttps://www.cats.test/",
+        "1:00 PMhttps://untitled.test/pagehttps://untitled.test/page",
       ]);
       expect(
         screen.getByRole("region", {
@@ -165,7 +165,7 @@ describe(App, () => {
       await finishLeaving();
       expect(
         screen.getAllByRole("link").map((link) => link.textContent),
-      ).toEqual(["Birdsbirds.test"]);
+      ).toEqual(["Birdshttps://birds.test/"]);
       expect(history.map((page) => page.visits.length)).toEqual([0, 0, 0, 1]);
     });
 

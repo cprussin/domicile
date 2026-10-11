@@ -7,7 +7,6 @@ import { memo } from "react";
 
 import { css } from "../styled-system/css";
 import { timeOfDay } from "./day";
-import { domain } from "./domain";
 import { highlight } from "./highlight";
 import type { Entry } from "./history-page";
 
@@ -29,7 +28,7 @@ type Props = {
 };
 
 /**
- * One visited page: its time, icon, title and site, linking to the page.
+ * One visited page: its time, icon, title and URL, linking to the page.
  *
  * The icon is the row's check box. Ctrl+click and middle-click open the page
  * in a new window; a right click or the end button opens the row's menu.
@@ -126,7 +125,7 @@ export const HistoryRow = memo(
                 ),
               )}
             </span>
-            <span className={domainStyles}>{domain(entry.url)}</span>
+            <span className={urlStyles}>{entry.url}</span>
           </a>
           <span className={actionsStyles} data-row-actions="">
             <Button
@@ -284,7 +283,7 @@ const markStyles = css({
   color: "inherit",
 });
 
-const domainStyles = css({
+const urlStyles = css({
   color: "muted",
   flexShrink: 0,
   fontSize: "xs",
