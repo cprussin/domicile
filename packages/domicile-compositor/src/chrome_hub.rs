@@ -7,6 +7,7 @@ use std::os::unix::net::UnixStream;
 use std::sync::atomic::AtomicU32;
 use std::sync::{Arc, Mutex, OnceLock};
 
+use domicile_host::idle_warnings::IdleWarnings;
 use domicile_host::ipc::{apply_chrome_message, to_line};
 use domicile_host::shell_commands::ShellCommands;
 use domicile_host::Host;
@@ -74,6 +75,9 @@ pub struct ChromeHub {
     /// The pages listening for `domicile send-shell`, shared by every
     /// connection's `System`.
     pub shell_commands: ShellCommands,
+    /// When the screens blank, while a warning runs, shared by every
+    /// connection's `System`. Set by the compositor's idle clock.
+    pub idle_warnings: IdleWarnings,
 }
 
 impl ChromeHub {
@@ -99,6 +103,7 @@ impl ChromeHub {
             notifications: OnceLock::new(),
             eis: OnceLock::new(),
             shell_commands: ShellCommands::default(),
+            idle_warnings: IdleWarnings::default(),
         });
         (hub, outbound_rx)
     }

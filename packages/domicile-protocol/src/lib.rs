@@ -420,9 +420,9 @@ pub enum HostMessage {
     /// input resumes. Decided by `crate::idle` in `domicile-compositor`.
     /// Sent on each change and on connect, so a reloaded page knows the state.
     ///
-    /// It goes out with the blanking modeset, not before it, so a shell gets
-    /// no warning to animate on. Use it to prepare what shows when the screens
-    /// return. A pre-blank warning is in `ROADMAP.md`.
+    /// It goes out with the blanking modeset, not before it. Use it to
+    /// prepare what shows when the screens return. A shell warned before
+    /// blanking listens with [`SystemRequest::IdleWarnings`].
     ///
     /// Not sent at all when blanking is not configured. Idle is not locked;
     /// see [`HostMessage::Locked`].
@@ -1433,6 +1433,14 @@ pub enum SystemRequest {
     /// run it. Answered with [`SystemReply::Sent`]. `domicile send-shell`
     /// sends this.
     SendShell { command: Vec<String> },
+    /// Report when the screens are about to blank. Answered with
+    /// [`SystemReply::Started`], then a [`SystemEvent::IdleWarning`] on each
+    /// change, the first at once when a warning is already running.
+    /// [`SystemRequest::Unwatch`] ends it.
+    ///
+    /// Silent on a desktop that sets no `idle.warn_before_seconds`. See
+    /// `docs/IDLE.md`.
+    IdleWarnings,
 }
 
 /// The `app_id` of a portal dialog the shell asked for itself, such as
@@ -1524,6 +1532,9 @@ pub enum SystemEvent {
     Changed { path: String },
     /// A command sent with [`SystemRequest::SendShell`].
     ShellCommand { command: Vec<String> },
+    /// How long until the screens blank, in milliseconds, or `None` when input
+    /// or an idle inhibitor called the blanking off, or the screens went dark.
+    IdleWarning { blanks_in_ms: Option<u64> },
     /// A D-Bus signal a match named, its body written as
     /// [`SystemReply::Returned`]'s is.
     Signal {

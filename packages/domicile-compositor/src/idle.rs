@@ -6,6 +6,10 @@
 //!
 //! - Methods report only edges, since each change costs a modeset. Ask
 //!   [`Idle::dark`] for the state.
+//! - With `idle.warn_before_seconds`, a [`Blanking::Warn`] edge comes that
+//!   long before [`Blanking::GoDark`], and input or an inhibitor in between
+//!   calls it off. The compositor passes it to the shell through
+//!   `domicile_host::idle_warnings`.
 //! - A `zwp_idle_inhibit_manager_v1` inhibitor vetoes blanking while its client
 //!   is alive and its surface has a window. See [`holds`].
 //! - An idle inhibitor from the Inhibit portal vetoes blanking while held. See
@@ -21,15 +25,28 @@ use domicile_protocol::HostMessage;
 
 use crate::client_requests::ClientRequest;
 use crate::engine::{Connector, Display};
-use domicile_config::Transform;
+use domicile_config::{IdleConfig, Transform};
 
-/// A change in whether the screens should be lit.
+/// A change in whether the screens should be lit, or are about to go dark.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Blanking {
+    /// The warning time before the timeout passed with no input: tell the
+    /// shell. See [`Idle::blanks_at`].
+    Warn,
+    /// Input or an inhibitor during a warning: the screens stay lit.
+    CallOff,
     /// The timeout passed with no input: turn the connectors off.
     GoDark,
     /// Input resumed or an inhibitor started holding: light the connectors.
     ComeBack,
+}
+
+/// Where the desktop stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Stage {
+    Lit,
+    Warned,
+    Dark,
 }
 
 /// Whether an inhibitor's client is still alive.
@@ -47,9 +64,12 @@ pub trait StillThere {
 /// `None`) the screens never blank.
 pub struct Idle<S> {
     blank_after: Duration,
+    /// How long before the timeout the shell is warned, if at all. Less than
+    /// `blank_after`, which `IdleConfig` checks.
+    warn_before: Option<Duration>,
     /// The last input, or creation time if there has been none.
     stirred_at: Instant,
-    dark: bool,
+    stage: Stage,
     /// Active inhibitors.
     ///
     /// A list, not a set: a surface can carry several inhibitors and a destroy
@@ -60,32 +80,39 @@ pub struct Idle<S> {
 }
 
 impl<S: StillThere + PartialEq> Idle<S> {
-    pub fn after(blank_after: Option<Duration>, now: Instant) -> Option<Idle<S>> {
-        blank_after.map(|blank_after| Idle {
+    pub fn after(idle: &IdleConfig, now: Instant) -> Option<Idle<S>> {
+        idle.blank_after().map(|blank_after| Idle {
             blank_after,
+            warn_before: idle.warn_before(),
             stirred_at: now,
-            dark: false,
+            stage: Stage::Lit,
             inhibitors: Vec::new(),
             held_by_portals: false,
         })
     }
 
-    /// Records input. `Some` only when this lights a dark desktop.
+    /// Records input. `Some` only when this lights a dark desktop or calls a
+    /// warning off.
     pub fn stirred(&mut self, now: Instant) -> Option<Blanking> {
         self.stirred_at = now;
-        let was_dark = self.dark;
-        self.dark = false;
-        was_dark.then_some(Blanking::ComeBack)
+        let was = self.stage;
+        self.stage = Stage::Lit;
+        match was {
+            Stage::Lit => None,
+            Stage::Warned => Some(Blanking::CallOff),
+            Stage::Dark => Some(Blanking::ComeBack),
+        }
     }
 
-    /// Handles the timer firing. `Some` only when this darkens the desktop.
+    /// Handles the timer firing. `Some` only when this warns or darkens the
+    /// desktop.
     ///
     /// It never relights: only [`Idle::stirred`] and the inhibitor methods do.
     pub fn elapsed(&mut self, now: Instant, on_the_desktop: &[S]) -> Option<Blanking> {
-        if self.should_be_dark(now, on_the_desktop) {
-            self.settle(now, on_the_desktop)
-        } else {
+        if self.stage == Stage::Dark {
             None
+        } else {
+            self.settle(now, on_the_desktop)
         }
     }
 
@@ -174,50 +201,80 @@ impl<S: StillThere + PartialEq> Idle<S> {
     /// Callers that configure connectors for other reasons (hotplug, reload)
     /// check this so the screens stay dark.
     pub fn dark(&self) -> bool {
-        self.dark
+        self.stage == Stage::Dark
+    }
+
+    /// When the screens go dark, while the shell is being warned of it.
+    pub fn blanks_at(&self) -> Option<Instant> {
+        (self.stage == Stage::Warned).then(|| self.stirred_at + self.blank_after)
     }
 
     /// The delay before the timer should fire again.
     ///
-    /// When dark, or when inhibited past the deadline, this is a full timeout:
-    /// only input or an inhibitor change can alter the state then. It is never
-    /// zero, which would spin the event loop.
+    /// The next of the warning and the timeout still to come, so an inhibitor
+    /// released between them still blanks on time. When dark, or when
+    /// inhibited past both, it is the time from input to its first check:
+    /// input resets the clock without re-arming the timer, so the timer must
+    /// come round before that input's warning. It is never zero, which would
+    /// spin the event loop.
     pub fn next_check(&self, now: Instant) -> Duration {
-        let until_the_deadline =
-            (self.stirred_at + self.blank_after).saturating_duration_since(now);
-        if self.dark || until_the_deadline.is_zero() {
-            self.blank_after
-        } else {
-            until_the_deadline
-        }
+        let first_check = self.blank_after - self.warn_before.unwrap_or_default();
+        let warns_at = self.stirred_at + first_check;
+        let blanks_at = self.stirred_at + self.blank_after;
+        let still_to_come: &[Instant] = match self.stage {
+            Stage::Lit => &[warns_at, blanks_at],
+            Stage::Warned => &[blanks_at],
+            Stage::Dark => &[],
+        };
+        still_to_come
+            .iter()
+            .find(|at| **at > now)
+            .map_or(first_check, |at| *at - now)
     }
 
     /// Updates the state and returns the edge, if any.
     fn settle(&mut self, now: Instant, on_the_desktop: &[S]) -> Option<Blanking> {
-        let should_be_dark = self.should_be_dark(now, on_the_desktop);
-        let changed = should_be_dark != self.dark;
-        self.dark = should_be_dark;
-        if !changed {
-            None
-        } else if should_be_dark {
-            Some(Blanking::GoDark)
-        } else {
-            Some(Blanking::ComeBack)
+        let was = self.stage;
+        self.stage = self.due(now, on_the_desktop);
+        match (was, self.stage) {
+            (Stage::Lit, Stage::Lit)
+            | (Stage::Warned, Stage::Warned)
+            | (Stage::Dark, Stage::Dark) => None,
+            (Stage::Lit, Stage::Warned) => Some(Blanking::Warn),
+            (Stage::Warned, Stage::Lit) => Some(Blanking::CallOff),
+            (Stage::Lit | Stage::Warned, Stage::Dark) => Some(Blanking::GoDark),
+            (Stage::Dark, Stage::Lit) => Some(Blanking::ComeBack),
+            (Stage::Dark, Stage::Warned) => {
+                unreachable!("only input relights a dark desktop's clock, and it lights it")
+            }
         }
     }
 
-    /// Whether the screens should be off.
+    /// Where the desktop should stand.
     ///
     /// An inhibitor vetoes the result instead of resetting or pausing the
     /// timer. So an inhibitor added while dark relights at once, and removing
-    /// the last one after the timeout darkens at once. See [`holds`].
-    fn should_be_dark(&self, now: Instant, on_the_desktop: &[S]) -> bool {
-        now.duration_since(self.stirred_at) >= self.blank_after
-            && !self.held_by_portals
-            && !self
+    /// the last one after the timeout darkens at once, with no warning. See
+    /// [`holds`].
+    fn due(&self, now: Instant, on_the_desktop: &[S]) -> Stage {
+        let still = now.duration_since(self.stirred_at);
+        let held = self.held_by_portals
+            || self
                 .inhibitors
                 .iter()
-                .any(|inhibitor| holds(inhibitor, on_the_desktop))
+                .any(|inhibitor| holds(inhibitor, on_the_desktop));
+        let warned = self
+            .warn_before
+            .is_some_and(|warn_before| still >= self.blank_after - warn_before);
+        if held {
+            Stage::Lit
+        } else if still >= self.blank_after {
+            Stage::Dark
+        } else if warned {
+            Stage::Warned
+        } else {
+            Stage::Lit
+        }
     }
 }
 
@@ -331,9 +388,10 @@ mod tests {
     use super::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
     use crate::client_requests::ClientRequest;
     use crate::engine::{Clipboard, Connector, Display};
-    use domicile_config::Transform;
+    use domicile_config::{IdleConfig, Transform};
 
     const AFTER: Duration = Duration::from_secs(600);
+    const WARNING: Duration = Duration::from_secs(30);
 
     /// A fake inhibitor: a surface and a flag for whether its client is alive.
     #[derive(Clone)]
@@ -371,7 +429,26 @@ mod tests {
 
     /// A timer that blanks after [`AFTER`], starting at `start`.
     fn desk(start: Instant) -> Idle<Inhibitor> {
-        Idle::after(Some(AFTER), start).expect("a timeout was stated")
+        Idle::after(
+            &IdleConfig {
+                blank_after_seconds: Some(AFTER.as_secs()),
+                warn_before_seconds: None,
+            },
+            start,
+        )
+        .expect("a timeout was stated")
+    }
+
+    /// A timer like [`desk`]'s that warns [`WARNING`] before it blanks.
+    fn warning_desk(start: Instant) -> Idle<Inhibitor> {
+        Idle::after(
+            &IdleConfig {
+                blank_after_seconds: Some(AFTER.as_secs()),
+                warn_before_seconds: Some(WARNING.as_secs()),
+            },
+            start,
+        )
+        .expect("a timeout was stated")
     }
 
     /// A desktop with a window on `surface`.
@@ -395,7 +472,107 @@ mod tests {
 
     #[test]
     fn a_desktop_that_states_no_timeout_has_nothing_to_watch() {
-        assert!(Idle::<Inhibitor>::after(None, Instant::now()).is_none());
+        assert!(Idle::<Inhibitor>::after(&IdleConfig::default(), Instant::now()).is_none());
+    }
+
+    #[test]
+    fn a_desktop_that_warns_says_so_before_it_goes_dark() {
+        let start = Instant::now();
+        let mut idle = warning_desk(start);
+        let warned = start + AFTER - WARNING;
+        assert_eq!(
+            idle.elapsed(warned - Duration::from_millis(1), SHOWING_NOTHING),
+            None
+        );
+        assert_eq!(idle.elapsed(warned, SHOWING_NOTHING), Some(Blanking::Warn));
+        assert_eq!(idle.blanks_at(), Some(start + AFTER));
+        assert!(!idle.dark());
+
+        assert_eq!(
+            idle.elapsed(start + AFTER, SHOWING_NOTHING),
+            Some(Blanking::GoDark)
+        );
+        assert_eq!(idle.blanks_at(), None, "the warning ends with the dark");
+    }
+
+    #[test]
+    fn a_desktop_with_no_warning_never_warns() {
+        let start = Instant::now();
+        let mut idle = desk(start);
+        assert_eq!(idle.elapsed(start + AFTER - WARNING, SHOWING_NOTHING), None);
+        assert_eq!(idle.blanks_at(), None);
+    }
+
+    #[test]
+    fn input_during_the_warning_calls_the_blanking_off() {
+        let start = Instant::now();
+        let mut idle = warning_desk(start);
+        let warned = start + AFTER - WARNING;
+        idle.elapsed(warned, SHOWING_NOTHING);
+
+        assert_eq!(idle.stirred(warned), Some(Blanking::CallOff));
+        assert_eq!(idle.blanks_at(), None);
+        assert_eq!(
+            idle.stirred(warned),
+            None,
+            "only the first key calls it off"
+        );
+    }
+
+    #[test]
+    fn a_film_starting_during_the_warning_calls_the_blanking_off() {
+        let start = Instant::now();
+        let mut idle = warning_desk(start);
+        let warned = start + AFTER - WARNING;
+        idle.elapsed(warned, &showing(1));
+
+        assert_eq!(
+            idle.inhibited_by(Inhibitor::on(1), warned, &showing(1)),
+            Some(Blanking::CallOff)
+        );
+        assert_eq!(idle.blanks_at(), None);
+    }
+
+    #[test]
+    fn a_desktop_that_warns_is_asked_again_when_the_warning_is_due_and_then_at_the_timeout() {
+        let start = Instant::now();
+        let mut idle = warning_desk(start);
+        assert_eq!(idle.next_check(start), AFTER - WARNING);
+        let warned = start + AFTER - WARNING;
+        idle.elapsed(warned, SHOWING_NOTHING);
+        assert_eq!(idle.next_check(warned), WARNING);
+    }
+
+    #[test]
+    fn a_film_ending_during_the_warning_still_blanks_at_the_timeout() {
+        let start = Instant::now();
+        let mut idle = warning_desk(start);
+        let warned = start + AFTER - WARNING;
+        idle.inhibited_by(Inhibitor::on(1), start, &showing(1));
+        assert_eq!(idle.elapsed(warned, &showing(1)), None);
+        assert_eq!(
+            idle.next_check(warned),
+            WARNING,
+            "asked again at the timeout, in case the film ends first"
+        );
+
+        let ended = warned + Duration::from_secs(10);
+        assert_eq!(
+            idle.uninhibited_by(&Inhibitor::on(1), ended, &showing(1)),
+            Some(Blanking::Warn)
+        );
+        assert_eq!(idle.next_check(ended), WARNING - Duration::from_secs(10));
+    }
+
+    #[test]
+    fn a_desktop_held_past_its_timeout_is_asked_again_in_time_to_warn() {
+        // Input resets the clock without re-arming the timer, so the timer
+        // must come round before the warning that input would be due.
+        let start = Instant::now();
+        let mut idle = warning_desk(start);
+        idle.inhibited_by(Inhibitor::on(1), start, &showing(1));
+        assert_eq!(idle.elapsed(start + AFTER, &showing(1)), None);
+        assert_eq!(idle.next_check(start + AFTER), AFTER - WARNING);
     }
 
     #[test]

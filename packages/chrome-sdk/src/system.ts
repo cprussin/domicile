@@ -230,6 +230,16 @@ export type System = {
   shellCommands: () => Promise<
     Result<Listening<readonly string[]>, SystemError>
   >;
+  /**
+   * Hear the milliseconds left before the screens blank when
+   * `idle.warn_before_seconds` passes, and `undefined` when input or an idle
+   * inhibitor calls it off or the screens go dark. A page that listens during
+   * a warning hears it at once. Allowed while the desktop is locked. See
+   * docs/SHELL-IDLE-AND-LOCK.md.
+   */
+  idleWarnings: () => Promise<
+    Result<Listening<number | undefined>, SystemError>
+  >;
 };
 
 /** What {@link system} needs of the desktop `Shell` is handed. */
@@ -284,6 +294,12 @@ export const system = (host: SystemHost): System => {
                 signature: event.signature,
               }
             : unexpected(event),
+      ),
+    idleWarnings: () =>
+      listening(calls, { call: "idle_warnings" }, (event) =>
+        event.kind === "idle_warning"
+          ? (event.blanks_in_ms ?? undefined)
+          : unexpected(event),
       ),
     readDir: (path) =>
       oneShot(calls, { call: "read_dir", path }, (reply) =>

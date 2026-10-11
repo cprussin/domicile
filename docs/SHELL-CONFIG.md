@@ -110,7 +110,7 @@ An edit applies to the running desktop, and windows stay open:
 | `input.keyboard` | New layout; moves the keys a shell bound ([Keybindings](WRITING-A-SHELL.md#keybindings)) |
 | `output.max_scale` | Re-advertised to clients |
 | `output.displays`, `output.profiles` | Displays rearranged |
-| `idle.blank_after_seconds` | Idle timer restarts. Dark screens relight |
+| `idle.blank_after_seconds`, `idle.warn_before_seconds` | Idle timer restarts. Dark screens relight |
 | `theme.mode` | Shell and windows repaint |
 | `theme.accent_color`, `contrast`, `reduced_motion` | Shell and windows that read the settings portal follow |
 | `theme.icon_theme` | Shell and windows that read the settings portal follow; tray icons redrawn and later notifications drawn in it; manganese on the next menu or launcher opening, and title bars when a new app id appears |
@@ -148,6 +148,10 @@ the screens turn off. Any key, click, scroll or pointer motion turns them back
 on.
 
 - Unset means the screens never blank. `0` is an error.
+- `idle.warn_before_seconds` warns the shell that long before blanking, so it
+  can dim or count down ([SHELL-IDLE-AND-LOCK.md](SHELL-IDLE-AND-LOCK.md#warning-before-blanking)).
+  Unset means no warning. It must be at least `1` and less than
+  `blank_after_seconds`.
 - The same timeout locks the desktop if `lock` is set.
 - Apps can block blanking (for example, during a video) with
   `zwp_idle_inhibit_manager_v1`. This involves only the app and the

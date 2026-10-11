@@ -1,7 +1,8 @@
-//! Files, watches, processes, D-Bus, screenshots and shell commands for one
-//! chrome connection. The compositor takes the screenshots
-//! ([`System::screenshotting_with`]) and shares the shell commands between
-//! connections ([`System::sharing_shell_commands`]).
+//! Files, watches, processes, D-Bus, screenshots, shell commands and idle
+//! warnings for one chrome connection. The compositor takes the screenshots
+//! ([`System::screenshotting_with`]) and shares the shell commands
+//! ([`System::sharing_shell_commands`]) and idle warnings
+//! ([`System::sharing_idle_warnings`]) between connections.
 //!
 //! [`System::handle`] runs a `ChromeMessage::SystemRequest` and sends every
 //! answer through the callback it was built with. Nothing here blocks the
@@ -20,7 +21,7 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::UNIX_EPOCH;
+use std::time::{Instant, UNIX_EPOCH};
 
 use domicile_protocol::{
     Bus, DirEntry, FileType, HostMessage, Signal, Stream, SystemEnd, SystemError, SystemErrorKind,
@@ -32,6 +33,7 @@ use zbus::zvariant::{Signature, Structure, StructureBuilder};
 
 use crate::base64::{decoded, encoded};
 use crate::dbus_json::{self, NotABody};
+use crate::idle_warnings::{self, IdleWarnings};
 use crate::lock_screen_readouts::is_a_readout;
 use crate::shell_commands::{Listener, ShellCommands};
 
@@ -60,6 +62,8 @@ pub struct System {
     screenshot: Option<Screenshot>,
     /// The pages that hear a `SystemRequest::SendShell`.
     shell_commands: ShellCommands,
+    /// The warning that the screens are about to blank.
+    idle_warnings: IdleWarnings,
 }
 
 /// Takes a screenshot, into the file if one is given, and returns where it
@@ -91,6 +95,8 @@ enum Running {
     Match(Connection),
     /// The page hears shell commands.
     ShellCommands(Listener),
+    /// The page hears idle warnings.
+    IdleWarnings(idle_warnings::Listener),
 }
 
 /// What [`System::handle`] did with a request.
@@ -158,7 +164,7 @@ pub fn reach(request: &SystemRequest) -> Reach {
             true => Reach::Readout,
             false => Reach::Acts,
         },
-        SystemRequest::ShellCommands => Reach::Listens,
+        SystemRequest::ShellCommands | SystemRequest::IdleWarnings => Reach::Listens,
         SystemRequest::WriteFile { .. }
         | SystemRequest::Stdin { .. }
         | SystemRequest::Screenshot { .. }
@@ -184,6 +190,7 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::DbusMatch { .. }
         | SystemRequest::Screenshot { .. }
         | SystemRequest::ShellCommands
+        | SystemRequest::IdleWarnings
         | SystemRequest::SendShell { .. } => Some(HostMessage::SystemReply {
             id,
             reply: SystemReply::Failed {
@@ -222,6 +229,7 @@ impl System {
             buses: Arc::default(),
             screenshot: None,
             shell_commands: ShellCommands::default(),
+            idle_warnings: IdleWarnings::default(),
         }
     }
 
@@ -248,6 +256,13 @@ impl System {
     /// instead of only its own.
     pub fn sharing_shell_commands(mut self, commands: ShellCommands) -> System {
         self.shell_commands = commands;
+        self
+    }
+
+    /// This system, hearing idle warnings through `warnings` instead of its
+    /// own, which never warns.
+    pub fn sharing_idle_warnings(mut self, warnings: IdleWarnings) -> System {
+        self.idle_warnings = warnings;
         self
     }
 
@@ -426,6 +441,17 @@ impl System {
                         drop(listener);
                         Handled::Done
                     }
+                    Some(Running::IdleWarnings(listener)) => {
+                        (self.tell)(HostMessage::SystemEnd {
+                            id,
+                            end: SystemEnd::Stopped,
+                        });
+                        // Dropped outside the lock, which a warning being
+                        // heard waits for.
+                        drop(running);
+                        drop(listener);
+                        Handled::Done
+                    }
                     Some(process) => {
                         running.insert(id, process);
                         Handled::Malformed
@@ -454,9 +480,12 @@ impl System {
                     stdin.take();
                     Handled::Done
                 }
-                Some(Running::Watch(_) | Running::Match(_) | Running::ShellCommands(_)) => {
-                    Handled::Malformed
-                }
+                Some(
+                    Running::Watch(_)
+                    | Running::Match(_)
+                    | Running::ShellCommands(_)
+                    | Running::IdleWarnings(_),
+                ) => Handled::Malformed,
                 None => Handled::NothingRunning,
             },
             SystemRequest::Kill { signal } => match self.running.lock().unwrap().get(&id) {
@@ -467,9 +496,12 @@ impl System {
                     unsafe { libc::kill(-group, number(signal)) };
                     Handled::Done
                 }
-                Some(Running::Watch(_) | Running::Match(_) | Running::ShellCommands(_)) => {
-                    Handled::Malformed
-                }
+                Some(
+                    Running::Watch(_)
+                    | Running::Match(_)
+                    | Running::ShellCommands(_)
+                    | Running::IdleWarnings(_),
+                ) => Handled::Malformed,
                 None => Handled::NothingRunning,
             },
             SystemRequest::Screenshot { file } => {
@@ -506,6 +538,31 @@ impl System {
                     }
                 }));
                 Ok((Running::ShellCommands(listener), Box::new(|| {})))
+            }),
+            SystemRequest::IdleWarnings => self.starting(id, |system| {
+                let warn = {
+                    let (tell, running) = (system.tell.clone(), Arc::downgrade(&system.running));
+                    move |blanks_at: Option<Instant>| {
+                        let Some(running) = running.upgrade() else {
+                            return;
+                        };
+                        // Under the lock, so no warning is told before the
+                        // reply or after `Unwatch` ends it.
+                        let running = running.lock().unwrap();
+                        if matches!(running.get(&id), Some(Running::IdleWarnings(_))) {
+                            tell(warned(id, blanks_at));
+                        }
+                    }
+                };
+                let listener = system.idle_warnings.listen(Arc::new(warn.clone()));
+                // A page that listens during a warning hears it at once.
+                let warnings = system.idle_warnings.clone();
+                let already = move || {
+                    if let Some(blanks_at) = warnings.blanks_at() {
+                        warn(Some(blanks_at));
+                    }
+                };
+                Ok((Running::IdleWarnings(listener), Box::new(already)))
             }),
             SystemRequest::SendShell { command } => {
                 let reply = match self.shell_commands.send(&command) {
@@ -710,8 +767,22 @@ impl Drop for System {
                     let _ = connection.close();
                 }
                 Running::ShellCommands(listener) => drop(listener),
+                Running::IdleWarnings(listener) => drop(listener),
             }
         }
+    }
+}
+
+/// The idle warning for the page's `id`: how long until the screens blank at
+/// `blanks_at`, or none.
+fn warned(id: u32, blanks_at: Option<Instant>) -> HostMessage {
+    let blanks_in_ms = blanks_at.map(|at| {
+        u64::try_from(at.saturating_duration_since(Instant::now()).as_millis())
+            .expect("a warning fits in u64 milliseconds")
+    });
+    HostMessage::SystemEvent {
+        id,
+        event: SystemEvent::IdleWarning { blanks_in_ms },
     }
 }
 

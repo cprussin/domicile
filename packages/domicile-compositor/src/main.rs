@@ -2733,6 +2733,14 @@ impl DomicileCompositor {
         self.hub.broadcast(announced(self.the_screens_are_dark()));
     }
 
+    /// Tell the shells when the screens blank, while a warning runs. See
+    /// `domicile_host::idle_warnings`, which tells them only of a change.
+    fn tell_the_shells_how_soon_the_screens_blank(&self) {
+        self.hub
+            .idle_warnings
+            .warn(self.idle.as_ref().and_then(Idle::blanks_at));
+    }
+
     /// Tell a new chrome whether the desktop is idle.
     ///
     /// Silent if the desktop never blanks, so the shell does not show idle UI
@@ -2879,10 +2887,20 @@ impl DomicileCompositor {
         let Some(idle) = self.idle.as_mut() else {
             return;
         };
-        if idle.stirred(Instant::now()) == Some(Blanking::ComeBack) {
-            debug!("somebody is at this desktop again; its screens come back on");
-            self.tell_the_chromes_whether_anybody_is_here();
-            self.state_the_connectors();
+        match idle.stirred(Instant::now()) {
+            Some(Blanking::ComeBack) => {
+                debug!("somebody is at this desktop again; its screens come back on");
+                self.tell_the_chromes_whether_anybody_is_here();
+                self.state_the_connectors();
+            }
+            Some(Blanking::CallOff) => {
+                debug!("somebody is at this desktop again; its screens stay on");
+                self.tell_the_shells_how_soon_the_screens_blank();
+            }
+            Some(Blanking::Warn | Blanking::GoDark) => {
+                unreachable!("input never darkens a desktop")
+            }
+            None => {}
         }
     }
 
@@ -2953,16 +2971,24 @@ impl DomicileCompositor {
 
     /// Act on an inhibitor state change, logging `why`.
     ///
-    /// Sets the connectors only when the state changed.
+    /// Sets the connectors only when the screens go dark or come back.
     fn the_inhibitors_changed(&mut self, edge: Option<Blanking>, why: &str) {
         let Some(edge) = edge else {
             return;
         };
+        self.tell_the_shells_how_soon_the_screens_blank();
         match edge {
-            Blanking::GoDark => debug!("{why}; this desktop's screens go dark"),
-            Blanking::ComeBack => debug!("{why}; this desktop's screens come back on"),
+            Blanking::Warn => debug!("{why}; this desktop's screens go dark soon"),
+            Blanking::CallOff => debug!("{why}; this desktop's screens stay on"),
+            Blanking::GoDark => {
+                debug!("{why}; this desktop's screens go dark");
+                self.state_the_connectors();
+            }
+            Blanking::ComeBack => {
+                debug!("{why}; this desktop's screens come back on");
+                self.state_the_connectors();
+            }
         }
-        self.state_the_connectors();
     }
 
     /// Handle the idle timer. Returns when to fire next; see
@@ -2974,10 +3000,14 @@ impl DomicileCompositor {
             .idle
             .as_mut()
             .expect("the idle clock is armed only where a timeout was stated");
-        let going_dark = idle.elapsed(now, &on_the_desktop);
+        let edge = idle.elapsed(now, &on_the_desktop);
         // Before acting on the change, which borrows `self`.
         let next = idle.next_check(now);
-        if going_dark == Some(Blanking::GoDark) {
+        self.tell_the_shells_how_soon_the_screens_blank();
+        if edge == Some(Blanking::Warn) {
+            debug!("nobody is at this desktop; its screens go dark soon");
+        }
+        if edge == Some(Blanking::GoDark) {
             debug!(
                 connectors = self.engine_displays.len(),
                 "nobody is at this desktop; its screens go dark"
@@ -3094,22 +3124,21 @@ impl DomicileCompositor {
     fn reset_the_idle_clock(&mut self, idle: &IdleConfig) {
         let was_dark = self.the_screens_are_dark();
         // Keep client inhibitors; see [`Idle::takes_over_from`].
-        self.idle = match (
-            Idle::after(idle.blank_after(), Instant::now()),
-            self.idle.as_mut(),
-        ) {
+        self.idle = match (Idle::after(idle, Instant::now()), self.idle.as_mut()) {
             (Some(clock), Some(previous)) => Some(clock.takes_over_from(previous)),
             (clock, _) => clock,
         };
         // Not fatal on reload, unlike at startup: the desktop just stops
         // blanking. Logged so it is not silent.
-        if let Err(why) = self.arm_the_idle_clock(idle.blank_after()) {
+        if let Err(why) = self.arm_the_idle_clock() {
             error!(
                 %why,
                 "no clock for the reloaded idle timeout, so this desktop's screens \
                  will not blank until it is restarted"
             );
         }
+        // The new clock starts lit, so a warning running is over.
+        self.tell_the_shells_how_soon_the_screens_blank();
         if was_dark {
             debug!("the idle timeout changed while the screens were off; they come back on");
             // Tell the shells. They were told the desktop is idle, and the
@@ -3183,17 +3212,18 @@ impl DomicileCompositor {
         self.turnover_deadline = Some(armed);
     }
 
-    /// Arm the idle timer, replacing any existing one.
+    /// Arm the idle timer for [`Idle::next_check`], replacing any existing
+    /// one.
     ///
-    /// `None` (never blank) leaves no timer. Removing the old one keeps reloads
-    /// from piling up timers.
-    fn arm_the_idle_clock(&mut self, after: Option<Duration>) -> Result<(), InsertError<Timer>> {
+    /// A desktop that never blanks gets no timer. Removing the old one keeps
+    /// reloads from piling up timers.
+    fn arm_the_idle_clock(&mut self) -> Result<(), InsertError<Timer>> {
         if let Some(armed) = self.idle_clock.take() {
             self.loop_handle.remove(armed);
         }
-        if let Some(after) = after {
+        if let Some(idle) = &self.idle {
             self.idle_clock = Some(self.loop_handle.insert_source(
-                Timer::from_duration(after),
+                Timer::from_duration(idle.next_check(Instant::now())),
                 |_, _, data: &mut CalloopData| {
                     TimeoutAction::ToDuration(data.state.the_idle_clock_came_round())
                 },
@@ -5973,7 +6003,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         engine_source: None,
         // Set by the first page hello.
         engine_process: None,
-        idle: Idle::after(config.idle.blank_after(), Instant::now()),
+        idle: Idle::after(&config.idle, Instant::now()),
         // Started below, after the event loop's sources.
         index: None,
         // Armed below by `arm_the_idle_clock`, the same path a reload uses.
@@ -6092,7 +6122,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // The idle timer, only if a timeout is configured. The re-arm interval
     // comes from `Idle::next_check`. Shares `arm_the_idle_clock` with reloads,
     // but a failure here is fatal since nothing is running yet.
-    data.state.arm_the_idle_clock(config.idle.blank_after())?;
+    data.state.arm_the_idle_clock()?;
 
     // Emulated input, served on this thread like the engine's, and handed to
     // the portals that take it.

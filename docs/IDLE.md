@@ -30,9 +30,27 @@ edges, before the modeset.
 
 - It carries the state, not the edge, and a page that says hello gets the
   current state. A reloaded page has missed every earlier edge.
-- The idle message arrives with the blanking, not before the timeout. There is
-  no warning to dim or count down with.
+- The idle message arrives with the blanking, not before the timeout.
 - A desktop with no timeout sends neither.
+
+### Warning the shell
+
+With `idle.warn_before_seconds`, the compositor warns the shell that long
+before blanking.
+
+- **The warning is a system call stream**, `SystemRequest::IdleWarnings`, so
+  it needs no engine change ([SHELL-SYSTEM-ACCESS.md](SHELL-SYSTEM-ACCESS.md#wire)).
+  Each `SystemEvent::IdleWarning` carries `blanks_in_ms`, or `null` when the
+  warning ends.
+- **Input or an inhibitor during the warning calls it off.** The screens stay
+  on. Input restarts the timer; an inhibitor does not, so releasing it inside
+  the warning window warns again and blanks at the original timeout.
+- **The warning ends with the blanking.** The shell hears `null` as the
+  screens go dark.
+- **An inhibitor released after the timeout blanks at once**, with no warning.
+- `crate::idle` decides the warning (`Blanking::Warn`, `Blanking::CallOff`).
+  `domicile_host::idle_warnings` holds it for every connection, so a page that
+  listens during a warning hears it at once.
 
 ### Idle inhibitors
 
@@ -65,6 +83,7 @@ application holds it. It names no surface, so it holds with no window showing
 CI has no `/dev/dri`. On hardware, look for:
 
 ```
+nobody is at this desktop; its screens go dark soon
 nobody is at this desktop; its screens go dark connectors=2
 somebody is at this desktop again; its screens come back on
 ```

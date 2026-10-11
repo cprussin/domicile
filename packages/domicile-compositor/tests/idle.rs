@@ -8,7 +8,7 @@
 
 mod running;
 
-use domicile_protocol::{ChromeMessage, HostMessage};
+use domicile_protocol::{ChromeMessage, HostMessage, SystemEvent, SystemRequest};
 
 use crate::running::Compositor;
 
@@ -34,6 +34,62 @@ const A_DESK_THAT_BLANKS_LATER: &str = r#"
   "idle": { "blank_after_seconds": 30 }
 }
 "#;
+
+/// A desk that warns its shell a second before it blanks, the shortest the
+/// config allows.
+const A_DESK_THAT_WARNS: &str = r#"
+{
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
+  "idle": { "blank_after_seconds": 2, "warn_before_seconds": 1 }
+}
+"#;
+
+/// The page hears the warning from the armed timer, and a key calls it off.
+#[test]
+fn a_key_during_the_warning_keeps_the_screens_on() {
+    let compositor = Compositor::started_with(A_DESK_THAT_WARNS);
+    let mut chrome = compositor.chrome();
+    chrome
+        .say(&ChromeMessage::SystemRequest {
+            id: 1,
+            request: SystemRequest::IdleWarnings,
+        })
+        .expect("the chrome socket takes a system call");
+
+    chrome
+        .wait_for(|message| {
+            matches!(
+                message,
+                HostMessage::SystemEvent {
+                    id: 1,
+                    event: SystemEvent::IdleWarning {
+                        blanks_in_ms: Some(_)
+                    },
+                }
+            )
+        })
+        .expect("the page is warned");
+    chrome
+        .say(&ChromeMessage::Key {
+            app_id: "nothing".into(),
+            keycode: 30,
+            pressed: true,
+        })
+        .expect("the chrome socket takes a key");
+
+    chrome
+        .wait_for(|message| {
+            matches!(
+                message,
+                HostMessage::SystemEvent {
+                    id: 1,
+                    event: SystemEvent::IdleWarning { blanks_in_ms: None },
+                }
+            )
+        })
+        .expect("the warning is called off");
+    compositor.wait_for_log("somebody is at this desktop again; its screens stay on");
+}
 
 /// A timeout added by reload blanks a desk that started with none.
 ///

@@ -24,12 +24,41 @@ domicile.addEventListener("idlechanged", idle);
   page stays visible while the screens are off, so `visibilityState` and idle
   detectors are wrong.
 - A newly loaded page reads the current state.
-- `idlechanged` fires as the screens go dark; there is no warning
-  ([ROADMAP.md](/ROADMAP.md)).
+- `idlechanged` fires as the screens go dark. To act before that, listen for
+  the [warning](#warning-before-blanking).
 - Undo idle changes when `idle` is `false`. The repaint finishes before the screens
   relight.
 - Input still reaches clients while blanked. To block it, configure `lock`.
 - With no timeout configured, `idle` stays `null`.
+
+### Warning before blanking
+
+With `idle.warn_before_seconds` set, the compositor warns the shell before the
+screens go dark:
+
+```ts
+import { system } from "@domicile-desktop/sdk/system";
+
+// Awaited: both arms return a promise.
+await (await system(domicile).idleWarnings()).match({
+  Err: async (error) => {
+    console.error("no idle warnings", error);
+  },
+  Ok: async ({ items }) => {
+    for await (const blanksInMs of items) {
+      // A number: the screens go dark in that many milliseconds.
+      // `undefined`: input called it off, or the screens went dark.
+      document.body.classList.toggle("dimmed", blanksInMs !== undefined);
+    }
+  },
+});
+```
+
+- Any input during the warning keeps the screens on, so a dim that wakes on a
+  key needs no code of its own.
+- A page that listens during a warning hears it at once.
+- Allowed while locked, so a lock screen can dim too.
+- Without `idle.warn_before_seconds`, nothing is heard.
 
 ## Locking
 

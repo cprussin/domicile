@@ -73,7 +73,8 @@ recorded output.
 
 - Page to compositor: `system_request { id, request }`. `request` starts a
   call (`read_file`, `write_file`, `read_dir`, `stat`, `watch`, `spawn`,
-  `dbus_call`, `dbus_match`, `screenshot`, `shell_commands`, `send_shell`) or
+  `dbus_call`, `dbus_match`, `screenshot`, `shell_commands`, `send_shell`,
+  `idle_warnings`) or
   drives one running under the same `id` (`unwatch`, `stdin`, `close_stdin`,
   `kill`). `read_file` takes an
   optional byte range, `offset` and `length`.
@@ -113,6 +114,7 @@ that trust from reaching anything else.
       ([LOCK.md](LOCK.md#lock-screen-readouts))
     - `shell_commands`, so a page reloaded while locked hears commands after
       unlock
+    - `idle_warnings`, so a lock screen can dim
   - `stdin` is dropped; `unwatch`, `close_stdin` and `kill` are allowed
   - processes and watches started before the lock keep running
 - **Lifetime:** a page's processes, watches and matches end when its
