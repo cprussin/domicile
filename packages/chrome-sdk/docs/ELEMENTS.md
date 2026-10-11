@@ -10,6 +10,10 @@ Event names and full types are in `src/app-element.ts` and
 
 - **Size:** the element's layout box is the client's size. The engine sends it
   as the `xdg_toplevel.configure`. There is nothing to call.
+- **Resize sync:** a new box holds the page's frame until the client draws at
+  it, up to viz's default deadline. Set the `resizing` attribute (or
+  `element.resizing = true`) while the user drags an edge: each box then shows
+  at once, without waiting. Removing it waits once for the final size.
 - **Scale:** call `domicile.setAppBounds(appId, x, y, width, height)` with
   the element's box in page pixels whenever it moves or resizes. The client
   draws at the scale of the monitor holding most of the box. An unreported

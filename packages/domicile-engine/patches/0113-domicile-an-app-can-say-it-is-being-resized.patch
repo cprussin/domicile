@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sun, 11 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: an <app> can say it is being resized
+
+Names the `resizing` attribute, which html_app_element.idl reflects.
+While it is set, an <app> embeds each new box with deadline 0 instead
+of holding the page's frame for its client. See
+third_party/blink/renderer/core/html/domicile/html_app_element.cc.
+---
+ third_party/blink/renderer/core/html/html_attribute_names.json5 | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/third_party/blink/renderer/core/html/html_attribute_names.json5 b/third_party/blink/renderer/core/html/html_attribute_names.json5
+index cd3fa157..06a6e231 100644
+--- a/third_party/blink/renderer/core/html/html_attribute_names.json5
++++ b/third_party/blink/renderer/core/html/html_attribute_names.json5
+@@ -343,6 +343,7 @@
+     "referrerpolicy",
+     "rel",
+     "required",
++    "resizing",
+     "rev",
+     "reversed",
+     "role",

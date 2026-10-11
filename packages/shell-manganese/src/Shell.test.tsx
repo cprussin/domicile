@@ -2871,6 +2871,42 @@ describe("Shell", () => {
       );
     });
 
+    it("marks a window resizing while its edge is dragged", () => {
+      // The engine then stops holding the desktop's frame for the client.
+      const { container } = renderShell();
+      clientAppears("term");
+      press("Tab", true);
+      pageHolds({});
+
+      fireEvent.pointerDown(rightBorder(container), {
+        clientX: 100,
+        clientY: 100,
+      });
+      fireEvent.pointerMove(window, { clientX: 140, clientY: 130 });
+      expect(appElement(container, "term").hasAttribute("resizing")).toBe(true);
+
+      fireEvent.pointerUp(window, { clientX: 140, clientY: 130 });
+      expect(appElement(container, "term").hasAttribute("resizing")).toBe(
+        false,
+      );
+    });
+
+    it("does not mark a window resizing while it is moved", () => {
+      const { container } = renderShell();
+      clientAppears("term");
+      press("Tab", true);
+
+      fireEvent.pointerDown(barFor(container, "app:term"), {
+        clientX: 100,
+        clientY: 100,
+      });
+      fireEvent.pointerMove(window, { clientX: 140, clientY: 100 });
+
+      expect(appElement(container, "term").hasAttribute("resizing")).toBe(
+        false,
+      );
+    });
+
     it("resizes a float's window with the pointer rather than easing after it", () => {
       // An eased window would trail the pointer; see `useSettling`.
       const { container } = renderShell();

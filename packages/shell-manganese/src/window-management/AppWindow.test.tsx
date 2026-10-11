@@ -68,6 +68,7 @@ const windowProps = {
   motion: "resting",
   onMotionEnded: nothingEnded,
   rect: ON_SCREEN,
+  resizing: false,
 } as const;
 
 // Loads the real stylesheet so computed styles reflect the emitted CSS.

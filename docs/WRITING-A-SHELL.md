@@ -219,7 +219,9 @@ Each entry in `domicile.windows` describes one client window.
 - **Cursor:** `cursor` is the CSS cursor a client wants over its window. Set it
   with `element.style.cursor = cursor` (in React, `<app style={{ cursor }}>`).
 - **Size:** the `<app>` element's layout box is the window size. The engine
-  sends it to the client. Resize a window by styling its element.
+  sends it to the client. Resize a window by styling its element. Set
+  `resizing` on the element while the user drags an edge; see
+  [ELEMENTS.md](/packages/chrome-sdk/docs/ELEMENTS.md).
 - **Drawn size:** `width` and `height` are the size the client drew at, `null`
   until it draws. The engine already uses them for pointer mapping, so you
   only need them for your own UI (`shell-simple` uses them to remove a

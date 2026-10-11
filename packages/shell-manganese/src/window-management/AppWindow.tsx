@@ -96,6 +96,12 @@ type Props = {
    * behind a tab).
    */
   rect: Rect | undefined;
+  /**
+   * Whether the user is resizing windows with the pointer. Sets the `<app>`'s
+   * `resizing` attribute, so the engine shows each new box without waiting for
+   * the client to draw at it.
+   */
+  resizing: boolean;
   /** The restack shuffle in progress, if any. See `shuffledBy`. */
   restack?: Restack | undefined;
   /** Eases the window into a new box; see `useSettling`. */
@@ -128,6 +134,7 @@ export const AppWindow = ({
   motion,
   onMotionEnded,
   rect,
+  resizing,
   restack,
   settler,
 }: Props) => {
@@ -258,6 +265,7 @@ export const AppWindow = ({
         }
       }}
       ref={attach}
+      resizing={resizing ? "" : undefined}
       // Inline because the box and the cursor are runtime values that Panda
       // cannot extract at build time.
       style={{
