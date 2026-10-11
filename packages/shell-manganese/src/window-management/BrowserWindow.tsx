@@ -14,6 +14,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { css, cx } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { AddressBar } from "./browser/AddressBar";
+import { AppAddress } from "./browser/AppAddress";
+import { leftOrigin } from "./browser/app-origin";
 import { BrowserCommand, browserCommandFor } from "./browser/browser-command";
 import { DeviceAsk } from "./browser/DeviceAsk";
 import { FindBar } from "./browser/FindBar";
@@ -218,9 +220,13 @@ export const BrowserWindow = ({
   // The URL the shell last navigated to. The bar shows it until the page
   // reports its own URL.
   const [sent, setSent] = useState(url);
+  // The address an app window opened at, whose origin is the app's. Kept from
+  // mount because `url` follows the page.
+  const [start] = useState(url);
   // The page's actual URL and connection security, including navigations
   // the shell did not start (links, redirects, form posts).
   const shown = useShownPage(view);
+  const address = addressOf(shown.url, sent);
   usePageIcon(view, window, onIcon);
   const { canGoBack, canGoForward } = useHistoryAvailability(view);
   const loading = useLoading(view);
@@ -533,7 +539,7 @@ export const BrowserWindow = ({
     >
       {popupWindow === undefined && !isApp && !pageFullscreen && (
         <AddressBar
-          address={addressOf(shown.url, sent)}
+          address={address}
           canGoBack={canGoBack}
           canGoForward={canGoForward}
           isPrivate={isPrivate}
@@ -572,6 +578,9 @@ export const BrowserWindow = ({
           zoom={zoom}
           zoomsAnnounced={zoomsAnnounced}
         />
+      )}
+      {isApp && !pageFullscreen && leftOrigin(start, address) && (
+        <AppAddress address={address} security={shown.security} />
       )}
       {/*
         Wraps the page so the find bar and file picker cover the page but not
