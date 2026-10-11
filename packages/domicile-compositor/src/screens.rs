@@ -576,14 +576,25 @@ impl Screens {
                 // A desktop of no displays has no density to match.
                 .unwrap_or(1.0)
         };
-        let most_of = bounds.and_then(|bounds| {
-            self.outputs
-                .iter()
-                .map(|output| (overlap_area(&output.bounds(), &bounds), output.scale))
-                .filter(|(area, _)| *area > 0.0)
-                .max_by(|(a, _), (b, _)| a.total_cmp(b))
-        });
-        most_of.map_or_else(densest, |(_, scale)| scale)
+        bounds
+            .and_then(|bounds| self.holding_most_of(bounds))
+            .map_or_else(densest, |output| output.scale)
+    }
+
+    /// The area of the display holding the most of a window in `bounds`,
+    /// which its menus are kept on. `None` when it is on no display.
+    pub fn screen_of(&self, bounds: Bounds) -> Option<Bounds> {
+        self.holding_most_of(bounds).map(Advertised::bounds)
+    }
+
+    /// The display holding the most of `bounds`, as sway picks it.
+    fn holding_most_of(&self, bounds: Bounds) -> Option<&Advertised> {
+        self.outputs
+            .iter()
+            .map(|output| (overlap_area(&output.bounds(), &bounds), output))
+            .filter(|(area, _)| *area > 0.0)
+            .max_by(|(a, _), (b, _)| a.total_cmp(b))
+            .map(|(_, output)| output)
     }
 
     /// The desktop's size in logical units — the bounding box of the outputs.
@@ -1012,6 +1023,22 @@ mod tests {
         assert_eq!(
             screens.scale_for(Some(window_at((-4000.0, -4000.0), (100.0, 100.0)))),
             1.5
+        );
+    }
+
+    #[test]
+    fn a_windows_screen_is_the_display_holding_the_most_of_it() {
+        // Where its menus are kept.
+        let screens = monitor_over_laptop();
+
+        assert_eq!(
+            screens.screen_of(window_at((0.0, 1500.0), (800.0, 600.0))),
+            Some(window_at((0.0, 1920.0), (1920.0, 1280.0))),
+            "100 rows on the monitor, 180 on the laptop"
+        );
+        assert_eq!(
+            screens.screen_of(window_at((-4000.0, -4000.0), (100.0, 100.0))),
+            None
         );
     }
 

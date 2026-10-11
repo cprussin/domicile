@@ -70,6 +70,13 @@ pub struct Arguments {
     /// menu does. Implies `popup`.
     pub popup_grab: bool,
 
+    /// Whether each press opens a menu over what it pressed, the window or a
+    /// menu, whose positioner lets it slide on both axes.
+    ///
+    /// Opened on a press, as a menu is, so the shell has placed the window
+    /// first. See [`crate::window::POPUP`] for its placement.
+    pub sliding_menu: bool,
+
     /// Whether to open a bubble over the window once it is up: a desync
     /// `wl_subsurface`, as Chromium draws an extension popup.
     ///
@@ -148,6 +155,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut paste = None;
     let mut popup = None;
     let mut popup_grab = None;
+    let mut sliding_menu = None;
     let mut bubble = None;
     let mut min_size = None;
     let mut max_size = None;
@@ -210,6 +218,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--popup-grab" => {
                 take(&mut popup_grab, &flag, true)?;
             }
+            "--sliding-menu" => {
+                take(&mut sliding_menu, &flag, true)?;
+            }
             "--bubble" => {
                 take(&mut bubble, &flag, true)?;
             }
@@ -239,6 +250,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         paste: paste.unwrap_or(false),
         popup: popup.unwrap_or(false) || popup_grab.unwrap_or(false),
         popup_grab: popup_grab.unwrap_or(false),
+        sliding_menu: sliding_menu.unwrap_or(false),
         bubble: bubble.unwrap_or(false),
         min_size,
         max_size,

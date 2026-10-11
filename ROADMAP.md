@@ -98,9 +98,6 @@ Understood and not scheduled.
 
 ### Windows and clients
 
-- **Popups near a screen edge aren't moved back on screen.**
-  `constraint_adjustment` is never applied (`popup_placed` in
-  `domicile-host`).
 - **Clients only get 8-bit formats** (`FOURCCS` in `engine.rs`).
 - **A chrome repaint damages the whole output.**
 - **Windows under a fullscreen window keep drawing,** so manganese can animate

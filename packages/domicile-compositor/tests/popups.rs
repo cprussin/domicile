@@ -17,6 +17,19 @@ const ONE_DISPLAY: &str = r#"
 { "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] } }
 "#;
 
+/// Two screens side by side, so a menu past the left one's right edge is
+/// still on the desktop.
+const TWO_DISPLAYS: &str = r#"
+{
+  "output": {
+    "displays": [
+      { "name": "left", "size": [1920, 1080] },
+      { "name": "right", "position": [1920, 0], "size": [1920, 1080] }
+    ]
+  }
+}
+"#;
+
 /// The window a client opened, by the id the chrome was told.
 fn window_of(chrome: &mut Chrome) -> String {
     let appeared = chrome
@@ -333,4 +346,91 @@ fn a_bubble_goes_with_its_client() {
             }
     });
     assert!(closed.is_ok(), "the bubble's going is announced");
+}
+
+/// A press over `app_id`, which opens a `--sliding-menu` over it.
+fn press(chrome: &mut Chrome, app_id: &str) {
+    chrome
+        .say(&ChromeMessage::PointerMotion {
+            app_id: app_id.to_string(),
+            x: 1.0,
+            y: 1.0,
+        })
+        .expect("the chrome can move the pointer");
+    for pressed in [true, false] {
+        chrome
+            .say(&ChromeMessage::PointerButton {
+                app_id: app_id.to_string(),
+                button: 0x110,
+                pressed,
+            })
+            .expect("the chrome can press");
+    }
+}
+
+/// A `--sliding-menu` window the page put in a 100 by 100 box at the left
+/// screen's bottom right corner, mostly on that screen. Its menu, unmoved,
+/// would cross that screen's right edge by 60 and its bottom edge by 30.
+fn a_window_in_the_corner(chrome: &mut Chrome) -> String {
+    let window = window_of(chrome);
+    chrome
+        .say(&ChromeMessage::SetAppBounds {
+            app_id: window.clone(),
+            position: [1850.0, 1010.0],
+            size: [100.0, 100.0],
+        })
+        .expect("the chrome reports where it put the window");
+    window
+}
+
+/// A menu that would cross the edge of its window's screen slides back onto
+/// that screen, as its positioner allows. The screen next to it does not
+/// count: a menu split across two screens is cut in half.
+#[test]
+fn a_menu_past_its_screens_edge_slides_back_onto_it() {
+    let compositor = Compositor::started_with(TWO_DISPLAYS);
+    let mut chrome = compositor.chrome();
+    let _client = compositor.client_with("a window with sliding menus", &["--sliding-menu"]);
+    let window = a_window_in_the_corner(&mut chrome);
+
+    press(&mut chrome, &window);
+
+    let HostMessage::PopupPlaced {
+        parent, position, ..
+    } = popup_of(&mut chrome)
+    else {
+        unreachable!("the wait matched on this variant")
+    };
+    assert_eq!(parent, window);
+    assert_eq!(
+        position,
+        [-50.0, -10.0],
+        "the menu ends at the screen's corner"
+    );
+}
+
+/// A menu opened from a menu slides onto its window's screen too, counting
+/// where the menu under it is.
+#[test]
+fn a_nested_menu_slides_back_onto_its_windows_screen() {
+    let compositor = Compositor::started_with(TWO_DISPLAYS);
+    let mut chrome = compositor.chrome();
+    let _client = compositor.client_with("a window with sliding menus", &["--sliding-menu"]);
+    let window = a_window_in_the_corner(&mut chrome);
+    press(&mut chrome, &window);
+    let HostMessage::PopupPlaced { app_id: menu, .. } = popup_of(&mut chrome) else {
+        unreachable!("the wait matched on this variant")
+    };
+
+    press(&mut chrome, &menu);
+
+    let HostMessage::PopupPlaced {
+        parent, position, ..
+    } = popup_of(&mut chrome)
+    else {
+        unreachable!("the wait matched on this variant")
+    };
+    assert_eq!(parent, menu);
+    // The menu under it already ends at the corner, so it covers that menu.
+    assert_eq!(position, [0.0, 0.0]);
 }
