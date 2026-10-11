@@ -43,6 +43,20 @@ typedef uint32_t DomicileClipboard;
 // Select and middle-click paste (zwp_primary_selection_device_v1).
 #define DOMICILE_CLIPBOARD_PRIMARY 1u
 
+// One type a clipboard's contents can be pasted as. Borrowed for the call it
+// crosses in.
+//
+// Text crosses once, under any text type; the browser offers it under every
+// text type a reader asks for. An image crosses under its own type, such as
+// "image/png".
+typedef struct DomicileClipboardItem {
+  // A nul-terminated MIME type. Never null.
+  const char* mime_type;
+  // `length` bytes. Null only when `length` is zero.
+  const uint8_t* data;
+  size_t length;
+} DomicileClipboardItem;
+
 // A monitor's rotation: the turn content takes to appear upright. Values follow
 // `wl_output.transform` order.
 typedef uint32_t DomicileDisplayTransform;
@@ -222,6 +236,8 @@ typedef struct DomicileEngineCallbacks {
   //
   // `text` is `length` bytes borrowed for the call; empty when the copy was
   // not text. Length-delimited because copied bytes may contain a NUL.
+  //
+  // Not called when `copied_items` is set.
   void (*copied)(void* user_data,
                  DomicileClipboard clipboard,
                  const char* text,
@@ -258,6 +274,15 @@ typedef struct DomicileEngineCallbacks {
                         uint32_t height,
                         double scale,
                         uint64_t box);
+  // Like `copied`, with every type the copy can be pasted as: its text and
+  // its image. `items` points at `count` records borrowed for the call; zero
+  // when the copy was neither.
+  //
+  // Called instead of `copied` when set.
+  void (*copied_items)(void* user_data,
+                       DomicileClipboard clipboard,
+                       const DomicileClipboardItem* items,
+                       uint32_t count);
 } DomicileEngineCallbacks;
 
 // Connects to the browser's mojo socket. Returns null on failure, and the
@@ -402,6 +427,17 @@ DOMICILE_ENGINE_EXPORT void domicile_clipboard_set(DomicileEngine* engine,
                                                    DomicileClipboard clipboard,
                                                    const char* text,
                                                    size_t length);
+
+// Sets the contents of one of the desktop's clipboards to `count` items: text,
+// an image, or both, as `copied_items` reports them. Zero items clears the
+// clipboard.
+//
+// The records and their bytes are borrowed for the call.
+DOMICILE_ENGINE_EXPORT void domicile_clipboard_set_items(
+    DomicileEngine* engine,
+    DomicileClipboard clipboard,
+    const DomicileClipboardItem* items,
+    uint32_t count);
 
 // Drops an imported buffer. Destroying a surface drops its buffers, so this is
 // for a client that destroys a single buffer.

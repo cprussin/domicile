@@ -1,0 +1,76 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 11 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a copied image crosses the desktop's clipboard
+
+The compositor and the browser hand each other a clipboard's contents
+keyed by MIME type instead of a string of text, so an image copied in a
+Wayland client pastes in a page and an image copied in a page pastes in
+a client.
+
+SetDomicileClipboard and the copied callback take
+DomicileClipboardContents: text under any text type and an image under
+its own. DrmClipboard offers the text under every text type and the
+image under its type. See ui/ozone/platform/drm/domicile/drm_clipboard.h.
+---
+ ui/ozone/platform/drm/ozone_platform_drm.cc |  7 ++++---
+ ui/ozone/public/ozone_platform.h            | 15 +++++++++++----
+ 2 files changed, 15 insertions(+), 7 deletions(-)
+
+diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
+index f972392..a4698d0 100644
+--- a/ui/ozone/platform/drm/ozone_platform_drm.cc
++++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
+@@ -189,9 +189,10 @@ class OzonePlatformDrm : public OzonePlatform {
+   // browser with the fallback clipboard for the rest of its life.
+   PlatformClipboard* GetPlatformClipboard() override { return &clipboard_; }
+ 
+-  void SetDomicileClipboard(ClipboardBuffer buffer,
+-                            const std::string& text) override {
+-    clipboard_.SetContents(buffer, text);
++  void SetDomicileClipboard(
++      ClipboardBuffer buffer,
++      const DomicileClipboardContents& contents) override {
++    clipboard_.SetContents(buffer, contents);
+   }
+ 
+   void SetDomicileCopiedCallback(DomicileCopied copied) override {
+diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
+index ed71b99..53def9d 100644
+--- a/ui/ozone/public/ozone_platform.h
++++ b/ui/ozone/public/ozone_platform.h
+@@ -12,6 +12,7 @@
+ #include <vector>
+ 
+ #include "base/component_export.h"
++#include "base/containers/flat_map.h"
+ #include "base/containers/flat_set.h"
+ #include "base/functional/callback.h"
+ #include "base/message_loop/message_pump_type.h"
+@@ -383,16 +384,22 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
+   // window inside somebody else's session, and the clipboard the browser reads
+   // there is that session's. See
+   // ui/ozone/platform/drm/domicile/drm_clipboard.h.
+-  virtual void SetDomicileClipboard(ClipboardBuffer buffer,
+-                                    const std::string& text) {}
++  //
++  // The contents are keyed by MIME type: text under any text type, and an
++  // image under its own, so a copied image pastes too.
++  using DomicileClipboardContents =
++      base::flat_map<std::string, std::vector<uint8_t>>;
++  virtual void SetDomicileClipboard(
++      ClipboardBuffer buffer,
++      const DomicileClipboardContents& contents) {}
+   // DOMICILE: where a copy made in this process goes, which is the compositor.
+   //
+   // A callback rather than a call, because the two ends are in different
+   // targets: the clipboard is //ui/ozone's and the compositor's connection is
+   // //content/browser's, and neither may depend on the other. Set once, by
+   // whoever holds that connection.
+-  using DomicileCopied =
+-      base::RepeatingCallback<void(ClipboardBuffer, const std::string&)>;
++  using DomicileCopied = base::RepeatingCallback<
++      void(ClipboardBuffer, const DomicileClipboardContents&)>;
+   virtual void SetDomicileCopiedCallback(DomicileCopied copied) {}
+   virtual PlatformClipboard* GetPlatformClipboard();
+   virtual std::unique_ptr<InputMethod> CreateInputMethod(
