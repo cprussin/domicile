@@ -306,6 +306,34 @@ export const WEBVIEW_PERMISSIONS = [
 
 export type WebViewPermission = (typeof WEBVIEW_PERMISSIONS)[number];
 
+/**
+ * Fired when the page asks for a device through WebHID, WebUSB or Web Serial,
+ * such as a hardware wallet. Bubbles.
+ *
+ * The browser draws no chooser. Call `preventDefault()` to handle it, then
+ * answer with {@link DomicileDeviceRequestEvent.choose} or
+ * {@link DomicileDeviceRequestEvent.cancel}. If no listener calls
+ * `preventDefault()`, the request is canceled: the page gets no device. One
+ * request is outstanding at a time.
+ */
+export const WEBVIEW_DEVICE_REQUEST_EVENT = "domicile-device-request";
+
+/**
+ * Fired when the outstanding {@link WEBVIEW_DEVICE_REQUEST_EVENT}'s devices
+ * change: once listed, and as devices are plugged in or removed. Reread
+ * {@link DomicileDeviceRequestEvent.devices}. Carries no payload. Bubbles.
+ */
+export const WEBVIEW_DEVICE_REQUEST_CHANGE_EVENT =
+  "domicile-device-request-change";
+
+/**
+ * Fired when the browser drops the outstanding
+ * {@link WEBVIEW_DEVICE_REQUEST_EVENT} unanswered, for example because the
+ * page navigated. Answering it afterward throws. Carries no payload. Bubbles.
+ */
+export const WEBVIEW_DEVICE_REQUEST_WITHDRAWN_EVENT =
+  "domicile-device-request-withdrawn";
+
 /** A site's stored choice for a permission. `ask` prompts the shell. */
 export const WEBVIEW_PERMISSION_SETTINGS = ["ask", "allow", "block"] as const;
 
@@ -531,6 +559,49 @@ declare global {
     dismiss(): void;
   }
 
+  /** A device a {@link DomicileDeviceRequestEvent} offers. */
+  type DomicileDevice = {
+    /** Names the device to `choose()`. Never reused. */
+    readonly id: number;
+    /** The name Chrome's chooser shows, such as `Nano X`. */
+    readonly name: string;
+  };
+
+  /**
+   * The {@link WEBVIEW_DEVICE_REQUEST_EVENT} event. The engine defines it in
+   * `domicile_device_request_event.idl`.
+   */
+  interface DomicileDeviceRequestEvent extends Event {
+    /**
+     * Chrome's question, naming the site and the kind of device, such as
+     * `solflare.com wants to connect to a HID device`.
+     */
+    readonly title: string;
+    /** Whether several devices may be chosen. */
+    readonly multiple: boolean;
+    /**
+     * Whether the browser has listed the devices yet. Until it has,
+     * {@link DomicileDeviceRequestEvent.devices} is empty because nothing is
+     * known.
+     */
+    readonly listed: boolean;
+    /**
+     * The devices on offer, in Chrome's order. External data; parse it at the
+     * boundary.
+     */
+    devices(): readonly DomicileDevice[];
+    /**
+     * Give the page the devices with these ids. Throws a `TypeError` for no
+     * ids, several when not `multiple`, an id twice or one never offered.
+     * Answering twice, or after
+     * {@link WEBVIEW_DEVICE_REQUEST_WITHDRAWN_EVENT}, throws an
+     * `InvalidStateError`.
+     */
+    choose(ids: readonly number[]): void;
+    /** Give the page no device. */
+    cancel(): void;
+  }
+
   /**
    * Types `addEventListener` for the events that carry data. Merged into
    * `HTMLElementEventMap` because `HTMLWebViewElement` has no event map of its
@@ -542,5 +613,6 @@ declare global {
     "domicile-file-chooser": DomicileFileChooserEvent;
     "domicile-context-menu": DomicileContextMenuEvent;
     "domicile-permission-request": DomicilePermissionRequestEvent;
+    "domicile-device-request": DomicileDeviceRequestEvent;
   }
 }

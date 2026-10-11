@@ -166,6 +166,16 @@ struct WebViewSitePermission {
   WebViewPermissionSetting setting;
 };
 
+// A device a page in a <webview> may be given, as the shell lists it.
+struct WebViewDevice {
+  // Names the device in the answer to DeviceRequested. Stays the device's own
+  // while it is listed, and is never reused. See
+  // components/domicile/browser/device_choices.h.
+  int32 id;
+  // The name Chrome's chooser shows, such as "Nano X".
+  string name;
+};
+
 // Renderer -> browser, bound per document.
 interface WebViewGuestHost {
   // Gives `placeholder_frame` a guest page.
@@ -346,6 +356,26 @@ interface WebViewGuestClient {
   // The browser dropped the unanswered request, for example because the page
   // navigated. Its answer, if one is sent, is ignored.
   PermissionRequestWithdrawn();
+
+  // The page asked for a device through WebHID, WebUSB or Web Serial, so the
+  // shell must let the user pick one. `title` is Chrome's question, naming
+  // the site and the kind of device. `multiple` allows picking several.
+  //
+  // The devices follow in DevicesOffered, once listed and again as they are
+  // plugged in or removed. Chrome draws a chooser as a bubble on a browser
+  // window, which a guest has none of.
+  //
+  // `chosen` are WebViewDevice ids. Null cancels, as does an unhandled event
+  // or a closed pipe. One at a time: a newer request withdraws the older one
+  // first.
+  DeviceRequested(string title, bool multiple) => (array<int32>? chosen);
+
+  // The devices the open DeviceRequested offers. Sent whenever they change.
+  DevicesOffered(array<WebViewDevice> devices);
+
+  // The browser dropped the unanswered DeviceRequested, for example because the
+  // page navigated. Its answer, if one is sent, is ignored.
+  DeviceRequestWithdrawn();
 
   // The page entered or left fullscreen, as a video's fullscreen button does.
   // The page fills the element's box; the shell decides whether the element

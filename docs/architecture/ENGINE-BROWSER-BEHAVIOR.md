@@ -41,6 +41,19 @@ Passkeys belong to extensions ([EXTENSIONS.md](EXTENSIONS.md)):
   proxies. Patch `0084` holds a conditional `get()` until the site aborts it, so a passkey
   extension's autofill can answer it.
 
+## Device choosers
+
+Patch `0110`:
+
+- WebHID, WebUSB and Web Serial ask the shell to pick a device. Chrome's
+  chooser is a bubble on a browser window, which a `<webview>` guest has none
+  of.
+- `//chrome/browser/domicile/domicile_device_chooser.h` sets Chrome's override.
+  Chrome's controllers still list the devices and grant the one picked.
+- Web Bluetooth's chooser goes the same way. Its scanning prompt, which picks
+  no device, is refused.
+- A page outside any guest gets no device.
+
 ## Host shortcuts when nested
 
 Under a host compositor, the engine inhibits the host's shortcuts so the shell
@@ -63,4 +76,5 @@ gets its Meta chords.
   [ENGINE-FORK-MEASUREMENTS.md](ENGINE-FORK-MEASUREMENTS.md#host-shortcut-inhibitor).
 - `guard-webview-context-menu.sh`: the context menu and DevTools.
 - `guard-webview-permissions.sh`: permission requests and site settings.
+- `guard-webview-device-request.sh`: device requests.
 - No guard reads the browser's offers.

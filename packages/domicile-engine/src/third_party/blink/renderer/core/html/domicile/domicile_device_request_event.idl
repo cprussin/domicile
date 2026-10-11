@@ -1,0 +1,34 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// Dispatched by a <webview> when its page asks for a device through WebHID,
+// WebUSB or Web Serial. The shell picks one on the event.
+//
+// Domicile-only, not a web standard. No constructor: only the browser creates
+// one.
+[
+    RuntimeEnabled=DomicileExternalSurface,
+    Exposed=Window
+] interface DomicileDeviceRequestEvent : Event {
+  // Chrome's question, naming the site and the kind of device, such as
+  // "solflare.com wants to connect to a HID device".
+  readonly attribute DOMString title;
+
+  // Whether several devices may be picked.
+  readonly attribute boolean multiple;
+
+  // Whether the browser has listed the devices yet. Until it has, `devices()`
+  // is empty because nothing is known, not because nothing is plugged in.
+  readonly attribute boolean listed;
+
+  // The devices on offer, in the order Chrome lists them. The element fires
+  // `domicile-device-request-change` when they change.
+  sequence<DomicileDevice> devices();
+
+  // Answers: give the page the devices with these ids, or nothing. `choose()`
+  // throws TypeError for no ids, several when not `multiple`, an id twice or
+  // an id never offered. Each throws InvalidStateError if already answered or
+  // withdrawn.
+  [RaisesException] undefined choose(sequence<long> ids);
+  [RaisesException] undefined cancel();
+};

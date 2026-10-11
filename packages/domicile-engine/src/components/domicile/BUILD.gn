@@ -386,6 +386,18 @@ source_set("web_view_guest") {
   ]
 }
 
+# Ids for the devices a <webview>'s device chooser offers. Its own target for
+# the reason :file_choice is one: it needs no browser, which is where its tests
+# are.
+source_set("device_choices") {
+  sources = [
+    "browser/device_choices.cc",
+    "browser/device_choices.h",
+  ]
+
+  deps = [ "//base" ]
+}
+
 # How a <webview>'s permissions map to Chrome's. Its own target beside
 # :web_view_guest for the reason :file_choice is one: it needs no browser,
 # which is where its tests are.
@@ -626,6 +638,7 @@ source_set("unit_tests") {
     "browser/desk_geometry_unittest.cc",
     "browser/desk_tabs_unittest.cc",
     "browser/desktop_prefs_unittest.cc",
+    "browser/device_choices_unittest.cc",
     "browser/display_capture_target_unittest.cc",
     "browser/display_capture_unittest.cc",
     "browser/display_list_unittest.cc",
@@ -674,6 +687,7 @@ source_set("unit_tests") {
     ":desk_geometry",
     ":desk_tabs",
     ":desktop_prefs",
+    ":device_choices",
     ":display_capture_target",
     ":display_transform",
     ":extension_installer",

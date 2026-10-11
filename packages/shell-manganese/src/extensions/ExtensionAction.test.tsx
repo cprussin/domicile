@@ -4,6 +4,7 @@ import type { Extension } from "@domicile-desktop/sdk/extension";
 import {
   WEBVIEW_CLOSE_EVENT,
   WEBVIEW_CONTENT_SIZE_CHANGE_EVENT,
+  WEBVIEW_DEVICE_REQUEST_EVENT,
   WEBVIEW_PERMISSION_REQUEST_EVENT,
 } from "@domicile-desktop/sdk/webview-element";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -370,6 +371,44 @@ describe("ExtensionAction", () => {
 
       expect(answers).toStrictEqual(["allow"]);
       expect(screen.queryByRole("region", { name: "Request" })).toBeNull();
+    });
+  });
+
+  // A wallet's popup asks for its hardware wallet.
+  describe("a device request from the popup", () => {
+    it("connects the device picked above it", async () => {
+      const answers: string[] = [];
+      render(
+        <ExtensionAction
+          domicile={NO_DOMICILE}
+          extension={blocker}
+          onOpen={() => undefined}
+          opened={BLOCKER}
+        />,
+      );
+      fireEvent(
+        await popupView(),
+        Object.assign(
+          new Event(WEBVIEW_DEVICE_REQUEST_EVENT, { cancelable: true }),
+          {
+            cancel: () => undefined,
+            choose: (ids: readonly number[]) => {
+              answers.push(`choose ${ids.join(",")}`);
+            },
+            devices: () => [{ id: 1, name: "Nano X" }],
+            listed: true,
+            multiple: false,
+            title: "Blocker wants to connect to a HID device",
+          },
+        ),
+      );
+
+      await userEvent.click(
+        await screen.findByRole("radio", { name: "Nano X" }),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+      expect(answers).toStrictEqual(["choose 1"]);
     });
   });
 });

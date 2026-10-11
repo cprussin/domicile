@@ -848,6 +848,27 @@ void WebViewGuest::WithdrawPermissionRequest() {
   client_->PermissionRequestWithdrawn();
 }
 
+void WebViewGuest::AskForDevice(const std::string& title,
+                                bool multiple,
+                                DeviceAnswered answered) {
+  // Logged before asking; the device guard greps for it.
+  LOG(INFO) << "domicile: a <webview>'s page asked for a device; asking the "
+               "shell.";
+  // Wrapped, as in AskPermission.
+  client_->DeviceRequested(
+      title, multiple,
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(std::move(answered),
+                                                  std::nullopt));
+}
+
+void WebViewGuest::OfferDevices(std::vector<mojom::WebViewDevicePtr> devices) {
+  client_->DevicesOffered(std::move(devices));
+}
+
+void WebViewGuest::WithdrawDeviceRequest() {
+  client_->DeviceRequestWithdrawn();
+}
+
 void WebViewGuest::Navigate(const GURL& url) {
   // This object is destroyed with the guest's WebContents, so guest_contents_
   // is never null here.

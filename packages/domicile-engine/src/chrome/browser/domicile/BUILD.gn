@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: MIT
 
 # The fork's browser-side code that needs //chrome: the command socket, the
-# desk, browser windows, extensions, file dialogs, permission prompts and
-# pointer warps.
+# desk, browser windows, extensions, file dialogs, permission prompts, device
+# choosers and pointer warps.
 #
 # A separate target because //chrome/browser:browser accepts no new sources,
 # and it keeps the fork to one added dependency in a Chromium-owned file.
@@ -19,6 +19,8 @@ source_set("domicile") {
     "domicile_desk.h",
     "domicile_desk_presenters.cc",
     "domicile_desk_presenters.h",
+    "domicile_device_chooser.cc",
+    "domicile_device_chooser.h",
     "domicile_desk_functions.cc",
     "domicile_desk_functions.h",
     "domicile_devtools.cc",
@@ -93,6 +95,10 @@ source_set("domicile") {
     "//chrome/browser/media/webrtc",
     "//components/domicile:site_permissions",
     "//components/permissions",
+    # Device choosers the shell answers, in place of Chrome's bubble (patch
+    # 0110).
+    "//chrome/browser/ui/dialogs:browser_dialogs",
+    "//components/domicile:device_choices",
     # The Settings app's site permissions, listed and set through the command
     # socket.
     "//components/content_settings/core/browser",
