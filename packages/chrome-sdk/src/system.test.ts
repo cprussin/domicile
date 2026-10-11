@@ -2,7 +2,14 @@ import { describe, expect, it } from "bun:test";
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
 import type { SystemError, SystemHost } from "./system";
-import { Bus, FileType, Signal, SystemErrorKind, system } from "./system";
+import {
+  Bus,
+  FileType,
+  ScreenshotKept,
+  Signal,
+  SystemErrorKind,
+  system,
+} from "./system";
 
 /**
  * A desktop that records system calls and answers them as the
@@ -408,7 +415,17 @@ describe("screenshots", () => {
     host.reply(1, { kind: "saved", path: "/home/me/Pictures/a.png" });
 
     expect(host.calls).toStrictEqual([[1, { call: "screenshot" }]]);
-    expect(await taking).toStrictEqual(Ok("/home/me/Pictures/a.png"));
+    expect(await taking).toStrictEqual(
+      Ok(ScreenshotKept.Saved("/home/me/Pictures/a.png")),
+    );
+  });
+
+  it("says the screenshot was copied rather than saved", async () => {
+    const host = new FakeHost();
+    const taking = system(host).screenshot();
+    host.reply(1, { kind: "copied" });
+
+    expect(await taking).toStrictEqual(Ok(ScreenshotKept.Copied()));
   });
 
   it("says the dialog was dismissed", async () => {

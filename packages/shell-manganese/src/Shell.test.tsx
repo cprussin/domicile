@@ -1165,6 +1165,7 @@ describe("Shell", () => {
               x: Number.parseFloat(contents.x),
               y: top,
             },
+            copy: false,
             kind: "screenshot",
           }),
         ]);
@@ -1213,7 +1214,7 @@ describe("Shell", () => {
         expect(domicile.calls).toContainEqual([
           "answerPortalRequest",
           3,
-          '{"id":"one","kind":"screenshot_window"}',
+          '{"copy":false,"id":"one","kind":"screenshot_window"}',
         ]);
       });
     });

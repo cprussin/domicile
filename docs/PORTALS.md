@@ -139,6 +139,11 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   frame, so they never capture themselves; the shell answers an area or a
   pixel in frame pixels. Saved as a PNG under
   `$XDG_PICTURES_DIR/Screenshots/`.
+  - **Ctrl+C in the picker copies the pick** (desk, screen, window or area)
+    to the clipboard as a PNG and closes it (`copy` on the answer). It
+    becomes a clipboard history row. An application that asked still gets
+    its file; the shell's own screenshot is not saved
+    (`SystemReply::Copied`).
   - The picker lists screens and windows apart. A screen is named by its
     make and model, a window by its application's desktop entry and its
     title.

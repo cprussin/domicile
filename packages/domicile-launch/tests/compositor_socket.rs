@@ -161,6 +161,19 @@ fn a_screenshot_with_no_file_is_the_shells_and_waits_for_the_user_to_pick() {
 }
 
 #[test]
+fn a_screenshot_the_user_copied_is_copied_rather_than_saved() {
+    let (_scratch, path) = scratch();
+    let heard = a_compositor(
+        &path,
+        Duration::ZERO,
+        Some("{\"type\":\"system_reply\",\"id\":1,\"reply\":{\"kind\":\"copied\"}}\n"),
+    );
+
+    assert_eq!(screenshot(&path, None, None), Ok(Shot::Copied));
+    heard.join().expect("the compositor was listening");
+}
+
+#[test]
 fn a_screenshot_the_user_dismissed_is_canceled_rather_than_refused() {
     let (_scratch, path) = scratch();
     let heard = a_compositor(

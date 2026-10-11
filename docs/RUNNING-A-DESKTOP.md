@@ -85,7 +85,9 @@ locked.
 - **`domicile screenshot`** opens the shell's screenshot picker, as the
   shell's screenshot key does (Print in manganese). Pick a monitor, a window
   or an area. The PNG goes under `$XDG_PICTURES_DIR/Screenshots/` and its path
-  is printed. Dismissing the picker prints
+  is printed. Ctrl+C in the picker copies the pick to the clipboard instead,
+  saves nothing and prints `domicile: the screenshot was copied to the
+  clipboard`. Dismissing the picker prints
   `domicile: the screenshot was canceled` and exits 1. It waits as long as
   the picker is open. With a shell that answers no portal requests, it waits
   until the desktop exits, and Ctrl-C does not withdraw the request.

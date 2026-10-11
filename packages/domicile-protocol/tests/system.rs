@@ -376,6 +376,13 @@ fn a_screenshot_is_answered_with_where_it_was_saved() {
     assert_eq!(
         host(&HostMessage::SystemReply {
             id: 10,
+            reply: SystemReply::Copied,
+        }),
+        r#"{"type":"system_reply","id":10,"reply":{"kind":"copied"}}"#
+    );
+    assert_eq!(
+        host(&HostMessage::SystemReply {
+            id: 10,
             reply: SystemReply::Failed {
                 error: SystemError {
                     kind: SystemErrorKind::Canceled,

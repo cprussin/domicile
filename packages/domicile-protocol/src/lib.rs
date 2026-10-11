@@ -649,8 +649,10 @@ impl PortalKind {
                         .iter()
                         .all(|range| 1 <= range.first && range.first <= range.last)
             }
-            (PortalKind::Screenshot(desk), PortalAnswer::Screenshot { area }) => desk.holds(area),
-            (PortalKind::Screenshot(desk), PortalAnswer::ScreenshotWindow { id }) => {
+            (PortalKind::Screenshot(desk), PortalAnswer::Screenshot { area, .. }) => {
+                desk.holds(area)
+            }
+            (PortalKind::Screenshot(desk), PortalAnswer::ScreenshotWindow { id, .. }) => {
                 desk.windows.iter().any(|window| window.id == *id)
             }
             (PortalKind::PickColor(desk), PortalAnswer::PickColor { x, y }) => {
@@ -1268,10 +1270,22 @@ pub enum PortalAnswer {
     /// The chords the user chose in a [`PortalKind::GlobalShortcuts`].
     GlobalShortcuts { triggers: Vec<ChosenTrigger> },
     /// The area of a [`PortalKind::Screenshot`] the user kept.
-    Screenshot { area: ShotRect },
+    ///
+    /// `copy` also puts it on the clipboard as a PNG (Ctrl+C in the dialog).
+    /// The shell's own screenshot is then not saved.
+    Screenshot {
+        area: ShotRect,
+        #[serde(default)]
+        copy: bool,
+    },
     /// The [`ShotWindow`] of a [`PortalKind::Screenshot`] the user picked,
     /// saved from its own last frame rather than from the frozen desk.
-    ScreenshotWindow { id: String },
+    /// `copy` as for [`PortalAnswer::Screenshot`].
+    ScreenshotWindow {
+        id: String,
+        #[serde(default)]
+        copy: bool,
+    },
     /// The pixel of a [`PortalKind::PickColor`] the user picked.
     PickColor { x: u32, y: u32 },
     /// The [`BoundShortcut`] with this id fired. Answers no request.
@@ -1398,7 +1412,8 @@ pub enum SystemRequest {
         member: Option<String>,
     },
     /// Take a screenshot: one frame of every monitor, as the Screenshot portal
-    /// takes. Answered with [`SystemReply::Saved`].
+    /// takes. Answered with [`SystemReply::Saved`], or [`SystemReply::Copied`]
+    /// when the user copied it from the dialog.
     ///
     /// Without `file`, the shell's screenshot dialog picks the area, as for
     /// an interactive portal screenshot asked by [`SHELL_APP_ID`], and the PNG
@@ -1470,6 +1485,8 @@ pub enum SystemReply {
     Started,
     /// The screenshot was written to this absolute path.
     Saved { path: String },
+    /// The screenshot was put on the clipboard and not saved.
+    Copied,
     /// At least one page heard the command.
     Sent,
     /// The call failed. Nothing else follows under this id.

@@ -567,6 +567,7 @@ mod reaches {
 mod screenshots {
     use std::path::PathBuf;
 
+    use domicile_host::system::Kept;
     use domicile_protocol::SystemError;
 
     use super::*;
@@ -578,7 +579,7 @@ mod screenshots {
         let (system, heard) = system_in(home.path());
         let system = system.screenshotting_with(move |file| {
             told.send(file).unwrap();
-            Ok(PathBuf::from("/pictures/a.png"))
+            Ok(Kept::Saved(PathBuf::from("/pictures/a.png")))
         });
 
         system.handle(
@@ -595,6 +596,17 @@ mod screenshots {
             }
         );
         assert_eq!(asked.recv().unwrap(), Some(home.path().join("shot.png")));
+    }
+
+    #[test]
+    fn a_screenshot_copied_from_the_dialog_says_so() {
+        let home = tempfile::tempdir().unwrap();
+        let (system, heard) = system_in(home.path());
+        let system = system.screenshotting_with(|_| Ok(Kept::Copied));
+
+        system.handle(1, SystemRequest::Screenshot { file: None });
+
+        assert_eq!(reply(&heard, 1), SystemReply::Copied);
     }
 
     #[test]

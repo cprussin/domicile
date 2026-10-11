@@ -7,7 +7,6 @@ use smithay::backend::input::{Axis, AxisSource, ButtonState};
 use smithay::input::pointer::{AxisFrame, MotionEvent};
 use smithay::utils::SERIAL_COUNTER;
 use smithay::wayland::compositor::with_states;
-use smithay::wayland::selection::data_device::set_data_device_selection;
 use tracing::{debug, warn};
 
 use domicile_host::clipboard::Contents;
@@ -17,9 +16,7 @@ use domicile_protocol::{Passphrase, PortalAnswer, Theme, TrayAction};
 use crate::chrome_hub::announce_open_apps;
 use crate::engine::Clipboard;
 use crate::lock::Asked;
-use crate::{
-    at, say_what_the_lock_refused, spawn_client, window_geometry, DomicileCompositor, Holder,
-};
+use crate::{say_what_the_lock_refused, spawn_client, window_geometry, DomicileCompositor};
 
 /// A chrome request that must run on the Wayland thread, where the seat and
 /// surfaces live.
@@ -342,20 +339,9 @@ impl DomicileCompositor {
                 self.hub.portals.answer(id, answer);
             }
             ClientRequest::CopyClipboardEntry { entry } => match self.clipboard.contents(entry) {
-                Some(contents) => {
-                    let mimes = contents.mimes();
-                    // Paste now yields this entry, not the newest. See
-                    // [`DomicileCompositor::holding`].
-                    self.holding[at(Clipboard::Copy)] = Some(contents.clone());
-                    set_data_device_selection(
-                        &self.display_handle,
-                        &self.seat,
-                        mimes.clone(),
-                        Holder::Desk(Clipboard::Copy),
-                    );
-                    self.hub.portals.selection_changed(mimes, None);
-                    self.tell_the_engine_a_clipboard(Clipboard::Copy);
-                }
+                // Paste now yields this entry, not the newest. See
+                // [`DomicileCompositor::holding`].
+                Some(contents) => self.hold_on_the_clipboard(contents.clone()),
                 // The history dropped this entry. Set nothing rather than
                 // substitute another entry for what the user picked.
                 None => warn!(

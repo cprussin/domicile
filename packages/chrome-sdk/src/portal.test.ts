@@ -937,10 +937,10 @@ describe("answerPortalRequest", () => {
     answerPortalRequest(
       host,
       10,
-      PortalAnswer.Screenshot({ height: 4, width: 3, x: 1, y: 2 }),
+      PortalAnswer.Screenshot({ height: 4, width: 3, x: 1, y: 2 }, false),
     );
     answerPortalRequest(host, 11, PortalAnswer.PickColor({ x: 5, y: 6 }));
-    answerPortalRequest(host, 12, PortalAnswer.ScreenshotWindow("app-3"));
+    answerPortalRequest(host, 12, PortalAnswer.ScreenshotWindow("app-3", true));
 
     expect(host.answers).toEqual([
       [1, { kind: "access" }],
@@ -974,9 +974,16 @@ describe("answerPortalRequest", () => {
           triggers: [{ id: "talk", trigger: "Ctrl+Alt+t" }, { id: "mute" }],
         },
       ],
-      [10, { area: { height: 4, width: 3, x: 1, y: 2 }, kind: "screenshot" }],
+      [
+        10,
+        {
+          area: { height: 4, width: 3, x: 1, y: 2 },
+          copy: false,
+          kind: "screenshot",
+        },
+      ],
       [11, { kind: "pick_color", x: 5, y: 6 }],
-      [12, { id: "app-3", kind: "screenshot_window" }],
+      [12, { copy: true, id: "app-3", kind: "screenshot_window" }],
     ]);
   });
 

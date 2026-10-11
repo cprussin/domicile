@@ -3335,6 +3335,22 @@ impl DomicileCompositor {
         }
     }
 
+    /// Put `contents` on the clipboard, served by the compositor: a restored
+    /// history row or a copied screenshot. Wayland clients, portal sessions
+    /// and the browser all paste it. The history is the caller's.
+    fn hold_on_the_clipboard(&mut self, contents: Contents) {
+        let mimes = contents.mimes();
+        self.holding[at(Clipboard::Copy)] = Some(contents);
+        set_data_device_selection(
+            &self.display_handle,
+            &self.seat,
+            mimes.clone(),
+            Holder::Desk(Clipboard::Copy),
+        );
+        self.hub.portals.selection_changed(mimes, None);
+        self.tell_the_engine_a_clipboard(Clipboard::Copy);
+    }
+
     /// Tell a newly connected browser what is on both clipboards, so earlier
     /// copies can be pasted into it.
     fn tell_the_engine_the_copies(&self) {
@@ -4827,6 +4843,13 @@ impl DomicileCompositor {
                 self.hub
                     .portals
                     .selection_changed(mime_types, Some(session));
+            }
+            // A copied screenshot is a copy like any other, so it is a row.
+            Selection::Hold { contents } => {
+                if self.clipboard.record(contents.clone()) {
+                    self.tell_the_chromes_the_clipboard();
+                }
+                self.hold_on_the_clipboard(contents);
             }
             Selection::Read { mime_type, into } => {
                 let held =

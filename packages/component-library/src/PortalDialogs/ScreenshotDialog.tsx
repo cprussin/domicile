@@ -9,7 +9,7 @@ import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import { GlobeIcon } from "@phosphor-icons/react/dist/ssr/Globe";
 import { MonitorIcon } from "@phosphor-icons/react/dist/ssr/Monitor";
 import type { PointerEvent, ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { css } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
@@ -57,7 +57,8 @@ type Choice = { icon: ReactNode; name: string; pick: Pick };
  * Picks what to save of a frozen desk: all of it, a screen, a window, or an
  * area dragged over it. A window the shell shows is its whole frame on the
  * desk; one it does not show, such as a hidden tab, is saved from its own
- * last frame. Dismissing it cancels.
+ * last frame. Ctrl+C copies the pick to the clipboard instead of saving it.
+ * Dismissing it cancels.
  */
 export const ScreenshotDialog = ({
   answer,
@@ -101,6 +102,18 @@ export const ScreenshotDialog = ({
   if (pick === undefined) {
     throw new Error(`no screenshot choice ${String(picked)}`);
   }
+  useEffect(() => {
+    const copy = (event: KeyboardEvent) => {
+      if (isCopy(event)) {
+        event.preventDefault();
+        answer(answerOf(pick, true));
+      }
+    };
+    document.addEventListener("keydown", copy);
+    return () => {
+      document.removeEventListener("keydown", copy);
+    };
+  }, [answer, pick]);
   const button = (choice: Choice, index: number) => (
     <Button
       aria-pressed={index === picked}
@@ -137,7 +150,7 @@ export const ScreenshotDialog = ({
           </Button>
           <Button
             onClick={() => {
-              answer(answerOf(pick));
+              answer(answerOf(pick, false));
             }}
           >
             Save
@@ -277,15 +290,23 @@ const placed = (
 const titled = (title: string): string =>
   title === "" ? "Untitled window" : title;
 
-/** The answer that saves `pick`. */
-const answerOf = (pick: Pick): PortalAnswer => {
+/** The answer that saves `pick`, and copies it too when `copy` is set. */
+const answerOf = (pick: Pick, copy: boolean): PortalAnswer => {
   switch (pick.kind) {
     case PickKind.Area:
-      return Answer.Screenshot(pick.area);
+      return Answer.Screenshot(pick.area, copy);
     case PickKind.Window:
-      return Answer.ScreenshotWindow(pick.id);
+      return Answer.ScreenshotWindow(pick.id, copy);
   }
 };
+
+/** Whether `event` is Ctrl+C, with no other modifier. */
+const isCopy = (event: KeyboardEvent): boolean =>
+  event.ctrlKey &&
+  !event.altKey &&
+  !event.metaKey &&
+  !event.shiftKey &&
+  event.key.toLowerCase() === "c";
 
 /**
  * What saving window `id` keeps: its frame on the desk while the shell shows

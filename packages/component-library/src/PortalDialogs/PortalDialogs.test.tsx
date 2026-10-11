@@ -1289,7 +1289,11 @@ describe(PortalDialogs, () => {
       expect(host.answers).toEqual([
         [
           1,
-          { area: { height: 20, width: 40, x: 20, y: 10 }, kind: "screenshot" },
+          {
+            area: { height: 20, width: 40, x: 20, y: 10 },
+            copy: false,
+            kind: "screenshot",
+          },
         ],
       ]);
     });
@@ -1308,7 +1312,7 @@ describe(PortalDialogs, () => {
       );
       await userEvent.click(screen.getByRole("button", { name: "Save" }));
       expect(host.answers).toEqual([
-        [1, { id: "app-3", kind: "screenshot_window" }],
+        [1, { copy: false, id: "app-3", kind: "screenshot_window" }],
       ]);
     });
 
@@ -1344,6 +1348,7 @@ describe(PortalDialogs, () => {
           1,
           {
             area: { height: 80, width: 180, x: 120, y: 20 },
+            copy: false,
             kind: "screenshot",
           },
         ],
@@ -1381,7 +1386,11 @@ describe(PortalDialogs, () => {
       expect(host.answers).toEqual([
         [
           1,
-          { area: { height: 20, width: 40, x: 20, y: 10 }, kind: "screenshot" },
+          {
+            area: { height: 20, width: 40, x: 20, y: 10 },
+            copy: false,
+            kind: "screenshot",
+          },
         ],
       ]);
     });
@@ -1406,6 +1415,7 @@ describe(PortalDialogs, () => {
           1,
           {
             area: { height: 100, width: 300, x: 0, y: 0 },
+            copy: false,
             kind: "screenshot",
           },
         ],
@@ -1427,7 +1437,49 @@ describe(PortalDialogs, () => {
       expect(host.answers).toEqual([
         [
           1,
-          { area: { height: 31, width: 81, x: 20, y: 20 }, kind: "screenshot" },
+          {
+            area: { height: 31, width: 81, x: 20, y: 20 },
+            copy: false,
+            kind: "screenshot",
+          },
+        ],
+      ]);
+    });
+
+    it("copies the window picked with Ctrl+C instead of saving it", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} shownWindows={() => []} />);
+      host.push([frozen(1, "screenshot")]);
+      await userEvent.click(
+        screen.getByRole("button", { name: "kitty: ~/src" }),
+      );
+      await userEvent.keyboard("{Control>}c{/Control}");
+
+      expect(host.answers).toEqual([
+        [1, { copy: true, id: "app-3", kind: "screenshot_window" }],
+      ]);
+    });
+
+    it("copies an area dragged on the desk with Ctrl+C", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([frozen(1, "screenshot")]);
+      const desk = drawnAtHalfSize(
+        screen.getByRole("group", { name: "Drag to pick an area" }),
+      );
+      fireEvent.pointerDown(desk, { clientX: 60, clientY: 30 });
+      fireEvent.pointerMove(desk, { clientX: 20, clientY: 45 });
+      fireEvent.pointerUp(desk, { clientX: 20, clientY: 45 });
+      await userEvent.keyboard("{Control>}c{/Control}");
+
+      expect(host.answers).toEqual([
+        [
+          1,
+          {
+            area: { height: 31, width: 81, x: 20, y: 20 },
+            copy: true,
+            kind: "screenshot",
+          },
         ],
       ]);
     });

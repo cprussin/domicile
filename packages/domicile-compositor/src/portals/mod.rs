@@ -24,10 +24,12 @@ use std::thread;
 
 use domicile_config::{LockdownConfig, ThemeConfig};
 use domicile_host::cast_grants::Grants;
+use domicile_host::clipboard::Contents;
 use domicile_host::cups::Cups;
 use domicile_host::data_dirs::data_dirs;
 use domicile_host::mime_apps::{default_handler, lists};
 use domicile_host::portal_notifications::Invoked;
+use domicile_host::system::Kept;
 use domicile_protocol::{
     BoundShortcut, Capturing, PortalAnswer, PortalRequest, PortalWallpaper, SystemError, Theme,
 };
@@ -276,9 +278,9 @@ impl Portals {
     }
 
     /// Takes a screenshot the shell asked for itself, and returns where it
-    /// was saved. Blocks until then, the dialog included. See
+    /// went. Blocks until then, the dialog included. See
     /// [`screenshot::for_the_shell`].
-    pub fn screenshot(&self, file: Option<PathBuf>) -> Result<PathBuf, SystemError> {
+    pub fn screenshot(&self, file: Option<PathBuf>) -> Result<Kept, SystemError> {
         zbus::block_on(screenshot::for_the_shell(
             &self.backends.queue,
             &self.shots,
@@ -476,6 +478,16 @@ pub fn serve(
         shoot: screenshot::shooting(casting.casting.clone()),
         shoot_window: screenshot::shooting_windows(casting.casting.clone()),
         save: screenshot::in_pictures(),
+        copy: {
+            let backends = backends.clone();
+            Arc::new(move |png| {
+                backends
+                    .select(Selection::Hold {
+                        contents: Contents::image("image/png", png),
+                    })
+                    .map_err(|why| why.to_string())
+            })
+        },
     };
     let portals = Portals {
         backends: backends.clone(),

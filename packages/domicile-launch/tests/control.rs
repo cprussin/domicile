@@ -175,6 +175,14 @@ fn a_screenshot_with_no_file_is_the_shells_and_the_answer_is_where_it_saved_it()
 }
 
 #[test]
+fn a_screenshot_the_user_copied_says_so() {
+    assert_eq!(
+        answered_capturing("{\"type\":\"screenshot\"}", &|_| Ok(Shot::Copied)),
+        Response::Copied
+    );
+}
+
+#[test]
 fn a_screenshot_the_user_dismissed_is_canceled() {
     assert_eq!(
         answered_capturing("{\"type\":\"screenshot\"}", &|_| Ok(Shot::Canceled)),

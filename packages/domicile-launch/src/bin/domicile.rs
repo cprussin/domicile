@@ -353,6 +353,11 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
             println!("{}", file.display());
             Ok(ExitCode::SUCCESS)
         }
+        // Nothing on stdout: there is no file.
+        Response::Copied => {
+            eprintln!("domicile: the screenshot was copied to the clipboard");
+            Ok(ExitCode::SUCCESS)
+        }
         // A failure, so `f=$(domicile screenshot) && …` stops here.
         Response::Canceled => {
             eprintln!("domicile: the screenshot was canceled");

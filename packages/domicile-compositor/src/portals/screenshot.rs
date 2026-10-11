@@ -17,6 +17,7 @@ use domicile_host::data_url::data_url;
 use domicile_host::screenshot::{
     color_at, crop, encode, file_name, save, screenshots_dir, Shot, Taken,
 };
+use domicile_host::system::Kept;
 use domicile_protocol::{
     AccessDialog, DeskRect, FrozenDesk, PortalAnswer, PortalKind, SystemError, SystemErrorKind,
     SHELL_APP_ID,
@@ -40,12 +41,17 @@ pub type ShootWindow =
 /// Saves a screenshot as a PNG and returns its path, or says why it cannot.
 pub type Save = Arc<dyn Fn(&Shot) -> Result<PathBuf, String> + Send + Sync>;
 
-/// How screenshots are taken and saved, for the portal and for the shell.
+/// Puts a PNG on the clipboard, or says why it cannot.
+pub type CopyPng = Arc<dyn Fn(Vec<u8>) -> Result<(), String> + Send + Sync>;
+
+/// How screenshots are taken, saved and copied, for the portal and for the
+/// shell.
 #[derive(Clone)]
 pub struct Shots {
     pub shoot: Shoot,
     pub shoot_window: ShootWindow,
     pub save: Save,
+    pub copy: CopyPng,
 }
 
 impl Shots {
@@ -56,6 +62,7 @@ impl Shots {
             shoot: Arc::new(|| Box::pin(async { Err("no desk here".into()) })),
             shoot_window: Arc::new(|_| Box::pin(async { Err("no windows here".into()) })),
             save: Arc::new(|_| Err("no pictures here".into())),
+            copy: Arc::new(|_| Err("no clipboard here".into())),
         }
     }
 }
@@ -76,7 +83,8 @@ pub struct Screenshot {
 #[zbus::interface(name = "org.freedesktop.impl.portal.Screenshot")]
 impl Screenshot {
     /// Saves a screenshot and answers with its `file://` URI. An interactive
-    /// one keeps the area the user picks.
+    /// one keeps the area the user picks, and copies it too when the user
+    /// asked to.
     ///
     /// A frontend that has not checked the `PermissionStore` itself
     /// (`permission_store_checked`) leaves it to the backend: a
@@ -109,7 +117,7 @@ impl Screenshot {
                     PortalKind::Screenshot(frozen),
                 )
                 .await;
-                picked(&self.shots, &desk, answer)
+                let picked = picked(&self.shots, &desk, answer)
                     .await
                     .map_err(|unpicked| match unpicked {
                         Unpicked::Not(answer) => answer.response().max(1),
@@ -117,7 +125,14 @@ impl Screenshot {
                             warn!(%why, "a window could not be shot for a screenshot");
                             2
                         }
-                    })?
+                    })?;
+                if picked.copy {
+                    // The application asked for a file, so it still gets one.
+                    if let Err(why) = (self.shots.copy)(encode(&picked.shot)) {
+                        warn!(%why, "a screenshot could not be copied; it is still saved");
+                    }
+                }
+                picked.shot
             } else {
                 desk.shot
             };
@@ -285,26 +300,31 @@ async fn keep(connection: &zbus::Connection, app_id: &str, allowed: bool) {
     }
 }
 
-/// Saves a screenshot the shell asked for itself, as `SystemRequest::Screenshot`
+/// Takes a screenshot the shell asked for itself, as `SystemRequest::Screenshot`
 /// describes: the whole desk into `file`, or else the area the shell picks,
-/// as for an interactive screenshot, through `shots.save`.
+/// as for an interactive screenshot, through `shots.save`, or through
+/// `shots.copy` alone when the user copied it.
 pub async fn for_the_shell(
     queue: &Queue,
     shots: &Shots,
     file: Option<PathBuf>,
-) -> Result<PathBuf, SystemError> {
+) -> Result<Kept, SystemError> {
     let desk = (shots.shoot)()
         .await
         .map_err(|why| other(format!("the desk could not be shot: {why}")))?;
     match file {
         Some(file) => std::fs::write(&file, encode(&desk.shot))
-            .map(|()| file)
+            .map(|()| Kept::Saved(file))
             .map_err(|why| other(format!("the screenshot could not be written: {why}"))),
         None => {
             let kind = PortalKind::Screenshot(frozen(&desk));
             let answer = ask_unbidden(queue, SHELL_APP_ID.into(), "", kind).await;
             match picked(shots, &desk, answer).await {
-                Ok(shot) => (shots.save)(&shot)
+                Ok(Picked { shot, copy: true }) => (shots.copy)(encode(&shot))
+                    .map(|()| Kept::Copied)
+                    .map_err(|why| other(format!("the screenshot could not be copied: {why}"))),
+                Ok(Picked { shot, copy: false }) => (shots.save)(&shot)
+                    .map(Kept::Saved)
                     .map_err(|why| other(format!("the screenshot could not be saved: {why}"))),
                 Err(Unpicked::Not(PortalAnswer::Canceled)) => Err(SystemError {
                     kind: SystemErrorKind::Canceled,
@@ -329,14 +349,24 @@ enum Unpicked {
     Failed(String),
 }
 
+/// What a picker kept, and whether the user asked to copy it.
+struct Picked {
+    shot: Shot,
+    copy: bool,
+}
+
 /// The shot a picker over `desk` kept: an area of the desk, or a window's own
 /// last frame.
-async fn picked(shots: &Shots, desk: &Desk, answer: PortalAnswer) -> Result<Shot, Unpicked> {
+async fn picked(shots: &Shots, desk: &Desk, answer: PortalAnswer) -> Result<Picked, Unpicked> {
     match answer {
-        PortalAnswer::Screenshot { area } => Ok(crop(&desk.shot, area)),
-        PortalAnswer::ScreenshotWindow { id } => {
-            (shots.shoot_window)(id).await.map_err(Unpicked::Failed)
-        }
+        PortalAnswer::Screenshot { area, copy } => Ok(Picked {
+            shot: crop(&desk.shot, area),
+            copy,
+        }),
+        PortalAnswer::ScreenshotWindow { id, copy } => (shots.shoot_window)(id)
+            .await
+            .map(|shot| Picked { shot, copy })
+            .map_err(Unpicked::Failed),
         answer => Err(Unpicked::Not(answer)),
     }
 }
@@ -572,7 +602,21 @@ mod tests {
         published: Receiver<Vec<PortalRequest>>,
         store: Store,
         album: tempfile::TempDir,
+        copied: Receiver<Vec<u8>>,
         _server: Connection,
+    }
+
+    /// A [`CopyPng`] that hands each PNG to the returned receiver.
+    fn copying() -> (CopyPng, Receiver<Vec<u8>>) {
+        let (copy, copied) = channel();
+        let copy = Mutex::new(copy);
+        (
+            Arc::new(move |png| {
+                copy.lock().expect("unpoisoned").send(png).expect("heard");
+                Ok(())
+            }),
+            copied,
+        )
     }
 
     /// The backend over a socket pair, shooting `shot` and saving into a
@@ -589,6 +633,7 @@ mod tests {
         );
         let store = Store::default();
         let album = tempfile::tempdir().expect("a temporary folder");
+        let (copy, copied) = copying();
         let backend = Screenshot {
             queue: Arc::clone(&queue),
             shots: Shots {
@@ -598,6 +643,7 @@ mod tests {
                     let dir = album.path().join("Screenshots");
                     saving_into(move || dir.clone())
                 },
+                copy,
             },
         };
         let (server, client) =
@@ -613,6 +659,7 @@ mod tests {
             published,
             store,
             album,
+            copied,
             _server: server,
         }
     }
@@ -671,9 +718,12 @@ mod tests {
             .strip_prefix("file://")
             .expect("a file URI")
             .replace("%20", " ");
-        let decoder = png::Decoder::new(std::io::BufReader::new(
-            std::fs::File::open(path).expect("saved"),
-        ));
+        png_of(std::fs::read(path).expect("saved"))
+    }
+
+    /// A PNG's size and straight RGBA pixels.
+    fn png_of(png: Vec<u8>) -> ((u32, u32), Vec<u8>) {
+        let decoder = png::Decoder::new(std::io::Cursor::new(png));
         let mut reader = decoder.read_info().expect("a PNG");
         let mut pixels = vec![0; reader.output_buffer_size().expect("a size")];
         let info = reader.next_frame(&mut pixels).expect("a frame");
@@ -788,12 +838,42 @@ mod tests {
             asked[0].id,
             PortalAnswer::Screenshot {
                 area: monitors[1].area,
+                copy: false,
             },
         );
 
         let (response, results) = picking.join().expect("returned");
         assert_eq!(response, 0);
         assert_eq!(png_at(&results["uri"]), ((1, 1), vec![0, 0, 255, 128]));
+    }
+
+    /// Ctrl+C in the dialog copies the area; the asking application still
+    /// gets its file.
+    #[test]
+    fn an_interactive_screenshot_copied_is_copied_and_saved_for_the_app() {
+        let served = served(Ok(desk()));
+        let picking = calling(&served, "Screenshot", vec![("interactive", true)]);
+
+        let asked = next(&served);
+        let PortalKind::Screenshot(FrozenDesk { monitors, .. }) = &asked[0].kind else {
+            panic!("a picker, not {:?}", asked[0].kind);
+        };
+        served.queue.answer(
+            asked[0].id,
+            PortalAnswer::Screenshot {
+                area: monitors[1].area,
+                copy: true,
+            },
+        );
+
+        let (response, results) = picking.join().expect("returned");
+        assert_eq!(response, 0);
+        assert_eq!(png_at(&results["uri"]), ((1, 1), vec![0, 0, 255, 128]));
+        let copied = served
+            .copied
+            .recv_timeout(Duration::from_secs(10))
+            .expect("copied");
+        assert_eq!(png_of(copied), ((1, 1), vec![0, 0, 255, 128]));
     }
 
     #[test]
@@ -806,7 +886,10 @@ mod tests {
 
         served.queue.answer(
             asked[0].id,
-            PortalAnswer::ScreenshotWindow { id: "app-3".into() },
+            PortalAnswer::ScreenshotWindow {
+                id: "app-3".into(),
+                copy: false,
+            },
         );
 
         let (response, results) = picking.join().expect("returned");
@@ -863,10 +946,11 @@ mod tests {
     /// The shell's own screenshot of `shot`, into `file` if given, on another
     /// thread, with the queue it asks through and the folder it saves into.
     struct ShellShot {
-        taken: thread::JoinHandle<Result<PathBuf, SystemError>>,
+        taken: thread::JoinHandle<Result<Kept, SystemError>>,
         queue: Arc<Queue>,
         published: Receiver<Vec<PortalRequest>>,
         album: tempfile::TempDir,
+        copied: Receiver<Vec<u8>>,
     }
 
     fn shell_shot(shot: Result<Desk, String>, file: Option<PathBuf>) -> ShellShot {
@@ -880,6 +964,7 @@ mod tests {
             |_| None,
         );
         let album = tempfile::tempdir().expect("a temporary folder");
+        let (copy, copied) = copying();
         let shots = Shots {
             shoot: shot_of(shot),
             shoot_window: own_frame(),
@@ -887,6 +972,7 @@ mod tests {
                 let dir = album.path().join("Screenshots");
                 saving_into(move || dir.clone())
             },
+            copy,
         };
         let taken = {
             let queue = Arc::clone(&queue);
@@ -897,6 +983,7 @@ mod tests {
             queue,
             published,
             album,
+            copied,
         }
     }
 
@@ -916,10 +1003,13 @@ mod tests {
             asked[0].id,
             PortalAnswer::Screenshot {
                 area: monitors[1].area,
+                copy: false,
             },
         );
 
-        let path = shooting.taken.join().expect("returned").expect("saved");
+        let Ok(Kept::Saved(path)) = shooting.taken.join().expect("returned") else {
+            panic!("saved");
+        };
         assert!(path.starts_with(shooting.album.path().join("Screenshots")));
         assert_eq!(
             png_at(&owned(Value::from(file_uri(&path.display().to_string())))),
@@ -937,14 +1027,42 @@ mod tests {
 
         shooting.queue.answer(
             asked[0].id,
-            PortalAnswer::ScreenshotWindow { id: "app-3".into() },
+            PortalAnswer::ScreenshotWindow {
+                id: "app-3".into(),
+                copy: false,
+            },
         );
 
-        let path = shooting.taken.join().expect("returned").expect("saved");
+        let Ok(Kept::Saved(path)) = shooting.taken.join().expect("returned") else {
+            panic!("saved");
+        };
         assert_eq!(
             png_at(&owned(Value::from(file_uri(&path.display().to_string())))),
             ((1, 1), vec![0, 255, 0, 255])
         );
+    }
+
+    /// Ctrl+C in the shell's own dialog copies the window and saves nothing.
+    #[test]
+    fn the_shells_own_screenshot_copied_is_not_saved() {
+        let shooting = shell_shot(Ok(desk()), None);
+        let asked = shooting
+            .published
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the queue published");
+
+        shooting.queue.answer(
+            asked[0].id,
+            PortalAnswer::ScreenshotWindow {
+                id: "app-3".into(),
+                copy: true,
+            },
+        );
+
+        assert_eq!(shooting.taken.join().expect("returned"), Ok(Kept::Copied));
+        let copied = shooting.copied.try_recv().expect("copied");
+        assert_eq!(png_of(copied), ((1, 1), vec![0, 255, 0, 255]));
+        assert!(!shooting.album.path().join("Screenshots").exists());
     }
 
     #[test]
@@ -972,7 +1090,10 @@ mod tests {
         let file = folder.path().join("shot.png");
         let shooting = shell_shot(Ok(desk()), Some(file.clone()));
 
-        assert_eq!(shooting.taken.join().expect("returned"), Ok(file.clone()));
+        assert_eq!(
+            shooting.taken.join().expect("returned"),
+            Ok(Kept::Saved(file.clone()))
+        );
         assert_eq!(
             png_at(&owned(Value::from(file_uri(&file.display().to_string())))).0,
             (2, 1)

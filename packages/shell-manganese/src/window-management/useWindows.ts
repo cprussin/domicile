@@ -205,8 +205,8 @@ const takeScreenshot = (domicile: DomicileHost) => {
             console.error("The screenshot was not saved", error);
           }
         },
-        // The PNG is under `$XDG_PICTURES_DIR/Screenshots/`, as a portal
-        // screenshot's is, which says nothing either.
+        // The PNG is under `$XDG_PICTURES_DIR/Screenshots/`, or on the
+        // clipboard after Ctrl+C. A portal screenshot says nothing either.
         Ok: () => undefined,
       });
     })
