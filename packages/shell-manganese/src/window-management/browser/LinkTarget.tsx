@@ -1,20 +1,26 @@
 import { css } from "../../../styled-system/css";
+import { useTargetUrl } from "../useTargetUrl";
 
 type Props = {
-  /** The address of the link under the pointer, or `""` for none. */
-  url: string;
+  /**
+   * The page whose link under the pointer it shows. Read here, so a hover
+   * redraws only the bubble.
+   */
+  view: HTMLWebViewElement | null;
 };
 
 /**
  * Shows the address of the link under the pointer, like Chrome's status
  * bubble. The engine draws none; see `targetUrl` on `<webview>`.
  */
-export const LinkTarget = ({ url }: Props) =>
-  url === "" ? undefined : (
+export const LinkTarget = ({ view }: Props) => {
+  const url = useTargetUrl(view);
+  return url === "" ? undefined : (
     <output aria-label="Link" className={bubbleStyles}>
       {url}
     </output>
   );
+};
 
 // In the page's bottom left corner, as in Chrome. Ignores the pointer so it
 // never blocks the page.

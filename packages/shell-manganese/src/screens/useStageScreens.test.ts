@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Display } from "@domicile-desktop/component-library/display-source";
 import { renderHook } from "@testing-library/react";
 
+import { Layout } from "../window-management/tree/node";
 import type { WindowState } from "../window-management/window-state";
 import {
   NO_WINDOWS,
@@ -83,5 +84,21 @@ describe("useStageScreens", () => {
 
     expect(result.current[0]).toBe(left);
     expect(result.current[1]?.screenful.placements).toHaveLength(2);
+  });
+
+  it("keeps each window's placement through a focus change", () => {
+    const split = reduce(
+      BOTH,
+      WindowAction.AppAppeared("vim", "vim"),
+      WindowAction.LayoutSet(Layout.SplitH),
+    );
+    const { rerender, result } = staged(split);
+    const before = result.current[1]?.screenful.placements;
+
+    rerender({ now: reduce(split, WindowAction.WindowHovered("app:foot")) });
+
+    const after = result.current[1]?.screenful;
+    expect(after?.focusBox?.windows).toEqual(["app:foot"]);
+    expect(after?.placements).toBe(before);
   });
 });

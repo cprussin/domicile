@@ -1,5 +1,5 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 
 import type { Rect } from "../rect";
 import type { Float, Grip } from "./float";
@@ -28,7 +28,8 @@ type Options = {
 /**
  * Resizes a floating window by dragging one of its borders.
  *
- * Listens for the rest of the drag on `window`, as `useFloatDrag` explains.
+ * Listens for the rest of the drag on `window`, as `useFloatDrag` explains,
+ * and only while it runs, since every float border has this hook.
  */
 export const useFloatBorderDrag = ({
   float,
@@ -39,53 +40,62 @@ export const useFloatBorderDrag = ({
 }: Options): {
   onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
 } => {
-  const running = useRef<Drag | undefined>(undefined);
-
-  useEffect(() => {
-    const moved = (event: PointerEvent) => {
-      const started = running.current;
-      if (started !== undefined) {
-        started.onResize(
-          rectOf(
-            stretched(
-              started.box,
-              started.grip,
-              event.clientX - started.from.x,
-              event.clientY - started.from.y,
-            ),
-          ),
-        );
-      }
-    };
-    // Idempotent: one drag can get both a release and a cancel.
-    const ended = () => {
-      const started = running.current;
-      if (started !== undefined) {
-        running.current = undefined;
-        started.onDrop();
-      }
-    };
-    window.addEventListener("pointermove", moved);
-    window.addEventListener("pointerup", ended);
-    window.addEventListener("pointercancel", ended);
-    return () => {
-      window.removeEventListener("pointermove", moved);
-      window.removeEventListener("pointerup", ended);
-      window.removeEventListener("pointercancel", ended);
-    };
-  }, []);
+  // Stops the running drag without dropping it, so a second press can take
+  // over.
+  const running = useRef<(() => void) | undefined>(undefined);
 
   return {
     onPointerDown: (event) => {
       event.currentTarget.setPointerCapture(event.pointerId);
-      running.current = {
-        box: float,
-        from: { x: event.clientX, y: event.clientY },
-        grip,
-        onDrop,
-        onResize,
-      };
+      running.current?.();
+      running.current = follow(
+        {
+          box: float,
+          from: { x: event.clientX, y: event.clientY },
+          grip,
+          onDrop,
+          onResize,
+        },
+        () => {
+          running.current = undefined;
+        },
+      );
       onGrab();
     },
   };
+};
+
+/**
+ * Applies pointer moves to `drag` until a release or cancel drops it and calls
+ * `ended`. Returns a function that stops listening without dropping.
+ *
+ * Only the first of release and cancel drops, since a browser can send both.
+ */
+const follow = (drag: Drag, ended: () => void): (() => void) => {
+  const moved = (event: PointerEvent) => {
+    drag.onResize(
+      rectOf(
+        stretched(
+          drag.box,
+          drag.grip,
+          event.clientX - drag.from.x,
+          event.clientY - drag.from.y,
+        ),
+      ),
+    );
+  };
+  const stop = () => {
+    window.removeEventListener("pointermove", moved);
+    window.removeEventListener("pointerup", released);
+    window.removeEventListener("pointercancel", released);
+  };
+  const released = () => {
+    stop();
+    ended();
+    drag.onDrop();
+  };
+  window.addEventListener("pointermove", moved);
+  window.addEventListener("pointerup", released);
+  window.addEventListener("pointercancel", released);
+  return stop;
 };

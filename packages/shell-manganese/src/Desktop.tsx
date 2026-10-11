@@ -1,5 +1,6 @@
 import { useDisplays } from "@domicile-desktop/component-library/DisplayProvider";
 import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs";
+import { useTheme } from "@domicile-desktop/component-library/ThemeProvider";
 import { createToastManager } from "@domicile-desktop/component-library/Toaster";
 import { usePictureUrl } from "@domicile-desktop/component-library/usePictureUrl";
 import { usePortalWallpaper } from "@domicile-desktop/component-library/usePortalWallpaper";
@@ -88,6 +89,8 @@ export const Desktop = ({
   topBar,
 }: Props) => {
   const displays = useDisplays();
+  // The wallpaper advances only this theme's rotation.
+  const { theme } = useTheme();
   const windows = useWindows(domicile, displays);
   const { act } = windows;
   const clientIcons = useClientIcons(
@@ -221,6 +224,14 @@ export const Desktop = ({
   if (opened !== undefined && !popupOpen) {
     setOpened(undefined);
   }
+  const openExtension = useCallback(
+    (screen: string, extension: string | undefined) => {
+      setOpened((now) =>
+        extension === undefined ? closedOn(now, screen) : { extension, screen },
+      );
+    },
+    [],
+  );
 
   // Shift is spent whether or not a window was floated: the user pressed it
   // for the chord, so it should not carry over to the next window. Both the
@@ -240,6 +251,54 @@ export const Desktop = ({
   const stageActions = useMemo(
     () => stageActionsOf(act, pointing),
     [act, pointing],
+  );
+
+  // The panels' callbacks and the lock screen's bar, memoized so a panel
+  // redraws only when what it shows changes.
+  const launcherClosed = useCallback(() => {
+    if (picked !== undefined) {
+      setPicked(undefined);
+      afterAFramePainted(() => {
+        launch(picked, act, setOpeningWith);
+      });
+    }
+  }, [act, picked]);
+  const launcherDismissed = useCallback(() => {
+    act(WindowAction.LauncherDismissed());
+  }, [act]);
+  const launched = useCallback(
+    (pick: Launch) => {
+      setPicked(pick);
+      act(WindowAction.LauncherDismissed());
+    },
+    [act],
+  );
+  const copied = useCallback(
+    (entry: number) => {
+      domicile.copyClipboardEntry(entry);
+    },
+    [domicile],
+  );
+  const clipboardDismissed = useCallback(() => {
+    act(WindowAction.ClipboardDismissed());
+  }, [act]);
+  // Only a bell opens the drawer, so it reports only closing.
+  const drawerToggled = useCallback((open: boolean) => {
+    if (!open) {
+      setNotificationsOpen(false);
+    }
+  }, []);
+  const { screens: deskScreens, workspaces } = windows;
+  const screenOf = useCallback(
+    (appId: string) => screenOfApp({ screens: deskScreens, workspaces }, appId),
+    [deskScreens, workspaces],
+  );
+  // Frames with their bars; the page's own boxes leave those out and still
+  // count a hidden tab.
+  const shownWindows = useCallback(() => shownWindowsOf(screens), [screens]);
+  const lockBar = useMemo(
+    () => <LockBar domicile={domicile} readouts={readouts} />,
+    [domicile, readouts],
   );
 
   // A global shortcuts review flags these.
@@ -265,38 +324,31 @@ export const Desktop = ({
         First, so it paints under everything. It does not wait for the
         desktop to connect.
       */}
-      <Wallpaper picture={backgroundPicture} />
+      <Wallpaper picture={backgroundPicture} theme={theme} />
       {/*
         Every display the desktop has taken up. A new display appears one
         render after the host reports it, once the reducer gives it a
         workspace.
       */}
-      {screens.map(({ geometry: { name } }) => (
+      {screens.map(({ current, geometry: { name } }) => (
         <Monitor
           act={act}
+          current={current}
           domicile={domicile}
           extensions={extensions}
+          focused={windows.focused === name}
+          homes={windows.homes}
           key={name}
+          mode={windows.mode}
           name={name}
-          notifications={{
-            onOpen: () => {
-              openNotifications(name);
-            },
-            unread: notifications.unread,
-          }}
-          onOpenExtension={(extension) => {
-            setOpened((now) =>
-              extension === undefined
-                ? closedOn(now, name)
-                : { extension, screen: name },
-            );
-          }}
+          onOpenExtension={openExtension}
+          onOpenNotifications={openNotifications}
           opened={opened?.screen === name ? opened.extension : undefined}
           readouts={readouts}
           topBar={topBar}
           tray={tray}
           trayOrder={trayOrder}
-          windows={windows}
+          unread={notifications.unread}
         />
       ))}
       {/*
@@ -330,21 +382,9 @@ export const Desktop = ({
       {/* Panels cover the whole desktop, not one screen. */}
       <Launcher
         fromPrivate={activeIsPrivate(windows)}
-        onClosed={() => {
-          if (picked !== undefined) {
-            setPicked(undefined);
-            afterAFramePainted(() => {
-              launch(picked, act, setOpeningWith);
-            });
-          }
-        }}
-        onDismiss={() => {
-          act(WindowAction.LauncherDismissed());
-        }}
-        onLaunch={(pick) => {
-          setPicked(pick);
-          act(WindowAction.LauncherDismissed());
-        }}
+        onClosed={launcherClosed}
+        onDismiss={launcherDismissed}
+        onLaunch={launched}
         open={windows.launcherOpen}
         opening={opening}
         preview={preview}
@@ -369,12 +409,8 @@ export const Desktop = ({
       {/* Over the whole desktop, like the launcher. */}
       <Clipboard
         entries={clipboard}
-        onCopy={(entry) => {
-          domicile.copyClipboardEntry(entry);
-        }}
-        onDismiss={() => {
-          act(WindowAction.ClipboardDismissed());
-        }}
+        onCopy={copied}
+        onDismiss={clipboardDismissed}
         open={windows.clipboardOpen}
         screen={windows.focused}
       />
@@ -397,12 +433,7 @@ export const Desktop = ({
         now={now}
         onAction={notifications.invoke}
         onDismiss={notifications.dismiss}
-        // Only a bell opens it, so the drawer reports only closing.
-        onOpenChange={(open) => {
-          if (!open) {
-            setNotificationsOpen(false);
-          }
-        }}
+        onOpenChange={drawerToggled}
         onReply={notifications.reply}
         open={notificationsOpen && !lock.locked}
         screen={notificationsOn}
@@ -416,11 +447,9 @@ export const Desktop = ({
         host={domicile}
         omitScreenCasts={showsSharing(topBar)}
         screen={windows.focused}
-        screenOf={(appId) => screenOfApp(windows, appId)}
+        screenOf={screenOf}
         shellChords={shellChords}
-        // Frames with their bars; the page's own boxes leave those out and
-        // still count a hidden tab.
-        shownWindows={() => shownWindowsOf(screens)}
+        shownWindows={shownWindows}
       />
       {/*
         Last, over every panel, so the modal launcher and clipboard cannot take
@@ -430,7 +459,7 @@ export const Desktop = ({
         unlocks. See `lock/Lock.tsx`.
       */}
       <Lock
-        bar={<LockBar domicile={domicile} readouts={readouts} />}
+        bar={lockBar}
         checking={lock.checking}
         locked={lock.locked}
         onUnlock={lock.unlock}

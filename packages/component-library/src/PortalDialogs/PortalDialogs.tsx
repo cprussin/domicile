@@ -18,7 +18,7 @@ import {
 } from "@domicile-desktop/sdk/portal";
 import type { System, SystemHost } from "@domicile-desktop/sdk/system";
 import { system } from "@domicile-desktop/sdk/system";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { listDirectory } from "../FilePicker/list-directory";
 import type { App } from "../useApps/useApps";
 import { useApps } from "../useApps/useApps";
@@ -81,76 +81,78 @@ type Props = {
  * chords applications hold through the GlobalShortcuts portal. See
  * docs/PORTALS.md.
  */
-export const PortalDialogs = ({
-  host,
-  omitScreenCasts = false,
-  screen,
-  screenOf,
-  shellChords = NONE,
-  shownWindows = drawnOnPage,
-  systemOf = system,
-}: Props) => {
-  const [requests, setRequests] = useState<readonly PortalRequest[]>([]);
-  const files = useMemo(() => systemOf(host), [systemOf, host]);
-  const list = useCallback(
-    (path: string) => listDirectory(files, path),
-    [files],
-  );
-  const [sessions, setSessions] = useState<readonly Capturing[]>([]);
-  const apps = useApps(files, [
-    ...requests.flatMap(appIds),
-    ...sessions.map((session) => session.appId),
-  ]);
+export const PortalDialogs = memo(
+  ({
+    host,
+    omitScreenCasts = false,
+    screen,
+    screenOf,
+    shellChords = NONE,
+    shownWindows = drawnOnPage,
+    systemOf = system,
+  }: Props) => {
+    const [requests, setRequests] = useState<readonly PortalRequest[]>([]);
+    const files = useMemo(() => systemOf(host), [systemOf, host]);
+    const list = useCallback(
+      (path: string) => listDirectory(files, path),
+      [files],
+    );
+    const [sessions, setSessions] = useState<readonly Capturing[]>([]);
+    const apps = useApps(files, [
+      ...requests.flatMap(appIds),
+      ...sessions.map((session) => session.appId),
+    ]);
 
-  useEffect(() => watchPortalRequests(host, setRequests), [host]);
-  useEffect(() => watchCapturing(host, setSessions), [host]);
-  useEffect(() => fireGlobalShortcuts(host), [host]);
+    useEffect(() => watchPortalRequests(host, setRequests), [host]);
+    useEffect(() => watchCapturing(host, setSessions), [host]);
+    useEffect(() => fireGlobalShortcuts(host), [host]);
 
-  useEffect(() => {
-    for (const request of requests) {
-      if (request.kind === PortalKind.Unknown) {
-        answerPortalRequest(host, request.id, PortalAnswer.Refused());
-      }
-    }
-  }, [host, requests]);
-
-  const shown = requests.find(isAsked);
-  return (
-    <>
-      <CapturingIndicator
-        apps={apps}
-        screen={screen}
-        sessions={
-          omitScreenCasts
-            ? sessions.filter(
-                (session) => session.kind !== CapturingKind.ScreenCast,
-              )
-            : sessions
+    useEffect(() => {
+      for (const request of requests) {
+        if (request.kind === PortalKind.Unknown) {
+          answerPortalRequest(host, request.id, PortalAnswer.Refused());
         }
-        stop={(id) => {
-          stopCapturing(host, id);
-        }}
-      />
-      {shown !== undefined && (
-        <Dialog
-          answer={(answer) => {
-            answerPortalRequest(host, shown.id, answer);
-          }}
+      }
+    }, [host, requests]);
+
+    const shown = requests.find(isAsked);
+    return (
+      <>
+        <CapturingIndicator
           apps={apps}
-          asker={apps(shown.appId).name}
-          browserWindows={host.browserWindows ?? []}
-          key={shown.id}
-          list={list}
-          request={shown}
-          screen={screenFor(shown, screen, screenOf)}
-          shellChords={shellChords}
-          shownWindows={shownWindows}
-          system={files}
+          screen={screen}
+          sessions={
+            omitScreenCasts
+              ? sessions.filter(
+                  (session) => session.kind !== CapturingKind.ScreenCast,
+                )
+              : sessions
+          }
+          stop={(id) => {
+            stopCapturing(host, id);
+          }}
         />
-      )}
-    </>
-  );
-};
+        {shown !== undefined && (
+          <Dialog
+            answer={(answer) => {
+              answerPortalRequest(host, shown.id, answer);
+            }}
+            apps={apps}
+            asker={apps(shown.appId).name}
+            browserWindows={host.browserWindows ?? []}
+            key={shown.id}
+            list={list}
+            request={shown}
+            screen={screenFor(shown, screen, screenOf)}
+            shellChords={shellChords}
+            shownWindows={shownWindows}
+            system={files}
+          />
+        )}
+      </>
+    );
+  },
+);
 
 /** The windows this page draws. */
 const drawnOnPage = () => drawnWindows(document);

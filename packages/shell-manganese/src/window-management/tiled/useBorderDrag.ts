@@ -1,5 +1,5 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 
 import type { Direction } from "../direction";
 import { Axis, axisOf } from "../direction";
@@ -25,7 +25,8 @@ type Options = {
 /**
  * Moves a tiled window's edge by the pointer's travel along the edge's axis.
  *
- * Listens for the rest of the drag on `window`, as `useFloatDrag` explains.
+ * Listens for the rest of the drag on `window`, as `useFloatDrag` explains,
+ * and only while it runs, since every tiled border has this hook.
  */
 export const useBorderDrag = ({
   edge,
@@ -35,45 +36,56 @@ export const useBorderDrag = ({
 }: Options): {
   onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
 } => {
-  const running = useRef<Drag | undefined>(undefined);
-
-  useEffect(() => {
-    const moved = (event: PointerEvent) => {
-      const started = running.current;
-      if (started !== undefined) {
-        running.current = followed(started, event.clientX, event.clientY);
-      }
-    };
-    // Idempotent: one drag can get both a release and a cancel.
-    const ended = () => {
-      const started = running.current;
-      if (started !== undefined) {
-        running.current = undefined;
-        started.onDrop();
-      }
-    };
-    window.addEventListener("pointermove", moved);
-    window.addEventListener("pointerup", ended);
-    window.addEventListener("pointercancel", ended);
-    return () => {
-      window.removeEventListener("pointermove", moved);
-      window.removeEventListener("pointerup", ended);
-      window.removeEventListener("pointercancel", ended);
-    };
-  }, []);
+  // Stops the running drag without dropping it, so a second press can take
+  // over.
+  const running = useRef<(() => void) | undefined>(undefined);
 
   return {
     onPointerDown: (event) => {
       event.currentTarget.setPointerCapture(event.pointerId);
-      running.current = {
-        edge,
-        last: { x: event.clientX, y: event.clientY },
-        onDrop,
-        onStretch,
-      };
+      running.current?.();
+      running.current = follow(
+        {
+          edge,
+          last: { x: event.clientX, y: event.clientY },
+          onDrop,
+          onStretch,
+        },
+        () => {
+          running.current = undefined;
+        },
+      );
       onGrab();
     },
   };
+};
+
+/**
+ * Applies pointer moves to `drag` until a release or cancel drops it and calls
+ * `ended`. Returns a function that stops listening without dropping.
+ *
+ * Only the first of release and cancel drops, since a browser can send both.
+ */
+const follow = (started: Drag, ended: () => void): (() => void) => {
+  // The drag as of the last move, which the next is measured from.
+  let drag = started;
+  const moved = (event: PointerEvent) => {
+    drag = followed(drag, event.clientX, event.clientY);
+  };
+  const stop = () => {
+    window.removeEventListener("pointermove", moved);
+    window.removeEventListener("pointerup", released);
+    window.removeEventListener("pointercancel", released);
+  };
+  const released = () => {
+    stop();
+    ended();
+    drag.onDrop();
+  };
+  window.addEventListener("pointermove", moved);
+  window.addEventListener("pointerup", released);
+  window.addEventListener("pointercancel", released);
+  return stop;
 };
 
 /** Moves the edge to follow the pointer at `x`, `y`. */

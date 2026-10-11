@@ -3,6 +3,7 @@ import { SlideOver } from "@domicile-desktop/component-library/SlideOver";
 import type { Notification } from "@domicile-desktop/sdk/notification";
 import { BellSimpleIcon } from "@phosphor-icons/react/dist/ssr/BellSimple";
 import { BroomIcon } from "@phosphor-icons/react/dist/ssr/Broom";
+import { memo } from "react";
 
 import { css } from "../../styled-system/css";
 import { center, flex, vstack } from "../../styled-system/patterns";
@@ -32,76 +33,78 @@ type Props = {
  * A notification stays here after its toast is gone, until it is cleared or its
  * application withdraws it. See docs/architecture/NOTIFICATIONS.md.
  */
-export const NotificationDrawer = ({
-  items,
-  now,
-  onAction,
-  onDismiss,
-  onOpenChange,
-  onReply,
-  open,
-  screen,
-}: Props) => (
-  <SlideOver
-    footer={
-      items.length === 0 ? undefined : (
-        <div className={footerStyles}>
-          <span className={countStyles}>
-            {items.length === 1
-              ? "1 notification"
-              : `${items.length} notifications`}
+export const NotificationDrawer = memo(
+  ({
+    items,
+    now,
+    onAction,
+    onDismiss,
+    onOpenChange,
+    onReply,
+    open,
+    screen,
+  }: Props) => (
+    <SlideOver
+      footer={
+        items.length === 0 ? undefined : (
+          <div className={footerStyles}>
+            <span className={countStyles}>
+              {items.length === 1
+                ? "1 notification"
+                : `${items.length} notifications`}
+            </span>
+            <Button
+              beforeIcon={<BroomIcon />}
+              onClick={() => {
+                onDismiss(items.map(({ id }) => id));
+              }}
+              size="sm"
+              variant="ghost"
+            >
+              Clear all
+            </Button>
+          </div>
+        )
+      }
+      onOpenChange={onOpenChange}
+      open={open}
+      screen={screen}
+      title="Notifications"
+    >
+      {items.length === 0 ? (
+        <div className={emptyStyles}>
+          <span aria-hidden className={glowStyles}>
+            <BellSimpleIcon size={28} weight="duotone" />
           </span>
-          <Button
-            beforeIcon={<BroomIcon />}
-            onClick={() => {
-              onDismiss(items.map(({ id }) => id));
-            }}
-            size="sm"
-            variant="ghost"
-          >
-            Clear all
-          </Button>
+          <span className={emptyTitleStyles}>You're all caught up</span>
+          <span className={emptyBodyStyles}>
+            What your applications and sites have to say will be here.
+          </span>
         </div>
-      )
-    }
-    onOpenChange={onOpenChange}
-    open={open}
-    screen={screen}
-    title="Notifications"
-  >
-    {items.length === 0 ? (
-      <div className={emptyStyles}>
-        <span aria-hidden className={glowStyles}>
-          <BellSimpleIcon size={28} weight="duotone" />
-        </span>
-        <span className={emptyTitleStyles}>You're all caught up</span>
-        <span className={emptyBodyStyles}>
-          What your applications and sites have to say will be here.
-        </span>
-      </div>
-    ) : (
-      <ul className={listStyles}>
-        {items.map((notification) => (
-          <li className={rowStyles} key={notification.id}>
-            <NotificationCard
-              closeLabel="Clear"
-              notification={notification}
-              now={now}
-              onAction={(key) => {
-                onAction(notification.id, key);
-              }}
-              onClose={() => {
-                onDismiss([notification.id]);
-              }}
-              onReply={(text) => {
-                onReply(notification.id, text);
-              }}
-            />
-          </li>
-        ))}
-      </ul>
-    )}
-  </SlideOver>
+      ) : (
+        <ul className={listStyles}>
+          {items.map((notification) => (
+            <li className={rowStyles} key={notification.id}>
+              <NotificationCard
+                closeLabel="Clear"
+                notification={notification}
+                now={now}
+                onAction={(key) => {
+                  onAction(notification.id, key);
+                }}
+                onClose={() => {
+                  onDismiss([notification.id]);
+                }}
+                onReply={(text) => {
+                  onReply(notification.id, text);
+                }}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </SlideOver>
+  ),
 );
 
 const listStyles = flex({

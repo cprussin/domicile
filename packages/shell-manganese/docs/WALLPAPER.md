@@ -7,10 +7,12 @@ A photograph behind the whole desktop, changing every minute. Source:
   the gaps between monitors of different sizes. All copies show the same
   photo. Until the compositor reports the screens, one copy covers the page.
 - **Each theme has its own rotation**: dark space photos for dark, bright
-  nature scenes for light. Both rotate together; CSS shows the current theme's.
-  A theme switch shows an already loaded photo.
+  nature scenes for light. CSS shows the current theme's, and only it
+  rotates. The other holds its loaded photo, so a theme switch shows it at
+  once.
 - **Mounted**: only the photo on screen, the one fading out and the next one.
   The next one mounts a full minute early, so it has loaded before its turn.
+  The hidden theme mounts only its photo on screen.
 - **Crossfade**: the incoming photo fades in over the outgoing one, which
   stays opaque underneath, so the background never shows through. `isolation: isolate` keeps their `z-index` from stacking over the
   chrome.

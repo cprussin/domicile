@@ -1,4 +1,4 @@
-import { Children } from "react";
+import { Children, memo, useMemo } from "react";
 
 import { css } from "../../styled-system/css";
 import { grid, hstack } from "../../styled-system/patterns";
@@ -33,28 +33,38 @@ type Props = Bar & {
  *
  * The middle column is centered on the screen regardless of the outer columns,
  * so the clock does not shift as items change.
+ *
+ * Memoized, as are its columns, so an item redraws only when the context it
+ * reads changes.
  */
-export const TopBar = ({ layout, ...bar }: Props) => (
-  <BarContext value={bar}>
-    <BarReadoutsContext
-      value={{ domicile: bar.domicile, locked: false, readouts: bar.readouts }}
-    >
-      <BarColumns layout={layout} />
-    </BarReadoutsContext>
-  </BarContext>
-);
+export const TopBar = memo(({ layout, ...bar }: Props) => {
+  const { domicile, readouts } = bar;
+  const barReadouts = useMemo(
+    () => ({ domicile, locked: false, readouts }),
+    [domicile, readouts],
+  );
+  return (
+    // A fresh object only when a prop changed, which every `useBar` item
+    // reads.
+    <BarContext value={bar}>
+      <BarReadoutsContext value={barReadouts}>
+        <BarColumns layout={layout} />
+      </BarReadoutsContext>
+    </BarContext>
+  );
+});
 
 /**
  * The bar's columns and look, with no context of its own: the caller provides
  * what its items read, as `LockBar` does with only the readouts.
  */
-export const BarColumns = ({ layout }: { layout: TopBarLayout }) => (
+export const BarColumns = memo(({ layout }: { layout: TopBarLayout }) => (
   <header className={barStyles} style={{ blockSize: `${TOP_BAR}px` }}>
     <div className={startStyles}>{Children.toArray(layout.left)}</div>
     <div className={middleStyles}>{Children.toArray(layout.middle)}</div>
     <div className={endStyles}>{Children.toArray(layout.right)}</div>
   </header>
-);
+));
 
 const barStyles = grid({
   // No focus ring in the bar: the browser's default color clashes with the

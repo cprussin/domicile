@@ -13,6 +13,7 @@ import { NodeKind, windowsIn } from "../window-management/tree/node";
 import type { WindowState } from "../window-management/window-state";
 import type { Workspace } from "../window-management/workspace";
 import { fullscreenOn } from "../window-management/workspace";
+import { sharedWith } from "./structural-sharing";
 
 /** One screen, as the stage draws windows on it. */
 export type StageScreen = {
@@ -34,21 +35,28 @@ export type StageScreen = {
   screenful: Screenful;
 };
 
-/**
- * Screens already laid out, by desk, then the workspace shown, then screen
- * name. By desk because every screen's geometry depends on every display.
- */
-export type LaidOut = WeakMap<
-  readonly Display[],
-  WeakMap<Workspace, Map<string, StageScreen>>
->;
+/** Screens already laid out. */
+export type LaidOut = {
+  /**
+   * By desk, then the workspace shown, then screen name. By desk because every
+   * screen's geometry depends on every display.
+   */
+  byDesk: WeakMap<
+    readonly Display[],
+    WeakMap<Workspace, Map<string, StageScreen>>
+  >;
+  /** The last screen laid out on each display, which the next shares with. */
+  last: Map<string, StageScreen>;
+};
 
 /**
  * Every screen the desktop state has, one render after the host describes it. A
  * screen drawn before the state reducer runs would have no workspace.
  *
  * A screen whose workspace is unchanged comes from `laidOut`, the same object
- * as before, so the stage redraws only the screens that changed.
+ * as before, so the stage redraws only the screens that changed. A screen laid
+ * out again keeps every part equal to the display's last screen, so a focus
+ * change or a float drag redraws only the windows whose placement changed.
  */
 export const stageScreensOf = (
   { screens, workspaces }: Pick<WindowState, "screens" | "workspaces">,
@@ -78,23 +86,25 @@ const stageScreenOn = (
   laidOut: LaidOut,
 ): StageScreen => {
   const onDesk =
-    laidOut.get(desk) ?? new WeakMap<Workspace, Map<string, StageScreen>>();
+    laidOut.byDesk.get(desk) ??
+    new WeakMap<Workspace, Map<string, StageScreen>>();
   const byScreen = onDesk.get(workspace) ?? new Map<string, StageScreen>();
   const found = byScreen.get(display.name);
   if (found === undefined) {
     const geometry = geometryOf(display, desk);
-    const screen = {
+    const screen = sharedWith(laidOut.last.get(display.name), {
       current: workspace.name,
       floats: workspace.floats.map((float) => onScreen(float, geometry.screen)),
       fullscreen: fullscreenOf(workspace),
       geometry,
       screenful: placementsOf(workspace, geometry),
-    };
+    });
     // A cache, so mutated in place.
-    laidOut.set(
+    laidOut.byDesk.set(
       desk,
       onDesk.set(workspace, byScreen.set(display.name, screen)),
     );
+    laidOut.last.set(display.name, screen);
     return screen;
   } else {
     return found;

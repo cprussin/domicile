@@ -22,7 +22,10 @@ export const useStageScreens = (
   { screens, workspaces }: Pick<WindowState, "screens" | "workspaces">,
   desk: readonly Display[] | undefined,
 ): readonly StageScreen[] => {
-  const [laidOut] = useState<LaidOut>(() => new WeakMap());
+  const [laidOut] = useState<LaidOut>(() => ({
+    byDesk: new WeakMap(),
+    last: new Map(),
+  }));
   return useMemo(
     () => stageScreensOf({ screens, workspaces }, desk ?? NO_DESK, laidOut),
     [desk, laidOut, screens, workspaces],

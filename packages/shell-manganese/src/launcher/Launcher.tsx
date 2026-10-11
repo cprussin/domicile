@@ -30,9 +30,11 @@ import { YoutubeLogoIcon } from "@phosphor-icons/react/dist/ssr/YoutubeLogo";
 import type { ReactNode, RefObject } from "react";
 import {
   Fragment,
+  memo,
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -128,61 +130,63 @@ type Learn = (bookmark: string, icon: string) => void;
  * Escape and backdrop clicks call `onDismiss`; a local copy of the state could
  * drift from the desktop's.
  */
-export const Launcher = ({
-  fromPrivate,
-  onClosed,
-  onDismiss,
-  onLaunch,
-  open,
-  opening,
-  preview,
-  screen,
-  search,
-  searchApps,
-}: Props) => (
-  <ModalDialog
-    // Keyboard-driven, so no close button; the footer shows Escape.
-    closeButton={false}
-    footer={
-      <>
-        <Tags />
-        <Keys />
-      </>
-    }
-    onOpenChange={(next) => {
-      if (!next) {
-        onDismiss();
+export const Launcher = memo(
+  ({
+    fromPrivate,
+    onClosed,
+    onDismiss,
+    onLaunch,
+    open,
+    opening,
+    preview,
+    screen,
+    search,
+    searchApps,
+  }: Props) => (
+    <ModalDialog
+      // Keyboard-driven, so no close button; the footer shows Escape.
+      closeButton={false}
+      footer={
+        <>
+          <Tags />
+          <Keys />
+        </>
       }
-    }}
-    onOpenChangeComplete={(next) => {
-      if (!next) {
-        onClosed();
-      }
-    }}
-    open={open}
-    // The shell refocuses the focused window. Focusing a browser window's view
-    // would read as a click in it and move the keyboard there.
-    returnFocus={false}
-    screen={screen}
-    // Wide enough for the rows and the preview side by side.
-    size="xl"
-    // Translucent, so the desktop stays visible behind a brief overlay.
-    surface="glass"
-    title="Open"
-  >
-    {/*
+      onOpenChange={(next) => {
+        if (!next) {
+          onDismiss();
+        }
+      }}
+      onOpenChangeComplete={(next) => {
+        if (!next) {
+          onClosed();
+        }
+      }}
+      open={open}
+      // The shell refocuses the focused window. Focusing a browser window's
+      // view would read as a click in it and move the keyboard there.
+      returnFocus={false}
+      screen={screen}
+      // Wide enough for the rows and the preview side by side.
+      size="xl"
+      // Translucent, so the desktop stays visible behind a brief overlay.
+      surface="glass"
+      title="Open"
+    >
+      {/*
       Inside the dialog so it unmounts on close, and every open starts with an
       empty box without an effect to reset it.
     */}
-    <Query
-      fromPrivate={fromPrivate}
-      onLaunch={onLaunch}
-      opening={opening}
-      preview={preview}
-      search={search}
-      searchApps={searchApps}
-    />
-  </ModalDialog>
+      <Query
+        fromPrivate={fromPrivate}
+        onLaunch={onLaunch}
+        opening={opening}
+        preview={preview}
+        search={search}
+        searchApps={searchApps}
+      />
+    </ModalDialog>
+  ),
 );
 
 type QueryProps = {
@@ -216,16 +220,15 @@ const Query = ({
 
   const found = useFound(search, query);
   const offered = useFoundApps(searchApps, query, opening);
-  const choices = choicesFor(
-    query,
-    found.files,
-    offered.apps,
-    offered.bookmarks,
+  // Memoized, so a render that changes no input keeps the rows.
+  const choices = useMemo(
+    () => choicesFor(query, found.files, offered.apps, offered.bookmarks),
+    [found.files, offered.apps, offered.bookmarks, query],
   );
   const highlighted = highlightIn(choices.length, stepped);
   const chosen = highlighted === undefined ? undefined : choices[highlighted];
   // The previewed row: the highlighted one once it has settled, else the
-  // previous one. Settles by key, since a choice is a new object per render.
+  // previous one. Settles by key, since a choice is a new object per search.
   const shown = useSettled(
     chosen,
     chosen === undefined ? undefined : keyOf(chosen),
