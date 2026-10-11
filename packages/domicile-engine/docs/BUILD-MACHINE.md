@@ -95,6 +95,10 @@ rebuild.
   engine jobs can run at once.
 - If every tree is held, one run waits up to 45 minutes
   (`DOMICILE_TREE_WAIT`). Any other run is refused.
+- A tree held by a run that GitHub reports finished is cleared before the
+  pick and while waiting (`crux-run-finished.sh`). A runner shut down
+  mid-build never drops its tree. A lock that names no run, such as a
+  person's, is never cleared.
 - **Memory:** 62 GB, no swap. A cold link uses most of it, so
   `.github/scripts/engine-compile-slot.sh` allows one cold build at a time.
   Runs on a tree that already carries the series skip the slot.

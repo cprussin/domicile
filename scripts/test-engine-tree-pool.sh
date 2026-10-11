@@ -322,6 +322,48 @@ out="$(DOMICILE_TREE_WAIT=2 DOMICILE_TREE_POLL=1 DOMICILE_TREE_RECHECK=0 \
 contains "a check that cannot answer leaves the wait alone" "held after waiting 2s" "$out"
 
 echo
+echo "== a tree held by a run that is over is cleared =="
+
+# A runner shut down mid-build never runs its drop step, and the tree stays
+# locked. The workflow's check (given HOLDER) says whether the holder's run is
+# over, as for the compile slot.
+root="$(build_root 1)"
+pick "$root" aaaaaaa 'engine-release.yml run 111 attempt 1' >/dev/null
+out="$(DOMICILE_TREE_WAIT=0 \
+  DOMICILE_TREE_HOLDER_DONE='[ "$HOLDER" = "engine-release.yml run 111 attempt 1" ] && echo "run 111 is completed"' \
+  pick "$root" aaaaaaa 'engine.yml run 222 attempt 1')"
+expect "a run takes a tree whose holder's run is over" "$root/trees/tree-0/src" \
+  "$(grep '^/' <<<"$out" | tail -1)"
+contains "saying whose and why" "run 111 is completed" "$out"
+expect "and holds its lock" 'engine.yml run 222 attempt 1' \
+  "$(cat "$(lock_of "$root" tree-0)/owner")"
+
+# Only on a yes: a running holder may be mid-build. Any other answer leaves the
+# holder alone.
+for verdict in 'exit 1' 'echo "no route"; exit 3'; do
+  root="$(build_root 1)"
+  pick "$root" aaaaaaa 'engine.yml run 333 attempt 1' >/dev/null
+  out="$(DOMICILE_TREE_WAIT=0 DOMICILE_TREE_HOLDER_DONE="$verdict" \
+    pick "$root" aaaaaaa 'engine.yml run 444 attempt 1')"
+  expect "a holder not known to be over keeps the tree ($verdict)" refused \
+    "$(case "$out" in (*::error::*) echo refused ;; (*) echo "$out" ;; esac)"
+  expect "and still holds it ($verdict)" 'engine.yml run 333 attempt 1' \
+    "$(cat "$(lock_of "$root" tree-0)/owner")"
+done
+
+# A waiter asks too: the holder's run can end while it waits.
+root="$(build_root 1)"
+pick "$root" aaaaaaa 'engine.yml run 555 attempt 1' >/dev/null
+touch "$WORK/run-555-over"
+( sleep 2; rm -f "$WORK/run-555-over" ) &
+out="$(DOMICILE_TREE_WAIT=20 DOMICILE_TREE_POLL=1 DOMICILE_TREE_RECHECK=0 \
+  DOMICILE_TREE_HOLDER_DONE="[ ! -e '$WORK/run-555-over' ] && echo 'run 555 is completed'" \
+  pick "$root" aaaaaaa 'engine.yml run 666 attempt 1')"
+wait
+expect "a waiter takes the tree once the holder's run is over" "$root/trees/tree-0/src" \
+  "$(grep '^/' <<<"$out" | tail -1)"
+
+echo
 echo "== a tree already carrying this run's series is the one to take =="
 
 # The pick prefers a tree whose stamp names this run's series, since its reset,
