@@ -808,7 +808,7 @@ mod tests {
                 "a client putting something on the clipboard",
                 ClientRequest::ClipboardCopied {
                     clipboard: Clipboard::Copy,
-                    text: "what was copied".into(),
+                    contents: domicile_host::clipboard::Contents::text("what was copied"),
                 },
             ),
             (

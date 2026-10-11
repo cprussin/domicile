@@ -28,6 +28,23 @@ PlatformClipboard::DataMap Copy(const std::string& text) {
   return data_map;
 }
 
+// Contents holding `text` alone, as the compositor sends text.
+DrmClipboard::Contents Text(const std::string& text) {
+  return {
+      {kMimeTypeUtf8PlainText, std::vector<uint8_t>(text.begin(), text.end())}};
+}
+
+// The bytes of a tiny stand-in for a PNG.
+std::vector<uint8_t> Png() {
+  return {0x89, 'P', 'N', 'G'};
+}
+
+// `Png()` as a string, as `Read` returns it.
+std::string PngRead() {
+  const std::vector<uint8_t> png = Png();
+  return std::string(png.begin(), png.end());
+}
+
 // Reads `buffer`. Needs no run loop because `RequestClipboardData` answers
 // synchronously; this fails if it ever stops doing so.
 std::string Read(DrmClipboard& clipboard,
@@ -68,7 +85,8 @@ std::vector<std::string> Types(DrmClipboard& clipboard, ClipboardBuffer buffer) 
 TEST(DrmClipboardTest, WhatTheCompositorSaysIsWhatAPasteProduces) {
   DrmClipboard clipboard;
 
-  clipboard.SetContents(ClipboardBuffer::kCopyPaste, "copied in a terminal");
+  clipboard.SetContents(ClipboardBuffer::kCopyPaste,
+                        Text("copied in a terminal"));
 
   EXPECT_EQ(Read(clipboard, ClipboardBuffer::kCopyPaste),
             "copied in a terminal");
@@ -78,8 +96,8 @@ TEST(DrmClipboardTest, WhatTheCompositorSaysIsWhatAPasteProduces) {
 TEST(DrmClipboardTest, TheTwoClipboardsHoldDifferentThings) {
   DrmClipboard clipboard;
 
-  clipboard.SetContents(ClipboardBuffer::kCopyPaste, "an explicit copy");
-  clipboard.SetContents(ClipboardBuffer::kSelection, "brushed past");
+  clipboard.SetContents(ClipboardBuffer::kCopyPaste, Text("an explicit copy"));
+  clipboard.SetContents(ClipboardBuffer::kSelection, Text("brushed past"));
 
   EXPECT_EQ(Read(clipboard, ClipboardBuffer::kCopyPaste), "an explicit copy");
   EXPECT_EQ(Read(clipboard, ClipboardBuffer::kSelection), "brushed past");
@@ -88,11 +106,12 @@ TEST(DrmClipboardTest, TheTwoClipboardsHoldDifferentThings) {
 // A page's copy goes to the compositor, which puts it on the seat.
 TEST(DrmClipboardTest, ACopyMadeHereReachesTheCompositor) {
   DrmClipboard clipboard;
-  std::vector<std::pair<ClipboardBuffer, std::string>> sent;
+  std::vector<std::pair<ClipboardBuffer, DrmClipboard::Contents>> sent;
   clipboard.SetCopiedCallback(base::BindRepeating(
-      [](std::vector<std::pair<ClipboardBuffer, std::string>>* sent,
-         ClipboardBuffer buffer,
-         const std::string& text) { sent->emplace_back(buffer, text); },
+      [](std::vector<std::pair<ClipboardBuffer, DrmClipboard::Contents>>* sent,
+         ClipboardBuffer buffer, const DrmClipboard::Contents& contents) {
+        sent->emplace_back(buffer, contents);
+      },
       &sent));
 
   clipboard.OfferClipboardData(ClipboardBuffer::kCopyPaste,
@@ -100,47 +119,90 @@ TEST(DrmClipboardTest, ACopyMadeHereReachesTheCompositor) {
 
   ASSERT_EQ(sent.size(), 1u);
   EXPECT_EQ(sent[0].first, ClipboardBuffer::kCopyPaste);
-  EXPECT_EQ(sent[0].second, "copied in a page");
+  // The text crosses once; the compositor offers it under every text type.
+  EXPECT_EQ(sent[0].second, Text("copied in a page"));
   // It is readable here at once; the compositor does not echo it back.
   EXPECT_EQ(Read(clipboard, ClipboardBuffer::kCopyPaste), "copied in a page");
 }
 
-// Copying non-text clears the text for other windows instead of leaving the
-// previous copy.
-TEST(DrmClipboardTest, ACopyWithNoTextInItEmptiesTheClipboard) {
+// A page's copied image goes to the compositor under its type. Types the
+// desktop does not carry, such as the HTML a copied image comes with, stay
+// behind.
+TEST(DrmClipboardTest, ACopiedImageReachesTheCompositor) {
   DrmClipboard clipboard;
-  clipboard.SetContents(ClipboardBuffer::kCopyPaste, "copied earlier");
+  std::vector<DrmClipboard::Contents> sent;
+  clipboard.SetCopiedCallback(base::BindRepeating(
+      [](std::vector<DrmClipboard::Contents>* sent, ClipboardBuffer buffer,
+         const DrmClipboard::Contents& contents) { sent->push_back(contents); },
+      &sent));
 
   PlatformClipboard::DataMap image;
-  image["image/png"] = base::MakeRefCounted<base::RefCountedBytes>(
-      std::vector<uint8_t>{1, 2, 3});
+  image[kMimeTypePng] = base::MakeRefCounted<base::RefCountedBytes>(Png());
+  image[kMimeTypeHtml] = base::MakeRefCounted<base::RefCountedBytes>(
+      std::vector<uint8_t>{'<', 'i', 'm', 'g', '>'});
   clipboard.OfferClipboardData(ClipboardBuffer::kCopyPaste, image);
+
+  ASSERT_EQ(sent.size(), 1u);
+  EXPECT_EQ(sent[0], (DrmClipboard::Contents{{kMimeTypePng, Png()}}));
+  EXPECT_EQ(Read(clipboard, ClipboardBuffer::kCopyPaste, kMimeTypePng),
+            PngRead());
+}
+
+// An image the compositor says is on the clipboard pastes, and is offered
+// beside the text it came with.
+TEST(DrmClipboardTest, AnImageFromTheCompositorPastes) {
+  DrmClipboard clipboard;
+  DrmClipboard::Contents contents = Text("a caption");
+  contents.emplace(kMimeTypePng, Png());
+
+  clipboard.SetContents(ClipboardBuffer::kCopyPaste, contents);
+
+  EXPECT_EQ(Read(clipboard, ClipboardBuffer::kCopyPaste, kMimeTypePng),
+            PngRead());
+  EXPECT_EQ(Read(clipboard, ClipboardBuffer::kCopyPaste), "a caption");
+  std::vector<std::string> offered = DomicileTextMimeTypes();
+  offered.push_back(kMimeTypePng);
+  EXPECT_EQ(Types(clipboard, ClipboardBuffer::kCopyPaste), offered);
+}
+
+// Copying neither text nor an image clears the clipboard for other windows
+// instead of leaving the previous copy.
+TEST(DrmClipboardTest, ACopyWithNothingTheDesktopCarriesEmptiesTheClipboard) {
+  DrmClipboard clipboard;
+  clipboard.SetContents(ClipboardBuffer::kCopyPaste, Text("copied earlier"));
+
+  PlatformClipboard::DataMap html;
+  html[kMimeTypeHtml] = base::MakeRefCounted<base::RefCountedBytes>(
+      std::vector<uint8_t>{'<', 'b', '>'});
+  clipboard.OfferClipboardData(ClipboardBuffer::kCopyPaste, html);
 
   EXPECT_EQ(Read(clipboard, ClipboardBuffer::kCopyPaste), "");
   EXPECT_TRUE(Types(clipboard, ClipboardBuffer::kCopyPaste).empty());
 }
 
 // Every text type is answered, since readers differ: Blink reads
-// `text/plain` and GTK asks for `text/plain;charset=utf-8`.
+// `text/plain` and GTK asks for `text/plain;charset=utf-8`. The compositor
+// may send the text under any of them.
 TEST(DrmClipboardTest, EverySpellingOfTextIsAnswered) {
   DrmClipboard clipboard;
-  clipboard.SetContents(ClipboardBuffer::kCopyPaste, "one string");
+  clipboard.SetContents(
+      ClipboardBuffer::kCopyPaste,
+      {{kMimeTypeLinuxString, std::vector<uint8_t>{'o', 'n', 'e'}}});
 
   for (const std::string& mime_type : DomicileTextMimeTypes()) {
-    EXPECT_EQ(Read(clipboard, ClipboardBuffer::kCopyPaste, mime_type),
-              "one string")
+    EXPECT_EQ(Read(clipboard, ClipboardBuffer::kCopyPaste, mime_type), "one")
         << "asked for " << mime_type;
   }
   EXPECT_EQ(Types(clipboard, ClipboardBuffer::kCopyPaste),
             DomicileTextMimeTypes());
 }
 
-// Non-text types get nothing rather than a string.
-TEST(DrmClipboardTest, AnythingThatIsNotTextIsNotAnswered) {
+// A type the clipboard does not hold gets nothing rather than a string.
+TEST(DrmClipboardTest, ATypeNotHeldIsNotAnswered) {
   DrmClipboard clipboard;
-  clipboard.SetContents(ClipboardBuffer::kCopyPaste, "one string");
+  clipboard.SetContents(ClipboardBuffer::kCopyPaste, Text("one string"));
 
-  EXPECT_EQ(Read(clipboard, ClipboardBuffer::kCopyPaste, "image/png"), "");
+  EXPECT_EQ(Read(clipboard, ClipboardBuffer::kCopyPaste, kMimeTypePng), "");
 }
 
 // An empty clipboard offers no types, so the paste menu is grayed out.
@@ -162,7 +224,7 @@ TEST(DrmClipboardTest, EveryChangeIsAnnounced) {
       },
       &changed));
 
-  clipboard.SetContents(ClipboardBuffer::kCopyPaste, "from elsewhere");
+  clipboard.SetContents(ClipboardBuffer::kCopyPaste, Text("from elsewhere"));
   clipboard.OfferClipboardData(ClipboardBuffer::kSelection, Copy("from here"));
 
   EXPECT_EQ(changed, (std::vector<ClipboardBuffer>{

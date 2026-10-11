@@ -4,6 +4,7 @@
 #ifndef UI_OZONE_PLATFORM_DRM_DOMICILE_DRM_CLIPBOARD_H_
 #define UI_OZONE_PLATFORM_DRM_DOMICILE_DRM_CLIPBOARD_H_
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -23,13 +24,18 @@ namespace ui {
 // A page's copy goes through `OfferClipboardData` to the compositor, which puts
 // it on the Wayland seat. The compositor sends every other copy to
 // `SetContents` as it is made (see `domicile_host::clipboard`), so a paste is
-// answered from memory. Only text crosses: copying anything else clears the
-// text. See docs/architecture/A-DESKTOP-ON-A-TTY.md#the-clipboard.
+// answered from memory. Text and images cross; a copy holding neither clears
+// the clipboard. See docs/architecture/A-DESKTOP-ON-A-TTY.md#the-clipboard.
 class DrmClipboard : public PlatformClipboard {
  public:
+  // A clipboard's contents by MIME type: text under
+  // `kMimeTypeUtf8PlainText`, each image under its own type. The compositor
+  // may send text under any text type.
+  using Contents = base::flat_map<std::string, std::vector<uint8_t>>;
+
   // Sends a copy made in this process to the compositor.
   using Copied =
-      base::RepeatingCallback<void(ClipboardBuffer, const std::string&)>;
+      base::RepeatingCallback<void(ClipboardBuffer, const Contents&)>;
 
   DrmClipboard();
 
@@ -39,7 +45,7 @@ class DrmClipboard : public PlatformClipboard {
   ~DrmClipboard() override;
 
   // Sets `buffer` to what the compositor says it holds. Empty means nothing.
-  void SetContents(ClipboardBuffer buffer, std::string text);
+  void SetContents(ClipboardBuffer buffer, const Contents& contents);
 
   // Sets where copies made in this process go. Set once by the owner of the
   // compositor connection; until then copies stay inside this process.
@@ -61,12 +67,13 @@ class DrmClipboard : public PlatformClipboard {
 
  private:
   // Returns what `buffer` holds, or empty.
-  const std::string& Held(ClipboardBuffer buffer) const;
+  const Contents& Held(ClipboardBuffer buffer) const;
 
-  // Stores `text` on `buffer` and notifies, so pastes in this process see it.
-  void Take(ClipboardBuffer buffer, std::string text);
+  // Stores `contents` on `buffer` and notifies, so pastes in this process see
+  // it.
+  void Take(ClipboardBuffer buffer, Contents contents);
 
-  base::flat_map<ClipboardBuffer, std::string> held_;
+  base::flat_map<ClipboardBuffer, Contents> held_;
   Copied copied_;
   ClipboardDataChangedCallback changed_;
 };
