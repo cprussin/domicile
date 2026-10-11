@@ -4,6 +4,7 @@
 #ifndef COMPONENTS_DOMICILE_BROWSER_WEB_VIEW_GUEST_H_
 #define COMPONENTS_DOMICILE_BROWSER_WEB_VIEW_GUEST_H_
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -271,6 +272,23 @@ class WebViewGuest : public mojom::WebViewGuest,
 
   // Tells the shell the request AskPermission sent is gone unanswered.
   void WithdrawPermissionRequest();
+
+  // Asks the shell to pick a device for the page. See DeviceRequested in the
+  // mojom.
+  //
+  // `answered` gets WebViewDevice ids, or nothing if the shell canceled,
+  // ignored the request or the element went away.
+  using DeviceAnswered =
+      base::OnceCallback<void(const std::optional<std::vector<int32_t>>&)>;
+  void AskForDevice(const std::string& title,
+                    bool multiple,
+                    DeviceAnswered answered);
+
+  // Sends the devices the request AskForDevice sent offers.
+  void OfferDevices(std::vector<mojom::WebViewDevicePtr> devices);
+
+  // Tells the shell the request AskForDevice sent is gone unanswered.
+  void WithdrawDeviceRequest();
 
   base::WeakPtr<WebViewGuest> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
