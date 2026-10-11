@@ -424,9 +424,12 @@ impl DomicileCompositor {
                 // Logged in case the chrome sent a bogus id.
                 None => debug!(%app_id, "bounds: a window with no toplevel"),
             },
-            ClientRequest::Spawn { command } => {
-                spawn_client(&command, &self.hub.wayland_display, self.scope_clients)
-            }
+            ClientRequest::Spawn { command } => spawn_client(
+                &command,
+                &self.hub.wayland_display,
+                self.scope_clients,
+                self.hub.child_nice,
+            ),
             ClientRequest::CloseApp { app_id } => match self.toplevel_for(&app_id) {
                 Some(toplevel) => {
                     debug!(%app_id, "close -> client");

@@ -44,6 +44,7 @@ pub mod portal_notifications;
 pub mod portals;
 pub mod print_media;
 pub mod print_settings;
+pub mod priority;
 pub mod screenshot;
 pub mod shell_commands;
 pub mod system;

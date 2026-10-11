@@ -41,6 +41,10 @@ pub struct ChromeHub {
     pub max_scale: AtomicU32,
     /// Our Wayland socket name, which spawned clients connect to.
     pub wayland_display: OsString,
+    /// The nice value spawned clients and the page's processes start at: the
+    /// compositor's own, before it raised its threads. See
+    /// [`crate::thread_priority`].
+    pub child_nice: i32,
     /// The latest file index snapshot, for answering `search_files`.
     ///
     /// Lives here because connection threads answer searches without waiting
@@ -84,6 +88,7 @@ impl ChromeHub {
         request_tx: Sender<ClientRequest>,
         max_scale: u32,
         wayland_display: OsString,
+        child_nice: i32,
         portals: Portals,
     ) -> (Arc<Self>, OutboundReceiver) {
         let (outbound, outbound_rx) = outbound();
@@ -95,6 +100,7 @@ impl ChromeHub {
             timings: Mutex::new(FrameTimings::default()),
             max_scale: AtomicU32::new(max_scale),
             wayland_display,
+            child_nice,
             offered: Mutex::new(None),
             lock: OnceLock::new(),
             portals,
@@ -277,6 +283,7 @@ pub mod fixture {
             request_tx,
             1,
             OsString::from("wayland-1"),
+            0,
             Portals::to_nobody(),
         );
         let app_id = {
@@ -314,6 +321,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
+            0,
             Portals::to_nobody(),
         );
 
@@ -346,6 +354,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
+            0,
             Portals::to_nobody(),
         );
 
@@ -366,6 +375,7 @@ mod tests {
             request_tx,
             1,
             OsString::from("wayland-1"),
+            0,
             Portals::to_nobody(),
         );
         let (first, _) = hub

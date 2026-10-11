@@ -66,7 +66,7 @@ mod screenshot;
 mod session;
 mod settings;
 #[cfg(test)]
-mod socket_pair;
+pub(crate) mod socket_pair;
 mod uri;
 mod usb;
 mod wallpaper;

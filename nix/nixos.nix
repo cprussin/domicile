@@ -61,8 +61,9 @@ in {
     # missing fails to start.
     security.pam.services.domicile = {};
 
-    # The engine asks for nice -8 on the threads that draw and present frames
-    # and SCHED_RR 8 on its realtime audio threads, falling back to nice -10.
+    # The engine and compositor ask for nice -8 on the threads that draw and
+    # present frames. The engine asks for SCHED_RR 8 on its realtime audio
+    # threads, falling back to nice -10.
     # Without these limits each request fails and the threads compete with a
     # build at nice 0. Granted to a group, as NixOS's PipeWire and JACK modules
     # do. Listed first (`mkBefore`) because a later pam_limits line for another

@@ -150,6 +150,7 @@ mod screencopy;
 mod screens;
 mod shell_config;
 mod shm_upload;
+mod thread_priority;
 mod timing_window;
 mod tray;
 mod uploads;
@@ -200,6 +201,7 @@ use domicile_host::clipboard::{
     image_mime, text_mime, Contents, History, LONGEST_COPY, LONGEST_IMAGE,
 };
 use domicile_host::data_dirs::data_dirs;
+use domicile_host::priority;
 use domicile_host::system::Environment;
 use domicile_host::theme_turnover::{Step, Turnover, REPAINT_WITHIN};
 use domicile_host::Host;
@@ -2677,6 +2679,7 @@ impl DomicileCompositor {
         );
         match &rejoined.dialed {
             Ok(()) => {
+                thread_priority::raise_the_engine_thread();
                 self.watch_the_engines_fd();
                 // The new engine numbers its boxes afresh, and shows none of
                 // the old one's frames.
@@ -5195,13 +5198,15 @@ fn chrome_display(socket_name: &OsStr) -> String {
 /// Spawn a client process onto Domicile's display.
 ///
 /// A reaper thread waits on the child so it doesn't become a zombie.
-/// `scoped` starts it in its own systemd scope; see [`crate::app_scope`].
-fn spawn_client(command: &[String], wayland_display: &OsStr, scoped: bool) {
+/// `scoped` starts it in its own systemd scope; see [`crate::app_scope`]. It
+/// starts at nice value `nice`; see [`client_command`].
+fn spawn_client(command: &[String], wayland_display: &OsStr, scoped: bool, nice: i32) {
     let Some(mut child) = client_command(
         command,
         wayland_display,
         std::env::var_os("LD_LIBRARY_PATH").as_deref(),
         scoped.then(app_scope::random),
+        nice,
     ) else {
         return;
     };
@@ -5282,6 +5287,8 @@ fn home_directory() -> Option<std::path::PathBuf> {
 ///   [`WAYLAND_PREFERENCE`] overrides them.
 /// - `LD_LIBRARY_PATH` loses the engine's directory; see
 ///   [`without_the_engine`].
+/// - It starts at nice value `nice`, not the raised Wayland thread's; see
+///   [`thread_priority`].
 ///
 /// `DOMICILE_SOCK` is inherited unchanged: the launcher sets it to this
 /// desktop's control socket.
@@ -5293,6 +5300,7 @@ fn client_command(
     wayland_display: &OsStr,
     library_path: Option<&OsStr>,
     scope: Option<u64>,
+    nice: i32,
 ) -> Option<Command> {
     let (program, args) = command.split_first()?;
     let words = match scope {
@@ -5308,6 +5316,7 @@ fn client_command(
             None => child.env_remove(name),
         };
     }
+    priority::starting_at(&mut child, nice);
     Some(child)
 }
 
@@ -5610,6 +5619,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         Err(_) => tracing_subscriber::fmt().with_ansi(colored).init(),
     }
 
+    // Read before any thread is raised, so the processes the desktop starts
+    // run at the priority it was started at.
+    let child_nice = priority::nice(priority::this_thread())?;
+
     // Parse arguments before binding anything. Another program writes them, so
     // an error is a bug and should not be buried in the startup log.
     let arguments = arguments(std::env::args_os().skip(1))?;
@@ -5751,6 +5764,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         request_tx,
         config.output.max_scale,
         socket_name.clone(),
+        child_nice,
         // Start before any client is spawned: an app asking for a color scheme
         // before the bus name is taken would get another backend's answer and
         // never ask again.
@@ -5764,7 +5778,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             {
                 let display = socket_name.clone();
                 let scoped = arguments.scope_clients;
-                move |command| spawn_client(command, &display, scoped)
+                move |command| spawn_client(command, &display, scoped, child_nice)
             },
             portals::ScreenCasting {
                 casting: casting::Casting::new(cast_requests.clone()),
@@ -5959,7 +5973,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // (the `scripts/` checks drive the chrome, input and displays without a
     // Chromium build), but it is logged.
     let engine = match arguments.engine_socket.as_deref() {
-        Some(socket) => Some(EngineSession::load(socket)?),
+        Some(socket) => {
+            let session = EngineSession::load(socket)?;
+            thread_priority::raise_the_engine_thread();
+            Some(session)
+        }
         None => {
             warn!(
                 "no --engine-socket, so no client window will be shown: the engine is what puts \
@@ -6366,8 +6384,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Startup commands, once the desktop is live. Not run on reload; see
     // `StartupConfig`.
     for command in &config.startup.commands {
-        spawn_client(command, &socket_name, arguments.scope_clients);
+        spawn_client(command, &socket_name, arguments.scope_clients, child_nice);
     }
+
+    // Raised last, so the service threads started above stay at the nice
+    // value they inherited. Threads this one starts later inherit -8.
+    thread_priority::raise_and_say(priority::this_thread(), "wayland");
 
     // Flush after every loop iteration so events queued while handling input
     // reach clients promptly.
@@ -6573,7 +6595,7 @@ mod tests {
         library_path: Option<&OsStr>,
         name: &str,
     ) -> Option<OsString> {
-        client_command(command, OsStr::new(display), library_path, None)
+        client_command(command, OsStr::new(display), library_path, None, 0)
             .expect("a command with a program builds")
             .get_envs()
             .find(|(key, _)| *key == OsStr::new(name))
@@ -6682,13 +6704,13 @@ mod tests {
 
     #[test]
     fn an_empty_command_spawns_nothing() {
-        assert!(client_command(&[], OsStr::new("wayland-7"), None, None).is_none());
+        assert!(client_command(&[], OsStr::new("wayland-7"), None, None, 0).is_none());
     }
 
     #[test]
     fn a_scoped_client_keeps_the_desktops_environment() {
         // `systemd-run --scope` execs the client with its own environment.
-        let child = client_command(&kitty(), OsStr::new("wayland-7"), None, Some(7))
+        let child = client_command(&kitty(), OsStr::new("wayland-7"), None, Some(7), 0)
             .expect("a command with a program builds");
         assert_eq!(child.get_program(), "systemd-run");
         assert!(
@@ -6701,9 +6723,24 @@ mod tests {
 
     #[test]
     fn an_unscoped_client_starts_itself() {
-        let child = client_command(&kitty(), OsStr::new("wayland-7"), None, None)
+        let child = client_command(&kitty(), OsStr::new("wayland-7"), None, None, 0)
             .expect("a command with a program builds");
         assert_eq!(child.get_program(), "kitty");
+    }
+
+    /// The Wayland thread runs raised; a client starts at the nice value it is
+    /// given instead.
+    #[test]
+    fn a_client_starts_at_the_nice_value_it_is_given() {
+        use domicile_host::priority::{nice, this_thread};
+        let given = nice(this_thread()).unwrap() + 3;
+
+        let ran = client_command(&["nice".into()], OsStr::new("wayland-7"), None, None, given)
+            .expect("a command with a program builds")
+            .output()
+            .expect("`nice` runs");
+
+        assert_eq!(String::from_utf8(ran.stdout).unwrap(), format!("{given}\n"));
     }
 
     #[test]
