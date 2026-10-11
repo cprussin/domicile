@@ -158,8 +158,9 @@ Understood and not scheduled.
 - **The session portal setup is only checked at evaluation.** Nothing here
   runs a user manager, an unclean exit leaves stale environment variables,
   and a nested desktop doesn't register.
-- **The settings portal answers only `icon-theme`** of
-  `org.gnome.desktop.interface`.
+- **The settings portal has no cursor or font keys** in
+  `org.gnome.desktop.interface` (`cursor-theme`, `cursor-size`, `font-name`,
+  `monospace-font-name`). The config has nothing to serve them from.
 - **Wayland capture is monitors only, into shm, one shot per frame.** No
   toplevel sources, cursor sessions or dmabufs; `wf-recorder` is slow.
   [PORTALS.md](docs/PORTALS.md).
