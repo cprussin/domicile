@@ -164,7 +164,14 @@ const PageContent = ({
         />
       );
     case PageId.Permissions:
-      return <PermissionsPage {...named} host={host} report={report} />;
+      return (
+        <PermissionsPage
+          {...named}
+          extensions={extensions}
+          host={host}
+          report={report}
+        />
+      );
     case PageId.Code:
       return files === undefined ? (
         <Page {...named} />

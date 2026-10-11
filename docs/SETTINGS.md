@@ -17,7 +17,7 @@ launcher, opens it in an app window
 - **Site permissions:** each permission with the sites that have a setting of
   their own for it, or each site with all its permissions. **Remove site**
   clears all of a site's own settings. Changes take effect at once in open
-  browser windows.
+  browser windows. An installed extension shows by its name.
 - **Camera and microphone device:** under Camera and Microphone, the device a
   site gets when it does not ask for a particular one. A site that names a
   device still gets that device.
