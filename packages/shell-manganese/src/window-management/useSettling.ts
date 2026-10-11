@@ -3,6 +3,7 @@ import { useLayoutEffect, useRef } from "react";
 
 import { token } from "../../styled-system/tokens";
 import type { Rect } from "./rect";
+import { useHandoffs } from "./SettleHandoffs";
 import type { Offset, Point } from "./settle";
 import { drawnAt, offsetFrom, partway } from "./settle";
 
@@ -23,6 +24,30 @@ type Placed = { origin: Point; rect: Rect };
 /** `T` with every field possibly missing, as for an element off screen. */
 type Unknown<T> = { [K in keyof T]: T[K] | undefined };
 
+type Options = {
+  element: RefObject<Element | null>;
+  /**
+   * The element's `transform-origin`, from its box's corner. `undefined`, like
+   * `rect`, when the element is off screen.
+   */
+  origin: Point | undefined;
+  /** The element's box, or `undefined` when it is off screen. */
+  rect: Rect | undefined;
+  settler?: Settler | undefined;
+  /**
+   * Keys of the part the element draws. An element new in a commit that
+   * removed one sharing a key eases from where that one was drawn, as when a
+   * tab switch hands a strip to the newly open tab. See `SettleHandoffs`.
+   */
+  shared?: readonly string[] | undefined;
+  /**
+   * Whether the box takes its new place without easing: it follows the
+   * pointer, which easing would make it trail, or it plays a motion, whose
+   * travel `scale` would scale.
+   */
+  still: boolean;
+};
+
 /**
  * Eases an element from its old box to a new one with `translate` and
  * `scale`, so its box changes once.
@@ -33,42 +58,90 @@ type Unknown<T> = { [K in keyof T]: T[K] | undefined };
  * the whole desktop would run at the slowest client's pace. `translate` and
  * `scale` run on the compositor thread.
  *
- * Runs before paint, so no frame shows the new box without the offset.
+ * Every part of a window eases this way, on one timing, so the parts keep
+ * together: each edge moves linearly in the eased progress, whatever the
+ * part's origin.
  *
- * @param origin - The element's `transform-origin`, from its box's corner.
- *   `undefined`, like `rect`, when the element is off screen.
- * @param still - Whether the box takes its new place without easing: it
- *   follows the pointer, which easing would make it trail, or it plays a
- *   motion, whose travel `scale` would scale.
+ * Runs before paint, so no frame shows the new box without the offset.
  */
-export const useSettling = (
-  element: RefObject<Element | null>,
-  rect: Rect | undefined,
-  origin: Point | undefined,
-  still: boolean,
-  settler: Settler = WEB_ANIMATIONS,
-): void => {
+export const useSettling = ({
+  element,
+  origin,
+  rect,
+  settler = WEB_ANIMATIONS,
+  shared = NO_KEYS,
+  still,
+}: Options): void => {
   const last = useRef<Placed | undefined>(undefined);
   const { x, y, width, height } = rect ?? {};
   const { x: originX, y: originY } = origin ?? {};
+  const handoffs = useHandoffs();
+  const keys = shared.join("\n");
   useLayoutEffect(() => {
     const was = last.current;
     const shown = element.current;
     const now = placedOf({ height, width, x, y }, { x: originX, y: originY });
     last.current = now;
-    if (
-      shown !== null &&
-      was !== undefined &&
-      now !== undefined &&
-      !sameBox(was.rect, now.rect)
-    ) {
-      settler.play(
-        shown,
-        still ? undefined : offsetTo(shown, was, now, settler),
-      );
+    if (shown !== null && now !== undefined) {
+      if (was === undefined) {
+        const from = takenOver(handoffs, keys);
+        if (from !== undefined && !still) {
+          settler.play(shown, offsetFrom(from, now.rect, now.origin));
+        }
+      } else if (!sameBox(was.rect, now.rect)) {
+        settler.play(
+          shown,
+          still ? undefined : offsetTo(shown, was, now, settler),
+        );
+      }
     }
-  }, [element, height, originX, originY, settler, still, width, x, y]);
+  }, [
+    element,
+    handoffs,
+    height,
+    keys,
+    originX,
+    originY,
+    settler,
+    still,
+    width,
+    x,
+    y,
+  ]);
+  // Leaves where it is drawn for an element taking over in this commit.
+  useLayoutEffect(
+    () => () => {
+      const shown = element.current;
+      const placed = last.current;
+      if (handoffs !== undefined && shown !== null && placed !== undefined) {
+        const drawn = drawnAt(
+          placed.rect,
+          placed.origin,
+          settler.offset(shown),
+        );
+        for (const key of keysIn(keys)) {
+          handoffs.set(key, drawn);
+        }
+      }
+    },
+    [element, handoffs, keys, settler],
+  );
 };
+
+const NO_KEYS: readonly string[] = [];
+
+/** The keys `useSettling` joined, so they can be its effects' dependency. */
+const keysIn = (keys: string): readonly string[] =>
+  keys === "" ? [] : keys.split("\n");
+
+/** Where a part that shared one of `keys` was drawn, if one just went. */
+const takenOver = (
+  handoffs: ReadonlyMap<string, Rect> | undefined,
+  keys: string,
+): Rect | undefined =>
+  keysIn(keys)
+    .map((key) => handoffs?.get(key))
+    .find((drawn) => drawn !== undefined);
 
 /** The box and origin, or `undefined` for an element off screen. */
 const placedOf = (

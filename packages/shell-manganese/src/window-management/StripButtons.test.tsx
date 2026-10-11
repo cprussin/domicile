@@ -6,7 +6,6 @@ import { StripButtons } from "./StripButtons";
 const nothing = () => undefined;
 
 const buttonsProps = {
-  depth: 0,
   floating: false,
   fullscreen: false,
   onFloat: nothing,

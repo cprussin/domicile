@@ -191,8 +191,11 @@ For how warping, browser-window focus and modifier drags work, see
 - The page hit-tests the bar, so clicks on it never reach the client.
 - In a tabbed or stacking container, each window's tab is its title bar. The
   tabs rest in a tab strip, even a container of one.
-- The strip has a rounded top and an edge. Its bottom edge is the window's top
-  edge; the open tab breaks it to join its window.
+- The strip is one box with a rounded top and an edge (`TabStrip.tsx`). Its
+  bottom edge is the window's top edge; the open tab covers it to join its
+  window.
+- The group's open tab draws the strip, and its tabs lie on it, each drawn by
+  its own window. A tab switch hands the strip to the next open tab.
 - Tabs are at most 240px wide, so the strip always runs on past the last one.
 - A "+" past a tabbed strip's last tab focuses the strip's open tab and opens
   the launcher, so the launched window opens as a tab beside it.
@@ -208,14 +211,14 @@ For how warping, browser-window focus and modifier drags work, see
 ## Animations
 
 - Opening: fade in and grow from the center.
-- Opening a tab: the tab opens out along its strip, which stays whole; the
-  contents fade in.
+- Opening a tab: the tab opens out from its start as the tabs after it slide
+  along; the contents fade in.
 - Rearranging: windows ease to their new boxes.
-- Moving a tab along its strip: the strip stays whole and the tab slides to
-  its new place.
+- Moving a tab along its strip: the tabs slide to their new places.
 - Closing: shrink and fade out.
-- Sending to a workspace no screen shows: shrink further and fade out. A tab
-  closes up along its strip.
+- Sending to a workspace no screen shows: shrink further and fade out.
+- Closing or sending away a tab: it closes up toward its start as the tabs
+  after it slide back.
 - Sending to the scratchpad: slide up off the top of the screen. Showing it
   slides the window back down. Each slide is the other played backwards, so
   one that cuts the other short starts where the window is
@@ -233,11 +236,16 @@ Rules:
   and `scale` (`useSettling`), stretched until they arrive. Eased boxes would
   hold every frame: the engine waits for a resized client to draw.
   Contents snap while a motion plays, since `scale` would scale the motion's
-  travel. The ease takes `durations.fastest` under reduced motion, as the
-  title bar's transitions do.
-- Title bars, glows and shadows ease their real box on the same timing. No
-  client draws into them.
-- A window being dragged or resized follows the pointer without easing.
+  travel. The ease takes `durations.fastest` under reduced motion.
+- Every other part of a window eases the same way: title bars, tabs, strips,
+  glows and shadows. One mechanism on one timing, on the compositor's
+  thread, keeps the parts together: each edge moves linearly in the eased
+  progress. Text in a bar stretches with it until it arrives, as the contents
+  do.
+- A part drawn by a new element, such as a strip handed to the next open tab,
+  eases from where the element it replaces was drawn (`SettleHandoffs`).
+- A window being dragged or resized follows the pointer without easing. A
+  dragged float carries all its windows, tabs and strip.
 - The title bar and contents scale about one shared center (`scaledAbout`).
 - Only windows new since the last render animate open.
 - Hidden windows (behind a tab, on another workspace) stay mounted, so client

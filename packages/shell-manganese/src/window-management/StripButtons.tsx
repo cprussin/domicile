@@ -7,11 +7,9 @@ import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour";
 import { css } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
 import type { Rect } from "./rect";
-import { placedAt } from "./window-styles";
+import { placedIn } from "./window-styles";
 
 type Props = {
-  /** The stacking depth of the strip's last tab. */
-  depth: number;
   /** Whether the group floats. Switches the float button to "Tile". */
   floating: boolean;
   /** Whether the group fills the screen. Switches the button to "Restore". */
@@ -20,7 +18,7 @@ type Props = {
   onFloat: () => void;
   /** Fills the screen with the whole group, or gives it back. */
   onFullscreen: () => void;
-  /** The strip's empty end. See `stripEndOf`. */
+  /** The strip's empty end, from the strip's corner. See `StripPlace.end`. */
   rect: Rect;
 };
 
@@ -28,19 +26,18 @@ type Props = {
  * The buttons at the far end of a tabbed strip, which float and fullscreen its
  * whole group.
  *
- * Drawn after the strip's tabs at their depth, since the last tab paints the
- * strip past itself. Only the buttons take the pointer, so the new-tab button
- * and the end's drag handle (`StripEnd`) beside them still get theirs.
+ * Drawn in the strip after its end's drag handle (`StripEnd`). Only the
+ * buttons take the pointer, so the new-tab button and the handle beside them
+ * still get theirs.
  */
 export const StripButtons = ({
-  depth,
   floating,
   fullscreen,
   onFloat,
   onFullscreen,
   rect,
 }: Props) => (
-  <div className={endStyles} style={placedAt(rect, depth)}>
+  <div className={endStyles} style={placedIn(rect)}>
     <span className={controlStyles}>
       <Button
         label={floating ? "Tile group" : "Float group"}
@@ -66,7 +63,7 @@ export const StripButtons = ({
   </div>
 );
 
-const endStyles = css({ pointerEvents: "none", position: "absolute" });
+const endStyles = css({ pointerEvents: "none" });
 
 /**
  * At the strip's far end, level with the new-tab button at its start (see

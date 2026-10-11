@@ -31,7 +31,6 @@ const FLOAT = {
 const nothing = () => undefined;
 
 const endProps = {
-  depth: 0,
   float: undefined,
   fullscreen: false,
   group: { node: { id: "a", up: 1 }, windows: ["a", "b"] },

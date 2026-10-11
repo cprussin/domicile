@@ -38,10 +38,7 @@ import type { TopBarLayout } from "./top-bar/layout";
 import { grabCursorStyles } from "./window-management/grab-cursor-styles";
 import { SURFACE_TUCK, TITLE_BAR } from "./window-management/rect";
 import { GrabCursor } from "./window-management/useGrabCursor";
-import {
-  movingStyles,
-  settlingStyles,
-} from "./window-management/window-styles";
+import { movingStyles } from "./window-management/window-styles";
 
 // Displays in the engine's shape, so every render exercises the mapping in
 // `screens/host-displays.ts`. Two landscape monitors side by side.
@@ -444,6 +441,16 @@ const barFor = (container: HTMLElement, id: string): HTMLElement => {
     throw new Error(`test: no title bar for ${id}`);
   } else {
     return bar;
+  }
+};
+
+/** The face of a bar or tab, which shows its state. */
+const faceOf = (bar: HTMLElement): HTMLElement => {
+  const face = bar.querySelector<HTMLElement>("[data-face]");
+  if (face === null) {
+    throw new Error("test: a title bar has no face");
+  } else {
+    return face;
   }
 };
 
@@ -1622,19 +1629,25 @@ describe("Shell", () => {
       });
     });
 
-    // Tabs draw the strip past the last tab, at the same depth, so the buttons
-    // come after them to win the tie.
-    it("draws a tab group's buttons over its strip", () => {
+    // One box under the whole strip, so no seam shows between tabs. The tabs
+    // come after it at its depth, so they lie on it.
+    it("draws one strip under all of a group's tabs", () => {
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
-      const button = screen.getByRole("button", { name: "Float group" });
+      const strips = container.querySelectorAll("[data-strip]");
 
+      expect(strips).toHaveLength(1);
       for (const bar of titleBars(container)) {
-        expect(bar.compareDocumentPosition(button)).toBe(
+        expect(strips[0]?.compareDocumentPosition(bar)).toBe(
           Node.DOCUMENT_POSITION_FOLLOWING,
         );
       }
+      expect(
+        within(strips[0] as HTMLElement).getByRole("button", {
+          name: "Float group",
+        }),
+      ).toBeDefined();
     });
 
     it("floats and tiles a whole tab group from its strip's button", async () => {
@@ -2182,13 +2195,13 @@ describe("Shell", () => {
 
       // The focused look on the bar is the only on-screen focus indicator.
       expect(domicile.calls).toContainEqual(["focusApp", "one"]);
-      expect(barFor(container, "app:one").className).not.toBe(
-        barFor(container, "app:two").className,
+      expect(faceOf(barFor(container, "app:one")).className).not.toBe(
+        faceOf(barFor(container, "app:two")).className,
       );
     });
 
-    // Its slot and the strip's end move at once; only the tab slides.
-    it("slides a tab moved along its strip over to its new place", () => {
+    // On the compositor's thread, as their windows' contents move.
+    it("slides tabs moved along their strip over to their new places", () => {
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
@@ -2196,15 +2209,8 @@ describe("Shell", () => {
 
       press("h", true);
 
-      const face = barFor(container, "app:two").querySelector<HTMLElement>(
-        "[data-face]",
-      );
-      expect(face?.style.getPropertyValue("--slide-x")).toBe("240px");
-      expect(
-        barFor(container, "app:one")
-          .querySelector<HTMLElement>("[data-face]")
-          ?.style.getPropertyValue("--slide-x"),
-      ).toBe("-240px");
+      expect(barFor(container, "app:two").getAnimations()).toHaveLength(1);
+      expect(barFor(container, "app:one").getAnimations()).toHaveLength(1);
     });
 
     it("moves a window through the tiling with Shift held", () => {
@@ -2327,12 +2333,14 @@ describe("Shell", () => {
 
       press("w");
 
-      // Every slot draws the line; the open tab draws it only past itself.
-      const pastSlot = css({ insetInlineStart: "100%" });
-      const edgeOf = (id: string) =>
-        barFor(container, id).querySelector("[data-strip-edge]")?.className;
-      expect(edgeOf("app:two")).not.toContain(pastSlot);
-      expect(edgeOf("app:three")).toContain(pastSlot);
+      // The strip draws the line; the open tab covers it to join its window.
+      const covers = css({ marginBlockEnd: "-1px" });
+      expect(faceOf(barFor(container, "app:two")).className).not.toContain(
+        covers,
+      );
+      expect(faceOf(barFor(container, "app:three")).className).toContain(
+        covers,
+      );
     });
 
     it("grows the glow in with the window that opened", () => {
@@ -2678,9 +2686,39 @@ describe("Shell", () => {
       fireEvent.pointerDown(bar, { clientX: 100, clientY: 100 });
       fireEvent.pointerMove(window, { clientX: 140, clientY: 100 });
 
-      expect(glowing(container).className).toContain(
-        settlingStyles({ box: "snapped" }),
+      expect(glowing(container).getAnimations()).toHaveLength(0);
+    });
+
+    // A tab easing after its group would trail the pointer.
+    it("carries every tab of a dragged floating group with it at once", () => {
+      const { container } = renderShell();
+      clientAppears("one");
+      press("Tab", true);
+      clientAppears("two");
+      motionsPlayOut(container);
+      const parts = () => [
+        barFor(container, "app:one"),
+        barFor(container, "app:two"),
+        ...container.querySelectorAll<HTMLElement>("[data-strip]"),
+      ];
+      expect(parts()).toHaveLength(3);
+      const before = parts().map((part) => part.style.insetInlineStart);
+
+      fireEvent.pointerDown(barFor(container, "app:two"), {
+        clientX: 600,
+        clientY: 300,
+      });
+      fireEvent.pointerMove(window, { clientX: 700, clientY: 340 });
+
+      expect(parts().map((part) => part.style.insetInlineStart)).not.toEqual(
+        before,
       );
+      for (const part of parts()) {
+        expect(part.getAnimations()).toHaveLength(0);
+        expect(globalThis.getComputedStyle(part).transition).not.toContain(
+          "inset",
+        );
+      }
     });
 
     it("drags a floating window onto the next screen and keeps hold of it", () => {
@@ -2887,9 +2925,12 @@ describe("Shell", () => {
       for (const element of [...raised, ...covered]) {
         expect(element.style.getPropertyValue("--restack-x")).not.toBe("");
       }
+      const restacking = movingParts(container, "restacking");
       expect(
-        movingParts(container, "restacking").filter(
-          (element) => element.dataset.shadow === undefined,
+        restacking.filter(
+          (element) =>
+            element.dataset.shadow === undefined &&
+            element.dataset.strip === undefined,
         ),
       ).toEqual([
         appElement(container, "one"),
@@ -2897,6 +2938,10 @@ describe("Shell", () => {
         barFor(container, "app:one"),
         barFor(container, "app:two"),
       ]);
+      // Each float's strip goes with it.
+      expect(
+        restacking.filter((element) => element.dataset.strip !== undefined),
+      ).toHaveLength(2);
       for (const element of raised) {
         expect(
           Number(element.style.getPropertyValue("--restack-to")),
@@ -3151,8 +3196,8 @@ describe("Shell", () => {
 
       domicile.set({ focusedWindow: "one" });
 
-      expect(barFor(container, "app:one").className).not.toBe(
-        barFor(container, "app:two").className,
+      expect(faceOf(barFor(container, "app:one")).className).not.toBe(
+        faceOf(barFor(container, "app:two")).className,
       );
     });
   });

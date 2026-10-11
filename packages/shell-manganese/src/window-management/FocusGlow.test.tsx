@@ -4,6 +4,7 @@ import { render } from "@testing-library/react";
 
 import { css } from "../../styled-system/css";
 import { FocusGlow } from "./FocusGlow";
+import { recordedSettles } from "./recorded-settles";
 
 // Loads the real stylesheet so motion and settling styles resolve. See
 // `TitleBar.test.tsx` for why the layers are stripped.
@@ -124,11 +125,31 @@ describe("FocusGlow", () => {
     expect(glow(container).style.getPropertyValue("--restack-to")).toBe("2");
   });
 
-  it("follows its window exactly while that window is being dragged", () => {
-    const { container } = render(<FocusGlow {...glowProps} dragging />);
+  describe("moved to a new box", () => {
+    const moved = (dragging: boolean) => {
+      const { played, settler } = recordedSettles();
+      const { rerender } = render(
+        <FocusGlow {...glowProps} dragging={dragging} settler={settler} />,
+      );
+      rerender(
+        <FocusGlow
+          {...glowProps}
+          dragging={dragging}
+          rect={{ ...glowProps.rect, x: glowProps.rect.x + 100 }}
+          settler={settler}
+        />,
+      );
+      return played;
+    };
 
-    expect(
-      globalThis.getComputedStyle(glow(container)).transition,
-    ).not.toContain("inline-size");
+    it("eases there with its windows", () => {
+      expect(moved(false)).toStrictEqual([
+        { scaleX: 1, scaleY: 1, x: -100, y: 0 },
+      ]);
+    });
+
+    it("follows its window exactly while that window is being dragged", () => {
+      expect(moved(true)).toStrictEqual([undefined]);
+    });
   });
 });

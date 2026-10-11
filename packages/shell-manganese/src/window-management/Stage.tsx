@@ -26,15 +26,14 @@ import type {
   Placement,
   Screenful,
 } from "./placement";
-import { contentsOf, raised, TILED } from "./placement";
+import { contentsOf, TILED } from "./placement";
 import type { Spot } from "./pointer-warp";
 import type { Popup } from "./popup";
 import { popupsOver } from "./popup";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
-import { StripButtons } from "./StripButtons";
-import { StripEnd } from "./StripEnd";
-import { stripEndOf } from "./strip-end";
+import { SettleHandoffs } from "./SettleHandoffs";
+import { TabStrip } from "./TabStrip";
 import { TitleBar } from "./TitleBar";
 import type { Aim, DropTargets, TabTarget, Target } from "./tiled/aim";
 import { bordersOf } from "./tiled/borders";
@@ -54,7 +53,7 @@ import { WindowTitleBar } from "./WindowTitleBar";
 import type { ShellWindow } from "./window";
 import { browserIdOf, WindowKind } from "./window";
 import type { WindowMotion } from "./window-motion";
-import { barMotion, isLeaving } from "./window-motion";
+import { barMotion } from "./window-motion";
 import { slidAcross } from "./window-styles";
 
 type Props = {
@@ -198,175 +197,109 @@ export const Stage = memo(
     // `draggingId`, which keeps its `TileGrab` mounted once the modifier is
     // let go.
     const movingId = stretching ? undefined : draggingId;
+    // Every window the drag moves, which follow the pointer without easing:
+    // a dragged float carries all its windows.
+    const held = useMemo(() => heldBy(desk, movingId), [desk, movingId]);
     const { onPlayedOut } = motions;
-    const ends = stripEndsOf(motions);
     return (
       <main className={stageStyles} data-stretching={stretching || undefined}>
-        {/*
+        <SettleHandoffs>
+          {/*
           Before every window, so each float covers its own shadow by document
           order. See `FloatShadow`. Skipped for fullscreen floats, whose shadow
           would spill onto the next display.
         */}
-        {motions.drawn.map(
-          ({ motion, placement, restack, rewound, screen, window }) => {
-            const float = desk.floats.get(window.id);
-            return placement !== undefined &&
-              !desk.fullscreen.has(window.id) &&
-              float !== undefined ? (
-              <Sliding
-                frame={placement.frame}
-                key={window.id}
-                on={screenNamed(desk, screen)}
-                rewound={rewound}
-              >
-                <FloatShadow
-                  depth={placement.depth}
-                  dragging={window.id === movingId}
+          {motions.drawn.map(
+            ({ motion, placement, restack, rewound, screen, window }) => {
+              const float = desk.floats.get(window.id);
+              return placement !== undefined &&
+                !desk.fullscreen.has(window.id) &&
+                float !== undefined ? (
+                <Sliding
                   frame={placement.frame}
-                  hanging={float.scratchpad}
-                  motion={motion}
-                  restack={restack}
-                />
-              </Sliding>
-            ) : undefined;
-          },
-        )}
-        {/*
+                  key={window.id}
+                  on={screenNamed(desk, screen)}
+                  rewound={rewound}
+                >
+                  <FloatShadow
+                    depth={placement.depth}
+                    dragging={held.has(window.id)}
+                    frame={placement.frame}
+                    hanging={float.scratchpad}
+                    motion={motion}
+                    restack={restack}
+                  />
+                </Sliding>
+              ) : undefined;
+            },
+          )}
+          {/*
           Before every window too, so the windows at its depth cover all but
           its glow. Only the glow fading in follows the focused window's
           motion.
         */}
-        {glows.map(({ box, leaving }) => {
-          const following = leaving ? undefined : active;
-          return (
-            <Sliding
-              frame={following?.placement?.frame}
-              key={keyOf(box)}
-              on={screenNamed(desk, following?.screen)}
-              rewound={following?.rewound ?? 0}
-            >
-              <FocusGlow
-                depth={box.depth}
-                dragging={following !== undefined && activeId === movingId}
-                leaving={leaving}
-                motion={
-                  following === undefined
-                    ? "resting"
-                    : barMotion(following.motion)
+          {glows.map(({ box, leaving }) => {
+            const following = leaving ? undefined : active;
+            return (
+              <Sliding
+                frame={following?.placement?.frame}
+                key={keyOf(box)}
+                on={screenNamed(desk, following?.screen)}
+                rewound={following?.rewound ?? 0}
+              >
+                <FocusGlow
+                  depth={box.depth}
+                  dragging={
+                    following !== undefined &&
+                    activeId !== undefined &&
+                    held.has(activeId)
+                  }
+                  leaving={leaving}
+                  motion={
+                    following === undefined
+                      ? "resting"
+                      : barMotion(following.motion)
+                  }
+                  rect={box.rect}
+                  restack={following?.restack}
+                  windows={box.windows}
+                />
+              </Sliding>
+            );
+          })}
+          {motions.drawn.map(
+            ({
+              focused,
+              motion,
+              placement,
+              restack,
+              rewound,
+              screen,
+              window,
+            }) => (
+              <WindowContents
+                behindPanel={behindPanel}
+                // With the modifier held, the shell takes the pointer over every
+                // grabbable window so it can catch a drag. During a drag it takes
+                // it over every window: one that kept the pointer would swallow
+                // the moves and the release, leaving the dragged window stuck.
+                clickThrough={
+                  draggingId !== undefined ||
+                  stretching ||
+                  (meta &&
+                    (desk.floats.has(window.id) ||
+                      desk.targeted.has(window.id)))
                 }
-                rect={box.rect}
-                restack={following?.restack}
-                windows={box.windows}
-              />
-            </Sliding>
-          );
-        })}
-        {motions.drawn.map(
-          ({
-            focused,
-            motion,
-            placement,
-            restack,
-            rewound,
-            screen,
-            window,
-          }) => (
-            <WindowContents
-              behindPanel={behindPanel}
-              // With the modifier held, the shell takes the pointer over every
-              // grabbable window so it can catch a drag. During a drag it takes
-              // it over every window: one that kept the pointer would swallow
-              // the moves and the release, leaving the dragged window stuck.
-              clickThrough={
-                draggingId !== undefined ||
-                stretching ||
-                (meta &&
-                  (desk.floats.has(window.id) || desk.targeted.has(window.id)))
-              }
-              domicile={domicile}
-              dragging={stretching || window.id === movingId}
-              focused={focused}
-              fullscreen={desk.fullscreen.get(window.id) === false}
-              hasKeyboard={window.id === focusedId}
-              key={window.id}
-              motion={motion}
-              onHover={onHover}
-              onIcon={onIcon}
-              onPageFullscreen={onPageFullscreen}
-              onPlayedOut={onPlayedOut}
-              onSelect={onSelect}
-              placement={placement}
-              restack={restack}
-              rewound={rewound}
-              screen={screen}
-              screenBox={screenNamed(desk, screen)?.geometry.screen}
-              window={window}
-            />
-          ),
-        )}
-        {/*
-          The empty ends of tabbed strips, which drag a whole group. Before the
-          bars, so the new-tab button over an end wins the `z-index` tie.
-        */}
-        {ends.map(({ bar, depth, id, strip }) => {
-          const floating = desk.floats.get(id);
-          return (
-            <StripEnd
-              depth={depth}
-              float={floating}
-              fullscreen={groupFills(screens, strip.group.windows)}
-              group={strip.group}
-              // By group: a strip's last tab and its parent strip's last tab
-              // can name one window.
-              key={`${strip.group.node.id}-${strip.group.node.up.toString()}`}
-              onAim={setAim}
-              onDrop={onDrop}
-              onDropOn={(aim) => {
-                onGroupDropOn(strip.group.node, aim);
-              }}
-              onGrab={() => {
-                if (floating === undefined) {
-                  onGroupGrab(strip.group.node);
-                } else {
-                  onGrab(id);
-                }
-              }}
-              onMove={(x, y) => {
-                onMove(id, x, y);
-              }}
-              rect={endOf(bar, strip)}
-              targets={desk.dropTargets}
-            />
-          );
-        })}
-        {/*
-          Every bar after every window's contents, so bars win the `z-index`
-          tie by document order. A shown tab's contents tuck under its whole
-          strip (see `SURFACE_TUCK`), including other windows' tabs. One
-          component for tiled and floating, so the bar is not remounted when
-          the window floats. See `WindowTitleBar`.
-        */}
-        {motions.drawn.map(
-          ({ focused, motion, placement, restack, rewound, screen, window }) =>
-            placement === undefined ? undefined : (
-              <WindowBar
-                dragging={window.id === movingId}
-                float={desk.floats.get(window.id)}
+                domicile={domicile}
+                dragging={stretching || held.has(window.id)}
                 focused={focused}
                 fullscreen={desk.fullscreen.get(window.id) === false}
-                icon={iconOf(window, clientIcons)}
+                hasKeyboard={window.id === focusedId}
                 key={window.id}
                 motion={motion}
-                onAim={setAim}
-                onClose={onClose}
-                onDrop={onDrop}
-                onDropOn={onDropOn}
-                onFloat={onFloat}
-                onFullscreen={onFullscreen}
-                onGrab={onGrab}
                 onHover={onHover}
-                onMove={onMove}
-                onNewTab={onNewTab}
+                onIcon={onIcon}
+                onPageFullscreen={onPageFullscreen}
                 onPlayedOut={onPlayedOut}
                 onSelect={onSelect}
                 placement={placement}
@@ -374,224 +307,323 @@ export const Stage = memo(
                 rewound={rewound}
                 screen={screen}
                 screenBox={screenNamed(desk, screen)?.geometry.screen}
-                targets={desk.dropTargets}
                 window={window}
               />
             ),
-        )}
-        {/*
+          )}
+          {/*
+          Tab strips, each drawn by its group's open tab, after every window's
+          contents and before every bar, so the contents tuck under the strip
+          and the tabs lie on it by document order. See `TabStrip`.
+        */}
+          {motions.drawn.map(
+            ({ motion, placement, restack, rewound, screen, window }) =>
+              placement?.strip?.open === true &&
+              placement.tabbed !== undefined &&
+              !leavesStrip(motion) ? (
+                <GroupStrip
+                  depth={placement.depth}
+                  dragging={stretching || held.has(window.id)}
+                  float={desk.floats.get(window.id)}
+                  frame={placement.frame}
+                  fullscreen={groupFills(
+                    screens,
+                    placement.strip.group.windows,
+                  )}
+                  id={window.id}
+                  key={window.id}
+                  motion={motion}
+                  on={screenNamed(desk, screen)}
+                  onAim={setAim}
+                  onDrop={onDrop}
+                  onGrab={onGrab}
+                  onGroupDropOn={onGroupDropOn}
+                  onGroupFloat={onGroupFloat}
+                  onGroupFullscreen={onGroupFullscreen}
+                  onGroupGrab={onGroupGrab}
+                  onMove={onMove}
+                  onNewTab={onNewTab}
+                  restack={restack}
+                  rewound={rewound}
+                  selected={placement.selected}
+                  strip={placement.strip}
+                  targets={desk.dropTargets}
+                />
+              ) : undefined,
+          )}
+          {motions.tabs.map(({ motion, screen, tab }) =>
+            tab.active && tab.strip.open ? (
+              <GroupStrip
+                depth={tab.depth}
+                dragging={stretching || held.has(tab.id)}
+                float={desk.floats.get(tab.id)}
+                frame={tab.strip.box}
+                fullscreen={groupFills(screens, tab.strip.group.windows)}
+                id={tab.id}
+                key={`tab-${tab.id}`}
+                motion={motion}
+                on={screenNamed(desk, screen)}
+                onAim={setAim}
+                onDrop={onDrop}
+                onGrab={onGrab}
+                onGroupDropOn={onGroupDropOn}
+                onGroupFloat={onGroupFloat}
+                onGroupFullscreen={onGroupFullscreen}
+                onGroupGrab={onGroupGrab}
+                onMove={onMove}
+                onNewTab={onNewTab}
+                restack={undefined}
+                rewound={0}
+                selected={tab.selected}
+                strip={tab.strip}
+                targets={desk.dropTargets}
+              />
+            ) : undefined,
+          )}
+          {/*
+          Every bar after every window's contents, so bars win the `z-index`
+          tie by document order. A shown tab's contents tuck under its whole
+          strip (see `SURFACE_TUCK`), including other windows' tabs. One
+          component for tiled and floating, so the bar is not remounted when
+          the window floats. See `WindowTitleBar`.
+        */}
+          {motions.drawn.map(
+            ({
+              focused,
+              motion,
+              placement,
+              restack,
+              rewound,
+              screen,
+              window,
+            }) =>
+              placement === undefined ? undefined : (
+                <WindowBar
+                  dragging={stretching || held.has(window.id)}
+                  float={desk.floats.get(window.id)}
+                  focused={focused}
+                  fullscreen={desk.fullscreen.get(window.id) === false}
+                  icon={iconOf(window, clientIcons)}
+                  key={window.id}
+                  motion={motion}
+                  onAim={setAim}
+                  onClose={onClose}
+                  onDrop={onDrop}
+                  onDropOn={onDropOn}
+                  onFloat={onFloat}
+                  onFullscreen={onFullscreen}
+                  onGrab={onGrab}
+                  onHover={onHover}
+                  onMove={onMove}
+                  onPlayedOut={onPlayedOut}
+                  onSelect={onSelect}
+                  placement={placement}
+                  restack={restack}
+                  rewound={rewound}
+                  screen={screen}
+                  screenBox={screenNamed(desk, screen)?.geometry.screen}
+                  targets={desk.dropTargets}
+                  window={window}
+                />
+              ),
+          )}
+          {/*
           After every bar, so it covers the bars at its depth by document
           order.
         */}
-        {screens.flatMap((on) => {
-          const hanging = hangingOn(motions.drawn, on);
-          return hanging?.placement === undefined
-            ? []
-            : [
-                <ScratchpadBackdrop
-                  depth={hanging.placement.depth - 1}
-                  key={on.geometry.name}
-                  motion={hanging.motion}
-                  onDismiss={() => {
-                    onDismiss(hanging.window.id);
-                  }}
-                  rewound={hanging.rewound}
-                  screen={on.geometry.screen}
-                />,
-              ];
-        })}
-        {/*
+          {screens.flatMap((on) => {
+            const hanging = hangingOn(motions.drawn, on);
+            return hanging?.placement === undefined
+              ? []
+              : [
+                  <ScratchpadBackdrop
+                    depth={hanging.placement.depth - 1}
+                    key={on.geometry.name}
+                    motion={hanging.motion}
+                    onDismiss={() => {
+                      onDismiss(hanging.window.id);
+                    }}
+                    rewound={hanging.rewound}
+                    screen={on.geometry.screen}
+                  />,
+                ];
+          })}
+          {/*
           Tiled window borders, which resize without a modifier. After the
           windows, so a border wins the pointer over the edge it overlaps;
           before the grabs, so a modifier grab covers everything but the gaps.
         */}
-        {screens.flatMap((on) =>
-          bordersOf(targetsOn(on)).map(({ edge, id, rect }) => (
-            <TileBorder
-              edge={edge}
-              id={id}
-              key={`${id}-${edge.toString()}`}
-              onDrop={() => {
-                setStretching(false);
-              }}
-              onGrab={() => {
-                setStretching(true);
-                onSelect(id);
-              }}
-              onStretch={(stretched, by) => {
-                onStretch(id, stretched, by, on.geometry);
-              }}
-              rect={rect}
-            />
-          )),
-        )}
-        {/*
+          {screens.flatMap((on) =>
+            bordersOf(targetsOn(on)).map(({ edge, id, rect }) => (
+              <TileBorder
+                edge={edge}
+                id={id}
+                key={`${id}-${edge.toString()}`}
+                onDrop={() => {
+                  setStretching(false);
+                }}
+                onGrab={() => {
+                  setStretching(true);
+                  onSelect(id);
+                }}
+                onStretch={(stretched, by) => {
+                  onStretch(id, stretched, by, on.geometry);
+                }}
+                rect={rect}
+              />
+            )),
+          )}
+          {/*
           Floating window borders, at each float's depth so windows above cover
           them. None for fullscreen floats, alone or in a group. One set per
           float, since a floating group is one box.
         */}
-        {motions.drawn.map(({ placement, screen, window }) => {
-          const on = screenNamed(desk, screen);
-          const floating = desk.floatsFocusing.get(window.id);
-          return placement === undefined ||
-            on === undefined ||
-            floating === undefined ||
-            desk.fullscreen.has(window.id)
-            ? undefined
-            : floatBordersOf(floating).map(({ cursor, grip, rect }) => (
-                <FloatBorder
-                  cursor={cursor}
-                  depth={placement.depth}
-                  float={floating}
-                  grip={grip}
-                  key={`${window.id}-${grip.horizontal?.toString() ?? ""}-${grip.vertical?.toString() ?? ""}`}
-                  onDrop={() => {
-                    setStretching(false);
-                  }}
-                  onGrab={() => {
-                    setStretching(true);
-                    onSelect(window.id);
-                  }}
-                  onResize={(box) => {
-                    onResize(window.id, box, on.geometry);
-                  }}
-                  rect={rect}
-                  window={window.id}
-                />
-              ));
-        })}
-        {/*
+          {motions.drawn.map(({ placement, screen, window }) => {
+            const on = screenNamed(desk, screen);
+            const floating = desk.floatsFocusing.get(window.id);
+            return placement === undefined ||
+              on === undefined ||
+              floating === undefined ||
+              desk.fullscreen.has(window.id)
+              ? undefined
+              : floatBordersOf(floating).map(({ cursor, grip, rect }) => (
+                  <FloatBorder
+                    cursor={cursor}
+                    depth={placement.depth}
+                    float={floating}
+                    grip={grip}
+                    key={`${window.id}-${grip.horizontal?.toString() ?? ""}-${grip.vertical?.toString() ?? ""}`}
+                    onDrop={() => {
+                      setStretching(false);
+                    }}
+                    onGrab={() => {
+                      setStretching(true);
+                      onSelect(window.id);
+                    }}
+                    onResize={(box) => {
+                      onResize(window.id, box, on.geometry);
+                    }}
+                    rect={rect}
+                    window={window.id}
+                  />
+                ));
+          })}
+          {/*
           Modifier grabs, after every window and border so they cover both.
 
           In window order, not stacking order: stacking uses `z-index` (see
           `placedAt`), and reordering would move the capturing element when a
           grab raises its window, which makes the browser drop pointer capture.
         */}
-        {motions.drawn.map(({ placement, screen, window }) => {
-          const on = screenNamed(desk, screen);
-          const floating = desk.floats.get(window.id);
-          const onGrabThis = () => {
-            onGrab(window.id);
-          };
-          if (placement === undefined || on === undefined) {
-            return undefined;
-          } else {
-            return (
-              <Fragment key={window.id}>
-                {floating === undefined &&
-                  desk.targeted.has(window.id) &&
-                  (meta || window.id === draggingId) && (
-                    <TileGrab
-                      frame={placement.frame}
-                      id={window.id}
-                      onAim={setAim}
-                      onDrop={() => {
-                        setStretching(false);
-                        onDrop();
-                      }}
-                      onDropOn={(aim) => {
-                        onDropOn(window.id, aim);
-                      }}
-                      onGrab={(resizing) => {
-                        setStretching(resizing);
-                        onGrabThis();
-                      }}
-                      onStretch={(edge, by) => {
-                        onStretch(window.id, edge, by, on.geometry);
-                      }}
-                      resizes={shift}
-                      targets={desk.dropTargets}
-                    />
-                  )}
-                {/*
+          {motions.drawn.map(({ placement, screen, window }) => {
+            const on = screenNamed(desk, screen);
+            const floating = desk.floats.get(window.id);
+            const onGrabThis = () => {
+              onGrab(window.id);
+            };
+            if (placement === undefined || on === undefined) {
+              return undefined;
+            } else {
+              return (
+                <Fragment key={window.id}>
+                  {floating === undefined &&
+                    desk.targeted.has(window.id) &&
+                    (meta || window.id === draggingId) && (
+                      <TileGrab
+                        frame={placement.frame}
+                        id={window.id}
+                        onAim={setAim}
+                        onDrop={() => {
+                          setStretching(false);
+                          onDrop();
+                        }}
+                        onDropOn={(aim) => {
+                          onDropOn(window.id, aim);
+                        }}
+                        onGrab={(resizing) => {
+                          setStretching(resizing);
+                          onGrabThis();
+                        }}
+                        onStretch={(edge, by) => {
+                          onStretch(window.id, edge, by, on.geometry);
+                        }}
+                        resizes={shift}
+                        targets={desk.dropTargets}
+                      />
+                    )}
+                  {/*
                   One grab per float, like its borders.
                 */}
-                {floating !== undefined &&
-                  focusedWindowIn(floating.root) === window.id &&
-                  (meta || window.id === draggingId) && (
-                    <FloatGrab
-                      depth={placement.depth}
-                      float={floating}
-                      onDrop={() => {
-                        setStretching(false);
-                        onDrop();
-                      }}
-                      onGrab={(resizing) => {
-                        setStretching(resizing);
-                        onGrabThis();
-                      }}
-                      onMove={(x, y) => {
-                        onMove(window.id, x, y);
-                      }}
-                      onResize={(box) => {
-                        onResize(window.id, box, on.geometry);
-                      }}
-                      resizes={shift}
-                      window={window.id}
-                    />
-                  )}
-              </Fragment>
-            );
-          }
-        })}
-        {/*
+                  {floating !== undefined &&
+                    focusedWindowIn(floating.root) === window.id &&
+                    (meta || window.id === draggingId) && (
+                      <FloatGrab
+                        depth={placement.depth}
+                        float={floating}
+                        onDrop={() => {
+                          setStretching(false);
+                          onDrop();
+                        }}
+                        onGrab={(resizing) => {
+                          setStretching(resizing);
+                          onGrabThis();
+                        }}
+                        onMove={(x, y) => {
+                          onMove(window.id, x, y);
+                        }}
+                        onResize={(box) => {
+                          onResize(window.id, box, on.geometry);
+                        }}
+                        resizes={shift}
+                        window={window.id}
+                      />
+                    )}
+                </Fragment>
+              );
+            }
+          })}
+          {/*
           Tabs of tabbed and stacking containers. Each tab is titled after, and
           selects, the window its container last focused.
         */}
-        {motions.tabs.map(({ focused, motion, screen, tab }) => {
-          const tabbed = windowNamed(named, tab.id);
-          return (
-            <ContainerTab
-              floating={desk.floats.has(tab.id)}
-              focused={focused}
-              // Always false: a fullscreen workspace draws no tabs. See
-              // `placement.ts`.
-              fullscreen={desk.fullscreen.get(tab.id) === false}
-              icon={iconOf(tabbed, clientIcons)}
-              key={tab.id}
-              motion={motion}
-              on={screenNamed(desk, screen)}
-              onClose={onClose}
-              onFloat={onFloat}
-              onFullscreen={onFullscreen}
-              onNewTab={onNewTab}
-              onPlayedOut={onPlayedOut}
-              onSelect={onSelect}
-              screen={screen}
-              tab={tab}
-              title={tabbed.title}
-            />
-          );
-        })}
-        {/*
-          The group buttons at the ends of tabbed strips. After every bar and
-          tab, so they win the `z-index` tie with the strip the last tab draws
-          past itself.
-        */}
-        {ends.map(({ bar, depth, id, strip }) => (
-          <GroupButtons
-            bar={bar}
-            depth={depth}
-            floating={desk.floats.has(id)}
-            fullscreen={groupFills(screens, strip.group.windows)}
-            key={`${strip.group.node.id}-${strip.group.node.up.toString()}`}
-            onFloat={onGroupFloat}
-            onFullscreen={onGroupFullscreen}
-            strip={strip}
-          />
-        ))}
-        {aim !== undefined && <DropIndicator rect={aim.rect} />}
-        {movingId !== undefined && <GrabbingSheet />}
-        {/*
+          {motions.tabs.map(({ focused, motion, screen, tab }) => {
+            const tabbed = windowNamed(named, tab.id);
+            return (
+              <ContainerTab
+                dragging={stretching || held.has(tab.id)}
+                floating={desk.floats.has(tab.id)}
+                focused={focused}
+                // Always false: a fullscreen workspace draws no tabs. See
+                // `placement.ts`.
+                fullscreen={desk.fullscreen.get(tab.id) === false}
+                icon={iconOf(tabbed, clientIcons)}
+                key={tab.id}
+                motion={motion}
+                on={screenNamed(desk, screen)}
+                onClose={onClose}
+                onFloat={onFloat}
+                onFullscreen={onFullscreen}
+                onPlayedOut={onPlayedOut}
+                onSelect={onSelect}
+                screen={screen}
+                tab={tab}
+                title={tabbed.title}
+              />
+            );
+          })}
+          {aim !== undefined && <DropIndicator rect={aim.rect} />}
+          {movingId !== undefined && <GrabbingSheet />}
+          {/*
           Last, so a popup wins the `z-index` tie at its window's depth but
           stays under windows stacked above.
         */}
-        {popupsOver(
-          popups,
-          screens.flatMap(({ screenful }) => screenful.placements),
-        ).map((popup) => (
-          <AppPopup key={popup.appId} popup={popup} />
-        ))}
+          {popupsOver(
+            popups,
+            screens.flatMap(({ screenful }) => screenful.placements),
+          ).map((popup) => (
+            <AppPopup key={popup.appId} popup={popup} />
+          ))}
+        </SettleHandoffs>
       </main>
     );
   },
@@ -789,7 +821,6 @@ type WindowBarProps = {
   onGrab: (id: string) => void;
   onHover: (id: string, at: Spot) => void;
   onMove: (id: string, x: number, y: number) => void;
-  onNewTab: (id: string) => void;
   onPlayedOut: WindowMotions["onPlayedOut"];
   onSelect: (id: string) => void;
   placement: Placement;
@@ -821,7 +852,6 @@ const WindowBar = memo(
     onGrab,
     onHover,
     onMove,
-    onNewTab,
     onPlayedOut,
     onSelect,
     placement,
@@ -869,9 +899,6 @@ const WindowBar = memo(
       },
       [id, onMove],
     );
-    const tabbed = useCallback(() => {
-      onNewTab(id);
-    }, [id, onNewTab]);
     return (
       <WindowFrame
         frame={placement.frame}
@@ -907,7 +934,6 @@ const WindowBar = memo(
           onGrab={grabbed}
           onMotionEnded={ended}
           onMove={moved}
-          onNewTab={tabbed}
           rect={placement.bar}
           restack={restack}
           strip={placement.strip}
@@ -922,6 +948,7 @@ const WindowBar = memo(
 );
 
 type ContainerTabProps = {
+  dragging: boolean;
   floating: boolean;
   focused: boolean;
   fullscreen: boolean;
@@ -931,7 +958,6 @@ type ContainerTabProps = {
   onClose: (id: string) => void;
   onFloat: (id: string) => void;
   onFullscreen: (id: string) => void;
-  onNewTab: (id: string) => void;
   onPlayedOut: WindowMotions["onPlayedOut"];
   onSelect: (id: string) => void;
   screen: string;
@@ -943,6 +969,7 @@ type ContainerTabProps = {
 /** A container's tab, memoized as {@link WindowContents} is. */
 const ContainerTab = memo(
   ({
+    dragging,
     floating,
     focused,
     fullscreen,
@@ -952,7 +979,6 @@ const ContainerTab = memo(
     onClose,
     onFloat,
     onFullscreen,
-    onNewTab,
     onPlayedOut,
     onSelect,
     screen,
@@ -972,9 +998,6 @@ const ContainerTab = memo(
     const ended = useCallback(() => {
       onPlayedOut(id, motion, screen, "bar");
     }, [id, motion, onPlayedOut, screen]);
-    const tabbed = useCallback(() => {
-      onNewTab(id);
-    }, [id, onNewTab]);
     const pressed = useCallback(() => {
       onSelect(id);
     }, [id, onSelect]);
@@ -982,8 +1005,7 @@ const ContainerTab = memo(
       <Sliding frame={undefined} on={on} rewound={0}>
         <TitleBar
           depth={tab.depth}
-          // A tab moves only with its container.
-          dragging={false}
+          dragging={dragging}
           floating={floating}
           // The shown tab of an unfocused container must not use the accent,
           // which marks keyboard focus.
@@ -1005,7 +1027,6 @@ const ContainerTab = memo(
           onFullscreen={filled}
           onMiddleClick={closed}
           onMotionEnded={ended}
-          onNewTab={tabbed}
           onPointerDown={pressed}
           rect={tab.rect}
           strip={tab.strip}
@@ -1074,79 +1095,138 @@ const hangingOn = (
         )),
   );
 
-/**
- * The tabbed strips drawn with an empty end, each with its last tab's bar,
- * window and depth, for the drag handle and buttons there.
- */
-const stripEndsOf = (motions: WindowMotions) =>
-  [
-    ...motions.drawn.flatMap(({ motion, placement }) =>
-      placement === undefined || isLeaving(motion) ? [] : [placement],
-    ),
-    ...motions.tabs.flatMap(({ motion, tab }) =>
-      isLeaving(motion) ? [] : [{ ...tab, bar: tab.rect }],
-    ),
-  ].flatMap(({ bar, depth, id, strip }) =>
-    strip === undefined || stripEndOf(bar, strip) === undefined
-      ? []
-      : [{ bar, depth: strip.open ? raised(depth) : depth, id, strip }],
-  );
-
-/** The empty end of a strip `stripEndsOf` found one on. */
-const endOf = (bar: Rect, strip: StripPlace): Rect => {
-  const end = stripEndOf(bar, strip);
-  if (end === undefined) {
-    throw new Error("stage: a strip end is missing");
-  } else {
-    return end;
-  }
-};
-
-type GroupButtonsProps = {
-  /** The bar of the strip's last tab. */
-  bar: Rect;
+type GroupStripProps = {
   depth: number;
-  floating: boolean;
+  dragging: boolean;
+  float: Float | undefined;
+  /** The open window's whole box. See `TabStrip`. */
+  frame: Rect;
   fullscreen: boolean;
-  onFloat: (group: NodeRef) => void;
-  onFullscreen: (group: NodeRef) => void;
+  /** The open tab's window, which draws the strip. */
+  id: string;
+  motion: WindowMotion;
+  on: StageScreen | undefined;
+  onAim: (aim: Aim | undefined) => void;
+  onDrop: () => void;
+  onGrab: (id: string) => void;
+  onGroupDropOn: (group: NodeRef, aim: Aim) => void;
+  onGroupFloat: (group: NodeRef) => void;
+  onGroupFullscreen: (group: NodeRef) => void;
+  onGroupGrab: (group: NodeRef) => void;
+  onMove: (id: string, x: number, y: number) => void;
+  onNewTab: (id: string) => void;
+  restack: Restack | undefined;
+  rewound: number;
+  selected: boolean;
   strip: StripPlace;
+  targets: DropTargets;
 };
 
 /**
- * A strip's group buttons, memoized as {@link WindowContents} is. Takes the
- * bar and strip, which keep their identity, rather than the end built from
- * them.
+ * A group's tab strip, drawn by its open tab, memoized as
+ * {@link WindowContents} is.
  */
-const GroupButtons = memo(
+const GroupStrip = memo(
   ({
-    bar,
     depth,
-    floating,
+    dragging,
+    float,
+    frame,
     fullscreen,
-    onFloat,
-    onFullscreen,
+    id,
+    motion,
+    on,
+    onAim,
+    onDrop,
+    onGrab,
+    onGroupDropOn,
+    onGroupFloat,
+    onGroupFullscreen,
+    onGroupGrab,
+    onMove,
+    onNewTab,
+    restack,
+    rewound,
+    selected,
     strip,
-  }: GroupButtonsProps) => {
+    targets,
+  }: GroupStripProps) => {
     const { node } = strip.group;
+    const floating = float !== undefined;
+    const droppedOn = useCallback(
+      (aim: Aim) => {
+        onGroupDropOn(node, aim);
+      },
+      [node, onGroupDropOn],
+    );
     const floated = useCallback(() => {
-      onFloat(node);
-    }, [node, onFloat]);
+      onGroupFloat(node);
+    }, [node, onGroupFloat]);
     const filled = useCallback(() => {
-      onFullscreen(node);
-    }, [node, onFullscreen]);
+      onGroupFullscreen(node);
+    }, [node, onGroupFullscreen]);
+    // A float moves as one box, by any of its windows.
+    const grabbed = useCallback(() => {
+      if (floating) {
+        onGrab(id);
+      } else {
+        onGroupGrab(node);
+      }
+    }, [floating, id, node, onGrab, onGroupGrab]);
+    const moved = useCallback(
+      (x: number, y: number) => {
+        onMove(id, x, y);
+      },
+      [id, onMove],
+    );
+    const tabbed = useCallback(() => {
+      onNewTab(id);
+    }, [id, onNewTab]);
     return (
-      <StripButtons
-        depth={depth}
-        floating={floating}
-        fullscreen={fullscreen}
-        onFloat={floated}
-        onFullscreen={filled}
-        rect={endOf(bar, strip)}
-      />
+      <Sliding frame={frame} on={on} rewound={rewound}>
+        <TabStrip
+          box={strip.box}
+          depth={depth}
+          dragging={dragging}
+          end={strip.end}
+          float={float}
+          frame={frame}
+          fullscreen={fullscreen}
+          group={strip.group}
+          motion={motion}
+          onAim={onAim}
+          onDrop={onDrop}
+          onDropOn={droppedOn}
+          onFloat={floated}
+          onFullscreen={filled}
+          onGrab={grabbed}
+          onMove={moved}
+          onNewTab={tabbed}
+          restack={restack}
+          selected={selected}
+          targets={targets}
+        />
+      </Sliding>
     );
   },
 );
+
+/**
+ * Whether a window playing `motion` leaves its strip while the strip stays:
+ * a tab closing or sent away, not its whole group.
+ */
+const leavesStrip = (motion: WindowMotion): boolean =>
+  motion === "closing-tab" || motion === "sending-tab";
+
+/** The windows a drag of `id` moves: a float's every window, else `id`. */
+const heldBy = (desk: Desk, id: string | undefined): ReadonlySet<string> => {
+  if (id === undefined) {
+    return new Set();
+  } else {
+    const float = desk.floats.get(id);
+    return new Set(float === undefined ? [id] : windowsIn(float.root));
+  }
+};
 
 /** Whether the group of `windows` is fullscreen. */
 const groupFills = (

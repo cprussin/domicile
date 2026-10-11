@@ -277,8 +277,6 @@ describe("framesOf", () => {
         0,
       ).frames.map(({ bar, strip }) => ({ strip, width: bar.width, x: bar.x }));
 
-    // Every tab knows its distance to the strip's end, so the tab that becomes
-    // last when the last closes already runs the strip on to it.
     it("caps each tab's width, leaving the rest of the strip after the last", () => {
       // The strip always shows past the tabs, so even one tab reads as a tab.
       expect(strip(Layout.Tabbed, 1)).toEqual([
@@ -287,10 +285,9 @@ describe("framesOf", () => {
             at: 0,
             box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
             divided: false,
-            first: true,
+            end: { height: TITLE_BAR, width: 760, x: 240, y: 0 },
             group: groupOf(1),
             open: true,
-            rest: 760,
             tabs: 1,
           },
           width: 240,
@@ -303,10 +300,9 @@ describe("framesOf", () => {
             at: 0,
             box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
             divided: false,
-            first: true,
+            end: { height: TITLE_BAR, width: 520, x: 480, y: 0 },
             group: groupOf(2),
             open: true,
-            rest: 760,
             tabs: 2,
           },
           width: 240,
@@ -317,10 +313,9 @@ describe("framesOf", () => {
             at: 1,
             box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
             divided: false,
-            first: false,
+            end: { height: TITLE_BAR, width: 520, x: 480, y: 0 },
             group: groupOf(2),
             open: false,
-            rest: 520,
             tabs: 2,
           },
           width: 240,
@@ -340,25 +335,23 @@ describe("framesOf", () => {
         at: 7,
         box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
         divided: true,
-        first: false,
+        end: { height: TITLE_BAR, width: 72, x: 928, y: 0 },
         group: groupOf(8),
         open: false,
-        rest: 72,
         tabs: 8,
       });
     });
 
-    it("runs a stack's bars full width, the first at its top", () => {
+    it("runs a stack's bars full width, each under a line but the first", () => {
       expect(strip(Layout.Stacking, 2)).toEqual([
         {
           strip: {
             at: 0,
             box: { height: TITLE_BAR * 2, width: 1000, x: 0, y: 0 },
             divided: false,
-            first: true,
+            end: undefined,
             group: groupOf(2),
             open: true,
-            rest: undefined,
             tabs: 2,
           },
           width: 1000,
@@ -368,11 +361,10 @@ describe("framesOf", () => {
           strip: {
             at: 1,
             box: { height: TITLE_BAR * 2, width: 1000, x: 0, y: 0 },
-            divided: false,
-            first: false,
+            divided: true,
+            end: undefined,
             group: groupOf(2),
             open: false,
-            rest: undefined,
             tabs: 2,
           },
           width: 1000,
@@ -433,10 +425,9 @@ describe("framesOf", () => {
           at: 0,
           box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
           divided: false,
-          first: true,
+          end: { height: TITLE_BAR, width: 520, x: 480, y: 0 },
           group: { node: { id: "a", up: 2 }, windows: ["a", "b", "c"] },
           open: true,
-          rest: 760,
           tabs: 2,
         },
         tabbed: Layout.Tabbed,
@@ -479,10 +470,9 @@ describe("framesOf", () => {
           at: 0,
           box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
           divided: false,
-          first: true,
+          end: { height: TITLE_BAR, width: 520, x: 480, y: 0 },
           group: { node: { id: "c", up: 1 }, windows: ["a", "b", "c"] },
           open: false,
-          rest: 760,
           tabs: 2,
         },
         tabbed: Layout.Tabbed,

@@ -46,8 +46,6 @@ type Props = {
   onMotionEnded: () => void;
   onGrab: () => void;
   onMove: (x: number, y: number) => void;
-  /** The new-tab button past a strip's last tab. See {@link TitleBar}. */
-  onNewTab: () => void;
   /**
    * Where the bar is drawn. Taken from the placement, not the float, which a
    * fullscreen window does not use.
@@ -96,7 +94,6 @@ export const WindowTitleBar = ({
   onGrab,
   onMotionEnded,
   onMove,
-  onNewTab,
   rect,
   restack,
   strip,
@@ -142,7 +139,6 @@ export const WindowTitleBar = ({
       onFullscreen={onFullscreen}
       onMiddleClick={onClose}
       onMotionEnded={onMotionEnded}
-      onNewTab={onNewTab}
       rect={rect}
       restack={restack}
       strip={strip}

@@ -1,9 +1,15 @@
+import { useRef } from "react";
+
 import { css, cva, cx } from "../../styled-system/css";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
+import type { Settler } from "./useSettling";
+import { useSettling } from "./useSettling";
 import type { WindowMotion } from "./window-motion";
+import { isMoving } from "./window-motion";
 import {
   movingStyles,
+  originOf,
   placedAt,
   scaledAbout,
   settlingStyles,
@@ -14,8 +20,8 @@ type Props = {
   /** The depth of the windows it lights. */
   depth: number;
   /**
-   * Whether the focused window is being dragged, which disables easing. See
-   * `settlingStyles`.
+   * Whether the focused window is being dragged, so the glow follows the
+   * pointer without easing.
    */
   dragging: boolean;
   /** Whether focus has left the box, so the glow fades out. */
@@ -26,6 +32,8 @@ type Props = {
   rect: Rect;
   /** The focused window's restack shuffle, if any. */
   restack?: Restack | undefined;
+  /** Eases the glow into a new box with its windows; see `useSettling`. */
+  settler?: Settler | undefined;
   /** The windows inside the box. */
   windows: readonly string[];
 };
@@ -39,7 +47,8 @@ type Props = {
  * - It sits at the windows' depth before every window in the document, so
  *   windows at that depth cover it and windows above it stay above.
  * - It fades in and out in place instead of moving to the next box.
- * - It plays the focused window's motion and takes no pointer events.
+ * - It plays the focused window's motion, moves with its windows, and takes
+ *   no pointer events.
  */
 export const FocusGlow = ({
   depth,
@@ -48,24 +57,36 @@ export const FocusGlow = ({
   motion,
   rect,
   restack,
+  settler,
   windows,
-}: Props) => (
-  <div
-    className={cx(
-      glowStyles,
-      fadeStyles({ leaving }),
-      movingStyles({ motion }),
-      settlingStyles({ box: dragging ? "snapped" : "eased" }),
-    )}
-    data-focus-box={windows.join(" ")}
-    data-leaving={leaving || undefined}
-    style={{
-      ...placedAt(rect, depth),
-      ...scaledAbout(rect, rect),
-      ...shuffledBy(restack),
-    }}
-  />
-);
+}: Props) => {
+  const element = useRef<HTMLDivElement>(null);
+  useSettling({
+    element,
+    origin: originOf(rect, rect),
+    rect,
+    settler,
+    still: dragging || isMoving(motion),
+  });
+  return (
+    <div
+      className={cx(
+        glowStyles,
+        fadeStyles({ leaving }),
+        movingStyles({ motion }),
+        settlingStyles,
+      )}
+      data-focus-box={windows.join(" ")}
+      data-leaving={leaving || undefined}
+      ref={element}
+      style={{
+        ...placedAt(rect, depth),
+        ...scaledAbout(rect, rect),
+        ...shuffledBy(restack),
+      }}
+    />
+  );
+};
 
 /** Rounded like a window's frame. The ring is 1px, like a window's edge. */
 const glowStyles = css({

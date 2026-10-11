@@ -7,14 +7,12 @@ import type { Aim, DropTargets } from "./tiled/aim";
 import { useTileDrag } from "./tiled/useTileDrag";
 import type { StripGroup } from "./tree/frames";
 import { GrabCursor } from "./useGrabCursor";
-import { placedAt } from "./window-styles";
+import { placedIn } from "./window-styles";
 
 /** The primary button, as `PointerEvent.button` numbers it. */
 const PRIMARY_BUTTON = 0;
 
 type Props = {
-  /** The stacking depth of the strip's last tab, which draws the end. */
-  depth: number;
   /** The float holding the group, or `undefined` while it is tiled. */
   float: Float | undefined;
   /** Whether the group fills the screen, which keeps it from being dragged. */
@@ -28,7 +26,7 @@ type Props = {
   onGrab: () => void;
   /** A float's new top-left corner. */
   onMove: (x: number, y: number) => void;
-  /** The empty end. See `stripEndOf`. */
+  /** The empty end, from the strip's corner. See `StripPlace.end`. */
   rect: Rect;
   /** What a tiled group can be dropped on, on every screen. */
   targets: DropTargets;
@@ -39,11 +37,9 @@ type Props = {
  * the primary button: a tiled group like a tiled window's bar, a float like
  * its bar. A fullscreen group does not drag, as a fullscreen window does not.
  *
- * Drawn under the strip's last tab, whose end is click-through, so the
- * new-tab button over it stays on top.
+ * Drawn in the strip, before the new-tab button over it.
  */
 export const StripEnd = ({
-  depth,
   float,
   fullscreen,
   group,
@@ -95,12 +91,12 @@ export const StripEnd = ({
           drag.onPointerDown(event);
         }
       }}
-      style={placedAt(rect, depth)}
+      style={placedIn(rect)}
     />
   );
 };
 
-const endStyles = css({ position: "absolute" });
+const endStyles = css({ pointerEvents: "auto" });
 
 /** Never called: the end only moves its group. */
 const doesNotResize = () => {

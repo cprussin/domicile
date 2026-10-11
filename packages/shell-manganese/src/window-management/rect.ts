@@ -49,6 +49,13 @@ export const tuckedUnderBar = (rect: Rect): Rect => ({
   y: rect.y - SURFACE_TUCK,
 });
 
+/** `rect` measured from the corner of `box` rather than the desktop's. */
+export const within = (rect: Rect, box: Rect): Rect => ({
+  ...rect,
+  x: rect.x - box.x,
+  y: rect.y - box.y,
+});
+
 export const sameRect = (one: Rect, other: Rect): boolean =>
   one.x === other.x &&
   one.y === other.y &&

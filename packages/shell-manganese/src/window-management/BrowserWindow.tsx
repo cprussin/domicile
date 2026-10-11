@@ -205,15 +205,16 @@ export const BrowserWindow = ({
   // The whole window, used to check whether focus is inside it and to ease it
   // into a new box. A ref because only effects read it.
   const element = useRef<HTMLElement>(null);
-  useSettling(
-    element,
+  useSettling({
+    element: element,
+    origin:
+      rect === undefined || frame === undefined
+        ? undefined
+        : originOf(frame, rect),
     rect,
-    rect === undefined || frame === undefined
-      ? undefined
-      : originOf(frame, rect),
-    dragging || isMoving(motion),
     settler,
-  );
+    still: dragging || isMoving(motion),
+  });
   // The URL the shell last navigated to. The bar shows it until the page
   // reports its own URL.
   const [sent, setSent] = useState(url);
@@ -492,7 +493,7 @@ export const BrowserWindow = ({
         (clickThrough || leaving) && clickThroughStyles,
         // The page's box takes its new size at once; `useSettling` eases it.
         // Colors still ease; see `settlingStyles`.
-        settlingStyles({ box: "snapped" }),
+        settlingStyles,
       )}
       // Exposes the motion on the element for tests and debugging.
       data-motion={motion}

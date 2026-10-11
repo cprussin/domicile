@@ -141,15 +141,16 @@ export const AppWindow = ({
     settling.current = node;
     setElement(node);
   }, []);
-  useSettling(
-    settling,
+  useSettling({
+    element: settling,
+    origin:
+      rect === undefined || frame === undefined
+        ? undefined
+        : originOf(frame, rect),
     rect,
-    rect === undefined || frame === undefined
-      ? undefined
-      : originOf(frame, rect),
-    dragging || isMoving(motion),
     settler,
-  );
+    still: dragging || isMoving(motion),
+  });
 
   // Keeps the compositor's keyboard focus in line with the shell's.
   //
@@ -241,7 +242,7 @@ export const AppWindow = ({
         (clickThrough || leaving) && clickThroughStyles,
         // The client's box takes its new size at once; `useSettling` eases
         // it. Colors still ease; see `settlingStyles`.
-        settlingStyles({ box: "snapped" }),
+        settlingStyles,
       )}
       // Exposes the motion on the element for tests and debugging.
       data-motion={motion}

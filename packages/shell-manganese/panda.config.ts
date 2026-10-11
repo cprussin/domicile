@@ -40,15 +40,6 @@ const clippedToScreen = (by: string) => {
 const WORKSPACE_WIDTH = "var(--workspace-width)";
 const NEGATIVE_WORKSPACE_WIDTH = "calc(-1 * var(--workspace-width))";
 
-// A tab moved along its strip slides from its old place, at `--slide-x` and
-// `--slide-y`, to its new one. Its slot is already there, so the strip stays
-// whole. Registered under two names so a second move restarts it; see
-// `useStripMove` and `slidingStyles`.
-const SLIDING_TAB = {
-  "0%": { transform: "translate(var(--slide-x), var(--slide-y))" },
-  "100%": { transform: "translate(0, 0)" },
-};
-
 // The scratchpad is a drop-down: a window shown from it slides down from above
 // the screen's top edge, `--lift` away (see `slidAcross`). It is clear of the
 // edge only in the last stretch, so it fades in there and does not show on a
@@ -100,15 +91,6 @@ export default defineConfig({
     // Fields stay selectable so they can be edited.
     "input, textarea": {
       userSelect: "text",
-    },
-  },
-  // Registered as a length so it can ease; see `stripStyles` in `TitleBar`.
-  // Inherited, since the slot's `::after` reads it.
-  globalVars: {
-    "--strip-rest": {
-      inherits: true,
-      initialValue: "0px",
-      syntax: "<length>",
     },
   },
   hash: true,
@@ -275,8 +257,6 @@ export default defineConfig({
           "0%": { opacity: "1", transform: "scale(1)" },
           "100%": { opacity: "0", transform: "scale(0.6)" },
         },
-        windowSlidingTab: SLIDING_TAB,
-        windowSlidingTabAgain: SLIDING_TAB,
         windowStowing: SCRATCHPAD_SLIDE,
         // The zoom indicator: appears quickly, holds long enough to read, then
         // fades out on its own.
