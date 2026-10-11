@@ -131,6 +131,43 @@ bindsym --inhibited Mod4+Shift+q kill
   `floating_modifier Mod1 normal`, to drag windows inside the desktop.
 - On a console login there is no host, so none of this applies.
 
+## Engine flags
+
+`DOMICILE_ENGINE_ARGS` adds switches to the engine's command line, split on
+whitespace: `DOMICILE_ENGINE_ARGS='--log-level=0 --enable-features=Vulkan'`.
+
+- Its `--enable-features` and `--disable-features` values join the launcher's,
+  so the built-in `LibinputHandleTouchpad,LibinputHandleMouse` stay on. A
+  feature in both lists is disabled.
+- Every other switch goes after the launcher's, and the last copy of a switch
+  wins.
+
+### GPU flags
+
+The launcher passes no GPU flags, so the engine runs with Chromium's Linux
+defaults. None of the flags below is known to be safe on every Mesa, Intel,
+AMD and NVIDIA driver, so each is opt-in:
+
+| Flag | Effect | Caveat |
+|---|---|---|
+| `--enable-gpu-rasterization` | Rasters tiles on the GPU. | Off on Linux unless the build enables `DefaultEnableGpuRasterization`. Overrides the blocklist. |
+| `--enable-zero-copy` | Rasters into the GPU buffer, skipping the upload copy. | Off outside ChromeOS. |
+| `--enable-features=Vulkan` | Skia draws with Vulkan, which also turns on GPU rasterization. | tty only: Chromium refuses Vulkan with `--ozone-platform=wayland`. |
+| `--ignore-gpu-blocklist` | Turns on what the blocklist turns off for your driver. | The blocklist lists driver bugs. Read which entry matched first. |
+
+Domicile's browser windows refuse `chrome://` pages, so check what a flag did
+in the pinned engine run as a browser, nested:
+
+```sh
+nix build .#engine
+./result/chrome --ozone-platform=wayland --user-data-dir="$(mktemp -d)" <flags> chrome://gpu
+```
+
+- **Graphics Feature Status** shows `Rasterization`, `Vulkan` and the Skia
+  backend.
+- **Problems Detected** lists the blocklist entries that matched your driver.
+- Vulkan cannot be checked this way, since it needs a tty.
+
 ## The launcher
 
 The launcher searches files in your home, desktop entries and bookmarks.
