@@ -96,6 +96,8 @@ struct EngineEvent {
     // wp_presentation_feedback: a window's frame reached the screen, or never
     // will.
     kPresented,
+    // The answer to domicile_surface_import_async.
+    kImported,
   };
 
   Type type = Type::kConfigure;
@@ -107,8 +109,10 @@ struct EngineEvent {
   double scale = 1.0;
   // kConfigure: the box's number, which a submit names to be shown at it.
   uint64_t box = 0;
-  // kReleased.
+  // kReleased, and kImported, where zero is a refusal.
   uint64_t buffer = 0;
+  // kImported: the compositor's number for the import.
+  uint64_t request = 0;
   // kDisplays. Never empty: the browser does not send an empty list.
   std::vector<EngineDisplay> displays;
   // kCopied: the DomicileClipboard and each type the copy can be pasted as,
