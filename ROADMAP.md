@@ -108,8 +108,6 @@ Understood and not scheduled.
 - **Browser window context menus have only Chrome's core items.** No spelling
   suggestions, page or extension items.
 - **Client-drawn cursor surfaces show a plain arrow.**
-- **The engine's `frame` callback is never called.** Removing it moves the
-  callbacks after it, so `domicile_engine.h` and `engine.rs` change together.
 - **Unknown: whether viz hit testing must agree with Domicile's.**
   [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#open-questions).
 

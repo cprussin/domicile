@@ -238,7 +238,7 @@ Callbacks (engine → compositor):
   the compositor is not woken each vsync. Viz still sends one after a frame to
   deliver its timing; the engine answers `DidNotProduceFrame` so the display
   does not wait for the window. Releases come with the frame's ack or
-  `ReclaimResources`. The ABI's `frame` callback is never called.
+  `ReclaimResources`.
 - `domicile_engine.h` is the full ABI, including the lifetime calls.
 
 ### Buffer import
