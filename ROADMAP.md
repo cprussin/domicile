@@ -89,10 +89,7 @@ item when it ships.
    - Untested on other hosts. mutter may show an unseen permission dialog.
    - Untested with a physical keyboard.
 
-6. **`guard-shell.sh` launches through `domicile`.** Do this last.
-   [THE-DOMICILE-BINARY.md](docs/architecture/THE-DOMICILE-BINARY.md).
-
-7. **A compositor restart breaks every embed.** App ids restart, so the page's
+6. **A compositor restart breaks every embed.** App ids restart, so the page's
    tokens point at dead `FrameSinkId`s. Invalidate the renderer's tokens on
    disconnect. Needed before item 2 of the repository list.
    [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#open-questions).

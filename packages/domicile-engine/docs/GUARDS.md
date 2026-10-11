@@ -42,7 +42,7 @@ Under `under-wayland.sh` unless marked headless.
 | `guard-two-windows.sh` | two clients' windows on one page, in one aggregation |
 | `guard-buffer-transform.sh` | a `wl_shm` buffer drawn with `wl_surface.set_buffer_transform` is shown upright |
 | `guard-app-survives-load-shell.sh` | a client's frames still reach the page after `load_shell`, when the new shell's `<app>` is a different size |
-| `guard-shell.sh` | a real shell, built with vite and the SDK, showing a client's window |
+| `guard-shell.sh` | a real shell, built with vite and the SDK, showing a client's window on a desktop `domicile` started |
 | `guard-shell-handover.sh` | the engine calls `Shell` with the body and a working desktop, and no `navigator.domicile` or `window.domicile` exists (patch 0094) |
 | `guard-css-and-resize.sh` | CSS parity of `<app>` against `<div>`, with and without `backdrop-filter`, plus resize and latency. Headless; `GPU=1` uses the GPU |
 | `guard-latency.sh` | keystroke to pixel with a real client, from the compositor's `latency` lines |
