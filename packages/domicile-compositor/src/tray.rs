@@ -8,8 +8,9 @@
 //! - Watcher methods, item signals and clicks are events on one channel,
 //!   handled by one worker thread. Watcher methods must not block zbus's
 //!   executor.
-//! - Each item read runs on its own thread, because zbus 4 has no method
-//!   timeout and one slow application must not stall the others.
+//! - Each item read runs on its own thread, because a call waits as long as
+//!   its application does and one slow application must not stall the
+//!   others. An item has at most one read in flight (see [`Reads`]).
 //! - Clicks arrive through the Wayland thread, which refuses them while
 //!   locked (see [`crate::lock::refused`]).
 //! - Failure leaves the tray empty and logs once. A bare tty may have no
@@ -20,7 +21,9 @@ use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 
-use domicile_host::tray::{address, item, method, Pixmap, Properties, Registry, Status, TrayIcons};
+use domicile_host::tray::{
+    address, item, method, Landed, Pixmap, Properties, Reads, Registry, Status, TrayIcons,
+};
 use domicile_protocol::{TrayAction, TrayItem};
 use tracing::{debug, warn};
 use zbus::blocking::object_server::InterfaceRef;
@@ -154,8 +157,7 @@ fn answer(
         .object_server()
         .interface::<_, Watcher>(WATCHER_PATH)?;
     let mut registry = Registry::default();
-    // The latest read sequence per item. Replies to older reads are stale.
-    let mut asked: HashMap<String, u64> = HashMap::new();
+    let mut reads = Reads::default();
     // Ends when every sender is dropped, when the compositor exits.
     for event in events {
         match event {
@@ -167,18 +169,18 @@ fn answer(
                 if let Some(id) = registry.register(&bus, &sender, &path) {
                     debug!(%id, "a tray icon registered");
                     listed(&watcher, &registry, Some(&id), None);
-                    read(&connection, &told, &mut asked, &registry, &id);
+                    read(&connection, &told, &mut reads, &registry, &id);
                 }
             }
             Event::Changed { sender, path } => {
                 for id in registry.sent_by(&sender, &path) {
-                    read(&connection, &told, &mut asked, &registry, &id);
+                    read(&connection, &told, &mut reads, &registry, &id);
                 }
             }
             Event::Owner { name, owner } if owner.is_empty() => {
                 for id in registry.vanished(&name) {
                     debug!(%id, "a tray icon went away");
-                    asked.remove(&id);
+                    reads.forget(&id);
                     listed(&watcher, &registry, None, Some(&id));
                 }
             }
@@ -188,7 +190,7 @@ fn answer(
                 sequence,
                 properties,
             } => {
-                if asked.get(&id) == Some(&sequence) {
+                if let Landed::Current { again } = reads.landed(&id, sequence) {
                     match properties {
                         Ok(properties) => {
                             let properties = parse(properties);
@@ -205,6 +207,9 @@ fn answer(
                             registry.show(&id, None);
                         }
                     }
+                    if let Some(sequence) = again {
+                        start(&connection, &told, &registry, &id, sequence);
+                    }
                 }
             }
             Event::Activate { id, action } => {
@@ -215,7 +220,7 @@ fn answer(
             Event::Rethemed { theme } => {
                 icons.retheme(theme);
                 for id in registry.ids() {
-                    read(&connection, &told, &mut asked, &registry, &id);
+                    read(&connection, &told, &mut reads, &registry, &id);
                 }
             }
         }
@@ -254,23 +259,30 @@ fn listed(
     }
 }
 
-/// Reads item `id`'s properties on a new thread and sends an
-/// [`Event::Read`] back.
-///
-/// zbus 4 has no method timeout (dbus-broker never times out), so a slow
-/// application must not block the worker.
+/// Reads item `id`'s properties, unless a read is in flight: then it is read
+/// again when that one lands.
 fn read(
     connection: &Connection,
     told: &Sender<Event>,
-    asked: &mut HashMap<String, u64>,
+    reads: &mut Reads,
     registry: &Registry,
     id: &str,
 ) {
-    let Some((bus, path)) = registry.address(id) else {
-        return;
-    };
-    let sequence = asked.get(id).map_or(0, |sequence| sequence + 1);
-    asked.insert(id.to_string(), sequence);
+    if let Some(sequence) = reads.wanted(id) {
+        start(connection, told, registry, id, sequence);
+    }
+}
+
+/// Reads item `id`'s properties on a new thread and sends an
+/// [`Event::Read`] back, so a slow application does not block the worker.
+fn start(
+    connection: &Connection,
+    told: &Sender<Event>,
+    registry: &Registry,
+    id: &str,
+    sequence: u64,
+) {
+    let (bus, path) = registry.address(id).expect("only an item held is read");
     let (connection, told, id) = (connection.clone(), told.clone(), id.to_string());
     thread::spawn(move || {
         let properties = Proxy::new(

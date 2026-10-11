@@ -314,12 +314,18 @@ fn pixmap(pixmaps: &[Pixmap]) -> Option<String> {
 /// Searches an item's own directory, then the icon theme, its parents and
 /// `hicolor` (see [`icon_theme`]), then `pixmaps`. Results, including misses,
 /// are cached until the theme changes: an item that changes its icon uses a
-/// new name.
+/// new name. The cache keeps the `CACHED` lookups used last. A name that is
+/// a path is read each time, since applications rewrite one file in place.
 pub struct TrayIcons {
     data_dirs: Vec<PathBuf>,
     theme: Option<String>,
-    found: HashMap<(String, String), Option<String>>,
+    /// Least recently used first.
+    found: Vec<((String, String), Option<String>)>,
 }
+
+/// The most lookups [`TrayIcons`] keeps. Each holds up to [`LARGEST`] bytes,
+/// and a tray shows a few icons.
+const CACHED: usize = 32;
 
 impl TrayIcons {
     /// Look up icons under `data_dirs`, highest priority first, in the icon
@@ -328,7 +334,7 @@ impl TrayIcons {
         TrayIcons {
             data_dirs,
             theme,
-            found: HashMap::new(),
+            found: Vec::new(),
         }
     }
 
@@ -342,21 +348,24 @@ impl TrayIcons {
     /// an empty name or no drawable icon.
     pub fn icon(&mut self, name: &str, theme_path: &str) -> Option<String> {
         if name.is_empty() {
-            return None;
+            None
+        } else if Path::new(name).is_absolute() {
+            read(Path::new(name))
+        } else {
+            let key = (name.to_string(), theme_path.to_string());
+            let found = match self.found.iter().position(|(cached, _)| *cached == key) {
+                Some(at) => self.found.remove(at).1,
+                None => self.look_for(name, theme_path),
+            };
+            if self.found.len() == CACHED {
+                self.found.remove(0);
+            }
+            self.found.push((key, found.clone()));
+            found
         }
-        let key = (name.to_string(), theme_path.to_string());
-        if let Some(found) = self.found.get(&key) {
-            return found.clone();
-        }
-        let found = self.look_for(name, theme_path);
-        self.found.insert(key, found.clone());
-        found
     }
 
     fn look_for(&self, name: &str, theme_path: &str) -> Option<String> {
-        if Path::new(name).is_absolute() {
-            return read(Path::new(name));
-        }
         // Applications use their own directory as either a theme base or a
         // flat pixmap directory, so search it as both.
         let own: Vec<PathBuf> = (!theme_path.is_empty())
@@ -408,4 +417,94 @@ fn read(path: &Path) -> Option<String> {
         return None;
     }
     Some(data_url(mime, &fs::read(path).ok()?))
+}
+
+/// The item reads in flight, at most one per item.
+///
+/// A read can hang as long as its application does, and an application can
+/// signal on every change. A signal during a read makes one more read after
+/// it, however many arrive.
+#[derive(Debug, Default)]
+pub struct Reads {
+    /// The sequence the next read gets.
+    next: u64,
+    flying: HashMap<String, Flight>,
+}
+
+/// An item's read in flight.
+#[derive(Debug, Clone, Copy)]
+struct Flight {
+    sequence: u64,
+    /// The item signaled since the read started.
+    again: bool,
+}
+
+/// What [`Reads::landed`] makes of a reply.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Landed {
+    /// From a read of an item that went away. Ignore it.
+    Stale,
+    /// The reply to the read in flight. Show it, then start read `again` if
+    /// the item signaled meanwhile.
+    Current { again: Option<u64> },
+}
+
+impl Reads {
+    /// The sequence of a read of `id` to start, or `None` if one is in
+    /// flight. That one is then read again when it lands.
+    pub fn wanted(&mut self, id: &str) -> Option<u64> {
+        match self.flying.get_mut(id) {
+            Some(flight) => {
+                flight.again = true;
+                None
+            }
+            None => {
+                let sequence = self.next();
+                self.flying.insert(
+                    id.to_string(),
+                    Flight {
+                        sequence,
+                        again: false,
+                    },
+                );
+                Some(sequence)
+            }
+        }
+    }
+
+    /// Record that read `sequence` of `id` replied.
+    pub fn landed(&mut self, id: &str, sequence: u64) -> Landed {
+        match self.flying.get(id).copied() {
+            Some(flight) if flight.sequence == sequence => {
+                let again = flight.again.then(|| self.next());
+                match again {
+                    Some(sequence) => {
+                        self.flying.insert(
+                            id.to_string(),
+                            Flight {
+                                sequence,
+                                again: false,
+                            },
+                        );
+                    }
+                    None => {
+                        self.flying.remove(id);
+                    }
+                }
+                Landed::Current { again }
+            }
+            _ => Landed::Stale,
+        }
+    }
+
+    /// Forget item `id`, which went away. Its read in flight lands stale.
+    pub fn forget(&mut self, id: &str) {
+        self.flying.remove(id);
+    }
+
+    fn next(&mut self) -> u64 {
+        let sequence = self.next;
+        self.next += 1;
+        sequence
+    }
 }
