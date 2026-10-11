@@ -26,7 +26,7 @@ desktop treats it.
 | Input | `Key`, pointer motion, buttons, axis, leave; the same from EIS clients (`crate::eis`) | Dropped (`debug` log) |
 | Commands | `CloseApp`, `Spawn`, `CopyClipboardEntry`, tray, notifications | Refused (`warn` log) |
 | Reads on the connection | `SearchFiles` | Answered with nothing (`warn` log) |
-| System calls | `SystemRequest`, except reads under `/sys`, lock screen readouts, listening for shell commands and calls that stop something running | A call that starts something is answered `locked`; `stdin` is dropped (`warn` log) |
+| System calls | `SystemRequest`, except reads under `/sys`, lock screen readouts, listening for shell commands or unlock refusals, and calls that stop something running | A call that starts something is answered `locked`; `stdin` is dropped (`warn` log) |
 | Allowed | `ChromeHello`, `Lock`, `Unlock`, `KeyboardFocus`, output scale and size, window bounds, `ClipboardCopied`, theme | Handled normally |
 
 Why some requests are allowed:
@@ -47,6 +47,7 @@ Why some requests are allowed:
 - `unwatch`, `close_stdin`, `kill`: they stop what the shell started.
 - `shell_commands`: it only listens. A page reloaded while locked still hears
   `domicile send-shell` after unlock. `send_shell` itself is refused.
+- `unlock_refusals`: it only listens, and a lock screen needs it while locked.
 
 ## Lock screen readouts
 
@@ -104,7 +105,10 @@ A reload that changes `lock` swaps the verifier (`Lock::rekeyed`). It never
 unlocks the desktop.
 
 - **A new verifier** checks the next passphrase. A check already running
-  against the old one cannot unlock: its `Ok(true)` counts as a refusal.
+  against the old one cannot unlock: its `Ok(true)` is refused, but not
+  counted as a wrong passphrase.
+- **The wait** after refused passphrases is kept
+  ([Refusals and the wait](#refusals-and-the-wait)).
 - **A removed verifier** at a locked desktop is kept until it unlocks the
   desktop, then dropped. Dropping it at once would leave nothing able to
   unlock.
@@ -123,7 +127,32 @@ unlocks the desktop.
   the part before the NUL.
 - `domicile_protocol::Passphrase` does not print itself, so no log line holds
   what was typed. Linux-PAM overwrites its copy before freeing it.
-- A refusal sends `locked: true` to every chrome again.
+- A refusal sends `SystemEvent::UnlockRefused` to every page listening with
+  `unlock_refusals`, then `locked: true` to every chrome again.
+
+## Refusals and the wait
+
+`crate::unlock_backoff` counts refused passphrases and makes the compositor
+wait before checking the next. The shell cannot skip the wait: it never sees
+the verifier.
+
+- The first 2 refused passphrases cost nothing. The 3rd starts a 5 second
+  wait, and each one after doubles it, up to 5 minutes.
+- A passphrase offered during the wait is refused `too_soon`, unchecked.
+- `unverifiable` counts too: some PAM stacks fail a wrong passphrase with
+  something other than `PAM_AUTH_ERR`.
+- Unlocking resets the count.
+- The count and wait are kept in memory only. Restarting the compositor resets
+  them.
+
+| `refusal` | Meaning |
+|---|---|
+| `wrong_passphrase` | The verifier checked it, and it is wrong |
+| `unverifiable` | The verifier could not check it (see [Failures fail closed](#failures-fail-closed)) |
+| `too_soon` | Offered during the wait |
+
+Each refusal carries `failures`, the refused passphrases since the last unlock,
+and `retry_in_ms`, the wait left.
 
 ## Failures fail closed
 
@@ -148,6 +177,7 @@ this desktop is locked; what the shell forwarded reaches no client
 this desktop is locked; what the shell asked for is not done
 checking a passphrase; the desk stays locked meanwhile
 a passphrase this desktop did not take; it stays locked
+a passphrase offered during the wait after refused ones; it was not checked
 the passphrase opened this desktop
 this desktop could not check a passphrase, so it stays locked
 taking up a reloaded lock

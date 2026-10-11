@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use domicile_host::idle_warnings::IdleWarnings;
 use domicile_host::ipc::{apply_chrome_message, to_line};
 use domicile_host::shell_commands::ShellCommands;
+use domicile_host::unlock_refusals::UnlockRefusals;
 use domicile_host::Host;
 use domicile_protocol::{ChromeMessage, HostMessage, Theme};
 use smithay::reexports::calloop::channel::Sender;
@@ -81,6 +82,9 @@ pub struct ChromeHub {
     /// When the screens blank, while a warning runs, shared by every
     /// connection's `System`. Set by the compositor's idle clock.
     pub idle_warnings: IdleWarnings,
+    /// The pages listening for the lock's refusals, shared by every
+    /// connection's `System`. See [`crate::lock`].
+    pub unlock_refusals: UnlockRefusals,
 }
 
 impl ChromeHub {
@@ -109,6 +113,7 @@ impl ChromeHub {
             eis: OnceLock::new(),
             shell_commands: ShellCommands::default(),
             idle_warnings: IdleWarnings::default(),
+            unlock_refusals: UnlockRefusals::default(),
         });
         (hub, outbound_rx)
     }

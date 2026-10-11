@@ -16,14 +16,17 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Instant;
 
 use domicile_config::LockVerifier;
 use domicile_host::system::Reach;
-use domicile_protocol::{HostMessage, Passphrase};
+use domicile_host::unlock_refusals::Refused;
+use domicile_protocol::{HostMessage, Passphrase, UnlockRefusal};
 
 use crate::chrome_connection::ConnectionRequest;
 use crate::client_requests::ClientRequest;
 use crate::pam::{NoPam, Pam};
+use crate::unlock_backoff::Backoff;
 
 /// Checks whether a passphrase unlocks the desktop.
 ///
@@ -121,6 +124,9 @@ pub enum Offer {
     StillChecking,
     /// The desktop is not locked. The page's state is out of date.
     NothingToOpen,
+    /// Offered during the wait after refused passphrases, so not checked. See
+    /// [`crate::unlock_backoff`].
+    TooSoon(Refused),
 }
 
 /// The outcome of a checked passphrase.
@@ -133,10 +139,11 @@ pub enum Unlocking {
     /// Wrong, or checked by a verifier a reload replaced. The desktop stays
     /// locked and every chrome is sent `locked: true` again, which the waiting
     /// page reads as the answer.
-    Refused,
+    Refused(Refused),
     /// The verifier could not check. Handled like [`Unlocking::Refused`], but
-    /// logged as an error. See [`CouldNotCheck`].
-    Unverifiable(CouldNotCheck),
+    /// logged as an error. Counted as a guess, since some PAM stacks fail a
+    /// wrong passphrase with an error. See [`CouldNotCheck`].
+    Unverifiable(CouldNotCheck, Refused),
 }
 
 /// The lock's state.
@@ -174,6 +181,7 @@ pub struct Lock {
     retiring: bool,
     answer: Arc<dyn Fn(Verdict) + Send + Sync>,
     state: Arc<Mutex<State>>,
+    backoff: Backoff,
 }
 
 impl Lock {
@@ -190,6 +198,7 @@ impl Lock {
             retiring: false,
             answer: Arc::new(answer),
             state: Arc::new(Mutex::new(State::Open)),
+            backoff: Backoff::default(),
         }
     }
 
@@ -203,7 +212,7 @@ impl Lock {
     /// Never unlocks. A check already running cannot unlock either: the
     /// passphrase was checked against a verifier the config no longer names.
     /// Removing the verifier while locked keeps it until it opens the desktop,
-    /// since nothing else could.
+    /// since nothing else could. The wait after refused passphrases stays.
     pub fn rekeyed(&mut self, verifier: Option<Box<dyn Verifier>>) -> Rekeying {
         let mut state = self.state.lock().unwrap();
         match (verifier, &mut *state) {
@@ -257,11 +266,20 @@ impl Lock {
     /// A second offer during a check is dropped. Parallel checks would race,
     /// and each would pay PAM's delay. The shell keeps its input as sent until
     /// the verdict, so there is nothing to queue.
-    pub fn offered(&mut self, passphrase: &Passphrase) -> Offer {
+    ///
+    /// An offer at `now` during the wait after refused passphrases is refused
+    /// unchecked.
+    pub fn offered(&mut self, passphrase: &Passphrase, now: Instant) -> Offer {
         let mut state = self.state.lock().unwrap();
+        let wait = self.backoff.wait(now);
         match *state {
             State::Open => Offer::NothingToOpen,
             State::Checking { .. } => Offer::StillChecking,
+            State::Shut if !wait.is_zero() => Offer::TooSoon(Refused {
+                refusal: UnlockRefusal::TooSoon,
+                failures: self.backoff.failures(),
+                retry_in: wait,
+            }),
             State::Shut => {
                 *state = State::Checking { overtaken: false };
                 let verifier = Arc::clone(
@@ -285,7 +303,8 @@ impl Lock {
     /// Applies the verdict for the passphrase [`Lock::offered`] is checking.
     ///
     /// Only one check runs at a time, so a verdict in any other state is a bug.
-    pub fn answered(&mut self, verdict: Verdict) -> Unlocking {
+    /// A refused passphrase starts its wait at `now`.
+    pub fn answered(&mut self, verdict: Verdict, now: Instant) -> Unlocking {
         let mut state = self.state.lock().unwrap();
         match *state {
             State::Open | State::Shut => {
@@ -298,15 +317,38 @@ impl Lock {
                         self.verifier = None;
                         self.retiring = false;
                     }
+                    self.backoff.opened();
                     Unlocking::Opened
                 }
-                Ok(true | false) => {
+                // The passphrase was right, so it is not counted as a guess.
+                Ok(true) => {
                     *state = State::Shut;
-                    Unlocking::Refused
+                    Unlocking::Refused(Refused {
+                        refusal: UnlockRefusal::WrongPassphrase,
+                        failures: self.backoff.failures(),
+                        retry_in: self.backoff.wait(now),
+                    })
+                }
+                Ok(false) => {
+                    *state = State::Shut;
+                    let retry_in = self.backoff.failed(now);
+                    Unlocking::Refused(Refused {
+                        refusal: UnlockRefusal::WrongPassphrase,
+                        failures: self.backoff.failures(),
+                        retry_in,
+                    })
                 }
                 Err(why) => {
                     *state = State::Shut;
-                    Unlocking::Unverifiable(why)
+                    let retry_in = self.backoff.failed(now);
+                    Unlocking::Unverifiable(
+                        why,
+                        Refused {
+                            refusal: UnlockRefusal::Unverifiable,
+                            failures: self.backoff.failures(),
+                            retry_in,
+                        },
+                    )
                 }
             },
         }
@@ -449,10 +491,12 @@ mod tests {
     use std::path::Path;
     use std::sync::mpsc;
     use std::sync::Mutex;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     use domicile_config::LockVerifier;
     use domicile_host::system::Reach;
+    use domicile_host::unlock_refusals::Refused;
+    use domicile_protocol::UnlockRefusal;
 
     use super::{
         announced, chosen, refused, Asked, CouldNotCheck, Lock, Offer, Refusal, Rekeying,
@@ -488,11 +532,34 @@ mod tests {
 
     /// Offers `passphrase` while locked and applies the verdict.
     fn offer(lock: &mut Lock, heard: &mpsc::Receiver<Verdict>, passphrase: &str) -> Unlocking {
-        assert_eq!(lock.offered(&Passphrase::from(passphrase)), Offer::Checking);
+        offer_at(lock, heard, passphrase, Instant::now())
+    }
+
+    /// [`offer`], with the offer and the verdict both at `now`.
+    fn offer_at(
+        lock: &mut Lock,
+        heard: &mpsc::Receiver<Verdict>,
+        passphrase: &str,
+        now: Instant,
+    ) -> Unlocking {
+        assert_eq!(
+            lock.offered(&Passphrase::from(passphrase), now),
+            Offer::Checking
+        );
         let verdict = heard
             .recv_timeout(Duration::from_secs(10))
             .expect("the verifier answers");
-        lock.answered(verdict)
+        lock.answered(verdict, now)
+    }
+
+    /// A refusal for `refusal`, after `failures` refused passphrases, with
+    /// `retry_in` seconds to wait.
+    fn told(refusal: UnlockRefusal, failures: u32, retry_in: u64) -> Refused {
+        Refused {
+            refusal,
+            failures,
+            retry_in: Duration::from_secs(retry_in),
+        }
     }
 
     #[test]
@@ -569,14 +636,17 @@ mod tests {
         let (mut lock, heard) = held_by(UntilReleased(Mutex::new(released)));
         lock.shut();
 
-        assert_eq!(lock.offered(&Passphrase::from("friend")), Offer::Checking);
+        assert_eq!(
+            lock.offered(&Passphrase::from("friend"), Instant::now()),
+            Offer::Checking
+        );
         release
             .send(())
             .expect("the verifier is still waiting, so the offer did not wait for it");
         let verdict = heard
             .recv_timeout(Duration::from_secs(10))
             .expect("the verifier answers");
-        assert_eq!(lock.answered(verdict), Unlocking::Opened);
+        assert_eq!(lock.answered(verdict, Instant::now()), Unlocking::Opened);
     }
 
     #[test]
@@ -585,18 +655,21 @@ mod tests {
         let (mut lock, heard) = desk();
         lock.shut();
 
-        assert_eq!(lock.offered(&Passphrase::from("friend")), Offer::Checking);
+        assert_eq!(
+            lock.offered(&Passphrase::from("friend"), Instant::now()),
+            Offer::Checking
+        );
         assert!(lock.locked(), "a desk being checked is still shut");
         assert!(!lock.shut(), "and shutting it again is no edge");
         assert_eq!(
-            lock.offered(&Passphrase::from("friend")),
+            lock.offered(&Passphrase::from("friend"), Instant::now()),
             Offer::StillChecking
         );
 
         let verdict = heard
             .recv_timeout(Duration::from_secs(10))
             .expect("the first passphrase is answered");
-        assert_eq!(lock.answered(verdict), Unlocking::Opened);
+        assert_eq!(lock.answered(verdict, Instant::now()), Unlocking::Opened);
         assert!(
             heard.recv_timeout(Duration::from_millis(100)).is_err(),
             "and the second was never checked"
@@ -618,7 +691,11 @@ mod tests {
 
         assert_eq!(
             offer(&mut lock, &heard, "friend"),
-            Unlocking::Unverifiable(CouldNotCheck("the module is not there".into()))
+            Unlocking::Unverifiable(
+                CouldNotCheck("the module is not there".into()),
+                told(UnlockRefusal::Unverifiable, 1, 0)
+            ),
+            "and it counts as a guess: some PAM stacks fail a wrong passphrase with an error"
         );
         assert!(lock.locked());
     }
@@ -644,13 +721,49 @@ mod tests {
 
         assert_eq!(
             offer(&mut lock, &heard, "enemy"),
-            Unlocking::Refused,
+            Unlocking::Refused(told(UnlockRefusal::WrongPassphrase, 1, 0)),
             "a desk that took the wrong passphrase would not be a lock"
         );
         assert!(lock.locked(), "and it stays shut");
 
         assert_eq!(offer(&mut lock, &heard, "friend"), Unlocking::Opened);
         assert!(!lock.locked());
+    }
+
+    #[test]
+    fn repeated_wrong_passphrases_make_the_desk_wait_before_it_checks_another() {
+        // Enforced here, so a shell cannot guess faster by calling `unlock`.
+        let (mut lock, heard) = desk();
+        lock.shut();
+        let then = Instant::now();
+        for _ in 0..2 {
+            offer_at(&mut lock, &heard, "enemy", then);
+        }
+        assert_eq!(
+            offer_at(&mut lock, &heard, "enemy", then),
+            Unlocking::Refused(told(UnlockRefusal::WrongPassphrase, 3, 5))
+        );
+
+        assert_eq!(
+            lock.offered(&Passphrase::from("friend"), then + Duration::from_secs(2)),
+            Offer::TooSoon(told(UnlockRefusal::TooSoon, 3, 3)),
+            "even the right passphrase waits"
+        );
+        assert!(
+            heard.recv_timeout(Duration::from_millis(100)).is_err(),
+            "and nothing was asked of the verifier"
+        );
+
+        assert_eq!(
+            offer_at(&mut lock, &heard, "friend", then + Duration::from_secs(5)),
+            Unlocking::Opened
+        );
+        lock.shut();
+        assert_eq!(
+            offer_at(&mut lock, &heard, "enemy", then + Duration::from_secs(6)),
+            Unlocking::Refused(told(UnlockRefusal::WrongPassphrase, 1, 0)),
+            "and opening the desk forgets the wrong ones"
+        );
     }
 
     #[test]
@@ -665,7 +778,10 @@ mod tests {
         lock.shut();
         assert!(seen.locked(), "a desk that shut is shut from a connection");
 
-        assert_eq!(lock.offered(&Passphrase::from("friend")), Offer::Checking);
+        assert_eq!(
+            lock.offered(&Passphrase::from("friend"), Instant::now()),
+            Offer::Checking
+        );
         assert!(
             seen.locked(),
             "a desk with a passphrase being checked is shut from a connection too"
@@ -674,7 +790,7 @@ mod tests {
         let verdict = heard
             .recv_timeout(Duration::from_secs(10))
             .expect("the verifier answers");
-        assert_eq!(lock.answered(verdict), Unlocking::Opened);
+        assert_eq!(lock.answered(verdict, Instant::now()), Unlocking::Opened);
         assert!(!seen.locked(), "and the verdict opens it there too");
     }
 
@@ -684,7 +800,7 @@ mod tests {
         // date.
         let (mut lock, heard) = desk();
         assert_eq!(
-            lock.offered(&Passphrase::from("friend")),
+            lock.offered(&Passphrase::from("friend"), Instant::now()),
             Offer::NothingToOpen
         );
         assert!(!lock.locked());
@@ -721,7 +837,10 @@ mod tests {
             Rekeying::Applied
         );
         assert!(lock.locked(), "a reload never opens the desk");
-        assert_eq!(offer(&mut lock, &heard, "friend"), Unlocking::Refused);
+        assert_eq!(
+            offer(&mut lock, &heard, "friend"),
+            Unlocking::Refused(told(UnlockRefusal::WrongPassphrase, 1, 0))
+        );
         assert_eq!(offer(&mut lock, &heard, "enemy"), Unlocking::Opened);
     }
 
@@ -731,7 +850,10 @@ mod tests {
         // names.
         let (mut lock, heard) = desk();
         lock.shut();
-        assert_eq!(lock.offered(&Passphrase::from("friend")), Offer::Checking);
+        assert_eq!(
+            lock.offered(&Passphrase::from("friend"), Instant::now()),
+            Offer::Checking
+        );
 
         lock.rekeyed(Some(Box::new(OnlyTheWord("enemy"))));
         let verdict = heard
@@ -739,8 +861,30 @@ mod tests {
             .expect("the verifier answers");
 
         assert_eq!(verdict, Ok(true), "the old verifier took it");
-        assert_eq!(lock.answered(verdict), Unlocking::Refused);
+        assert_eq!(
+            lock.answered(verdict, Instant::now()),
+            Unlocking::Refused(told(UnlockRefusal::WrongPassphrase, 0, 0)),
+            "and it is no wrong guess: the passphrase was right"
+        );
         assert!(lock.locked());
+    }
+
+    #[test]
+    fn a_reload_during_the_wait_keeps_it() {
+        // Otherwise editing the config would skip the wait.
+        let (mut lock, heard) = desk();
+        lock.shut();
+        let then = Instant::now();
+        for _ in 0..3 {
+            offer_at(&mut lock, &heard, "enemy", then);
+        }
+
+        lock.rekeyed(Some(Box::new(OnlyTheWord("friend"))));
+
+        assert_eq!(
+            lock.offered(&Passphrase::from("friend"), then + Duration::from_secs(2)),
+            Offer::TooSoon(told(UnlockRefusal::TooSoon, 3, 3))
+        );
     }
 
     #[test]

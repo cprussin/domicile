@@ -93,13 +93,35 @@ the page in devtools does not unlock the desktop.
 - Your page still receives keys, so it can take a passphrase in a field.
 - `unlock` sends it to the compositor. On success, `locked` becomes `false` on
   every shell. Clear the lock screen then, not on your own submit.
-- A wrong passphrase, or a check that failed to run, fires `lockedchanged`
-  with `locked` still `true`. Treat that while a passphrase is pending as a
-  rejection: clear the field.
+- A passphrase that did not unlock fires `lockedchanged` with `locked` still
+  `true`. Treat that while a passphrase is pending as a rejection: clear the
+  field.
+- To say why, listen with `unlockRefusals()` from
+  `@domicile-desktop/sdk/system`. Each refusal arrives before its
+  `lockedchanged`:
+
+  ```ts
+  const hear = async (items: ReadableStream<UnlockRefused>) => {
+    for await (const { refusal, failures, retryInMs } of items) {
+      // refusal: WrongPassphrase, Unverifiable (the check could not run) or
+      // TooSoon (sent during the wait, so not checked).
+    }
+  };
+
+  (await system(domicile).unlockRefusals()).match({
+    Err: (error) => console.error(error),
+    Ok: ({ items }) => {
+      hear(items).catch((error: unknown) => console.error(error));
+    },
+  });
+  ```
+
+- After 3 refused passphrases the compositor waits before checking another,
+  starting at 5 seconds and doubling up to 5 minutes. `retryInMs` is the wait
+  left. See [LOCK.md](LOCK.md#refusals-and-the-wait).
 - A check takes as long as PAM does. PAM delays a wrong password by a few
   seconds. Input stays blocked until `locked` is `false`, and an `unlock` sent
   during a check is dropped.
-- There is no attempt limit yet ([ROADMAP.md](/ROADMAP.md)).
 - A newly loaded page reads the current state. A reloaded shell must check it
   before drawing an unlocked desktop.
 - The shell cannot tell whether the config uses PAM or a passphrase.

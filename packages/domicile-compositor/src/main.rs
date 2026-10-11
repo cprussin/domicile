@@ -153,6 +153,7 @@ mod shm_upload;
 mod thread_priority;
 mod timing_window;
 mod tray;
+mod unlock_backoff;
 mod uploads;
 mod viewport;
 mod which_engine;
@@ -204,6 +205,7 @@ use domicile_host::data_dirs::data_dirs;
 use domicile_host::priority;
 use domicile_host::system::Environment;
 use domicile_host::theme_turnover::{Step, Turnover, REPAINT_WITHIN};
+use domicile_host::unlock_refusals::Refused;
 use domicile_host::Host;
 use domicile_launch::arguments::arguments;
 use domicile_launch::handshake::{silence, Handshake, WAIT_FOR_A_PAGE};
@@ -2873,7 +2875,7 @@ impl DomicileCompositor {
     /// to the page that asked. A page that unlocked itself could be opened from
     /// devtools.
     fn offered_the_passphrase(&mut self, passphrase: &Passphrase) {
-        match self.lock.offered(passphrase) {
+        match self.lock.offered(passphrase, Instant::now()) {
             Offer::Checking => debug!("checking a passphrase; the desk stays locked meanwhile"),
             Offer::StillChecking => warn!(
                 "a chrome offered a passphrase while another was being checked; this one was \
@@ -2882,28 +2884,54 @@ impl DomicileCompositor {
             Offer::NothingToOpen => {
                 warn!("a chrome offered a passphrase to a desktop that is not locked")
             }
+            Offer::TooSoon(refused) => {
+                warn!(
+                    "a passphrase offered during the wait after refused ones; it was not checked"
+                );
+                self.tell_the_chromes_the_desk_refused(&refused);
+            }
         }
+    }
+
+    /// Tell every page listening why a passphrase did not open the desktop,
+    /// then every chrome that it is still locked.
+    ///
+    /// The `locked` message is the answer a waiting page reads; the refusal
+    /// goes first, so the page knows why when it reads it.
+    fn tell_the_chromes_the_desk_refused(&self, refused: &Refused) {
+        self.hub.unlock_refusals.send(refused);
+        self.tell_the_chromes_whether_the_desk_is_locked();
     }
 
     /// Handle the verifier's result for a passphrase.
     ///
     /// Every result is broadcast. A refusal re-sends `locked: true`, which is
-    /// how the waiting shell learns of it.
+    /// how the waiting shell learns of it, after saying why. See
+    /// [`tell_the_chromes_the_desk_refused`](DomicileCompositor::tell_the_chromes_the_desk_refused).
     ///
     /// Refusals and verifier failures are logged without the passphrase;
     /// [`Unlocking`] does not hold it.
     fn heard_the_verdict(&mut self, verdict: Verdict) {
-        match self.lock.answered(verdict) {
-            Unlocking::Opened => debug!("the passphrase opened this desktop"),
-            Unlocking::Refused => {
-                warn!("a passphrase this desktop did not take; it stays locked")
+        match self.lock.answered(verdict, Instant::now()) {
+            Unlocking::Opened => {
+                debug!("the passphrase opened this desktop");
+                self.tell_the_chromes_whether_the_desk_is_locked();
             }
-            Unlocking::Unverifiable(why) => error!(
-                %why,
-                "this desktop could not check a passphrase, so it stays locked"
-            ),
+            Unlocking::Refused(refused) => {
+                warn!(
+                    failures = refused.failures,
+                    "a passphrase this desktop did not take; it stays locked"
+                );
+                self.tell_the_chromes_the_desk_refused(&refused);
+            }
+            Unlocking::Unverifiable(why, refused) => {
+                error!(
+                    %why,
+                    "this desktop could not check a passphrase, so it stays locked"
+                );
+                self.tell_the_chromes_the_desk_refused(&refused);
+            }
         }
-        self.tell_the_chromes_whether_the_desk_is_locked();
     }
 
     /// Keep a blanked desktop dark after a hotplug.

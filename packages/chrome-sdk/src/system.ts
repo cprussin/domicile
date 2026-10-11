@@ -35,6 +35,25 @@ export enum SystemErrorKind {
   Other,
 }
 
+/** Why the lock did not take a passphrase. See docs/LOCK.md. */
+export enum UnlockRefusal {
+  /** The compositor checked it, and it is wrong. */
+  WrongPassphrase,
+  /** The compositor could not check it, such as a PAM module missing. */
+  Unverifiable,
+  /** Sent during the wait after repeated refused passphrases, so not checked. */
+  TooSoon,
+}
+
+/** A passphrase the lock did not take. */
+export type UnlockRefused = {
+  refusal: UnlockRefusal;
+  /** Refused passphrases, wrong or unverifiable, since the desktop last opened. */
+  failures: number;
+  /** How long the compositor refuses every passphrase, unchecked. */
+  retryInMs: number;
+};
+
 export type SystemError = {
   kind: SystemErrorKind;
   /** The operating system's description, for logs. */
@@ -240,6 +259,11 @@ export type System = {
   idleWarnings: () => Promise<
     Result<Listening<number | undefined>, SystemError>
   >;
+  /**
+   * Hear why each passphrase sent with `unlock` did not open the desk. Every
+   * page listening hears every refusal. Allowed while the desktop is locked.
+   */
+  unlockRefusals: () => Promise<Result<Listening<UnlockRefused>, SystemError>>;
 };
 
 /** What {@link system} needs of the desktop `Shell` is handed. */
@@ -340,6 +364,16 @@ export const system = (host: SystemHost): System => {
               size: reply.size,
             }
           : unexpected(reply),
+      ),
+    unlockRefusals: () =>
+      listening(calls, { call: "unlock_refusals" }, (event) =>
+        event.kind === "unlock_refused"
+          ? {
+              failures: event.failures,
+              refusal: unlockRefusal(event.refusal),
+              retryInMs: event.retry_in_ms,
+            }
+          : unexpected(event),
       ),
     watch: (path) =>
       listening(calls, { call: "watch", path }, (event) =>
@@ -736,6 +770,19 @@ const fileType = (
       return FileType.Symlink;
     case "other":
       return FileType.Other;
+  }
+};
+
+const unlockRefusal = (
+  refusal: "wrong_passphrase" | "unverifiable" | "too_soon",
+): UnlockRefusal => {
+  switch (refusal) {
+    case "wrong_passphrase":
+      return UnlockRefusal.WrongPassphrase;
+    case "unverifiable":
+      return UnlockRefusal.Unverifiable;
+    case "too_soon":
+      return UnlockRefusal.TooSoon;
   }
 };
 

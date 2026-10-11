@@ -56,7 +56,8 @@ const systemReplySchema = z.looseObject({
 });
 
 // Output from a running process, a change a watch saw, a signal a D-Bus match
-// heard, a command `domicile send-shell` sent, or an idle warning.
+// heard, a command `domicile send-shell` sent, an idle warning, or a
+// passphrase the lock did not take.
 const systemEventSchema = z.looseObject({
   event: z.discriminatedUnion("kind", [
     z.looseObject({
@@ -82,6 +83,12 @@ const systemEventSchema = z.looseObject({
       // `null` when the blanking was called off or the screens went dark.
       blanks_in_ms: z.number().nullable(),
       kind: z.literal("idle_warning"),
+    }),
+    z.looseObject({
+      failures: z.number(),
+      kind: z.literal("unlock_refused"),
+      refusal: z.enum(["wrong_passphrase", "unverifiable", "too_soon"]),
+      retry_in_ms: z.number(),
     }),
   ]),
   id: z.number(),
