@@ -35,6 +35,8 @@ export const Shell = async (root, domicile) => {
 - `shellCommands()` streams each command `domicile send-shell` sends.
   `bindKeys` listens for you and passes them to `onCommand`; see
   [KEYBINDINGS.md](architecture/KEYBINDINGS.md#commands-from-a-terminal).
+- `unlockRefusals()` streams why each passphrase did not unlock the desktop
+  ([SHELL-IDLE-AND-LOCK.md](SHELL-IDLE-AND-LOCK.md#drawing-the-lock-screen)).
 - Spawned programs are found on the compositor's `PATH`. The Nix wrapper
   appends `pactl`, `parec` and `curl`, so a user's own copies win.
 - A reload starts every library from nothing: each reads its state again, so a
@@ -74,7 +76,7 @@ recorded output.
 - Page to compositor: `system_request { id, request }`. `request` starts a
   call (`read_file`, `write_file`, `read_dir`, `stat`, `watch`, `spawn`,
   `dbus_call`, `dbus_match`, `screenshot`, `shell_commands`, `send_shell`,
-  `idle_warnings`) or
+  `idle_warnings`, `unlock_refusals`) or
   drives one running under the same `id` (`unwatch`, `stdin`, `close_stdin`,
   `kill`). `read_file` takes an
   optional byte range, `offset` and `length`.
@@ -115,6 +117,7 @@ that trust from reaching anything else.
     - `shell_commands`, so a page reloaded while locked hears commands after
       unlock
     - `idle_warnings`, so a lock screen can dim
+    - `unlock_refusals`, which a lock screen needs while locked
   - `stdin` is dropped; `unwatch`, `close_stdin` and `kill` are allowed
   - processes and watches started before the lock keep running
 - **Lifetime:** a page's processes, watches and matches end when its

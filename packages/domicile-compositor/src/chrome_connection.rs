@@ -185,7 +185,8 @@ fn read_chrome_messages(
         move |file| portals.screenshot(file)
     })
     .sharing_shell_commands(hub.shell_commands.clone())
-    .sharing_idle_warnings(hub.idle_warnings.clone());
+    .sharing_idle_warnings(hub.idle_warnings.clone())
+    .sharing_unlock_refusals(hub.unlock_refusals.clone());
     let mut ready = false;
     // Whether this connection is in the broadcast list. Separate from `ready`
     // because a socket can send `hello` twice, and the writer must not be added
@@ -690,7 +691,10 @@ mod tests {
         };
 
         lock.shut();
-        assert_eq!(lock.offered(&Passphrase::from("friend")), Offer::Checking);
+        assert_eq!(
+            lock.offered(&Passphrase::from("friend"), std::time::Instant::now()),
+            Offer::Checking
+        );
         assert!(
             search().is_empty(),
             "a desk with a passphrase being checked answered a search out of the home"
@@ -699,7 +703,10 @@ mod tests {
         let verdict = heard
             .recv_timeout(Duration::from_secs(10))
             .expect("the verifier answers");
-        assert_eq!(lock.answered(verdict), Unlocking::Opened);
+        assert_eq!(
+            lock.answered(verdict, std::time::Instant::now()),
+            Unlocking::Opened
+        );
         assert_eq!(search().len(), 1, "and the verdict opens it to the search");
     }
 

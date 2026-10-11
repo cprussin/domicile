@@ -465,6 +465,7 @@ export const Desktop = ({
         onUnlock={lock.unlock}
         picture={lockPicture}
         refusals={lock.refusals}
+        refused={lock.refused}
         screen={windows.focused}
       />
       <NoScreens />

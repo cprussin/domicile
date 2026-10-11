@@ -31,8 +31,6 @@ item when it ships.
 
 3. **Lock.** [LOCK.md](docs/LOCK.md),
    [SHELL-IDLE-AND-LOCK.md](docs/SHELL-IDLE-AND-LOCK.md#locking).
-   - A wrong passphrase only re-sends `locked: true`. A shell can't tell it
-     from a verifier error, or count or rate-limit attempts.
    - `lock.passphrase` is world-readable.
 
 4. **Notifications.** [NOTIFICATIONS.md](docs/architecture/NOTIFICATIONS.md).

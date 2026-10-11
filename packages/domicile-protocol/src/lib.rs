@@ -181,9 +181,9 @@ pub enum ChromeMessage {
     ///
     /// The compositor checks it, not the page, so editing the page cannot
     /// open the lock. The answer is [`HostMessage::Locked`] to every chrome. A
-    /// wrong passphrase, or a verifier that failed, gets `locked: true` again;
-    /// only the compositor's log tells them apart. There is no rate limit yet;
-    /// see `ROADMAP.md`.
+    /// passphrase that did not open it gets `locked: true` again, after a
+    /// [`SystemEvent::UnlockRefused`] saying why to every page listening with
+    /// [`SystemRequest::UnlockRefusals`].
     Unlock { passphrase: Passphrase },
 
     /// Lock the desktop now.
@@ -1441,6 +1441,10 @@ pub enum SystemRequest {
     /// Silent on a desktop that sets no `idle.warn_before_seconds`. See
     /// `docs/IDLE.md`.
     IdleWarnings,
+    /// Report each passphrase the lock did not take. Answered with
+    /// [`SystemReply::Started`], then a [`SystemEvent::UnlockRefused`] per
+    /// refusal, to every page listening. [`SystemRequest::Unwatch`] ends it.
+    UnlockRefusals,
 }
 
 /// The `app_id` of a portal dialog the shell asked for itself, such as
@@ -1535,6 +1539,17 @@ pub enum SystemEvent {
     /// How long until the screens blank, in milliseconds, or `None` when input
     /// or an idle inhibitor called the blanking off, or the screens went dark.
     IdleWarning { blanks_in_ms: Option<u64> },
+    /// A [`ChromeMessage::Unlock`] that left the desktop locked.
+    ///
+    /// `failures` counts refused passphrases, wrong or unverifiable, since the
+    /// desktop last opened.
+    /// `retry_in_ms` is how long the compositor refuses every passphrase,
+    /// unchecked, with [`UnlockRefusal::TooSoon`].
+    UnlockRefused {
+        refusal: UnlockRefusal,
+        failures: u32,
+        retry_in_ms: u64,
+    },
     /// A D-Bus signal a match named, its body written as
     /// [`SystemReply::Returned`]'s is.
     Signal {
@@ -1545,6 +1560,19 @@ pub enum SystemEvent {
         signature: String,
         body: String,
     },
+}
+
+/// Why the lock did not take a passphrase. See `docs/LOCK.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UnlockRefusal {
+    /// The verifier checked it, and it is wrong.
+    WrongPassphrase,
+    /// The verifier could not check it, such as a PAM module missing.
+    Unverifiable,
+    /// Offered during the wait after repeated refused passphrases, so it was
+    /// not checked.
+    TooSoon,
 }
 
 /// One of a process's output streams.

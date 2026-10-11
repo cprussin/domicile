@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use domicile_protocol::{
     Bus, ChromeMessage, DirEntry, FileType, HostMessage, Signal, Stream, SystemEnd, SystemError,
-    SystemErrorKind, SystemEvent, SystemReply, SystemRequest,
+    SystemErrorKind, SystemEvent, SystemReply, SystemRequest, UnlockRefusal,
 };
 
 fn chrome(json: &str) -> ChromeMessage {
@@ -460,4 +460,35 @@ fn a_page_hears_how_soon_the_screens_blank_and_when_they_no_longer_will() {
         }),
         r#"{"type":"system_event","id":13,"event":{"kind":"idle_warning","blanks_in_ms":null}}"#
     );
+}
+
+/// A lock screen hears why each passphrase did not open the desktop.
+#[test]
+fn a_refused_unlock_goes_to_each_page_that_listens_for_one() {
+    assert_eq!(
+        chrome(r#"{"type":"system_request","id":13,"request":{"call":"unlock_refusals"}}"#),
+        ChromeMessage::SystemRequest {
+            id: 13,
+            request: SystemRequest::UnlockRefusals,
+        }
+    );
+    for (refusal, wire) in [
+        (UnlockRefusal::WrongPassphrase, "wrong_passphrase"),
+        (UnlockRefusal::Unverifiable, "unverifiable"),
+        (UnlockRefusal::TooSoon, "too_soon"),
+    ] {
+        assert_eq!(
+            host(&HostMessage::SystemEvent {
+                id: 13,
+                event: SystemEvent::UnlockRefused {
+                    refusal,
+                    failures: 3,
+                    retry_in_ms: 5000,
+                },
+            }),
+            format!(
+                r#"{{"type":"system_event","id":13,"event":{{"kind":"unlock_refused","refusal":"{wire}","failures":3,"retry_in_ms":5000}}}}"#
+            )
+        );
+    }
 }

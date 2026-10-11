@@ -9,6 +9,7 @@ import {
   Signal,
   SystemErrorKind,
   system,
+  UnlockRefusal,
 } from "./system";
 
 /**
@@ -481,6 +482,34 @@ describe("idle warnings", () => {
       30_000,
       undefined,
     ]);
+  });
+});
+
+describe("unlock refusals", () => {
+  it("streams why each passphrase did not open the desk", async () => {
+    const host = new FakeHost();
+    const listening = system(host).unlockRefusals();
+    host.reply(1, { kind: "started" });
+    const refusals = started(await listening);
+    for (const refusal of ["wrong_passphrase", "unverifiable", "too_soon"]) {
+      host.event(1, {
+        failures: 3,
+        kind: "unlock_refused",
+        refusal,
+        retry_in_ms: 5000,
+      });
+    }
+    refusals.stop();
+    host.end(1, { kind: "stopped" });
+
+    expect(host.calls[0]).toStrictEqual([1, { call: "unlock_refusals" }]);
+    expect(await Array.fromAsync(refusals.items)).toStrictEqual(
+      [
+        UnlockRefusal.WrongPassphrase,
+        UnlockRefusal.Unverifiable,
+        UnlockRefusal.TooSoon,
+      ].map((refusal) => ({ failures: 3, refusal, retryInMs: 5000 })),
+    );
   });
 });
 

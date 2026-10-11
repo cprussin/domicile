@@ -894,6 +894,59 @@ mod idle_warnings {
     }
 }
 
+/// Passphrases the lock did not take, sent by the compositor and heard on
+/// every connection listening.
+mod unlock_refusals {
+    use std::time::Duration;
+
+    use domicile_host::unlock_refusals::{Refused, UnlockRefusals};
+    use domicile_protocol::UnlockRefusal;
+
+    use super::*;
+
+    #[test]
+    fn a_refusal_is_heard_on_every_page_listening() {
+        let refusals = UnlockRefusals::default();
+        let home = std::env::temp_dir();
+        let pages: Vec<_> = (0..2)
+            .map(|_| {
+                let (page, heard) = system_in(&home);
+                let page = page.sharing_unlock_refusals(refusals.clone());
+                page.handle(4, SystemRequest::UnlockRefusals);
+                assert_eq!(reply(&heard, 4), SystemReply::Started);
+                (page, heard)
+            })
+            .collect();
+
+        refusals.send(&Refused {
+            refusal: UnlockRefusal::WrongPassphrase,
+            failures: 3,
+            retry_in: Duration::from_secs(5),
+        });
+
+        for (_, heard) in &pages {
+            assert_eq!(
+                next(heard),
+                HostMessage::SystemEvent {
+                    id: 4,
+                    event: SystemEvent::UnlockRefused {
+                        refusal: UnlockRefusal::WrongPassphrase,
+                        failures: 3,
+                        retry_in_ms: 5000,
+                    },
+                }
+            );
+        }
+    }
+
+    /// A lock screen listens while the desktop is locked; that is when it
+    /// hears anything.
+    #[test]
+    fn listening_is_its_own_reach() {
+        assert_eq!(reach(&SystemRequest::UnlockRefusals), Reach::Listens);
+    }
+}
+
 /// What a refused request gets while the desktop is locked.
 mod locked {
     use super::*;

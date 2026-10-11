@@ -112,6 +112,7 @@ export const fakeSystem = (
         ),
       ),
     touched,
+    unlockRefusals: unexpected,
     watch: unexpected,
     writeFile: unexpected,
   };

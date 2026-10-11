@@ -2,15 +2,25 @@ import { describe, expect, it } from "bun:test";
 import { DisplayProvider } from "@domicile-desktop/component-library/DisplayProvider";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import { Slider } from "@domicile-desktop/component-library/Slider";
+import { UnlockRefusal } from "@domicile-desktop/sdk/system";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { PropsWithChildren } from "react";
 
 import { OnOneScreen, SCREEN } from "../screens/fixture";
 import { Lock } from "./Lock";
+import type { Refused } from "./useLocked";
 
 /** The lock state, as `useLocked` returns it. */
-type Standing = { checking: boolean; locked: boolean; refusals: number };
+type Standing = {
+  checking: boolean;
+  locked: boolean;
+  refusals: number;
+  refused?: Refused | undefined;
+};
+
+/** The monotonic clock the lock reads, frozen, in milliseconds. */
+const NOW = 86_400_000;
 
 /** Renders the lock, recording every passphrase it submits. */
 const lock = (locked = true) => {
@@ -18,6 +28,7 @@ const lock = (locked = true) => {
   const drawn = (standing: Standing) => (
     <Lock
       {...standing}
+      now={() => NOW}
       onUnlock={(passphrase) => {
         offered.push(passphrase);
       }}
@@ -342,6 +353,59 @@ describe("Lock", () => {
       await user.type(field(), "x");
 
       expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("says the compositor could not check it", () => {
+      // A broken PAM setup is not a typo; retyping will not help.
+      const { says } = lock();
+
+      says({
+        refusals: 1,
+        refused: {
+          refusal: UnlockRefusal.Unverifiable,
+          retryAt: NOW,
+        },
+      });
+
+      expect(screen.getByRole("alert").textContent).toBe(
+        "This desktop could not check the passphrase",
+      );
+    });
+
+    it("counts down the wait after too many wrong ones", async () => {
+      // Shown while typing too, since a passphrase sent now is not checked.
+      const { field, says, user } = lock();
+      says({
+        refusals: 4,
+        refused: {
+          refusal: UnlockRefusal.WrongPassphrase,
+          retryAt: NOW + 4500,
+        },
+      });
+
+      await user.type(field(), "x");
+
+      expect(screen.getByRole("alert").textContent).toBe(
+        "Wrong passphrase. Try again in 5 s",
+      );
+    });
+
+    it("says it came too soon, and is not offered until the wait ends", async () => {
+      const { field, offered, says, user } = lock();
+      says({
+        refusals: 1,
+        refused: {
+          refusal: UnlockRefusal.TooSoon,
+          retryAt: NOW + 20_000,
+        },
+      });
+
+      await user.type(field(), "open sesame{Enter}");
+
+      expect(screen.getByRole("alert").textContent).toBe(
+        "Too many tries. Try again in 20 s",
+      );
+      expect(offered).toStrictEqual([]);
     });
 
     it("is cleared once the desk opens", async () => {

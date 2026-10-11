@@ -10,7 +10,9 @@
 
 mod running;
 
-use domicile_protocol::{ChromeMessage, HostMessage, Passphrase};
+use domicile_protocol::{
+    ChromeMessage, HostMessage, Passphrase, SystemEvent, SystemReply, SystemRequest, UnlockRefusal,
+};
 
 use crate::running::Compositor;
 
@@ -208,6 +210,55 @@ fn a_passphrase_the_desk_refuses_leaves_it_shut_says_so_and_stays_out_of_the_log
         !said.contains(THE_PASSPHRASE),
         "the desk's own passphrase is in the log:\n{said}"
     );
+}
+
+/// A page listening while locked hears why a passphrase was refused, before
+/// the `locked: true` that answers it.
+#[test]
+fn a_page_listening_hears_why_the_desk_refused_a_passphrase() {
+    let compositor = Compositor::started_with(A_DESK_THAT_CAN_LOCK);
+    let mut chrome = compositor.chrome();
+    lock_the_desk(&compositor, &mut chrome);
+    chrome
+        .say(&ChromeMessage::SystemRequest {
+            id: 5,
+            request: SystemRequest::UnlockRefusals,
+        })
+        .expect("the chrome socket takes a system call");
+    chrome
+        .wait_for(|message| {
+            matches!(
+                message,
+                HostMessage::SystemReply {
+                    id: 5,
+                    reply: SystemReply::Started
+                }
+            )
+        })
+        .expect("a locked desk lets a page listen for refusals");
+
+    chrome
+        .say(&ChromeMessage::Unlock {
+            passphrase: Passphrase::from("hunter2"),
+        })
+        .expect("the chrome socket takes an unlock");
+
+    assert_eq!(
+        chrome
+            .wait_for(|message| matches!(message, HostMessage::SystemEvent { id: 5, .. }))
+            .expect("the page hears the refusal"),
+        HostMessage::SystemEvent {
+            id: 5,
+            event: SystemEvent::UnlockRefused {
+                refusal: UnlockRefusal::WrongPassphrase,
+                failures: 1,
+                retry_in_ms: 0,
+            },
+        }
+    );
+    chrome
+        .wait_for(|message| matches!(message, HostMessage::Locked { locked: true }))
+        .expect("and then that the desk stayed locked");
 }
 
 /// A key held down when the desktop locks is released for the client.

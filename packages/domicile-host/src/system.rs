@@ -1,8 +1,9 @@
-//! Files, watches, processes, D-Bus, screenshots, shell commands and idle
-//! warnings for one chrome connection. The compositor takes the screenshots
-//! ([`System::screenshotting_with`]) and shares the shell commands
-//! ([`System::sharing_shell_commands`]) and idle warnings
-//! ([`System::sharing_idle_warnings`]) between connections.
+//! Files, watches, processes, D-Bus, screenshots, shell commands, idle
+//! warnings and the lock's refusals for one chrome connection. The compositor
+//! takes the screenshots ([`System::screenshotting_with`]), shares the shell
+//! commands ([`System::sharing_shell_commands`]) and idle warnings
+//! ([`System::sharing_idle_warnings`]) between connections, and sends the
+//! refusals ([`System::sharing_unlock_refusals`]).
 //!
 //! [`System::handle`] runs a `ChromeMessage::SystemRequest` and sends every
 //! answer through the callback it was built with. Nothing here blocks the
@@ -33,10 +34,12 @@ use zbus::zvariant::{Signature, Structure, StructureBuilder};
 
 use crate::base64::{decoded, encoded};
 use crate::dbus_json::{self, NotABody};
+use crate::fanout::Listener;
 use crate::idle_warnings::{self, IdleWarnings};
 use crate::lock_screen_readouts::is_a_readout;
 use crate::priority;
-use crate::shell_commands::{Listener, ShellCommands};
+use crate::shell_commands::ShellCommands;
+use crate::unlock_refusals::UnlockRefusals;
 
 /// How much of a process's output one event carries at most.
 const CHUNK: usize = 64 * 1024;
@@ -68,6 +71,8 @@ pub struct System {
     shell_commands: ShellCommands,
     /// The warning that the screens are about to blank.
     idle_warnings: IdleWarnings,
+    /// The pages that hear the lock refuse a passphrase.
+    unlock_refusals: UnlockRefusals,
 }
 
 /// Takes a screenshot, into the file if one is given, and returns where it
@@ -97,8 +102,8 @@ enum Running {
     Watch(notify::RecommendedWatcher),
     /// A D-Bus match, on a connection of its own so closing it ends the match.
     Match(Connection),
-    /// The page hears shell commands.
-    ShellCommands(Listener),
+    /// The page hears shell commands or the lock's refusals.
+    Listening(Listener),
     /// The page hears idle warnings.
     IdleWarnings(idle_warnings::Listener),
 }
@@ -168,7 +173,9 @@ pub fn reach(request: &SystemRequest) -> Reach {
             true => Reach::Readout,
             false => Reach::Acts,
         },
-        SystemRequest::ShellCommands | SystemRequest::IdleWarnings => Reach::Listens,
+        SystemRequest::ShellCommands
+        | SystemRequest::IdleWarnings
+        | SystemRequest::UnlockRefusals => Reach::Listens,
         SystemRequest::WriteFile { .. }
         | SystemRequest::Stdin { .. }
         | SystemRequest::Screenshot { .. }
@@ -195,6 +202,7 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::Screenshot { .. }
         | SystemRequest::ShellCommands
         | SystemRequest::IdleWarnings
+        | SystemRequest::UnlockRefusals
         | SystemRequest::SendShell { .. } => Some(HostMessage::SystemReply {
             id,
             reply: SystemReply::Failed {
@@ -236,6 +244,7 @@ impl System {
             screenshot: None,
             shell_commands: ShellCommands::default(),
             idle_warnings: IdleWarnings::default(),
+            unlock_refusals: UnlockRefusals::default(),
         }
     }
 
@@ -269,6 +278,13 @@ impl System {
     /// own, which never warns.
     pub fn sharing_idle_warnings(mut self, warnings: IdleWarnings) -> System {
         self.idle_warnings = warnings;
+        self
+    }
+
+    /// This system, telling a page that listens each refusal sent through
+    /// `refusals`.
+    pub fn sharing_unlock_refusals(mut self, refusals: UnlockRefusals) -> System {
+        self.unlock_refusals = refusals;
         self
     }
 
@@ -437,7 +453,7 @@ impl System {
                         let _ = connection.close();
                         Handled::Done
                     }
-                    Some(Running::ShellCommands(listener)) => {
+                    Some(Running::Listening(listener)) => {
                         (self.tell)(HostMessage::SystemEnd {
                             id,
                             end: SystemEnd::Stopped,
@@ -490,7 +506,7 @@ impl System {
                 Some(
                     Running::Watch(_)
                     | Running::Match(_)
-                    | Running::ShellCommands(_)
+                    | Running::Listening(_)
                     | Running::IdleWarnings(_),
                 ) => Handled::Malformed,
                 None => Handled::NothingRunning,
@@ -506,7 +522,7 @@ impl System {
                 Some(
                     Running::Watch(_)
                     | Running::Match(_)
-                    | Running::ShellCommands(_)
+                    | Running::Listening(_)
                     | Running::IdleWarnings(_),
                 ) => Handled::Malformed,
                 None => Handled::NothingRunning,
@@ -535,7 +551,7 @@ impl System {
                     // Under the lock, so no command is told before the reply
                     // or after `Unwatch` ends it.
                     let running = running.lock().unwrap();
-                    if matches!(running.get(&id), Some(Running::ShellCommands(_))) {
+                    if matches!(running.get(&id), Some(Running::Listening(_))) {
                         tell(HostMessage::SystemEvent {
                             id,
                             event: SystemEvent::ShellCommand {
@@ -544,7 +560,24 @@ impl System {
                         });
                     }
                 }));
-                Ok((Running::ShellCommands(listener), Box::new(|| {})))
+                Ok((Running::Listening(listener), Box::new(|| {})))
+            }),
+            SystemRequest::UnlockRefusals => self.starting(id, |system| {
+                let (tell, running) = (system.tell.clone(), Arc::downgrade(&system.running));
+                let listener = system.unlock_refusals.listen(Arc::new(move |refused| {
+                    let Some(running) = running.upgrade() else {
+                        return;
+                    };
+                    // Under the lock, as for shell commands.
+                    let running = running.lock().unwrap();
+                    if matches!(running.get(&id), Some(Running::Listening(_))) {
+                        tell(HostMessage::SystemEvent {
+                            id,
+                            event: refused.event(),
+                        });
+                    }
+                }));
+                Ok((Running::Listening(listener), Box::new(|| {})))
             }),
             SystemRequest::IdleWarnings => self.starting(id, |system| {
                 let warn = {
@@ -773,7 +806,7 @@ impl Drop for System {
                 Running::Match(connection) => {
                     let _ = connection.close();
                 }
-                Running::ShellCommands(listener) => drop(listener),
+                Running::Listening(listener) => drop(listener),
                 Running::IdleWarnings(listener) => drop(listener),
             }
         }

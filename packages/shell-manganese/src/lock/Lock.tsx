@@ -5,6 +5,7 @@ import {
 } from "@domicile-desktop/component-library/DisplayProvider";
 import { Input } from "@domicile-desktop/component-library/Input";
 import { PopoverContainer } from "@domicile-desktop/component-library/Popover";
+import { UnlockRefusal } from "@domicile-desktop/sdk/system";
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock";
 import type { ReactNode } from "react";
@@ -13,6 +14,8 @@ import { memo, useEffect, useRef, useState } from "react";
 import { css, cva } from "../../styled-system/css";
 import { hstack, vstack } from "../../styled-system/patterns";
 import { LockClock } from "./LockClock";
+import { uptime, useUptime } from "./uptime";
+import type { Refused } from "./useLocked";
 
 /** The field's label, also used by tests to find it. */
 const PASSPHRASE = "Passphrase";
@@ -24,6 +27,8 @@ type Props = {
   checking: boolean;
   /** How many passphrases the compositor has refused; see `useLocked`. */
   refusals: number;
+  /** Why the compositor last refused one, when it said; see `useLocked`. */
+  refused?: Refused | undefined;
   /**
    * Submit a passphrase to the compositor.
    *
@@ -40,6 +45,8 @@ type Props = {
   picture?: string | undefined;
   /** The screen to ask for the passphrase on: the one with the keyboard. */
   screen: string;
+  /** The clock the wait counts down on; injectable for tests. */
+  now?: typeof uptime | undefined;
 };
 
 /**
@@ -65,7 +72,17 @@ type Props = {
  * submit. That is why it does not use `ModalDialog`.
  */
 export const Lock = memo(
-  ({ bar, checking, locked, onUnlock, picture, refusals, screen }: Props) => {
+  ({
+    bar,
+    checking,
+    locked,
+    now = uptime,
+    onUnlock,
+    picture,
+    refusals,
+    refused,
+    screen,
+  }: Props) => {
     const displays = useDisplays();
     const [typed, setTyped] = useState("");
     const [wrong, setWrong] = useState(false);
@@ -149,8 +166,9 @@ export const Lock = memo(
                 // shell runs on.
                 event.preventDefault();
                 // One submission at a time; the compositor drops a second one
-                // sent while the first is being checked.
-                if (!checking) {
+                // sent while the first is being checked, and refuses one sent
+                // during the wait unchecked.
+                if (!checking && secondsUntil(refused, now()) === 0) {
                   onUnlock(typed);
                 }
               }}
@@ -184,11 +202,9 @@ export const Lock = memo(
                 <ArrowRightIcon />
               </Button>
             </form>
-            {wrong ? (
-              <p className={refusalStyles} role="alert">
-                Wrong passphrase
-              </p>
-            ) : undefined}
+            {locked && (
+              <RefusalNote now={now} refused={refused} wrong={wrong} />
+            )}
           </div>
         </div>
         {/*
@@ -210,6 +226,27 @@ export const Lock = memo(
     );
   },
 );
+
+/**
+ * Why the last passphrase was refused, and the wait left. Its own component,
+ * mounted only while locked, so the countdown's tick redraws only this.
+ */
+const RefusalNote = ({
+  now,
+  refused,
+  wrong,
+}: {
+  now: typeof uptime;
+  refused: Refused | undefined;
+  wrong: boolean;
+}) => {
+  const wait = secondsUntil(refused, useUptime(now));
+  return wrong || wait > 0 ? (
+    <p className={refusalStyles} role="alert">
+      {refusalText(refused?.refusal, wait)}
+    </p>
+  ) : undefined;
+};
 
 /**
  * The bar on display `screen`. `data-screen` keeps its panels on that
@@ -439,5 +476,31 @@ const shaken = (refusals: number): "never" | "once" | "again" => {
     return "never";
   } else {
     return refusals % 2 === 1 ? "once" : "again";
+  }
+};
+
+/** Whole seconds, rounded up, until the compositor takes a passphrase. */
+const secondsUntil = (refused: Refused | undefined, now: number): number =>
+  refused === undefined
+    ? 0
+    : Math.max(0, Math.ceil((refused.retryAt - now) / 1000));
+
+/**
+ * What the lock screen says of a refusal. A compositor that did not say why
+ * refused a wrong passphrase.
+ */
+const refusalText = (
+  refusal: UnlockRefusal | undefined,
+  wait: number,
+): string => {
+  const retry = wait > 0 ? `. Try again in ${wait.toString()} s` : "";
+  switch (refusal) {
+    case undefined:
+    case UnlockRefusal.WrongPassphrase:
+      return `Wrong passphrase${retry}`;
+    case UnlockRefusal.Unverifiable:
+      return "This desktop could not check the passphrase";
+    case UnlockRefusal.TooSoon:
+      return `Too many tries${retry}`;
   }
 };

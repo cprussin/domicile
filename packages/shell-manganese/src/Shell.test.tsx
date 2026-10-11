@@ -1046,6 +1046,46 @@ describe("Shell", () => {
     });
   });
 
+  describe("the lock screen", () => {
+    it("says why the compositor refused a passphrase, and how long to wait", async () => {
+      renderShell();
+      act(() => {
+        domicile.fake.set({ locked: true });
+      });
+      const [, id] =
+        domicile.calls.find(
+          ([method, , request]) =>
+            method === "callSystem" &&
+            request === JSON.stringify({ call: "unlock_refusals" }),
+        ) ?? [];
+      const say = (line: object) => {
+        domicile.fake.dispatch("system", {
+          data: JSON.stringify({ id, ...line }),
+        });
+      };
+
+      await act(async () => {
+        say({ reply: { kind: "started" }, type: "system_reply" });
+        await Promise.resolve();
+        say({
+          event: {
+            failures: 3,
+            kind: "unlock_refused",
+            refusal: "too_soon",
+            retry_in_ms: 20_000,
+          },
+          type: "system_event",
+        });
+        await new Promise((settled) => setTimeout(settled, 0));
+      });
+
+      // The wait is read off a ticking clock, so allow the second it may lag.
+      expect(screen.getByRole("alert").textContent).toMatch(
+        /^Too many tries\. Try again in 2[01] s$/,
+      );
+    });
+  });
+
   describe("the clipboard", () => {
     it("shows what has been copied, newest first", () => {
       // The compositor pushes the history; the panel does not ask for it.
