@@ -639,7 +639,7 @@ fn heard(
             fd,
         } => match backends.remotes.sharing(&session) {
             Ok(()) => {
-                let serial = backends.transfers.lock().unwrap().hold(session.clone(), fd);
+                let serial = Transfers::hold(&backends.transfers, session.clone(), fd);
                 connection.emit_signal(
                     None::<&str>,
                     OBJECT_PATH,

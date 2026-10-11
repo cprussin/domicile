@@ -137,6 +137,7 @@ mod latency;
 mod lock;
 mod modifiers;
 mod notifications;
+mod once_per_window;
 mod outbound;
 mod pam;
 mod peer_process;
@@ -161,7 +162,7 @@ use crate::buffer_transform::{crop_in_buffer, upright_size, Sampled};
 use crate::dmabuf_descriptor::DmabufDescriptor;
 use crate::engine::{Bounds, Capture, Clipboard, NEWEST_BOX};
 use crate::engine_buffers::Returned;
-use crate::engine_session::{EngineSession, Submission, Submitted};
+use crate::engine_session::{EngineSession, Release, Submission, Submitted};
 use crate::gbm::Gbm;
 use crate::held_frames::{HeldFrames, TRICKLE};
 use crate::latency::{Latency, Step as LatencyStep};
@@ -183,6 +184,7 @@ use crate::idle::{announced, darkened, somebody_is_here, Blanking, Idle, StillTh
 use crate::keymap::compiled_keymap;
 use crate::lock::{Lock, Offer, Refusal, Unlocking, Verdict};
 use crate::modifiers::{Held, Modifiers};
+use crate::once_per_window::OncePerWindow;
 use crate::peer_process::peer_pid;
 use crate::portals::{shell_appearance, Selection, CURRENT_DESKTOP};
 use crate::restatement::Restatement;
@@ -490,7 +492,7 @@ struct DomicileCompositor {
     chrome_toplevel: Option<ToplevelSurface>,
     /// Clients whose shm frame could not be copied, already logged. Logged once
     /// per client, not per frame.
-    shm_refused: HashSet<String>,
+    shm_refused: OncePerWindow,
     /// GPU buffers that shm frames are copied into, so the engine gets a
     /// dmabuf. See [`crate::uploads`].
     uploads: Uploads<Dmabuf>,
@@ -512,7 +514,7 @@ struct DomicileCompositor {
     ///
     /// Mapping, getting a sink and being configured do not mean a window drew
     /// anything.
-    first_frame_logged: HashSet<String>,
+    first_frame_logged: OncePerWindow,
 
     /// Temporary, part of the pixel probe. When the probe last ran.
     ///
@@ -611,6 +613,9 @@ struct DomicileCompositor {
     casting: casting::Streams,
     /// Takes the shots Wayland capture clients copy. See [`crate::screencopy`].
     screen_copying: casting::Casting,
+    /// When the soonest superseded engine hold expires, if one is held. See
+    /// [`crate::engine_buffers`].
+    hold_deadline: Option<RegistrationToken>,
     /// When the next paced cast frame is sent, if one waits.
     cast_deadline: Option<RegistrationToken>,
     /// `DOMICILE_CAST_WINDOW`: the title of a window to cast as soon as it has
@@ -1412,6 +1417,8 @@ impl DomicileCompositor {
         self.app_bounds.remove(app_id);
         self.held_frames.forget(app_id);
         self.casting.window_gone(app_id);
+        self.shm_refused.forget(app_id);
+        self.first_frame_logged.forget(app_id);
         // An app id can return (a reconnecting client), but it then names a
         // different window.
         if self.pointer_app.as_deref() == Some(app_id) {
@@ -1511,22 +1518,10 @@ impl DomicileCompositor {
         }
     }
 
-    /// Run the engine's pending work and act on its events.
-    ///
-    /// Called only from the engine's calloop source, because the ABI's
-    /// callbacks fire inside `dispatch`. `dh` is needed to create `wl_output`s
-    /// when a display list rearranges the desktop.
-    fn pump_the_engine(&mut self, dh: &DisplayHandle) {
-        let Some(session) = self.engine.as_mut() else {
-            return;
-        };
-        let (events, releases) = session.dispatch();
-        // Take back buffers viz held past the deadline. A single-buffered
-        // client cannot draw otherwise; tearing once and logging it is better
-        // than freezing it.
-        let overdue = session.overdue(Instant::now());
-
-        for release in releases.into_iter().chain(overdue) {
+    /// Returns buffers the engine gave back to their clients, logging any viz
+    /// held past the deadline.
+    fn take_back(&mut self, releases: impl IntoIterator<Item = Release>) {
+        for release in releases {
             match release.why {
                 Returned::Released => {}
                 // Include the app id: if only one window's buffers expire, viz
@@ -1558,6 +1553,54 @@ impl DomicileCompositor {
             }
             self.returned(release.buffer);
         }
+    }
+
+    /// Wakes the loop when the soonest superseded hold expires, unless a wake
+    /// is armed.
+    ///
+    /// Viz may keep a buffer and send nothing, so the engine's fd alone would
+    /// never apply the deadline. Taking it back lets a single-buffered client
+    /// draw; tearing once and logging it is better than freezing it. A wake
+    /// can come after its hold was released, and then only re-arms.
+    fn arm_the_hold_deadline(&mut self) {
+        if self.hold_deadline.is_some() {
+            return;
+        }
+        let Some(due) = self.engine.as_ref().and_then(EngineSession::next_overdue) else {
+            return;
+        };
+        let armed = self
+            .loop_handle
+            .insert_source(Timer::from_deadline(due), |_, _, data: &mut CalloopData| {
+                let state = &mut data.state;
+                state.hold_deadline = None;
+                let overdue = state
+                    .engine
+                    .as_mut()
+                    .map(|session| session.overdue(Instant::now()))
+                    .unwrap_or_default();
+                state.take_back(overdue);
+                state.arm_the_hold_deadline();
+                TimeoutAction::Drop
+            })
+            // Timers register nothing with the kernel, so inserting cannot
+            // fail.
+            .expect("the compositor's own loop takes a timer");
+        self.hold_deadline = Some(armed);
+    }
+
+    /// Run the engine's pending work and act on its events.
+    ///
+    /// Called only from the engine's calloop source, because the ABI's
+    /// callbacks fire inside `dispatch`. `dh` is needed to create `wl_output`s
+    /// when a display list rearranges the desktop.
+    fn pump_the_engine(&mut self, dh: &DisplayHandle) {
+        let Some(session) = self.engine.as_mut() else {
+            return;
+        };
+        let (events, releases) = session.dispatch();
+        let overdue = session.overdue(Instant::now());
+        self.take_back(releases.into_iter().chain(overdue));
 
         for event in events {
             match event {
@@ -2013,7 +2056,7 @@ impl DomicileCompositor {
         let Some(session) = self.engine.as_mut() else {
             return Published::NotShown;
         };
-        match session.submit(
+        let submission = session.submit(
             app_id,
             submitted,
             descriptor,
@@ -2021,7 +2064,9 @@ impl DomicileCompositor {
             damage,
             commit.at_box,
             Instant::now(),
-        ) {
+        );
+        self.arm_the_hold_deadline();
+        match submission {
             Submission::Taken => shown,
             Submission::Waiting { replaced } => {
                 if let Some(buffer) = replaced {
@@ -2049,7 +2094,7 @@ impl DomicileCompositor {
         let copied = match self.copy_shm_frame(app_id, commit) {
             Ok(copied) => copied,
             Err(why) => {
-                if self.shm_refused.insert(app_id.to_string()) {
+                if self.shm_refused.first(app_id) {
                     warn!(app_id, %why, "this client's window will be blank");
                 }
                 return Published::NotShown;
@@ -2137,9 +2182,7 @@ impl DomicileCompositor {
     /// Run after the engine takes a frame: log the first frame, and run the
     /// spike probes.
     fn frame_shown(&mut self, app_id: &str) {
-        // Check before inserting, to avoid allocating a `String` every frame.
-        if !self.first_frame_logged.contains(app_id) {
-            self.first_frame_logged.insert(app_id.to_string());
+        if self.first_frame_logged.first(app_id) {
             debug!(app_id, "the engine took this app's first frame");
         }
         // Temporary spike probes. Only the compositor can ask viz what it drew.
@@ -5285,6 +5328,7 @@ fn poll_the_engine(
         |_, _, data: &mut CalloopData| {
             let dh = data.display.handle();
             data.state.pump_the_engine(&dh);
+            data.state.arm_the_hold_deadline();
             Ok(PostAction::Continue)
         },
     )?)
@@ -5903,13 +5947,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         latency: None,
         latency_app: None,
         latency_reported: false,
-        shm_refused: HashSet::new(),
+        shm_refused: OncePerWindow::default(),
         uploads: Uploads::default(),
         configure_answers: HashMap::new(),
         shown: engine_damage::Shown::default(),
         size_limits: HashMap::new(),
         by_surface: HashMap::new(),
-        first_frame_logged: HashSet::new(),
+        first_frame_logged: OncePerWindow::default(),
         last_probe: None,
         probe_refused: HashSet::new(),
         probe_missing: HashSet::new(),
@@ -5943,6 +5987,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             streams.screens(cast_screens, None);
             streams
         },
+        hold_deadline: None,
         cast_deadline: None,
         screen_copying: casting::Casting::new(cast_requests.clone()),
         cast_on_title: std::env::var("DOMICILE_CAST_WINDOW")

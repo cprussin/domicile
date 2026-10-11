@@ -84,9 +84,11 @@ impl RemoteDesktop {
             },
         );
         let remotes = std::sync::Arc::clone(&self.backends.remotes);
+        let transfers = std::sync::Arc::clone(&self.backends.transfers);
         let closing = session_handle.clone();
         session::open(server, &session_handle, move || {
             remotes.0.lock().unwrap().remove(&closing);
+            transfers.lock().unwrap().end(&closing);
         })
         .await?;
         Ok((0, HashMap::new()))

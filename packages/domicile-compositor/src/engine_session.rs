@@ -409,6 +409,11 @@ impl EngineSession {
         returned(self.held.expired(now), Returned::Expired)
     }
 
+    /// When [`EngineSession::overdue`] next has a buffer to take back.
+    pub fn next_overdue(&self) -> Option<Instant> {
+        self.held.next_expiry()
+    }
+
     /// Destroys the app's surface and returns its buffers at once, since no
     /// release will arrive for them.
     pub fn window_gone(&mut self, app_id: &str) -> Vec<Release> {

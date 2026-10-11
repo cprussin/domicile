@@ -102,3 +102,32 @@ fn the_component_that_exited_is_named_however_early_it_was_started() {
     assert_eq!(exit.what, "compositor");
     assert!(exit.how.contains('5'), "{}", exit.how);
 }
+
+#[test]
+fn waiting_for_an_exit_does_not_wake_until_one_comes() {
+    // Polling every 100 ms would block and wake about ten times in a second.
+    let mut running = Running::new();
+    running.start("engine", &sh("sleep 1")).expect("it starts");
+
+    let woken = std::thread::spawn(move || {
+        let before = voluntary_switches();
+        assert_eq!(running.until_one_exits().what, "engine");
+        voluntary_switches() - before
+    })
+    .join()
+    .expect("the wait returns");
+
+    assert!(woken < 5, "woke {woken} times");
+}
+
+/// How often this thread has blocked.
+fn voluntary_switches() -> u64 {
+    std::fs::read_to_string("/proc/thread-self/status")
+        .expect("Linux reports on its threads")
+        .lines()
+        .find_map(|line| line.strip_prefix("voluntary_ctxt_switches:"))
+        .expect("the status counts switches")
+        .trim()
+        .parse()
+        .expect("a count")
+}

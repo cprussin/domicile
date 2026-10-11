@@ -147,6 +147,16 @@ impl<B> HeldBuffers<B> {
         expired
     }
 
+    /// When the soonest superseded hold expires, if any is outstanding.
+    pub fn next_expiry(&self) -> Option<Instant> {
+        self.held
+            .values()
+            .flat_map(HashMap::values)
+            .filter_map(|held| held.superseded)
+            .min()
+            .map(|superseded| superseded + self.deadline)
+    }
+
     /// Removes every hold after the engine is lost, split into each surface's
     /// on-screen frame and the rest.
     ///
@@ -247,6 +257,23 @@ mod tests {
             Some("new"),
             "and the one on screen is still there"
         );
+    }
+
+    // The loop wakes for the soonest deadline, and only while one runs.
+    #[test]
+    fn the_next_expiry_is_the_soonest_superseded_deadline() {
+        let now = Instant::now();
+        let mut held = HeldBuffers::with_deadline(Duration::from_millis(500));
+        held.hold(SURFACE, 1, "on screen", now);
+        assert_eq!(held.next_expiry(), None, "nothing is superseded");
+
+        held.hold(SURFACE, 2, "newer", at(now, 100));
+        held.hold(SURFACE + 1, 1, "other", now);
+        held.hold(SURFACE + 1, 2, "other newer", at(now, 50));
+        assert_eq!(held.next_expiry(), Some(at(now, 550)));
+
+        held.release(SURFACE + 1, 1);
+        assert_eq!(held.next_expiry(), Some(at(now, 600)));
     }
 
     // A surface whose last hold expires is not left listed, empty.
