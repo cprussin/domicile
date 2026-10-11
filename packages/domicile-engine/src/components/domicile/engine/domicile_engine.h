@@ -213,12 +213,6 @@ typedef struct DomicileEngineCallbacks {
                     DomicileSurfaceId surface,
                     uint32_t width,
                     uint32_t height);
-  // Never called: the engine asks viz for no BeginFrames, since a window draws
-  // when its client commits. Kept so the fields after it stay where the
-  // compositor's binding expects them.
-  void (*frame)(void* user_data,
-                DomicileSurfaceId surface,
-                uint64_t deadline_us);
   void (*released)(void* user_data, DomicileSurfaceId surface, uint64_t buffer);
   void (*displays)(void* user_data,
                    const DomicileDisplay* displays,

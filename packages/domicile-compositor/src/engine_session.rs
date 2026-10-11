@@ -148,7 +148,7 @@ impl EngineSession {
     ///   Otherwise an idle client's window stays blank, since nothing else
     ///   makes it commit.
     /// - Frame callbacks need no handling: `wl_surface.frame` is answered at
-    ///   commit, not from the engine's `Frame` event.
+    ///   commit, not by the engine.
     ///
     /// No check in this repository covers this. See
     /// `docs/HARDWARE-CHECKS.md#dead-engine-with-windows-open`.
@@ -394,7 +394,6 @@ impl EngineSession {
                     None
                 }
                 Event::Copied { .. }
-                | Event::Frame { .. }
                 | Event::Displays(_)
                 | Event::Captured { .. }
                 | Event::CaptureEnded { .. } => None,

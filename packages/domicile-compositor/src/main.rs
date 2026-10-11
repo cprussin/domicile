@@ -1630,9 +1630,6 @@ impl DomicileCompositor {
                         }
                     }
                 }
-                // `wl_surface.frame` is sent at commit. Driving it from viz
-                // would change every client's frame rate.
-                engine::Event::Frame { .. } => {}
                 // Handled above, with the buffers.
                 engine::Event::Released { .. } => {}
                 engine::Event::Captured {
