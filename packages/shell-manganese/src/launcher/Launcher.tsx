@@ -160,6 +160,9 @@ export const Launcher = ({
       }
     }}
     open={open}
+    // The shell refocuses the focused window. Focusing a browser window's view
+    // would read as a click in it and move the keyboard there.
+    returnFocus={false}
     screen={screen}
     // Wide enough for the rows and the preview side by side.
     size="xl"
