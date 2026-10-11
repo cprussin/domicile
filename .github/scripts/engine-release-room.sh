@@ -52,6 +52,8 @@ TMP="$BUILD_ROOT/tmp"
 LEGACY_STAGE="$BUILD_ROOT/engine-release"
 # Overridable for tests, which cannot set a directory's ctime.
 NOW="${DOMICILE_NOW:-$(date +%s)}"
+# The user this runner deletes as. Overridable for tests, which cannot chown.
+RUNNER_UID="${DOMICILE_RUNNER_UID:-$(id -u)}"
 LOCK_SH="$(cd "$(dirname "$0")" && pwd)/engine-tree-lock.sh"
 RECLAIMER="$OWNER, reclaiming disk"
 
@@ -80,13 +82,18 @@ remove() {
 }
 
 # Stale nix and job temp directories in the shared TMPDIR. Only these name
-# patterns are considered.
+# patterns are considered. Skips, and names on stderr, an entry holding files
+# another user's job wrote, since this runner cannot remove them.
 stale_tmp() {
   local entry
   for entry in "$TMP"/nix-shell.* "$TMP"/nix-develop.* "$TMP"/dj.*; do
     if [ -e "$entry" ] &&
       [ $((NOW - $(stat -c %Z "$entry"))) -gt $((STALE_TMP_MINUTES * 60)) ]; then
-      printf '%s\n' "$entry"
+      if [ -n "$(find "$entry" ! -user "$RUNNER_UID" -print -quit)" ]; then
+        echo "skipping $entry: it holds files another user owns" >&2
+      else
+        printf '%s\n' "$entry"
+      fi
     fi
   done
 }

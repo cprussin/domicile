@@ -177,6 +177,17 @@ expect "and nothing dearer was reached for" yesyesyes \
   "$(published)$(stage 0)$(staged 0)"
 contains "it says what it dropped" "nix-shell.leaked" "$SAID"
 
+# Another user's job can leave files in a temp directory. The runner cannot
+# remove those, so it skips the directory and reclaims the next thing.
+# `DOMICILE_RUNNER_UID` stands in for a runner that owns none of them.
+a_pool
+SAID="$(DOMICILE_NOW=$TWO_DAYS_ON DOMICILE_RUNNER_UID=65534 room 7)"
+expect "a stale directory holding another user's files does not stop the run" \
+  ok "$(status "$SAID")"
+expect "it is left where it is" yes "$(leaked)"
+contains "and named as skipped" "skipping $TMP/nix-shell.leaked" "$SAID"
+expect "and the published tarballs go instead" no "$(published)"
+
 # --- short, and the published tarballs are enough ---------------------------
 
 # A temp directory made today may belong to a live job on either runner, so it
