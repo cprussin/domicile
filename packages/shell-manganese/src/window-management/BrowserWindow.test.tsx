@@ -580,6 +580,114 @@ describe("BrowserWindow", () => {
     });
   });
 
+  // `domicile open-app`. See docs/architecture/WEB-APPS.md.
+  describe("an app window", () => {
+    const renderApp = (url: string, fullscreen = false) =>
+      render(
+        <BrowserWindow
+          behindPanel={false}
+          clickThrough={false}
+          covered={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          fullscreen={fullscreen}
+          isApp
+          motion="resting"
+          onIcon={noIcon}
+          onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          url={url}
+          window="1"
+        />,
+      );
+
+    it("draws no address while its page is on the app's origin", () => {
+      const { container } = renderApp("https://music.example/");
+
+      shows(view(container), "https://music.example/album/7", "secure");
+
+      expect(
+        screen.queryByRole("status", { name: "Address" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("combobox", { name: "Address" }),
+      ).not.toBeInTheDocument();
+    });
+
+    // As Chrome does for an installed app, so a sign-in page elsewhere says
+    // where it is.
+    it("shows the site, read-only, once its page leaves the app's origin", () => {
+      const { container } = renderApp("https://music.example/");
+
+      shows(view(container), "https://login.example/sign-in", "secure");
+
+      expect(screen.getByRole("status", { name: "Address" })).toHaveTextContent(
+        "login.example",
+      );
+      expect(control("Connection is secure")).toBeVisible();
+      expect(
+        screen.queryByRole("combobox", { name: "Address" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("hides the address while its page is fullscreen", () => {
+      const { container } = renderApp("https://music.example/", true);
+      shows(view(container), "https://video.example/watch", "secure");
+
+      Object.defineProperty(view(container), "pageFullscreen", {
+        configurable: true,
+        value: true,
+      });
+      fireEvent(
+        view(container),
+        new Event(WEBVIEW_PAGE_FULLSCREEN_CHANGE_EVENT),
+      );
+
+      expect(
+        screen.queryByRole("status", { name: "Address" }),
+      ).not.toBeInTheDocument();
+    });
+
+    // The engine lists the page's current address, so the origin is the one
+    // the window opened at.
+    it("keeps the origin it opened at as the engine lists the page elsewhere", () => {
+      const { container, rerender } = renderApp("https://music.example/");
+      shows(view(container), "https://login.example/sign-in", "secure");
+
+      rerender(
+        <BrowserWindow
+          behindPanel={false}
+          clickThrough={false}
+          covered={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          fullscreen={false}
+          isApp
+          motion="resting"
+          onIcon={noIcon}
+          onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          url="https://login.example/sign-in"
+          window="1"
+        />,
+      );
+
+      expect(
+        screen.getByRole("status", { name: "Address" }),
+      ).toBeInTheDocument();
+    });
+  });
+
   // The engine draws no file dialog and cancels unanswered requests, so the
   // window draws a picker over the page and gives it the keyboard.
   describe("a file its page asks for", () => {

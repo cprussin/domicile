@@ -2,8 +2,8 @@
 
 A web app on Domicile is a URL and a desktop entry. `domicile open-app <url>`
 opens it in an app window: a browser window the shell draws as an application,
-with no address bar. Domicile already is a browser, so an app ships no browser
-of its own, as an Electron app does.
+with no address bar while its page is on the app's origin. Domicile already is
+a browser, so an app ships no browser of its own, as an Electron app does.
 
 ## Design
 
@@ -12,7 +12,7 @@ Exec=domicile open-app <url>
   ─▶ supervisor   {"type":"open_app","url":…}                     control socket
   ─▶ engine       {"type":"open_url","version":1,"url":…,"app":true}  command socket
   ─▶ shell        DomicileBrowserWindow.isApp                     browserwindowschanged
-  ─▶ manganese    <BrowserWindow isApp>: no address bar
+  ─▶ manganese    <BrowserWindow isApp>: no address bar on the app's origin
 ```
 
 - **An app window** is a browser window with `isApp` set. It shares the
@@ -57,14 +57,18 @@ manifest `key` pins the id.
   home-manager already make and read them.
 - **Every `open-app` opens a window.** An app can have several windows, as a
   browser can.
-- **No address bar at all.** Only a program the user runs opens an app window.
-  Showing the address off the app's origin is in the plan.
+- **A read-only address off the app's origin, none on it.** Only a program the
+  user runs opens an app window, so its own pages need no address. A page
+  elsewhere, such as a sign-in, shows its site and connection, as Chrome does
+  for an installed app.
+- **The origin is the one the window opened at.** The engine lists the page's
+  current address, so manganese keeps the first one it sees.
 
 ## Plan
 
 - [x] app windows: `domicile open-app`, `isApp`, manganese draws no address
   bar; Settings and History open as apps
-- [ ] off the app's origin, show a read-only address bar, as Chrome does for an
+- [x] off the app's origin, show a read-only address bar, as Chrome does for an
   installed app
 - [ ] `domicile install-app <url>`: read the site's web app manifest (`name`,
   `icons`, `start_url`) and write a desktop entry to
