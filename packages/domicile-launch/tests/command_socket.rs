@@ -7,13 +7,15 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use domicile_launch::command::{
-    config_extensions_line, load_shell_line, load_unpacked_line, open_url_line,
-    set_site_permission_line, site_permissions_line, uninstall_extension_line,
+    config_extensions_line, load_shell_line, load_unpacked_line, media_devices_line, open_url_line,
+    set_media_device_line, set_site_permission_line, site_permissions_line,
+    uninstall_extension_line,
 };
 use domicile_launch::command_socket::{
-    config_extensions, load_shell, load_unpacked, open_url, set_site_permission, site_permissions,
-    uninstall_extension, CommandError,
+    config_extensions, load_shell, load_unpacked, media_devices, open_url, set_media_device,
+    set_site_permission, site_permissions, uninstall_extension, CommandError,
 };
+use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
 /// Reply timeout: long enough for a loaded machine, short enough for a fast
@@ -195,6 +197,44 @@ fn the_engine_is_sent_a_site_s_setting_and_says_it_stored_it() {
     assert_eq!(
         heard.join().expect("the engine was listening"),
         set_site_permission_line(&site)
+    );
+}
+
+#[test]
+fn the_engine_lists_media_devices() {
+    let (_scratch, path) = scratch();
+    let heard = an_engine(
+        &path,
+        Some("{\"type\":\"media_devices\",\"cameras\":[],\"microphones\":[{\"id\":\"default\",\"name\":\"Default\"}]}\n"),
+    );
+
+    assert_eq!(
+        media_devices(&path, BRIEFLY).expect("the engine listed them"),
+        MediaDevices {
+            cameras: vec![],
+            microphones: vec![MediaDevice {
+                id: "default".to_string(),
+                name: "Default".to_string(),
+            }],
+        }
+    );
+    assert_eq!(
+        heard.join().expect("the engine was listening"),
+        media_devices_line()
+    );
+}
+
+#[test]
+fn the_engine_is_sent_a_preferred_media_device_and_says_it_stored_it() {
+    let (_scratch, path) = scratch();
+    let heard = an_engine(&path, Some("{\"type\":\"set\"}\n"));
+
+    set_media_device(&path, MediaKind::Microphone, "default", BRIEFLY)
+        .expect("the engine stored it");
+
+    assert_eq!(
+        heard.join().expect("the engine was listening"),
+        set_media_device_line(MediaKind::Microphone, "default")
     );
 }
 

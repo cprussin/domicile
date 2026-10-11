@@ -42,6 +42,8 @@ struct Told {
   std::optional<WebViewPermissionSetting> setting;
   base::FilePath unpacked;
   std::string uninstalled;
+  std::optional<MediaDeviceKind> device_kind;
+  std::string device;
 };
 
 // The id the recording `load_unpacked` gives what it loads, and the one the
@@ -57,6 +59,16 @@ SitePermissionList StoredSettings() {
                     WebViewPermissionSetting::kAllow}};
   list.sites = {{url::Origin::Create(GURL("https://meet.example")),
                  WebViewPermission::kCamera, WebViewPermissionSetting::kAllow}};
+  return list;
+}
+
+// What the recording `list_media_devices` answers: one camera, and two
+// microphones with the default first.
+MediaDeviceList ConnectedDevices() {
+  MediaDeviceList list;
+  list.cameras = {{.id = "/dev/video2", .name = "USB Camera"}};
+  list.microphones = {{.id = "default", .name = "Default"},
+                      {.id = "alsa_input.usb", .name = "USB Microphone"}};
   return list;
 }
 
@@ -120,6 +132,23 @@ std::string Answer(std::string_view line,
     }
     return std::vector<std::string>{kExtensionId};
   };
+  auto list_media_devices = [has_window]() -> std::optional<MediaDeviceList> {
+    if (!has_window) {
+      return std::nullopt;
+    }
+    return ConnectedDevices();
+  };
+  auto set_media_device =
+      [told, has_window](
+          MediaDeviceKind kind,
+          const std::string& id) -> base::expected<void, std::string> {
+    told->device_kind = kind;
+    told->device = id;
+    if (!has_window) {
+      return base::unexpected("no shell");
+    }
+    return base::ok();
+  };
   std::string reply;
   AnswerCommand(line,
                 {.load_shell = load_shell,
@@ -128,7 +157,9 @@ std::string Answer(std::string_view line,
                  .set_site_permission = set_site_permission,
                  .load_unpacked = load_unpacked,
                  .uninstall_extension = uninstall_extension,
-                 .list_config_extensions = list_config_extensions},
+                 .list_config_extensions = list_config_extensions,
+                 .list_media_devices = list_media_devices,
+                 .set_media_device = set_media_device},
                 base::BindOnce([](std::string* out,
                                   std::string line) { *out = std::move(line); },
                                &reply));
@@ -392,6 +423,60 @@ TEST(CommandProtocolTest, RefusesSitePermissionsWithNoProfileToKeepThem) {
                           R"("permission":"camera","setting":"block"})",
                           &told, /*has_window=*/false)),
             "refused");
+}
+
+TEST(CommandProtocolTest, ListsEachKindsMediaDevicesInTheOrderGiven) {
+  Told told;
+  const std::string reply =
+      Answer(R"({"type":"media_devices","version":1})", &told);
+  EXPECT_EQ(base::JSONReader::ReadDict(reply, base::JSON_PARSE_RFC),
+            base::JSONReader::ReadDict(
+                R"({"type":"media_devices",)"
+                R"("cameras":[{"id":"/dev/video2","name":"USB Camera"}],)"
+                R"("microphones":[{"id":"default","name":"Default"},)"
+                R"({"id":"alsa_input.usb","name":"USB Microphone"}]})",
+                base::JSON_PARSE_RFC));
+}
+
+TEST(CommandProtocolTest, PrefersTheMediaDeviceARequestNames) {
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"set_media_device","version":1,"kind":"microphone",)"
+      R"("id":"alsa_input.usb"})",
+      &told);
+  EXPECT_EQ(TypeOf(reply), "set");
+  EXPECT_EQ(told.device_kind, MediaDeviceKind::kMicrophone);
+  EXPECT_EQ(told.device, "alsa_input.usb");
+}
+
+TEST(CommandProtocolTest, RefusesAMediaDeviceItCannotName) {
+  Told told;
+  const std::string kind = Answer(
+      R"({"type":"set_media_device","version":1,"kind":"speaker",)"
+      R"("id":"default"})",
+      &told);
+  EXPECT_EQ(TypeOf(kind), "refused");
+  EXPECT_THAT(WhyOf(kind), HasSubstr("speaker"));
+
+  const std::string id = Answer(
+      R"({"type":"set_media_device","version":1,"kind":"camera"})", &told);
+  EXPECT_EQ(TypeOf(id), "refused");
+  EXPECT_THAT(WhyOf(id), HasSubstr("\"id\""));
+
+  EXPECT_FALSE(told.device_kind.has_value());
+}
+
+TEST(CommandProtocolTest, CarriesBackWhyAMediaDeviceWasNotPreferred) {
+  Told told;
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"media_devices","version":1})", &told,
+                          /*has_window=*/false)),
+            "refused");
+  const std::string reply = Answer(
+      R"({"type":"set_media_device","version":1,"kind":"camera",)"
+      R"("id":"/dev/video2"})",
+      &told, /*has_window=*/false);
+  EXPECT_EQ(TypeOf(reply), "refused");
+  EXPECT_EQ(WhyOf(reply), "no shell");
 }
 
 TEST(CommandProtocolTest, LoadsTheUnpackedExtensionARequestNames) {
