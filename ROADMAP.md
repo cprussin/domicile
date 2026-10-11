@@ -59,8 +59,10 @@ item when it ships.
    - A guard that runs the app's native messaging host in the engine.
 
 9. **Split up the compositor's `main.rs`.** Left in it: event-loop state,
-   startup (`run`), the surface commit path, casting, the engine pump and the
-   Wayland protocol handlers.
+   startup (`run`), the surface commit path, casting, the engine pump, the
+   Wayland protocol handlers, window placement and popups, latency driving,
+   outputs and scale, idle and lock glue, config adoption, the clipboard and
+   client spawning.
 
 10. **Web apps.** [WEB-APPS.md](docs/architecture/WEB-APPS.md).
     - Show the address when an app leaves its origin.
@@ -140,8 +142,8 @@ Understood and not scheduled.
   page sees `visibilitychange` twice (`WebViewGuest::AttachWindowTo`).
 - **Resize cost is unmeasured.**
   [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#embed-deadlines).
-- **The padlock's `dangerous` state is untested.** Needs an https fixture with
-  an untrusted cert.
+- **The padlock's `dangerous` state is untested against the engine.** Needs
+  an https fixture with an untrusted cert.
 
 ### Clipboard
 
