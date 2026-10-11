@@ -1583,11 +1583,12 @@ pub struct ClipboardEntry {
     /// integers are signed 32-bit.
     pub id: u32,
 
-    /// A possibly truncated preview of the copied text.
+    /// A possibly truncated preview of the copied text, or the size of a
+    /// copied image with no text (`Image, 1920 × 1080`).
     ///
     /// Long entries are cut at
     /// `domicile_host::clipboard::PREVIEW_CHARACTERS`; restoring the entry
-    /// always restores the full text.
+    /// always restores the whole copy.
     pub preview: String,
 }
 

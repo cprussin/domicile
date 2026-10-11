@@ -1,4 +1,5 @@
-//! Clipboard history policy: what is kept, deduplicated and previewed.
+//! Clipboard policy: what is read from a selection, kept, deduplicated and
+//! previewed.
 //!
 //! A Wayland selection lives in the offering client, so it vanishes when that
 //! client exits. The compositor keeps copies to survive that. Reading and
@@ -7,13 +8,19 @@
 
 use domicile_protocol::ClipboardEntry;
 
-/// Number of copies kept. Bounded by count, not age.
+/// Number of copies kept. Bounded by count, and by [`HELD_BYTES`].
 pub const REMEMBERED: usize = 32;
 
-/// Largest copy kept, in bytes, to bound memory.
+/// Longest text kept, in bytes, to bound memory.
 ///
 /// A larger copy still pastes from its client but is not added to history.
 pub const LONGEST_COPY: usize = 1024 * 1024;
+
+/// Largest image kept, in bytes. A screenshot of several monitors fits.
+pub const LONGEST_IMAGE: usize = 32 * 1024 * 1024;
+
+/// Most bytes the history holds. The oldest rows go first; the newest stays.
+pub const HELD_BYTES: usize = 128 * 1024 * 1024;
 
 /// Characters of each copy sent to the shell as a preview. Restoring a copy
 /// always uses the full text.
@@ -31,8 +38,10 @@ pub const TEXT_MIMES: [&str; 4] = [
     "STRING",
 ];
 
-/// The MIME type to read a selection as, or `None` if it has no text (for
-/// example an image), which is not kept.
+/// The image type every reader takes, preferred over any other.
+const PNG: &str = "image/png";
+
+/// The MIME type to read a selection's text as, or `None` if it has no text.
 ///
 /// Case-insensitive: X11 bridges write `text/plain;charset=UTF-8`, and the
 /// charset value is case-insensitive.
@@ -45,7 +54,155 @@ pub fn text_mime(offered: &[String]) -> Option<String> {
     })
 }
 
-/// Copied text, newest first.
+/// The MIME type to read a selection's image as: PNG if offered, else the
+/// first `image/` type, else `None`.
+pub fn image_mime(offered: &[String]) -> Option<String> {
+    offered
+        .iter()
+        .find(|mime| mime.eq_ignore_ascii_case(PNG))
+        .or_else(|| {
+            offered
+                .iter()
+                .find(|mime| mime.to_ascii_lowercase().starts_with("image/"))
+        })
+        .cloned()
+}
+
+/// What one clipboard holds: text, an image, or both.
+///
+/// A client copying an image often offers text with it, such as a file name
+/// or a spreadsheet's cells, so both are kept.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Contents {
+    pub text: Option<String>,
+    pub image: Option<Image>,
+}
+
+/// A copied image, in the format it was offered in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Image {
+    pub mime: String,
+    pub bytes: Vec<u8>,
+}
+
+impl Contents {
+    /// Contents that are only `text`.
+    pub fn text(text: impl Into<String>) -> Contents {
+        Contents {
+            text: Some(text.into()),
+            image: None,
+        }
+    }
+
+    /// Contents that are only an image of type `mime`.
+    pub fn image(mime: impl Into<String>, bytes: Vec<u8>) -> Contents {
+        Contents {
+            text: None,
+            image: Some(Image {
+                mime: mime.into(),
+                bytes,
+            }),
+        }
+    }
+
+    /// The text and image among `offers`, each a MIME type and its bytes.
+    ///
+    /// Picks types as [`text_mime`] and [`image_mime`] do and drops the rest.
+    /// Text that is not UTF-8 is dropped, not repaired: a repaired copy would
+    /// differ from what was copied.
+    pub fn from_offers(offers: impl IntoIterator<Item = (String, Vec<u8>)>) -> Contents {
+        let offers: Vec<(String, Vec<u8>)> = offers.into_iter().collect();
+        let mimes: Vec<String> = offers.iter().map(|(mime, _)| mime.clone()).collect();
+        let take = |wanted: Option<String>| {
+            wanted.and_then(|wanted| offers.iter().find(|(mime, _)| *mime == wanted).cloned())
+        };
+        Contents {
+            text: take(text_mime(&mimes)).and_then(|(_, bytes)| String::from_utf8(bytes).ok()),
+            image: take(image_mime(&mimes)).map(|(mime, bytes)| Image { mime, bytes }),
+        }
+    }
+
+    /// The MIME types these can be pasted as: every text type, then the
+    /// image's.
+    pub fn mimes(&self) -> Vec<String> {
+        let text = self
+            .text
+            .iter()
+            .flat_map(|_| TEXT_MIMES.map(str::to_string));
+        let image = self.image.iter().map(|image| image.mime.clone());
+        text.chain(image).collect()
+    }
+
+    /// The bytes to paste for `mime`, or `None` if these hold nothing of
+    /// that type.
+    pub fn bytes(&self, mime: &str) -> Option<&[u8]> {
+        let text = || {
+            TEXT_MIMES
+                .iter()
+                .any(|text| text.eq_ignore_ascii_case(mime))
+                .then_some(self.text.as_deref())
+                .flatten()
+                .map(str::as_bytes)
+        };
+        let image = || {
+            self.image
+                .as_ref()
+                .filter(|image| image.mime.eq_ignore_ascii_case(mime))
+                .map(|image| image.bytes.as_slice())
+        };
+        text().or_else(image)
+    }
+
+    /// Whether these hold nothing to paste.
+    pub fn is_empty(&self) -> bool {
+        self.text.as_deref().is_none_or(str::is_empty) && self.image.is_none()
+    }
+
+    /// Bytes held, for bounding the history.
+    fn size(&self) -> usize {
+        self.text.as_ref().map_or(0, String::len)
+            + self.image.as_ref().map_or(0, |image| image.bytes.len())
+    }
+
+    /// Whether either part is too big to keep.
+    fn too_big(&self) -> bool {
+        self.text
+            .as_ref()
+            .is_some_and(|text| text.len() > LONGEST_COPY)
+            || self
+                .image
+                .as_ref()
+                .is_some_and(|image| image.bytes.len() > LONGEST_IMAGE)
+    }
+
+    /// The row a shell shows: the start of the text, else the image's size.
+    fn preview(&self) -> String {
+        match (&self.text, &self.image) {
+            (Some(text), _) => text.chars().take(PREVIEW_CHARACTERS).collect(),
+            (None, Some(image)) => match png_size(image) {
+                Some((width, height)) => format!("Image, {width} × {height}"),
+                None => format!("Image ({})", image.mime),
+            },
+            (None, None) => String::new(),
+        }
+    }
+}
+
+/// The width and height a PNG's header gives, or `None` for another format
+/// or a header that does not read.
+fn png_size(image: &Image) -> Option<(u32, u32)> {
+    if image.mime.eq_ignore_ascii_case(PNG) {
+        let reader = png::Decoder::new(std::io::Cursor::new(&image.bytes))
+            .read_info()
+            .ok()?;
+        let info = reader.info();
+        Some((info.width, info.height))
+    } else {
+        None
+    }
+}
+
+/// Copies, newest first.
 ///
 /// Kept in memory only, never on disk, because it may hold passwords.
 #[derive(Debug, Default)]
@@ -57,11 +214,11 @@ pub struct History {
     taken: u32,
 }
 
-/// One copied text and its id.
+/// One copy and its id.
 #[derive(Debug)]
 struct Copy {
     id: u32,
-    text: String,
+    contents: Contents,
 }
 
 impl History {
@@ -70,11 +227,11 @@ impl History {
     ///
     /// Clients often re-offer the current selection, such as an editor during
     /// a drag, so a repeat of the newest entry returns `false`.
-    pub fn record(&mut self, text: String) -> bool {
-        if text.is_empty() || text.len() > LONGEST_COPY {
+    pub fn record(&mut self, contents: Contents) -> bool {
+        if contents.is_empty() || contents.too_big() {
             false
         } else {
-            self.remember(text)
+            self.remember(contents)
         }
     }
 
@@ -84,7 +241,7 @@ impl History {
             .iter()
             .map(|copy| ClipboardEntry {
                 id: copy.id,
-                preview: copy.text.chars().take(PREVIEW_CHARACTERS).collect(),
+                preview: copy.contents.preview(),
             })
             .collect()
     }
@@ -97,22 +254,26 @@ impl History {
         self.entries.first().map(|copy| copy.id)
     }
 
-    /// The full text of entry `id`, for restoring it to the clipboard.
+    /// Everything entry `id` holds, for restoring it to the clipboard.
     ///
     /// `None` if the entry has dropped off the end of the history.
-    pub fn text(&self, id: u32) -> Option<&str> {
+    pub fn contents(&self, id: u32) -> Option<&Contents> {
         self.entries
             .iter()
             .find(|copy| copy.id == id)
-            .map(|copy| copy.text.as_str())
+            .map(|copy| &copy.contents)
     }
 
     /// Puts a copy at the front, moving an existing equal entry instead of
     /// duplicating it.
     ///
     /// A moved entry keeps its id, so an open panel's rows stay valid.
-    fn remember(&mut self, text: String) -> bool {
-        match self.entries.iter().position(|copy| copy.text == text) {
+    fn remember(&mut self, contents: Contents) -> bool {
+        match self
+            .entries
+            .iter()
+            .position(|copy| copy.contents == contents)
+        {
             // Already newest, so nothing changed.
             Some(0) => false,
             Some(held) => {
@@ -126,13 +287,29 @@ impl History {
                     0,
                     Copy {
                         id: self.taken,
-                        text,
+                        contents,
                     },
                 );
-                // Drop the oldest entry and its text to bound memory.
-                self.entries.truncate(REMEMBERED);
+                self.forget_the_oldest();
                 true
             }
         }
+    }
+
+    /// Drops the oldest entries past [`REMEMBERED`] or [`HELD_BYTES`], and
+    /// their contents with them.
+    fn forget_the_oldest(&mut self) {
+        let mut held = 0;
+        let kept = self
+            .entries
+            .iter()
+            .take(REMEMBERED)
+            .take_while(|copy| {
+                held += copy.contents.size();
+                held <= HELD_BYTES
+            })
+            .count();
+        // The newest is always kept: it is within both limits on its own.
+        self.entries.truncate(kept.max(1));
     }
 }

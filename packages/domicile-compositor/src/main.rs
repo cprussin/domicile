@@ -193,7 +193,9 @@ use crate::which_engine::another_engine;
 use domicile_config::{
     Config, ConfigError, ConfigStore, ExtensionsConfig, IdleConfig, KeyboardConfig, Omit, ThemeMode,
 };
-use domicile_host::clipboard::{text_mime, History, LONGEST_COPY, TEXT_MIMES};
+use domicile_host::clipboard::{
+    image_mime, text_mime, Contents, History, LONGEST_COPY, LONGEST_IMAGE,
+};
 use domicile_host::data_dirs::data_dirs;
 use domicile_host::system::Environment;
 use domicile_host::theme_turnover::{Step, Turnover, REPAINT_WITHIN};
@@ -380,16 +382,17 @@ struct DomicileCompositor {
     /// because `set_selection` arrives only here. Policy lives in
     /// `domicile_host::clipboard`.
     clipboard: History,
-    /// The mime type to read from a new selection, one per clipboard.
+    /// The mime types to read from a new selection, one slot per clipboard.
     ///
     /// Read one dispatch later because Smithay calls `new_selection` before
     /// storing the selection on the seat.
     /// [`DomicileCompositor::read_what_was_copied`] uses it at the end of the
-    /// dispatch, before the flush. `None` means no text, which is not recorded.
+    /// dispatch, before the flush. Empty means no text or image, which is not
+    /// recorded.
     ///
     /// One slot per clipboard because a client can set both in one dispatch.
-    copying: [Option<String>; 2],
-    /// The current text on each clipboard, whoever set it.
+    copying: [Vec<String>; 2],
+    /// What is on each clipboard now, whoever set it.
     ///
     /// Differs from the history: this is what a paste would produce now,
     /// including an old history entry the shell restored.
@@ -397,7 +400,7 @@ struct DomicileCompositor {
     /// Needed for the browser, which is not a Wayland client here and cannot be
     /// served by another client directly. It also serves Wayland clients
     /// pasting what the browser copied. See [`Clipboard`].
-    holding: [Option<String>; 2],
+    holding: [Option<Contents>; 2],
     /// The display handle, for paths that do not start at the event loop:
     /// moving clipboard focus with the keyboard (a `SeatHandler` callback) and
     /// restoring a history entry (a chrome request).
@@ -1646,8 +1649,12 @@ impl DomicileCompositor {
                 // the desktop has one clipboard.
                 //
                 // The engine is not told back; it already has the copy.
-                engine::Event::Copied { clipboard, text } => {
-                    self.took_a_copy(clipboard, text);
+                engine::Event::Copied {
+                    clipboard,
+                    contents,
+                } => {
+                    let mimes = contents.mimes();
+                    self.took_a_copy(clipboard, contents);
                     // Set the seat's selection, so Wayland clients can paste
                     // it.
                     match clipboard {
@@ -1655,15 +1662,15 @@ impl DomicileCompositor {
                             set_data_device_selection(
                                 &self.display_handle,
                                 &self.seat,
-                                text_mimes(),
+                                mimes.clone(),
                                 Holder::Desk(clipboard),
                             );
-                            self.hub.portals.selection_changed(text_mimes(), None);
+                            self.hub.portals.selection_changed(mimes, None);
                         }
                         Clipboard::Primary => set_primary_selection(
                             &self.display_handle,
                             &self.seat,
-                            text_mimes(),
+                            mimes,
                             Holder::Desk(clipboard),
                         ),
                     }
@@ -3306,24 +3313,24 @@ impl DomicileCompositor {
     ///
     /// Only the regular clipboard has history. The primary selection changes on
     /// every text selection.
-    fn took_a_copy(&mut self, clipboard: Clipboard, text: String) {
-        if clipboard == Clipboard::Copy && self.clipboard.record(text.clone()) {
+    fn took_a_copy(&mut self, clipboard: Clipboard, contents: Contents) {
+        if clipboard == Clipboard::Copy && self.clipboard.record(contents.clone()) {
             self.tell_the_chromes_the_clipboard();
         }
-        self.holding[at(clipboard)] = Some(text);
+        self.holding[at(clipboard)] = Some(contents);
     }
 
     /// Tell the browser what is on one clipboard.
     ///
     /// Without an engine, nothing to do: a new one gets both clipboards via
     /// [`DomicileCompositor::tell_the_engine_the_copies`]. An empty clipboard
-    /// is sent as an empty string, so the browser does not keep offering an old
+    /// is sent as empty contents, so the browser does not keep offering an old
     /// value.
     fn tell_the_engine_a_clipboard(&self, clipboard: Clipboard) {
         if let Some(session) = self.engine.as_ref() {
             session.set_clipboard(
                 clipboard,
-                self.holding[at(clipboard)].as_deref().unwrap_or_default(),
+                &self.holding[at(clipboard)].clone().unwrap_or_default(),
             );
         }
     }
@@ -3346,59 +3353,87 @@ impl DomicileCompositor {
     /// arrives as [`ClientRequest::ClipboardCopied`].
     fn read_what_was_copied(&mut self) {
         for clipboard in BOTH {
-            let Some(mime) = self.copying[at(clipboard)].take() else {
-                continue;
-            };
-            self.read_one_clipboard(clipboard, mime);
+            let mimes = std::mem::take(&mut self.copying[at(clipboard)]);
+            if !mimes.is_empty() {
+                self.read_one_clipboard(clipboard, mimes);
+            }
         }
     }
 
-    /// Ask the client holding one clipboard for its contents.
-    fn read_one_clipboard(&mut self, clipboard: Clipboard, mime: String) {
+    /// Ask the client holding one clipboard for its contents, as each of
+    /// `mimes`.
+    ///
+    /// Every type is asked for before any is read: the client writes once it
+    /// receives `wl_data_source.send`, which goes out at the flush.
+    fn read_one_clipboard(&mut self, clipboard: Clipboard, mimes: Vec<String>) {
+        let mut asked = Vec::new();
+        for mime in mimes {
+            match self.ask_for_a_copy(clipboard, &mime) {
+                Some(ours) => asked.push((mime, ours)),
+                // Logged; the copy is not read, since part of it would be
+                // missing.
+                None => return,
+            }
+        }
+        let hub = self.hub.clone();
+        thread::spawn(move || {
+            let mut offers = Vec::new();
+            for (mime, ours) in asked {
+                let text = text_mime(std::slice::from_ref(&mime)).is_some();
+                let longest = if text { LONGEST_COPY } else { LONGEST_IMAGE };
+                match clipboard::read_copy(ours, longest, clipboard::PATIENCE) {
+                    // The client offered UTF-8 text and sent something else.
+                    // Logged, not repaired: a repaired copy would differ from
+                    // what was copied.
+                    Ok(copied) if text && std::str::from_utf8(&copied).is_err() => {
+                        warn!("a client offered text that is not UTF-8, so it is not a row");
+                        return;
+                    }
+                    Ok(copied) => offers.push((mime, copied)),
+                    Err(err) => {
+                        warn!(%err, %mime, "a client offered the clipboard and did not hand it over");
+                        return;
+                    }
+                }
+            }
+            hub.send_request(ClientRequest::ClipboardCopied {
+                clipboard,
+                contents: Contents::from_offers(offers),
+            });
+        });
+    }
+
+    /// Ask the client holding one clipboard to write it as `mime`, returning
+    /// the end to read, or `None` if nothing can be read.
+    fn ask_for_a_copy(&mut self, clipboard: Clipboard, mime: &str) -> Option<OwnedFd> {
         let (ours, theirs) = match clipboard::pipe() {
             Ok(ends) => ends,
             Err(err) => {
                 warn!(%err, "no pipe to read a copy over, so nothing is told what was copied");
-                return;
+                return None;
             }
         };
         // `ServerSideSelection` is expected when the compositor owns the
-        // selection; this process already has the text.
+        // selection; this process already has the contents.
         //
         // The two Smithay modules have separate error types with the same
         // cases, so both are converted to strings.
         let asked = match clipboard {
             Clipboard::Copy => {
-                request_data_device_client_selection(&self.seat, mime.clone(), theirs)
+                request_data_device_client_selection(&self.seat, mime.to_string(), theirs)
                     .map_err(|err| err.to_string())
             }
             Clipboard::Primary => {
-                request_primary_client_selection(&self.seat, mime.clone(), theirs)
+                request_primary_client_selection(&self.seat, mime.to_string(), theirs)
                     .map_err(|err| err.to_string())
             }
         };
-        if let Err(err) = asked {
-            debug!(%err, %mime, "nothing to read this copy from");
-        } else {
-            let hub = self.hub.clone();
-            thread::spawn(move || {
-                match clipboard::read_copy(ours, LONGEST_COPY, clipboard::PATIENCE) {
-                    Ok(copied) => match String::from_utf8(copied) {
-                        Ok(text) => {
-                            hub.send_request(ClientRequest::ClipboardCopied { clipboard, text });
-                        }
-                        // The client offered UTF-8 text and sent something
-                        // else. Logged, not repaired: a repaired copy would
-                        // differ from what was copied.
-                        Err(err) => {
-                            warn!(%err, "a client offered text that is not UTF-8, so it is not a row")
-                        }
-                    },
-                    Err(err) => {
-                        warn!(%err, "a client offered the clipboard and did not hand it over")
-                    }
-                }
-            });
+        match asked {
+            Ok(()) => Some(ours),
+            Err(err) => {
+                debug!(%err, %mime, "nothing to read this copy from");
+                None
+            }
         }
     }
 
@@ -4726,14 +4761,6 @@ delegate_kde_decoration!(DomicileCompositor);
 
 // ---- data device: drag-and-drop, and the clipboard ------------------------
 
-/// The mime types offered for compositor-owned selections.
-///
-/// All of [`TEXT_MIMES`], since clients differ: GTK asks for
-/// `text/plain;charset=utf-8`, X11 bridges for `STRING`.
-fn text_mimes() -> Vec<String> {
-    TEXT_MIMES.iter().map(|mime| (*mime).to_string()).collect()
-}
-
 /// Both clipboards, in slot order.
 const BOTH: [Clipboard; 2] = [Clipboard::Copy, Clipboard::Primary];
 
@@ -4827,20 +4854,22 @@ impl DomicileCompositor {
     /// If nothing is held, the fd is dropped and the client reads EOF.
     fn serve_a_selection(&self, held: &Holder, mime_type: String, fd: OwnedFd) {
         match held {
-            Holder::Desk(clipboard) => match self.holding[at(*clipboard)].as_deref() {
-                Some(text) => {
-                    let copy = text.to_owned();
+            Holder::Desk(clipboard) => match self.holding[at(*clipboard)]
+                .as_ref()
+                .and_then(|held| held.bytes(&mime_type))
+            {
+                Some(bytes) => {
+                    let copy = bytes.to_vec();
                     thread::spawn(move || {
-                        if let Err(err) =
-                            clipboard::write_copy(fd, copy.as_bytes(), clipboard::PATIENCE)
-                        {
+                        if let Err(err) = clipboard::write_copy(fd, &copy, clipboard::PATIENCE) {
                             warn!(%err, "a client asked for the clipboard and did not take it");
                         }
                     });
                 }
                 None => warn!(
                     ?clipboard,
-                    "a client is pasting something this desktop no longer holds, so it gets nothing"
+                    %mime_type,
+                    "a client is pasting something this desktop does not hold, so it gets nothing"
                 ),
             },
             Holder::Portal(session) => self.hub.portals.transfer(session.clone(), mime_type, fd),
@@ -4862,11 +4891,18 @@ impl SelectionHandler for DomicileCompositor {
         source: Option<SelectionSource>,
         _seat: Seat<Self>,
     ) {
-        // A cleared selection (`None`) or one with no text (an image, a file)
+        // A cleared selection (`None`) or one with no text or image (a file)
         // is not read; the previous copy stays.
         self.copying[at(clipboard_of(target))] = source
             .as_ref()
-            .and_then(|offered| text_mime(&offered.mime_types()));
+            .map(|offered| {
+                let offered = offered.mime_types();
+                text_mime(&offered)
+                    .into_iter()
+                    .chain(image_mime(&offered))
+                    .collect()
+            })
+            .unwrap_or_default();
         if target == SelectionTarget::Clipboard {
             let offered = source
                 .as_ref()
@@ -5767,7 +5803,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         ext_data_control_state,
         wlr_data_control_state,
         clipboard: History::default(),
-        copying: [None, None],
+        copying: [Vec::new(), Vec::new()],
         holding: [None, None],
         display_handle: dh.clone(),
         seat,

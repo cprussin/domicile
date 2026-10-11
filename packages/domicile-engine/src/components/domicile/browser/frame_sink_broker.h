@@ -57,9 +57,11 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       base::RepeatingCallback<void(std::vector<mojom::DisplayLayoutPtr>)>;
   // Writes the producer's clipboard into `ui::OzonePlatform`'s clipboard.
   // Injected for the same reason. Empty when the embedder runs inside another
-  // session; the text is then dropped.
+  // session; the contents are then dropped.
+  using ClipboardContents = base::flat_map<std::string, std::vector<uint8_t>>;
   using ClipboardSetter =
-      base::RepeatingCallback<void(mojom::Clipboard, const std::string&)>;
+      base::RepeatingCallback<void(mojom::Clipboard,
+                                   const ClipboardContents&)>;
   // The root frame sink of the browser window showing a display, or nullopt
   // when none does. Injected because finding windows needs //ui/aura. Empty
   // when the embedder has no windows to capture; every capture is then
@@ -124,7 +126,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
 
   // Forwards a copy in this browser to clipboard observers. Not stored: a
   // producer that connects later owns its own clipboard state.
-  void OnCopied(mojom::Clipboard clipboard, const std::string& text);
+  void OnCopied(mojom::Clipboard clipboard, const ClipboardContents& contents);
 
   // mojom::FrameSinkBroker implementation.
   void CreateFrameSink(
@@ -147,7 +149,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   void ConfigureDisplays(
       std::vector<mojom::DisplayLayoutPtr> layout) override;
   void SetClipboard(mojom::Clipboard clipboard,
-                    const std::string& text) override;
+                    const ClipboardContents& contents) override;
   void ObserveClipboard(
       mojo::PendingRemote<mojom::ClipboardObserver> observer) override;
   void ObserveDisplays(

@@ -197,10 +197,11 @@ void SetDisplayLayout(std::vector<domicile::mojom::DisplayLayoutPtr> layout) {
 // Lives here because //components/domicile/browser cannot depend on //ui/ozone.
 // Every platform but DRM ignores it: a nested run uses the host session's
 // clipboard.
-void SetClipboard(domicile::mojom::Clipboard clipboard,
-                  const std::string& text) {
+void SetClipboard(
+    domicile::mojom::Clipboard clipboard,
+    const domicile::FrameSinkBroker::ClipboardContents& contents) {
   ui::OzonePlatform::GetInstance()->SetDomicileClipboard(BufferOf(clipboard),
-                                                         text);
+                                                         contents);
 }
 
 // The root frame sink of the browser window showing `display_id`, for a
@@ -264,10 +265,11 @@ class DomicileBrowserService {
 
  private:
   // Forwards a copy made in this browser to the producer.
-  void Copied(ui::ClipboardBuffer buffer, const std::string& text) {
+  void Copied(ui::ClipboardBuffer buffer,
+              const ui::OzonePlatform::DomicileClipboardContents& contents) {
     std::optional<domicile::mojom::Clipboard> clipboard = ClipboardOf(buffer);
     if (clipboard.has_value()) {
-      broker_.OnCopied(*clipboard, text);
+      broker_.OnCopied(*clipboard, contents);
     }
   }
 
