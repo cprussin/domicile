@@ -1,5 +1,6 @@
 //! The protocol the supervisor uses to send `load-shell`, `open-url` and the
-//! Settings app's site permissions and extensions to the engine.
+//! Settings app's site permissions, extensions and media devices to the
+//! engine.
 //!
 //! One JSON line each way per connection:
 //!
@@ -25,6 +26,12 @@
 //!
 //! {"type":"config_extensions","version":1}
 //! {"type":"config_extensions","ids":["…"]}
+//!
+//! {"type":"media_devices","version":1}
+//! {"type":"media_devices","cameras":[{"id":"/dev/video2","name":"USB Camera"}],"microphones":[…]}
+//!
+//! {"type":"set_media_device","version":1,"kind":"camera","id":"/dev/video2"}
+//! {"type":"set"}   |   {"type":"refused","why":"…"}
 //! ```
 //!
 //! The engine side is C++ in the fork
@@ -37,6 +44,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use crate::media_devices::{MediaDevices, MediaKind};
 use crate::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
 /// The protocol version the supervisor sends and the engine checks.
@@ -57,7 +65,7 @@ pub enum Reply {
     Opened,
     /// Every permission's default and every site's own setting.
     SitePermissions(SiteSettings),
-    /// The engine stored a site's setting.
+    /// The engine stored a site's setting or a preferred media device.
     Set,
     /// The engine loaded an unpacked extension, which has this id.
     LoadedUnpacked { id: String },
@@ -65,6 +73,8 @@ pub enum Reply {
     Uninstalled,
     /// The ids of the extensions the desk's config installed.
     ConfigExtensions { ids: Vec<String> },
+    /// Each kind's media devices, most preferred first.
+    MediaDevices(MediaDevices),
     /// The engine refused, with its reason.
     Refused { why: String },
 }
@@ -138,6 +148,21 @@ pub fn config_extensions_line() -> String {
     line(&Command::ConfigExtensions { version: VERSION })
 }
 
+/// The request for the cameras and microphones, most preferred first.
+pub fn media_devices_line() -> String {
+    line(&Command::MediaDevices { version: VERSION })
+}
+
+/// The request to give device `id` to sites that ask for a `kind` without
+/// naming one.
+pub fn set_media_device_line(kind: MediaKind, id: &str) -> String {
+    line(&Command::SetMediaDevice {
+        version: VERSION,
+        kind,
+        id,
+    })
+}
+
 /// Parses one reply line, without its trailing newline.
 ///
 /// An unparseable reply is an error, not a [`Reply::Refused`]: it comes from
@@ -185,6 +210,14 @@ enum Command<'a> {
     },
     ConfigExtensions {
         version: u32,
+    },
+    MediaDevices {
+        version: u32,
+    },
+    SetMediaDevice {
+        version: u32,
+        kind: MediaKind,
+        id: &'a str,
     },
 }
 

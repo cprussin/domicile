@@ -53,6 +53,14 @@ const SITES = {
   ],
 } as const satisfies FakeHostState["sites"];
 
+const MEDIA = {
+  cameras: [
+    { id: "/dev/video0", name: "Integrated Camera" },
+    { id: "/dev/video2", name: "USB Camera" },
+  ],
+  microphones: [{ id: "default", name: "Default" }],
+} as const satisfies FakeHostState["media"];
+
 const INSTALLED: InstalledExtension[] = [
   {
     description: "An efficient content blocker.",
@@ -82,6 +90,7 @@ const renderApp = async (
   const host = fakeHost({
     configExtensions,
     files: files(config, writable),
+    media: structuredClone(MEDIA),
     refuse,
     sites: structuredClone(SITES),
   });
@@ -378,6 +387,18 @@ describe(App, () => {
           permission: "camera",
           setting: "block",
         });
+      });
+    });
+
+    it("picks the camera a site gets when it names none", async () => {
+      const { host, user } = await renderApp("Site permissions");
+      await user.click(await screen.findByRole("button", { name: /^Camera/ }));
+      expect(
+        await screen.findByRole("combobox", { name: "Camera device" }),
+      ).toHaveTextContent("Integrated Camera");
+      await choose(user, "Camera device", "USB Camera");
+      await waitFor(() => {
+        expect(host.state.media.cameras[0]?.id).toBe("/dev/video2");
       });
     });
 

@@ -55,8 +55,18 @@ namespace domicile {
 //   -> {"type":"config_extensions","ids":["..."]}
 //   -> {"type":"refused","why":"..."}
 //
-// The site permissions and extensions are the Settings app's, relayed by the
-// supervisor (docs/SETTINGS.md). Names are site_permissions.h's.
+//   {"type":"media_devices","version":1}
+//   -> {"type":"media_devices",
+//       "cameras":[{"id":"/dev/video2","name":"USB Camera"}],
+//       "microphones":[...]}
+//   -> {"type":"refused","why":"..."}
+//
+//   {"type":"set_media_device","version":1,"kind":"camera","id":"..."}
+//   -> {"type":"set"}
+//   -> {"type":"refused","why":"..."}
+//
+// The site permissions, extensions and media devices are the Settings app's,
+// relayed by the supervisor (docs/SETTINGS.md). Names are site_permissions.h's.
 //
 // This file only parses and answers lines; the actions are injected so it can
 // be tested with strings. chrome/browser/domicile/domicile_command_socket.cc
@@ -135,6 +145,37 @@ using UninstallExtension =
 using ListConfigExtensions =
     base::FunctionRef<std::optional<std::vector<std::string>>()>;
 
+// A camera or a microphone.
+struct MediaDevice {
+  // The system's id for it, which Chrome's device preference stores.
+  std::string id;
+  std::string name;
+};
+
+// Each kind's devices, most preferred first. A site that names no device gets
+// the first.
+struct MediaDeviceList {
+  MediaDeviceList();
+  MediaDeviceList(const MediaDeviceList&);
+  MediaDeviceList& operator=(const MediaDeviceList&);
+  ~MediaDeviceList();
+
+  std::vector<MediaDevice> cameras;
+  std::vector<MediaDevice> microphones;
+};
+
+enum class MediaDeviceKind { kCamera, kMicrophone };
+
+// Carries out `media_devices`. Returns nothing if there is no shell, and so
+// no profile whose preference ranks them.
+using ListMediaDevices = base::FunctionRef<std::optional<MediaDeviceList>()>;
+
+// Carries out `set_media_device`: sites that ask for a `kind` without naming a
+// device get `id`. Says why not when there is no such device.
+using SetMediaDevice =
+    base::FunctionRef<base::expected<void, std::string>(MediaDeviceKind kind,
+                                                        const std::string& id)>;
+
 // What each command does, injected so this file can be tested with strings.
 struct CommandActions {
   LoadShell load_shell;
@@ -144,6 +185,8 @@ struct CommandActions {
   LoadUnpacked load_unpacked;
   UninstallExtension uninstall_extension;
   ListConfigExtensions list_config_extensions;
+  ListMediaDevices list_media_devices;
+  SetMediaDevice set_media_device;
 };
 
 // Receives the reply line, including its trailing newline.

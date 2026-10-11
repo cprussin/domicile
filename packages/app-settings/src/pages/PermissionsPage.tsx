@@ -13,6 +13,8 @@ import { css } from "../../styled-system/css";
 import { flex, grid, hstack } from "../../styled-system/patterns";
 import type { Report } from "../config-editor";
 import type {
+  MediaDevices,
+  MediaKind,
   Permission,
   Setting,
   SettingsHost,
@@ -29,6 +31,7 @@ import {
 } from "../permission-names";
 import { SettingRow } from "../SettingRow";
 import { resetSite, siteName, sites, sitesWith } from "../site-groups";
+import { useMediaDevices } from "../useMediaDevices";
 import { useSiteSettings } from "../useSiteSettings";
 
 type Props = {
@@ -40,7 +43,8 @@ type Props = {
 
 /**
  * Site permissions, kept by the engine: each permission and the sites with a
- * setting of their own for it, or each site and its permissions.
+ * setting of their own for it, or each site and its permissions. Camera and
+ * microphone also pick the device a site gets when it names none.
  */
 export const PermissionsPage = ({
   description,
@@ -49,6 +53,7 @@ export const PermissionsPage = ({
   title,
 }: Props) => {
   const { failure, remove, set, settings } = useSiteSettings(host, report);
+  const media = useMediaDevices(host, report);
   return (
     <Page description={description} title={title}>
       {failure !== undefined && (
@@ -63,7 +68,13 @@ export const PermissionsPage = ({
           tabs={[
             {
               content: (
-                <ByPermission onSet={set} report={report} settings={settings} />
+                <ByPermission
+                  devices={media.devices}
+                  onPrefer={media.prefer}
+                  onSet={set}
+                  report={report}
+                  settings={settings}
+                />
               ),
               label: "By permission",
               value: "permission",
@@ -87,12 +98,19 @@ type ViewProps = {
   onSet: (site: SitePermission) => void;
 };
 
+type DeviceProps = {
+  devices: MediaDevices | undefined;
+  onPrefer: (kind: MediaKind, id: string) => void;
+};
+
 /** Each permission, opening onto the sites with a setting for it. */
 const ByPermission = ({
+  devices,
+  onPrefer,
   onSet,
   report,
   settings,
-}: ViewProps & { report: Report }) => {
+}: ViewProps & DeviceProps & { report: Report }) => {
   const [open, setOpen] = useState<Permission | undefined>(undefined);
   return (
     <div className={viewStyles}>
@@ -103,6 +121,8 @@ const ByPermission = ({
             : {
                 content: (
                   <PermissionDetail
+                    devices={devices}
+                    onPrefer={onPrefer}
                     onSet={onSet}
                     permission={open}
                     report={report}
@@ -135,13 +155,19 @@ const ByPermission = ({
   );
 };
 
-type PermissionDetailProps = ViewProps & {
-  permission: Permission;
-  report: Report;
-};
+type PermissionDetailProps = ViewProps &
+  DeviceProps & {
+    permission: Permission;
+    report: Report;
+  };
 
-/** The sites with a setting for `permission`, and a field to add one. */
+/**
+ * The sites with a setting for `permission`, a field to add one, and for a
+ * camera or microphone the device sites get.
+ */
 const PermissionDetail = ({
+  devices,
+  onPrefer,
   onSet,
   permission,
   report,
@@ -149,8 +175,17 @@ const PermissionDetail = ({
 }: PermissionDetailProps) => {
   const fallback = settings.defaults[permission];
   const listed = sitesWith(settings, permission);
+  const kind = mediaKindOf(permission);
   return (
     <Card>
+      {kind !== undefined && devices !== undefined && (
+        <DeviceRow
+          devices={kind === "camera" ? devices.cameras : devices.microphones}
+          kind={kind}
+          onPrefer={onPrefer}
+          title={PERMISSION_TITLES[permission]}
+        />
+      )}
       <p className={hintStyles}>
         A site with no setting of its own gets {settingTitle(fallback)}. Setting
         a site to {settingTitle(fallback)} removes its own.
@@ -281,6 +316,52 @@ const Entry = ({ count, onOpen, title }: EntryProps) => (
     </button>
   </li>
 );
+
+type DeviceRowProps = {
+  devices: MediaDevices["cameras"];
+  kind: MediaKind;
+  onPrefer: (kind: MediaKind, id: string) => void;
+  title: string;
+};
+
+/** The device a site gets when it does not ask for a particular one. */
+const DeviceRow = ({ devices, kind, onPrefer, title }: DeviceRowProps) => (
+  <SettingRow
+    hint="For sites that don't ask for a particular one."
+    title="Device"
+  >
+    {devices[0] === undefined ? (
+      <span className={hintStyles}>None connected</span>
+    ) : (
+      <Select
+        aria-label={`${title} device`}
+        onValueChange={(id) => {
+          if (id !== null) {
+            onPrefer(kind, id);
+          }
+        }}
+        options={devices.map(({ id, name }) => ({ label: name, value: id }))}
+        size="sm"
+        value={devices[0].id}
+        width={56}
+      />
+    )}
+  </SettingRow>
+);
+
+/** The kind of device `permission` grants, if it grants one. */
+const mediaKindOf = (permission: Permission): MediaKind | undefined => {
+  switch (permission) {
+    case "camera":
+    case "microphone":
+      return permission;
+    case "location":
+    case "notifications":
+    case "clipboard":
+    case "midi":
+      return undefined;
+  }
+};
 
 type SettingSelectProps = {
   label: string;
