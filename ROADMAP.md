@@ -34,8 +34,6 @@ item when it ships.
    - A wrong passphrase only re-sends `locked: true`. A shell can't tell it
      from a verifier error, or count or rate-limit attempts.
    - A config reload doesn't change `lock`. It applies on the next run.
-   - No warning before blanking. `HostMessage::Idle` arrives when the screens
-     go dark.
    - `lock.passphrase` is world-readable and not compared in constant time.
 
 4. **Notifications.** [NOTIFICATIONS.md](docs/architecture/NOTIFICATIONS.md).

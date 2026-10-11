@@ -67,6 +67,15 @@ describe(readSettings, () => {
     );
   });
 
+  it("reads an idle warning, which Settings does not edit", () => {
+    const settings = readSettings({
+      idle: { blank_after_seconds: 600, warn_before_seconds: 30 },
+    });
+    expect(settings.map((read) => read.idle)).toEqual(
+      Ok({ blank_after_seconds: 600, warn_before_seconds: 30 }),
+    );
+  });
+
   it("says where a config does not fit", () => {
     expect(readSettings({ theme: { mode: "system" } }).isErr()).toBe(true);
     expect(readSettings({ theme: { tint: "red" } }).isErr()).toBe(true);

@@ -183,7 +183,8 @@ fn read_chrome_messages(
         let portals = hub.portals.clone();
         move |file| portals.screenshot(file)
     })
-    .sharing_shell_commands(hub.shell_commands.clone());
+    .sharing_shell_commands(hub.shell_commands.clone())
+    .sharing_idle_warnings(hub.idle_warnings.clone());
     let mut ready = false;
     // Whether this connection is in the broadcast list. Separate from `ready`
     // because a socket can send `hello` twice, and the writer must not be added

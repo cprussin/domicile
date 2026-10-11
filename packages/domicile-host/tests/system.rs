@@ -764,6 +764,110 @@ mod shell_commands {
     }
 }
 
+/// Warnings that the screens are about to blank, set by the compositor and
+/// heard on every connection listening.
+mod idle_warnings {
+    use domicile_host::idle_warnings::IdleWarnings;
+
+    use super::*;
+
+    const WARNING: Duration = Duration::from_secs(30);
+
+    /// A system sharing `warnings`, as a chrome connection does.
+    fn page(warnings: &IdleWarnings) -> (System, Receiver<HostMessage>) {
+        let (system, heard) = system_in(&std::env::temp_dir());
+        (system.sharing_idle_warnings(warnings.clone()), heard)
+    }
+
+    /// How long the warning `heard` says is left, or `None` for no warning.
+    fn left(heard: &Receiver<HostMessage>, id: u32) -> Option<Duration> {
+        match next(heard) {
+            HostMessage::SystemEvent {
+                id: from,
+                event: SystemEvent::IdleWarning { blanks_in_ms },
+            } if from == id => blanks_in_ms.map(Duration::from_millis),
+            other => panic!("expected an idle warning for {id}, heard {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_page_listening_hears_the_warning_and_when_it_is_called_off() {
+        let warnings = IdleWarnings::default();
+        let (page, heard) = page(&warnings);
+        page.handle(7, SystemRequest::IdleWarnings);
+        assert_eq!(reply(&heard, 7), SystemReply::Started);
+
+        warnings.warn(Some(Instant::now() + WARNING));
+        let warned = left(&heard, 7).expect("a warning");
+        assert!(
+            warned <= WARNING && warned > WARNING - PATIENCE,
+            "{warned:?}"
+        );
+
+        warnings.warn(None);
+        assert_eq!(left(&heard, 7), None);
+    }
+
+    #[test]
+    fn a_page_that_listens_during_a_warning_hears_it_at_once() {
+        // A page reloaded during a warning missed its start.
+        let warnings = IdleWarnings::default();
+        warnings.warn(Some(Instant::now() + WARNING));
+        let (page, heard) = page(&warnings);
+
+        page.handle(7, SystemRequest::IdleWarnings);
+
+        assert_eq!(reply(&heard, 7), SystemReply::Started);
+        assert!(left(&heard, 7).is_some());
+    }
+
+    #[test]
+    fn a_warning_that_did_not_change_is_not_told_again() {
+        let warnings = IdleWarnings::default();
+        let (page, heard) = page(&warnings);
+        page.handle(7, SystemRequest::IdleWarnings);
+        reply(&heard, 7);
+
+        warnings.warn(None);
+        page.handle(7, SystemRequest::Unwatch);
+
+        assert_eq!(
+            next(&heard),
+            HostMessage::SystemEnd {
+                id: 7,
+                end: SystemEnd::Stopped,
+            },
+            "no warning was running, so calling it off says nothing"
+        );
+    }
+
+    #[test]
+    fn a_page_that_stopped_listening_hears_no_more() {
+        let warnings = IdleWarnings::default();
+        let (page, heard) = page(&warnings);
+        page.handle(7, SystemRequest::IdleWarnings);
+        reply(&heard, 7);
+
+        page.handle(7, SystemRequest::Unwatch);
+        warnings.warn(Some(Instant::now() + WARNING));
+
+        assert_eq!(
+            next(&heard),
+            HostMessage::SystemEnd {
+                id: 7,
+                end: SystemEnd::Stopped,
+            }
+        );
+        assert!(heard.try_recv().is_err());
+    }
+
+    /// A lock screen may dim too.
+    #[test]
+    fn listening_is_its_own_reach() {
+        assert_eq!(reach(&SystemRequest::IdleWarnings), Reach::Listens);
+    }
+}
+
 /// What a refused request gets while the desktop is locked.
 mod locked {
     use super::*;

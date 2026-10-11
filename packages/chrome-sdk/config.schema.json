@@ -177,6 +177,13 @@
           "format": "uint64",
           "minimum": 0,
           "type": ["integer", "null"]
+        },
+        "warn_before_seconds": {
+          "default": null,
+          "description": "Seconds before the screens go dark that the shell is warned, so it can\ndim or count down. Input in that time calls the blanking off.\n\nAbsent means no warning. It must be at least 1 and less than\n`blank_after_seconds`.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": ["integer", "null"]
         }
       },
       "type": "object"

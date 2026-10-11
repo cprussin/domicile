@@ -179,6 +179,50 @@ fn rejects_a_timeout_of_no_time_at_all() {
     );
 }
 
+#[test]
+fn a_desk_that_states_a_warning_gets_it_before_the_timeout() {
+    let idle = Config::parse(
+        r#"
+{ "idle": { "blank_after_seconds": 600, "warn_before_seconds": 30 } }
+"#,
+    )
+    .unwrap()
+    .idle;
+    assert_eq!(idle.warn_before(), Some(Duration::from_secs(30)));
+}
+
+#[test]
+fn a_desk_that_states_no_warning_gets_none() {
+    let idle = Config::parse(
+        r#"
+{ "idle": { "blank_after_seconds": 600 } }
+"#,
+    )
+    .unwrap()
+    .idle;
+    assert_eq!(idle.warn_before(), None);
+}
+
+#[test]
+fn rejects_a_warning_that_cannot_come_before_its_timeout() {
+    // A warning of no time, one as long as the timeout, and one with no
+    // timeout to warn of have no reading.
+    for idle in [
+        r#"{ "blank_after_seconds": 600, "warn_before_seconds": 0 }"#,
+        r#"{ "blank_after_seconds": 600, "warn_before_seconds": 600 }"#,
+        r#"{ "warn_before_seconds": 30 }"#,
+    ] {
+        let err = Config::parse(&format!(r#"{{ "idle": {idle} }}"#)).unwrap_err();
+        let ConfigError::Validation(message) = &err else {
+            panic!("{idle} is refused rather than taken: {err:?}");
+        };
+        assert!(
+            message.contains("idle.warn_before_seconds"),
+            "the message should name the key: {message}"
+        );
+    }
+}
+
 // ---- lock -----------------------------------------------------------------
 
 #[test]

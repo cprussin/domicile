@@ -67,6 +67,7 @@ export const fakeSystem = (
         ? Promise.resolve(Ok(settings(iconTheme)))
         : unexpected(),
     dbusMatch: unexpected,
+    idleWarnings: unexpected,
     readDir: (path) =>
       Promise.resolve(
         at(path).andThen((node) =>

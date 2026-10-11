@@ -432,3 +432,32 @@ fn a_shell_command_goes_to_each_page_that_listens_for_one() {
         r#"{"type":"system_event","id":12,"event":{"kind":"shell_command","command":["focus","right"]}}"#
     );
 }
+
+/// A page hears when the screens are about to blank, and when that is called
+/// off. See `docs/IDLE.md`.
+#[test]
+fn a_page_hears_how_soon_the_screens_blank_and_when_they_no_longer_will() {
+    assert_eq!(
+        chrome(r#"{"type":"system_request","id":13,"request":{"call":"idle_warnings"}}"#),
+        ChromeMessage::SystemRequest {
+            id: 13,
+            request: SystemRequest::IdleWarnings,
+        }
+    );
+    assert_eq!(
+        host(&HostMessage::SystemEvent {
+            id: 13,
+            event: SystemEvent::IdleWarning {
+                blanks_in_ms: Some(30_000),
+            },
+        }),
+        r#"{"type":"system_event","id":13,"event":{"kind":"idle_warning","blanks_in_ms":30000}}"#
+    );
+    assert_eq!(
+        host(&HostMessage::SystemEvent {
+            id: 13,
+            event: SystemEvent::IdleWarning { blanks_in_ms: None },
+        }),
+        r#"{"type":"system_event","id":13,"event":{"kind":"idle_warning","blanks_in_ms":null}}"#
+    );
+}

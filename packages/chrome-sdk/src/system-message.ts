@@ -56,7 +56,7 @@ const systemReplySchema = z.looseObject({
 });
 
 // Output from a running process, a change a watch saw, a signal a D-Bus match
-// heard, or a command `domicile send-shell` sent.
+// heard, a command `domicile send-shell` sent, or an idle warning.
 const systemEventSchema = z.looseObject({
   event: z.discriminatedUnion("kind", [
     z.looseObject({
@@ -77,6 +77,11 @@ const systemEventSchema = z.looseObject({
     z.looseObject({
       command: z.array(z.string()),
       kind: z.literal("shell_command"),
+    }),
+    z.looseObject({
+      // `null` when the blanking was called off or the screens went dark.
+      blanks_in_ms: z.number().nullable(),
+      kind: z.literal("idle_warning"),
     }),
   ]),
   id: z.number(),

@@ -303,8 +303,8 @@ in {
                 Seconds without input before the screens blank. Any key, click,
                 scroll or pointer movement wakes them.
 
-                `null`, the default, never blanks. The shell gets no warning
-                before blanking, so this is opt-in.
+                `null`, the default, never blanks. A blank screen looks like a
+                crash, so this is opt-in.
 
                 Blanking also locks a desk that sets a `lock` verifier. Without
                 a timeout, the desk locks only when its shell asks.
@@ -315,6 +315,18 @@ in {
               type = lib.types.nullOr lib.types.ints.positive;
               default = null;
               example = 600;
+            };
+            warn_before_seconds = lib.mkOption {
+              description = ''
+                Seconds before blanking that the shell is warned, so it can dim
+                or count down. Input in that time keeps the screens on. Must be
+                less than `blank_after_seconds`.
+
+                `null`, the default, gives no warning. Applied on reload.
+              '';
+              type = lib.types.nullOr lib.types.ints.positive;
+              default = null;
+              example = 30;
             };
           };
 

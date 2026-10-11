@@ -172,6 +172,14 @@ export type IdleConfig = {
    * Absent means never. Zero is refused.
    */
   blank_after_seconds?: number | null;
+  /**
+   * Seconds before the screens go dark that the shell is warned, so it can
+   * dim or count down. Input in that time calls the blanking off.
+   *
+   * Absent means no warning. It must be at least 1 and less than
+   * `blank_after_seconds`.
+   */
+  warn_before_seconds?: number | null;
 };
 
 /** Input-device settings. */
