@@ -124,6 +124,7 @@ mod eis;
 mod engine;
 mod engine_buffers;
 mod engine_damage;
+mod engine_imports;
 mod engine_session;
 mod engine_surfaces;
 mod engine_waiting;
@@ -162,7 +163,7 @@ use crate::buffer_transform::{crop_in_buffer, upright_size, Sampled};
 use crate::dmabuf_descriptor::DmabufDescriptor;
 use crate::engine::{Bounds, Capture, Clipboard, NEWEST_BOX};
 use crate::engine_buffers::Returned;
-use crate::engine_session::{EngineSession, Release, Submission, Submitted};
+use crate::engine_session::{Dispatched, EngineSession, Release, Submission, Submitted};
 use crate::gbm::Gbm;
 use crate::held_frames::{HeldFrames, TRICKLE};
 use crate::latency::{Latency, Step as LatencyStep};
@@ -1638,9 +1639,16 @@ impl DomicileCompositor {
         let Some(session) = self.engine.as_mut() else {
             return;
         };
-        let (events, releases) = session.dispatch();
+        let Dispatched {
+            events,
+            releases,
+            shown,
+        } = session.dispatch(Instant::now());
         let overdue = session.overdue(Instant::now());
         self.take_back(releases.into_iter().chain(overdue));
+        for app_id in shown {
+            self.frame_shown(&app_id);
+        }
 
         for event in events {
             match event {
@@ -1725,8 +1733,8 @@ impl DomicileCompositor {
                         }
                     }
                 }
-                // Handled above, with the buffers.
-                engine::Event::Released { .. } => {}
+                // Handled by the session, with the buffers.
+                engine::Event::Released { .. } | engine::Event::Imported { .. } => {}
                 engine::Event::Captured {
                     capture,
                     frame,
@@ -2116,7 +2124,12 @@ impl DomicileCompositor {
         );
         self.arm_the_hold_deadline();
         match submission {
-            Submission::Taken => shown,
+            Submission::Taken { replaced } => {
+                if let Some(buffer) = replaced {
+                    self.returned(buffer);
+                }
+                shown
+            }
             Submission::Waiting { replaced } => {
                 if let Some(buffer) = replaced {
                     self.returned(buffer);

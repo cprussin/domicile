@@ -210,6 +210,7 @@ typedef struct DomicileDisplayLayout {
 //   displays   wl_output              — the whole display list, primary first
 //   copied     wl_data_device.set_selection — something was copied in a page
 //   captured   a frame of a display capture, for a screen cast
+//   imported   zwp_linux_buffer_params.created — a dmabuf was imported
 //
 // All fire from domicile_engine_dispatch, on the calling thread. `user_data`
 // is passed back untouched. A null function pointer drops that event.
@@ -283,6 +284,12 @@ typedef struct DomicileEngineCallbacks {
                        DomicileClipboard clipboard,
                        const DomicileClipboardItem* items,
                        uint32_t count);
+  // The answer to domicile_surface_import_async with this `request`: the
+  // buffer's id, or zero if the browser refused it.
+  void (*imported)(void* user_data,
+                   DomicileSurfaceId surface,
+                   uint64_t request,
+                   DomicileBufferId buffer);
 } DomicileEngineCallbacks;
 
 // Connects to the browser's mojo socket. Returns null on failure, and the
@@ -320,12 +327,22 @@ DOMICILE_ENGINE_EXPORT void domicile_surface_destroy(DomicileEngine* engine,
 // Imports a client's dmabuf (zwp_linux_dmabuf_v1). Returns the buffer id, or
 // zero if the browser refused.
 //
-// Blocks; it runs once per buffer, not per frame. The usual failure is an
-// ozone platform without CreateNativePixmapFromHandle, such as headless.
+// Blocks for a round trip to the GPU process. The usual failure is an ozone
+// platform without CreateNativePixmapFromHandle, such as headless.
 DOMICILE_ENGINE_EXPORT DomicileBufferId
 domicile_surface_import(DomicileEngine* engine,
                         DomicileSurfaceId surface,
                         const DomicileDmabuf* dmabuf);
+
+// Like domicile_surface_import, but returns at once. The answer arrives as
+// `imported`, carrying `request`. Submit the buffer only once it has.
+//
+// The fds are duplicated before this returns. A null `dmabuf` aborts.
+DOMICILE_ENGINE_EXPORT void domicile_surface_import_async(
+    DomicileEngine* engine,
+    DomicileSurfaceId surface,
+    const DomicileDmabuf* dmabuf,
+    uint64_t request);
 
 // Submits a frame showing `buffer` (wl_surface.commit), damaging the given
 // rectangle. An empty rectangle means the whole surface.
