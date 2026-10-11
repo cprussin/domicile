@@ -94,9 +94,23 @@ library sends; the libraries' tests and the allowlist's both check it.
 | `lock` setting | Verifier | Note |
 |---|---|---|
 | `"pam_service": "domicile"` | `crate::pam`: `pam_authenticate` as the compositor's uid | The machine must declare the service: `nixosModules.default`, or `security.pam.services.domicile = {};`. A home-manager module cannot |
-| `"passphrase": "…"` | String compare | Stored in a world-readable file. Guards against someone at the keyboard only |
+| `"passphrase": "…"` | Constant-time compare | Stored in a world-readable file. Guards against someone at the keyboard only |
 | neither | none | The desktop never locks |
 | both | refused at parse | Neither is a fallback for the other |
+
+## Reloading
+
+A reload that changes `lock` swaps the verifier (`Lock::rekeyed`). It never
+unlocks the desktop.
+
+- **A new verifier** checks the next passphrase. A check already running
+  against the old one cannot unlock: its `Ok(true)` counts as a refusal.
+- **A removed verifier** at a locked desktop is kept until it unlocks the
+  desktop, then dropped. Dropping it at once would leave nothing able to
+  unlock.
+- **A PAM service the machine lacks** is refused and logged. The current lock
+  stays. Nothing retries until `lock` changes again, so declare the service and
+  edit `lock`, or restart.
 
 ## Checking a passphrase
 
@@ -136,4 +150,8 @@ checking a passphrase; the desk stays locked meanwhile
 a passphrase this desktop did not take; it stays locked
 the passphrase opened this desktop
 this desktop could not check a passphrase, so it stays locked
+taking up a reloaded lock
+the reloaded config removes the lock; this desktop no longer locks
+the reloaded config removes the lock while this desktop is locked; it stays locked until the current passphrase opens it
+the reloaded lock cannot be used; the current one stays
 ```

@@ -40,7 +40,7 @@ launcher, opens it in an app window
 - The host refuses a JSON config the compositor would refuse, with the
   compositor's reason. The file is not written.
 - An edit made elsewhere shows at once: the host watches both files.
-- `lock` and `startup` are read only at startup.
+- `startup` is read only at startup.
 
 ## How it works
 

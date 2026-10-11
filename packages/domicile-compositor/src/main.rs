@@ -182,7 +182,7 @@ use crate::eis::barriers::Zone;
 use crate::file_indexing::{keep_the_index, kept_at, Heard};
 use crate::idle::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
 use crate::keymap::compiled_keymap;
-use crate::lock::{Lock, Offer, Refusal, Unlocking, Verdict};
+use crate::lock::{Lock, Offer, Refusal, Rekeying, Unlocking, Verdict};
 use crate::modifiers::{Held, Modifiers};
 use crate::once_per_window::OncePerWindow;
 use crate::peer_process::peer_pid;
@@ -193,7 +193,8 @@ use crate::screens::{Advertised, Screens, Slot};
 use crate::viewport::{source_pixels, surface_size, Viewport};
 use crate::which_engine::another_engine;
 use domicile_config::{
-    Config, ConfigError, ConfigStore, ExtensionsConfig, IdleConfig, KeyboardConfig, Omit, ThemeMode,
+    Config, ConfigError, ConfigStore, ExtensionsConfig, IdleConfig, KeyboardConfig, LockConfig,
+    Omit, ThemeMode,
 };
 use domicile_host::clipboard::{
     image_mime, text_mime, Contents, History, LONGEST_COPY, LONGEST_IMAGE,
@@ -597,15 +598,15 @@ struct DomicileCompositor {
     /// Kept so a reload can remove or replace it; a calloop source can only be
     /// removed by its token.
     idle_clock: Option<RegistrationToken>,
-    /// The lock, for a desktop that can lock.
+    /// The lock.
     ///
-    /// `None` if the config sets neither `lock.passphrase` nor
-    /// `lock.pam_service`. See [`crate::lock::chosen`].
+    /// Has no verifier, and never locks, if the config sets neither
+    /// `lock.passphrase` nor `lock.pam_service`. See [`crate::lock::chosen`].
     ///
-    /// Not replaced on reload, unlike `idle`. Rebuilding it could unlock the
-    /// desktop, or leave a locked one with no verifier. Verifier changes apply
-    /// on the next run. See `ROADMAP.md`.
-    lock: Option<Lock>,
+    /// Kept across reloads, which only swap its verifier
+    /// ([`rekey_the_lock`](DomicileCompositor::rekey_the_lock)). Rebuilding it
+    /// would unlock the desktop.
+    lock: Lock,
     /// The theme change in progress, if any, and its current phase's deadline.
     turnover: Option<Turnover<usize>>,
     turnover_deadline: Option<RegistrationToken>,
@@ -2758,7 +2759,7 @@ impl DomicileCompositor {
     ///
     /// A desktop that cannot lock is never locked.
     fn the_desk_is_locked(&self) -> bool {
-        self.lock.as_ref().is_some_and(Lock::locked)
+        self.lock.locked()
     }
 
     /// Tell every chrome whether the desktop is locked.
@@ -2787,7 +2788,7 @@ impl DomicileCompositor {
     /// Silent if the desktop cannot lock, like
     /// [`tell_a_new_chrome_whether_anybody_is_here`](DomicileCompositor::tell_a_new_chrome_whether_anybody_is_here).
     fn tell_a_new_chrome_whether_the_desk_is_locked(&self) {
-        if self.lock.is_some() {
+        if self.lock.can_lock() {
             self.tell_the_chromes_whether_the_desk_is_locked();
         }
     }
@@ -2798,10 +2799,7 @@ impl DomicileCompositor {
     /// only on the transition to locked, so a repeat does not reset a lock
     /// screen mid-passphrase.
     fn shut_the_desk(&mut self, why: &str) {
-        let Some(lock) = self.lock.as_mut() else {
-            return;
-        };
-        if lock.shut() {
+        if self.lock.shut() {
             debug!("{why}");
             // Release held keys. Input is dropped while locked, including
             // releases, so a key pressed before locking would stay down. With
@@ -2824,11 +2822,7 @@ impl DomicileCompositor {
     /// to the page that asked. A page that unlocked itself could be opened from
     /// devtools.
     fn offered_the_passphrase(&mut self, passphrase: &Passphrase) {
-        let Some(lock) = self.lock.as_mut() else {
-            warn!("a chrome offered a passphrase to a desktop that has no lock");
-            return;
-        };
-        match lock.offered(passphrase) {
+        match self.lock.offered(passphrase) {
             Offer::Checking => debug!("checking a passphrase; the desk stays locked meanwhile"),
             Offer::StillChecking => warn!(
                 "a chrome offered a passphrase while another was being checked; this one was \
@@ -2848,11 +2842,7 @@ impl DomicileCompositor {
     /// Refusals and verifier failures are logged without the passphrase;
     /// [`Unlocking`] does not hold it.
     fn heard_the_verdict(&mut self, verdict: Verdict) {
-        let lock = self
-            .lock
-            .as_mut()
-            .expect("a verdict comes only from this desk's own lock");
-        match lock.answered(verdict) {
+        match self.lock.answered(verdict) {
             Unlocking::Opened => debug!("the passphrase opened this desktop"),
             Unlocking::Refused => {
                 warn!("a passphrase this desktop did not take; it stays locked")
@@ -3065,6 +3055,9 @@ impl DomicileCompositor {
         if let Some(lockdown) = &restated.lockdown {
             self.hub.portals.lock_down(lockdown.clone());
         }
+        if let Some(lock) = &restated.lock {
+            self.rekey_the_lock(lock);
+        }
         if let Some(theme) = restated.theme {
             // The config overrides the shell's toggle. The toggle writes
             // nothing back because the config is generated, so a `theme` edit
@@ -3089,6 +3082,26 @@ impl DomicileCompositor {
             if let Some(message) = told {
                 self.hub.broadcast(message);
             }
+        }
+    }
+
+    /// Apply a new `lock`. See [`Lock::rekeyed`].
+    ///
+    /// A PAM service the machine lacks is refused, keeping the current
+    /// verifier, as startup refuses it.
+    fn rekey_the_lock(&mut self, lock: &LockConfig) {
+        match lock::chosen(lock.verifier(), Path::new(pam::SERVICES)) {
+            Err(why) => error!(%why, "the reloaded lock cannot be used; the current one stays"),
+            Ok(verifier) => match self.lock.rekeyed(verifier) {
+                Rekeying::Applied if self.lock.can_lock() => info!("taking up a reloaded lock"),
+                Rekeying::Applied => {
+                    info!("the reloaded config removes the lock; this desktop no longer locks")
+                }
+                Rekeying::OnceOpened => warn!(
+                    "the reloaded config removes the lock while this desktop is locked; \
+                     it stays locked until the current passphrase opens it"
+                ),
+            },
         }
     }
 
@@ -5912,21 +5925,20 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // See `crate::lock::chosen`.
     //
     // Verdicts come back to this loop; see `heard_the_verdict`.
-    let lock = lock::chosen(config.lock.verifier(), Path::new(pam::SERVICES))?.map(|verifier| {
-        Lock::held_by(verifier, move |verdict| {
+    let lock = Lock::held_by(
+        lock::chosen(config.lock.verifier(), Path::new(pam::SERVICES))?,
+        move |verdict| {
             verdicts
                 .send(verdict)
                 .expect("the loop that hears a verdict outlives the lock that asked for one")
-        })
-    });
+        },
+    );
     // Give chrome connections the lock state (see `answer_on_the_connection`).
     // Safe to set after connections start: the desktop starts unlocked, and
     // nothing can lock it before the event loop runs.
-    if let Some(lock) = &lock {
-        hub.lock
-            .set(lock.seen())
-            .expect("the lock is handed to the hub once, at startup");
-    }
+    hub.lock
+        .set(lock.seen())
+        .expect("the lock is handed to the hub once, at startup");
 
     let state = DomicileCompositor {
         compositor_state: CompositorState::new::<DomicileCompositor>(&dh),

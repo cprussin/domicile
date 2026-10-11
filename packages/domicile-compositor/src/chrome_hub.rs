@@ -51,8 +51,7 @@ pub struct ChromeHub {
     /// then answers nothing, so a launcher does not show a broken desktop as an
     /// empty home.
     pub offered: Mutex<Option<Arc<Offered>>>,
-    /// The lock state, for [`answer_on_the_connection`]. Set once at startup,
-    /// only if the desktop can lock.
+    /// The lock state, for [`answer_on_the_connection`]. Set once at startup.
     pub lock: OnceLock<Seen>,
     /// The desktop portal: tells clients the theme, and takes the shell's
     /// answers to their dialogs.
