@@ -136,10 +136,21 @@ describe("aimAt", () => {
     expect(aimAt(TABS, ["b"], 250, 10)).toBeUndefined();
   });
 
+  it("aims beside the tab group of the window under the pointer, at its edge", () => {
+    expect(aimAt(TABS, ["x"], 990, 200)).toEqual(
+      Aim.Group("a", Direction.Right, {
+        height: 400,
+        width: 500,
+        x: 500,
+        y: 0,
+      }),
+    );
+  });
+
   it("aims a tab over its own group at the half of the group it is in", () => {
-    // Beside one of its tabs, which the drop puts it beside the group of.
+    // Beside the group, through one of its other tabs, since this one leaves.
     expect(aimAt(TABS, ["a"], 900, 200)).toEqual(
-      Aim.Window("b", Direction.Right, {
+      Aim.Group("b", Direction.Right, {
         height: 400,
         width: 500,
         x: 500,
@@ -147,7 +158,7 @@ describe("aimAt", () => {
       }),
     );
     expect(aimAt(TABS, ["a"], 500, 210)).toEqual(
-      Aim.Window("b", Direction.Down, {
+      Aim.Group("b", Direction.Down, {
         height: 200,
         width: 1000,
         x: 0,

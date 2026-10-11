@@ -1254,7 +1254,11 @@ describe("the pointer", () => {
   it("retiles a tiled window where it was dropped on another", () => {
     const state = reduce(
       desktop("kitty", "editor", "browser"),
-      WindowAction.WindowDroppedOn(APP("kitty"), APP("browser"), undefined),
+      WindowAction.WindowDroppedOn(
+        APP("kitty"),
+        { id: APP("browser"), up: 0 },
+        undefined,
+      ),
     );
 
     expect(windowsOf(workspaceHere(state).tiling)).toEqual([
@@ -1321,7 +1325,11 @@ describe("a tiled window dragged across screens", () => {
   it("goes beside the window it is dropped on, and takes the keyboard there", () => {
     const state = reduce(
       twoScreens(),
-      WindowAction.WindowDroppedOn(APP("kitty"), APP("term"), Direction.Left),
+      WindowAction.WindowDroppedOn(
+        APP("kitty"),
+        { id: APP("term"), up: 0 },
+        Direction.Left,
+      ),
     );
 
     expect(state.focused).toBe("right");
@@ -1338,7 +1346,11 @@ describe("a tiled window dragged across screens", () => {
   it("trades places with the window it is dropped in the middle of", () => {
     const state = reduce(
       twoScreens(),
-      WindowAction.WindowDroppedOn(APP("kitty"), APP("term"), undefined),
+      WindowAction.WindowDroppedOn(
+        APP("kitty"),
+        { id: APP("term"), up: 0 },
+        undefined,
+      ),
     );
 
     expect(windowsOf(workspaceOn(state, "left").tiling)).toEqual([
@@ -1442,7 +1454,11 @@ describe("a tab group dragged by its strip", () => {
   it("goes whole beside the window it is dropped on, on another screen", () => {
     const state = reduce(
       twoScreens(),
-      WindowAction.GroupDroppedOn(GROUP, APP("term"), Direction.Left),
+      WindowAction.GroupDroppedOn(
+        GROUP,
+        { id: APP("term"), up: 0 },
+        Direction.Left,
+      ),
     );
 
     expect(state.focused).toBe("right");

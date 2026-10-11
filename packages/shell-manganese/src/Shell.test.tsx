@@ -1486,6 +1486,8 @@ describe("Shell", () => {
       fireEvent.pointerUp(window, { clientX: GAP + 600, clientY: y });
 
       expect(tabOrder(container)).toEqual(["app:two", "app:three", "app:one"]);
+      // Still one group: only its open tab's window shows.
+      expect(windowsOnScreen(container)).toHaveLength(1);
     });
 
     it("breaks a tab out of its group into a split when dragged over the group", () => {

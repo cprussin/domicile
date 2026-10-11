@@ -543,9 +543,13 @@ const stageActionsOf = (
         act(WindowAction.WindowDroppedOnScreen(id, aim.name));
         break;
       }
+      case AimKind.Group: {
+        act(WindowAction.WindowDroppedOn(id, { id: aim.id, up: 1 }, aim.edge));
+        break;
+      }
       case AimKind.Strip:
       case AimKind.Window: {
-        act(WindowAction.WindowDroppedOn(id, aim.id, aim.edge));
+        act(WindowAction.WindowDroppedOn(id, { id: aim.id, up: 0 }, aim.edge));
         break;
       }
     }
@@ -561,6 +565,12 @@ const stageActionsOf = (
   },
   onGroupDropOn: (group: NodeRef, aim: Aim) => {
     switch (aim.kind) {
+      case AimKind.Group: {
+        act(
+          WindowAction.GroupDroppedOn(group, { id: aim.id, up: 1 }, aim.edge),
+        );
+        break;
+      }
       case AimKind.Screen: {
         act(WindowAction.GroupDroppedOnScreen(group, aim.name));
         break;
@@ -570,7 +580,9 @@ const stageActionsOf = (
         throw new Error(`desktop: group ${group.id} aimed along a strip`);
       }
       case AimKind.Window: {
-        act(WindowAction.GroupDroppedOn(group, aim.id, aim.edge));
+        act(
+          WindowAction.GroupDroppedOn(group, { id: aim.id, up: 0 }, aim.edge),
+        );
         break;
       }
     }

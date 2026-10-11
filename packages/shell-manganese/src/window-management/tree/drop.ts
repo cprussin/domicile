@@ -12,35 +12,34 @@ import {
   axisOf,
   LayoutNode as Node,
   NodeKind,
-  showsOneChild,
   splitFor,
   windowsIn,
   withChildAt,
 } from "./node";
 import type { NodeRef, Path } from "./path";
-import { nodeAt, pathTo, pathToRef, replacedAt } from "./path";
+import { nodeAt, pathToRef, replacedAt } from "./path";
 import { withoutAt } from "./remove";
 import type { Tiling } from "./tiling";
 import { withCommandsOn } from "./tiling";
 
 /**
- * The tiling with the node `moving` names dropped on window `target`'s
- * `edge`, or its middle when `edge` is `undefined`. Focus and commands go to
- * the moved node, so a dropped group stays selected.
+ * The tiling with the node `moving` names dropped on the `edge` of the node
+ * `target` names, or its middle when `edge` is `undefined`. Focus and commands
+ * go to the moved node, so a dropped group stays selected.
  *
- * Unchanged when `target` is inside `moving`. Throws if either is not tiled
- * here.
+ * Unchanged when `target`'s window is inside `moving`. Throws if either is not
+ * tiled here.
  */
 export const droppedOn = (
   tiling: Tiling,
   moving: NodeRef,
-  target: string,
+  target: NodeRef,
   edge: Direction | undefined,
 ): Tiling => {
   const root = tiledRoot(tiling);
   const from = pathToRef(root, moving);
   const node = nodeAt(root, from);
-  if (windowsIn(node).includes(target)) {
+  if (windowsIn(node).includes(target.id)) {
     return tiling;
   } else {
     const moved =
@@ -52,20 +51,20 @@ export const droppedOn = (
 };
 
 /**
- * The tiling with `node`, dragged in from another workspace, dropped on
- * `target`'s `edge`, or in its place when `edge` is `undefined`. Focus and
- * commands go to `node`.
+ * The tiling with `node`, dragged in from another workspace, dropped on the
+ * `edge` of the node `target` names, or in its place when `edge` is
+ * `undefined`. Focus and commands go to `node`.
  *
  * Throws if `target` is not tiled here.
  */
 export const arrivedOn = (
   tiling: Tiling,
   node: LayoutNode,
-  target: string,
+  target: NodeRef,
   edge: Direction | undefined,
 ): Tiling => {
   const root = tiledRoot(tiling);
-  const at = pathOf(root, target);
+  const at = pathToRef(root, target);
   const moved =
     edge === undefined
       ? replacedAt(root, at, () => node)
@@ -91,9 +90,9 @@ export const tradedFor = (
   };
 };
 
-/** Swaps the node at `from` with window `target`, keeping both boxes' sizes. */
-const traded = (root: LayoutNode, from: Path, target: string): LayoutNode => {
-  const to = pathOf(root, target);
+/** Swaps the node at `from` with `target`, keeping both boxes' sizes. */
+const traded = (root: LayoutNode, from: Path, target: NodeRef): LayoutNode => {
+  const to = pathToRef(root, target);
   const moving = nodeAt(root, from);
   return replacedAt(
     replacedAt(root, from, () => nodeAt(root, to)),
@@ -111,22 +110,27 @@ const traded = (root: LayoutNode, from: Path, target: string): LayoutNode => {
 const besideTarget = (
   root: LayoutNode,
   from: Path,
-  target: string,
+  target: NodeRef,
   edge: Direction,
 ): LayoutNode => {
   const rest = withoutAt(root, from);
   if (rest === undefined) {
     // Unreachable: the target is still in the tree.
-    throw new Error(`layout tree: dropping on ${target} left nothing`);
+    throw new Error(`layout tree: dropping on ${target.id} left nothing`);
   } else {
-    return placedBeside(rest, pathOf(rest, target), nodeAt(root, from), edge);
+    return placedBeside(
+      rest,
+      pathToRef(rest, target),
+      nodeAt(root, from),
+      edge,
+    );
   }
 };
 
 /**
- * Puts `moving` on the `edge` side of the node at `at`: beside its parent if
- * that is a tab group of several, in its parent if that is a split along that
- * axis, else in a new split with the node (also when there is no parent).
+ * Puts `moving` on the `edge` side of the node at `at`: in its parent if the
+ * parent runs along that axis, else in a new split with the node (also when
+ * there is no parent).
  */
 const placedBeside = (
   root: LayoutNode,
@@ -141,15 +145,7 @@ const placedBeside = (
   const forward = isForward(edge);
   if (
     parent?.kind === NodeKind.Container &&
-    showsOneChild(parent.layout) &&
-    parent.children.length > 1
-  ) {
-    // An edge of a tab group's window is an edge of the group, as in sway.
-    return placedBeside(root, around, moving, edge);
-  } else if (
-    parent?.kind === NodeKind.Container &&
     index !== undefined &&
-    !showsOneChild(parent.layout) &&
     axisOf(parent.layout) === axis
   ) {
     return replacedAt(root, around, () =>
@@ -184,14 +180,5 @@ const tiledRoot = ({ root }: Tiling): LayoutNode => {
     throw new Error("layout tree: nothing is tiled to drop a window on");
   } else {
     return root;
-  }
-};
-
-const pathOf = (root: LayoutNode, id: string): Path => {
-  const path = pathTo(root, id);
-  if (path === undefined) {
-    throw new Error(`layout tree: no tiled window ${id} to drag`);
-  } else {
-    return path;
   }
 };

@@ -18,7 +18,12 @@ const ROW = {
 
 describe("droppedOn", () => {
   it("trades places with the window dropped on the middle of", () => {
-    const dropped = droppedOn(ROW, { id: "a", up: 0 }, "c", undefined);
+    const dropped = droppedOn(
+      ROW,
+      { id: "a", up: 0 },
+      { id: "c", up: 0 },
+      undefined,
+    );
 
     expect(dropped.root).toEqual(
       LayoutNode.Container(
@@ -40,13 +45,21 @@ describe("droppedOn", () => {
 
     expect(
       focusedIdOf(
-        removed(droppedOn(visited, { id: "b", up: 0 }, "a", undefined), "b"),
+        removed(
+          droppedOn(visited, { id: "b", up: 0 }, { id: "a", up: 0 }, undefined),
+          "b",
+        ),
       ),
     ).toBe("a");
   });
 
   it("goes beside a window dropped on the edge that runs along its row", () => {
-    const dropped = droppedOn(ROW, { id: "a", up: 0 }, "c", Direction.Left);
+    const dropped = droppedOn(
+      ROW,
+      { id: "a", up: 0 },
+      { id: "c", up: 0 },
+      Direction.Left,
+    );
 
     expect(dropped.root).toMatchObject({
       children: [
@@ -60,7 +73,12 @@ describe("droppedOn", () => {
   });
 
   it("splits a window dropped on the edge across its row", () => {
-    const dropped = droppedOn(ROW, { id: "a", up: 0 }, "c", Direction.Up);
+    const dropped = droppedOn(
+      ROW,
+      { id: "a", up: 0 },
+      { id: "c", up: 0 },
+      Direction.Up,
+    );
 
     expect(dropped.root).toMatchObject({
       children: [
@@ -84,7 +102,8 @@ describe("droppedOn", () => {
     };
 
     expect(
-      droppedOn(pair, { id: "a", up: 0 }, "b", Direction.Down).root,
+      droppedOn(pair, { id: "a", up: 0 }, { id: "b", up: 0 }, Direction.Down)
+        .root,
     ).toMatchObject({
       children: [LayoutNode.Window("b"), LayoutNode.Window("a")],
       layout: Layout.SplitV,
@@ -94,13 +113,13 @@ describe("droppedOn", () => {
   it("leaves the tree alone when a window is dropped on itself", () => {
     const tiling = withFocusOn(ROW, "b");
 
-    expect(droppedOn(tiling, { id: "b", up: 0 }, "b", Direction.Left)).toBe(
-      tiling,
-    );
+    expect(
+      droppedOn(tiling, { id: "b", up: 0 }, { id: "b", up: 0 }, Direction.Left),
+    ).toBe(tiling);
   });
 
-  it("goes beside a tab group dropped on the edge of its window, not into it", () => {
-    const tabs = {
+  describe("a tab group", () => {
+    const TABS = {
       depth: 1,
       root: LayoutNode.Container(Layout.Tabbed, [
         LayoutNode.Window("a"),
@@ -109,17 +128,34 @@ describe("droppedOn", () => {
       ]),
     };
 
-    expect(
-      droppedOn(tabs, { id: "c", up: 0 }, "a", Direction.Right).root,
-    ).toMatchObject({
-      children: [
-        {
-          children: [LayoutNode.Window("a"), LayoutNode.Window("b")],
-          layout: Layout.Tabbed,
-        },
-        LayoutNode.Window("c"),
-      ],
-      layout: Layout.SplitH,
+    it("takes a window dropped beside one of its tabs into its strip", () => {
+      expect(
+        droppedOn(TABS, { id: "c", up: 0 }, { id: "a", up: 0 }, Direction.Right)
+          .root,
+      ).toMatchObject({
+        children: [
+          LayoutNode.Window("a"),
+          LayoutNode.Window("c"),
+          LayoutNode.Window("b"),
+        ],
+        layout: Layout.Tabbed,
+      });
+    });
+
+    it("splits with a window dropped on its edge, which leaves it", () => {
+      expect(
+        droppedOn(TABS, { id: "c", up: 0 }, { id: "a", up: 1 }, Direction.Right)
+          .root,
+      ).toMatchObject({
+        children: [
+          {
+            children: [LayoutNode.Window("a"), LayoutNode.Window("b")],
+            layout: Layout.Tabbed,
+          },
+          LayoutNode.Window("c"),
+        ],
+        layout: Layout.SplitH,
+      });
     });
   });
 
@@ -141,7 +177,12 @@ describe("droppedOn", () => {
     const GROUP = { id: "a", up: 1 };
 
     it("goes beside a window dropped on its edge, and stays selected", () => {
-      const dropped = droppedOn(TABS_BESIDE, GROUP, "c", Direction.Right);
+      const dropped = droppedOn(
+        TABS_BESIDE,
+        GROUP,
+        { id: "c", up: 0 },
+        Direction.Right,
+      );
 
       expect(dropped.root).toMatchObject({
         children: [
@@ -157,15 +198,17 @@ describe("droppedOn", () => {
     });
 
     it("trades places with a window dropped on the middle of", () => {
-      expect(droppedOn(TABS_BESIDE, GROUP, "c", undefined).root).toMatchObject({
+      expect(
+        droppedOn(TABS_BESIDE, GROUP, { id: "c", up: 0 }, undefined).root,
+      ).toMatchObject({
         children: [LayoutNode.Window("c"), { layout: Layout.Tabbed }],
       });
     });
 
     it("leaves the tree alone when dropped on a window inside it", () => {
-      expect(droppedOn(TABS_BESIDE, GROUP, "b", Direction.Left)).toBe(
-        TABS_BESIDE,
-      );
+      expect(
+        droppedOn(TABS_BESIDE, GROUP, { id: "b", up: 0 }, Direction.Left),
+      ).toBe(TABS_BESIDE);
     });
   });
 });

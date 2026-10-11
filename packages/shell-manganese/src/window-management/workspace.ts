@@ -632,13 +632,13 @@ export const nodeHeld = (workspace: Workspace, held: NodeRef): Workspace => {
 };
 
 /**
- * A tiled window or group dragged onto a window and let go: onto its `edge`,
- * or its middle where that is `undefined` — see `tree/drop.ts`.
+ * A tiled window or group dragged onto a window or its group and let go: onto
+ * its `edge`, or its middle where that is `undefined` — see `tree/drop.ts`.
  */
 export const tiledDropped = (
   workspace: Workspace,
   moving: NodeRef,
-  target: string,
+  target: NodeRef,
   edge: Direction | undefined,
 ): Workspace => ({
   ...workspace,
@@ -669,7 +669,7 @@ export const tiledLifted = (
 export const tiledArrived = (
   workspace: Workspace,
   node: LayoutNode,
-  target: string,
+  target: NodeRef,
   edge: Direction | undefined,
 ): Workspace => ({
   ...workspace,
