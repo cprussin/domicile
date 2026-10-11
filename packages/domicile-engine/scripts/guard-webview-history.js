@@ -23,13 +23,14 @@
 //   GUARD page-state …         path, security and URL
 //   GUARD favicon-state …      the favicon's path
 //   GUARD loading-state …      `loading` and change events so far
+//   GUARD load-progress …      `loadProgress` and change events so far
 //   GUARD done                 the schedule finished
 //
 // The pages log `GUARD guest-shown path=…`; see the fixture server.
 //
-// `loading` is checked here because this run already has a settled page and a
-// pending one (`/slow`). It needs no control: an element stuck on either value
-// fails one of the two readings.
+// `loading` and `loadProgress` are checked here because this run already has a
+// settled page and a pending one (`/slow`). They need no control: an element
+// stuck on any value fails one of the two readings.
 //
 // Listeners are added late on purpose. `canGoBack`/`canGoForward` are
 // properties so a shell that mounts late (a React shell adds listeners after
@@ -131,6 +132,9 @@ export const Shell = () => {
   // change independently.
   let loadingAnnounced = 0;
 
+  // Counts `domicile-load-progress-change` events.
+  let progressAnnounced = 0;
+
   // Called once, late on purpose; see the header.
   const listen = () => {
     view.addEventListener("domicile-history-change", () => {
@@ -138,6 +142,9 @@ export const Shell = () => {
     });
     view.addEventListener("domicile-loading-change", () => {
       loadingAnnounced += 1;
+    });
+    view.addEventListener("domicile-load-progress-change", () => {
+      progressAnnounced += 1;
     });
   };
 
@@ -175,11 +182,16 @@ export const Shell = () => {
     return url === "" ? "" : new URL(url).pathname;
   };
 
-  // Logs `loading`. Read once settled and once while `/slow` is pending.
+  // Logs `loading` and `loadProgress`. Read once settled, once while `/slow`
+  // is pending and once after stop().
   const readLoading = (at) => {
     say(
       `loading-state at=${at} loading=${view.loading}` +
         ` events=${loadingAnnounced}`,
+    );
+    say(
+      `load-progress at=${at} progress=${view.loadProgress}` +
+        ` events=${progressAnnounced}`,
     );
   };
 

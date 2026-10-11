@@ -76,6 +76,12 @@ baseline() { # $1 NEGATIVE
   # Any nonzero count. The verdict only checks that the loading state was
   # announced at least once.
   PENDING_LOADING_EVENTS=2
+  # Shared, at the same two points: a finished load is done, and a load the
+  # fixture holds open has started and not finished.
+  SETTLED_PROGRESS=1
+  PENDING_PROGRESS=0.1
+  # Any nonzero count, as for loading.
+  PENDING_PROGRESS_EVENTS=3
   if [ "$1" = "1" ]; then
     FIRST="/one"
     SECOND="/two"
@@ -323,6 +329,28 @@ expect "a canceled load still called loading is a failure" "fail" \
   "$(verdict 0 STOPPED_LOADING=true)"
 expect "a canceled load still called loading names the spinner" "yes" \
   "$(blames "spinner" 0 STOPPED_LOADING=true)"
+
+echo
+echo "how far a page has loaded"
+# Fails an element stuck at done: a load held open is not done.
+expect "a pending load called done is a failure" "fail" \
+  "$(verdict 0 PENDING_PROGRESS=1)"
+expect "a pending load called done names the positive it rests on" "yes" \
+  "$(blames "THIS IS THE POSITIVE" 0 PENDING_PROGRESS=1)"
+# Fails an element that never heard a report, which reads 0.
+expect "a pending load at nothing is a failure" "fail" \
+  "$(verdict 0 PENDING_PROGRESS=0)"
+expect "an element with no progress at all is a failure" "fail" \
+  "$(verdict 0 PENDING_PROGRESS=undefined)"
+# Fails an element stuck at the start: a finished load is done.
+expect "a settled page short of done is a failure" "fail" \
+  "$(verdict 0 SETTLED_PROGRESS=0.1)"
+expect "a settled page short of done names the load finishing" "yes" \
+  "$(blames "never reporting the load done" 0 SETTLED_PROGRESS=0.1)"
+expect "no progress event at all is a failure" "fail" \
+  "$(verdict 0 PENDING_PROGRESS_EVENTS=0)"
+expect "no progress event at all names the chrome that would never re-read" \
+  "yes" "$(blames "re-read" 0 PENDING_PROGRESS_EVENTS=0)"
 
 echo
 echo "and the control, where the same readings invert"

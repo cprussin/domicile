@@ -534,6 +534,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   // content::WebContentsObserver:
   void WebContentsDestroyed() override;
 
+  // Reports load progress. See LoadProgressChanged in the mojom.
+  void LoadProgressChanged(double progress) override;
+
   // Reports Find results. Replies to a stopped or replaced search are dropped,
   // as in Chrome's FindTabHelper.
   void DidReceiveFindReply(int request_id,
@@ -658,6 +661,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   // also fires when nothing changed.
   void ReportLoading(bool should_show_loading_ui);
 
+  // Reports load progress to the element if it changed.
+  void ReportLoadProgress(double progress);
+
   // Reports the page's zoom to the element if it changed. Zoom changes when
   // the shell sets it, when another window on the same host changes it
   // (HostZoomMap is per host), or on navigation to a differently zoomed site.
@@ -727,6 +733,7 @@ class WebViewGuest : public mojom::WebViewGuest,
   bool reported_can_go_forward_ = false;
 
   bool reported_loading_ = false;
+  double reported_load_progress_ = 0.0;
   GURL reported_url_;
   mojom::WebViewSecurity reported_security_ =
       mojom::WebViewSecurity::kNeutral;

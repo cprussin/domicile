@@ -12,6 +12,7 @@ const BAR = {
   canGoForward: false,
   isPrivate: false,
   loading: false,
+  loadProgress: 0,
   onBack: () => undefined,
   onForward: () => undefined,
   onNavigate: () => undefined,
@@ -115,6 +116,22 @@ describe("AddressBar", () => {
 
       expect(calls).toStrictEqual(["stop"]);
       expect(screen.queryByRole("button", { name: "Reload" })).toBeNull();
+    });
+  });
+
+  describe("the loading bar", () => {
+    it("says how far a page that is arriving has loaded", () => {
+      render(<AddressBar {...BAR} loading loadProgress={0.4} />);
+
+      expect(
+        screen.getByRole("progressbar", { name: "Loading" }),
+      ).toHaveAttribute("aria-valuenow", "40");
+    });
+
+    it("is gone once the page has arrived", () => {
+      render(<AddressBar {...BAR} />);
+
+      expect(screen.queryByRole("progressbar")).toBeNull();
     });
   });
 

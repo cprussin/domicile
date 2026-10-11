@@ -53,6 +53,7 @@ constexpr char kGuestFocusEvent[] = "domicile-guest-focus";
 // State changes.
 constexpr char kHistoryChangeEvent[] = "domicile-history-change";
 constexpr char kLoadingChangeEvent[] = "domicile-loading-change";
+constexpr char kLoadProgressChangeEvent[] = "domicile-load-progress-change";
 constexpr char kPageChangeEvent[] = "domicile-page-change";
 
 // An unhandled chord, as a KeyboardEvent with its own type so shell `keydown`
@@ -505,6 +506,12 @@ void HTMLWebViewElement::LoadingChanged(bool is_loading) {
   loading_ = is_loading;
 
   DispatchEvent(*Event::CreateBubble(AtomicString(kLoadingChangeEvent)));
+}
+
+void HTMLWebViewElement::LoadProgressChanged(double progress) {
+  load_progress_ = progress;
+
+  DispatchEvent(*Event::CreateBubble(AtomicString(kLoadProgressChangeEvent)));
 }
 
 void HTMLWebViewElement::PageChanged(
