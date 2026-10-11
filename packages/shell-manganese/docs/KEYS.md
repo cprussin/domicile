@@ -22,6 +22,7 @@ Manganese binds sway's keys on Meta (Super, `Mod4`) by default:
 | Meta+Shift+Q | Close the window. |
 | Meta+Space, Meta+D | Toggle the launcher. |
 | Meta+Shift+V | Toggle the clipboard history. |
+| Meta+Shift+Space | Open the copied URL, or search Google for the copied text. |
 | Meta+Shift+Return | Lock. Does nothing if the config has no `lock`. |
 | Print | Take a screenshot: pick the area in the screenshot dialog. Ctrl+C there copies it instead of saving. |
 | Meta+R | Enter resize mode. |
@@ -40,7 +41,7 @@ There is no terminal key. Bind one with `exec`.
 ## Commands
 
 Build commands with the exported helpers (`focus`, `move`, `workspace`,
-`moveToWorkspace`, `grow`, `mode`, `exec`, …). They use sway's names:
+`moveToWorkspace`, `grow`, `mode`, `exec`, `searchClipboard`, …). They use sway's names:
 
 | Command | Action |
 |---|---|
@@ -66,6 +67,7 @@ Manganese-only commands:
 | `launcher` | Toggle the launcher. |
 | `clipboard` | Toggle the clipboard history. |
 | `screenshot` | Take a screenshot, as Print does. |
+| `search-clipboard` | Open the newest copy in a browser window: as a site if it is a URL, else as a search. Reads the first 160 characters. |
 | `resize grow left/right/up/down` | Grow the window that way. |
 
 - `mode(name)` comes from the SDK's `bindKeys`. Each monitor's page keeps its

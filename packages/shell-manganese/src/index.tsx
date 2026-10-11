@@ -30,6 +30,7 @@ export {
   move,
   moveToWorkspace,
   scratchpad,
+  searchClipboard,
   split,
   type Way,
   workspace,

@@ -25,6 +25,8 @@ export const lock = () => command("lock");
 export const launcher = () => command("launcher");
 /** Toggle the clipboard history. */
 export const clipboard = () => command("clipboard");
+/** Open the newest copy as a site if it is a URL, else search for it. */
+export const searchClipboard = () => command("search-clipboard");
 /** Take a screenshot, picking the area in a dialog. */
 export const screenshot = () => command("screenshot");
 /** Move the focus, or focus the parent or child container. */
@@ -104,6 +106,7 @@ export const DEFAULT_KEYBINDINGS: ModeKeybindings = {
   "Meta+Shift+minus": move("scratchpad"),
   "Meta+Shift+q": kill(),
   "Meta+Shift+Return": lock(),
+  "Meta+Shift+space": searchClipboard(),
   "Meta+Shift+Tab": floating(),
   "Meta+Shift+v": clipboard(),
   "Meta+s": layout("stacking"),

@@ -12,6 +12,7 @@ import {
   useReducer,
   useRef,
 } from "react";
+import { typedAddress } from "../address/typed-address";
 import { openFileCommand } from "../launcher/open-file";
 import type { PlacedScreen } from "../screens/screen-toward";
 import { appIdOf, browserIdOf } from "./window";
@@ -92,6 +93,12 @@ export const useWindows = (
       }
       if (action.kind === WindowActionKind.AppLaunched) {
         domicile.spawn(action.command);
+      }
+      if (action.kind === WindowActionKind.ClipboardSearched) {
+        const url = clipboardUrl(domicile);
+        if (url !== undefined) {
+          domicile.openBrowserWindow(url);
+        }
       }
       if (action.kind === WindowActionKind.BrowserOpened) {
         if (action.isPrivate) {
@@ -214,4 +221,16 @@ const takeScreenshot = (domicile: DomicileHost) => {
       // biome-ignore lint/suspicious/noConsole: surfacing a broken system call
       console.error("The screenshot was not taken", error);
     });
+};
+
+/**
+ * The newest copy as a site or a search URL, or `undefined` when the clipboard
+ * holds no text.
+ *
+ * Reads the row's preview, so a copy longer than its first 160 characters is
+ * cut short.
+ */
+const clipboardUrl = (domicile: DomicileHost): string | undefined => {
+  const newest = domicile.clipboard?.[0];
+  return newest === undefined ? undefined : typedAddress(newest.preview)?.url;
 };

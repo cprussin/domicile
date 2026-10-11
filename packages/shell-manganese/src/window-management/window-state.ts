@@ -319,6 +319,7 @@ export enum WindowActionKind {
   BrowserWindowsListed,
   ChildFocused,
   ClipboardDismissed,
+  ClipboardSearched,
   ClipboardToggled,
   CommandExecuted,
   ContainerSplit,
@@ -477,6 +478,16 @@ export const WindowAction = {
    */
   ClipboardDismissed: () => ({
     kind: WindowActionKind.ClipboardDismissed as const,
+  }),
+
+  /**
+   * `search-clipboard`: open the newest copy as a site if it is a URL, else
+   * search for it.
+   *
+   * Changes no state; `useWindows` asks the engine for the browser window.
+   */
+  ClipboardSearched: () => ({
+    kind: WindowActionKind.ClipboardSearched as const,
   }),
 
   /**
@@ -951,6 +962,10 @@ const reduceAction = (
     }
     case WindowActionKind.ClipboardDismissed: {
       return { ...state, clipboardOpen: false };
+    }
+    case WindowActionKind.ClipboardSearched: {
+      // The engine opens the window and lists it.
+      return state;
     }
     case WindowActionKind.ClipboardToggled: {
       return { ...state, clipboardOpen: !state.clipboardOpen };
