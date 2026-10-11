@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, spyOn } from "bun:test";
+import { ModalDialog } from "@domicile-desktop/component-library/ModalDialog";
 import { FilePreview } from "@domicile-desktop/sdk/file-preview";
 import {
   WEBVIEW_FAVICON_CHANGE_EVENT,
@@ -9,7 +10,13 @@ import { BookmarkSimpleIcon } from "@phosphor-icons/react/dist/ssr/BookmarkSimpl
 import { GithubLogoIcon } from "@phosphor-icons/react/dist/ssr/GithubLogo";
 import { GoogleLogoIcon } from "@phosphor-icons/react/dist/ssr/GoogleLogo";
 import { YoutubeLogoIcon } from "@phosphor-icons/react/dist/ssr/YoutubeLogo";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitForElementToBeRemoved,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -224,6 +231,54 @@ describe("Launcher", () => {
       );
       rerender(<Launcher {...props} onClosed={closed} open={false} />);
     });
+  });
+
+  // Focusing a browser window's view reads as a click in it, which would move
+  // the keyboard to that window. The shell refocuses the focused window.
+  it("focuses nothing when it closes, not even what an earlier panel left", async () => {
+    const props = {
+      fromPrivate: false,
+      onClosed: () => undefined,
+      onDismiss: () => undefined,
+      onLaunch: () => undefined,
+      opening: { apps: [], bookmarks: [] },
+      preview: previewing,
+      screen: SCREEN,
+      search: searching(FILES, false),
+      searchApps: searchingApps([], []),
+    };
+    const Desk = ({
+      launcher,
+      panel,
+    }: {
+      launcher: boolean;
+      panel: boolean;
+    }) => (
+      <>
+        <button type="button">Other screen</button>
+        <button type="button">This screen</button>
+        <ModalDialog open={panel} title="Panel">
+          Body
+        </ModalDialog>
+        <Launcher {...props} open={launcher} />
+      </>
+    );
+    const { rerender } = render(<Desk launcher={false} panel={false} />, {
+      wrapper: OnOneScreen,
+    });
+    const other = screen.getByRole("button", { name: "Other screen" });
+    other.focus();
+    rerender(<Desk launcher={false} panel />);
+    await screen.findByRole("dialog");
+    rerender(<Desk launcher={false} panel={false} />);
+    await waitForElementToBeRemoved(() => screen.queryByRole("dialog"));
+    screen.getByRole("button", { name: "This screen" }).focus();
+    rerender(<Desk launcher panel={false} />);
+    await screen.findByRole("combobox");
+    rerender(<Desk launcher={false} panel={false} />);
+    await waitForElementToBeRemoved(() => screen.queryByRole("combobox"));
+
+    expect(document.activeElement).toBe(document.body);
   });
 
   it("opens wide, so the rows and a preview both have room", () => {

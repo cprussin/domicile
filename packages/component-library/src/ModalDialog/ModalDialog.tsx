@@ -55,6 +55,11 @@ type Props = ExtendProps<
      */
     popup?: boolean | undefined;
     /**
+     * Whether closing focuses what had focus before it opened. Turn it off
+     * when the caller places focus itself.
+     */
+    returnFocus?: boolean | undefined;
+    /**
      * Name of the display to center the popup on and dim. Without it, a page
      * that spans several monitors centers it across all of them and dims them
      * all. Needs a `DisplayProvider`.
@@ -73,6 +78,7 @@ const ModalDialogComponent = ({
   footer,
   placement = "center",
   popup = true,
+  returnFocus = true,
   screen,
   size = "md",
   surface = "card",
@@ -100,7 +106,7 @@ const ModalDialogComponent = ({
         A hidden popup, since closing completes when the popup closes.
         Without one the backdrop would stay and block every click.
       */}
-        {!popup && <BaseDialog.Popup hidden />}
+        {!popup && <BaseDialog.Popup finalFocus={returnFocus} hidden />}
         {popup && (
           <BaseDialog.Viewport className={viewportStyles} style={region}>
             {/* Data attributes make the variant visible in the inspector and
@@ -110,6 +116,7 @@ const ModalDialogComponent = ({
               data-placement={placement}
               data-size={size}
               data-surface={surface}
+              finalFocus={returnFocus}
               onKeyDown={moveFooterFocus}
             >
               {title !== undefined && (

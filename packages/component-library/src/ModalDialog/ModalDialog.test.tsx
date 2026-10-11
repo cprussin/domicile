@@ -196,6 +196,29 @@ describe(ModalDialog, () => {
       expect(onOpenChange.mock.calls[0]?.[0]).toBe(false);
     });
 
+    it("leaves focus where closing put it when told not to return it", async () => {
+      const user = userEvent.setup();
+      const Dialog = ({ open }: { open: boolean }) => (
+        <>
+          <Button>Before</Button>
+          <ModalDialog open={open} returnFocus={false} title="Settings">
+            Body
+          </ModalDialog>
+        </>
+      );
+      const { rerender } = render(<Dialog open={false} />);
+      const before = screen.getByRole("button", { name: "Before" });
+      before.focus();
+      rerender(<Dialog open />);
+      await user.click(await screen.findByRole("button", { name: "Close" }));
+      rerender(<Dialog open={false} />);
+      await waitFor(() => {
+        expect(screen.queryByText("Body")).not.toBeInTheDocument();
+      });
+      await Promise.resolve();
+      expect(before).not.toHaveFocus();
+    });
+
     it("reports a press on a backdrop drawn without its popup", async () => {
       const user = userEvent.setup();
       const closed: boolean[] = [];

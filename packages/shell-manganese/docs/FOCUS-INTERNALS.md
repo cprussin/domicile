@@ -26,6 +26,10 @@ How manganese implements the focus behavior in
   when the launcher opens, for the last focused guest. A window ignores it
   while its page can't be clicked: behind another tab or a desktop panel.
   Otherwise opening the launcher would move focus to that window's screen.
+- The launcher gives focus back to nothing when it closes (`returnFocus`).
+  base-ui would focus an element focused before some earlier panel, which can
+  be another screen's `<webview>`, and that reads as a click in it.
+  `useReclaimFocus` refocuses the focused window instead.
 - The engine reports a `<webview>` whose guest has focus as
   `document.activeElement` (patch
   `0011-domicile-let-a-guest-s-focus-reach-the-element-it-ha.patch`).
