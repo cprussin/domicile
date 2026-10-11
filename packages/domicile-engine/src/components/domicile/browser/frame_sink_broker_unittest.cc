@@ -107,6 +107,12 @@ class FakeDisplayListObserver : public mojom::DisplayListObserver {
   mojo::Receiver<mojom::DisplayListObserver> receiver_{this};
 };
 
+// Clipboard contents holding `text` alone, keyed as the producer sends text.
+FrameSinkBroker::ClipboardContents Text(const std::string& text) {
+  return {{"text/plain;charset=utf-8",
+           std::vector<uint8_t>(text.begin(), text.end())}};
+}
+
 // Fake producer clipboard observer.
 class FakeClipboardObserver : public mojom::ClipboardObserver {
  public:
@@ -115,12 +121,14 @@ class FakeClipboardObserver : public mojom::ClipboardObserver {
   }
 
   // mojom::ClipboardObserver implementation.
-  void OnCopied(mojom::Clipboard clipboard, const std::string& text) override {
-    copies_.emplace_back(clipboard, text);
+  void OnCopied(mojom::Clipboard clipboard,
+                const FrameSinkBroker::ClipboardContents& contents) override {
+    copies_.emplace_back(clipboard, contents);
   }
 
   // Every copy sent, in order. A list so tests can detect duplicates.
-  std::vector<std::pair<mojom::Clipboard, std::string>> copies_;
+  std::vector<std::pair<mojom::Clipboard, FrameSinkBroker::ClipboardContents>>
+      copies_;
 
  private:
   mojo::Receiver<mojom::ClipboardObserver> receiver_{this};
@@ -258,8 +266,9 @@ class FrameSinkBrokerTest : public testing::Test {
   }
 
   // Fake for the ozone platform that owns the clipboard.
-  void RecordClipboard(mojom::Clipboard clipboard, const std::string& text) {
-    clipboards_.emplace_back(clipboard, text);
+  void RecordClipboard(mojom::Clipboard clipboard,
+                       const FrameSinkBroker::ClipboardContents& contents) {
+    clipboards_.emplace_back(clipboard, contents);
   }
 
   void TearDown() override {
@@ -279,7 +288,8 @@ class FrameSinkBrokerTest : public testing::Test {
   std::vector<std::vector<mojom::DisplayLayoutPtr>> layouts_;
 
   // Every clipboard the producer sent, in order.
-  std::vector<std::pair<mojom::Clipboard, std::string>> clipboards_;
+  std::vector<std::pair<mojom::Clipboard, FrameSinkBroker::ClipboardContents>>
+      clipboards_;
 
   // Fake for the browser's frame sink id allocator.
   viz::FrameSinkIdAllocator allocator_{kBrowserClientId};
@@ -899,15 +909,19 @@ TEST_F(FrameSinkBrokerTest, AProducerSaysWhatIsOnEachClipboard) {
   mojo::Remote<mojom::FrameSinkBroker> remote;
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
 
-  remote->SetClipboard(mojom::Clipboard::kCopy, "an explicit copy");
-  remote->SetClipboard(mojom::Clipboard::kPrimary, "brushed past");
+  // The copy holds an image as well as text, as a screenshot with a file
+  // name does: both cross.
+  FrameSinkBroker::ClipboardContents copy = Text("an explicit copy");
+  copy.emplace("image/png", std::vector<uint8_t>{0x89, 'P', 'N', 'G'});
+  remote->SetClipboard(mojom::Clipboard::kCopy, copy);
+  remote->SetClipboard(mojom::Clipboard::kPrimary, Text("brushed past"));
   RunUntilIdle();
 
   ASSERT_EQ(clipboards_.size(), 2u);
   EXPECT_EQ(clipboards_[0].first, mojom::Clipboard::kCopy);
-  EXPECT_EQ(clipboards_[0].second, "an explicit copy");
+  EXPECT_EQ(clipboards_[0].second, copy);
   EXPECT_EQ(clipboards_[1].first, mojom::Clipboard::kPrimary);
-  EXPECT_EQ(clipboards_[1].second, "brushed past");
+  EXPECT_EQ(clipboards_[1].second, Text("brushed past"));
 }
 
 TEST_F(FrameSinkBrokerTest, AnEmptyClipboardIsSaidRatherThanSwallowed) {
@@ -915,11 +929,11 @@ TEST_F(FrameSinkBrokerTest, AnEmptyClipboardIsSaidRatherThanSwallowed) {
   mojo::Remote<mojom::FrameSinkBroker> remote;
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
 
-  remote->SetClipboard(mojom::Clipboard::kCopy, "");
+  remote->SetClipboard(mojom::Clipboard::kCopy, {});
   RunUntilIdle();
 
   ASSERT_EQ(clipboards_.size(), 1u);
-  EXPECT_EQ(clipboards_[0].second, "");
+  EXPECT_TRUE(clipboards_[0].second.empty());
 }
 
 TEST_F(FrameSinkBrokerTest, AnEmbedderWithNoClipboardDropsWhatWasSaid) {
@@ -934,7 +948,7 @@ TEST_F(FrameSinkBrokerTest, AnEmbedderWithNoClipboardDropsWhatWasSaid) {
   mojo::Remote<mojom::FrameSinkBroker> remote;
   unwired.Bind(remote.BindNewPipeAndPassReceiver());
 
-  remote->SetClipboard(mojom::Clipboard::kCopy, "an explicit copy");
+  remote->SetClipboard(mojom::Clipboard::kCopy, Text("an explicit copy"));
   RunUntilIdle();
 
   EXPECT_TRUE(clipboards_.empty()) << "the fixture's own broker heard nothing";
@@ -953,12 +967,12 @@ TEST_F(FrameSinkBrokerTest, ACopyMadeInTheBrowserReachesEveryObserver) {
   second_remote->ObserveClipboard(second.BindRemote());
   RunUntilIdle();
 
-  broker()->OnCopied(mojom::Clipboard::kPrimary, "copied in a page");
+  broker()->OnCopied(mojom::Clipboard::kPrimary, Text("copied in a page"));
   RunUntilIdle();
 
   ASSERT_EQ(first.copies_.size(), 1u);
   EXPECT_EQ(first.copies_[0].first, mojom::Clipboard::kPrimary);
-  EXPECT_EQ(first.copies_[0].second, "copied in a page");
+  EXPECT_EQ(first.copies_[0].second, Text("copied in a page"));
   EXPECT_EQ(second.copies_, first.copies_);
 }
 
@@ -967,7 +981,8 @@ TEST_F(FrameSinkBrokerTest, AnObserverIsNotCaughtUpOnCopiesItMissed) {
   // state and sets it with SetClipboard.
   mojo::Remote<mojom::FrameSinkBroker> remote;
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
-  broker()->OnCopied(mojom::Clipboard::kCopy, "copied before it connected");
+  broker()->OnCopied(mojom::Clipboard::kCopy,
+                     Text("copied before it connected"));
 
   FakeClipboardObserver observer;
   remote->ObserveClipboard(observer.BindRemote());

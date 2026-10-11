@@ -173,6 +173,11 @@ The compositor pushes every selection, so:
 - `RequestClipboardData` answers synchronously from memory.
 - The browser is never the selection owner.
 
+Contents cross keyed by MIME type (`DomicileClipboardContents`, patch `0110`):
+the text once, offered under every text type, and an image under its own type
+(`image/png` from a page). Other types, such as the HTML a copied image comes
+with, stay in the browser.
+
 The primary selection works too (`zwp_primary_selection_device_manager_v1`).
 A nested run still uses the host's clipboard; `ROADMAP.md` tracks it.
 

@@ -9,6 +9,7 @@ use std::time::Instant;
 
 use crate::buffer_transform::Sampled;
 use crate::dmabuf_descriptor::DmabufDescriptor;
+use domicile_host::clipboard::Contents;
 use smithay::reexports::wayland_server::backend::ObjectId;
 use smithay::reexports::wayland_server::protocol::wl_buffer;
 use smithay::reexports::wayland_server::Resource as _;
@@ -264,8 +265,8 @@ impl EngineSession {
     ///
     /// See [`crate::engine::Engine::set_clipboard`], including why the browser
     /// is told rather than asked.
-    pub fn set_clipboard(&self, clipboard: Clipboard, text: &str) {
-        self.engine.set_clipboard(clipboard, text);
+    pub fn set_clipboard(&self, clipboard: Clipboard, contents: &Contents) {
+        self.engine.set_clipboard(clipboard, contents);
     }
 
     /// Submits a buffer as `app_id`'s window, at the box `at_box` names (see
