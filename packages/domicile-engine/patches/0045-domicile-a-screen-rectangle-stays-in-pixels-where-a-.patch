@@ -23,7 +23,7 @@ the turn, as before.
  2 files changed, 34 insertions(+), 6 deletions(-)
 
 diff --git a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc
-index e2a092e1a7..983d12d86b 100644
+index e2a092e1..983d12d8 100644
 --- a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc
 +++ b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc
 @@ -36,6 +36,7 @@
@@ -81,7 +81,7 @@ index e2a092e1a7..983d12d86b 100644
    const display::Display::Rotation turn = GetDisplayTurn();
    if (turn == display::Display::ROTATE_90 ||
 diff --git a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h
-index dd0cb93baa..b98cedf4b0 100644
+index 284710ab..9e33412f 100644
 --- a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h
 +++ b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h
 @@ -247,12 +247,18 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform

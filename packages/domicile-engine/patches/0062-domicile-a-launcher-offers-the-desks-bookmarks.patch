@@ -15,10 +15,10 @@ in a generated-bindings list.
  2 files changed, 3 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index 662d335997..d403424050 100644
+index 8fe123f7..814401de 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
-@@ -2422,6 +2422,8 @@ generated_interface_sources_in_modules = [
+@@ -2402,6 +2402,8 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_apps_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_desktop_entry.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_desktop_entry.h",
@@ -28,10 +28,10 @@ index 662d335997..d403424050 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_display.cc",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index 19acb2e596..3fff523b79 100644
+index 7b60a81b..42906e6f 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
-@@ -302,6 +302,7 @@ static_idl_files_in_modules = [
+@@ -306,6 +306,7 @@ static_idl_files_in_modules = [
    "//third_party/blink/renderer/modules/domicile/domicile_apps_event.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_apps_event_init.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_desktop_entry.idl",

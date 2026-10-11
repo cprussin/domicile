@@ -30,10 +30,10 @@ needs a new event type and that invalidates the generated bindings.
  2 files changed, 6 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index 2b3a0b8dec..bb8cd63738 100644
+index 07fe6ff5..1d6bb812 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
-@@ -323,6 +323,8 @@ generated_dictionary_sources_in_modules = [
+@@ -317,6 +317,8 @@ generated_dictionary_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_battery_event_init.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_clipboard_event_init.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_clipboard_event_init.h",
@@ -42,7 +42,7 @@ index 2b3a0b8dec..bb8cd63738 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_files_event_init.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_files_event_init.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event_init.cc",
-@@ -2402,6 +2404,8 @@ generated_interface_sources_in_modules = [
+@@ -2382,6 +2384,8 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_clipboard_entry.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_clipboard_event.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_clipboard_event.h",
@@ -52,10 +52,10 @@ index 2b3a0b8dec..bb8cd63738 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_files_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event.cc",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index 5a92af859e..d6493e846d 100644
+index 156319e0..1c483c19 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
-@@ -292,6 +292,8 @@ static_idl_files_in_modules = [
+@@ -296,6 +296,8 @@ static_idl_files_in_modules = [
    "//third_party/blink/renderer/modules/domicile/domicile_clipboard_entry.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_clipboard_event.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_clipboard_event_init.idl",

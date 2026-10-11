@@ -28,7 +28,7 @@ before it, and both blobs are that file's.
  2 files changed, 20 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 6a1ca6a186..fb71a7d67c 100644
+index 6a1ca6a1..fb71a7d6 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -5,6 +5,7 @@
@@ -61,7 +61,7 @@ index 6a1ca6a186..fb71a7d67c 100644
  
    // Domicile's engine fork: a <webview> asking for a guest to put behind it.
 diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
-index e87e891e4d..d0f812f626 100644
+index ee7a227e..1b48d224 100644
 --- a/chrome/browser/prefs/browser_prefs.cc
 +++ b/chrome/browser/prefs/browser_prefs.cc
 @@ -4,6 +4,8 @@
@@ -73,7 +73,7 @@ index e87e891e4d..d0f812f626 100644
  #include <array>
  #include <optional>
  #include <string>
-@@ -2091,6 +2093,10 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
+@@ -2170,6 +2172,10 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
    extensions::RegisterSettingsOverriddenUiPrefs(registry);
    ExtensionSettingsOverriddenDialog::RegisterProfilePrefs(registry);
  

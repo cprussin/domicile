@@ -42,7 +42,7 @@ DrmGpuDisplayManagerTest cases cover the call sites.
  4 files changed, 29 insertions(+), 17 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/common/drm_util.cc b/ui/ozone/platform/drm/common/drm_util.cc
-index e3d61d2b27..f52391d2be 100644
+index e3d61d2b..f52391d2 100644
 --- a/ui/ozone/platform/drm/common/drm_util.cc
 +++ b/ui/ozone/platform/drm/common/drm_util.cc
 @@ -672,10 +672,10 @@ GetDisplayInfosAndInvalidCrtcs(const DrmWrapper& drm) {
@@ -60,7 +60,7 @@ index e3d61d2b27..f52391d2be 100644
      }
  
 diff --git a/ui/ozone/platform/drm/common/drm_util.h b/ui/ozone/platform/drm/common/drm_util.h
-index fa7e84622c..bfc1853201 100644
+index fa7e8462..bfc18532 100644
 --- a/ui/ozone/platform/drm/common/drm_util.h
 +++ b/ui/ozone/platform/drm/common/drm_util.h
 @@ -37,16 +37,28 @@ class DisplayMode;
@@ -98,7 +98,7 @@ index fa7e84622c..bfc1853201 100644
  // Using a moderate size e.g. 256 for the cursor is enough in most cases.
  const int kMaxCursorBufferSize = 256;
 diff --git a/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc b/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc
-index a8994855e6..7a5b07ffda 100644
+index a8994855..7a5b07ff 100644
 --- a/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc
 +++ b/ui/ozone/platform/drm/gpu/drm_gpu_display_manager.cc
 @@ -313,10 +313,10 @@ MovableDisplaySnapshots DrmGpuDisplayManager::GetDisplays() {
@@ -116,10 +116,10 @@ index a8994855e6..7a5b07ffda 100644
      }
  
 diff --git a/ui/ozone/platform/drm/gpu/drm_gpu_display_manager_unittest.cc b/ui/ozone/platform/drm/gpu/drm_gpu_display_manager_unittest.cc
-index fb8b56e6ef..ad044727a4 100644
+index 5e2d41dd..8a3dc68c 100644
 --- a/ui/ozone/platform/drm/gpu/drm_gpu_display_manager_unittest.cc
 +++ b/ui/ozone/platform/drm/gpu/drm_gpu_display_manager_unittest.cc
-@@ -286,8 +286,8 @@ class DrmGpuDisplayManagerTest : public testing::Test {
+@@ -290,8 +290,8 @@ class DrmGpuDisplayManagerTest : public testing::Test {
  };
  
  TEST_F(DrmGpuDisplayManagerTest, CapOutOnMaxDrmDeviceCount) {
@@ -130,7 +130,7 @@ index fb8b56e6ef..ad044727a4 100644
      auto fake_drm = AddDrmDevice();
      fake_drm->ResetStateWithAllProperties();
  
-@@ -309,7 +309,7 @@ TEST_F(DrmGpuDisplayManagerTest, CapOutOnMaxDrmDeviceCount) {
+@@ -313,7 +313,7 @@ TEST_F(DrmGpuDisplayManagerTest, CapOutOnMaxDrmDeviceCount) {
      fake_drm->InitializeState(/* use_atomic */ true);
    }
  
@@ -139,7 +139,7 @@ index fb8b56e6ef..ad044727a4 100644
  }
  
  TEST_F(DrmGpuDisplayManagerTest, CapOutOnMaxConnectorCount) {
-@@ -317,8 +317,8 @@ TEST_F(DrmGpuDisplayManagerTest, CapOutOnMaxConnectorCount) {
+@@ -321,8 +321,8 @@ TEST_F(DrmGpuDisplayManagerTest, CapOutOnMaxConnectorCount) {
    auto fake_drm = AddDrmDevice();
    fake_drm->ResetStateWithAllProperties();
  
@@ -150,7 +150,7 @@ index fb8b56e6ef..ad044727a4 100644
      // Add 1 CRTC
      fake_drm->AddCrtcWithPrimaryAndCursorPlanes();
  
-@@ -336,7 +336,7 @@ TEST_F(DrmGpuDisplayManagerTest, CapOutOnMaxConnectorCount) {
+@@ -340,7 +340,7 @@ TEST_F(DrmGpuDisplayManagerTest, CapOutOnMaxConnectorCount) {
    }
    fake_drm->InitializeState(/* use_atomic */ true);
  

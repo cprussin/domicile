@@ -20,7 +20,7 @@ a keymap and a key, and checks the key carries no modifiers.
  2 files changed, 60 insertions(+)
 
 diff --git a/ui/events/ozone/layout/xkb/xkb_keyboard_layout_engine.cc b/ui/events/ozone/layout/xkb/xkb_keyboard_layout_engine.cc
-index 1a780c1..e051bfc 100644
+index 9bfe4c82..ef3452e6 100644
 --- a/ui/events/ozone/layout/xkb/xkb_keyboard_layout_engine.cc
 +++ b/ui/events/ozone/layout/xkb/xkb_keyboard_layout_engine.cc
 @@ -966,6 +966,13 @@ int XkbKeyboardLayoutEngine::UpdateModifiers(uint32_t depressed,
@@ -38,7 +38,7 @@ index 1a780c1..e051bfc 100644
    xkb_state_update_mask(state, depressed, latched, locked, 0, 0, group);
    auto component = static_cast<xkb_state_component>(XKB_STATE_MODS_DEPRESSED |
 diff --git a/ui/ozone/platform/wayland/host/wayland_keyboard_unittest.cc b/ui/ozone/platform/wayland/host/wayland_keyboard_unittest.cc
-index babf740..3a0c884 100644
+index babf7403..3a0c884e 100644
 --- a/ui/ozone/platform/wayland/host/wayland_keyboard_unittest.cc
 +++ b/ui/ozone/platform/wayland/host/wayland_keyboard_unittest.cc
 @@ -225,6 +225,59 @@ TEST_F(WaylandKeyboardTest, CapsLockModifier) {
