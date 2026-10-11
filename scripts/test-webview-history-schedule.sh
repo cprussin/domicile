@@ -53,6 +53,7 @@ const view = {
   favicon: "",
   goBack: () => go(entries[index - 1], () => { index -= 1; }),
   goForward: () => go(entries[index + 1], () => { index += 1; }),
+  loadProgress: 0,
   loading: false,
   reload: () => go(entries[index], () => {}),
   security: "",
@@ -75,8 +76,12 @@ const view = {
   url: "",
 };
 
+// A load reports its progress before its state, as the engine does: a start
+// at 0.1 and an end at 1.
 const setLoading = (value) => {
   if (view.loading !== value) {
+    view.loadProgress = value ? 0.1 : 1;
+    announce("domicile-load-progress-change");
     view.loading = value;
     announce("domicile-loading-change");
   }
@@ -189,6 +194,10 @@ expect "pending is read while /slow is held" "yes" \
   "$(has "$POSITIVE" "loading-state at=pending loading=true")"
 expect "after-stop is read once the load is canceled" "yes" \
   "$(has "$POSITIVE" "loading-state at=after-stop loading=false")"
+expect "settled reads a finished load" "yes" \
+  "$(has "$POSITIVE" "load-progress at=settled progress=1 ")"
+expect "pending reads a load partway, with its events" "yes" \
+  "$(has "$POSITIVE" "load-progress at=pending progress=0.1 events=")"
 # The request must reach the fixture before stop(), or there is nothing to
 # cancel.
 ASKED="$(when "$POSITIVE" "fixture asked /slow")"
@@ -236,6 +245,8 @@ expect "takes all four history readings" "4" \
   "$(printf '%s\n' "$DEAD" | grep -c "GUARD history-state")"
 expect "takes all three loading readings" "3" \
   "$(printf '%s\n' "$DEAD" | grep -c "GUARD loading-state")"
+expect "takes a progress reading with each loading one" "3" \
+  "$(printf '%s\n' "$DEAD" | grep -c "GUARD load-progress")"
 # 300 + 5 × 200 + 50: the first page, five steps and the hold. The last step
 # waits for a load to end, and none began.
 expect "gives every step its whole bound" "yes" \

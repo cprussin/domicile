@@ -33,6 +33,7 @@ import type { Restack } from "./restacking";
 import { useFindResult } from "./useFindResult";
 import { useHistoryAvailability } from "./useHistoryAvailability";
 import { useLoading } from "./useLoading";
+import { useLoadProgress } from "./useLoadProgress";
 import { useLowered } from "./useLowered";
 import { usePageFullscreen } from "./usePageFullscreen";
 import { usePageIcon } from "./usePageIcon";
@@ -232,6 +233,7 @@ export const BrowserWindow = ({
   usePageIcon(view, window, onIcon);
   const { canGoBack, canGoForward } = useHistoryAvailability(view);
   const loading = useLoading(view);
+  const loadProgress = useLoadProgress(view);
   const zoom = useZoom(view);
   const targetUrl = useTargetUrl(view);
   // A fullscreen page, such as a video, fills the window without its bar.
@@ -508,8 +510,8 @@ export const BrowserWindow = ({
       hidden={rect === undefined}
       // A leaving window is unreachable by keyboard.
       inert={leaving}
-      // Ignores animations bubbling up from descendants, such as the address
-      // bar's loading spinner.
+      // Ignores animations bubbling up from descendants, such as the zoom
+      // indicator.
       onAnimationEnd={(event) => {
         if (event.target === event.currentTarget) {
           onMotionEnded();
@@ -546,6 +548,7 @@ export const BrowserWindow = ({
           canGoForward={canGoForward}
           isPrivate={isPrivate}
           loading={loading}
+          loadProgress={loadProgress}
           onBack={drive((loaded) => {
             loaded.goBack();
           })}

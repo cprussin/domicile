@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Checks a <webview>'s history controls and the state the element reports
 # about its guest: goBack(), goForward(), reload() and stop() must drive the
-# guest, and canGoBack/canGoForward, loading state, address, security and
-# favicon must follow it. See packages/domicile-engine/docs/GUARDS.md.
+# guest, and canGoBack/canGoForward, loading state, load progress, address,
+# security and favicon must follow it. See packages/domicile-engine/docs/GUARDS.md.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-history.sh /build/chromium/src
@@ -38,6 +38,12 @@
 #   settled     false   /two has finished loading
 #   pending     true    the fixture is holding /slow open
 #   after-stop  false   stop() canceled /slow
+#
+# Load progress at two of them:
+#
+#   settled     1           /two's load is done
+#   pending     above 0,    /slow's load has started and not finished
+#               below 1
 #
 # `two-pages` is read before the module adds any listener, and must report
 # `events=0`. A React shell adds listeners after the first pages commit, so the
@@ -249,6 +255,21 @@ PENDING_LOADING="$(loading_at pending)"
 PENDING_LOADING_EVENTS="$(loading_events_at pending)"
 STOPPED_LOADING="$(loading_at after-stop)"
 
+# Load progress at each point, from 0 to 1.
+PROGRESSES="$(grep -o 'GUARD load-progress at=[^ ]* progress=[^ ]* events=[0-9]*' \
+  "$ENGINE_LOG")"
+progress_at() { # $1 point
+  printf '%s\n' "$PROGRESSES" |
+    sed -n "s/^GUARD load-progress at=$1 progress=\([^ ]*\) .*\$/\1/p" | head -1
+}
+progress_events_at() { # $1 point
+  printf '%s\n' "$PROGRESSES" |
+    sed -n "s/^GUARD load-progress at=$1 .* events=\([0-9]*\)\$/\1/p" | head -1
+}
+SETTLED_PROGRESS="$(progress_at settled)"
+PENDING_PROGRESS="$(progress_at pending)"
+PENDING_PROGRESS_EVENTS="$(progress_events_at pending)"
+
 # The address and connection security the element reports at each point.
 PAGES="$(grep -o 'GUARD page-state at=[^ ]* path=[^ ]* security=[^ ]*' \
   "$ENGINE_LOG")"
@@ -288,6 +309,8 @@ echo "and it was showing: two-pages=$TWO_PATH after-back=$BACK_PATH after-forwar
 echo "with security: at two-pages=$TWO_SECURITY"
 echo "and it was loading: settled=$SETTLED_LOADING pending=$PENDING_LOADING after-stop=$STOPPED_LOADING"
 echo "loading events: at pending=$PENDING_LOADING_EVENTS"
+echo "and this far loaded: settled=$SETTLED_PROGRESS pending=$PENDING_PROGRESS"
+echo "progress events: at pending=$PENDING_PROGRESS_EVENTS"
 echo
 
 # The verdict. `scripts/test-webview-history-guard.sh` runs this block
@@ -463,6 +486,22 @@ elif [ "$PENDING_LOADING_EVENTS" = "0" ] || [ -z "$PENDING_LOADING_EVENTS" ]; th
 chrome has nothing to re-read on. The value itself is right, which makes this \
 the half a shell cannot do without rather than the half it renders from: an \
 address bar would show whatever its first render caught and never move again"
+elif [ "$SETTLED_PROGRESS" != "1" ]; then
+  FAILURE="the element said a finished page was \"$SETTLED_PROGRESS\" of the \
+way loaded where it is all the way. This catches an element stuck at a load's \
+start, so nothing below it is a measurement: it is the browser never \
+reporting the load done, or the element never storing that it was"
+elif ! awk -v p="$PENDING_PROGRESS" \
+  'BEGIN { exit !(p ~ /^[0-9.]+$/ && p > 0 && p < 1) }'; then
+  FAILURE="the element said a page on its way was \"$PENDING_PROGRESS\" of \
+the way loaded, with the fixture holding it open. THIS IS THE POSITIVE the \
+progress readings rest on: a load that has started and not finished is above \
+0 and below 1. 1 is an element stuck on the last load; 0 or empty is the \
+browser never sending LoadProgressChanged, or the element never storing it"
+elif [ "$PENDING_PROGRESS_EVENTS" = "0" ] || [ -z "$PENDING_PROGRESS_EVENTS" ]; then
+  FAILURE="the element never announced that its load progress changed, so a \
+chrome has nothing to re-read on: a progress bar would stay where its first \
+render caught it"
 elif [ "$SAW_SLOW_SHOWN" = "1" ]; then
   FAILURE="the slow page arrived anyway, so stop() canceled nothing. The \
 fixture sits on that navigation for ${SLOW_SECONDS}s and stop() was driven \
@@ -485,8 +524,8 @@ and stop() canceled a navigation that would otherwise have landed. And the \
 element says what back and forward can do at each step — read at two pages \
 with no listener on it, which is what a chrome mounting late would read — \
 with an event behind every change for one to re-read on. It also tells a page \
-that has arrived from one still on its way, and stops saying so the moment \
-the load is canceled"
+that has arrived from one still on its way, says how far that one has \
+loaded, and stops saying so the moment the load is canceled"
 fi
 
 if [ -n "$PASSED" ]; then

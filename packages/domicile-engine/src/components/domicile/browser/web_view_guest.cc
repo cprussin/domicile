@@ -712,6 +712,7 @@ void WebViewGuest::ReportEverything() {
   reported_can_go_back_ = false;
   reported_can_go_forward_ = false;
   reported_loading_ = false;
+  reported_load_progress_ = 0.0;
   reported_url_ = GURL();
   reported_security_ = mojom::WebViewSecurity::kNeutral;
   reported_find_matches_ = 0;
@@ -722,6 +723,7 @@ void WebViewGuest::ReportEverything() {
   ReportHistory();
   ReportPage();
   ReportLoading(guest_contents_->ShouldShowLoadingUI());
+  ReportLoadProgress(guest_contents_->GetLoadProgress());
   // Bypasses ReportZoom, which would also notify chrome.tabs of an unchanged
   // zoom.
   if (!blink::ZoomValuesEqual(reported_zoom_, 1.0)) {
@@ -1426,6 +1428,13 @@ void WebViewGuest::ReportLoading(bool should_show_loading_ui) {
   }
 }
 
+void WebViewGuest::ReportLoadProgress(double progress) {
+  if (progress != reported_load_progress_) {
+    reported_load_progress_ = progress;
+    client_->LoadProgressChanged(progress);
+  }
+}
+
 namespace {
 
 // The assumed size of an icon whose link gives none: 180 px for a touch icon,
@@ -1555,6 +1564,10 @@ void WebViewGuest::ReportZoom() {
     client_->ZoomChanged(zoom);
     zoom_callbacks_.Notify(was, zoom);
   }
+}
+
+void WebViewGuest::LoadProgressChanged(double progress) {
+  ReportLoadProgress(progress);
 }
 
 void WebViewGuest::DidReceiveFindReply(int request_id,

@@ -32,6 +32,13 @@ export const WEBVIEW_HISTORY_CHANGE_EVENT = "domicile-history-change";
 export const WEBVIEW_LOADING_CHANGE_EVENT = "domicile-loading-change";
 
 /**
+ * Fired when {@link HTMLWebViewElement.loadProgress} changes. Carries no
+ * payload. Bubbles.
+ */
+export const WEBVIEW_LOAD_PROGRESS_CHANGE_EVENT =
+  "domicile-load-progress-change";
+
+/**
  * Fired when {@link HTMLWebViewElement.url} or
  * {@link HTMLWebViewElement.security} changes. Carries no payload. Bubbles.
  *
@@ -362,6 +369,13 @@ declare global {
      * {@link WEBVIEW_LOADING_CHANGE_EVENT}.
      */
     readonly loading: boolean;
+    /**
+     * How far the page has loaded, from 0.1 when a load starts to 1 when it
+     * finishes or stops. `0` until the first load starts. Meaningful only
+     * while {@link HTMLWebViewElement.loading}. Changes fire
+     * {@link WEBVIEW_LOAD_PROGRESS_CHANGE_EVENT}.
+     */
+    readonly loadProgress: number;
     /**
      * The current address, as a browser's address bar shows it. Differs from
      * {@link HTMLWebViewElement.src} after links and redirects.
