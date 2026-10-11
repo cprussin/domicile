@@ -80,7 +80,7 @@ for the other end of it.
  2 files changed, 76 insertions(+), 1 deletion(-)
 
 diff --git a/third_party/blink/renderer/core/html/html_frame_element_base.h b/third_party/blink/renderer/core/html/html_frame_element_base.h
-index e72ada052d..7beffa3ade 100644
+index e72ada05..7beffa3a 100644
 --- a/third_party/blink/renderer/core/html/html_frame_element_base.h
 +++ b/third_party/blink/renderer/core/html/html_frame_element_base.h
 @@ -60,6 +60,14 @@ class CORE_EXPORT HTMLFrameElementBase : public HTMLFrameOwnerElement {
@@ -107,18 +107,18 @@ index e72ada052d..7beffa3ade 100644
    bool IsURLAttribute(const Attribute&) const final;
    bool HasLegalLinkAttribute(const QualifiedName&) const final;
 diff --git a/third_party/blink/renderer/core/page/focus_controller.cc b/third_party/blink/renderer/core/page/focus_controller.cc
-index 3f62c685cb..7122102875 100644
+index 33032336..aa39ffef 100644
 --- a/third_party/blink/renderer/core/page/focus_controller.cc
 +++ b/third_party/blink/renderer/core/page/focus_controller.cc
-@@ -31,6 +31,7 @@
+@@ -30,6 +30,7 @@
+ #include <optional>
  #include <ranges>
  
- #include "base/containers/adapters.h"
 +#include "base/logging.h"
  #include "base/memory/stack_allocated.h"
  #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
  #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
-@@ -57,6 +58,7 @@
+@@ -56,6 +57,7 @@
  #include "third_party/blink/renderer/core/frame/local_frame_view.h"
  #include "third_party/blink/renderer/core/frame/remote_frame.h"
  #include "third_party/blink/renderer/core/frame/settings.h"
@@ -126,7 +126,7 @@ index 3f62c685cb..7122102875 100644
  #include "third_party/blink/renderer/core/html/fenced_frame/html_fenced_frame_element.h"
  #include "third_party/blink/renderer/core/html/forms/html_form_control_element.h"
  #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
-@@ -1828,6 +1830,72 @@ void FocusController::SetFocusedFrame(Frame* frame, bool notify_embedder) {
+@@ -1827,6 +1829,72 @@ void FocusController::SetFocusedFrame(Frame* frame, bool notify_embedder) {
        // invocation of the function to run.
        SetFocusedElement(fenced_frame, frame);
      }

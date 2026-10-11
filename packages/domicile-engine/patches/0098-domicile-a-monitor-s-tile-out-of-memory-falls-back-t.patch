@@ -26,7 +26,7 @@ scripts/test-the-desk-does-not-flash-between-densities.sh.
  2 files changed, 21 insertions(+), 1 deletion(-)
 
 diff --git a/cc/tiles/picture_layer_tiling.h b/cc/tiles/picture_layer_tiling.h
-index 7e78f66e5e..d27e7cd2ba 100644
+index 7e78f66e..d27e7cd2 100644
 --- a/cc/tiles/picture_layer_tiling.h
 +++ b/cc/tiles/picture_layer_tiling.h
 @@ -21,6 +21,7 @@
@@ -51,7 +51,7 @@ index 7e78f66e5e..d27e7cd2ba 100644
      can_require_tiles_for_activation_ = can_require_tiles;
    }
 diff --git a/cc/tiles/tiling_set_coverage_iterator.h b/cc/tiles/tiling_set_coverage_iterator.h
-index 3ff2be1a35..a0e95ca73a 100644
+index 3ff2be1a..a0e95ca7 100644
 --- a/cc/tiles/tiling_set_coverage_iterator.h
 +++ b/cc/tiles/tiling_set_coverage_iterator.h
 @@ -130,6 +130,19 @@ class TilingSetCoverageIterator {

@@ -21,9 +21,10 @@ job builds it on `crux`.
  2 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
+index df37a1ef..36a2b6e1 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
-@@ -340,8 +340,6 @@ static_idl_files_in_modules = [
+@@ -343,8 +343,6 @@ static_idl_files_in_modules = [
    "//third_party/blink/renderer/modules/domicile/domicile_notifications_event_init.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_locked_event.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_locked_event_init.idl",
@@ -33,6 +34,7 @@ diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_part
    "//third_party/blink/renderer/modules/eyedropper/color_selection_result.idl",
    "//third_party/blink/renderer/modules/eyedropper/eye_dropper.idl",
 diff --git a/third_party/blink/renderer/modules/modules_initializer.cc b/third_party/blink/renderer/modules/modules_initializer.cc
+index 6be2e31b..ad480b66 100644
 --- a/third_party/blink/renderer/modules/modules_initializer.cc
 +++ b/third_party/blink/renderer/modules/modules_initializer.cc
 @@ -60,6 +60,7 @@
@@ -51,6 +53,3 @@ diff --git a/third_party/blink/renderer/modules/modules_initializer.cc b/third_p
  
  #if BUILDFLAG(IS_ANDROID)
    LocalFrame* frame = window.GetFrame();
--- 
-2.43.0
-

@@ -25,10 +25,10 @@ job builds it on `crux`.
  5 files changed, 26 insertions(+), 1 deletion(-)
 
 diff --git a/ui/ozone/platform/drm/host/drm_cursor.cc b/ui/ozone/platform/drm/host/drm_cursor.cc
-index 4c0829feee..2e49417f53 100644
+index 4c0829fe..2e49417f 100644
 --- a/ui/ozone/platform/drm/host/drm_cursor.cc
 +++ b/ui/ozone/platform/drm/host/drm_cursor.cc
-@@ -198,6 +198,12 @@
+@@ -198,6 +198,12 @@ void DrmCursor::SetDomicileDeskHost(gfx::AcceleratedWidget host) {
    desk_host_ = host;
  }
  
@@ -42,10 +42,10 @@ index 4c0829feee..2e49417f53 100644
                               const gfx::PointF& location) {
    TRACE_EVENT0("drmcursor", "DrmCursor::MoveCursorTo (window)");
 diff --git a/ui/ozone/platform/drm/host/drm_cursor.h b/ui/ozone/platform/drm/host/drm_cursor.h
-index b3f0485932..246cacedba 100644
+index b3f04859..246caced 100644
 --- a/ui/ozone/platform/drm/host/drm_cursor.h
 +++ b/ui/ozone/platform/drm/host/drm_cursor.h
-@@ -99,6 +99,10 @@
+@@ -99,6 +99,10 @@ class DrmCursor : public CursorDelegateEvdev {
    // `OzonePlatform::SetDomicileDeskHost`.
    void SetDomicileDeskHost(gfx::AcceleratedWidget host);
  
@@ -57,7 +57,7 @@ index b3f0485932..246cacedba 100644
    void MoveCursorTo(gfx::AcceleratedWidget window,
                      const gfx::PointF& location) override;
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
-index 1609a51512..dae841e046 100644
+index 1609a515..dae841e0 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.cc
 +++ b/ui/ozone/platform/drm/host/drm_window_host.cc
 @@ -20,6 +20,7 @@
@@ -68,7 +68,7 @@ index 1609a51512..dae841e046 100644
  #include "ui/ozone/common/bitmap_cursor.h"
  #include "ui/ozone/platform/drm/domicile/drm_fullscreen.h"
  #include "ui/ozone/platform/drm/domicile/drm_pointer_crossing.h"
-@@ -336,6 +337,16 @@
+@@ -336,6 +337,16 @@ void DrmWindowHost::SynthesizeMouseMove(const gfx::PointF& location) {
    event_factory_->SynthesizeMouseMove(location);
  }
  
@@ -86,10 +86,10 @@ index 1609a51512..dae841e046 100644
    if (cursor_confined_bounds_ == bounds)
      return;
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.h b/ui/ozone/platform/drm/host/drm_window_host.h
-index d30729c1b6..700f090814 100644
+index d30729c1..700f0908 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.h
 +++ b/ui/ozone/platform/drm/host/drm_window_host.h
-@@ -111,6 +111,10 @@
+@@ -111,6 +111,10 @@ class DrmWindowHost : public PlatformWindow,
    // stayed put.
    void FollowDisplayTurn();
  
@@ -101,10 +101,10 @@ index d30729c1b6..700f090814 100644
    void SendBoundsChange();
  
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index 65bd24f2b8..f972392f37 100644
+index 65bd24f2..f972392f 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
-@@ -103,7 +103,7 @@
+@@ -103,7 +103,7 @@ class OzonePlatformDrm : public OzonePlatform {
    // ScreenOzone -> CreateScreen() and hit the NOTREACHED() that was here.
    // See docs/architecture/A-DESKTOP-ON-A-TTY.md in the Domicile repository.
    std::unique_ptr<PlatformScreen> CreateScreen() override {
@@ -113,6 +113,3 @@ index 65bd24f2b8..f972392f37 100644
    }
    void InitScreen(PlatformScreen* screen) override {
      // Start the modeset driver here, and not earlier, because here is where
--- 
-2.43.0
-

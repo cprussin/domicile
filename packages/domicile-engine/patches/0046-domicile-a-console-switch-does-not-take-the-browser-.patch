@@ -45,7 +45,7 @@ Claude-Session: https://claude.ai/code/session_01AM7tJMCYn6EGCw9tCBubSu
  3 files changed, 41 insertions(+), 1 deletion(-)
 
 diff --git a/ui/events/ozone/evdev/input_controller_evdev.cc b/ui/events/ozone/evdev/input_controller_evdev.cc
-index 73dce91f83..f707f73ed7 100644
+index 73dce91f..f707f73e 100644
 --- a/ui/events/ozone/evdev/input_controller_evdev.cc
 +++ b/ui/events/ozone/evdev/input_controller_evdev.cc
 @@ -13,6 +13,7 @@
@@ -96,7 +96,7 @@ index 73dce91f83..f707f73ed7 100644
    // Mouse button map and pointing stick map can be null in tests.
    if (mouse_button_map_) {
 diff --git a/ui/events/ozone/evdev/input_controller_evdev.h b/ui/events/ozone/evdev/input_controller_evdev.h
-index b4c5cb1ace..5a58a06e89 100644
+index b4c5cb1a..5a58a06e 100644
 --- a/ui/events/ozone/evdev/input_controller_evdev.h
 +++ b/ui/events/ozone/evdev/input_controller_evdev.h
 @@ -9,6 +9,7 @@
@@ -144,7 +144,7 @@ index b4c5cb1ace..5a58a06e89 100644
    base::flat_map<int, std::vector<uint64_t>> gamepad_key_bits_mapping_;
  
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index b415e3ac40..b0fdbe5d91 100644
+index df853888..10de02a4 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -260,6 +260,7 @@ source_set("gbm_unittests") {

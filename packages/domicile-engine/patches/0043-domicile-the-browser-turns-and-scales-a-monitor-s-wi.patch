@@ -44,7 +44,7 @@ reads the display's rotation, which it now has.
  8 files changed, 173 insertions(+), 20 deletions(-)
 
 diff --git a/ui/events/ozone/BUILD.gn b/ui/events/ozone/BUILD.gn
-index aaa0b617c5..641e00b847 100644
+index aaa0b617..641e00b8 100644
 --- a/ui/events/ozone/BUILD.gn
 +++ b/ui/events/ozone/BUILD.gn
 @@ -41,7 +41,10 @@ component("ozone") {
@@ -60,7 +60,7 @@ index aaa0b617c5..641e00b847 100644
        "chromeos/cursor_controller.cc",
        "chromeos/cursor_controller.h",
 diff --git a/ui/ozone/platform/drm/host/drm_cursor.cc b/ui/ozone/platform/drm/host/drm_cursor.cc
-index 88d5688a01..b5f65e795c 100644
+index 88d5688a..b5f65e79 100644
 --- a/ui/ozone/platform/drm/host/drm_cursor.cc
 +++ b/ui/ozone/platform/drm/host/drm_cursor.cc
 @@ -13,22 +13,13 @@
@@ -107,7 +107,7 @@ index 88d5688a01..b5f65e795c 100644
    SendCursorMoveLocked();
  }
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
-index 5227fd20b0..25da4460f4 100644
+index 5227fd20..25da4460 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.cc
 +++ b/ui/ozone/platform/drm/host/drm_window_host.cc
 @@ -16,6 +16,7 @@
@@ -161,7 +161,7 @@ index 5227fd20b0..25da4460f4 100644
  
  }  // namespace ui
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.h b/ui/ozone/platform/drm/host/drm_window_host.h
-index b29db82526..d30729c1b6 100644
+index b29db825..d30729c1 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.h
 +++ b/ui/ozone/platform/drm/host/drm_window_host.h
 @@ -104,6 +104,13 @@ class DrmWindowHost : public PlatformWindow,
@@ -179,7 +179,7 @@ index b29db82526..d30729c1b6 100644
    void SendBoundsChange();
  
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index 6f236cf094..96da42700e 100644
+index 6f236cf0..96da4270 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -307,6 +307,12 @@ class OzonePlatformDrm : public OzonePlatform {
@@ -196,7 +196,7 @@ index 6f236cf094..96da42700e 100644
      window_manager_ = std::make_unique<DrmWindowHostManager>();
      cursor_ = std::make_unique<DrmCursor>(window_manager_.get());
 diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
-index 27da20f0a4..b8d4a462fb 100644
+index 27da20f0..b8d4a462 100644
 --- a/ui/ozone/public/ozone_platform.h
 +++ b/ui/ozone/public/ozone_platform.h
 @@ -77,6 +77,15 @@ struct DomicileDisplayLayout {
@@ -230,7 +230,7 @@ index 27da20f0a4..b8d4a462fb 100644
      static SupportsForTest override_supports_per_window_scaling_for_test;
  
 diff --git a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc
-index 3a5009d15f..e2a092e1a7 100644
+index 3a5009d1..e2a092e1 100644
 --- a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc
 +++ b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.cc
 @@ -17,6 +17,7 @@
@@ -390,7 +390,7 @@ index 3a5009d15f..e2a092e1a7 100644
    // error, the converted result may become slightly larger than expected value,
    // such as 3000.0005. Allow error to round down in such case. This is
 diff --git a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h
-index 1f1fc48849..dd0cb93baa 100644
+index 4a535b76..284710ab 100644
 --- a/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h
 +++ b/ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h
 @@ -153,6 +153,8 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform

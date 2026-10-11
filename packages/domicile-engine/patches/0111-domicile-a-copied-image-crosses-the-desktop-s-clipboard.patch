@@ -18,7 +18,7 @@ image under its type. See ui/ozone/platform/drm/domicile/drm_clipboard.h.
  2 files changed, 15 insertions(+), 7 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index f972392..a4698d0 100644
+index f972392f..a4698d0b 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -189,9 +189,10 @@ class OzonePlatformDrm : public OzonePlatform {
@@ -36,7 +36,7 @@ index f972392..a4698d0 100644
  
    void SetDomicileCopiedCallback(DomicileCopied copied) override {
 diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
-index ed71b99..53def9d 100644
+index ed71b992..53def9dc 100644
 --- a/ui/ozone/public/ozone_platform.h
 +++ b/ui/ozone/public/ozone_platform.h
 @@ -12,6 +12,7 @@

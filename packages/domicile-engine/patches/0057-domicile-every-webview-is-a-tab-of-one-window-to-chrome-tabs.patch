@@ -39,7 +39,7 @@ and both blobs are that file's.
  4 files changed, 27 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
-index bdd890cc79..a462b484af 100644
+index 00f13a4a..c0efb0e2 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
 @@ -5,6 +5,7 @@
@@ -61,10 +61,10 @@ index bdd890cc79..a462b484af 100644
    for (auto& chrome_extra_part : chrome_extra_parts_) {
      chrome_extra_part->PostProfileInit(profile, is_initial_profile);
 diff --git a/chrome/browser/extensions/BUILD.gn b/chrome/browser/extensions/BUILD.gn
-index 61d17e83b6..23f9e21881 100644
+index 3ccd1f6f..9549fc4f 100644
 --- a/chrome/browser/extensions/BUILD.gn
 +++ b/chrome/browser/extensions/BUILD.gn
-@@ -266,6 +266,8 @@ source_set("extensions") {
+@@ -272,6 +272,8 @@ source_set("extensions") {
      "data_deleter.h",
      "devtools_util.cc",
      "devtools_util.h",
@@ -74,7 +74,7 @@ index 61d17e83b6..23f9e21881 100644
      "error_console/error_console.h",
      "error_console/error_console_factory.cc",
 diff --git a/chrome/browser/extensions/chrome_extension_function_details.cc b/chrome/browser/extensions/chrome_extension_function_details.cc
-index 1e1d95cf28..dfedf25a3c 100644
+index 1e1d95cf..dfedf25a 100644
 --- a/chrome/browser/extensions/chrome_extension_function_details.cc
 +++ b/chrome/browser/extensions/chrome_extension_function_details.cc
 @@ -5,6 +5,7 @@
@@ -100,7 +100,7 @@ index 1e1d95cf28..dfedf25a3c 100644
    if (function_->dispatcher()) {
      if (WindowController* window_controller =
 diff --git a/chrome/browser/extensions/extension_tab_util.cc b/chrome/browser/extensions/extension_tab_util.cc
-index 20c6eaf858..829facdd40 100644
+index 20c6eaf8..829facdd 100644
 --- a/chrome/browser/extensions/extension_tab_util.cc
 +++ b/chrome/browser/extensions/extension_tab_util.cc
 @@ -24,6 +24,7 @@
