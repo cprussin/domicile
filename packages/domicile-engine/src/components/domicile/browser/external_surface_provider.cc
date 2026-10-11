@@ -40,4 +40,9 @@ void ExternalSurfaceProvider::Embed(
   }
 }
 
+void ExternalSurfaceProvider::WaitForEnd(const viz::FrameSinkId& frame_sink_id,
+                                         WaitForEndCallback callback) {
+  broker_->WaitForEnd(frame_sink_id, std::move(callback));
+}
+
 }  // namespace domicile

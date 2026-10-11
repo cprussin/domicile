@@ -25,9 +25,9 @@ namespace {
 // a surface. Per app also keeps a kReconfigure for one window from changing the
 // surface ids of the others.
 //
-// Entries are never removed. If the compositor restarts, it reuses app ids and
-// the browser brokers new FrameSinkIds, which hit the same refusal for the
-// page's lifetime. See docs/architecture/ENGINE-FORK.md#open-questions.
+// A restarted compositor reuses app ids, and the browser brokers them new
+// FrameSinkIds, which hit the same refusal. So the loss of an app's frame sink
+// invalidates its allocator with a new embed token (OnEnded).
 //
 // `std::map` rather than `base::flat_map`: callers hold references into the
 // map, and a flat_map insert would invalidate them.
@@ -47,7 +47,8 @@ AppSurface& SurfaceForApp(const String& app_id) {
 
 }  // namespace
 
-ExternalSurfaceEmbedder::ExternalSurfaceEmbedder() = default;
+ExternalSurfaceEmbedder::ExternalSurfaceEmbedder(base::RepeatingClosure lost)
+    : lost_(std::move(lost)) {}
 
 ExternalSurfaceEmbedder::~ExternalSurfaceEmbedder() = default;
 
@@ -109,7 +110,44 @@ void ExternalSurfaceEmbedder::OnEmbedded(
   const viz::SurfaceId surface_id(*frame_sink_id, local_surface_id);
   LOG(INFO) << "domicile: embedded \"" << app_id.Utf8() << "\" as "
             << surface_id.ToString();
+  // One wait per frame sink: every resize embeds again under the same one.
+  if (*frame_sink_id != watched_frame_sink_id_) {
+    watched_frame_sink_id_ = *frame_sink_id;
+    provider_->WaitForEnd(
+        *frame_sink_id,
+        base::BindOnce(&ExternalSurfaceEmbedder::OnEnded,
+                       base::Unretained(this), app_id, surface_id));
+  }
   std::move(callback).Run(surface_id);
+}
+
+void ExternalSurfaceEmbedder::OnEnded(
+    const String& app_id,
+    const viz::SurfaceId& surface_id,
+    domicile::mojom::blink::FrameSinkEnd end) {
+  // An end of a frame sink this embedder has since moved off changes nothing
+  // it shows.
+  const bool shown = surface_id.frame_sink_id() == watched_frame_sink_id_;
+  if (shown) {
+    watched_frame_sink_id_ = viz::FrameSinkId();
+  }
+  // A closed window's app id never returns, so there is nothing to embed again.
+  if (end != domicile::mojom::blink::FrameSinkEnd::kProducerGone) {
+    return;
+  }
+  LOG(INFO) << "domicile: lost \"" << app_id.Utf8() << "\" at "
+            << surface_id.ToString();
+  // Several embedders of one app share its allocator. Only the first to hear
+  // of the loss replaces the token, so they all embed the same new surface.
+  viz::ParentLocalSurfaceIdAllocator& allocator =
+      SurfaceForApp(app_id).allocator;
+  if (allocator.GetEmbedToken() ==
+      surface_id.local_surface_id().embed_token()) {
+    allocator.Invalidate(/*also_invalidate_allocation_group=*/true);
+  }
+  if (shown && lost_) {
+    lost_.Run();
+  }
 }
 
 }  // namespace blink
