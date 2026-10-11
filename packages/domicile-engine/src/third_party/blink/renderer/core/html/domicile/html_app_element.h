@@ -174,6 +174,11 @@ class CORE_EXPORT HTMLAppElement final : public HTMLElement,
   // resize of that app embeds its new surface without waiting for the reply.
   AtomicString embedded_app_id_;
 
+  // Whether the last resize embedded without waiting for the client, because
+  // `resizing` was set. Removing `resizing` then embeds the box once more,
+  // waiting.
+  bool embedded_without_waiting_ = false;
+
   std::unique_ptr<::blink::SurfaceLayerBridge> surface_layer_bridge_;
   std::unique_ptr<ExternalSurfaceEmbedder> external_surface_embedder_;
 };
