@@ -22,8 +22,9 @@ import type { TitleFocus } from "./title-focus";
 import type { StripPlace, TabLayout } from "./tree/frames";
 import { Layout } from "./tree/node";
 import { GrabCursor } from "./useGrabCursor";
+import { useLowered } from "./useLowered";
 import type { Settler } from "./useSettling";
-import { useSettling } from "./useSettling";
+import { UPRIGHT, useSettling } from "./useSettling";
 import type { WindowMotion } from "./window-motion";
 import { isLeaving, isMoving } from "./window-motion";
 import {
@@ -176,6 +177,9 @@ export const TitleBar = ({
   // A tab opening or leaving turns about its strip's start, as the tabs after
   // it ease along. Anything else turns about its whole window's middle.
   const origin = alongStrip(motion) ? STRIP_START : originOf(frame, rect);
+  // Over the rest of the strip, which slides under it when tabs swap.
+  const shownDepth = strip?.open === true ? raised(depth) : depth;
+  const lowered = useLowered(shownDepth);
   useSettling({
     element,
     origin,
@@ -193,7 +197,7 @@ export const TitleBar = ({
           tabSlotStyles({ stacked: tabbed === Layout.Stacking }),
         movingStyles({ motion }),
         isLeaving(motion) && clickThroughStyles,
-        settlingStyles,
+        settlingStyles({ lowered }),
         // The bar holds pointer capture during a drag, so its cursor shows.
         dragging && grabCursorStyles[GrabCursor.Grabbing],
       )}
@@ -230,8 +234,7 @@ export const TitleBar = ({
       }}
       ref={element}
       style={{
-        // Over the rest of the strip, which slides under it when tabs swap.
-        ...placedAt(rect, strip?.open === true ? raised(depth) : depth),
+        ...placedAt(rect, shownDepth),
         ...originAt(origin),
         ...shuffledBy(restack),
         ...collapsedAlong(tabbed),
@@ -250,16 +253,18 @@ export const TitleBar = ({
                 joined: !hidden && tabbed === Layout.Tabbed,
                 open: !hidden,
               }),
-          settlingStyles,
+          settlingStyles(),
         )}
         data-face
       >
-        {group !== undefined && (
-          <GroupMark layout={group.layout} windows={group.windows} />
-        )}
-        {/* Keyed so a new icon gets another try after one fails to load. */}
-        <WindowIcon icon={icon} key={icon} />
-        <span className={titleStyles}>{title}</span>
+        <span className={leadStyles} {...{ [UPRIGHT]: "" }}>
+          {group !== undefined && (
+            <GroupMark layout={group.layout} windows={group.windows} />
+          )}
+          {/* Keyed so a new icon gets another try after one fails to load. */}
+          <WindowIcon icon={icon} key={icon} />
+          <span className={titleStyles}>{title}</span>
+        </span>
         {/*
         A press on a button must not start a drag: drag pointer capture would
         retarget the click to the bar.
@@ -269,6 +274,7 @@ export const TitleBar = ({
           onPointerDown={(event) => {
             event.stopPropagation();
           }}
+          {...{ [UPRIGHT]: "" }}
         >
           {/*
             A hidden tab only offers to close, as in a browser, so its title
@@ -564,8 +570,29 @@ const topCornerStyles = css({
   borderStartStartRadius: "lg",
 });
 
-// No gap: each button is already padded, and together they read as a group.
-const controlStyles = hstack({ gap: 0 });
+/**
+ * No gap: each button is already padded, and together they read as a group.
+ *
+ * Kept upright about the bar's end while it settles, on the bar's own
+ * background, so a title laid out wider than a growing bar runs under the
+ * buttons.
+ */
+const controlStyles = hstack({
+  backgroundColor: "inherit",
+  gap: 0,
+  transformOrigin: "right center",
+});
+
+/**
+ * The bar's group mark, icon and title, kept upright about the bar's start
+ * while it settles. `transform-origin` has no logical keywords.
+ */
+const leadStyles = hstack({
+  flex: 1,
+  gap: 1.5,
+  minInlineSize: 0,
+  transformOrigin: "left center",
+});
 
 // Hidden in a bar too narrow to keep its title beside them. The bar is the
 // query container (see `barStyles` and `tabStyles`).

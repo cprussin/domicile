@@ -47,3 +47,22 @@ export const partway = (from: Offset, progress: number): Offset => ({
   x: from.x * (1 - progress),
   y: from.y * (1 - progress),
 });
+
+/** A step of {@link uprightAlong}: the part's `scale` at progress `at`. */
+export type UprightStep = { at: number; scaleX: number; scaleY: number };
+
+/**
+ * The `scale` that keeps a part of a settling element at its own size, at
+ * `steps` even steps of the settle from `from`.
+ *
+ * The inverse of a linear ease is not linear, so it is sampled.
+ */
+export const uprightAlong = (
+  from: Offset,
+  steps: number,
+): readonly UprightStep[] =>
+  Array.from({ length: steps + 1 }, (_, step) => {
+    const at = step / steps;
+    const settled = partway(from, at);
+    return { at, scaleX: 1 / settled.scaleX, scaleY: 1 / settled.scaleY };
+  });

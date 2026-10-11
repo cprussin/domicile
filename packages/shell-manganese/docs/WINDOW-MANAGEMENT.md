@@ -60,7 +60,8 @@ Workspaces belong to the desktop, and screens show them, as in sway:
   (`FocusGlow.tsx`), lighting the gaps around it. A window in a tab group
   lights the whole group, tabs included. Its title bar is raised with bold
   text. The glow fades out and in where it is, rather than moving to the next
-  window, so pointer-driven focus changes don't flash or slide.
+  window, so pointer-driven focus changes don't flash or slide. A glow that
+  has faded out leaves the page (`useFocusGlows`).
 - **Meta+A selects a group.** Commands then act on the whole container. One
   glow surrounds the group; the focused window's bar gets the accent color.
   A selected tab group lights its tab strip instead, and its tabs keep their
@@ -242,10 +243,18 @@ Rules:
   Contents snap while a motion plays, since `scale` would scale the motion's
   travel. The ease takes `durations.fastest` under reduced motion.
 - Every other part of a window eases the same way: title bars, tabs, strips,
-  glows and shadows. One mechanism on one timing, on the compositor's
-  thread, keeps the parts together: each edge moves linearly in the eased
-  progress. Text in a bar stretches with it until it arrives, as the contents
-  do.
+  glows, shadows and the drop indicator. One mechanism on one timing, on the
+  compositor's thread, keeps the parts together: each edge moves linearly in
+  the eased progress. Glows and shadows are drawn once at their new size and
+  scale, blur included, so no frame repaints them.
+- A bar keeps its icon, title and buttons at their own size (`UPRIGHT` in
+  `useSettling`): they scale back by the inverse of the bar's scale, sampled
+  in steps. A title laid out wider than a growing bar is clipped by the bar
+  and runs under its buttons.
+- Depth never eases: each `z-index` step restacks the page's layers. A raise
+  is at once. A part whose depth drops (`useLowered`) keeps its old depth
+  until it has settled, so a window leaving fullscreen stays over the windows
+  it still covers.
 - A part drawn by a new element, such as a strip handed to the next open tab,
   eases from where the element it replaces was drawn (`SettleHandoffs`).
 - A window being dragged or resized follows the pointer without easing. A

@@ -3,6 +3,7 @@ import { useRef } from "react";
 import { cva, cx } from "../../../styled-system/css";
 import type { Rect } from "../rect";
 import type { Restack } from "../restacking";
+import { useLowered } from "../useLowered";
 import type { Settler } from "../useSettling";
 import { useSettling } from "../useSettling";
 import type { WindowMotion } from "../window-motion";
@@ -55,6 +56,7 @@ export const FloatShadow = ({
   settler,
 }: Props) => {
   const element = useRef<HTMLDivElement>(null);
+  const lowered = useLowered(depth);
   useSettling({
     element,
     origin: originOf(frame, frame),
@@ -67,7 +69,7 @@ export const FloatShadow = ({
       className={cx(
         shadowStyles({ hanging }),
         movingStyles({ motion }),
-        settlingStyles,
+        settlingStyles({ lowered }),
       )}
       data-shadow
       ref={element}

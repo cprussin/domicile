@@ -33,6 +33,7 @@ import type { Restack } from "./restacking";
 import { useFindResult } from "./useFindResult";
 import { useHistoryAvailability } from "./useHistoryAvailability";
 import { useLoading } from "./useLoading";
+import { useLowered } from "./useLowered";
 import { usePageFullscreen } from "./usePageFullscreen";
 import { usePageIcon } from "./usePageIcon";
 import { useReclaimFocus } from "./useReclaimFocus";
@@ -207,6 +208,7 @@ export const BrowserWindow = ({
   // The whole window, used to check whether focus is inside it and to ease it
   // into a new box. A ref because only effects read it.
   const element = useRef<HTMLElement>(null);
+  const lowered = useLowered(depth);
   useSettling({
     element: element,
     origin:
@@ -499,7 +501,7 @@ export const BrowserWindow = ({
         (clickThrough || leaving) && clickThroughStyles,
         // The page's box takes its new size at once; `useSettling` eases it.
         // Colors still ease; see `settlingStyles`.
-        settlingStyles,
+        settlingStyles({ lowered }),
       )}
       // Exposes the motion on the element for tests and debugging.
       data-motion={motion}

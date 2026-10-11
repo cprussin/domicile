@@ -12,6 +12,7 @@ import { StripButtons } from "./StripButtons";
 import { StripEnd } from "./StripEnd";
 import type { Aim, DropTargets } from "./tiled/aim";
 import type { StripGroup } from "./tree/frames";
+import { useLowered } from "./useLowered";
 import type { Settler } from "./useSettling";
 import { useSettling } from "./useSettling";
 import type { WindowMotion } from "./window-motion";
@@ -110,6 +111,7 @@ export const TabStrip = ({
   const origin = originOf(frame, box);
   const leaving = isLeaving(motion);
   const playing = stripMotion(motion);
+  const lowered = useLowered(depth);
   useSettling({
     element,
     origin,
@@ -124,7 +126,7 @@ export const TabStrip = ({
         stripStyles({ selected }),
         movingStyles({ motion: playing }),
         leaving && clickThroughStyles,
-        settlingStyles,
+        settlingStyles({ lowered }),
       )}
       data-motion={motion}
       data-strip

@@ -5,18 +5,32 @@ import { token } from "../../styled-system/tokens";
 import type { Rect } from "./rect";
 import { useHandoffs } from "./SettleHandoffs";
 import type { Offset, Point } from "./settle";
-import { drawnAt, offsetFrom, partway } from "./settle";
+import { drawnAt, offsetFrom, partway, uprightAlong } from "./settle";
 
 /** Reads and plays an element's settle. */
 export type Settler = {
   /** How far the element is drawn from its box. */
   offset: (element: Element) => Offset;
   /**
-   * Stops the element's settle, then eases it from `offset` to its box. Only
-   * stops for `undefined`.
+   * Stops the element's settle, then eases it from `offset` to its box,
+   * keeping each `upright` part at its own size. Only stops for `undefined`.
    */
-  play: (element: Element, offset: Offset | undefined) => void;
+  play: (
+    element: Element,
+    offset: Offset | undefined,
+    upright: readonly Element[],
+  ) => void;
 };
+
+/**
+ * Marks a part of a settling element, such as a title, kept at its own size
+ * while the element scales. It scales back about its `transform-origin`,
+ * which should be the edge of the element it keeps to.
+ */
+export const UPRIGHT = "data-upright";
+
+/** How many steps {@link uprightAlong} samples a settle in. */
+const UPRIGHT_STEPS = 12;
 
 /** The box an element was given last, and the origin it scaled about. */
 type Placed = { origin: Point; rect: Rect };
@@ -86,12 +100,17 @@ export const useSettling = ({
       if (was === undefined) {
         const from = takenOver(handoffs, keys);
         if (from !== undefined && !still) {
-          settler.play(shown, offsetFrom(from, now.rect, now.origin));
+          settler.play(
+            shown,
+            offsetFrom(from, now.rect, now.origin),
+            uprightIn(shown),
+          );
         }
       } else if (!sameBox(was.rect, now.rect)) {
         settler.play(
           shown,
           still ? undefined : offsetTo(shown, was, now, settler),
+          uprightIn(shown),
         );
       }
     }
@@ -129,6 +148,11 @@ export const useSettling = ({
 };
 
 const NO_KEYS: readonly string[] = [];
+
+/** The parts of `element` kept upright; see {@link UPRIGHT}. */
+const uprightIn = (element: Element): readonly Element[] => [
+  ...element.querySelectorAll(`[${UPRIGHT}]`),
+];
 
 /** The keys `useSettling` joined, so they can be its effects' dependency. */
 const keysIn = (keys: string): readonly string[] =>
@@ -187,15 +211,20 @@ const sameBox = (one: Rect, other: Rect): boolean =>
 /** No offset: the element is drawn at its box. */
 const NONE: Offset = { scaleX: 1, scaleY: 1, x: 0, y: 0 };
 
-/** Each element's settle, and the offset it started from. */
-const settles = new WeakMap<Element, { animation: Animation; from: Offset }>();
+/**
+ * Each element's settle, the offset it started from, and its upright parts'
+ * animations.
+ */
+const settles = new WeakMap<
+  Element,
+  { animation: Animation; from: Offset; upright: readonly Animation[] }
+>();
 
 /**
  * The browser's settle: a Web Animation, which leaves the element's CSS
  * `animation` to its motion keyframes.
  *
- * Takes the box transition's timing, so the title bar and the window it tops
- * move together.
+ * Every part of a window settles on one timing, so the parts move together.
  */
 const WEB_ANIMATIONS: Settler = {
   // `progress` is eased, and `scale` and `translate` interpolate linearly, so
@@ -208,37 +237,62 @@ const WEB_ANIMATIONS: Settler = {
       ? NONE
       : partway(settle.from, progress);
   },
-  play: (element, offset) => {
-    settles.get(element)?.animation.cancel();
+  play: (element, offset, upright) => {
+    const was = settles.get(element);
+    was?.animation.cancel();
+    for (const part of was?.upright ?? []) {
+      part.cancel();
+    }
     settles.delete(element);
     if (offset !== undefined) {
-      const animation = element.animate(
-        [
-          {
-            scale: `${offset.scaleX.toString()} ${offset.scaleY.toString()}`,
-            translate: `${offset.x.toString()}px ${offset.y.toString()}px`,
-          },
-          { scale: "1", translate: "0px" },
-        ],
+      const timing = settleTiming();
+      const animation = settled(element, timing, [
         {
-          // The shortest duration under reduced motion, as the preset gives
-          // the title bar's transitions.
-          duration: millisecondsOf(
-            document.documentElement.hasAttribute("data-reduced-motion")
-              ? token("durations.fastest")
-              : token("durations.fast"),
-          ),
-          easing: token("easings.out"),
+          scale: `${offset.scaleX.toString()} ${offset.scaleY.toString()}`,
+          translate: `${offset.x.toString()}px ${offset.y.toString()}px`,
         },
+        { scale: "1", translate: "0px" },
+      ]);
+      // Keyframe offsets are eased progress, as the element's are, so each
+      // part keeps pace with it.
+      const steps = uprightAlong(offset, UPRIGHT_STEPS).map(
+        ({ at, scaleX, scaleY }) => ({
+          offset: at,
+          scale: `${scaleX.toString()} ${scaleY.toString()}`,
+        }),
       );
-      // A canceled settle rejects `finished`. The next settle replaces it, so
-      // there is nothing to handle.
-      animation.finished.catch(() => {
-        /* no-op */
+      settles.set(element, {
+        animation,
+        from: offset,
+        upright: upright.map((part) => settled(part, timing, steps)),
       });
-      settles.set(element, { animation, from: offset });
     }
   },
+};
+
+/** The shortest duration under reduced motion, as the preset gives others. */
+const settleTiming = (): KeyframeAnimationOptions => ({
+  duration: millisecondsOf(
+    document.documentElement.hasAttribute("data-reduced-motion")
+      ? token("durations.fastest")
+      : token("durations.fast"),
+  ),
+  easing: token("easings.out"),
+});
+
+/** Plays `keyframes` on `element` as part of a settle. */
+const settled = (
+  element: Element,
+  timing: KeyframeAnimationOptions,
+  keyframes: Keyframe[],
+): Animation => {
+  const animation = element.animate(keyframes, timing);
+  // A canceled settle rejects `finished`. The next settle replaces it, so
+  // there is nothing to handle.
+  animation.finished.catch(() => {
+    /* no-op */
+  });
+  return animation;
 };
 
 /** A duration token's value, such as `150ms`, in milliseconds. */
