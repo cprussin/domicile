@@ -230,6 +230,23 @@ fn the_config_s_extensions_are_the_desktop_s() {
 }
 
 #[test]
+fn a_folder_is_chosen_with_the_desktop_s_picker() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({"id": 15, "type": "choose_folder"})),
+        json!({"id": 15, "type": "folder", "path": "/home/me/src/my-extension"})
+    );
+    let canceled = Fake {
+        chosen: None,
+        ..Fake::new(FILES.clone())
+    };
+    assert_eq!(
+        canceled.answer(&json!({"id": 16, "type": "choose_folder"})),
+        json!({"id": 16, "type": "folder", "path": null})
+    );
+}
+
+#[test]
 fn a_desktop_that_refused_is_quoted() {
     let host = Fake {
         refuse: true,
@@ -275,6 +292,8 @@ static FILES: std::sync::LazyLock<SettingsFiles> = std::sync::LazyLock::new(|| S
 /// A desktop and a file system in memory.
 struct Fake {
     files: SettingsFiles,
+    /// What the folder picker returns.
+    chosen: Option<PathBuf>,
     refuse: bool,
     asked: RefCell<Vec<Request>>,
     written: RefCell<Vec<(PathBuf, String)>>,
@@ -288,6 +307,7 @@ impl Fake {
     fn new(files: SettingsFiles) -> Self {
         Self {
             files,
+            chosen: Some(PathBuf::from("/home/me/src/my-extension")),
             refuse: false,
             asked: RefCell::new(Vec::new()),
             written: RefCell::new(Vec::new()),
@@ -351,6 +371,7 @@ impl Fake {
                     _ => Err(std::io::Error::from(std::io::ErrorKind::NotFound)),
                 },
                 home: Some(Path::new("/home/me")),
+                choose_folder: &|| Ok(self.chosen.clone()),
                 writable: &|path: &Path| !path.starts_with("/nix/store"),
                 write: &|path, text| {
                     self.written

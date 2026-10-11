@@ -35,6 +35,7 @@ pub mod config_path;
 pub mod config_watch;
 pub mod control;
 pub mod control_socket;
+pub mod folder_chooser;
 pub mod graphical_session;
 pub mod handshake;
 pub mod heard;

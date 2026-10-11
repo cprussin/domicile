@@ -9,10 +9,11 @@ launcher, opens it in an app window
   ([SHELL-CONFIG.md](SHELL-CONFIG.md)). A change is written to the file as soon
   as it is made, and the desktop reloads it.
 - **Extensions:** switch an extension on or off and open its options through
-  `chrome.management`. Load an unpacked folder, or uninstall an extension the
-  config did not install, through the engine; this works with a read-only
-  config. Install and uninstall the config's by editing its `extensions`
-  lists ([EXTENSIONS.md](architecture/EXTENSIONS.md#from-the-settings-app)).
+  `chrome.management`. Load an unpacked folder, picked in the desktop's file
+  chooser, or uninstall an extension the config did not install, through the
+  engine; this works with a read-only config. The config's own uninstall by
+  editing its `extensions` lists
+  ([EXTENSIONS.md](architecture/EXTENSIONS.md#from-the-settings-app)).
 - **Site permissions:** each permission with the sites that have a setting of
   their own for it, or each site with all its permissions. **Remove site**
   clears all of a site's own settings. Changes take effect at once in open
@@ -62,6 +63,7 @@ Settings page ─ native messaging ─▶ domicile-settings-host ─ DOMICILE_SO
 | Which files | The host asks the desktop (`settings_files` on the control socket) on every request. The page never names a path. |
 | Writable | `access(W_OK)` on the file, following links. |
 | Extensions | The engine's `load_unpacked`, `uninstall_extension` and `config_extensions` commands. |
+| Picking a folder | The host calls the `FileChooser` portal's `OpenFile` with `directory`, which the shell draws ([PORTALS.md](PORTALS.md)). A page cannot learn the path of a folder from `<input type="file">`. |
 | Site permissions | The engine's `site_permissions` and `set_site_permission` commands ([CONTROL-CHANNEL.md](/packages/domicile-engine/docs/CONTROL-CHANNEL.md#command-socket)). They read and write the shell profile's content settings as the address bar's panel does. |
 | Camera and microphone | The engine's `media_devices` and `set_media_device` commands. They read and write Chrome's device ranking in the shell profile's prefs, which Chrome uses for a site that names no device. |
 | Opening it | `domicile-settings` runs `domicile open-app chrome-extension://acpgnhiblklkgbkcjgbabkcmdmchdphk/settings.html`. |

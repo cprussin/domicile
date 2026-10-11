@@ -14,6 +14,8 @@ use std::sync::{Arc, Mutex};
 
 use domicile_launch::control::{Request, Response};
 use domicile_launch::control_socket::{advertised, ask, PATIENCE, VARIABLE};
+use domicile_launch::folder_chooser::choose_folder;
+use domicile_launch::notification::session_bus;
 use domicile_launch::settings::{answer, read_message, watched, write_message, Host};
 use notify::Watcher as _;
 use serde_json::json;
@@ -43,6 +45,11 @@ fn run() -> Result<(), String> {
     let host = Host {
         ask: &asking,
         home: home.as_deref(),
+        choose_folder: &|| {
+            let bus =
+                session_bus().map_err(|why| format!("cannot reach the session bus: {why}"))?;
+            choose_folder(&bus, "Load an unpacked extension")
+        },
         read: &|path| std::fs::read_to_string(path),
         writable: &writable,
         write: &|path, text| std::fs::write(path, text),

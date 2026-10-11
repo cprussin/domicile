@@ -117,6 +117,11 @@ export type SettingsHost = {
    * resolves with its id. It stays until uninstalled.
    */
   loadUnpacked: (directory: string) => Promise<string>;
+  /**
+   * Shows the desktop's folder picker. Resolves with the folder's absolute
+   * path, or `undefined` if the user canceled.
+   */
+  chooseFolder: () => Promise<string | undefined>;
   /** Uninstalls an extension the config did not install. */
   uninstallExtension: (id: string) => Promise<void>;
   /** The ids of the extensions the config installed, which only it removes. */
@@ -171,6 +176,14 @@ export const nativeHost = (
     });
 
   return {
+    chooseFolder: async () => {
+      const reply = await ask({ type: "choose_folder" });
+      if (reply.type === "folder") {
+        return reply.path ?? undefined;
+      } else {
+        throw unexpected(reply, "folder");
+      }
+    },
     configExtensions: async () => {
       const reply = await ask({ type: "config_extensions" });
       if (reply.type === "config_extensions") {
@@ -275,6 +288,11 @@ const replySchema = z.discriminatedUnion("type", [
     type: z.literal("loaded_unpacked"),
   }),
   z.object({ id: z.number(), type: z.literal("uninstalled") }),
+  z.object({
+    id: z.number(),
+    path: z.string().nullable(),
+    type: z.literal("folder"),
+  }),
   z.object({
     id: z.number(),
     ids: z.array(z.string()),

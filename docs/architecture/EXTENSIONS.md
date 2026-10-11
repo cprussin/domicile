@@ -64,7 +64,7 @@ Once `ExtensionSystem::ready()`, reconciling:
 Listing an extension is consent. There is no install prompt, and manifest
 permissions are granted as declared.
 
-The Settings app installs and uninstalls by editing these lists, and switches
+The Settings app removes extensions by editing these lists, and switches
 extensions on and off through `chrome.management`
 ([SETTINGS.md](/docs/SETTINGS.md)).
 
@@ -77,7 +77,7 @@ uninstalls through the engine's command socket, relayed by
 
 | Command | Does |
 |---|---|
-| `load_unpacked` | `UnpackedInstaller::Load` on an absolute directory. The host expands `~`. It is not recorded in `domicile.extensions.added`, so reconciling leaves it, and Chromium loads it again on every start. |
+| `load_unpacked` | `UnpackedInstaller::Load` on an absolute directory, picked in the `FileChooser` portal. It is not recorded in `domicile.extensions.added`, so reconciling leaves it, and Chromium loads it again on every start. |
 | `uninstall_extension` | `UNINSTALL_REASON_USER_INITIATED`. Refuses an id in `domicile.extensions.added`, which reconciling would install again. |
 | `config_extensions` | The ids in `domicile.extensions.added`. The app shows no uninstall button for these unless the config is writable and lists the id. |
 
