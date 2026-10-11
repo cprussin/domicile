@@ -119,6 +119,68 @@ fn a_clipboard_manager_copies_into_the_history_and_pastes_from_it() {
     );
 }
 
+/// A copied image reaches the history as a row named for its size, and a
+/// restored image row pastes back the same bytes after its copier has left.
+#[test]
+fn a_copied_image_is_a_row_and_pastes_back_whole() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let image = domicile_host::screenshot::encode(&domicile_host::screenshot::Shot {
+        width: 3,
+        height: 2,
+        bgra: (0..24).collect(),
+    });
+
+    let mut copying = compositor
+        .command("wl-copy")
+        .args(["--foreground", "--type", "image/png"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("wl-copy starts; it is in `nix develop .#full`");
+    std::io::Write::write_all(&mut copying.stdin.take().expect("stdin was piped"), &image)
+        .expect("wl-copy takes the image");
+    let history = chrome
+        .wait_for(|message| {
+            matches!(message, HostMessage::Clipboard { entries }
+                if entries.iter().any(|entry| entry.preview == "Image, 3 × 2"))
+        })
+        .expect("a copied image reaches the shell's history");
+
+    let HostMessage::Clipboard { entries } = history else {
+        unreachable!("the wait matched on this variant")
+    };
+    let row = entries
+        .iter()
+        .find(|entry| entry.preview == "Image, 3 × 2")
+        .expect("the wait matched on this row");
+    chrome
+        .say(&ChromeMessage::CopyClipboardEntry { entry: row.id })
+        .expect("the chrome socket takes a restore");
+    // `wl-copy` exits when its selection is replaced.
+    let copied = finished(copying, Duration::from_secs(10));
+    assert!(copied.status.success(), "wl-copy failed: {}", copied.stderr);
+
+    let pasting = compositor
+        .command("wl-paste")
+        .args(["--type", "image/png"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("wl-paste starts; it is in `nix develop .#full`");
+    let pasted = pasting.wait_with_output().expect("wl-paste finishes");
+    assert!(
+        pasted.status.success(),
+        "wl-paste failed: {}",
+        String::from_utf8_lossy(&pasted.stderr)
+    );
+    assert_eq!(
+        pasted.stdout, image,
+        "the restored row pastes the copied image"
+    );
+}
+
 /// Give the keyboard to the window with this title, and wait until it has it.
 ///
 /// Selections are offered to the client with the keyboard, so the move must

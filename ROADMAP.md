@@ -146,8 +146,7 @@ Understood and not scheduled.
 ### Clipboard
 
 - **A nested desktop's browser uses the host's clipboard.**
-- **Only text crosses to the browser.**
-- **Clipboard history stores text only,** and not the primary selection.
+- **Clipboard history skips the primary selection.**
 
 ### Theme
 

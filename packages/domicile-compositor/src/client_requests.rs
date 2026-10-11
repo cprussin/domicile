@@ -10,6 +10,7 @@ use smithay::wayland::compositor::with_states;
 use smithay::wayland::selection::data_device::set_data_device_selection;
 use tracing::{debug, warn};
 
+use domicile_host::clipboard::Contents;
 use domicile_host::theme_turnover::{Turnover, CAPTURE_WITHIN};
 use domicile_protocol::{Passphrase, PortalAnswer, Theme, TrayAction};
 
@@ -17,8 +18,7 @@ use crate::chrome_hub::announce_open_apps;
 use crate::engine::Clipboard;
 use crate::lock::Asked;
 use crate::{
-    at, say_what_the_lock_refused, spawn_client, text_mimes, window_geometry, DomicileCompositor,
-    Holder,
+    at, say_what_the_lock_refused, spawn_client, window_geometry, DomicileCompositor, Holder,
 };
 
 /// A chrome request that must run on the Wayland thread, where the seat and
@@ -99,14 +99,14 @@ pub enum ClientRequest {
     ChromeHello {
         served_by: Option<i32>,
     },
-    /// A client's copied text, read from its pipe.
+    /// A client's copy, read from its pipe.
     ///
     /// Sent by the reader thread, not a chrome, because a client may write
     /// slowly and the Wayland thread must not wait. See
     /// [`DomicileCompositor::read_what_was_copied`].
     ClipboardCopied {
         clipboard: Clipboard,
-        text: String,
+        contents: Contents,
     },
     /// The shell picked a clipboard history entry. Make it the seat's
     /// selection.
@@ -309,8 +309,11 @@ impl DomicileCompositor {
                 let serial = SERIAL_COUNTER.next_serial();
                 keyboard.set_focus(self, surface, serial);
             }
-            ClientRequest::ClipboardCopied { clipboard, text } => {
-                self.took_a_copy(clipboard, text);
+            ClientRequest::ClipboardCopied {
+                clipboard,
+                contents,
+            } => {
+                self.took_a_copy(clipboard, contents);
                 self.tell_the_engine_a_clipboard(clipboard);
             }
             // Forward to the tray worker, which talks to the session bus.
@@ -338,18 +341,19 @@ impl DomicileCompositor {
             ClientRequest::AnswerPortalRequest { id, answer } => {
                 self.hub.portals.answer(id, answer);
             }
-            ClientRequest::CopyClipboardEntry { entry } => match self.clipboard.text(entry) {
-                Some(text) => {
+            ClientRequest::CopyClipboardEntry { entry } => match self.clipboard.contents(entry) {
+                Some(contents) => {
+                    let mimes = contents.mimes();
                     // Paste now yields this entry, not the newest. See
                     // [`DomicileCompositor::holding`].
-                    self.holding[at(Clipboard::Copy)] = Some(text.to_owned());
+                    self.holding[at(Clipboard::Copy)] = Some(contents.clone());
                     set_data_device_selection(
                         &self.display_handle,
                         &self.seat,
-                        text_mimes(),
+                        mimes.clone(),
                         Holder::Desk(Clipboard::Copy),
                     );
-                    self.hub.portals.selection_changed(text_mimes(), None);
+                    self.hub.portals.selection_changed(mimes, None);
                     self.tell_the_engine_a_clipboard(Clipboard::Copy);
                 }
                 // The history dropped this entry. Set nothing rather than

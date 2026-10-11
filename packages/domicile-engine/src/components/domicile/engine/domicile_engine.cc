@@ -75,6 +75,11 @@ constexpr uint64_t kBrokerPipeName = 0;
 // Throwaway; see domicile_engine_spike.h.
 constexpr uint64_t kProbePipeName = 1;
 
+// The type text crosses the broker under. The browser offers it under every
+// text type a reader asks for (see DomicileTextMimeTypes in
+// ui/ozone/platform/drm/domicile/drm_clipboard.h).
+constexpr char kClipboardText[] = "text/plain;charset=utf-8";
+
 // Initializes the AtExitManager and mojo core once per process.
 //
 // The compositor is not a Chromium process, so the library provides both. They
@@ -509,12 +514,15 @@ class Copies : public mojom::ClipboardObserver {
   void Unbind() { receiver_.reset(); }
 
   // mojom::ClipboardObserver implementation.
-  void OnCopied(mojom::Clipboard clipboard, const std::string& text) override {
+  void OnCopied(
+      mojom::Clipboard clipboard,
+      const base::flat_map<std::string, std::vector<uint8_t>>& contents)
+      override {
     EngineEvent event{.type = EngineEvent::Type::kCopied};
     event.clipboard = clipboard == mojom::Clipboard::kPrimary
                           ? DOMICILE_CLIPBOARD_PRIMARY
                           : DOMICILE_CLIPBOARD_COPY;
-    event.copied = text;
+    event.copied = contents;
     queue_->Push(event);
   }
 
@@ -657,10 +665,27 @@ struct DomicileEngine {
           }
           break;
         case domicile::EngineEvent::Type::kCopied:
-          if (callbacks_.copied) {
-            // `event` owns the bytes until the loop ends, as for display names.
+          // `event` owns the bytes until the loop ends, as for display names.
+          if (callbacks_.copied_items) {
+            std::vector<DomicileClipboardItem> items;
+            items.reserve(event.copied.size());
+            for (const auto& [mime_type, data] : event.copied) {
+              items.push_back(
+                  DomicileClipboardItem{.mime_type = mime_type.c_str(),
+                                        .data = data.data(),
+                                        .length = data.size()});
+            }
+            callbacks_.copied_items(callbacks_.user_data, event.clipboard,
+                                    items.data(),
+                                    static_cast<uint32_t>(items.size()));
+          } else if (callbacks_.copied) {
+            auto text = event.copied.find(domicile::kClipboardText);
+            const std::string copied =
+                text == event.copied.end()
+                    ? std::string()
+                    : std::string(text->second.begin(), text->second.end());
             callbacks_.copied(callbacks_.user_data, event.clipboard,
-                              event.copied.data(), event.copied.size());
+                              copied.data(), copied.size());
           }
           break;
         case domicile::EngineEvent::Type::kCaptured:
@@ -805,11 +830,13 @@ struct DomicileEngine {
 
   // Takes a copy: the ABI lends the bytes only for the call, and the browser is
   // told later on another thread.
-  void SetClipboard(DomicileClipboard clipboard, std::string text) {
+  void SetClipboard(
+      DomicileClipboard clipboard,
+      base::flat_map<std::string, std::vector<uint8_t>> contents) {
     thread_.task_runner()->PostTask(
         FROM_HERE, base::BindOnce(&DomicileEngine::SetClipboardOnThread,
                                   base::Unretained(this), clipboard,
-                                  std::move(text)));
+                                  std::move(contents)));
   }
 
  private:
@@ -896,12 +923,14 @@ struct DomicileEngine {
   // frames.
   void ForgetCapture(DomicileCaptureId capture) { captures_.erase(capture); }
 
-  void SetClipboardOnThread(DomicileClipboard clipboard, std::string text) {
+  void SetClipboardOnThread(
+      DomicileClipboard clipboard,
+      base::flat_map<std::string, std::vector<uint8_t>> contents) {
     if (broker_) {
       broker_->SetClipboard(clipboard == DOMICILE_CLIPBOARD_PRIMARY
                                 ? domicile::mojom::Clipboard::kPrimary
                                 : domicile::mojom::Clipboard::kCopy,
-                            text);
+                            std::move(contents));
     }
   }
 
@@ -1330,9 +1359,40 @@ void domicile_clipboard_set(DomicileEngine* engine,
     // SAFETY: the ABI says `text` points at `length` bytes valid for this
     // call, and the check above refused a null pointer with a nonzero length.
     // `UNSAFE_BUFFERS` is required to span an ABI pointer and length. The
-    // string is copied before this returns.
+    // bytes are copied before this returns.
     const auto bytes = UNSAFE_BUFFERS(base::span(text, length));
-    engine->SetClipboard(clipboard, std::string(bytes.begin(), bytes.end()));
+    base::flat_map<std::string, std::vector<uint8_t>> contents;
+    if (length > 0) {
+      contents.emplace(domicile::kClipboardText,
+                       std::vector<uint8_t>(bytes.begin(), bytes.end()));
+    }
+    engine->SetClipboard(clipboard, std::move(contents));
+  }
+}
+
+void domicile_clipboard_set_items(DomicileEngine* engine,
+                                  DomicileClipboard clipboard,
+                                  const DomicileClipboardItem* items,
+                                  uint32_t count) {
+  // A null array with a nonzero count is a caller bug. A null array with zero
+  // count clears the clipboard.
+  if (engine && (items || count == 0)) {
+    base::flat_map<std::string, std::vector<uint8_t>> contents;
+    if (count > 0) {
+      // SAFETY: the ABI says `items` points at `count` records, and each
+      // record's `data` at `length` bytes, valid for this call. Everything
+      // is copied before this returns.
+      for (const DomicileClipboardItem& item :
+           UNSAFE_BUFFERS(base::span(items, static_cast<size_t>(count)))) {
+        CHECK(item.mime_type);
+        CHECK(item.data || item.length == 0);
+        const auto bytes = UNSAFE_BUFFERS(base::span(item.data, item.length));
+        contents.insert_or_assign(
+            std::string(item.mime_type),
+            std::vector<uint8_t>(bytes.begin(), bytes.end()));
+      }
+    }
+    engine->SetClipboard(clipboard, std::move(contents));
   }
 }
 
