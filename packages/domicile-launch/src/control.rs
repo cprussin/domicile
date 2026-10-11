@@ -95,6 +95,10 @@ pub enum Response {
     /// The user dismissed the shell's screenshot dialog.
     Canceled,
 
+    /// The user copied the screenshot to the clipboard from the shell's
+    /// dialog, so no file was saved.
+    Copied,
+
     /// The compositor sent the command to every page listening for one.
     ///
     /// The shell does not report whether it knew the command.
@@ -230,6 +234,8 @@ pub struct Desktop<'a> {
 pub enum Shot {
     /// Saved as this file.
     Saved(PathBuf),
+    /// Put on the clipboard from the shell's dialog, and not saved.
+    Copied,
     /// The user dismissed the shell's screenshot dialog.
     Canceled,
 }
@@ -258,6 +264,7 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
         }),
         Ok(Request::Screenshot { file }) => to_line(&match (desktop.capture)(file.as_deref()) {
             Ok(Shot::Saved(file)) => Response::Captured { file },
+            Ok(Shot::Copied) => Response::Copied,
             Ok(Shot::Canceled) => Response::Canceled,
             Err(why) => Response::Refused { why },
         }),

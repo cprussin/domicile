@@ -817,11 +817,34 @@ fn the_screenshot_and_color_answers_the_sdk_sends_parse() {
                     width: 3,
                     height: 4,
                 },
+                copy: false,
             },
         ),
         (
             r#"{"kind":"screenshot_window","id":"app-3"}"#,
-            PortalAnswer::ScreenshotWindow { id: "app-3".into() },
+            PortalAnswer::ScreenshotWindow {
+                id: "app-3".into(),
+                copy: false,
+            },
+        ),
+        (
+            r#"{"kind":"screenshot","area":{"x":1,"y":2,"width":3,"height":4},"copy":true}"#,
+            PortalAnswer::Screenshot {
+                area: ShotRect {
+                    x: 1,
+                    y: 2,
+                    width: 3,
+                    height: 4,
+                },
+                copy: true,
+            },
+        ),
+        (
+            r#"{"kind":"screenshot_window","id":"app-3","copy":true}"#,
+            PortalAnswer::ScreenshotWindow {
+                id: "app-3".into(),
+                copy: true,
+            },
         ),
         (
             r#"{"kind":"pick_color","x":5,"y":6}"#,
@@ -848,6 +871,7 @@ fn a_frozen_desk_takes_only_its_own_answer_inside_the_frame() {
             width,
             height,
         },
+        copy: false,
     };
 
     assert!(picker.accepts(&area(0, 0, 300, 100)));
@@ -857,7 +881,10 @@ fn a_frozen_desk_takes_only_its_own_answer_inside_the_frame() {
     );
     assert!(!picker.accepts(&area(0, 0, 0, 10)), "empty");
     assert!(!picker.accepts(&PortalAnswer::PickColor { x: 1, y: 1 }));
-    let window = |id: &str| PortalAnswer::ScreenshotWindow { id: id.into() };
+    let window = |id: &str| PortalAnswer::ScreenshotWindow {
+        id: id.into(),
+        copy: false,
+    };
     assert!(picker.accepts(&window("app-3")));
     assert!(!picker.accepts(&window("app-9")), "not on the desk");
     assert!(!picking.accepts(&window("app-3")));

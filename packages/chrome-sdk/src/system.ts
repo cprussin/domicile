@@ -159,6 +159,24 @@ export type ByteRange = {
 /** What {@link System.run} collected. */
 export type Ran = Exit & { stdout: string; stderr: string };
 
+/** Where a screenshot from the shell's dialog went. */
+export enum ScreenshotKeptKind {
+  /** Saved under `$XDG_PICTURES_DIR/Screenshots/`. */
+  Saved,
+  /** Copied to the clipboard with Ctrl+C, and not saved. */
+  Copied,
+}
+
+export const ScreenshotKept = {
+  Copied: () => ({ kind: ScreenshotKeptKind.Copied as const }),
+  /** Saved as the PNG at `path`. */
+  Saved: (path: string) => ({ kind: ScreenshotKeptKind.Saved as const, path }),
+};
+
+export type ScreenshotKept = ReturnType<
+  (typeof ScreenshotKept)[keyof typeof ScreenshotKept]
+>;
+
 /** A watch's `items` are the absolute path of each change. */
 export type Watch = Listening<string>;
 
@@ -201,9 +219,10 @@ export type System = {
    * Take a screenshot as an interactive Screenshot portal call takes one, as
    * if the shell were the application: the desk freezes, `<PortalDialogs />`
    * draws the screenshot dialog, and the area picked is saved under
-   * `$XDG_PICTURES_DIR/Screenshots/`. Resolves with the saved PNG's path.
+   * `$XDG_PICTURES_DIR/Screenshots/`, or copied to the clipboard instead when
+   * the user presses Ctrl+C. Resolves with where it went.
    */
-  screenshot: () => Promise<Result<string, SystemError>>;
+  screenshot: () => Promise<Result<ScreenshotKept, SystemError>>;
   /**
    * Hear each command `domicile send-shell` sends, as its words. Every page
    * listening hears every command. Allowed while the desktop is locked.
@@ -290,9 +309,7 @@ export const system = (host: SystemHost): System => {
         return exited.map((exit) => ({ ...exit, stderr, stdout }));
       }),
     screenshot: () =>
-      oneShot(calls, { call: "screenshot" }, (reply) =>
-        reply.kind === "saved" ? reply.path : unexpected(reply),
-      ),
+      oneShot(calls, { call: "screenshot" }, (reply) => keptOf(reply)),
     shellCommands: () =>
       listening(calls, { call: "shell_commands" }, (event) =>
         event.kind === "shell_command" ? event.command : unexpected(event),
@@ -614,6 +631,18 @@ const stopOf = (end: End): Result<"stopped", SystemError> => {
 };
 
 /** An answer the protocol does not allow at this point: a compositor bug. */
+/** Where a screenshot call's reply says the screenshot went. */
+const keptOf = (reply: Reply): ScreenshotKept => {
+  switch (reply.kind) {
+    case "saved":
+      return ScreenshotKept.Saved(reply.path);
+    case "copied":
+      return ScreenshotKept.Copied();
+    default:
+      return unexpected(reply);
+  }
+};
+
 const unexpected = (answer: unknown): never => {
   throw new Error(`an unexpected system answer: ${JSON.stringify(answer)}`);
 };

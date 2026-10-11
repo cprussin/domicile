@@ -66,6 +66,7 @@ pub fn screenshot(
     let answer = called(socket, request, patience)?;
     match answer.reply {
         SystemReply::Saved { path } => Ok(Shot::Saved(PathBuf::from(path))),
+        SystemReply::Copied => Ok(Shot::Copied),
         SystemReply::Failed {
             error:
                 SystemError {

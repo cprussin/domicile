@@ -645,13 +645,18 @@ export const PortalAnswer = {
     kind: PortalAnswerKind.ScreenCast as const,
     sources,
   }),
-  /** A non-empty area inside the request's frame. */
-  Screenshot: (area: ShotRect) => ({
+  /**
+   * A non-empty area inside the request's frame. `copy` also puts it on the
+   * clipboard; the shell's own screenshot is then not saved.
+   */
+  Screenshot: (area: ShotRect, copy: boolean) => ({
     area,
+    copy,
     kind: PortalAnswerKind.Screenshot as const,
   }),
-  /** One of the request's windows, by {@link ShotWindow.id}. */
-  ScreenshotWindow: (id: string) => ({
+  /** One of the request's windows, by {@link ShotWindow.id}; `copy` as above. */
+  ScreenshotWindow: (id: string, copy: boolean) => ({
+    copy,
     id,
     kind: PortalAnswerKind.ScreenshotWindow as const,
   }),
@@ -1443,9 +1448,9 @@ const wireAnswer = (answer: PortalAnswer): object => {
         printer: answer.printer,
       };
     case PortalAnswerKind.Screenshot:
-      return { area: answer.area, kind: "screenshot" };
+      return { area: answer.area, copy: answer.copy, kind: "screenshot" };
     case PortalAnswerKind.ScreenshotWindow:
-      return { id: answer.id, kind: "screenshot_window" };
+      return { copy: answer.copy, id: answer.id, kind: "screenshot_window" };
     case PortalAnswerKind.PickColor:
       return { kind: "pick_color", x: answer.at.x, y: answer.at.y };
     case PortalAnswerKind.Refused:

@@ -30,7 +30,8 @@ export const Shell = async (root, domicile) => {
   the mapping.
 - `screenshot()` takes an interactive Screenshot portal screenshot as if the
   shell were the app: `<PortalDialogs />` draws the dialog, and the call
-  resolves with the saved PNG's path, or fails `canceled`.
+  resolves with `ScreenshotKept.Saved(path)`, `ScreenshotKept.Copied()` when
+  the user pressed Ctrl+C, or fails `canceled`.
 - `shellCommands()` streams each command `domicile send-shell` sends.
   `bindKeys` listens for you and passes them to `onCommand`; see
   [KEYBINDINGS.md](architecture/KEYBINDINGS.md#commands-from-a-terminal).

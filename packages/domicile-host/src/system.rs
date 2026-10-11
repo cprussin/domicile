@@ -63,8 +63,17 @@ pub struct System {
 }
 
 /// Takes a screenshot, into the file if one is given, and returns where it
-/// was saved. Blocks until it is saved, the dialog included.
-pub type Screenshot = Arc<dyn Fn(Option<PathBuf>) -> Result<PathBuf, SystemError> + Send + Sync>;
+/// went. Blocks until it is kept, the dialog included.
+pub type Screenshot = Arc<dyn Fn(Option<PathBuf>) -> Result<Kept, SystemError> + Send + Sync>;
+
+/// Where a screenshot went.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Kept {
+    /// Saved as this file.
+    Saved(PathBuf),
+    /// Put on the clipboard (Ctrl+C in the dialog) and not saved.
+    Copied,
+}
 
 /// How a [`System`] reaches a D-Bus bus.
 type Connect = Arc<dyn Fn(Bus) -> zbus::Result<Connection> + Send + Sync>;
@@ -229,7 +238,7 @@ impl System {
     /// This system, taking screenshots through `screenshot`.
     pub fn screenshotting_with(
         mut self,
-        screenshot: impl Fn(Option<PathBuf>) -> Result<PathBuf, SystemError> + Send + Sync + 'static,
+        screenshot: impl Fn(Option<PathBuf>) -> Result<Kept, SystemError> + Send + Sync + 'static,
     ) -> System {
         self.screenshot = Some(Arc::new(screenshot));
         self
@@ -470,9 +479,11 @@ impl System {
                         kind: SystemErrorKind::Other,
                         message: "this desktop takes no screenshots".into(),
                     })?;
-                    let path = screenshot(file.map(|file| home.join(file)))?;
-                    Ok(SystemReply::Saved {
-                        path: path.display().to_string(),
+                    Ok(match screenshot(file.map(|file| home.join(file)))? {
+                        Kept::Saved(path) => SystemReply::Saved {
+                            path: path.display().to_string(),
+                        },
+                        Kept::Copied => SystemReply::Copied,
                     })
                 })
             }

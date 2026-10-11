@@ -10,6 +10,7 @@
 use std::collections::HashMap;
 use std::os::fd::OwnedFd;
 
+use domicile_host::clipboard::Contents;
 use zbus::fdo;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 
@@ -28,6 +29,9 @@ pub enum Selection {
     },
     /// Write the clipboard, as `mime_type`, into `into`.
     Read { mime_type: String, into: OwnedFd },
+    /// Put `contents` on the clipboard, served by the compositor: a
+    /// screenshot copied from its dialog.
+    Hold { contents: Contents },
 }
 
 /// Pastes of a session's offer, waiting for the application to write them.
