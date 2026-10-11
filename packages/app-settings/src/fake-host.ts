@@ -13,6 +13,8 @@ import type {
 /** What a fake host starts with. */
 export type FakeHostState = {
   files: SettingsFiles;
+  /** The folder the picker returns, or `undefined` for a canceled one. */
+  chosen: string | undefined;
   /** The ids the engine says the config installed. */
   configExtensions: string[];
   sites: SiteSettings;
@@ -27,7 +29,13 @@ export const fakeHost = (state: FakeHostState) => {
   const writes: { file: Target; text: string }[] = [];
   const loaded: string[] = [];
   const uninstalled: string[] = [];
+  /** Each folder the picker returned. */
+  const chosen: (string | undefined)[] = [];
   const host: SettingsHost = {
+    chooseFolder: () => {
+      chosen.push(state.chosen);
+      return Promise.resolve(state.chosen);
+    },
     configExtensions: () => Promise.resolve([...state.configExtensions]),
     loadUnpacked: (directory) => {
       loaded.push(directory);
@@ -89,7 +97,7 @@ export const fakeHost = (state: FakeHostState) => {
       listener();
     }
   };
-  return { change, host, loaded, state, uninstalled, writes };
+  return { change, chosen, host, loaded, state, uninstalled, writes };
 };
 
 /** `chrome.management` over `installed`, which switches change. */

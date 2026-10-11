@@ -21,6 +21,8 @@
 //!   {"id":6,"type":"uninstalled"}
 //! {"id":7,"type":"config_extensions"}
 //!   {"id":7,"type":"config_extensions","ids":["…"]}
+//! {"id":8,"type":"choose_folder"}
+//!   {"id":8,"type":"folder","path":"/home/me/src/my-extension"}   (null if canceled)
 //! {"id":8,"type":"media_devices"}
 //!   {"id":8,"type":"media_devices","cameras":[{"id":…,"name":…}],"microphones":[…]}
 //! {"id":9,"type":"set_media_device","kind":"camera","device":"…"}
@@ -57,6 +59,9 @@ pub struct Host<'a> {
     pub read: &'a dyn Fn(&Path) -> std::io::Result<String>,
     /// The user's home directory, which a leading `~` names.
     pub home: Option<&'a Path>,
+    /// Shows the desktop's folder picker: the folder, or `None` if canceled.
+    /// [`crate::folder_chooser::choose_folder`] outside tests.
+    pub choose_folder: &'a dyn Fn() -> Result<Option<PathBuf>, String>,
     /// Whether this user may write the file, following links.
     pub writable: &'a dyn Fn(&Path) -> bool,
     /// Replaces the file's contents in place, so a link stays a link.
@@ -125,6 +130,7 @@ enum AppRequest {
     // `extension`, since the message's own `id` is the request's.
     UninstallExtension { extension: String },
     ConfigExtensions,
+    ChooseFolder,
     MediaDevices,
     // `device`, since the message's own `id` is the request's.
     SetMediaDevice { kind: MediaKind, device: String },
@@ -193,6 +199,9 @@ fn carry_out(request: AppRequest, host: &Host) -> Result<Value, String> {
                 Response::Uninstalled => Ok(json!({"type": "uninstalled"})),
                 other => Err(refusal_or_surprise(other)),
             }
+        }
+        AppRequest::ChooseFolder => {
+            (host.choose_folder)().map(|path| json!({"type": "folder", "path": path}))
         }
         AppRequest::ConfigExtensions => match (host.ask)(&Request::ConfigExtensions)? {
             Response::ConfigExtensions { ids } => {

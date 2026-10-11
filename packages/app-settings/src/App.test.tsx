@@ -76,11 +76,14 @@ const INSTALLED: InstalledExtension[] = [
 const renderApp = async (
   page: string,
   {
+    chosen = "/home/me/src/my-extension",
     config = {},
     configExtensions = [],
     refuse,
     writable = true,
   }: {
+    /** The folder the picker returns; `null` for a canceled picker. */
+    chosen?: string | null;
     config?: Record<string, unknown>;
     configExtensions?: string[];
     refuse?: string;
@@ -88,6 +91,7 @@ const renderApp = async (
   } = {},
 ) => {
   const host = fakeHost({
+    chosen: chosen ?? undefined,
     configExtensions,
     files: files(config, writable),
     media: structuredClone(MEDIA),
@@ -305,20 +309,6 @@ describe(App, () => {
       ]);
     });
 
-    it("installs from a Web Store address by adding it to the config", async () => {
-      const { host, user } = await renderApp("Extensions");
-      await user.type(
-        screen.getByRole("textbox", { name: "Web Store address or id" }),
-        `https://chromewebstore.google.com/detail/x/${"b".repeat(32)}`,
-      );
-      await user.click(screen.getByRole("button", { name: "Install" }));
-      await waitFor(() => {
-        expect(written(host.writes).extensions.web_store).toEqual([
-          "b".repeat(32),
-        ]);
-      });
-    });
-
     it("uninstalls an extension the config installed", async () => {
       const { host, user } = await renderApp("Extensions", {
         config: { extensions: { web_store: [UBLOCK] } },
@@ -335,18 +325,27 @@ describe(App, () => {
   });
 
   describe("unpacked and uninstalled through the engine", () => {
-    it("loads an unpacked folder", async () => {
+    it("loads the unpacked folder chosen in the desktop's picker", async () => {
       const { host, user } = await renderApp("Extensions", {
         writable: false,
       });
-      await user.type(
-        screen.getByRole("textbox", { name: "Unpacked extension folder" }),
-        "~/src/my-extension",
+      await user.click(
+        screen.getByRole("button", { name: "Load unpacked folder" }),
       );
-      await user.click(screen.getByRole("button", { name: "Load" }));
       await waitFor(() => {
-        expect(host.loaded).toEqual(["~/src/my-extension"]);
+        expect(host.loaded).toEqual(["/home/me/src/my-extension"]);
       });
+    });
+
+    it("loads nothing when the picker is canceled", async () => {
+      const { host, user } = await renderApp("Extensions", { chosen: null });
+      await user.click(
+        screen.getByRole("button", { name: "Load unpacked folder" }),
+      );
+      await waitFor(() => {
+        expect(host.chosen).toEqual([undefined]);
+      });
+      expect(host.loaded).toEqual([]);
     });
 
     it("uninstalls an extension the config did not install", async () => {

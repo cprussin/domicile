@@ -1,15 +1,13 @@
 import { Button } from "@domicile-desktop/component-library/Button";
 import { Card } from "@domicile-desktop/component-library/Card";
-import { Input } from "@domicile-desktop/component-library/Input";
 import { Switch } from "@domicile-desktop/component-library/Switch";
-import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr/DownloadSimple";
 import { FolderOpenIcon } from "@phosphor-icons/react/dist/ssr/FolderOpen";
 import { GearIcon } from "@phosphor-icons/react/dist/ssr/Gear";
 import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
-import { useId, useState } from "react";
+import { useId } from "react";
 
 import { css } from "../../styled-system/css";
-import { circle, flex, grid } from "../../styled-system/patterns";
+import { circle, flex } from "../../styled-system/patterns";
 import type { ConfigEditor, Report } from "../config-editor";
 import type { Extensions, InstalledExtension } from "../extensions";
 import type { SettingsHost } from "../host";
@@ -17,7 +15,6 @@ import { ListSetting } from "../ListSetting";
 import { Notice } from "../Notice";
 import { Page } from "../Page";
 import { useInstalled } from "../useInstalled";
-import { webStoreId } from "../web-store-id";
 
 type Props = {
   title: string;
@@ -98,37 +95,32 @@ export const ExtensionsPage = ({
       </Card>
       <Card title="Load an unpacked folder">
         <p className={hintStyles}>
-          Loads the extension in a folder on this computer, an absolute path or
-          one under ~, with every permission it asks for. It stays until you
-          uninstall it.
+          Loads the extension in a folder on this computer, with every
+          permission it asks for. It stays until you uninstall it.
         </p>
-        <UnpackedField
-          onLoad={async (directory) => {
-            await host.loadUnpacked(directory);
-            reload();
-          }}
-          report={report}
-        />
+        <div>
+          <Button
+            beforeIcon={<FolderOpenIcon size={14} />}
+            onClick={() => {
+              host
+                .chooseFolder()
+                .then(async (directory) => {
+                  if (directory !== undefined) {
+                    await host.loadUnpacked(directory);
+                    reload();
+                  }
+                })
+                .catch(report("Couldn't load the folder"));
+            }}
+            size="sm"
+            variant="primary"
+          >
+            Load unpacked folder
+          </Button>
+        </div>
       </Card>
       {editor !== undefined && (
         <>
-          <Card title="Install from the Chrome Web Store">
-            <p className={hintStyles}>
-              Adds the extension to the config, which installs it with every
-              permission it asks for.
-            </p>
-            <StoreField
-              disabled={!configurable}
-              onInstall={(id) => {
-                if (fromStore.includes(id)) {
-                  report("Already installed")(`${id} is in the config`);
-                } else {
-                  editor.set(["extensions", "web_store"], [...fromStore, id]);
-                }
-              }}
-              report={report}
-            />
-          </Card>
           <Card title="Unpacked folders in the config">
             <p className={hintStyles}>
               Folders the config loads on every start: an absolute path, or one
@@ -267,100 +259,6 @@ const ExtensionRow = ({
   );
 };
 
-type StoreFieldProps = {
-  disabled: boolean;
-  onInstall: (id: string) => void;
-  report: Report;
-};
-
-/** Where a Store address or id is pasted. */
-const StoreField = ({ disabled, onInstall, report }: StoreFieldProps) => {
-  const [written, setWritten] = useState("");
-  const install = () => {
-    webStoreId(written).match({
-      Err: report("Not a Web Store extension"),
-      Ok: (id) => {
-        onInstall(id);
-        setWritten("");
-      },
-    });
-  };
-  return (
-    <div className={storeStyles}>
-      <Input
-        aria-label="Web Store address or id"
-        disabled={disabled}
-        onChange={(event) => {
-          setWritten(event.target.value);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            install();
-          }
-        }}
-        placeholder="https://chromewebstore.google.com/detail/…"
-        size="sm"
-        value={written}
-      />
-      <Button
-        beforeIcon={<DownloadSimpleIcon size={14} />}
-        disabled={disabled}
-        onClick={install}
-        size="sm"
-        variant="primary"
-      >
-        Install
-      </Button>
-    </div>
-  );
-};
-
-type UnpackedFieldProps = {
-  onLoad: (directory: string) => Promise<void>;
-  report: Report;
-};
-
-/** Where an unpacked extension's folder is typed. */
-const UnpackedField = ({ onLoad, report }: UnpackedFieldProps) => {
-  const [written, setWritten] = useState("");
-  const load = () => {
-    const directory = written.trim();
-    onLoad(directory).then(
-      () => {
-        setWritten("");
-      },
-      report(`Couldn't load ${directory}`),
-    );
-  };
-  return (
-    <div className={storeStyles}>
-      <Input
-        aria-label="Unpacked extension folder"
-        onChange={(event) => {
-          setWritten(event.target.value);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && written.trim() !== "") {
-            load();
-          }
-        }}
-        placeholder="~/src/my-extension"
-        size="sm"
-        value={written}
-      />
-      <Button
-        beforeIcon={<FolderOpenIcon size={14} />}
-        disabled={written.trim() === ""}
-        onClick={load}
-        size="sm"
-        variant="primary"
-      >
-        Load
-      </Button>
-    </div>
-  );
-};
-
 const listStyles = flex({
   direction: "column",
   gap: 0,
@@ -409,9 +307,3 @@ const descriptionStyles = css({
 const actionsStyles = flex({ align: "center", flexShrink: 0, gap: 1 });
 
 const hintStyles = css({ color: "muted", fontSize: "xs", margin: 0 });
-
-const storeStyles = grid({
-  alignItems: "center",
-  gap: 2,
-  gridTemplateColumns: "minmax(0, 1fr) auto",
-});

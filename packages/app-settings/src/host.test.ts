@@ -186,6 +186,19 @@ describe(nativeHost, () => {
     expect(await listed).toEqual([id]);
   });
 
+  it("asks the desktop's picker for a folder", async () => {
+    const { ports, runtime } = fakeRuntime();
+    const host = nativeHost(runtime);
+    const chosen = host.chooseFolder();
+    expect(ports[0]?.sent.at(-1)).toEqual({ id: 1, type: "choose_folder" });
+    ports[0]?.answer({ id: 1, path: "/home/me/src/x", type: "folder" });
+    expect(await chosen).toBe("/home/me/src/x");
+
+    const canceled = host.chooseFolder();
+    ports[0]?.answer({ id: 2, path: null, type: "folder" });
+    expect(await canceled).toBeUndefined();
+  });
+
   it("tells listeners a file changed on disk", async () => {
     const { ports, runtime } = fakeRuntime();
     const host = nativeHost(runtime);
