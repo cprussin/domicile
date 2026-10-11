@@ -53,3 +53,10 @@ libc = "0.2"
 png = "0.18"
 # The config's JSON Schema, from which the SDK's config types are generated.
 schemars = "1"
+
+# The installed binaries (`domicileBinaries` in `flake.nix`). Panics unwind:
+# `domicile`'s `Drop`s end the desktop's process groups and its graphical
+# session, and a panicking helper thread ends only that thread.
+[profile.release]
+lto = "thin"
+codegen-units = 1
