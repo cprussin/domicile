@@ -17,10 +17,10 @@ job builds it on `crux`.
  2 files changed, 9 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/history/history_tab_helper.cc b/chrome/browser/history/history_tab_helper.cc
-index cff7c39..22749fa 100644
+index 41e33ac7..82593683 100644
 --- a/chrome/browser/history/history_tab_helper.cc
 +++ b/chrome/browser/history/history_tab_helper.cc
-@@ -679,7 +679,7 @@ void HistoryTabHelper::WebContentsDestroyed() {
+@@ -683,7 +683,7 @@ void HistoryTabHelper::WebContentsDestroyed() {
  
  bool HistoryTabHelper::IsEligibleTab(
      const history::HistoryAddPageArgs& add_page_args) const {
@@ -30,7 +30,7 @@ index cff7c39..22749fa 100644
    }
  
 diff --git a/chrome/browser/history/history_tab_helper.h b/chrome/browser/history/history_tab_helper.h
-index aed6337..121ab13 100644
+index aed6337c..121ab130 100644
 --- a/chrome/browser/history/history_tab_helper.h
 +++ b/chrome/browser/history/history_tab_helper.h
 @@ -64,6 +64,11 @@ class HistoryTabHelper
@@ -55,6 +55,3 @@ index aed6337..121ab13 100644
    // The `WebContents` that opened the `WebContents` associated with `this` via
    // "Open in New Tab", "Open in New Window", window.open(), etc.
    base::WeakPtr<content::WebContents> opener_web_contents_;
--- 
-2.43.0
-

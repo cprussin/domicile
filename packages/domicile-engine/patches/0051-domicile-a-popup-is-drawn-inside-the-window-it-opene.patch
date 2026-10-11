@@ -32,7 +32,7 @@ halves.
  2 files changed, 35 insertions(+)
 
 diff --git a/chrome/browser/ui/views/chrome_views_delegate_linux.cc b/chrome/browser/ui/views/chrome_views_delegate_linux.cc
-index c5808a0797..c7a7a46e0f 100644
+index c5808a07..c7a7a46e 100644
 --- a/chrome/browser/ui/views/chrome_views_delegate_linux.cc
 +++ b/chrome/browser/ui/views/chrome_views_delegate_linux.cc
 @@ -86,6 +86,16 @@ NativeWidgetType GetNativeWidgetTypeForInitParams(
@@ -53,7 +53,7 @@ index c5808a0797..c7a7a46e0f 100644
            params.type != views::Widget::InitParams::TYPE_MENU &&
            params.type != views::Widget::InitParams::TYPE_TOOLTIP)
 diff --git a/ui/views/widget/desktop_aura/desktop_native_widget_aura.cc b/ui/views/widget/desktop_aura/desktop_native_widget_aura.cc
-index c79a1ab2ba..4bb10fd169 100644
+index c79a1ab2..4bb10fd1 100644
 --- a/ui/views/widget/desktop_aura/desktop_native_widget_aura.cc
 +++ b/ui/views/widget/desktop_aura/desktop_native_widget_aura.cc
 @@ -88,6 +88,10 @@

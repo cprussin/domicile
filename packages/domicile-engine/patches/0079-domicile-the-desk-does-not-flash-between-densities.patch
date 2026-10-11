@@ -32,7 +32,7 @@ scripts/test-the-desk-does-not-flash-between-densities.sh.
  6 files changed, 139 insertions(+), 37 deletions(-)
 
 diff --git a/cc/layers/picture_layer_impl.cc b/cc/layers/picture_layer_impl.cc
-index a4466e4ff7..2a8c56103c 100644
+index 68426f1c..67e9300f 100644
 --- a/cc/layers/picture_layer_impl.cc
 +++ b/cc/layers/picture_layer_impl.cc
 @@ -134,7 +134,8 @@ void PictureLayerImpl::CopyPropertiesTo(LayerImpl* base_layer) const {
@@ -149,7 +149,7 @@ index a4466e4ff7..2a8c56103c 100644
  }
  
 diff --git a/cc/layers/picture_layer_impl.h b/cc/layers/picture_layer_impl.h
-index ac2a487d67..d16dc16539 100644
+index ac2a487d..d16dc165 100644
 --- a/cc/layers/picture_layer_impl.h
 +++ b/cc/layers/picture_layer_impl.h
 @@ -20,6 +20,7 @@
@@ -170,7 +170,7 @@ index ac2a487d67..d16dc16539 100644
    void UpdateDomicileDisplayTilings();
    float MinimumContentsScale() const;
 diff --git a/cc/tiles/picture_layer_tiling.cc b/cc/tiles/picture_layer_tiling.cc
-index dbd0d307bd..5302716567 100644
+index dbd0d307..53027165 100644
 --- a/cc/tiles/picture_layer_tiling.cc
 +++ b/cc/tiles/picture_layer_tiling.cc
 @@ -143,6 +143,9 @@ void PictureLayerTiling::TakeTilesAndPropertiesFrom(
@@ -184,7 +184,7 @@ index dbd0d307bd..5302716567 100644
    while (!pending_twin->tiles_.empty()) {
      auto pending_iter = pending_twin->tiles_.begin();
 diff --git a/cc/tiles/picture_layer_tiling.h b/cc/tiles/picture_layer_tiling.h
-index a487d76016..7e78f66e5e 100644
+index a487d760..7e78f66e 100644
 --- a/cc/tiles/picture_layer_tiling.h
 +++ b/cc/tiles/picture_layer_tiling.h
 @@ -304,8 +304,12 @@ class CC_EXPORT PictureLayerTiling {
@@ -202,7 +202,7 @@ index a487d76016..7e78f66e5e 100644
        }
  
 diff --git a/cc/tiles/tiling_set_raster_queue_required.cc b/cc/tiles/tiling_set_raster_queue_required.cc
-index 9620d9fd65..465c59ff7d 100644
+index 9620d9fd..465c59ff 100644
 --- a/cc/tiles/tiling_set_raster_queue_required.cc
 +++ b/cc/tiles/tiling_set_raster_queue_required.cc
 @@ -7,6 +7,7 @@
@@ -319,7 +319,7 @@ index 9620d9fd65..465c59ff7d 100644
  
  const PrioritizedTile& TilingSetRasterQueueRequired::Top() const {
 diff --git a/cc/tiles/tiling_set_raster_queue_required.h b/cc/tiles/tiling_set_raster_queue_required.h
-index e817720787..5b41726b82 100644
+index e8177207..5b41726b 100644
 --- a/cc/tiles/tiling_set_raster_queue_required.h
 +++ b/cc/tiles/tiling_set_raster_queue_required.h
 @@ -6,7 +6,9 @@

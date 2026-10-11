@@ -13,10 +13,11 @@ never laid out, so the page keeps the whole window.
 Verified: not built. This repository cannot build Chromium; the engine
 job builds it on `crux`.
 ---
- .../frame/layout/browser_view_app_layout_impl.cc    | 21 ++++++---------------
+ .../layout/browser_view_app_layout_impl.cc    | 21 ++++++-------------
  1 file changed, 6 insertions(+), 15 deletions(-)
 
 diff --git a/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.cc b/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.cc
+index 9eb00149..278a843f 100644
 --- a/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.cc
 +++ b/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.cc
 @@ -170,22 +170,13 @@ BrowserViewAppLayoutImpl::CalculateProposedLayout(
@@ -48,6 +49,3 @@ diff --git a/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.c
    }
  
    // Lay out contents container.
--- 
-2.43.0
-

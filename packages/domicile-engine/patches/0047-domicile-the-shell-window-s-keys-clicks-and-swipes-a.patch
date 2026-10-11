@@ -29,7 +29,7 @@ windows are <webview> guests, whose delegate is WebViewGuest.
  2 files changed, 22 insertions(+), 17 deletions(-)
 
 diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
-index a10b8d4fb8..ff487f3459 100644
+index a10b8d4f..ff487f34 100644
 --- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 +++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 @@ -312,23 +312,29 @@ content::KeyboardEventProcessingResult
@@ -97,7 +97,7 @@ index a10b8d4fb8..ff487f3459 100644
  
  bool BrowserWebContentsDelegate::TakeFocus(content::WebContents* source,
 diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h
-index c505eaa7f8..146082fe1a 100644
+index c505eaa7..146082fe 100644
 --- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h
 +++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h
 @@ -59,6 +59,8 @@ class BrowserWebContentsDelegate : public content::WebContentsDelegate {

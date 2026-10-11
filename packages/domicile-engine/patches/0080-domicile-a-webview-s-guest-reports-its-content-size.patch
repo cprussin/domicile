@@ -19,10 +19,10 @@ engine job.
  1 file changed, 5 insertions(+), 2 deletions(-)
 
 diff --git a/content/browser/renderer_host/render_frame_host_impl.cc b/content/browser/renderer_host/render_frame_host_impl.cc
-index cdba20d0ac..ce40985dee 100644
+index 2124095d..fe65b4e6 100644
 --- a/content/browser/renderer_host/render_frame_host_impl.cc
 +++ b/content/browser/renderer_host/render_frame_host_impl.cc
-@@ -7612,8 +7612,11 @@ void RenderFrameHostImpl::ContentsPreferredSizeChanged(
+@@ -7647,8 +7647,11 @@ void RenderFrameHostImpl::ContentsPreferredSizeChanged(
      return;
    }
  

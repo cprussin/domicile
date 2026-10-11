@@ -16,7 +16,7 @@ frame it is embedded in; the registry tells only that page.
  1 file changed, 5 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 3d9daaaeb6..a9bfcfdcce 100644
+index 3d9daaae..a9bfcfdc 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -549,7 +549,11 @@ void PopulateChromeFrameBinders(

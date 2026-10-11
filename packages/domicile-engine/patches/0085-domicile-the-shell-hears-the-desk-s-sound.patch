@@ -23,10 +23,10 @@ job builds it on `crux`, and `guard-control-arrival.sh` fires the
  2 files changed, 18 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index a756588f15..50ce784ac4 100644
+index 561f11b6..d74a198e 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
-@@ -335,6 +335,8 @@ generated_dictionary_sources_in_modules = [
+@@ -329,6 +329,8 @@ generated_dictionary_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_modifiers_event_init.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shell_config_event_init.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shell_config_event_init.h",
@@ -35,7 +35,7 @@ index a756588f15..50ce784ac4 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event_init.cc",
-@@ -2440,6 +2442,16 @@ generated_interface_sources_in_modules = [
+@@ -2420,6 +2422,16 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_display.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shell_config_event.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shell_config_event.h",
@@ -53,10 +53,10 @@ index a756588f15..50ce784ac4 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme_event.cc",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index 566ec65db9..1dfca7a9a9 100644
+index f39d0a56..a3cfa05c 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
-@@ -309,6 +309,12 @@ static_idl_files_in_modules = [
+@@ -313,6 +313,12 @@ static_idl_files_in_modules = [
    "//third_party/blink/renderer/modules/domicile/domicile_display.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_shell_config_event.idl",
    "//third_party/blink/renderer/modules/domicile/domicile_shell_config_event_init.idl",

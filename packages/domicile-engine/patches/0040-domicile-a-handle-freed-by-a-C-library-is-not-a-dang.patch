@@ -29,7 +29,7 @@ Each is released with `ExtractAsDangling`, as `~Buffer` already does for
  3 files changed, 15 insertions(+), 9 deletions(-)
 
 diff --git a/ui/events/ozone/evdev/libinput_event_converter.cc b/ui/events/ozone/evdev/libinput_event_converter.cc
-index 160a98cc70..d92469b05c 100644
+index 160a98cc..d92469b0 100644
 --- a/ui/events/ozone/evdev/libinput_event_converter.cc
 +++ b/ui/events/ozone/evdev/libinput_event_converter.cc
 @@ -74,7 +74,7 @@ LibInputEventConverter::LibInputEvent::LibInputEvent(
@@ -60,7 +60,7 @@ index 160a98cc70..d92469b05c 100644
  }
  
 diff --git a/ui/events/ozone/evdev/libinput_event_converter.h b/ui/events/ozone/evdev/libinput_event_converter.h
-index 9a9c2c02e6..175b49024a 100644
+index 9a9c2c02..175b4902 100644
 --- a/ui/events/ozone/evdev/libinput_event_converter.h
 +++ b/ui/events/ozone/evdev/libinput_event_converter.h
 @@ -42,10 +42,12 @@ class LibInputEventConverter : public EventConverterEvdev {
@@ -81,7 +81,7 @@ index 9a9c2c02e6..175b49024a 100644
    };
  
 diff --git a/ui/gfx/linux/gbm_wrapper.cc b/ui/gfx/linux/gbm_wrapper.cc
-index 2aea5aca7a..9c9fc1290a 100644
+index 2aea5aca..9c9fc129 100644
 --- a/ui/gfx/linux/gbm_wrapper.cc
 +++ b/ui/gfx/linux/gbm_wrapper.cc
 @@ -250,8 +250,12 @@ class Buffer final : public ui::GbmBuffer {

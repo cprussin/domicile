@@ -29,7 +29,7 @@ job builds it on `crux`.
  4 files changed, 22 insertions(+), 7 deletions(-)
 
 diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
-index 9759229..aed27af 100644
+index 7dff20e0..34fe0165 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
 @@ -1628,14 +1628,12 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
@@ -52,10 +52,10 @@ index 9759229..aed27af 100644
    for (auto& chrome_extra_part : chrome_extra_parts_) {
      chrome_extra_part->PostProfileInit(profile, is_initial_profile);
 diff --git a/chrome/browser/notifications/BUILD.gn b/chrome/browser/notifications/BUILD.gn
-index 5f32394..e4ec29d 100644
+index a3ae144a..821775a6 100644
 --- a/chrome/browser/notifications/BUILD.gn
 +++ b/chrome/browser/notifications/BUILD.gn
-@@ -210,6 +210,10 @@ source_set("impl") {
+@@ -211,6 +211,10 @@ source_set("impl") {
      "//chrome/browser/updates/announcement_notification",
      "//components/content_settings/browser",
      "//components/content_settings/core/browser",
@@ -67,7 +67,7 @@ index 5f32394..e4ec29d 100644
      "//components/safe_browsing/content/browser/notification_content_detection",
      "//components/safe_browsing/core/browser:safe_browsing_metrics_collector",
 diff --git a/chrome/browser/notifications/notification_permission_context.cc b/chrome/browser/notifications/notification_permission_context.cc
-index 8158400..028588b 100644
+index ca63f6fa..50900df5 100644
 --- a/chrome/browser/notifications/notification_permission_context.cc
 +++ b/chrome/browser/notifications/notification_permission_context.cc
 @@ -19,6 +19,7 @@
@@ -94,7 +94,7 @@ index 8158400..028588b 100644
    // Extensions can declare the "notifications" permission in their manifest
    // that also grant permission to use the Web Notification API.
 diff --git a/chrome/browser/notifications/notification_platform_bridge_linux.cc b/chrome/browser/notifications/notification_platform_bridge_linux.cc
-index 5477f49..198e0a0 100644
+index eb6ee808..1d4014d7 100644
 --- a/chrome/browser/notifications/notification_platform_bridge_linux.cc
 +++ b/chrome/browser/notifications/notification_platform_bridge_linux.cc
 @@ -312,7 +312,11 @@ bool ShouldMarkPersistentNotificationsAsCritical(
@@ -110,6 +110,3 @@ index 5477f49..198e0a0 100644
  }
  
  void ForwardNotificationOperation(NotificationOperation operation,
--- 
-2.43.0
-

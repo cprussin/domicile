@@ -18,6 +18,7 @@ job builds it on crux.
  2 files changed, 10 insertions(+), 4 deletions(-)
 
 diff --git a/third_party/blink/renderer/platform/graphics/surface_layer_bridge.cc b/third_party/blink/renderer/platform/graphics/surface_layer_bridge.cc
+index c419aa06..68a8d981 100644
 --- a/third_party/blink/renderer/platform/graphics/surface_layer_bridge.cc
 +++ b/third_party/blink/renderer/platform/graphics/surface_layer_bridge.cc
 @@ -55,7 +55,9 @@ void SurfaceLayerBridge::SetLocalSurfaceId(
@@ -42,6 +43,7 @@ diff --git a/third_party/blink/renderer/platform/graphics/surface_layer_bridge.c
    if (observer_) {
      observer_->OnWebLayerUpdated();
 diff --git a/third_party/blink/renderer/platform/graphics/surface_layer_bridge.h b/third_party/blink/renderer/platform/graphics/surface_layer_bridge.h
+index a1dd37fc..26ddc80f 100644
 --- a/third_party/blink/renderer/platform/graphics/surface_layer_bridge.h
 +++ b/third_party/blink/renderer/platform/graphics/surface_layer_bridge.h
 @@ -7,6 +7,7 @@
@@ -65,6 +67,3 @@ diff --git a/third_party/blink/renderer/platform/graphics/surface_layer_bridge.h
  
    // Implementation of blink::mojom::blink::SurfaceEmbedder
    void SetLocalSurfaceId(const viz::LocalSurfaceId& local_surface_id) override;
--- 
-2.43.0
-

@@ -78,7 +78,7 @@ each post-image is the pin's file with these lines in it.
  2 files changed, 95 insertions(+)
 
 diff --git a/ui/ozone/platform/wayland/host/wayland_toplevel_window.cc b/ui/ozone/platform/wayland/host/wayland_toplevel_window.cc
-index 8fbac8ac7d..85a080b51a 100644
+index 8fbac8ac..85a080b5 100644
 --- a/ui/ozone/platform/wayland/host/wayland_toplevel_window.cc
 +++ b/ui/ozone/platform/wayland/host/wayland_toplevel_window.cc
 @@ -6,6 +6,7 @@
@@ -202,7 +202,7 @@ index 8fbac8ac7d..85a080b51a 100644
  
  void WaylandToplevelWindow::OnDecorationModeChanged() {
 diff --git a/ui/ozone/platform/wayland/host/wayland_toplevel_window.h b/ui/ozone/platform/wayland/host/wayland_toplevel_window.h
-index 15cc9a2d4a..060ff00f7c 100644
+index 15cc9a2d..060ff00f 100644
 --- a/ui/ozone/platform/wayland/host/wayland_toplevel_window.h
 +++ b/ui/ozone/platform/wayland/host/wayland_toplevel_window.h
 @@ -209,6 +209,11 @@ class WaylandToplevelWindow : public WaylandWindow,
