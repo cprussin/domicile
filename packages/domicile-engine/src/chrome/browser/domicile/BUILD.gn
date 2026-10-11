@@ -97,6 +97,9 @@ source_set("domicile") {
     # socket.
     "//components/content_settings/core/browser",
     "//components/content_settings/core/common",
+    # The Settings app's camera and microphone: Chrome's device ranking in the
+    # profile's prefs (patch 0109).
+    "//chrome/browser/media/prefs",
     # DevTools for a guest's page: Chrome's front end and its bindings.
     "//chrome/browser/devtools",
     # Tab zoom factors and range.

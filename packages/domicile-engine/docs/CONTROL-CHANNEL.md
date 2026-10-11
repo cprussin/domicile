@@ -156,6 +156,12 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 
 {"type":"config_extensions","version":1}
 {"type":"config_extensions","ids":["…"]}
+
+{"type":"media_devices","version":1}
+{"type":"media_devices","cameras":[{"id":"/dev/video2","name":"USB Camera"}],"microphones":[…]}
+
+{"type":"set_media_device","version":1,"kind":"camera","id":"/dev/video2"}
+{"type":"set"}   |   {"type":"refused","why":"…"}
 ```
 
 - Without the switch, the engine binds nothing. Every desktop `domicile`
@@ -179,6 +185,11 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
   Settings app's too ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md#from-the-settings-app)).
   `load_unpacked` replies once the extension has loaded, or with why it did
   not.
+- `media_devices` and `set_media_device` are the Settings app's too. They list
+  each kind's devices in the order of Chrome's device ranking in the shell
+  profile's prefs, and move one to the top. A site that names no device gets
+  the top one. Patch 0109 lets `//chrome/browser/domicile` use
+  `//chrome/browser/media/prefs`.
 - It is its own socket because the compositor has no part in choosing the
   shell. The supervisor also passes it at
   launch as `--domicile-shell-root` and `--domicile-shell-module`. See
