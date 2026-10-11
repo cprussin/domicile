@@ -136,6 +136,8 @@ class CORE_EXPORT HTMLAppElement final : public HTMLElement,
   void Embed();
   void OnEmbedded(const AtomicString& app_id,
                   const std::optional<viz::SurfaceId>&);
+  // The producer of the surface shown disconnected.
+  void OnSurfaceLost();
 
   bool CreateLayer();
 
