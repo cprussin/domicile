@@ -3,6 +3,7 @@ import { useRef } from "react";
 import { css, cva, cx } from "../../styled-system/css";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
+import { useLowered } from "./useLowered";
 import type { Settler } from "./useSettling";
 import { useSettling } from "./useSettling";
 import type { WindowMotion } from "./window-motion";
@@ -28,6 +29,8 @@ type Props = {
   leaving: boolean;
   /** The focused window's motion, which the glow plays too. */
   motion: WindowMotion;
+  /** Called when a fade in or out ends. */
+  onFaded: () => void;
   /** The box: the focused window's frame, or its group's. */
   rect: Rect;
   /** The focused window's restack shuffle, if any. */
@@ -55,12 +58,14 @@ export const FocusGlow = ({
   dragging,
   leaving,
   motion,
+  onFaded,
   rect,
   restack,
   settler,
   windows,
 }: Props) => {
   const element = useRef<HTMLDivElement>(null);
+  const lowered = useLowered(depth);
   useSettling({
     element,
     origin: originOf(rect, rect),
@@ -74,10 +79,15 @@ export const FocusGlow = ({
         glowStyles,
         fadeStyles({ leaving }),
         movingStyles({ motion }),
-        settlingStyles,
+        settlingStyles({ lowered }),
       )}
       data-focus-box={windows.join(" ")}
       data-leaving={leaving || undefined}
+      onTransitionEnd={(event) => {
+        if (event.propertyName === "opacity") {
+          onFaded();
+        }
+      }}
       ref={element}
       style={{
         ...placedAt(rect, depth),

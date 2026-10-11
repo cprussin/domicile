@@ -22,16 +22,19 @@ type Props = {
  * Renders the hook on an element, with a settler that finds it drawn at
  * `current` from its box.
  */
-const settling = (first: Props, current?: Offset) => {
-  const { played, settler } = recordedSettles(current);
-  const element = { current: document.createElement("div") };
+const settling = (
+  first: Props,
+  current?: Offset,
+  element = { current: document.createElement("div") },
+) => {
+  const { kept, played, settler } = recordedSettles(current);
   const { rerender } = renderHook(
     ({ origin, rect, still }: Props) => {
       useSettling({ element, origin, rect, settler, still });
     },
     { initialProps: first },
   );
-  return { played, rerender };
+  return { kept, played, rerender };
 };
 
 describe("useSettling", () => {
@@ -70,6 +73,23 @@ describe("useSettling", () => {
     rerender({ origin: CORNER, rect: NOW, still: false });
 
     expect(played).toStrictEqual([{ scaleX: 0.5, scaleY: 0.5, x: 0, y: -30 }]);
+  });
+
+  // Text and icons would stretch with the box.
+  it("keeps the parts marked upright at their own size", () => {
+    const element = { current: document.createElement("div") };
+    const title = document.createElement("span");
+    title.toggleAttribute("data-upright", true);
+    element.current.append(document.createElement("span"), title);
+    const { kept, rerender } = settling(
+      { origin: CORNER, rect: WAS, still: false },
+      undefined,
+      element,
+    );
+
+    rerender({ origin: CORNER, rect: NOW, still: false });
+
+    expect(kept).toStrictEqual([[title]]);
   });
 
   // A box that follows the pointer would trail it.

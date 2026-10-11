@@ -313,16 +313,29 @@ export const movingStyles = cva({
  * with `useSettling` instead, on the compositor's thread, so every part keeps
  * with its client's contents.
  *
- * - Depth: `z-index` eases on the settle's timing, so a window leaving
- *   fullscreen stays above the windows it still covers until it has shrunk
- *   (see `placement.ts`).
+ * - Depth: never eased, since each `z-index` step restacks the page's
+ *   layers. A raise is at once. A part whose depth dropped (`lowered`, see
+ *   `useLowered`) keeps its old depth until it has settled, so a window
+ *   leaving fullscreen stays above the windows it still covers (see
+ *   `placement.ts`).
  * - Colors: focus follows the pointer, so snapping would flicker.
  * - Opacity: so `FocusGlow` fades rather than blinks.
  *
- * One rule because two rules setting `transition` on one element race on
+ * One recipe because two rules setting `transition` on one element race on
  * Panda's emit order.
  */
-export const settlingStyles = css({
-  transition:
-    "z-index {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}, opacity {durations.fast} {easings.out}",
+export const settlingStyles = cva({
+  defaultVariants: { lowered: false },
+  variants: {
+    lowered: {
+      false: {
+        transition:
+          "background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}, opacity {durations.fast} {easings.out}",
+      },
+      true: {
+        transition:
+          "background-color {durations.fast} {easings.out}, border-color {durations.fast} {easings.out}, color {durations.fast} {easings.out}, opacity {durations.fast} {easings.out}, z-index {durations.fast} step-end",
+      },
+    },
+  },
 });

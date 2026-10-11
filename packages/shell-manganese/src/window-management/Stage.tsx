@@ -193,7 +193,9 @@ export const Stage = memo(
       () => new Map(windows.map((window) => [window.id, window])),
       [windows],
     );
-    const glows = useFocusGlows(focusBoxShowing(screens, activeId));
+    const { glows, onFaded } = useFocusGlows(
+      focusBoxShowing(screens, activeId),
+    );
     const active = motions.drawn.find(({ window }) => window.id === activeId);
     // Drawn over every window, not by the dragged one: see `DropIndicator`.
     const [aim, setAim] = useState<Aim | undefined>(undefined);
@@ -209,7 +211,7 @@ export const Stage = memo(
     const held = useMemo(() => heldBy(desk, movingId), [desk, movingId]);
     const { onPlayedOut } = motions;
     return (
-      <main className={stageStyles} data-stretching={stretching || undefined}>
+      <main>
         <SettleHandoffs>
           {/*
           Before every window, so each float covers its own shadow by document
@@ -230,7 +232,7 @@ export const Stage = memo(
                 >
                   <FloatShadow
                     depth={placement.depth}
-                    dragging={held.has(window.id)}
+                    dragging={stretching || held.has(window.id)}
                     frame={placement.frame}
                     hanging={float.scratchpad}
                     motion={motion}
@@ -258,8 +260,8 @@ export const Stage = memo(
                   depth={box.depth}
                   dragging={
                     following !== undefined &&
-                    activeId !== undefined &&
-                    held.has(activeId)
+                    (stretching ||
+                      (activeId !== undefined && held.has(activeId)))
                   }
                   leaving={leaving}
                   motion={
@@ -267,6 +269,9 @@ export const Stage = memo(
                       ? "resting"
                       : barMotion(following.motion)
                   }
+                  onFaded={() => {
+                    onFaded(box);
+                  }}
                   rect={box.rect}
                   restack={following?.restack}
                   windows={box.windows}
@@ -1046,16 +1051,6 @@ const ContainerTab = memo(
     );
   },
 );
-
-/**
- * Disables transitions during a resize drag, since easing would open gaps
- * between the resized window and its neighbors. Covers the whole stage because
- * the neighbors move too. Window contents ease with `useSettling` instead, so
- * every window is passed as `dragging`.
- */
-const stageStyles = css({
-  "&[data-stretching] *": { transition: "none" },
-});
 
 /**
  * Gives its children the distances that slide `frame` off screen `on`. Has no

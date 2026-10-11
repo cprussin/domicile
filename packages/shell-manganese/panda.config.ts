@@ -196,8 +196,8 @@ export default defineConfig({
         // `tab-switch.ts`.
         //
         // Both hold a fixed depth throughout (see `placement.ts`). Otherwise
-        // `settlingStyles` would transition the depths and the swap would
-        // happen halfway, hiding the fade.
+        // the hidden tab would keep the shown tab's depth until the fade ends
+        // (`settlingStyles`) and could draw over the tab being revealed.
         windowConcealing: {
           "0%": { zIndex: "-1" },
           "100%": { zIndex: "-1" },
@@ -205,8 +205,8 @@ export default defineConfig({
         windowDropping: SCRATCHPAD_SLIDE,
         // Holds a window at the tiled depth. The tab a close uncovers, and the
         // tab a switch reveals, keep it while the other tab fades over or
-        // under them. Otherwise `settlingStyles` would ease their depth up
-        // from the hidden tabs', and one of them would show through.
+        // under them, whatever `settlingStyles` does with their depth, so no
+        // other hidden tab shows through.
         windowHeldTiled: {
           "0%": { zIndex: "0" },
           "100%": { zIndex: "0" },

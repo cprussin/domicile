@@ -2230,6 +2230,27 @@ describe("Shell", () => {
       }
     });
 
+    // A glow at opacity 0 would stay on the page, drawing nothing.
+    it("takes the glow focus left off the page once it has faded", () => {
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      const left = container.querySelector("[data-focus-box][data-leaving]");
+      if (left === null) {
+        throw new Error("test: focus left no glow fading");
+      }
+
+      // happy-dom's `TransitionEvent` drops `propertyName`.
+      fireEvent(
+        left,
+        Object.assign(new Event("transitionend", { bubbles: true }), {
+          propertyName: "opacity",
+        }),
+      );
+
+      expect(container.querySelector("[data-leaving]")).toBeNull();
+    });
+
     it("lights a window the desk shows alone", () => {
       const { container } = renderShell();
       clientAppears("one");
@@ -2755,6 +2776,8 @@ describe("Shell", () => {
       clientAppears("term");
       press("Tab", true);
       pageHolds({});
+      // A window plays its motion out before it settles.
+      motionsPlayOut(container);
 
       fireEvent.pointerDown(rightBorder(container), {
         clientX: 100,
@@ -2762,7 +2785,14 @@ describe("Shell", () => {
       });
       fireEvent.pointerMove(window, { clientX: 140, clientY: 130 });
 
-      expect(appElement(container, "term").getAnimations()).toHaveLength(0);
+      for (const part of [
+        appElement(container, "term"),
+        barFor(container, "app:term"),
+        floatShadow(container),
+        glowing(container),
+      ]) {
+        expect(part.getAnimations()).toHaveLength(0);
+      }
     });
 
     it("keeps a float's glow on it while it is dragged rather than easing after it", () => {

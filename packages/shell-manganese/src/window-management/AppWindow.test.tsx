@@ -289,6 +289,24 @@ describe("AppWindow", () => {
       expect(played).toStrictEqual([{ scaleX: 2, scaleY: 1, x: 600, y: 0 }]);
     });
 
+    // Each `z-index` change restacks the client's surface, so the depth never
+    // steps through the ones between. A window leaving fullscreen stays over
+    // the windows it covers until it has shrunk.
+    it("takes a higher depth at once, and a lower one once it has settled", () => {
+      const { container, rerender } = render(
+        <AppWindow {...windowProps} depth={0} focused={false} />,
+      );
+      const transition = () =>
+        globalThis.getComputedStyle(portal(container)).transition;
+
+      rerender(<AppWindow {...windowProps} depth={2000} focused={false} />);
+      expect(transition()).not.toContain("z-index");
+
+      rerender(<AppWindow {...windowProps} depth={0} focused={false} />);
+      expect(transition()).toContain("z-index");
+      expect(transition()).toContain("step-end");
+    });
+
     // `scale` applies outside the motion's `transform`, so it would scale the
     // motion's travel and pull the contents off their title bar.
     it("takes its new box without easing while it plays a motion", () => {

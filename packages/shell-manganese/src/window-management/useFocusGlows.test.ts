@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 
 import type { PlacedFocusBox } from "./placement";
 import { useFocusGlows } from "./useFocusGlows";
@@ -23,7 +23,7 @@ describe("useFocusGlows", () => {
   it("lights the focus box", () => {
     const { result } = glowsFor(LEFT);
 
-    expect(result.current).toEqual([{ box: LEFT, leaving: false }]);
+    expect(result.current.glows).toEqual([{ box: LEFT, leaving: false }]);
   });
 
   it("keeps the box focus left, fading out, beside the one it moved to", () => {
@@ -31,7 +31,7 @@ describe("useFocusGlows", () => {
 
     rerender({ box: RIGHT });
 
-    expect(result.current).toEqual([
+    expect(result.current.glows).toEqual([
       { box: LEFT, leaving: true },
       { box: RIGHT, leaving: false },
     ]);
@@ -42,10 +42,10 @@ describe("useFocusGlows", () => {
     const narrower = { ...LEFT, rect: { ...LEFT.rect, width: 600 } };
 
     rerender({ box: narrower });
-    expect(result.current).toEqual([{ box: narrower, leaving: false }]);
+    expect(result.current.glows).toEqual([{ box: narrower, leaving: false }]);
 
     rerender({ box: RIGHT });
-    expect(result.current).toEqual([
+    expect(result.current.glows).toEqual([
       { box: narrower, leaving: true },
       { box: RIGHT, leaving: false },
     ]);
@@ -56,6 +56,34 @@ describe("useFocusGlows", () => {
 
     rerender({ box: undefined });
 
-    expect(result.current).toEqual([{ box: LEFT, leaving: true }]);
+    expect(result.current.glows).toEqual([{ box: LEFT, leaving: true }]);
+  });
+
+  it("drops the box focus left once its glow has faded", () => {
+    const { rerender, result } = glowsFor(LEFT);
+    rerender({ box: RIGHT });
+
+    act(() => {
+      result.current.onFaded(LEFT);
+    });
+
+    expect(result.current.glows).toEqual([{ box: RIGHT, leaving: false }]);
+  });
+
+  // A fade that ends after focus has moved on again belongs to a glow that
+  // is gone.
+  it("keeps a box that is still fading when an older fade ends", () => {
+    const { rerender, result } = glowsFor(LEFT);
+    rerender({ box: RIGHT });
+    rerender({ box: LEFT });
+
+    act(() => {
+      result.current.onFaded(LEFT);
+    });
+
+    expect(result.current.glows).toEqual([
+      { box: RIGHT, leaving: true },
+      { box: LEFT, leaving: false },
+    ]);
   });
 });

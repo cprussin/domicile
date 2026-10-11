@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 import { css } from "../../styled-system/css";
 import { loadEmittedStylesheet } from "../emitted-stylesheet";
@@ -210,7 +210,7 @@ describe("TitleBar", () => {
   describe("moved to a new box", () => {
     const AWAY = { ...ON_SCREEN, x: 100 };
     const moved = (props: Partial<Parameters<typeof TitleBar>[0]>) => {
-      const { played, settler } = recordedSettles();
+      const { kept, played, settler } = recordedSettles();
       const rendered = render(
         <TitleBar {...barProps} {...props} settler={settler} />,
       );
@@ -223,7 +223,7 @@ describe("TitleBar", () => {
           settler={settler}
         />,
       );
-      return { container: rendered.container, played };
+      return { container: rendered.container, kept, played };
     };
 
     // On the contents' timing and the compositor's thread, so the bar keeps
@@ -251,6 +251,35 @@ describe("TitleBar", () => {
     it("goes there at once while it plays a motion", () => {
       expect(moved({ motion: "opening" }).played).toStrictEqual([undefined]);
     });
+
+    // Scaling text and icons would stretch them.
+    it("keeps its title and buttons at their own size as it eases", () => {
+      const upright = moved({}).kept[0] ?? [];
+
+      expect(
+        upright.some((part) => part.contains(screen.getByText("kitty"))),
+      ).toBe(true);
+      expect(
+        upright.some((part) =>
+          part.contains(screen.getByRole("button", { name: "Close" })),
+        ),
+      ).toBe(true);
+    });
+  });
+
+  // It stays over the windows its window still covers until it has shrunk.
+  it("keeps a lower depth's old one until it has settled", () => {
+    const { container, rerender } = render(
+      <TitleBar {...barProps} depth={2000} />,
+    );
+    const transition = () =>
+      globalThis.getComputedStyle(bar(container)).transition;
+    expect(transition()).not.toContain("z-index");
+
+    rerender(<TitleBar {...barProps} depth={0} />);
+
+    expect(transition()).toContain("z-index");
+    expect(transition()).toContain("step-end");
   });
 
   it("shows a grabbing pointer while its window is being dragged", () => {

@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { css, cx } from "../../styled-system/css";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
+import { useLowered } from "./useLowered";
 import type { Settler } from "./useSettling";
 import { useSettling } from "./useSettling";
 import { appWindowId } from "./window";
@@ -141,6 +142,7 @@ export const AppWindow = ({
     settling.current = node;
     setElement(node);
   }, []);
+  const lowered = useLowered(depth);
   useSettling({
     element: settling,
     origin:
@@ -242,7 +244,7 @@ export const AppWindow = ({
         (clickThrough || leaving) && clickThroughStyles,
         // The client's box takes its new size at once; `useSettling` eases
         // it. Colors still ease; see `settlingStyles`.
-        settlingStyles,
+        settlingStyles({ lowered }),
       )}
       // Exposes the motion on the element for tests and debugging.
       data-motion={motion}

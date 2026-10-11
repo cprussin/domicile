@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
-import { render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 
 import { css } from "../../styled-system/css";
 import { FocusGlow } from "./FocusGlow";
@@ -26,9 +26,16 @@ const glowProps = {
   dragging: false,
   leaving: false,
   motion: "resting",
+  onFaded: () => undefined,
   rect: RECT,
   windows: ["app:term", "app:editor"],
 } as const;
+
+/** A `transitionend`; happy-dom's `TransitionEvent` drops `propertyName`. */
+const transitionEnd = (propertyName: string): Event =>
+  Object.assign(new Event("transitionend", { bubbles: true }), {
+    propertyName,
+  });
 
 const glow = (container: HTMLElement): HTMLElement => {
   const element = container.firstElementChild;
@@ -100,6 +107,34 @@ describe("FocusGlow", () => {
       expect(globalThis.getComputedStyle(glow(container)).transition).toContain(
         "opacity",
       );
+    });
+
+    // A faded glow would stay mounted, drawing nothing.
+    it("says when it has faded", async () => {
+      await new Promise<void>((resolve) => {
+        const { container } = render(
+          <FocusGlow {...glowProps} leaving onFaded={resolve} />,
+        );
+        fireEvent(glow(container), transitionEnd("opacity"));
+      });
+    });
+
+    // A lowered glow's depth also ends a transition.
+    it("says nothing when another of its transitions ends", () => {
+      const faded: string[] = [];
+      const { container } = render(
+        <FocusGlow
+          {...glowProps}
+          leaving
+          onFaded={() => {
+            faded.push("faded");
+          }}
+        />,
+      );
+
+      fireEvent(glow(container), transitionEnd("z-index"));
+
+      expect(faded).toStrictEqual([]);
     });
   });
 

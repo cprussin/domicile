@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import type { PlacedFocusBox } from "./placement";
 
@@ -10,7 +10,7 @@ export type FocusGlowing = {
 
 type Glows = {
   lit: PlacedFocusBox | undefined;
-  /** The box lit before `lit`, kept so its glow can fade out in place. */
+  /** The box lit before `lit`, kept until its glow has faded out in place. */
   left: PlacedFocusBox | undefined;
 };
 
@@ -18,10 +18,15 @@ type Glows = {
  * The glows to draw for focus box `lit`: its own, and the one focus last
  * left, fading out. A box keeps its glow while its windows are the same, so
  * the glow follows a layout change but not a focus change.
+ *
+ * `onFaded` drops a box focus left, once its glow has faded.
  */
 export const useFocusGlows = (
   lit: PlacedFocusBox | undefined,
-): readonly FocusGlowing[] => {
+): {
+  glows: readonly FocusGlowing[];
+  onFaded: (box: PlacedFocusBox) => void;
+} => {
   const [glows, setGlows] = useState<Glows>({ left: undefined, lit });
   // Derived state, updated during render so no frame shows a stale box.
   // Each update converges: the next render finds `lit` already stored.
@@ -30,10 +35,18 @@ export const useFocusGlows = (
   } else if (!sameBox(lit, glows.lit)) {
     setGlows({ ...glows, lit });
   }
-  return [
-    ...(glows.left === undefined ? [] : [{ box: glows.left, leaving: true }]),
-    ...(lit === undefined ? [] : [{ box: lit, leaving: false }]),
-  ];
+  const onFaded = useCallback((box: PlacedFocusBox) => {
+    setGlows((now) =>
+      keyOf(now.left) === keyOf(box) ? { ...now, left: undefined } : now,
+    );
+  }, []);
+  return {
+    glows: [
+      ...(glows.left === undefined ? [] : [{ box: glows.left, leaving: true }]),
+      ...(lit === undefined ? [] : [{ box: lit, leaving: false }]),
+    ],
+    onFaded,
+  };
 };
 
 /** Names a box by the windows inside it. */
