@@ -218,6 +218,7 @@ Calls (compositor → engine):
 | `domicile_clipboard_set_items(clipboard, items, count)` | `wl_data_offer.receive`. The compositor sends the selection it already read: its text and its image, each a `DomicileClipboardItem`. `domicile_clipboard_set(clipboard, text, length)` is the text-only form an older compositor calls. |
 | `domicile_display_capture_start(engine, display, width, height, max_fps)`, `_resize`, `_stop` | none: a screen cast of a monitor (see [Display capture](#display-capture)) |
 | `domicile_captured_frame_release(engine, capture, frame)` | none: the compositor is done reading a captured frame |
+| `domicile_engine_reports_frames()` | none: says the engine calls `frame_done` and `presented`, so the compositor waits for them |
 
 Callbacks (engine → compositor):
 
@@ -228,6 +229,8 @@ Callbacks (engine → compositor):
 | `displays(displays, count)` | `wl_output`. Primary first, never empty. |
 | `copied_items(clipboard, items, count)` | `wl_data_device.set_selection` for a copy made in a page: its text and its image. `copied(clipboard, text, length)` is the text-only form, called when `copied_items` is unset. |
 | `captured(capture, frame, record)`, `capture_ended(capture)` | none: a monitor's frame for a screen cast, and the browser ending the capture |
+| `frame_done(surface, frame)` | `wl_surface.frame`'s `done`: viz acked the frame |
+| `presented(surface, frame, time_ns, refresh_ns, flags)` | `wp_presentation_feedback`: from the frame's `FrameTimingDetails`, or discarded |
 
 - Only `crop` fills the `<app>` box, so client-side shadows are not drawn. An
   empty rectangle means the whole buffer or surface. `domicile_surface_submit`
@@ -236,8 +239,8 @@ Callbacks (engine → compositor):
 - **No BeginFrames.** A window's frame is submitted when its client commits,
   with a manual `BeginFrameAck`, so the engine asks viz for no BeginFrames and
   the compositor is not woken each vsync. Viz still sends one after a frame to
-  deliver its timing; the engine answers `DidNotProduceFrame` so the display
-  does not wait for the window. Releases come with the frame's ack or
+  deliver its timing, which becomes `presented`; the engine answers
+  `DidNotProduceFrame` so the display does not wait for the window. Releases come with the frame's ack or
   `ReclaimResources`.
 - `domicile_engine.h` is the full ABI, including the lifetime calls.
 
