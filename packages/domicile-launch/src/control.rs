@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::media_devices::{MediaDevices, MediaKind};
 use crate::site_permissions::{SitePermission, SiteSettings};
 
 /// A request to a running desktop.
@@ -55,6 +56,10 @@ pub enum Request {
     /// Report the ids of the extensions the config installed, which only the
     /// config uninstalls.
     ConfigExtensions,
+    /// Report the engine's cameras and microphones, most preferred first.
+    MediaDevices,
+    /// Give this device to sites that ask for a `kind` without naming one.
+    SetMediaDevice { kind: MediaKind, id: String },
 }
 
 /// The files the Settings app edits, as the desktop found them at startup.
@@ -101,7 +106,7 @@ pub enum Response {
     /// Answers `site_permissions`.
     SitePermissions(SiteSettings),
 
-    /// The engine stored the site's setting.
+    /// The engine stored the site's setting or the preferred media device.
     Stored,
 
     /// The engine loaded the unpacked extension, which has this id.
@@ -112,6 +117,9 @@ pub enum Response {
 
     /// Answers `config_extensions`.
     ConfigExtensions { ids: Vec<String> },
+
+    /// Answers `media_devices`.
+    MediaDevices(MediaDevices),
 
     /// The request was unknown or could not be carried out.
     ///
@@ -184,6 +192,17 @@ pub type UninstallExtension<'a> = &'a dyn Fn(&str) -> Result<(), String>;
 /// tests.
 pub type ConfigExtensions<'a> = &'a dyn Fn() -> Result<Vec<String>, String>;
 
+/// Asks the engine for its cameras and microphones.
+///
+/// [`crate::command_socket::media_devices`] in a desktop; a closure in tests.
+pub type ListMediaDevices<'a> = &'a dyn Fn() -> Result<MediaDevices, String>;
+
+/// Tells the engine which device sites get when they name none.
+///
+/// [`crate::command_socket::set_media_device`] in a desktop; a closure in
+/// tests.
+pub type SetMediaDevice<'a> = &'a dyn Fn(MediaKind, &str) -> Result<(), String>;
+
 /// What a request can learn about or do to the running desktop.
 ///
 /// The dials reach the engine and the compositor; they are injected so
@@ -202,6 +221,8 @@ pub struct Desktop<'a> {
     pub load_unpacked: LoadUnpacked<'a>,
     pub uninstall_extension: UninstallExtension<'a>,
     pub config_extensions: ConfigExtensions<'a>,
+    pub media_devices: ListMediaDevices<'a>,
+    pub set_media_device: SetMediaDevice<'a>,
 }
 
 /// How a screenshot the compositor took ended.
@@ -273,6 +294,16 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Ok(ids) => Response::ConfigExtensions { ids },
             Err(why) => Response::Refused { why },
         }),
+        Ok(Request::MediaDevices) => to_line(&match (desktop.media_devices)() {
+            Ok(devices) => Response::MediaDevices(devices),
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::SetMediaDevice { kind, id }) => {
+            to_line(&match (desktop.set_media_device)(kind, &id) {
+                Ok(()) => Response::Stored,
+                Err(why) => Response::Refused { why },
+            })
+        }
         Err(why) => to_line(&Response::Refused {
             why: format!(
                 "'{}' is not a request this desktop knows: {why}",
