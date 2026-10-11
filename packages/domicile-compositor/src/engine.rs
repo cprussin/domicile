@@ -31,6 +31,10 @@ pub type SurfaceId = u32;
 /// An imported buffer, as the engine names one. Never zero.
 pub type BufferId = u64;
 
+/// Names one import in [`Engine::import_in_the_background`], so its answer
+/// can be matched to it.
+pub type Request = u64;
+
 /// A display capture, as the engine names one. Never zero.
 pub type CaptureId = u32;
 
@@ -291,6 +295,14 @@ pub enum Event {
         frame: u64,
         shown: Option<Shown>,
     },
+
+    /// The answer to [`Engine::import_in_the_background`]: the buffer's id,
+    /// or `None` if the browser refused it.
+    Imported {
+        surface: SurfaceId,
+        request: Request,
+        buffer: Option<BufferId>,
+    },
 }
 
 /// When and how a frame reached the screen.
@@ -352,6 +364,7 @@ struct Callbacks {
     copied_items: Option<extern "C" fn(*mut c_void, u32, *const RawClipboardItem, u32)>,
     frame_done: Option<extern "C" fn(*mut c_void, SurfaceId, u64)>,
     presented: Option<extern "C" fn(*mut c_void, SurfaceId, u64, i64, i64, u32)>,
+    imported: Option<extern "C" fn(*mut c_void, SurfaceId, Request, BufferId)>,
 }
 
 /// `DomicileClipboardItem`, laid out as in the C header: one type a copy can be
@@ -689,6 +702,37 @@ impl Engine {
         // SAFETY: as above, and `dmabuf` outlives the call.
         let buffer = unsafe { f(self.handle, surface, dmabuf as *const Dmabuf) };
         (buffer != 0).then_some(buffer)
+    }
+
+    /// Whether the engine has [`Engine::import_in_the_background`]. An older
+    /// one has only [`Engine::import`], which blocks the caller.
+    pub fn imports_in_the_background(&self) -> bool {
+        self.import_async().is_ok()
+    }
+
+    /// Starts importing a client's dmabuf and returns at once. The answer
+    /// arrives as an [`Event::Imported`] carrying `request`.
+    ///
+    /// The fds are borrowed; the engine duplicates them before returning.
+    pub fn import_in_the_background(&self, surface: SurfaceId, dmabuf: &Dmabuf, request: Request) {
+        let f = self
+            .import_async()
+            .expect("the caller checked imports_in_the_background");
+        // SAFETY: as above, and `dmabuf` outlives the call.
+        unsafe { f(self.handle, surface, dmabuf as *const Dmabuf, request) };
+    }
+
+    #[allow(clippy::type_complexity)] // the C signature, spelled out
+    fn import_async(
+        &self,
+    ) -> Result<
+        Symbol<'_, unsafe extern "C" fn(*mut Handle, SurfaceId, *const Dmabuf, Request)>,
+        EngineError,
+    > {
+        self.symbol(
+            b"domicile_surface_import_async\0",
+            "domicile_surface_import_async",
+        )
     }
 
     /// Tells the browser the contents of a clipboard.
@@ -1168,6 +1212,7 @@ fn join(
         copied_items: Some(on_copied_items),
         frame_done: Some(on_frame_done),
         presented: Some(on_presented),
+        imported: Some(on_imported),
     };
     let socket_c = CString::new(socket.as_os_str().as_encoded_bytes())?;
     let connect: Symbol<unsafe extern "C" fn(*const c_char, Callbacks) -> *mut Handle> = symbol(
@@ -1251,6 +1296,22 @@ extern "C" fn on_configure_box(
             height,
             scale: Some(scale),
             number: Some(number),
+        },
+    );
+}
+
+extern "C" fn on_imported(
+    user_data: *mut c_void,
+    surface: SurfaceId,
+    request: Request,
+    buffer: BufferId,
+) {
+    push(
+        user_data,
+        Event::Imported {
+            surface,
+            request,
+            buffer: (buffer != 0).then_some(buffer),
         },
     );
 }
@@ -1552,14 +1613,15 @@ mod tests {
     }
 
     #[test]
-    fn the_callbacks_are_the_user_data_and_eleven_pointers_the_c_header_declares() {
-        // `released` follows `configure`, and `presented` is last, as in the
+    fn the_callbacks_are_the_user_data_and_twelve_pointers_the_c_header_declares() {
+        // `released` follows `configure`, and `imported` is last, as in the
         // header.
-        assert_eq!(std::mem::size_of::<Callbacks>(), 12 * 8);
+        assert_eq!(std::mem::size_of::<Callbacks>(), 13 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, released), 2 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, copied_items), 9 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, frame_done), 10 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, presented), 11 * 8);
+        assert_eq!(std::mem::offset_of!(Callbacks, imported), 12 * 8);
     }
 
     #[test]
@@ -1583,6 +1645,31 @@ mod tests {
     #[test]
     fn a_discarded_frame_was_not_shown() {
         assert_eq!(shown_from(0, 0, 0x8000_0000), None);
+    }
+
+    #[test]
+    fn an_import_answers_its_request_with_the_buffer_or_a_refusal() {
+        let events = RefCell::new(Vec::new());
+        let queue = (&events as *const RefCell<Vec<Event>>) as *mut c_void;
+        on_imported(queue, 2, 5, 11);
+        on_imported(queue, 2, 6, 0);
+
+        assert_eq!(
+            events.into_inner(),
+            vec![
+                Event::Imported {
+                    surface: 2,
+                    request: 5,
+                    buffer: Some(11),
+                },
+                // Zero is never a buffer, so it is the refusal.
+                Event::Imported {
+                    surface: 2,
+                    request: 6,
+                    buffer: None,
+                },
+            ]
+        );
     }
 
     /// A pipe's read end, standing in for a buffer's fd.
