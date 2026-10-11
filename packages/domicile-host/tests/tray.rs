@@ -4,7 +4,9 @@
 use std::fs;
 use std::path::Path;
 
-use domicile_host::tray::{address, item, method, Pixmap, Properties, Registry, Status, TrayIcons};
+use domicile_host::tray::{
+    address, item, method, Landed, Pixmap, Properties, Reads, Registry, Status, TrayIcons,
+};
 use domicile_protocol::{TrayAction, TrayItem};
 
 /// A temporary data directory holding `files` as (relative path, bytes).
@@ -627,5 +629,108 @@ mod actions {
         assert_eq!(method(TrayAction::Primary), "Activate");
         assert_eq!(method(TrayAction::Secondary), "SecondaryActivate");
         assert_eq!(method(TrayAction::Context), "ContextMenu");
+    }
+}
+
+mod icon_cache {
+    use super::*;
+
+    /// More distinct lookups than the cache holds.
+    const MANY: usize = 1000;
+
+    #[test]
+    fn the_cache_forgets_icons_not_looked_up_for_a_while() {
+        let dir = data_dir(&[("icons/hicolor/22x22/status/sync.png", b"sync")]);
+        let mut icons = icons_in(dir.path());
+        assert!(icons.icon("sync", "").is_some());
+        fs::remove_file(dir.path().join("icons/hicolor/22x22/status/sync.png")).unwrap();
+
+        for n in 0..MANY {
+            icons.icon(&format!("missing-{n}"), "");
+        }
+
+        assert_eq!(icons.icon("sync", ""), None);
+    }
+
+    #[test]
+    fn the_cache_keeps_an_icon_looked_up_often() {
+        let dir = data_dir(&[("icons/hicolor/22x22/status/sync.png", b"sync")]);
+        let mut icons = icons_in(dir.path());
+        assert!(icons.icon("sync", "").is_some());
+        fs::remove_file(dir.path().join("icons/hicolor/22x22/status/sync.png")).unwrap();
+
+        for n in 0..MANY {
+            icons.icon(&format!("missing-{n}"), "");
+            assert!(icons.icon("sync", "").is_some(), "kept after {n} others");
+        }
+    }
+
+    #[test]
+    fn an_icon_named_by_its_path_is_read_again_each_time() {
+        // Applications rewrite one file in place to change their icon.
+        let dir = data_dir(&[("icon.png", b"one")]);
+        let path = dir.path().join("icon.png");
+        let named = path.to_string_lossy().into_owned();
+        let mut icons = icons_in(dir.path());
+        assert_eq!(
+            icons.icon(&named, ""),
+            Some("data:image/png;base64,b25l".into())
+        );
+
+        fs::write(&path, b"two").unwrap();
+
+        assert_eq!(
+            icons.icon(&named, ""),
+            Some("data:image/png;base64,dHdv".into())
+        );
+    }
+}
+
+mod reads {
+    use super::*;
+
+    #[test]
+    fn a_read_starts_when_none_is_in_flight() {
+        let mut reads = Reads::default();
+        let first = reads.wanted("a").expect("a read");
+
+        assert_eq!(reads.landed("a", first), Landed::Current { again: None });
+        assert!(reads.wanted("a").is_some());
+    }
+
+    #[test]
+    fn signals_during_a_read_make_one_more_read_after_it() {
+        let mut reads = Reads::default();
+        let first = reads.wanted("a").expect("a read");
+        assert_eq!(reads.wanted("a"), None);
+        assert_eq!(reads.wanted("a"), None);
+
+        let Landed::Current {
+            again: Some(second),
+        } = reads.landed("a", first)
+        else {
+            panic!("one more read");
+        };
+
+        assert_eq!(reads.landed("a", second), Landed::Current { again: None });
+    }
+
+    #[test]
+    fn items_are_read_independently() {
+        let mut reads = Reads::default();
+        assert!(reads.wanted("a").is_some());
+
+        assert!(reads.wanted("b").is_some());
+    }
+
+    #[test]
+    fn a_read_of_an_item_that_went_away_is_stale() {
+        let mut reads = Reads::default();
+        let gone = reads.wanted("a").expect("a read");
+        reads.forget("a");
+        let again = reads.wanted("a").expect("a read of the new item");
+
+        assert_eq!(reads.landed("a", gone), Landed::Stale);
+        assert_eq!(reads.landed("a", again), Landed::Current { again: None });
     }
 }

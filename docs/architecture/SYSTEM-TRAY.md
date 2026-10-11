@@ -54,7 +54,11 @@ shell menu ─ dbusCall / dbusMatch (callSystem) ─▶ compositor ─▶ com.ca
 - **Clicks respect the lock.** They go through the Wayland thread, which
   refuses them while locked, the same as `Spawn`.
 - **Reads never block the D-Bus worker.** Each `GetAll` runs on its own thread,
-  because zbus 4 has no method timeout.
+  because a call waits as long as its application does.
+  - An item has at most one read in flight. Signals during a read cause one
+    more read after it.
+- **Icon lookups are cached** for the 32 names used last. An icon named by a
+  path is read each time, since applications rewrite one file in place.
 - **Secondary click opens the item's dbusmenu**, as KDE's and waybar's trays
   do. An item with no `Menu` (`menu` empty, for none or `/NO_DBUSMENU`) gets
   `ContextMenu` and opens its own. Primary click is `Activate`, except for an
