@@ -27,7 +27,7 @@ concurrency:
 
 permissions:
   contents: read
-  # The compile slot asks whether its holder's run is over.
+  # The compile slot and the tree pool ask whether a holder's run is over.
   actions: read
 
 jobs:
@@ -83,6 +83,10 @@ jobs:
       # Take and lock a tree from the pool (see engine.yml). Before the room
       # check, because that checks this run's tree.
       - name: Take a tree
+        env:
+          # A holder whose run is over holds nothing (crux-run-finished.sh).
+          DOMICILE_TREE_HOLDER_DONE: '.github/scripts/crux-run-finished.sh "$HOLDER"'
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           tree="$(.github/scripts/engine-tree-pool.sh pick \

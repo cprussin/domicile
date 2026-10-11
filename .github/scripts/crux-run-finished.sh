@@ -4,9 +4,9 @@
 #   crux-run-finished.sh "<workflow>.yml run <id> attempt <n>"
 #                         0 over, 1 still going, 3 could not ask
 #
-# engine.yml and engine-release.yml ask this while waiting for the compile
-# slot. A runner shut down mid-build never releases the slot, so a waiter needs
-# to know when it may clear it.
+# engine.yml, engine-release.yml and engine-drm-probe.yml ask this about the
+# compile slot's holder and each held tree's. A runner shut down mid-build
+# never releases either, so a run needs to know when it may clear them.
 #
 # Not named `engine-*.sh`; see crux-stale-runs.sh.
 set -u
