@@ -9,6 +9,8 @@
 
 use std::collections::HashMap;
 use std::os::fd::OwnedFd;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use domicile_host::clipboard::Contents;
 use zbus::fdo;
@@ -34,19 +36,52 @@ pub enum Selection {
     Hold { contents: Contents },
 }
 
+/// How long a paste waits for the application to take its pipe. Mutter
+/// waits as long.
+const TRANSFER_DEADLINE: Duration = Duration::from_secs(15);
+
 /// Pastes of a session's offer, waiting for the application to write them.
-#[derive(Default)]
 pub struct Transfers {
     next_serial: u32,
     pending: HashMap<u32, (OwnedObjectPath, OwnedFd)>,
+    /// When a paste the application has not taken is dropped.
+    deadline: Duration,
+}
+
+impl Default for Transfers {
+    fn default() -> Self {
+        Transfers {
+            next_serial: 0,
+            pending: HashMap::new(),
+            deadline: TRANSFER_DEADLINE,
+        }
+    }
 }
 
 impl Transfers {
     /// Hold `fd` for `session` and return the serial its signal carries.
-    pub fn hold(&mut self, session: OwnedObjectPath, fd: OwnedFd) -> u32 {
-        self.next_serial += 1;
-        self.pending.insert(self.next_serial, (session, fd));
-        self.next_serial
+    ///
+    /// A paste the application has not taken by the deadline is dropped, so
+    /// the pasting client reads nothing rather than waiting forever.
+    pub fn hold(transfers: &Arc<Mutex<Transfers>>, session: OwnedObjectPath, fd: OwnedFd) -> u32 {
+        let (serial, deadline) = {
+            let mut held = transfers.lock().unwrap();
+            held.next_serial += 1;
+            let serial = held.next_serial;
+            held.pending.insert(serial, (session, fd));
+            (serial, held.deadline)
+        };
+        let transfers = Arc::clone(transfers);
+        std::thread::spawn(move || {
+            std::thread::sleep(deadline);
+            transfers.lock().unwrap().pending.remove(&serial);
+        });
+        serial
+    }
+
+    /// `session` closed: drop its pastes, so their clients read nothing.
+    pub fn end(&mut self, session: &OwnedObjectPath) {
+        self.pending.retain(|_, (held, _)| held != session);
     }
 }
 
@@ -158,7 +193,6 @@ pub fn owner_changed(mime_types: &[String], is_owner: bool) -> HashMap<String, O
 mod tests {
     use super::*;
     use std::io::{Read, Write};
-    use std::time::Duration;
 
     use domicile_protocol::{Devices, PortalAnswer, PortalKind, RemoteDesktopDialog};
     use zbus::blocking::MessageIterator;
@@ -260,13 +294,12 @@ mod tests {
         assert!(refused.is_err());
     }
 
-    #[test]
-    fn a_client_pasting_the_sessions_offer_is_written_by_the_application() {
-        let served = served(Tokens::load(None));
-        sharing(&served, true);
-        let transfers = signals(&served, "SelectionTransfer");
+    /// A client pasting the session's offer: its read end, and the serial
+    /// the application heard.
+    fn pasting(served: &Served) -> (OwnedFd, u32) {
+        let transfers = signals(served, "SelectionTransfer");
         call(
-            &served,
+            served,
             CLIPBOARD,
             "SetSelection",
             &(
@@ -278,7 +311,7 @@ mod tests {
         let Selection::Offer {
             session,
             mime_types,
-        } = selected(&served)
+        } = selected(served)
         else {
             panic!("an offer")
         };
@@ -287,7 +320,7 @@ mod tests {
             (SESSION, vec![TEXT.to_string()])
         );
 
-        // A client pastes: the Wayland thread hands over its pipe.
+        // The Wayland thread hands over the client's pipe.
         let (pasted, paste) = crate::clipboard::pipe().expect("a pipe");
         served.backends.transfer(session, TEXT.into(), paste);
         let signal = transfers
@@ -298,6 +331,21 @@ mod tests {
         let (_, mime_type, serial): (OwnedObjectPath, String, u32) =
             signal.body().deserialize().expect("its arguments");
         assert_eq!(mime_type, TEXT);
+        (pasted, serial)
+    }
+
+    /// Whether `pasted` reaches its end, empty, within ten seconds.
+    fn ends_empty(pasted: OwnedFd) -> bool {
+        let (read, reading) = std::sync::mpsc::channel();
+        std::thread::spawn(move || read.send(read_all(pasted)));
+        reading.recv_timeout(Duration::from_secs(10)) == Ok(String::new())
+    }
+
+    #[test]
+    fn a_client_pasting_the_sessions_offer_is_written_by_the_application() {
+        let served = served(Tokens::load(None));
+        sharing(&served, true);
+        let (pasted, serial) = pasting(&served);
         let write = call(
             &served,
             CLIPBOARD,
@@ -324,6 +372,36 @@ mod tests {
             .read_exact(&mut arrived)
             .expect("it reads");
         assert_eq!(&arrived, b"from afar");
+    }
+
+    #[test]
+    fn a_paste_the_application_never_took_ends_when_the_session_closes() {
+        let served = served(Tokens::load(None));
+        sharing(&served, true);
+        let (pasted, _) = pasting(&served);
+
+        served
+            .client
+            .call_method(
+                None::<&str>,
+                SESSION,
+                Some("org.freedesktop.impl.portal.Session"),
+                "Close",
+                &(),
+            )
+            .expect("Close answered");
+
+        assert!(ends_empty(pasted));
+    }
+
+    #[test]
+    fn a_paste_the_application_never_took_ends_at_its_deadline() {
+        let served = served(Tokens::load(None));
+        sharing(&served, true);
+        served.backends.transfers.lock().unwrap().deadline = Duration::from_millis(10);
+        let (pasted, _) = pasting(&served);
+
+        assert!(ends_empty(pasted));
     }
 
     #[test]

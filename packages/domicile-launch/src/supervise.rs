@@ -8,9 +8,10 @@
 //! the run.
 
 use std::io::{BufRead, BufReader};
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::os::unix::process::CommandExt;
 use std::process::{Child, Command, ExitStatus, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -18,10 +19,9 @@ use std::time::Duration;
 use crate::heard::Heard;
 use crate::spawn::Spawn;
 
-/// How often to poll the components for exit.
-///
-/// Waiting on whichever of several children exits first needs a signal
-/// handler, so we poll. 100 ms is not a noticeable delay.
+/// How often the short waits (startup, backoff, shutdown) check for an exit
+/// or a stop. 100 ms is not a noticeable delay. The session-long wait,
+/// [`Running::until_one_exits`], blocks instead.
 pub const ASK_EVERY: Duration = Duration::from_millis(100);
 
 /// A component could not be started.
@@ -223,9 +223,57 @@ impl Running {
                     how: "interrupted".to_string(),
                 };
             }
-            std::thread::sleep(ASK_EVERY);
+            self.until_something_happens();
         }
     }
+
+    /// Blocks until a component's pid fd or the interrupt pipe is readable.
+    ///
+    /// A pid fd becomes readable when its process exits. A signal that lands
+    /// between the caller's checks and the `poll` still wakes it, through the
+    /// pipe.
+    fn until_something_happens(&self) {
+        let pid_fds: Vec<OwnedFd> = self
+            .components
+            .iter()
+            .map(|(_, child)| pid_fd(child))
+            .collect();
+        // `poll` skips a negative fd: no pipe before `catch_interrupts`.
+        let mut polled: Vec<libc::pollfd> = pid_fds
+            .iter()
+            .map(AsRawFd::as_raw_fd)
+            .chain([INTERRUPT_READ.load(Ordering::Relaxed)])
+            .map(|fd| libc::pollfd {
+                fd,
+                events: libc::POLLIN,
+                revents: 0,
+            })
+            .collect();
+        // SAFETY: `polled` is a live array of `polled.len()` entries.
+        let ready = unsafe { libc::poll(polled.as_mut_ptr(), polled.len() as libc::nfds_t, -1) };
+        if ready < 0 {
+            let why = std::io::Error::last_os_error();
+            // A signal: the caller checks for a stop.
+            assert_eq!(
+                why.kind(),
+                std::io::ErrorKind::Interrupted,
+                "polling the components failed: {why}"
+            );
+        }
+    }
+}
+
+/// A pid fd for `child`, which is not reaped yet, so its pid is still its own.
+fn pid_fd(child: &Child) -> OwnedFd {
+    // SAFETY: `pidfd_open` takes a pid and flags, and returns a new fd or -1.
+    let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, child.id() as libc::pid_t, 0) };
+    assert!(
+        fd >= 0,
+        "a child this process started has a pid fd: {}",
+        std::io::Error::last_os_error()
+    );
+    // SAFETY: the kernel just opened `fd`, and nothing else owns it.
+    unsafe { OwnedFd::from_raw_fd(fd as RawFd) }
 }
 
 impl Default for Running {
@@ -234,20 +282,52 @@ impl Default for Running {
     }
 }
 
-/// Set by the signal handler and read by the poll loop. An atomic is all a
+/// Set by the signal handler and read by the wait loops. An atomic is all a
 /// signal handler may safely touch.
 static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 
+/// The pipe the signal handler writes to, so [`Running::until_one_exits`]
+/// wakes for a stop. -1 until [`catch_interrupts`] opens it.
+static INTERRUPT_READ: AtomicI32 = AtomicI32::new(-1);
+static INTERRUPT_WRITE: AtomicI32 = AtomicI32::new(-1);
+
 extern "C" fn note_the_interrupt(_signal: libc::c_int) {
     INTERRUPTED.store(true, Ordering::Relaxed);
+    // SAFETY: `write` is async-signal-safe. The end is non-blocking, so a
+    // full pipe, which is already readable, drops the byte. `errno` is put
+    // back for the code the signal interrupted.
+    unsafe {
+        let errno = *libc::__errno_location();
+        libc::write(
+            INTERRUPT_WRITE.load(Ordering::Relaxed),
+            [0u8].as_ptr().cast(),
+            1,
+        );
+        *libc::__errno_location() = errno;
+    }
 }
 
 /// Makes `SIGINT` and `SIGTERM` end the run instead of killing this process.
 ///
 /// Components run in their own process groups, so Ctrl-C reaches only this
 /// process. Without a handler it would die before `Running::drop` stopped
-/// them. The handler only sets a flag, which the poll loop checks.
+/// them. The handler sets a flag, which the wait loops check, and wakes
+/// [`Running::until_one_exits`].
+///
+/// Panics if the pipe cannot be opened, which only fd exhaustion causes.
 pub fn catch_interrupts() {
+    let mut ends = [0; 2];
+    // SAFETY: `ends` has room for the two fds `pipe2` writes.
+    let piped = unsafe { libc::pipe2(ends.as_mut_ptr(), libc::O_CLOEXEC | libc::O_NONBLOCK) };
+    assert_eq!(
+        piped,
+        0,
+        "opening the interrupt pipe failed: {}",
+        std::io::Error::last_os_error()
+    );
+    // Open for the life of the process: the handler may fire at any time.
+    INTERRUPT_READ.store(ends[0], Ordering::Relaxed);
+    INTERRUPT_WRITE.store(ends[1], Ordering::Relaxed);
     for signal in [libc::SIGINT, libc::SIGTERM] {
         // SAFETY: `note_the_interrupt` touches one atomic and nothing else,
         // which is what a handler is permitted to do.
