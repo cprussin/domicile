@@ -401,6 +401,12 @@ void HTMLWebViewElement::reload() {
   }
 }
 
+void HTMLWebViewElement::clearCompletedDownloads() {
+  if (guest_.is_bound()) {
+    guest_->ClearCompletedDownloads();
+  }
+}
+
 // Does not set `zoom_`: the browser's result may differ (e.g. another window
 // on the site zooms), so only ZoomChanged updates it.
 void HTMLWebViewElement::setZoom(double factor,
@@ -524,10 +530,12 @@ void HTMLWebViewElement::LoadProgressChanged(double progress) {
 
 void HTMLWebViewElement::DownloadsChanged(int32_t count,
                                           int64_t received_bytes,
-                                          int64_t total_bytes) {
+                                          int64_t total_bytes,
+                                          int32_t completed) {
   download_count_ = count;
   download_received_bytes_ = received_bytes;
   download_total_bytes_ = total_bytes;
+  download_completed_count_ = completed;
 
   DispatchEvent(*Event::CreateBubble(AtomicString(kDownloadsChangeEvent)));
 }

@@ -480,6 +480,21 @@ void FilesChosen(scoped_refptr<content::FileSelectListener> listener,
   listener->FileSelected(AsFileInfos(*chosen), base::FilePath(), mode);
 }
 
+// Where a download is, for TallyDownloads.
+DownloadStage DownloadStageOf(download::DownloadItem::DownloadState state) {
+  switch (state) {
+    case download::DownloadItem::IN_PROGRESS:
+      return DownloadStage::kInProgress;
+    case download::DownloadItem::COMPLETE:
+      return DownloadStage::kComplete;
+    case download::DownloadItem::CANCELLED:
+    case download::DownloadItem::INTERRUPTED:
+      return DownloadStage::kStopped;
+    case download::DownloadItem::MAX_DOWNLOAD_STATE:
+      NOTREACHED();
+  }
+}
+
 // Passes the shell's download location to //chrome.
 void DownloadPathChosen(
     base::OnceCallback<void(std::optional<base::FilePath>)> chosen,
@@ -961,6 +976,17 @@ void WebViewGuest::Stop() {
   CHECK(guest_contents_);
   // NavigationController has no Stop; the WebContents cancels the load.
   guest_contents_->Stop();
+}
+
+void WebViewGuest::ClearCompletedDownloads() {
+  std::erase_if(downloads_, [this](download::DownloadItem* item) {
+    if (item->GetState() != download::DownloadItem::COMPLETE) {
+      return false;
+    }
+    download_observations_.RemoveObservation(item);
+    return true;
+  });
+  ReportDownloads();
 }
 
 void WebViewGuest::Reload() {
@@ -1491,8 +1517,7 @@ void WebViewGuest::ReportDownloads() {
   std::vector<DownloadReading> readings;
   for (const download::DownloadItem* item : downloads_) {
     readings.push_back(
-        {.in_progress =
-             item->GetState() == download::DownloadItem::IN_PROGRESS,
+        {.stage = DownloadStageOf(item->GetState()),
          .has_target = !item->GetTargetFilePath().empty(),
          .received_bytes = item->GetReceivedBytes(),
          .total_bytes = item->GetTotalBytes()});
@@ -1504,7 +1529,7 @@ void WebViewGuest::ReportDownloads() {
     LOG(INFO) << "domicile: a <webview> reported " << tally.count
               << " downloads in progress.";
     client_->DownloadsChanged(tally.count, tally.received_bytes,
-                              tally.total_bytes);
+                              tally.total_bytes, tally.completed);
   }
 }
 

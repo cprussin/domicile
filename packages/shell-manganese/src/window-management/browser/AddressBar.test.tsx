@@ -10,11 +10,12 @@ const BAR = {
   address: "https://example.com",
   canGoBack: false,
   canGoForward: false,
-  downloads: { count: 0, receivedBytes: 0, totalBytes: 0 },
+  downloads: { completed: 0, count: 0, receivedBytes: 0, totalBytes: 0 },
   isPrivate: false,
   loading: false,
   loadProgress: 0,
   onBack: () => undefined,
+  onClearDownloads: () => undefined,
   onForward: () => undefined,
   onNavigate: () => undefined,
   onReload: () => undefined,
@@ -141,7 +142,12 @@ describe("AddressBar", () => {
       render(
         <AddressBar
           {...BAR}
-          downloads={{ count: 1, receivedBytes: 456, totalBytes: 1000 }}
+          downloads={{
+            completed: 0,
+            count: 1,
+            receivedBytes: 456,
+            totalBytes: 1000,
+          }}
         />,
       );
 
@@ -156,7 +162,12 @@ describe("AddressBar", () => {
       render(
         <AddressBar
           {...BAR}
-          downloads={{ count: 3, receivedBytes: 10, totalBytes: 100 }}
+          downloads={{
+            completed: 0,
+            count: 3,
+            receivedBytes: 10,
+            totalBytes: 100,
+          }}
         />,
       );
 
@@ -170,7 +181,12 @@ describe("AddressBar", () => {
       render(
         <AddressBar
           {...BAR}
-          downloads={{ count: 1, receivedBytes: 10, totalBytes: 0 }}
+          downloads={{
+            completed: 0,
+            count: 1,
+            receivedBytes: 10,
+            totalBytes: 0,
+          }}
         />,
       );
 
@@ -181,12 +197,72 @@ describe("AddressBar", () => {
       expect(indicator.textContent).toBe("");
     });
 
+    it("keeps saying a download finished until it is cleared", async () => {
+      const calls: string[] = [];
+      render(
+        <AddressBar
+          {...BAR}
+          downloads={{
+            completed: 1,
+            count: 0,
+            receivedBytes: 0,
+            totalBytes: 0,
+          }}
+          onClearDownloads={() => {
+            calls.push("clear");
+          }}
+        />,
+      );
+
+      expect(screen.getByRole("status")).toHaveTextContent("Downloaded");
+      await userEvent.click(control("Clear finished downloads"));
+
+      expect(calls).toStrictEqual(["clear"]);
+    });
+
+    it("says how many finished when there are several", () => {
+      render(
+        <AddressBar
+          {...BAR}
+          downloads={{
+            completed: 2,
+            count: 0,
+            receivedBytes: 0,
+            totalBytes: 0,
+          }}
+        />,
+      );
+
+      expect(screen.getByRole("status")).toHaveTextContent("2 downloaded");
+    });
+
+    // The finished ones wait until nothing is in progress.
+    it("shows progress over finished downloads", () => {
+      render(
+        <AddressBar
+          {...BAR}
+          downloads={{
+            completed: 1,
+            count: 1,
+            receivedBytes: 10,
+            totalBytes: 100,
+          }}
+        />,
+      );
+
+      expect(
+        screen.getByRole("progressbar", { name: "Downloading" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("status")).toBeNull();
+    });
+
     it("is gone when nothing is downloading", () => {
       render(<AddressBar {...BAR} />);
 
       expect(
         screen.queryByRole("progressbar", { name: /Downloading/ }),
       ).toBeNull();
+      expect(screen.queryByRole("status")).toBeNull();
     });
   });
 

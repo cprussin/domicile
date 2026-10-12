@@ -40,8 +40,9 @@ export const WEBVIEW_LOAD_PROGRESS_CHANGE_EVENT =
 
 /**
  * Fired when {@link HTMLWebViewElement.downloadCount},
- * {@link HTMLWebViewElement.downloadReceivedBytes} or
- * {@link HTMLWebViewElement.downloadTotalBytes} changes. Carries no payload.
+ * {@link HTMLWebViewElement.downloadReceivedBytes},
+ * {@link HTMLWebViewElement.downloadTotalBytes} or
+ * {@link HTMLWebViewElement.downloadCompletedCount} changes. Carries no payload.
  * Bubbles.
  */
 export const WEBVIEW_DOWNLOADS_CHANGE_EVENT = "domicile-downloads-change";
@@ -421,6 +422,14 @@ declare global {
      * is unknown.
      */
     readonly downloadTotalBytes: number;
+    /**
+     * How many of the page's downloads finished, until
+     * {@link HTMLWebViewElement.clearCompletedDownloads}. A canceled or
+     * interrupted download is not counted.
+     */
+    readonly downloadCompletedCount: number;
+    /** Stops counting finished downloads in `downloadCompletedCount`. */
+    clearCompletedDownloads(): void;
     /**
      * The current address, as a browser's address bar shows it. Differs from
      * {@link HTMLWebViewElement.src} after links and redirects.

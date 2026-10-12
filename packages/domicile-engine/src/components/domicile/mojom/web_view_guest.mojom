@@ -253,13 +253,18 @@ interface WebViewGuestClient {
   // first load starts.
   LoadProgressChanged(double progress);
 
-  // The guest's page's downloads in progress, for a download indicator: how
-  // many, and their bytes received and expected in all. `total_bytes` is 0 when
-  // any one's size is unknown.
+  // The guest's page's downloads, for a download indicator: how many are in
+  // progress, their bytes received and expected in all, and how many finished.
+  // `total_bytes` is 0 when any one in progress has an unknown size.
   //
-  // Counts a download once the shell has said where it goes. Sent only when it
-  // changes. A fresh guest sends nothing until its first download.
-  DownloadsChanged(int32 count, int64 received_bytes, int64 total_bytes);
+  // Counts a download in progress once the shell has said where it goes. A
+  // finished one counts until WebViewGuest.ClearCompletedDownloads; a canceled
+  // or interrupted one counts nowhere. Sent only when it changes. A fresh guest
+  // sends nothing until its first download.
+  DownloadsChanged(int32 count,
+                   int64 received_bytes,
+                   int64 total_bytes,
+                   int32 completed);
 
   // The guest's current URL and security level, for an address bar.
   //
@@ -464,6 +469,10 @@ interface WebViewGuest {
   // Reloads the current entry. A POST entry's repost warning has no dialog
   // yet; see ROADMAP.md.
   Reload();
+
+  // Stops counting the page's finished downloads. See
+  // WebViewGuestClient.DownloadsChanged.
+  ClearCompletedDownloads();
 
   // Sets the zoom factor; 1 is 100%. Applied through HostZoomMap, so it zooms
   // the whole site, as in Chrome. Reported back as
