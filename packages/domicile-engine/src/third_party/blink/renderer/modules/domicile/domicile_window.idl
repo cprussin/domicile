@@ -26,6 +26,12 @@
   readonly attribute double? maxWidth;
   readonly attribute double? maxHeight;
 
+  // The client gave the window a parent or a fixed size, so shells float it
+  // at its first frame's size.
+  readonly attribute boolean dialog;
+  // The client asked to draw its own frame (client-side decorations).
+  readonly attribute boolean clientFrame;
+
   readonly attribute DomicileCursorShape cursor;
 
   // A popup's parent window and its place relative to it, and whether it

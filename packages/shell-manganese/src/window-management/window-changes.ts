@@ -1,5 +1,7 @@
 import type { DomicileWindow } from "@domicile-desktop/sdk/domicile-host";
 
+import type { FloatingRules } from "./floating/floating-rules";
+import { opensFloating } from "./floating/floating-rules";
 import type { Popup } from "./popup";
 import type { SizeLimit } from "./window";
 import type { WindowAction as Action } from "./window-state";
@@ -11,9 +13,10 @@ import { WindowAction } from "./window-state";
  *
  * The host lists every window after any change; the reducer takes individual
  * events. A popup is placed rather than announced, since it is drawn over its
- * window, not laid out.
+ * window, not laid out. A window `rules` or its client marks opens floating.
  */
 export const windowChanges = (
+  rules: FloatingRules,
   before: readonly DomicileWindow[],
   after: readonly DomicileWindow[],
 ): readonly Action[] => {
@@ -21,7 +24,9 @@ export const windowChanges = (
   const was = new Map(before.map((window) => [window.appId, window]));
   const listed = new Set(after.map(({ appId }) => appId));
   return [
-    ...after.flatMap((window) => changesOf(was.get(window.appId), window)),
+    ...after.flatMap((window) =>
+      changesOf(rules, was.get(window.appId), window),
+    ),
     ...before
       .filter(({ appId }) => !listed.has(appId))
       .map(({ appId }) => WindowAction.AppClosed(appId)),
@@ -30,14 +35,16 @@ export const windowChanges = (
 
 /** The changes to one window. `was` is `undefined` for a new one. */
 const changesOf = (
+  rules: FloatingRules,
   was: DomicileWindow | undefined,
   window: DomicileWindow,
 ): readonly Action[] =>
   window.parent === null
-    ? toplevelChanges(was, window)
+    ? toplevelChanges(rules, was, window)
     : popupChanges(was, window, window.parent);
 
 const toplevelChanges = (
+  rules: FloatingRules,
   was: DomicileWindow | undefined,
   window: DomicileWindow,
 ): readonly Action[] => {
@@ -46,9 +53,7 @@ const toplevelChanges = (
   const minSize = limitOf(window.minWidth, window.minHeight);
   const maxSize = limitOf(window.maxWidth, window.maxHeight);
   return [
-    ...(was === undefined
-      ? [WindowAction.AppAppeared(appId, named(window.title))]
-      : []),
+    ...(was === undefined ? [appeared(rules, window)] : []),
     ...(was !== undefined && before.title !== window.title
       ? [WindowAction.AppTitled(appId, named(window.title))]
       : []),
@@ -90,6 +95,23 @@ const UNSAID = {
   minHeight: null,
   minWidth: null,
 } as const;
+
+/** The action that opens a new window, tiled or floating. */
+const appeared = (rules: FloatingRules, window: DomicileWindow): Action => {
+  const { appId, clientFrame, height, title, width } = window;
+  if (!opensFloating(rules, window)) {
+    return WindowAction.AppAppeared(appId, named(title));
+  } else if (width === null || height === null) {
+    throw new Error(`windows: ${appId} is listed before it drew`);
+  } else {
+    return WindowAction.AppAppearedFloating(
+      appId,
+      named(title),
+      [width, height],
+      clientFrame,
+    );
+  }
+};
 
 /** A popup's placement. */
 const popupOf = (window: DomicileWindow, parent: string): Popup => {

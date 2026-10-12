@@ -567,6 +567,7 @@ describe("nodeDropped", () => {
       ...emptyWorkspace("1"),
       floatFocus: floating.at(-1)?.at(-1),
       floats: floating.map((ids, at) => ({
+        bare: false,
         depth: 1,
         height: 400,
         root: tabsOf(ids),

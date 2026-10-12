@@ -70,21 +70,13 @@ fn a_client_on_the_chrome_display_is_the_desktop_rather_than_a_window_on_it() {
     let appeared = chrome
         .wait_for(|message| matches!(message, HostMessage::AppAppeared { .. }))
         .expect("a client that opened a window is announced to the chrome");
-    let HostMessage::AppAppeared { app_id: first, .. } = appeared else {
-        unreachable!("the wait matched on this variant")
-    };
-
-    let named = chrome
-        .wait_for(|message| {
-            matches!(message, HostMessage::AppTitled { title: Some(title), .. } if title == "app-side")
-        })
-        .expect("the client on the apps' display names its window");
-    let HostMessage::AppTitled { app_id: named, .. } = named else {
+    let HostMessage::AppAppeared { title, .. } = appeared else {
         unreachable!("the wait matched on this variant")
     };
 
     assert_eq!(
-        first, named,
+        title.as_deref(),
+        Some("app-side"),
         "the first window announced to the chrome was not the one on the \
          apps' display, so the compositor announced its own desktop as a \
          window on itself"

@@ -15,6 +15,7 @@ import {
 import { typedAddress } from "../address/typed-address";
 import { openFileCommand } from "../launcher/open-file";
 import type { PlacedScreen } from "../screens/screen-toward";
+import type { FloatingRules } from "./floating/floating-rules";
 import { appIdOf, browserIdOf } from "./window";
 import { windowChanges } from "./window-changes";
 import type { WindowAction, WindowState } from "./window-state";
@@ -47,11 +48,13 @@ export type Windows = WindowState & {
  *
  * @param displays - the desk the host described. `undefined` until it has
  *   described one.
+ * @param floating - which client windows open floating, besides dialogs.
  * @param openFile - the argv that opens a file the launcher chose.
  */
 export const useWindows = (
   domicile: DomicileHost,
   displays: readonly Display[] | undefined,
+  floating: FloatingRules,
   openFile: typeof openFileCommand = openFileCommand,
 ): Windows => {
   const [state, dispatch] = useReducer(reduceWindows, NO_WINDOWS);
@@ -133,11 +136,11 @@ export const useWindows = (
   const listed = useRef<readonly DomicileWindow[]>([]);
 
   useEffect(() => {
-    // Client buffer sizes are ignored: only the engine's pointer scaling uses
-    // them.
+    // A client's size places only a window that opens floating; the engine's
+    // pointer scaling uses it too.
     const windowsChanged = () => {
       const now = domicile.windows;
-      for (const action of windowChanges(listed.current, now)) {
+      for (const action of windowChanges(floating, listed.current, now)) {
         dispatch(action);
       }
       listed.current = now;
@@ -174,7 +177,7 @@ export const useWindows = (
         browserWindowsChanged,
       );
     };
-  }, [domicile]);
+  }, [domicile, floating]);
 
   // The desk the host described, which bounds where windows can go.
   useEffect(() => {

@@ -15,6 +15,7 @@ const EDITOR = ShellWindow.App("nvim", "nvim");
 
 const placementOf = (id: string): Placement => ({
   bar: { height: 30, width: 1200, x: 0, y: 32 },
+  bare: false,
   behind: undefined,
   depth: 0,
   frame: { height: 800, width: 1200, x: 0, y: 32 },
@@ -536,6 +537,7 @@ describe("useWindowMotion", () => {
         ...tabs(windows),
         placements: windows.map(({ id }) => ({
           ...placementOf(id),
+          bare: false,
           behind: id === EDITOR.id ? placementOf(id).surface : undefined,
           surface: id === EDITOR.id ? undefined : placementOf(id).surface,
           tabbed: Layout.Tabbed,
@@ -662,6 +664,7 @@ describe("useWindowMotion", () => {
         placementOf(on.id),
         {
           ...placementOf(off.id),
+          bare: false,
           behind: placementOf(off.id).surface,
           surface: undefined,
         },
@@ -722,6 +725,7 @@ describe("useWindowMotion", () => {
         placementOf(TERMINAL.id),
         {
           ...placementOf(hidden.id),
+          bare: false,
           behind: placementOf(hidden.id).surface,
           surface: undefined,
         },

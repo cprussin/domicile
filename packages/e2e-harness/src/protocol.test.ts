@@ -46,33 +46,33 @@ describe("parseHostMessage", () => {
     ).toThrow();
   });
 
-  it("normalizes a missing app title to undefined", () => {
+  it("normalizes a missing app title and desktop id to undefined", () => {
     const message = parseHostMessage(
-      '{"type":"app_appeared","app_id":"term","title":null,"size":[640,480]}',
+      '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":[640,480],"dialog":true,"client_frame":false}',
     );
-    expect(message).toEqual({
+    expect(message).toStrictEqual({
       app_id: "term",
+      client_frame: false,
       desktop_id: undefined,
+      dialog: true,
       size: [640, 480],
       title: undefined,
       type: "app_appeared",
     });
   });
 
-  it("normalizes the size of a client that has not committed to undefined", () => {
-    // A window has no size until it draws; the host sends `null` and the
-    // size follows in `app_resized`. The desktop id follows in
-    // `app_desktop_id`.
-    const message = parseHostMessage(
-      '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":null}',
-    );
-    expect(message).toStrictEqual({
-      app_id: "term",
-      desktop_id: undefined,
-      size: undefined,
-      title: undefined,
-      type: "app_appeared",
-    });
+  it("throws on an announcement without its size or dialog hints", () => {
+    // A window is announced when it draws, so these are always known.
+    expect(() =>
+      parseHostMessage(
+        '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":null,"dialog":false,"client_frame":false}',
+      ),
+    ).toThrow();
+    expect(() =>
+      parseHostMessage(
+        '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":[640,480]}',
+      ),
+    ).toThrow();
   });
 
   it("decodes which desktop entry a client says it is", () => {

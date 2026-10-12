@@ -239,9 +239,10 @@ class MODULES_EXPORT DomicileHost final
   void AppAppeared(const String& app_id,
                    const String& title,
                    const String& desktop_id,
-                   bool has_size,
                    double width,
-                   double height) override;
+                   double height,
+                   bool dialog,
+                   bool client_frame) override;
   void AppResized(const String& app_id, double width, double height) override;
   void AppMinSize(const String& app_id, double width, double height) override;
   void AppMaxSize(const String& app_id, double width, double height) override;
