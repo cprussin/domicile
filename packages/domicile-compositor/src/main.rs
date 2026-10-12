@@ -1151,12 +1151,13 @@ impl DomicileCompositor {
     }
 
     /// Sends a commit's frame callbacks once the engine reports its frame, and
-    /// its presentation feedback once the frame reaches the screen. Without a
-    /// frame the engine reports, sends the callbacks now and discards the
-    /// feedback. See [`crate::frame_callbacks`].
+    /// its presentation feedback once the frame reaches the screen. A held
+    /// frame waits until it goes up. Without a frame the engine reports, sends
+    /// the callbacks now and discards the feedback. See
+    /// [`crate::frame_callbacks`].
     fn answer_when_shown(
         &mut self,
-        shown: Option<(String, u64)>,
+        shown: Option<Paced>,
         callbacks: Vec<WlCallback>,
         feedback: Vec<PresentationFeedbackCallback>,
     ) {
@@ -1164,11 +1165,18 @@ impl DomicileCompositor {
             .engine
             .as_ref()
             .is_some_and(EngineSession::reports_frames);
+        let now = self.monotonic();
         match shown.filter(|_| reported) {
-            Some((app_id, frame)) => {
-                let now = self.monotonic();
-                self.frame_callbacks
-                    .wait(&app_id, frame, callbacks, feedback, now);
+            Some(paced) => {
+                let replaced = match paced {
+                    Paced::Submitted(app_id, frame) => self
+                        .frame_callbacks
+                        .wait(&app_id, frame, callbacks, feedback, now),
+                    Paced::Held(app_id) => {
+                        self.frame_callbacks.hold(&app_id, callbacks, feedback, now)
+                    }
+                };
+                self.answer_unreported(replaced);
                 self.watch_the_frame_deadline();
             }
             None => self.answer_unreported(Unreported {
@@ -1796,8 +1804,9 @@ impl DomicileCompositor {
         } = session.dispatch(Instant::now());
         let overdue = session.overdue(Instant::now());
         self.take_back(releases.into_iter().chain(overdue));
-        for app_id in shown {
+        for (app_id, frame) in shown {
             self.frame_shown(&app_id);
+            self.frame_callbacks.submitted(&app_id, frame);
         }
 
         for event in events {
@@ -1826,12 +1835,15 @@ impl DomicileCompositor {
                         .as_mut()
                         .map(|session| session.show_what_was_waiting(surface, Instant::now()));
                     match waited {
-                        Some(Ok(true)) => self.frame_shown(&app_id),
+                        Some(Ok(Some(frame))) => {
+                            self.frame_shown(&app_id);
+                            self.frame_callbacks.submitted(&app_id, frame);
+                        }
                         Some(Err(refused)) => {
                             warn!(%app_id, "the engine would not take the frame that waited for this window");
                             self.returned(refused.buffer);
                         }
-                        Some(Ok(false)) | None => {}
+                        Some(Ok(None)) | None => {}
                     }
                     // A popup's size comes from its positioner, not the page.
                     if self.popups.iter().any(|(id, _)| *id == app_id) {
@@ -4156,9 +4168,18 @@ enum Published {
     /// The engine took a copy, uploaded as `fourcc`, so the client's buffer
     /// is already free.
     Copied { fourcc: u32 },
-    /// No page has embedded the window yet; the frame waits (see
-    /// `engine_waiting`). `held` is as in [`Published::Held`].
+    /// The frame waits for a page to embed the window (see `engine_waiting`)
+    /// or for its buffer's import (see `engine_imports`). `held` is as in
+    /// [`Published::Held`].
     Waiting { held: bool },
+}
+
+/// What a commit's frame callbacks wait for. See [`crate::frame_callbacks`].
+enum Paced {
+    /// The engine reports the app's frame by this number.
+    Submitted(String, u64),
+    /// The session holds the app's frame back for an import or an embed.
+    Held(String),
 }
 
 /// An shm frame in one of the compositor's buffers, ready to submit.
@@ -4471,15 +4492,17 @@ impl CompositorHandler for DomicileCompositor {
                         started,
                         matches!(published, Published::Held | Published::Copied { .. }),
                     );
-                    // The frame the engine will report, if it reached viz.
-                    let shown = matches!(published, Published::Held | Published::Copied { .. })
-                        .then(|| {
-                            self.engine
-                                .as_ref()
-                                .and_then(|session| session.frame_of(app_id))
-                                .map(|frame| (app_id.clone(), frame))
-                        })
-                        .flatten();
+                    // The frame the engine will report, if it reached viz or
+                    // goes up later.
+                    let shown = match published {
+                        Published::Held | Published::Copied { .. } => self
+                            .engine
+                            .as_ref()
+                            .and_then(|session| session.frame_of(app_id))
+                            .map(|frame| Paced::Submitted(app_id.clone(), frame)),
+                        Published::Waiting { .. } => Some(Paced::Held(app_id.clone())),
+                        Published::NotShown => None,
+                    };
                     (
                         matches!(
                             published,

@@ -50,9 +50,13 @@ rate the screen shows it.
   `presented`, the frame's `FrameTimingDetails` from viz. The clock is
   `CLOCK_MONOTONIC`, synced to the output the window is on. `seq` is always
   zero: viz reports no vblank count.
-- **Frames viz never sees** answer at once and discard their feedback: a
-  window no page has embedded yet, an shm frame the compositor could not copy,
-  a commit with no new buffer, the chrome's own window.
+- **Held frames:** a frame waiting for its buffer's import or for a page to
+  embed its window has no number yet. Its commit's callbacks and feedback wait
+  by window, and take the number the frame goes up with. A newer frame answers
+  them and discards the feedback.
+- **Frames viz never sees** answer at once and discard their feedback: an shm
+  frame the compositor could not copy, a commit with no new buffer, the
+  chrome's own window.
 - **The deadline:** a frame the engine does not report within 250 ms is
   answered anyway and its feedback discarded, so no client waits for good.
 - **Older engines** lack `domicile_engine_reports_frames`. The compositor
