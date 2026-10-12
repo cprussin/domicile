@@ -16,6 +16,7 @@ const MIDDLE_BUTTON = 1;
 
 /** The group floating, at (100, 100). */
 const FLOAT = {
+  bare: false,
   depth: 1,
   height: 400,
   root: LayoutNode.Container(Layout.Tabbed, [

@@ -70,12 +70,16 @@ pub enum HostError {
 /// A window's size limit on neither axis, as xdg-shell spells it.
 const NO_LIMIT: (f64, f64) = (0.0, 0.0);
 
-/// A mapped client window, whether or not the chrome has placed it.
+/// A client window, whether or not the chrome has placed it.
 #[derive(Debug, Clone)]
 pub struct App {
     pub app_id: AppId,
-    /// Map order, so [`Host::open_apps`] re-announces windows in that order.
+    /// Creation order, so [`Host::open_apps`] re-announces windows in that
+    /// order.
     pub arrival: u64,
+    /// What the client said when it first drew, or `None` before. Until then
+    /// the chromes have not heard of the window. See [`Host::app_mapped`].
+    pub mapped: Option<Mapped>,
     pub title: Option<String>,
     /// The client's `xdg_toplevel.set_app_id`; `None` until it sets one.
     pub desktop_id: Option<String>,
@@ -84,6 +88,17 @@ pub struct App {
     /// Size limits in logical units. `0` on an axis means no limit.
     pub min_size: (f64, f64),
     pub max_size: (f64, f64),
+}
+
+/// What a client says about its window by its first frame.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Mapped {
+    /// The size the first frame was drawn at, logical.
+    pub size: (f64, f64),
+    /// `xdg_toplevel.set_parent` named another window.
+    pub has_parent: bool,
+    /// The client asked to draw its own frame.
+    pub client_frame: bool,
 }
 
 /// A popup a client opened over one of its windows. See
@@ -360,14 +375,11 @@ impl Host {
             })
     }
 
-    /// Register a newly-mapped Wayland toplevel. Returns its assigned id and
-    /// the message to forward to the chrome so it can mount an `<app>`
-    /// element. The app has no on-screen portal until the chrome places it.
-    pub fn app_appeared(
-        &mut self,
-        title: Option<String>,
-        size: Option<(f64, f64)>,
-    ) -> (AppId, HostMessage) {
+    /// Register a new Wayland toplevel and return its id.
+    ///
+    /// The chromes hear of it at [`Host::app_mapped`]. Until then, changes to
+    /// it are recorded and not reported.
+    pub fn app_created(&mut self) -> AppId {
         self.next_id += 1;
         let app_id = format!("app-{}", self.next_id);
         self.apps.insert(
@@ -375,20 +387,28 @@ impl Host {
             App {
                 app_id: app_id.clone(),
                 arrival: self.next_id,
-                title: title.clone(),
+                mapped: None,
+                title: None,
                 desktop_id: None,
-                size,
+                size: None,
                 min_size: NO_LIMIT,
                 max_size: NO_LIMIT,
             },
         );
-        let message = HostMessage::AppAppeared {
-            app_id: app_id.clone(),
-            title,
-            desktop_id: None,
-            size: size.map(wire_size),
-        };
-        (app_id, message)
+        app_id
+    }
+
+    /// A window drew its first frame. Returns the messages that announce it,
+    /// or none for an unknown or already announced window.
+    pub fn app_mapped(&mut self, app_id: &str, mapped: Mapped) -> Vec<HostMessage> {
+        match self.apps.get_mut(app_id) {
+            Some(app) if app.mapped.is_none() => {
+                app.mapped = Some(mapped);
+                app.size = Some(mapped.size);
+                announced(app, mapped)
+            }
+            _ => Vec::new(),
+        }
     }
 
     /// Messages that re-announce every open window and popup, then focus.
@@ -402,7 +422,7 @@ impl Host {
         let mut open: Vec<(u64, Vec<HostMessage>)> = self
             .apps
             .values()
-            .map(|app| (app.arrival, announced(app)))
+            .filter_map(|app| Some((app.arrival, announced(app, app.mapped?))))
             .chain(
                 self.popups
                     .values()
@@ -438,8 +458,7 @@ impl Host {
     /// Focus does not move. The shell decides and answers with
     /// `ChromeMessage::FocusApp`, so a shell can refuse focus stealing.
     pub fn focus_requested(&self, app_id: &str) -> Option<HostMessage> {
-        self.apps
-            .contains_key(app_id)
+        self.is_announced(app_id)
             .then(|| HostMessage::FocusRequested {
                 app_id: app_id.to_string(),
             })
@@ -459,18 +478,29 @@ impl Host {
         Some(HostMessage::FocusChanged { app_id: holder })
     }
 
+    /// Whether the chromes have heard of the window `app_id`.
+    fn is_announced(&self, app_id: &str) -> bool {
+        self.apps
+            .get(app_id)
+            .is_some_and(|app| app.mapped.is_some())
+    }
+
     /// Record the smallest a client will draw its window. Returns the chrome
-    /// notification, or `None` if the app is unknown or nothing changed.
+    /// notification, or `None` if the app is unknown, unannounced or nothing
+    /// changed.
     pub fn app_min_size(&mut self, app_id: &str, size: (f64, f64)) -> Option<HostMessage> {
         let app = self.apps.get_mut(app_id)?;
         if app.min_size == size {
             None
         } else {
             app.min_size = size;
-            Some(HostMessage::AppMinSize {
-                app_id: app_id.to_string(),
-                size: wire_size(size),
-            })
+            reported(
+                app,
+                HostMessage::AppMinSize {
+                    app_id: app_id.to_string(),
+                    size: wire_size(size),
+                },
+            )
         }
     }
 
@@ -482,10 +512,13 @@ impl Host {
             None
         } else {
             app.max_size = size;
-            Some(HostMessage::AppMaxSize {
-                app_id: app_id.to_string(),
-                size: wire_size(size),
-            })
+            reported(
+                app,
+                HostMessage::AppMaxSize {
+                    app_id: app_id.to_string(),
+                    size: wire_size(size),
+                },
+            )
         }
     }
 
@@ -494,10 +527,13 @@ impl Host {
     pub fn app_resized(&mut self, app_id: &str, size: (f64, f64)) -> Option<HostMessage> {
         let app = self.apps.get_mut(app_id)?;
         app.size = Some(size);
-        Some(HostMessage::AppResized {
-            app_id: app_id.to_string(),
-            size: wire_size(size),
-        })
+        reported(
+            app,
+            HostMessage::AppResized {
+                app_id: app_id.to_string(),
+                size: wire_size(size),
+            },
+        )
     }
 
     /// Record what a client calls its window. Returns the chrome notification,
@@ -511,10 +547,13 @@ impl Host {
             None
         } else {
             app.title = title.clone();
-            Some(HostMessage::AppTitled {
-                app_id: app_id.to_string(),
-                title,
-            })
+            reported(
+                app,
+                HostMessage::AppTitled {
+                    app_id: app_id.to_string(),
+                    title,
+                },
+            )
         }
     }
 
@@ -527,10 +566,13 @@ impl Host {
             None
         } else {
             app.desktop_id = Some(desktop_id.clone());
-            Some(HostMessage::AppDesktopId {
-                app_id: app_id.to_string(),
-                desktop_id,
-            })
+            reported(
+                app,
+                HostMessage::AppDesktopId {
+                    app_id: app_id.to_string(),
+                    desktop_id,
+                },
+            )
         }
     }
 
@@ -543,7 +585,7 @@ impl Host {
         size: (f64, f64),
         grab: bool,
     ) -> Option<(AppId, HostMessage)> {
-        if !self.apps.contains_key(parent) && !self.popups.contains_key(parent) {
+        if !self.is_announced(parent) && !self.popups.contains_key(parent) {
             return None;
         }
         self.next_id += 1;
@@ -576,14 +618,16 @@ impl Host {
     }
 
     /// Tear down a client: forget it and remove any portal. Returns the chrome
-    /// notification, or `None` if the app was already gone.
+    /// notification, or `None` if the app was already gone or never
+    /// announced.
     pub fn app_closed(&mut self, app_id: &str) -> Option<HostMessage> {
-        if self.popups.remove(app_id).is_none() {
-            self.apps.remove(app_id)?;
+        let announced = self.popups.remove(app_id).is_some() || {
+            let app = self.apps.remove(app_id)?;
             self.scene.window_gone(app_id);
             self.exports.app_closed(app_id);
-        }
-        Some(HostMessage::AppClosed {
+            app.mapped.is_some()
+        };
+        announced.then(|| HostMessage::AppClosed {
             app_id: app_id.to_string(),
         })
     }
@@ -677,12 +721,14 @@ fn placed(popup: &Popup) -> HostMessage {
 
 /// Messages announcing a window, then its size limits. Limits come second
 /// because a chrome needs the window first.
-fn announced(app: &App) -> Vec<HostMessage> {
+fn announced(app: &App, mapped: Mapped) -> Vec<HostMessage> {
     let appeared = HostMessage::AppAppeared {
         app_id: app.app_id.clone(),
         title: app.title.clone(),
         desktop_id: app.desktop_id.clone(),
-        size: app.size.map(wire_size),
+        size: wire_size(app.size.expect("a mapped window has a size")),
+        dialog: mapped.has_parent || is_fixed(app.min_size, app.max_size),
+        client_frame: mapped.client_frame,
     };
     let min = (app.min_size != NO_LIMIT).then(|| HostMessage::AppMinSize {
         app_id: app.app_id.clone(),
@@ -693,6 +739,18 @@ fn announced(app: &App) -> Vec<HostMessage> {
         size: wire_size(app.max_size),
     });
     std::iter::once(appeared).chain(min).chain(max).collect()
+}
+
+/// `message` if the chromes have heard of `app`, else `None`: its
+/// announcement will carry the change.
+fn reported(app: &App, message: HostMessage) -> Option<HostMessage> {
+    app.mapped.is_some().then_some(message)
+}
+
+/// Whether limits fix a window's size, as sway reads them: a minimum on both
+/// axes, and a maximum equal to it on either.
+fn is_fixed(min: (f64, f64), max: (f64, f64)) -> bool {
+    min.0 > 0.0 && min.1 > 0.0 && (min.0 == max.0 || min.1 == max.1)
 }
 
 /// A size as the protocol carries it.

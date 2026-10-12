@@ -68,6 +68,7 @@ describe("placementsOf", () => {
     expect(placementFor(desktop("kitty"), "kitty")).toEqual({
       // A tab at most 240 wide, the rest of the strip after it.
       bar: { height: TITLE_BAR, width: 240, x: 20, y: 52 },
+      bare: false,
       behind: undefined,
       depth: 0,
       frame: { height: 1008, width: 1880, x: 20, y: 52 },
@@ -136,6 +137,22 @@ describe("placementsOf", () => {
 
     expect(placementFor(state, "kitty")?.depth).toBe(0);
     expect(placementFor(state, "editor")?.depth).toBeGreaterThan(0);
+  });
+
+  it("gives a bare float's client its whole box, with no bar", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.AppAppearedFloating("huddle", "Huddle", [400, 300], true),
+    );
+    const [float] = workspaceHere(state).floats;
+    const box = { height: 300, width: 400, x: float?.x, y: float?.y };
+
+    expect(placementFor(state, "huddle")).toMatchObject({
+      bare: true,
+      frame: box,
+      surface: box,
+    });
+    expect(placementFor(state, "kitty")?.bare).toBe(false);
   });
 
   it("puts a float where it is on its own screen, wherever that screen is", () => {

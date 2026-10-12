@@ -18,7 +18,14 @@ import sys
 import time
 
 SEQUENCE = [
-    {"type": "app_appeared", "app_id": "term", "title": "Term", "size": [400, 200]},
+    {
+        "type": "app_appeared",
+        "app_id": "term",
+        "title": "Term",
+        "size": [400, 200],
+        "dialog": False,
+        "client_frame": False,
+    },
     {
         "type": "popup_placed",
         "app_id": "menu",

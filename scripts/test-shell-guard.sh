@@ -48,7 +48,7 @@ trap 'rm -rf "$FIXTURES"' EXIT
 # - APPEARED is built from the format string in domicile-compositor's
 #   main.rs. If that log site is reworded, this test still passes while the
 #   guard stops matching.
-APPEARED='2026-09-07T11:37:14.581795Z  INFO domicile_compositor: toplevel mapped -> Host::app_appeared app_id=app-1'
+APPEARED='2026-09-07T11:37:14.581795Z  INFO domicile_compositor: toplevel drew -> app_appeared app_id=app-1'
 JOINED='2026-09-07T11:37:13.641032Z  INFO domicile_compositor: chrome agreed the protocol; it now gets the desktop'
 # Built from the format string in domicile-compositor's `freshened`, with the
 # same caveat as APPEARED. The count is matched: zero displays is not a

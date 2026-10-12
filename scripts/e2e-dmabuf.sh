@@ -58,7 +58,7 @@ compositor_trouble() {
   echo "      whether it is stuck on the last step or finished it long ago):"
   # Whole lines, not `grep -o`: the module path `…::dmabuf_import` would
   # match "import:" and drop the stage name and fields.
-  plain | grep -aE "readback:|outbound:|dropped a frame|broadcast app frame|buffer released|toplevel mapped|chrome client connected" \
+  plain | grep -aE "readback:|outbound:|dropped a frame|broadcast app frame|buffer released|toplevel drew|chrome client connected" \
     | sed 's/^[0-9-]*T//' | cut -c1-150 | tail -18 | sed 's/^/  /'
 }
 

@@ -188,10 +188,10 @@ fn a_copied_image_is_a_row_and_pastes_back_whole() {
 fn focus(chrome: &mut domicile_test_chrome::Chrome, title: &str) {
     let named = chrome
         .wait_for(|message| {
-            matches!(message, HostMessage::AppTitled { title: Some(named), .. } if named == title)
+            matches!(message, HostMessage::AppAppeared { title: Some(named), .. } if named == title)
         })
         .expect("a client that named its window is announced to the chrome");
-    let HostMessage::AppTitled { app_id, .. } = named else {
+    let HostMessage::AppAppeared { app_id, .. } = named else {
         unreachable!("the wait matched on this variant")
     };
     chrome

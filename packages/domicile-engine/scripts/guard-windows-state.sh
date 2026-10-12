@@ -143,7 +143,8 @@ windows = json.loads(windows_line[len('"GUARD windows '):-1])
 by_id = {w["appId"]: w for w in windows}
 
 def default(**fields):
-    window = {"cursor": "default", "desktopId": "", "grab": False, "height": None, "maxHeight": None,
+    window = {"clientFrame": False, "cursor": "default", "desktopId": "", "dialog": False,
+              "grab": False, "height": None, "maxHeight": None,
               "maxWidth": None, "minHeight": None, "minWidth": None, "parent": None,
               "title": "", "width": None, "x": None, "y": None}
     window.update(fields)
@@ -153,7 +154,7 @@ wanted = [
     default(appId="first", title="Retitled", desktopId="org.example.First", width=800,
             height=600, minWidth=100, minHeight=50, cursor="zoom-out"),
     default(appId="second", title="Second", desktopId="org.example.Second", width=640,
-            height=480, cursor="grab"),
+            height=480, cursor="grab", dialog=True, clientFrame=True),
     default(appId="menu", parent="second", x=10, y=20, width=120, height=90, grab=True),
 ]
 

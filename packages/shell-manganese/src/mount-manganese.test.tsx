@@ -5,6 +5,7 @@ import { act, within } from "@testing-library/react";
 import { exec } from "./keyboard/commands";
 import { applicationsConfigSchema } from "./launcher/applications-config";
 import { mountManganese } from "./mount-manganese";
+import { floatingRulesSchema } from "./window-management/floating/floating-rules";
 
 /** A fake desktop describing one screen. */
 const onADesk = (): FakeDomicileHost => {
@@ -28,6 +29,7 @@ const onADesk = (): FakeDomicileHost => {
 };
 
 const applications = applicationsConfigSchema.parse(undefined);
+const floating = floatingRulesSchema.parse(undefined);
 
 describe("mountManganese", () => {
   // A custom bar layout on the stock desktop.
@@ -38,6 +40,7 @@ describe("mountManganese", () => {
     const mounted = await act(() =>
       mountManganese(root, fake.host, {
         applications,
+        floating,
         topBar: {
           left: [<span key="mail">mail 3/12</span>],
           middle: [],
@@ -60,6 +63,7 @@ describe("mountManganese", () => {
     const mounted = await act(() =>
       mountManganese(document.createElement("div"), fake.host, {
         applications,
+        floating,
         keybindings: { keybindings: { "Meta+x": exec("kitty") }, modes: {} },
       }),
     );
@@ -79,6 +83,7 @@ describe("mountManganese", () => {
     const mounted = await act(() =>
       mountManganese(document.createElement("div"), fake.host, {
         applications,
+        floating,
       }),
     );
 

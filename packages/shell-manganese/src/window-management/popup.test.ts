@@ -11,6 +11,7 @@ const placed = (
   depth = 0,
 ): Placement => ({
   bar: { height: 30, width: 0, x: 0, y: 0 },
+  bare: false,
   behind: undefined,
   depth,
   frame: { height: 0, width: 0, x: 0, y: 0 },

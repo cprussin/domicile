@@ -120,7 +120,7 @@ fn a_version_refused_after_one_was_agreed_takes_the_handshake_back() {
 fn messages_before_the_handshake_are_ignored() {
     // No message takes effect before `Hello`.
     let mut session = Session::new();
-    let (id, _) = session.host_mut().app_appeared(None, Some((100.0, 100.0)));
+    let id = session.host_mut().app_created();
     let _ = session.ingest(&to_line(&ChromeMessage::FocusApp { app_id: id.clone() }));
     assert_eq!(
         session.host_mut().keyboard_target(),
@@ -131,7 +131,7 @@ fn messages_before_the_handshake_are_ignored() {
 #[test]
 fn a_message_after_the_handshake_reaches_the_host() {
     let mut session = Session::new();
-    let (id, _) = session.host_mut().app_appeared(None, Some((100.0, 100.0)));
+    let id = session.host_mut().app_created();
     session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
     }));

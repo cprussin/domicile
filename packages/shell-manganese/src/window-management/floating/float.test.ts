@@ -6,6 +6,7 @@ import { LayoutNode } from "../tree/node";
 import type { Float } from "./float";
 import {
   FLOAT_STEP,
+  floatCenteredFor,
   floatFor,
   grown,
   movedTo,
@@ -17,6 +18,7 @@ import {
 } from "./float";
 
 const AT: Float = {
+  bare: false,
   depth: 0,
   height: 420,
   root: LayoutNode.Window("w1"),
@@ -78,6 +80,29 @@ describe("floatFor", () => {
     );
     expect(x + width).toBeLessThanOrEqual(screen.width);
     expect(y + height).toBeLessThanOrEqual(screen.height);
+  });
+});
+
+describe("floatCenteredFor", () => {
+  it("opens at the size asked for, in the middle of the screen", () => {
+    expect(
+      floatCenteredFor(LayoutNode.Window("w1"), SCREEN, 400, 300, true),
+    ).toStrictEqual({
+      bare: true,
+      depth: 0,
+      height: 300,
+      root: LayoutNode.Window("w1"),
+      scratchpad: false,
+      width: 400,
+      x: 760,
+      y: 390,
+    });
+  });
+
+  it("keeps its corner on a screen too small for it", () => {
+    expect(
+      floatCenteredFor(LayoutNode.Window("w1"), SCREEN, 2000, 1101, false),
+    ).toMatchObject({ height: 1101, width: 2000, x: 0, y: 0 });
   });
 });
 

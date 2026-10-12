@@ -10,6 +10,7 @@ import { DEFAULT_KEYBINDINGS, DEFAULT_MODES } from "./keyboard/commands";
 import type { ApplicationsConfig } from "./launcher/applications-config";
 import type { TopBarLayout } from "./top-bar/layout";
 import { DEFAULT_TOP_BAR } from "./top-bar/layout";
+import type { FloatingRules } from "./window-management/floating/floating-rules";
 
 type Props = {
   /**
@@ -24,6 +25,8 @@ type Props = {
    */
   displays: DisplaySource;
   domicile: DomicileHost;
+  /** Which client windows open floating, besides dialogs. Defaults to none. */
+  floating?: FloatingRules | undefined;
   /** The keys this desktop binds, under the config's. Defaults to sway's. */
   keybindings?: ShellKeybindings | undefined;
   /**
@@ -44,6 +47,7 @@ export const Shell = ({
   applications,
   displays,
   domicile,
+  floating = NO_FLOATING_RULES,
   keybindings = DEFAULT_SHELL_KEYBINDINGS,
   theme,
   topBar = DEFAULT_TOP_BAR,
@@ -53,12 +57,16 @@ export const Shell = ({
       <Desktop
         applications={applications}
         domicile={domicile}
+        floating={floating}
         keybindings={keybindings}
         topBar={topBar}
       />
     </DisplayProvider>
   </Provider>
 );
+
+/** No floating rules, defined once so the reference is stable. */
+const NO_FLOATING_RULES: FloatingRules = [];
 
 /** Manganese's default keybindings, defined once so the reference is stable. */
 const DEFAULT_SHELL_KEYBINDINGS: ShellKeybindings = {

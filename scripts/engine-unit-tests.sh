@@ -29,10 +29,11 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # DomicileDisplayRegions 27, DomicileDeskTargeter 4, PlaceholderStage 3,
 # SystemCall 4, PortalRequest 3, FileChoice 13, DisplayCapture 7,
 # CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, SitePermissions 11,
-# ControlChannel 1, DeviceChoices 9, WheelAction 1, SurfaceFrames 6,
+# ControlChannel 2, DeviceChoices 9, WheelAction 1, SurfaceFrames 6,
 # GuestDialogs 6, DownloadTally 5, SurfaceSubmits 4.
 #
-# 297, and it was 291 — fencing an shm frame's buffer instead of waiting for
+# 298, and it was 297 — a window's size and hints reaching the page is one
+# more ControlChannel case. Before that 297, and it was 291 — fencing an shm frame's buffer instead of waiting for
 # its copy is two FrameSinkBroker cases and four SurfaceSubmits ones. Before
 # that 291, and it was 286 — adding up a <webview>'s downloads for their progress is
 # five DownloadTally cases. Before that 286, and it was 280 — the dialog a guest's page has open is six
@@ -105,7 +106,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=297
+FLOOR=298
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

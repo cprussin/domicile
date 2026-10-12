@@ -182,6 +182,7 @@ describe("WindowTitleBar", () => {
   describe("a drag of a floating window's tab", () => {
     /** A float at (100, 100) holding `windows` as tabs. */
     const floatOf = (...windows: readonly string[]) => ({
+      bare: false,
       depth: 1,
       height: 400,
       root: LayoutNode.Container(

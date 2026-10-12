@@ -1,6 +1,6 @@
 //! Finds the process on the other end of a client's connection.
 //!
-//! The log has `spawning client` when a client starts and `toplevel mapped`
+//! The log has `spawning client` when a client starts and `toplevel drew`
 //! when it first commits a buffer. Logging the connection in between splits a
 //! slow launch into client startup and the client's Wayland setup.
 //!
