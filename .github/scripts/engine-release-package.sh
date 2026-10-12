@@ -24,6 +24,28 @@ fi
 BUILD="$CHROMIUM/$OUT"
 [ -d "$BUILD" ] || { echo "no build directory at $BUILD" >&2; exit 1; }
 
+# The flavor, from the args the build used (see engine-release-build.sh). It
+# must match DOMICILE_ENGINE_BUILD, which picks the release tag.
+[ -f "$BUILD/args.gn" ] || {
+  echo "::error::no $BUILD/args.gn, so the build's flavor is unknown" >&2
+  exit 1
+}
+gn_arg() { sed -n "s/^ *$1 *= *\(true\|false\) *\$/\1/p" "$BUILD/args.gn"; }
+OFFICIAL="$(gn_arg is_official_build)"
+DCHECKS="$(gn_arg dcheck_always_on)"
+case "$OFFICIAL/$DCHECKS" in
+  (false/true) FLAVOR=checked ;;
+  (true/false) FLAVOR=official ;;
+  (*)
+    echo "::error::$BUILD/args.gn has is_official_build '$OFFICIAL' and dcheck_always_on '$DCHECKS'; neither the checked nor the official build" >&2
+    exit 1
+    ;;
+esac
+if [ "$FLAVOR" != "${DOMICILE_ENGINE_BUILD:-checked}" ]; then
+  echo "::error::$BUILD is the $FLAVOR build, but DOMICILE_ENGINE_BUILD is '${DOMICILE_ENGINE_BUILD:-checked}'" >&2
+  exit 1
+fi
+
 # The engine cannot start or draw text without these.
 REQUIRED=(
   chrome
@@ -97,6 +119,7 @@ series identity: $IDENTITY
 domicile commit: $(git rev-parse HEAD)
 chromium pin:    $PIN
 built:           $(date -u +%Y-%m-%dT%H:%M:%SZ)
+build:           $FLAVOR (is_official_build = $OFFICIAL, dcheck_always_on = $DCHECKS)
 gn args:         see .github/scripts/engine-release-build.sh at the commit above
 
 libdomicile_engine.so is dlopened by domicile-compositor by name, so this
