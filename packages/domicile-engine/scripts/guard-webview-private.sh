@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Checks a private <webview> and a private browser window keep their storage
-# apart from the user's.
+# apart from the user's, and lose it once every private page closes.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-private.sh /build/chromium/src
@@ -19,6 +19,8 @@
 #   a reader on the other side does not     the claim
 #   the window is listed with `isPrivate`   the shell can tell
 #   the window's page has the cookie        the window is on the setter's side
+#   a private reader opened after every     private data lasts only while a
+#   private page closed does not have it    private page is open
 #
 # NEGATIVE=1 sets the cookie in an ordinary <webview> and opens an ordinary
 # window. The private reader must not see it, and the window must not be
@@ -49,7 +51,7 @@ PROFILE="${PROFILE:-/tmp/domicile-webview-private-profile}"
 WIDTH="${WIDTH:-1024}"
 HEIGHT="${HEIGHT:-768}"
 
-# Time for the shell to load, make four guests and load a page in each.
+# Time for the shell to load, make five guests and load a page in each.
 # Generous because every step is asynchronous and the machine is shared.
 FOR_SECONDS="${FOR_SECONDS:-90}"
 
@@ -123,14 +125,12 @@ rm -f "$ENGINE_LOG"
   --domicile-broker-socket="$BROKER" >"$ENGINE_LOG" 2>&1 &
 STARTED+=($!)
 
-# 3. Wait for the last reader and the setter's own report, or a crash. The
-#    pages report to the server's log: content does not log a private page's
-#    console. The readers start once the setter commits, so its report can
-#    land after all three reads.
+# 3. Wait for the last reader, or a crash. The pages report to the server's
+#    log: content does not log a private page's console. The `after` reader
+#    loads only once every other page has reported.
 TRIES=$((FOR_SECONDS * 4))
 for _ in $(seq 1 "$TRIES"); do
-  [ "$(grep -cF "GUARD read as=" "$HTTP_LOG" 2>/dev/null)" -ge 3 ] &&
-    grep -qF "GUARD set-loaded" "$HTTP_LOG" 2>/dev/null && break
+  grep -qF "GUARD read as=after " "$HTTP_LOG" 2>/dev/null && break
   grep -qF "Received signal" "$ENGINE_LOG" 2>/dev/null && break
   sleep 0.25
 done
@@ -150,6 +150,10 @@ SAW_WINDOW=$(saw "GUARD window id=" "$ENGINE_LOG")
 WINDOW_PRIVATE=$(saw "private=true" "$ENGINE_LOG")
 SAW_WINDOW_READ=$(saw "GUARD read as=window " "$HTTP_LOG")
 WINDOW_HAS=$(saw "GUARD read as=window cookie=seen=1" "$HTTP_LOG")
+SAW_CLOSED=$(saw "GUARD closed-private" "$ENGINE_LOG")
+SAW_AFTER=$(saw "GUARD read as=after " "$HTTP_LOG")
+AFTER_HAS=$(saw "GUARD read as=after cookie=seen=1" "$HTTP_LOG")
+SAW_ENDED=$(saw "domicile: ended private browsing" "$ENGINE_LOG")
 # WebViewGuest's own line for a private guest. Diagnostic only.
 SAW_MADE=$(saw "domicile: made a private guest" "$ENGINE_LOG")
 
@@ -158,6 +162,7 @@ echo "shell=$SAW_SHELL set=$SAW_SET crash=$SAW_CRASH made-private=$SAW_MADE"
 echo "normal: read=$SAW_NORMAL has=$NORMAL_HAS"
 echo "private: read=$SAW_PRIVATE has=$PRIVATE_HAS"
 echo "window: listed=$SAW_WINDOW private=$WINDOW_PRIVATE read=$SAW_WINDOW_READ has=$WINDOW_HAS"
+echo "after: closed=$SAW_CLOSED ended=$SAW_ENDED read=$SAW_AFTER has=$AFTER_HAS"
 echo
 
 # The verdict. `scripts/test-webview-private-guard.sh` runs this block
@@ -215,13 +220,27 @@ elif [ "$WINDOW_HAS" != "1" ]; then
   FAILURE="the window's page does not have the setter's cookie, so the window \
 is not on the side it was opened on. Check DeskWindows::Make picks the \
 off-the-record profile for a private window"
+elif [ "$SAW_CLOSED" != "1" ] || [ "$SAW_AFTER" != "1" ]; then
+  FAILURE="the reader opened after every private page closed never loaded, \
+so whether private data outlives its pages was not measured. The shell closes \
+them once each page goes to #reported; see guard-webview-private.js"
+elif [ "$AFTER_HAS" = "1" ] && [ "$SAW_ENDED" != "1" ]; then
+  FAILURE="private browsing never ended after the last private page closed, \
+so a new private page still has the old cookie. Check WebViewGuest's \
+destructor reports PrivatePageClosed and DeskWindows' PrivatePages reaches \
+zero"
+elif [ "$AFTER_HAS" = "1" ]; then
+  FAILURE="private browsing ended, but a new private page still has the old \
+cookie, so it was made in the ending off-the-record profile. Check \
+DeskWindows::PrivateProfile finishes ending_private_profile_ first"
 elif [ "$NEGATIVE" = "1" ]; then
   PASSED="the control is sharp: a cookie set in an ordinary <webview> reaches \
 an ordinary reader and window and not a private reader, and the window is not \
 listed as private"
 else
   PASSED="a cookie set in a private <webview> reaches a private reader and a \
-private window, never an ordinary reader, and the window is listed as private"
+private window, never an ordinary reader, and is gone once every private page \
+closes; the window is listed as private"
 fi
 
 if [ -n "$PASSED" ]; then

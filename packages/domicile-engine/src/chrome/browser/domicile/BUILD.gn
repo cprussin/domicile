@@ -60,6 +60,10 @@ source_set("domicile") {
     # Installs the extensions the desk's config names into the profile.
     "//chrome/browser/extensions",
     "//chrome/browser/profiles:profile",
+    # Private browsing ends with the last private page: the off-the-record
+    # profile is destroyed through Chrome's ProfileDestroyer.
+    "//chrome/browser/profiles:profile_manager",
+    "//components/domicile:private_pages",
     "//chrome/common:constants",
     "//components/domicile:extension_installer",
     "//components/prefs",

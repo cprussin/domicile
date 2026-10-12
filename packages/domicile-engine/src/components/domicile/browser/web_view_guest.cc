@@ -641,6 +641,12 @@ std::unique_ptr<content::WebContents> WebViewGuest::MakeContents(
   // context, the user's cookies unless the guest is private. See the class
   // comment.
   content::BrowserContext* context = params.browser_context;
+  // The shell is never private, so an off-the-record page is a private one,
+  // whether asked for or opened by one.
+  if (context->IsOffTheRecord()) {
+    private_context_ = context;
+    Host().PrivatePageOpened(*context);
+  }
   params.guest_delegate = this;
   std::unique_ptr<content::WebContents> contents =
       content::WebContents::Create(params);
@@ -809,9 +815,13 @@ WebViewGuest::WebViewGuest(content::WebContents& shell,
 }
 
 // Destroys a browser window's WebContents first, while members still exist for
-// content's teardown callbacks. Member order would destroy it last.
+// content's teardown callbacks. Member order would destroy it last. A private
+// page is reported closed after, so private browsing never ends under it.
 WebViewGuest::~WebViewGuest() {
   owned_guest_contents_.reset();
+  if (private_context_) {
+    Host().PrivatePageClosed(*private_context_);
+  }
 }
 
 // static
