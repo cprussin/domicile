@@ -10,6 +10,7 @@ const BAR = {
   address: "https://example.com",
   canGoBack: false,
   canGoForward: false,
+  downloads: { count: 0, receivedBytes: 0, totalBytes: 0 },
   isPrivate: false,
   loading: false,
   loadProgress: 0,
@@ -132,6 +133,60 @@ describe("AddressBar", () => {
       render(<AddressBar {...BAR} />);
 
       expect(screen.queryByRole("progressbar")).toBeNull();
+    });
+  });
+
+  describe("the download indicator", () => {
+    it("says how far the page's download has come", () => {
+      render(
+        <AddressBar
+          {...BAR}
+          downloads={{ count: 1, receivedBytes: 456, totalBytes: 1000 }}
+        />,
+      );
+
+      const indicator = screen.getByRole("progressbar", {
+        name: "Downloading",
+      });
+      expect(indicator).toHaveAttribute("aria-valuenow", "45");
+      expect(indicator).toHaveTextContent("45%");
+    });
+
+    it("says how many files when there are several", () => {
+      render(
+        <AddressBar
+          {...BAR}
+          downloads={{ count: 3, receivedBytes: 10, totalBytes: 100 }}
+        />,
+      );
+
+      expect(
+        screen.getByRole("progressbar", { name: "Downloading 3 files" }),
+      ).toBeInTheDocument();
+    });
+
+    // A sum missing one size would read as nearly done when it is not.
+    it("claims no amount when a download's size is unknown", () => {
+      render(
+        <AddressBar
+          {...BAR}
+          downloads={{ count: 1, receivedBytes: 10, totalBytes: 0 }}
+        />,
+      );
+
+      const indicator = screen.getByRole("progressbar", {
+        name: "Downloading",
+      });
+      expect(indicator).not.toHaveAttribute("aria-valuenow");
+      expect(indicator.textContent).toBe("");
+    });
+
+    it("is gone when nothing is downloading", () => {
+      render(<AddressBar {...BAR} />);
+
+      expect(
+        screen.queryByRole("progressbar", { name: /Downloading/ }),
+      ).toBeNull();
     });
   });
 

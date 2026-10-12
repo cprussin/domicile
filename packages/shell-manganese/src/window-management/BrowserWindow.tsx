@@ -30,6 +30,7 @@ import { useSitePermissions } from "./browser/useSitePermissions";
 import { zoomedIn, zoomedOut } from "./browser/zoom-steps";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
+import { useDownloads } from "./useDownloads";
 import { useHistoryAvailability } from "./useHistoryAvailability";
 import { useLoading } from "./useLoading";
 import { useLoadProgress } from "./useLoadProgress";
@@ -232,6 +233,7 @@ export const BrowserWindow = ({
   const { canGoBack, canGoForward } = useHistoryAvailability(view);
   const loading = useLoading(view);
   const loadProgress = useLoadProgress(view);
+  const downloads = useDownloads(view);
   const zoom = useZoom(view);
   // A fullscreen page, such as a video, fills the window without its bar.
   const pageFullscreen = usePageFullscreen(view, fullscreen, onPageFullscreen);
@@ -538,6 +540,7 @@ export const BrowserWindow = ({
           address={address}
           canGoBack={canGoBack}
           canGoForward={canGoForward}
+          downloads={downloads}
           isPrivate={isPrivate}
           loading={loading}
           loadProgress={loadProgress}
