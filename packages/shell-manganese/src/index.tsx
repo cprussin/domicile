@@ -10,6 +10,8 @@ import type { ApplicationsOptions } from "./launcher/applications-config";
 import { applicationsConfigSchema } from "./launcher/applications-config";
 import { mountManganese } from "./mount-manganese";
 import type { TopBarLayout } from "./top-bar/layout";
+import type { FloatingOptions } from "./window-management/floating/floating-rules";
+import { floatingRulesSchema } from "./window-management/floating/floating-rules";
 
 import "./global.css";
 
@@ -60,6 +62,13 @@ export type ManganeseOptions = {
    */
   readonly applications?: ApplicationsOptions;
   /**
+   * Client windows that open floating at the size they drew, as sway's
+   * `for_window [app_id=…] floating enable`. Each rule matches regular
+   * expressions on the `app` id and `title`. Dialogs float without one. See
+   * `docs/WINDOW-MANAGEMENT.md`.
+   */
+  readonly floating?: FloatingOptions;
+  /**
    * Shell keybindings, below any the config binds. Defaults to
    * `DEFAULT_KEYBINDINGS` and `DEFAULT_MODES` (sway's, on Meta).
    */
@@ -70,10 +79,11 @@ export type ManganeseOptions = {
 
 /** Build a `Shell` that mounts manganese with `options`. */
 export const runManganese = (options: ManganeseOptions = {}): ShellModule => {
-  // Parsed when the config is built, so a bad bookmark fails it.
+  // Parsed when the config is built, so a bad bookmark or pattern fails it.
   const applications = applicationsConfigSchema.parse(options.applications);
+  const floating = floatingRulesSchema.parse(options.floating);
   return (root, domicile) => {
-    mountManganese(root, domicile, { ...options, applications });
+    mountManganese(root, domicile, { ...options, applications, floating });
   };
 };
 

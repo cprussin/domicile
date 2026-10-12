@@ -36,13 +36,13 @@ Each app the shell starts logs three `DEBUG` lines, in order:
 ```
 spawning client pid=1234 command=["kitty"] wayland_display="wayland-2"
 app client connected pid=Some(1234)
-toplevel mapped -> Host::app_appeared app_id=app-1
+toplevel drew -> app_appeared app_id=app-1
 ```
 
 - **spawn → connected:** the app's own startup (linking, caches, fontconfig,
   GL driver). The compositor is not involved.
-- **connected → mapped:** the Wayland exchange. A slow compositor shows up
-  here.
+- **connected → drew:** the Wayland exchange and the app's first frame. A
+  slow compositor shows up here.
 - Match lines by pid. Repeated launches can arrive out of order.
 - A slow first launch with fast later ones means a cold machine (page cache,
   fontconfig, Mesa shader cache). The time shows up in spawn → connected.

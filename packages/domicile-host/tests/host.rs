@@ -4,7 +4,7 @@
 //! changes back as `HostMessage`s. These tests need no Wayland or GPU.
 
 use domicile_host::ipc::apply_chrome_message;
-use domicile_host::{AppId, Host};
+use domicile_host::{AppId, Host, Mapped};
 use domicile_protocol::{
     Appearance, ChromeMessage, DisplayInfo, DisplayTransform, HostMessage, Theme, PROTOCOL_VERSION,
 };
@@ -14,10 +14,10 @@ use domicile_scene::KeyboardTarget;
 
 #[test]
 fn a_window_says_what_it_is_called_when_the_client_says_it() {
-    // A toplevel is announced before its first `set_title`, and a terminal
-    // retitles on every command, so title changes need their own message.
+    // A terminal retitles on every command, so title changes need their own
+    // message.
     let mut host = Host::new();
-    let (app, _) = host.app_appeared(None, None);
+    let app = drawn(&mut host);
 
     assert_eq!(
         host.app_titled(&app, Some("a terminal".to_string())),
@@ -33,7 +33,9 @@ fn a_window_says_what_it_is_called_when_the_client_says_it() {
             app_id: app.clone(),
             title: Some("a terminal".to_string()),
             desktop_id: None,
-            size: None,
+            size: SIZE,
+            dialog: false,
+            client_frame: false,
         })
     );
     // An unchanged title sends nothing.
@@ -44,10 +46,10 @@ fn a_window_says_what_it_is_called_when_the_client_says_it() {
 
 #[test]
 fn a_window_says_which_desktop_entry_it_is_when_the_client_says_it() {
-    // `set_app_id` comes after the toplevel, like `set_title`, and a shell
-    // reads it to find the app's icon.
+    // A client may change it after drawing, and a shell reads it to find the
+    // app's icon.
     let mut host = Host::new();
-    let (app, _) = host.app_appeared(None, None);
+    let app = drawn(&mut host);
 
     assert_eq!(
         host.app_desktop_id(&app, "org.gnome.Nautilus".to_string()),
@@ -63,7 +65,9 @@ fn a_window_says_which_desktop_entry_it_is_when_the_client_says_it() {
             app_id: app.clone(),
             title: None,
             desktop_id: Some("org.gnome.Nautilus".to_string()),
-            size: None,
+            size: SIZE,
+            dialog: false,
+            client_frame: false,
         })
     );
     // An unchanged id sends nothing.
@@ -76,43 +80,104 @@ fn a_window_says_which_desktop_entry_it_is_when_the_client_says_it() {
 }
 
 #[test]
-fn a_client_that_has_not_committed_is_announced_with_no_size() {
-    // A toplevel maps before its first buffer commit, so it has no size yet.
-    // A `0x0` size would make the chrome open a window with no box, which is
-    // never composited. The size arrives with the following `app_resized`.
+fn a_window_is_announced_when_it_first_draws_with_what_its_client_said_before() {
+    // A client sets its title, app id and limits before its first frame. The
+    // shell places a window once, so it needs them in the announcement.
     let mut host = Host::new();
-    let (app, announce) = host.app_appeared(None, None);
-    let announced = |size| HostMessage::AppAppeared {
-        app_id: app.clone(),
-        title: None,
-        desktop_id: None,
-        size,
-    };
+    let app = host.app_created();
 
-    assert_eq!(announce, announced(None));
-    assert_eq!(host.open_apps().first(), Some(&announced(None)));
-
-    host.app_resized(&app, (640.0, 480.0));
-
+    assert_eq!(host.app_titled(&app, Some("pinentry".to_string())), None);
+    assert_eq!(host.app_desktop_id(&app, "pinentry-qt".to_string()), None);
+    assert_eq!(host.app_min_size(&app, (300.0, 0.0)), None);
+    assert_eq!(host.app_resized(&app, SIZE.into()), None);
     assert_eq!(
-        host.open_apps().first(),
-        Some(&announced(Some([640.0, 480.0])))
+        host.open_apps(),
+        vec![HostMessage::FocusChanged { app_id: None }],
+        "a reloaded chrome is not told about a window that has not drawn"
     );
+
+    let announced = vec![
+        HostMessage::AppAppeared {
+            app_id: app.clone(),
+            title: Some("pinentry".to_string()),
+            desktop_id: Some("pinentry-qt".to_string()),
+            size: SIZE,
+            dialog: false,
+            client_frame: true,
+        },
+        HostMessage::AppMinSize {
+            app_id: app.clone(),
+            size: [300.0, 0.0],
+        },
+    ];
+    assert_eq!(
+        host.app_mapped(
+            &app,
+            Mapped {
+                client_frame: true,
+                ..mapped()
+            }
+        ),
+        announced
+    );
+    assert_eq!(host.app_mapped(&app, mapped()), vec![], "announced once");
+    assert_eq!(host.app_mapped("app-nowhere", mapped()), vec![]);
+}
+
+#[test]
+fn a_window_with_a_parent_or_a_fixed_size_is_a_dialog() {
+    let dialog = |limits: ((f64, f64), (f64, f64)), hints: Mapped| {
+        let mut host = Host::new();
+        let app = host.app_created();
+        host.app_min_size(&app, limits.0);
+        host.app_max_size(&app, limits.1);
+        match host.app_mapped(&app, hints).first() {
+            Some(HostMessage::AppAppeared { dialog, .. }) => *dialog,
+            other => panic!("expected AppAppeared, got {other:?}"),
+        }
+    };
+    let free = ((0.0, 0.0), (0.0, 0.0));
+
+    assert!(!dialog(free, mapped()));
+    assert!(dialog(
+        free,
+        Mapped {
+            has_parent: true,
+            ..mapped()
+        }
+    ));
+    // Fixed on one axis, as sway reads it.
+    assert!(dialog(((300.0, 200.0), (300.0, 0.0)), mapped()));
+    // A minimum alone is a window that cannot shrink, not a dialog.
+    assert!(!dialog(((300.0, 200.0), (0.0, 0.0)), mapped()));
+    // A minimum on one axis only says nothing about the other.
+    assert!(!dialog(((300.0, 0.0), (300.0, 0.0)), mapped()));
+}
+
+#[test]
+fn a_window_that_has_not_drawn_is_never_mentioned_to_the_chromes() {
+    // The chromes have not heard of it.
+    let mut host = Host::new();
+    let app = host.app_created();
+
+    assert_eq!(host.focus_requested(&app), None);
+    assert_eq!(host.popup_placed(&app, (0.0, 0.0), (1.0, 1.0), false), None);
+    assert_eq!(host.app_closed(&app), None, "nor hear that it closed");
+    assert_eq!(host.app_mapped(&app, mapped()), vec![], "it is gone");
 }
 
 #[test]
 fn a_chrome_that_arrives_late_is_told_about_every_window_already_open() {
-    // `app_appeared` is sent once, when the client maps. A chrome that
-    // connects later, or reloads, learns about existing windows only from
-    // this replay.
+    // `app_appeared` is sent once, when the client first draws. A chrome
+    // that connects later, or reloads, learns about existing windows only
+    // from this replay.
     let mut host = Host::new();
-    let (first, _) = host.app_appeared(Some("a terminal".to_string()), Some((640.0, 480.0)));
-    let (second, _) = host.app_appeared(None, Some((100.0, 200.0)));
+    let first = drawn(&mut host);
+    host.app_titled(&first, Some("a terminal".to_string()));
+    let second = drawn(&mut host);
     // Enough apps that hash map order almost surely differs from arrival
     // order. With two, an unordered implementation passes half the time.
-    let rest: Vec<AppId> = (0..10)
-        .map(|n| host.app_appeared(None, Some((f64::from(n), 0.0))).0)
-        .collect();
+    let rest: Vec<AppId> = (0..10).map(|_| drawn(&mut host)).collect();
 
     let announcements = host.open_apps();
 
@@ -123,26 +188,28 @@ fn a_chrome_that_arrives_late_is_told_about_every_window_already_open() {
             app_id: first,
             title: Some("a terminal".to_string()),
             desktop_id: None,
-            size: Some([640.0, 480.0]),
+            size: SIZE,
+            dialog: false,
+            client_frame: false,
         },
         HostMessage::AppAppeared {
             app_id: second,
             title: None,
             desktop_id: None,
-            size: Some([100.0, 200.0]),
+            size: SIZE,
+            dialog: false,
+            client_frame: false,
         },
     ]
     .into_iter()
-    .chain(
-        rest.into_iter()
-            .enumerate()
-            .map(|(n, app_id)| HostMessage::AppAppeared {
-                app_id,
-                title: None,
-                desktop_id: None,
-                size: Some([n as f64, 0.0]),
-            }),
-    )
+    .chain(rest.into_iter().map(|app_id| HostMessage::AppAppeared {
+        app_id,
+        title: None,
+        desktop_id: None,
+        size: SIZE,
+        dialog: false,
+        client_frame: false,
+    }))
     // Then the focus holder: the chrome, since no app has focus.
     .chain(std::iter::once(HostMessage::FocusChanged { app_id: None }))
     .collect();
@@ -157,7 +224,7 @@ fn focus_is_reported_when_it_moves_and_not_when_it_does_not() {
     // `focus_change` runs after every chrome message, so it reports only
     // actual changes. Otherwise every mouse move would send a message.
     let mut host = Host::new();
-    let (app, _) = host.app_appeared(None, Some((100.0, 100.0)));
+    let app = drawn(&mut host);
 
     host.handle_chrome_message(ChromeMessage::FocusApp {
         app_id: app.clone(),
@@ -177,7 +244,7 @@ fn focus_is_reported_when_it_moves_and_not_when_it_does_not() {
 fn the_keyboard_coming_back_to_the_chrome_is_reported_too() {
     // The chrome cannot infer this case, so it must be reported.
     let mut host = Host::new();
-    let (app, _) = host.app_appeared(None, Some((100.0, 100.0)));
+    let app = drawn(&mut host);
     host.handle_chrome_message(ChromeMessage::FocusApp {
         app_id: app.clone(),
     })
@@ -199,8 +266,8 @@ fn a_client_asking_for_the_keyboard_is_a_question_rather_than_a_move() {
     // the keyboard alone, so a shell can refuse a window that would interrupt
     // typing.
     let mut host = Host::new();
-    let (asking, _) = host.app_appeared(None, None);
-    let (typing, _) = host.app_appeared(None, None);
+    let asking = drawn(&mut host);
+    let typing = drawn(&mut host);
     host.handle_chrome_message(ChromeMessage::FocusApp {
         app_id: typing.clone(),
     })
@@ -239,7 +306,7 @@ fn a_focused_window_closing_hands_the_keyboard_back_and_says_so() {
     // The client may have crashed. Without a focus message the chrome would
     // keep marking the closed app active.
     let mut host = Host::new();
-    let (app, _) = host.app_appeared(None, Some((100.0, 100.0)));
+    let app = drawn(&mut host);
     host.handle_chrome_message(ChromeMessage::FocusApp {
         app_id: app.clone(),
     })
@@ -258,7 +325,7 @@ fn a_focused_window_closing_hands_the_keyboard_back_and_says_so() {
 fn a_chrome_that_arrives_late_is_told_who_has_the_keyboard() {
     // A newly loaded page has no other way to learn the focus holder.
     let mut host = Host::new();
-    let (app, _) = host.app_appeared(None, Some((100.0, 100.0)));
+    let app = drawn(&mut host);
     host.handle_chrome_message(ChromeMessage::FocusApp {
         app_id: app.clone(),
     })
@@ -282,31 +349,16 @@ fn a_chrome_that_arrives_late_is_told_who_has_the_keyboard() {
 }
 
 #[test]
-fn app_appeared_assigns_ids_and_announces_to_chrome() {
+fn each_window_gets_its_own_id() {
     let mut host = Host::new();
-    let (id1, msg1) = host.app_appeared(Some("Terminal".into()), Some((640.0, 480.0)));
-    let (id2, _) = host.app_appeared(None, Some((800.0, 600.0)));
 
-    assert_ne!(id1, id2, "each app gets a distinct id");
-    match msg1 {
-        HostMessage::AppAppeared {
-            app_id,
-            title,
-            desktop_id: None,
-            size,
-        } => {
-            assert_eq!(app_id, id1);
-            assert_eq!(title.as_deref(), Some("Terminal"));
-            assert_eq!(size, Some([640.0, 480.0]));
-        }
-        other => panic!("expected AppAppeared, got {other:?}"),
-    }
+    assert_ne!(host.app_created(), host.app_created());
 }
 
 #[test]
 fn a_popup_is_announced_as_its_own_app_over_its_window() {
     let mut host = Host::new();
-    let (window, _) = host.app_appeared(None, None);
+    let window = drawn(&mut host);
 
     let (popup, placed) = host
         .popup_placed(&window, (12.0, 30.0), (180.0, 240.0), true)
@@ -338,7 +390,7 @@ fn a_popup_is_announced_as_its_own_app_over_its_window() {
 #[test]
 fn a_popup_moved_is_placed_again_and_closed_like_a_window() {
     let mut host = Host::new();
-    let (window, _) = host.app_appeared(None, None);
+    let window = drawn(&mut host);
     let (popup, _) = host
         .popup_placed(&window, (12.0, 30.0), (180.0, 240.0), false)
         .unwrap();
@@ -367,7 +419,7 @@ fn a_popup_moved_is_placed_again_and_closed_like_a_window() {
 #[test]
 fn a_reloaded_chrome_is_told_each_popup_after_what_it_is_over() {
     let mut host = Host::new();
-    let (window, _) = host.app_appeared(None, None);
+    let window = drawn(&mut host);
     let (menu, _) = host
         .popup_placed(&window, (0.0, 30.0), (180.0, 240.0), true)
         .unwrap();
@@ -391,7 +443,7 @@ fn a_reloaded_chrome_is_told_each_popup_after_what_it_is_over() {
 #[test]
 fn a_windows_size_limits_are_reported_when_they_change() {
     let mut host = Host::new();
-    let (id, _) = host.app_appeared(None, None);
+    let id = drawn(&mut host);
 
     assert_eq!(
         host.app_min_size(&id, (680.0, 500.0)),
@@ -412,7 +464,7 @@ fn a_windows_size_limits_are_reported_when_they_change() {
     );
     assert_eq!(host.app_max_size(&id, (1920.0, 0.0)), None);
     // Zero means no limit, which is the initial state.
-    let (fresh, _) = host.app_appeared(None, None);
+    let fresh = drawn(&mut host);
     assert_eq!(host.app_min_size(&fresh, (0.0, 0.0)), None);
     assert_eq!(host.app_min_size("app-nowhere", (1.0, 1.0)), None);
 }
@@ -420,8 +472,8 @@ fn a_windows_size_limits_are_reported_when_they_change() {
 #[test]
 fn a_reloaded_chrome_is_told_every_windows_size_limits() {
     let mut host = Host::new();
-    let (limited, _) = host.app_appeared(None, None);
-    let (free, _) = host.app_appeared(None, None);
+    let limited = drawn(&mut host);
+    let free = drawn(&mut host);
     host.app_min_size(&limited, (680.0, 500.0));
     host.app_max_size(&limited, (1000.0, 800.0));
 
@@ -465,7 +517,7 @@ fn a_reloaded_chrome_is_told_every_windows_size_limits() {
 #[test]
 fn resizing_and_closing_report_to_chrome() {
     let mut host = Host::new();
-    let (id, _) = host.app_appeared(None, Some((100.0, 100.0)));
+    let id = drawn(&mut host);
 
     match host.app_resized(&id, (200.0, 150.0)) {
         Some(HostMessage::AppResized { app_id, size }) => {
@@ -488,7 +540,7 @@ fn resizing_and_closing_report_to_chrome() {
 #[test]
 fn focus_routes_keyboard_between_app_and_chrome() {
     let mut host = Host::new();
-    let (id, _) = host.app_appeared(None, Some((100.0, 100.0)));
+    let id = drawn(&mut host);
 
     assert_eq!(host.keyboard_target(), KeyboardTarget::Chrome);
 
@@ -519,7 +571,7 @@ fn asking_a_client_to_close_leaves_the_window_where_it_is() {
     // up. Dropping the window here would remove its tab for good, since
     // `app_appeared` is sent once.
     let mut host = Host::new();
-    let (id, _) = host.app_appeared(None, Some((100.0, 100.0)));
+    let id = drawn(&mut host);
 
     host.handle_chrome_message(ChromeMessage::CloseApp { app_id: id.clone() })
         .unwrap();
@@ -651,4 +703,23 @@ fn lying_down(name: &str, position: [i32; 2], size: [u32; 2], scale: u32) -> Dis
         mode: size,
         transform: DisplayTransform::Normal,
     }
+}
+
+/// The size [`drawn`] windows draw at.
+const SIZE: [f64; 2] = [640.0, 480.0];
+
+/// What a plain window says when it first draws.
+fn mapped() -> Mapped {
+    Mapped {
+        size: SIZE.into(),
+        has_parent: false,
+        client_frame: false,
+    }
+}
+
+/// A window that has drawn its first frame, announced to the chromes.
+fn drawn(host: &mut Host) -> AppId {
+    let app = host.app_created();
+    host.app_mapped(&app, mapped());
+    app
 }

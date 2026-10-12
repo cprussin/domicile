@@ -222,10 +222,17 @@ Each entry in `domicile.windows` describes one client window.
   sends it to the client. Resize a window by styling its element. Set
   `resizing` on the element while the user drags an edge; see
   [ELEMENTS.md](/packages/chrome-sdk/docs/ELEMENTS.md).
-- **Drawn size:** `width` and `height` are the size the client drew at, `null`
-  until it draws. The engine already uses them for pointer mapping, so you
-  only need them for your own UI (`shell-simple` uses them to remove a
-  placeholder).
+- **Listed when drawn:** a window joins `windows` with its first frame, so
+  its title, `desktopId`, limits and hints are already set.
+- **Drawn size:** `width` and `height` are the size the client drew at. The
+  engine already uses them for pointer mapping, so you only need them for
+  your own UI, such as sizing a dialog.
+- **Dialogs:** `dialog` is `true` when the client gave the window a parent or
+  a fixed size, as sway reads them. `shell-manganese` floats such a window at
+  its drawn size.
+- **Client frames:** `clientFrame` is `true` when the client asked to draw its
+  own frame. `shell-manganese` leaves its title bar off such a window while it
+  floats.
 - **Limits:** `minWidth`, `minHeight`, `maxWidth` and `maxHeight` give the
   client's limits (`null` for none). Outside them, the client's frame is cut
   off or stretched. `shell-manganese` keeps floating windows within them.

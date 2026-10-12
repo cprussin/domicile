@@ -9,7 +9,7 @@ import { Axis, axisOf, isForward } from "../direction";
 import type { Rect } from "../rect";
 import { SURFACE_TUCK, TITLE_BAR } from "../rect";
 import type { LayoutNode } from "../tree/node";
-import { windowsIn } from "../tree/node";
+import { NodeKind, windowsIn } from "../tree/node";
 import type { Tiling } from "../tree/tiling";
 import { focusChainOf } from "../tree/tiling";
 import type { SizeLimit } from "../window";
@@ -20,6 +20,12 @@ import type { SizeLimit } from "../window";
  * It is also a {@link Tiling}, so tree commands work inside a floating group.
  */
 export type Float = {
+  /**
+   * Whether it opened as a dialog whose client draws its own frame, so the
+   * shell draws no title bar while it holds that one window. See
+   * {@link isBare}.
+   */
+  bare: boolean;
   /** How far down its tree the commands point. See `Tiling`. */
   depth: number;
   height: number;
@@ -71,6 +77,7 @@ export const floatFor = (
   floating: number,
   screen: Pick<Rect, "height" | "width">,
 ): Float => ({
+  bare: false,
   depth: focusChainOf(root).length,
   height: fitted(OPENS_AT.height, screen.height, SMALLEST.height),
   root,
@@ -89,6 +96,7 @@ export const scratchpadFloatFor = (
   root: LayoutNode,
   screen: Pick<Rect, "height" | "width">,
 ): Float => ({
+  bare: false,
   depth: focusChainOf(root).length,
   height: Math.max(SMALLEST.height, screen.height - ORIGIN),
   root,
@@ -116,6 +124,34 @@ export const floatAskedFor = (
     height === 0 ? float.height : height,
   );
 };
+
+/**
+ * A box of exactly `width` by `height` in the middle of `screen`, for a
+ * dialog at the size its client drew. Its corner stays on the screen.
+ */
+export const floatCenteredFor = (
+  root: LayoutNode,
+  screen: Pick<Rect, "height" | "width">,
+  width: number,
+  height: number,
+  bare: boolean,
+): Float => ({
+  bare,
+  depth: focusChainOf(root).length,
+  height,
+  root,
+  scratchpad: false,
+  width,
+  x: Math.max(0, Math.round((screen.width - width) / 2)),
+  y: Math.max(0, Math.round((screen.height - height) / 2)),
+});
+
+/**
+ * Whether the box draws no title bar: it opened {@link Float.bare} and still
+ * holds only its own window.
+ */
+export const isBare = (float: Float): boolean =>
+  float.bare && float.root.kind === NodeKind.Window;
 
 /**
  * The box with its tree changed by `into`.
@@ -151,11 +187,12 @@ export const floatHolds = (float: Float, id: string): boolean =>
 const SMALLEST = { height: 120, width: 240 };
 
 /** How much of a float's height is not its client's. See `surfaceOf`. */
-const BAR_OVER_SURFACE = TITLE_BAR - SURFACE_TUCK;
+const barOver = (float: Float): number =>
+  isBare(float) ? 0 : TITLE_BAR - SURFACE_TUCK;
 
 /**
  * The box with its contents clamped to the client's `min` and `max` size,
- * plus the title bar.
+ * plus the title bar unless it is bare.
  *
  * Without this, the client's frame would not fill the box. An edge unchanged
  * since `before` stays put, so a window resized from the left stops at its
@@ -176,8 +213,8 @@ export const limitedTo = (
   const down = spanLimited(
     { size: float.height, start: float.y },
     before === undefined ? undefined : { size: before.height, start: before.y },
-    minHeight === undefined ? undefined : minHeight + BAR_OVER_SURFACE,
-    maxHeight === undefined ? undefined : maxHeight + BAR_OVER_SURFACE,
+    minHeight === undefined ? undefined : minHeight + barOver(float),
+    maxHeight === undefined ? undefined : maxHeight + barOver(float),
   );
   return across.size === float.width &&
     across.start === float.x &&

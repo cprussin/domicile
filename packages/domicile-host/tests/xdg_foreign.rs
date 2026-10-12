@@ -85,8 +85,8 @@ fn an_unexported_handle_names_nothing_and_leaves_other_exports() {
 #[test]
 fn a_closed_window_takes_its_exports_with_it() {
     let mut host = Host::new();
-    let (closed, _) = host.app_appeared(None, None);
-    let (open, _) = host.app_appeared(None, None);
+    let closed = host.app_created();
+    let open = host.app_created();
     let first = host.exports_mut().export(Some(closed.clone()));
     let second = host.exports_mut().export(Some(closed.clone()));
     let other = host.exports_mut().export(Some(open.clone()));

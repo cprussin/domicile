@@ -10,6 +10,7 @@ import type { Axis, Direction } from "./direction";
 import type { Float } from "./floating/float";
 import {
   floatAskedFor,
+  floatCenteredFor,
   floatFor,
   floatHolds,
   grown,
@@ -316,6 +317,29 @@ export const openedFloating = (
           width,
           height,
         ),
+      ],
+    },
+    id,
+  );
+
+/**
+ * Opens a window as the focused front float of exactly `width` by `height`,
+ * in the middle of `screen` (see `floatCenteredFor`).
+ */
+export const openedCentered = (
+  workspace: Workspace,
+  id: string,
+  screen: Rect,
+  width: number,
+  height: number,
+  bare: boolean,
+): Workspace =>
+  floatFocused(
+    {
+      ...workspace,
+      floats: [
+        ...workspace.floats,
+        floatCenteredFor(Node.Window(id), screen, width, height, bare),
       ],
     },
     id,

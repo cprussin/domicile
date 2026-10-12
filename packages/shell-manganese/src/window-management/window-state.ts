@@ -17,6 +17,7 @@ import type { Float } from "./floating/float";
 import { floatHolds, limitedTo, movedTo } from "./floating/float";
 import type { Popup } from "./popup";
 import type { Rect } from "./rect";
+import { SURFACE_TUCK, TITLE_BAR } from "./rect";
 import type { Layout } from "./tree/node";
 import { windowsIn } from "./tree/node";
 import type { NodeRef } from "./tree/path";
@@ -55,6 +56,7 @@ import {
   nodeTiledIn,
   nodeTraded,
   opened,
+  openedCentered,
   openedFloating,
   pageFullscreened,
   parentFocused,
@@ -307,6 +309,7 @@ export const activeIsPrivate = (state: WindowState): boolean => {
 
 export enum WindowActionKind {
   AppAppeared,
+  AppAppearedFloating,
   AppClosed,
   AppCursorChanged,
   AppDesktopIdChanged,
@@ -376,6 +379,23 @@ export const WindowAction = {
   AppAppeared: (appId: string, title: string | undefined) => ({
     appId,
     kind: WindowActionKind.AppAppeared as const,
+    title,
+  }),
+
+  /**
+   * The host announced a Wayland client that opens floating, at the `size` it
+   * drew. `bare` drops the title bar for a client that draws its own frame.
+   */
+  AppAppearedFloating: (
+    appId: string,
+    title: string | undefined,
+    size: readonly [width: number, height: number],
+    bare: boolean,
+  ) => ({
+    appId,
+    bare,
+    kind: WindowActionKind.AppAppearedFloating as const,
+    size,
     title,
   }),
 
@@ -901,6 +921,9 @@ const reduceAction = (
     case WindowActionKind.AppAppeared: {
       return openApp(state, action.appId, action.title);
     }
+    case WindowActionKind.AppAppearedFloating: {
+      return openFloatingApp(state, action);
+    }
     case WindowActionKind.AppClosed: {
       // Popups and windows share one id space without overlap.
       return state.popups.some(({ appId }) => appId === action.appId)
@@ -1281,6 +1304,36 @@ const openApp = (
   const window = Window.App(appId, title ?? appId);
   return windowOf(state, window.id) === undefined
     ? openWindow(state, window)
+    : state;
+};
+
+/**
+ * Opens a client floating in the middle of the screen, its contents at the
+ * size it drew, as sway opens a dialog.
+ */
+const openFloatingApp = (
+  state: WindowState,
+  {
+    appId,
+    bare,
+    size: [width, height],
+    title,
+  }: ReturnType<typeof WindowAction.AppAppearedFloating>,
+): WindowState => {
+  const window = Window.App(appId, title ?? appId);
+  return windowOf(state, window.id) === undefined
+    ? onCurrent(
+        { ...state, windows: [...state.windows, window] },
+        (workspace) =>
+          openedCentered(
+            workspace,
+            window.id,
+            screenHere(state),
+            width,
+            bare ? height : height + TITLE_BAR - SURFACE_TUCK,
+            bare,
+          ),
+      )
     : state;
 };
 

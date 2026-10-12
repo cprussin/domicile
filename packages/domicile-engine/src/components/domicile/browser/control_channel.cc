@@ -701,17 +701,17 @@ void ControlChannel::DispatchLine(const std::string& line) {
       return;
     }
     const std::string* title = message.FindString("title");
-    // Null until the client sets one, like the title.
+    // Null when the client set none, like the title.
     const std::string* desktop_id = message.FindString("desktop_id");
-    // Size is absent until the client has committed a buffer. Passing a zero
-    // as though it were a size is what opened windows at nothing at all, so
-    // absence is carried rather than flattened.
     const base::ListValue* size = message.FindList("size");
-    const bool has_size = size && size->size() == 2u;
-    client_->AppAppeared(*app_id, title ? *title : std::string(),
-                         desktop_id ? *desktop_id : std::string(), has_size,
-                         has_size ? Number((*size)[0]) : 0.0,
-                         has_size ? Number((*size)[1]) : 0.0);
+    const std::optional<bool> dialog = message.FindBool("dialog");
+    const std::optional<bool> client_frame = message.FindBool("client_frame");
+    if (size && size->size() == 2u && dialog && client_frame) {
+      client_->AppAppeared(*app_id, title ? *title : std::string(),
+                           desktop_id ? *desktop_id : std::string(),
+                           Number((*size)[0]), Number((*size)[1]), *dialog,
+                           *client_frame);
+    }
     return;
   }
 

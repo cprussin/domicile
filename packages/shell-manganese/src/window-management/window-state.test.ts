@@ -330,6 +330,56 @@ describe("the browser windows the engine lists", () => {
   });
 });
 
+// A dialog, such as pinentry, or a window a floating rule names.
+describe("the clients that open floating", () => {
+  const floatOf = (state: WindowState) => {
+    const [float] = workspaceHere(state).floats;
+    if (float === undefined) {
+      throw new Error("nothing is floating");
+    } else {
+      return float;
+    }
+  };
+
+  it("opens one floating in the middle of the screen, at the size it drew", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.ScreensDescribed(sideBySide("left")),
+      WindowAction.AppAppearedFloating("pin", "pinentry", [400, 300], false),
+    );
+
+    expect(activeIdOf(state)).toBe(APP("pin"));
+    expect(windowsOf(workspaceHere(state).tiling)).toEqual([APP("kitty")]);
+    // The title bar goes on top of the size the client drew.
+    const height = 300 + TITLE_BAR - SURFACE_TUCK;
+    expect(floatOf(state)).toMatchObject({
+      bare: false,
+      height,
+      width: 400,
+      x: 760,
+      y: Math.round((1080 - height) / 2),
+    });
+  });
+
+  it("opens one that draws its own frame at that size alone, limits and all", () => {
+    const state = reduce(
+      desktop("kitty"),
+      WindowAction.ScreensDescribed(sideBySide("left")),
+      WindowAction.AppAppearedFloating("huddle", "Huddle", [400, 300], true),
+      WindowAction.AppMinSize("huddle", [400, 300]),
+      WindowAction.AppMaxSize("huddle", [400, 300]),
+    );
+
+    expect(floatOf(state)).toMatchObject({
+      bare: true,
+      height: 300,
+      width: 400,
+      x: 760,
+      y: 390,
+    });
+  });
+});
+
 // `chrome.windows.create` with a popup (such as Bitwarden's "Unlock"), opened
 // as a browser window owned by the extension.
 describe("the windows an extension asks for", () => {
