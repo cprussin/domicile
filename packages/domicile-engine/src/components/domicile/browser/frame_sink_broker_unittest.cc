@@ -253,6 +253,7 @@ class FrameSinkBrokerTest : public testing::Test {
         base::BindRepeating(&FrameSinkBrokerTest::RecordClipboard,
                             base::Unretained(this)),
         base::BindRepeating(&FrameSinkBrokerTest::CaptureTarget));
+    page_ = broker_->NewEmbedRequester();
   }
 
   // Fake for the browser's windows: display 7's window is the page's.
@@ -300,6 +301,8 @@ class FrameSinkBrokerTest : public testing::Test {
   std::unique_ptr<viz::HostFrameSinkManager> host_frame_sink_manager_;
   std::unique_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_;
   std::unique_ptr<FrameSinkBroker> broker_;
+  // The page whose embeds tests send to the broker directly.
+  uint64_t page_ = 0;
   // Set by DriveBeginFrames.
   std::optional<viz::FakeExternalBeginFrameSource> begin_frame_source_;
 };
@@ -415,7 +418,7 @@ TEST_F(FrameSinkBrokerTest, EmbedAnswersWithTheBrokeredFrameSinkId) {
   RunUntilIdle();
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
-  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+  broker()->Embed(page_, kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
                   kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
 
   EXPECT_EQ(frame_sink_id, embedded.Get());
@@ -427,7 +430,7 @@ TEST_F(FrameSinkBrokerTest, EmbedWaitsForAProducer) {
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
-  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+  broker()->Embed(page_, kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
                   kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
   RunUntilIdle();
   EXPECT_FALSE(embedded.IsReady());
@@ -573,7 +576,7 @@ TEST_F(FrameSinkBrokerTest, AnEmbedWithATokenFromADisconnectedSinkIsRefused) {
   mojo::Remote<viz::mojom::CompositorFrameSink> old_sink;
   BrokerASink(*old_producer, old_client, old_sink, mojo::NullRemote());
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> first;
-  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+  broker()->Embed(page_, kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
                   kEmbeddedSize, kEmbeddedScale, first.GetCallback());
   ASSERT_TRUE(first.Get().has_value());
   old_producer.reset();
@@ -588,7 +591,7 @@ TEST_F(FrameSinkBrokerTest, AnEmbedWithATokenFromADisconnectedSinkIsRefused) {
 
   // The same allocator, so the same embed token.
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> stale;
-  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+  broker()->Embed(page_, kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
                   kEmbeddedSize, kEmbeddedScale, stale.GetCallback());
 
   ASSERT_TRUE(stale.IsReady());
@@ -619,10 +622,10 @@ TEST_F(FrameSinkBrokerTest, EachAppEmbedsItsOwnSurface) {
   RunUntilIdle();
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> for_terminal;
-  broker()->Embed("terminal", kPageFrameSinkId, AllocateLocalSurfaceId(),
+  broker()->Embed(page_, "terminal", kPageFrameSinkId, AllocateLocalSurfaceId(),
                   kEmbeddedSize, kEmbeddedScale, for_terminal.GetCallback());
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> for_editor;
-  broker()->Embed("editor", kPageFrameSinkId, AllocateLocalSurfaceId(),
+  broker()->Embed(page_, "editor", kPageFrameSinkId, AllocateLocalSurfaceId(),
                   kEmbeddedSize, kEmbeddedScale, for_editor.GetCallback());
 
   EXPECT_EQ(terminal.Get(), for_terminal.Get());
@@ -638,7 +641,7 @@ TEST_F(FrameSinkBrokerTest, AWaitingEmbedTakesOnlyItsOwnApp) {
   broker()->Bind(remote.BindNewPipeAndPassReceiver());
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> for_editor;
-  broker()->Embed("editor", kPageFrameSinkId, AllocateLocalSurfaceId(),
+  broker()->Embed(page_, "editor", kPageFrameSinkId, AllocateLocalSurfaceId(),
                   kEmbeddedSize, kEmbeddedScale, for_editor.GetCallback());
   RunUntilIdle();
 
@@ -664,6 +667,41 @@ TEST_F(FrameSinkBrokerTest, AWaitingEmbedTakesOnlyItsOwnApp) {
   EXPECT_EQ(editor.Get(), for_editor.Get());
 }
 
+// A waiting embed is dropped when its page disconnects, as when the renderer
+// goes away. Its app may never connect, and if it does, the embed must not
+// reach the producer. Another page's embed of the same app still waits.
+TEST_F(FrameSinkBrokerTest, AWaitingEmbedIsDroppedWithItsPage) {
+  ExternalSurfaceProvider provider(broker());
+  mojo::Remote<mojom::ExternalSurfaceProvider> gone_page;
+  provider.Bind(gone_page.BindNewPipeAndPassReceiver(),
+                kPageFrameSinkId.client_id());
+  mojo::Remote<mojom::ExternalSurfaceProvider> kept_page;
+  provider.Bind(kept_page.BindNewPipeAndPassReceiver(),
+                kPageFrameSinkId.client_id());
+
+  gone_page->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+                   kEmbeddedSize, kEmbeddedScale, base::DoNothing());
+  const viz::LocalSurfaceId kept_surface = AllocateLocalSurfaceId();
+  base::test::TestFuture<const std::optional<viz::FrameSinkId>&> kept;
+  kept_page->Embed(kTestApp, kPageFrameSinkId, kept_surface, kEmbeddedSize,
+                   kEmbeddedScale, kept.GetCallback());
+  RunUntilIdle();
+  gone_page.reset();
+  RunUntilIdle();
+
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  FakeSurfaceObserver observer;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, observer.BindRemote());
+
+  EXPECT_EQ(frame_sink_id, kept.Get());
+  RunUntilIdle();
+  EXPECT_THAT(observer.told_, testing::ElementsAre(kept_surface));
+}
+
 // The producer learns the embedder's LocalSurfaceId, since only the embedder
 // can mint its embed_token.
 TEST_F(FrameSinkBrokerTest, EmbedTellsTheProducerWhichSurfaceToSubmitTo) {
@@ -678,7 +716,7 @@ TEST_F(FrameSinkBrokerTest, EmbedTellsTheProducerWhichSurfaceToSubmitTo) {
 
   const viz::LocalSurfaceId local_surface_id = AllocateLocalSurfaceId();
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
-  broker()->Embed(kTestApp, kPageFrameSinkId, local_surface_id,
+  broker()->Embed(page_, kTestApp, kPageFrameSinkId, local_surface_id,
                   kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
 
   EXPECT_EQ(local_surface_id, observer.embedded_.Get<viz::LocalSurfaceId>());
@@ -704,7 +742,7 @@ TEST_F(FrameSinkBrokerTest, AnOlderSurfaceArrivingLateIsNotPassedOn) {
   const viz::LocalSurfaceId newer = AllocateLocalSurfaceId();
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> for_newer;
-  broker()->Embed(kTestApp, kPageFrameSinkId, newer, kEmbeddedSize,
+  broker()->Embed(page_, kTestApp, kPageFrameSinkId, newer, kEmbeddedSize,
                   kEmbeddedScale, for_newer.GetCallback());
   ASSERT_TRUE(for_newer.Wait());
   RunUntilIdle();
@@ -714,7 +752,7 @@ TEST_F(FrameSinkBrokerTest, AnOlderSurfaceArrivingLateIsNotPassedOn) {
 
   // The late embed is still answered: the element needs a FrameSinkId.
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> for_older;
-  broker()->Embed(kTestApp, kPageFrameSinkId, older, kEmbeddedSize,
+  broker()->Embed(page_, kTestApp, kPageFrameSinkId, older, kEmbeddedSize,
                   kEmbeddedScale, for_older.GetCallback());
   ASSERT_TRUE(for_older.Wait());
   RunUntilIdle();
@@ -741,7 +779,7 @@ TEST_F(FrameSinkBrokerTest, EmbedRegistersTheHierarchyUnderThePage) {
   ASSERT_FALSE(VizHasHierarchy(kPageFrameSinkId, frame_sink_id));
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
-  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+  broker()->Embed(page_, kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
                   kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
   ASSERT_TRUE(embedded.Wait());
   RunUntilIdle();
@@ -759,7 +797,7 @@ TEST_F(FrameSinkBrokerTest, AnEmbeddedWindowAsksForNoBeginFrames) {
   BrokerABrowserHeldSink(remote, observer.BindRemote());
 
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
-  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+  broker()->Embed(page_, kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
                   kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
   ASSERT_TRUE(embedded.Wait());
   RunUntilIdle();
@@ -779,7 +817,7 @@ TEST_F(FrameSinkBrokerTest, ABeginFrameWithNothingToDrawIsAnswered) {
   const viz::FrameSinkId frame_sink_id =
       BrokerABrowserHeldSink(remote, observer.BindRemote());
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
-  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+  broker()->Embed(page_, kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
                   kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
   ASSERT_TRUE(embedded.Wait());
   RunUntilIdle();
@@ -806,7 +844,7 @@ TEST_F(FrameSinkBrokerTest, DestroyingTheSinkUnregistersTheHierarchy) {
   const viz::FrameSinkId frame_sink_id =
       BrokerASink(remote, sink_client, sink, mojo::NullRemote());
   base::test::TestFuture<const std::optional<viz::FrameSinkId>&> embedded;
-  broker()->Embed(kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
+  broker()->Embed(page_, kTestApp, kPageFrameSinkId, AllocateLocalSurfaceId(),
                   kEmbeddedSize, kEmbeddedScale, embedded.GetCallback());
   ASSERT_TRUE(embedded.Wait());
   RunUntilIdle();

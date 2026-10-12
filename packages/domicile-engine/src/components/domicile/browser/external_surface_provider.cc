@@ -5,6 +5,7 @@
 
 #include <utility>
 
+#include "base/functional/bind.h"
 #include "components/domicile/browser/frame_sink_broker.h"
 
 namespace domicile {
@@ -12,6 +13,9 @@ namespace domicile {
 ExternalSurfaceProvider::ExternalSurfaceProvider(FrameSinkBroker* broker)
     : broker_(broker) {
   CHECK(broker);
+  // Unretained: `receivers_` is a member, so the handler cannot outlive this.
+  receivers_.set_disconnect_handler(base::BindRepeating(
+      &ExternalSurfaceProvider::OnPageDisconnected, base::Unretained(this)));
 }
 
 ExternalSurfaceProvider::~ExternalSurfaceProvider() = default;
@@ -19,7 +23,8 @@ ExternalSurfaceProvider::~ExternalSurfaceProvider() = default;
 void ExternalSurfaceProvider::Bind(
     mojo::PendingReceiver<mojom::ExternalSurfaceProvider> receiver,
     uint32_t renderer_client_id) {
-  receivers_.Add(this, std::move(receiver), renderer_client_id);
+  receivers_.Add(this, std::move(receiver),
+                 Page{renderer_client_id, broker_->NewEmbedRequester()});
 }
 
 // The page only grants access here: it names its parent frame sink and
@@ -32,17 +37,24 @@ void ExternalSurfaceProvider::Embed(
     const gfx::Size& size,
     double scale,
     EmbedCallback callback) {
-  if (parent_frame_sink_id.client_id() != receivers_.current_context()) {
+  const Page& page = receivers_.current_context();
+  if (parent_frame_sink_id.client_id() != page.renderer_client_id) {
     receivers_.ReportBadMessage("parent frame sink is not the renderer's");
   } else {
-    broker_->Embed(app_id, parent_frame_sink_id, local_surface_id, size, scale,
-                   std::move(callback));
+    broker_->Embed(page.requester, app_id, parent_frame_sink_id,
+                   local_surface_id, size, scale, std::move(callback));
   }
 }
 
 void ExternalSurfaceProvider::WaitForEnd(const viz::FrameSinkId& frame_sink_id,
                                          WaitForEndCallback callback) {
   broker_->WaitForEnd(frame_sink_id, std::move(callback));
+}
+
+// The element was collected or its renderer went away. Its pending replies
+// have nowhere to go.
+void ExternalSurfaceProvider::OnPageDisconnected() {
+  broker_->DropEmbeds(receivers_.current_context().requester);
 }
 
 }  // namespace domicile

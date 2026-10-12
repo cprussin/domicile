@@ -88,6 +88,10 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
 
   void Bind(mojo::PendingReceiver<mojom::FrameSinkBroker> receiver);
 
+  // A new id for a page that sends Embed, so its waiting embeds can be dropped
+  // with DropEmbeds. Never reused.
+  uint64_t NewEmbedRequester();
+
   // Embeds the surface for `app_id` under `parent_frame_sink_id`. Registers
   // the hierarchy, tells the producer its LocalSurfaceId, and runs `callback`
   // with the FrameSinkId.
@@ -101,12 +105,20 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   //
   // Runs `callback` with nullopt at once if the embed token was used on a sink
   // whose producer disconnected: viz would refuse it on the new sink.
-  void Embed(const std::string& app_id,
+  //
+  // `requester` is the page's id from NewEmbedRequester.
+  void Embed(uint64_t requester,
+             const std::string& app_id,
              const viz::FrameSinkId& parent_frame_sink_id,
              const viz::LocalSurfaceId& local_surface_id,
              const gfx::Size& size,
              double scale,
              EmbedCallback callback);
+
+  // Drops `requester`'s waiting embeds without running their callbacks. For a
+  // page that disconnected: its app may never connect, and an answer would
+  // embed the window under a page that is gone.
+  void DropEmbeds(uint64_t requester);
 
   // Runs `callback` once `frame_sink_id` is no longer brokered, with why. Runs
   // it at once if it is not brokered.
@@ -165,7 +177,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
  private:
   // A page's embed request waiting for its producer.
   struct PendingEmbed {
-    PendingEmbed(const std::string& app_id,
+    PendingEmbed(uint64_t requester,
+                 const std::string& app_id,
                  const viz::FrameSinkId& parent_frame_sink_id,
                  const viz::LocalSurfaceId& local_surface_id,
                  const gfx::Size& size,
@@ -175,6 +188,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
     PendingEmbed& operator=(PendingEmbed&&);
     ~PendingEmbed();
 
+    uint64_t requester;
     std::string app_id;
     viz::FrameSinkId parent_frame_sink_id;
     viz::LocalSurfaceId local_surface_id;
@@ -218,6 +232,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       frame_sink_map_;
 
   std::vector<PendingEmbed> pending_embeds_;
+  uint64_t next_embed_requester_ = 1;
 
   // WaitForEnd callbacks, by the brokered sink they wait on.
   base::flat_map<viz::FrameSinkId, std::vector<EndCallback>> end_waiters_;

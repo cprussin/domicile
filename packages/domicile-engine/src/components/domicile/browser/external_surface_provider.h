@@ -50,10 +50,20 @@ class ExternalSurfaceProvider : public mojom::ExternalSurfaceProvider {
                   WaitForEndCallback callback) override;
 
  private:
+  // One bound page.
+  struct Page {
+    // Its renderer's frame sink client id.
+    uint32_t renderer_client_id;
+    // Its id from FrameSinkBroker::NewEmbedRequester.
+    uint64_t requester;
+  };
+
+  // Drops the disconnected page's waiting embeds.
+  void OnPageDisconnected();
+
   const raw_ptr<FrameSinkBroker> broker_;
 
-  // Each receiver's context is its renderer's frame sink client id.
-  mojo::ReceiverSet<mojom::ExternalSurfaceProvider, uint32_t> receivers_;
+  mojo::ReceiverSet<mojom::ExternalSurfaceProvider, Page> receivers_;
 };
 
 }  // namespace domicile
