@@ -3,6 +3,15 @@
 
 use domicile_host::xdg_foreign::Exports;
 use domicile_host::Host;
+use domicile_protocol::Owner;
+
+/// A window's owner, for tests about anything else.
+const OWNER: Owner = Owner {
+    pid: 1,
+    uid: 1000,
+    gid: 1000,
+    pidfd_inode: None,
+};
 
 fn parent_window(handle: &str) -> String {
     format!("wayland:{handle}")
@@ -85,8 +94,8 @@ fn an_unexported_handle_names_nothing_and_leaves_other_exports() {
 #[test]
 fn a_closed_window_takes_its_exports_with_it() {
     let mut host = Host::new();
-    let closed = host.app_created();
-    let open = host.app_created();
+    let closed = host.app_created(OWNER);
+    let open = host.app_created(OWNER);
     let first = host.exports_mut().export(Some(closed.clone()));
     let second = host.exports_mut().export(Some(closed.clone()));
     let other = host.exports_mut().export(Some(open.clone()));

@@ -15,6 +15,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
@@ -54,11 +55,24 @@ class FakeClient : public mojom::ControlChannelClient {
                    double width,
                    double height,
                    bool dialog,
-                   bool client_frame) override {
+                   bool client_frame,
+                   mojom::WindowOwnerPtr owner) override {
     heard_.push_back(base::StringPrintf(
-        "appeared %s %s %s %gx%g%s%s", app_id.c_str(), title.c_str(),
+        "appeared %s %s %s %gx%g%s%s%s", app_id.c_str(), title.c_str(),
         desktop_id.c_str(), width, height, dialog ? " dialog" : "",
-        client_frame ? " client_frame" : ""));
+        client_frame ? " client_frame" : "", Owned(owner).c_str()));
+  }
+
+  // The owner as " owner pid/uid/gid/inode", or "" for none.
+  static std::string Owned(const mojom::WindowOwnerPtr& owner) {
+    if (!owner) {
+      return "";
+    }
+    return base::StringPrintf(
+        " owner %d/%u/%u/%s", owner->pid, owner->uid, owner->gid,
+        owner->pidfd_inode
+            ? base::NumberToString(*owner->pidfd_inode).c_str()
+            : "none");
   }
   void AppResized(const std::string&, double, double) override {}
   void AppMinSize(const std::string&, double, double) override {}
@@ -186,6 +200,28 @@ TEST_F(ControlChannelTest, AWindowReachesThePageWithItsSizeAndHints) {
   EXPECT_EQ(client_.heard_,
             (std::vector<std::string>{
                 "appeared app-1 pinentry  400x300 dialog client_frame",
+                "locked false"}));
+}
+
+TEST_F(ControlChannelTest, AWindowReachesThePageWithItsOwner) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  // A uid past 2^31 does not fit base::Value's int.
+  Say("{\"type\":\"app_appeared\",\"app_id\":\"app-1\",\"title\":"
+      "\"a\",\"desktop_id\":null,\"size\":[400.0,300.0],"
+      "\"dialog\":false,\"client_frame\":false,\"owner\":{\"pid\":4242,"
+      "\"uid\":4294967294,\"gid\":100,\"pidfd_inode\":5021}}\n"
+      "{\"type\":\"app_appeared\",\"app_id\":\"app-2\",\"title\":"
+      "\"b\",\"desktop_id\":null,\"size\":[400.0,300.0],"
+      "\"dialog\":false,\"client_frame\":false,\"owner\":{\"pid\":7,"
+      "\"uid\":1000,\"gid\":1000,\"pidfd_inode\":null}}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_,
+            (std::vector<std::string>{
+                "appeared app-1 a  400x300 owner 4242/4294967294/100/5021",
+                "appeared app-2 b  400x300 owner 7/1000/1000/none",
                 "locked false"}));
 }
 

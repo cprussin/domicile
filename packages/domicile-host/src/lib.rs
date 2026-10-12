@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 
 use domicile_protocol::{
     Appearance, BoundShortcut, Capturing, ChromeMessage, DisplayInfo, HostMessage, Notification,
-    PortalRequest, PortalWallpaper, Theme, TrayItem,
+    Owner, PortalRequest, PortalWallpaper, Theme, TrayItem,
 };
 
 pub mod autostart;
@@ -84,6 +84,8 @@ pub struct App {
     pub title: Option<String>,
     /// The client's `xdg_toplevel.set_app_id`; `None` until it sets one.
     pub desktop_id: Option<String>,
+    /// The process that connected the window's client.
+    pub owner: Owner,
     /// Content size of the latest committed buffer; `None` before the first.
     pub size: Option<(f64, f64)>,
     /// Size limits in logical units. `0` on an axis means no limit.
@@ -380,7 +382,7 @@ impl Host {
     ///
     /// The chromes hear of it at [`Host::app_mapped`]. Until then, changes to
     /// it are recorded and not reported.
-    pub fn app_created(&mut self) -> AppId {
+    pub fn app_created(&mut self, owner: Owner) -> AppId {
         self.next_id += 1;
         let app_id = format!("app-{}", self.next_id);
         self.apps.insert(
@@ -391,6 +393,7 @@ impl Host {
                 mapped: None,
                 title: None,
                 desktop_id: None,
+                owner,
                 size: None,
                 min_size: NO_LIMIT,
                 max_size: NO_LIMIT,
@@ -733,6 +736,7 @@ fn announced(app: &App, mapped: Mapped) -> Vec<HostMessage> {
         size: wire_size(app.size.expect("a mapped window has a size")),
         dialog: mapped.has_parent || is_fixed(app.min_size, app.max_size),
         client_frame: mapped.client_frame,
+        owner: app.owner,
     };
     let min = (app.min_size != NO_LIMIT).then(|| HostMessage::AppMinSize {
         app_id: app.app_id.clone(),

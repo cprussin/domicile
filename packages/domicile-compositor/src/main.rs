@@ -196,7 +196,7 @@ use crate::keymap::compiled_keymap;
 use crate::lock::{Lock, Offer, Refusal, Rekeying, Unlocking, Verdict};
 use crate::modifiers::{Held, Modifiers};
 use crate::once_per_window::OncePerWindow;
-use crate::peer_process::peer_pid;
+use crate::peer_process::peer_owner;
 use crate::portals::{shell_appearance, Selection, CURRENT_DESKTOP};
 use crate::restatement::Restatement;
 use crate::scale::{logical_size, output_scale};
@@ -221,7 +221,7 @@ use domicile_launch::arguments::arguments;
 use domicile_launch::handshake::{silence, Handshake, WAIT_FOR_A_PAGE};
 use domicile_launch::session::{publish, Session};
 use domicile_protocol::{
-    ChromeMessage, CursorShape, HostMessage, Passphrase, Theme, WindowRequest,
+    ChromeMessage, CursorShape, HostMessage, Owner, Passphrase, Theme, WindowRequest,
 };
 use smithay::backend::renderer::gles::GlesRenderer;
 use zbus::zvariant::OwnedObjectPath;
@@ -673,15 +673,36 @@ struct ClientState {
     /// The socket identifies it because clients cannot spoof it. An
     /// `xdg_toplevel` app id is client-set and may arrive after the toplevel.
     is_chrome: bool,
+    /// The process that connected, read from the socket on arrival. `None`
+    /// for the chrome, which owns no window.
+    owner: Option<Owner>,
 }
 
 impl ClientState {
+    fn app(owner: Owner) -> Self {
+        ClientState {
+            owner: Some(owner),
+            ..ClientState::default()
+        }
+    }
+
     fn chrome() -> Self {
         ClientState {
             is_chrome: true,
             ..ClientState::default()
         }
     }
+}
+
+/// The process that connected `surface`'s client.
+///
+/// Panics for the chrome's surfaces and dead clients: the caller has already
+/// ruled both out.
+fn owner_of(surface: &WlSurface) -> Owner {
+    surface
+        .client()
+        .and_then(|client: Client| client.get_data::<ClientState>().and_then(|data| data.owner))
+        .expect("an app's client is alive and was read on arrival")
 }
 
 /// Whether `surface` belongs to the chrome rather than to an app.
@@ -5021,7 +5042,7 @@ impl XdgShellHandler for DomicileCompositor {
         // by when its client has said what it is.
         {
             let mut host = self.hub.host.lock().unwrap();
-            let app_id = host.app_created();
+            let app_id = host.app_created(owner_of(surface.wl_surface()));
             debug!(%app_id, "toplevel created -> Host::app_created");
             // Enter every output for now; the chrome has not placed the window.
             // Some toolkits (GLFW, kitty) wait for this before drawing.
@@ -6554,12 +6575,21 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Accept on the sockets bound above.
     let handle = event_loop.handle();
     handle.insert_source(source, move |stream, _, data: &mut CalloopData| {
-        // Pairs with `spawning client` to time a launch. Before
-        // `insert_client`, which takes the stream.
-        debug!(pid = ?peer_pid(&stream), "{}", grepped::ARRIVED);
+        // Before `insert_client`, which takes the stream.
+        let owner = match peer_owner(&stream) {
+            Ok(owner) => owner,
+            Err(err) => {
+                // A window whose owner the shell cannot know is refused rather
+                // than shown unattributed.
+                warn!(%err, "a client's credentials would not read; refusing it");
+                return;
+            }
+        };
+        // Pairs with `spawning client` to time a launch.
+        debug!(pid = owner.pid, "{}", grepped::ARRIVED);
         data.display
             .handle()
-            .insert_client(stream, Arc::new(ClientState::default()))
+            .insert_client(stream, Arc::new(ClientState::app(owner)))
             .expect("failed to insert client");
     })?;
     handle.insert_source(chrome_source, move |stream, _, data: &mut CalloopData| {

@@ -48,17 +48,35 @@ describe("parseHostMessage", () => {
 
   it("normalizes a missing app title and desktop id to undefined", () => {
     const message = parseHostMessage(
-      '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":[640,480],"dialog":true,"client_frame":false}',
+      '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":[640,480],"dialog":true,"client_frame":false,"owner":{"pid":7,"uid":1000,"gid":1000,"pidfd_inode":null}}',
     );
     expect(message).toStrictEqual({
       app_id: "term",
       client_frame: false,
       desktop_id: undefined,
       dialog: true,
+      owner: { gid: 1000, pid: 7, pidfd_inode: undefined, uid: 1000 },
       size: [640, 480],
       title: undefined,
       type: "app_appeared",
     });
+  });
+
+  it("decodes the process that owns a window", () => {
+    const message = parseHostMessage(
+      '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":[640,480],"dialog":false,"client_frame":false,"owner":{"pid":4242,"uid":1001,"gid":100,"pidfd_inode":5021}}',
+    );
+    expect(message).toMatchObject({
+      owner: { gid: 100, pid: 4242, pidfd_inode: 5021, uid: 1001 },
+    });
+  });
+
+  it("throws on a window with no owner", () => {
+    expect(() =>
+      parseHostMessage(
+        '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":[640,480],"dialog":false,"client_frame":false}',
+      ),
+    ).toThrow();
   });
 
   it("throws on an announcement without its size or dialog hints", () => {
