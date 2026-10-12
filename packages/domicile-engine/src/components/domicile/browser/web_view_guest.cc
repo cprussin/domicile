@@ -1103,10 +1103,6 @@ bool WebViewGuest::HandleKeyboardEvent(
   return false;
 }
 
-void WebViewGuest::ContentsZoomChange(bool zoom_in) {
-  client_->ZoomRequested(zoom_in);
-}
-
 bool WebViewGuest::HandleContextMenu(
     content::RenderFrameHost& render_frame_host,
     const content::ContextMenuParams& params) {

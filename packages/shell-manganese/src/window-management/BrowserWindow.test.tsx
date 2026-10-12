@@ -16,7 +16,6 @@ import {
   WEBVIEW_SITE_PERMISSIONS_CHANGE_EVENT,
   WEBVIEW_TARGET_URL_CHANGE_EVENT,
   WEBVIEW_ZOOM_CHANGE_EVENT,
-  WEBVIEW_ZOOM_OUT_REQUEST_EVENT,
 } from "@domicile-desktop/sdk/webview-element";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -1562,17 +1561,6 @@ describe("BrowserWindow", () => {
       guestPresses(view(container), { ctrlKey: true, key: "0" });
 
       expect(asked).toStrictEqual([1.5, 1.25, 1]);
-    });
-
-    // The engine turns Ctrl+wheel over the page into a zoom request, which uses
-    // the same steps as the keys.
-    it("zooms when the wheel asks it to", () => {
-      const { container } = renderWindow();
-      const asked = zoomable(view(container), 1);
-
-      fireEvent(view(container), new Event(WEBVIEW_ZOOM_OUT_REQUEST_EVENT));
-
-      expect(asked).toStrictEqual([0.9]);
     });
 
     it("zooms from the buttons in its bar", async () => {
