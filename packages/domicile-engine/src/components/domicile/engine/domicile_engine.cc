@@ -763,6 +763,12 @@ struct DomicileEngine {
                                  event.flags);
           }
           break;
+        case domicile::EngineEvent::Type::kImported:
+          if (callbacks_.imported) {
+            callbacks_.imported(callbacks_.user_data, event.surface,
+                                event.request, event.buffer);
+          }
+          break;
       }
     }
   }
@@ -788,6 +794,21 @@ struct DomicileEngine {
                                       base::Unretained(this), surface,
                                       std::ref(dmabuf), &imported));
     return imported;
+  }
+
+  // Returns at once; the answer arrives as kImported. Duplicates the fds
+  // here, since the ABI lends them only for the call.
+  void ImportBufferAsync(DomicileSurfaceId surface,
+                         const DomicileDmabuf& dmabuf,
+                         uint64_t request) {
+    thread_.task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&DomicileEngine::ImportBufferAsyncOnThread,
+                       base::Unretained(this), surface,
+                       domicile::ToGpuMemoryBufferHandle(dmabuf),
+                       gfx::Size(static_cast<int>(dmabuf.width),
+                                 static_cast<int>(dmabuf.height)),
+                       dmabuf.fourcc, request));
   }
 
   void SubmitBuffer(DomicileSurfaceId surface,
@@ -1119,6 +1140,43 @@ struct DomicileEngine {
     loop.Run();
   }
 
+  // Unretained: the reply is dropped when TearDown resets `broker_`.
+  void ImportBufferAsyncOnThread(DomicileSurfaceId surface,
+                                 gfx::GpuMemoryBufferHandle handle,
+                                 const gfx::Size& size,
+                                 uint32_t fourcc,
+                                 uint64_t request) {
+    auto iter = surfaces_.find(surface);
+    if (iter == surfaces_.end() || !broker_ || handle.is_null()) {
+      OnImported(surface, request, /*has_alpha=*/false, 0, std::nullopt);
+      return;
+    }
+    broker_->ImportBuffer(
+        iter->second->frame_sink_id(), std::move(handle), size, fourcc,
+        base::BindOnce(&DomicileEngine::OnImported, base::Unretained(this),
+                       surface, request, domicile::FourccHasAlpha(fourcc)));
+  }
+
+  // The surface may have gone while the browser imported.
+  void OnImported(DomicileSurfaceId surface,
+                  uint64_t request,
+                  bool has_alpha,
+                  uint64_t id,
+                  std::optional<gpu::ExportedSharedImage> exported) {
+    DomicileBufferId imported = 0;
+    auto iter = surfaces_.find(surface);
+    // Without the SharedImage there is nothing to submit, so treat the import
+    // as refused.
+    if (iter != surfaces_.end() && id != 0 && exported.has_value()) {
+      iter->second->Adopt(id, std::move(exported).value(), has_alpha);
+      imported = id;
+    }
+    queue_.Push({.type = domicile::EngineEvent::Type::kImported,
+                 .surface = surface,
+                 .buffer = imported,
+                 .request = request});
+  }
+
   void SubmitBufferOnThread(DomicileSurfaceId surface,
                             DomicileBufferId buffer,
                             const gfx::Rect& crop,
@@ -1331,6 +1389,16 @@ DomicileBufferId domicile_surface_import(DomicileEngine* engine,
     return 0;
   }
   return engine->ImportBuffer(surface, *dmabuf);
+}
+
+void domicile_surface_import_async(DomicileEngine* engine,
+                                   DomicileSurfaceId surface,
+                                   const DomicileDmabuf* dmabuf,
+                                   uint64_t request) {
+  CHECK(dmabuf);
+  if (engine) {
+    engine->ImportBufferAsync(surface, *dmabuf, request);
+  }
 }
 
 void domicile_surface_submit(DomicileEngine* engine,
