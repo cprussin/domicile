@@ -242,7 +242,8 @@ class MODULES_EXPORT DomicileHost final
                    double width,
                    double height,
                    bool dialog,
-                   bool client_frame) override;
+                   bool client_frame,
+                   domicile::mojom::blink::WindowOwnerPtr owner) override;
   void AppResized(const String& app_id, double width, double height) override;
   void AppMinSize(const String& app_id, double width, double height) override;
   void AppMaxSize(const String& app_id, double width, double height) override;

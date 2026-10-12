@@ -11,8 +11,16 @@ use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::Host;
 use domicile_protocol::{
     AccessDialog, Appearance, BoundShortcut, Capturing, CapturingKind, ChromeMessage, Devices,
-    HostMessage, Notification, PortalKind, PortalRequest, PortalWallpaper, Theme, TrayItem,
+    HostMessage, Notification, Owner, PortalKind, PortalRequest, PortalWallpaper, Theme, TrayItem,
     Urgency, PROTOCOL_VERSION,
+};
+
+/// A window's owner, for tests about anything else.
+const OWNER: Owner = Owner {
+    pid: 1,
+    uid: 1000,
+    gid: 1000,
+    pidfd_inode: None,
 };
 
 /// One chrome connection's [`Host`] and handshake state.
@@ -120,7 +128,7 @@ fn a_version_refused_after_one_was_agreed_takes_the_handshake_back() {
 fn messages_before_the_handshake_are_ignored() {
     // No message takes effect before `Hello`.
     let mut session = Session::new();
-    let id = session.host_mut().app_created();
+    let id = session.host_mut().app_created(OWNER);
     let _ = session.ingest(&to_line(&ChromeMessage::FocusApp { app_id: id.clone() }));
     assert_eq!(
         session.host_mut().keyboard_target(),
@@ -131,7 +139,7 @@ fn messages_before_the_handshake_are_ignored() {
 #[test]
 fn a_message_after_the_handshake_reaches_the_host() {
     let mut session = Session::new();
-    let id = session.host_mut().app_created();
+    let id = session.host_mut().app_created(OWNER);
     session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
     }));

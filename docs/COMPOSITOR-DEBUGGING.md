@@ -35,7 +35,7 @@ Each app the shell starts logs three `DEBUG` lines, in order:
 
 ```
 spawning client pid=1234 command=["kitty"] wayland_display="wayland-2"
-app client connected pid=Some(1234)
+app client connected pid=1234
 toplevel drew -> app_appeared app_id=app-1
 ```
 

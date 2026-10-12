@@ -1,7 +1,7 @@
 {"type":"welcome","protocol_version":1}
 {"type":"modifiers","alt":true,"ctrl":false,"shift":true,"logo":false}
-{"type":"app_appeared","app_id":"app-1","title":null,"desktop_id":null,"size":[400.0,300.0],"dialog":true,"client_frame":true}
-{"type":"app_appeared","app_id":"app-2","title":"kitty","desktop_id":"kitty","size":[800.0,600.0],"dialog":false,"client_frame":false}
+{"type":"app_appeared","app_id":"app-1","title":null,"desktop_id":null,"size":[400.0,300.0],"dialog":true,"client_frame":true,"owner":{"pid":4242,"uid":1000,"gid":1000,"pidfd_inode":null}}
+{"type":"app_appeared","app_id":"app-2","title":"kitty","desktop_id":"kitty","size":[800.0,600.0],"dialog":false,"client_frame":false,"owner":{"pid":4343,"uid":1000,"gid":100,"pidfd_inode":5021}}
 {"type":"app_titled","app_id":"app-2","title":"~/src"}
 {"type":"app_desktop_id","app_id":"app-2","desktop_id":"org.wezfurlong.wezterm"}
 {"type":"app_resized","app_id":"app-2","size":[1024.0,768.0]}

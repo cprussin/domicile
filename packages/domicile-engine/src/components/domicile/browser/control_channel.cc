@@ -209,6 +209,27 @@ double Number(const base::Value& value) {
   return 0.0;
 }
 
+// A window's owner, or null for a message with none or a malformed one. The
+// uid, gid and inode go through a double because base::Value's whole numbers
+// are a signed int, which a uid above 2^31 does not fit.
+mojom::WindowOwnerPtr OwnerOf(const base::DictValue* owner) {
+  if (!owner) {
+    return nullptr;
+  }
+  const std::optional<int> pid = owner->FindInt("pid");
+  const std::optional<double> uid = owner->FindDouble("uid");
+  const std::optional<double> gid = owner->FindDouble("gid");
+  if (!pid || !uid || !gid) {
+    return nullptr;
+  }
+  std::optional<uint64_t> pidfd_inode;
+  if (std::optional<double> inode = owner->FindDouble("pidfd_inode")) {
+    pidfd_inode = static_cast<uint64_t>(*inode);
+  }
+  return mojom::WindowOwner::New(*pid, static_cast<uint32_t>(*uid),
+                                 static_cast<uint32_t>(*gid), pidfd_inode);
+}
+
 // Which way up a monitor is, by the name the compositor wrote.
 //
 // A missing field and a name nothing matches both come out kNormal, and NOT
@@ -710,7 +731,7 @@ void ControlChannel::DispatchLine(const std::string& line) {
       client_->AppAppeared(*app_id, title ? *title : std::string(),
                            desktop_id ? *desktop_id : std::string(),
                            Number((*size)[0]), Number((*size)[1]), *dialog,
-                           *client_frame);
+                           *client_frame, OwnerOf(message.FindDict("owner")));
     }
     return;
   }
