@@ -135,11 +135,13 @@ the display holding most of it, as in sway. Other monitors resample its buffer.
   focus move to the workspace that screen shows (as sway's
   `floating_fix_coordinates`). A center in a gap stays put.
 - Until then, the float draws once at its page position, across both screens.
-  Windows are `position: fixed` in page pixels and nothing clips a `<Screen>`.
+  Windows are positioned in page pixels and nothing clips a `<Screen>`.
 - One `Stage`, after every monitor's bar, draws every window once for the
   desk, keyed by window id. A float that changes screens keeps its element, so
   a browser window's `<webview>` does not reload.
 - A workspace switch slides only its own screen, by that screen's width.
+  Each window is clipped to that screen while it slides, so it does not
+  show on the next one.
 
 ## Key decisions
 

@@ -1,7 +1,7 @@
 // Lays out the tree as rectangles: each visible window's frame, and the tabs
 // of tabbed and stacking containers.
 //
-// Windows are `position: fixed` boxes, so the whole layout is computed here
+// Windows are positioned boxes, so the whole layout is computed here
 // instead of by document flow.
 
 import type { Rect } from "../rect";

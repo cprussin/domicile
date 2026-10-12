@@ -229,7 +229,8 @@ For how warping, browser-window focus and modifier drags work, see
   one that cuts the other short starts where the window is
   (`DrawnWindow.rewound`). The backdrop fades with the slides.
 - Workspace switch: the new workspace slides in; the old one slides out.
-  Each window is clipped to its screen, so it never shows on the next one.
+  Each window is clipped to its screen meanwhile, so it never shows on the
+  next one.
 - Tab switch: crossfade.
 
 Rules:
@@ -277,6 +278,12 @@ Rules:
   animation on the compositor thread only if it can run every property there,
   and `z-index` cannot. A motion that holds or swaps depth adds a second,
   depth-only animation.
+- A workspace switch clips each part of a window with CSS `clip` on its
+  wrapper (`clippedTo`), not an animated `clip-path`. The clip is a static
+  rectangle like the notification drawer's `overflow: clip`, which the
+  compositor applies to client surfaces too. Parts are `position: absolute`
+  so the wrapper's clip reaches them; the wrapper has no `z-index`, so each
+  part still stacks by its own.
 - Durations live in the Panda tokens only. The shell waits for each CSS
   animation's end event.
 

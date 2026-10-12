@@ -2014,6 +2014,35 @@ describe("Shell", () => {
       ).toBe("1280px");
     });
 
+    // The page spans every monitor, so a window sliding off its screen would
+    // show on the next one. Each of its parts is clipped by its wrapper.
+    it("keeps every part of a sliding workspace on its screen", () => {
+      const { container } = renderShell([LEFT, RIGHT]);
+      pointerAt(2000, 500);
+      clientAppears("term");
+      motionsPlayOut(container);
+
+      press("braceright");
+
+      const clips = movingParts(container, "leaving-to-start").map(
+        (part) => part.parentElement?.style.clip,
+      );
+      expect(clips).not.toHaveLength(0);
+      expect(new Set(clips)).toStrictEqual(
+        new Set(["rect(0px, 3200px, 1024px, 1920px)"]),
+      );
+    });
+
+    // A float can hang over the next screen while it is dragged across.
+    it("lets windows at rest draw across screens", () => {
+      const { container } = renderShell([LEFT, RIGHT]);
+      pointerAt(2000, 500);
+      clientAppears("term");
+      motionsPlayOut(container);
+
+      expect(appElement(container, "term").parentElement?.style.clip).toBe("");
+    });
+
     it("and the other way when the switch goes the other way", () => {
       const { container } = renderShell();
       clientAppears("term");
