@@ -20,6 +20,11 @@ struct DomicileWindowState {
   String app_id;
   String title = g_empty_string;
   String desktop_id = g_empty_string;
+  // Null for a popup, or a window the compositor named no owner for.
+  std::optional<int32_t> pid;
+  std::optional<uint32_t> uid;
+  std::optional<uint32_t> gid;
+  std::optional<uint64_t> pidfd_inode;
   std::optional<double> width;
   std::optional<double> height;
   std::optional<double> min_width;
@@ -47,6 +52,10 @@ class MODULES_EXPORT DomicileWindow final : public ScriptWrappable {
   const String& appId() const { return state_.app_id; }
   const String& title() const { return state_.title; }
   const String& desktopId() const { return state_.desktop_id; }
+  std::optional<int32_t> pid() const { return state_.pid; }
+  std::optional<uint32_t> uid() const { return state_.uid; }
+  std::optional<uint32_t> gid() const { return state_.gid; }
+  std::optional<uint64_t> pidfdInode() const { return state_.pidfd_inode; }
   std::optional<double> width() const { return state_.width; }
   std::optional<double> height() const { return state_.height; }
   std::optional<double> minWidth() const { return state_.min_width; }

@@ -778,6 +778,19 @@ export type DomicileWindow = {
    */
   readonly desktopId: string;
   /**
+   * The process that connected the window's client, as the kernel recorded
+   * it. The client cannot forge these, unlike the fields above. Null for a
+   * popup: read its parent's.
+   */
+  readonly pid: number | null;
+  readonly uid: number | null;
+  readonly gid: number | null;
+  /**
+   * The inode of the process's pidfd, which tells a reused pid apart. Null on
+   * kernels without pidfs (before Linux 6.9).
+   */
+  readonly pidfdInode: number | null;
+  /**
    * The size the client last committed, in CSS pixels; null until it has
    * committed one.
    */

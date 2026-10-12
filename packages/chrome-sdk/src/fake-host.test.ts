@@ -35,6 +35,25 @@ describe("FakeDomicileHost", () => {
     ]);
   });
 
+  it("lists a window with no owner until one is given", () => {
+    const fake = new FakeDomicileHost();
+
+    fake.appear("menu");
+    fake.appear("term", { gid: 100, pid: 4242, pidfdInode: 5021, uid: 1000 });
+
+    expect(
+      fake.host.windows.map(({ gid, pid, pidfdInode, uid }) => ({
+        gid,
+        pid,
+        pidfdInode,
+        uid,
+      })),
+    ).toStrictEqual([
+      { gid: null, pid: null, pidfdInode: null, uid: null },
+      { gid: 100, pid: 4242, pidfdInode: 5021, uid: 1000 },
+    ]);
+  });
+
   it("sets state and dispatches its change event", () => {
     const fake = new FakeDomicileHost();
     const heard: string[] = [];
