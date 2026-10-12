@@ -22,11 +22,13 @@ import type { ThemeSource } from "./theme-source";
  * The current `theme` and a `flip` that requests the other one.
  *
  * `flip` only sends a request ({@link ThemeSource.setTheme}). `theme` changes,
- * with animation, when the source reports the new theme.
+ * with animation, when the source reports the new theme. `flipping` is true
+ * from that report until the animation ends and `theme` commits.
  */
 export type ThemeControl = {
   theme: Theme;
   flip: () => void;
+  flipping: boolean;
 };
 
 const ThemeContext = createContext<ThemeControl | undefined>(undefined);
@@ -47,6 +49,7 @@ export const ThemeProvider = ({
   source,
 }: PropsWithChildren<{ source: ThemeSource }>) => {
   const [theme, setTheme] = useState<Theme>(source.theme ?? DEFAULT_THEME);
+  const [flipping, setFlipping] = useState(false);
 
   // The theme on `<html>`, which leads the committed state by the length of
   // the wipe. Lets the effect below skip reports that change nothing.
@@ -65,12 +68,14 @@ export const ThemeProvider = ({
       // theme is common and must not animate.
       if (previous !== next) {
         painted.current = next;
+        setFlipping(true);
         flipThemeWithAnimation({
           applyNextTheme: () => {
             applyTheme(next);
           },
           commitTheme: () => {
             setTheme(next);
+            setFlipping(false);
           },
           next,
           previous,
@@ -90,7 +95,10 @@ export const ThemeProvider = ({
     source.setTheme(OTHER_THEME[theme]);
   }, [source, theme]);
 
-  const value = useMemo(() => ({ flip, theme }), [flip, theme]);
+  const value = useMemo(
+    () => ({ flip, flipping, theme }),
+    [flip, flipping, theme],
+  );
   return (
     <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
   );
