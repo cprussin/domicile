@@ -216,6 +216,25 @@ describe("Wallpaper", () => {
     jest.useRealTimers();
   });
 
+  it("holds the next photograph until the theme wipe is over", () => {
+    // A crossfade under the wipe would show through the new theme's frame.
+    jest.useFakeTimers();
+    const { container, rerender } = render(<Wallpaper held theme="dark" />, {
+      wrapper: OnOneScreen,
+    });
+    loadPhotos(container);
+
+    act(() => {
+      jest.advanceTimersByTime(DWELL_MS);
+    });
+    expect(layer(container, "dark", "current")).toEqual([photo("dark", 0)]);
+
+    rerender(<Wallpaper held={false} theme="dark" />);
+    expect(layer(container, "dark", "current")).toEqual([photo("dark", 1)]);
+    expect(layer(container, "dark", "previous")).toEqual([photo("dark", 0)]);
+    jest.useRealTimers();
+  });
+
   it("comes back round to the first photograph at the end of the rotation", () => {
     // On wrap-around the incoming photograph is earlier in the document, so
     // stacking must come from the role, not document order. Checked per theme

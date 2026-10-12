@@ -14,7 +14,11 @@ describe(ThemeSwitch, () => {
       // descendants as light.
       render(
         <ThemeSwitch
-          useTheme={() => ({ flip: () => undefined, theme: "dark" })}
+          useTheme={() => ({
+            flip: () => undefined,
+            flipping: false,
+            theme: "dark",
+          })}
         />,
       );
       expect(screen.getByRole("button").getAttribute("data-theme-mode")).toBe(
@@ -25,7 +29,11 @@ describe(ThemeSwitch, () => {
     it("uses a theme-specific aria-label that names the other one", () => {
       render(
         <ThemeSwitch
-          useTheme={() => ({ flip: () => undefined, theme: "light" })}
+          useTheme={() => ({
+            flip: () => undefined,
+            flipping: false,
+            theme: "light",
+          })}
         />,
       );
       expect(
@@ -35,7 +43,11 @@ describe(ThemeSwitch, () => {
 
     it("calls the context's flip when clicked", async () => {
       const flip = mock();
-      render(<ThemeSwitch useTheme={() => ({ flip, theme: "dark" })} />);
+      render(
+        <ThemeSwitch
+          useTheme={() => ({ flip, flipping: false, theme: "dark" })}
+        />,
+      );
       await userEvent.click(screen.getByRole("button"));
       expect(flip).toHaveBeenCalledTimes(1);
     });

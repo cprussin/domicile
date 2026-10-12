@@ -12,9 +12,14 @@ const isLight = () =>
 
 // Shows the theme and flips it on click.
 const Probe = () => {
-  const { flip, theme } = useTheme();
+  const { flip, flipping, theme } = useTheme();
   return (
-    <button data-testid="theme" onClick={flip} type="button">
+    <button
+      data-flipping={flipping}
+      data-testid="theme"
+      onClick={flip}
+      type="button"
+    >
       {theme}
     </button>
   );
@@ -223,6 +228,34 @@ describe(ThemeProvider, () => {
         wipe.end?.();
         await Promise.resolve();
       });
+    });
+
+    it("says it is flipping from the request until the wipe ends", async () => {
+      // The wallpaper holds its rotation meanwhile, so no crossfade plays
+      // under the wipe.
+      const turning = renderTurning();
+      const probe = screen.getByTestId("theme");
+      expect(probe).toHaveAttribute("data-flipping", "false");
+
+      await userEvent.click(probe);
+      await waitFor(() => {
+        expect(wipe.start).toBeDefined();
+      });
+      expect(probe).toHaveAttribute("data-flipping", "true");
+
+      wipe.start?.(true);
+      await waitFor(() => {
+        expect(turning.done).toBeDefined();
+      });
+      turning.done?.();
+      await act(async () => {
+        wipe.end?.();
+        await Promise.resolve();
+      });
+      await waitFor(() => {
+        expect(probe).toHaveAttribute("data-flipping", "false");
+      });
+      expect(probe).toHaveTextContent("light");
     });
 
     it("turns the windows when the wipe is skipped", async () => {

@@ -23,6 +23,12 @@ const CROSSFADE_MS = Number.parseFloat(token("durations.crossfade")) * 1000;
 
 type Props = {
   /**
+   * Holds the rotation, as while the theme wipe plays: a crossfade under it
+   * would show through the new theme's frame. A photograph due meanwhile
+   * fades in once released.
+   */
+  held?: boolean;
+  /**
    * A picture an application set through the Wallpaper portal, as a URL. Shown
    * on every screen in place of the rotation.
    */
@@ -50,23 +56,34 @@ const STARTS: Readonly<Record<Theme, number>> = { dark: 0, light: 0 };
  *   The other holds its photograph and loads no next one until it is shown.
  * - It takes no pointer events.
  */
-export const Wallpaper = ({ picture, theme }: Props) => {
+export const Wallpaper = ({ held = false, picture, theme }: Props) => {
   const displays = useDisplays();
   const [steps, setSteps] = useState(STARTS);
   // Whether the shown rotation's fade has finished.
   const [settled, setSettled] = useState(true);
-  // An effect event, so a theme switch does not restart the minute.
+  // Whether a minute has passed since the last step.
+  const [due, setDue] = useState(false);
+  // An effect event, so a theme switch does not advance the hidden rotation.
   const advance = useEffectEvent(() => {
     setSteps((previous) => ({ ...previous, [theme]: previous[theme] + 1 }));
     setSettled(false);
+    setDue(false);
   });
 
   useEffect(() => {
-    const timer = setInterval(advance, DWELL_MS);
+    const timer = setInterval(() => {
+      setDue(true);
+    }, DWELL_MS);
     return () => {
       clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => {
+    if (due && !held) {
+      advance();
+    }
+  }, [due, held]);
 
   useEffect(() => {
     if (settled) {

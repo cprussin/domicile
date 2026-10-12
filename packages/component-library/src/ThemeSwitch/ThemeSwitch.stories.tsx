@@ -45,7 +45,9 @@ export const BothThemes: StoryObj<typeof ThemeSwitch> = {
   render: () => (
     <Variants columnLabel={(column) => column} columns={THEMES}>
       {(theme) => (
-        <ThemeSwitch useTheme={() => ({ flip: () => undefined, theme })} />
+        <ThemeSwitch
+          useTheme={() => ({ flip: () => undefined, flipping: false, theme })}
+        />
       )}
     </Variants>
   ),

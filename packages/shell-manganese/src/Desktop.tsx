@@ -89,8 +89,9 @@ export const Desktop = ({
   topBar,
 }: Props) => {
   const displays = useDisplays();
-  // The wallpaper advances only this theme's rotation.
-  const { theme } = useTheme();
+  // The wallpaper advances only this theme's rotation, and holds it while
+  // the theme wipe plays.
+  const { flipping, theme } = useTheme();
   const windows = useWindows(domicile, displays);
   const { act } = windows;
   const clientIcons = useClientIcons(
@@ -324,7 +325,7 @@ export const Desktop = ({
         First, so it paints under everything. It does not wait for the
         desktop to connect.
       */}
-      <Wallpaper picture={backgroundPicture} theme={theme} />
+      <Wallpaper held={flipping} picture={backgroundPicture} theme={theme} />
       {/*
         Every display the desktop has taken up. A new display appears one
         render after the host reports it, once the reducer gives it a
