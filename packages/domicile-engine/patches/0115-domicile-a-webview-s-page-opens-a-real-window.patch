@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Mon, 12 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a webview's page opens a real window
+
+A page's `window.open()` and `target="_blank"` returned null from a
+<webview> guest: WebContentsImpl::CreateNewWindow CHECKs that a guest
+has a guest SiteInstance, so WebViewGuest overrode creation and opened
+a browser window at the address. The page lost its window handle, the
+opener, the target name and a form's POST body.
+
+A guest SiteInstance needs a partition of its own, which would log the
+user out of every site, so Domicile's guests have none. This patch
+relaxes the CHECK to "a guest SiteInstance implies a guest", and makes
+a noopener window's SiteInstance for a guest only when the guest has a
+guest SiteInstance. Content's guest path does the rest: it asks
+WebViewGuest::CreateNewGuestWindow for the page and hands it back in
+AddNewContents, which lists it as a browser window
+(components/domicile/browser/web_view_guest.cc).
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ content/browser/web_contents/web_contents_impl.cc | 15 +++++++++++----
+ 1 file changed, 11 insertions(+), 4 deletions(-)
+
+diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
+index 9cc6449..cadde01 100644
+--- a/content/browser/web_contents/web_contents_impl.cc
++++ b/content/browser/web_contents/web_contents_impl.cc
+@@ -5788,9 +5788,14 @@ FrameTree* WebContentsImpl::CreateNewWindow(
+       base::FeatureList::IsEnabled(features::kGuestViewMPArch)
+           ? opener->GetOutermostMainFrame()->frame_tree()->is_guest()
+           : IsGuest();
+-  // While some guest types do not have a guest SiteInstance, the ones that
+-  // don't all override WebContents creation above.
+-  CHECK_EQ(source_site_instance->GetSecurityPrincipal().IsGuest(), is_guest);
++  // DOMICILE: a guest SiteInstance implies a guest, but a guest may have none.
++  // Domicile's <webview> guests share the default partition, so they keep the
++  // user's logins, and make new windows through
++  // BrowserPluginGuestDelegate::CreateNewGuestWindow below. See
++  // components/domicile/browser/web_view_guest.h.
++  const bool guest_site_instance =
++      source_site_instance->GetSecurityPrincipal().IsGuest();
++  CHECK(!guest_site_instance || is_guest);
+ 
+   // We usually create the new window in the same BrowsingInstance (group of
+   // script-related windows), by passing in the current SiteInstance.  However,
+@@ -5798,7 +5803,9 @@ FrameTree* WebContentsImpl::CreateNewWindow(
+   // SiteInstance is created in a new BrowsingInstance.
+   scoped_refptr<SiteInstance> site_instance;
+   if (params.opener_suppressed) {
+-    if (is_guest) {
++    // DOMICILE: a guest without a guest SiteInstance has the default
++    // partition, which CreateForGuest refuses. See above.
++    if (guest_site_instance) {
+       // For guests, noopener windows can be created in a new BrowsingInstance
+       // as long as they preserve the guest's StoragePartition.
+       site_instance =

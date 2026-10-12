@@ -55,6 +55,18 @@ Patch `0110`:
   no device, is refused.
 - A page outside any guest gets no device.
 
+## New windows
+
+- A page's `target="_blank"` or `window.open()` makes a real window: content
+  keeps the opener, the name and a form's POST body.
+- Content CHECKs that a guest's opener has a guest SiteInstance, which needs a
+  partition of its own and would log the user out of every site. Patch `0115`
+  relaxes it for guests without one.
+- `WebViewGuest::CreateNewGuestWindow` makes the page as a browser window, and
+  `AddNewContents` lists it once the page shows it.
+- A middle click and an extension's window open at the address with no
+  opener (`ReportNewWindow`).
+
 ## Dialogs
 
 - `alert()`, `confirm()` and `prompt()` ask the shell. A guest's

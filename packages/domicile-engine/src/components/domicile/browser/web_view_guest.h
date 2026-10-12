@@ -82,6 +82,18 @@ class BrowserWindowHost {
   // window or an extension's tabs.create.
   virtual void Open(content::BrowserContext& context, const GURL& url) = 0;
 
+  // Makes a browser window for a page's `window.open()` or `target="_blank"`
+  // from content's `params`, which name the opener and the window. Content
+  // holds the page until it shows it with AdoptOpenedWindow.
+  virtual std::unique_ptr<content::WebContents> MakeOpenedWindow(
+      const content::WebContents::CreateParams& params) = 0;
+
+  // Lists the window MakeOpenedWindow made, now that content shows it.
+  // `target_url` is the address content navigates it to next; the list shows
+  // it until the window's first navigation.
+  virtual void AdoptOpenedWindow(std::unique_ptr<content::WebContents> contents,
+                                 const GURL& target_url) = 0;
+
   // Opens popup window `window_id`'s one tab at `url`, for an extension's
   // chrome.windows.create. `width` and `height` are the requested size, or 0.
   virtual void OpenPopupWindow(content::BrowserContext& context,
@@ -164,9 +176,9 @@ class MediaAccess {
 // - Uses AttachInnerWebContents, not AttachGuestPage, which requires
 //   features::kGuestViewMPArch (disabled at our pin).
 // - No guest SiteInstance: that requires a separate StoragePartition, which
-//   would log the user out of every site. Because content CHECKs that a
-//   guest's SiteInstance matches in WebContentsImpl::CreateNewWindow,
-//   IsWebContentsCreationOverridden always returns true.
+//   would log the user out of every site. Patch 0115 lets
+//   WebContentsImpl::CreateNewWindow make a guest's new window without one,
+//   through CreateNewGuestWindow.
 class WebViewGuest : public mojom::WebViewGuest,
                      public content::BrowserPluginGuestDelegate,
                      public content::WebContentsDelegate,
@@ -212,6 +224,23 @@ class WebViewGuest : public mojom::WebViewGuest,
       std::optional<int> popup_window,
       bool private_browsing,
       const GuestCreatedCallback& created);
+
+  // Makes the page of browser window `window_id` from content's `params`, for
+  // a page's `window.open()`, and returns it for content to hold. See
+  // BrowserWindowHost::MakeOpenedWindow.
+  //
+  // The guest owns itself until AdoptOpenedWindow, so a page content drops
+  // unshown, such as one whose opener closed first, takes its guest with it.
+  static std::unique_ptr<content::WebContents> MakeOpenedWindow(
+      content::WebContents& shell,
+      const std::string& window_id,
+      const content::WebContents::CreateParams& params,
+      const GuestCreatedCallback& created);
+
+  // Takes back a page MakeOpenedWindow made, once content shows it, and
+  // returns its guest, which owns it from here as MakeWindow's does.
+  static std::unique_ptr<WebViewGuest> AdoptOpenedWindow(
+      std::unique_ptr<content::WebContents> contents);
 
   // Shows this window in `placeholder`, the <webview window> frame under
   // `owner`, and binds the element's pipes to it.
@@ -393,6 +422,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   content::RenderFrameHost* GetProspectiveOuterDocument() override;
   base::WeakPtr<content::BrowserPluginGuestDelegate> GetGuestDelegateWeakPtr()
       override;
+  // Makes the page's new window as a browser window. See MakeOpenedWindow.
+  std::unique_ptr<content::WebContents> CreateNewGuestWindow(
+      const content::WebContents::CreateParams& create_params) override;
 
   // content::WebContentsDelegate:
   //
@@ -474,12 +506,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   void CancelDialogs(content::WebContents* web_contents,
                      bool reset_state) override;
 
-  // Handles a page opening a new window (target="_blank", window.open, ...).
-  //
-  // Refuses content's window and opens a browser window at the address
-  // instead (ReportNewWindow), since content's path CHECKs without a guest
-  // SiteInstance (see the class comment). The opener, window.open handle,
-  // target name and POST body are lost.
+  // Lets content make a page's new window (target="_blank", window.open, ...)
+  // through CreateNewGuestWindow, so the page keeps its opener, its handle,
+  // the target name and a form's POST body.
   bool IsWebContentsCreationOverridden(
       content::RenderFrameHost* opener,
       content::SiteInstance* source_site_instance,
@@ -487,6 +516,7 @@ class WebViewGuest : public mojom::WebViewGuest,
       const GURL& opener_url,
       const std::string& frame_name,
       const GURL& target_url) override;
+  // Unused: IsWebContentsCreationOverridden is false.
   content::WebContents* CreateCustomWebContents(
       content::RenderFrameHost* opener,
       content::SiteInstance* source_site_instance,
@@ -499,13 +529,26 @@ class WebViewGuest : public mojom::WebViewGuest,
       const content::StoragePartitionConfig& partition_config,
       content::SessionStorageNamespaceHandle* session_storage_namespace) override;
 
+  // Shows a new window CreateNewGuestWindow made as a browser window. Content
+  // calls it when the page shows the window, or at once for one without an
+  // opener, and then navigates it.
+  content::WebContents* AddNewContents(
+      content::WebContents* source,
+      std::unique_ptr<content::WebContents> new_contents,
+      const GURL& target_url,
+      WindowOpenDisposition disposition,
+      const blink::mojom::WindowFeatures& window_features,
+      bool user_gesture,
+      bool* was_blocked) override;
+
   // Performs navigations the renderer hands to the browser: a cross-site
   // subframe's `target="_top"` link, a middle or Ctrl click, or a window.open
   // naming an existing context. Content's default ignores them, which breaks
   // sign-in flows.
   //
   // A current-tab disposition navigates this guest. Anything asking for a new
-  // window opens a browser window, as CreateCustomWebContents does.
+  // window opens a browser window at the address with no opener, as Chrome
+  // opens a middle-clicked link (ReportNewWindow).
   content::WebContents* OpenURLFromTab(
       content::WebContents* source,
       const content::OpenURLParams& params,
@@ -646,11 +689,10 @@ class WebViewGuest : public mojom::WebViewGuest,
                 const content::ContextMenuParams& params,
                 bool is_subresource);
 
-  // Makes this guest's WebContents with this as guest delegate, delegate and
-  // observer. Shared by both kinds of guest.
+  // Makes this guest's WebContents from `params` with this as guest
+  // delegate, delegate and observer. Shared by every kind of guest.
   std::unique_ptr<content::WebContents> MakeContents(
-      content::BrowserContext* context,
-      bool initially_hidden,
+      content::WebContents::CreateParams params,
       const GuestCreatedCallback& created);
 
   // Finishes AttachToElement once content has a frame safe to swap, or null
@@ -681,8 +723,8 @@ class WebViewGuest : public mojom::WebViewGuest,
   // changed. The renderer reads it from the widget's visual properties.
   void SetPageFullscreen(bool fullscreen);
 
-  // Opens a browser window at `target_url` for a page that asked for one.
-  // Never opens an empty window.
+  // Opens a browser window at `target_url`, with no opener, for a middle click
+  // or an extension. Never opens an empty window.
   void ReportNewWindow(const GURL& target_url);
 
   // Reports back/forward availability to the element if it changed.

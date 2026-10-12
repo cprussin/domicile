@@ -118,8 +118,6 @@ Understood and not scheduled.
 
 ### Browser windows
 
-- **`window.open` returns `null`** and drops the opener and target name; a
-  form POST to a new target arrives as a GET.
 - **`beforeunload` asks nothing.** The page leaves.
 - **Some permission requests are refused,** including `getDisplayMedia`.
 - **Some file dialogs are refused:** from the shell's own page, and a

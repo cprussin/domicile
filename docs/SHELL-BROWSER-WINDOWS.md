@@ -214,13 +214,10 @@ The browser opens a window without you for:
 
 The window arrives in the next `browserwindowschanged`. You decide where it goes.
 
-The new window is a fresh navigation to that address:
-
-- `window.open` returns `null` to the opener.
-- The opener relationship and window name are lost.
-- A form POSTed to a new target arrives as a GET of its action.
-
-A plain link (`target="_blank"` or middle click) loses nothing.
+A page's new window is the window it asked for: `window.open` returns it, and
+the opener, the window name and a form's POST body are kept. It is listed once
+the page shows it, at the address it opens. A middle click opens the link with
+no opener, as in Chrome.
 
 ## Fullscreen
 
