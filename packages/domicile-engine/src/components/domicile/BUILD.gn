@@ -289,6 +289,16 @@ source_set("file_choice") {
   deps = [ "//net" ]
 }
 
+# A <webview>'s downloads added up for the element. Its own target beside
+# :web_view_guest for the reason :file_choice is one: it needs no browser,
+# which is where its tests are.
+source_set("download_tally") {
+  sources = [
+    "browser/download_tally.cc",
+    "browser/download_tally.h",
+  ]
+}
+
 # Which addresses a <webview> may show.
 #
 # Its own target beside :web_view_guest because it is the part of navigating a
@@ -351,6 +361,7 @@ source_set("web_view_guest") {
 
   public_deps = [
     ":context_menu",
+    ":download_tally",
     ":file_choice",
     ":guest_dialogs",
     ":placeholder_stage",
@@ -362,6 +373,8 @@ source_set("web_view_guest") {
     # PermissionsClient, which //components may reach.
     "//components/content_settings/core/browser",
     "//components/domicile/mojom",
+    # The page's downloads, for their progress.
+    "//components/download/public/common:public",
     "//components/permissions",
     "//components/input",
     # THE LOCK A BROWSER WINDOW DRAWS, and the reason it is Chromium's own
@@ -654,6 +667,7 @@ source_set("unit_tests") {
     "browser/display_capture_target_unittest.cc",
     "browser/display_capture_unittest.cc",
     "browser/display_list_unittest.cc",
+    "browser/download_tally_unittest.cc",
     "browser/extension_installer_unittest.cc",
     "browser/extension_tray_entry_unittest.cc",
     "browser/file_choice_unittest.cc",
@@ -704,6 +718,7 @@ source_set("unit_tests") {
     ":device_choices",
     ":display_capture_target",
     ":display_transform",
+    ":download_tally",
     ":extension_installer",
     ":extension_tray_entry",
     ":file_choice",

@@ -95,6 +95,7 @@ stale state.
 | `canGoBack`, `canGoForward` | `domicile-history-change` | Whether back and forward would move |
 | `loading` | `domicile-loading-change` | Whether the page is loading, as a browser's spinner shows. Same-document navigations (fragment, `pushState`) do not count |
 | `loadProgress` | `domicile-load-progress-change` | How far the page has loaded, from 0.1 to 1. Read it only while `loading` |
+| `downloadCount`, `downloadReceivedBytes`, `downloadTotalBytes` | `domicile-downloads-change` | The page's downloads in progress, and their bytes received and expected. Total is 0 when any size is unknown. A download counts once the shell picks where it goes |
 | `url`, `security` | `domicile-page-change` | The address the page is at, and its connection security |
 | `zoom` | `domicile-zoom-change` | Zoom factor; 1 is 100% |
 | `favicon` | `domicile-favicon-change` | Icon URL, or `""` |

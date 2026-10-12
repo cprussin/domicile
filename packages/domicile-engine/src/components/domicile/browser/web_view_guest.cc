@@ -28,6 +28,7 @@
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "components/domicile/browser/context_menu.h"
+#include "components/domicile/browser/download_tally.h"
 #include "components/domicile/browser/file_choice.h"
 #include "components/domicile/browser/placeholder_stage.h"
 #include "components/domicile/browser/shortcut_registry.h"
@@ -36,7 +37,9 @@
 #include "components/domicile/browser/web_view_url.h"
 #include "components/security_state/content/content_utils.h"
 #include "components/security_state/core/security_state.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/document_service.h"
+#include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -655,6 +658,7 @@ std::unique_ptr<content::WebContents> WebViewGuest::MakeContents(
 
   settings_observation_.Observe(
       permissions::PermissionsClient::Get()->GetSettingsMap(context));
+  download_manager_observation_.Observe(context->GetDownloadManager());
 
   // Unretained is safe: the subscription is a member, reset in
   // WebContentsDestroyed.
@@ -749,6 +753,7 @@ void WebViewGuest::ReportEverything() {
   reported_can_go_forward_ = false;
   reported_loading_ = false;
   reported_load_progress_ = 0.0;
+  reported_downloads_ = DownloadTally();
   reported_url_ = GURL();
   reported_security_ = mojom::WebViewSecurity::kNeutral;
   reported_find_matches_ = 0;
@@ -760,6 +765,7 @@ void WebViewGuest::ReportEverything() {
   ReportPage();
   ReportLoading(guest_contents_->ShouldShowLoadingUI());
   ReportLoadProgress(guest_contents_->GetLoadProgress());
+  ReportDownloads();
   // Bypasses ReportZoom, which would also notify chrome.tabs of an unchanged
   // zoom.
   if (!blink::ZoomValuesEqual(reported_zoom_, 1.0)) {
@@ -1467,6 +1473,27 @@ void WebViewGuest::ReportLoadProgress(double progress) {
   }
 }
 
+void WebViewGuest::ReportDownloads() {
+  std::vector<DownloadReading> readings;
+  for (const download::DownloadItem* item : downloads_) {
+    readings.push_back(
+        {.in_progress =
+             item->GetState() == download::DownloadItem::IN_PROGRESS,
+         .has_target = !item->GetTargetFilePath().empty(),
+         .received_bytes = item->GetReceivedBytes(),
+         .total_bytes = item->GetTotalBytes()});
+  }
+  const DownloadTally tally = TallyDownloads(readings);
+  if (tally != reported_downloads_) {
+    reported_downloads_ = tally;
+    // Logged for guard-webview-download.sh.
+    LOG(INFO) << "domicile: a <webview> reported " << tally.count
+              << " downloads in progress.";
+    client_->DownloadsChanged(tally.count, tally.received_bytes,
+                              tally.total_bytes);
+  }
+}
+
 namespace {
 
 // The assumed size of an icon whose link gives none: 180 px for a touch icon,
@@ -1600,6 +1627,32 @@ void WebViewGuest::ReportZoom() {
 
 void WebViewGuest::LoadProgressChanged(double progress) {
   ReportLoadProgress(progress);
+}
+
+void WebViewGuest::OnDownloadCreated(content::DownloadManager* manager,
+                                     download::DownloadItem* item) {
+  if (content::DownloadItemUtils::GetWebContents(item) != guest_contents_) {
+    return;
+  }
+  downloads_.push_back(item);
+  download_observations_.AddObservation(item);
+  ReportDownloads();
+}
+
+void WebViewGuest::ManagerGoingDown(content::DownloadManager* manager) {
+  download_observations_.RemoveAllObservations();
+  downloads_.clear();
+  download_manager_observation_.Reset();
+}
+
+void WebViewGuest::OnDownloadUpdated(download::DownloadItem* item) {
+  ReportDownloads();
+}
+
+void WebViewGuest::OnDownloadDestroyed(download::DownloadItem* item) {
+  download_observations_.RemoveObservation(item);
+  std::erase(downloads_, item);
+  ReportDownloads();
 }
 
 void WebViewGuest::DidReceiveFindReply(int request_id,
@@ -1948,6 +2001,9 @@ base::CallbackListSubscription WebViewGuest::AddZoomChangedCallback(
 void WebViewGuest::WebContentsDestroyed() {
   zoom_subscription_ = {};
   settings_observation_.Reset();
+  download_manager_observation_.Reset();
+  download_observations_.RemoveAllObservations();
+  downloads_.clear();
   guest_contents_ = nullptr;
   if (self_owned_) {
     delete this;

@@ -4,6 +4,7 @@ import {
   WEBVIEW_CONTEXT_MENU_EVENT,
   WEBVIEW_DEVICE_REQUEST_EVENT,
   WEBVIEW_DIALOG_EVENT,
+  WEBVIEW_DOWNLOADS_CHANGE_EVENT,
   WEBVIEW_FILE_CHOOSER_EVENT,
   WEBVIEW_FIND_CHANGE_EVENT,
   WEBVIEW_FOCUS_REQUEST_EVENT,
@@ -102,6 +103,27 @@ const progresses = (element: HTMLWebViewElement, progress: number): void => {
     value: progress,
   });
   fireEvent(element, new Event(WEBVIEW_LOAD_PROGRESS_CHANGE_EVENT));
+};
+
+/** Fires a downloads change with one download `received` bytes of `total` in. */
+const downloads = (
+  element: HTMLWebViewElement,
+  received: number,
+  total: number,
+): void => {
+  Object.defineProperty(element, "downloadCount", {
+    configurable: true,
+    value: 1,
+  });
+  Object.defineProperty(element, "downloadReceivedBytes", {
+    configurable: true,
+    value: received,
+  });
+  Object.defineProperty(element, "downloadTotalBytes", {
+    configurable: true,
+    value: total,
+  });
+  fireEvent(element, new Event(WEBVIEW_DOWNLOADS_CHANGE_EVENT));
 };
 
 /**
@@ -1525,6 +1547,35 @@ describe("BrowserWindow", () => {
       expect(
         screen.getByRole("progressbar", { name: "Loading" }),
       ).toHaveAttribute("aria-valuenow", "50");
+    });
+
+    it("shows how far the page's download has come", () => {
+      const { container } = render(
+        <BrowserWindow
+          behindPanel={false}
+          clickThrough={false}
+          covered={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          fullscreen={false}
+          motion="resting"
+          onIcon={noIcon}
+          onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          url="https://example.com"
+          window="1"
+        />,
+      );
+      downloads(view(container), 25, 100);
+
+      expect(
+        screen.getByRole("progressbar", { name: "Downloading" }),
+      ).toHaveAttribute("aria-valuenow", "25");
     });
   });
 
