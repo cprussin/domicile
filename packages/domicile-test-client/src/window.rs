@@ -232,6 +232,8 @@ struct Client {
     buffer_transform: Option<wl_output::Transform>,
     /// See [`crate::arguments::Arguments::follow_configure`].
     follow_configure: bool,
+    /// See [`crate::arguments::Arguments::resize_to`]. Taken when applied.
+    resize_to: Option<(u32, u32)>,
     /// See [`crate::arguments::Arguments::ask_for_focus`].
     ask_for_focus: Option<AskForFocus>,
     /// The serial of the keyboard's last `enter`, for
@@ -263,7 +265,7 @@ struct Client {
     /// `xdg_toplevel.configure` carries the size and the following
     /// `xdg_surface.configure` carries the serial that makes it current, so
     /// the size is held until then. Always `None` without
-    /// `--follow-configure`.
+    /// `--follow-configure`, except for the size `--resize-to` applies.
     configured_size: Option<(u32, u32)>,
     globals: Globals,
     /// Set by [`Client::open`] before any event that could draw is
@@ -437,6 +439,7 @@ impl Client {
             translucent: asked.translucent,
             buffer_transform: asked.buffer_transform,
             follow_configure: asked.follow_configure,
+            resize_to: asked.resize_to,
             ask_for_focus: asked.ask_for_focus,
             entered_at: None,
             hold_the_screens_on: asked.hold_the_screens_on,
@@ -1489,6 +1492,11 @@ impl Dispatch<wl_callback::WlCallback, ()> for Client {
         handle: &QueueHandle<Client>,
     ) {
         if let wl_callback::Event::Done { .. } = event {
+            // The first frame is up, so `--resize-to` changes a shown window.
+            if let Some(size) = client.resize_to.take() {
+                client.configured_size = Some(size);
+                resize_or_stop(client, handle);
+            }
             draw_or_stop(client, handle);
         }
     }

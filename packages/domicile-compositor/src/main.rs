@@ -203,6 +203,7 @@ use crate::scale::{logical_size, output_scale};
 use crate::screens::{Advertised, Screens, Slot};
 use crate::viewport::{source_pixels, surface_size, Viewport};
 use crate::which_engine::another_engine;
+use crate::window_geometry::window_size;
 use domicile_config::{
     Config, ConfigError, ConfigStore, ExtensionsConfig, IdleConfig, KeyboardConfig, LockConfig,
     Omit, ThemeMode,
@@ -953,24 +954,13 @@ impl DomicileCompositor {
     }
 
     /// Announce a window to the chromes at its first frame, with what its
-    /// client said before drawing it.
-    ///
-    /// `drawn` is the frame's logical size; the window geometry, when set,
-    /// leaves out a client-drawn shadow.
+    /// client said before drawing it. `size` is from [`window_size`].
     fn announce_a_new_window(
         &mut self,
         app_id: &str,
         toplevel: &ToplevelSurface,
-        geometry: Option<(i32, i32, i32, i32)>,
-        drawn: Option<(u32, u32)>,
+        size: (f64, f64),
     ) {
-        let size = match (geometry, drawn) {
-            (Some((_, _, width, height)), _) => (f64::from(width), f64::from(height)),
-            (None, Some((width, height))) => (f64::from(width), f64::from(height)),
-            // A buffer of no known kind is not shown, so the window waits for
-            // one that is.
-            (None, None) => return,
-        };
         self.unannounced.remove(app_id);
         let mapped = domicile_host::Mapped {
             size,
@@ -982,6 +972,19 @@ impl DomicileCompositor {
         let announce = self.hub.host.lock().unwrap().app_mapped(app_id, mapped);
         debug!(%app_id, ?mapped, "toplevel drew -> app_appeared");
         for message in announce {
+            self.hub.broadcast(message);
+        }
+    }
+
+    /// Tell the chromes a window's size, if it changed. `size` is from
+    /// [`window_size`].
+    ///
+    /// The engine maps the pointer into the window by this size, so a stale
+    /// one offsets every click.
+    fn tell_the_size(&mut self, app_id: &str, size: (f64, f64)) {
+        let resized = self.hub.host.lock().unwrap().app_resized(app_id, size);
+        if let Some(message) = resized {
+            debug!(%app_id, ?size, "toplevel resized -> app_resized");
             self.hub.broadcast(message);
         }
     }
@@ -4384,15 +4387,20 @@ impl CompositorHandler for DomicileCompositor {
         if let (Some(buffer), Committer::App(app_id), Role::Toplevel(toplevel)) =
             (&attached, &committer, &role)
         {
-            if self.unannounced.contains(app_id) {
-                let drawn = committed_buffer(buffer).map(|committed| {
-                    surface_size(
-                        upright_size(committed.size(), buffer_transform),
-                        buffer_scale,
-                        viewport.destination,
-                    )
-                });
-                self.announce_a_new_window(app_id, toplevel, geometry, drawn);
+            let drawn = committed_buffer(buffer).map(|committed| {
+                surface_size(
+                    upright_size(committed.size(), buffer_transform),
+                    buffer_scale,
+                    viewport.destination,
+                )
+            });
+            // A buffer of no known kind is not shown, so it has no size.
+            if let Some(size) = window_size(geometry, drawn) {
+                if self.unannounced.contains(app_id) {
+                    self.announce_a_new_window(app_id, toplevel, size);
+                } else {
+                    self.tell_the_size(app_id, size);
+                }
             }
         }
         let feedback = with_states(surface, |states| {

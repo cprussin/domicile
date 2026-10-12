@@ -303,3 +303,22 @@ fn a_client_that_limits_its_size_has_the_chrome_told() {
     // `0` means no limit on that axis.
     assert_eq!(size, [1920.0, 0.0]);
 }
+
+/// A window that redraws at a new size has the chrome told.
+///
+/// The engine maps the pointer into the window by the size it was last told,
+/// so a stale size puts every click off by the ratio of the two.
+#[test]
+fn a_window_that_draws_at_a_new_size_has_the_chrome_told() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let _client = compositor.client_with("a growing window", &["--resize-to", "400x300"]);
+
+    let resized = chrome
+        .wait_for(|message| matches!(message, HostMessage::AppResized { .. }))
+        .expect("a window that drew at a new size has the chrome told");
+    let HostMessage::AppResized { size, .. } = resized else {
+        unreachable!("the wait matched on this variant")
+    };
+    assert_eq!(size, [400.0, 300.0]);
+}

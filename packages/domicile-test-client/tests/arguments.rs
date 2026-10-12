@@ -321,6 +321,19 @@ fn a_client_can_be_given_limits_on_its_size() {
 }
 
 #[test]
+fn a_client_can_resize_itself_after_its_first_frame() {
+    // As a client that picks its own size does.
+    let asked = given(&["--resize-to", "400x300"]).expect("a client that grows");
+
+    assert_eq!(asked.resize_to, Some((400, 300)));
+    assert_eq!(
+        given(&[]).unwrap().resize_to,
+        None,
+        "and keeps its size unless asked"
+    );
+}
+
+#[test]
 fn a_size_that_is_not_two_numbers_is_refused() {
     assert_eq!(
         given(&["--min-size", "680"]),
