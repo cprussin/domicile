@@ -4,10 +4,11 @@
 #   nix develop .#full -c ./scripts/check.sh
 #   ./scripts/check.sh e2e            # one group
 #
-# Groups: `shell`, `rust`, `typescript`, `e2e`, `engine` and `nix`. Workflows
-# run groups only; `scripts/test-the-workflows-delegate-their-checks.sh`
-# asserts that. `engine` needs a warm Chromium tree and `nix` needs `nix` on
-# PATH; without them they skip.
+# Groups: `shell`, `rust`, `typescript`, `e2e`, `engine`, `nix` and `distro`.
+# Workflows run groups only;
+# `scripts/test-the-workflows-delegate-their-checks.sh` asserts that. `engine` needs a warm Chromium tree, `nix` needs `nix` on PATH
+# and `distro` needs packages from `distro/build.sh` and docker; without them
+# they skip.
 #
 # `DOMICILE_CHECK_STRICT=1` turns a skip into a failure, for CI.
 #
@@ -25,7 +26,7 @@ PASSED=(); FAILED=(); SKIPPED=()
 # Which groups to run; none means all.
 #
 # Not `GROUPS`: bash reserves that name and ignores assignments to it.
-KNOWN=(shell rust typescript e2e engine nix)
+KNOWN=(shell rust typescript e2e engine nix distro)
 SELECTED=("$@")
 [ "${#SELECTED[@]}" -eq 0 ] && SELECTED=("${KNOWN[@]}")
 # An unknown group is an error, so a typo cannot check nothing and exit 0.
@@ -209,6 +210,16 @@ if wanted nix; then
   echo
   echo "== nix =="
   for script in scripts/nix-*.sh; do
+    run "$(basename "$script" .sh)" "$script"
+  done
+fi
+
+# Every `distro-*.sh`. A separate group because these need the packages
+# `distro/build.sh` makes and docker; `distro-packages.yml` runs it.
+if wanted distro; then
+  echo
+  echo "== distro =="
+  for script in scripts/distro-*.sh; do
     run "$(basename "$script" .sh)" "$script"
   done
 fi

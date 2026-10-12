@@ -1,0 +1,141 @@
+name: Distro packages
+
+# Build the Debian, RPM and Arch packages (`distro/build.sh`), install each in
+# its distribution's container (`./scripts/check.sh distro`), and publish them
+# as a release when stable.yml calls this for a commit it promoted.
+#
+# On pull requests, only those that touch the packaging or the pins it reads.
+# The other workflows build the code itself.
+on:
+  pull_request:
+    paths:
+      - distro/**
+      - nix/**
+      - flake.nix
+      - flake.lock
+      - packages/domicile-engine/engine-*.nix
+      - scripts/check.sh
+      - scripts/distro-*.sh
+      - scripts/lib/distro-installed.sh
+      - .github/scripts/distro-packages-publish.sh
+      - .github/workflows/distro-packages.yml
+  workflow_call:
+    inputs:
+      ref:
+        description: The commit to package
+        type: string
+        required: true
+      publish:
+        description: Publish the packages as a release
+        type: boolean
+        default: false
+  # To publish again after a failure: the commit stable.yml promoted, and
+  # `publish`.
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: The commit to package
+        type: string
+        required: true
+      publish:
+        description: Publish the packages as a release
+        type: boolean
+        default: false
+
+concurrency:
+  group: distro-packages-${{ inputs.ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # In Debian 12, so the binaries need glibc 2.36 at most. The engine needs
+  # 2.25.
+  binaries:
+    runs-on: ubuntu-latest
+    container: debian:bookworm
+    timeout-minutes: 45
+    steps:
+      - name: Install the build tools and the headers the compositor builds against
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates curl git \
+            build-essential pkg-config libxkbcommon-dev libwayland-dev \
+            libpipewire-0.3-dev libclang-dev
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: distro/binaries.sh binaries
+      - uses: actions/upload-artifact@v7
+        with:
+          name: binaries
+          path: binaries/
+
+  packages:
+    needs: binaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - uses: actions/download-artifact@v8
+        with:
+          name: binaries
+          path: binaries/
+      - run: distro/build.sh binaries distro-out
+      # Already compressed.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packages
+          path: distro-out/
+          compression-level: 0
+
+  installs:
+    needs: packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [debian, ubuntu, fedora, opensuse, arch]
+    env:
+      # Docker is on the runner, so the check must run.
+      DOMICILE_CHECK_STRICT: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: packages
+          path: distro-out/
+      - run: ./scripts/check.sh distro
+        env:
+          DOMICILE_DISTRO_PACKAGES: distro-out
+          DOMICILE_DISTROS: ${{ matrix.distro }}
+
+  publish:
+    needs: installs
+    if: inputs.publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: packages
+          path: distro-out/
+      - run: .github/scripts/distro-packages-publish.sh distro-out
+        env:
+          GH_TOKEN: ${{ github.token }}

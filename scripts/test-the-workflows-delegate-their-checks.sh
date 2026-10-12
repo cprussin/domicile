@@ -181,7 +181,7 @@ fi
 #                             `scripts/`.
 echo "the checking workflows check through scripts/"
 
-for name in cargo-test turbo-test e2e nix-build engine pinned-engine; do
+for name in cargo-test turbo-test e2e nix-build engine pinned-engine distro-packages; do
   workflow="$WORKFLOWS/$name.yml"
   if [ ! -f "$workflow" ]; then
     fail "$name.yml exists" "it does not, so nothing below was asserted about it"

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Creates the `domicile` group from `/usr/lib/sysusers.d/domicile.conf`.
+set -e
+systemd-sysusers domicile.conf

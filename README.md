@@ -64,6 +64,8 @@ See [shell-manganese](packages/shell-manganese/README.md) for configuration and 
 
 [shell-simple](packages/shell-simple/README.md) is the same terrible idea with fewer opinions.
 
+Not on Nix? There are packages for Debian, Ubuntu, Fedora, openSUSE and Arch: [other distributions](docs/RUNNING-A-DESKTOP.md#other-distributions).
+
 ## License
 
 [MIT](LICENSE). The engine's patches edit Chromium files, which keep Chromium's licenses; see [`packages/domicile-engine/LICENSE`](packages/domicile-engine/LICENSE).

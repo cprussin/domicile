@@ -1,0 +1,11 @@
+# Lets the engine make the user namespaces its sandbox runs in. Ubuntu 23.10
+# and later refuse them to programs without a profile; Ubuntu ships the same
+# profile for Chrome.
+abi <abi/4.0>,
+include <tunables/global>
+
+profile domicile-engine /usr/libexec/domicile/engine/chrome flags=(unconfined) {
+  userns,
+
+  include if exists <local/domicile-engine>
+}

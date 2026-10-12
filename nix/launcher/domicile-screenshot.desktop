@@ -1,0 +1,9 @@
+# The shell's picker, as Print in manganese: a monitor, a window or an area.
+[Desktop Entry]
+Type=Application
+Name=Screenshot
+Comment=Save a picture of a monitor, a window or an area
+Exec=@bin@/domicile screenshot
+Icon=@icon@
+X-Domicile-Preview=@preview@
+Terminal=false
