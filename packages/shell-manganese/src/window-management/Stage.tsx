@@ -401,7 +401,7 @@ export const Stage = memo(
           tie by document order. A shown tab's contents tuck under its whole
           strip (see `SURFACE_TUCK`), including other windows' tabs. One
           component for tiled and floating, so the bar is not remounted when
-          the window floats. See `WindowTitleBar`.
+          the window floats. See `WindowTitleBar`. A bare float has none.
         */}
           {motions.drawn.map(
             ({
@@ -413,7 +413,7 @@ export const Stage = memo(
               screen,
               window,
             }) =>
-              placement === undefined ? undefined : (
+              placement === undefined || placement.bare ? undefined : (
                 <WindowBar
                   dragging={stretching || held.has(window.id)}
                   float={desk.floats.get(window.id)}

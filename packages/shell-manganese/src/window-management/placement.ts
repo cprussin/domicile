@@ -5,7 +5,7 @@
 // it is on.
 
 import type { Float } from "./floating/float";
-import { floatHolds, onScreen, rectOf } from "./floating/float";
+import { floatHolds, isBare, onScreen, rectOf } from "./floating/float";
 import { floatingGapOf, INNER_GAP, tiledAreaOf } from "./gaps";
 import type { Rect } from "./rect";
 import { spanning } from "./rect";
@@ -27,6 +27,11 @@ import { fullscreenOn } from "./workspace";
 export type Placement = {
   /** Its title bar, or its tab in a tabbed container. */
   bar: Rect;
+  /**
+   * Whether it draws no title bar: a bare float's window, whose client draws
+   * its own frame over the whole box. See `isBare`.
+   */
+  bare: boolean;
   /**
    * For a hidden tab, where a tab switch draws it under the shown one, at
    * {@link COVERED}. `undefined` when `surface` is set. See `Frame.behind`.
@@ -164,8 +169,15 @@ export const placementsOf = (
     }));
   const laidOut = [
     ...frames.map((frame) => placed(frame, TILED)),
-    ...floating.flatMap(({ depth, frames: inFloat }) =>
-      inFloat.map((frame) => placed(frame, depth)),
+    ...floating.flatMap(({ depth, float, frames: inFloat }) =>
+      inFloat.map((frame) =>
+        isBare(float)
+          ? {
+              ...placed({ ...frame, surface: rectOf(float) }, depth),
+              bare: true,
+            }
+          : placed(frame, depth),
+      ),
     ),
   ];
   const filled = fullscreenIn(workspace, geometry);
@@ -286,6 +298,7 @@ const placed = (
   depth: number,
 ): Placement => ({
   bar,
+  bare: false,
   behind,
   depth,
   frame: surface === undefined ? bar : spanning(bar, surface),

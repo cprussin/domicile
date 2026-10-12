@@ -47,6 +47,7 @@ import { useTrayOrder } from "./tray/useTrayOrder";
 import { Wallpaper } from "./wallpaper/Wallpaper";
 import { desktopClientIcons } from "./window-management/client-icons";
 import type { Direction } from "./window-management/direction";
+import type { FloatingRules } from "./window-management/floating/floating-rules";
 import type { Geometry } from "./window-management/placement";
 import type { Focus, Spot } from "./window-management/pointer-warp";
 import type { Rect } from "./window-management/rect";
@@ -68,6 +69,8 @@ type Props = {
   /** What the launcher offers beside files. */
   applications: ApplicationsConfig;
   domicile: DomicileHost;
+  /** Which client windows open floating, besides dialogs. */
+  floating: FloatingRules;
   /** The keys this desktop binds, merged under the config's. */
   keybindings: ShellKeybindings;
   /** The layout of every monitor's bar. */
@@ -85,6 +88,7 @@ type Props = {
 export const Desktop = ({
   applications,
   domicile,
+  floating,
   keybindings,
   topBar,
 }: Props) => {
@@ -92,7 +96,7 @@ export const Desktop = ({
   // The wallpaper advances only this theme's rotation, and holds it while
   // the theme wipe plays.
   const { flipping, theme } = useTheme();
-  const windows = useWindows(domicile, displays);
+  const windows = useWindows(domicile, displays, floating);
   const { act } = windows;
   const clientIcons = useClientIcons(
     domicile,

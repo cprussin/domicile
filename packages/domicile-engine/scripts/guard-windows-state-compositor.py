@@ -36,15 +36,31 @@ import sys
 import time
 
 SEQUENCE = [
-    {"type": "app_appeared", "app_id": "first", "title": "First"},
+    {
+        "type": "app_appeared",
+        "app_id": "first",
+        "title": "First",
+        "size": [300, 200],
+        "dialog": False,
+        "client_frame": False,
+    },
     {
         "type": "app_appeared",
         "app_id": "second",
         "title": "Second",
         "desktop_id": "org.example.Second",
         "size": [640, 480],
+        "dialog": True,
+        "client_frame": True,
     },
-    {"type": "app_appeared", "app_id": "gone", "title": "Gone"},
+    {
+        "type": "app_appeared",
+        "app_id": "gone",
+        "title": "Gone",
+        "size": [100, 100],
+        "dialog": False,
+        "client_frame": False,
+    },
     {"type": "app_titled", "app_id": "first", "title": "Retitled"},
     {"type": "app_desktop_id", "app_id": "first", "desktop_id": "org.example.First"},
     {"type": "app_resized", "app_id": "first", "size": [800, 600]},

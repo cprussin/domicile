@@ -79,8 +79,10 @@ export const describedWindow = (
   fields: Partial<DomicileWindow> = {},
 ): DomicileWindow => ({
   appId,
+  clientFrame: false,
   cursor: "default",
   desktopId: "",
+  dialog: false,
   grab: false,
   height: null,
   maxHeight: null,

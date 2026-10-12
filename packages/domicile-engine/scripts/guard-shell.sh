@@ -351,14 +351,25 @@ LOOKS="${LOOKS:-90}"
 
 FOUND=""
 WAITED=0
+GONE=0
 for _ in $(seq 1 "$LOOKS"); do
   FOUND=$(grep -aoE "engine found #[0-9A-F]{8} over .*" "$COMP_LOG" 2>/dev/null |
             tail -1)
   [ -n "$FOUND" ] && break
-  desktop_up || break
+  desktop_up || { GONE=1; break; }
   sleep 1
   WAITED=$((WAITED + 1))
 done
+
+# A compositor that exits ends `domicile` without a restart, so the window's
+# absence is the desktop's death. Name it, with what `domicile` said last.
+if [ -z "$FOUND" ] && [ "$GONE" = "1" ]; then
+  annotate_from "guard-shell: the desktop exited while the guard looked for the client's window" \
+    "$RUN_LOG"
+  echo "the desktop exited. domicile's last words:" >&2
+  tail -40 "$RUN_LOG" | cut -c1-300 | sed 's/^/  /' >&2
+  exit 1
+fi
 
 # Record the timing only when the guard found the color. A run that timed out
 # measured nothing.

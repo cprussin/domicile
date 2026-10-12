@@ -1,28 +1,31 @@
 import { describe, expect, it } from "bun:test";
 import { describedWindow } from "@domicile-desktop/sdk/fake-host";
 
+import { floatingRulesSchema } from "./floating/floating-rules";
 import { windowChanges } from "./window-changes";
 import { WindowAction } from "./window-state";
 
 const TERM = describedWindow("term", { title: "Terminal" });
+const NO_RULES = floatingRulesSchema.parse([]);
 
 describe("windowChanges", () => {
   describe("a window that appeared", () => {
     it("is announced with its title", () => {
-      expect(windowChanges([], [TERM])).toStrictEqual([
+      expect(windowChanges(NO_RULES, [], [TERM])).toStrictEqual([
         WindowAction.AppAppeared("term", "Terminal"),
       ]);
     });
 
     it("is announced unnamed while its client has not named it", () => {
-      expect(windowChanges([], [describedWindow("term")])).toStrictEqual([
-        WindowAction.AppAppeared("term", undefined),
-      ]);
+      expect(
+        windowChanges(NO_RULES, [], [describedWindow("term")]),
+      ).toStrictEqual([WindowAction.AppAppeared("term", undefined)]);
     });
 
     it("says the limits and the cursor its client already asked for", () => {
       expect(
         windowChanges(
+          NO_RULES,
           [],
           [{ ...TERM, cursor: "text", maxWidth: 800, minHeight: 100 }],
         ),
@@ -36,16 +39,65 @@ describe("windowChanges", () => {
 
     it("says the desktop entry its client already named", () => {
       expect(
-        windowChanges([], [{ ...TERM, desktopId: "org.example.Term" }]),
+        windowChanges(
+          NO_RULES,
+          [],
+          [{ ...TERM, desktopId: "org.example.Term" }],
+        ),
       ).toStrictEqual([
         WindowAction.AppAppeared("term", "Terminal"),
         WindowAction.AppDesktopIdChanged("term", "org.example.Term"),
       ]);
     });
 
+    it("opens floating at the size it drew, for a dialog", () => {
+      expect(
+        windowChanges(
+          NO_RULES,
+          [],
+          [{ ...TERM, dialog: true, height: 300, width: 400 }],
+        ),
+      ).toStrictEqual([
+        WindowAction.AppAppearedFloating("term", "Terminal", [400, 300], false),
+      ]);
+    });
+
+    it("opens floating without its title bar when it draws its own frame", () => {
+      expect(
+        windowChanges(
+          NO_RULES,
+          [],
+          [
+            {
+              ...TERM,
+              clientFrame: true,
+              dialog: true,
+              height: 300,
+              width: 400,
+            },
+          ],
+        ),
+      ).toStrictEqual([
+        WindowAction.AppAppearedFloating("term", "Terminal", [400, 300], true),
+      ]);
+    });
+
+    it("opens floating when a rule names it", () => {
+      expect(
+        windowChanges(
+          floatingRulesSchema.parse([{ title: "^Term" }]),
+          [],
+          [{ ...TERM, height: 300, width: 400 }],
+        ),
+      ).toStrictEqual([
+        WindowAction.AppAppearedFloating("term", "Terminal", [400, 300], false),
+      ]);
+    });
+
     it("is placed, for a popup", () => {
       expect(
         windowChanges(
+          NO_RULES,
           [TERM],
           [
             TERM,
@@ -72,14 +124,22 @@ describe("windowChanges", () => {
   describe("a window that changed", () => {
     it("says only what changed", () => {
       expect(
-        windowChanges([TERM], [{ ...TERM, title: "vim", width: 640 }]),
+        windowChanges(
+          NO_RULES,
+          [TERM],
+          [{ ...TERM, title: "vim", width: 640 }],
+        ),
       ).toStrictEqual([WindowAction.AppTitled("term", "vim")]);
     });
 
     it("says the desktop entry its client names later", () => {
       // Clients usually set their app id after their toplevel appears.
       expect(
-        windowChanges([TERM], [{ ...TERM, desktopId: "org.example.Term" }]),
+        windowChanges(
+          NO_RULES,
+          [TERM],
+          [{ ...TERM, desktopId: "org.example.Term" }],
+        ),
       ).toStrictEqual([
         WindowAction.AppDesktopIdChanged("term", "org.example.Term"),
       ]);
@@ -88,6 +148,7 @@ describe("windowChanges", () => {
     it("says its new limits", () => {
       expect(
         windowChanges(
+          NO_RULES,
           [TERM],
           [{ ...TERM, maxHeight: 600, minHeight: 100, minWidth: 200 }],
         ),
@@ -99,7 +160,7 @@ describe("windowChanges", () => {
 
     it("says its new cursor", () => {
       expect(
-        windowChanges([TERM], [{ ...TERM, cursor: "pointer" }]),
+        windowChanges(NO_RULES, [TERM], [{ ...TERM, cursor: "pointer" }]),
       ).toStrictEqual([WindowAction.AppCursorChanged("term", "pointer")]);
     });
 
@@ -113,7 +174,7 @@ describe("windowChanges", () => {
       });
 
       expect(
-        windowChanges([TERM, menu], [TERM, { ...menu, x: 30 }]),
+        windowChanges(NO_RULES, [TERM, menu], [TERM, { ...menu, x: 30 }]),
       ).toStrictEqual([
         WindowAction.PopupPlaced({
           appId: "menu",
@@ -125,12 +186,12 @@ describe("windowChanges", () => {
     });
 
     it("says nothing for a window that did not change", () => {
-      expect(windowChanges([TERM], [TERM])).toStrictEqual([]);
+      expect(windowChanges(NO_RULES, [TERM], [TERM])).toStrictEqual([]);
     });
   });
 
   it("closes a window that is gone", () => {
-    expect(windowChanges([TERM], [])).toStrictEqual([
+    expect(windowChanges(NO_RULES, [TERM], [])).toStrictEqual([
       WindowAction.AppClosed("term"),
     ]);
   });

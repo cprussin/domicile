@@ -291,12 +291,22 @@ pub mod fixture {
             0,
             Portals::to_nobody(),
         );
-        let app_id = {
-            let mut host = hub.host.lock().unwrap();
-            let (app_id, _) = host.app_appeared(None, Some((100.0, 100.0)));
-            app_id
-        };
+        let app_id = drawn(&mut hub.host.lock().unwrap());
         (hub, outbound, app_id)
+    }
+
+    /// A window that has drawn its first frame, announced to the chromes.
+    pub fn drawn(host: &mut domicile_host::Host) -> String {
+        let app_id = host.app_created();
+        host.app_mapped(
+            &app_id,
+            domicile_host::Mapped {
+                size: (100.0, 100.0),
+                has_parent: false,
+                client_frame: false,
+            },
+        );
+        app_id
     }
 }
 
@@ -308,7 +318,7 @@ mod tests {
     use domicile_protocol::{ChromeMessage, HostMessage, Theme};
     use smithay::reexports::calloop::channel::channel;
 
-    use super::fixture::{hub_with_an_app, queued};
+    use super::fixture::{drawn, hub_with_an_app, queued};
     use super::{
         announce_open_apps, broadcast_closed, broadcast_focus_decision, broadcast_focus_request,
         ChromeHub,
@@ -383,16 +393,8 @@ mod tests {
             0,
             Portals::to_nobody(),
         );
-        let (first, _) = hub
-            .host
-            .lock()
-            .unwrap()
-            .app_appeared(Some("a terminal".to_string()), Some((640.0, 480.0)));
-        let (second, _) = hub
-            .host
-            .lock()
-            .unwrap()
-            .app_appeared(None, Some((100.0, 200.0)));
+        let first = drawn(&mut hub.host.lock().unwrap());
+        let second = drawn(&mut hub.host.lock().unwrap());
 
         announce_open_apps(&hub);
 

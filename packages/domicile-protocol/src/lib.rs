@@ -257,26 +257,34 @@ pub enum HostMessage {
         logo: bool,
     },
 
-    /// A new Wayland toplevel appeared; the chrome decides where to mount its
-    /// `<app id="…">` element.
+    /// A Wayland toplevel drew its first frame; the chrome decides where to
+    /// mount its `<app id="…">` element.
     ///
-    /// `size` is usually absent because the client has not drawn yet; it
-    /// follows in [`HostMessage::AppResized`]. Until then the chrome picks the
-    /// window's size itself.
+    /// Sent at the first buffer commit, so it carries everything the client
+    /// set before drawing. Later changes follow in their own messages.
     AppAppeared {
         app_id: String,
         title: Option<String>,
         /// The client's `xdg_toplevel.set_app_id`, which names its desktop
-        /// entry. Usually absent here; it follows in
+        /// entry. Absent when the client set none; a later one follows in
         /// [`HostMessage::AppDesktopId`].
         desktop_id: Option<String>,
-        size: Option<[f64; 2]>,
+        /// The size the client drew its first frame at, logical.
+        size: [f64; 2],
+        /// The client marked the window a dialog: it has a parent
+        /// (`xdg_toplevel.set_parent`) or a fixed size, as sway reads them.
+        /// Shells float dialogs at `size`.
+        dialog: bool,
+        /// The client asked to draw its own frame (client-side decorations).
+        /// The compositor still answers "server side"; a shell can leave its
+        /// own frame off such a window where that suits it.
+        client_frame: bool,
     },
 
     /// A window's title, sent whenever it changes.
     ///
-    /// Separate from [`HostMessage::AppAppeared`] because clients set the
-    /// title after creating the toplevel. `title` is optional only to match
+    /// Sent only after [`HostMessage::AppAppeared`], which carries the title
+    /// set before the first frame. `title` is optional only to match
     /// `AppAppeared`; xdg-shell cannot unset a title, so this never sends
     /// `None`. The chrome treats `""` as no title.
     AppTitled {
@@ -287,7 +295,7 @@ pub enum HostMessage {
     /// A window's desktop id (`xdg_toplevel.set_app_id`), sent whenever it
     /// changes.
     ///
-    /// Separate from [`HostMessage::AppAppeared`] for the reason
+    /// Sent only after [`HostMessage::AppAppeared`], as
     /// [`HostMessage::AppTitled`] is. xdg-shell cannot unset an app id, so
     /// this always carries one.
     AppDesktopId { app_id: String, desktop_id: String },
@@ -315,7 +323,8 @@ pub enum HostMessage {
     /// A window's minimum size in logical units (`xdg_toplevel.set_min_size`).
     ///
     /// `0` on an axis means no limit. The compositor crops windows sized below
-    /// this, so shells should respect it. Sent only when it changes.
+    /// this, so shells should respect it. Sent right after
+    /// [`HostMessage::AppAppeared`], then only when it changes.
     AppMinSize { app_id: String, size: [f64; 2] },
 
     /// A window's maximum size (`xdg_toplevel.set_max_size`), read as

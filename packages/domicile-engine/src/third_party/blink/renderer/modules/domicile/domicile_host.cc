@@ -1090,16 +1090,17 @@ bool DomicileHost::Ask(Element& target,
 void DomicileHost::AppAppeared(const String& app_id,
                                const String& title,
                                const String& desktop_id,
-                               bool has_size,
                                double width,
-                               double height) {
+                               double height,
+                               bool dialog,
+                               bool client_frame) {
   DomicileWindowState& state = WindowNamed(app_id);
   state.title = title;
   state.desktop_id = desktop_id;
-  if (has_size) {
-    state.width = width;
-    state.height = height;
-  }
+  state.width = width;
+  state.height = height;
+  state.dialog = dialog;
+  state.client_frame = client_frame;
   WindowsChanged();
 }
 

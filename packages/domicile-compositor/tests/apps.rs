@@ -67,8 +67,9 @@ fn a_chrome_that_connects_late_is_told_about_a_window_already_open() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
 
     let client = compositor.client("early");
-    // Wait for the map, not the start: until then there is no window to replay.
-    compositor.wait_for_log("toplevel mapped");
+    // Wait for the first frame, not the start: until then there is no window
+    // to replay.
+    compositor.wait_for_log("toplevel drew");
 
     // `Compositor::chrome` completes the handshake, which sends `hello`.
     let mut chrome = compositor.chrome();
@@ -84,8 +85,7 @@ fn a_chrome_that_connects_late_is_told_about_a_window_already_open() {
             )
         });
 
-    // A map-time `app_appeared` carries no title or size; those follow as
-    // separate messages. With one client, any non-empty id is that client's.
+    // With one client, any non-empty id is that client's.
     let HostMessage::AppAppeared { app_id, .. } = appeared else {
         unreachable!("the wait matched on this variant")
     };
@@ -100,56 +100,6 @@ fn a_chrome_that_connects_late_is_told_about_a_window_already_open() {
     chrome
         .wait_for(|message| matches!(message, HostMessage::FocusChanged { .. }))
         .expect("the catch-up names who has the keyboard, after the windows");
-}
-
-/// A client's `set_title` reaches the chrome as `app_titled`.
-///
-/// Only a real client exercises `title_changed`. Renames are not covered:
-/// `domicile-test-client` cannot rename its window.
-#[test]
-fn a_client_that_names_its_window_has_the_chrome_told() {
-    let compositor = Compositor::started_with(ONE_DISPLAY);
-
-    // Connect before the client: the `hello` replay never sends `app_titled`,
-    // so a late chrome would wait for it forever.
-    let mut chrome = compositor.chrome();
-    let _client = compositor.client("a named window");
-
-    let titled = chrome
-        .wait_for(|message| matches!(message, HostMessage::AppTitled { .. }))
-        .expect("a client that named its window has the chrome told");
-    let HostMessage::AppTitled { title, .. } = titled else {
-        unreachable!("the wait matched on this variant")
-    };
-
-    // Check the title itself, not only that a message was sent.
-    assert_eq!(
-        title.as_deref(),
-        Some("a named window"),
-        "the chrome was told the window is called {title:?}"
-    );
-}
-
-/// A client's `set_app_id` reaches the chrome as `app_desktop_id`.
-///
-/// Only a real client exercises `app_id_changed`.
-#[test]
-fn a_client_that_names_its_application_has_the_chrome_told() {
-    let compositor = Compositor::started_with(ONE_DISPLAY);
-
-    // Connect before the client, as for `app_titled`.
-    let mut chrome = compositor.chrome();
-    let _client = compositor.client("a window");
-
-    let named = chrome
-        .wait_for(|message| matches!(message, HostMessage::AppDesktopId { .. }))
-        .expect("a client that named its application has the chrome told");
-    let HostMessage::AppDesktopId { desktop_id, .. } = named else {
-        unreachable!("the wait matched on this variant")
-    };
-
-    // The id `domicile-test-client` sets.
-    assert_eq!(desktop_id, "dev.domicile.test-client");
 }
 
 /// A chrome's `spawn` starts a process on this compositor's display.
@@ -283,6 +233,44 @@ fn a_client_that_reaches_the_socket_is_said_to_have_arrived() {
     let client = compositor.client("arriving");
 
     compositor.wait_for_log(&format!("app client connected pid=Some({})", client.pid()));
+}
+
+/// A window is announced when it first draws, with its size and what its
+/// client said before: a title, an app id, a fixed size, which makes it a
+/// dialog, and a request to draw its own frame, which the test client always
+/// makes.
+///
+/// `domicile-test-client` cannot rename its window, so `app_titled` and
+/// `app_desktop_id` after the first frame are covered in `domicile-host`.
+#[test]
+fn a_fixed_size_window_is_announced_as_a_dialog_at_the_size_it_drew() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let _client = compositor.client_with(
+        "a dialog",
+        &["--min-size", "320x240", "--max-size", "320x240"],
+    );
+
+    let appeared = chrome
+        .wait_for(|message| matches!(message, HostMessage::AppAppeared { .. }))
+        .expect("a client that drew a window is announced to the chrome");
+    let HostMessage::AppAppeared {
+        title,
+        desktop_id,
+        size,
+        dialog,
+        client_frame,
+        ..
+    } = appeared
+    else {
+        unreachable!("the wait matched on this variant")
+    };
+    assert_eq!(title.as_deref(), Some("a dialog"));
+    // The id `domicile-test-client` sets.
+    assert_eq!(desktop_id.as_deref(), Some("dev.domicile.test-client"));
+    assert_eq!(size, [320.0, 240.0]);
+    assert!(dialog, "a fixed-size window is a dialog");
+    assert!(client_frame, "the client asked to draw its own frame");
 }
 
 /// A client's minimum and maximum sizes reach the chrome.
