@@ -22,6 +22,19 @@ How CI publishes prebuilt engines and how the flake picks one.
 - The identity is a content hash of `CHROMIUM_PIN`, `patches/` and `src/`, the
   same value `engine-series-stamp.sh` uses.
 - Commits that do not change the fork share a release and need no repin.
+- The official build's tag is `engine-official-s<identity>`. Both builds name
+  their tarball `domicile-engine-s<identity>-linux-x64.tar.zst`.
+
+## Which build a tarball holds
+
+The tarball's `PROVENANCE` says, from the build's `args.gn`:
+
+```
+build:           checked (is_official_build = false, dcheck_always_on = true)
+```
+
+`engine-release-package.sh` stops if `args.gn` is missing, matches neither
+build, or disagrees with `DOMICILE_ENGINE_BUILD`.
 
 ## A fork change is one pull request
 
