@@ -9,11 +9,18 @@
 
 namespace domicile {
 
+// Where a download is, from its DownloadItem's state.
+enum class DownloadStage {
+  kInProgress,
+  kComplete,
+  // Canceled or interrupted.
+  kStopped,
+};
+
 // One download from a <webview>'s page, as WebViewGuest reads it off its
 // DownloadItem.
 struct DownloadReading {
-  // False once it finished, was canceled or was interrupted.
-  bool in_progress;
+  DownloadStage stage;
   // Whether the shell has said where it goes. Until then the shell's picker is
   // open.
   bool has_target;
@@ -29,11 +36,14 @@ struct DownloadTally {
   int64_t received_bytes = 0;
   // 0 when any counted download's size is unknown.
   int64_t total_bytes = 0;
+  // Downloads that finished, until the shell clears them.
+  int32_t completed = 0;
 
   friend bool operator==(const DownloadTally&, const DownloadTally&) = default;
 };
 
-// Adds up the downloads in progress that the shell has placed.
+// Adds up the downloads in progress that the shell has placed, and counts the
+// finished ones.
 DownloadTally TallyDownloads(const std::vector<DownloadReading>& downloads);
 
 }  // namespace domicile

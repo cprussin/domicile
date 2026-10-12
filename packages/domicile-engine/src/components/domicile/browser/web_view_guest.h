@@ -396,6 +396,7 @@ class WebViewGuest : public mojom::WebViewGuest,
   void GoForward() override;
   void Stop() override;
   void Reload() override;
+  void ClearCompletedDownloads() override;
   void SetZoom(double factor) override;
 
   // Find in page on the guest's WebContents, so every guest frame is searched
@@ -885,8 +886,8 @@ class WebViewGuest : public mojom::WebViewGuest,
                           content::DownloadManager::Observer>
       download_manager_observation_{this};
 
-  // This page's downloads, kept until each is destroyed: an interrupted one
-  // can resume.
+  // This page's downloads, kept until each is destroyed, or for a finished
+  // one, cleared: an interrupted one can resume.
   std::vector<raw_ptr<download::DownloadItem>> downloads_;
   base::ScopedMultiSourceObservation<download::DownloadItem,
                                      download::DownloadItem::Observer>

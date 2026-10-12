@@ -124,6 +124,31 @@ const downloads = (
     configurable: true,
     value: total,
   });
+  Object.defineProperty(element, "downloadCompletedCount", {
+    configurable: true,
+    value: 0,
+  });
+  fireEvent(element, new Event(WEBVIEW_DOWNLOADS_CHANGE_EVENT));
+};
+
+/** Fires a downloads change with one finished download and none in progress. */
+const finishesADownload = (element: HTMLWebViewElement): void => {
+  Object.defineProperty(element, "downloadCount", {
+    configurable: true,
+    value: 0,
+  });
+  Object.defineProperty(element, "downloadReceivedBytes", {
+    configurable: true,
+    value: 0,
+  });
+  Object.defineProperty(element, "downloadTotalBytes", {
+    configurable: true,
+    value: 0,
+  });
+  Object.defineProperty(element, "downloadCompletedCount", {
+    configurable: true,
+    value: 1,
+  });
   fireEvent(element, new Event(WEBVIEW_DOWNLOADS_CHANGE_EVENT));
 };
 
@@ -1577,6 +1602,40 @@ describe("BrowserWindow", () => {
       expect(
         screen.getByRole("progressbar", { name: "Downloading" }),
       ).toHaveAttribute("aria-valuenow", "25");
+    });
+
+    it("clears the page's finished downloads when asked", async () => {
+      const driven: string[] = [];
+      const { container } = render(
+        <BrowserWindow
+          behindPanel={false}
+          clickThrough={false}
+          covered={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          fullscreen={false}
+          motion="resting"
+          onIcon={noIcon}
+          onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          url="https://example.com"
+          window="1"
+        />,
+      );
+      const guest = view(container);
+      guest.clearCompletedDownloads = () => {
+        driven.push("clear");
+      };
+      finishesADownload(guest);
+
+      await userEvent.click(control("Clear finished downloads"));
+
+      expect(driven).toStrictEqual(["clear"]);
     });
   });
 

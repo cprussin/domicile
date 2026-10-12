@@ -9,13 +9,21 @@ DownloadTally TallyDownloads(const std::vector<DownloadReading>& downloads) {
   DownloadTally tally;
   bool size_unknown = false;
   for (const DownloadReading& download : downloads) {
-    if (!download.in_progress || !download.has_target) {
-      continue;
+    switch (download.stage) {
+      case DownloadStage::kInProgress:
+        if (download.has_target) {
+          ++tally.count;
+          tally.received_bytes += download.received_bytes;
+          tally.total_bytes += download.total_bytes;
+          size_unknown |= download.total_bytes == 0;
+        }
+        break;
+      case DownloadStage::kComplete:
+        ++tally.completed;
+        break;
+      case DownloadStage::kStopped:
+        break;
     }
-    ++tally.count;
-    tally.received_bytes += download.received_bytes;
-    tally.total_bytes += download.total_bytes;
-    size_unknown |= download.total_bytes == 0;
   }
   if (size_unknown) {
     tally.total_bytes = 0;

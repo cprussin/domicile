@@ -12,8 +12,12 @@
 //   GUARD file-chooser mode=…    the element asked, and for what
 //     suggested=…
 //   GUARD answered               the answer did not throw
-//   GUARD downloads count=…      the element's downloads in progress changed
+//   GUARD downloads count=…      the element's downloads changed
 //     received=… total=…
+//     completed=…
+//
+// Clears a finished download as soon as one is reported, with nothing in
+// progress.
 //
 // The guest page logs what it received; see
 // guard-webview-file-chooser-server.py. Domicile calls `Shell` once the module
@@ -82,8 +86,11 @@ export const Shell = () => {
   document.addEventListener("domicile-downloads-change", (event) => {
     const view = event.target;
     say(
-      `downloads count=${view.downloadCount} received=${view.downloadReceivedBytes} total=${view.downloadTotalBytes}`,
+      `downloads count=${view.downloadCount} received=${view.downloadReceivedBytes} total=${view.downloadTotalBytes} completed=${view.downloadCompletedCount}`,
     );
+    if (view.downloadCount === 0 && view.downloadCompletedCount > 0) {
+      view.clearCompletedDownloads();
+    }
   });
 
   // Shows the harness can deliver a click to this document.

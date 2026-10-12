@@ -52,7 +52,7 @@ type Props = {
   address: string;
   canGoBack: boolean;
   canGoForward: boolean;
-  /** The page's downloads in progress, shown while there are any. */
+  /** The page's downloads, shown while any are in progress or finished. */
   downloads: Downloads;
   /** Whether the window is private, which the bar says in its own color. */
   isPrivate: boolean;
@@ -61,6 +61,8 @@ type Props = {
   /** Whether a page is loading, which turns Reload into Stop. */
   loading: boolean;
   onBack: () => void;
+  /** Stops showing the page's finished downloads. */
+  onClearDownloads: () => void;
   onForward: () => void;
   /** Loads `url`, already resolved from what was typed. */
   onNavigate: (url: string) => void;
@@ -94,7 +96,7 @@ type Props = {
 /**
  * A browser window's toolbar: history controls, a private label for a private
  * window, address field with the connection and site permissions, zoom, and
- * downloads while there are any.
+ * downloads while any are in progress or finished and not cleared.
  *
  * Follows Chromium's layout, which users already know.
  */
@@ -107,6 +109,7 @@ export const AddressBar = ({
   loadProgress,
   loading,
   onBack,
+  onClearDownloads,
   onForward,
   onNavigate,
   onReload,
@@ -256,8 +259,8 @@ export const AddressBar = ({
           <PlusIcon size={12} weight="bold" />
         </Button>
       </div>
-      {downloads.count === 0 ? undefined : (
-        <DownloadIndicator downloads={downloads} />
+      {downloads.count === 0 && downloads.completed === 0 ? undefined : (
+        <DownloadIndicator downloads={downloads} onClear={onClearDownloads} />
       )}
       {loading && (
         <div
