@@ -96,6 +96,20 @@ describe("clientIcons", () => {
     ).toStrictEqual(SVG);
   });
 
+  // An app can install its own entry naming an icon no data directory holds.
+  it("passes over an entry whose icon is not found", async () => {
+    expect(
+      await iconFor(
+        {
+          "/data/applications/chat.desktop": entry("missing"),
+          "/share/applications/launch-chat.desktop": `${entry("chat-icon")}StartupWMClass=chat\n`,
+          "/share/icons/hicolor/scalable/apps/chat-icon.svg": "svg",
+        },
+        "chat",
+      ),
+    ).toStrictEqual(SVG);
+  });
+
   // Apps often install an icon named after their app id, entry or not.
   it("draws a client with no entry with the icon named after it", async () => {
     expect(
