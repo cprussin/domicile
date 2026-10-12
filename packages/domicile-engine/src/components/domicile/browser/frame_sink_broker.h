@@ -20,11 +20,13 @@
 #include "components/domicile/mojom/frame_sink_broker.mojom.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
+#include "gpu/command_buffer/common/sync_token.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/gpu_fence_handle.h"
 
 namespace viz {
 class HostFrameSinkManager;
@@ -156,6 +158,10 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   void SubmitBuffer(const viz::FrameSinkId& frame_sink_id,
                     uint64_t buffer_id,
                     const gfx::Rect& damage) override;
+  void FenceBuffer(const viz::FrameSinkId& frame_sink_id,
+                   uint64_t buffer_id,
+                   gfx::GpuFenceHandle fence,
+                   FenceBufferCallback callback) override;
   void DestroyBuffer(const viz::FrameSinkId& frame_sink_id,
                      uint64_t buffer_id) override;
   void ConfigureDisplays(

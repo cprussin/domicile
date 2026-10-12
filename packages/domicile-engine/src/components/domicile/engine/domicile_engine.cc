@@ -3,6 +3,8 @@
 
 #include "components/domicile/engine/domicile_engine.h"
 
+#include <unistd.h>
+
 #include <algorithm>
 #include <memory>
 #include <optional>
@@ -36,6 +38,7 @@
 #include "components/domicile/engine/surface_alpha.h"
 #include "components/domicile/engine/surface_crop.h"
 #include "components/domicile/engine/surface_frames.h"
+#include "components/domicile/engine/surface_submits.h"
 #include "components/domicile/engine/surface_transform.h"
 #include "components/domicile/mojom/control_channel.mojom.h"
 #include "components/domicile/mojom/frame_sink_broker.mojom.h"
@@ -66,6 +69,7 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer_handle.h"
 #include "ui/gfx/geometry/transform.h"
+#include "ui/gfx/gpu_fence_handle.h"
 #include "ui/gfx/native_pixmap_handle.h"
 #include "ui/gfx/presentation_feedback.h"
 
@@ -167,17 +171,43 @@ class Surface : public mojom::SurfaceObserver,
     }
   }
 
-  // Shows `buffer_id` at the newest box numbered at most `box`. A client's
-  // buffer is drawn for the box it acked, so an old buffer stays at its old
-  // size and id: viz keeps the page's frame waiting for the new one rather
-  // than stretching the old one over it.
-  bool Submit(uint64_t buffer_id,
-              const gfx::Rect& crop,
-              const gfx::Rect& damage,
-              uint64_t box,
-              domicile::BufferTransform transform) {
-    auto iter = buffers_.find(buffer_id);
-    if (iter == buffers_.end() || boxes_.empty()) {
+  // Sends `submit` to viz, unless an earlier submit waits for its fence.
+  void Submit(const SurfaceSubmit& submit) { Send(submits_.Push(submit)); }
+
+  // Holds `submit` until the browser puts its buffer's acquire fence in
+  // place. Returns the ticket for Fenced.
+  uint64_t Hold(const SurfaceSubmit& submit) { return submits_.Hold(submit); }
+
+  // The browser put `ticket`'s fence in place behind `sync_token`, or refused
+  // it when `sync_token` is nullopt.
+  void Fenced(uint64_t ticket,
+              const std::optional<gpu::SyncToken>& sync_token) {
+    Send(submits_.Fenced(ticket, sync_token));
+  }
+
+ private:
+  void Send(const std::vector<SurfaceSubmit>& ready) {
+    for (const SurfaceSubmit& submit : ready) {
+      SubmitNow(submit);
+    }
+  }
+
+  // Shows `submit.buffer` at the newest box numbered at most `submit.box`. A
+  // client's buffer is drawn for the box it acked, so an old buffer stays at
+  // its old size and id: viz keeps the page's frame waiting for the new one
+  // rather than stretching the old one over it.
+  void SubmitNow(const SurfaceSubmit& submit) {
+    auto iter = buffers_.find(submit.buffer);
+    if (iter == buffers_.end() || boxes_.empty() || submit.fence_refused) {
+      if (submit.fence_refused) {
+        LOG(ERROR) << "domicile: the browser would not fence buffer "
+                   << submit.buffer << ", so its frame is dropped";
+        // The buffer may be unfinished, so viz must not read it. Viz never
+        // had it, so nothing else gives it back.
+        queue_->Push({.type = EngineEvent::Type::kReleased,
+                      .surface = id_,
+                      .buffer = submit.buffer});
+      }
       // Viz never sees it, so nothing else reports it, and the compositor
       // counts every submit.
       const uint64_t number = frames_.Dropped();
@@ -188,11 +218,13 @@ class Surface : public mojom::SurfaceObserver,
                     .surface = id_,
                     .frame = number,
                     .flags = DOMICILE_PRESENTED_DISCARDED});
-      return false;
+      return;
     }
+    const gfx::Rect& crop = submit.crop;
+    const gfx::Rect& damage = submit.damage;
     // Viz refuses a frame at an older LocalSurfaceId than one it has, so a
     // box once shown is never shown again after a newer one.
-    while (boxes_.size() > 1 && boxes_[1].number <= box) {
+    while (boxes_.size() > 1 && boxes_[1].number <= submit.box) {
       boxes_.pop_front();
     }
     const Box& shown = boxes_.front();
@@ -206,7 +238,7 @@ class Surface : public mojom::SurfaceObserver,
 
     // Drawn in the buffer's orientation, then turned onto the box.
     const domicile::BufferQuad placed =
-        domicile::QuadForBuffer(transform, shown.size);
+        domicile::QuadForBuffer(submit.transform, shown.size);
 
     viz::SharedQuadState* quad_state = pass->CreateAndAppendSharedQuadState();
     quad_state->SetAll(placed.to_box, placed.rect, placed.rect,
@@ -235,15 +267,19 @@ class Surface : public mojom::SurfaceObserver,
     frame.metadata.device_scale_factor = 1.f;
     frame.metadata.frame_token = ++next_frame_token_;
     frames_.Sent(frame.metadata.frame_token);
-    frame.resource_list.push_back(iter->second.resource);
+    viz::TransferableResource resource = iter->second.resource;
+    // Viz waits on the token, which comes after the creation token on the
+    // same stream, so it orders viz's read after the fence too.
+    if (submit.sync_token.HasData()) {
+      resource.set_sync_token(submit.sync_token);
+    }
+    frame.resource_list.push_back(resource);
     frame.render_pass_list.push_back(std::move(pass));
 
     sink_->SubmitCompositorFrame(shown.local_surface_id, std::move(frame),
                                  std::nullopt, 0);
-    return true;
   }
 
- private:
   void OnCreated(base::OnceCallback<void(bool)> done,
                  const viz::FrameSinkId& frame_sink_id) {
     frame_sink_id_ = frame_sink_id;
@@ -373,6 +409,7 @@ class Surface : public mojom::SurfaceObserver,
   viz::ResourceId next_resource_id_{1};
   viz::FrameTokenGenerator next_frame_token_;
   SurfaceFrames frames_;
+  SurfaceSubmits submits_;
 };
 
 // The planes DomicileCapturedFrame carries.
@@ -620,6 +657,28 @@ mojom::DisplayTransform TransformOf(DomicileDisplayTransform transform) {
   NOTREACHED() << "domicile: no display transform numbered " << transform;
 }
 
+// The submit the C ABI's arguments describe. The caller has checked
+// `transform`.
+SurfaceSubmit SubmitOf(DomicileBufferId buffer,
+                       int32_t crop_x,
+                       int32_t crop_y,
+                       int32_t crop_width,
+                       int32_t crop_height,
+                       int32_t damage_x,
+                       int32_t damage_y,
+                       int32_t damage_width,
+                       int32_t damage_height,
+                       uint64_t box,
+                       DomicileBufferTransform transform) {
+  SurfaceSubmit submit;
+  submit.buffer = buffer;
+  submit.crop = gfx::Rect(crop_x, crop_y, crop_width, crop_height);
+  submit.damage = gfx::Rect(damage_x, damage_y, damage_width, damage_height);
+  submit.box = box;
+  submit.transform = static_cast<BufferTransform>(transform);
+  return submit;
+}
+
 }  // namespace
 }  // namespace domicile
 
@@ -812,15 +871,23 @@ struct DomicileEngine {
   }
 
   void SubmitBuffer(DomicileSurfaceId surface,
-                    DomicileBufferId buffer,
-                    const gfx::Rect& crop,
-                    const gfx::Rect& damage,
-                    uint64_t box,
-                    domicile::BufferTransform transform) {
+                    const domicile::SurfaceSubmit& submit) {
     thread_.task_runner()->PostTask(
         FROM_HERE, base::BindOnce(&DomicileEngine::SubmitBufferOnThread,
-                                  base::Unretained(this), surface, buffer, crop,
-                                  damage, box, transform));
+                                  base::Unretained(this), surface, submit));
+  }
+
+  // Duplicates `acquire_fence` here, since the ABI lends it only for the call.
+  void SubmitFencedBuffer(DomicileSurfaceId surface,
+                          const domicile::SurfaceSubmit& submit,
+                          int acquire_fence) {
+    base::ScopedFD fence(HANDLE_EINTR(dup(acquire_fence)));
+    PCHECK(fence.is_valid()) << "domicile: the acquire fence is not an fd";
+    thread_.task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&DomicileEngine::SubmitFencedBufferOnThread,
+                       base::Unretained(this), surface, submit,
+                       std::move(fence)));
   }
 
   // Throwaway; see domicile_engine_spike.h.
@@ -1178,14 +1245,40 @@ struct DomicileEngine {
   }
 
   void SubmitBufferOnThread(DomicileSurfaceId surface,
-                            DomicileBufferId buffer,
-                            const gfx::Rect& crop,
-                            const gfx::Rect& damage,
-                            uint64_t box,
-                            domicile::BufferTransform transform) {
+                            const domicile::SurfaceSubmit& submit) {
     auto iter = surfaces_.find(surface);
     if (iter != surfaces_.end()) {
-      iter->second->Submit(buffer, crop, damage, box, transform);
+      iter->second->Submit(submit);
+    }
+  }
+
+  // Holds the submit until the browser has put the fence in place, so the
+  // compositor need not wait for its draw.
+  //
+  // Unretained: the reply is dropped when TearDown resets `broker_`.
+  void SubmitFencedBufferOnThread(DomicileSurfaceId surface,
+                                  const domicile::SurfaceSubmit& submit,
+                                  base::ScopedFD fence) {
+    auto iter = surfaces_.find(surface);
+    if (iter == surfaces_.end()) {
+      return;
+    }
+    const uint64_t ticket = iter->second->Hold(submit);
+    gfx::GpuFenceHandle handle;
+    handle.Adopt(std::move(fence));
+    broker_->FenceBuffer(
+        iter->second->frame_sink_id(), submit.buffer, std::move(handle),
+        base::BindOnce(&DomicileEngine::OnFenced, base::Unretained(this),
+                       surface, ticket));
+  }
+
+  // The surface may have gone while the browser fenced.
+  void OnFenced(DomicileSurfaceId surface,
+                uint64_t ticket,
+                const std::optional<gpu::SyncToken>& sync_token) {
+    auto iter = surfaces_.find(surface);
+    if (iter != surfaces_.end()) {
+      iter->second->Fenced(ticket, sync_token);
     }
   }
 
@@ -1467,9 +1560,35 @@ void domicile_surface_submit_transformed(DomicileEngine* engine,
   CHECK_LE(transform, DOMICILE_BUFFER_TRANSFORM_FLIPPED_270);
   if (engine) {
     engine->SubmitBuffer(
-        surface, buffer, gfx::Rect(crop_x, crop_y, crop_width, crop_height),
-        gfx::Rect(damage_x, damage_y, damage_width, damage_height), box,
-        static_cast<domicile::BufferTransform>(transform));
+        surface, domicile::SubmitOf(buffer, crop_x, crop_y, crop_width,
+                                    crop_height, damage_x, damage_y,
+                                    damage_width, damage_height, box,
+                                    transform));
+  }
+}
+
+void domicile_surface_submit_fenced(DomicileEngine* engine,
+                                    DomicileSurfaceId surface,
+                                    DomicileBufferId buffer,
+                                    int32_t crop_x,
+                                    int32_t crop_y,
+                                    int32_t crop_width,
+                                    int32_t crop_height,
+                                    int32_t damage_x,
+                                    int32_t damage_y,
+                                    int32_t damage_width,
+                                    int32_t damage_height,
+                                    uint64_t box,
+                                    DomicileBufferTransform transform,
+                                    int acquire_fence) {
+  CHECK_LE(transform, DOMICILE_BUFFER_TRANSFORM_FLIPPED_270);
+  if (engine) {
+    engine->SubmitFencedBuffer(
+        surface,
+        domicile::SubmitOf(buffer, crop_x, crop_y, crop_width, crop_height,
+                           damage_x, damage_y, damage_width, damage_height,
+                           box, transform),
+        acquire_fence);
   }
 }
 

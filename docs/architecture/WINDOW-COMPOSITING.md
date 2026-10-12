@@ -161,8 +161,24 @@ GBM buffer and submits that (`uploads.rs`, `shm_upload.rs`).
   previous commit in the same format, only the client's damage is uploaded.
   Smithay keeps a cached texture's format, so a new format at the same size
   skips the cache.
-- The copy waits for the GPU on the Wayland thread. The C ABI carries no fence,
-  so the engine would otherwise sample an unfinished draw.
+- **The copy is fenced, not waited for.** The compositor submits with the
+  draw's sync_file (`domicile_surface_submit_fenced`). The browser gives the
+  fence to the SharedImage (`FenceBuffer`, `UpdateSharedImage`) and returns a
+  sync token, which the engine puts on the frame's resource. Viz waits on the
+  token, and the GPU waits on the fence before the read.
+  - The engine holds the surface's later submits behind a fenced one
+    (`surface_submits.cc`), so frames reach viz in commit order.
+  - Each fenced frame costs the browser one synchronous flush to the GPU
+    process, to verify the token. Viz refuses an unverified one, and the
+    engine has no GPU channel to verify it.
+  - A refused fence drops the frame and releases the buffer.
+- **The copy waits for the GPU on the Wayland thread** with an older engine,
+  or a driver that cannot export a sync_file (no
+  `EGL_ANDROID_native_fence_sync`).
+- Unverified: a GPU process without `EGL_ANDROID_native_fence_sync` skips the
+  fence's wait (`GLTexturePassthroughOzoneImageRepresentation::BeginAccess`),
+  as for exo, and may show an unfinished copy. No check reads a lit screen,
+  so torn shm frames on hardware are unmeasured.
 
 ### Damage
 

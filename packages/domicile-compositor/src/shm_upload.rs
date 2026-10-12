@@ -7,10 +7,12 @@
 //! a buffer the GPU rendered into, so the client's pixels are uploaded as a
 //! texture and drawn as a quad.
 
+use std::os::fd::OwnedFd;
 use std::sync::Mutex;
 
 use smithay::backend::allocator::Modifier;
 use smithay::backend::renderer::gles::{GlesError, GlesRenderer, GlesTexture};
+use smithay::backend::renderer::sync::SyncPoint;
 use smithay::backend::renderer::{Bind, Color32F, Frame, ImportMemWl as _, Renderer as _};
 use smithay::reexports::wayland_server::protocol::wl_buffer;
 use smithay::utils::{Buffer as BufferCoords, Physical, Rectangle, Size, Transform};
@@ -20,16 +22,19 @@ use thiserror::Error;
 
 use crate::uploads::Shape;
 
-/// Draws `texture` over all of `target` and waits for the draw to finish.
+/// Draws `texture` over all of `target`. Returns the draw's fence when
+/// `fenced`, for an engine that waits on it; otherwise, or when the driver
+/// cannot export one, waits for the draw to finish.
 ///
-/// The engine reads the buffer from another process with no fence, so a frame
+/// The engine reads the buffer from another process. Without a fence, a frame
 /// submitted before the draw finishes shows the previous frame or a torn one.
 pub fn copy<T>(
     renderer: &mut GlesRenderer,
     texture: &GlesTexture,
     target: &mut T,
     size: Size<i32, Physical>,
-) -> Result<(), CopyError>
+    fenced: bool,
+) -> Result<Option<OwnedFd>, CopyError>
 where
     GlesRenderer: Bind<T>,
 {
@@ -49,7 +54,19 @@ where
         Transform::Normal,
         1.0,
     )?;
-    frame.finish()?.wait().map_err(|_| CopyError::Interrupted)
+    landed(frame.finish()?, fenced)
+}
+
+/// The fence `sync` exports, if `fenced` asks for one and the driver can
+/// export it. Otherwise waits for `sync`.
+fn landed(sync: SyncPoint, fenced: bool) -> Result<Option<OwnedFd>, CopyError> {
+    match fenced.then(|| sync.export()).flatten() {
+        Some(fence) => Ok(Some(fence)),
+        None => {
+            sync.wait().map_err(|_| CopyError::Interrupted)?;
+            Ok(None)
+        }
+    }
 }
 
 /// The rectangles of a `size` buffer to upload into the surface's texture, in
@@ -198,7 +215,14 @@ mod tests {
             .create_buffer(Fourcc::Argb8888, size)
             .expect("a renderbuffer");
 
-        copy(&mut renderer, &texture, &mut target, Size::from((2, 2))).expect("the copy draws");
+        copy(
+            &mut renderer,
+            &texture,
+            &mut target,
+            Size::from((2, 2)),
+            false,
+        )
+        .expect("the copy draws");
 
         let framebuffer = renderer.bind(&mut target).expect("binds");
         let mapping = renderer
@@ -266,6 +290,86 @@ mod tests {
                 Err("no")
             );
             assert_eq!(cached, Some(shape(200, XRGB)));
+        }
+    }
+
+    mod landed {
+        use std::fs::File;
+        use std::os::fd::{AsRawFd as _, OwnedFd};
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::{Arc, Mutex};
+
+        use smithay::backend::renderer::sync::{Fence, Interrupted, SyncPoint};
+
+        use super::super::landed;
+
+        /// A draw still on the GPU, whose fence exports `fd` if there is one.
+        #[derive(Debug)]
+        struct Drawing {
+            fd: Mutex<Option<OwnedFd>>,
+            waited: Arc<AtomicBool>,
+        }
+
+        impl Fence for Drawing {
+            fn is_signaled(&self) -> bool {
+                false
+            }
+
+            fn wait(&self) -> Result<(), Interrupted> {
+                self.waited.store(true, Ordering::SeqCst);
+                Ok(())
+            }
+
+            fn is_exportable(&self) -> bool {
+                self.fd.lock().expect("never poisoned").is_some()
+            }
+
+            fn export(&self) -> Option<OwnedFd> {
+                self.fd.lock().expect("never poisoned").take()
+            }
+        }
+
+        /// The draw's sync point, and whether anything waited on it.
+        fn drawing(fd: Option<OwnedFd>) -> (SyncPoint, Arc<AtomicBool>) {
+            let waited = Arc::new(AtomicBool::new(false));
+            let sync = SyncPoint::from(Drawing {
+                fd: Mutex::new(fd),
+                waited: waited.clone(),
+            });
+            (sync, waited)
+        }
+
+        fn an_fd() -> OwnedFd {
+            File::open("/dev/null").expect("opens").into()
+        }
+
+        #[test]
+        fn an_engine_that_takes_fences_gets_the_draws_fence_and_nothing_waits() {
+            let fd = an_fd();
+            let raw = fd.as_raw_fd();
+            let (sync, waited) = drawing(Some(fd));
+
+            let fence = landed(sync, true).expect("lands").expect("a fence");
+
+            assert_eq!(fence.as_raw_fd(), raw);
+            assert!(!waited.load(Ordering::SeqCst));
+        }
+
+        #[test]
+        fn an_engine_that_takes_no_fence_waits_for_the_draw() {
+            let (sync, waited) = drawing(Some(an_fd()));
+
+            assert!(landed(sync, false).expect("lands").is_none());
+            assert!(waited.load(Ordering::SeqCst));
+        }
+
+        // A driver without EGL_ANDROID_native_fence_sync.
+        #[test]
+        fn a_draw_whose_fence_cannot_be_exported_is_waited_for() {
+            let (sync, waited) = drawing(None);
+
+            assert!(landed(sync, true).expect("lands").is_none());
+            assert!(waited.load(Ordering::SeqCst));
         }
     }
 

@@ -3,6 +3,7 @@
 
 #include "components/domicile/browser/brokered_frame_sink.h"
 
+#include <memory>
 #include <optional>
 #include <ostream>
 #include <utility>
@@ -20,6 +21,7 @@
 #include "gpu/command_buffer/common/sync_token.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/transform.h"
+#include "ui/gfx/gpu_fence.h"
 
 namespace domicile {
 namespace {
@@ -240,6 +242,27 @@ bool BrokeredFrameSink::SubmitBuffer(uint64_t buffer_id,
                                /*hit_test_region_list=*/std::nullopt,
                                /*submit_time=*/0);
   return true;
+}
+
+std::optional<gpu::SyncToken> BrokeredFrameSink::FenceBuffer(
+    uint64_t buffer_id,
+    gfx::GpuFenceHandle fence) {
+  auto iter = buffers_.find(buffer_id);
+  gpu::SharedImageInterface* sii = get_shared_image_interface_.Run();
+  if (iter == buffers_.end() || !sii) {
+    LOG(ERROR) << "domicile: cannot fence buffer " << buffer_id << " — it is "
+               << (iter == buffers_.end() ? "unknown" : "known")
+               << ", and there is " << (sii ? "a" : "no") << " GPU";
+    return std::nullopt;
+  }
+  // The GPU process waits for the fence before any later read of the image,
+  // as exo::Buffer does for an explicitly synchronized client.
+  sii->UpdateSharedImage(gpu::SyncToken(),
+                         std::make_unique<gfx::GpuFence>(std::move(fence)),
+                         iter->second.shared_image->mailbox());
+  // Verified because the producer has no GPU channel to verify it with, and a
+  // frame carrying an unverified token is refused.
+  return sii->GenVerifiedSyncToken();
 }
 
 void BrokeredFrameSink::DestroyBuffer(uint64_t buffer_id) {

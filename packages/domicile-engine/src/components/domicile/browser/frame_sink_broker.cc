@@ -206,6 +206,16 @@ void FrameSinkBroker::SubmitBuffer(const viz::FrameSinkId& frame_sink_id,
   }
 }
 
+void FrameSinkBroker::FenceBuffer(const viz::FrameSinkId& frame_sink_id,
+                                  uint64_t buffer_id,
+                                  gfx::GpuFenceHandle fence,
+                                  FenceBufferCallback callback) {
+  BrokeredFrameSink* frame_sink = OwnedFrameSink(frame_sink_id);
+  std::move(callback).Run(
+      frame_sink ? frame_sink->FenceBuffer(buffer_id, std::move(fence))
+                 : std::nullopt);
+}
+
 void FrameSinkBroker::DestroyBuffer(const viz::FrameSinkId& frame_sink_id,
                                     uint64_t buffer_id) {
   BrokeredFrameSink* frame_sink = OwnedFrameSink(frame_sink_id);
