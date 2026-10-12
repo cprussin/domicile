@@ -110,6 +110,15 @@ void HTMLAppElement::ParseAttribute(
     Embed();
     return;
   }
+  if (params.name == html_names::kResizingAttr) {
+    // The last box of a resize may show before the client drew at it. Embed
+    // it again with the default deadline, so the box and the window settle in
+    // one frame.
+    if (params.new_value.IsNull() && embedded_without_waiting_) {
+      Embed();
+    }
+    return;
+  }
   HTMLElement::ParseAttribute(params);
 }
 
@@ -200,11 +209,18 @@ void HTMLAppElement::Embed() {
   // the new box in the frame whose layout changed it. Viz holds that frame
   // until the client draws at the new size, up to the default deadline, so the
   // box and the window change together instead of the old frame stretching.
+  //
+  // While `resizing` is set, deadline 0: an interactive resize changes the box
+  // every frame, and waiting each time would hold the whole page to the
+  // client's pace.
   if (app_id == embedded_app_id_) {
+    embedded_without_waiting_ = FastHasAttribute(html_names::kResizingAttr);
     surface_layer_bridge_->EmbedSurface(
         viz::SurfaceId(surface_layer_bridge_->GetSurfaceId().frame_sink_id(),
                        local_surface_id),
-        cc::DeadlinePolicy::UseDefaultDeadline());
+        embedded_without_waiting_
+            ? cc::DeadlinePolicy::UseSpecifiedDeadline(0u)
+            : cc::DeadlinePolicy::UseDefaultDeadline());
   }
 }
 

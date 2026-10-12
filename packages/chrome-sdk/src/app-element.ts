@@ -70,6 +70,12 @@ declare global {
      * when the attribute is unset.
      */
     appId: string;
+    /**
+     * Whether the user is resizing the window with the pointer. Reflects the
+     * `resizing` attribute. While set, each new box shows without waiting for
+     * the client to draw at it; clearing it waits once for the final size.
+     */
+    resizing: boolean;
   }
 
   // biome-ignore lint/style/useConsistentTypeDefinitions: declaration merging onto a built-in type is what `interface` is for and what a type alias cannot do

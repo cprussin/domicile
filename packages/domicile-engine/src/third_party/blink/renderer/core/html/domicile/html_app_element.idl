@@ -14,4 +14,9 @@
 
   // The window to show. Reflects the `app-id` attribute.
   [CEReactions, Reflect=app_id] attribute DOMString appId;
+
+  // Whether the user is resizing the window. Reflects the `resizing`
+  // attribute. While set, a new box shows without waiting for the client to
+  // draw at it.
+  [CEReactions, Reflect] attribute boolean resizing;
 };
