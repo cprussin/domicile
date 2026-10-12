@@ -24,6 +24,7 @@
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
 #include "components/viz/host/host_frame_sink_client.h"
+#include "gpu/command_buffer/common/sync_token.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -32,6 +33,7 @@
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/gpu_fence_handle.h"
 #include "ui/gfx/gpu_memory_buffer_handle.h"
 
 namespace gpu {
@@ -121,6 +123,12 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
   // Submits a frame showing `buffer_id`. False if there is no such buffer, or
   // no surface to submit to yet.
   bool SubmitBuffer(uint64_t buffer_id, const gfx::Rect& damage);
+
+  // Makes the GPU wait for `fence` before reading `buffer_id`, and returns the
+  // verified sync token a frame showing it must carry. Nullopt if there is no
+  // such buffer or no GPU.
+  std::optional<gpu::SyncToken> FenceBuffer(uint64_t buffer_id,
+                                            gfx::GpuFenceHandle fence);
 
   // Drops an imported buffer. Safe while viz still holds it: the SharedImage is
   // refcounted, and no release is sent for it.

@@ -457,6 +457,29 @@ DOMICILE_ENGINE_EXPORT void domicile_surface_submit_transformed(
     uint64_t box,
     DomicileBufferTransform transform);
 
+// Like domicile_surface_submit_transformed, for a buffer whose draw may not
+// have finished. `acquire_fence` is a sync_file fd that signals when it has,
+// and viz reads the buffer only after that. Later submits to the surface wait
+// behind this one.
+//
+// The fd is duplicated before this returns. An invalid fd aborts. If the
+// browser refuses the fence, the frame is dropped and the buffer `released`.
+DOMICILE_ENGINE_EXPORT void domicile_surface_submit_fenced(
+    DomicileEngine* engine,
+    DomicileSurfaceId surface,
+    DomicileBufferId buffer,
+    int32_t crop_x,
+    int32_t crop_y,
+    int32_t crop_width,
+    int32_t crop_height,
+    int32_t damage_x,
+    int32_t damage_y,
+    int32_t damage_width,
+    int32_t damage_height,
+    uint64_t box,
+    DomicileBufferTransform transform,
+    int acquire_fence);
+
 // Tells the browser which connectors to light and where, in answer to the
 // `displays` callback.
 //

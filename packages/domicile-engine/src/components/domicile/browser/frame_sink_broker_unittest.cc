@@ -3,19 +3,27 @@
 
 #include "components/domicile/browser/frame_sink_broker.h"
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "base/check.h"
+#include "base/check_op.h"
+#include "base/files/file_util.h"
+#include "base/files/scoped_file.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "components/domicile/browser/external_surface_provider.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
+#include "components/viz/common/resources/shared_image_format.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/frame_sink_id_allocator.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
@@ -27,6 +35,10 @@
 #include "components/viz/test/fake_external_begin_frame_source.h"
 #include "components/viz/test/fake_host_frame_sink_client.h"
 #include "components/viz/test/mock_compositor_frame_sink_client.h"
+#include "gpu/command_buffer/client/client_shared_image.h"
+#include "gpu/command_buffer/client/test_shared_image_interface.h"
+#include "gpu/command_buffer/common/mailbox.h"
+#include "gpu/command_buffer/common/sync_token.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -37,6 +49,8 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/gpu_fence.h"
+#include "ui/gfx/gpu_fence_handle.h"
 
 namespace domicile {
 namespace {
@@ -55,6 +69,56 @@ constexpr char kTestApp[] = "test-app";
 constexpr gfx::Size kEmbeddedSize(320, 240);
 // The page's device scale factor.
 constexpr double kEmbeddedScale = 1.5;
+
+// The DRM fourcc of the buffers tests import, and its viz format.
+constexpr uint32_t kArgb8888 = 0x34325241;
+constexpr gfx::Size kBufferSize(64, 48);
+
+// The browser's SharedImageInterface, recording the images it is told to read
+// only after an acquire fence.
+class FenceRecordingSharedImageInterface : public gpu::TestSharedImageInterface {
+ public:
+  FenceRecordingSharedImageInterface();
+
+  using gpu::TestSharedImageInterface::UpdateSharedImage;
+  void UpdateSharedImage(const gpu::SyncToken& sync_token,
+                         std::unique_ptr<gfx::GpuFence> acquire_fence,
+                         const gpu::Mailbox& mailbox) override;
+
+  // Every image given a fence, in order.
+  const std::vector<gpu::Mailbox>& fenced() const { return fenced_; }
+
+ private:
+  ~FenceRecordingSharedImageInterface() override;
+
+  std::vector<gpu::Mailbox> fenced_;
+};
+
+FenceRecordingSharedImageInterface::FenceRecordingSharedImageInterface() =
+    default;
+FenceRecordingSharedImageInterface::~FenceRecordingSharedImageInterface() =
+    default;
+
+void FenceRecordingSharedImageInterface::UpdateSharedImage(
+    const gpu::SyncToken& sync_token,
+    std::unique_ptr<gfx::GpuFence> acquire_fence,
+    const gpu::Mailbox& mailbox) {
+  CHECK(acquire_fence);
+  CHECK(!acquire_fence->GetGpuFenceHandle().is_null());
+  fenced_.push_back(mailbox);
+  gpu::TestSharedImageInterface::UpdateSharedImage(
+      sync_token, std::move(acquire_fence), mailbox);
+}
+
+// A fence for the producer's draw. Any fd crosses mojo as one.
+gfx::GpuFenceHandle AFence() {
+  base::ScopedFD read_end;
+  base::ScopedFD write_end;
+  CHECK(base::CreatePipe(&read_end, &write_end));
+  gfx::GpuFenceHandle fence;
+  fence.Adopt(std::move(read_end));
+  return fence;
+}
 
 // Fake producer observer, told which surface the embedder chose.
 class FakeSurfaceObserver : public mojom::SurfaceObserver {
@@ -201,6 +265,25 @@ class FrameSinkBrokerTest : public testing::Test {
     return future.Get();
   }
 
+  // Imports a buffer into `frame_sink_id` and returns its id and the mailbox
+  // of its SharedImage.
+  std::pair<uint64_t, gpu::Mailbox> ImportABuffer(
+      mojo::Remote<mojom::FrameSinkBroker>& remote,
+      const viz::FrameSinkId& frame_sink_id) {
+    base::test::TestFuture<uint64_t, std::optional<gpu::ExportedSharedImage>>
+        future;
+    remote->ImportBuffer(frame_sink_id,
+                         gpu::TestSharedImageInterface::CreateGMBHandle(
+                             viz::SinglePlaneFormat::kBGRA_8888, kBufferSize),
+                         kBufferSize, kArgb8888, future.GetCallback());
+    auto [buffer_id, exported] = future.Take();
+    CHECK_NE(buffer_id, 0u);
+    CHECK(exported.has_value());
+    return {buffer_id,
+            gpu::ClientSharedImage::ImportUnowned(std::move(exported).value())
+                ->mailbox()};
+  }
+
   // Brokers a sink the browser holds, as a producer with only dmabufs asks
   // for, and returns its id.
   viz::FrameSinkId BrokerABrowserHeldSink(
@@ -247,7 +330,8 @@ class FrameSinkBrokerTest : public testing::Test {
               return allocator->NextFrameSinkId();
             },
             &allocator_),
-        FrameSinkBroker::SharedImageInterfaceGetter(),
+        base::BindRepeating(&FrameSinkBrokerTest::SharedImageInterface,
+                            base::Unretained(this)),
         base::BindRepeating(&FrameSinkBrokerTest::RecordLayout,
                             base::Unretained(this)),
         base::BindRepeating(&FrameSinkBrokerTest::RecordClipboard,
@@ -260,6 +344,14 @@ class FrameSinkBrokerTest : public testing::Test {
   static std::optional<viz::FrameSinkId> CaptureTarget(int64_t display_id) {
     return display_id == 7 ? std::optional(kPageFrameSinkId) : std::nullopt;
   }
+
+  // Fake for aura::Env's GPU: none, as when headless, unless a test gives
+  // the broker `sii_`. With one, a display capture takes its GPU path, which
+  // these tests do not set up.
+  gpu::SharedImageInterface* SharedImageInterface() { return gpu_; }
+
+  // Gives the broker a GPU.
+  void UseTheGpu() { gpu_ = sii_.get(); }
 
   // Fake for the ozone platform that owns the CRTCs.
   void RecordLayout(std::vector<mojom::DisplayLayoutPtr> layout) {
@@ -298,6 +390,9 @@ class FrameSinkBrokerTest : public testing::Test {
   viz::FakeHostFrameSinkClient page_frame_sink_client_;
 
   base::test::SingleThreadTaskEnvironment task_environment_;
+  scoped_refptr<FenceRecordingSharedImageInterface> sii_ =
+      base::MakeRefCounted<FenceRecordingSharedImageInterface>();
+  raw_ptr<gpu::SharedImageInterface> gpu_ = nullptr;
   std::unique_ptr<viz::HostFrameSinkManager> host_frame_sink_manager_;
   std::unique_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_;
   std::unique_ptr<FrameSinkBroker> broker_;
@@ -1098,6 +1193,47 @@ TEST_F(FrameSinkBrokerTest, ADisplayWithNoWindowIsRefused) {
   EXPECT_FALSE(started.Get());
   RunUntilIdle();
   EXPECT_FALSE(capture.is_connected());
+}
+
+// The producer submits without waiting for its draw. The GPU waits for the
+// draw's fence before reading the buffer, and the token orders viz's read
+// after the fence is in place.
+TEST_F(FrameSinkBrokerTest, AFencedBufferIsReadOnlyAfterItsFence) {
+  UseTheGpu();
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  const auto [buffer_id, mailbox] = ImportABuffer(remote, frame_sink_id);
+
+  base::test::TestFuture<const std::optional<gpu::SyncToken>&> fenced;
+  remote->FenceBuffer(frame_sink_id, buffer_id, AFence(),
+                      fenced.GetCallback());
+
+  ASSERT_TRUE(fenced.Get().has_value());
+  EXPECT_EQ(*fenced.Get(), sii_->MostRecentGeneratedToken());
+  // The producer has no GPU channel to verify it with.
+  EXPECT_TRUE(fenced.Get()->verified_flush());
+  EXPECT_EQ(sii_->fenced(), std::vector<gpu::Mailbox>{mailbox});
+}
+
+TEST_F(FrameSinkBrokerTest, FencingABufferNeverImportedIsRefused) {
+  UseTheGpu();
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+
+  base::test::TestFuture<const std::optional<gpu::SyncToken>&> fenced;
+  remote->FenceBuffer(frame_sink_id, /*buffer_id=*/1, AFence(),
+                      fenced.GetCallback());
+
+  EXPECT_FALSE(fenced.Get().has_value());
+  EXPECT_TRUE(sii_->fenced().empty());
 }
 
 }  // namespace domicile

@@ -4,6 +4,7 @@
 //! [`crate::engine`] is the ABI; this module uses it.
 
 use std::collections::HashMap;
+use std::os::fd::{AsFd as _, OwnedFd};
 use std::path::Path;
 use std::time::Instant;
 
@@ -72,6 +73,9 @@ struct Frame {
     descriptor: DmabufDescriptor,
     sampled: Sampled,
     at_box: u64,
+    /// Signals when the compositor's draw into the buffer lands. `None` for a
+    /// buffer already drawn.
+    fence: Option<OwnedFd>,
 }
 
 /// What became of a frame handed to [`EngineSession::put_up`].
@@ -266,6 +270,7 @@ impl EngineSession {
             sampled,
             (0, 0, 0, 0),
             NEWEST_BOX,
+            None,
             now,
         )
     }
@@ -291,9 +296,9 @@ impl EngineSession {
         self.engine.set_clipboard(clipboard, contents);
     }
 
-    /// Submits a buffer as `app_id`'s window, at the box `at_box` names (see
-    /// [`crate::engine::Engine::submit`]). See [`Submission`] for who owns the
-    /// buffer afterward.
+    /// Submits a buffer as `app_id`'s window, at the box `at_box` names, read
+    /// once `fence` signals (see [`crate::engine::Engine::submit`]). See
+    /// [`Submission`] for who owns the buffer afterward.
     #[allow(clippy::too_many_arguments)] // One frame's worth.
     pub fn submit(
         &mut self,
@@ -303,6 +308,7 @@ impl EngineSession {
         sampled: Sampled,
         damage: (i32, i32, i32, i32),
         at_box: u64,
+        fence: Option<OwnedFd>,
         now: Instant,
     ) -> Submission {
         let Some(surface) = self.surface_for(app_id) else {
@@ -313,6 +319,7 @@ impl EngineSession {
             descriptor: descriptor.clone(),
             sampled,
             at_box,
+            fence,
         };
         // The engine drops frames for unembedded surfaces and never releases
         // them (see `engine_surfaces`), so the frame waits for the embed. See
@@ -439,8 +446,14 @@ impl EngineSession {
         damage: (i32, i32, i32, i32),
         now: Instant,
     ) {
-        self.engine
-            .submit(surface, id, frame.sampled, damage, frame.at_box);
+        self.engine.submit(
+            surface,
+            id,
+            frame.sampled,
+            damage,
+            frame.at_box,
+            frame.fence.as_ref().map(OwnedFd::as_fd),
+        );
         self.surfaces.submitted(surface);
         self.sampled.insert(app_id.to_owned(), frame.sampled);
         // A replaced hold is the same buffer, since `imports` is keyed on the
@@ -629,6 +642,11 @@ impl EngineSession {
     /// See [`crate::engine::Engine::reports_frames`].
     pub fn reports_frames(&self) -> bool {
         self.engine.reports_frames()
+    }
+
+    /// See [`crate::engine::Engine::takes_fences`].
+    pub fn takes_fences(&self) -> bool {
+        self.engine.takes_fences()
     }
 
     /// Which app a surface belongs to, for an event that names only the

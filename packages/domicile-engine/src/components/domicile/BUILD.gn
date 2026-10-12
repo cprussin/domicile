@@ -744,6 +744,7 @@ source_set("unit_tests") {
     "//components/domicile/engine:surface_alpha_unit_tests",
     "//components/domicile/engine:surface_crop_unit_tests",
     "//components/domicile/engine:surface_frames_unit_tests",
+    "//components/domicile/engine:surface_submits_unit_tests",
     "//components/domicile/engine:surface_transform_unit_tests",
     "//components/autofill/core/common",
     "//components/password_manager/core/common",
@@ -754,6 +755,9 @@ source_set("unit_tests") {
     "//components/domicile/spike:window_diff",
     "//components/viz/service",
     "//components/viz/test:test_support",
+
+    # TestSharedImageInterface, the broker's GPU in its buffer tests.
+    "//gpu:test_support",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/test_support:test_utils",
     "//media",

@@ -9,7 +9,9 @@ import "services/viz/public/mojom/compositing/frame_sink_id.mojom";
 import "services/viz/public/mojom/compositing/local_surface_id.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
 import "gpu/ipc/common/exported_shared_image.mojom";
+import "gpu/ipc/common/sync_token.mojom";
 import "ui/gfx/mojom/buffer_types.mojom";
+import "ui/gfx/mojom/gpu_fence_handle.mojom";
 import "mojo/public/mojom/base/shared_memory.mojom";
 
 // Tells a producer which surface to submit to.
@@ -246,6 +248,18 @@ interface FrameSinkBroker {
   SubmitBuffer(viz.mojom.FrameSinkId frame_sink_id,
                uint64 buffer_id,
                gfx.mojom.Rect damage);
+
+  // Makes the GPU wait for `fence` before anything reads `buffer_id`, and
+  // returns the verified sync token a frame showing it must carry. Null when
+  // the sink or buffer is unknown or there is no GPU.
+  //
+  // `fence` signals when the producer's draw into the buffer lands, so the
+  // producer need not wait for it before submitting. Viz waits on the token,
+  // which orders its read after the fence is in place.
+  FenceBuffer(viz.mojom.FrameSinkId frame_sink_id,
+              uint64 buffer_id,
+              gfx.mojom.GpuFenceHandle fence)
+      => (gpu.mojom.SyncToken? sync_token);
 
   // Drops an imported buffer the client destroyed. Buffers are also dropped
   // with their sink.
