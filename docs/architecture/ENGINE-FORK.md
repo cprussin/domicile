@@ -278,7 +278,8 @@ Decisions:
   (`viz.mojom.Gpu`, what a renderer gets) would give an external process
   unrestricted GPU authority and pull the `gpu::` client stack into the
   library. Brokering the import costs one hop per buffer, and buffers are
-  imported once and reused.
+  imported once per surface and reused. An import belongs to its surface, so a
+  buffer committed to two surfaces is imported for each.
 - **The producer submits its own frames.** It holds `gpu::` and `viz::` types,
   but no GPU channel. A mailbox lets the producer sample an existing image. It
   cannot create new ones. This takes the browser off the per-frame path.

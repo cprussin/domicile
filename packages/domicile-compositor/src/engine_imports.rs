@@ -1,6 +1,9 @@
 //! Which buffers the engine has imported, which it is still importing, and the
 //! frame each surface holds back for an import.
 //!
+//! An engine import belongs to one surface, so a buffer committed to two
+//! surfaces is imported for each.
+//!
 //! An import is a round trip through the browser to the GPU process, so the
 //! compositor does not wait for one. A frame whose buffer is new waits here
 //! and goes up when the import finishes. A newer frame replaces it, as in
@@ -11,10 +14,10 @@ use std::hash::Hash;
 
 use crate::engine::{BufferId, Request, SurfaceId};
 
-/// The imports, by buffer `K`, and the frames `F` waiting on them.
+/// The imports, by surface and buffer `K`, and the frames `F` waiting on them.
 #[derive(Debug)]
 pub struct Imports<K, F> {
-    done: HashMap<K, (SurfaceId, BufferId)>,
+    done: HashMap<(SurfaceId, K), BufferId>,
     importing: HashMap<Request, Importing<K>>,
     waiting: HashMap<SurfaceId, (K, F)>,
     last_request: Request,
@@ -52,8 +55,8 @@ pub struct Finished<F> {
     /// An id imported for a buffer or surface that went meanwhile. Tell the
     /// engine to forget it.
     pub forget: Option<(SurfaceId, BufferId)>,
-    /// The frames that waited on it.
-    pub then: Vec<Then<F>>,
+    /// The frame that waited on it.
+    pub then: Option<Then<F>>,
 }
 
 /// A frame whose import finished.
@@ -72,8 +75,8 @@ pub enum Then<F> {
 /// What [`Imports::forget`] took out.
 #[derive(Debug, PartialEq)]
 pub struct Forgotten<F> {
-    /// The buffer's import, for the engine to forget.
-    pub id: Option<(SurfaceId, BufferId)>,
+    /// The buffer's imports, for the engine to forget.
+    pub ids: Vec<(SurfaceId, BufferId)>,
     /// Frames that waited on it, to release.
     pub waited: Vec<(SurfaceId, F)>,
 }
@@ -99,27 +102,28 @@ impl<K, F> Default for Imports<K, F> {
 }
 
 impl<K: Clone + Eq + Hash, F> Imports<K, F> {
-    /// Whether `key` is imported.
-    pub fn knows(&self, key: &K) -> bool {
-        self.done.contains_key(key)
+    /// Whether `key` is imported for `surface`.
+    pub fn knows(&self, surface: SurfaceId, key: &K) -> bool {
+        self.done.contains_key(&(surface, key.clone()))
     }
 
     /// Records an import that finished while the caller waited.
-    pub fn imported(&mut self, key: K, surface: SurfaceId, id: BufferId) {
-        self.done.insert(key, (surface, id));
+    pub fn imported(&mut self, surface: SurfaceId, key: K, id: BufferId) {
+        self.done.insert((surface, key), id);
     }
 
     /// Decides whether `frame`, showing buffer `key`, goes up now or waits for
     /// an import.
     pub fn route(&mut self, surface: SurfaceId, key: K, frame: F) -> Route<F> {
-        match self.done.get(&key) {
-            Some((_, id)) => Route::Submit {
+        match self.done.get(&(surface, key.clone())) {
+            Some(id) => Route::Submit {
                 id: *id,
                 frame,
                 replaced: self.waiting.remove(&surface).map(|(_, frame)| frame),
             },
             None => {
-                let start = (!self.is_importing(&key)).then(|| self.start(surface, key.clone()));
+                let start =
+                    (!self.is_importing(surface, &key)).then(|| self.start(surface, key.clone()));
                 Route::Wait {
                     replaced: self
                         .waiting
@@ -141,33 +145,30 @@ impl<K: Clone + Eq + Hash, F> Imports<K, F> {
         let Some(key) = importing.key else {
             return Finished {
                 forget: buffer.map(|id| (importing.surface, id)),
-                then: Vec::new(),
+                then: None,
             };
         };
+        let surface = importing.surface;
         if let Some(id) = buffer {
-            self.done.insert(key.clone(), (importing.surface, id));
+            self.done.insert((surface, key.clone()), id);
         }
-        let surfaces: Vec<SurfaceId> = self
+        let waits = self
             .waiting
-            .iter()
-            .filter(|(_, (waits_on, _))| *waits_on == key)
-            .map(|(surface, _)| *surface)
-            .collect();
-        let then = surfaces
-            .into_iter()
-            .map(|surface| {
-                let (_, frame) = self.waiting.remove(&surface).expect("just found");
-                match buffer {
-                    Some(id) => Then::Submit { surface, id, frame },
-                    None => Then::Refused { surface, frame },
-                }
-            })
-            .collect();
+            .get(&surface)
+            .is_some_and(|(waits_on, _)| *waits_on == key);
+        let then = waits.then(|| {
+            let (_, frame) = self.waiting.remove(&surface).expect("just found");
+            match buffer {
+                Some(id) => Then::Submit { surface, id, frame },
+                None => Then::Refused { surface, frame },
+            }
+        });
         Finished { forget: None, then }
     }
 
-    /// Drops buffer `key`'s import, for a destroyed `wl_buffer` or a freed
-    /// upload. An import still running is forgotten when it finishes.
+    /// Drops buffer `key`'s imports on every surface, for a destroyed
+    /// `wl_buffer` or a freed upload. An import still running is forgotten
+    /// when it finishes.
     pub fn forget(&mut self, key: &K) -> Forgotten<F> {
         for importing in self.importing.values_mut() {
             if importing.key.as_ref() == Some(key) {
@@ -175,7 +176,11 @@ impl<K: Clone + Eq + Hash, F> Imports<K, F> {
             }
         }
         Forgotten {
-            id: self.done.remove(key),
+            ids: self
+                .done
+                .extract_if(|(_, of), _| of == key)
+                .map(|((surface, _), id)| (surface, id))
+                .collect(),
             waited: self
                 .waiting
                 .extract_if(|_, (waits_on, _)| waits_on == key)
@@ -194,8 +199,8 @@ impl<K: Clone + Eq + Hash, F> Imports<K, F> {
         Gone {
             ids: self
                 .done
-                .extract_if(|_, (of, _)| *of == surface)
-                .map(|(_, (_, id))| id)
+                .extract_if(|(of, _), _| *of == surface)
+                .map(|(_, id)| id)
                 .collect(),
             waited: self.waiting.remove(&surface).map(|(_, frame)| frame),
         }
@@ -212,10 +217,10 @@ impl<K: Clone + Eq + Hash, F> Imports<K, F> {
             .collect()
     }
 
-    fn is_importing(&self, key: &K) -> bool {
+    fn is_importing(&self, surface: SurfaceId, key: &K) -> bool {
         self.importing
             .values()
-            .any(|importing| importing.key.as_ref() == Some(key))
+            .any(|importing| importing.surface == surface && importing.key.as_ref() == Some(key))
     }
 
     fn start(&mut self, surface: SurfaceId, key: K) -> Request {
@@ -265,11 +270,11 @@ mod tests {
             imports.finished(1, Some(10)),
             Finished {
                 forget: None,
-                then: vec![Then::Submit {
+                then: Some(Then::Submit {
                     surface: SURFACE,
                     id: 10,
                     frame: 1
-                }]
+                })
             }
         );
         assert_eq!(
@@ -296,18 +301,57 @@ mod tests {
         );
         assert_eq!(
             imports.finished(request, Some(10)).then,
-            vec![Then::Submit {
+            Some(Then::Submit {
                 surface: SURFACE,
                 id: 10,
                 frame: 2
-            }]
+            })
+        );
+    }
+
+    #[test]
+    fn a_buffer_on_two_surfaces_is_imported_for_each() {
+        let mut imports = Under::default();
+        let first = waits(&mut imports, SURFACE, 'a', 1).expect("an import starts");
+        let second = waits(&mut imports, OTHER, 'a', 2).expect("and another for the other surface");
+
+        assert_eq!(
+            imports.finished(first, Some(10)).then,
+            Some(Then::Submit {
+                surface: SURFACE,
+                id: 10,
+                frame: 1
+            })
+        );
+        assert_eq!(
+            imports.finished(second, Some(20)).then,
+            Some(Then::Submit {
+                surface: OTHER,
+                id: 20,
+                frame: 2
+            })
+        );
+        assert_eq!(
+            (imports.route(SURFACE, 'a', 3), imports.route(OTHER, 'a', 4)),
+            (
+                Route::Submit {
+                    id: 10,
+                    frame: 3,
+                    replaced: None
+                },
+                Route::Submit {
+                    id: 20,
+                    frame: 4,
+                    replaced: None
+                }
+            )
         );
     }
 
     #[test]
     fn an_imported_buffer_goes_up_past_a_frame_still_waiting() {
         let mut imports = Under::default();
-        imports.imported('a', SURFACE, 10);
+        imports.imported(SURFACE, 'a', 10);
         let request = waits(&mut imports, SURFACE, 'b', 1).expect("an import starts");
 
         assert_eq!(
@@ -318,8 +362,11 @@ mod tests {
                 replaced: Some(1)
             }
         );
-        assert_eq!(imports.finished(request, Some(11)).then, vec![]);
-        assert!(imports.knows(&'b'), "and the import is kept for next time");
+        assert_eq!(imports.finished(request, Some(11)).then, None);
+        assert!(
+            imports.knows(SURFACE, &'b'),
+            "and the import is kept for next time"
+        );
     }
 
     #[test]
@@ -329,32 +376,36 @@ mod tests {
 
         assert_eq!(
             imports.finished(request, None).then,
-            vec![Then::Refused {
+            Some(Then::Refused {
                 surface: SURFACE,
                 frame: 1
-            }]
+            })
         );
-        assert!(!imports.knows(&'a'));
+        assert!(!imports.knows(SURFACE, &'a'));
         assert_eq!(waits(&mut imports, SURFACE, 'a', 2), Some(request + 1));
     }
 
     #[test]
-    fn a_forgotten_buffer_s_import_is_dropped_even_while_it_runs() {
+    fn a_forgotten_buffer_s_imports_are_dropped_on_every_surface_even_while_they_run() {
         let mut imports = Under::default();
-        imports.imported('a', SURFACE, 10);
+        imports.imported(SURFACE, 'a', 10);
+        imports.imported(OTHER, 'a', 12);
         let request = waits(&mut imports, OTHER, 'b', 1).expect("an import starts");
 
+        let mut forgotten = imports.forget(&'a');
+
+        forgotten.ids.sort();
         assert_eq!(
-            imports.forget(&'a'),
+            forgotten,
             Forgotten {
-                id: Some((SURFACE, 10)),
+                ids: vec![(SURFACE, 10), (OTHER, 12)],
                 waited: vec![]
             }
         );
         assert_eq!(
             imports.forget(&'b'),
             Forgotten {
-                id: None,
+                ids: vec![],
                 waited: vec![(OTHER, 1)]
             }
         );
@@ -362,18 +413,18 @@ mod tests {
             imports.finished(request, Some(11)),
             Finished {
                 forget: Some((OTHER, 11)),
-                then: vec![]
+                then: None
             }
         );
-        assert!(!imports.knows(&'a') && !imports.knows(&'b'));
+        assert!(!imports.knows(OTHER, &'a') && !imports.knows(OTHER, &'b'));
     }
 
     #[test]
     fn a_gone_surface_takes_its_imports_and_frame_and_no_other_s() {
         let mut imports = Under::default();
-        imports.imported('a', SURFACE, 10);
-        imports.imported('b', SURFACE, 11);
-        imports.imported('c', OTHER, 12);
+        imports.imported(SURFACE, 'a', 10);
+        imports.imported(SURFACE, 'b', 11);
+        imports.imported(OTHER, 'a', 12);
         let request = waits(&mut imports, SURFACE, 'd', 1).expect("an import starts");
 
         let mut gone = imports.surface_gone(SURFACE);
@@ -386,7 +437,7 @@ mod tests {
                 waited: Some(1)
             }
         );
-        assert!(imports.knows(&'c'));
+        assert!(imports.knows(OTHER, &'a'));
         assert_eq!(
             imports.finished(request, Some(13)).forget,
             Some((SURFACE, 13))
@@ -396,11 +447,11 @@ mod tests {
     #[test]
     fn a_lost_engine_takes_every_import_and_hands_back_every_frame() {
         let mut imports = Under::default();
-        imports.imported('a', SURFACE, 10);
+        imports.imported(SURFACE, 'a', 10);
         waits(&mut imports, OTHER, 'b', 1);
 
         assert_eq!(imports.clear(), vec![(OTHER, 1)]);
-        assert!(!imports.knows(&'a'));
+        assert!(!imports.knows(SURFACE, &'a'));
         assert_eq!(
             waits(&mut imports, OTHER, 'b', 2),
             Some(2),
