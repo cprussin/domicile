@@ -15,18 +15,22 @@
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/no_destructor.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/process/process_handle.h"
 #include "base/task/thread_pool.h"
 #include "components/domicile/browser/display_capture_target.h"
 #include "components/domicile/browser/display_list.h"
 #include "components/domicile/browser/external_surface_provider.h"
 #include "components/domicile/browser/frame_sink_broker.h"
+#include "components/domicile/browser/shell_origin.h"
 #include "components/domicile/mojom/frame_sink_broker.mojom.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/domicile/domicile_desk.h"
 #include "content/browser/domicile/domicile_spike_probe.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window_tree_host.h"
@@ -36,6 +40,7 @@
 #include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/display/screen.h"
 #include "ui/ozone/public/ozone_platform.h"
+#include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/platform/named_platform_channel.h"
 #include "mojo/public/cpp/platform/platform_channel_server_endpoint.h"
 #include "mojo/public/cpp/system/invitation.h"
@@ -341,9 +346,18 @@ void StartDomicileFrameSinkBroker() {
 }
 
 void BindDomicileExternalSurfaceProvider(
-    uint32_t renderer_client_id,
+    RenderFrameHost* frame,
     mojo::PendingReceiver<domicile::mojom::ExternalSurfaceProvider> receiver) {
-  GetDomicileBrowserService().Bind(std::move(receiver), renderer_client_id);
+  // Checked at bind time: the binder map is built before a document commits.
+  if (!domicile::IsShellOrigin(frame->GetLastCommittedOrigin())) {
+    mojo::ReportBadMessage("domicile: only the shell may embed a window.");
+  } else {
+    // A frame sink's client id is its renderer's process id; see
+    // RenderProcessHostImpl::CreateEmbeddedFrameSinkProvider.
+    GetDomicileBrowserService().Bind(
+        std::move(receiver),
+        base::checked_cast<uint32_t>(frame->GetProcess()->GetDeprecatedID()));
+  }
 }
 
 }  // namespace content

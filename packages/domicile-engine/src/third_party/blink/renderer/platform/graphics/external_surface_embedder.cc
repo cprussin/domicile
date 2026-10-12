@@ -11,8 +11,7 @@
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
-#include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
-#include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 
 namespace blink {
 namespace {
@@ -47,8 +46,12 @@ AppSurface& SurfaceForApp(const String& app_id) {
 
 }  // namespace
 
-ExternalSurfaceEmbedder::ExternalSurfaceEmbedder(base::RepeatingClosure lost)
-    : lost_(std::move(lost)) {}
+ExternalSurfaceEmbedder::ExternalSurfaceEmbedder(
+    const BrowserInterfaceBrokerProxy& broker,
+    base::RepeatingClosure lost)
+    : lost_(std::move(lost)) {
+  broker.GetInterface(provider_.BindNewPipeAndPassReceiver());
+}
 
 ExternalSurfaceEmbedder::~ExternalSurfaceEmbedder() = default;
 
@@ -59,11 +62,6 @@ viz::LocalSurfaceId ExternalSurfaceEmbedder::Embed(
     double scale,
     Allocation allocation,
     EmbeddedCallback callback) {
-  if (!provider_) {
-    Platform::Current()->GetBrowserInterfaceBroker()->GetInterface(
-        provider_.BindNewPipeAndPassReceiver());
-  }
-
   // Allocate before the round trip: the browser passes this half of the
   // SurfaceId to the producer, which cannot create one.
   //

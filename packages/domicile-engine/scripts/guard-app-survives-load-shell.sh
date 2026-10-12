@@ -142,7 +142,6 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
   --no-sandbox --password-store=basic --no-first-run --disable-component-update \
   --user-data-dir="$PROFILE" \
   --window-size=1024,768 \
-  --enable-blink-features=DomicileExternalSurface \
   --enable-logging=stderr --log-level=0 \
   --domicile-broker-socket="$BROKER" >"$ENGINE_LOG" 2>&1 &
 STARTED+=($!)

@@ -4,13 +4,13 @@
 #ifndef CONTENT_BROWSER_DOMICILE_DOMICILE_FRAME_SINK_BROKER_H_
 #define CONTENT_BROWSER_DOMICILE_DOMICILE_FRAME_SINK_BROKER_H_
 
-#include <cstdint>
-
 #include "components/domicile/mojom/external_surface.mojom.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 
 namespace content {
+
+class RenderFrameHost;
 
 // Builds the browser's broker and, if --domicile-broker-socket names a path,
 // listens on it. Without the switch it does nothing.
@@ -23,14 +23,15 @@ namespace content {
 // GetHostFrameSinkManager() reads through it.
 CONTENT_EXPORT void StartDomicileFrameSinkBroker();
 
-// Binds a page to the browser's domicile::FrameSinkBroker.
+// Binds `frame` to the browser's domicile::FrameSinkBroker, if it is the shell.
 //
-// `renderer_client_id` is the client id of the page's renderer's frame sinks.
-// An embed under any other parent is a bad message.
+// Any other frame asking is a bad message: a page that embeds a window takes
+// that window's pixels from the shell. An embed under a parent frame sink
+// outside the frame's renderer is a bad message too.
 //
-// Call on the UI thread, after the compositor is up.
+// Registered as a frame binder, so call on the UI thread.
 CONTENT_EXPORT void BindDomicileExternalSurfaceProvider(
-    uint32_t renderer_client_id,
+    RenderFrameHost* frame,
     mojo::PendingReceiver<domicile::mojom::ExternalSurfaceProvider> receiver);
 
 }  // namespace content

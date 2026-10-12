@@ -31,9 +31,9 @@
 #   --password-store=basic      otherwise Chrome blocks on a missing keyring
 #                               and never opens a window
 #   --no-sandbox                the producer is not a child process
-#   --enable-blink-features=... canvas.embedExternalSurface() has no status in
-#                               runtime_enabled_features.json5, so it must be
-#                               enabled by name
+#   --domicile-shell-root       serves the page from domicile://shell/:
+#                               <app> and canvas.embedExternalSurface() exist
+#                               only on that origin
 set -u
 
 CHROMIUM="${1:-}"
@@ -104,7 +104,8 @@ if [ -z "$URL" ] && [ ! -f "$PAGE" ]; then
   echo "no page at $PAGE" >&2
   exit 1
 fi
-[ -n "$URL" ] || URL="file://$PAGE$PAGE_QUERY"
+# The page in this directory, served from the shell's origin.
+[ -n "$URL" ] || URL="domicile://shell/$(basename "$PAGE")$PAGE_QUERY"
 
 rm -f "$SOCKET"
 rm -rf "$PROFILE" && mkdir -p "$PROFILE"
@@ -120,7 +121,7 @@ TMPDIR=/tmp "$OUT/chrome" \
   --no-first-run --disable-component-update \
   --user-data-dir="$PROFILE" \
   --window-size="$WINDOW_SIZE" \
-  --enable-blink-features=DomicileExternalSurface \
+  --domicile-shell-root="$SCRIPTS" \
   --enable-logging=stderr --log-level=0 \
   --domicile-broker-socket="$SOCKET" \
   "${ENGINE_FLAGS[@]}" \
