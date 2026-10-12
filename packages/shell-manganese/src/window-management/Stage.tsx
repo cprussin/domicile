@@ -316,6 +316,9 @@ export const Stage = memo(
                 onPlayedOut={onPlayedOut}
                 onSelect={onSelect}
                 placement={placement}
+                // Every window, since a tiled edge resizes the windows on
+                // both sides of it. A window whose box stays put is unaffected.
+                resizing={stretching}
                 restack={restack}
                 rewound={rewound}
                 screen={screen}
@@ -708,6 +711,8 @@ type WindowContentsProps = {
   onPlayedOut: WindowMotions["onPlayedOut"];
   onSelect: (id: string) => void;
   placement: Placement | undefined;
+  /** See `AppWindow`. */
+  resizing: boolean;
   restack: Restack | undefined;
   /** How far into its motion it starts. See `DrawnWindow.rewound`. */
   rewound: number;
@@ -737,6 +742,7 @@ const WindowContents = memo(
     onPlayedOut,
     onSelect,
     placement,
+    resizing,
     restack,
     rewound,
     screen,
@@ -788,6 +794,7 @@ const WindowContents = memo(
             motion={motion}
             onMotionEnded={ended}
             rect={contents?.rect}
+            resizing={resizing}
             restack={restack}
           />
         ) : (

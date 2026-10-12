@@ -174,6 +174,10 @@ on other Wayland compositors.
 - **`<app>`:** a resize embeds the surface for the new box with the default
   deadline, in the frame whose layout changed the box (`html_app_element.cc`,
   patch `0102`). A first embed uses deadline 0.
+- **Interactive resize:** while an `<app>` has the `resizing` attribute (patch
+  `0113`), a resize embeds with deadline 0, so a slow client cannot hold every
+  frame of a drag. Removing it re-embeds the box once with the default
+  deadline, if a resize happened meanwhile.
 - **The compositor** shows each commit at the box of the configure the client
   acked (`configure_box`, `domicile_surface_submit_for_box`,
   `configure_answers.rs`). An old buffer stays at its old surface instead of
@@ -185,7 +189,7 @@ on other Wayland compositors.
 - **`<webview>`:** the guest keeps upstream's default deadline, as an
   out-of-process `<iframe>` does.
 - **Cost:** a client slower than the deadline slows the whole desktop during a
-  resize. Past the deadline, viz shows the window's last frame stretched.
+  resize without `resizing`. Past the deadline, viz shows the window's last frame stretched.
 - `scripts/test-a-resized-window-holds-the-shell-until-it-draws.sh` checks
   this.
 
