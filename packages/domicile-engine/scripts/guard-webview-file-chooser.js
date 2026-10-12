@@ -12,6 +12,8 @@
 //   GUARD file-chooser mode=…    the element asked, and for what
 //     suggested=…
 //   GUARD answered               the answer did not throw
+//   GUARD downloads count=…      the element's downloads in progress changed
+//     received=… total=…
 //
 // The guest page logs what it received; see
 // guard-webview-file-chooser-server.py. Domicile calls `Shell` once the module
@@ -76,6 +78,13 @@ export const Shell = () => {
     }
     say("answered");
   };
+
+  document.addEventListener("domicile-downloads-change", (event) => {
+    const view = event.target;
+    say(
+      `downloads count=${view.downloadCount} received=${view.downloadReceivedBytes} total=${view.downloadTotalBytes}`,
+    );
+  });
 
   // Shows the harness can deliver a click to this document.
   document.addEventListener("mousedown", (event) => {

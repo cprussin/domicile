@@ -23,9 +23,11 @@
 #   the shell was asked in save mode with the site's file name
 #   the shell answered without throwing
 #   the file is at the shell's path with the site's bytes (the claim)
+#   the element counted the download in progress, then counted none
 #
 # NEGATIVE=1 runs a shell that cancels. Nothing may be saved anywhere in the
-# home, proving the browser does not save regardless of the answer.
+# home, proving the browser does not save regardless of the answer, and the
+# element never counts it.
 #
 # The guard uses its own empty home, so any file there with the site's bytes
 # is this run's download.
@@ -197,11 +199,18 @@ FOUND="$(
   } | sort -u
 )"
 SAVED_ANYWHERE=$([ -n "$FOUND" ] && echo 1 || echo 0)
+# Logged by WebViewGuest::ReportDownloads. Tells "never counted" from "counted
+# but the shell was not told".
+SAW_GUEST_COUNTED=$(saw "domicile: a <webview> reported 1 downloads in progress.")
+SAW_COUNTED=$(saw "GUARD downloads count=1 ")
+# The element starts at 0, so a change to 0 follows a count.
+SAW_CLEARED=$(saw "GUARD downloads count=0 ")
 
 echo
 echo "shell=$SAW_SHELL page=$SAW_PAGE press=$SAW_CHROME guest=$SAW_GUEST fetched=$SAW_FETCHED"
 echo "the browser asked=$SAW_BROWSER; the shell was asked=$SAW_ASKED with the name=$SAW_SUGGESTED and answered=$SAW_ANSWERED"
 echo "on the disk: where the shell said=$SAVED anywhere=$SAVED_ANYWHERE"
+echo "in progress: the guest counted=$SAW_GUEST_COUNTED; the shell heard=$SAW_COUNTED, then none=$SAW_CLEARED"
 [ -n "$FOUND" ] && printf '  %s\n' $FOUND
 echo "everything in the home, for the record:"
 find "$HOME_DIR" -type f 2>/dev/null | sed 's/^/  /'
@@ -249,14 +258,33 @@ elif [ "$NEGATIVE" = "1" ]; then
     FAILURE="THE CONTROL SAVED A FILE: the shell canceled and the download \
 landed in the home anyway, so the positive run's file is not the shell's \
 answer being followed"
+  elif [ "$SAW_COUNTED" = "1" ]; then
+    FAILURE="THE CONTROL COUNTED A DOWNLOAD: the shell canceled and the \
+element said one was in progress. A download counts once it has a target -- \
+see TallyDownloads in download_tally.h"
   else
     PASSED="the control is sharp: the shell canceled, and nothing landed \
 anywhere in the home. So what the positive run reads is the shell's answer"
   fi
 elif [ "$SAVED" = "1" ]; then
-  PASSED="a download started inside a browser window asked the shell where it \
-goes -- carrying the site's name for it -- and landed at the path the shell \
-answered with, relative to the home, with the bytes the site sent"
+  if [ "$SAW_GUEST_COUNTED" != "1" ]; then
+    FAILURE="the download was saved and never counted as in progress: \
+WebViewGuest::ReportDownloads never reported it. Either OnDownloadCreated did \
+not find this guest from the download's WebContents, or the download had no \
+target while in progress"
+  elif [ "$SAW_COUNTED" != "1" ]; then
+    FAILURE="the guest counted the download and the shell never heard: \
+DownloadsChanged on WebViewGuestClient, the dispatch in HTMLWebViewElement, \
+or the event's name"
+  elif [ "$SAW_CLEARED" != "1" ]; then
+    FAILURE="THE DOWNLOAD IS STILL IN PROGRESS after it was saved: the element \
+never went back to 0. OnDownloadUpdated did not report the finish"
+  else
+    PASSED="a download started inside a browser window asked the shell where \
+it goes -- carrying the site's name for it -- landed at the path the shell \
+answered with, relative to the home, with the bytes the site sent, and the \
+element counted it in progress until it finished"
+  fi
 elif [ "$SAVED_ANYWHERE" = "1" ]; then
   FAILURE="THE FILE LANDED SOMEWHERE ELSE: the shell chose $PICK and the \
 download is elsewhere in the home. The path is resolved under the home in the \
