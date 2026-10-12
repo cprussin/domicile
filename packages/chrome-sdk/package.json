@@ -120,7 +120,7 @@
     "test:unit": "bun test"
   },
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.0.0-alpha-a89d6ae41ff7",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/cprussin/domicile.git",

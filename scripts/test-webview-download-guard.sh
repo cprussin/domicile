@@ -48,6 +48,8 @@ run_block() { # $1 NEGATIVE, then NAME=value overrides
   SAW_GUEST_COUNTED=1
   SAW_COUNTED=1
   SAW_CLEARED=1
+  SAW_FINISHED=1
+  SAW_FORGOTTEN=1
   NEGATIVE="$1"
   shift
   for override in "$@"; do
@@ -79,7 +81,7 @@ blames() { # $1 word, then the args verdict takes
 }
 
 # The control's readings: the shell canceled, so nothing was saved.
-CONTROL="SAVED=0 SAVED_ANYWHERE=0 SAW_GUEST_COUNTED=0 SAW_COUNTED=0 SAW_CLEARED=0"
+CONTROL="SAVED=0 SAVED_ANYWHERE=0 SAW_GUEST_COUNTED=0 SAW_COUNTED=0 SAW_CLEARED=0 SAW_FINISHED=0 SAW_FORGOTTEN=0"
 
 echo "a run that never got as far as measuring anything"
 # shellcheck disable=SC2086
@@ -124,6 +126,12 @@ expect "a download still counted once saved is a failure" "fail" \
   "$(verdict 0 SAW_CLEARED=0)"
 expect "a download still counted once saved says so" "yes" \
   "$(blames "STILL IN PROGRESS" 0 SAW_CLEARED=0)"
+expect "a finished download not kept as finished says so" "yes" \
+  "$(blames "NOT KEPT" 0 SAW_FINISHED=0 SAW_FORGOTTEN=0)"
+expect "a finished download the shell could not clear is a failure" "fail" \
+  "$(verdict 0 SAW_FORGOTTEN=0)"
+expect "a finished download the shell could not clear names the call" "yes" \
+  "$(blames "clearCompletedDownloads" 0 SAW_FORGOTTEN=0)"
 
 echo
 echo "the control run — a shell that cancels"
@@ -135,6 +143,9 @@ expect "a file after a cancel is the failure" "fail" \
 # shellcheck disable=SC2086
 expect "a canceled download counted as in progress is a failure" "fail" \
   "$(verdict 1 $CONTROL SAW_COUNTED=1)"
+# shellcheck disable=SC2086
+expect "a canceled download counted as finished is a failure" "fail" \
+  "$(verdict 1 $CONTROL SAW_FINISHED=1)"
 
 echo
 if [ "$FAILED" -eq 0 ]; then

@@ -547,6 +547,11 @@ export const BrowserWindow = ({
           onBack={drive((loaded) => {
             loaded.goBack();
           })}
+          onClearDownloads={() => {
+            withView((loaded) => {
+              loaded.clearCompletedDownloads();
+            });
+          }}
           onForward={drive((loaded) => {
             loaded.goForward();
           })}

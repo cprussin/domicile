@@ -53,9 +53,9 @@ BRITISH='\b('\
 'foetus|oesophagus|oestrogen|orthopaedic|paediatric|haemoglobin|leukaemia'\
 ')\b'
 
-# Other projects' APIs: Nix's `--realise` flag and GitHub's `cancelled()`.
-# Only those exact forms are exempt.
-EXEMPT='--realise\b|\bcancelled\(\)'
+# Other projects' APIs: Nix's `--realise` flag, GitHub's `cancelled()` and
+# Chromium's `DownloadItem::CANCELLED`. Only those exact forms are exempt.
+EXEMPT='--realise\b|\bcancelled\(\)|\bDownloadItem::CANCELLED\b'
 
 # Skip binaries, lockfiles, this file (it contains the list) and the vendored
 # IANA TLD list (`.theatre` is a real TLD).
