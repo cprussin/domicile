@@ -210,3 +210,13 @@ from a page, such as a wallet extension's "connect Ledger".
   the page's filters exclude it.
 - `answered with 1 device(s)` and the page cannot open the device: the session
   cannot open its `/dev/hidraw*` node. Check `getfacl /dev/hidraw*`.
+
+## A tty desktop in a virtio-gpu VM
+
+QEMU/KVM with virtio-gpu and virgl, on a VT. Run with
+`--vmodule=gbm_wrapper=1,drm_framebuffer=4`.
+
+- The desktop draws: the primary plane got a scanout buffer.
+- `Not scanning out a … buffer … without GBM_BO_USE_SCANOUT`: it did not.
+  The lines above it say why
+  ([A primary plane display cannot read](TTY-DEBUGGING.md#a-primary-plane-display-cannot-read)).
