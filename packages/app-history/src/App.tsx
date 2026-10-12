@@ -7,6 +7,7 @@ import {
 } from "@domicile-desktop/component-library/Toaster";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/ssr/ArrowSquareOut";
 import { ClockCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ClockCounterClockwise";
+import { CookieIcon } from "@phosphor-icons/react/dist/ssr/Cookie";
 import { LinkIcon } from "@phosphor-icons/react/dist/ssr/Link";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
 import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
@@ -239,6 +240,23 @@ export const App = ({ browser, now = Date.now }: Props) => {
               }}
             >
               More from this site
+            </ContextMenu.Item>
+            <ContextMenu.Item
+              icon={<CookieIcon />}
+              onClick={() => {
+                const site = domain(menu.entry.url);
+                browser
+                  .clearSiteData(menu.entry.url)
+                  .then(() => {
+                    toasts.add({
+                      timeout: TOAST_MS,
+                      title: `Cookies cleared for ${site}`,
+                    });
+                  })
+                  .catch(report("Couldn't clear the site's cookies"));
+              }}
+            >
+              Clear cookies for this site
             </ContextMenu.Item>
             <ContextMenu.Item
               icon={<TrashIcon />}

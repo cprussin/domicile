@@ -57,6 +57,7 @@ export const fakeBrowser = (pages: FakePage[]) => {
   };
   const browser: Browser = {
     ...fakeHistory(pages),
+    clearSiteData: unused,
     copyText: unused,
     deleteVisits: (visits) => {
       for (const page of pages) {

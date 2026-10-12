@@ -294,6 +294,48 @@ describe(App, () => {
       ).toHaveValue("dogs.test");
     });
 
+    it("clears the row's site's cookies", async () => {
+      const cleared = new Promise((resolve) => {
+        const { user } = renderApp(HISTORY, {
+          clearSiteData: (url) => {
+            resolve(url);
+            return Promise.resolve();
+          },
+        });
+        screen
+          .findByRole("button", { name: "Actions for Dogs" })
+          .then(async (button) => {
+            await user.click(button);
+            await user.click(
+              await screen.findByRole("menuitem", {
+                name: "Clear cookies for this site",
+              }),
+            );
+          })
+          .catch(() => undefined);
+      });
+      expect(await cleared).toBe("https://dogs.test/");
+      expect(
+        await screen.findByText("Cookies cleared for dogs.test"),
+      ).toBeInTheDocument();
+    });
+
+    it("reports a site's cookies it couldn't clear", async () => {
+      const { user } = renderApp(HISTORY, {
+        clearSiteData: () => Promise.reject(new Error("profile is busy")),
+      });
+      await screen.findByRole("link", { name: /Dogs/ });
+      await user.click(
+        within(row("Dogs")).getByRole("button", { name: "Actions for Dogs" }),
+      );
+      await user.click(
+        await screen.findByRole("menuitem", {
+          name: "Clear cookies for this site",
+        }),
+      );
+      expect(await screen.findByText("profile is busy")).toBeInTheDocument();
+    });
+
     it("opens a row in a new window from its context menu", async () => {
       const opened = new Promise((resolve) => {
         const { user } = renderApp(HISTORY, {

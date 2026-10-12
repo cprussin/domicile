@@ -7,6 +7,8 @@ Every desktop has a History app: Chrome's history page for browser windows.
 - Lists visits by day, newest first, with search, "More from this site",
   removing entries and **Clear browsing data** (history, cookies, cached files
   and more, over a time range).
+- A row's **Clear cookies for this site** removes the cookies and site
+  storage of the row's origin.
 - Source and design: [`packages/app-history`](/packages/app-history/README.md).
 
 ## How it works
