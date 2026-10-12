@@ -6,7 +6,8 @@ The History app: an unpacked MV3 Chrome extension whose page,
 - Lists visits newest first under day headers, one row per page per day,
   150 pages at a time with infinite scroll.
 - Search (`/` or Ctrl+F), row menus, check boxes with Shift ranges, keyboard
-  navigation, "Clear browsing data", and live updates from
+  navigation, "Clear browsing data", per-site cookie clearing, and live
+  updates from
   `chrome.history.onVisited` / `onVisitRemoved`.
 - Follows `prefers-color-scheme` and `prefers-reduced-motion`, which Domicile
   sets from the desktop.

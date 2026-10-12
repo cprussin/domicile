@@ -50,7 +50,8 @@ item when it ships.
 8. **Settings app.** [SETTINGS.md](docs/SETTINGS.md).
    - Shell options ([SHELL-OPTIONS.md](docs/architecture/SHELL-OPTIONS.md)).
    - A persistent theme choice, which needs a store for desktop state.
-   - Cookies and site data.
+   - A list of sites with stored data. History clears cookies by time range
+     or by site ([HISTORY.md](docs/HISTORY.md)).
    - A guard that runs the app's native messaging host in the engine.
 
 9. **Split up the compositor's `main.rs`.** Left in it: event-loop state,
@@ -123,7 +124,7 @@ Understood and not scheduled.
 - **Some permission requests are refused,** including `getDisplayMedia`.
 - **Some file dialogs are refused:** from the shell's own page, and a
   directory dropped on a page.
-- **No `chrome://` pages,** so no cookie clearing and no printing.
+- **No `chrome://` pages,** so no printing.
 - **Some extension calls are refused.**
   [EXTENSIONS.md](docs/architecture/EXTENSIONS.md).
 - **Private data lasts until the engine exits.**
