@@ -37,6 +37,9 @@ source_set("browser") {
     # Public so the browser's broker in //content, which depends only on this
     # target, finds a display's window with it.
     ":display_capture_target",
+    # Public for the same reason: //content binds a page to the broker only if
+    # it is the shell.
+    ":shell_origin",
     "//base",
     "//components/domicile/mojom",
     "//components/viz/common",
@@ -176,6 +179,19 @@ source_set("theme") {
 # need no Blink.
 source_set("held_chords") {
   sources = [ "common/held_chords.h" ]
+}
+
+# Whether an origin is the shell's. Its own target for :web_view_url's reason:
+# the check needs no browser, so its tests need none either.
+source_set("shell_origin") {
+  sources = [
+    "browser/shell_origin.cc",
+    "browser/shell_origin.h",
+  ]
+
+  public_deps = [ "//url" ]
+
+  deps = [ ":common" ]
 }
 
 # Serving the shell over domicile://.
@@ -692,6 +708,7 @@ source_set("unit_tests") {
     "browser/private_pages_unittest.cc",
     "browser/shell_source_unittest.cc",
     "browser/shell_url_loader_factory_unittest.cc",
+    "browser/shell_origin_unittest.cc",
     "browser/shell_windows_unittest.cc",
     "browser/shortcut_registry_unittest.cc",
     "browser/site_permissions_unittest.cc",
@@ -742,6 +759,7 @@ source_set("unit_tests") {
     ":pointer_warp",
     ":portal_request",
     ":private_pages",
+    ":shell_origin",
     ":shell_scheme",
     ":shell_source",
     ":shell_windows",

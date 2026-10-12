@@ -46,6 +46,7 @@ Under `under-wayland.sh` unless marked headless.
 | `guard-shell-handover.sh` | the engine calls `Shell` with the body and a working desktop, and no `navigator.domicile` or `window.domicile` exists (patch 0094) |
 | `guard-css-and-resize.sh` | CSS parity of `<app>` against `<div>`, with and without `backdrop-filter`, plus resize and latency. Headless; `GPU=1` uses the GPU |
 | `guard-latency.sh` | keystroke to pixel with a real client, from the compositor's `latency` lines |
+| `guard-app-only-in-shell.sh` | `<app>`, `HTMLAppElement` and `canvas.embedExternalSurface()` exist in the shell and not in a site in its `<webview>`. Headless |
 | `guard-app-routes-input.sh` | `<app>` sends the pointer, wheel and keys to its client through its whole CSS transform, with no page script; a `<div>` control gets nothing |
 | `guard-windows-state.sh` | `windows`, `focusedWindow` and the appearance attributes follow the compositor, every event name fires, and every CSS cursor keyword reaches the page; and that a system call and its answer cross the browser. Headless |
 | `guard-portal-requests.sh` | a shell that listens late for `portalrequests` hears them; `answerPortalRequest` reaches the compositor and a malformed answer does not. Headless |
@@ -124,7 +125,7 @@ Standalone checks of `<app>` embedding. Run by hand unless noted.
 | Script | Does |
 |---|---|
 | `spike.sh` | runs one spike step; the producer's exit code is the result. `guard-css-and-resize.sh` calls it |
-| `spike-page.html`, `spike-css-page.html`, `spike-resize-page.html` | the pages for `spike.sh` and the CSS run |
+| `spike-page.html`, `spike-css-page.html`, `spike-resize-page.html` | the pages for `spike.sh` and the CSS run, served from `domicile://shell/`, the only origin with `<app>` |
 | `spike-engine.sh` | drives `libdomicile_engine.so` from a C process |
 | `spike-dmabuf.sh` | imports, submits and releases a real dmabuf; under `under-wayland.sh` |
-| `spike-iframe.sh` | compares `<app>` with an out-of-process `<iframe>` |
+| `spike-iframe.sh` | compares `<app>` with an out-of-process `<iframe>`. Does not run: its page is an http page, which has no `<app>` |

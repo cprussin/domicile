@@ -18,6 +18,8 @@
 
 namespace blink {
 
+class BrowserInterfaceBrokerProxy;
+
 // Resolves the SurfaceId of a surface the browser brokered to a non-renderer
 // producer, so a layer in this page can embed it.
 //
@@ -45,10 +47,14 @@ class PLATFORM_EXPORT ExternalSurfaceEmbedder {
     kReconfigure,
   };
 
+  // `broker` is the embedding frame's. The browser refuses any frame but the
+  // shell's, so the browser decides which page may embed.
+  //
   // `lost` runs when the producer of the last surface embedded disconnects,
   // not when it closes the window. The app's next Embed() gets a new embed
   // token, so a caller can embed again and wait for a new producer.
   explicit ExternalSurfaceEmbedder(
+      const BrowserInterfaceBrokerProxy& broker,
       base::RepeatingClosure lost = base::RepeatingClosure());
 
   ExternalSurfaceEmbedder(const ExternalSurfaceEmbedder&) = delete;

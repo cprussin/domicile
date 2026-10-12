@@ -113,14 +113,20 @@ lists two undocumented transport constraints.
 
 `<app app-id="…">` is a real element, `HTMLAppElement` (patch `0007`).
 
+- It exists only in the shell's document, `domicile://shell/` (patch `0116`).
+  `DomicileExternalSurface` is an origin trial feature that `DomicileShell`
+  turns on there. Elsewhere `<app>` is an `HTMLUnknownElement`. A page that
+  embedded a window would take its pixels from the shell, since the last embed
+  wins.
+
 - `LayoutAppSurface::UpdateAfterLayout` reports the box layout gave it.
 - `ExternalSurfaceEmbedder` resolves the `SurfaceId` for the app id.
 - `SurfaceLayerBridge::EmbedSurface` and `cc::SurfaceLayer::SetSurfaceId` do not
   check which namespace the surface belongs to, so the page embeds a surface it
   did not allocate without changes to either.
-- `canvas.embedExternalSurface()` (patch `0002`) does the same embed.
-  `spike-page.html`, `spike-iframe-page.html` and `guard-two-windows.html` use
-  it.
+- `canvas.embedExternalSurface()` (patch `0002`) does the same embed, also only
+  in the shell. `spike-page.html`, `spike-iframe-page.html` and
+  `guard-two-windows.html` use it.
 - A fork element must override `Node::GetElementType`. Without it, casts to
   the element return null and `<app>` never embeds.
   `scripts/test-fork-elements-know-their-type.sh` checks this.
@@ -129,7 +135,7 @@ Two mojo interfaces carry the ids:
 
 | Interface | Direction | Carries |
 |---|---|---|
-| `domicile.mojom.ExternalSurfaceProvider` | renderer → browser | `Embed`: the page's `LocalSurfaceId` and size. Returns the `FrameSinkId`. A page naming a surface it was not offered gets an empty one. A parent frame sink outside the calling renderer is a bad message (patch `0107`). `WaitForEnd`: replies when a brokered `FrameSinkId` ends, and whether the window closed or the compositor went away. |
+| `domicile.mojom.ExternalSurfaceProvider` | renderer → browser | `Embed`: the page's `LocalSurfaceId` and size. Returns the `FrameSinkId`. A page naming a surface it was not offered gets an empty one. Bound per frame; a frame whose origin is not `domicile://shell` is a bad message (patch `0116`). A parent frame sink outside the calling renderer is a bad message (patch `0107`). `WaitForEnd`: replies when a brokered `FrameSinkId` ends, and whether the window closed or the compositor went away. |
 | `domicile.mojom.SurfaceObserver` | browser → producer | A `LocalSurfaceId` and a size, sent again whenever the box changes. |
 
 ### One engine, many surfaces
