@@ -493,6 +493,18 @@ source_set("keyboard_layout") {
   ]
 }
 
+# How many private pages a profile has open, so its off-the-record profile
+# ends with the last one. Its own target so the count is tested without a
+# profile.
+source_set("private_pages") {
+  sources = [
+    "browser/private_pages.cc",
+    "browser/private_pages.h",
+  ]
+
+  public_deps = [ "//base" ]
+}
+
 # Newline-framed lines out of a socket read a buffer at a time.
 #
 # Its own target beside :control_channel rather than part of it, for the
@@ -677,6 +689,7 @@ source_set("unit_tests") {
     "browser/placeholder_stage_unittest.cc",
     "browser/pointer_warp_unittest.cc",
     "browser/portal_request_unittest.cc",
+    "browser/private_pages_unittest.cc",
     "browser/shell_source_unittest.cc",
     "browser/shell_url_loader_factory_unittest.cc",
     "browser/shell_windows_unittest.cc",
@@ -729,6 +742,7 @@ source_set("unit_tests") {
     ":placeholder_stage",
     ":pointer_warp",
     ":portal_request",
+    ":private_pages",
     ":shell_scheme",
     ":shell_source",
     ":shell_windows",
