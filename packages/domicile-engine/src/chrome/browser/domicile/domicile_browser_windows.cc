@@ -27,10 +27,12 @@
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/domicile/domicile_tab_helpers.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_destroyer.h"
 #include "chrome/browser/profiles/profile_observer.h"
 #include "chrome/browser/ui/browser_window/public/browser_collection.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+#include "components/domicile/browser/private_pages.h"
 #include "components/domicile/browser/web_view_guest.h"
 #include "components/domicile/common/domicile_scheme.h"
 #include "components/tabs/public/tab_interface.h"
@@ -102,7 +104,10 @@ class DeskWindows final : public base::SupportsUserData::Data,
     return windows;
   }
 
-  explicit DeskWindows(Profile* profile) : profile_(profile) {
+  explicit DeskWindows(Profile* profile)
+      : profile_(profile),
+        private_pages_(base::BindRepeating(&DeskWindows::EndPrivateProfile,
+                                           base::Unretained(this))) {
     profile_observation_.Observe(profile);
   }
   DeskWindows(const DeskWindows&) = delete;
@@ -158,15 +163,24 @@ class DeskWindows final : public base::SupportsUserData::Data,
                 /*app=*/false);
   }
 
-  // The off-the-record profile private windows live in, made on first use.
-  // Watched, so its windows close before it is destroyed.
+  // The off-the-record profile a new private page lives in, made on first
+  // use. Watched, so its windows close before it is destroyed.
   Profile& PrivateProfile() {
+    if (ending_private_profile_) {
+      // Still waiting on its renderers. A page made in it would be destroyed
+      // with it, so finish it now and start a new one.
+      ProfileDestroyer::DestroyOTRProfileImmediately(
+          ending_private_profile_.get());
+    }
     Profile* otr = profile_->GetPrimaryOTRProfile(/*create_if_needed=*/true);
     if (!private_observation_.IsObserving()) {
       private_observation_.Observe(otr);
     }
     return *otr;
   }
+
+  void PrivatePageOpened() { private_pages_.Opened(); }
+  void PrivatePageClosed() { private_pages_.Closed(); }
 
   // Closes window `id`. An unknown id is a close that raced another.
   void Close(const std::string& id) {
@@ -283,6 +297,23 @@ class DeskWindows final : public base::SupportsUserData::Data,
   // Destroys closed windows' pages once none of their frames are on the stack.
   void Reap() { closing_.clear(); }
 
+  // Ends private browsing once the last private page closes: its cookies,
+  // cache and storage go with the off-the-record profile.
+  void EndPrivateProfile() {
+    // The original profile's destruction takes the off-the-record one with
+    // it.
+    if (!profile_observation_.IsObserving()) {
+      return;
+    }
+    Profile* otr = profile_->GetPrimaryOTRProfile(/*create_if_needed=*/false);
+    // Null when it was destroyed first, which closed the last page.
+    if (otr != nullptr) {
+      LOG(INFO) << "domicile: ended private browsing.";
+      ending_private_profile_ = otr->GetWeakPtr();
+      ProfileDestroyer::DestroyOTRProfileWhenAppropriate(otr);
+    }
+  }
+
   void Changed() {
     for (Observer& observer : observers_) {
       observer.OnWindowsChanged();
@@ -324,6 +355,9 @@ class DeskWindows final : public base::SupportsUserData::Data,
   base::ScopedObservation<Profile, ProfileObserver> profile_observation_{this};
   // The off-the-record profile, once PrivateProfile made it.
   base::ScopedObservation<Profile, ProfileObserver> private_observation_{this};
+  PrivatePages private_pages_;
+  // The off-the-record profile EndPrivateProfile is destroying, until it is.
+  base::WeakPtr<Profile> ending_private_profile_;
 
   base::WeakPtrFactory<DeskWindows> weak_factory_{this};
 };
@@ -368,6 +402,14 @@ class Host final : public BrowserWindowHost {
   content::BrowserContext& PrivateContext(
       content::BrowserContext& context) override {
     return Windows(context).PrivateProfile();
+  }
+
+  void PrivatePageOpened(content::BrowserContext& context) override {
+    Windows(context).PrivatePageOpened();
+  }
+
+  void PrivatePageClosed(content::BrowserContext& context) override {
+    Windows(context).PrivatePageClosed();
   }
 
  private:

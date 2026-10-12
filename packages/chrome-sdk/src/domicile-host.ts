@@ -162,8 +162,8 @@ export type DomicileBrowserWindow = {
   readonly height: number;
   /**
    * Whether the page is private: in the off-the-record profile, sharing
-   * nothing with the user's pages and storing nothing past the browser. A
-   * private window's new windows are private too.
+   * nothing with the user's pages and storing nothing past the last private
+   * page. A private window's new windows are private too.
    */
   readonly isPrivate: boolean;
   /**
