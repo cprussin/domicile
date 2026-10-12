@@ -1,0 +1,117 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Mon, 12 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a buffer display cannot read is never scanned out
+
+On virtio-gpu (virgl, Mesa 26.2) the checked engine's GPU process aborted
+on its first frame on a tty:
+
+  gbm_pixmap.cc:79] DCHECK failed: buffer_->GetFlags() & GBM_BO_USE_SCANOUT.
+  ui::GbmPixmap::ScheduleOverlayPlane
+  ...
+  viz::SkiaOutputDeviceBufferQueue::Present
+
+`DrmThread` adds a framebuffer only to a buffer allocated or imported with
+GBM_BO_USE_SCANOUT, so display cannot read any other. Two paths make one:
+
+- `OzoneImageBackingFactory::CreateSharedImageInternal` retries a failed
+  SCANOUT allocation as GPU_READ, without a log. The buffer queue's
+  primary plane buffers are SCANOUT allocations, so a device that cannot
+  allocate one, or add its framebuffer, gets a primary plane display cannot
+  read. The trace above is this path: no overlay is promoted on this
+  platform, so the primary plane is the only one scheduled.
+- Patch 0005 imports a client's buffer without scanout when its modifier is
+  render-only. It reaches a plane only through overlay promotion, which is
+  off here: `supports_overlays` is false and nothing passes
+  `--enable-hardware-overlays`. With it on, off ChromeOS the validator
+  tests a fresh scanout buffer rather than the candidate's own
+  (`allow_sync_and_real_buffer_page_flip_testing`), so it would let one
+  through.
+
+Without DCHECKs, `ScheduleOverlayPlane` queues nothing and returns true.
+The commit then has no planes, and `HardwareDisplayController` ACKs
+without a page flip: the screen keeps the modeset buffer and the log is
+clean.
+
+So `ScheduleOverlayPlane` keeps that behavior without the DCHECK, and logs
+such a buffer's format, size and modifier once. It does not fail the frame:
+SWAP_FAILED loses the context on every frame, which can loop GPU-process
+restarts.
+
+This does not make virgl draw. Why its SCANOUT allocation fails needs a
+log from the machine: `--vmodule=gbm_wrapper=1,drm_framebuffer=4` shows a
+failed `gbm_bo_create` or `AddFramebuffer2`.
+
+Not reproduced; nothing here runs virgl. `GbmPixmapScanoutTest` covers the
+skip and the single log.
+---
+ ui/ozone/platform/drm/BUILD.gn          |  1 +
+ ui/ozone/platform/drm/gpu/gbm_pixmap.cc | 19 +++++++++++++++++--
+ ui/ozone/platform/drm/gpu/gbm_pixmap.h  |  4 ++++
+ 3 files changed, 22 insertions(+), 2 deletions(-)
+
+diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
+index b7897f32..db4abf9f 100644
+--- a/ui/ozone/platform/drm/BUILD.gn
++++ b/ui/ozone/platform/drm/BUILD.gn
+@@ -272,6 +272,7 @@
+     "domicile/drm_sleep_unittest.cc",
+     "domicile/drm_vt_switcher_unittest.cc",
+     "domicile/edid_name_unittest.cc",
++    "domicile/gbm_pixmap_scanout_unittest.cc",
+ 
+     # evdev's, not this platform's: `//ui/events/ozone/evdev:unittests` is
+     # linked only into `events_unittests`, which no job here builds, and the
+diff --git a/ui/ozone/platform/drm/gpu/gbm_pixmap.cc b/ui/ozone/platform/drm/gpu/gbm_pixmap.cc
+index 3afd12cb..5dca5402 100644
+--- a/ui/ozone/platform/drm/gpu/gbm_pixmap.cc
++++ b/ui/ozone/platform/drm/gpu/gbm_pixmap.cc
+@@ -8,8 +8,9 @@
+ #include <memory>
+ #include <utility>
+ 
+-#include "base/check.h"
++#include "base/logging.h"
+ #include "ui/gfx/gpu_fence.h"
++#include "ui/gfx/linux/drm_util_linux.h"
+ #include "ui/gfx/native_pixmap_handle.h"
+ #include "ui/ozone/platform/drm/gpu/drm_overlay_plane.h"
+ #include "ui/ozone/platform/drm/gpu/gbm_surface_factory.h"
+@@ -76,7 +77,21 @@
+     gfx::AcceleratedWidget widget,
+     const gfx::OverlayPlaneData& overlay_plane_data,
+     gfx::GpuFenceHandle acquire_fence) {
+-  DCHECK(buffer_->GetFlags() & GBM_BO_USE_SCANOUT);
++  // DOMICILE: a buffer allocated or imported without GBM_BO_USE_SCANOUT has
++  // no framebuffer, so display cannot read it. `OzoneImageBackingFactory`
++  // makes one for the primary plane when a scanout allocation fails, and
++  // patch 0005 imports a client's buffer for sampling only. Queue no plane and
++  // say so once. Failing the frame instead loses the context every frame,
++  // which can loop GPU-process restarts.
++  if (!(buffer_->GetFlags() & GBM_BO_USE_SCANOUT)) {
++    LOG_IF(ERROR, !reported_no_scanout_)
++        << "Not scanning out a " << DrmFormatToString(buffer_->GetFormat())
++        << " buffer (" << buffer_->GetSize().ToString() << ", modifier "
++        << buffer_->GetFormatModifier()
++        << ") allocated or imported without GBM_BO_USE_SCANOUT";
++    reported_no_scanout_ = true;
++    return true;
++  }
+   // |framebuffer_id| might be 0 if AddFramebuffer2 failed, in that case we
+   // already logged the error in GbmBuffer ctor. We avoid logging the error
+   // here since this method might be called every pageflip.
+diff --git a/ui/ozone/platform/drm/gpu/gbm_pixmap.h b/ui/ozone/platform/drm/gpu/gbm_pixmap.h
+index 5abd0332..7e606f1e 100644
+--- a/ui/ozone/platform/drm/gpu/gbm_pixmap.h
++++ b/ui/ozone/platform/drm/gpu/gbm_pixmap.h
+@@ -56,6 +56,10 @@
+   const raw_ptr<GbmSurfaceFactory> surface_manager_;
+   const std::unique_ptr<GbmBuffer> buffer_;
+   const scoped_refptr<DrmFramebuffer> framebuffer_;
++
++  // DOMICILE: whether `ScheduleOverlayPlane` has logged that this buffer has
++  // no GBM_BO_USE_SCANOUT.
++  bool reported_no_scanout_ = false;
+ };
+ 
+ }  // namespace ui
