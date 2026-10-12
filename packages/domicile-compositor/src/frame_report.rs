@@ -25,6 +25,7 @@ pub fn report(window: &mut FrameWindow, hub: &Arc<ChromeHub>) {
         idle_ms = report.idle_ms,
         response_ms = report.response_ms,
         response_worst_ms = report.response_worst_ms,
+        present_ms = report.present_ms,
         chromes = hub.chromes.lock().unwrap().len(),
         "frames"
     );
@@ -47,6 +48,9 @@ pub struct FrameTimings {
     /// takes to reach the client. Measured from the oldest unanswered
     /// keystroke, as the chrome does, so the two compare.
     pub response: TimingWindow,
+    /// Time from a commit to its frame reaching the screen, as viz reports
+    /// it (`wp_presentation`).
+    pub present: TimingWindow,
 }
 
 /// When the writer thread last reported.
@@ -63,6 +67,7 @@ struct FrameReport {
     idle_ms: u32,
     response_ms: u32,
     response_worst_ms: u32,
+    present_ms: u32,
 }
 
 impl FrameWindow {
@@ -77,9 +82,10 @@ impl FrameWindow {
             // not fill the log.
             let report = timings.commit.take().map(|commit| {
                 // A stage that recorded nothing reports zero.
-                let (idle, response) = (
+                let (idle, response, present) = (
                     timings.idle.take().unwrap_or_default(),
                     timings.response.take().unwrap_or_default(),
+                    timings.present.take().unwrap_or_default(),
                 );
                 FrameReport {
                     commits: commit.count,
@@ -87,6 +93,7 @@ impl FrameWindow {
                     idle_ms: idle.average.as_millis() as u32,
                     response_ms: response.average.as_millis() as u32,
                     response_worst_ms: response.worst.as_millis() as u32,
+                    present_ms: present.average.as_millis() as u32,
                 }
             });
             drop(timings);
@@ -121,6 +128,18 @@ mod tests {
             .record(Duration::from_millis(4));
         let report = closed_window().due(&timings);
         assert_eq!(report.map(|report| report.commits), Some(1));
+    }
+
+    #[test]
+    fn a_window_reports_how_long_frames_took_to_reach_the_screen() {
+        let timings = Mutex::new(FrameTimings::default());
+        {
+            let mut timings = timings.lock().unwrap();
+            timings.commit.record(Duration::from_millis(4));
+            timings.present.record(Duration::from_millis(20));
+        }
+        let report = closed_window().due(&timings);
+        assert_eq!(report.map(|report| report.present_ms), Some(20));
     }
 
     #[test]
