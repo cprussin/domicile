@@ -118,9 +118,9 @@ Understood and not scheduled.
 
 ### Browser windows
 
-- **No dialogs.** `alert`, `confirm` and `prompt` show nothing.
-  `window.open` returns `null` and drops the opener and target name; a form
-  POST to a new target arrives as a GET.
+- **`window.open` returns `null`** and drops the opener and target name; a
+  form POST to a new target arrives as a GET.
+- **`beforeunload` asks nothing.** The page leaves.
 - **Some permission requests are refused,** including `getDisplayMedia`.
 - **Some file dialogs are refused:** from the shell's own page, and a
   directory dropped on a page.

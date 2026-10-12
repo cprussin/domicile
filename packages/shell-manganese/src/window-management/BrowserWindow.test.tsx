@@ -3,6 +3,7 @@ import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import {
   WEBVIEW_CONTEXT_MENU_EVENT,
   WEBVIEW_DEVICE_REQUEST_EVENT,
+  WEBVIEW_DIALOG_EVENT,
   WEBVIEW_DOWNLOADS_CHANGE_EVENT,
   WEBVIEW_FILE_CHOOSER_EVENT,
   WEBVIEW_FIND_CHANGE_EVENT,
@@ -19,7 +20,14 @@ import {
   WEBVIEW_TARGET_URL_CHANGE_EVENT,
   WEBVIEW_ZOOM_CHANGE_EVENT,
 } from "@domicile-desktop/sdk/webview-element";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { css } from "../../styled-system/css";
@@ -1798,6 +1806,60 @@ describe("BrowserWindow", () => {
       await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
       expect(answers).toStrictEqual(["choose 1"]);
+    });
+  });
+
+  // The engine draws no dialog for alert, confirm or prompt.
+  describe("a dialog its page opens", () => {
+    it("answers it over the page", async () => {
+      const answers: string[] = [];
+      const { container } = render(
+        <BrowserWindow
+          behindPanel={false}
+          clickThrough={false}
+          covered={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          fullscreen={false}
+          isApp
+          motion="resting"
+          onIcon={noIcon}
+          onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          url="https://example.com"
+          window="1"
+        />,
+      );
+      fireEvent(
+        view(container),
+        Object.assign(new Event(WEBVIEW_DIALOG_EVENT, { cancelable: true }), {
+          accept: () => {
+            answers.push("accept");
+          },
+          defaultValue: "",
+          dialogType: "confirm",
+          dismiss: () => undefined,
+          message: "Leave?",
+          origin: "https://example.com",
+        }),
+      );
+
+      const ok = within(
+        await screen.findByRole("alertdialog", { name: "example.com says" }),
+      ).getByRole("button", { name: "OK" });
+      // The page waits on it, so a focused window gives it the keyboard.
+      await waitFor(() => {
+        expect(ok).toHaveFocus();
+      });
+      await userEvent.click(ok);
+
+      expect(answers).toStrictEqual(["accept"]);
+      expect(screen.queryByRole("alertdialog")).toBeNull();
     });
   });
 

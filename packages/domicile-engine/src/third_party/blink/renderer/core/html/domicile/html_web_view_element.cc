@@ -24,6 +24,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_context_menu_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_device_request_event.h"
+#include "third_party/blink/renderer/core/html/domicile/domicile_dialog_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_file_chooser_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_permission_request_event.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
@@ -107,6 +108,11 @@ constexpr char kDeviceRequestEvent[] = "domicile-device-request";
 constexpr char kDeviceRequestChangeEvent[] = "domicile-device-request-change";
 constexpr char kDeviceRequestWithdrawnEvent[] =
     "domicile-device-request-withdrawn";
+
+// A page's `alert()`, `confirm()` or `prompt()`, which the shell answers on
+// the event, and its withdrawal. See domicile_dialog_event.h.
+constexpr char kDialogEvent[] = "domicile-dialog";
+constexpr char kDialogWithdrawnEvent[] = "domicile-dialog-withdrawn";
 
 // The values of a site permission's setting. Strings, as for `security`.
 constexpr char kSettingAsk[] = "ask";
@@ -221,6 +227,7 @@ void HTMLWebViewElement::Trace(Visitor* visitor) const {
   visitor->Trace(waiting_choosers_);
   visitor->Trace(permission_request_);
   visitor->Trace(device_request_);
+  visitor->Trace(dialog_);
   visitor->Trace(pointer_listener_);
   HTMLFrameElementBase::Trace(visitor);
 }
@@ -715,6 +722,44 @@ void HTMLWebViewElement::DeviceRequestAnswered(
     DomicileDeviceRequestEvent& event) {
   if (device_request_ == &event) {
     device_request_ = nullptr;
+  }
+}
+
+// Held in `dialog_` until answered. If no listener calls `preventDefault()`,
+// the shell shows nothing, so dismiss immediately.
+void HTMLWebViewElement::DialogRequested(
+    const KURL& origin,
+    domicile::mojom::blink::WebViewDialogType type,
+    const String& message,
+    const String& default_prompt,
+    DialogRequestedCallback callback) {
+  // The browser withdraws a dialog before sending the next one. Answer a stale
+  // one anyway, so its callback is never dropped unrun.
+  if (dialog_) {
+    dialog_->DismissIfUnanswered();
+  }
+  auto* event = MakeGarbageCollected<DomicileDialogEvent>(
+      AtomicString(kDialogEvent), type,
+      SecurityOrigin::Create(origin)->ToString(), message, default_prompt,
+      std::move(callback), *this);
+  dialog_ = event;
+  DispatchEvent(*event);
+  if (!event->defaultPrevented()) {
+    event->DismissIfUnanswered();
+  }
+}
+
+// Only for a dialog still held: one the shell answered is already gone.
+void HTMLWebViewElement::DialogWithdrawn() {
+  if (dialog_) {
+    dialog_->DismissIfUnanswered();
+    DispatchEvent(*Event::CreateBubble(AtomicString(kDialogWithdrawnEvent)));
+  }
+}
+
+void HTMLWebViewElement::DialogAnswered(DomicileDialogEvent& event) {
+  if (dialog_ == &event) {
+    dialog_ = nullptr;
   }
 }
 

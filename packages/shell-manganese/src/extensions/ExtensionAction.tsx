@@ -7,8 +7,10 @@ import { useEffect, useState } from "react";
 
 import { css } from "../../styled-system/css";
 import { DeviceAsk } from "../window-management/browser/DeviceAsk";
+import { PageDialog } from "../window-management/browser/PageDialog";
 import { PermissionAsk } from "../window-management/browser/PermissionAsk";
 import { useDeviceRequest } from "../window-management/browser/useDeviceRequest";
+import { useDialogRequest } from "../window-management/browser/useDialogRequest";
 import { usePermissionRequest } from "../window-management/browser/usePermissionRequest";
 import { useContentSize } from "./useContentSize";
 
@@ -124,7 +126,8 @@ type PopupViewProps = {
  * `viewStyles`' box (also its size until the page reports one).
  *
  * The page's permission and device requests are asked above it. A grant is
- * the extension's, so it holds in the extension's other pages too.
+ * the extension's, so it holds in the extension's other pages too. Its
+ * dialogs cover it, and take focus, since the page is paused on them.
  */
 const PopupView = ({ name, onClose, popup }: PopupViewProps) => {
   // `null` because React passes it to a callback ref on unmount.
@@ -132,6 +135,7 @@ const PopupView = ({ name, onClose, popup }: PopupViewProps) => {
   const size = useContentSize(view);
   const request = usePermissionRequest(view);
   const deviceRequest = useDeviceRequest(view);
+  const dialogRequest = useDialogRequest(view);
 
   useEffect(() => {
     if (view === null) {
@@ -156,21 +160,26 @@ const PopupView = ({ name, onClose, popup }: PopupViewProps) => {
           <DeviceAsk request={deviceRequest} />
         </div>
       )}
-      <webview
-        className={viewStyles}
-        // Marks the page as an action popup rather than a tab, so extensions
-        // that lay out differently in a tab match Chrome. Read once, when the
-        // view loads its page.
-        extensionpopup=""
-        ref={setView}
-        src={popup}
-        // Inline because Panda can't read runtime values. `viewStyles` caps it.
-        style={
-          size === undefined
-            ? undefined
-            : { blockSize: size.height, inlineSize: size.width }
-        }
-      />
+      <div className={pageStyles}>
+        <webview
+          className={viewStyles}
+          // Marks the page as an action popup rather than a tab, so extensions
+          // that lay out differently in a tab match Chrome. Read once, when the
+          // view loads its page.
+          extensionpopup=""
+          ref={setView}
+          src={popup}
+          // Inline because Panda can't read runtime values. `viewStyles` caps it.
+          style={
+            size === undefined
+              ? undefined
+              : { blockSize: size.height, inlineSize: size.width }
+          }
+        />
+        {dialogRequest !== undefined && (
+          <PageDialog asker={name} ref={focusDialog} request={dialogRequest} />
+        )}
+      </div>
     </>
   );
 };
@@ -197,6 +206,9 @@ const badgeStyles = css({
   whiteSpace: "nowrap",
 });
 
+// Places a dialog over the page.
+const pageStyles = css({ position: "relative" });
+
 // The panel is flush, so the request gets its own inset.
 const askStyles = css({ padding: 2 });
 
@@ -212,3 +224,10 @@ const viewStyles = css({
   maxBlockSize: "min({spacing.150}, 80vh)",
   maxInlineSize: 100,
 });
+
+/** Focuses a popup's dialog when it opens. */
+const focusDialog = (element: HTMLElement | null): void => {
+  if (element !== null) {
+    element.focus();
+  }
+};

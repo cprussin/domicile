@@ -166,6 +166,17 @@ struct WebViewSitePermission {
   WebViewPermissionSetting setting;
 };
 
+// The kind of dialog a page in a <webview> opened with `alert()`, `confirm()`
+// or `prompt()`.
+enum WebViewDialogType {
+  // A message with one button. The answer is ignored.
+  kAlert,
+  // A message with OK and Cancel.
+  kConfirm,
+  // A message, a text field and OK and Cancel.
+  kPrompt,
+};
+
 // A device a page in a <webview> may be given, as the shell lists it.
 struct WebViewDevice {
   // Names the device in the answer to DeviceRequested. Stays the device's own
@@ -386,6 +397,25 @@ interface WebViewGuestClient {
   // The browser dropped the unanswered DeviceRequested, for example because the
   // page navigated. Its answer, if one is sent, is ignored.
   DeviceRequestWithdrawn();
+
+  // The page called `alert()`, `confirm()` or `prompt()`, so the shell must
+  // show a dialog. The page is paused until the answer. `origin` is the
+  // calling frame's site. `default_prompt` is `prompt()`'s initial text, and
+  // empty for the others.
+  //
+  // `accepted` is OK; false is Cancel, as are an unhandled event and a closed
+  // pipe. `user_input` is the prompt's text, and ignored unless `accepted`.
+  // One at a time: a page that opens another while one is open gets the
+  // second dismissed at once.
+  DialogRequested(url.mojom.Url origin,
+                  WebViewDialogType type,
+                  string message,
+                  string default_prompt)
+      => (bool accepted, string user_input);
+
+  // The browser dropped the open DialogRequested, for example because the page
+  // navigated or closed. Its answer, if one is sent, is ignored.
+  DialogWithdrawn();
 
   // The page entered or left fullscreen, as a video's fullscreen button does.
   // The page fills the element's box; the shell decides whether the element

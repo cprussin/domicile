@@ -339,6 +339,30 @@ export const WEBVIEW_DEVICE_REQUEST_CHANGE_EVENT =
 export const WEBVIEW_DEVICE_REQUEST_WITHDRAWN_EVENT =
   "domicile-device-request-withdrawn";
 
+/**
+ * Fired when the page calls `alert()`, `confirm()` or `prompt()`. The page is
+ * paused until it is answered. Bubbles.
+ *
+ * The browser draws no dialog. Call `preventDefault()` to handle it, then
+ * answer with {@link DomicileDialogEvent.accept} or
+ * {@link DomicileDialogEvent.dismiss}. If no listener calls `preventDefault()`,
+ * the dialog is dismissed: `confirm()` returns false and `prompt()` null. One
+ * dialog is open at a time.
+ */
+export const WEBVIEW_DIALOG_EVENT = "domicile-dialog";
+
+/**
+ * Fired when the browser drops the open {@link WEBVIEW_DIALOG_EVENT}
+ * unanswered, for example because the page navigated or closed. Answering it
+ * afterward throws. Carries no payload. Bubbles.
+ */
+export const WEBVIEW_DIALOG_WITHDRAWN_EVENT = "domicile-dialog-withdrawn";
+
+/** The dialogs a page can open, as {@link DomicileDialogEvent.dialogType}. */
+export const WEBVIEW_DIALOG_TYPES = ["alert", "confirm", "prompt"] as const;
+
+export type WebViewDialogType = (typeof WEBVIEW_DIALOG_TYPES)[number];
+
 /** A site's stored choice for a permission. `ask` prompts the shell. */
 export const WEBVIEW_PERMISSION_SETTINGS = ["ask", "allow", "block"] as const;
 
@@ -628,6 +652,35 @@ declare global {
   }
 
   /**
+   * The {@link WEBVIEW_DIALOG_EVENT} event. The engine defines it in
+   * `domicile_dialog_event.idl`.
+   */
+  interface DomicileDialogEvent extends Event {
+    /**
+     * One of {@link WEBVIEW_DIALOG_TYPES}. External data; parse it at the
+     * boundary.
+     */
+    readonly dialogType: string;
+    /**
+     * The calling frame's site, such as `https://example.com`, or `null` for
+     * one with no site.
+     */
+    readonly origin: string;
+    /** The text the page passed. */
+    readonly message: string;
+    /** `prompt()`'s initial text. Empty for the others. */
+    readonly defaultValue: string;
+    /**
+     * OK. `value` is what `prompt()` returns; the others ignore it. Answering
+     * twice, or after {@link WEBVIEW_DIALOG_WITHDRAWN_EVENT}, throws an
+     * `InvalidStateError`.
+     */
+    accept(value?: string): void;
+    /** Cancel. An alert has only OK; either closes it. */
+    dismiss(): void;
+  }
+
+  /**
    * Types `addEventListener` for the events that carry data. Merged into
    * `HTMLElementEventMap` because `HTMLWebViewElement` has no event map of its
    * own.
@@ -639,5 +692,6 @@ declare global {
     "domicile-context-menu": DomicileContextMenuEvent;
     "domicile-permission-request": DomicilePermissionRequestEvent;
     "domicile-device-request": DomicileDeviceRequestEvent;
+    "domicile-dialog": DomicileDialogEvent;
   }
 }

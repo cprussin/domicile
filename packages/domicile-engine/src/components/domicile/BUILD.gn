@@ -363,6 +363,7 @@ source_set("web_view_guest") {
     ":context_menu",
     ":download_tally",
     ":file_choice",
+    ":guest_dialogs",
     ":placeholder_stage",
     ":shortcut_registry",
     ":site_permissions",
@@ -397,6 +398,17 @@ source_set("web_view_guest") {
     "//ui/gfx/geometry",
     "//url",
   ]
+}
+
+# The dialog a guest's page has open. Its own target for the reason
+# :file_choice is one: it needs no browser, which is where its tests are.
+source_set("guest_dialogs") {
+  sources = [
+    "browser/guest_dialogs.cc",
+    "browser/guest_dialogs.h",
+  ]
+
+  deps = [ "//base" ]
 }
 
 # Ids for the devices a <webview>'s device chooser offers. Its own target for
@@ -660,6 +672,7 @@ source_set("unit_tests") {
     "browser/extension_tray_entry_unittest.cc",
     "browser/file_choice_unittest.cc",
     "browser/frame_sink_broker_unittest.cc",
+    "browser/guest_dialogs_unittest.cc",
     "browser/line_framer_unittest.cc",
     "browser/placeholder_stage_unittest.cc",
     "browser/pointer_warp_unittest.cc",
@@ -709,6 +722,7 @@ source_set("unit_tests") {
     ":extension_installer",
     ":extension_tray_entry",
     ":file_choice",
+    ":guest_dialogs",
     ":held_chords",
     ":keyboard_layout",
     ":line_framer",

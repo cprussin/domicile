@@ -21,6 +21,7 @@
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/domicile/browser/download_tally.h"
+#include "components/domicile/browser/guest_dialogs.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
 #include "components/download/public/common/download_item.h"
 #include "components/input/native_web_keyboard_event.h"
@@ -31,6 +32,7 @@
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/invalidate_type.h"
+#include "content/public/browser/javascript_dialog_manager.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/media_stream_request.h"
 #include "content/public/browser/render_frame_host.h"
@@ -141,6 +143,8 @@ class MediaAccess {
 //                               window
 //   WebContentsDelegate         handles what the page asks of its embedder
 //                               (new windows, dialogs, permissions)
+//   JavaScriptDialogManager     sends `alert()`, `confirm()` and `prompt()`
+//                               to the shell
 //   WebContentsObserver         tracks the guest's lifetime; after
 //                               attaching, this object is deleted with it
 //   content_settings::Observer  reports the page's site permissions when a
@@ -166,6 +170,7 @@ class MediaAccess {
 class WebViewGuest : public mojom::WebViewGuest,
                      public content::BrowserPluginGuestDelegate,
                      public content::WebContentsDelegate,
+                     public content::JavaScriptDialogManager,
                      public content::WebContentsObserver,
                      public content_settings::Observer,
                      public content::DownloadManager::Observer,
@@ -442,6 +447,32 @@ class WebViewGuest : public mojom::WebViewGuest,
   // its view sees the mouse exit, and a guest has no view of its own.
   bool PreHandleMouseEvent(content::WebContents* source,
                            const blink::WebMouseEvent& event) override;
+
+  // Returns this, so the page's dialogs reach the shell. Content's default
+  // has none, which dismisses each dialog at once.
+  content::JavaScriptDialogManager* GetJavaScriptDialogManager(
+      content::WebContents* source) override;
+
+  // content::JavaScriptDialogManager:
+  //
+  // Sends the dialog to the element as DialogRequested. One at a time; see
+  // GuestDialogs.
+  void RunJavaScriptDialog(content::WebContents* web_contents,
+                           content::RenderFrameHost* render_frame_host,
+                           content::JavaScriptDialogType dialog_type,
+                           const std::u16string& message_text,
+                           const std::u16string& default_prompt_text,
+                           DialogClosedCallback callback,
+                           bool* did_suppress_message) override;
+  // Leaves the page without asking, as content does with no dialog manager.
+  void RunBeforeUnloadDialog(content::WebContents* web_contents,
+                             content::RenderFrameHost* render_frame_host,
+                             bool is_reload,
+                             DialogClosedCallback callback) override;
+  // Answers the open dialog with Cancel and sends DialogWithdrawn. Content
+  // calls it on navigation and when the page closes.
+  void CancelDialogs(content::WebContents* web_contents,
+                     bool reset_state) override;
 
   // Handles a page opening a new window (target="_blank", window.open, ...).
   //
@@ -766,6 +797,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Whether the page is fullscreen. Also what IsFullscreenForTabOrPending
   // answers, so the renderer's state and the element's never differ.
   bool page_fullscreen_ = false;
+
+  // The page's open dialog. See RunJavaScriptDialog.
+  GuestDialogs dialogs_;
 
   // The current find's text, or empty. Decides whether a Find is the next
   // match or a new search.

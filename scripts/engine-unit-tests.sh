@@ -18,7 +18,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 . "$ROOT/scripts/lib/engine-guard.sh"
 require_engine_out
 
-FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*:CommandProtocolTest.*:DomicileDisplayListTest.*:DomicileKeyboardLayoutTest.*:ShellWindowsTest.*:ShellWindowPlacesTest.*:LineFramerTest.*:DesktopPrefsTest.*:SurfaceCropTest.*:SurfaceTransformTest.*:SurfaceAlphaTest.*:ExtensionInstallerTest.*:ExtensionTrayEntryTest.*:DeskTabsTest.*:DeskGeometryTest.*:DomicileDisplayRegionsTest.*:DomicileDeskTargeterTest.*:PlaceholderStageTest.*:SystemCallTest.*:PortalRequestTest.*:FileChoiceTest.*:DisplayCaptureTest.*:CapturedFourccTest.*:DisplayCaptureTargetTest.*:HeldChordsTest.*:SitePermissionsTest.*:ControlChannelTest.*:DeviceChoicesTest.*:WheelActionTest.*:SurfaceFramesTest.*:DownloadTallyTest.*'
+FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*:CommandProtocolTest.*:DomicileDisplayListTest.*:DomicileKeyboardLayoutTest.*:ShellWindowsTest.*:ShellWindowPlacesTest.*:LineFramerTest.*:DesktopPrefsTest.*:SurfaceCropTest.*:SurfaceTransformTest.*:SurfaceAlphaTest.*:ExtensionInstallerTest.*:ExtensionTrayEntryTest.*:DeskTabsTest.*:DeskGeometryTest.*:DomicileDisplayRegionsTest.*:DomicileDeskTargeterTest.*:PlaceholderStageTest.*:SystemCallTest.*:PortalRequestTest.*:FileChoiceTest.*:DisplayCaptureTest.*:CapturedFourccTest.*:DisplayCaptureTargetTest.*:HeldChordsTest.*:SitePermissionsTest.*:ControlChannelTest.*:DeviceChoicesTest.*:WheelActionTest.*:SurfaceFramesTest.*:GuestDialogsTest.*:DownloadTallyTest.*'
 
 # Every suite in the filter, counted rather than estimated: FrameSinkBroker 35,
 # WindowDiff 7, EngineEventQueue 7, ShortcutRegistry 10, ShellURLLoaderFactory
@@ -29,10 +29,12 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # DomicileDisplayRegions 27, DomicileDeskTargeter 4, PlaceholderStage 3,
 # SystemCall 4, PortalRequest 3, FileChoice 13, DisplayCapture 7,
 # CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, SitePermissions 11,
-# ControlChannel 1, DeviceChoices 9, WheelAction 1, SurfaceFrames 6, DownloadTally 5.
+# ControlChannel 1, DeviceChoices 9, WheelAction 1, SurfaceFrames 6,
+# GuestDialogs 6, DownloadTally 5.
 #
-# 285, and it was 280 — adding up a <webview>'s downloads for their progress is
-# five DownloadTally cases. Before that 280, and it was 279 — dropping a waiting embed when its page disconnects is
+# 291, and it was 286 — adding up a <webview>'s downloads for their progress is
+# five DownloadTally cases. Before that 286, and it was 280 — the dialog a guest's page has open is six
+# GuestDialogs cases. Before that 280, and it was 279 — dropping a waiting embed when its page disconnects is
 # one more FrameSinkBroker case. Before that 279, and it was 273 — matching viz's acks and presentation feedback to a
 # window's frames is six SurfaceFrames cases. Before that 273, and it was 272 —
 # Ctrl+wheel scrolling is one WheelAction case. Before
@@ -101,7 +103,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=285
+FLOOR=291
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

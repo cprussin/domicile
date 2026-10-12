@@ -55,6 +55,18 @@ Patch `0110`:
   no device, is refused.
 - A page outside any guest gets no device.
 
+## Dialogs
+
+- `alert()`, `confirm()` and `prompt()` ask the shell. A guest's
+  `WebViewGuest` is its `JavaScriptDialogManager`; content dismisses every
+  dialog without one.
+- One at a time (`GuestDialogs`). A second one, from another frame's process,
+  is dismissed at once.
+- A navigation or close cancels the open dialog and withdraws it from the
+  shell.
+- `beforeunload` asks nothing: the page leaves, as with no manager.
+- Patch `0114` only lists the event's files for the build.
+
 ## Host shortcuts when nested
 
 Under a host compositor, the engine inhibits the host's shortcuts so the shell

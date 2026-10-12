@@ -5,9 +5,16 @@ import {
   WEBVIEW_CLOSE_EVENT,
   WEBVIEW_CONTENT_SIZE_CHANGE_EVENT,
   WEBVIEW_DEVICE_REQUEST_EVENT,
+  WEBVIEW_DIALOG_EVENT,
   WEBVIEW_PERMISSION_REQUEST_EVENT,
 } from "@domicile-desktop/sdk/webview-element";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ExtensionAction } from "./ExtensionAction";
@@ -409,6 +416,42 @@ describe("ExtensionAction", () => {
       await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
       expect(answers).toStrictEqual(["choose 1"]);
+    });
+  });
+
+  // A password manager's popup confirms a delete.
+  describe("a dialog from the popup", () => {
+    it("is answered over it, naming the extension", async () => {
+      const answers: string[] = [];
+      render(
+        <ExtensionAction
+          domicile={NO_DOMICILE}
+          extension={blocker}
+          onOpen={() => undefined}
+          opened={BLOCKER}
+        />,
+      );
+      fireEvent(
+        await popupView(),
+        Object.assign(new Event(WEBVIEW_DIALOG_EVENT, { cancelable: true }), {
+          accept: () => undefined,
+          defaultValue: "",
+          dialogType: "confirm",
+          dismiss: () => {
+            answers.push("dismiss");
+          },
+          message: "Delete this item?",
+          origin: "chrome-extension://blocker",
+        }),
+      );
+
+      await userEvent.click(
+        within(
+          await screen.findByRole("alertdialog", { name: "Blocker says" }),
+        ).getByRole("button", { name: "Cancel" }),
+      );
+
+      expect(answers).toStrictEqual(["dismiss"]);
     });
   });
 });
