@@ -242,6 +242,14 @@ interface WebViewGuestClient {
   // first load starts.
   LoadProgressChanged(double progress);
 
+  // The guest's page's downloads in progress, for a download indicator: how
+  // many, and their bytes received and expected in all. `total_bytes` is 0 when
+  // any one's size is unknown.
+  //
+  // Counts a download once the shell has said where it goes. Sent only when it
+  // changes. A fresh guest sends nothing until its first download.
+  DownloadsChanged(int32 count, int64 received_bytes, int64 total_bytes);
+
   // The guest's current URL and security level, for an address bar.
   //
   // Both come from the same `GetVisibleEntry()`, so the lock always describes

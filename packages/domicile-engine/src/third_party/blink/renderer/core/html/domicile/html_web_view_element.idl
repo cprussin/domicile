@@ -35,6 +35,14 @@
   // `loading`. `domicile-load-progress-change` signals a change.
   readonly attribute double loadProgress;
 
+  // The page's downloads in progress: how many, and their bytes received and
+  // expected in all. `downloadTotalBytes` is 0 when any one's size is unknown.
+  // A download counts once the shell has said where it goes.
+  // `domicile-downloads-change` signals a change.
+  readonly attribute long downloadCount;
+  readonly attribute long long downloadReceivedBytes;
+  readonly attribute long long downloadTotalBytes;
+
   // The guest's visible URL. Differs from `src` after a link or redirect.
   // Empty until the browser reports one.
   readonly attribute USVString url;
