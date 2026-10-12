@@ -701,7 +701,6 @@ source_set("unit_tests") {
     "common/display_transform_unittest.cc",
     "common/held_chords_unittest.cc",
     "common/theme_unittest.cc",
-    "common/wheel_action_unittest.cc",
     "spike/window_diff_unittest.cc",
   ]
 
@@ -780,7 +779,6 @@ source_set("unit_tests") {
     "//skia",
     "//testing/gmock",
     "//testing/gtest",
-    "//third_party/blink/public/common",
     "//ui/display",
     # The keymap test's four: the engine it asserts against, the DomCode and
     # DomKey it decodes to, the KeyboardCode beside them, and the xkbcommon

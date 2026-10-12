@@ -59,9 +59,12 @@ constexpr char kDownloadsChangeEvent[] = "domicile-downloads-change";
 constexpr char kPageChangeEvent[] = "domicile-page-change";
 
 // An unhandled chord, as a KeyboardEvent with its own type so shell `keydown`
-// listeners do not mistake it for a key in the shell's document.
+// listeners do not mistake it for a key in the shell's document. The zoom
+// requests encode direction in the name, so they stay plain Events.
 constexpr char kGuestKeydownEvent[] = "domicile-guest-keydown";
 constexpr char kZoomChangeEvent[] = "domicile-zoom-change";
+constexpr char kZoomInRequestEvent[] = "domicile-zoom-in-request";
+constexpr char kZoomOutRequestEvent[] = "domicile-zoom-out-request";
 
 // More state changes.
 constexpr char kFaviconChangeEvent[] = "domicile-favicon-change";
@@ -621,6 +624,11 @@ void HTMLWebViewElement::PageFullscreenChanged(bool fullscreen) {
 
   DispatchEvent(
       *Event::CreateBubble(AtomicString(kPageFullscreenChangeEvent)));
+}
+
+void HTMLWebViewElement::ZoomRequested(bool zoom_in) {
+  DispatchEvent(*Event::CreateBubble(
+      AtomicString(zoom_in ? kZoomInRequestEvent : kZoomOutRequestEvent)));
 }
 
 // Held in `waiting_choosers_` until answered. If no listener calls
