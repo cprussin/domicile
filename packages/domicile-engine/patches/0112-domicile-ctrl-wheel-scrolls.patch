@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 12 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: Ctrl+wheel scrolls
+
+On Aura, Chrome classifies a wheel tick with Ctrl held as kPageZoom.
+MouseWheelEventQueue makes no scroll from it and WebContentsImpl hands
+it to ContentsZoomChange. In Domicile the shell ignored it and a
+<webview> turned it into a zoom request, so neither scrolled.
+
+GetPlatformSpecificDefaultEventAction no longer returns kPageZoom, so
+Ctrl+wheel scrolls like a plain wheel. The page still gets a `wheel`
+with `ctrlKey` and can preventDefault it.
+
+WheelActionTest in domicile_unittests checks a Ctrl+wheel tick scrolls.
+---
+ third_party/blink/common/input/web_mouse_wheel_event.cc | 8 ++------
+ 1 file changed, 2 insertions(+), 6 deletions(-)
+
+diff --git a/third_party/blink/common/input/web_mouse_wheel_event.cc b/third_party/blink/common/input/web_mouse_wheel_event.cc
+index 9c5ab493..d1a18d64 100644
+--- a/third_party/blink/common/input/web_mouse_wheel_event.cc
++++ b/third_party/blink/common/input/web_mouse_wheel_event.cc
+@@ -117,12 +117,8 @@ WebMouseWheelEvent::EventAction
+ WebMouseWheelEvent::GetPlatformSpecificDefaultEventAction(
+     const WebMouseWheelEvent& event) {
+ #if defined(USE_AURA) || BUILDFLAG(IS_ANDROID)
+-  // Scroll events generated from the mouse wheel when the control key is held
+-  // don't trigger scrolling. Instead, they may cause zooming.
+-  if (event.delta_units != ui::ScrollGranularity::kScrollByPrecisePixel &&
+-      (event.GetModifiers() & WebInputEvent::kControlKey)) {
+-    return blink::WebMouseWheelEvent::EventAction::kPageZoom;
+-  }
++  // Domicile: Ctrl+wheel scrolls. Chrome makes it kPageZoom, which no page
++  // scrolls by. The page still sees `ctrlKey` and may preventDefault.
+ 
+   if (event.delta_x == 0 && (event.GetModifiers() & WebInputEvent::kShiftKey))
+     return blink::WebMouseWheelEvent::EventAction::kScrollHorizontal;
+-- 
+2.43.0
+
