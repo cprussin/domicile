@@ -3,6 +3,7 @@
 
 import { z } from "zod";
 
+import { DataKind, dataToRemove } from "./clear-data";
 import type { HistoryItem, HistorySource } from "./history-page";
 
 /** A `chrome.*` event. */
@@ -15,7 +16,7 @@ type ChromeEvent = {
 export type ChromeApi = {
   browsingData: {
     remove: (
-      options: { since: number },
+      options: { origins: string[] } | { since: number },
       dataToRemove: Readonly<Record<string, boolean>>,
     ) => Promise<unknown>;
   };
@@ -42,6 +43,8 @@ declare const chrome: ChromeApi;
 
 /** Everything the app does outside the page. */
 export type Browser = HistorySource & {
+  /** Removes the cookies and site data of `pageUrl`'s origin. */
+  clearSiteData: (pageUrl: string) => Promise<void>;
   copyText: (text: string) => Promise<void>;
   /** Removes the visits at exactly these times. */
   deleteVisits: (visits: readonly number[]) => Promise<void>;
@@ -71,6 +74,12 @@ export const chromeBrowser = (
 ): Browser => {
   const url = (path: string) => z.string().parse(api.runtime.getURL(path));
   return {
+    clearSiteData: async (pageUrl) => {
+      await api.browsingData.remove(
+        { origins: [new URL(pageUrl).origin] },
+        dataToRemove(new Set([DataKind.Cookies])),
+      );
+    },
     copyText: (text) => clipboard.writeText(text),
     deleteVisits: async (visits) => {
       for (const visit of visits) {

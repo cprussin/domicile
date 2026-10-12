@@ -121,6 +121,26 @@ describe(chromeBrowser, () => {
     ]);
   });
 
+  it("clears cookies and site data for a page's origin", async () => {
+    const { api, calls } = fakeChrome();
+    await chromeBrowser(api).clearSiteData("https://a.test:8080/b?c=1");
+    expect(calls).toEqual([
+      [
+        "browsingData.remove",
+        { origins: ["https://a.test:8080"] },
+        {
+          cacheStorage: true,
+          cookies: true,
+          fileSystems: true,
+          indexedDB: true,
+          localStorage: true,
+          serviceWorkers: true,
+          webSQL: true,
+        },
+      ],
+    ]);
+  });
+
   it("opens a page in a new window", async () => {
     const { api, calls } = fakeChrome();
     await chromeBrowser(api).openInNewWindow("https://a.test/");
