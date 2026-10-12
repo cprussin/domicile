@@ -9,6 +9,10 @@
 //!
 //! Waiting for the embed cannot deadlock: the page embeds once the frame sink
 //! exists, not once a frame arrives.
+//!
+//! It also numbers each surface's frames as the engine does, from 1 per
+//! submit, so `Event::FrameDone` and `Event::Presented` name the commit they
+//! answer. See `crate::frame_callbacks`.
 
 use std::collections::{HashMap, HashSet};
 
@@ -19,6 +23,8 @@ use crate::engine::SurfaceId;
 pub struct Surfaces {
     by_app: HashMap<String, SurfaceId>,
     embedded: HashSet<SurfaceId>,
+    /// The number of the last frame submitted for each surface.
+    frames: HashMap<SurfaceId, u64>,
 }
 
 impl Surfaces {
@@ -44,6 +50,18 @@ impl Surfaces {
         self.embedded.contains(&surface)
     }
 
+    /// A frame was submitted for `surface`: its number.
+    pub fn submitted(&mut self, surface: SurfaceId) -> u64 {
+        let frame = self.frames.entry(surface).or_default();
+        *frame += 1;
+        *frame
+    }
+
+    /// The number of the last frame submitted for `app_id`'s surface.
+    pub fn last_frame(&self, app_id: &str) -> Option<u64> {
+        self.frames.get(&self.get(app_id)?).copied()
+    }
+
     /// Which app `surface` belongs to. A linear scan, since there are only a
     /// few windows.
     pub fn app_for(&self, surface: SurfaceId) -> Option<&str> {
@@ -59,6 +77,7 @@ impl Surfaces {
     /// page embeds it again.
     pub fn drain(&mut self) -> std::collections::hash_map::Drain<'_, String, SurfaceId> {
         self.embedded.clear();
+        self.frames.clear();
         self.by_app.drain()
     }
 
@@ -66,6 +85,7 @@ impl Surfaces {
     pub fn forget(&mut self, app_id: &str) -> Option<SurfaceId> {
         let surface = self.by_app.remove(app_id)?;
         self.embedded.remove(&surface);
+        self.frames.remove(&surface);
         Some(surface)
     }
 }
@@ -134,6 +154,36 @@ mod tests {
         assert_eq!(surfaces.forget(APP), Some(SURFACE));
         assert_eq!(surfaces.get(APP), None);
         assert_eq!(surfaces.forget(APP), None);
+    }
+
+    // The engine numbers every submit, so the compositor must too.
+    #[test]
+    fn each_surface_numbers_its_frames_from_one() {
+        let mut surfaces = Surfaces::default();
+        surfaces.brokered(APP, SURFACE);
+        surfaces.brokered("app-2", SURFACE + 1);
+        assert_eq!(surfaces.last_frame(APP), None);
+
+        assert_eq!(surfaces.submitted(SURFACE), 1);
+        assert_eq!(surfaces.submitted(SURFACE), 2);
+        assert_eq!(surfaces.submitted(SURFACE + 1), 1);
+        assert_eq!(surfaces.last_frame(APP), Some(2));
+        assert_eq!(surfaces.last_frame("app-3"), None);
+    }
+
+    // A new surface, from a reopened window or a new engine, starts again.
+    #[test]
+    fn a_surface_brokered_again_numbers_its_frames_afresh() {
+        let mut surfaces = Surfaces::default();
+        surfaces.brokered(APP, SURFACE);
+        surfaces.submitted(SURFACE);
+        surfaces.forget(APP);
+        surfaces.brokered(APP, SURFACE);
+        assert_eq!(surfaces.submitted(SURFACE), 1);
+
+        surfaces.drain();
+        surfaces.brokered(APP, SURFACE);
+        assert_eq!(surfaces.submitted(SURFACE), 1);
     }
 
     // A new engine can reuse the old surface ids, so a re-brokered surface

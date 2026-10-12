@@ -10,7 +10,7 @@ client committed a buffer. The launcher's default `RUST_LOG` hides it. Show it
 with `RUST_LOG=info,domicile_compositor=debug`.
 
 ```
-commits commit_ms idle_ms response_ms response_worst_ms chromes
+commits commit_ms idle_ms response_ms response_worst_ms present_ms chromes
 ```
 
 - **`commit_ms`:** handling one commit end to end, including handing its buffer
@@ -19,6 +19,12 @@ commits commit_ms idle_ms response_ms response_worst_ms chromes
   Large means waiting on clients.
 - **`response_ms`:** keystroke to the client's next commit. Subtract it from
   the chrome's `rt_ms` for the time a key takes to reach the client.
+- **`present_ms`:** a commit to its frame reaching the screen, from viz's
+  presentation feedback. Zero when no frame was presented: an engine without
+  `domicile_engine_reports_frames`, or frames viz discarded.
+- **Frames answered late:** `the engine did not report these frames in time`
+  means frame callbacks went out at the 250 ms deadline instead of on viz's
+  ack. See [WINDOW-COMPOSITING.md](architecture/WINDOW-COMPOSITING.md#frame-pacing).
 
 Container numbers come from a software rasterizer; see `AGENTS.md`,
 *Checking your work*.
