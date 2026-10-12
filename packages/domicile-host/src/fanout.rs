@@ -1,6 +1,7 @@
 //! Something every listening page hears, across every chrome connection: the
-//! shell commands ([`crate::shell_commands`]) and the lock's refusals
-//! ([`crate::unlock_refusals`]).
+//! shell commands ([`crate::shell_commands`]), the lock's refusals
+//! ([`crate::unlock_refusals`]) and clients' window requests
+//! ([`crate::window_requests`]).
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

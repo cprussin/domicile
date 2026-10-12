@@ -4,6 +4,8 @@ import type {
   DomicileWindow,
 } from "@domicile-desktop/sdk/domicile-host";
 import { SystemErrorKind, system } from "@domicile-desktop/sdk/system";
+import type { WindowRequest } from "@domicile-desktop/sdk/window-state";
+import { WindowRequestKind } from "@domicile-desktop/sdk/window-state";
 import {
   useCallback,
   useEffect,
@@ -16,8 +18,9 @@ import { typedAddress } from "../address/typed-address";
 import { openFileCommand } from "../launcher/open-file";
 import type { PlacedScreen } from "../screens/screen-toward";
 import type { FloatingRules } from "./floating/floating-rules";
-import { appIdOf, browserIdOf } from "./window";
+import { appIdOf, appWindowId, browserIdOf } from "./window";
 import { windowChanges } from "./window-changes";
+import { hearWindowRequests } from "./window-requests";
 import type { WindowAction, WindowState } from "./window-state";
 import {
   WindowAction as Action,
@@ -179,6 +182,17 @@ export const useWindows = (
     };
   }, [domicile, floating]);
 
+  // Clients' requests, which the compositor reports without granting.
+  useEffect(() => {
+    const hearing = hearWindowRequests(domicile, (request) => {
+      const action = actionFor(request);
+      if (action !== undefined) {
+        dispatch(action);
+      }
+    });
+    return hearing.stop;
+  }, [domicile]);
+
   // The desk the host described, which bounds where windows can go.
   useEffect(() => {
     if (displays !== undefined) {
@@ -194,6 +208,22 @@ export const useWindows = (
     }),
     [act, state],
   );
+};
+
+/**
+ * What a client's request does. Fullscreen fills the window's screen, as a
+ * page's fullscreen does. Windows tile, so maximizing changes nothing.
+ */
+const actionFor = (request: WindowRequest): WindowAction | undefined => {
+  switch (request.kind) {
+    case WindowRequestKind.Fullscreen:
+      return Action.PageFullscreened(appWindowId(request.appId), true);
+    case WindowRequestKind.Unfullscreen:
+      return Action.PageFullscreened(appWindowId(request.appId), false);
+    case WindowRequestKind.Maximize:
+    case WindowRequestKind.Unmaximize:
+      return undefined;
+  }
 };
 
 /** The desk's displays as the screens the desktop is told of. */

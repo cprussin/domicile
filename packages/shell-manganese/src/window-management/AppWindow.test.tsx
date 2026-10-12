@@ -26,6 +26,14 @@ const placed = (): unknown[] =>
     .filter(([method]) => method === "setAppBounds")
     .map(([, id, x, y, width, height]) => [id, { height, width, x, y }]);
 
+/** The states this case asked the host to set on each window. */
+const statesSet = (): unknown[] =>
+  host.calls
+    .filter(([method]) => method === "callSystem")
+    .map(([, , request]) => JSON.parse(String(request)))
+    .filter(({ call }) => call === "set_window_states")
+    .map(({ app_id, states }) => [app_id, states]);
+
 /** An arbitrary on-screen box. */
 const ON_SCREEN = { height: 800, width: 1200, x: 0, y: 32 };
 
@@ -62,6 +70,7 @@ const windowProps = {
   depth: 0,
   domicile: host.host,
   dragging: false,
+  floating: false,
   frame: FRAME,
   fullscreen: false,
   hasKeyboard: false,
@@ -427,6 +436,32 @@ describe("AppWindow", () => {
         "none",
       );
       expect(portal(container)).toHaveAttribute("inert");
+    });
+  });
+
+  // Tiled states keep a client from drawing its own shadow, rounded corners
+  // and resize border inside its tile.
+  describe("the states it sets on its client", () => {
+    it("are tiled on every edge while it tiles", () => {
+      render(<AppWindow {...windowProps} focused={false} />);
+
+      expect(statesSet()).toStrictEqual([
+        ["term", ["tiled_left", "tiled_right", "tiled_top", "tiled_bottom"]],
+      ]);
+    });
+
+    it("are none while it floats", () => {
+      render(<AppWindow {...windowProps} floating focused={false} />);
+
+      expect(statesSet()).toStrictEqual([["term", []]]);
+    });
+
+    it("are fullscreen while it fills the screen", () => {
+      render(
+        <AppWindow {...windowProps} floating focused={false} fullscreen />,
+      );
+
+      expect(statesSet()).toStrictEqual([["term", ["fullscreen"]]]);
     });
   });
 });

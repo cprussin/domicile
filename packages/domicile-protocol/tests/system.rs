@@ -7,7 +7,8 @@ use std::collections::BTreeMap;
 
 use domicile_protocol::{
     Bus, ChromeMessage, DirEntry, FileType, HostMessage, Signal, Stream, SystemEnd, SystemError,
-    SystemErrorKind, SystemEvent, SystemReply, SystemRequest, UnlockRefusal,
+    SystemErrorKind, SystemEvent, SystemReply, SystemRequest, UnlockRefusal, WindowRequest,
+    WindowState,
 };
 
 fn chrome(json: &str) -> ChromeMessage {
@@ -488,6 +489,72 @@ fn a_refused_unlock_goes_to_each_page_that_listens_for_one() {
             }),
             format!(
                 r#"{{"type":"system_event","id":13,"event":{{"kind":"unlock_refused","refusal":"{wire}","failures":3,"retry_in_ms":5000}}}}"#
+            )
+        );
+    }
+}
+/// The shell sets a window's `xdg_toplevel` states and hears what its client
+/// asks for.
+#[test]
+fn the_shell_sets_window_states_and_hears_what_clients_ask_for() {
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":3,"request":{"call":"set_window_states","app_id":"app-1","states":["tiled_left","tiled_right","tiled_top","tiled_bottom","maximized","fullscreen"]}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 3,
+            request: SystemRequest::SetWindowStates {
+                app_id: "app-1".into(),
+                states: vec![
+                    WindowState::TiledLeft,
+                    WindowState::TiledRight,
+                    WindowState::TiledTop,
+                    WindowState::TiledBottom,
+                    WindowState::Maximized,
+                    WindowState::Fullscreen,
+                ],
+            },
+        }
+    );
+    assert_eq!(
+        host(&HostMessage::SystemReply {
+            id: 3,
+            reply: SystemReply::Set,
+        }),
+        r#"{"type":"system_reply","id":3,"reply":{"kind":"set"}}"#
+    );
+    assert_eq!(
+        chrome(r#"{"type":"system_request","id":4,"request":{"call":"window_requests"}}"#),
+        ChromeMessage::SystemRequest {
+            id: 4,
+            request: SystemRequest::WindowRequests,
+        }
+    );
+    for (request, json) in [
+        (WindowRequest::Maximize, r#"{"kind":"maximize"}"#),
+        (WindowRequest::Unmaximize, r#"{"kind":"unmaximize"}"#),
+        (
+            WindowRequest::Fullscreen { display: None },
+            r#"{"kind":"fullscreen","display":null}"#,
+        ),
+        (
+            WindowRequest::Fullscreen {
+                display: Some("left".into()),
+            },
+            r#"{"kind":"fullscreen","display":"left"}"#,
+        ),
+        (WindowRequest::Unfullscreen, r#"{"kind":"unfullscreen"}"#),
+    ] {
+        assert_eq!(
+            host(&HostMessage::SystemEvent {
+                id: 4,
+                event: SystemEvent::WindowRequest {
+                    app_id: "app-1".into(),
+                    request,
+                },
+            }),
+            format!(
+                r#"{{"type":"system_event","id":4,"event":{{"kind":"window_request","app_id":"app-1","request":{json}}}}}"#
             )
         );
     }

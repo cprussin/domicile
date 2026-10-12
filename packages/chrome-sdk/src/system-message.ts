@@ -50,6 +50,7 @@ const systemReplySchema = z.looseObject({
     z.looseObject({ kind: z.literal("saved"), path: z.string() }),
     z.looseObject({ kind: z.literal("copied") }),
     z.looseObject({ kind: z.literal("sent") }),
+    z.looseObject({ kind: z.literal("set") }),
     z.looseObject({ error: systemErrorSchema, kind: z.literal("failed") }),
   ]),
   type: z.literal("system_reply"),
@@ -57,7 +58,7 @@ const systemReplySchema = z.looseObject({
 
 // Output from a running process, a change a watch saw, a signal a D-Bus match
 // heard, a command `domicile send-shell` sent, an idle warning, or a
-// passphrase the lock did not take.
+// passphrase the lock did not take, or a client's window request.
 const systemEventSchema = z.looseObject({
   event: z.discriminatedUnion("kind", [
     z.looseObject({
@@ -89,6 +90,19 @@ const systemEventSchema = z.looseObject({
       kind: z.literal("unlock_refused"),
       refusal: z.enum(["wrong_passphrase", "unverifiable", "too_soon"]),
       retry_in_ms: z.number(),
+    }),
+    z.looseObject({
+      app_id: z.string(),
+      kind: z.literal("window_request"),
+      request: z.discriminatedUnion("kind", [
+        z.looseObject({ kind: z.literal("maximize") }),
+        z.looseObject({ kind: z.literal("unmaximize") }),
+        z.looseObject({
+          display: z.string().nullable(),
+          kind: z.literal("fullscreen"),
+        }),
+        z.looseObject({ kind: z.literal("unfullscreen") }),
+      ]),
     }),
   ]),
   id: z.number(),

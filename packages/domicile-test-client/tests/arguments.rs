@@ -6,7 +6,7 @@
 use std::ffi::OsString;
 
 use domicile_test_client::arguments::{
-    arguments, ArgumentError, Arguments, AskForFocus, HoldTheScreensOn,
+    arguments, ArgumentError, Arguments, AskForFocus, AskTo, HoldTheScreensOn,
 };
 use wayland_client::protocol::wl_output::Transform;
 
@@ -379,6 +379,33 @@ fn a_turn_wl_output_has_no_name_for_is_refused() {
         given(&["--buffer-transform", "45"]),
         Err(ArgumentError::NotATransform {
             value: "45".to_string(),
+        })
+    );
+}
+
+#[test]
+fn a_client_can_be_asked_to_ask_for_a_window_state() {
+    for (value, ask_to) in [
+        ("maximize", AskTo::Maximize),
+        ("unmaximize", AskTo::Unmaximize),
+        ("fullscreen", AskTo::Fullscreen),
+        ("unfullscreen", AskTo::Unfullscreen),
+    ] {
+        assert_eq!(given(&["--ask-to", value]).unwrap().ask_to, Some(ask_to));
+    }
+    assert_eq!(
+        given(&[]).unwrap().ask_to,
+        None,
+        "and asks nothing unless told"
+    );
+}
+
+#[test]
+fn a_window_request_xdg_toplevel_has_no_name_for_is_refused() {
+    assert_eq!(
+        given(&["--ask-to", "minimize"]),
+        Err(ArgumentError::NotAWindowRequest {
+            value: "minimize".to_string(),
         })
     );
 }

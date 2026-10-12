@@ -146,6 +146,74 @@ describe("the desktop", () => {
   });
 });
 
+describe("a client's window requests", () => {
+  /** Answer the page's `window_requests` call, and return its id. */
+  const listening = (host: ReturnType<typeof client>): number => {
+    const found = host.fake.calls.find(
+      ([name, , request]) =>
+        name === "callSystem" &&
+        JSON.parse(String(request)).call === "window_requests",
+    );
+    if (found === undefined) {
+      throw new Error("test: the desktop does not listen for window requests");
+    } else {
+      const id = Number(found[1]);
+      host.fake.dispatch("system", {
+        data: JSON.stringify({
+          id,
+          reply: { kind: "started" },
+          type: "system_reply",
+        }),
+      });
+      return id;
+    }
+  };
+
+  /** The compositor reports `request` from `appId`'s client. */
+  const asks = async (
+    host: ReturnType<typeof client>,
+    id: number,
+    appId: string,
+    request: object,
+  ) => {
+    await act(async () => {
+      host.fake.dispatch("system", {
+        data: JSON.stringify({
+          event: { app_id: appId, kind: "window_request", request },
+          id,
+          type: "system_event",
+        }),
+      });
+      await Bun.sleep(0);
+    });
+  };
+
+  it("fill the screen while the client asks for fullscreen", async () => {
+    const { host, result } = desktop([LEFT]);
+    host.announces("mpv");
+    const id = listening(host);
+
+    await asks(host, id, "mpv", { display: null, kind: "fullscreen" });
+    expect(workspaceOn(result.current, "left").fullscreen?.id).toBe(
+      appWindowId("mpv"),
+    );
+
+    await asks(host, id, "mpv", { kind: "unfullscreen" });
+    expect(workspaceOn(result.current, "left").fullscreen).toBeUndefined();
+  });
+
+  it("leave a tiled window as it is when the client asks to maximize", async () => {
+    const { host, result } = desktop([LEFT]);
+    host.announces("gedit");
+    const id = listening(host);
+    const before = result.current;
+
+    await asks(host, id, "gedit", { kind: "maximize" });
+
+    expect(result.current.workspaces).toBe(before.workspaces);
+  });
+});
+
 describe("the desk's browser windows", () => {
   const EXAMPLE: DomicileBrowserWindow = {
     height: 0,

@@ -32,6 +32,9 @@ export const Shell = async (root, domicile) => {
   shell were the app: `<PortalDialogs />` draws the dialog, and the call
   resolves with `ScreenshotKept.Saved(path)`, `ScreenshotKept.Copied()` when
   the user pressed Ctrl+C, or fails `canceled`.
+- `setWindowStates()` and `windowRequests()` set a window's tiled,
+  maximized and fullscreen states and hear clients ask for them; see
+  [WRITING-A-SHELL.md](WRITING-A-SHELL.md#window-states).
 - `shellCommands()` streams each command `domicile send-shell` sends.
   `bindKeys` listens for you and passes them to `onCommand`; see
   [KEYBINDINGS.md](architecture/KEYBINDINGS.md#commands-from-a-terminal).
@@ -76,7 +79,8 @@ recorded output.
 - Page to compositor: `system_request { id, request }`. `request` starts a
   call (`read_file`, `write_file`, `read_dir`, `stat`, `watch`, `spawn`,
   `dbus_call`, `dbus_match`, `screenshot`, `shell_commands`, `send_shell`,
-  `idle_warnings`, `unlock_refusals`) or
+  `idle_warnings`, `unlock_refusals`, `set_window_states`, `window_requests`)
+  or
   drives one running under the same `id` (`unwatch`, `stdin`, `close_stdin`,
   `kill`). `read_file` takes an
   optional byte range, `offset` and `length`.
@@ -114,10 +118,11 @@ that trust from reaching anything else.
       and `system-bluetooth`'s watch, matched field by field, so a lock screen
       shows the battery and Bluetooth and sets the brightness and volume
       ([LOCK.md](LOCK.md#lock-screen-readouts))
-    - `shell_commands`, so a page reloaded while locked hears commands after
-      unlock
+    - `shell_commands` and `window_requests`, so a page reloaded while
+      locked hears them after unlock
     - `idle_warnings`, so a lock screen can dim
     - `unlock_refusals`, which a lock screen needs while locked
+    - `set_window_states`, like `setAppBounds`
   - `stdin` is dropped; `unwatch`, `close_stdin` and `kill` are allowed
   - processes and watches started before the lock keep running
 - **Lifetime:** a page's processes, watches and matches end when its

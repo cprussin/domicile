@@ -239,6 +239,46 @@ Each entry in `domicile.windows` describes one client window.
 - **Multiple monitors:** the page spans every monitor, so a window across two
   monitors is one `<app>`, and dragging across the edge is one drag.
 
+### Window states
+
+Tell a client how its window is laid out with its `xdg_toplevel` states:
+
+```ts
+import { system } from "@domicile-desktop/sdk/system";
+import { WindowState } from "@domicile-desktop/sdk/window-state";
+
+await system(domicile).setWindowStates(appId, [
+  WindowState.TiledLeft,
+  WindowState.TiledRight,
+  WindowState.TiledTop,
+  WindowState.TiledBottom,
+]);
+```
+
+- **Tiled** states say something touches that edge. A client that draws its
+  own frame then draws no shadow, rounded corners or resize border there.
+- **`Maximized`** and **`Fullscreen`** tell the client it fills its box.
+  They do not size the window; the `<app>` box does.
+- Each call replaces the states the shell set and configures the client. The
+  compositor's own states (`activated`, `suspended`) are kept.
+- States outlive a shell reload. Set them again for every window you lay out;
+  setting the same states configures nothing.
+- A client bound below `xdg_wm_base` version 2 gets no tiled states.
+- An unknown `appId` fails with `SystemErrorKind.NotFound`.
+
+A client asks to be maximized or fullscreen (a terminal's fullscreen key, a
+video player). The compositor answers with a configure of the states it has
+and reports the request. Nothing changes until the shell sets states.
+
+- `system(domicile).windowRequests()` streams each request as a
+  `WindowRequest`: `Maximize`, `Unmaximize`, `Fullscreen` or `Unfullscreen`,
+  with its `appId`. `Fullscreen` carries the `display` the client named, if
+  any.
+- A shell that does not listen ignores every request.
+
+`shell-manganese` tiles with all four tiled states, sets none on floats, and
+makes a window fullscreen while its client asks to be.
+
 ## Who gets the keyboard
 
 The compositor delivers keys, but your shell decides where they go. With no

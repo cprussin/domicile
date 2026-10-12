@@ -46,7 +46,7 @@ use wayland_protocols_misc::server_decoration::client::{
     org_kde_kwin_server_decoration, org_kde_kwin_server_decoration_manager,
 };
 
-use crate::arguments::{Arguments, AskForFocus, HoldTheScreensOn};
+use crate::arguments::{Arguments, AskForFocus, AskTo, HoldTheScreensOn};
 
 /// Why the client stopped.
 #[derive(Debug, thiserror::Error)]
@@ -236,6 +236,8 @@ struct Client {
     resize_to: Option<(u32, u32)>,
     /// See [`crate::arguments::Arguments::ask_for_focus`].
     ask_for_focus: Option<AskForFocus>,
+    /// See [`crate::arguments::Arguments::ask_to`]. Taken once asked.
+    ask_to: Option<AskTo>,
     /// The serial of the keyboard's last `enter`, for
     /// [`AskForFocus::WhenLeft`].
     entered_at: Option<u32>,
@@ -294,7 +296,7 @@ struct Client {
     /// `wl_registry.global_remove` identifies outputs by this name, so it is
     /// needed to drop a removed output's `scales` and `entered` entries. No
     /// test removes an output yet, so this path is untested.
-    outputs: Vec<(u32, ObjectId)>,
+    outputs: Vec<(u32, wl_output::WlOutput)>,
 }
 
 /// The clipboard and primary selection devices.
@@ -441,6 +443,7 @@ impl Client {
             follow_configure: asked.follow_configure,
             resize_to: asked.resize_to,
             ask_for_focus: asked.ask_for_focus,
+            ask_to: asked.ask_to,
             entered_at: None,
             hold_the_screens_on: asked.hold_the_screens_on,
             outlive_its_window: asked.outlive_its_window,
@@ -1306,7 +1309,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for Client {
                 if interface == "wl_output" {
                     let output: wl_output::WlOutput =
                         registry.bind(name, version.min(4), handle, ());
-                    client.outputs.push((name, output.id()));
+                    client.outputs.push((name, output));
                 }
                 client.globals.named.push((name, interface, version));
             }
@@ -1317,7 +1320,7 @@ impl Dispatch<wl_registry::WlRegistry, ()> for Client {
                 let Some(at) = client.outputs.iter().position(|(named, _)| named == &name) else {
                     return;
                 };
-                let (_, gone) = client.outputs.remove(at);
+                let gone = client.outputs.remove(at).1.id();
                 client.scales.retain(|(id, _)| id != &gone);
                 client.entered.retain(|id| id != &gone);
                 follow_or_stop(client, handle);
@@ -1458,6 +1461,31 @@ impl Dispatch<xdg_toplevel::XdgToplevel, ()> for Client {
                     u32::from_ne_bytes(*state) == xdg_toplevel::State::Suspended as u32
                 });
             crate::say!(toplevel.id(), "suspended({suspended})");
+            // The states a shell sets, in protocol order.
+            let set: Vec<&str> = [
+                (xdg_toplevel::State::TiledLeft, "tiled_left"),
+                (xdg_toplevel::State::TiledRight, "tiled_right"),
+                (xdg_toplevel::State::TiledTop, "tiled_top"),
+                (xdg_toplevel::State::TiledBottom, "tiled_bottom"),
+                (xdg_toplevel::State::Maximized, "maximized"),
+                (xdg_toplevel::State::Fullscreen, "fullscreen"),
+            ]
+            .into_iter()
+            .filter(|(state, _)| {
+                states
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .any(|held| u32::from_ne_bytes(*held) == *state as u32)
+            })
+            .map(|(_, name)| name)
+            .collect();
+            crate::say!(toplevel.id(), "states({})", set.join(" "));
+            // On the first configure, so the window has been configured once
+            // and the request needs a configure of its own.
+            if let Some(ask_to) = client.ask_to.take() {
+                ask(client, toplevel, ask_to);
+            }
             // Zero means "client chooses". Negative is invalid and would cast
             // to a huge `u32`.
             if client.follow_configure && width > 0 && height > 0 {
@@ -1478,6 +1506,33 @@ impl Dispatch<xdg_toplevel::XdgToplevel, ()> for Client {
             } else {
                 std::process::exit(0);
             }
+        }
+    }
+}
+
+/// Make `--ask-to`'s request. Fullscreen names the first output bound.
+fn ask(client: &Client, toplevel: &xdg_toplevel::XdgToplevel, ask_to: AskTo) {
+    match ask_to {
+        AskTo::Maximize => {
+            toplevel.set_maximized();
+            crate::say!(toplevel.id(), "set_maximized()");
+        }
+        AskTo::Unmaximize => {
+            toplevel.unset_maximized();
+            crate::say!(toplevel.id(), "unset_maximized()");
+        }
+        AskTo::Fullscreen => {
+            let output = client.outputs.first().map(|(_, output)| output);
+            toplevel.set_fullscreen(output);
+            crate::say!(
+                toplevel.id(),
+                "set_fullscreen({})",
+                output.map_or("nil".to_string(), |output| output.id().to_string())
+            );
+        }
+        AskTo::Unfullscreen => {
+            toplevel.unset_fullscreen();
+            crate::say!(toplevel.id(), "unset_fullscreen()");
         }
     }
 }

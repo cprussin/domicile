@@ -308,6 +308,7 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         | ClientRequest::SetOutputScale { .. }
         | ClientRequest::SetOutputSize { .. }
         | ClientRequest::SetAppBounds { .. }
+        | ClientRequest::SetWindowStates { .. }
         | ClientRequest::CloseApp { .. }
         | ClientRequest::Spawn { .. }
         | ClientRequest::ChromeHello { .. }
@@ -1012,6 +1013,13 @@ mod tests {
                         min: domicile_scene::Point::new(0.0, 0.0),
                         max: domicile_scene::Point::new(800.0, 600.0),
                     },
+                },
+            ),
+            (
+                "the page setting a window's states",
+                ClientRequest::SetWindowStates {
+                    app_id: "app-1".into(),
+                    states: vec![domicile_protocol::WindowState::TiledLeft],
                 },
             ),
             (

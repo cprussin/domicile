@@ -101,6 +101,10 @@
     "./webview-element": {
       "types": "./dist/webview-element.d.ts",
       "default": "./dist/webview-element.js"
+    },
+    "./window-state": {
+      "types": "./dist/window-state.d.ts",
+      "default": "./dist/window-state.js"
     }
   },
   "files": [

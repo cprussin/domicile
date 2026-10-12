@@ -92,6 +92,7 @@ export const fakeSystem = (
       return Promise.resolve(Ok(ran));
     },
     screenshot: unexpected,
+    setWindowStates: unexpected,
     shellCommands: unexpected,
     spawn: (argv) => Promise.resolve(Ok(subprocess(spawned(argv)))),
     stat: (path) =>
@@ -114,6 +115,7 @@ export const fakeSystem = (
     touched,
     unlockRefusals: unexpected,
     watch: unexpected,
+    windowRequests: unexpected,
     writeFile: unexpected,
   };
 };

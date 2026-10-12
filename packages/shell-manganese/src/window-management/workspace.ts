@@ -57,8 +57,8 @@ import {
  */
 export type Fullscreen = NodeRef & {
   /**
-   * Whether the window's page asked for it, so the page leaving fullscreen
-   * ends it. See {@link pageFullscreened}.
+   * Whether the window's page or client asked for it, so its leaving
+   * fullscreen ends it. See {@link pageFullscreened}.
    */
   byPage?: true;
   /** Whether it covers every screen rather than the one it is on. */
@@ -518,9 +518,10 @@ export const fullscreenToggled = (
 };
 
 /**
- * Window `id`'s page entered or left fullscreen, as a video's fullscreen
- * button does. The window fills its screen while its page is fullscreen. A
- * window the user made fullscreen stays so when its page leaves.
+ * Window `id`'s page or client entered or left fullscreen, as a video's
+ * fullscreen button does. The window fills its screen while its page or
+ * client is fullscreen. A window the user made fullscreen stays so when its
+ * page or client leaves.
  */
 export const pageFullscreened = (
   workspace: Workspace,
