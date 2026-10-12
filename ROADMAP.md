@@ -127,8 +127,6 @@ Understood and not scheduled.
 - **No `chrome://` pages,** so no printing.
 - **Some extension calls are refused.**
   [EXTENSIONS.md](docs/architecture/EXTENSIONS.md).
-- **Private data lasts until the engine exits.**
-  [SHELL-BROWSER-WINDOWS.md](docs/SHELL-BROWSER-WINDOWS.md#private-browsing).
 - **A browser window attached while hidden is visible for a moment,** so the
   page sees `visibilitychange` twice (`WebViewGuest::AttachWindowTo`).
 - **Resize cost is unmeasured.**

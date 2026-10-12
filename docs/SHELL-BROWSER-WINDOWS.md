@@ -57,8 +57,9 @@ plus.addEventListener("click", () => {
 - **`<webview private>`** makes your own page private, such as a preview. Set
   `private` before the view enters the document.
 - A private page is in Chrome's off-the-record profile: its cookies, cache and
-  storage stay in memory until the engine exits, shared by every private page
-  and none of the user's.
+  storage stay in memory, shared by every private page and none of the user's.
+- Private data ends when the last private page closes, whether a private
+  window or a `<webview private>`. The next private page starts empty.
 - A private window's new windows are private too.
 - Extensions see no private page.
 

@@ -93,7 +93,7 @@ Headless.
 | `guard-webview-fullscreen.sh` | a page enters fullscreen from its own button, the shell hears it as `pageFullscreen`, and Escape and `exitPageFullscreen()` each take it out |
 | `guard-webview-context-menu.sh` | a right click fires `domicile-context-menu` with the link and image under it; its `inspect` opens DevTools in a browser window (patch 0092) |
 | `guard-webview-new-window.sh` | a `target="_blank"` link opens a browser window, and the shell's `<webview window>` shows it |
-| `guard-webview-private.sh` | a cookie set in a `<webview private>` reaches private pages and windows, never ordinary ones; a private window is listed `isPrivate` |
+| `guard-webview-private.sh` | a cookie set in a `<webview private>` reaches private pages and windows, never ordinary ones; a private window is listed `isPrivate`; the cookie is gone once every private page closes |
 | `guard-webview-survives-load-shell.sh` | a browser window's page keeps running across `load_shell`, and the new shell's `<webview window>` shows it |
 | `guard-webview-hidden.sh` | a browser window's page is hidden while its `<webview>` is `display: none`, visible once shown, and hidden again after |
 | `guard-webview-permissions.sh` | a page's `getUserMedia` asks the shell over `domicile-permission-request`; the shell's allow reaches the page and is stored for the site (patch 0103) |
