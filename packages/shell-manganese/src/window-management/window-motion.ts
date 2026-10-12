@@ -91,6 +91,34 @@ export const isLeaving = (motion: WindowMotion): boolean => {
   }
 };
 
+/** Whether a workspace switch is sliding the window on or off its screen. */
+export const isSwitching = (motion: WindowMotion): boolean => {
+  switch (motion) {
+    case "arriving-from-end":
+    case "arriving-from-start":
+    case "leaving-to-end":
+    case "leaving-to-start": {
+      return true;
+    }
+    case "closing":
+    case "closing-tab":
+    case "concealing":
+    case "dropping":
+    case "opening":
+    case "opening-tab":
+    case "restacking":
+    case "restacking-again":
+    case "resting":
+    case "revealing":
+    case "sending":
+    case "sending-tab":
+    case "stowing":
+    case "uncovering": {
+      return false;
+    }
+  }
+};
+
 /**
  * The motion of a window's title bar.
  *

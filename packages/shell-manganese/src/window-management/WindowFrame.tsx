@@ -1,15 +1,17 @@
 import type { ReactNode } from "react";
 
-import { css } from "../../styled-system/css";
 import type { Spot } from "./pointer-warp";
 import type { Rect } from "./rect";
-import { slidAcross } from "./window-styles";
+import type { WindowMotion } from "./window-motion";
+import { clippedTo, screenClipStyles, slidAcross } from "./window-styles";
 
 type Props = {
   /** The window's contents or its bar. */
   children: ReactNode;
   /** The window's frame, which the scratchpad slides lift. */
   frame: Rect | undefined;
+  /** The window's motion; a workspace switch clips it to its screen. */
+  motion: WindowMotion;
   /**
    * Called when the pointer enters any part of this window, with the page
    * position. Focus follows the cursor; `usePointerWarp` uses the position to
@@ -37,19 +39,21 @@ export const WINDOW_FRAME = "data-window-frame";
  * Wraps a window's bar and contents to handle pointer hover and press for
  * every kind of window in one place.
  *
- * Uses `display: contents`, so it has no box and does not affect layout,
- * stacking or hit-testing. Its children inherit the slide distances from it.
+ * Takes no space, stacking or pointer of its own (see `screenClipStyles`).
+ * Its children inherit the slide distances from it, and it clips them to
+ * their screen during a workspace switch.
  */
 export const WindowFrame = ({
   children,
   frame,
+  motion,
   onHover,
   onReach,
   rewound,
   screen,
 }: Props) => (
   <div
-    className={frameStyles}
+    className={screenClipStyles}
     {...{ [WINDOW_FRAME]: "" }}
     onPointerDown={onReach}
     // `pointerover` bubbles from whichever part the pointer entered.
@@ -57,11 +61,14 @@ export const WindowFrame = ({
       onHover([event.clientX, event.clientY]);
     }}
     style={
-      screen === undefined ? undefined : slidAcross(screen, frame, rewound)
+      screen === undefined
+        ? undefined
+        : {
+            ...slidAcross(screen, frame, rewound),
+            ...clippedTo(screen, motion),
+          }
     }
   >
     {children}
   </div>
 );
-
-const frameStyles = css({ display: "contents" });

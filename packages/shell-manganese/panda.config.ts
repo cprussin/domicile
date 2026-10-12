@@ -22,24 +22,6 @@ const RESTACKING_DEPTH = {
   "51%, 100%": { zIndex: "var(--restack-to)" },
 };
 
-// Clips a window part sliding `by` across its screen to that screen, so it does
-// not show on the next monitor. The page spans every monitor.
-//
-// `clip-path` is in the part's own box, which the slide moves, so the clip
-// moves back by `by`. `rect()` takes offsets from the box's top-left corner;
-// see `placedAt` and `slidAcross` for the custom properties.
-const clippedToScreen = (by: string) => {
-  const top = "calc(var(--screen-y) - var(--placed-y))";
-  const right = `calc(var(--screen-x) + var(--workspace-width) - var(--placed-x) - ${by})`;
-  const bottom =
-    "calc(var(--screen-y) + var(--screen-height) - var(--placed-y))";
-  const left = `calc(var(--screen-x) - var(--placed-x) - ${by})`;
-  return { clipPath: `rect(${top} ${right} ${bottom} ${left})` };
-};
-
-const WORKSPACE_WIDTH = "var(--workspace-width)";
-const NEGATIVE_WORKSPACE_WIDTH = "calc(-1 * var(--workspace-width))";
-
 // The scratchpad is a drop-down: a window shown from it slides down from above
 // the screen's top edge, `--lift` away (see `slidAcross`). It is clear of the
 // edge only in the last stretch, so it fades in there and does not show on a
@@ -155,24 +137,6 @@ export default defineConfig({
             transform: "translateX(calc(-1 * var(--workspace-width)))",
           },
           "100%": { transform: "translateX(0)" },
-        },
-        // Each part of a sliding window is clipped to its screen, in a second
-        // animation; see `clippedToScreen`.
-        windowClippedArrivingFromEnd: {
-          "0%": clippedToScreen(WORKSPACE_WIDTH),
-          "100%": clippedToScreen("0px"),
-        },
-        windowClippedArrivingFromStart: {
-          "0%": clippedToScreen(NEGATIVE_WORKSPACE_WIDTH),
-          "100%": clippedToScreen("0px"),
-        },
-        windowClippedLeavingToEnd: {
-          "0%": clippedToScreen("0px"),
-          "100%": clippedToScreen(WORKSPACE_WIDTH),
-        },
-        windowClippedLeavingToStart: {
-          "0%": clippedToScreen("0px"),
-          "100%": clippedToScreen(NEGATIVE_WORKSPACE_WIDTH),
         },
         // The reverse of `windowOpening`. It shrinks only to 0.85 rather than
         // to nothing; the fade does most of the work.

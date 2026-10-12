@@ -6,6 +6,8 @@ import type { Restack } from "./restacking";
 import type { Point } from "./settle";
 import type { TabLayout } from "./tree/frames";
 import { Layout } from "./tree/node";
+import type { WindowMotion } from "./window-motion";
+import { isSwitching } from "./window-motion";
 
 /**
  * Styles shared by every window.
@@ -28,20 +30,16 @@ export const windowStyles = css({
  * element's own `z-index`, since that is what stacks the client's surface.
  * Coordinates are the desktop's: the viewport spans every display.
  *
- * Also hands the corner to the keyframes as `--placed-x` and `--placed-y`, so
- * a workspace switch can clip the part to its screen (see {@link slidAcross}).
+ * Absolute, not fixed, so a window's wrapper can clip it to its screen (see
+ * {@link clippedTo}). The wrapper sits at the desktop's corner and has no
+ * `z-index`, so the coordinates and stacking are those of the page.
  */
-export const placedAt = (
-  rect: Rect,
-  depth: number,
-): CSSProperties & Record<`--${string}`, string> => ({
-  "--placed-x": `${rect.x.toString()}px`,
-  "--placed-y": `${rect.y.toString()}px`,
+export const placedAt = (rect: Rect, depth: number): CSSProperties => ({
   blockSize: `${rect.height.toString()}px`,
   inlineSize: `${rect.width.toString()}px`,
   insetBlockStart: `${rect.y.toString()}px`,
   insetInlineStart: `${rect.x.toString()}px`,
-  position: "fixed",
+  position: "absolute",
   zIndex: depth,
 });
 
@@ -164,9 +162,6 @@ export const rewoundBy = (rewound: number): Record<`--${string}`, string> => ({
  *
  * - `--workspace-width`: the screen width, so the two workspaces of a switch
  *   stay side by side.
- * - `--screen-x`, `--screen-y` and `--screen-height`: the rest of the screen,
- *   which a switch clips each part to. The page spans every monitor, so a
- *   part sliding off its screen would otherwise show on the next one.
  * - `--lift`: how far up `frame` must move to clear the screen's top edge, for
  *   the scratchpad's slides. None for a window not drawn.
  * - `--motion-delay`: see {@link rewoundBy}.
@@ -177,14 +172,50 @@ export const slidAcross = (
   rewound: number,
 ): Record<`--${string}`, string> => ({
   ...rewoundBy(rewound),
-  "--screen-height": `${screen.height.toString()}px`,
-  "--screen-x": `${screen.x.toString()}px`,
-  "--screen-y": `${screen.y.toString()}px`,
   "--workspace-width": `${screen.width.toString()}px`,
   ...(frame === undefined
     ? {}
     : { "--lift": `${(frame.y + frame.height - screen.y).toString()}px` }),
 });
+
+/**
+ * The wrapper around each part of a window that clips it to its screen; see
+ * {@link clippedTo}.
+ *
+ * A box, since `clip` needs one, but an empty one at the desktop's corner: its
+ * parts are positioned, so it takes no space and no pointer. Without a
+ * `z-index` it is no stacking context, so each part still stacks by its own.
+ */
+export const screenClipStyles = css({
+  insetBlockStart: 0,
+  insetInlineStart: 0,
+  position: "absolute",
+});
+
+/**
+ * Inline style clipping a window's wrapper to its `screen` while a workspace
+ * switch slides it, or none.
+ *
+ * The page spans every monitor, so a window sliding off its screen would show
+ * on the next one. `clip` is a plain rectangle, like the notification drawer's
+ * `overflow: clip`, so the compositor applies it to client surfaces too and the
+ * slide stays on the compositor thread. None at rest: a float being dragged
+ * draws across both screens.
+ */
+export const clippedTo = (
+  screen: Rect,
+  motion: WindowMotion,
+): CSSProperties => {
+  if (isSwitching(motion)) {
+    const top = `${screen.y.toString()}px`;
+    const right = `${(screen.x + screen.width).toString()}px`;
+    const bottom = `${(screen.y + screen.height).toString()}px`;
+    const left = `${screen.x.toString()}px`;
+    return { clip: `rect(${top}, ${right}, ${bottom}, ${left})` };
+  } else {
+    return {};
+  }
+};
 
 /**
  * A window's animation, keyed by `WindowMotion`. Keyframes are in
@@ -224,15 +255,13 @@ export const movingStyles = cva({
     motion: {
       // Both workspaces share timing so they stay side by side. `emphasized`,
       // not `outQuart`: a full-screen slide that starts at full speed jumps.
-      // The clip to the screen is a second animation on the same timing, so
-      // the compositor thread can still run the slide.
       "arriving-from-end": {
         animation:
-          "windowArrivingFromEnd {durations.slower} {easings.emphasized}, windowClippedArrivingFromEnd {durations.slower} {easings.emphasized}",
+          "windowArrivingFromEnd {durations.slower} {easings.emphasized}",
       },
       "arriving-from-start": {
         animation:
-          "windowArrivingFromStart {durations.slower} {easings.emphasized}, windowClippedArrivingFromStart {durations.slower} {easings.emphasized}",
+          "windowArrivingFromStart {durations.slower} {easings.emphasized}",
       },
       closing: {
         animation: "windowClosing {durations.fast} {easings.outQuart} forwards",
@@ -256,11 +285,11 @@ export const movingStyles = cva({
       },
       "leaving-to-end": {
         animation:
-          "windowLeavingToEnd {durations.slower} {easings.emphasized} forwards, windowClippedLeavingToEnd {durations.slower} {easings.emphasized} forwards",
+          "windowLeavingToEnd {durations.slower} {easings.emphasized} forwards",
       },
       "leaving-to-start": {
         animation:
-          "windowLeavingToStart {durations.slower} {easings.emphasized} forwards, windowClippedLeavingToStart {durations.slower} {easings.emphasized} forwards",
+          "windowLeavingToStart {durations.slower} {easings.emphasized} forwards",
       },
       opening: {
         animation: "windowOpening {durations.fast} {easings.outQuart}",

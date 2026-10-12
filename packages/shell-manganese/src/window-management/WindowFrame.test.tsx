@@ -19,6 +19,7 @@ describe("WindowFrame", () => {
     render(
       <WindowFrame
         frame={undefined}
+        motion="resting"
         onHover={(at) => {
           crossed.push(at);
         }}
@@ -45,6 +46,7 @@ describe("WindowFrame", () => {
     render(
       <WindowFrame
         frame={undefined}
+        motion="resting"
         onHover={noHover}
         onReach={() => {
           reached.push("reach");
@@ -67,6 +69,7 @@ describe("WindowFrame", () => {
       render(
         <WindowFrame
           frame={{ height: 400, width: 600, x: 40, y: 300 }}
+          motion="resting"
           onHover={noHover}
           onReach={noReach}
           rewound={0}
@@ -81,17 +84,6 @@ describe("WindowFrame", () => {
     it("slides its parts the width of the screen", () => {
       // A workspace switch slides by the width of the window's screen.
       expect(styleOf()?.getPropertyValue("--workspace-width")).toBe("1280px");
-    });
-
-    it("bounds its parts' slides by the screen", () => {
-      // A workspace switch clips each part to its screen.
-      const style = styleOf();
-
-      expect([
-        style?.getPropertyValue("--screen-x"),
-        style?.getPropertyValue("--screen-y"),
-        style?.getPropertyValue("--screen-height"),
-      ]).toStrictEqual(["0px", "100px", "800px"]);
     });
 
     it("lifts its parts far enough to clear the top of the screen", () => {

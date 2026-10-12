@@ -2,8 +2,6 @@ import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { ReactNode } from "react";
 import { Fragment, memo, useCallback, useMemo, useState } from "react";
 
-import { css } from "../../styled-system/css";
-
 import type { Modifiers } from "../keyboard/useModifiers";
 import type { StageScreen } from "../screens/stage-screens";
 import { useShared } from "../screens/useShared";
@@ -62,7 +60,7 @@ import type { ShellWindow } from "./window";
 import { browserIdOf, WindowKind } from "./window";
 import type { WindowMotion } from "./window-motion";
 import { barMotion } from "./window-motion";
-import { slidAcross } from "./window-styles";
+import { clippedTo, screenClipStyles, slidAcross } from "./window-styles";
 
 type Props = {
   /** The window the user is working in. */
@@ -230,6 +228,7 @@ export const Stage = memo(
                 <Sliding
                   frame={placement.frame}
                   key={window.id}
+                  motion={motion}
                   on={screenNamed(desk, screen)}
                   rewound={rewound}
                 >
@@ -252,10 +251,13 @@ export const Stage = memo(
         */}
           {glows.map(({ box, leaving }) => {
             const following = leaving ? undefined : active;
+            const motion =
+              following === undefined ? "resting" : barMotion(following.motion);
             return (
               <Sliding
                 frame={following?.placement?.frame}
                 key={keyOf(box)}
+                motion={motion}
                 on={screenNamed(desk, following?.screen)}
                 rewound={following?.rewound ?? 0}
               >
@@ -267,11 +269,7 @@ export const Stage = memo(
                       (activeId !== undefined && held.has(activeId)))
                   }
                   leaving={leaving}
-                  motion={
-                    following === undefined
-                      ? "resting"
-                      : barMotion(following.motion)
-                  }
+                  motion={motion}
                   onFaded={() => {
                     onFaded(box);
                   }}
@@ -768,6 +766,7 @@ const WindowContents = memo(
     return (
       <WindowFrame
         frame={placement?.frame}
+        motion={motion}
         onHover={hovered}
         onReach={reached}
         rewound={rewound}
@@ -918,6 +917,7 @@ const WindowBar = memo(
     return (
       <WindowFrame
         frame={placement.frame}
+        motion={motion}
         onHover={hovered}
         onReach={reached}
         rewound={rewound}
@@ -1018,7 +1018,7 @@ const ContainerTab = memo(
       onSelect(id);
     }, [id, onSelect]);
     return (
-      <Sliding frame={undefined} on={on} rewound={0}>
+      <Sliding frame={undefined} motion={motion} on={on} rewound={0}>
         <TitleBar
           depth={tab.depth}
           dragging={dragging}
@@ -1056,33 +1056,36 @@ const ContainerTab = memo(
 );
 
 /**
- * Gives its children the distances that slide `frame` off screen `on`. Has no
- * box of its own; see `frameStyles` in `WindowFrame`.
+ * Gives its children the distances that slide `frame` off screen `on`, and
+ * clips them to it during a workspace switch. See `screenClipStyles`.
  */
 const Sliding = ({
   children,
   frame,
+  motion,
   on,
   rewound,
 }: {
   children: ReactNode;
   frame: Rect | undefined;
+  motion: WindowMotion;
   on: StageScreen | undefined;
   rewound: number;
 }) => (
   <div
-    className={slidingStyles}
+    className={screenClipStyles}
     style={
       on === undefined
         ? undefined
-        : slidAcross(on.geometry.screen, frame, rewound)
+        : {
+            ...slidAcross(on.geometry.screen, frame, rewound),
+            ...clippedTo(on.geometry.screen, motion),
+          }
     }
   >
     {children}
   </div>
 );
-
-const slidingStyles = css({ display: "contents" });
 
 /**
  * The scratchpad window shown on screen `on`, or one sliding off it back to the
@@ -1189,7 +1192,7 @@ const GroupStrip = memo(
       onNewTab(id);
     }, [id, onNewTab]);
     return (
-      <Sliding frame={frame} on={on} rewound={rewound}>
+      <Sliding frame={frame} motion={motion} on={on} rewound={rewound}>
         <TabStrip
           box={strip.box}
           depth={depth}

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
-import config from "../../panda.config";
 import { Layout } from "./tree/node";
 import {
+  clippedTo,
   collapsedAlong,
   movingStyles,
   placedAt,
@@ -15,8 +15,9 @@ const RECT = { height: 200, width: 300, x: 10, y: 20 };
 
 describe("placedAt", () => {
   it("places a window in the desktop's own coordinates", () => {
-    // The viewport spans the whole desktop, including under the top bar.
-    expect(placedAt(RECT, 0).position).toBe("fixed");
+    // Absolute, not fixed, so the wrapper that clips a switch to its screen
+    // holds it. That wrapper, like the page, starts at the desktop's corner.
+    expect(placedAt(RECT, 0).position).toBe("absolute");
   });
 
   it("puts the window where the rectangle says", () => {
@@ -31,13 +32,6 @@ describe("placedAt", () => {
   it("writes the depth as the element's own z-index", () => {
     // The compositor stacks the client's surface by the element's own z-index.
     expect(placedAt(RECT, 3).zIndex).toBe(3);
-  });
-
-  it("hands its corner to the keyframes that clip it to its screen", () => {
-    expect(placedAt(RECT, 0)).toMatchObject({
-      "--placed-x": "10px",
-      "--placed-y": "20px",
-    });
   });
 });
 
@@ -97,26 +91,6 @@ describe("collapsedAlong", () => {
 });
 
 describe("movingStyles", () => {
-  // The page spans every monitor, so a window sliding off its screen would
-  // otherwise show on the next one.
-  it.each([
-    "arriving-from-end",
-    "arriving-from-start",
-    "leaving-to-end",
-    "leaving-to-start",
-  ] as const)("clips a %s window to its screen", (motion) => {
-    const { animation } = movingStyles.raw({ motion });
-    const animated = String(animation)
-      .split(",")
-      .flatMap((entry) => {
-        const name = entry.trim().split(" ")[0] ?? "";
-        return Object.values(config.theme?.extend?.keyframes?.[name] ?? {});
-      })
-      .flatMap((frame) => Object.keys(frame));
-
-    expect(animated).toContain("clipPath");
-  });
-
   const classes = (styles: string): readonly string[] => styles.split(" ");
 
   /** What a closing tab's contents have that its bar lacks: the delay. */
@@ -159,5 +133,26 @@ describe("slidAcross", () => {
     expect(slidAcross(SCREEN, undefined, 300)).toMatchObject({
       "--motion-delay": "-300ms",
     });
+  });
+});
+
+describe("clippedTo", () => {
+  const SCREEN = { height: 1024, width: 1280, x: 1920, y: 0 };
+
+  // The page spans every monitor; a slide would show on the next one.
+  it.each([
+    "arriving-from-end",
+    "arriving-from-start",
+    "leaving-to-end",
+    "leaving-to-start",
+  ] as const)("clips a %s window to its screen", (motion) => {
+    expect(clippedTo(SCREEN, motion)).toStrictEqual({
+      clip: "rect(0px, 3200px, 1024px, 1920px)",
+    });
+  });
+
+  // A float dragged across screens draws on both.
+  it("leaves any other window unclipped", () => {
+    expect(clippedTo(SCREEN, "resting")).toStrictEqual({});
   });
 });
