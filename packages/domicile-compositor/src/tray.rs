@@ -8,24 +8,28 @@
 //! - Watcher methods, item signals and clicks are events on one channel,
 //!   handled by one worker thread. Watcher methods must not block zbus's
 //!   executor.
-//! - Each item read runs on its own thread, because a call waits as long as
-//!   its application does and one slow application must not stall the
-//!   others. An item has at most one read in flight (see [`Reads`]).
+//! - Each item read runs on its own thread, because a call waits until its
+//!   application answers or [`ANSWER_WITHIN`] passes, and one slow
+//!   application must not stall the others. An item has at most one read in
+//!   flight (see [`Reads`]).
 //! - Clicks arrive through the Wayland thread, which refuses them while
 //!   locked (see [`crate::lock::refused`]).
 //! - Failure leaves the tray empty and logs once. A bare tty may have no
 //!   session bus, and a nested desktop may find the watcher name taken.
 
 use std::collections::HashMap;
+use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
+use std::time::Duration;
 
 use domicile_host::tray::{
     address, item, method, Landed, Pixmap, Properties, Reads, Registry, Status, TrayIcons,
 };
 use domicile_protocol::{TrayAction, TrayItem};
 use tracing::{debug, warn};
+use zbus::blocking::connection::Builder;
 use zbus::blocking::object_server::InterfaceRef;
 use zbus::blocking::{Connection, MessageIterator, Proxy};
 use zbus::message::{Header, Type};
@@ -42,6 +46,10 @@ const WATCHER_PATH: &str = "/StatusNotifierWatcher";
 
 /// The interface every item implements.
 const ITEM_INTERFACE: &str = "org.kde.StatusNotifierItem";
+
+/// How long a call on the tray's connection waits for a reply. Without it, a
+/// hung item would hold its read, and its thread, forever.
+const ANSWER_WITHIN: Duration = Duration::from_secs(3);
 
 /// Work for the worker thread.
 enum Event {
@@ -118,7 +126,7 @@ fn answer(
     mut icons: TrayIcons,
     publish: &dyn Fn(Vec<TrayItem>),
 ) -> zbus::Result<()> {
-    let connection = Connection::session()?;
+    let connection = answering_within(Builder::session()?).build()?;
     connection.object_server().at(
         WATCHER_PATH,
         Watcher {
@@ -201,9 +209,17 @@ fn answer(
                             registry.show(&id, item(&name, &bus, properties, &mut icons));
                         }
                         // Kept registered but hidden: there is nothing to
-                        // draw.
+                        // draw. Its next signal reads it again.
                         Err(why) => {
-                            debug!(%id, %why, "a tray icon could not be read");
+                            if timed_out(&why) && reads.hung(&id) {
+                                warn!(
+                                    %id,
+                                    "a tray icon did not answer within {ANSWER_WITHIN:?}; \
+                                     it is hidden until it signals a change"
+                                );
+                            } else {
+                                debug!(%id, %why, "a tray icon could not be read");
+                            }
                             registry.show(&id, None);
                         }
                     }
@@ -285,15 +301,7 @@ fn start(
     let (bus, path) = registry.address(id).expect("only an item held is read");
     let (connection, told, id) = (connection.clone(), told.clone(), id.to_string());
     thread::spawn(move || {
-        let properties = Proxy::new(
-            &connection,
-            bus.as_str(),
-            path.as_str(),
-            "org.freedesktop.DBus.Properties",
-        )
-        .and_then(|proxy| {
-            proxy.call::<_, _, HashMap<String, OwnedValue>>("GetAll", &(ITEM_INTERFACE,))
-        });
+        let properties = get_all(&connection, &bus, &path);
         // A closed channel means the worker stopped and already logged why.
         let _ = told.send(Event::Read {
             id,
@@ -301,6 +309,26 @@ fn start(
             properties,
         });
     });
+}
+
+/// `builder` with calls that fail after [`ANSWER_WITHIN`].
+fn answering_within(builder: Builder<'_>) -> Builder<'_> {
+    builder.method_timeout(ANSWER_WITHIN)
+}
+
+/// Whether a call failed because nothing answered within [`ANSWER_WITHIN`].
+fn timed_out(why: &zbus::Error) -> bool {
+    matches!(why, zbus::Error::InputOutput(io) if io.kind() == ErrorKind::TimedOut)
+}
+
+/// The properties of the item at `path` on `bus`.
+fn get_all(
+    connection: &Connection,
+    bus: &str,
+    path: &str,
+) -> zbus::Result<HashMap<String, OwnedValue>> {
+    Proxy::new(connection, bus, path, "org.freedesktop.DBus.Properties")
+        .and_then(|proxy| proxy.call("GetAll", &(ITEM_INTERFACE,)))
 }
 
 /// Calls the method for `action` on item `id`.
@@ -487,7 +515,21 @@ impl Watcher {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::portals::socket_pair::connected_both;
+    use std::time::Instant;
     use zbus::zvariant::{ObjectPath, Value};
+
+    #[test]
+    fn a_read_of_an_item_that_never_answers_times_out() {
+        // The item's end serves no objects, so it never replies.
+        let (_item, host) = connected_both(|item| item, answering_within);
+        let asked = Instant::now();
+
+        let read = get_all(&host, "org.example.Hung", "/StatusNotifierItem");
+
+        assert!(timed_out(&read.expect_err("no reply")));
+        assert!(asked.elapsed() < ANSWER_WITHIN * 2);
+    }
 
     /// `properties` in the shape of a `GetAll` reply.
     fn answered(properties: Vec<(&str, Value<'static>)>) -> HashMap<String, OwnedValue> {
