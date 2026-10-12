@@ -95,9 +95,13 @@ class BrowserWindowHost {
                              const std::string& id) = 0;
 
   // Returns the off-the-record context of `context`'s profile, making it on
-  // first use. Private guests' pages live there.
+  // first use, for one new private guest's page. Private browsing ends when
+  // every such page has been reported to PrivatePageClosed.
   virtual content::BrowserContext& PrivateContext(
       content::BrowserContext& context) = 0;
+
+  // A private guest's page in `context`, from PrivateContext, was destroyed.
+  virtual void PrivatePageClosed(content::BrowserContext& context) = 0;
 };
 
 // Opens DevTools on `frame`'s page, at `root_point` (a context menu's click,
@@ -596,10 +600,12 @@ class WebViewGuest : public mojom::WebViewGuest,
                 const content::ContextMenuParams& params,
                 bool is_subresource);
 
-  // Makes this guest's WebContents with this as guest delegate, delegate and
+  // Makes this guest's WebContents in `owner_context`, or its private context
+  // for `private_browsing`, with this as guest delegate, delegate and
   // observer. Shared by both kinds of guest.
   std::unique_ptr<content::WebContents> MakeContents(
-      content::BrowserContext* context,
+      content::BrowserContext& owner_context,
+      bool private_browsing,
       bool initially_hidden,
       const GuestCreatedCallback& created);
 
@@ -684,6 +690,10 @@ class WebViewGuest : public mojom::WebViewGuest,
   // destructor.
   std::unique_ptr<content::WebContents> owned_guest_contents_;
   raw_ptr<content::WebContents> guest_contents_ = nullptr;
+
+  // The private context this page is in, or null for an ordinary page. The
+  // destructor reports the page closed to BrowserWindowHost.
+  raw_ptr<content::BrowserContext> private_context_ = nullptr;
 
   // The <webview>'s document. An id, not a pointer, so it cannot dangle.
   content::GlobalRenderFrameHostId owner_rfh_id_;

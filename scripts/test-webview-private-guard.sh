@@ -42,6 +42,10 @@ readings() { # $1 NEGATIVE, then NAME=value overrides
   SAW_WINDOW=1
   SAW_WINDOW_READ=1
   WINDOW_HAS=1
+  SAW_CLOSED=1
+  SAW_AFTER=1
+  AFTER_HAS=0
+  SAW_ENDED=1
   if [ "$NEGATIVE" = "1" ]; then
     NORMAL_HAS=1
     PRIVATE_HAS=0
@@ -109,6 +113,13 @@ expect "a window without the cookie is a failure" "fail" \
 expect "and names DeskWindows::Make" "yes" \
   "$(blames "DeskWindows::Make" 0 WINDOW_HAS=0)"
 expect "an unlisted window is a failure" "fail" "$(verdict 0 SAW_WINDOW=0)"
+expect "no reader after closing is a failure" "fail" "$(verdict 0 SAW_AFTER=0)"
+expect "the cookie outliving its pages is a failure" "fail" \
+  "$(verdict 0 AFTER_HAS=1)"
+expect "and names PrivatePageClosed when nothing ended" "yes" \
+  "$(blames "PrivatePageClosed" 0 AFTER_HAS=1 SAW_ENDED=0)"
+expect "and names PrivateProfile when it ended" "yes" \
+  "$(blames "DeskWindows::PrivateProfile" 0 AFTER_HAS=1)"
 
 echo
 echo "the control — the cookie set in an ordinary <webview>"

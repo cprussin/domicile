@@ -526,9 +526,9 @@ void WebViewGuest::CreateAndAttach(
     const GuestCreatedCallback& created) {
   std::unique_ptr<WebViewGuest> guest = base::WrapUnique(new WebViewGuest(
       owner, std::move(receiver), std::move(client), extension_popup));
-  guest->owned_guest_contents_ = guest->MakeContents(
-      ContextFor(*owner.GetBrowserContext(), private_browsing),
-      /*initially_hidden=*/false, created);
+  guest->owned_guest_contents_ =
+      guest->MakeContents(*owner.GetBrowserContext(), private_browsing,
+                          /*initially_hidden=*/false, created);
 
 
   // Asynchronous: beforeunload handlers must run first, and a cross-process
@@ -583,17 +583,23 @@ std::unique_ptr<WebViewGuest> WebViewGuest::MakeWindow(
       base::WrapUnique(new WebViewGuest(shell, window_id, popup_window));
   // Hidden (and throttled) like a background tab until AttachWindowTo shows
   // it.
-  guest->owned_guest_contents_ = guest->MakeContents(
-      ContextFor(*shell.GetBrowserContext(), private_browsing),
-      /*initially_hidden=*/true, created);
+  guest->owned_guest_contents_ =
+      guest->MakeContents(*shell.GetBrowserContext(), private_browsing,
+                          /*initially_hidden=*/true, created);
   LOG(INFO) << "domicile: opened browser window " << window_id << ".";
   return guest;
 }
 
 std::unique_ptr<content::WebContents> WebViewGuest::MakeContents(
-    content::BrowserContext* context,
+    content::BrowserContext& owner_context,
+    bool private_browsing,
     bool initially_hidden,
     const GuestCreatedCallback& created) {
+  content::BrowserContext* context =
+      ContextFor(owner_context, private_browsing);
+  if (private_browsing) {
+    private_context_ = context;
+  }
   // `guest_delegate` makes this a guest. Content asks it for the owner during
   // construction, so the owner is set in this object's constructor.
   //
@@ -767,9 +773,13 @@ WebViewGuest::WebViewGuest(content::WebContents& shell,
 }
 
 // Destroys a browser window's WebContents first, while members still exist for
-// content's teardown callbacks. Member order would destroy it last.
+// content's teardown callbacks. Member order would destroy it last. A private
+// page is reported closed after, so private browsing never ends under it.
 WebViewGuest::~WebViewGuest() {
   owned_guest_contents_.reset();
+  if (private_context_) {
+    Host().PrivatePageClosed(*private_context_);
+  }
 }
 
 // static

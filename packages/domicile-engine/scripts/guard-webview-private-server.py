@@ -5,6 +5,9 @@
                  cookie is stored before the page commits. Reports `set-loaded`.
   /read?as=NAME  reports `read as=NAME cookie=…`, with the page's
                  `document.cookie`, or `(none)` when it has none.
+
+Both pages go to `#reported` once the report is in, so the shell can close
+them without losing it.
   /report?line=  prints `GUARD <line>` to stdout, which the guard reads.
 
 Pages report here, not to the console: content does not log an
@@ -32,7 +35,9 @@ SET_PAGE = """<!doctype html>
   </head>
   <body>
     <script>
-      fetch("/report?line=set-loaded");
+      fetch("/report?line=set-loaded").then(() => {
+        location.hash = "reported";
+      });
     </script>
   </body>
 </html>
@@ -47,7 +52,9 @@ READ_PAGE = """<!doctype html>
   <body>
     <script>
       const line = `read as=%(name)s cookie=${document.cookie || "(none)"}`;
-      fetch(`/report?line=${encodeURIComponent(line)}`);
+      fetch(`/report?line=${encodeURIComponent(line)}`).then(() => {
+        location.hash = "reported";
+      });
     </script>
   </body>
 </html>
