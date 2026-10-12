@@ -21,6 +21,8 @@ under `src/`. Design: [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md).
 - The socket opens only when `--domicile-broker-socket` names a path.
 - The browser holds a page's embed until a producer connects, so a page may
   embed an `<app>` before its client window exists.
+- A held embed is dropped when its page's pipe closes: the element was
+  collected or the renderer went away.
 
 ## Engine library
 

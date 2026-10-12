@@ -18,13 +18,15 @@
 namespace domicile {
 
 FrameSinkBroker::PendingEmbed::PendingEmbed(
+    uint64_t requester,
     const std::string& app_id,
     const viz::FrameSinkId& parent_frame_sink_id,
     const viz::LocalSurfaceId& local_surface_id,
     const gfx::Size& size,
     double scale,
     EmbedCallback callback)
-    : app_id(app_id),
+    : requester(requester),
+      app_id(app_id),
       parent_frame_sink_id(parent_frame_sink_id),
       local_surface_id(local_surface_id),
       size(size),
@@ -64,7 +66,12 @@ void FrameSinkBroker::Bind(
   receivers_.Add(this, std::move(receiver));
 }
 
-void FrameSinkBroker::Embed(const std::string& app_id,
+uint64_t FrameSinkBroker::NewEmbedRequester() {
+  return next_embed_requester_++;
+}
+
+void FrameSinkBroker::Embed(uint64_t requester,
+                            const std::string& app_id,
                             const viz::FrameSinkId& parent_frame_sink_id,
                             const viz::LocalSurfaceId& local_surface_id,
                             const gfx::Size& size,
@@ -79,8 +86,9 @@ void FrameSinkBroker::Embed(const std::string& app_id,
   if (!frame_sink) {
     // The <app> element can exist before its client connects, as on a shell
     // reload. Wait for this app's sink, not whichever is brokered next.
-    pending_embeds_.emplace_back(app_id, parent_frame_sink_id, local_surface_id,
-                                 size, scale, std::move(callback));
+    pending_embeds_.emplace_back(requester, app_id, parent_frame_sink_id,
+                                 local_surface_id, size, scale,
+                                 std::move(callback));
     return;
   }
 
@@ -88,6 +96,12 @@ void FrameSinkBroker::Embed(const std::string& app_id,
   embed_tokens_[frame_sink->frame_sink_id()].insert(
       local_surface_id.embed_token());
   std::move(callback).Run(frame_sink->frame_sink_id());
+}
+
+void FrameSinkBroker::DropEmbeds(uint64_t requester) {
+  std::erase_if(pending_embeds_, [requester](const PendingEmbed& embed) {
+    return embed.requester == requester;
+  });
 }
 
 void FrameSinkBroker::CreateFrameSink(
