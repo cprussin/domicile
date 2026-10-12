@@ -733,4 +733,16 @@ mod reads {
         assert_eq!(reads.landed("a", gone), Landed::Stale);
         assert_eq!(reads.landed("a", again), Landed::Current { again: None });
     }
+
+    #[test]
+    fn an_item_hangs_for_the_first_time_once_per_registration() {
+        let mut reads = Reads::default();
+        assert!(reads.hung("a"));
+        assert!(!reads.hung("a"));
+        assert!(reads.hung("b"));
+
+        reads.forget("a");
+
+        assert!(reads.hung("a"));
+    }
 }

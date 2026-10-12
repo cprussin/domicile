@@ -57,6 +57,11 @@ shell menu ─ dbusCall / dbusMatch (callSystem) ─▶ compositor ─▶ com.ca
   because a call waits as long as its application does.
   - An item has at most one read in flight. Signals during a read cause one
     more read after it.
+  - Calls on the tray's connection time out after 3 seconds
+    (`ANSWER_WITHIN`). A timed-out read is a failed read: the item is hidden
+    and its next signal reads it again. The first timeout per item logs a
+    warning; later ones log at debug.
+  - Clicks use `call_noreply`, so they never wait.
 - **Icon lookups are cached** for the 32 names used last. An icon named by a
   path is read each time, since applications rewrite one file in place.
 - **Secondary click opens the item's dbusmenu**, as KDE's and waybar's trays

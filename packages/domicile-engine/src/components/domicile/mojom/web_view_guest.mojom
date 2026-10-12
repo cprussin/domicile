@@ -311,6 +311,12 @@ interface WebViewGuestClient {
   // navigates. Sent only when it changes.
   TargetUrlChanged(url.mojom.Url url);
 
+  // The user pressed Ctrl+wheel and the page did not consume the wheel.
+  //
+  // A request, not a zoom: unlike Chrome, the shell applies the step so
+  // Ctrl+wheel and Ctrl+plus share one path and one indicator.
+  ZoomRequested(bool zoom_in);
+
   // The page needs a file picked: an `<input type="file">` or a download.
   //
   // The shell draws the picker, because the shell owns all desktop UI.

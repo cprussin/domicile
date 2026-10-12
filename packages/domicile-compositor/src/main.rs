@@ -4616,7 +4616,7 @@ impl BufferHandler for DomicileCompositor {
     /// the fds, and forget any hold.
     fn buffer_destroyed(&mut self, buffer: &wl_buffer::WlBuffer) {
         if let Some(session) = self.engine.as_mut() {
-            if session.buffer_destroyed(buffer).is_some() {
+            if !session.buffer_destroyed(buffer).is_empty() {
                 tracing::debug!("a buffer the engine still held was destroyed by its client");
             }
         }

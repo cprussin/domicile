@@ -5,7 +5,7 @@
 //! [`TrayItem`]s. Icons become `data:` URLs. See
 //! `docs/architecture/SYSTEM-TRAY.md`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -421,14 +421,16 @@ fn read(path: &Path) -> Option<String> {
 
 /// The item reads in flight, at most one per item.
 ///
-/// A read can hang as long as its application does, and an application can
-/// signal on every change. A signal during a read makes one more read after
-/// it, however many arrive.
+/// A read waits until its application answers or the call times out, and an
+/// application can signal on every change. A signal during a read makes one
+/// more read after it, however many arrive.
 #[derive(Debug, Default)]
 pub struct Reads {
     /// The sequence the next read gets.
     next: u64,
     flying: HashMap<String, Flight>,
+    /// Items with a read that timed out.
+    hung: HashSet<String>,
 }
 
 /// An item's read in flight.
@@ -497,9 +499,16 @@ impl Reads {
         }
     }
 
+    /// Record that a read of `id` timed out. True the first time since it
+    /// registered, so a hung item is logged once.
+    pub fn hung(&mut self, id: &str) -> bool {
+        self.hung.insert(id.to_string())
+    }
+
     /// Forget item `id`, which went away. Its read in flight lands stale.
     pub fn forget(&mut self, id: &str) {
         self.flying.remove(id);
+        self.hung.remove(id);
     }
 
     fn next(&mut self) -> u64 {

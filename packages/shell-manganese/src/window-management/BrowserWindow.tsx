@@ -6,6 +6,8 @@ import {
   WEBVIEW_FOCUS_REQUEST_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_GUEST_KEYDOWN_EVENT,
+  WEBVIEW_ZOOM_IN_REQUEST_EVENT,
+  WEBVIEW_ZOOM_OUT_REQUEST_EVENT,
 } from "@domicile-desktop/sdk/webview-element";
 import type { FocusEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -381,8 +383,8 @@ export const BrowserWindow = ({
   }, [findBox, focusOwn]);
 
   // Keys pressed in the guest never reach this document. The engine forwards
-  // chords the page did not handle, so sites keep their own bindings as in
-  // Chrome. See `WEBVIEW_GUEST_KEYDOWN_EVENT`.
+  // chords the page did not handle, and Ctrl+wheel as zoom requests, so sites
+  // keep their own bindings as in Chrome. See `WEBVIEW_GUEST_KEYDOWN_EVENT`.
   useEffect(() => {
     if (view === null) {
       return undefined;
@@ -393,9 +395,19 @@ export const BrowserWindow = ({
           run(command);
         }
       };
+      const zoomIn = () => {
+        run(BrowserCommand.ZoomIn);
+      };
+      const zoomOut = () => {
+        run(BrowserCommand.ZoomOut);
+      };
       view.addEventListener(WEBVIEW_GUEST_KEYDOWN_EVENT, pressed);
+      view.addEventListener(WEBVIEW_ZOOM_IN_REQUEST_EVENT, zoomIn);
+      view.addEventListener(WEBVIEW_ZOOM_OUT_REQUEST_EVENT, zoomOut);
       return () => {
         view.removeEventListener(WEBVIEW_GUEST_KEYDOWN_EVENT, pressed);
+        view.removeEventListener(WEBVIEW_ZOOM_IN_REQUEST_EVENT, zoomIn);
+        view.removeEventListener(WEBVIEW_ZOOM_OUT_REQUEST_EVENT, zoomOut);
       };
     }
   }, [run, view]);

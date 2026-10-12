@@ -30,8 +30,8 @@ type Props = {
 /**
  * One visited page: its time, icon, title and URL, linking to the page.
  *
- * The icon is the row's check box. Ctrl+click and middle-click open the page
- * in a new window; a right click or the end button opens the row's menu.
+ * The icon is the row's check box. A click or middle-click opens the page in a
+ * new window; a right click or the end button opens the row's menu.
  */
 export const HistoryRow = memo(
   ({
@@ -108,11 +108,7 @@ export const HistoryRow = memo(
                 openElsewhere(event);
               }
             }}
-            onClick={(event) => {
-              if (event.ctrlKey || event.metaKey) {
-                openElsewhere(event);
-              }
-            }}
+            onClick={openElsewhere}
           >
             <span className={titleStyles}>
               {highlight(title, search).map((segment, at) =>

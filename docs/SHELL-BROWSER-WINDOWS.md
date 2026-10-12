@@ -172,8 +172,9 @@ Bind browser keys yourself:
 
 - `domicile-guest-keydown`: a `KeyboardEvent` for each chord (Ctrl, Alt or
   Meta held) the page did not `preventDefault`. Plain keys never arrive.
-- Zoom with `view.setZoom(factor)` (0.25 to 5). Zoom is per host, as in
-  Chrome. Ctrl+wheel scrolls; it does not zoom.
+- `domicile-zoom-in-request` / `domicile-zoom-out-request`: Ctrl+wheel. They
+  zoom nothing. Call `view.setZoom(factor)` (0.25 to 5). Zoom is per host, as
+  in Chrome.
 - `view.find(text, backward)` searches; the same text again goes to the next
   match. `view.stopFinding()` ends it. A navigation ends it too. Matches are
   counted across all frames.

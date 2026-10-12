@@ -359,7 +359,7 @@ describe(App, () => {
       expect(await opened).toBe("https://dogs.test/");
     });
 
-    it("opens a row in a new window on Ctrl+click", async () => {
+    it("opens a row in a new window on click", async () => {
       const opened = new Promise((resolve) => {
         const { user } = renderApp(HISTORY, {
           openInNewWindow: (url) => {
@@ -370,7 +370,6 @@ describe(App, () => {
         screen
           .findByRole("link", { name: /Dogs/ })
           .then(async (link) => {
-            await user.keyboard("{Control>}");
             await user.click(link);
           })
           .catch(() => undefined);
