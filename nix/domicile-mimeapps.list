@@ -1,0 +1,8 @@
+# Makes `domicile-open-url.desktop` the default web link handler. GIO and
+# `xdg-open` read this file only when `XDG_CURRENT_DESKTOP` is `domicile`, and
+# `domicile` puts the package's `share` first in every app's `XDG_DATA_DIRS`.
+# A user's own `mimeapps.list` still takes precedence.
+[Default Applications]
+text/html=domicile-open-url.desktop
+x-scheme-handler/http=domicile-open-url.desktop
+x-scheme-handler/https=domicile-open-url.desktop

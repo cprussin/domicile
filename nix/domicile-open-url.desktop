@@ -1,0 +1,9 @@
+# Registers `domicile-open-url` as the web link handler, so links open in a
+# browser window of the current desktop. Hidden from launchers.
+[Desktop Entry]
+Type=Application
+Name=Domicile
+Comment=Open a link in a browser window of this desktop
+Exec=@bin@/domicile-open-url %u
+MimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;
+NoDisplay=true

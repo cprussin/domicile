@@ -4,6 +4,9 @@ name: Stable
 # `nix run github:cprussin/domicile/stable#manganese` never gets the checked
 # engine. See .github/scripts/promote-stable.sh. engine-release.yml's official
 # pin lands on main as its own merge, which runs this too.
+#
+# Each commit stable moves to is packaged for other distributions and
+# released (distro-packages.yml).
 on:
   push:
     branches: [main]
@@ -21,9 +24,20 @@ permissions:
 jobs:
   promote:
     runs-on: ubuntu-latest
+    outputs:
+      promoted: ${{ steps.promote.outputs.promoted }}
     steps:
       # The whole history, so stable can be checked as an ancestor of main.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - run: .github/scripts/promote-stable.sh
+      - id: promote
+        run: .github/scripts/promote-stable.sh
+
+  packages:
+    needs: promote
+    if: needs.promote.outputs.promoted != ''
+    uses: ./.github/workflows/distro-packages.yml
+    with:
+      ref: ${{ needs.promote.outputs.promoted }}
+      publish: true

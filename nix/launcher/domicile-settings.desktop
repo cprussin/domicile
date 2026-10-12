@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Settings
+Comment=Change the desktop's settings, shell, extensions and site permissions
+Exec=@bin@/domicile-settings
+Icon=@icon@
+X-Domicile-Preview=@preview@
+Terminal=false

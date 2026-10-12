@@ -328,6 +328,17 @@
       # A launcher entry, `domicile-<id>.desktop`, for something Domicile
       # does. The icon is `<icon>` and the launcher's preview `<preview>`,
       # both SVGs.
+      #
+      # `launcherFile` fills in `nix/launcher/domicile-<id>.desktop`, which
+      # `distro/stage.sh` shares. `launcherEntry` writes one whose `Exec` is a
+      # store path.
+      launcherFile = { id, icon, preview }: ''
+        substitute ${./nix/launcher + "/domicile-${id}.desktop"} \
+          "$out/share/applications/domicile-${id}.desktop" \
+          --subst-var-by bin "$out/bin" \
+          --subst-var-by icon ${icon} \
+          --subst-var-by preview ${preview}
+      '';
       launcherEntry = { id, name, comment, exec, icon, preview }: ''
         cat >"$out/share/applications/domicile-${id}.desktop" <<DESKTOP
         [Desktop Entry]
@@ -405,11 +416,8 @@
       # stay a symlink because nothing resolves its path.
       domicilePackage = pkgs.runCommand "domicile"
         {
-          # The login session. `domicile` with no shell argument runs the
-          # shell its config names. NixOS's `sessionPackages` requires
-          # `providedSessions`. The display manager sets `XDG_CURRENT_DESKTOP`
-          # from `DesktopNames`. No `OZONE`: the session runs on a VT, and
-          # `XDG_VTNR` already selects the drm platform.
+          # The login session, `nix/domicile-session.desktop`. NixOS's
+          # `sessionPackages` requires `providedSessions`.
           passthru.providedSessions = [ "domicile" ];
           meta = {
             description = "Run a Domicile desktop from a shell you built yourself";
@@ -431,28 +439,13 @@
         # the desktop over `DOMICILE_SOCK`. Copied for the same reason.
         cp ${domicileBinaries}/bin/domicile-settings "$out/bin/domicile-settings"
         cp ${domicileBinaries}/bin/domicile-settings-host "$out/bin/domicile-settings-host"
-        # Registers `domicile-open-url` as the web link handler, so links open
-        # in a browser window of the current desktop. Hidden from launchers.
+        # The web link handler and the file making it the default.
         mkdir -p "$out/share/applications"
-        cat >"$out/share/applications/domicile-open-url.desktop" <<DESKTOP
-        [Desktop Entry]
-        Type=Application
-        Name=Domicile
-        Comment=Open a link in a browser window of this desktop
-        Exec=$out/bin/domicile-open-url %u
-        MimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;
-        NoDisplay=true
-        DESKTOP
-        # Makes that handler the default. GIO and `xdg-open` read this file
-        # only when `XDG_CURRENT_DESKTOP` is `domicile`, and `domicile` puts
-        # this `share` first in every app's `XDG_DATA_DIRS`. A user's own
-        # `mimeapps.list` still takes precedence.
-        cat >"$out/share/applications/domicile-mimeapps.list" <<MIMEAPPS
-        [Default Applications]
-        text/html=domicile-open-url.desktop
-        x-scheme-handler/http=domicile-open-url.desktop
-        x-scheme-handler/https=domicile-open-url.desktop
-        MIMEAPPS
+        substitute ${./nix/domicile-open-url.desktop} \
+          "$out/share/applications/domicile-open-url.desktop" \
+          --subst-var-by bin "$out/bin"
+        cp ${./nix/domicile-mimeapps.list} \
+          "$out/share/applications/domicile-mimeapps.list"
         ln -s ${domicileEngine} "$out/libexec/domicile/engine"
         cp ${domicileBuilder} "$out/libexec/domicile/builder"
         mkdir -p "$out/libexec/domicile/shells"
@@ -464,29 +457,18 @@
         ln -s ${appExtension "history"} "$out/libexec/domicile/apps/history"
         ln -s ${appExtension "settings"} "$out/libexec/domicile/apps/settings"
         # What the launcher offers of Domicile's own.
-        ${launcherEntry {
+        ${launcherFile {
           id = "history";
-          name = "History";
-          comment = "Browse, search and clear the pages browser windows visited";
-          exec = "$out/bin/domicile-history";
           icon = ./packages/app-history/icons/history.svg;
           preview = ./packages/app-history/icons/history-preview.svg;
         }}
-        ${launcherEntry {
+        ${launcherFile {
           id = "settings";
-          name = "Settings";
-          comment = "Change the desktop's settings, shell, extensions and site permissions";
-          exec = "$out/bin/domicile-settings";
           icon = ./packages/app-settings/icons/settings.svg;
           preview = ./packages/app-settings/icons/settings-preview.svg;
         }}
-        # The shell's picker, as Print in manganese: a monitor, a window or an
-        # area.
-        ${launcherEntry {
+        ${launcherFile {
           id = "screenshot";
-          name = "Screenshot";
-          comment = "Save a picture of a monitor, a window or an area";
-          exec = "$out/bin/domicile screenshot";
           icon = ./nix/launcher/screenshot.svg;
           preview = ./nix/launcher/screenshot-preview.svg;
         }}
@@ -536,14 +518,9 @@
         cp ${./nix/domicile-session-shutdown.target} \
           "$out/lib/systemd/user/domicile-session-shutdown.target"
         mkdir -p "$out/share/wayland-sessions"
-        cat >"$out/share/wayland-sessions/domicile.desktop" <<DESKTOP
-        [Desktop Entry]
-        Type=Application
-        Name=Domicile
-        Comment=The desktop your config names
-        Exec=$out/bin/domicile
-        DesktopNames=domicile
-        DESKTOP
+        substitute ${./nix/domicile-session.desktop} \
+          "$out/share/wayland-sessions/domicile.desktop" \
+          --subst-var-by bin "$out/bin"
       '';
 
       # A desktop: `domicile` wrapped with a prebuilt shell module. The wrapper

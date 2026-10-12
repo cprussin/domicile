@@ -1,0 +1,12 @@
+# The login session. `domicile` with no shell argument runs the shell its
+# config names. The display manager sets `XDG_CURRENT_DESKTOP` from
+# `DesktopNames`. No `OZONE`: the session runs on a VT, and `XDG_VTNR` already
+# selects the drm platform.
+#
+# The flake and `distro/stage.sh` fill in the directory holding `domicile`.
+[Desktop Entry]
+Type=Application
+Name=Domicile
+Comment=The desktop your config names
+Exec=@bin@/domicile
+DesktopNames=domicile
