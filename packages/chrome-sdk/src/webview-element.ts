@@ -153,6 +153,16 @@ export const WEBVIEW_FAVICON_CHANGE_EVENT = "domicile-favicon-change";
 export const WEBVIEW_TARGET_URL_CHANGE_EVENT = "domicile-target-url-change";
 
 /**
+ * Fired on Ctrl+wheel over a page that did not handle the wheel.
+ *
+ * The engine does not zoom; the shell picks the step and calls `setZoom`, so
+ * the wheel and keyboard shortcuts share one path. Two plain `Event`s instead
+ * of one with a direction. Both bubble.
+ */
+export const WEBVIEW_ZOOM_IN_REQUEST_EVENT = "domicile-zoom-in-request";
+export const WEBVIEW_ZOOM_OUT_REQUEST_EVENT = "domicile-zoom-out-request";
+
+/**
  * Fired when {@link HTMLWebViewElement.findMatches} or
  * {@link HTMLWebViewElement.findActiveMatch} changes. Carries no payload.
  * Bubbles.
