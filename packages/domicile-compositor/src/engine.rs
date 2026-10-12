@@ -12,6 +12,7 @@ use std::ffi::{c_char, c_int, c_void, CString, NulError};
 use std::os::fd::{BorrowedFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::buffer_transform::Sampled;
 use crate::dmabuf_descriptor::DmabufDescriptor;
@@ -278,7 +279,33 @@ pub enum Event {
 
     /// The browser ended a display capture. No frame of it follows.
     CaptureEnded { capture: CaptureId },
+
+    /// `wl_surface.frame`'s `done`: viz took `frame` and takes the next.
+    /// Frames are numbered from 1 per submit, as
+    /// `crate::engine_surfaces::Surfaces::submitted` counts them.
+    FrameDone { surface: SurfaceId, frame: u64 },
+
+    /// `wp_presentation_feedback` for `frame`. `None` if it was never shown.
+    Presented {
+        surface: SurfaceId,
+        frame: u64,
+        shown: Option<Shown>,
+    },
 }
+
+/// When and how a frame reached the screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Shown {
+    /// On `CLOCK_MONOTONIC`.
+    pub time: Duration,
+    /// The display's frame interval, if known.
+    pub refresh: Option<Duration>,
+    /// `wp_presentation_feedback.kind` bits.
+    pub kind: u32,
+}
+
+/// `DOMICILE_PRESENTED_DISCARDED`.
+const PRESENTED_DISCARDED: u32 = 0x8000_0000;
 
 /// Which clipboard a copy is on. Crosses the ABI as [`Clipboard::as_raw`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -323,6 +350,8 @@ struct Callbacks {
     capture_ended: Option<extern "C" fn(*mut c_void, CaptureId)>,
     configure_box: Option<extern "C" fn(*mut c_void, SurfaceId, u32, u32, f64, u64)>,
     copied_items: Option<extern "C" fn(*mut c_void, u32, *const RawClipboardItem, u32)>,
+    frame_done: Option<extern "C" fn(*mut c_void, SurfaceId, u64)>,
+    presented: Option<extern "C" fn(*mut c_void, SurfaceId, u64, i64, i64, u32)>,
 }
 
 /// `DomicileClipboardItem`, laid out as in the C header: one type a copy can be
@@ -611,6 +640,16 @@ impl Engine {
         // on this thread, and push into `events`.
         unsafe { f(self.handle) };
         self.events.borrow_mut().drain(..).collect()
+    }
+
+    /// Whether the engine calls `frame_done` and `presented`. An older one
+    /// ignores them, so the compositor answers frame callbacks at commit.
+    pub fn reports_frames(&self) -> bool {
+        self.symbol::<unsafe extern "C" fn() -> c_int>(
+            b"domicile_engine_reports_frames\0",
+            "domicile_engine_reports_frames",
+        )
+        .is_ok()
     }
 
     /// Asks the browser to broker a frame sink for a new window.
@@ -1127,6 +1166,8 @@ fn join(
         capture_ended: Some(on_capture_ended),
         configure_box: Some(on_configure_box),
         copied_items: Some(on_copied_items),
+        frame_done: Some(on_frame_done),
+        presented: Some(on_presented),
     };
     let socket_c = CString::new(socket.as_os_str().as_encoded_bytes())?;
     let connect: Symbol<unsafe extern "C" fn(*const c_char, Callbacks) -> *mut Handle> = symbol(
@@ -1368,6 +1409,41 @@ extern "C" fn on_capture_ended(user_data: *mut c_void, capture: CaptureId) {
     push(user_data, Event::CaptureEnded { capture });
 }
 
+extern "C" fn on_frame_done(user_data: *mut c_void, surface: SurfaceId, frame: u64) {
+    push(user_data, Event::FrameDone { surface, frame });
+}
+
+extern "C" fn on_presented(
+    user_data: *mut c_void,
+    surface: SurfaceId,
+    frame: u64,
+    time_ns: i64,
+    refresh_ns: i64,
+    flags: u32,
+) {
+    push(
+        user_data,
+        Event::Presented {
+            surface,
+            frame,
+            shown: shown_from(time_ns, refresh_ns, flags),
+        },
+    );
+}
+
+/// A `presented` callback's arguments. Panics on a negative time, which
+/// `CLOCK_MONOTONIC` never gives.
+fn shown_from(time_ns: i64, refresh_ns: i64, flags: u32) -> Option<Shown> {
+    let nanos = |ns: i64| {
+        Duration::from_nanos(u64::try_from(ns).expect("the engine reports no time before boot"))
+    };
+    (flags & PRESENTED_DISCARDED == 0).then(|| Shown {
+        time: nanos(time_ns),
+        refresh: (refresh_ns != 0).then(|| nanos(refresh_ns)),
+        kind: flags,
+    })
+}
+
 /// Converts the ABI's display records.
 fn displays_from(records: &[RawDisplay]) -> Vec<Display> {
     records
@@ -1476,12 +1552,37 @@ mod tests {
     }
 
     #[test]
-    fn the_callbacks_are_the_user_data_and_nine_pointers_the_c_header_declares() {
-        // `released` follows `configure`, and `copied_items` is last, as in
-        // the header.
-        assert_eq!(std::mem::size_of::<Callbacks>(), 10 * 8);
+    fn the_callbacks_are_the_user_data_and_eleven_pointers_the_c_header_declares() {
+        // `released` follows `configure`, and `presented` is last, as in the
+        // header.
+        assert_eq!(std::mem::size_of::<Callbacks>(), 12 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, released), 2 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, copied_items), 9 * 8);
+        assert_eq!(std::mem::offset_of!(Callbacks, frame_done), 10 * 8);
+        assert_eq!(std::mem::offset_of!(Callbacks, presented), 11 * 8);
+    }
+
+    #[test]
+    fn a_presented_frame_keeps_its_time_refresh_and_kind() {
+        // DOMICILE_PRESENTED_VSYNC | DOMICILE_PRESENTED_HW_COMPLETION.
+        assert_eq!(
+            shown_from(1_500_000_000, 16_666_667, 0x1 | 0x4),
+            Some(Shown {
+                time: Duration::from_nanos(1_500_000_000),
+                refresh: Some(Duration::from_nanos(16_666_667)),
+                kind: 0x1 | 0x4,
+            })
+        );
+        assert_eq!(
+            shown_from(5, 0, 0).map(|shown| shown.refresh),
+            Some(None),
+            "zero is an unknown refresh"
+        );
+    }
+
+    #[test]
+    fn a_discarded_frame_was_not_shown() {
+        assert_eq!(shown_from(0, 0, 0x8000_0000), None);
     }
 
     /// A pipe's read end, standing in for a buffer's fd.
