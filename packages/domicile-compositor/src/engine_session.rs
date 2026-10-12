@@ -80,8 +80,11 @@ struct Frame {
 
 /// What became of a frame handed to [`EngineSession::put_up`].
 enum PutUp {
-    /// As [`Submission::Taken`].
-    Taken { replaced: Option<Submitted> },
+    /// As [`Submission::Taken`], as the engine's `frame`.
+    Taken {
+        replaced: Option<Submitted>,
+        frame: u64,
+    },
     /// Its buffer is being imported, and it goes up when that finishes.
     Importing { replaced: Option<Submitted> },
     /// The engine refused its buffer. The frame is handed back.
@@ -95,8 +98,9 @@ pub struct Dispatched {
     pub events: Vec<Event>,
     /// The buffers to give back.
     pub releases: Vec<Release>,
-    /// Apps whose frame went up once its buffer was imported.
-    pub shown: Vec<String>,
+    /// Apps whose frame went up once its buffer was imported, and the number
+    /// the engine reports it by.
+    pub shown: Vec<(String, u64)>,
 }
 
 #[derive(Debug)]
@@ -333,7 +337,7 @@ impl EngineSession {
             };
         }
         match self.put_up(app_id, surface, frame, damage, now) {
-            PutUp::Taken { replaced } => Submission::Taken { replaced },
+            PutUp::Taken { replaced, .. } => Submission::Taken { replaced },
             PutUp::Importing { replaced } => Submission::Waiting { replaced },
             PutUp::Refused(_) => Submission::Refused,
         }
@@ -341,16 +345,16 @@ impl EngineSession {
 
     /// Submits the frame waiting for `surface` after a page embeds it.
     ///
-    /// Returns `Ok(false)` if nothing was waiting or the frame now waits for
-    /// its import, and `Err` with the buffer to release if the engine refused
-    /// it.
+    /// Returns the number the engine reports it by, `Ok(None)` if nothing was
+    /// waiting or the frame now waits for its import, and `Err` with the
+    /// buffer to release if the engine refused it.
     pub fn show_what_was_waiting(
         &mut self,
         surface: SurfaceId,
         now: Instant,
-    ) -> Result<bool, Release> {
+    ) -> Result<Option<u64>, Release> {
         let Some(frame) = self.waiting.take(surface) else {
-            return Ok(false);
+            return Ok(None);
         };
         let refused = |buffer| Release {
             buffer,
@@ -363,9 +367,15 @@ impl EngineSession {
         // A frame waits for an import only on an embedded surface, and this
         // one was not embedded until now, so none is replaced.
         match self.put_up(&app_id, surface, frame, (0, 0, 0, 0), now) {
-            PutUp::Taken { replaced: None } => Ok(true),
-            PutUp::Importing { replaced: None } => Ok(false),
-            PutUp::Taken { replaced: Some(_) } | PutUp::Importing { replaced: Some(_) } => {
+            PutUp::Taken {
+                replaced: None,
+                frame,
+            } => Ok(Some(frame)),
+            PutUp::Importing { replaced: None } => Ok(None),
+            PutUp::Taken {
+                replaced: Some(_), ..
+            }
+            | PutUp::Importing { replaced: Some(_) } => {
                 unreachable!("a surface embedded just now had a frame waiting for an import")
             }
             PutUp::Refused(frame) => Err(refused(frame.buffer)),
@@ -415,12 +425,10 @@ impl EngineSession {
                 id,
                 frame,
                 replaced,
-            } => {
-                self.show(app_id, surface, id, frame, damage, now);
-                PutUp::Taken {
-                    replaced: replaced.map(|frame| frame.buffer),
-                }
-            }
+            } => PutUp::Taken {
+                frame: self.show(app_id, surface, id, frame, damage, now),
+                replaced: replaced.map(|frame| frame.buffer),
+            },
             Route::Wait { replaced, start } => {
                 if let Some(request) = start {
                     let dmabuf = dmabuf
@@ -436,7 +444,8 @@ impl EngineSession {
         }
     }
 
-    /// Submits and holds a frame whose buffer is imported as `id`.
+    /// Submits and holds a frame whose buffer is imported as `id`. Returns the
+    /// number the engine reports it by.
     fn show(
         &mut self,
         app_id: &str,
@@ -445,7 +454,7 @@ impl EngineSession {
         frame: Frame,
         damage: (i32, i32, i32, i32),
         now: Instant,
-    ) {
+    ) -> u64 {
         self.engine.submit(
             surface,
             id,
@@ -454,11 +463,11 @@ impl EngineSession {
             frame.at_box,
             frame.fence.as_ref().map(OwnedFd::as_fd),
         );
-        self.surfaces.submitted(surface);
         self.sampled.insert(app_id.to_owned(), frame.sampled);
         // A replaced hold is the same buffer, since `imports` is keyed on the
         // object. Drop it without releasing: viz holds it again.
         drop(self.held.hold(surface, id, frame.buffer, now));
+        self.surfaces.submitted(surface)
     }
 
     /// Runs the engine's pending work, and puts up the frames whose imports
@@ -519,8 +528,8 @@ impl EngineSession {
                         .app_for(surface)
                         .expect("`window_gone` takes the frames of the surfaces it forgets")
                         .to_owned();
-                    self.show(&app_id, surface, id, frame, (0, 0, 0, 0), now);
-                    dispatched.shown.push(app_id);
+                    let frame = self.show(&app_id, surface, id, frame, (0, 0, 0, 0), now);
+                    dispatched.shown.push((app_id, frame));
                 }
                 Then::Refused { surface, frame } => {
                     say_it_was_refused(&frame.descriptor);
