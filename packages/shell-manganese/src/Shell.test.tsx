@@ -2725,6 +2725,33 @@ describe("Shell", () => {
   });
 
   describe("floating windows", () => {
+    it("opens a dialog at the size it drew, with a title bar", () => {
+      const { container } = renderShell();
+      domicile.appear("pin", { dialog: true, height: 300, width: 400 });
+
+      expect(boxOf(appElement(container, "pin"))).toMatchObject({
+        height: "300px",
+        width: "400px",
+      });
+      expect(barFor(container, "app:pin")).toBeDefined();
+    });
+
+    it("opens a dialog that draws its own frame with no title bar", () => {
+      const { container } = renderShell();
+      domicile.appear("huddle", {
+        clientFrame: true,
+        dialog: true,
+        height: 300,
+        width: 400,
+      });
+
+      expect(boxOf(appElement(container, "huddle"))).toMatchObject({
+        height: "300px",
+        width: "400px",
+      });
+      expect(() => barFor(container, "app:huddle")).toThrow("no title bar");
+    });
+
     it("takes a window out of the tiling and puts it back", () => {
       const { container } = renderShell();
       clientAppears("term");

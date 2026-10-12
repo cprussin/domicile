@@ -39,22 +39,25 @@ const welcomeSchema = z.looseObject({
 
 // Can repeat for a known window: the host replays all windows to every chrome
 // whenever any chrome connects. Key windows by app id.
+// Sent when the window first draws, with what the client said before.
 const appAppearedSchema = z.looseObject({
   app_id: z.string(),
-  // Usually absent: the client has not set it yet. It arrives in a later
-  // `app_desktop_id`.
+  // The client asked to draw its own frame.
+  client_frame: z.boolean(),
+  // Absent when the client set none. A later one arrives in `app_desktop_id`.
   desktop_id: z
     .string()
     .nullish()
     .transform((desktopId) => desktopId ?? undefined),
-  // Usually absent: the client has not drawn yet. The size arrives in a later
-  // `app_resized`.
-  size: sizeSchema.nullish().transform((size) => size ?? undefined),
+  // The client has a parent window or a fixed size.
+  dialog: z.boolean(),
+  // The size of the first frame.
+  size: sizeSchema,
   title: titleSchema,
   type: z.literal("app_appeared"),
 });
 
-// Sent on each `set_title`. Clients usually set a title after `app_appeared`.
+// Sent on each `set_title` after `app_appeared`.
 const appTitledSchema = z.looseObject({
   app_id: z.string(),
   title: titleSchema,

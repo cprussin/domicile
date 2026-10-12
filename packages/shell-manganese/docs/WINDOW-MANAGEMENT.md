@@ -143,6 +143,37 @@ For how warping, browser-window focus and modifier drags work, see
   tabs that swap slide under the open one. Floats are two apart to leave room.
 - Raising a float over one it overlaps animates the two swapping places.
 
+### Opening floating
+
+A client window opens floating, as sway opens a dialog, when:
+
+- its client gave it a parent (`xdg_toplevel.set_parent`), or
+- its client fixed its size: a minimum on both axes, and a maximum equal to
+  it on either, or
+- a `floating` rule matches it. A rule's `app` and `title` are regular
+  expressions on the window's Wayland app id and its title when it first
+  draws. A rule matches when every pattern it gives does:
+
+  ```ts
+  export const Shell = runManganese({
+    floating: [{ app: "pinentry" }, { app: "^Slack$", title: "^Huddle" }],
+  });
+  ```
+
+Such a window:
+
+- opens in the middle of the screen with the keyboard, its contents the size
+  the client drew (`floatCenteredFor`). It is not put in a tabbed container,
+  so new windows still tile.
+- has no title bar if its client asked to draw its own frame
+  (`DomicileWindow.clientFrame`), such as a frameless Electron window. Its
+  client draws over the whole box (`isBare`). Meta+drag still moves it and its
+  edges still resize it. Floating it again after tiling it brings the bar
+  back.
+
+The decision is made once, when the window first draws: the compositor
+announces a window only then, so its title, app id and limits are known.
+
 ## Dragging windows and tabs
 
 - **Meta+drag**, or dragging its title bar, picks up a tiled window. An

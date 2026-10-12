@@ -8,6 +8,7 @@ import type { Float, Grip } from "./float";
 import { useFloatBorderDrag } from "./useFloatBorderDrag";
 
 const AT: Float = {
+  bare: false,
   depth: 0,
   height: 400,
   root: LayoutNode.Window("w1"),

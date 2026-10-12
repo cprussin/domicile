@@ -13,6 +13,7 @@ const MAIL = ShellWindow.App("mail", "mail");
 
 const placementOf = (id: string): Placement => ({
   bar: { height: 30, width: 1200, x: 0, y: 32 },
+  bare: false,
   behind: undefined,
   depth: 0,
   frame: { height: 800, width: 1200, x: 0, y: 32 },
@@ -69,6 +70,7 @@ describe("departed", () => {
     const before = shown([TERMINAL, EDITOR]);
     const hidden = {
       ...placementOf(TERMINAL.id),
+      bare: false,
       behind: placementOf(TERMINAL.id).surface,
       surface: undefined,
     };

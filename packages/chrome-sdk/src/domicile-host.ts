@@ -788,6 +788,13 @@ export type DomicileWindow = {
   readonly minHeight: number | null;
   readonly maxWidth: number | null;
   readonly maxHeight: number | null;
+  /**
+   * The client gave the window a parent or a fixed size, so shells float it
+   * at its first frame's size.
+   */
+  readonly dialog: boolean;
+  /** The client asked to draw its own frame (client-side decorations). */
+  readonly clientFrame: boolean;
   readonly cursor: DomicileCursorShape;
   /**
    * A popup's parent window and its place relative to it, and whether it

@@ -11,6 +11,7 @@ const CONTENTS: Rect = { height: 770, width: 1200, x: 0, y: 30 };
 
 const shownIn = (id: string): Placement => ({
   bar: BAR,
+  bare: false,
   behind: undefined,
   depth: 0,
   frame: { ...CONTENTS, height: 800, y: 0 },
@@ -24,6 +25,7 @@ const shownIn = (id: string): Placement => ({
 
 const hiddenIn = (id: string): Placement => ({
   bar: BAR,
+  bare: false,
   behind: CONTENTS,
   depth: 0,
   frame: BAR,

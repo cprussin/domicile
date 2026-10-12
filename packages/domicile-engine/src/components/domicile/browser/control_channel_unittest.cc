@@ -15,6 +15,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -47,12 +48,18 @@ class FakeClient : public mojom::ControlChannelClient {
 
   void AppTitled(const std::string&, const std::string&) override {}
   void AppDesktopId(const std::string&, const std::string&) override {}
-  void AppAppeared(const std::string&,
-                   const std::string&,
-                   const std::string&,
-                   bool,
-                   double,
-                   double) override {}
+  void AppAppeared(const std::string& app_id,
+                   const std::string& title,
+                   const std::string& desktop_id,
+                   double width,
+                   double height,
+                   bool dialog,
+                   bool client_frame) override {
+    heard_.push_back(base::StringPrintf(
+        "appeared %s %s %s %gx%g%s%s", app_id.c_str(), title.c_str(),
+        desktop_id.c_str(), width, height, dialog ? " dialog" : "",
+        client_frame ? " client_frame" : ""));
+  }
   void AppResized(const std::string&, double, double) override {}
   void AppMinSize(const std::string&, double, double) override {}
   void AppMaxSize(const std::string&, double, double) override {}
@@ -163,6 +170,23 @@ TEST_F(ControlChannelTest, ALineBeforeThePageBindsReachesItAfterInOrder) {
 
   EXPECT_EQ(client_.heard_,
             (std::vector<std::string>{"idle true", "locked false"}));
+}
+
+// A window is announced with its first frame's size and the client's hints,
+// which the shell places it by.
+TEST_F(ControlChannelTest, AWindowReachesThePageWithItsSizeAndHints) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  Say("{\"type\":\"app_appeared\",\"app_id\":\"app-1\",\"title\":"
+      "\"pinentry\",\"desktop_id\":null,\"size\":[400.0,300.0],"
+      "\"dialog\":true,\"client_frame\":true}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_,
+            (std::vector<std::string>{
+                "appeared app-1 pinentry  400x300 dialog client_frame",
+                "locked false"}));
 }
 
 }  // namespace

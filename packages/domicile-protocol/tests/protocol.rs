@@ -362,16 +362,18 @@ fn a_desktop_of_no_displays_is_a_message_rather_than_a_silence() {
 #[test]
 fn wire_shape_is_pinned() {
     // The JS client depends on these exact strings.
-    // An unknown size is `null`, not an absent key, matching how the chrome's
-    // schema reads `title`.
     let v = serde_json::to_value(HostMessage::AppAppeared {
         app_id: "term".into(),
         title: None,
         desktop_id: None,
-        size: None,
+        size: [640.0, 480.0],
+        dialog: true,
+        client_frame: true,
     })
     .unwrap();
-    assert!(v["size"].is_null());
+    assert_eq!(v["size"], serde_json::json!([640.0, 480.0]));
+    assert_eq!(v["dialog"], true);
+    assert_eq!(v["client_frame"], true);
 
     let v = serde_json::to_value(HostMessage::AppCursor {
         app_id: "term".into(),

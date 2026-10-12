@@ -227,7 +227,7 @@ use zbus::zvariant::OwnedObjectPath;
 ///
 /// Renaming one means updating the tests named on it. Not a complete list:
 /// `scripts/e2e-dmabuf.sh` and `tests/` also match unnamed messages such as
-/// `toplevel mapped`.
+/// `toplevel drew`.
 mod grepped {
     /// A chrome message that failed to parse.
     pub const UNPARSEABLE: &str = "unparseable chrome message";
@@ -527,6 +527,9 @@ struct DomicileCompositor {
     /// The size limits each window's chromes were last told, so a commit
     /// that keeps them does not lock the host.
     size_limits: HashMap<String, SizeLimits>,
+    /// Windows that have not drawn yet, which the chromes have not heard of.
+    /// See `announce_a_new_window`.
+    unannounced: HashSet<String>,
     /// Every announced surface's app id and role, kept in step with
     /// `toplevels`, `popups` and `bubbles`, so a commit finds its window
     /// without searching them.
@@ -946,6 +949,40 @@ impl DomicileCompositor {
                 ),
                 None => debug!("the chrome's frame could not be made into a texture"),
             }
+        }
+    }
+
+    /// Announce a window to the chromes at its first frame, with what its
+    /// client said before drawing it.
+    ///
+    /// `drawn` is the frame's logical size; the window geometry, when set,
+    /// leaves out a client-drawn shadow.
+    fn announce_a_new_window(
+        &mut self,
+        app_id: &str,
+        toplevel: &ToplevelSurface,
+        geometry: Option<(i32, i32, i32, i32)>,
+        drawn: Option<(u32, u32)>,
+    ) {
+        let size = match (geometry, drawn) {
+            (Some((_, _, width, height)), _) => (f64::from(width), f64::from(height)),
+            (None, Some((width, height))) => (f64::from(width), f64::from(height)),
+            // A buffer of no known kind is not shown, so the window waits for
+            // one that is.
+            (None, None) => return,
+        };
+        self.unannounced.remove(app_id);
+        let mapped = domicile_host::Mapped {
+            size,
+            has_parent: toplevel.parent().is_some(),
+            client_frame: asks_to_draw_its_frame(toplevel.wl_surface()),
+        };
+        // Collected so the host is unlocked before broadcasting. See
+        // `title_changed`.
+        let announce = self.hub.host.lock().unwrap().app_mapped(app_id, mapped);
+        debug!(%app_id, ?mapped, "toplevel drew -> app_appeared");
+        for message in announce {
+            self.hub.broadcast(message);
         }
     }
 
@@ -1611,6 +1648,7 @@ impl DomicileCompositor {
         self.configure_answers.remove(app_id);
         self.shown.missed(app_id);
         self.size_limits.remove(app_id);
+        self.unannounced.remove(app_id);
         self.app_bounds.remove(app_id);
         self.held_frames.forget(app_id);
         let unreported = self.frame_callbacks.forget(app_id);
@@ -4343,6 +4381,20 @@ impl CompositorHandler for DomicileCompositor {
             });
         // Whether the client took its buffer away, unmapping the window.
         let (attached, unmapped) = attached;
+        if let (Some(buffer), Committer::App(app_id), Role::Toplevel(toplevel)) =
+            (&attached, &committer, &role)
+        {
+            if self.unannounced.contains(app_id) {
+                let drawn = committed_buffer(buffer).map(|committed| {
+                    surface_size(
+                        upright_size(committed.size(), buffer_transform),
+                        buffer_scale,
+                        viewport.destination,
+                    )
+                });
+                self.announce_a_new_window(app_id, toplevel, geometry, drawn);
+            }
+        }
         let feedback = with_states(surface, |states| {
             std::mem::take(
                 &mut states
@@ -4954,16 +5006,13 @@ impl XdgShellHandler for DomicileCompositor {
             return;
         }
 
-        // Register a new window with `Host` (which assigns an app id) and
-        // announce it to every chrome.
-        //
-        // No size yet: a client states its size by drawing, which arrives as
-        // `app_resized` after its first commit. No title yet: `set_title` comes
-        // after the toplevel, in `title_changed`.
-        let announce = {
+        // Register a new window with `Host`, which assigns an app id. The
+        // chromes hear of it when it first draws, in `announce_a_new_window`,
+        // by when its client has said what it is.
+        {
             let mut host = self.hub.host.lock().unwrap();
-            let (app_id, announce) = host.app_appeared(None, None);
-            debug!(%app_id, "toplevel mapped -> Host::app_appeared");
+            let app_id = host.app_created();
+            debug!(%app_id, "toplevel created -> Host::app_created");
             // Enter every output for now; the chrome has not placed the window.
             // Some toolkits (GLFW, kitty) wait for this before drawing.
             // `enter_the_displays_each_window_is_on` updates it on placement.
@@ -4974,11 +5023,10 @@ impl XdgShellHandler for DomicileCompositor {
                 surface.wl_surface().clone(),
                 (app_id.clone(), Role::Toplevel(surface.clone())),
             );
+            self.unannounced.insert(app_id.clone());
             self.toplevels.push((app_id, surface));
-            announce
-        };
+        }
         self.the_running_apps_changed();
-        self.hub.broadcast(announce);
         // An inhibitor taken before the window mapped starts holding now (see
         // `crate::idle::holds`), which may wake a dark desktop.
         self.the_windows_changed("a window appeared under an inhibitor");
@@ -5215,11 +5263,13 @@ impl XdgDecorationHandler for DomicileCompositor {
         shell_draws_the_frame(&toplevel);
     }
 
-    fn request_mode(&mut self, toplevel: ToplevelSurface, _: XdgDecorationMode) {
+    fn request_mode(&mut self, toplevel: ToplevelSurface, mode: XdgDecorationMode) {
+        ask_to_draw_its_frame(toplevel.wl_surface(), mode == XdgDecorationMode::ClientSide);
         shell_draws_the_frame(&toplevel);
     }
 
     fn unset_mode(&mut self, toplevel: ToplevelSurface) {
+        ask_to_draw_its_frame(toplevel.wl_surface(), false);
         shell_draws_the_frame(&toplevel);
     }
 }
@@ -5245,14 +5295,45 @@ impl KdeDecorationHandler for DomicileCompositor {
 
     fn request_mode(
         &mut self,
-        _: &WlSurface,
+        surface: &WlSurface,
         decoration: &OrgKdeKwinServerDecoration,
-        _: WEnum<KdeMode>,
+        mode: WEnum<KdeMode>,
     ) {
+        ask_to_draw_its_frame(surface, mode == WEnum::Value(KdeMode::Client));
         decoration.mode(KdeMode::Server);
     }
 }
 delegate_kde_decoration!(DomicileCompositor);
+
+/// Whether a window's client asked to draw its own frame, kept on its surface.
+/// Reported in [`HostMessage::AppAppeared`]; the answer is always "server
+/// side".
+struct AsksToDrawItsFrame(AtomicBool);
+
+/// Record whether `surface`'s client last asked to draw its own frame.
+fn ask_to_draw_its_frame(surface: &WlSurface, asks: bool) {
+    with_states(surface, |states| {
+        states
+            .data_map
+            .insert_if_missing_threadsafe(|| AsksToDrawItsFrame(AtomicBool::new(false)));
+        states
+            .data_map
+            .get::<AsksToDrawItsFrame>()
+            .expect("inserted above")
+            .0
+            .store(asks, Ordering::Relaxed);
+    });
+}
+
+/// Whether `surface`'s client last asked to draw its own frame.
+fn asks_to_draw_its_frame(surface: &WlSurface) -> bool {
+    with_states(surface, |states| {
+        states
+            .data_map
+            .get::<AsksToDrawItsFrame>()
+            .is_some_and(|asks| asks.0.load(Ordering::Relaxed))
+    })
+}
 
 // ---- data device: drag-and-drop, and the clipboard ------------------------
 
@@ -6364,6 +6445,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         configure_answers: HashMap::new(),
         shown: engine_damage::Shown::default(),
         size_limits: HashMap::new(),
+        unannounced: HashSet::new(),
         by_surface: HashMap::new(),
         first_frame_logged: OncePerWindow::default(),
         last_probe: None,

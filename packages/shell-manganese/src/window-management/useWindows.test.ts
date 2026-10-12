@@ -4,6 +4,8 @@ import type { DomicileBrowserWindow } from "@domicile-desktop/sdk/domicile-host"
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { act, renderHook } from "@testing-library/react";
 
+import type { FloatingOptions } from "./floating/floating-rules";
+import { floatingRulesSchema } from "./floating/floating-rules";
 import { useWindows } from "./useWindows";
 import { appWindowId, browserWindowId } from "./window";
 import { currentHere, WindowAction, workspaceOn } from "./window-state";
@@ -69,9 +71,13 @@ const client = () => {
   };
 };
 
-const desktop = (displays: readonly Display[] | undefined) => {
+const desktop = (
+  displays: readonly Display[] | undefined,
+  floating: FloatingOptions = [],
+) => {
   const host = client();
-  const view = renderHook(() => useWindows(host.domicile, displays));
+  const rules = floatingRulesSchema.parse(floating);
+  const view = renderHook(() => useWindows(host.domicile, displays, rules));
   return { ...view, host };
 };
 
@@ -98,6 +104,22 @@ describe("the desktop", () => {
     expect(result.current.windows.map(({ id }) => id)).toEqual([
       appWindowId("foot"),
     ]);
+  });
+
+  it("floats a window a floating rule names", () => {
+    const { host, result } = desktop([LEFT], [{ app: "pinentry" }]);
+
+    act(() => {
+      host.fake.appear("pin", {
+        desktopId: "pinentry-qt",
+        height: 300,
+        width: 400,
+      });
+    });
+
+    expect(
+      workspaceOn(result.current, "left").floats.map(({ width }) => width),
+    ).toEqual([400]);
   });
 
   it("follows the keyboard where the host says it is", () => {
@@ -303,7 +325,12 @@ describe("a command", () => {
     const openFile = (_system: unknown, path: string) =>
       Promise.resolve(["pager", `/home/me/${path}`]);
     const { result } = renderHook(() =>
-      useWindows(host.domicile, displays, openFile),
+      useWindows(
+        host.domicile,
+        displays,
+        floatingRulesSchema.parse([]),
+        openFile,
+      ),
     );
 
     await act(async () => {
