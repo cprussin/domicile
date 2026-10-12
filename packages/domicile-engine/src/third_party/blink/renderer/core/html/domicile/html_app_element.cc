@@ -188,6 +188,7 @@ void HTMLAppElement::Embed() {
     // WrapWeakPersistent: the element owns the embedder, which owns this
     // callback.
     external_surface_embedder_ = std::make_unique<ExternalSurfaceEmbedder>(
+        frame->GetBrowserInterfaceBroker(),
         BindRepeating(&HTMLAppElement::OnSurfaceLost,
                       WrapWeakPersistent(this)));
   }

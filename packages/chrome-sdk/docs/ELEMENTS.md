@@ -8,6 +8,10 @@ Event names and full types are in `src/app-element.ts` and
 
 `<app app-id="…">` embeds a Wayland client. The engine provides the element.
 
+- **Shell only:** `<app>` and `<webview>` exist only in the shell's document.
+  In any other page, such as a site in a `<webview>` or an `<iframe>`, they are
+  unknown elements.
+
 - **Size:** the element's layout box is the client's size. The engine sends it
   as the `xdg_toplevel.configure`. There is nothing to call.
 - **Resize sync:** a new box holds the page's frame until the client draws at

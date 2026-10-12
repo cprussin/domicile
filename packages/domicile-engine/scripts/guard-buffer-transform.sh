@@ -96,10 +96,10 @@ rm -f "$BROKER"; rm -rf "$PROFILE"; mkdir -p "$PROFILE"
   --no-sandbox --password-store=basic --no-first-run --disable-component-update \
   --user-data-dir="$PROFILE" \
   --window-size=1024,768 \
-  --enable-blink-features=DomicileExternalSurface \
+  --domicile-shell-root="$SCRIPTS" \
   --enable-logging=stderr --log-level=0 \
   --domicile-broker-socket="$BROKER" \
-  "file://$SCRIPTS/spike-page.html?app=$APP" >"$ENGINE_LOG" 2>&1 &
+  "domicile://shell/spike-page.html?app=$APP" >"$ENGINE_LOG" 2>&1 &
 STARTED+=($!)
 
 for _ in $(seq 1 120); do [ -S "$BROKER" ] && break; sleep 0.5; done

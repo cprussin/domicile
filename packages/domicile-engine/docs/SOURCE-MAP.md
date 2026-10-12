@@ -14,7 +14,8 @@ under `src/`. Design: [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md).
 | `components/domicile/browser/display_capture.{h,cc}` | one display capture: a viz `FrameSinkVideoCapturer` whose frames go to the producer |
 | `components/domicile/browser/display_capture_target.{h,cc}` | which browser window's root frame sink shows a display |
 | `components/domicile/browser/external_surface_provider.{h,cc}` | the renderer-facing wrapper over the broker; refuses a parent frame sink outside the calling renderer |
-| `content/browser/domicile/domicile_frame_sink_broker.{h,cc}` | the browser's single broker and the socket a producer connects to |
+| `components/domicile/browser/shell_origin.{h,cc}` | whether an origin is the shell's; only the shell's frames are bound to the provider |
+| `content/browser/domicile/domicile_frame_sink_broker.{h,cc}` | the browser's single broker, the socket a producer connects to, and the frame binder that refuses every frame but the shell |
 | `third_party/blink/renderer/platform/graphics/external_surface_embedder.{h,cc}` | the page side: allocates the `LocalSurfaceId`, gets the `FrameSinkId`, pairs them |
 
 - `browser_main_loop.cc` creates the broker at startup.
