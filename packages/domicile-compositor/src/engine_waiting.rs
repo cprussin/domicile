@@ -37,10 +37,9 @@ impl<F> Waiting<F> {
         self.frames.remove(&surface)
     }
 
-    /// Removes the frame `is` matches, for a destroyed buffer.
-    pub fn take_where(&mut self, is: impl Fn(&F) -> bool) -> Option<(SurfaceId, F)> {
-        let surface = *self.frames.iter().find(|(_, frame)| is(frame))?.0;
-        self.frames.remove(&surface).map(|frame| (surface, frame))
+    /// Removes the frames `is` matches, for a destroyed buffer.
+    pub fn take_where(&mut self, is: impl Fn(&F) -> bool) -> Vec<(SurfaceId, F)> {
+        self.frames.extract_if(|_, frame| is(frame)).collect()
     }
 
     /// Removes every frame, for a lost engine.
@@ -81,16 +80,20 @@ mod tests {
     }
 
     #[test]
-    fn a_destroyed_buffer_stops_waiting_and_a_dead_engine_takes_them_all() {
+    fn a_destroyed_buffer_stops_waiting_everywhere_and_a_dead_engine_takes_them_all() {
         let mut waiting = Waiting::default();
         waiting.wait(SURFACE, frame(1));
         waiting.wait(SURFACE + 1, frame(2));
+        waiting.wait(SURFACE + 2, frame(2));
 
+        let mut taken = waiting.take_where(|buffer| *buffer == 2);
+
+        taken.sort();
         assert_eq!(
-            waiting.take_where(|buffer| *buffer == 2),
-            Some((SURFACE + 1, frame(2)))
+            taken,
+            vec![(SURFACE + 1, frame(2)), (SURFACE + 2, frame(2))]
         );
-        assert_eq!(waiting.take_where(|buffer| *buffer == 2), None);
+        assert_eq!(waiting.take_where(|buffer| *buffer == 2), vec![]);
         assert_eq!(waiting.take_all(), vec![(SURFACE, frame(1))]);
         assert_eq!(waiting.take(SURFACE), None);
     }

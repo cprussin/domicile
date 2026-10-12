@@ -141,9 +141,9 @@ pub struct EngineSession {
     /// One surface per app, brokered on the app's first commit, and which of
     /// them a page has embedded.
     surfaces: Surfaces,
-    /// The engine id of each imported buffer, and the frames waiting for an
-    /// import. Clients commit the same buffer repeatedly, so importing per
-    /// commit would send new fds every frame.
+    /// The engine id of each buffer imported for each surface, and the frames
+    /// waiting for an import. Clients commit the same buffer repeatedly, so
+    /// importing per commit would send new fds every frame.
     imports: Imports<ImportKey, Frame>,
     held: HeldBuffers<Submitted>,
     /// Each app's last crop and transform, reused when a reconnect
@@ -396,7 +396,7 @@ impl EngineSession {
         now: Instant,
     ) -> PutUp {
         let key = frame.buffer.key();
-        let dmabuf = match self.imports.knows(&key) {
+        let dmabuf = match self.imports.knows(surface, &key) {
             true => None,
             false => match Dmabuf::from_descriptor(&frame.descriptor) {
                 Some(dmabuf) => Some(dmabuf),
@@ -412,7 +412,7 @@ impl EngineSession {
         if let Some(dmabuf) = &dmabuf {
             if !self.engine.imports_in_the_background() {
                 match self.engine.import(surface, dmabuf) {
-                    Some(id) => self.imports.imported(key.clone(), surface, id),
+                    Some(id) => self.imports.imported(surface, key.clone(), id),
                     None => {
                         say_it_was_refused(&frame.descriptor);
                         return PutUp::Refused(frame);
@@ -465,7 +465,8 @@ impl EngineSession {
         );
         self.sampled.insert(app_id.to_owned(), frame.sampled);
         // A replaced hold is the same buffer, since `imports` is keyed on the
-        // object. Drop it without releasing: viz holds it again.
+        // surface and the object. Drop it without releasing: viz holds it
+        // again.
         drop(self.held.hold(surface, id, frame.buffer, now));
         self.surfaces.submitted(surface)
     }
@@ -508,7 +509,7 @@ impl EngineSession {
         dispatched
     }
 
-    /// Puts up or hands back the frames that waited on `request`.
+    /// Puts up or hands back the frame that waited on `request`.
     fn import_finished(
         &mut self,
         request: Request,
@@ -520,7 +521,7 @@ impl EngineSession {
         if let Some((surface, id)) = finished.forget {
             self.engine.forget(surface, id);
         }
-        for then in finished.then {
+        if let Some(then) = finished.then {
             match then {
                 Then::Submit { surface, id, frame } => {
                     let app_id = self
@@ -578,39 +579,34 @@ impl EngineSession {
             .collect()
     }
 
-    /// Drops the import for a destroyed `wl_buffer` and returns its hold, if
-    /// any, since no release will arrive for it.
-    pub fn buffer_destroyed(&mut self, buffer: &wl_buffer::WlBuffer) -> Option<Release> {
-        // A frame waiting for an embed was never imported, so there is nothing
-        // else to drop.
+    /// Drops a destroyed `wl_buffer`'s imports on every surface and returns
+    /// its holds and waiting frames, since no release will arrive for them.
+    pub fn buffer_destroyed(&mut self, buffer: &wl_buffer::WlBuffer) -> Vec<Release> {
         let key = ImportKey::Client(buffer.id());
-        if let Some((surface, frame)) = self.waiting.take_where(|frame| frame.buffer.key() == key) {
-            return Some(Release {
-                buffer: frame.buffer,
-                surface,
-                why: Returned::Abandoned,
-            });
-        }
+        let embeds = self.waiting.take_where(|frame| frame.buffer.key() == key);
         let forgotten = self.imports.forget(&key);
-        let held = forgotten.id.and_then(|(surface, id)| {
-            self.engine.forget(surface, id);
-            self.held.release(surface, id).map(|buffer| Release {
+        let held: Vec<(SurfaceId, Submitted)> = forgotten
+            .ids
+            .into_iter()
+            .filter_map(|(surface, id)| {
+                self.engine.forget(surface, id);
+                self.held
+                    .release(surface, id)
+                    .map(|buffer| (surface, buffer))
+            })
+            .collect();
+        let waited = embeds
+            .into_iter()
+            .chain(forgotten.waited)
+            .map(|(surface, frame)| (surface, frame.buffer));
+        held.into_iter()
+            .chain(waited)
+            .map(|(surface, buffer)| Release {
                 buffer,
                 surface,
                 why: Returned::Abandoned,
             })
-        });
-        held.or_else(|| {
-            forgotten
-                .waited
-                .into_iter()
-                .next()
-                .map(|(surface, frame)| Release {
-                    buffer: frame.buffer,
-                    surface,
-                    why: Returned::Abandoned,
-                })
-        })
+            .collect()
     }
 
     /// Drops the import for a freed compositor buffer so the browser closes its
@@ -622,7 +618,7 @@ impl EngineSession {
             forgotten.waited.is_empty(),
             "a freed upload had a frame waiting for its import"
         );
-        if let Some((surface, id)) = forgotten.id {
+        for (surface, id) in forgotten.ids {
             self.engine.forget(surface, id);
         }
     }
