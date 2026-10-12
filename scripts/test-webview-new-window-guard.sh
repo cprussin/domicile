@@ -59,7 +59,8 @@ verdict() { # $1 NEGATIVE, then NAME=value overrides
     SAW_SECOND=1
     SAW_OPENED=1
     SAW_STAYED=0
-    SAW_REFUSED=1
+    SAW_MADE=1
+    SAW_POSTED=1
     NEGATIVE="$1"
     shift
     for override in "$@"; do
@@ -89,7 +90,8 @@ reason() { # $1 NEGATIVE, then NAME=value overrides
     SAW_SECOND=1
     SAW_OPENED=1
     SAW_STAYED=0
-    SAW_REFUSED=1
+    SAW_MADE=1
+    SAW_POSTED=1
     NEGATIVE="$1"
     shift
     for override in "$@"; do
@@ -113,12 +115,12 @@ blames() { # $1 word, then the args verdict takes
 # window and its page navigates.
 control() { # the overrides a case adds
   verdict 1 SAW_ASKED=0 SAW_ADDRESS=0 SAW_SECOND=0 SAW_OPENED=0 SAW_STAYED=1 \
-    SAW_REFUSED=0 "$@"
+    SAW_MADE=0 SAW_POSTED=0 "$@"
 }
 
 controlBlames() { # $1 word, then overrides
   blames "$1" 1 SAW_ASKED=0 SAW_ADDRESS=0 SAW_SECOND=0 SAW_OPENED=0 \
-    SAW_STAYED=1 SAW_REFUSED=0 "${@:2}"
+    SAW_STAYED=1 SAW_MADE=0 "${@:2}"
 }
 
 echo "a run that never got as far as measuring anything"
@@ -155,29 +157,29 @@ expect "everything arriving is the pass" "pass" "$(verdict 0)"
 # Looks like the defect but is not: the press hit the control's link.
 expect "a press on the ordinary link is a failure" "fail" \
   "$(verdict 0 SAW_ASKED=0 SAW_ADDRESS=0 SAW_SECOND=0 SAW_OPENED=0 \
-    SAW_STAYED=1 SAW_REFUSED=0)"
+    SAW_STAYED=1 SAW_MADE=0)"
 expect "a press on the ordinary link blames the geometry" "yes" \
   "$(blames "geometry" 0 SAW_ASKED=0 SAW_ADDRESS=0 SAW_SECOND=0 SAW_OPENED=0 \
-    SAW_STAYED=1 SAW_REFUSED=0)"
+    SAW_STAYED=1 SAW_MADE=0)"
 # The browser's log line says which process to look in. With it, the renderer
 # asked and the refusal never reached the page. Without it, nothing asked, so
 # no fix in the page's layer applies.
-expect "an ask the browser refused and never reported is a failure" "fail" \
+expect "a window the browser made and never reported is a failure" "fail" \
   "$(verdict 0 SAW_ASKED=0 SAW_ADDRESS=0 SAW_SECOND=0 SAW_OPENED=0)"
-expect "an ask the browser refused and never reported blames the report" \
+expect "a window the browser made and never reported blames the report" \
   "yes" "$(blames "THE PAGE WAS NOT TOLD" 0 SAW_ASKED=0 SAW_ADDRESS=0 \
     SAW_SECOND=0 SAW_OPENED=0)"
 expect "no ask at the browser at all blames the renderer's request" "yes" \
   "$(blames "NEVER ASKED" 0 SAW_ASKED=0 SAW_ADDRESS=0 SAW_SECOND=0 \
-    SAW_OPENED=0 SAW_REFUSED=0)"
+    SAW_OPENED=0 SAW_MADE=0)"
 expect "no ask at the browser at all does not blame the report" "no" \
   "$(blames "THE PAGE WAS NOT TOLD" 0 SAW_ASKED=0 SAW_ADDRESS=0 \
-    SAW_SECOND=0 SAW_OPENED=0 SAW_REFUSED=0)"
+    SAW_SECOND=0 SAW_OPENED=0 SAW_MADE=0)"
 # The wrong-link arm is checked first: a press on the ordinary link also lacks
 # both readings above.
 expect "the wrong link outranks the process the ask stopped in" "no" \
   "$(blames "NEVER ASKED" 0 SAW_ASKED=0 SAW_ADDRESS=0 SAW_SECOND=0 \
-    SAW_OPENED=0 SAW_STAYED=1 SAW_REFUSED=0)"
+    SAW_OPENED=0 SAW_STAYED=1 SAW_MADE=0)"
 
 echo
 echo "the address, and the window the list is only half of"

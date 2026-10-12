@@ -290,6 +290,7 @@ if wanted engine; then
       scripts/engine-guard-webview-click.sh \
       scripts/engine-guard-webview-activate.sh \
       scripts/engine-guard-webview-new-window.sh \
+      scripts/engine-guard-webview-window-open.sh \
       scripts/engine-guard-webview-private.sh \
       scripts/engine-guard-webview-routed-link.sh \
       scripts/engine-guard-webview-target-url.sh \

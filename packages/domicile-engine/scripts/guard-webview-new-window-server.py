@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Serves the pages guard-webview-new-window.sh clicks through.
 
-  /opener   the page in the browser window: two links, each filling half of it.
-            The top half is target="_blank" -> /opened, the subject. The bottom
-            half is an ordinary link -> /stayed, the control. Half-page targets
+  /opener   the page in the browser window: two targets, each filling half of
+            it. The top half is a target="_blank" form that POSTs `name=Ada`
+            to /opened, the subject. The bottom half is an ordinary link ->
+            /stayed, the control. Half-page targets
             cannot be missed by rounding in the guard's computed click point.
             Logs `GUARD opener-loaded`, and `GUARD guest-mousedown` for each
             press, which shows the click reached the guest.
-  /opened   logs `GUARD opened-loaded`. Only a second <webview> opened by the
-            shell loads it, so this shows the user got a window.
+  /opened   logs `GUARD opened-loaded method=M body=B`: how it was asked for,
+            which shows the form's POST reached the new window.
   /stayed   logs `GUARD stayed-loaded`. Shows the control's click followed a
             link, so its lack of a new window is a real result.
 
@@ -34,13 +35,19 @@ OPENER_PAGE = """<!doctype html>
     <title>a page that wants another window</title>
     <style>
       html, body { margin: 0; height: 100%%; }
-      a { display: block; position: fixed; inset-inline: 0; height: 50%%; }
+      #blank, #same {
+        display: block; position: fixed; inset-inline: 0; height: 50%%;
+        width: 100%%; border: 0; margin: 0;
+      }
       #blank { inset-block-start: 0; background: #204060; }
       #same { inset-block-end: 0; background: #402060; }
     </style>
   </head>
   <body>
-    <a id="blank" href="%(opened)s" target="_blank">open a window</a>
+    <form method="post" action="%(opened)s" target="_blank">
+      <input type="hidden" name="name" value="Ada" />
+      <button id="blank" type="submit">open a window</button>
+    </form>
     <a id="same" href="%(stayed)s">stay in this one</a>
     <script>
       const say = (what) => {
@@ -61,7 +68,8 @@ OPENER_PAGE = """<!doctype html>
 </html>
 """
 
-# The pages the links lead to. Each logs which one it is.
+# The pages the targets lead to. Each logs which one it is, and how it was
+# asked for.
 ARRIVED_PAGE = """<!doctype html>
 <html lang="en">
   <head>
@@ -70,7 +78,7 @@ ARRIVED_PAGE = """<!doctype html>
   </head>
   <body>
     <script>
-      console.log("GUARD %(which)s-loaded");
+      console.log("GUARD %(which)s-loaded method=%(method)s body=%(body)s");
     </script>
   </body>
 </html>
@@ -81,12 +89,20 @@ class TwoLinksAndWhereTheyGo(BaseHTTPRequestHandler):
     """Answers the three paths above, and everything else with a 404."""
 
     def do_GET(self):  # noqa: N802 - the name is BaseHTTPRequestHandler's
+        self.answer("GET", "")
+
+    def do_POST(self):  # noqa: N802 - the name is BaseHTTPRequestHandler's
+        length = int(self.headers.get("Content-Length", "0"))
+        self.answer("POST", self.rfile.read(length).decode("utf-8"))
+
+    def answer(self, method, sent):
+        """Serves the path asked for, saying how it was asked for."""
         if self.path == OPENER:
             body = OPENER_PAGE % {"opened": OPENED, "stayed": STAYED}
         elif self.path == OPENED:
-            body = ARRIVED_PAGE % {"which": "opened"}
+            body = ARRIVED_PAGE % {"which": "opened", "method": method, "body": sent}
         elif self.path == STAYED:
-            body = ARRIVED_PAGE % {"which": "stayed"}
+            body = ARRIVED_PAGE % {"which": "stayed", "method": method, "body": sent}
         else:
             self.send_error(404, "this server has three pages and that is none of them")
             return

@@ -93,7 +93,8 @@ Headless.
 | `guard-webview-dialog.sh` | a page's `prompt()` from a press asks the shell as `domicile-dialog`, and the shell's text reaches the page as `prompt()`'s value |
 | `guard-webview-fullscreen.sh` | a page enters fullscreen from its own button, the shell hears it as `pageFullscreen`, and Escape and `exitPageFullscreen()` each take it out |
 | `guard-webview-context-menu.sh` | a right click fires `domicile-context-menu` with the link and image under it; its `inspect` opens DevTools in a browser window (patch 0092) |
-| `guard-webview-new-window.sh` | a `target="_blank"` link opens a browser window, and the shell's `<webview window>` shows it |
+| `guard-webview-new-window.sh` | a `target="_blank"` form opens a browser window, the shell's `<webview window>` shows it, and its page gets the form's POST |
+| `guard-webview-window-open.sh` | a page's `window.open()` returns a handle, the window is listed, keeps its opener and name, and posts back to its opener (patch 0115) |
 | `guard-webview-private.sh` | a cookie set in a `<webview private>` reaches private pages and windows, never ordinary ones; a private window is listed `isPrivate` |
 | `guard-webview-survives-load-shell.sh` | a browser window's page keeps running across `load_shell`, and the new shell's `<webview window>` shows it |
 | `guard-webview-hidden.sh` | a browser window's page is hidden while its `<webview>` is `display: none`, visible once shown, and hidden again after |
