@@ -15,7 +15,7 @@ import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGl
 import { MinusIcon } from "@phosphor-icons/react/dist/ssr/Minus";
 import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
-import type { FormEvent } from "react";
+import type { CSSProperties, FormEvent } from "react";
 import { useState } from "react";
 
 import { css } from "../../../styled-system/css";
@@ -52,6 +52,8 @@ type Props = {
   canGoForward: boolean;
   /** Whether the window is private, which the bar says in its own color. */
   isPrivate: boolean;
+  /** How far the page has loaded, from 0 to 1. Shown only while `loading`. */
+  loadProgress: number;
   /** Whether a page is loading, which turns Reload into Stop. */
   loading: boolean;
   onBack: () => void;
@@ -96,6 +98,7 @@ export const AddressBar = ({
   canGoBack,
   canGoForward,
   isPrivate,
+  loadProgress,
   loading,
   onBack,
   onForward,
@@ -161,8 +164,7 @@ export const AddressBar = ({
         >
           <CaretRightIcon size={16} />
         </Button>
-        {/* One button for Reload and Stop, since only one applies at a time.
-            It is also the only loading indicator, as in other browsers. */}
+        {/* One button for Reload and Stop, since only one applies at a time. */}
         <Button
           label={loading ? "Stop" : "Reload"}
           onClick={loading ? onStop : onReload}
@@ -248,12 +250,31 @@ export const AddressBar = ({
           <PlusIcon size={12} weight="bold" />
         </Button>
       </div>
+      {loading && (
+        <div
+          aria-label="Loading"
+          aria-valuenow={Math.round(loadProgress * 100)}
+          className={loadingStyles}
+          role="progressbar"
+          style={filledTo(loadProgress)}
+        />
+      )}
       {zoomsAnnounced === 0 ? undefined : (
         <ZoomIndicator key={zoomsAnnounced} zoom={zoom} />
       )}
     </form>
   );
 };
+
+/**
+ * Inline style handing `progress` to `loadingStyles` as `--load-progress`.
+ * Inline because Panda only extracts build-time literals.
+ */
+const filledTo = (
+  progress: number,
+): CSSProperties & Record<`--${string}`, string> => ({
+  "--load-progress": String(progress),
+});
 
 /** The suggestion list for the typed text. */
 const suggestionsFor = (
@@ -316,7 +337,7 @@ const barStyles = hstack({
   gap: 2,
   paddingBlock: 1.5,
   paddingInline: 2,
-  // Anchors the zoom indicator.
+  // Anchors the zoom indicator and the loading bar.
   position: "relative",
 });
 
@@ -365,4 +386,25 @@ const dividerStyles = css({
   blockSize: 3,
   flex: "none",
   inlineSize: "1px",
+});
+
+// A bar along the address bar's bottom edge, over the border, filled as far as
+// the page has loaded. Grows from the left: `transform-origin` takes no
+// logical keyword.
+const loadingStyles = css({
+  _before: {
+    backgroundColor: "accent",
+    content: '""',
+    inset: 0,
+    position: "absolute",
+    transform: "scaleX(var(--load-progress))",
+    transformOrigin: "left",
+    transition: "transform {durations.normal} {easings.out}",
+  },
+  blockSize: 0.5,
+  insetBlockEnd: "-1px",
+  insetInline: 0,
+  overflow: "hidden",
+  pointerEvents: "none",
+  position: "absolute",
 });

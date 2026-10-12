@@ -234,6 +234,14 @@ interface WebViewGuestClient {
   // nothing until its first load starts.
   LoadingChanged(bool is_loading);
 
+  // How far the guest's page has loaded, from 0.1 when a load starts to 1 when
+  // it finishes or stops, for an address bar progress bar.
+  //
+  // Content's own progress, as Chrome on Android draws it, throttled by
+  // content. Sent only when it changes. A fresh guest sends nothing until its
+  // first load starts.
+  LoadProgressChanged(double progress);
+
   // The guest's current URL and security level, for an address bar.
   //
   // Both come from the same `GetVisibleEntry()`, so the lock always describes

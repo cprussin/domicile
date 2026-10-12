@@ -9,6 +9,7 @@ import {
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_GUEST_KEYDOWN_EVENT,
   WEBVIEW_HISTORY_CHANGE_EVENT,
+  WEBVIEW_LOAD_PROGRESS_CHANGE_EVENT,
   WEBVIEW_LOADING_CHANGE_EVENT,
   WEBVIEW_PAGE_CHANGE_EVENT,
   WEBVIEW_PAGE_FULLSCREEN_CHANGE_EVENT,
@@ -85,6 +86,15 @@ const loads = (element: HTMLWebViewElement, loading: boolean): void => {
     value: loading,
   });
   fireEvent(element, new Event(WEBVIEW_LOADING_CHANGE_EVENT));
+};
+
+/** Fires a load progress change with the given progress. */
+const progresses = (element: HTMLWebViewElement, progress: number): void => {
+  Object.defineProperty(element, "loadProgress", {
+    configurable: true,
+    value: progress,
+  });
+  fireEvent(element, new Event(WEBVIEW_LOAD_PROGRESS_CHANGE_EVENT));
 };
 
 /**
@@ -1478,6 +1488,36 @@ describe("BrowserWindow", () => {
       await userEvent.click(control("Stop"));
 
       expect(driven).toStrictEqual(["reload", "stop"]);
+    });
+
+    it("fills the loading bar as far as the page has loaded", () => {
+      const { container } = render(
+        <BrowserWindow
+          behindPanel={false}
+          clickThrough={false}
+          covered={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          fullscreen={false}
+          motion="resting"
+          onIcon={noIcon}
+          onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          url="https://example.com"
+          window="1"
+        />,
+      );
+      loads(view(container), true);
+      progresses(view(container), 0.5);
+
+      expect(
+        screen.getByRole("progressbar", { name: "Loading" }),
+      ).toHaveAttribute("aria-valuenow", "50");
     });
   });
 

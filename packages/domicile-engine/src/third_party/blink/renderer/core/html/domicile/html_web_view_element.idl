@@ -30,6 +30,11 @@
   // same-document navigations. `domicile-loading-change` signals a change.
   readonly attribute boolean loading;
 
+  // How far the page has loaded, from 0.1 when a load starts to 1 when it
+  // finishes or stops. 0 until the first load starts. Read it only while
+  // `loading`. `domicile-load-progress-change` signals a change.
+  readonly attribute double loadProgress;
+
   // The guest's visible URL. Differs from `src` after a link or redirect.
   // Empty until the browser reports one.
   readonly attribute USVString url;
