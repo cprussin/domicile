@@ -11,9 +11,7 @@ Patch `0047`:
 - Every key reaches the page. An unhandled key stays unhandled: no reload,
   back, F11, zoom, close or quit.
 - A right click is only the page's `contextmenu` event.
-- Edge swipes do nothing.
-- Ctrl+wheel scrolls, in the shell and in browser windows (patch `0112`). The
-  page still sees `ctrlKey`.
+- Ctrl+wheel and edge swipes do nothing.
 
 In a browser window (`WebViewGuest`):
 
@@ -23,6 +21,7 @@ In a browser window (`WebViewGuest`):
 - `inspect` opens DevTools in a browser window at DevTools' address.
   `chrome/browser/domicile/domicile_devtools.h` attaches it.
 - A chord the page does not handle goes to the shell.
+- Ctrl+wheel goes to the shell as a zoom request.
 
 The shell binds browser keys itself.
 

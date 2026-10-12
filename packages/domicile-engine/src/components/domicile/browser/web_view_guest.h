@@ -452,6 +452,10 @@ class WebViewGuest : public mojom::WebViewGuest,
   bool HandleKeyboardEvent(content::WebContents* source,
                            const input::NativeWebKeyboardEvent& event) override;
 
+  // Ctrl+wheel the page did not handle. Reported, not applied; see
+  // ZoomRequested in the mojom.
+  void ContentsZoomChange(bool zoom_in) override;
+
   // Sends the context menu to the element as ContextMenuRequested so the
   // shell draws it instead of Chrome. The page's own `contextmenu` event has
   // already fired.
