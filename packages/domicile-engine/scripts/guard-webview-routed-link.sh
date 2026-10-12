@@ -13,9 +13,9 @@
 # override the click is silently dropped.
 #
 # guard-webview-new-window.sh covers the `target="_blank"` path
-# (`CreateNewWindow`). Both paths open the same browser window through
-# `ReportNewWindow`, so the shell's list cannot tell them apart. This guard
-# also reads the engine's own log line from `OpenURLFromTab`.
+# (`CreateNewWindow`). Both paths list a browser window at the address, so the
+# shell's list cannot tell them apart. This guard also reads the engine's own
+# log line from `OpenURLFromTab`.
 #
 # Assertions, in order; each is meaningful only if the previous one holds:
 #
@@ -203,8 +203,8 @@ SAW_CHROME=$(saw "GUARD chrome-mousedown")
 SAW_PAGE=$(saw "GUARD page-loaded")
 SAW_PRESS=$(saw "GUARD page-mousedown")
 # Logged by WebViewGuest::OpenURLFromTab's new-window arm, so it shows the
-# gesture reached this delegate rather than CreateNewWindow. ReportNewWindow's
-# line is shared by both paths and cannot tell them apart.
+# gesture reached this delegate rather than CreateNewWindow. The shell's list
+# cannot tell the two apart.
 SAW_ROUTED=$(saw "domicile: a <webview> routed a second-window gesture")
 # A browser window at the link's address in the desk's list: the delegate's
 # result reached the shell.
@@ -269,9 +269,9 @@ geometry"
   fi
 elif [ "$SAW_ROUTED" != "1" ] && [ "$SAW_ASKED" = "1" ]; then
   FAILURE="THE SHELL WAS ASKED AND THIS DELEGATE NEVER RAN, which is this \
-guard measuring the other hole rather than the claim. ReportNewWindow is \
-shared, so CreateCustomWebContents -- the target=_blank path #447 closed -- \
-opens the identical window, and a run reading only the shell's side would go \
+guard measuring the other hole rather than the claim. The target=_blank \
+path, CreateNewGuestWindow, lists an identical window, and a run reading only \
+the shell's side would go \
 green against a fork with no OpenURLFromTab override at all. Either the middle \
 click is reaching CreateNewWindow rather than the delegate at this pin, or the \
 engine's line moved and this guard's grep did not follow it"
@@ -304,8 +304,8 @@ symptom as not being asked at all and a different fault. The engine's log has \
 the disposition it was asked with"
 else
   PASSED="a middle click on an ordinary link reached the guest's delegate, \
-which refused to let content open the window and opened a browser window at \
-the address instead, which the shell heard in the desk's list \
+which opened a browser window at the address, which the shell heard in the \
+desk's list \
 -- and left the page where it was. Which is what a user middle-clicking a link \
 in a browser window gets, measured end to end, with the browser's own line \
 saying it was THIS delegate rather than the target=_blank path that answered"

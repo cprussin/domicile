@@ -18,7 +18,8 @@ import "url/mojom/url.mojom";
 // Who opens one:
 // - A program asking for a window gets one, as a Wayland client's toplevel
 //   exists before the shell hears of it: `domicile open-url`, a page's
-//   `target="_blank"`, chrome.tabs.create and chrome.windows.create.
+//   `target="_blank"` or `window.open()`, chrome.tabs.create and
+//   chrome.windows.create.
 // - Open below is for the shell's own UI, such as a `+` button or a launcher.
 // - The shell decides where a window goes and whether it is in front.
 //
@@ -32,7 +33,9 @@ import "url/mojom/url.mojom";
 
 // One browser window, as a shell draws it.
 struct BrowserWindow {
-  // The name `<webview window>` and Close use: "1", "2", ... in open order.
+  // The name `<webview window>` and Close use: "1", "2", ... in open order. A
+  // window a page opened takes its id when made, before it is listed, so an id
+  // can be skipped.
   // Never reused while the browser runs, so a stale id names no window.
   string id;
   // The page's address. Empty before it has shown anything.

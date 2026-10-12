@@ -528,8 +528,9 @@ void WebViewGuest::CreateAndAttach(
   std::unique_ptr<WebViewGuest> guest = base::WrapUnique(new WebViewGuest(
       owner, std::move(receiver), std::move(client), extension_popup));
   guest->owned_guest_contents_ = guest->MakeContents(
-      ContextFor(*owner.GetBrowserContext(), private_browsing),
-      /*initially_hidden=*/false, created);
+      content::WebContents::CreateParams(
+          ContextFor(*owner.GetBrowserContext(), private_browsing)),
+      created);
 
 
   // Asynchronous: beforeunload handlers must run first, and a cross-process
@@ -582,28 +583,62 @@ std::unique_ptr<WebViewGuest> WebViewGuest::MakeWindow(
     const GuestCreatedCallback& created) {
   std::unique_ptr<WebViewGuest> guest =
       base::WrapUnique(new WebViewGuest(shell, window_id, popup_window));
+  content::WebContents::CreateParams params(
+      ContextFor(*shell.GetBrowserContext(), private_browsing));
   // Hidden (and throttled) like a background tab until AttachWindowTo shows
   // it.
-  guest->owned_guest_contents_ = guest->MakeContents(
-      ContextFor(*shell.GetBrowserContext(), private_browsing),
-      /*initially_hidden=*/true, created);
+  params.initially_hidden = true;
+  guest->owned_guest_contents_ =
+      guest->MakeContents(std::move(params), created);
   LOG(INFO) << "domicile: opened browser window " << window_id << ".";
   return guest;
 }
 
+// static
+std::unique_ptr<content::WebContents> WebViewGuest::MakeOpenedWindow(
+    content::WebContents& shell,
+    const std::string& window_id,
+    const content::WebContents::CreateParams& params,
+    const GuestCreatedCallback& created) {
+  auto* guest = new WebViewGuest(shell, window_id, std::nullopt);
+  content::WebContents::CreateParams opened = params;
+  // Hidden until AttachWindowTo, as in MakeWindow, whatever the page asked.
+  opened.initially_hidden = true;
+  std::unique_ptr<content::WebContents> contents =
+      guest->MakeContents(std::move(opened), created);
+  // Deleted with its page in WebContentsDestroyed until AdoptOpenedWindow.
+  guest->self_owned_ = true;
+  // The window guard greps for this.
+  LOG(INFO) << "domicile: made browser window " << window_id
+            << " for a page's new window.";
+  return contents;
+}
+
+// static
+std::unique_ptr<WebViewGuest> WebViewGuest::AdoptOpenedWindow(
+    std::unique_ptr<content::WebContents> contents) {
+  WebViewGuest* guest = FromWebContents(contents.get());
+  // Content shows only windows CreateNewGuestWindow made.
+  CHECK(guest);
+  CHECK(guest->self_owned_);
+  guest->self_owned_ = false;
+  guest->owned_guest_contents_ = std::move(contents);
+  LOG(INFO) << "domicile: opened browser window " << guest->window_id()
+            << " for a page's new window.";
+  return base::WrapUnique(guest);
+}
+
 std::unique_ptr<content::WebContents> WebViewGuest::MakeContents(
-    content::BrowserContext* context,
-    bool initially_hidden,
+    content::WebContents::CreateParams params,
     const GuestCreatedCallback& created) {
   // `guest_delegate` makes this a guest. Content asks it for the owner during
   // construction, so the owner is set in this object's constructor.
   //
-  // No SiteInstance or StoragePartitionConfig: the guest uses the default
-  // partition of `context`, the user's cookies unless the guest is private.
-  // See the class comment.
-  content::WebContents::CreateParams params(context);
+  // No StoragePartitionConfig: the guest uses the default partition of its
+  // context, the user's cookies unless the guest is private. See the class
+  // comment.
+  content::BrowserContext* context = params.browser_context;
   params.guest_delegate = this;
-  params.initially_hidden = initially_hidden;
   std::unique_ptr<content::WebContents> contents =
       content::WebContents::Create(params);
 
@@ -1685,7 +1720,7 @@ bool WebViewGuest::IsWebContentsCreationOverridden(
     const GURL& opener_url,
     const std::string& frame_name,
     const GURL& target_url) {
-  return true;
+  return false;
 }
 
 content::WebContents* WebViewGuest::CreateCustomWebContents(
@@ -1699,13 +1734,25 @@ content::WebContents* WebViewGuest::CreateCustomWebContents(
     const blink::mojom::WindowFeatures& window_features,
     const content::StoragePartitionConfig& partition_config,
     content::SessionStorageNamespaceHandle* session_storage_namespace) {
-  // Content cannot create this window for a guest without its own
-  // SiteInstance (see the class comment), so refuse it and open a browser
-  // window at the address instead.
-  //
+  NOTREACHED();
+}
+
+std::unique_ptr<content::WebContents> WebViewGuest::CreateNewGuestWindow(
+    const content::WebContents::CreateParams& create_params) {
+  return Host().MakeOpenedWindow(create_params);
+}
+
+content::WebContents* WebViewGuest::AddNewContents(
+    content::WebContents* source,
+    std::unique_ptr<content::WebContents> new_contents,
+    const GURL& target_url,
+    WindowOpenDisposition disposition,
+    const blink::mojom::WindowFeatures& window_features,
+    bool user_gesture,
+    bool* was_blocked) {
   // `disposition` and `window_features` are dropped: the shell lays out
-  // browser windows itself.
-  ReportNewWindow(target_url);
+  // browser windows itself. Content navigates the window after this returns.
+  Host().AdoptOpenedWindow(std::move(new_contents), target_url);
   return nullptr;
 }
 
@@ -1776,19 +1823,16 @@ content::WebContents* WebViewGuest::OpenURLFromTab(
 }
 
 void WebViewGuest::ReportNewWindow(const GURL& target_url) {
-  // A `window.open()` with no URL wants a handle to write into, which a
-  // browser window cannot provide. Refuse it instead of opening a blank one.
+  // Nothing could write into a blank window with no opener, so refuse it
+  // instead of opening one.
   if (!target_url.is_valid()) {
     LOG(WARNING) << "domicile: a <webview>'s page asked for a window with no "
                     "address to open; refused, and no window is opened.";
     return;
   }
 
-  // A warning because the page did not get the window it asked for (no
-  // opener, no POST body).
-  LOG(WARNING) << "domicile: a <webview> refused to open a window for "
-               << target_url.possibly_invalid_spec()
-               << "; a browser window was opened at it instead.";
+  LOG(INFO) << "domicile: opened a browser window at "
+            << target_url.possibly_invalid_spec() << " with no opener.";
 
   Host().Open(*guest_contents_->GetBrowserContext(), target_url);
 }

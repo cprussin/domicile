@@ -125,6 +125,33 @@ class DeskWindows final : public base::SupportsUserData::Data,
                 /*private_browsing=*/false, /*app=*/true);
   }
 
+  // Makes the page of a window a page opened, for content to hold until
+  // Adopt. A page in a guest implies a shell to own it.
+  std::unique_ptr<content::WebContents> MakeOpened(
+      const content::WebContents::CreateParams& params) {
+    content::WebContents* shell = ShellContentsIn(profile_);
+    CHECK(shell);
+    // Taken now, so an unshown window content drops leaves a gap. Ids are
+    // still never reused.
+    return WebViewGuest::MakeOpenedWindow(
+        *shell, base::NumberToString(next_id_++), params,
+        base::BindRepeating(&AttachTabHelpers));
+  }
+
+  // Lists a window MakeOpened made. Content navigates it, so this does not.
+  void Adopt(std::unique_ptr<content::WebContents> contents,
+             const GURL& target_url) {
+    std::unique_ptr<WebViewGuest> guest =
+        WebViewGuest::AdoptOpenedWindow(std::move(contents));
+    const std::string id = guest->window_id();
+    auto watch = std::make_unique<Watch>(
+        guest->contents(),
+        base::BindRepeating(&DeskWindows::Changed, base::Unretained(this)));
+    windows_.push_back(Window{id, std::move(guest), std::move(watch), 0, 0,
+                              /*app=*/false, target_url});
+    Changed();
+  }
+
   // Opens a window at `url` as popup window `window_id`'s one tab.
   bool OpenPopupWindow(int window_id, const GURL& url, int width, int height) {
     return Make(url, window_id, width, height, /*private_browsing=*/false,
@@ -173,8 +200,11 @@ class DeskWindows final : public base::SupportsUserData::Data,
       content::WebContents& contents = window.guest->contents();
       content::NavigationEntry* entry =
           contents.GetController().GetVisibleEntry();
+      // A page's new window has only its initial entry until its first
+      // navigation commits.
+      const bool navigated = entry != nullptr && !entry->IsInitialEntry();
       list.push_back(mojom::BrowserWindow::New(
-          window.id, entry == nullptr ? GURL() : entry->GetVirtualURL(),
+          window.id, navigated ? entry->GetVirtualURL() : window.opened_at,
           base::UTF16ToUTF8(contents.GetTitle()),
           window.guest->popup_window().value_or(0), window.width,
           window.height, contents.GetBrowserContext()->IsOffTheRecord(),
@@ -215,6 +245,9 @@ class DeskWindows final : public base::SupportsUserData::Data,
     int width = 0;
     int height = 0;
     bool app = false;
+    // For a window a page opened, the address content navigates it to. Listed
+    // until its first navigation commits, since content lists it first.
+    GURL opened_at;
   };
 
   bool Make(const GURL& url,
@@ -302,6 +335,17 @@ class Host final : public BrowserWindowHost {
   // A private page's new window is private too.
   void Open(content::BrowserContext& context, const GURL& url) override {
     Windows(context).Open(url, context.IsOffTheRecord());
+  }
+
+  std::unique_ptr<content::WebContents> MakeOpenedWindow(
+      const content::WebContents::CreateParams& params) override {
+    return Windows(*params.browser_context).MakeOpened(params);
+  }
+
+  void AdoptOpenedWindow(std::unique_ptr<content::WebContents> contents,
+                         const GURL& target_url) override {
+    content::BrowserContext& context = *contents->GetBrowserContext();
+    Windows(context).Adopt(std::move(contents), target_url);
   }
 
   void OpenPopupWindow(content::BrowserContext& context,
