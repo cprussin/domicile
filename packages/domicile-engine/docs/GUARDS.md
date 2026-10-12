@@ -99,7 +99,7 @@ Headless.
 | `guard-webview-hidden.sh` | a browser window's page is hidden while its `<webview>` is `display: none`, visible once shown, and hidden again after |
 | `guard-webview-permissions.sh` | a page's `getUserMedia` asks the shell over `domicile-permission-request`; the shell's allow reaches the page and is stored for the site (patch 0103) |
 | `guard-webview-upload.sh` | `<input type="file">` asks the shell over `domicile-file-chooser`, and the page reads the chosen file (patch 0053) |
-| `guard-webview-download.sh` | a download asks the shell and lands at the chosen path (patch 0053) |
+| `guard-webview-download.sh` | a download asks the shell, lands at the chosen path (patch 0053), and is counted in progress until it finishes |
 | `guard-webview-save-picker.sh` | `showSaveFilePicker()` asks the shell (patch 0086) |
 | `guard-webview-passkey-extension.sh` | WebAuthn requests reach an extension on `chrome.webAuthenticationProxy` (patches 0048, 0069, 0084) |
 
