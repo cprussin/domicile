@@ -90,6 +90,12 @@ struct EngineEvent {
     kCaptured,
     // The browser ended a display capture; no frame follows.
     kCaptureEnded,
+    // wl_surface.frame: viz acked a window's frame, so its client may draw
+    // the next.
+    kFrameDone,
+    // wp_presentation_feedback: a window's frame reached the screen, or never
+    // will.
+    kPresented,
   };
 
   Type type = Type::kConfigure;
@@ -112,8 +118,14 @@ struct EngineEvent {
   // kCaptured and kCaptureEnded: the DomicileCaptureId.
   uint32_t capture = 0;
   // kCaptured: the frame's id, which releases it, and the frame.
+  // kFrameDone and kPresented: the window's frame number; see SurfaceFrames.
   uint64_t frame = 0;
   EngineCapturedFrame captured;
+  // kPresented: when, on CLOCK_MONOTONIC, the display's frame interval, and
+  // the DOMICILE_PRESENTED_* flags.
+  int64_t time_ns = 0;
+  int64_t refresh_ns = 0;
+  uint32_t flags = 0;
 };
 
 // Queue of engine events with a pollable fd.

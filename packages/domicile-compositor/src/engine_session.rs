@@ -148,8 +148,9 @@ impl EngineSession {
     /// - Each surface's on-screen frame is imported and submitted again.
     ///   Otherwise an idle client's window stays blank, since nothing else
     ///   makes it commit.
-    /// - Frame callbacks need no handling: `wl_surface.frame` is answered at
-    ///   commit, not by the engine.
+    /// - Frame callbacks waiting on the old engine are the caller's to answer
+    ///   (`crate::frame_callbacks`). The new surfaces number their frames
+    ///   afresh.
     ///
     /// No check in this repository covers this. See
     /// `docs/HARDWARE-CHECKS.md#dead-engine-with-windows-open`.
@@ -365,6 +366,7 @@ impl EngineSession {
             return false;
         };
         self.engine.submit(surface, id, sampled, damage, at_box);
+        self.surfaces.submitted(surface);
         self.sampled.insert(app_id.to_owned(), sampled);
         // A replaced hold is the same buffer, since `imports` is keyed on the
         // object. Drop it without releasing: viz holds it again.
@@ -397,7 +399,9 @@ impl EngineSession {
                 Event::Copied { .. }
                 | Event::Displays(_)
                 | Event::Captured { .. }
-                | Event::CaptureEnded { .. } => None,
+                | Event::CaptureEnded { .. }
+                | Event::FrameDone { .. }
+                | Event::Presented { .. } => None,
             })
             .collect();
         (events, releases)
@@ -480,6 +484,17 @@ impl EngineSession {
     /// Spike helper. See [`crate::engine::Engine::spike_find`].
     pub fn spike_find(&self, argb: u32) -> Option<Capture> {
         self.engine.spike_find(argb)
+    }
+
+    /// The number of `app_id`'s last submitted frame, which
+    /// [`Event::FrameDone`] and [`Event::Presented`] name.
+    pub fn frame_of(&self, app_id: &str) -> Option<u64> {
+        self.surfaces.last_frame(app_id)
+    }
+
+    /// See [`crate::engine::Engine::reports_frames`].
+    pub fn reports_frames(&self) -> bool {
+        self.engine.reports_frames()
     }
 
     /// Which app a surface belongs to, for an event that names only the

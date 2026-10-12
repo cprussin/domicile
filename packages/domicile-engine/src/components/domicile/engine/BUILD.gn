@@ -93,6 +93,31 @@ source_set("surface_alpha_unit_tests") {
   ]
 }
 
+# Numbers a window's frames and matches viz's acks and presentation feedback to
+# them.
+source_set("surface_frames") {
+  sources = [
+    "surface_frames.cc",
+    "surface_frames.h",
+  ]
+
+  public_deps = [ "//base" ]
+
+  deps = [ "//ui/gfx" ]
+}
+
+source_set("surface_frames_unit_tests") {
+  testonly = true
+
+  sources = [ "surface_frames_unittest.cc" ]
+
+  deps = [
+    ":surface_frames",
+    "//testing/gtest",
+    "//ui/gfx",
+  ]
+}
+
 source_set("event_queue_unit_tests") {
   testonly = true
 
@@ -118,6 +143,7 @@ shared_library("domicile_engine") {
     ":event_queue",
     ":surface_alpha",
     ":surface_crop",
+    ":surface_frames",
     ":surface_transform",
     "//base",
     "//components/domicile/mojom",

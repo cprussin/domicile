@@ -1,0 +1,58 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+#ifndef COMPONENTS_DOMICILE_ENGINE_SURFACE_FRAMES_H_
+#define COMPONENTS_DOMICILE_ENGINE_SURFACE_FRAMES_H_
+
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+
+#include "base/containers/circular_deque.h"
+#include "base/containers/flat_map.h"
+#include "components/domicile/engine/domicile_engine.h"
+
+namespace domicile {
+
+// Numbers a surface's frames and matches viz's acks and presentation feedback
+// to them, for the `frame_done` and `presented` callbacks.
+//
+// Numbers start at 1 and count every submit, so the compositor counts them
+// too.
+class SurfaceFrames {
+ public:
+  // The most frames kept waiting for presentation feedback. Viz reports every
+  // frame it is sent, so this only bounds one it never reports.
+  static constexpr size_t kMostUnpresented = 64;
+
+  SurfaceFrames();
+  SurfaceFrames(const SurfaceFrames&) = delete;
+  SurfaceFrames& operator=(const SurfaceFrames&) = delete;
+  ~SurfaceFrames();
+
+  // A frame sent to viz as `frame_token`. Returns its number.
+  uint64_t Sent(uint32_t frame_token);
+
+  // A frame that never reached viz. Returns its number.
+  uint64_t Dropped();
+
+  // Viz acked a frame. Acks name no frame and come in the order frames were
+  // sent, so this is the oldest unacked one. `nullopt` if none is unacked.
+  std::optional<uint64_t> Acked();
+
+  // Viz reported presenting `frame_token`. Returns its number once;
+  // `nullopt` for a token this did not send or already reported.
+  std::optional<uint64_t> Presented(uint32_t frame_token);
+
+ private:
+  uint64_t last_ = 0;
+  base::circular_deque<uint64_t> unacked_;
+  base::flat_map<uint32_t, uint64_t> unpresented_;
+};
+
+// The DOMICILE_PRESENTED_* flags for a gfx::PresentationFeedback's `flags`.
+uint32_t PresentedFlagsOf(uint32_t feedback_flags);
+
+}  // namespace domicile
+
+#endif  // COMPONENTS_DOMICILE_ENGINE_SURFACE_FRAMES_H_

@@ -38,6 +38,26 @@ The page and the compositor share only a `viz::SurfaceId`.
   requests to it. Messages from the page about a frame are not synchronized
   with that frame's commit.
 
+## Frame pacing
+
+A client draws its next frame when viz takes its last one, so it draws at the
+rate the screen shows it.
+
+- **`wl_surface.frame`:** a commit's callbacks wait for the engine's
+  `frame_done`, viz's ack of the frame the commit submitted
+  (`frame_callbacks.rs`).
+- **`wp_presentation`:** a commit's feedback waits for the engine's
+  `presented`, the frame's `FrameTimingDetails` from viz. The clock is
+  `CLOCK_MONOTONIC`, synced to the output the window is on. `seq` is always
+  zero: viz reports no vblank count.
+- **Frames viz never sees** answer at once and discard their feedback: a
+  window no page has embedded yet, an shm frame the compositor could not copy,
+  a commit with no new buffer, the chrome's own window.
+- **The deadline:** a frame the engine does not report within 250 ms is
+  answered anyway and its feedback discarded, so no client waits for good.
+- **Older engines** lack `domicile_engine_reports_frames`. The compositor
+  answers at commit and discards feedback.
+
 ## Hidden windows
 
 A window the page does not draw (another workspace, a background tab) draws
