@@ -9,7 +9,7 @@
 
 use std::cell::{Cell, RefCell};
 use std::ffi::{c_char, c_int, c_void, CString, NulError};
-use std::os::fd::{BorrowedFd, OwnedFd, RawFd};
+use std::os::fd::{AsRawFd as _, BorrowedFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -793,6 +793,13 @@ impl Engine {
         };
     }
 
+    /// Whether the engine has `domicile_surface_submit_fenced`. An older one
+    /// reads a buffer as soon as it is submitted, so the compositor must wait
+    /// for its own draw into one first.
+    pub fn takes_fences(&self) -> bool {
+        self.submit_fenced().is_ok()
+    }
+
     /// Submits a frame showing the `sampled` part of `buffer`
     /// (`wl_surface.commit`), turned upright, at the newest box numbered at
     /// most `at_box` (see [`Event::Configure`]).
@@ -800,7 +807,94 @@ impl Engine {
     /// The crop is the window geometry, which excludes client-drawn shadows
     /// (see [`crate::window_geometry`]). An empty crop means the whole buffer;
     /// empty damage means the whole surface.
+    ///
+    /// With `fence`, viz reads the buffer only once the fence signals. Only
+    /// for an engine that [`Engine::takes_fences`]. The fd is borrowed.
     pub fn submit(
+        &self,
+        surface: SurfaceId,
+        buffer: BufferId,
+        sampled: Sampled,
+        damage: (i32, i32, i32, i32),
+        at_box: u64,
+        fence: Option<BorrowedFd<'_>>,
+    ) {
+        match fence {
+            Some(fence) => self.submit_after(surface, buffer, sampled, damage, at_box, fence),
+            None => self.submit_now(surface, buffer, sampled, damage, at_box),
+        }
+    }
+
+    /// Submits with an acquire fence.
+    fn submit_after(
+        &self,
+        surface: SurfaceId,
+        buffer: BufferId,
+        sampled: Sampled,
+        damage: (i32, i32, i32, i32),
+        at_box: u64,
+        fence: BorrowedFd<'_>,
+    ) {
+        let f = self
+            .submit_fenced()
+            .expect("the caller checked takes_fences");
+        let (crop_x, crop_y, crop_width, crop_height) = sampled.crop;
+        let (x, y, width, height) = damage;
+        // SAFETY: as above, and `fence` outlives the call; the engine
+        // duplicates it.
+        unsafe {
+            f(
+                self.handle,
+                surface,
+                buffer,
+                crop_x,
+                crop_y,
+                crop_width,
+                crop_height,
+                x,
+                y,
+                width,
+                height,
+                at_box,
+                abi_transform(sampled.transform),
+                fence.as_raw_fd(),
+            )
+        };
+    }
+
+    #[allow(clippy::type_complexity)] // the C signature, spelled out
+    fn submit_fenced(
+        &self,
+    ) -> Result<
+        Symbol<
+            '_,
+            unsafe extern "C" fn(
+                *mut Handle,
+                SurfaceId,
+                BufferId,
+                i32,
+                i32,
+                i32,
+                i32,
+                i32,
+                i32,
+                i32,
+                i32,
+                u64,
+                u32,
+                c_int,
+            ),
+        >,
+        EngineError,
+    > {
+        self.symbol(
+            b"domicile_surface_submit_fenced\0",
+            "domicile_surface_submit_fenced",
+        )
+    }
+
+    /// Submits a buffer the compositor has finished drawing into.
+    fn submit_now(
         &self,
         surface: SurfaceId,
         buffer: BufferId,
@@ -1603,7 +1697,7 @@ fn push(user_data: *mut c_void, event: Event) {
 mod tests {
     use super::*;
     use crate::dmabuf_descriptor::DmabufPlane as BridgePlane;
-    use std::os::fd::{AsRawFd as _, IntoRawFd as _};
+    use std::os::fd::IntoRawFd as _;
 
     #[test]
     fn a_captured_frame_is_the_record_the_c_header_declares() {

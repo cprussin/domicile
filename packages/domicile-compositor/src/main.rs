@@ -2255,6 +2255,7 @@ impl DomicileCompositor {
                     app_id,
                     Submitted::Client(commit.buffer.clone()),
                     &descriptor_from(dmabuf),
+                    None,
                     commit,
                     damage,
                     Published::Held,
@@ -2281,11 +2282,13 @@ impl DomicileCompositor {
     /// Submit `submitted` as `app_id`'s frame, damaging `damage` (see
     /// [`crate::engine_damage`]). Returns `shown` if the engine took it,
     /// [`Published::NotShown`] if not.
+    #[allow(clippy::too_many_arguments)] // One frame's worth.
     fn submit_to_the_engine(
         &mut self,
         app_id: &str,
         submitted: Submitted,
         descriptor: &DmabufDescriptor,
+        fence: Option<OwnedFd>,
         commit: &Commit,
         damage: (i32, i32, i32, i32),
         shown: Published,
@@ -2300,6 +2303,7 @@ impl DomicileCompositor {
             commit.sampled,
             damage,
             commit.at_box,
+            fence,
             Instant::now(),
         );
         self.arm_the_hold_deadline();
@@ -2346,6 +2350,7 @@ impl DomicileCompositor {
             app_id,
             Submitted::Upload(copied.id),
             &copied.descriptor,
+            copied.fence,
             commit,
             damage,
             Published::Copied {
@@ -2380,7 +2385,14 @@ impl DomicileCompositor {
     ///
     /// The buffer comes back taken; the caller gives it back if the engine
     /// does not take it.
+    ///
+    /// An engine that takes fences gets the copy's, so this thread does not
+    /// wait for the GPU.
     fn copy_shm_frame(&mut self, app_id: &str, commit: &Commit) -> Result<CopiedFrame, ShmRefused> {
+        let fenced = self
+            .engine
+            .as_ref()
+            .is_some_and(EngineSession::takes_fences);
         let gpu = self.gpu.as_mut().ok_or(ShmRefused::NoRenderer)?;
         let gbm = gpu.gbm.as_ref().ok_or(ShmRefused::NoAllocator)?;
         let shape = shm_shape(commit.buffer).ok_or(ShmRefused::Unreadable)?;
@@ -2407,12 +2419,13 @@ impl DomicileCompositor {
             shm_upload::import(&mut gpu.renderer, commit.buffer, states, shape, &damage)
         })
         .map_err(CopyError::from)
-        .and_then(|texture| shm_upload::copy(&mut gpu.renderer, &texture, target, size));
+        .and_then(|texture| shm_upload::copy(&mut gpu.renderer, &texture, target, size, fenced));
         match copied {
-            Ok(()) => Ok(CopiedFrame {
+            Ok(fence) => Ok(CopiedFrame {
                 id: taken.id,
                 descriptor: descriptor_from(target),
                 fourcc: shape.fourcc,
+                fence,
             }),
             Err(err) => {
                 self.uploads.give_back(taken.id);
@@ -4154,6 +4167,8 @@ struct CopiedFrame {
     descriptor: DmabufDescriptor,
     /// The format the surface's texture now holds it in.
     fourcc: u32,
+    /// Signals when the copy lands. `None` when the copy was waited for.
+    fence: Option<OwnedFd>,
 }
 
 /// An app's commit with a buffer, as [`DomicileCompositor::publish_frame`]

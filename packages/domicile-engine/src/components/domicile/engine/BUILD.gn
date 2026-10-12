@@ -118,6 +118,34 @@ source_set("surface_frames_unit_tests") {
   ]
 }
 
+# Holds a window's submits in order behind any whose acquire fence the browser
+# has not yet put in place.
+source_set("surface_submits") {
+  sources = [
+    "surface_submits.cc",
+    "surface_submits.h",
+  ]
+
+  public_deps = [
+    ":surface_transform",
+    "//base",
+    "//gpu/command_buffer/common",
+    "//ui/gfx/geometry",
+  ]
+}
+
+source_set("surface_submits_unit_tests") {
+  testonly = true
+
+  sources = [ "surface_submits_unittest.cc" ]
+
+  deps = [
+    ":surface_submits",
+    "//gpu/command_buffer/common",
+    "//testing/gtest",
+  ]
+}
+
 source_set("event_queue_unit_tests") {
   testonly = true
 
@@ -144,6 +172,7 @@ shared_library("domicile_engine") {
     ":surface_alpha",
     ":surface_crop",
     ":surface_frames",
+    ":surface_submits",
     ":surface_transform",
     "//base",
     "//components/domicile/mojom",
