@@ -28,6 +28,8 @@ import {
 import type { ConnectionSafety } from "../../address/connection-safety";
 import { typedAddress } from "../../address/typed-address";
 import { ConnectionIndicator } from "./ConnectionIndicator";
+import { DownloadIndicator } from "./DownloadIndicator";
+import type { Downloads } from "./downloads";
 import { SitePermissions } from "./SitePermissions";
 import type { SitePermission } from "./site-permissions";
 import type { PermissionRequest } from "./usePermissionRequest";
@@ -50,6 +52,8 @@ type Props = {
   address: string;
   canGoBack: boolean;
   canGoForward: boolean;
+  /** The page's downloads in progress, shown while there are any. */
+  downloads: Downloads;
   /** Whether the window is private, which the bar says in its own color. */
   isPrivate: boolean;
   /** How far the page has loaded, from 0 to 1. Shown only while `loading`. */
@@ -89,7 +93,8 @@ type Props = {
 
 /**
  * A browser window's toolbar: history controls, a private label for a private
- * window, address field with the connection and site permissions, and zoom.
+ * window, address field with the connection and site permissions, zoom, and
+ * downloads while there are any.
  *
  * Follows Chromium's layout, which users already know.
  */
@@ -97,6 +102,7 @@ export const AddressBar = ({
   address,
   canGoBack,
   canGoForward,
+  downloads,
   isPrivate,
   loadProgress,
   loading,
@@ -250,6 +256,9 @@ export const AddressBar = ({
           <PlusIcon size={12} weight="bold" />
         </Button>
       </div>
+      {downloads.count === 0 ? undefined : (
+        <DownloadIndicator downloads={downloads} />
+      )}
       {loading && (
         <div
           aria-label="Loading"

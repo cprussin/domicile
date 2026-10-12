@@ -82,6 +82,12 @@ class CORE_EXPORT HTMLWebViewElement final
   // LoadProgressChanged in components/domicile/mojom/web_view_guest.mojom.
   double loadProgress() const { return load_progress_; }
 
+  // The page's downloads in progress. Properties, like canGoBack. See
+  // DownloadsChanged in components/domicile/mojom/web_view_guest.mojom.
+  int32_t downloadCount() const { return download_count_; }
+  int64_t downloadReceivedBytes() const { return download_received_bytes_; }
+  int64_t downloadTotalBytes() const { return download_total_bytes_; }
+
   // The page's current URL and security level, for an address bar. Both come
   // from the same navigation entry in one message, so they always match.
   // Properties, like canGoBack.
@@ -230,6 +236,9 @@ class CORE_EXPORT HTMLWebViewElement final
   void HistoryChanged(bool can_go_back, bool can_go_forward) override;
   void LoadingChanged(bool is_loading) override;
   void LoadProgressChanged(double progress) override;
+  void DownloadsChanged(int32_t count,
+                        int64_t received_bytes,
+                        int64_t total_bytes) override;
   void PageChanged(const KURL& url,
                    domicile::mojom::blink::WebViewSecurity security) override;
 
@@ -346,6 +355,9 @@ class CORE_EXPORT HTMLWebViewElement final
   bool can_go_forward_ = false;
   bool loading_ = false;
   double load_progress_ = 0.0;
+  int32_t download_count_ = 0;
+  int64_t download_received_bytes_ = 0;
+  int64_t download_total_bytes_ = 0;
   String url_;
   String security_;
   double zoom_ = 1.0;

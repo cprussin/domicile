@@ -16,14 +16,18 @@
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/domicile/browser/download_tally.h"
 #include "components/domicile/browser/guest_dialogs.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
+#include "components/download/public/common/download_item.h"
 #include "components/input/native_web_keyboard_event.h"
 #include "content/public/browser/browser_plugin_guest_delegate.h"
 #include "content/public/browser/context_menu_params.h"
+#include "content/public/browser/download_manager.h"
 #include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/host_zoom_map.h"
@@ -157,6 +161,8 @@ class MediaAccess {
 //                               attaching, this object is deleted with it
 //   content_settings::Observer  reports the page's site permissions when a
 //                               setting changes
+//   DownloadManager::Observer,  report the progress of the page's downloads
+//   DownloadItem::Observer
 //
 // A guest, not a subframe, so the page is a main frame: X-Frame-Options and
 // CSP frame-ancestors pass, history works across process changes, and storage
@@ -178,7 +184,9 @@ class WebViewGuest : public mojom::WebViewGuest,
                      public content::WebContentsDelegate,
                      public content::JavaScriptDialogManager,
                      public content::WebContentsObserver,
-                     public content_settings::Observer {
+                     public content_settings::Observer,
+                     public content::DownloadManager::Observer,
+                     public download::DownloadItem::Observer {
  public:
   // Creates a guest for `placeholder`, a child frame of `owner`, and starts
   // attaching it. The attach replaces and destroys `placeholder`; a refused
@@ -642,6 +650,17 @@ class WebViewGuest : public mojom::WebViewGuest,
       const ContentSettingsPattern& secondary_pattern,
       ContentSettingsTypeSet content_type_set) override;
 
+  // content::DownloadManager::Observer:
+  //
+  // Watches each download this page starts, for ReportDownloads.
+  void OnDownloadCreated(content::DownloadManager* manager,
+                         download::DownloadItem* item) override;
+  void ManagerGoingDown(content::DownloadManager* manager) override;
+
+  // download::DownloadItem::Observer:
+  void OnDownloadUpdated(download::DownloadItem* item) override;
+  void OnDownloadDestroyed(download::DownloadItem* item) override;
+
  private:
   WebViewGuest(content::RenderFrameHost& owner,
                mojo::PendingReceiver<mojom::WebViewGuest> receiver,
@@ -733,6 +752,10 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Reports load progress to the element if it changed.
   void ReportLoadProgress(double progress);
 
+  // Reports the page's downloads in progress to the element if they changed.
+  // See DownloadsChanged in the mojom.
+  void ReportDownloads();
+
   // Reports the page's zoom to the element if it changed. Zoom changes when
   // the shell sets it, when another window on the same host changes it
   // (HostZoomMap is per host), or on navigation to a differently zoomed site.
@@ -803,6 +826,7 @@ class WebViewGuest : public mojom::WebViewGuest,
 
   bool reported_loading_ = false;
   double reported_load_progress_ = 0.0;
+  DownloadTally reported_downloads_;
   GURL reported_url_;
   mojom::WebViewSecurity reported_security_ =
       mojom::WebViewSecurity::kNeutral;
@@ -839,6 +863,20 @@ class WebViewGuest : public mojom::WebViewGuest,
   // WebContentsDestroyed, with the zoom subscription.
   base::ScopedObservation<HostContentSettingsMap, content_settings::Observer>
       settings_observation_{this};
+
+  // The profile's downloads, watched for ones this page starts. Reset in
+  // WebContentsDestroyed, since a download with no WebContents would then
+  // match.
+  base::ScopedObservation<content::DownloadManager,
+                          content::DownloadManager::Observer>
+      download_manager_observation_{this};
+
+  // This page's downloads, kept until each is destroyed: an interrupted one
+  // can resume.
+  std::vector<raw_ptr<download::DownloadItem>> downloads_;
+  base::ScopedMultiSourceObservation<download::DownloadItem,
+                                     download::DownloadItem::Observer>
+      download_observations_{this};
 
   // HostZoomMap zoom changes, including from other windows on the same host.
   // Dropped with the guest's WebContents, which ReportZoom reads.

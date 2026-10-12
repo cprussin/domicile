@@ -121,7 +121,7 @@ Understood and not scheduled.
 - **`beforeunload` asks nothing.** The page leaves.
 - **Some permission requests are refused,** including `getDisplayMedia`.
 - **Some file dialogs are refused:** from the shell's own page, and a
-  directory dropped on a page. Download progress isn't reported.
+  directory dropped on a page.
 - **No `chrome://` pages,** so no printing.
 - **Some extension calls are refused.**
   [EXTENSIONS.md](docs/architecture/EXTENSIONS.md).
