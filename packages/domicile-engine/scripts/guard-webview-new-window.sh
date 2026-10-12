@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Checks a target="_blank" link inside a browser window opens a second window
-# the shell draws.
+# Checks a target="_blank" form inside a browser window opens a second window
+# the shell draws, and that the window's page gets the form's POST.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-new-window.sh /build/chromium/src
@@ -9,11 +9,12 @@
 # nothing is measured in pixels.
 #
 # A browser window's page is a guest with no SiteInstance of its own, which
-# keeps the user logged in, but content CHECKs for one in
-# `WebContentsImpl::CreateNewWindow`. So `WebViewGuest` refuses content's window
-# and opens a desk browser window at the address instead
+# keeps the user logged in. Patch 0115 lets `WebContentsImpl::CreateNewWindow`
+# make its new window anyway, through `WebViewGuest::CreateNewGuestWindow`,
+# which lists it as a desk browser window
 # (src/components/domicile/mojom/browser_windows.mojom). The shell sees it in
-# `browserwindowschanged` and draws it.
+# `browserwindowschanged` and draws it. A `target="_blank"` form has no
+# opener, so content navigates the window itself, with the form's body.
 #
 # Asserts, in order, since each reading depends on the one before:
 #
@@ -25,10 +26,11 @@
 #   - at the address the link named
 #   - the shell created a second view for it
 #   - that view's page loaded, so the user sees the linked page
+#   - the page got the form's POST, not a GET
 #
 # The last two are required because a listed window is not a window on screen.
 # Unit tests cannot cover this: happy-dom has no guest or browser process to
-# refuse a window.
+# make a window.
 #
 # NEGATIVE=1 runs the negative control: it clicks an ordinary link in the same
 # guest. It must open no window and must navigate in place, so a window opened
@@ -225,16 +227,19 @@ SAW_OPENED=$(saw "GUARD second-page url=$SITE/opened")
 # The ordinary link was followed in place. Expected in the negative control;
 # in the claim's run it means the press hit the wrong link.
 SAW_STAYED=$(saw "GUARD stayed-loaded")
-# Logged by WebViewGuest::CreateCustomWebContents. Separates "the renderer
-# never asked for a window" from "the browser refused it and nothing reached
+# Logged by WebViewGuest::MakeOpenedWindow. Separates "the renderer
+# never asked for a window" from "the browser made it and nothing reached
 # the page", which look the same from the shell's document.
-SAW_REFUSED=$(saw "domicile: a <webview> refused to open a window for")
+SAW_MADE=$(saw "domicile: made browser window")
+# The page that loaded in the window says how it was asked for. A window
+# opened at the address alone would load it with a GET and no body.
+SAW_POSTED=$(saw "GUARD opened-loaded method=POST body=name=Ada")
 
 echo
 echo "shell=$SAW_SHELL page=$SAW_PAGE"
 echo "the shell's document saw: press=$SAW_CHROME asked=$SAW_ASKED address=$SAW_ADDRESS second=$SAW_SECOND"
-echo "the browser process said: refused=$SAW_REFUSED"
-echo "the pages in the windows saw: press=$SAW_GUEST opened=$SAW_OPENED stayed=$SAW_STAYED"
+echo "the browser process said: made=$SAW_MADE"
+echo "the pages in the windows saw: press=$SAW_GUEST opened=$SAW_OPENED posted=$SAW_POSTED stayed=$SAW_STAYED"
 echo
 
 # Picks which side to blame. `scripts/test-webview-new-window-guard.sh` runs
@@ -283,11 +288,11 @@ elif [ "$SAW_ASKED" != "1" ] && [ "$SAW_STAYED" = "1" ]; then
 ordinary link, which is the control's target and sits in the other half of the \
 page. Nothing here is about a link asking for a window — this is geometry, \
 press points and the fixture's halves are both derived from the window's size"
-elif [ "$SAW_ASKED" != "1" ] && [ "$SAW_REFUSED" = "1" ]; then
+elif [ "$SAW_ASKED" != "1" ] && [ "$SAW_MADE" = "1" ]; then
   FAILURE="THE BROWSER WAS ASKED AND THE PAGE WAS NOT TOLD: \
-WebViewGuest::CreateCustomWebContents ran — it refused the window, which it \
-must — and no window reached this document's list. So the crossing works and \
-the report does not: the browser window the host opened \
+WebViewGuest::MakeOpenedWindow made the window and no window reached this \
+document's list. So the crossing works and the report does not: content never \
+handed the window to AddNewContents, the host never listed it \
 (domicile_browser_windows.cc, which logs 'opened browser window'), the list \
 BrowserWindowsClient carries, or DomicileHost's browserwindowschanged"
 elif [ "$SAW_ASKED" != "1" ]; then
@@ -317,10 +322,17 @@ arrived in it. So the window's page was never navigated, or never attached to \
 the element — a user clicking that link sees an empty window. The engine's \
 'attached browser window' line and the http log's record of whether /opened \
 was ever requested are the two ends of it"
+elif [ "$SAW_POSTED" != "1" ]; then
+  FAILURE="the window opened and its page lost the form's POST: it loaded \
+without the body the form sent. Content navigates a window with no opener \
+itself, with the body, once AddNewContents returns; a window opened at the \
+address instead (ReportNewWindow) loads it with a GET. The http log has the \
+request's method"
 else
-  PASSED="a link with target=\"_blank\", clicked inside a browser window, \
+  PASSED="a form with target=\"_blank\", sent inside a browser window, \
 opened a browser window at the address it names, the shell heard it in the \
-desk's list — and the second <webview> the shell drew it in showed that page. \
+desk's list — and the second <webview> the shell drew it in showed that page, \
+with the form's POST. \
 Which is the whole of what a user asking for a new window gets, measured end \
 to end"
 fi

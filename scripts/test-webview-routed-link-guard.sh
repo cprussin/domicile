@@ -141,7 +141,7 @@ expect "everything arriving is the pass" "pass" "$(verdict 0)"
 expect "an ask with no routed line is a failure" "fail" \
   "$(verdict 0 SAW_ROUTED=0)"
 expect "an ask with no routed line blames the other path" "yes" \
-  "$(blames "CreateCustomWebContents" 0 SAW_ROUTED=0)"
+  "$(blames "CreateNewGuestWindow" 0 SAW_ROUTED=0)"
 expect "an ask with no routed line is not read as a pass" "no" \
   "$(blames "the delegate took it" 0 SAW_ROUTED=0)"
 # Looks like the defect but is not: the press arrived as a left press.

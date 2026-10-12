@@ -4,12 +4,11 @@
 // It must be a domicile:// document: the browser binds WebViewGuestHost only
 // for the shell's origin. See ShellURLLoaderFactory::ShellDocument.
 //
-// Tests a `target="_blank"` link inside a browser window. A guest has no
-// SiteInstance of its own, which keeps the user logged in, but content CHECKs
-// for one in `WebContentsImpl::CreateNewWindow`. So the browser refuses
-// content's window and opens a desk browser window at that address instead.
-// The shell gets `browserwindowschanged` with an undrawn window in
-// `browserWindows`, and draws it in a second `<webview>` naming the window.
+// Tests a `target="_blank"` form inside a browser window. Content makes the
+// new window through `WebViewGuest::CreateNewGuestWindow` (patch 0115), which
+// lists it as a desk browser window. The shell gets `browserwindowschanged`
+// with an undrawn window in `browserWindows`, and draws it in a second
+// `<webview>` naming the window.
 //
 // The guard requires the second view, since a window in the list is not on
 // screen. The second element's page logging that it ran cannot be faked by an
@@ -24,8 +23,8 @@
 //   GUARD shell-loaded          this module ran and the window is set up
 //   GUARD chrome-mousedown      a press reached the shell's document (harness
 //                               check)
-//   GUARD new-window url=…      an undrawn browser window appeared in the
-//                               desk's list, with its address
+//   GUARD new-window url=…      a browser window in the desk's list, with its
+//                               address, each time that changes
 //   GUARD second-view           the shell created a second <webview> for it
 //   GUARD second-page url=…     the second <webview> shows that page
 //
@@ -92,13 +91,16 @@ export const Shell = (_root, desktop) => {
         " document is not a shell the engine serves",
     );
   }
-  const drawn = new Set();
+  // Each window's last reported address. A page's new window is listed
+  // before its first navigation commits, so its address can arrive in a
+  // later change.
+  const reported = new Map();
   host.addEventListener("browserwindowschanged", () => {
     for (const window of host.browserWindows ?? []) {
-      if (!drawn.has(window.id)) {
-        drawn.add(window.id);
+      if (reported.get(window.id) !== window.url) {
         say(`new-window url=${window.url}`);
-
+      }
+      if (!reported.has(window.id)) {
         // Draw the window in a second element over the first; the guard checks
         // the page arrives, not its position. Set `window` before attaching,
         // since the element requests its page on attach.
@@ -112,6 +114,7 @@ export const Shell = (_root, desktop) => {
         document.body.append(opened);
         say("second-view");
       }
+      reported.set(window.id, window.url);
     }
   });
 
