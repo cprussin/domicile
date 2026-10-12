@@ -203,7 +203,11 @@ void HTMLAppElement::Embed() {
           frame->LayoutZoomFactor(),
           reconfiguring ? ExternalSurfaceEmbedder::Allocation::kReconfigure
                         : ExternalSurfaceEmbedder::Allocation::kAdopt,
-          BindOnce(&HTMLAppElement::OnEmbedded, WrapPersistent(this), app_id));
+          // WrapWeakPersistent: the embedder owns this callback too. A strong
+          // one would keep a removed element, and its pipe, alive while the
+          // browser holds the embed.
+          BindOnce(&HTMLAppElement::OnEmbedded, WrapWeakPersistent(this),
+                   app_id));
 
   // A shown window resized: its frame sink is known, so embed the surface for
   // the new box in the frame whose layout changed it. Viz holds that frame

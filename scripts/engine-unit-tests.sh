@@ -20,7 +20,7 @@ require_engine_out
 
 FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*:CommandProtocolTest.*:DomicileDisplayListTest.*:DomicileKeyboardLayoutTest.*:ShellWindowsTest.*:ShellWindowPlacesTest.*:LineFramerTest.*:DesktopPrefsTest.*:SurfaceCropTest.*:SurfaceTransformTest.*:SurfaceAlphaTest.*:ExtensionInstallerTest.*:ExtensionTrayEntryTest.*:DeskTabsTest.*:DeskGeometryTest.*:DomicileDisplayRegionsTest.*:DomicileDeskTargeterTest.*:PlaceholderStageTest.*:SystemCallTest.*:PortalRequestTest.*:FileChoiceTest.*:DisplayCaptureTest.*:CapturedFourccTest.*:DisplayCaptureTargetTest.*:HeldChordsTest.*:SitePermissionsTest.*:ControlChannelTest.*:DeviceChoicesTest.*:WheelActionTest.*:SurfaceFramesTest.*'
 
-# Every suite in the filter, counted rather than estimated: FrameSinkBroker 34,
+# Every suite in the filter, counted rather than estimated: FrameSinkBroker 35,
 # WindowDiff 7, EngineEventQueue 7, ShortcutRegistry 10, ShellURLLoaderFactory
 # 12, ShellDocument 14, ShellSource 3, CursorShape 3, CommandProtocol 27,
 # DomicileDisplayList 6, DomicileKeyboardLayout 3, ShellWindows 8,
@@ -31,7 +31,8 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, SitePermissions 11,
 # ControlChannel 1, DeviceChoices 9, WheelAction 1, SurfaceFrames 6.
 #
-# 279, and it was 273 — matching viz's acks and presentation feedback to a
+# 280, and it was 279 — dropping a waiting embed when its page disconnects is
+# one more FrameSinkBroker case. Before that 279, and it was 273 — matching viz's acks and presentation feedback to a
 # window's frames is six SurfaceFrames cases. Before that 273, and it was 272 —
 # Ctrl+wheel scrolling is one WheelAction case. Before
 # that 272, and it was 263 — the ids a <webview>'s device chooser gives the shell
@@ -99,7 +100,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=279
+FLOOR=280
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.
