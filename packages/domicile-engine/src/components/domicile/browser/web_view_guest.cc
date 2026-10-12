@@ -49,6 +49,7 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/unowned_inner_web_contents_client.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "content/public/common/javascript_dialog_type.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/stop_find_action.h"
 #include "content/public/common/url_constants.h"
@@ -1594,6 +1595,87 @@ void WebViewGuest::ReportFind(int matches, int active_match) {
 void WebViewGuest::EndFind() {
   find_text_.clear();
   ReportFind(0, 0);
+}
+
+namespace {
+
+mojom::WebViewDialogType ToDialogType(content::JavaScriptDialogType type) {
+  switch (type) {
+    case content::JAVASCRIPT_DIALOG_TYPE_ALERT:
+      return mojom::WebViewDialogType::kAlert;
+    case content::JAVASCRIPT_DIALOG_TYPE_CONFIRM:
+      return mojom::WebViewDialogType::kConfirm;
+    case content::JAVASCRIPT_DIALOG_TYPE_PROMPT:
+      return mojom::WebViewDialogType::kPrompt;
+  }
+  NOTREACHED();
+}
+
+// The element's reply, in the strings content takes.
+void DialogAnswered(GuestDialogs::Closed answer,
+                    bool accepted,
+                    const std::string& user_input) {
+  std::move(answer).Run(accepted, base::UTF8ToUTF16(user_input));
+}
+
+}  // namespace
+
+content::JavaScriptDialogManager* WebViewGuest::GetJavaScriptDialogManager(
+    content::WebContents* source) {
+  return this;
+}
+
+void WebViewGuest::RunJavaScriptDialog(
+    content::WebContents* web_contents,
+    content::RenderFrameHost* render_frame_host,
+    content::JavaScriptDialogType dialog_type,
+    const std::u16string& message_text,
+    const std::u16string& default_prompt_text,
+    DialogClosedCallback callback,
+    bool* did_suppress_message) {
+  const GURL origin = render_frame_host->GetLastCommittedOrigin().GetURL();
+  const mojom::WebViewDialogType type = ToDialogType(dialog_type);
+  const bool opened = dialogs_.Open(
+      std::move(callback),
+      base::BindOnce(
+          [](mojom::WebViewGuestClient* client, const GURL& origin,
+             mojom::WebViewDialogType type, const std::u16string& message,
+             const std::u16string& default_prompt,
+             GuestDialogs::Closed answer) {
+            // Wrapped, as in AskPermission: the page is paused until it gets
+            // an answer, and a pipe closing unanswered must still give one.
+            client->DialogRequested(
+                origin, type, base::UTF16ToUTF8(message),
+                base::UTF16ToUTF8(default_prompt),
+                mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+                    base::BindOnce(&DialogAnswered, std::move(answer)), false,
+                    std::string()));
+          },
+          client_.get(), origin, type, message_text, default_prompt_text));
+  // The dialog guard greps for these.
+  if (opened) {
+    LOG(INFO) << "domicile: a <webview>'s page opened a dialog; asking the "
+                 "shell.";
+  } else {
+    LOG(WARNING) << "domicile: a <webview>'s page opened a dialog while one "
+                    "was open; dismissed.";
+  }
+  *did_suppress_message = !opened;
+}
+
+void WebViewGuest::RunBeforeUnloadDialog(
+    content::WebContents* web_contents,
+    content::RenderFrameHost* render_frame_host,
+    bool is_reload,
+    DialogClosedCallback callback) {
+  std::move(callback).Run(true, std::u16string());
+}
+
+void WebViewGuest::CancelDialogs(content::WebContents* web_contents,
+                                 bool reset_state) {
+  if (dialogs_.Cancel()) {
+    client_->DialogWithdrawn();
+  }
 }
 
 bool WebViewGuest::IsWebContentsCreationOverridden(

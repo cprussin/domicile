@@ -21,6 +21,7 @@ namespace blink {
 
 class DomicileContextMenuEvent;
 class DomicileDeviceRequestEvent;
+class DomicileDialogEvent;
 class DomicileFileChooserEvent;
 class DomicilePermissionRequestEvent;
 class ExceptionState;
@@ -148,6 +149,9 @@ class CORE_EXPORT HTMLWebViewElement final
 
   // Releases the device request once answered. See `device_request_`.
   void DeviceRequestAnswered(DomicileDeviceRequestEvent&);
+
+  // Releases the dialog once answered. See `dialog_`.
+  void DialogAnswered(DomicileDialogEvent&);
 
   void Trace(Visitor*) const override;
 
@@ -293,6 +297,18 @@ class CORE_EXPORT HTMLWebViewElement final
   // `domicile-device-request-withdrawn`, so the shell stops showing it.
   void DeviceRequestWithdrawn() override;
 
+  // Dispatches `domicile-dialog`. If no listener calls `preventDefault()`,
+  // the dialog is dismissed after dispatch. See domicile_dialog_event.h.
+  void DialogRequested(const KURL& origin,
+                       domicile::mojom::blink::WebViewDialogType type,
+                       const String& message,
+                       const String& default_prompt,
+                       DialogRequestedCallback callback) override;
+
+  // Dismisses the held dialog and dispatches `domicile-dialog-withdrawn`, so
+  // the shell stops showing it.
+  void DialogWithdrawn() override;
+
   // Dispatches `domicile-context-menu`. See domicile_context_menu_event.h.
   void ContextMenuRequested(
       domicile::mojom::blink::WebViewContextMenuPtr menu) override;
@@ -362,6 +378,10 @@ class CORE_EXPORT HTMLWebViewElement final
   // one at a time. Held for `waiting_choosers_`' reason, and so DevicesOffered
   // reaches it.
   Member<DomicileDeviceRequestEvent> device_request_;
+
+  // The dialog the shell has not answered, if any. The browser sends one at a
+  // time. Held for `waiting_choosers_`' reason.
+  Member<DomicileDialogEvent> dialog_;
 
   // See sitePermissions().
   Vector<std::pair<String, String>> site_permissions_;

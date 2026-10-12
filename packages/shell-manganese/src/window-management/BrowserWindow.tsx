@@ -18,9 +18,11 @@ import { BrowserCommand, browserCommandFor } from "./browser/browser-command";
 import { DeviceAsk } from "./browser/DeviceAsk";
 import { FindBar } from "./browser/FindBar";
 import { LinkTarget } from "./browser/LinkTarget";
+import { PageDialog } from "./browser/PageDialog";
 import { PageMenu } from "./browser/PageMenu";
 import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
 import { useDeviceRequest } from "./browser/useDeviceRequest";
+import { useDialogRequest } from "./browser/useDialogRequest";
 import { useFileRequest } from "./browser/useFileRequest";
 import { usePageMenu } from "./browser/usePageMenu";
 import { usePermissionRequest } from "./browser/usePermissionRequest";
@@ -260,6 +262,10 @@ export const BrowserWindow = ({
   // The device the page asked for. The engine draws no chooser; this window
   // asks over the page, address bar or not.
   const deviceRequest = useDeviceRequest(view);
+  // The `alert()`, `confirm()` or `prompt()` the page is paused on, and the
+  // element in it to focus. The engine draws no dialog.
+  const dialogRequest = useDialogRequest(view);
+  const [dialogBox, setDialogBox] = useState<HTMLElement | null>(null);
 
   // Focuses an element in this window without reporting it as a user reach.
   // All programmatic focus here must go through this.
@@ -399,18 +405,19 @@ export const BrowserWindow = ({
   //   engine does this for `<app>` but not for `<webview>`.
   // - Skips the page if focus is already in this window. Otherwise a click in
   //   the address bar would have its focus pulled into the page.
-  // - Focuses the file picker instead while one is open, since the page is
-  //   waiting on it.
+  // - Focuses the file picker or the page's dialog instead while one is open,
+  //   since the page is waiting on it.
   useEffect(() => {
     if (holdsKeyboard && view !== null) {
       domicile.focusChrome();
-      if (pickerBox !== null) {
-        focusOwn(pickerBox);
+      const waiting = pickerBox ?? dialogBox;
+      if (waiting !== null) {
+        focusOwn(waiting);
       } else if (!holdsFocus(element.current)) {
         focusOwn(view);
       }
     }
-  }, [domicile, focusOwn, holdsKeyboard, pickerBox, view]);
+  }, [dialogBox, domicile, focusOwn, holdsKeyboard, pickerBox, view]);
 
   // Releases focus when the window loses it. The engine forwards keys from this
   // document to clients, but keys sent to a focused guest never reach the
@@ -422,10 +429,11 @@ export const BrowserWindow = ({
   }, [holdsKeyboard]);
 
   // Restores focus if chrome takes it later, such as when another window
-  // closes. See `useReclaimFocus`. Targets the picker while one is open. Not
-  // behind a panel or the lock screen, whose keys must not reach the page.
+  // closes. See `useReclaimFocus`. Targets the picker or the dialog while one
+  // is open. Not behind a panel or the lock screen, whose keys must not reach
+  // the page.
   useReclaimFocus<HTMLElement>(
-    pickerBox ?? view,
+    pickerBox ?? dialogBox ?? view,
     holdsKeyboard && !behindPanel,
     focusOwn,
   );
@@ -619,6 +627,9 @@ export const BrowserWindow = ({
           <div className={deviceAskStyles}>
             <DeviceAsk request={deviceRequest} />
           </div>
+        )}
+        {dialogRequest !== undefined && (
+          <PageDialog ref={setDialogBox} request={dialogRequest} />
         )}
         {asking !== undefined && (
           <FilePicker
