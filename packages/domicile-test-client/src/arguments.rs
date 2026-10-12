@@ -87,6 +87,10 @@ pub struct Arguments {
     pub min_size: Option<(i32, i32)>,
     pub max_size: Option<(i32, i32)>,
 
+    /// The size to redraw at after the first frame, in surface pixels, as a
+    /// client that picks its own size does.
+    pub resize_to: Option<(u32, u32)>,
+
     /// The `wl_surface.set_buffer_transform` to draw with, if any.
     ///
     /// The buffer is drawn turned, half [`crate::window::TURNED_COLORS`]`[0]`
@@ -159,6 +163,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut bubble = None;
     let mut min_size = None;
     let mut max_size = None;
+    let mut resize_to = None;
     let mut buffer_transform = None;
 
     let mut args = args.into_iter();
@@ -230,6 +235,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--max-size" => {
                 take(&mut max_size, &flag, size(&mut args, &flag)?)?;
             }
+            "--resize-to" => {
+                take(&mut resize_to, &flag, size(&mut args, &flag)?)?;
+            }
             "--buffer-transform" => {
                 take(&mut buffer_transform, &flag, turn(&mut args, &flag)?)?;
             }
@@ -254,6 +262,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         bubble: bubble.unwrap_or(false),
         min_size,
         max_size,
+        resize_to,
         buffer_transform,
     })
 }
@@ -279,10 +288,10 @@ fn value(args: &mut impl Iterator<Item = OsString>, flag: &str) -> Result<String
 }
 
 /// The `WIDTHxHEIGHT` after a flag.
-fn size(
+fn size<T: std::str::FromStr>(
     args: &mut impl Iterator<Item = OsString>,
     flag: &str,
-) -> Result<(i32, i32), ArgumentError> {
+) -> Result<(T, T), ArgumentError> {
     let stated = value(args, flag)?;
     stated
         .split_once('x')

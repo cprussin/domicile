@@ -526,6 +526,8 @@ fn resizing_and_closing_report_to_chrome() {
         }
         other => panic!("expected AppResized, got {other:?}"),
     }
+    // The compositor reports the size of every frame; only a change is news.
+    assert_eq!(host.app_resized(&id, (200.0, 150.0)), None);
     assert!(host.app_resized("ghost", (1.0, 1.0)).is_none());
 
     match host.app_closed(&id) {

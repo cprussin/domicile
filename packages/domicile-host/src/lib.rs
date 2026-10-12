@@ -522,10 +522,13 @@ impl Host {
         }
     }
 
-    /// Record a client's new content size. Returns the chrome notification, or
-    /// `None` if the app is unknown.
+    /// Record a client's content size. Returns the chrome notification, or
+    /// `None` if the app is unknown or the size has not changed.
     pub fn app_resized(&mut self, app_id: &str, size: (f64, f64)) -> Option<HostMessage> {
         let app = self.apps.get_mut(app_id)?;
+        if app.size == Some(size) {
+            return None;
+        }
         app.size = Some(size);
         reported(
             app,

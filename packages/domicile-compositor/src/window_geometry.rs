@@ -57,6 +57,20 @@ pub fn crop(
     }
 }
 
+/// A window's size for the chromes: its geometry, which leaves out a
+/// client-drawn shadow, or else `drawn`, the frame's logical size. `None` for
+/// a buffer of no known kind, which is not shown.
+pub fn window_size(
+    geometry: Option<(i32, i32, i32, i32)>,
+    drawn: Option<(u32, u32)>,
+) -> Option<(f64, f64)> {
+    match (geometry, drawn) {
+        (Some((_, _, width, height)), _) => Some((f64::from(width), f64::from(height))),
+        (None, Some((width, height))) => Some((f64::from(width), f64::from(height))),
+        (None, None) => None,
+    }
+}
+
 /// Maps a point in the `<app>` element's box to surface coordinates.
 pub fn surface_point(geometry: Option<(i32, i32, i32, i32)>, point: (f64, f64)) -> (f64, f64) {
     let (x, y, _, _) = geometry.unwrap_or_default();
@@ -65,7 +79,17 @@ pub fn surface_point(geometry: Option<(i32, i32, i32, i32)>, point: (f64, f64)) 
 
 #[cfg(test)]
 mod tests {
-    use super::{crop, surface_point};
+    use super::{crop, surface_point, window_size};
+
+    #[test]
+    fn a_window_is_the_size_of_its_geometry_or_else_of_its_frame() {
+        assert_eq!(
+            window_size(Some((25, 25, 800, 600)), Some((850, 650))),
+            Some((800.0, 600.0))
+        );
+        assert_eq!(window_size(None, Some((850, 650))), Some((850.0, 650.0)));
+        assert_eq!(window_size(None, None), None);
+    }
 
     #[test]
     fn a_surface_with_no_geometry_is_shown_whole() {
