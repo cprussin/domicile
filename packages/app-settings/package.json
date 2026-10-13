@@ -3,12 +3,13 @@
     "@base-ui/react": "catalog:",
     "@cprussin/option-result": "catalog:",
     "@domicile-desktop/component-library": "workspace:*",
+    "@domicile-desktop/sdk": "workspace:*",
     "@phosphor-icons/react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "zod": "catalog:"
   },
-  "description": "The Settings app: a Chrome extension page that edits the desktop config, the shell, extensions and site permissions.",
+  "description": "The Settings app: an app module that edits the desktop config, the shell, extensions and site permissions.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@domicile-desktop/test-support": "workspace:*",

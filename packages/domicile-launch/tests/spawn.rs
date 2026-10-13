@@ -387,9 +387,8 @@ fn the_compositor_carries_this_desktops_control_socket_to_everything_it_starts()
 }
 
 #[test]
-fn the_engine_carries_this_desktops_control_socket_to_the_settings_host() {
-    // The engine starts `domicile-settings-host` for the Settings app, which
-    // asks this desktop for its files and site permissions.
+fn the_engine_carries_this_desktops_control_socket_to_what_it_starts() {
+    // Native messaging hosts the engine starts reach this desktop with it.
     let spawned = engine(
         Path::new("/l/engine"),
         &shell(),

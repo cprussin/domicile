@@ -1,15 +1,16 @@
 # Settings
 
 Every desktop has a Settings app. `domicile-settings`, or **Settings** in the
-launcher, opens it in an app window
-([WEB-APPS.md](architecture/WEB-APPS.md)).
+launcher, opens it in an app window. It is an app module
+([APP-MODULES.md](architecture/APP-MODULES.md)), not an extension, so it is
+not in the Extensions page or any extension list.
 
 - **Config pages:** Appearance, Keyboard, Displays, Power & lock, Privacy,
   Launcher and Startup cover every key of the config
   ([SHELL-CONFIG.md](SHELL-CONFIG.md)). A change is written to the file as soon
   as it is made, and the desktop reloads it.
 - **Extensions:** switch an extension on or off and open its options through
-  `chrome.management`. Load an unpacked folder, picked in the desktop's file
+  the engine. Load an unpacked folder, picked in the desktop's file
   chooser, or uninstall an extension the config did not install, through the
   engine; this works with a read-only config. The config's own uninstall by
   editing its `extensions` lists
@@ -46,35 +47,37 @@ launcher, opens it in an app window
 ## How it works
 
 ```
-Settings page ─ native messaging ─▶ domicile-settings-host ─ DOMICILE_SOCK ─▶ domicile ─ command socket ─▶ engine
- (extension)                          reads and writes the files    settings_files,                site_permissions,
+Settings page ─ spawn, stdio ─▶ domicile-settings-host ─ DOMICILE_SOCK ─▶ domicile ─ command socket ─▶ engine
+ (app module)                       reads and writes the files    settings_files,                site_permissions,
                                                                      site_permissions,              set_site_permission,
                                                                      extensions,                    load_unpacked,
                                                                      media_devices                  uninstall_extension,
                                                                                                     config_extensions,
+                                                                                                    extensions,
+                                                                                                    set_extension_enabled,
                                                                                                     media_devices,
                                                                                                     set_media_device
 ```
 
 | Part | Where |
 |---|---|
-| The app | An unpacked MV3 extension with the `management` and `nativeMessaging` permissions. Its manifest `key` fixes its id, `acpgnhiblklkgbkcjgbabkcmdmchdphk`. Installed like History ([HISTORY.md](HISTORY.md#how-it-works)). |
-| The host | `domicile-settings-host`, beside `domicile`. Chrome starts it for the app. Protocol: `domicile_launch::settings`. |
-| Finding the host | On every start `domicile` writes `<profile>/NativeMessagingHosts/domicile.settings.json`, whose `allowed_origins` is the app alone (`domicile_launch::apps`). |
+| The app | `settings.js`, an app module in `libexec/domicile/app-modules/settings`. `DOMICILE_APP_MODULES` names another directory of app modules. |
+| The host | `domicile-settings-host`, beside `domicile`. The app spawns it with the system API and frames each message as a 4-byte little-endian length and UTF-8 JSON. Protocol: `domicile_launch::settings`. |
+| Finding the host | `domicile` links it into the apps' `PATH` (the runtime's `bin`, beside `xdg-open`). |
 | Which files | The host asks the desktop (`settings_files` on the control socket) on every request. The page never names a path. |
 | Writable | `access(W_OK)` on the file, following links. |
-| Extensions | The engine's `load_unpacked`, `uninstall_extension` and `config_extensions` commands. |
+| Extensions | The engine's `extensions`, `set_extension_enabled`, `load_unpacked`, `uninstall_extension` and `config_extensions` commands. |
 | Picking a folder | The host calls the `FileChooser` portal's `OpenFile` with `directory`, which the shell draws ([PORTALS.md](PORTALS.md)). A page cannot learn the path of a folder from `<input type="file">`. |
 | Site permissions | The engine's `site_permissions` and `set_site_permission` commands ([CONTROL-CHANNEL.md](/packages/domicile-engine/docs/CONTROL-CHANNEL.md#command-socket)). They read and write the shell profile's content settings as the address bar's panel does. |
 | Camera and microphone | The engine's `media_devices` and `set_media_device` commands. They read and write Chrome's device ranking in the shell profile's prefs, which Chrome uses for a site that names no device. |
-| Opening it | `domicile-settings` runs `domicile open-app chrome-extension://acpgnhiblklkgbkcjgbabkcmdmchdphk/settings.html`. |
+| Opening it | `domicile-settings` runs `domicile run-app` on `settings.js`. |
 
 ## Key decisions
 
-- **Native messaging over a new engine binding.** An extension page reaches a
-  native program through Chrome's own API, so files need no engine change. Only
-  listing site permissions needs the engine, since `chrome.contentSettings`
-  cannot list them and its settings shadow the user's.
+- **A spawned host over a new engine binding.** An app reaches a native
+  program through the system API, so files need no engine change. Domicile's
+  state that only the engine holds is an engine command
+  ([APP-MODULES.md](architecture/APP-MODULES.md#domiciles-own-state)).
 - **The host asks the desktop for paths.** Only `domicile` knows which config
   and shell it runs. A page that named a path could write anywhere.
 - **Writes in place.** A link stays a link, so a config linked from a dotfiles
@@ -85,8 +88,8 @@ Settings page ─ native messaging ─▶ domicile-settings-host ─ DOMICILE_SO
 - **A module config is read-only in the form.** Its settings are code. The Code
   page edits it.
 - **Writing the config is trusting the page.** The config can run commands at
-  startup. Only the app's id may start the host, and only the shell and the
-  config, which the user already trusts, are written.
+  startup. Any app can spawn the host, as it can any program; only the shell
+  and the config, which the user already trusts, are written.
 
 ## Shell options
 
