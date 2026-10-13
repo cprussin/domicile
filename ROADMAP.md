@@ -47,14 +47,13 @@ item when it ships.
    - A guard that runs the app's native messaging host in the engine.
 
 7. **Web apps.** [WEB-APPS.md](docs/architecture/WEB-APPS.md).
+   - `DomicileHost.openAppWindow(url)`, for a shell's own launcher.
    - A guard that the engine lists an app window with `isApp` and records no
      visits for it.
 
 8. **Distribution packages.**
    [RUNNING-A-DESKTOP.md](docs/RUNNING-A-DESKTOP.md#other-distributions).
    - No APT or RPM repository, AUR package or COPR, so upgrades are by hand.
-   - The shell builder ships the whole workspace's `node_modules`, about
-     600 MB with the dev tools.
    - Checked by installing in containers; no packaged session has run on
      hardware.
 
