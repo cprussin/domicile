@@ -1,0 +1,26 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+module domicile.mojom;
+
+// An app module's channel to the compositor: system calls and their answers,
+// and nothing else. See docs/architecture/APP-MODULES.md.
+//
+// The browser binds this only for a document on an app's origin, in a window
+// pinned to that app. It says `app_hello` on the compositor's socket, and the
+// compositor answers only the calls an app may make, so a renderer that calls
+// this wrongly reaches nothing more.
+interface AppChannel {
+  // Where the compositor's answers go. Answers that arrive first are held
+  // until this is called.
+  SetClient(pending_remote<AppChannelClient> client);
+
+  // A system call: `request` is the call as JSON, as for
+  // ControlChannel.CallSystem.
+  CallSystem(uint32 id, string request);
+};
+
+interface AppChannelClient {
+  // A `system_reply`, `system_event` or `system_end` line, whole.
+  System(string message);
+};

@@ -4,6 +4,7 @@
 #include "components/domicile/browser/shell_url_loader_factory.h"
 
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "base/containers/span.h"
@@ -12,6 +13,7 @@
 #include "base/strings/escape.h"
 #include "base/strings/strcat.h"
 #include "mojo/public/cpp/system/data_pipe.h"
+#include "components/domicile/browser/app_roots.h"
 #include "components/domicile/browser/desk_lock.h"
 #include "components/domicile/browser/shell_source.h"
 #include "components/domicile/common/domicile_scheme.h"
@@ -42,7 +44,7 @@ constexpr char kShellCacheControl[] = "no-store";
 // if the URL does not resolve inside `root`. Shared by the shell and home
 // hosts.
 bool ResolveUnder(const base::FilePath& root,
-                  const char* host,
+                  std::string_view host,
                   bool refuse_dotfiles,
                   const GURL& url,
                   base::FilePath* out_path) {
@@ -103,6 +105,42 @@ bool ResolveUnder(const base::FilePath& root,
   return true;
 }
 
+// A document that names `module` in a `meta_name` meta element and runs no
+// script of its own, with `head` added to its head and `style` to its style.
+//
+// The module name comes from disk. EscapeAllExceptUnreserved makes it safe in
+// a quoted attribute and encodes `#`, `?` and `%` so they stay part of the
+// filename.
+std::string ModuleDocument(std::string_view module,
+                           std::string_view meta_name,
+                           std::string_view head,
+                           std::string_view style) {
+  const std::string escaped = base::EscapeAllExceptUnreserved(module);
+  return base::StrCat({
+      "<!doctype html>\n"
+      "<html lang=\"en\">\n"
+      "  <head>\n"
+      "    <meta charset=\"utf-8\" />\n"
+      "    <meta content=\"width=device-width, initial-scale=1\" "
+      "name=\"viewport\" />\n"
+      "    <meta content=\"./",
+      escaped, "\" name=\"", meta_name, "\" />\n", head,
+      "    <style>\n"
+      "      html,\n"
+      "      body {\n"
+      "        block-size: 100%;\n"
+      "        inline-size: 100%;\n"
+      "        margin: 0;\n"
+      "        overflow: hidden;\n"
+      "        padding: 0;\n"
+      "      }\n",
+      style,
+      "    </style>\n"
+      "  </head>\n"
+      "  <body></body>\n"
+      "</html>\n"});
+}
+
 }  // namespace
 
 // static
@@ -111,6 +149,15 @@ bool ShellURLLoaderFactory::ResolveShellPath(const base::FilePath& shell_root,
                                             base::FilePath* out_path) {
   return ResolveUnder(shell_root, kDomicileShellHost,
                       /*refuse_dotfiles=*/false, url, out_path);
+}
+
+// static
+bool ShellURLLoaderFactory::ResolveAppPath(const base::FilePath& app_root,
+                                          std::string_view host,
+                                          const GURL& url,
+                                          base::FilePath* out_path) {
+  return ResolveUnder(app_root, host, /*refuse_dotfiles=*/false, url,
+                      out_path);
 }
 
 // static
@@ -150,43 +197,38 @@ std::string ShellURLLoaderFactory::ShellDocument(const std::string& module) {
   // DomicileShell loads it after the body is parsed and calls its `Shell`
   // export; see DomicileShell, which also reports load failures.
   //
-  // The module name comes from disk and goes into the most privileged page.
-  // EscapeAllExceptUnreserved makes it safe in a quoted attribute and encodes
-  // `#`, `?` and `%` so they stay part of the filename.
-  //
   // The body stays empty with no ids: every name in this document is in the
   // shell's namespace and could collide with the shell's own lookups.
-  const std::string escaped = base::EscapeAllExceptUnreserved(module);
-  return base::StrCat({
-      "<!doctype html>\n"
-      "<html lang=\"en\">\n"
-      "  <head>\n"
-      "    <meta charset=\"utf-8\" />\n"
-      "    <meta content=\"width=device-width, initial-scale=1\" "
-      "name=\"viewport\" />\n"
-      "    <meta content=\"./",
-      escaped,
-      "\" name=\"domicile-shell-module\" />\n"
-      "    <title>Domicile</title>\n"
-      "    <style>\n"
-      "      html,\n"
-      "      body {\n"
-      "        block-size: 100%;\n"
-      "        inline-size: 100%;\n"
-      "        margin: 0;\n"
-      "        overflow: hidden;\n"
-      "        padding: 0;\n"
-      "      }\n"
-      "      @view-transition {\n"
-      "        navigation: auto;\n"
-      "      }\n"
-      "      ::view-transition-group(root) {\n"
-      "        animation-duration: 600ms;\n"
-      "      }\n"
-      "    </style>\n"
-      "  </head>\n"
-      "  <body></body>\n"
-      "</html>\n"});
+  return ModuleDocument(module, "domicile-shell-module",
+                        "    <title>Domicile</title>\n",
+                        "      @view-transition {\n"
+                        "        navigation: auto;\n"
+                        "      }\n"
+                        "      ::view-transition-group(root) {\n"
+                        "        animation-duration: 600ms;\n"
+                        "      }\n");
+}
+
+// static
+std::string ShellURLLoaderFactory::AppDocument(const std::string& module) {
+  // The shell's document without its title or view transition, which are the
+  // app's to choose. Blink's DomicileApp loads the module named in the
+  // `domicile-app-module` meta and calls its `main` export.
+  return ModuleDocument(module, "domicile-app-module", "", "");
+}
+
+// static
+network::mojom::URLResponseHeadPtr ShellURLLoaderFactory::AppDocumentHead() {
+  // No Content-Security-Policy: an app may load code from anywhere, as a
+  // native program may. See docs/architecture/APP-MODULES.md.
+  auto head = network::mojom::URLResponseHead::New();
+  head->mime_type = "text/html";
+  head->charset = "utf-8";
+  head->headers =
+      net::HttpResponseHeaders::Builder(net::HttpVersion(1, 1), "200 OK")
+          .AddHeader("Cache-Control", kShellCacheControl)
+          .Build();
+  return head;
 }
 
 // static
@@ -210,11 +252,8 @@ ShellURLLoaderFactory::ShellFileHeaders() {
       .Build();
 }
 
-void ShellURLLoaderFactory::ServeDocument(
+void ShellURLLoaderFactory::ServeShellDocument(
     mojo::PendingRemote<network::mojom::URLLoaderClient> client) {
-  mojo::Remote<network::mojom::URLLoaderClient> client_remote(
-      std::move(client));
-
   // Read per request so each load serves whatever `domicile load-shell` last
   // set. ShellSource starts with the command-line values.
   const std::string module = ShellSource::Get().Module();
@@ -223,14 +262,44 @@ void ShellURLLoaderFactory::ServeDocument(
     LOG(ERROR) << "domicile: the engine was started without --"
                << kDomicileShellModuleSwitch
                << ", so there is no shell to load.";
-    client_remote->OnComplete(
-        network::URLLoaderCompletionStatus(net::ERR_INVALID_ARGUMENT));
+    mojo::Remote<network::mojom::URLLoaderClient>(std::move(client))
+        ->OnComplete(
+            network::URLLoaderCompletionStatus(net::ERR_INVALID_ARGUMENT));
     return;
   }
+  SendDocument(std::move(client), ShellDocument(module), ShellDocumentHead());
+}
 
-  const std::string document = ShellDocument(module);
+void ShellURLLoaderFactory::ServeApp(
+    std::string_view host,
+    bool bare,
+    const network::ResourceRequest& request,
+    mojo::PendingReceiver<network::mojom::URLLoader> loader,
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client) {
+  // Looked up per request: `run_app` adds apps while the engine runs.
+  const AppRoots::App* app = AppRoots::Get().Find(host);
+  base::FilePath path;
+  if (app != nullptr && bare) {
+    SendDocument(std::move(client), AppDocument(app->module),
+                 AppDocumentHead());
+  } else if (app != nullptr &&
+             ResolveAppPath(app->root, host, request.url, &path)) {
+    // A rebuilt app keeps its file names, as a shell does.
+    ServeFile(request, path, std::move(loader), std::move(client),
+              ShellFileHeaders());
+  } else {
+    mojo::Remote<network::mojom::URLLoaderClient>(std::move(client))
+        ->OnComplete(network::URLLoaderCompletionStatus(net::ERR_INVALID_URL));
+  }
+}
 
-  network::mojom::URLResponseHeadPtr response = ShellDocumentHead();
+// static
+void ShellURLLoaderFactory::SendDocument(
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+    const std::string& document,
+    network::mojom::URLResponseHeadPtr response) {
+  mojo::Remote<network::mojom::URLLoaderClient> client_remote(
+      std::move(client));
 
   mojo::ScopedDataPipeProducerHandle producer;
   mojo::ScopedDataPipeConsumerHandle consumer;
@@ -257,6 +326,24 @@ void ShellURLLoaderFactory::ServeDocument(
   client_remote->OnComplete(network::URLLoaderCompletionStatus(net::OK));
 }
 
+// static
+void ShellURLLoaderFactory::ServeFile(
+    const network::ResourceRequest& request,
+    const base::FilePath& path,
+    mojo::PendingReceiver<network::mojom::URLLoader> loader,
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+    scoped_refptr<net::HttpResponseHeaders> headers) {
+  // Skipping file: URL policy is safe: this was never a file: URL, and the
+  // caller already confined it to a root.
+  network::ResourceRequest file_request = request;
+  file_request.url = net::FilePathToFileURL(path);
+  content::CreateFileURLLoaderBypassingSecurityChecks(
+      file_request, std::move(loader), std::move(client),
+      /*observer=*/nullptr,
+      // A listing would expose the tree's layout.
+      /*allow_directory_listing=*/false, std::move(headers));
+}
+
 ShellURLLoaderFactory::ShellURLLoaderFactory(
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> factory_receiver,
     const base::FilePath& shell_root,
@@ -275,11 +362,18 @@ void ShellURLLoaderFactory::CreateLoaderAndStart(
     const network::ResourceRequest& request,
     mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
-  const bool home = request.url.host() == kDomicileHomeHost;
+  const std::string host(request.url.host());
   // The bare root is the generated document; only the module and its imports
   // come from disk.
-  if (!home && (request.url.path() == "/" || request.url.path().empty())) {
-    ServeDocument(std::move(client));
+  const bool bare = request.url.path() == "/" || request.url.path().empty();
+  if (IsAppHost(host)) {
+    ServeApp(host, bare, request, std::move(loader), std::move(client));
+    return;
+  }
+
+  const bool home = host == kDomicileHomeHost;
+  if (!home && bare) {
+    ServeShellDocument(std::move(client));
     return;
   }
 
@@ -296,17 +390,9 @@ void ShellURLLoaderFactory::CreateLoaderAndStart(
     return;
   }
 
-  // Skipping file: URL policy is safe: this was never a file: URL, and the
-  // checks above already confined it to the root.
-  network::ResourceRequest file_request = request;
-  file_request.url = net::FilePathToFileURL(path);
-  content::CreateFileURLLoaderBypassingSecurityChecks(
-      file_request, std::move(loader), std::move(client),
-      /*observer=*/nullptr,
-      // A listing would expose the tree's layout.
-      /*allow_directory_listing=*/false,
-      // Home files are not the shell's, and a rebuild does not change them.
-      home ? nullptr : ShellFileHeaders());
+  // Home files are not the shell's, and a rebuild does not change them.
+  ServeFile(request, path, std::move(loader), std::move(client),
+            home ? nullptr : ShellFileHeaders());
 }
 
 // static

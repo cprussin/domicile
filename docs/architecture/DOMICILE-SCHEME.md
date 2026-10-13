@@ -63,6 +63,24 @@ of a file search found). Beyond the shell root's containment it refuses:
   probe which files exist.
 - every request while the desk is locked
 
+## `domicile://app-<id>/`
+
+An app module's files ([APP-MODULES.md](APP-MODULES.md)), one host per app.
+
+- `<id>` is the first 32 hex digits of the SHA-256 of the app's root, so each
+  directory has its own origin and storage
+  (`components/domicile/browser/app_roots.h`).
+- Served only for an app `run_app` added. The bare root is a document the
+  engine writes, naming the module in a `domicile-app-module` meta; Blink's
+  `DomicileApp` calls its `main`.
+- Files are served `Cache-Control: no-store`, as the shell's are. No
+  Content-Security-Policy: an app sets its own.
+- Shown only in the window `run_app` opened for it
+  (`WebViewGuest::PinToApp`). `MayShowInWebView` and the guest's navigation
+  throttle refuse it in any other `<webview>`.
+- The shell's interfaces bind only for `domicile://shell`'s origin. An app
+  binds `AppChannel` instead: system calls only.
+
 ## The control channel
 
 - `--domicile-control-socket` names the compositor's socket. The engine holds

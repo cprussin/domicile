@@ -17,13 +17,19 @@ inline constexpr char kDomicileScheme[] = "domicile";
 
 // The shell's host. The bare root `domicile://shell/` is a page that
 // `ShellURLLoaderFactory` generates, not a file on disk. Requests to hosts
-// other than this and `kDomicileHomeHost` are refused.
+// other than this, `kDomicileHomeHost` and an app's are refused.
 inline constexpr char kDomicileShellHost[] = "shell";
 
 // The user's home, for shell previews: `domicile://home/Notes/a.png` is
 // `$HOME/Notes/a.png`. Served only to the shell's own document (see
 // ShellURLLoaderFactory) and never for paths containing a dotfile.
 inline constexpr char kDomicileHomeHost[] = "home";
+
+// An app module's host starts with this, followed by an id from its root:
+// `domicile://app-3f34b27d8967e876d882c16c62df92be/`. Served only for an app
+// `run_app` added. See components/domicile/browser/app_roots.h and
+// docs/architecture/APP-MODULES.md.
+inline constexpr char kDomicileAppHostPrefix[] = "app-";
 
 // Directory the shell's files are read from.
 inline constexpr char kDomicileShellRootSwitch[] = "domicile-shell-root";

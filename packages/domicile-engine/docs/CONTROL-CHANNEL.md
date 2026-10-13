@@ -92,6 +92,12 @@ The engine has two channels to the rest of Domicile:
 
 ### Outside the control channel
 
+- **App modules:** an app's `DomicileAppHost` uses
+  `components/domicile/mojom/app_channel.mojom`. The browser opens its own
+  connection to the compositor, says `app_hello`, and carries `call_system`
+  and the `system` event only. It binds for an app's origin in the window
+  pinned to that app. See
+  [APP-MODULES.md](/docs/architecture/APP-MODULES.md).
 - **Extension tray:** the `extensions` event and `activateExtension()` use
   `components/domicile/mojom/extension_tray.mojom`, a separate browser-side
   pipe. Action state is the browser's own; the compositor never sees it. See
@@ -138,6 +144,9 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 {"type":"load_shell","version":1,"root":"/x/dist","module":"shell.js"}
 {"type":"loaded"}   |   {"type":"refused","why":"…"}
 
+{"type":"run_app","version":1,"root":"/opt/notes","module":"notes.js"}
+{"type":"opened"}   |   {"type":"refused","why":"…"}
+
 {"type":"open_url","version":1,"url":"https://example.com/"}
 {"type":"open_url","version":1,"url":"https://example.com/","app":true}
 {"type":"opened"}   |   {"type":"refused","why":"…"}
@@ -169,6 +178,10 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 - `domicile load-shell <path>` sends `load_shell`. `domicile open-url <url>`
   sends `open_url`, and `domicile open-app <url>` sends it with `"app":true`.
   `domicile screenshot <file>` goes to the compositor.
+- `run_app` serves the app module `module` under `root` at
+  `domicile://app-<id>/` and opens an app window pinned to it
+  ([APP-MODULES.md](/docs/architecture/APP-MODULES.md)). `root` must be
+  absolute.
 - `open_url` opens a browser window at the address, as a page's
   `target="_blank"` does. The shell gets it in `browserwindowschanged`, so a
   shell mid-reload gets it with every other window. An unparsable URL, a

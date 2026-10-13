@@ -162,12 +162,13 @@ An app reaches Domicile's own state through programs it spawns. Each inherits
 ## Plan
 
 - [x] compositor: app connections, system tier only
-- [ ] engine: `domicile://app-<id>/`, the `main` runner, `DomicileAppHost`,
+- [x] engine: `domicile://app-<id>/`, the `main` runner, `DomicileAppHost`,
   `run_app`, guests pinned to an app
 - [x] supervisor: `domicile run-app`; SDK: `DomicileAppHost`, `system()`
   takes it; an example app (`examples/minimal-app`)
-- [ ] guard: `run-app` runs `main`, an app reads a file, and a `<webview>`
-  cannot open an app's URL
+- [x] guard: `run_app` runs `main`, an app's system call crosses, and a
+  `<webview>` not opened for the app cannot open its URL
+  (`guard-app-module.sh`)
 - [ ] Settings as an app: `domicile-app-host`, engine `extensions` and
   `set_extension_enabled`
 - [ ] History as an app: engine `history`, `delete_history` and

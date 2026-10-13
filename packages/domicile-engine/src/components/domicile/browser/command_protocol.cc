@@ -26,6 +26,7 @@ namespace {
 
 // The command names.
 constexpr char kLoadShell[] = "load_shell";
+constexpr char kRunApp[] = "run_app";
 constexpr char kOpenUrl[] = "open_url";
 constexpr char kListSitePermissionsCommand[] = "site_permissions";
 constexpr char kSetSitePermissionCommand[] = "set_site_permission";
@@ -52,6 +53,7 @@ std::string Done(std::string_view type) {
 
 std::string AnswerLoadShell(const base::DictValue& request,
                             LoadShell load_shell);
+std::string AnswerRunApp(const base::DictValue& request, RunApp run_app);
 std::string AnswerOpenUrl(const base::DictValue& request, OpenUrl open_url);
 std::string AnswerSitePermissions(ListSitePermissions list_site_permissions);
 std::string AnswerSetSitePermission(const base::DictValue& request,
@@ -122,6 +124,10 @@ void AnswerCommand(std::string_view line,
     std::move(reply).Run(AnswerLoadShell(*request, actions.load_shell));
     return;
   }
+  if (*type == kRunApp) {
+    std::move(reply).Run(AnswerRunApp(*request, actions.run_app));
+    return;
+  }
   if (*type == kOpenUrl) {
     std::move(reply).Run(AnswerOpenUrl(*request, actions.open_url));
     return;
@@ -160,7 +166,8 @@ void AnswerCommand(std::string_view line,
   }
   std::move(reply).Run(RefusedCommand(base::StrCat(
       {"\"", *type, "\" is not a command this engine knows; it takes \"",
-       kLoadShell, "\", \"", kOpenUrl, "\", \"", kListSitePermissionsCommand,
+       kLoadShell, "\", \"", kRunApp, "\", \"", kOpenUrl, "\", \"",
+       kListSitePermissionsCommand,
        "\", \"", kSetSitePermissionCommand, "\", \"", kLoadUnpacked, "\", \"",
        kUninstallExtension, "\", \"", kConfigExtensions, "\", \"",
        kMediaDevices, "\" and \"", kSetMediaDevice, "\""})));
@@ -202,6 +209,27 @@ std::string AnswerLoadShell(const base::DictValue& request,
         "this engine has no shell window to load a shell into");
   }
   return Done("loaded");
+}
+
+std::string AnswerRunApp(const base::DictValue& request, RunApp run_app) {
+  const std::string* root = request.FindString("root");
+  const std::string* module = request.FindString("module");
+  if (root == nullptr || module == nullptr || module->empty()) {
+    return RefusedCommand(
+        "run_app needs a \"root\", the directory the app is served out of, "
+        "and a \"module\", its entry as a name under the root");
+  }
+  // Absolute for load_shell's reason. `domicile run-app` resolves the path and
+  // makes it canonical, so one directory is one app.
+  const base::FilePath app_root = base::FilePath::FromUTF8Unsafe(*root);
+  if (!app_root.IsAbsolute()) {
+    return RefusedCommand(
+        base::StrCat({"\"", *root, "\" is not an absolute path"}));
+  }
+  if (!run_app(app_root, *module)) {
+    return RefusedCommand("this engine has no shell page to open an app in");
+  }
+  return Done("opened");
 }
 
 std::string AnswerOpenUrl(const base::DictValue& request, OpenUrl open_url) {

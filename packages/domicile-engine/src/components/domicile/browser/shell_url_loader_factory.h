@@ -6,6 +6,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "base/files/file_path.h"
 #include "base/memory/scoped_refptr.h"
@@ -61,6 +62,19 @@ class ShellURLLoaderFactory : public network::SelfDeletingURLLoaderFactory {
                                const GURL& url,
                                base::FilePath* out_path);
 
+  // The HTML document that loads an app's `module`. Exposed for testing.
+  static std::string AppDocument(const std::string& module);
+
+  // The response head AppDocument is served with. Exposed for testing.
+  static network::mojom::URLResponseHeadPtr AppDocumentHead();
+
+  // Resolves a URL at app `host` to a file under `app_root`, or fails.
+  // Exposed for testing.
+  static bool ResolveAppPath(const base::FilePath& app_root,
+                             std::string_view host,
+                             const GURL& url,
+                             base::FilePath* out_path);
+
   // Resolves a domicile://home/ URL to a file under `home`, or fails. Also
   // refuses any path containing a dotfile, matching the compositor's file
   // index, so ~/.ssh and ~/.config stay unreachable.
@@ -79,8 +93,31 @@ class ShellURLLoaderFactory : public network::SelfDeletingURLLoaderFactory {
   ~ShellURLLoaderFactory() override;
 
   // Responds with the generated shell document.
-  void ServeDocument(
+  void ServeShellDocument(
       mojo::PendingRemote<network::mojom::URLLoaderClient> client);
+
+  // Responds for the app at `host`: its document at the `bare` root, else a
+  // file under its root. See docs/architecture/APP-MODULES.md.
+  void ServeApp(std::string_view host,
+                bool bare,
+                const network::ResourceRequest& request,
+                mojo::PendingReceiver<network::mojom::URLLoader> loader,
+                mojo::PendingRemote<network::mojom::URLLoaderClient> client);
+
+  // Responds with `document`, under `response`.
+  static void SendDocument(
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+      const std::string& document,
+      network::mojom::URLResponseHeadPtr response);
+
+  // Responds with the file at `path`, which the caller has confined to a
+  // root, under `headers`.
+  static void ServeFile(
+      const network::ResourceRequest& request,
+      const base::FilePath& path,
+      mojo::PendingReceiver<network::mojom::URLLoader> loader,
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+      scoped_refptr<net::HttpResponseHeaders> headers);
 
   // network::mojom::URLLoaderFactory:
   void CreateLoaderAndStart(

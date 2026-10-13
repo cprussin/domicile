@@ -12,7 +12,8 @@ class NavigationThrottleRegistry;
 
 namespace domicile {
 
-// Stops a <webview> guest from loading Chrome's own pages (see IsBrowserPage).
+// Stops a <webview> guest from loading Chrome's own pages (see IsBrowserPage),
+// or a domicile:// address it is not pinned to (see MayShowInWebView).
 //
 // A throttle catches every route in: `src`, links, redirects, and extension
 // tabs.create/tabs.update.
@@ -34,7 +35,12 @@ class BrowserPageThrottle : public content::NavigationThrottle {
 
   // content::NavigationThrottle:
   ThrottleCheckResult WillStartRequest() override;
+  ThrottleCheckResult WillRedirectRequest() override;
   const char* GetNameForLogging() override;
+
+ private:
+  // Cancels a Chrome page, and a domicile:// address the guest may not show.
+  ThrottleCheckResult Check();
 };
 
 }  // namespace domicile
