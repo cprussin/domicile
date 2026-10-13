@@ -6,7 +6,8 @@
 # - <binaries>: the Rust binaries `flake.nix` installs, built by
 #   `distro/binaries.sh`.
 # - <engine>: the engine release, unpacked: the directory holding `chrome`.
-# - <bun>: the bun binary the shell builder runs with.
+# - <bun>: the bun binary that installs the shell builder's modules and runs
+#   it.
 # - <workspace>: a checkout after `distro/build.sh`'s workspace build.
 # - <stage>: created; `<stage>/usr` is the tree.
 #
@@ -77,13 +78,21 @@ cp -a "$ENGINE" "$LIBEXEC/engine"
 install -m 755 "$BUN" "$LIBEXEC/bun"
 install -m 755 "$ROOT/distro/builder" "$LIBEXEC/builder"
 
-# `shellWorkspace` in `flake.nix`: the root manifest and modules, and every
-# package with a `package.json`.
-cp -a "$WORKSPACE/package.json" "$WORKSPACE/node_modules" "$LIBEXEC/workspace/"
-rm -rf "$LIBEXEC/workspace/node_modules/.cache"
+# `shellWorkspace` in `flake.nix`, with only the modules a build needs: the
+# production dependencies of the builder and manganese, installed by the bun
+# that runs the builder. Every package with a `package.json` is copied, so
+# `bun.lock` matches. Each package is copied without `node_modules`, whose
+# links point into the checkout's install, and without `tsconfig.json`, which
+# extends a dev dependency; the npm packages ship without it too.
+cp -a "$WORKSPACE/package.json" "$WORKSPACE/bun.lock" "$LIBEXEC/workspace/"
 for manifest in "$WORKSPACE"/packages/*/package.json; do
-  cp -a "$(dirname "$manifest")" "$LIBEXEC/workspace/packages/"
+  package="$LIBEXEC/workspace/packages/$(basename "$(dirname "$manifest")")"
+  cp -a "$(dirname "$manifest")" "$package"
+  rm -rf "$package/node_modules" "$package/tsconfig.json"
 done
+(cd "$LIBEXEC/workspace" &&
+  "$BUN" install --frozen-lockfile --ignore-scripts --production --no-progress \
+    --filter @domicile-desktop/builder --filter @domicile-desktop/manganese)
 
 for shell in "${SHELLS[@]}"; do
   cp -a "$WORKSPACE/packages/shell-$shell/.vite/renderer/main_window" \

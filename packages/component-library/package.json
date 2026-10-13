@@ -86,7 +86,9 @@
   "license": "MIT",
   "name": "@domicile-desktop/component-library",
   "peerDependencies": {
-    "react": "catalog:"
+    "@pandacss/dev": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
   },
   "private": false,
   "publishConfig": {

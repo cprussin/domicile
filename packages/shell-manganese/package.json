@@ -59,6 +59,9 @@
   ],
   "license": "MIT",
   "name": "@domicile-desktop/manganese",
+  "peerDependencies": {
+    "@pandacss/dev": "catalog:"
+  },
   "private": false,
   "productName": "domicile-shell-manganese",
   "publishConfig": {

@@ -110,7 +110,9 @@
         "vite": "catalog:",
       },
       "peerDependencies": {
+        "@pandacss/dev": "catalog:",
         "react": "catalog:",
+        "react-dom": "catalog:",
       },
     },
     "packages/domicile-builder": {
@@ -179,6 +181,9 @@
         "postcss": "catalog:",
         "typescript": "catalog:",
         "vite": "catalog:",
+      },
+      "peerDependencies": {
+        "@pandacss/dev": "catalog:",
       },
     },
     "packages/shell-simple": {

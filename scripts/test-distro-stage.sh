@@ -55,9 +55,11 @@ mkdir -p "$ENGINE/locales"
 touch "$ENGINE/chrome" "$ENGINE/libdomicile_engine.so" "$ENGINE/locales/en-US.pak"
 chmod +x "$ENGINE/chrome"
 
-# Prints its arguments, so the builder's command line can be read back.
+# Prints its arguments, so the builder's command line can be read back, and
+# logs where it ran and with what.
 BUN="$WORK/bun"
-printf '#!/bin/sh\necho "$@"\n' >"$BUN"
+BUN_LOG="$WORK/bun.log"
+printf '#!/bin/sh\necho "$PWD: $*" >>"%s"\necho "$@"\n' "$BUN_LOG" >"$BUN"
 chmod +x "$BUN"
 
 WORKSPACE="$WORK/workspace"
@@ -66,10 +68,10 @@ page() { # package, file
   echo "$1" >"$WORKSPACE/packages/$1/$2"
   echo '{}' >"$WORKSPACE/packages/$1/package.json"
 }
-mkdir -p "$WORKSPACE/node_modules/.cache" "$WORKSPACE/node_modules/vite"
+mkdir -p "$WORKSPACE/node_modules/turbo"
 echo '{}' >"$WORKSPACE/package.json"
-echo cached >"$WORKSPACE/node_modules/.cache/junk"
-echo vite >"$WORKSPACE/node_modules/vite/index.js"
+echo lock >"$WORKSPACE/bun.lock"
+echo turbo >"$WORKSPACE/node_modules/turbo/index.js"
 for shell in manganese simple splash; do
   page "shell-$shell" .vite/renderer/main_window/shell.js
 done
@@ -79,6 +81,8 @@ for app in history settings; do
   page "app-$app" "icons/$app-preview.svg"
 done
 page domicile-builder src/main.ts
+page domicile-builder tsconfig.json
+page domicile-builder node_modules/zod/index.js
 # A crate: no `package.json`, so not part of the workspace.
 mkdir -p "$WORKSPACE/packages/domicile-launch/src"
 touch "$WORKSPACE/packages/domicile-launch/Cargo.toml"
@@ -126,13 +130,22 @@ echo "the builder runs the bundled bun against the bundled workspace"
 expect "the builder's command line" \
   "$LIBEXEC/workspace/packages/domicile-builder/src/main.ts --domicile $LIBEXEC/workspace --entry desk.tsx" \
   "$("$LIBEXEC/builder" --entry desk.tsx 2>&1)"
-[ -f "$LIBEXEC/workspace/node_modules/vite/index.js" ] &&
+cmp -s "$WORKSPACE/bun.lock" "$LIBEXEC/workspace/bun.lock" &&
   [ -f "$LIBEXEC/workspace/package.json" ] &&
-  ok "the workspace has its modules" ||
-  fail "the workspace has its modules" "$(ls -a "$LIBEXEC/workspace" 2>&1)"
-[ ! -e "$LIBEXEC/workspace/node_modules/.cache" ] &&
-  ok "without the module cache" ||
-  fail "without the module cache" "node_modules/.cache was copied"
+  ok "the workspace has the checkout's manifest and lockfile" ||
+  fail "the workspace has the checkout's manifest and lockfile" \
+    "$(ls -a "$LIBEXEC/workspace" 2>&1)"
+expect "the bundled bun installs only what a build needs" \
+  "$LIBEXEC/workspace: install --frozen-lockfile --ignore-scripts --production --no-progress --filter @domicile-desktop/builder --filter @domicile-desktop/manganese" \
+  "$(grep -F ": install " "$BUN_LOG" 2>&1)"
+[ ! -e "$LIBEXEC/workspace/node_modules" ] &&
+  [ ! -e "$LIBEXEC/workspace/packages/domicile-builder/node_modules" ] &&
+  ok "without the checkout's modules" ||
+  fail "without the checkout's modules" "a node_modules was copied"
+[ ! -e "$LIBEXEC/workspace/packages/domicile-builder/tsconfig.json" ] &&
+  ok "without tsconfig.json, which extends a dev dependency" ||
+  fail "without tsconfig.json, which extends a dev dependency" \
+    "packages/domicile-builder/tsconfig.json was copied"
 [ ! -e "$LIBEXEC/workspace/packages/domicile-launch" ] &&
   ok "and without the crates" ||
   fail "and without the crates" "packages/domicile-launch was copied"

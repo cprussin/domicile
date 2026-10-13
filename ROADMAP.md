@@ -68,8 +68,6 @@ item when it ships.
 11. **Distribution packages.**
     [RUNNING-A-DESKTOP.md](docs/RUNNING-A-DESKTOP.md#other-distributions).
     - No APT or RPM repository, AUR package or COPR, so upgrades are by hand.
-    - The shell builder ships the whole workspace's `node_modules`, about
-      600 MB with the dev tools.
     - Checked by installing in containers; no packaged session has run on
       hardware.
 
