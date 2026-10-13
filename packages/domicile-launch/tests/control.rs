@@ -104,6 +104,27 @@ fn a_desktop_told_to_open_an_address_tells_the_engine() {
 }
 
 #[test]
+fn a_desktop_told_to_run_an_app_tells_the_engine() {
+    let told = RefCell::new(None);
+    let answered = reply_to(
+        "{\"type\":\"run_app\",\"root\":\"/opt/notes\",\"module\":\"notes.js\"}",
+        &Desktop {
+            run_app: &|root, module| {
+                *told.borrow_mut() = Some((root.to_path_buf(), module.to_path_buf()));
+                Ok(())
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(
+        told.take(),
+        Some((PathBuf::from("/opt/notes"), PathBuf::from("notes.js")))
+    );
+    assert_eq!(answered, Response::Opened);
+}
+
+#[test]
 fn a_desktop_told_to_open_an_app_tells_the_engine() {
     let told = Cell::new(None);
     let answered = reply_to(
@@ -449,6 +470,7 @@ fn nothing_dialed() -> Desktop<'static> {
         module: Path::new("/shell.js"),
         open: &|_| panic!("only open_url opens a browser window"),
         open_app: &|_| panic!("only open_app opens an app window"),
+        run_app: &|_, _| panic!("only run_app runs an app module"),
         permissions: &|| panic!("only site_permissions lists site permissions"),
         send: &|_| panic!("only send_shell sends anything"),
         set_media_device: &|_, _| panic!("only set_media_device prefers one"),

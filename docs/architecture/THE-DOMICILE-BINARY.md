@@ -30,6 +30,7 @@ domicile which-shell              # ask the running desktop which shell it serve
 domicile load-shell <shell>       # replace the running desktop's shell
 domicile open-url <url>           # open a URL in the running desktop (BROWSER)
 domicile open-app <url>           # open a URL as an app: no address bar (WEB-APPS.md)
+domicile run-app <module>         # run an app module in an app window (APP-MODULES.md)
 domicile install-app <url>        # write a desktop entry from the site's web app manifest; needs no desktop
 domicile screenshot               # the shell's interactive screenshot (Print in manganese)
 domicile screenshot <file>        # write a PNG of the running desk
@@ -83,6 +84,7 @@ temp directory. The modules that spawn processes or bind sockets stay thin.
 | `web_app` | yes | the page's manifest link, and the name, start URL and icon a manifest gives |
 | `web_address` | yes | resolves a manifest's and its icons' addresses against where they were found; origins |
 | `desktop_entry` | yes | the desktop entry `install-app` writes, escaped, and its file name |
+| `app_entry` | no | the module `run-app` names: its canonical directory and file name |
 | `address` | yes | what `open-url` sends the engine: a URL as given, or a path as a `file://` URL relative to the caller's directory |
 | `spawn` | yes | the engine and compositor commands as data, so flag lists are testable |
 | `session` | yes | what the compositor publishes once up, and waiting for it |
@@ -298,8 +300,8 @@ running one. The first argument decides which.
   the socket.
 - The supervisor answers each connection on its own thread, since an
   interactive screenshot waits on the user.
-- The supervisor answers and routes. `load-shell`, `open-url` and
-  `open-app` go to the engine. `screenshot` and `send-shell` go to the compositor's chrome socket
+- The supervisor answers and routes. `load-shell`, `open-url`, `open-app`
+  and `run-app` go to the engine. `screenshot` and `send-shell` go to the compositor's chrome socket
   as the `screenshot` and `send_shell` system calls a page makes
   (`domicile_launch::compositor_socket`). The connection never says `hello`,
   so it is not a chrome. See
@@ -315,6 +317,7 @@ domicile which-shell ─▶ $DOMICILE_SOCK ─▶ supervisor
 domicile load-shell  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine ─▶ page
 domicile open-url    ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
 domicile open-app    ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
+domicile run-app     ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
 domicile screenshot  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor
 domicile send-shell  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor ─▶ every page
 domicile-settings-host ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine   (site permissions; settings_files stops at the supervisor)

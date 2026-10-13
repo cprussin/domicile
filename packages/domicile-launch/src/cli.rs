@@ -20,7 +20,8 @@ pub enum CliError {
          --config <path>: a module's `Shell` export, or a JSON config's \
          \"shell\", is the shell when none is given.\n\
          Or a command for the desktop already running: which-shell, \
-         load-shell <shell>, open-url <url>, open-app <url>, screenshot \
+         load-shell <shell>, open-url <url>, open-app <url>, run-app \
+         <module>, screenshot \
          [file], or \
          send-shell <command>…. Or \
          check-config <file> to check a config without running it, or \
@@ -68,6 +69,16 @@ pub enum CliError {
          address is one app window."
     )]
     ExtraToOpenAsApp { extra: String },
+    #[error(
+        "run-app takes the app module to run, and was given nothing:\n\n    \
+         domicile run-app ./notes/notes.js\n"
+    )]
+    NothingToRun,
+    #[error(
+        "run-app takes one module, and it was given {extra} as well. One \
+         module is one app window."
+    )]
+    ExtraToRun { extra: String },
     #[error(
         "install-app takes the address of the site to install, and was given \
          nothing:\n\n    \
@@ -136,6 +147,10 @@ pub enum Invocation {
     ///
     /// Kept as typed, like [`Invocation::Open`]'s.
     OpenApp { target: String },
+    /// Tell the running desktop to run this app module in a new app window.
+    ///
+    /// Kept as typed; [`crate::app_entry`] resolves it.
+    RunApp { entry: String },
     /// Write a desktop entry that opens the site at `url` as an app. Needs no
     /// running desktop.
     InstallApp { url: String },
@@ -194,6 +209,11 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (None, _) => Err(CliError::NothingToOpenAsApp),
                 (Some(target), None) => Ok(Invocation::OpenApp { target }),
                 (Some(_), Some(extra)) => Err(CliError::ExtraToOpenAsApp { extra }),
+            },
+            Verb::RunningApp => match (args.next(), args.next()) {
+                (None, _) => Err(CliError::NothingToRun),
+                (Some(entry), None) => Ok(Invocation::RunApp { entry }),
+                (Some(_), Some(extra)) => Err(CliError::ExtraToRun { extra }),
             },
             Verb::Installing => match (args.next(), args.next()) {
                 (None, _) => Err(CliError::NothingToInstall),
@@ -264,6 +284,8 @@ enum Verb {
     Opening,
     /// `open-app`, which takes an address.
     OpeningApp,
+    /// `run-app`, which takes a module.
+    RunningApp,
     /// `install-app`, which takes an address.
     Installing,
     /// `screenshot`, which takes a file or nothing.
@@ -285,6 +307,7 @@ fn verb(word: &str) -> Option<Verb> {
         "load-shell" => Some(Verb::Loading),
         "open-url" => Some(Verb::Opening),
         "open-app" => Some(Verb::OpeningApp),
+        "run-app" => Some(Verb::RunningApp),
         "install-app" => Some(Verb::Installing),
         "screenshot" => Some(Verb::Capturing),
         "send-shell" => Some(Verb::Sending),

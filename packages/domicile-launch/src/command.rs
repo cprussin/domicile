@@ -91,6 +91,16 @@ pub fn load_shell_line(root: &Path, module: &Path) -> String {
     })
 }
 
+/// The request to serve the app module `module` under `root` and open an app
+/// window on it. See `docs/architecture/APP-MODULES.md`.
+pub fn run_app_line(root: &Path, module: &Path) -> String {
+    line(&Command::RunApp {
+        module,
+        root,
+        version: VERSION,
+    })
+}
+
 /// The request to open `url` in the shell. The engine validates `url`.
 pub fn open_url_line(url: &str) -> String {
     line(&Command::OpenUrl {
@@ -179,6 +189,11 @@ pub fn reply(line: &str) -> Result<Reply, serde_json::Error> {
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Command<'a> {
     LoadShell {
+        version: u32,
+        root: &'a Path,
+        module: &'a Path,
+    },
+    RunApp {
         version: u32,
         root: &'a Path,
         module: &'a Path,

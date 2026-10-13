@@ -54,6 +54,7 @@ See [docs/ELEMENTS.md](docs/ELEMENTS.md) for `<app>` input and focus, and the
 | `./domicile-host` | `DomicileHost`: the type of the desktop `Shell` is handed. Generated from the engine's IDL; see [Generated types](#generated-types). |
 | `./config` | Types for the config file's sections, for a TypeScript config module. Generated; see [Generated types](#generated-types). `./config.schema.json` is the JSON Schema they come from. |
 | `./shell` | `Shell`: the export a shell module must provide. Domicile calls it once with the element to draw in. |
+| `./app` | `AppMain` and `DomicileAppHost`: an app module's `main` and the host it gets. Pass the host to `system()`. See [APP-MODULES.md](../../docs/architecture/APP-MODULES.md). |
 | `./app-element`, `./webview-element` | Types and event names for `<app>` and `<webview>`. |
 | `./bind-keys` | `bindKeys`: grab a shell's own chords by name and handle them by mode. `./key-action` and `./own-keybindings` are its parts. |
 | `./fake-host` | `FakeDomicileHost`: a desktop for a shell's tests. |

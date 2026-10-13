@@ -164,8 +164,8 @@ An app reaches Domicile's own state through programs it spawns. Each inherits
 - [x] compositor: app connections, system tier only
 - [ ] engine: `domicile://app-<id>/`, the `main` runner, `DomicileAppHost`,
   `run_app`, guests pinned to an app
-- [ ] supervisor: `domicile run-app`; SDK: `DomicileAppHost`, `system()`
-  takes it; an example app
+- [x] supervisor: `domicile run-app`; SDK: `DomicileAppHost`, `system()`
+  takes it; an example app (`examples/minimal-app`)
 - [ ] guard: `run-app` runs `main`, an app reads a file, and a `<webview>`
   cannot open an app's URL
 - [ ] Settings as an app: `domicile-app-host`, engine `extensions` and

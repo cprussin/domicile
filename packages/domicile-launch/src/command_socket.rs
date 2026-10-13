@@ -13,8 +13,8 @@ use std::time::Duration;
 
 use crate::command::{
     config_extensions_line, load_shell_line, load_unpacked_line, media_devices_line, open_app_line,
-    open_url_line, reply, set_media_device_line, set_site_permission_line, site_permissions_line,
-    uninstall_extension_line, Reply,
+    open_url_line, reply, run_app_line, set_media_device_line, set_site_permission_line,
+    site_permissions_line, uninstall_extension_line, Reply,
 };
 use crate::media_devices::{MediaDevices, MediaKind};
 use crate::site_permissions::{SitePermission, SiteSettings};
@@ -73,6 +73,17 @@ pub fn load_shell(
 /// Tells the engine at `socket` to open `url` in the shell.
 pub fn open_url(socket: &Path, url: &str, patience: Duration) -> Result<(), CommandError> {
     carry_out(socket, &open_url_line(url), Reply::Opened, patience)
+}
+
+/// Tells the engine at `socket` to run the app module `module` under `root`
+/// in an app window.
+pub fn run_app(
+    socket: &Path,
+    root: &Path,
+    module: &Path,
+    patience: Duration,
+) -> Result<(), CommandError> {
+    carry_out(socket, &run_app_line(root, module), Reply::Opened, patience)
 }
 
 /// Tells the engine at `socket` to open `url` in an app window.

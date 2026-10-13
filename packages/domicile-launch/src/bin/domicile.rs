@@ -19,11 +19,12 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use domicile_launch::address::url_for;
+use domicile_launch::app_entry::app_entry;
 use domicile_launch::apps::list_the_settings_host;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
 use domicile_launch::cli::{invocation, CliError, Invocation};
 use domicile_launch::command_socket::{
-    config_extensions, load_shell, load_unpacked, media_devices, open_app, open_url,
+    config_extensions, load_shell, load_unpacked, media_devices, open_app, open_url, run_app,
     set_media_device, set_site_permission, site_permissions, uninstall_extension,
 };
 use domicile_launch::components::{apps, builder, components, our_shell, Components};
@@ -109,6 +110,13 @@ fn run() -> Result<ExitCode, String> {
         Invocation::OpenApp { target } => asked(&Request::OpenApp {
             url: url_for(&target, &typed_in()?),
         }),
+        Invocation::RunApp { entry } => {
+            let app = app_entry(Path::new(&entry), &typed_in()?)?;
+            asked(&Request::RunApp {
+                root: app.root,
+                module: app.module,
+            })
+        }
         // Absolute here, since the compositor does not share this working
         // directory.
         Invocation::Screenshot { file } => asked(&Request::Screenshot {
@@ -902,6 +910,9 @@ fn answer_a_command(
                 open: &|url| open_url(engine, url, ANSWER_WITHIN).map_err(|why| why.to_string()),
                 open_app: &|url| {
                     open_app(engine, url, ANSWER_WITHIN).map_err(|why| why.to_string())
+                },
+                run_app: &|root, module| {
+                    run_app(engine, root, module, ANSWER_WITHIN).map_err(|why| why.to_string())
                 },
                 // The interactive one waits for the user, however long that
                 // takes.
