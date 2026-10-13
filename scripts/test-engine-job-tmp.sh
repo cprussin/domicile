@@ -100,6 +100,19 @@ for flow in engine.yml engine-release.yml engine-drm-probe.yml; do
   fi
 done
 
+# --- and its nested compositor's runtime directory ---------------------------
+
+# `under-wayland.sh` otherwise uses one fixed XDG_RUNTIME_DIR path, the same
+# string on `crux` and `crux-two`. Each job that runs a guard under it keeps
+# the compositor's sockets in its own directory, dropped with it.
+for flow in engine.yml engine-release.yml; do
+  file="$ROOT/.github/workflows/$flow"
+  MAKES="$(grep -c 'engine-job-tmp.sh make' "$file")"
+  SETS="$(grep -c 'echo "UNDER_WAYLAND_RUNTIME_DIR=\$dir/' "$file")"
+  expect "$flow gives each job's nested compositor its own runtime directory" \
+    "$MAKES" "$SETS"
+done
+
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
   exit 1
