@@ -34,6 +34,8 @@ domicile screenshot               # the shell's interactive screenshot (Print in
 domicile screenshot <file>        # write a PNG of the running desk
 domicile send-shell <word>…       # run a shell command, as a SendShell keybinding does
 domicile check-config <file>      # exit 1 with the reason if the compositor refuses this JSON config
+domicile power-off                # ask in the Access dialog, then `systemctl poweroff`
+domicile reboot                   # ask in the Access dialog, then `systemctl reboot`
 ```
 
 Config file:
@@ -90,6 +92,7 @@ temp directory. The modules that spawn processes or bind sockets stay thin.
 | `command_socket` | no | dials the engine's command socket, one line each way |
 | `graphical_session` | no | tells the systemd user manager the desktop is the graphical session |
 | `notification` | no | sends desktop notifications for errors after startup, such as a broken config edit |
+| `power` | no | `power-off` and `reboot`: the question in the desktop's Access dialog and the `systemctl` command |
 
 ### Home Manager module
 

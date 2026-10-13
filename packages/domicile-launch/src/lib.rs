@@ -12,6 +12,8 @@
 //!   ([`command`], [`command_socket`], [`address`]).
 //! - `domicile screenshot`: forwarded to the compositor
 //!   ([`compositor_socket`]).
+//! - `domicile power-off` and `domicile reboot`: asked in the desktop's
+//!   Access dialog ([`power`]).
 //! - Failed runs report the compositor's last output ([`heard`]).
 //! - Domicile's own apps, which every desktop installs ([`apps`]).
 //! - The compositor's side: its command line ([`arguments`]), the session
@@ -43,6 +45,7 @@ pub mod media_devices;
 pub mod milestones;
 pub mod notification;
 pub mod platform;
+pub mod power;
 pub mod profile_claim;
 pub mod profile_path;
 pub mod restart;

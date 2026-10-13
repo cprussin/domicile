@@ -81,6 +81,10 @@ check "the portal routing is installed" \
   test -f /usr/share/xdg-desktop-portal/domicile-portals.conf
 check "the default-browser file is installed" \
   test -f /usr/share/applications/domicile-mimeapps.list
+for entry in history settings screenshot shutdown reboot; do
+  check "the $entry launcher entry is installed" \
+    test -f "/usr/share/applications/domicile-$entry.desktop"
+done
 
 check "the domicile group exists" getent group domicile
 check "the domicile group may raise its threads" \

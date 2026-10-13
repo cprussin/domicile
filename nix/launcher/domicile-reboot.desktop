@@ -1,0 +1,9 @@
+# Asks in Domicile's Access dialog, then runs `systemctl reboot`.
+[Desktop Entry]
+Type=Application
+Name=Reboot
+Comment=Restart the computer
+Exec=@bin@/domicile reboot
+Icon=@icon@
+X-Domicile-Preview=@preview@
+Terminal=false

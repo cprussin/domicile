@@ -46,8 +46,8 @@ Every desktop has a History app: Chrome's history page for browser windows.
 | `domicile-history.desktop` | `domicile-history` |
 | `domicile-settings.desktop` | `domicile-settings` ([SETTINGS.md](SETTINGS.md)) |
 | `domicile-screenshot.desktop` | `domicile screenshot` |
-| `domicile-shutdown.desktop` | `systemctl poweroff`, after a yes in Domicile's Access dialog |
-| `domicile-reboot.desktop` | `systemctl reboot`, after the same |
+| `domicile-shutdown.desktop` | `domicile power-off`: `systemctl poweroff` after a yes in Domicile's Access dialog |
+| `domicile-reboot.desktop` | `domicile reboot`: `systemctl reboot` after the same |
 
 Each names an SVG icon and an `X-Domicile-Preview` picture
 ([LAUNCHER.md](LAUNCHER.md)).

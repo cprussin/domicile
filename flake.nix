@@ -307,49 +307,16 @@
         '';
       };
 
-      # Asks `title` in Domicile's own yes/no dialog, its Access portal, and
-      # runs `command` only on a yes. Esc, the deny button or no shell to
-      # ask all leave it be.
-      confirmed = { name, title, subtitle, grant, command }:
-        pkgs.writeShellScript "domicile-${name}" ''
-          reply=$(${pkgs.systemd}/bin/busctl --user --timeout=infinity call \
-            org.freedesktop.impl.portal.desktop.domicile \
-            /org/freedesktop/portal/desktop \
-            org.freedesktop.impl.portal.Access AccessDialog 'osssssa{sv}' \
-            "/org/freedesktop/portal/desktop/request/launcher/${name}_$$" \
-            domicile-${name} "" \
-            ${pkgs.lib.escapeShellArg title} ${pkgs.lib.escapeShellArg subtitle} "" \
-            2 grant_label s ${pkgs.lib.escapeShellArg grant} deny_label s Cancel)
-          if [ "$reply" = 'ua{sv} 0 0' ]; then
-            exec ${command}
-          fi
-        '';
-
       # A launcher entry, `domicile-<id>.desktop`, for something Domicile
-      # does. The icon is `<icon>` and the launcher's preview `<preview>`,
-      # both SVGs.
-      #
-      # `launcherFile` fills in `nix/launcher/domicile-<id>.desktop`, which
-      # `distro/stage.sh` shares. `launcherEntry` writes one whose `Exec` is a
-      # store path.
+      # does: `nix/launcher/domicile-<id>.desktop` filled in, as
+      # `distro/stage.sh` does. The icon is `<icon>` and the launcher's
+      # preview `<preview>`, both SVGs.
       launcherFile = { id, icon, preview }: ''
         substitute ${./nix/launcher + "/domicile-${id}.desktop"} \
           "$out/share/applications/domicile-${id}.desktop" \
           --subst-var-by bin "$out/bin" \
           --subst-var-by icon ${icon} \
           --subst-var-by preview ${preview}
-      '';
-      launcherEntry = { id, name, comment, exec, icon, preview }: ''
-        cat >"$out/share/applications/domicile-${id}.desktop" <<DESKTOP
-        [Desktop Entry]
-        Type=Application
-        Name=${name}
-        Comment=${comment}
-        Exec=${exec}
-        Icon=${icon}
-        X-Domicile-Preview=${preview}
-        Terminal=false
-        DESKTOP
       '';
 
       # The built workspace a shell is built against: the builder's
@@ -472,31 +439,13 @@
           icon = ./nix/launcher/screenshot.svg;
           preview = ./nix/launcher/screenshot-preview.svg;
         }}
-        ${launcherEntry {
+        ${launcherFile {
           id = "shutdown";
-          name = "Shutdown";
-          comment = "Turn the computer off";
-          exec = confirmed {
-            name = "shutdown";
-            title = "Shut down?";
-            subtitle = "Every open window closes.";
-            grant = "Shut down";
-            command = "${pkgs.systemd}/bin/systemctl poweroff -i";
-          };
           icon = ./nix/launcher/shutdown.svg;
           preview = ./nix/launcher/shutdown-preview.svg;
         }}
-        ${launcherEntry {
+        ${launcherFile {
           id = "reboot";
-          name = "Reboot";
-          comment = "Restart the computer";
-          exec = confirmed {
-            name = "reboot";
-            title = "Reboot?";
-            subtitle = "Every open window closes.";
-            grant = "Reboot";
-            command = "${pkgs.systemd}/bin/systemctl reboot -i";
-          };
           icon = ./nix/launcher/reboot.svg;
           preview = ./nix/launcher/reboot-preview.svg;
         }}

@@ -1,0 +1,9 @@
+# Asks in Domicile's Access dialog, then runs `systemctl poweroff`.
+[Desktop Entry]
+Type=Application
+Name=Shutdown
+Comment=Turn the computer off
+Exec=@bin@/domicile power-off
+Icon=@icon@
+X-Domicile-Preview=@preview@
+Terminal=false
