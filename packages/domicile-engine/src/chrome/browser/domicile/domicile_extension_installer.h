@@ -10,6 +10,7 @@
 #include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/types/expected.h"
+#include "components/domicile/browser/command_protocol.h"
 #include "components/domicile/browser/extension_installer.h"
 
 class PrefRegistrySimple;
@@ -50,6 +51,16 @@ base::expected<void, std::string> UninstallFrom(Profile& profile,
 
 // The ids of the extensions the config added to `profile`.
 std::vector<std::string> ConfigExtensionsOf(Profile& profile);
+
+// Every extension in `profile`, for the Settings app: no apps, themes or
+// Chrome's own components, as `chrome.management` lists them.
+std::vector<InstalledExtension> ExtensionsOf(Profile& profile);
+
+// Switches extension `id` in `profile` on or off, as its user would, or says
+// why not.
+base::expected<void, std::string> SetExtensionEnabledIn(Profile& profile,
+                                                        const std::string& id,
+                                                        bool enabled);
 
 }  // namespace domicile
 

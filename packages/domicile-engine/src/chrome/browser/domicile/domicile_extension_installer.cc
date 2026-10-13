@@ -26,6 +26,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/browser/browser_thread.h"
+#include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_registry.h"
@@ -36,6 +37,9 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/extension_urls.h"
+#include "extensions/common/manifest.h"
+#include "extensions/common/manifest_handlers/description_info.h"
+#include "extensions/common/manifest_handlers/options_page_info.h"
 #include "extensions/common/mojom/manifest.mojom-shared.h"
 
 namespace domicile {
@@ -112,7 +116,7 @@ void Reconcile(base::WeakPtr<Profile> profile, const ExtensionList& wanted) {
 
   std::set<std::string> installed;
   std::map<std::string, std::string> unpacked;
-  for (const scoped_refptr<const extensions::Extension>& extension :
+  for (const auto& extension :
        extensions::ExtensionRegistry::Get(profile.get())
            ->GenerateInstalledExtensionsSet()) {
     installed.insert(extension->id());
@@ -245,6 +249,49 @@ std::vector<std::string> ConfigExtensionsOf(Profile& profile) {
     ids.push_back(id.GetString());
   }
   return ids;
+}
+
+std::vector<InstalledExtension> ExtensionsOf(Profile& profile) {
+  const extensions::ExtensionRegistry* registry =
+      extensions::ExtensionRegistry::Get(&profile);
+  std::vector<InstalledExtension> listed;
+  for (const auto& extension :
+       registry->GenerateInstalledExtensionsSet()) {
+    if (!extension->is_extension() ||
+        extensions::Manifest::IsComponentLocation(extension->location())) {
+      continue;
+    }
+    InstalledExtension entry;
+    entry.id = extension->id();
+    entry.name = extension->name();
+    entry.description =
+        extensions::DescriptionInfo::GetDescription(*extension);
+    entry.version = extension->VersionString();
+    entry.enabled = registry->enabled_extensions().Contains(extension->id());
+    entry.options_url =
+        extensions::OptionsPageInfo::GetOptionsPage(extension.get());
+    listed.push_back(std::move(entry));
+  }
+  return listed;
+}
+
+base::expected<void, std::string> SetExtensionEnabledIn(Profile& profile,
+                                                        const std::string& id,
+                                                        bool enabled) {
+  if (extensions::ExtensionRegistry::Get(&profile)->GetInstalledExtension(
+          id) == nullptr) {
+    return base::unexpected(
+        base::StrCat({"no extension ", id, " is installed"}));
+  }
+  extensions::ExtensionRegistrar* registrar =
+      extensions::ExtensionRegistrar::Get(&profile);
+  if (enabled) {
+    registrar->EnableExtension(id);
+  } else {
+    registrar->DisableExtension(
+        id, {extensions::disable_reason::DISABLE_USER_ACTION});
+  }
+  return base::ok();
 }
 
 void RegisterExtensionInstallerPrefs(PrefRegistrySimple* registry) {
