@@ -120,12 +120,14 @@ mod tests {
             keymap.starts_with("xkb_keymap"),
             "it is the text format a wl_keyboard.keymap fd carries"
         );
-        assert!(
-            symbols_for(&keymap, "AD01").contains("semicolon"),
+        assert_eq!(
+            unshifted_on(&keymap, "AD01"),
+            "semicolon",
             "the top-left letter key is dvp's semicolon, not qwerty's q"
         );
-        assert!(
-            symbols_for(&keymap, "CAPS").contains("Escape"),
+        assert_eq!(
+            unshifted_on(&keymap, "CAPS"),
+            "Escape",
             "caps:swapescape reached xkb too"
         );
     }
@@ -136,15 +138,15 @@ mod tests {
         // keymap in case xkb reads an empty field as something else.
         let keymap = compiled_keymap(&KeyboardConfig::default()).expect("plain us exists");
 
-        assert!(
-            symbols_for(&keymap, "AD01").contains('q'),
-            "the top-left letter key is qwerty's q: {}",
-            symbols_for(&keymap, "AD01")
+        assert_eq!(
+            unshifted_on(&keymap, "AD01"),
+            "q",
+            "the top-left letter key is qwerty's q"
         );
-        assert!(
-            !symbols_for(&keymap, "CAPS").contains("Escape"),
-            "nothing remapped caps lock: {}",
-            symbols_for(&keymap, "CAPS")
+        assert_eq!(
+            unshifted_on(&keymap, "CAPS"),
+            "Caps_Lock",
+            "nothing remapped caps lock"
         );
     }
 
@@ -209,15 +211,26 @@ mod tests {
         assert_eq!(key_for(&KeyboardConfig::default(), "Greek_alpha"), None);
     }
 
-    /// The `key <NAME> { ... };` block of a compiled keymap, which may span
-    /// several lines.
-    fn symbols_for(keymap: &str, name: &str) -> String {
-        let opens = format!("key <{name}>");
-        let at = keymap
-            .find(&opens)
+    /// The keysym name on the first level of the key named `name` in the
+    /// first layout of `keymap`.
+    ///
+    /// Reads the text back through xkb, as the browser does. Its serialization
+    /// varies by libxkbcommon version: 1.12 writes keysyms as hex.
+    fn unshifted_on(keymap: &str, name: &str) -> String {
+        let context = xkb::Context::new(xkb::CONTEXT_NO_FLAGS);
+        let keymap = xkb::Keymap::new_from_string(
+            &context,
+            keymap.to_string(),
+            xkb::KEYMAP_FORMAT_TEXT_V1,
+            xkb::KEYMAP_COMPILE_NO_FLAGS,
+        )
+        .expect("xkb reads back the keymap it wrote");
+        let key = keymap
+            .key_by_name(name)
             .unwrap_or_else(|| panic!("no key <{name}> in the keymap"));
-        let rest = &keymap[at..];
-        let ends = rest.find("};").expect("a key block closes");
-        rest[..ends].to_string()
+        match keymap.key_get_syms_by_level(key, 0, 0) {
+            [keysym] => xkb::keysym_get_name(*keysym),
+            other => panic!("<{name}> has {} keysyms unshifted", other.len()),
+        }
     }
 }
