@@ -177,6 +177,18 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 
 {"type":"set_media_device","version":1,"kind":"camera","id":"/dev/video2"}
 {"type":"set"}   |   {"type":"refused","why":"…"}
+
+{"type":"history","version":1,"text":"news","end_time":1700000000000.5,"max_results":100}
+{"type":"history","items":[{"url":"https://news.example/","title":"News","favicon":"data:image/png;base64,…"}]}
+
+{"type":"visits","version":1,"url":"https://news.example/"}
+{"type":"visits","times":[1700000000000.5,…]}
+
+{"type":"delete_history","version":1,"visits":[1700000000000.5,…]}
+{"type":"deleted"}   |   {"type":"refused","why":"…"}
+
+{"type":"clear_browsing_data","version":1,"since":1700000000000,"types":["cookies","localStorage"],"origins":["https://a.example"]}
+{"type":"cleared"}   |   {"type":"refused","why":"…"}
 ```
 
 - Without the switch, the engine binds nothing. Every desktop `domicile`
@@ -215,6 +227,31 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
   profile's prefs, and move one to the top. A site that names no device gets
   the top one. Patch 0109 lets `//chrome/browser/domicile` use
   `//chrome/browser/media/prefs`.
+- `history`, `visits`, `delete_history` and `clear_browsing_data` are the
+  History app's, in place of `chrome.history` and `chrome.browsingData`
+  ([APP-MODULES.md](/docs/architecture/APP-MODULES.md#domiciles-own-state)).
+  Each replies once the shell profile's history service or browsing data
+  remover is done.
+  - Times are milliseconds since the Unix epoch, fractional to the
+    microsecond, as `chrome.history` gives them. The engine rounds each to the
+    nearest microsecond.
+  - `history` is `chrome.history.search` from the start of time: each page
+    once, most recently visited first, at most `max_results` (at least 1),
+    visited before `end_time`, matching `text` (empty for every page).
+    `favicon` is the page's cached favicon (or its site's) as a PNG `data:`
+    URL, about 32 pixels, since an app page cannot load `chrome://favicon2`.
+    It is left out when there is none.
+  - `visits` lists every visit to `url`, as `chrome.history.getVisits` does;
+    a page never visited has none.
+  - `delete_history` removes the visits at exactly those times, as their user
+    would.
+  - `clear_browsing_data` is `chrome.browsingData.remove`: data changed since
+    `since` (0 for all time) of each of `types`, named as `DataTypeSet` names
+    them. `origins`, when present, limits it to those sites, and then only
+    types kept per site may be named, not `downloads`, `formData`, `history`
+    or `passwords`. A site's cookies are those of its registrable domain.
+    `webSQL` clears nothing: Chromium no longer has it. An unknown type is
+    refused.
 - It is its own socket because the compositor has no part in choosing the
   shell. The supervisor also passes it at
   launch as `--domicile-shell-root` and `--domicile-shell-module`. See
@@ -231,6 +268,7 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 | `chrome/browser/domicile/domicile_browser_windows.{h,cc}` | the desk's browser windows; `open_url` opens one |
 | `components/domicile/browser/site_permissions.{h,cc}` | permission and setting names; unit tested |
 | `chrome/browser/domicile/domicile_extension_installer.{h,cc}` | loads, uninstalls and lists extensions for the extension commands |
+| `chrome/browser/domicile/domicile_history.{h,cc}` | the History app's commands, on the profile's history service, favicon service and browsing data remover |
 
 ### Dev reload
 

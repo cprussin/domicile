@@ -4,12 +4,14 @@
 #include "components/domicile/browser/command_protocol.h"
 
 #include <algorithm>
+#include <cmath>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include "base/base64.h"
 #include "base/check.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
@@ -17,6 +19,7 @@
 #include "base/json/json_writer.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/time/time.h"
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "components/domicile/browser/site_permissions.h"
@@ -37,11 +40,15 @@ constexpr char kExtensions[] = "extensions";
 constexpr char kSetExtensionEnabled[] = "set_extension_enabled";
 constexpr char kMediaDevices[] = "media_devices";
 constexpr char kSetMediaDevice[] = "set_media_device";
+constexpr char kHistory[] = "history";
+constexpr char kVisits[] = "visits";
+constexpr char kDeleteHistory[] = "delete_history";
+constexpr char kClearBrowsingData[] = "clear_browsing_data";
 
 std::string Line(base::DictValue reply) {
   std::string line;
-  // Replies hold only strings, lists and objects, so a write failure is a
-  // bug.
+  // Replies hold only strings, finite numbers, booleans, lists and objects,
+  // so a write failure is a bug.
   CHECK(base::JSONWriter::Write(reply, &line));
   line.push_back('\n');
   return line;
@@ -73,6 +80,18 @@ std::string AnswerSetExtensionEnabled(const base::DictValue& request,
 std::string AnswerMediaDevices(ListMediaDevices list_media_devices);
 std::string AnswerSetMediaDevice(const base::DictValue& request,
                                  SetMediaDevice set_media_device);
+void AnswerHistory(const base::DictValue& request,
+                   SearchHistory search_history,
+                   CommandReply reply);
+void AnswerVisits(const base::DictValue& request,
+                  ListVisits list_visits,
+                  CommandReply reply);
+void AnswerDeleteHistory(const base::DictValue& request,
+                         DeleteVisits delete_visits,
+                         CommandReply reply);
+void AnswerClearBrowsingData(const base::DictValue& request,
+                             ClearBrowsingData clear_browsing_data,
+                             CommandReply reply);
 
 }  // namespace
 
@@ -92,6 +111,18 @@ MediaDeviceList::MediaDeviceList() = default;
 MediaDeviceList::MediaDeviceList(const MediaDeviceList&) = default;
 MediaDeviceList& MediaDeviceList::operator=(const MediaDeviceList&) = default;
 MediaDeviceList::~MediaDeviceList() = default;
+
+HistoryEntry::HistoryEntry() = default;
+HistoryEntry::HistoryEntry(const HistoryEntry&) = default;
+HistoryEntry& HistoryEntry::operator=(const HistoryEntry&) = default;
+HistoryEntry::~HistoryEntry() = default;
+
+BrowsingDataClearing::BrowsingDataClearing() = default;
+BrowsingDataClearing::BrowsingDataClearing(const BrowsingDataClearing&) =
+    default;
+BrowsingDataClearing& BrowsingDataClearing::operator=(
+    const BrowsingDataClearing&) = default;
+BrowsingDataClearing::~BrowsingDataClearing() = default;
 
 std::string RefusedCommand(std::string_view why) {
   base::DictValue reply;
@@ -184,6 +215,23 @@ void AnswerCommand(std::string_view line,
         AnswerSetMediaDevice(*request, actions.set_media_device));
     return;
   }
+  if (*type == kHistory) {
+    AnswerHistory(*request, actions.search_history, std::move(reply));
+    return;
+  }
+  if (*type == kVisits) {
+    AnswerVisits(*request, actions.list_visits, std::move(reply));
+    return;
+  }
+  if (*type == kDeleteHistory) {
+    AnswerDeleteHistory(*request, actions.delete_visits, std::move(reply));
+    return;
+  }
+  if (*type == kClearBrowsingData) {
+    AnswerClearBrowsingData(*request, actions.clear_browsing_data,
+                            std::move(reply));
+    return;
+  }
   std::move(reply).Run(RefusedCommand(base::StrCat(
       {"\"", *type, "\" is not a command this engine knows; it takes \"",
        kLoadShell, "\", \"", kRunApp, "\", \"", kOpenUrl, "\", \"",
@@ -191,7 +239,9 @@ void AnswerCommand(std::string_view line,
        "\", \"", kSetSitePermissionCommand, "\", \"", kLoadUnpacked, "\", \"",
        kUninstallExtension, "\", \"", kConfigExtensions, "\", \"",
        kExtensions, "\", \"", kSetExtensionEnabled, "\", \"",
-       kMediaDevices, "\" and \"", kSetMediaDevice, "\""})));
+       kMediaDevices, "\", \"", kSetMediaDevice, "\", \"", kHistory, "\", \"",
+       kVisits, "\", \"", kDeleteHistory, "\" and \"", kClearBrowsingData,
+       "\""})));
 }
 
 namespace {
@@ -523,6 +573,253 @@ std::string AnswerSetMediaDevice(const base::DictValue& request,
     return RefusedCommand(set.error());
   }
   return Done("set");
+}
+
+// The time `ms` milliseconds after the Unix epoch, to the nearest microsecond.
+//
+// A double holds a visit's fractional milliseconds only to within a fraction
+// of a microsecond, and `base::Milliseconds` would truncate that to the
+// microsecond before.
+base::Time TimeFromWire(double ms) {
+  return base::Time::UnixEpoch() + base::Microseconds(std::round(ms * 1000));
+}
+
+// Answers `reply` with `type` once `done` says the action is done, or with
+// why it is not.
+CommandDone ReplyWhenDone(std::string_view type, CommandReply reply) {
+  return base::BindOnce(
+      [](std::string type, CommandReply reply,
+         base::expected<void, std::string> done) {
+        std::move(reply).Run(done.has_value() ? Done(type)
+                                              : RefusedCommand(done.error()));
+      },
+      std::string(type), std::move(reply));
+}
+
+void AnswerHistory(const base::DictValue& request,
+                   SearchHistory search_history,
+                   CommandReply reply) {
+  const std::string* text = request.FindString("text");
+  const std::optional<double> end_time = request.FindDouble("end_time");
+  const std::optional<int> max_results = request.FindInt("max_results");
+  if (text == nullptr || !end_time || !max_results || *max_results < 1) {
+    std::move(reply).Run(RefusedCommand(
+        "history needs the \"text\" to match, an \"end_time\" the visits are "
+        "before and how many \"max_results\", at least 1"));
+    return;
+  }
+  search_history(
+      {.text = *text,
+       .end_time = TimeFromWire(*end_time),
+       .max_results = *max_results},
+      base::BindOnce(
+          [](CommandReply reply,
+             base::expected<std::vector<HistoryEntry>, std::string> found) {
+            if (!found.has_value()) {
+              std::move(reply).Run(RefusedCommand(found.error()));
+              return;
+            }
+            base::ListValue items;
+            for (const HistoryEntry& entry : found.value()) {
+              base::DictValue item;
+              item.Set("url", entry.url.spec());
+              item.Set("title", entry.title);
+              if (!entry.favicon_png.empty()) {
+                item.Set("favicon",
+                         base::StrCat({"data:image/png;base64,",
+                                       base::Base64Encode(entry.favicon_png)}));
+              }
+              items.Append(std::move(item));
+            }
+            base::DictValue done;
+            done.Set("type", kHistory);
+            done.Set("items", std::move(items));
+            std::move(reply).Run(Line(std::move(done)));
+          },
+          std::move(reply)));
+}
+
+void AnswerVisits(const base::DictValue& request,
+                  ListVisits list_visits,
+                  CommandReply reply) {
+  const std::string* url = request.FindString("url");
+  if (url == nullptr) {
+    std::move(reply).Run(RefusedCommand(
+        "visits needs a \"url\": the page whose visits to list"));
+    return;
+  }
+  const GURL page(*url);
+  if (!page.is_valid()) {
+    std::move(reply).Run(
+        RefusedCommand(base::StrCat({"\"", *url, "\" is not a URL"})));
+    return;
+  }
+  list_visits(
+      page,
+      base::BindOnce(
+          [](CommandReply reply,
+             base::expected<std::vector<base::Time>, std::string> found) {
+            if (!found.has_value()) {
+              std::move(reply).Run(RefusedCommand(found.error()));
+              return;
+            }
+            base::ListValue times;
+            for (const base::Time& visit : found.value()) {
+              times.Append(visit.InMillisecondsFSinceUnixEpoch());
+            }
+            base::DictValue done;
+            done.Set("type", kVisits);
+            done.Set("times", std::move(times));
+            std::move(reply).Run(Line(std::move(done)));
+          },
+          std::move(reply)));
+}
+
+// The times in `list`, or nothing if it holds anything but numbers.
+std::optional<std::vector<base::Time>> TimesIn(const base::ListValue& list) {
+  std::vector<base::Time> times;
+  for (const base::Value& value : list) {
+    const std::optional<double> ms = value.GetIfDouble();
+    if (!ms) {
+      return std::nullopt;
+    }
+    times.push_back(TimeFromWire(*ms));
+  }
+  return times;
+}
+
+void AnswerDeleteHistory(const base::DictValue& request,
+                         DeleteVisits delete_visits,
+                         CommandReply reply) {
+  const base::ListValue* visits = request.FindList("visits");
+  const std::optional<std::vector<base::Time>> times =
+      visits == nullptr ? std::nullopt : TimesIn(*visits);
+  if (!times) {
+    std::move(reply).Run(RefusedCommand(
+        "delete_history needs the \"visits\" to delete, as a list of their "
+        "times"));
+    return;
+  }
+  delete_visits(*times, ReplyWhenDone("deleted", std::move(reply)));
+}
+
+std::optional<BrowsingDataKind> BrowsingDataKindNamed(std::string_view name) {
+  static constexpr std::pair<std::string_view, BrowsingDataKind> kNames[] = {
+      {"cache", BrowsingDataKind::kCache},
+      {"cacheStorage", BrowsingDataKind::kCacheStorage},
+      {"cookies", BrowsingDataKind::kCookies},
+      {"downloads", BrowsingDataKind::kDownloads},
+      {"fileSystems", BrowsingDataKind::kFileSystems},
+      {"formData", BrowsingDataKind::kFormData},
+      {"history", BrowsingDataKind::kHistory},
+      {"indexedDB", BrowsingDataKind::kIndexedDB},
+      {"localStorage", BrowsingDataKind::kLocalStorage},
+      {"passwords", BrowsingDataKind::kPasswords},
+      {"serviceWorkers", BrowsingDataKind::kServiceWorkers},
+      {"webSQL", BrowsingDataKind::kWebSQL},
+  };
+  for (const auto& [kind_name, kind] : kNames) {
+    if (kind_name == name) {
+      return kind;
+    }
+  }
+  return std::nullopt;
+}
+
+// Whether `kind` is kept per site, and so can be cleared for some sites only.
+// The rest are kept per visit or per form.
+bool IsKeptPerSite(BrowsingDataKind kind) {
+  switch (kind) {
+    case BrowsingDataKind::kCache:
+    case BrowsingDataKind::kCacheStorage:
+    case BrowsingDataKind::kCookies:
+    case BrowsingDataKind::kFileSystems:
+    case BrowsingDataKind::kIndexedDB:
+    case BrowsingDataKind::kLocalStorage:
+    case BrowsingDataKind::kServiceWorkers:
+    case BrowsingDataKind::kWebSQL:
+      return true;
+    case BrowsingDataKind::kDownloads:
+    case BrowsingDataKind::kFormData:
+    case BrowsingDataKind::kHistory:
+    case BrowsingDataKind::kPasswords:
+      return false;
+  }
+}
+
+// What a `clear_browsing_data` request clears, or why it cannot be cleared.
+base::expected<BrowsingDataClearing, std::string> ClearingIn(
+    const base::DictValue& request) {
+  const std::optional<double> since = request.FindDouble("since");
+  const base::ListValue* types = request.FindList("types");
+  if (!since || types == nullptr) {
+    return base::unexpected(
+        "clear_browsing_data needs a \"since\", 0 for all time, and the "
+        "\"types\" to clear");
+  }
+  BrowsingDataClearing clearing;
+  // 0 is all time, as for `chrome.browsingData`.
+  clearing.since = *since == 0 ? base::Time() : TimeFromWire(*since);
+  for (const base::Value& type : *types) {
+    const std::string* name = type.GetIfString();
+    if (name == nullptr) {
+      return base::unexpected("clear_browsing_data's \"types\" are strings");
+    }
+    const std::optional<BrowsingDataKind> kind = BrowsingDataKindNamed(*name);
+    if (!kind) {
+      return base::unexpected(base::StrCat(
+          {"\"", *name,
+           "\" is not a type of browsing data; they are \"cache\", "
+           "\"cacheStorage\", \"cookies\", \"downloads\", \"fileSystems\", "
+           "\"formData\", \"history\", \"indexedDB\", \"localStorage\", "
+           "\"passwords\", \"serviceWorkers\" and \"webSQL\""}));
+    }
+    clearing.kinds.push_back(*kind);
+  }
+
+  // Optional: without it, every site's data is cleared.
+  const base::Value* origins = request.Find("origins");
+  if (origins == nullptr) {
+    return clearing;
+  }
+  if (!origins->is_list() || origins->GetList().empty()) {
+    return base::unexpected(
+        "clear_browsing_data's \"origins\" lists the sites to clear; leave it "
+        "out to clear every site");
+  }
+  for (const base::Value& origin : origins->GetList()) {
+    const std::string* spec = origin.GetIfString();
+    if (spec == nullptr) {
+      return base::unexpected("clear_browsing_data's \"origins\" are strings");
+    }
+    const url::Origin site = url::Origin::Create(GURL(*spec));
+    if (site.opaque()) {
+      return base::unexpected(
+          base::StrCat({"\"", *spec, "\" is not a site's origin"}));
+    }
+    clearing.origins.push_back(site);
+  }
+  for (const BrowsingDataKind kind : clearing.kinds) {
+    if (!IsKeptPerSite(kind)) {
+      return base::unexpected(
+          "\"origins\" clears only data kept per site, which \"downloads\", "
+          "\"formData\", \"history\" and \"passwords\" are not");
+    }
+  }
+  return clearing;
+}
+
+void AnswerClearBrowsingData(const base::DictValue& request,
+                             ClearBrowsingData clear_browsing_data,
+                             CommandReply reply) {
+  const base::expected<BrowsingDataClearing, std::string> clearing =
+      ClearingIn(request);
+  if (!clearing.has_value()) {
+    std::move(reply).Run(RefusedCommand(clearing.error()));
+    return;
+  }
+  clear_browsing_data(clearing.value(),
+                      ReplyWhenDone("cleared", std::move(reply)));
 }
 
 }  // namespace

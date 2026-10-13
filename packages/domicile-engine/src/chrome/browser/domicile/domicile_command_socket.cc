@@ -21,9 +21,11 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
+#include "base/time/time.h"
 #include "base/types/expected.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
 #include "chrome/browser/domicile/domicile_extension_installer.h"
+#include "chrome/browser/domicile/domicile_history.h"
 #include "chrome/browser/domicile/domicile_media_devices.h"
 #include "chrome/browser/profiles/profile.h"
 #include "base/task/bind_post_task.h"
@@ -299,11 +301,59 @@ base::expected<void, std::string> PreferShellMediaDevice(
   return PreferMediaDevice(*profile->GetPrefs(), kind, id);
 }
 
+constexpr char kNoHistory[] =
+    "this engine has no shell, and so no profile to hold history and browsing "
+    "data";
+
+// The shell profile's history and browsing data, for the History app.
+void SearchShellHistory(const HistorySearch& search, HistoryFound found) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  Profile* profile = ShellProfile();
+  if (profile == nullptr) {
+    std::move(found).Run(base::unexpected(kNoHistory));
+    return;
+  }
+  SearchHistoryIn(*profile, search, std::move(found));
+}
+
+void ListShellVisits(const GURL& url, VisitsFound found) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  Profile* profile = ShellProfile();
+  if (profile == nullptr) {
+    std::move(found).Run(base::unexpected(kNoHistory));
+    return;
+  }
+  ListVisitsIn(*profile, url, std::move(found));
+}
+
+void DeleteShellVisits(const std::vector<base::Time>& visits,
+                       CommandDone done) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  Profile* profile = ShellProfile();
+  if (profile == nullptr) {
+    std::move(done).Run(base::unexpected(kNoHistory));
+    return;
+  }
+  DeleteVisitsIn(*profile, visits, std::move(done));
+}
+
+void ClearShellBrowsingData(const BrowsingDataClearing& clearing,
+                            CommandDone done) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  Profile* profile = ShellProfile();
+  if (profile == nullptr) {
+    std::move(done).Run(base::unexpected(kNoHistory));
+    return;
+  }
+  ClearBrowsingDataIn(*profile, clearing, std::move(done));
+}
+
 // One request line, answered from the UI thread.
 //
 // Runs on the UI thread because `ShellSource` is unlocked and UI-thread only,
 // and loading a shell navigates a window. `reply` is bound to the IO thread,
-// so it may be called from any thread, and later for `load_unpacked`.
+// so it may be called from any thread, and later for `load_unpacked` and the
+// History app's commands.
 void AnswerOnUIThread(const std::string& line, CommandReply reply) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   AnswerCommand(line,
@@ -319,7 +369,11 @@ void AnswerOnUIThread(const std::string& line, CommandReply reply) {
                  .list_extensions = &ListShellExtensions,
                  .set_extension_enabled = &SetShellExtensionEnabled,
                  .list_media_devices = &ListShellMediaDevices,
-                 .set_media_device = &PreferShellMediaDevice},
+                 .set_media_device = &PreferShellMediaDevice,
+                 .search_history = &SearchShellHistory,
+                 .list_visits = &ListShellVisits,
+                 .delete_visits = &DeleteShellVisits,
+                 .clear_browsing_data = &ClearShellBrowsingData},
                 std::move(reply));
 }
 
