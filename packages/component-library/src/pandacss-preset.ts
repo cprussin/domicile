@@ -388,6 +388,10 @@ export const domicilePreset = definePreset({
           wipe: { value: "1.6s" },
         },
         easings: {
+          // For long movements, such as a workspace switch or the lock
+          // screen's entrance. `outQuart` starts at full speed, which looks
+          // like a jump over a screen's width.
+          emphasized: { value: "cubic-bezier(0.2, 0, 0, 1)" },
           // Ease-out with a small overshoot, for a landing bounce.
           outBack: { value: "cubic-bezier(0.34, 1.8, 0.64, 1)" },
           // easeOutQuart, for settling animations where `easings.out` feels

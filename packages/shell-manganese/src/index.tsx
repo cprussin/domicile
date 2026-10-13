@@ -1,58 +1,20 @@
-// Manganese's entry point and library API. `runManganese` builds a `Shell` that
-// takes the desktop it is handed and mounts the React chrome; `Shell` is the
-// default build. Bar items are exported for custom layouts. Importing this
-// module only installs its stylesheet.
+// Manganese's entry point. `runManganese` builds a `Shell` that takes the
+// desktop it is handed and mounts the React chrome; `Shell` is the default
+// build. Bar items, commands and the rest live in the `manganese-*` packages.
+// Importing this module only installs its stylesheet.
 
+import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
+import type { ApplicationsOptions } from "@domicile-desktop/manganese-launcher/applications-config";
+import { applicationsConfigSchema } from "@domicile-desktop/manganese-launcher/applications-config";
+import type { FloatingOptions } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
+import { floatingRulesSchema } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
-
-import type { ApplicationsOptions } from "./launcher/applications-config";
-import { applicationsConfigSchema } from "./launcher/applications-config";
 import { mountManganese } from "./mount-manganese";
-import type { BarLayout } from "./top-bar/layout";
-import type { FloatingOptions } from "./window-management/floating/floating-rules";
-import { floatingRulesSchema } from "./window-management/floating/floating-rules";
 
 import "./global.css";
 
-export {
-  clipboard,
-  DEFAULT_KEYBINDINGS,
-  DEFAULT_MODES,
-  exec,
-  floating,
-  focus,
-  fullscreen,
-  grow,
-  kill,
-  launcher,
-  layout,
-  lock,
-  mode,
-  move,
-  moveToWorkspace,
-  scratchpad,
-  searchClipboard,
-  split,
-  type Way,
-  workspace,
-} from "./keyboard/commands";
-export {
-  BarBattery as Battery,
-  BarBluetooth as Bluetooth,
-  BarBrightness as Brightness,
-  BarClock as Clock,
-  BarLauncher as LauncherButton,
-  BarMode as Mode,
-  BarNetwork as Network,
-  BarNotifications as Notifications,
-  BarSharing as Sharing,
-  BarThemeSelector as ThemeSwitch,
-  BarTray as Tray,
-  BarVolume as Volume,
-  BarWorkspaces as WorkspaceSwitcher,
-} from "./top-bar/bar-items";
-export { type BarLayout, DEFAULT_BAR } from "./top-bar/layout";
+export { DEFAULT_BAR } from "./default-bars";
 
 /** Options for `runManganese`. */
 export type ManganeseOptions = {
@@ -70,6 +32,7 @@ export type ManganeseOptions = {
    * Client windows that open floating at the size they drew, as sway's
    * `for_window [app_id=…] floating enable`. Each rule matches regular
    * expressions on the `app` id and `title`. Dialogs float without one. See
+   * `@domicile-desktop/manganese-window-management`'s
    * `docs/WINDOW-MANAGEMENT.md`.
    */
   readonly floating?: FloatingOptions;

@@ -1,0 +1,163 @@
+import { Popover } from "@domicile-desktop/component-library/Popover";
+import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
+import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
+import type { Audio, AudioDevice } from "@domicile-desktop/system-audio/audio";
+import { SpeakerSimpleHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleHigh";
+import { SpeakerSimpleLowIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleLow";
+import { SpeakerSimpleNoneIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleNone";
+import { SpeakerSimpleSlashIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleSlash";
+import { SpeakerSimpleXIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleX";
+import type { WheelEvent } from "react";
+import { css } from "../styled-system/css";
+import { ask } from "./ask";
+import type { SoundControls } from "./desk-sound";
+import { Level } from "./Level";
+import { Mixer } from "./Mixer";
+import { primary } from "./primary";
+
+/** How far one notch of the wheel over the icon moves the volume. */
+const WHEEL_STEP = 0.05;
+
+type Props = {
+  /** The sound server's state. */
+  audio: SharedWatch<Audio>;
+  /** Whether the desktop is locked; see below. */
+  locked?: boolean | undefined;
+  /** The target of volume changes. */
+  server: SoundControls;
+};
+
+/**
+ * Top bar volume item: a speaker icon that opens the {@link Mixer}. The wheel
+ * over the icon changes the default output's volume.
+ *
+ * Renders nothing until the server reports, so it stays hidden without a
+ * sound server. The mixer meters only while open, because metering a
+ * microphone records it.
+ *
+ * On a locked desktop the panel holds only the default output's volume and
+ * mute, the requests a locked desktop allows.
+ */
+export const Volume = ({ audio: watch, locked = false, server }: Props) => {
+  const audio = useSharedWatch(watch);
+
+  if (audio === undefined) {
+    return undefined;
+  } else {
+    const output = audio.outputs.find((device) => device.default);
+    return (
+      <Popover
+        align="center"
+        side="bottom"
+        tone="overPhoto"
+        trigger={
+          <button
+            aria-label={triggerLabel(output)}
+            className={triggerStyles}
+            onWheel={(event) => {
+              if (output !== undefined) {
+                ask(server.setVolume(output.id, stepped(output, event)));
+              }
+            }}
+            type="button"
+          >
+            <Speaker output={output} />
+          </button>
+        }
+        wide={!locked}
+      >
+        {locked ? (
+          <OutputLevel audio={audio} server={server} />
+        ) : (
+          <Mixer audio={audio} server={server} />
+        )}
+      </Popover>
+    );
+  }
+};
+
+/** The default output's volume and mute, unmetered. */
+const OutputLevel = ({
+  audio,
+  server,
+}: {
+  audio: Audio;
+  server: SoundControls;
+}) => {
+  const output = primary(audio.outputs);
+  return output === undefined ? undefined : (
+    <span className={outputLevelStyles}>
+      <Level
+        direction="output"
+        label="Volume"
+        level={output.volume}
+        muted={output.muted}
+        onLevel={(level) => {
+          ask(server.setVolume(output.id, level));
+        }}
+        onMuted={(muted) => {
+          ask(server.setMuted(output.id, muted));
+        }}
+      />
+    </span>
+  );
+};
+
+const triggerLabel = (output: AudioDevice | undefined) => {
+  if (output === undefined) {
+    return "Sound";
+  } else if (output.muted) {
+    return "Volume muted";
+  } else {
+    return `Volume ${Math.round(output.volume * 100)}%`;
+  }
+};
+
+/** A speaker icon whose waves show the default output's rough volume. */
+const Speaker = ({ output }: { output: AudioDevice | undefined }) => {
+  if (output === undefined) {
+    return <SpeakerSimpleSlashIcon size={15} weight="bold" />;
+  } else if (output.muted) {
+    return <SpeakerSimpleXIcon size={15} weight="bold" />;
+  } else if (output.volume === 0) {
+    return <SpeakerSimpleNoneIcon size={15} weight="bold" />;
+  } else if (output.volume < 0.5) {
+    return <SpeakerSimpleLowIcon size={15} weight="bold" />;
+  } else {
+    return <SpeakerSimpleHighIcon size={15} weight="bold" />;
+  }
+};
+
+/** The output's volume after one wheel notch, rounded and clamped to 0–1. */
+const stepped = (output: AudioDevice, event: WheelEvent) => {
+  const step = event.deltaY < 0 ? WHEEL_STEP : -WHEEL_STEP;
+  return Math.min(
+    1,
+    Math.max(0, Math.round((output.volume + step) * 100) / 100),
+  );
+};
+
+// Matches the brightness item's button.
+const triggerStyles = css({
+  _hover: {
+    backgroundColor: "color-mix(in oklab, white 16%, transparent)",
+  },
+  alignItems: "center",
+  backgroundColor: "transparent",
+  blockSize: 7,
+  borderRadius: "full",
+  borderStyle: "none",
+  cursor: "pointer",
+  display: "inline-flex",
+  flexShrink: 0,
+  inlineSize: 7,
+  justifyContent: "center",
+  padding: 0,
+  transition: "background-color {durations.fast} {easings.default}",
+});
+
+// As wide as the brightness item's slider.
+const outputLevelStyles = css({
+  display: "block",
+  inlineSize: 60,
+});

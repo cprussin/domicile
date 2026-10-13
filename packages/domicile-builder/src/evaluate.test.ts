@@ -15,10 +15,13 @@ describe("evaluate", () => {
     writeFileSync(
       config,
       `import { DEFAULT_BAR, runManganese } from "@domicile-desktop/manganese";
+         import { Clock } from "@domicile-desktop/manganese-bar-module-clock";
+         import { DEFAULT_KEYBINDINGS } from "@domicile-desktop/manganese-window-management/keyboard/commands";
          export const input = { keyboard: { xkb_variant: "dvp" } };
          export const extensions = { web_store: ["abc"] };
          export const Shell = runManganese({
-           bar: { ...DEFAULT_BAR, center: [<span key="m">mail</span>] },
+           bar: { ...DEFAULT_BAR, center: [<Clock key="clock" />] },
+           keybindings: { keybindings: DEFAULT_KEYBINDINGS },
          });`,
     );
     const out = path.join(desk, "config.json");

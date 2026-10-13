@@ -46,18 +46,31 @@ export const evaluate = async (
   writeFileSync(out, `${JSON.stringify(sections)}\n`);
 };
 
-/** Resolve Domicile's packages and React from Domicile's install. */
+/**
+ * Resolve Domicile's packages and React from Domicile's install: the user's
+ * imports from manganese, and imports inside Domicile's packages from the
+ * package that makes them, which depends on them.
+ */
 const fromDomicile = (domicile: string): BunPlugin => {
   const manganese = path.join(domicile, "packages", "shell-manganese");
+  const ours = `${path.join(domicile, "packages")}${path.sep}`;
   return {
     name: "domicile:from-domicile",
     setup: (build) => {
-      build.onResolve({ filter: FROM_DOMICILE }, ({ path: specifier }) => ({
-        path:
-          specifier === "@domicile-desktop/manganese"
-            ? path.join(manganese, "src", "index.tsx")
-            : Bun.resolveSync(specifier, manganese),
-      }));
+      build.onResolve(
+        { filter: FROM_DOMICILE },
+        ({ importer, path: specifier }) => ({
+          path:
+            specifier === "@domicile-desktop/manganese"
+              ? path.join(manganese, "src", "index.tsx")
+              : Bun.resolveSync(
+                  specifier,
+                  importer.startsWith(ours)
+                    ? path.dirname(importer)
+                    : manganese,
+                ),
+        }),
+      );
     },
   };
 };

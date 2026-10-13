@@ -60,7 +60,7 @@ EXEMPT='--realise\b|\bcancelled\(\)|\bDownloadItem::CANCELLED\b'
 # Skip binaries, lockfiles, this file (it contains the list) and the vendored
 # IANA TLD list (`.theatre` is a real TLD).
 SELF="scripts/$(basename "$0")"
-TLDS="packages/shell-manganese/src/address/tlds.ts"
+TLDS="packages/manganese-address/src/tlds.ts"
 FILES="$(git ls-files \
   | grep -vE '\.(lock|png|jpe?g|gif|ico|webp|woff2?|ttf|otf|pdf|svg)$' \
   | grep -vxF -e "$SELF" -e "$TLDS")"

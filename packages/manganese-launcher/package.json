@@ -1,0 +1,65 @@
+{
+  "dependencies": {
+    "@cprussin/option-result": "catalog:",
+    "@domicile-desktop/component-library": "workspace:*",
+    "@domicile-desktop/manganese-address": "workspace:*",
+    "@domicile-desktop/manganese-host": "workspace:*",
+    "@domicile-desktop/sdk": "workspace:*",
+    "@domicile-desktop/system-apps": "workspace:*",
+    "@pandacss/dev": "catalog:",
+    "@phosphor-icons/react": "catalog:",
+    "lowlight": "catalog:",
+    "react": "catalog:",
+    "zod": "catalog:"
+  },
+  "description": "Manganese's launcher: apps, files, bookmarks, web addresses and searches in one panel.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/manganese-window-management": "workspace:*",
+    "@domicile-desktop/test-support": "workspace:*",
+    "@pandacss/preset-panda": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@testing-library/user-event": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "postcss": "catalog:",
+    "react-dom": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    "./app-search": "./src/app-search.ts",
+    "./applications-config": "./src/applications-config.ts",
+    "./fixture": "./src/fixture.ts",
+    "./Launcher": "./src/Launcher.tsx",
+    "./launch": "./src/launch.ts",
+    "./launcher-context": "./src/launcher-context.ts",
+    "./OpenWith": "./src/OpenWith.tsx",
+    "./panda-preset": "./src/panda-preset.ts",
+    "./useOpeningApps": "./src/useOpeningApps.ts"
+  },
+  "files": [
+    "src/**",
+    "styled-system/**",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx"
+  ],
+  "license": "MIT",
+  "name": "@domicile-desktop/manganese-launcher",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "directory": "packages/manganese-launcher",
+    "type": "git",
+    "url": "git+https://github.com/cprussin/domicile.git"
+  },
+  "scripts": {
+    "prepare": "panda codegen --silent && panda cssgen --silent",
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}

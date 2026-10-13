@@ -1,9 +1,8 @@
 import { Screen } from "@domicile-desktop/component-library/Screen";
+import { BarContext } from "@domicile-desktop/manganese-bar/bar-context";
+import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
+import { TopBar } from "@domicile-desktop/manganese-bar/TopBar";
 import { memo, useMemo } from "react";
-
-import { BarContext } from "../top-bar/bar-context";
-import type { BarLayout } from "../top-bar/layout";
-import { TopBar } from "../top-bar/TopBar";
 
 type Props = {
   /** The bar layout, shared by every monitor. */

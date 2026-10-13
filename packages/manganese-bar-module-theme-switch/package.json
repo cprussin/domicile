@@ -1,0 +1,47 @@
+{
+  "dependencies": {
+    "@domicile-desktop/component-library": "workspace:*",
+    "@pandacss/dev": "catalog:",
+    "react": "catalog:"
+  },
+  "description": "A manganese bar item: the light and dark theme toggle.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/test-support": "workspace:*",
+    "@pandacss/preset-panda": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@testing-library/user-event": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "postcss": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    ".": "./src/bar-item.tsx"
+  },
+  "files": [
+    "src/**",
+    "styled-system/**",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx"
+  ],
+  "license": "MIT",
+  "name": "@domicile-desktop/manganese-bar-module-theme-switch",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "directory": "packages/manganese-bar-module-theme-switch",
+    "type": "git",
+    "url": "git+https://github.com/cprussin/domicile.git"
+  },
+  "scripts": {
+    "prepare": "panda codegen --silent",
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}

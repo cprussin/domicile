@@ -9,8 +9,8 @@ import { bundle } from "./bundle";
 const DOMICILE = path.resolve(import.meta.dir, "..", "..", "..");
 
 describe("bundle", () => {
-  // An entry outside any project, with nothing installed, gets manganese and
-  // React from Domicile. Its output directory's parent does not exist yet, as
+  // An entry outside any project, with nothing installed, gets manganese, its
+  // packages and React from Domicile. Its output directory's parent does not exist yet, as
   // in a fresh cache.
   it("builds an entry against Domicile's manganese into a module with its `Shell` and its styles", async () => {
     const desk = mkdtempSync(path.join(tmpdir(), "domicile-builder-"));
@@ -18,9 +18,10 @@ describe("bundle", () => {
     writeFileSync(
       entry,
       `import { DEFAULT_BAR, runManganese } from "@domicile-desktop/manganese";
+         import { Clock } from "@domicile-desktop/manganese-bar-module-clock";
          const Mail = () => <span>mail 3/12</span>;
          export const Shell = runManganese({
-           bar: { ...DEFAULT_BAR, center: [<Mail key="mail" />] },
+           bar: { ...DEFAULT_BAR, center: [<Clock key="clock" />, <Mail key="mail" />] },
          });`,
     );
 

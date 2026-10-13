@@ -1,0 +1,50 @@
+{
+  "dependencies": {
+    "@domicile-desktop/component-library": "workspace:*",
+    "@domicile-desktop/manganese-host": "workspace:*",
+    "@pandacss/dev": "catalog:",
+    "react": "catalog:"
+  },
+  "description": "Manganese's top bar: three columns of items over a scrim, and the context each item reads.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/test-support": "workspace:*",
+    "@pandacss/preset-panda": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@testing-library/user-event": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "postcss": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    "./bar-context": "./src/bar-context.ts",
+    "./bar-layout": "./src/bar-layout.ts",
+    "./TopBar": "./src/TopBar.tsx"
+  },
+  "files": [
+    "src/**",
+    "styled-system/**",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx"
+  ],
+  "license": "MIT",
+  "name": "@domicile-desktop/manganese-bar",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "directory": "packages/manganese-bar",
+    "type": "git",
+    "url": "git+https://github.com/cprussin/domicile.git"
+  },
+  "scripts": {
+    "prepare": "panda codegen --silent",
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}

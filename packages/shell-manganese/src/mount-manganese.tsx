@@ -6,20 +6,19 @@ import {
   applyTheme,
   DEFAULT_THEME,
 } from "@domicile-desktop/component-library/theme-core";
+import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
+import type { ApplicationsConfig } from "@domicile-desktop/manganese-launcher/applications-config";
+import type { FloatingRules } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
+import { hostDisplays } from "@domicile-desktop/manganese-window-management/screens/host-displays";
 import { watchAppearance } from "@domicile-desktop/sdk/appearance";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import type { Root } from "react-dom/client";
 import { createRoot } from "react-dom/client";
-
-import type { ApplicationsConfig } from "./launcher/applications-config";
 import { mountPoint } from "./mount-point";
 import { Shell as Chrome } from "./Shell";
-import { hostDisplays } from "./screens/host-displays";
 import { hostTheme } from "./theme/host-theme";
 import { rememberedTheme } from "./theme/remembered-theme";
-import type { BarLayout } from "./top-bar/layout";
-import type { FloatingRules } from "./window-management/floating/floating-rules";
 
 /** What `mountManganese` draws, from `runManganese`'s parsed options. */
 type MountOptions = {

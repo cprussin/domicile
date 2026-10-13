@@ -150,7 +150,7 @@ interface DomicileExtension {
     longest word.
 
 SDK side: the `DomicileHost` types in `packages/chrome-sdk`, and the tray
-and popup panel in `packages/shell-manganese/src/extensions/`.
+and popup panel in `packages/manganese-bar-module-tray/src/extensions/`.
 
 ### Tabs
 

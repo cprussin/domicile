@@ -1,0 +1,51 @@
+{
+  "dependencies": {
+    "@domicile-desktop/component-library": "workspace:*",
+    "@domicile-desktop/sdk": "workspace:*",
+    "@pandacss/dev": "catalog:",
+    "zod": "catalog:"
+  },
+  "description": "Reads typed text as a web address or a search, for manganese's launcher and browser address bar.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/test-support": "workspace:*",
+    "@pandacss/preset-panda": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@testing-library/user-event": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "postcss": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    "./address-suggestions": "./src/address-suggestions.ts",
+    "./connection-safety": "./src/connection-safety.ts",
+    "./search": "./src/search.ts",
+    "./typed-address": "./src/typed-address.ts"
+  },
+  "files": [
+    "src/**",
+    "styled-system/**",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx"
+  ],
+  "license": "MIT",
+  "name": "@domicile-desktop/manganese-address",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "directory": "packages/manganese-address",
+    "type": "git",
+    "url": "git+https://github.com/cprussin/domicile.git"
+  },
+  "scripts": {
+    "prepare": "panda codegen --silent",
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}

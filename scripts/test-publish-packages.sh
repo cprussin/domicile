@@ -34,9 +34,17 @@ if ! DOMICILE_PUBLISH_DRY_RUN="$OUT" "$PUBLISH" >"$OUT/log" 2>&1; then
   fail "the dry run succeeds" "$(tail -20 "$OUT/log")"
 fi
 
-for name in sdk system-apps system-audio system-backlight system-battery component-library system-network system-bluetooth manganese; do
-  tarball="$(ls "$OUT"/domicile-desktop-"$name"-*.tgz 2>/dev/null | head -1)"
-  if [ -z "$tarball" ]; then
+MANGANESE=(
+  manganese manganese-host manganese-address manganese-bar manganese-page-requests
+  manganese-window-management manganese-launcher manganese-notifications
+  manganese-clipboard manganese-wallpaper manganese-lock
+)
+for module in battery bluetooth brightness clock launcher-button mode network notifications sharing theme-switch tray volume workspace-switcher; do
+  MANGANESE+=("manganese-bar-module-$module")
+done
+for name in sdk system-apps system-audio system-backlight system-battery component-library system-network system-bluetooth "${MANGANESE[@]}"; do
+  tarball="$OUT/domicile-desktop-$name-$version.tgz"
+  if [ ! -f "$tarball" ]; then
     fail "@domicile-desktop/$name is packed" "no tarball in $OUT"
     continue
   fi
@@ -54,14 +62,23 @@ for name in sdk system-apps system-audio system-backlight system-battery compone
     fail "@domicile-desktop/$name names its repository, as provenance needs" "$(jq .repository <<<"$manifest")"
 done
 
-manganese="$(ls "$OUT"/domicile-desktop-manganese-*.tgz 2>/dev/null | head -1)"
-if [ -n "$manganese" ]; then
+manganese="$OUT/domicile-desktop-manganese-$version.tgz"
+if [ -f "$manganese" ]; then
   [ "$(tar -xzOf "$manganese" package/package.json | jq -r '.dependencies["@domicile-desktop/sdk"]')" = "$version" ] &&
     ok "manganese depends on the sdk of its own commit" ||
     fail "manganese depends on the sdk of its own commit" "$(tar -xzOf "$manganese" package/package.json | jq .dependencies)"
   tar -tzf "$manganese" | grep -q '^package/styled-system/css/index.mjs$' &&
     ok "manganese ships its generated styled-system" ||
     fail "manganese ships its generated styled-system" "$(tar -tzf "$manganese" | head)"
+fi
+tray="$OUT/domicile-desktop-manganese-bar-module-tray-$version.tgz"
+if [ -f "$tray" ]; then
+  [ "$(tar -xzOf "$tray" package/package.json | jq -r '.dependencies["@domicile-desktop/manganese-host"]')" = "$version" ] &&
+    ok "a bar module depends on manganese's packages of its own commit" ||
+    fail "a bar module depends on manganese's packages of its own commit" "$(tar -xzOf "$tray" package/package.json | jq .dependencies)"
+  tar -tzf "$tray" | grep -q '^package/styled-system/css/index.mjs$' &&
+    ok "a bar module ships its generated styled-system" ||
+    fail "a bar module ships its generated styled-system" "$(tar -tzf "$tray" | head)"
 fi
 sdk="$(ls "$OUT"/domicile-desktop-sdk-*.tgz 2>/dev/null | head -1)"
 if [ -n "$sdk" ]; then

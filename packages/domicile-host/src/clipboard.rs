@@ -4,7 +4,7 @@
 //! A Wayland selection lives in the offering client, so it vanishes when that
 //! client exits. The compositor keeps copies to survive that. Reading and
 //! restoring selections is in `domicile-compositor`'s `clipboard` module. See
-//! `packages/shell-manganese/docs/CLIPBOARD.md`.
+//! `packages/manganese-clipboard/docs/CLIPBOARD.md`.
 
 use domicile_protocol::ClipboardEntry;
 

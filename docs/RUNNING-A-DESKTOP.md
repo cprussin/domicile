@@ -103,7 +103,7 @@ desktop, as a keybinding bound to it does. `domicile send-shell focus right`
 moves focus right in manganese, like Meta+l.
 
 - Every word after `send-shell` is the command. The shell's README lists its
-  commands; manganese's are in [KEYS.md](../packages/shell-manganese/docs/KEYS.md#commands).
+  commands; manganese's are in [KEYS.md](../packages/manganese-window-management/docs/KEYS.md#commands).
 - Every page of the desktop hears it.
 - It fails when no page listens for commands, and while the desk is locked.
 - It exits 0 once the pages have the command. The shell does not report

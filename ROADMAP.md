@@ -36,20 +36,17 @@ item when it ships.
 4. **Native density on every monitor: test on hardware.**
    [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
 
-5. **Split manganese into small packages.** Clock, tray, mixer and window
-   management as their own packages; manganese composes them. No design doc.
-
-6. **Settings app.** [SETTINGS.md](docs/SETTINGS.md).
+5. **Settings app.** [SETTINGS.md](docs/SETTINGS.md).
    - Shell options ([SHELL-OPTIONS.md](docs/architecture/SHELL-OPTIONS.md)).
    - A list of sites with stored data. History clears cookies by time range
      or by site ([HISTORY.md](docs/HISTORY.md)).
 
-7. **Web apps.** [WEB-APPS.md](docs/architecture/WEB-APPS.md).
+6. **Web apps.** [WEB-APPS.md](docs/architecture/WEB-APPS.md).
    - `DomicileHost.openAppWindow(url)`, for a shell's own launcher.
    - App modules: `domicile run-app`, and History and Settings as app modules
      instead of extensions ([APP-MODULES.md](docs/architecture/APP-MODULES.md)).
 
-8. **Distribution packages.**
+7. **Distribution packages.**
    [RUNNING-A-DESKTOP.md](docs/RUNNING-A-DESKTOP.md#other-distributions).
    - Released on GitHub only. APT and RPM repositories, package signing, an
      AUR package and COPR wait until users ask for them; until then upgrades

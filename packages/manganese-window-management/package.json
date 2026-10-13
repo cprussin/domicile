@@ -1,0 +1,84 @@
+{
+  "dependencies": {
+    "@cprussin/option-result": "catalog:",
+    "@domicile-desktop/component-library": "workspace:*",
+    "@domicile-desktop/manganese-address": "workspace:*",
+    "@domicile-desktop/manganese-bar": "workspace:*",
+    "@domicile-desktop/manganese-host": "workspace:*",
+    "@domicile-desktop/manganese-page-requests": "workspace:*",
+    "@domicile-desktop/sdk": "workspace:*",
+    "@domicile-desktop/system-apps": "workspace:*",
+    "@pandacss/dev": "catalog:",
+    "@phosphor-icons/react": "catalog:",
+    "react": "catalog:",
+    "zod": "catalog:"
+  },
+  "description": "Manganese's window management: sway's layout tree, tiling, floating, workspaces, keybindings and the windows' chrome.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/test-support": "workspace:*",
+    "@pandacss/preset-panda": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@testing-library/user-event": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "postcss": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    "./client-icons": "./src/client-icons.ts",
+    "./direction": "./src/direction.ts",
+    "./floating/floating-rules": "./src/floating/floating-rules.ts",
+    "./grab-cursor-styles": "./src/grab-cursor-styles.ts",
+    "./keyboard/commands": "./src/keyboard/commands.ts",
+    "./keyboard/useKeybindings": "./src/keyboard/useKeybindings.ts",
+    "./keyboard/useModifiers": "./src/keyboard/useModifiers.ts",
+    "./panda-preset": "./src/panda-preset.ts",
+    "./placement": "./src/placement.ts",
+    "./pointer-warp": "./src/pointer-warp.ts",
+    "./rect": "./src/rect.ts",
+    "./Stage": "./src/Stage.tsx",
+    "./screens/fixture": "./src/screens/fixture.tsx",
+    "./screens/host-displays": "./src/screens/host-displays.ts",
+    "./screens/shown-windows": "./src/screens/shown-windows.ts",
+    "./screens/stage-screens": "./src/screens/stage-screens.ts",
+    "./screens/useScreenFollowsPointer": "./src/screens/useScreenFollowsPointer.ts",
+    "./screens/useShared": "./src/screens/useShared.ts",
+    "./screens/useStageScreens": "./src/screens/useStageScreens.ts",
+    "./tiled/aim": "./src/tiled/aim.ts",
+    "./tree/path": "./src/tree/path.ts",
+    "./useClientIcons": "./src/useClientIcons.ts",
+    "./useGrabCursor": "./src/useGrabCursor.ts",
+    "./usePointerWarp": "./src/usePointerWarp.ts",
+    "./useWindows": "./src/useWindows.ts",
+    "./window": "./src/window.ts",
+    "./window-state": "./src/window-state.ts",
+    "./window-styles": "./src/window-styles.ts",
+    "./workspaces-context": "./src/workspaces-context.ts"
+  },
+  "files": [
+    "src/**",
+    "styled-system/**",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx"
+  ],
+  "license": "MIT",
+  "name": "@domicile-desktop/manganese-window-management",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "directory": "packages/manganese-window-management",
+    "type": "git",
+    "url": "git+https://github.com/cprussin/domicile.git"
+  },
+  "scripts": {
+    "prepare": "panda codegen --silent && panda cssgen --silent",
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}
