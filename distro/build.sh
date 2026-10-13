@@ -101,7 +101,7 @@ VERSION="0.$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y%m%d.%H%M%S)"
 
 echo "== packages: version $VERSION, glibc $GLIBC =="
 # nfpm's Arch packager holds every file open until it finishes, and the
-# workspace alone is over 30,000 files.
+# workspace alone is over 20,000 files.
 ulimit -n "$(ulimit -Hn)"
 package() { # nfpm packager, pam file, target
   local config="$WORK/nfpm-$2.yaml"

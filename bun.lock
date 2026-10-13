@@ -86,12 +86,12 @@
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/sdk": "workspace:*",
         "@domicile-desktop/system-apps": "workspace:*",
+        "@pandacss/dev": "catalog:",
         "@phosphor-icons/react": "catalog:",
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
         "@domicile-desktop/test-support": "workspace:*",
-        "@pandacss/dev": "catalog:",
         "@pandacss/preset-panda": "catalog:",
         "@storybook/addon-docs": "catalog:",
         "@storybook/addon-themes": "catalog:",
@@ -111,6 +111,7 @@
       },
       "peerDependencies": {
         "react": "catalog:",
+        "react-dom": "catalog:",
       },
     },
     "packages/domicile-builder": {
@@ -159,6 +160,7 @@
         "@domicile-desktop/system-battery": "workspace:*",
         "@domicile-desktop/system-bluetooth": "workspace:*",
         "@domicile-desktop/system-network": "workspace:*",
+        "@pandacss/dev": "catalog:",
         "@phosphor-icons/react": "catalog:",
         "lowlight": "catalog:",
         "react": "catalog:",
@@ -168,7 +170,6 @@
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
         "@domicile-desktop/test-support": "workspace:*",
-        "@pandacss/dev": "catalog:",
         "@pandacss/preset-panda": "catalog:",
         "@testing-library/react": "catalog:",
         "@testing-library/user-event": "catalog:",

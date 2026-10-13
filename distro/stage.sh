@@ -6,7 +6,8 @@
 # - <binaries>: the Rust binaries `flake.nix` installs, built by
 #   `distro/binaries.sh`.
 # - <engine>: the engine release, unpacked: the directory holding `chrome`.
-# - <bun>: the bun binary the shell builder runs with.
+# - <bun>: the bun binary the shell builder runs with. It also installs the
+#   builder's modules.
 # - <workspace>: a checkout after `distro/build.sh`'s workspace build.
 # - <stage>: created; `<stage>/usr` is the tree.
 #
@@ -77,13 +78,42 @@ cp -a "$ENGINE" "$LIBEXEC/engine"
 install -m 755 "$BUN" "$LIBEXEC/bun"
 install -m 755 "$ROOT/distro/builder" "$LIBEXEC/builder"
 
-# `shellWorkspace` in `flake.nix`: the root manifest and modules, and every
-# package with a `package.json`.
-cp -a "$WORKSPACE/package.json" "$WORKSPACE/node_modules" "$LIBEXEC/workspace/"
-rm -rf "$LIBEXEC/workspace/node_modules/.cache"
+# What the builder needs of `shellWorkspace` in `flake.nix`: the builder and
+# manganese, the workspace packages they depend on, and their production
+# modules, installed from `bun.lock`. Every manifest is copied because the
+# frozen install checks the lockfile against all of them.
+SHIPPED="$LIBEXEC/workspace"
+ROOTS=(domicile-builder shell-manganese)
+cp "$WORKSPACE/package.json" "$WORKSPACE/bun.lock" "$WORKSPACE/bunfig.toml" "$SHIPPED/"
 for manifest in "$WORKSPACE"/packages/*/package.json; do
-  cp -a "$(dirname "$manifest")" "$LIBEXEC/workspace/packages/"
+  package="$(basename "$(dirname "$manifest")")"
+  mkdir -p "$SHIPPED/packages/$package"
+  cp "$manifest" "$SHIPPED/packages/$package/"
 done
+(cd "$SHIPPED" && "$BUN" install --production --frozen-lockfile --ignore-scripts \
+  --no-progress "${ROOTS[@]/#/--filter=./packages/}")
+# The workspace packages the install linked, by directory name.
+linked() {
+  local packages target
+  packages="$(cd "$SHIPPED/packages" && pwd -P)"
+  find "$SHIPPED"/packages/*/node_modules -type l -print0 |
+    while IFS= read -r -d '' link; do
+      target="$(readlink -f "$link")"
+      [ "$(dirname "$target")" != "$packages" ] || basename "$target"
+    done | sort -u
+}
+# Each package's published files: what `bun pm pack` would pack.
+for package in "${ROOTS[@]}" $(linked); do
+  (cd "$WORKSPACE/packages/$package" && "$BUN" pm pack --dry-run --ignore-scripts) |
+    sed -n 's/^packed [^ ]* //p' |
+    while IFS= read -r file; do
+      install -D -m 644 "$WORKSPACE/packages/$package/$file" "$SHIPPED/packages/$package/$file"
+    done
+done
+find "$SHIPPED/node_modules" -type f \( -name '*.map' -o -iname 'README*' \) -delete
+# bun installs native modules for both C libraries; the packages need glibc.
+rm -rf "$SHIPPED"/node_modules/.bun/*-musl@*
+find "$SHIPPED" -xtype l -delete
 
 for shell in "${SHELLS[@]}"; do
   cp -a "$WORKSPACE/packages/shell-$shell/.vite/renderer/main_window" \

@@ -4,13 +4,13 @@
     "@cprussin/option-result": "catalog:",
     "@domicile-desktop/sdk": "workspace:*",
     "@domicile-desktop/system-apps": "workspace:*",
+    "@pandacss/dev": "catalog:",
     "@phosphor-icons/react": "catalog:"
   },
   "description": "React components and the Panda CSS design system that Domicile's shells are built from.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@domicile-desktop/test-support": "workspace:*",
-    "@pandacss/dev": "catalog:",
     "@pandacss/preset-panda": "catalog:",
     "@storybook/addon-docs": "catalog:",
     "@storybook/addon-themes": "catalog:",
@@ -81,12 +81,14 @@
     "styled-system/**",
     "!src/**/*.test.ts",
     "!src/**/*.test.tsx",
-    "!src/**/*.stories.tsx"
+    "!src/**/*.stories.tsx",
+    "!src/__test__/**"
   ],
   "license": "MIT",
   "name": "@domicile-desktop/component-library",
   "peerDependencies": {
-    "react": "catalog:"
+    "react": "catalog:",
+    "react-dom": "catalog:"
   },
   "private": false,
   "publishConfig": {
