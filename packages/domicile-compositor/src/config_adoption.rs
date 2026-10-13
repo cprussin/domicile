@@ -270,8 +270,8 @@ impl DomicileCompositor {
 
     /// Apply a new `lock`. See [`Lock::rekeyed`].
     ///
-    /// A PAM service the machine lacks is refused, keeping the current
-    /// verifier, as startup refuses it.
+    /// A PAM service the machine lacks, or a hash libcrypt refuses, is
+    /// refused, keeping the current verifier, as startup refuses it.
     pub fn rekey_the_lock(&mut self, lock: &LockConfig) {
         match lock::chosen(lock.verifier(), Path::new(pam::SERVICES)) {
             Err(why) => error!(%why, "the reloaded lock cannot be used; the current one stays"),

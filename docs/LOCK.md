@@ -95,9 +95,18 @@ library sends; the libraries' tests and the allowlist's both check it.
 | `lock` setting | Verifier | Note |
 |---|---|---|
 | `"pam_service": "domicile"` | `crate::pam`: `pam_authenticate` as the compositor's uid | The machine must declare the service: `nixosModules.default`, or `security.pam.services.domicile = {};`. A home-manager module cannot |
-| `"passphrase": "…"` | Constant-time compare | Stored in a world-readable file. Guards against someone at the keyboard only |
+| `"passphrase_hash": "$y$…"` | `crate::passphrase_hash`: libxcrypt's `crypt_rn`, then a constant-time compare | A crypt(3) hash from `mkpasswd`, as NixOS's `hashedPassword` takes. The config is world-readable, so it holds only the hash |
 | neither | none | The desktop never locks |
 | both | refused at parse | Neither is a fallback for the other |
+
+`lock.passphrase_hash`:
+
+- `crypt_checksalt` judges the hash when the config is read. Only
+  `CRYPT_SALT_OK` is taken: a hash libxcrypt cannot read, or whose method it
+  calls disabled, legacy (MD5, DES) or too cheap, is refused. A world-readable
+  weak hash is quick to crack.
+- libcrypt is loaded with `dlopen`: `libcrypt.so.2` (NixOS, Fedora, Arch), else
+  `libcrypt.so.1` (Debian, openSUSE). It needs libxcrypt 4.3 or later.
 
 ## Reloading
 
@@ -112,9 +121,9 @@ unlocks the desktop.
 - **A removed verifier** at a locked desktop is kept until it unlocks the
   desktop, then dropped. Dropping it at once would leave nothing able to
   unlock.
-- **A PAM service the machine lacks** is refused and logged. The current lock
-  stays. Nothing retries until `lock` changes again, so declare the service and
-  edit `lock`, or restart.
+- **A PAM service the machine lacks**, or a hash libxcrypt refuses, is refused
+  and logged. The current lock stays. Nothing retries until `lock` changes
+  again, so fix the machine and edit `lock`, or restart.
 
 ## Checking a passphrase
 
@@ -123,8 +132,8 @@ unlocks the desktop.
   `heard_the_verdict`, which calls `Lock::answered`.
 - The desktop stays locked during the check. A second `unlock` during a check is
   dropped.
-- A passphrase containing NUL is refused before PAM sees it. C would read only
-  the part before the NUL.
+- A passphrase containing NUL is refused before PAM or libcrypt sees it. C
+  would read only the part before the NUL.
 - `domicile_protocol::Passphrase` does not print itself, so no log line holds
   what was typed. Linux-PAM overwrites its copy before freeing it.
 - A refusal sends `SystemEvent::UnlockRefused` to every page listening with
@@ -164,6 +173,8 @@ Only `PAM_AUTH_ERR` means a wrong passphrase. Any other PAM failure is
 | Startup | `/etc/pam.d/<service>` | The compositor exits, naming the file and what to declare. Linux-PAM would otherwise fall back to its `other` service |
 | Startup | `libpam.so.0` or its `pam_start_confdir` | The compositor exits, naming the library. PAM is loaded with `dlopen`, so a desktop without PAM needs none |
 | Startup | a user for the uid | The compositor exits |
+| Startup | libxcrypt, or a `lock.passphrase_hash` it takes | The compositor exits, naming the library or why the hash is refused, and not the hash |
+| Each attempt | `crypt_rn` fails | `Unverifiable` |
 | Each attempt | `/etc/pam.d/<service>` removed | `Unverifiable` |
 
 `pam_start_confdir` gets `/etc/pam.d` explicitly, so the checked directory and

@@ -63,7 +63,7 @@ await (await system(domicile).idleWarnings()).match({
 ## Locking
 
 The compositor locks the desktop at the idle timeout, or when the shell calls
-`lock()`, if the config sets `lock.pam_service` or `lock.passphrase`.
+`lock()`, if the config sets `lock.pam_service` or `lock.passphrase_hash`.
 
 ```ts
 domicile.addEventListener("lockedchanged", () => {

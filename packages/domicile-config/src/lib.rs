@@ -445,23 +445,25 @@ impl IdleConfig {
 ///
 /// Set one verifier:
 /// - `pam_service` authenticates the desk's user against a PAM service.
-/// - `passphrase` is for machines without a PAM service. The file is
-///   generated, often into the world-readable Nix store, so any user can read
-///   it.
+/// - `passphrase_hash` is for machines without a PAM service. The file is
+///   generated, often into the world-readable Nix store, so it holds a hash
+///   rather than the passphrase.
 ///
 /// A config with both is refused, so a passphrase is never mistaken for a PAM
-/// fallback. A PAM service that does not exist stops the compositor from
-/// starting. See `docs/LOCK.md#verifiers`.
+/// fallback. A PAM service that does not exist, or a hash the machine's
+/// libcrypt will not take, stops the compositor from starting. See
+/// `docs/LOCK.md#verifiers`.
 // `PartialEq` lets a reload detect a change; see the compositor's
 // `Restatement`.
 #[derive(Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct LockConfig {
-    /// A passphrase that unlocks this desk. An empty string is refused.
+    /// The crypt(3) hash of the passphrase that unlocks this desk, as
+    /// `mkpasswd` prints. An empty string is refused.
     // The `Debug` impl below redacts it. It is `pub` so
     // `scripts/test-the-home-manager-module-agrees.sh` can check that this
     // struct accepts every key the home-manager module writes.
-    pub passphrase: Option<String>,
+    pub passphrase_hash: Option<String>,
     /// The PAM service the desk's user authenticates against.
     ///
     /// The system must declare it in `/etc/pam.d/`; on NixOS,
@@ -471,11 +473,12 @@ pub struct LockConfig {
 
 /// The verifier a desk configured.
 ///
-/// Borrows from the config so the passphrase is not copied.
+/// Borrows from the config.
 #[derive(PartialEq, Eq)]
 pub enum LockVerifier<'a> {
-    /// `lock.passphrase`: compared with what the user types.
-    Passphrase(&'a str),
+    /// `lock.passphrase_hash`: what the user types, hashed with this hash's
+    /// method and salt, has to give this hash.
+    PassphraseHash(&'a str),
     /// `lock.pam_service`: the desk's user, authenticated by PAM against this
     /// service.
     Pam { service: &'a str },
@@ -484,9 +487,9 @@ pub enum LockVerifier<'a> {
 impl LockConfig {
     /// What opens this desk, or `None` for one that never locks.
     pub fn verifier(&self) -> Option<LockVerifier<'_>> {
-        match (self.passphrase.as_deref(), self.pam_service.as_deref()) {
+        match (self.passphrase_hash.as_deref(), self.pam_service.as_deref()) {
             (None, None) => None,
-            (Some(passphrase), None) => Some(LockVerifier::Passphrase(passphrase)),
+            (Some(hash), None) => Some(LockVerifier::PassphraseHash(hash)),
             (None, Some(service)) => Some(LockVerifier::Pam { service }),
             (Some(_), Some(_)) => {
                 unreachable!("validate refuses a [lock] that states both verifiers")
@@ -495,10 +498,10 @@ impl LockConfig {
     }
 
     fn validate(&self) -> Result<(), ConfigError> {
-        if self.passphrase.as_deref() == Some("") {
+        if self.passphrase_hash.as_deref() == Some("") {
             return Err(ConfigError::Validation(
-                "lock.passphrase must not be empty; leave the key out for a desktop that \
-                 never locks"
+                "lock.passphrase_hash must not be empty; leave the key out for a desktop \
+                 that never locks"
                     .into(),
             ));
         }
@@ -509,10 +512,10 @@ impl LockConfig {
                     .into(),
             ));
         }
-        if self.passphrase.is_some() && self.pam_service.is_some() {
+        if self.passphrase_hash.is_some() && self.pam_service.is_some() {
             return Err(ConfigError::Validation(
-                "lock.passphrase and lock.pam_service are two ways to open this desk and \
-                 it takes one; neither is a fallback for the other"
+                "lock.passphrase_hash and lock.pam_service are two ways to open this desk \
+                 and it takes one; neither is a fallback for the other"
                     .into(),
             ));
         }
@@ -520,28 +523,27 @@ impl LockConfig {
     }
 }
 
-/// Redacts the passphrase.
+/// Redacts the passphrase hash, so a log line holds nothing to crack offline.
 ///
 /// The redaction lives on the type because `Config`'s derived `Debug` and the
-/// compositor's `Restatement` both print it. `domicile_protocol::Passphrase`
-/// does the same on the wire.
+/// compositor's `Restatement` both print it.
 impl std::fmt::Debug for LockConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LockConfig")
             .field(
-                "passphrase",
-                &self.passphrase.as_ref().map(|_| "<redacted>"),
+                "passphrase_hash",
+                &self.passphrase_hash.as_ref().map(|_| "<redacted>"),
             )
             .field("pam_service", &self.pam_service)
             .finish()
     }
 }
 
-/// Redacts the passphrase, as [`LockConfig`]'s `Debug` does.
+/// Redacts the passphrase hash, as [`LockConfig`]'s `Debug` does.
 impl std::fmt::Debug for LockVerifier<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LockVerifier::Passphrase(_) => f.write_str("Passphrase(<redacted>)"),
+            LockVerifier::PassphraseHash(_) => f.write_str("PassphraseHash(<redacted>)"),
             LockVerifier::Pam { service } => {
                 f.debug_struct("Pam").field("service", service).finish()
             }

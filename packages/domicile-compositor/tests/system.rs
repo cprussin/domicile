@@ -22,7 +22,7 @@ const A_DESK: &str = r#"{ "output": { "displays": [{ "name": "left", "size": [19
 const A_DESK_THAT_CAN_LOCK: &str = r#"
 {
   "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
-  "lock": { "passphrase": "open sesame" }
+  "lock": { "passphrase_hash": "$y$j9T$mMzyBSKNKxkbivH7ik1.T.$iM4gXKt2j/qEPlwG5bMwAYPJa15M//yqCKSEin8n0P/" }
 }
 "#;
 
@@ -31,7 +31,7 @@ const A_DESK_THAT_LOCKS_IN_A_SECOND: &str = r#"
 {
   "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
   "idle": { "blank_after_seconds": 1 },
-  "lock": { "passphrase": "open sesame" }
+  "lock": { "passphrase_hash": "$y$j9T$mMzyBSKNKxkbivH7ik1.T.$iM4gXKt2j/qEPlwG5bMwAYPJa15M//yqCKSEin8n0P/" }
 }
 "#;
 

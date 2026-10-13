@@ -105,6 +105,7 @@ mod once_per_window;
 mod outbound;
 mod outputs;
 mod pam;
+mod passphrase_hash;
 mod peer_process;
 mod pnp_ids;
 mod popups;
@@ -564,7 +565,8 @@ struct DomicileCompositor {
     /// The lock.
     ///
     /// Has no verifier, and never locks, if the config sets neither
-    /// `lock.passphrase` nor `lock.pam_service`. See [`crate::lock::chosen`].
+    /// `lock.passphrase_hash` nor `lock.pam_service`. See
+    /// [`crate::lock::chosen`].
     ///
     /// Kept across reloads, which only swap its verifier
     /// ([`rekey_the_lock`](DomicileCompositor::rekey_the_lock)). Rebuilding it
@@ -1079,8 +1081,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    // If the config asks for PAM and it is unavailable, fail with the service
-    // name. Running without the configured lock would contradict the config.
+    // If the config's verifier is unusable (no PAM service, or a hash libcrypt
+    // refuses), fail and say why. Running without the configured lock would
+    // contradict the config.
     // See `crate::lock::chosen`.
     //
     // Verdicts come back to this loop; see `heard_the_verdict`.

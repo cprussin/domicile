@@ -320,7 +320,7 @@ mod tests {
   "input": {
     "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:swapescape"] }
   },
-  "lock": { "passphrase": "friend" },
+  "lock": { "passphrase_hash": "$y$j9T$0jTZN1rZSlhdm48mn5lVm/$Bb0mHOJ7gIqNJGkYTVpSIRqSPVJtoJRORWwsQ9pmsZ/" },
   "output": { "displays": [{ "name": "one", "size": [1024, 768] }] }
 }
 "#;

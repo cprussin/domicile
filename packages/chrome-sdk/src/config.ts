@@ -211,13 +211,14 @@ export type KeyboardConfig = {
  *
  * Set one verifier:
  * - `pam_service` authenticates the desk's user against a PAM service.
- * - `passphrase` is for machines without a PAM service. The file is
- *   generated, often into the world-readable Nix store, so any user can read
- *   it.
+ * - `passphrase_hash` is for machines without a PAM service. The file is
+ *   generated, often into the world-readable Nix store, so it holds a hash
+ *   rather than the passphrase.
  *
  * A config with both is refused, so a passphrase is never mistaken for a PAM
- * fallback. A PAM service that does not exist stops the compositor from
- * starting. See `docs/LOCK.md#verifiers`.
+ * fallback. A PAM service that does not exist, or a hash the machine's
+ * libcrypt will not take, stops the compositor from starting. See
+ * `docs/LOCK.md#verifiers`.
  */
 export type LockConfig = {
   /**
@@ -227,8 +228,11 @@ export type LockConfig = {
    * `security.pam.services.<name> = {};`. The docs use `"domicile"`.
    */
   pam_service?: string | null;
-  /** A passphrase that unlocks this desk. An empty string is refused. */
-  passphrase?: string | null;
+  /**
+   * The crypt(3) hash of the passphrase that unlocks this desk, as
+   * `mkpasswd` prints. An empty string is refused.
+   */
+  passphrase_hash?: string | null;
 };
 
 /**

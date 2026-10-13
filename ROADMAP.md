@@ -29,32 +29,28 @@ item when it ships.
 
    [THE-DOMICILE-BINARY.md](docs/architecture/THE-DOMICILE-BINARY.md).
 
-3. **Lock.** [LOCK.md](docs/LOCK.md),
-   [SHELL-IDLE-AND-LOCK.md](docs/SHELL-IDLE-AND-LOCK.md#locking).
-   - `lock.passphrase` is world-readable.
-
-4. **Notifications.** [NOTIFICATIONS.md](docs/architecture/NOTIFICATIONS.md).
+3. **Notifications.** [NOTIFICATIONS.md](docs/architecture/NOTIFICATIONS.md).
    - Chrome's notification bridge looks for the server once at startup, so a
      slow bus leaves it showing its own popups.
 
-5. **Native density on every monitor: test on hardware.**
+4. **Native density on every monitor: test on hardware.**
    [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
 
-6. **Split manganese into small packages.** Clock, tray, mixer and window
+5. **Split manganese into small packages.** Clock, tray, mixer and window
    management as their own packages; manganese composes them. No design doc.
 
-7. **Settings app.** [SETTINGS.md](docs/SETTINGS.md).
+6. **Settings app.** [SETTINGS.md](docs/SETTINGS.md).
    - Shell options ([SHELL-OPTIONS.md](docs/architecture/SHELL-OPTIONS.md)).
    - A persistent theme choice, which needs a store for desktop state.
    - A list of sites with stored data. History clears cookies by time range
      or by site ([HISTORY.md](docs/HISTORY.md)).
    - A guard that runs the app's native messaging host in the engine.
 
-8. **Web apps.** [WEB-APPS.md](docs/architecture/WEB-APPS.md).
+7. **Web apps.** [WEB-APPS.md](docs/architecture/WEB-APPS.md).
    - A guard that the engine lists an app window with `isApp` and records no
      visits for it.
 
-9. **Distribution packages.**
+8. **Distribution packages.**
    [RUNNING-A-DESKTOP.md](docs/RUNNING-A-DESKTOP.md#other-distributions).
    - No APT or RPM repository, AUR package or COPR, so upgrades are by hand.
    - The shell builder ships the whole workspace's `node_modules`, about

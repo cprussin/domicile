@@ -26,6 +26,7 @@ use domicile_protocol::{HostMessage, Passphrase, UnlockRefusal};
 use crate::chrome_connection::ConnectionRequest;
 use crate::client_requests::ClientRequest;
 use crate::pam::{NoPam, Pam};
+use crate::passphrase_hash::{NoHash, PassphraseHash};
 use crate::unlock_backoff::Backoff;
 
 /// Checks whether a passphrase unlocks the desktop.
@@ -56,51 +57,32 @@ pub struct CouldNotCheck(pub String);
 /// itself on idle and never open again.
 ///
 /// Returns `Err` when the config asks for PAM and the service file is missing
-/// in `pam_confdir` ([`crate::pam::SERVICES`] in production). At startup the
-/// compositor then fails to start rather than run without its lock. On a
-/// reload it refuses the change and keeps the current lock.
+/// in `pam_confdir` ([`crate::pam::SERVICES`] in production), or states a hash
+/// libcrypt refuses. At startup the compositor then fails to start rather than
+/// run without its lock. On a reload it refuses the change and keeps the
+/// current lock.
 pub fn chosen(
     stated: Option<LockVerifier<'_>>,
     pam_confdir: &Path,
-) -> Result<Option<Box<dyn Verifier>>, NoPam> {
+) -> Result<Option<Box<dyn Verifier>>, NoVerifier> {
     match stated {
         None => Ok(None),
-        Some(LockVerifier::Passphrase(passphrase)) => Ok(Some(Box::new(ConfiguredPassphrase {
-            passphrase: passphrase.to_string(),
-        }))),
+        Some(LockVerifier::PassphraseHash(hash)) => {
+            Ok(Some(Box::new(PassphraseHash::checked(hash)?)))
+        }
         Some(LockVerifier::Pam { service }) => {
             Ok(Some(Box::new(Pam::for_this_user(service, pam_confdir)?)))
         }
     }
 }
 
-/// The verifier for `lock.passphrase`: a constant-time string comparison.
-///
-/// The passphrase sits in a world-readable store, so this only stops someone at
-/// the keyboard. `lock.pam_service` keeps the secret out of the config.
-struct ConfiguredPassphrase {
-    passphrase: String,
-}
-
-impl Verifier for ConfiguredPassphrase {
-    fn opens_the_desk(&self, passphrase: &Passphrase) -> Verdict {
-        Ok(same_bytes(
-            passphrase.as_str().as_bytes(),
-            self.passphrase.as_bytes(),
-        ))
-    }
-}
-
-/// Compares two byte strings in time that depends only on their lengths.
-///
-/// A `==` returns at the first differing byte, so its timing reveals how much
-/// of a guess was right. `black_box` on the accumulator keeps the compiler
-/// from adding that early exit back. The lengths are not hidden.
-fn same_bytes(typed: &[u8], stated: &[u8]) -> bool {
-    let differing = typed.iter().zip(stated).fold(0u8, |differing, (a, b)| {
-        std::hint::black_box(differing | (a ^ b))
-    });
-    typed.len() == stated.len() && differing == 0
+/// Why the verifier the config names cannot be used.
+#[derive(Debug, thiserror::Error)]
+pub enum NoVerifier {
+    #[error(transparent)]
+    Pam(#[from] NoPam),
+    #[error(transparent)]
+    Hash(#[from] NoHash),
 }
 
 /// What a reload's [`Lock::rekeyed`] did with the new verifier.
@@ -578,22 +560,42 @@ mod tests {
     }
 
     #[test]
-    fn the_configured_passphrase_is_the_one_that_opens_the_desk() {
+    fn the_passphrase_the_configured_hash_was_made_from_opens_the_desk() {
+        // `mkpasswd "open sesame"`.
         let verifier = chosen(
-            Some(LockVerifier::Passphrase("open sesame")),
+            Some(LockVerifier::PassphraseHash(
+                "$y$j9T$mMzyBSKNKxkbivH7ik1.T.$iM4gXKt2j/qEPlwG5bMwAYPJa15M//yqCKSEin8n0P/",
+            )),
             Path::new("/nonexistent"),
         )
-        .expect("a passphrase needs nothing from the machine")
-        .expect("a passphrase was stated");
-        assert!(verifier
-            .opens_the_desk(&Passphrase::from("open sesame"))
-            .unwrap());
-        assert!(!verifier
-            .opens_the_desk(&Passphrase::from("open sesam"))
-            .unwrap());
-        assert!(!verifier
-            .opens_the_desk(&Passphrase::from("open sesame!"))
-            .unwrap());
+        .expect("a hash needs only libcrypt from the machine")
+        .expect("a hash was stated");
+        assert_eq!(
+            verifier.opens_the_desk(&Passphrase::from("open sesame")),
+            Ok(true)
+        );
+        assert_eq!(
+            verifier.opens_the_desk(&Passphrase::from("open sesam")),
+            Ok(false)
+        );
+    }
+
+    #[test]
+    fn a_desk_whose_hash_libcrypt_refuses_does_not_come_up() {
+        // A passphrase pasted in plain text, and md5crypt, which libxcrypt
+        // calls legacy or leaves out. A desk that could never open, or one a
+        // copy of its config opens in seconds, is refused.
+        for hash in ["open sesame", "$1$saltsalt$qjXMvbEw8oaL.CzflDugX/"] {
+            let Err(why) = chosen(
+                Some(LockVerifier::PassphraseHash(hash)),
+                Path::new("/nonexistent"),
+            ) else {
+                panic!("{hash} is refused");
+            };
+            let said = why.to_string();
+            assert!(said.contains("mkpasswd"), "it says how to make one: {said}");
+            assert!(!said.contains(hash), "it does not print the value: {said}");
+        }
     }
 
     #[test]
