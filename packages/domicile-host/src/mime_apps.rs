@@ -2,7 +2,8 @@
 //! Applications spec: `mimeapps.list` defaults first, then entries that
 //! declare the type in `MimeType`.
 //!
-//! The email portal opens `mailto:` URLs with this. Read on each call, so a
+//! The email portal opens `mailto:` URLs with this, and a press on a
+//! notification starts its application with it. Read on each call, so a
 //! changed default takes effect without a watch.
 
 use std::collections::HashMap;
@@ -105,6 +106,19 @@ pub fn default_handler(
                 .find(|handler| handler.handler.id == id)
                 .map(|handler| handler.handler.clone())
         })
+}
+
+/// The argv that starts the application whose desktop file id is `name` plus
+/// `.desktop`, or `None` if none under `application_dirs` is usable.
+///
+/// A notification's `desktop-entry` hint names its application this way. Field
+/// codes are dropped: it opens no file or URL.
+pub fn launch_command(name: &str, application_dirs: &[PathBuf]) -> Option<Vec<String>> {
+    let id = format!("{name}.desktop");
+    installed(application_dirs)
+        .into_iter()
+        .find(|found| found.handler.id == id)
+        .and_then(|found| expanded(&found.handler.exec, "").map(|(words, _)| words))
 }
 
 /// An installed handler and the types it declares.

@@ -340,6 +340,7 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen={false}
         motion="resting"
+        onFocusRequest={() => undefined}
         onIcon={noIcon}
         onMotionEnded={nothingEnded}
         onPageFullscreen={noFullscreen}
@@ -370,6 +371,7 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen
         motion="resting"
+        onFocusRequest={() => undefined}
         onIcon={noIcon}
         onMotionEnded={nothingEnded}
         onPageFullscreen={noFullscreen}
@@ -402,6 +404,7 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen={false}
         motion="resting"
+        onFocusRequest={() => undefined}
         onIcon={noIcon}
         onMotionEnded={nothingEnded}
         onPageFullscreen={noFullscreen}
@@ -431,6 +434,7 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen={false}
         motion="resting"
+        onFocusRequest={() => undefined}
         onIcon={noIcon}
         onMotionEnded={nothingEnded}
         onPageFullscreen={noFullscreen}
@@ -459,6 +463,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -489,6 +494,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -532,6 +538,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -563,6 +570,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -597,6 +605,7 @@ describe("BrowserWindow", () => {
       frame: FRAME,
       fullscreen: false,
       motion: "resting",
+      onFocusRequest: () => undefined,
       onIcon: noIcon,
       onMotionEnded: nothingEnded,
       onPageFullscreen: noFullscreen,
@@ -663,6 +672,7 @@ describe("BrowserWindow", () => {
           fullscreen={fullscreen}
           isApp
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -739,6 +749,7 @@ describe("BrowserWindow", () => {
           fullscreen={false}
           isApp
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -770,6 +781,7 @@ describe("BrowserWindow", () => {
       // One file in the home directory is enough for these tests.
       listDirectory: () => Promise.resolve(["notes.txt"]),
       motion: "resting",
+      onFocusRequest: () => undefined,
       onIcon: noIcon,
       onMotionEnded: nothingEnded,
       onPageFullscreen: noFullscreen,
@@ -878,6 +890,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -912,6 +925,7 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
+            onFocusRequest={() => undefined}
             onIcon={noIcon}
             onMotionEnded={nothingEnded}
             onPageFullscreen={noFullscreen}
@@ -966,6 +980,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -992,6 +1007,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -1019,6 +1035,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -1050,6 +1067,7 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
+        onFocusRequest: () => undefined,
         onIcon: noIcon,
         onMotionEnded: nothingEnded,
         onPageFullscreen: noFullscreen,
@@ -1080,6 +1098,7 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
+        onFocusRequest: () => undefined,
         onIcon: noIcon,
         onMotionEnded: nothingEnded,
         onPageFullscreen: noFullscreen,
@@ -1113,6 +1132,7 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
+        onFocusRequest: () => undefined,
         onIcon: noIcon,
         onMotionEnded: nothingEnded,
         onPageFullscreen: noFullscreen,
@@ -1144,6 +1164,7 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
+        onFocusRequest: () => undefined,
         onIcon: noIcon,
         onMotionEnded: nothingEnded,
         onPageFullscreen: noFullscreen,
@@ -1181,6 +1202,7 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
+            onFocusRequest={() => undefined}
             onIcon={noIcon}
             onMotionEnded={nothingEnded}
             onPageFullscreen={noFullscreen}
@@ -1210,6 +1232,7 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
+            onFocusRequest={() => undefined}
             onIcon={noIcon}
             onMotionEnded={nothingEnded}
             onPageFullscreen={noFullscreen}
@@ -1247,6 +1270,7 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
+            onFocusRequest={() => undefined}
             onIcon={noIcon}
             onMotionEnded={nothingEnded}
             onPageFullscreen={noFullscreen}
@@ -1282,6 +1306,7 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
+            onFocusRequest={() => undefined}
             onIcon={noIcon}
             onMotionEnded={nothingEnded}
             onPageFullscreen={noFullscreen}
@@ -1297,9 +1322,11 @@ describe("BrowserWindow", () => {
       });
     });
 
-    it("reports a reach when an extension asks for the window in front", async () => {
-      // `chrome.tabs.update(id, {active: true})` and `chrome.windows.update(id,
-      // {focused: true})` arrive on the view and raise the window.
+    it("reports a focus request when the page or an extension asks for the window in front", async () => {
+      // A page's `window.focus()` or `client.focus()` (as from a notification
+      // click), `chrome.tabs.update(id, {active: true})` and
+      // `chrome.windows.update(id, {focused: true})` arrive on the view. Not a
+      // reach: the pointer is elsewhere, so the shell warps it.
       await new Promise<void>((resolve) => {
         const { container } = render(
           <BrowserWindow
@@ -1313,12 +1340,13 @@ describe("BrowserWindow", () => {
             frame={FRAME}
             fullscreen={false}
             motion="resting"
+            onFocusRequest={() => {
+              resolve();
+            }}
             onIcon={noIcon}
             onMotionEnded={nothingEnded}
             onPageFullscreen={noFullscreen}
-            onReach={() => {
-              resolve();
-            }}
+            onReach={() => undefined}
             rect={ON_SCREEN}
             url="https://example.com"
             window="1"
@@ -1343,6 +1371,7 @@ describe("BrowserWindow", () => {
         frame: FRAME,
         fullscreen: false,
         motion: "resting",
+        onFocusRequest: () => undefined,
         onIcon: noIcon,
         onMotionEnded: nothingEnded,
         onPageFullscreen: noFullscreen,
@@ -1385,6 +1414,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -1431,6 +1461,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -1460,6 +1491,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -1492,6 +1524,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -1523,6 +1556,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -1560,6 +1594,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -1590,6 +1625,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -1620,6 +1656,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -1655,6 +1692,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -1772,6 +1810,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -1847,6 +1886,7 @@ describe("BrowserWindow", () => {
           fullscreen={false}
           isApp
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -1899,6 +1939,7 @@ describe("BrowserWindow", () => {
           fullscreen={false}
           isApp
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -1961,6 +2002,7 @@ describe("BrowserWindow", () => {
           fullscreen={false}
           isPrivate={isPrivate}
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -2099,6 +2141,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -2136,6 +2179,7 @@ describe("BrowserWindow", () => {
           frame={FRAME}
           fullscreen={false}
           motion="resting"
+          onFocusRequest={() => undefined}
           onIcon={noIcon}
           onMotionEnded={nothingEnded}
           onPageFullscreen={noFullscreen}
@@ -2256,6 +2300,7 @@ describe("BrowserWindow", () => {
         frame={FRAME}
         fullscreen={false}
         motion="resting"
+        onFocusRequest={() => undefined}
         onIcon={noIcon}
         onMotionEnded={nothingEnded}
         onPageFullscreen={noFullscreen}
@@ -2282,6 +2327,7 @@ describe("BrowserWindow", () => {
       frame: FRAME,
       fullscreen: false,
       motion: "resting",
+      onFocusRequest: () => undefined,
       onIcon: noIcon,
       onMotionEnded: nothingEnded,
       onPageFullscreen: noFullscreen,

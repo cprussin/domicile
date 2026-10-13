@@ -18,14 +18,22 @@ use crate::{app_scope, engine};
 ///
 /// A reaper thread waits on the child so it doesn't become a zombie.
 /// `scoped` starts it in its own systemd scope; see [`crate::app_scope`]. It
-/// starts at nice value `nice`; see [`client_command`].
-pub fn spawn_client(command: &[String], wayland_display: &OsStr, scoped: bool, nice: i32) {
+/// starts at nice value `nice`; see [`client_command`]. `activation_token`
+/// lets it raise its window; see [`client_command`].
+pub fn spawn_client(
+    command: &[String],
+    wayland_display: &OsStr,
+    scoped: bool,
+    nice: i32,
+    activation_token: Option<&str>,
+) {
     let Some(mut child) = client_command(
         command,
         wayland_display,
         std::env::var_os("LD_LIBRARY_PATH").as_deref(),
         scoped.then(app_scope::random),
         nice,
+        activation_token,
     ) else {
         return;
     };
@@ -70,12 +78,18 @@ pub fn spawn_client(command: &[String], wayland_display: &OsStr, scoped: bool, n
 ///
 /// With a `scope`, the client starts in its own systemd scope; see
 /// [`app_scope::scoped`].
+///
+/// An `activation_token` is set as `XDG_ACTIVATION_TOKEN`, and as
+/// `DESKTOP_STARTUP_ID` for toolkits that read only that. A singleton app
+/// launched again hands it to its running instance, which raises its window.
+/// See [`crate::activation`].
 pub fn client_command(
     command: &[String],
     wayland_display: &OsStr,
     library_path: Option<&OsStr>,
     scope: Option<u64>,
     nice: i32,
+    activation_token: Option<&str>,
 ) -> Option<Command> {
     let (program, args) = command.split_first()?;
     let words = match scope {
@@ -90,6 +104,10 @@ pub fn client_command(
             Some(value) => child.env(name, value),
             None => child.env_remove(name),
         };
+    }
+    if let Some(token) = activation_token {
+        child.env("XDG_ACTIVATION_TOKEN", token);
+        child.env("DESKTOP_STARTUP_ID", token);
     }
     priority::starting_at(&mut child, nice);
     Some(child)
@@ -192,7 +210,7 @@ mod tests {
         library_path: Option<&OsStr>,
         name: &str,
     ) -> Option<OsString> {
-        client_command(command, OsStr::new(display), library_path, None, 0)
+        client_command(command, OsStr::new(display), library_path, None, 0, None)
             .expect("a command with a program builds")
             .get_envs()
             .find(|(key, _)| *key == OsStr::new(name))
@@ -288,14 +306,37 @@ mod tests {
     }
 
     #[test]
+    fn a_launched_client_is_handed_a_token_to_raise_its_window() {
+        // A singleton app launched again passes it to its running instance,
+        // which raises its window with it.
+        let child = client_command(
+            &kitty(),
+            OsStr::new("wayland-7"),
+            None,
+            None,
+            0,
+            Some("t0k"),
+        )
+        .expect("a command with a program builds");
+        for name in ["XDG_ACTIVATION_TOKEN", "DESKTOP_STARTUP_ID"] {
+            assert!(
+                child
+                    .get_envs()
+                    .any(|pair| pair == (OsStr::new(name), Some(OsStr::new("t0k")))),
+                "{name}: {child:?}"
+            );
+        }
+    }
+
+    #[test]
     fn an_empty_command_spawns_nothing() {
-        assert!(client_command(&[], OsStr::new("wayland-7"), None, None, 0).is_none());
+        assert!(client_command(&[], OsStr::new("wayland-7"), None, None, 0, None).is_none());
     }
 
     #[test]
     fn a_scoped_client_keeps_the_desktops_environment() {
         // `systemd-run --scope` execs the client with its own environment.
-        let child = client_command(&kitty(), OsStr::new("wayland-7"), None, Some(7), 0)
+        let child = client_command(&kitty(), OsStr::new("wayland-7"), None, Some(7), 0, None)
             .expect("a command with a program builds");
         assert_eq!(child.get_program(), "systemd-run");
         assert!(
@@ -308,7 +349,7 @@ mod tests {
 
     #[test]
     fn an_unscoped_client_starts_itself() {
-        let child = client_command(&kitty(), OsStr::new("wayland-7"), None, None, 0)
+        let child = client_command(&kitty(), OsStr::new("wayland-7"), None, None, 0, None)
             .expect("a command with a program builds");
         assert_eq!(child.get_program(), "kitty");
     }
@@ -320,10 +361,17 @@ mod tests {
         use domicile_host::priority::{nice, this_thread};
         let given = nice(this_thread()).unwrap() + 3;
 
-        let ran = client_command(&["nice".into()], OsStr::new("wayland-7"), None, None, given)
-            .expect("a command with a program builds")
-            .output()
-            .expect("`nice` runs");
+        let ran = client_command(
+            &["nice".into()],
+            OsStr::new("wayland-7"),
+            None,
+            None,
+            given,
+            None,
+        )
+        .expect("a command with a program builds")
+        .output()
+        .expect("`nice` runs");
 
         assert_eq!(String::from_utf8(ran.stdout).unwrap(), format!("{given}\n"));
     }

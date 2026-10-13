@@ -122,6 +122,12 @@ type Props = {
    * The page entered or left fullscreen, as a video's fullscreen button does.
    * The window should fill its screen while it is. See `usePageFullscreen`.
    */
+  /**
+   * Called when the page (`window.focus()`, or `client.focus()` from a
+   * notification click) or an extension asks for this window in front. See
+   * `WEBVIEW_FOCUS_REQUEST_EVENT`.
+   */
+  onFocusRequest: () => void;
   onPageFullscreen: (fullscreen: boolean) => void;
   /**
    * Called when the user moves focus into this window (page or address bar).
@@ -190,6 +196,7 @@ export const BrowserWindow = ({
   isPrivate = false,
   listDirectory = defaultListDirectory,
   motion,
+  onFocusRequest,
   onIcon,
   onMotionEnded,
   onPageFullscreen,
@@ -310,19 +317,17 @@ export const BrowserWindow = ({
     }
   }, [onReach, unclickable, view]);
 
-  // An extension asked to raise this window (`chrome.tabs.update` with
-  // `active`, or `chrome.windows.update` with `focused`). See
-  // `WEBVIEW_FOCUS_REQUEST_EVENT`.
+  // The page or an extension asked to raise this window. See `onFocusRequest`.
   useEffect(() => {
     if (view === null) {
       return undefined;
     } else {
-      view.addEventListener(WEBVIEW_FOCUS_REQUEST_EVENT, onReach);
+      view.addEventListener(WEBVIEW_FOCUS_REQUEST_EVENT, onFocusRequest);
       return () => {
-        view.removeEventListener(WEBVIEW_FOCUS_REQUEST_EVENT, onReach);
+        view.removeEventListener(WEBVIEW_FOCUS_REQUEST_EVENT, onFocusRequest);
       };
     }
-  }, [onReach, view]);
+  }, [onFocusRequest, view]);
 
   // Runs a browser command from a chord in the address bar, a chord the page
   // did not handle, or a button.

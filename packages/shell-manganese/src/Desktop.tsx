@@ -660,6 +660,9 @@ const stageActionsOf = (
   onFloat: (id: string) => {
     act(WindowAction.WindowFloated(id));
   },
+  onFocusRequest: (id: string) => {
+    act(WindowAction.FocusRequested(id));
+  },
   onFullscreen: (id: string) => {
     act(WindowAction.WindowFullscreened(id));
   },

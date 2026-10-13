@@ -70,16 +70,19 @@ Workspaces belong to the desktop, and screens show them, as in sway:
   usual states. Meta+Shift+A,
   focusing a floating window, or clicking another window ends the selection.
 - **`xdg-activation` requests are granted.** The compositor forwards them as
-  `focus_requested`. Manganese switches to that window's workspace and focuses
-  it. The compositor drops requests made before the keyboard last moved, so a
+  `focus_requested`. Manganese switches to that window's workspace, shows its
+  tab, focuses it and warps the pointer to it. A browser window whose page or
+  extension asks to come forward (`domicile-focus-request`) is treated the
+  same. The compositor drops requests made before the keyboard last moved, so a
   window cannot take focus back after the user moved on.
 
 ### Pointer warping
 
 The pointer follows keyboard focus (sway's `mouse_warping container`):
 
-- A keyed focus change warps the pointer to the center of the new window,
-  unless it is already over it. An empty screen warps to its center.
+- A keyed focus change, or a granted focus request, warps the pointer to the
+  center of the new window, unless it is already over it. An empty screen
+  warps to its center.
 - A window that opens with the keyboard also warps the pointer, but only when
   the pointer is over another window. Over the top bar or an empty workspace,
   it stays put.

@@ -131,6 +131,8 @@ impl<T> PortalNotifications<T> {
                 },
                 expire_timeout: if persistent { 0 } else { -1 },
                 icon: notification.icon,
+                // The portal starts an application that has quit.
+                sender: None,
             },
             now,
         );

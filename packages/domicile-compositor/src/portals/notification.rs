@@ -3,7 +3,8 @@
 //!
 //! They go straight into the `org.freedesktop.Notifications` history
 //! ([`crate::notifications`]), so the shell's drawer shows them with the rest.
-//! A press on one comes back as `ActionInvoked` with its target.
+//! A press on one comes back as `ActionInvoked` with its target and an
+//! `xdg-activation` token.
 
 use std::collections::HashMap;
 use std::fs::File;
@@ -63,17 +64,26 @@ impl Notification {
     }
 }
 
-/// Emit `ActionInvoked`. The parameter is the action's target, if it has one.
+/// Emit `ActionInvoked`. The parameter is the action's target, if it has one,
+/// then the platform data: `token` as its `activation-token`, which the
+/// application raises its window with.
 pub fn invoked(
     served: &zbus::blocking::object_server::InterfaceRef<Notification>,
     invoked: Invoked<OwnedValue>,
+    token: String,
 ) {
+    let platform_data = HashMap::from([("activation-token", Value::from(token))]);
     let said = zbus::block_on(Notification::action_invoked(
         served.signal_emitter(),
         &invoked.app_id,
         &invoked.id,
         &invoked.action,
-        invoked.target.into_iter().map(Value::from).collect(),
+        invoked
+            .target
+            .into_iter()
+            .map(Value::from)
+            .chain([Value::from(platform_data)])
+            .collect(),
     ));
     if let Err(why) = said {
         warn!(%why, id = invoked.id, "a portal notification's action could not be said");

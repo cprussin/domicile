@@ -181,7 +181,7 @@ export type WindowState = {
    */
   popups: readonly Popup[];
   /**
-   * How many commands keys have run.
+   * How many commands keys have run, and focus requests granted.
    *
    * `usePointerWarp` moves the pointer after each one. A counter lets each
    * monitor tell new presses from ones it has handled.
@@ -567,12 +567,13 @@ export const WindowAction = {
   }),
 
   /**
-   * A client requested focus over `xdg-activation`. The compositor leaves the
-   * decision to the shell; Manganese grants it and switches to the window's
-   * workspace.
+   * Window `id` asked for the keyboard: a client over `xdg-activation`, or a
+   * browser window's page or an extension. The compositor leaves the decision
+   * to the shell; Manganese grants it, shows the window's workspace and tab,
+   * and warps the pointer to it.
    */
-  FocusRequested: (appId: string) => ({
-    appId,
+  FocusRequested: (id: string) => ({
+    id,
     kind: WindowActionKind.FocusRequested as const,
   }),
 
@@ -1020,7 +1021,14 @@ const reduceAction = (
       }
     }
     case WindowActionKind.FocusRequested: {
-      return reachWindow(state, appWindowId(action.appId));
+      // A change is counted as a key press, so the pointer follows: it is
+      // elsewhere, and focus follows the pointer. A window that already has
+      // the keyboard, such as one just launched, keeps the pointer's rule for
+      // new windows.
+      const reached = reachWindow(state, action.id);
+      return reached === state
+        ? state
+        : { ...reached, pressed: state.pressed + 1 };
     }
     case WindowActionKind.FocusStepped: {
       return stepFocus(state, action.direction);

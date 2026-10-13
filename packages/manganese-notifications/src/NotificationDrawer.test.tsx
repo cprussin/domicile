@@ -20,7 +20,9 @@ const drawer = (
       onDismiss={(ids) => {
         asked.push(["dismiss", ids]);
       }}
-      onOpenChange={() => undefined}
+      onOpenChange={(open) => {
+        asked.push(["open", open]);
+      }}
       onReply={(id, text) => {
         asked.push(["reply", id, text]);
       }}
@@ -64,7 +66,7 @@ describe("NotificationDrawer", () => {
     ]);
   });
 
-  it("takes a notification's action", () => {
+  it("takes a notification's action, and closes for the window it raises", () => {
     const asked: Asked = [];
     drawer(
       [notification({ actions: [{ key: "reply", label: "Reply" }], id: 7 })],
@@ -73,7 +75,10 @@ describe("NotificationDrawer", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Reply" }));
 
-    expect(asked).toEqual([["action", 7, "reply"]]);
+    expect(asked).toEqual([
+      ["action", 7, "reply"],
+      ["open", false],
+    ]);
   });
 
   it("replies to a notification", () => {
