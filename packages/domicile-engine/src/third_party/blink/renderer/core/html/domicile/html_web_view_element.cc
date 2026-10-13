@@ -14,6 +14,9 @@
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/task_type.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_domicile_media_device.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_domicile_media_devices.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_keyboard_event_init.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
@@ -505,6 +508,97 @@ void HTMLWebViewElement::setSitePermission(const String& permission,
   }
   CHECK(guest_.is_bound());
   guest_->SetSitePermission(*named, *stored);
+}
+
+namespace {
+
+HeapVector<Member<DomicileMediaDevice>> Listed(
+    const Vector<domicile::mojom::blink::WebViewMediaDevicePtr>& devices) {
+  HeapVector<Member<DomicileMediaDevice>> listed;
+  listed.reserve(devices.size());
+  for (const auto& device : devices) {
+    auto* entry = DomicileMediaDevice::Create();
+    entry->setId(device->id);
+    entry->setName(device->name);
+    listed.push_back(entry);
+  }
+  return listed;
+}
+
+void ResolveMediaDevices(
+    ScriptPromiseResolver<DomicileMediaDevices>* resolver,
+    domicile::mojom::blink::WebViewMediaDevicesPtr devices) {
+  auto* answer = DomicileMediaDevices::Create();
+  answer->setCameras(Listed(devices->cameras));
+  answer->setMicrophones(Listed(devices->microphones));
+  resolver->Resolve(answer);
+}
+
+void SettleMediaDevice(ScriptPromiseResolver<IDLUndefined>* resolver,
+                       const String& refusal) {
+  if (refusal.IsNull()) {
+    resolver->Resolve();
+  } else {
+    resolver->RejectWithDOMException(DOMExceptionCode::kNotFoundError,
+                                     refusal);
+  }
+}
+
+std::optional<domicile::mojom::blink::WebViewMediaDeviceKind>
+MediaDeviceKindNamed(const String& kind) {
+  if (kind == "camera") {
+    return domicile::mojom::blink::WebViewMediaDeviceKind::kCamera;
+  }
+  if (kind == "microphone") {
+    return domicile::mojom::blink::WebViewMediaDeviceKind::kMicrophone;
+  }
+  return std::nullopt;
+}
+
+}  // namespace
+
+// The preference is the profile's, so the browser answers the same for every
+// element; the guest is only the way there.
+ScriptPromise<DomicileMediaDevices> HTMLWebViewElement::mediaDevices(
+    ScriptState* script_state,
+    ExceptionState& exception_state) {
+  if (!guest_.is_bound()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "This <webview> has no page yet.");
+    return EmptyPromise();
+  }
+  auto* resolver =
+      MakeGarbageCollected<ScriptPromiseResolver<DomicileMediaDevices>>(
+          script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  guest_->ListMediaDevices(
+      BindOnce(&ResolveMediaDevices, WrapPersistent(resolver)));
+  return promise;
+}
+
+ScriptPromise<IDLUndefined> HTMLWebViewElement::setMediaDevice(
+    ScriptState* script_state,
+    const String& kind,
+    const String& id,
+    ExceptionState& exception_state) {
+  const std::optional<domicile::mojom::blink::WebViewMediaDeviceKind> named =
+      MediaDeviceKindNamed(kind);
+  if (!named.has_value()) {
+    exception_state.ThrowTypeError(
+        "A kind must be \"camera\" or \"microphone\".");
+    return EmptyPromise();
+  }
+  if (!guest_.is_bound()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "This <webview> has no page yet.");
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLUndefined>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  guest_->SetMediaDevice(
+      *named, id, BindOnce(&SettleMediaDevice, WrapPersistent(resolver)));
+  return promise;
 }
 
 // State updates store the new value before dispatching, so handlers read it.

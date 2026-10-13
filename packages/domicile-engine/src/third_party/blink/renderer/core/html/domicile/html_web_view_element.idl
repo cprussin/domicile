@@ -120,4 +120,17 @@
   // InvalidStateError when `sitePermissions()` is empty.
   [RaisesException] undefined setSitePermission(DOMString permission,
                                                 DOMString setting);
+
+  // The cameras and microphones, each most preferred first: a page that names
+  // no device gets the first. The preference is the profile's, not the
+  // site's. Rejects with InvalidStateError before the element has a page.
+  [CallWith=ScriptState, RaisesException]
+  Promise<DomicileMediaDevices> mediaDevices();
+
+  // Gives the device `id` to pages that ask for a `kind` ("camera" or
+  // "microphone") without naming one. Rejects with TypeError for another
+  // kind, NotFoundError when no connected device of that kind has the id, and
+  // InvalidStateError before the element has a page.
+  [CallWith=ScriptState, RaisesException]
+  Promise<undefined> setMediaDevice(DOMString kind, DOMString id);
 };
