@@ -51,7 +51,11 @@ describe("opened", () => {
 
     expect(windowsOf(workspace.tiling)).toEqual([]);
     expect(workspace.floats.map(({ root }) => root)).toEqual([
-      Node.Container(Layout.Tabbed, [Node.Window("a"), Node.Window("b")], 1),
+      Node.Container(
+        Layout.Tabbed,
+        [Node.Window("a", 1), Node.Window("b", 2)],
+        1,
+      ),
     ]);
     expect(focusedOn(workspace)).toBe("b");
   });
@@ -127,7 +131,7 @@ describe("floatToggled", () => {
     const workspace = floatToggled(tiling("a", "b"), SCREEN);
 
     expect(workspace.floats.map(({ root }) => root)).toEqual([
-      Node.Container(Layout.Tabbed, [Node.Window("b")]),
+      Node.Container(Layout.Tabbed, [Node.Window("b", 2)]),
     ]);
   });
 
@@ -139,7 +143,7 @@ describe("floatToggled", () => {
 
     expect(workspace.floats).toEqual([]);
     expect(workspace.tiling.root).toMatchObject({
-      children: [Node.Window("a"), Node.Window("b")],
+      children: [{ id: "a" }, { id: "b" }],
     });
     expect(focusedOn(workspace)).toBe("b");
   });

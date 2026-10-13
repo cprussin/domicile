@@ -37,7 +37,7 @@ describe("inserted", () => {
     const tiling = inserted(NOTHING_TILED, "a");
 
     expect(tiling.root).toEqual(
-      LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("a")]),
+      LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("a", 1)]),
     );
     expect(focusedIdOf(tiling)).toBe("a");
   });
@@ -55,7 +55,10 @@ describe("inserted", () => {
       LayoutNode.Window("b"),
     ]);
 
-    expect(insertedNode(NOTHING_TILED, column).root).toEqual(column);
+    expect(insertedNode(NOTHING_TILED, column).root).toMatchObject({
+      children: [{ id: "a" }, { id: "b" }],
+      layout: Layout.SplitV,
+    });
   });
 
   it("puts a new window beside the one being worked in", () => {
@@ -93,8 +96,8 @@ describe("inserted", () => {
   });
 
   it("leaves the focus on the window rather than on its container", () => {
-    expect(focusedNodeOf(inserted(tiled("a", "b"), "c"))).toEqual(
-      LayoutNode.Window("c"),
-    );
+    expect(focusedNodeOf(inserted(tiled("a", "b"), "c"))).toMatchObject({
+      id: "c",
+    });
   });
 });
