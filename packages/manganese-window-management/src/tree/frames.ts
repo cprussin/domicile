@@ -275,6 +275,9 @@ const LONE_SPLIT_ROOM = 64;
  * The part of `area` child `at` gets: its share of the space left after the
  * gaps, along the container's axis. A split of one leaves
  * {@link LONE_SPLIT_ROOM} instead.
+ *
+ * Each edge rounds to a whole pixel, as a float's does, so a client's box
+ * stays on the pixel grid. Shares stay exact, so a 1px drag moves an edge 1px.
  */
 const sliceOf = (
   container: Container,
@@ -292,21 +295,34 @@ const sliceOf = (
   if (fraction === undefined) {
     throw new Error(`layout tree: no share for child ${at.toString()}`);
   } else if (container.layout === Layout.SplitV) {
-    const extent = area.height - gaps;
-    return {
-      ...area,
-      height: extent * fraction,
-      y: area.y + extent * before + gap * at,
-    };
+    const { end, start } = edgesOf(
+      area.y + gap * at,
+      area.height - gaps,
+      before,
+      fraction,
+    );
+    return { ...area, height: end - start, y: start };
   } else {
-    const extent = area.width - gaps;
-    return {
-      ...area,
-      width: extent * fraction,
-      x: area.x + extent * before + gap * at,
-    };
+    const { end, start } = edgesOf(
+      area.x + gap * at,
+      area.width - gaps,
+      before,
+      fraction,
+    );
+    return { ...area, width: end - start, x: start };
   }
 };
+
+/** A slice's edges, from `origin`, on whole pixels. */
+const edgesOf = (
+  origin: number,
+  extent: number,
+  before: number,
+  fraction: number,
+): { end: number; start: number } => ({
+  end: Math.round(origin + extent * (before + fraction)),
+  start: Math.round(origin + extent * before),
+});
 
 /**
  * Lays out a tabbed or stacking container: a title per child, and the shown
