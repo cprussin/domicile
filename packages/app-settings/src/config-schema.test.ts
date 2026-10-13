@@ -76,6 +76,19 @@ describe(readSettings, () => {
     );
   });
 
+  it("reads a cursor and fonts, which Settings does not edit", () => {
+    const theme = {
+      cursor_size: 32,
+      cursor_theme: "Bibata-Modern-Ice",
+      font_name: "Inter 11",
+      monospace_font_name: "Iosevka 12",
+    };
+    expect(readSettings({ theme }).map((read) => read.theme)).toEqual(
+      Ok({ ...theme, contrast: "normal", mode: "dark", reduced_motion: false }),
+    );
+    expect(readSettings({ theme: { cursor_size: 0 } }).isErr()).toBe(true);
+  });
+
   it("says where a config does not fit", () => {
     expect(readSettings({ theme: { mode: "system" } }).isErr()).toBe(true);
     expect(readSettings({ theme: { tint: "red" } }).isErr()).toBe(true);

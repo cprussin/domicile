@@ -132,6 +132,7 @@ An edit applies to the running desktop, and windows stay open:
 | `idle.blank_after_seconds`, `idle.warn_before_seconds` | Idle timer restarts. Dark screens relight |
 | `theme.mode` | Shell and windows repaint |
 | `theme.accent_color`, `contrast`, `reduced_motion` | Shell and windows that read the settings portal follow |
+| `theme.cursor_theme`, `cursor_size`, `font_name`, `monospace_font_name` | Windows that read the settings portal follow |
 | `theme.icon_theme` | Shell and windows that read the settings portal follow; tray icons redrawn and later notifications drawn in it; manganese on the next menu or launcher opening, and title bars when a new app id appears |
 | `files.omit` | Launcher file index rebuilt |
 | `extensions` | Extensions installed or removed ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)) |
@@ -235,6 +236,10 @@ Applications read the rest through the settings portal
 | `theme.contrast` | `"normal"`, `"high"` | `"normal"` |
 | `theme.reduced_motion` | `true`, `false` | `false` |
 | `theme.icon_theme` | an icon theme's directory name, such as `"Papirus-Dark"` | unset: `hicolor` only |
+| `theme.cursor_theme` | a cursor theme's directory name, such as `"Bibata-Modern-Ice"` | unset: each application's own |
+| `theme.cursor_size` | logical pixels, at least `1` | unset: each application's own |
+| `theme.font_name` | a Pango font description, such as `"Inter 11"` | unset: each application's own |
+| `theme.monospace_font_name` | a Pango font description, such as `"Iosevka 12"` | unset: each application's own |
 
 `icon_theme`:
 
@@ -246,6 +251,15 @@ Applications read the rest through the settings portal
   and look icons up with `@domicile-desktop/system-apps/app-icons`.
 - Portal dialogs draw applications in it: `describeApps` reads it each time
   a dialog's applications change.
+
+`cursor_theme`, `cursor_size`, `font_name`, `monospace_font_name`:
+
+- Served as `org.gnome.desktop.interface`'s `cursor-theme`, `cursor-size`,
+  `font-name` and `monospace-font-name`. Unset leaves each to the next portal
+  backend; a reload that unsets one signals the toolkit default: `default`,
+  `24`, `Sans 10`, `Monospace 10`.
+- The engine draws every pointer, including a window's. Whether it follows
+  the cursor keys is unknown; see [ROADMAP.md](/ROADMAP.md#windows-and-clients).
 
 In manganese:
 

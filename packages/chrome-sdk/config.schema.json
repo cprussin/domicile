@@ -365,6 +365,24 @@
         "contrast": {
           "$ref": "#/$defs/Contrast"
         },
+        "cursor_size": {
+          "default": null,
+          "description": "The cursor size in logical pixels. Unset leaves clients their own.\nZero is refused.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": ["integer", "null"]
+        },
+        "cursor_theme": {
+          "default": null,
+          "description": "The XCursor theme's directory name, such as `Adwaita`. Unset leaves\nclients their own.",
+          "type": ["string", "null"]
+        },
+        "font_name": {
+          "default": null,
+          "description": "The interface font as a Pango description, such as `Inter 11`. Unset\nleaves clients their own.",
+          "type": ["string", "null"]
+        },
         "icon_theme": {
           "default": null,
           "description": "The freedesktop icon theme's directory name, such as `Papirus-Dark`.\nUnset leaves shells with `hicolor`.",
@@ -372,6 +390,11 @@
         },
         "mode": {
           "$ref": "#/$defs/ThemeMode"
+        },
+        "monospace_font_name": {
+          "default": null,
+          "description": "The fixed-width font as a Pango description, such as `Iosevka 12`.\nUnset leaves clients their own.",
+          "type": ["string", "null"]
         },
         "reduced_motion": {
           "default": false,

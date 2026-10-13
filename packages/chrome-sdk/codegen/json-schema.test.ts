@@ -15,12 +15,17 @@ describe("parseRootSchema", () => {
       parseRootSchema({
         ...ROOT,
         properties: {
-          scale: { default: 1, format: "uint32", minimum: 0, type: "integer" },
+          size: {
+            format: "uint16",
+            maximum: 65_535,
+            minimum: 0,
+            type: "integer",
+          },
         },
       }),
     ).toEqual({
       $defs: {},
-      properties: { scale: { type: "integer" } },
+      properties: { size: { type: "integer" } },
       title: "Config",
       type: "object",
     });

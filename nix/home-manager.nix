@@ -522,6 +522,39 @@ in {
             example = "Papirus-Dark";
           };
 
+          theme.cursor_theme = lib.mkOption {
+            description = ''
+              The cursor theme applications draw their cursors from, by its
+              directory name under `share/icons`, through the settings portal.
+              Install the theme's package too. `null`, the default, leaves each
+              application its own.
+            '';
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            example = "Bibata-Modern-Ice";
+          };
+
+          theme.cursor_size = lib.mkOption {
+            description = "The cursor size applications draw, in logical pixels, through the settings portal. `null`, the default, leaves each application its own.";
+            type = lib.types.nullOr (lib.types.ints.between 1 65535);
+            default = null;
+            example = 32;
+          };
+
+          theme.font_name = lib.mkOption {
+            description = "The interface font applications draw text in, as a Pango font description, through the settings portal. `null`, the default, leaves each application its own.";
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            example = "Inter 11";
+          };
+
+          theme.monospace_font_name = lib.mkOption {
+            description = "The fixed-width font applications draw code and terminals in, as a Pango font description, through the settings portal. `null`, the default, leaves each application its own.";
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            example = "Iosevka 12";
+          };
+
           input.keyboard = {
             xkb_rules = lib.mkOption {
               description = "Passed to xkb as is. Empty uses the libxkbcommon default.";

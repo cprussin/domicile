@@ -127,8 +127,12 @@ const settingsSchema = z.strictObject({
         .regex(/^#[0-9a-fA-F]{6}$/)
         .optional(),
       contrast: z.enum(CONTRASTS).default("normal"),
+      cursor_size: z.number().int().positive().max(65_535).optional(),
+      cursor_theme: z.string().optional(),
+      font_name: z.string().optional(),
       icon_theme: z.string().optional(),
       mode: z.enum(THEME_MODES).default("dark"),
+      monospace_font_name: z.string().optional(),
       reduced_motion: z.boolean().default(false),
     })
     .prefault({}),
