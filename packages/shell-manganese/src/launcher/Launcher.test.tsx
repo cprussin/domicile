@@ -14,6 +14,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   waitForElementToBeRemoved,
   within,
 } from "@testing-library/react";
@@ -224,12 +225,18 @@ describe("Launcher", () => {
       search: searching(FILES, false),
       searchApps: searchingApps([], []),
     };
-    await new Promise<void>((closed) => {
-      const { rerender } = render(
-        <Launcher {...props} onClosed={closed} open />,
-        { wrapper: OnOneScreen },
-      );
-      rerender(<Launcher {...props} onClosed={closed} open={false} />);
+    const closed: true[] = [];
+    const onClosed = () => {
+      closed.push(true);
+    };
+    const { rerender } = render(
+      <Launcher {...props} onClosed={onClosed} open />,
+      { wrapper: OnOneScreen },
+    );
+    rerender(<Launcher {...props} onClosed={onClosed} open={false} />);
+
+    await waitFor(() => {
+      expect(closed).toEqual([true]);
     });
   });
 
