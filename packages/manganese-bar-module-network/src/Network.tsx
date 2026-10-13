@@ -38,8 +38,11 @@ type Props = {
 
 /**
  * The network item on the bar: an icon for the primary connection, and the
- * Wi-Fi network's or VPN's name. Turns `warning` when the link does not reach
- * the internet. A click opens the {@link WifiPanel}.
+ * Wi-Fi network's or VPN's name, or the link's kind. Turns `warning` when the
+ * link does not reach the internet. A click opens the {@link WifiPanel}.
+ *
+ * Holds one width so the items beside it never move; a long name is cut
+ * short.
  *
  * Draws nothing until the network service answers, and nothing on an error,
  * so a machine without one shows no item.
@@ -75,7 +78,6 @@ const Item = ({
     connectivity !== Connectivity.Limited &&
     connectivity !== Connectivity.Portal;
   const label = online ? describe(link) : `${describe(link)}, no internet`;
-  const name = nameOf(link);
   return (
     <Popover
       align="center"
@@ -84,9 +86,7 @@ const Item = ({
       trigger={
         <button className={triggerStyles({ online })} type="button">
           <LinkIcon label={label} link={link} />
-          {name === undefined ? undefined : (
-            <span className={nameStyles}>{name}</span>
-          )}
+          <Name link={link} />
         </button>
       }
       wide
@@ -123,7 +123,23 @@ const LinkIcon = ({ label, link }: { label: string; link: Link }) => {
   }
 };
 
-// Matches the volume item's button, widened by the network's name.
+/**
+ * The Wi-Fi network or VPN, or else the link's kind, so the item is never an
+ * icon alone in a wide button. The kind repeats the icon's name, so screen
+ * readers skip it.
+ */
+const Name = ({ link }: { link: Link }) => {
+  const name = nameOf(link);
+  return name === undefined ? (
+    <span aria-hidden className={nameStyles}>
+      {describe(link)}
+    </span>
+  ) : (
+    <span className={nameStyles}>{name}</span>
+  );
+};
+
+// Matches the volume item's button, at a fixed width.
 const triggerStyles = cva({
   base: hstack.raw({
     _hover: {
@@ -137,8 +153,9 @@ const triggerStyles = cva({
     flexShrink: 0,
     font: "inherit",
     gap: 1,
+    // Fits a name of about a dozen letters.
+    inlineSize: 24,
     justifyContent: "center",
-    minInlineSize: 7,
     paddingBlock: 0,
     paddingInline: 1.5,
     transition: "background-color {durations.fast} {easings.default}",
@@ -151,8 +168,14 @@ const triggerStyles = cva({
   },
 });
 
-// 10px to match the bar's other figures; no font-size token fits.
-const nameStyles = css({ fontSize: "0.625rem" });
+const nameStyles = css({
+  // 10px to match the bar's other figures; no font-size token fits.
+  fontSize: "0.625rem",
+  minInlineSize: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+});
 
 /** What the icon shows, for its accessible name. */
 const describe = (link: Link): string => {
@@ -168,7 +191,7 @@ const describe = (link: Link): string => {
   }
 };
 
-/** The name shown beside the icon: the Wi-Fi network or VPN, not a cable. */
+/** The Wi-Fi network's or VPN's name; a cable or no link has none. */
 const nameOf = (link: Link): string | undefined => {
   switch (link.kind) {
     case LinkKind.Wifi:
