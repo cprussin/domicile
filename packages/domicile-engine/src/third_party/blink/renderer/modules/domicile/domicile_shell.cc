@@ -9,6 +9,7 @@
 
 #include "base/functional/callback.h"
 #include "components/domicile/common/domicile_scheme.h"
+#include "third_party/blink/public/mojom/origin_trials/origin_trial_feature.mojom-shared.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_evaluation_result.h"
 #include "third_party/blink/renderer/bindings/core/v8/to_v8_traits.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
@@ -18,6 +19,7 @@
 #include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/html/html_meta_element.h"
+#include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
 #include "third_party/blink/renderer/core/script/classic_script.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_host.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
@@ -115,6 +117,10 @@ void DomicileShell::Install(LocalDOMWindow& window) {
       url.Host() != StringView(domicile::kDomicileShellHost)) {
     return;
   }
+  // <app>, <webview> and canvas.embedExternalSurface() exist only here. See
+  // DomicileExternalSurface in runtime_enabled_features.json5.
+  window.GetOriginTrialContext()->AddFeature(
+      mojom::blink::OriginTrialFeature::kDomicileExternalSurface);
   // The window object is cleared more than once for some documents; the
   // shell runs once.
   if (Supplement<LocalDOMWindow>::From<DomicileShell>(window)) {
