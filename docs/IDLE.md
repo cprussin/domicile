@@ -89,6 +89,15 @@ The Inhibit portal's idle flag (`8`) blocks blanking the same way while the
 application holds it. It names no surface, so it holds with no window showing
 (`Idle::held_by_portals`).
 
+A shell holds one the same way: `dbusCall` to
+`org.freedesktop.portal.Inhibit.Inhibit`, and `Request.Close` on the returned
+handle to let go. Manganese's idle inhibitor bar item does this.
+
+- **No new protocol:** the portal already reaches `crate::idle`.
+- **A reload lets go:** each page has its own D-Bus connection, which closes
+  with the page, and xdg-desktop-portal closes the requests of a caller that
+  leaves the bus.
+
 ### Checking it on hardware
 
 CI has no `/dev/dri`. On hardware, look for:
