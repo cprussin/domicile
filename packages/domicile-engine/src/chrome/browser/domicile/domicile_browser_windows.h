@@ -4,6 +4,8 @@
 #ifndef CHROME_BROWSER_DOMICILE_DOMICILE_BROWSER_WINDOWS_H_
 #define CHROME_BROWSER_DOMICILE_DOMICILE_BROWSER_WINDOWS_H_
 
+#include <string>
+
 #include "components/domicile/mojom/browser_windows.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 
@@ -38,6 +40,12 @@ void StartBrowserWindows();
 // open-url`, or with `app` an app window, for `domicile open-app`. Returns
 // false when there is no shell to own it.
 bool OpenBrowserWindow(const GURL& url, bool app);
+
+// Opens an app window at `url`, an app module's address, pinned to the app
+// at `app_host` so it may show that app and no other domicile:// address.
+// Returns false when there is no shell to own it. See
+// docs/architecture/APP-MODULES.md.
+bool OpenAppModuleWindow(const GURL& url, const std::string& app_host);
 
 // Binds BrowserWindows for `frame`. Sends the whole list on binding and on
 // every change, and takes the shell's opens and closes.

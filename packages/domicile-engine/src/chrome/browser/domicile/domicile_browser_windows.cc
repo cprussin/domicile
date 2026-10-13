@@ -130,6 +130,13 @@ class DeskWindows final : public base::SupportsUserData::Data,
                 /*private_browsing=*/false, /*app=*/true);
   }
 
+  // Opens an app window at an app module's `url`, pinned to `app_host`. See
+  // WebViewGuest::PinToApp.
+  bool OpenAppModule(const GURL& url, const std::string& app_host) {
+    return Make(url, /*popup_window=*/std::nullopt, 0, 0,
+                /*private_browsing=*/false, /*app=*/true, app_host);
+  }
+
   // Makes the page of a window a page opened, for content to hold until
   // Adopt. A page in a guest implies a shell to own it.
   std::unique_ptr<content::WebContents> MakeOpened(
@@ -269,7 +276,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
             int width,
             int height,
             bool private_browsing,
-            bool app) {
+            bool app,
+            const std::string& app_host = std::string()) {
     // The shell owns every guest, browser windows included: content's guest
     // machinery reads the owner's WebContents when making a guest. A desk with
     // no shell has nothing to draw a window in anyway.
@@ -287,6 +295,9 @@ class DeskWindows final : public base::SupportsUserData::Data,
     auto watch = std::make_unique<Watch>(
         guest->contents(),
         base::BindRepeating(&DeskWindows::Changed, base::Unretained(this)));
+    if (!app_host.empty()) {
+      guest->PinToApp(app_host);
+    }
     guest->Navigate(url);
     windows_.push_back(
         Window{id, std::move(guest), std::move(watch), width, height, app});
@@ -482,6 +493,16 @@ bool OpenBrowserWindow(const GURL& url, bool app) {
       DeskWindows::For(Profile::FromBrowserContext(shell->GetBrowserContext()));
   return app ? windows.OpenApp(url)
              : windows.Open(url, /*private_browsing=*/false);
+}
+
+bool OpenAppModuleWindow(const GURL& url, const std::string& app_host) {
+  content::WebContents* shell = ShellContentsIn(nullptr);
+  if (shell == nullptr) {
+    return false;
+  }
+  return DeskWindows::For(
+             Profile::FromBrowserContext(shell->GetBrowserContext()))
+      .OpenAppModule(url, app_host);
 }
 
 void BindBrowserWindows(content::RenderFrameHost* frame,

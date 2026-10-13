@@ -3,6 +3,8 @@
 
 #include "components/domicile/browser/web_view_url.h"
 
+#include <string_view>
+
 #include "components/domicile/common/domicile_scheme.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -10,10 +12,13 @@
 
 namespace domicile {
 
-bool MayShowInWebView(const GURL& url) {
-  return url.SchemeIs(url::kViewSourceScheme)
-             ? MayShowInWebView(GURL(url.GetContent()))
-             : url::Origin::Create(url).scheme() != kDomicileScheme;
+bool MayShowInWebView(const GURL& url, std::string_view app_host) {
+  if (url.SchemeIs(url::kViewSourceScheme)) {
+    return MayShowInWebView(GURL(url.GetContent()), app_host);
+  }
+  const url::Origin origin = url::Origin::Create(url);
+  return origin.scheme() != kDomicileScheme ||
+         (!app_host.empty() && origin.host() == app_host);
 }
 
 }  // namespace domicile

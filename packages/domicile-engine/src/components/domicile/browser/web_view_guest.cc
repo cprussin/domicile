@@ -949,7 +949,7 @@ void WebViewGuest::Navigate(const GURL& url) {
   // The URL often comes from a page (`target="_blank"`) or an extension
   // (`tabs.update`), and a guest on domicile:// would give it shell access.
   // Show about:blank#blocked, as content does, so the address bar explains.
-  const bool may_show = MayShowInWebView(url);
+  const bool may_show = MayShowInWebView(url, app_host_);
   if (!may_show) {
     LOG(WARNING) << "domicile: a <webview> may not show "
                  << url.possibly_invalid_spec() << "; it is blocked.";
@@ -958,6 +958,11 @@ void WebViewGuest::Navigate(const GURL& url) {
       may_show ? url : GURL(content::kBlockedURL));
   params.transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
   guest_contents_->GetController().LoadURLWithParams(params);
+}
+
+void WebViewGuest::PinToApp(const std::string& app_host) {
+  CHECK(app_host_.empty());
+  app_host_ = app_host;
 }
 
 void WebViewGuest::GoBack() {

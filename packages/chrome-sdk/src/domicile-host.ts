@@ -131,6 +131,41 @@ export type DomicileAppEvent = Event & {
   readonly appId: string;
 };
 
+/** Every event `DomicileAppHost` fires, by name. */
+export type DomicileAppHostEventMap = {
+  /** An answer to callSystem(), as a MessageEvent whose `data` is the line. */
+  system: MessageEvent<string>;
+};
+
+/**
+ * The host an app module is handed: system calls and their answers, the
+ * shell's system access without its window manager. See
+ * docs/architecture/APP-MODULES.md.
+ *
+ * Not a web standard. It exists in Domicile's engine fork, on an app
+ * module's document in its own app window, and nowhere else.
+ */
+export type DomicileAppHost = {
+  /**
+   * A system call, as DomicileHost.callSystem(). The compositor answers only
+   * files, processes and D-Bus, and fails the rest with permission_denied.
+   */
+  callSystem(id: number, request: string): void;
+  /**
+   * Typed by the event map rather than by inheriting `EventTarget`, whose
+   * overloads take any name and type every listener's event as `Event`.
+   * `dispatchEvent` is left out: a page does not dispatch to it.
+   */
+  addEventListener<T extends keyof DomicileAppHostEventMap>(
+    type: T,
+    listener: (event: DomicileAppHostEventMap[T]) => void,
+  ): void;
+  removeEventListener<T extends keyof DomicileAppHostEventMap>(
+    type: T,
+    listener: (event: DomicileAppHostEventMap[T]) => void,
+  ): void;
+};
+
 /**
  * One of the desk's browser windows: a page the browser holds, drawn with
  * `<webview window="id">`. See components/domicile/mojom/browser_windows.mojom.
