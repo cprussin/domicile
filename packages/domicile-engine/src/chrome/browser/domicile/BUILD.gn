@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: MIT
 
 # The fork's browser-side code that needs //chrome: the command socket, the
-# desk, browser windows, extensions, file dialogs, permission prompts, device
-# choosers and pointer warps.
+# desk, browser windows, extensions, history, file dialogs, permission prompts,
+# device choosers and pointer warps.
 #
 # A separate target because //chrome/browser:browser accepts no new sources,
 # and it keeps the fork to one added dependency in a Chromium-owned file.
@@ -31,6 +31,8 @@ source_set("domicile") {
     "domicile_extension_tray.h",
     "domicile_file_dialogs.cc",
     "domicile_file_dialogs.h",
+    "domicile_history.cc",
+    "domicile_history.h",
     "domicile_media_devices.cc",
     "domicile_media_devices.h",
     "domicile_permissions.cc",
@@ -114,6 +116,13 @@ source_set("domicile") {
     # ranking in the profile's prefs (patch 0109), for the Settings app and the
     # shell.
     "//chrome/browser/media/prefs",
+    # The History app's history, favicons and browsing data, through the
+    # command socket.
+    "//chrome/browser/browsing_data:constants",
+    "//components/favicon/core",
+    "//components/favicon_base",
+    "//components/history/core/browser",
+    "//components/keyed_service/core",
     # DevTools for a guest's page: Chrome's front end and its bindings.
     "//chrome/browser/devtools",
     # Tab zoom factors and range.

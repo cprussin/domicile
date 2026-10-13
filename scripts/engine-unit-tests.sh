@@ -22,7 +22,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 
 # Every suite in the filter, counted rather than estimated: FrameSinkBroker 37,
 # WindowDiff 7, EngineEventQueue 7, ShortcutRegistry 10, ShellURLLoaderFactory
-# 12, ShellDocument 14, ShellSource 3, CursorShape 3, CommandProtocol 27,
+# 12, ShellDocument 14, ShellSource 3, CursorShape 3, CommandProtocol 40,
 # DomicileDisplayList 6, DomicileKeyboardLayout 3, ShellWindows 8,
 # ShellWindowPlaces 7, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
 # SurfaceTransform 3, SurfaceAlpha 2, ExtensionInstaller 3, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 13,
@@ -34,8 +34,10 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # PrivatePages 3, ShellOrigin 2, AppRoots 4, AppChannel 2, AppDocument 3,
 # WebViewUrl 5.
 #
-# 326, and it was 323 — listing and switching extensions for the Settings
-# app is three CommandProtocol cases. Before that 323, and it was 304 — app modules are two ShellURLLoaderFactory cases, three
+# 333, and it was 326 — the History app's history and browsing data are
+# seven CommandProtocol cases. Before that 326, and it was 323 — listing and
+# switching extensions for the Settings app is three CommandProtocol cases.
+# Before that 323, and it was 304 — app modules are two ShellURLLoaderFactory cases, three
 # CommandProtocol ones, the AppRoots, AppChannel and AppDocument suites, and
 # WebViewUrl joining the filter with its two new cases. Before that 304, and it was 303 — a window's owner reaching the page is one more
 # ControlChannel case. Before that 303, and it was 301 — only the shell's origin binding the broker is two
@@ -116,7 +118,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=326
+FLOOR=333
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

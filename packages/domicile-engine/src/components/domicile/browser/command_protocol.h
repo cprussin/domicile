@@ -4,6 +4,7 @@
 #ifndef COMPONENTS_DOMICILE_BROWSER_COMMAND_PROTOCOL_H_
 #define COMPONENTS_DOMICILE_BROWSER_COMMAND_PROTOCOL_H_
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -13,6 +14,7 @@
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
 #include "base/functional/function_ref.h"
+#include "base/time/time.h"
 #include "base/types/expected.h"
 #include "components/domicile/mojom/web_view_guest.mojom-shared.h"
 #include "url/gurl.h"
@@ -79,8 +81,30 @@ namespace domicile {
 //   -> {"type":"set"}
 //   -> {"type":"refused","why":"..."}
 //
+//   {"type":"history","version":1,"text":"news",
+//    "end_time":1700000000000.5,"max_results":100}
+//   -> {"type":"history","items":[{"url":"https://news.example/",
+//       "title":"News","favicon":"data:image/png;base64,..."}]}
+//   -> {"type":"refused","why":"..."}
+//
+//   {"type":"visits","version":1,"url":"https://news.example/"}
+//   -> {"type":"visits","times":[1700000000000.5]}
+//   -> {"type":"refused","why":"..."}
+//
+//   {"type":"delete_history","version":1,"visits":[1700000000000.5]}
+//   -> {"type":"deleted"}
+//   -> {"type":"refused","why":"..."}
+//
+//   {"type":"clear_browsing_data","version":1,"since":1700000000000,
+//    "types":["cookies","localStorage"],"origins":["https://a.example"]}
+//   -> {"type":"cleared"}
+//   -> {"type":"refused","why":"..."}
+//
 // The site permissions, extensions and media devices are the Settings app's,
 // relayed by the supervisor (docs/SETTINGS.md). Names are site_permissions.h's.
+// The history and browsing data are the History app's. Times are milliseconds
+// since the Unix epoch, fractional to the microsecond, as `chrome.history`
+// gives them.
 //
 // This file only parses and answers lines; the actions are injected so it can
 // be tested with strings. chrome/browser/domicile/domicile_command_socket.cc
@@ -224,6 +248,94 @@ using SetMediaDevice =
     base::FunctionRef<base::expected<void, std::string>(MediaDeviceKind kind,
                                                         const std::string& id)>;
 
+// Runs once when a command that answers later is done, or with why it is not.
+using CommandDone = base::OnceCallback<void(base::expected<void, std::string>)>;
+
+// What `history` looks for: like `chrome.history.search` from the start of
+// time.
+struct HistorySearch {
+  // Matched against each page's title and address; empty matches every page.
+  std::string text;
+  // Only visits before this count.
+  base::Time end_time;
+  int max_results = 0;
+};
+
+// A page in the history, as the History app lists it.
+struct HistoryEntry {
+  HistoryEntry();
+  HistoryEntry(const HistoryEntry&);
+  HistoryEntry& operator=(const HistoryEntry&);
+  ~HistoryEntry();
+
+  GURL url;
+  std::string title;
+  // The page's cached favicon as a PNG, or empty when there is none.
+  std::vector<uint8_t> favicon_png;
+};
+
+// Runs once with the pages `history` found, most recently visited first, or
+// why it could not look.
+using HistoryFound = base::OnceCallback<void(
+    base::expected<std::vector<HistoryEntry>, std::string>)>;
+
+// Carries out `history` in the shell's profile. Runs `found` once, possibly
+// after returning.
+using SearchHistory =
+    base::FunctionRef<void(const HistorySearch& search, HistoryFound found)>;
+
+// Runs once with the times of a page's visits, or why it could not look.
+using VisitsFound = base::OnceCallback<void(
+    base::expected<std::vector<base::Time>, std::string>)>;
+
+// Carries out `visits`: every visit to `url` in the shell's profile. Runs
+// `found` once, possibly after returning.
+using ListVisits = base::FunctionRef<void(const GURL& url, VisitsFound found)>;
+
+// Carries out `delete_history`: removes the visits at exactly these times, as
+// their user would. Runs `done` once, possibly after returning.
+using DeleteVisits =
+    base::FunctionRef<void(const std::vector<base::Time>& visits,
+                           CommandDone done)>;
+
+// The kinds of data `clear_browsing_data` clears, as `chrome.browsingData`
+// names them.
+enum class BrowsingDataKind {
+  kCache,
+  kCacheStorage,
+  kCookies,
+  kDownloads,
+  kFileSystems,
+  kFormData,
+  kHistory,
+  kIndexedDB,
+  kLocalStorage,
+  kPasswords,
+  kServiceWorkers,
+  kWebSQL,
+};
+
+// What `clear_browsing_data` clears.
+struct BrowsingDataClearing {
+  BrowsingDataClearing();
+  BrowsingDataClearing(const BrowsingDataClearing&);
+  BrowsingDataClearing& operator=(const BrowsingDataClearing&);
+  ~BrowsingDataClearing();
+
+  // Data changed since this; null for all time.
+  base::Time since;
+  std::vector<BrowsingDataKind> kinds;
+  // Only these sites' data, or every site's when empty. Only kinds kept per
+  // site may be cleared per site.
+  std::vector<url::Origin> origins;
+};
+
+// Carries out `clear_browsing_data` in the shell's profile. Runs `done` once,
+// possibly after returning.
+using ClearBrowsingData =
+    base::FunctionRef<void(const BrowsingDataClearing& clearing,
+                           CommandDone done)>;
+
 // What each command does, injected so this file can be tested with strings.
 struct CommandActions {
   LoadShell load_shell;
@@ -238,14 +350,19 @@ struct CommandActions {
   SetExtensionEnabled set_extension_enabled;
   ListMediaDevices list_media_devices;
   SetMediaDevice set_media_device;
+  SearchHistory search_history;
+  ListVisits list_visits;
+  DeleteVisits delete_visits;
+  ClearBrowsingData clear_browsing_data;
 };
 
 // Receives the reply line, including its trailing newline.
 using CommandReply = base::OnceCallback<void(std::string)>;
 
 // Answers one request line (without its newline). `reply` runs once: before
-// this returns, except for `load_unpacked`, which answers once the extension
-// has loaded.
+// this returns, except for `load_unpacked`, `history`, `visits`,
+// `delete_history` and `clear_browsing_data`, which answer once their action
+// is done.
 void AnswerCommand(std::string_view line,
                    const CommandActions& actions,
                    CommandReply reply);

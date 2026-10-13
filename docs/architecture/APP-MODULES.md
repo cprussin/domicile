@@ -116,7 +116,7 @@ An app reaches Domicile's own state through programs it spawns. Each inherits
   | Command | Replaces |
   |---|---|
   | `extensions`, `set_extension_enabled` | `chrome.management` |
-  | `history`, `delete_history` | `chrome.history` |
+  | `history`, `visits`, `delete_history` | `chrome.history` |
   | `clear_browsing_data` | `chrome.browsingData` |
 
   `history` returns each row's favicon as a `data:` URL, since an app page
