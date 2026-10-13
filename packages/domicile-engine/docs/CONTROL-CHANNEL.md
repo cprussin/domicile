@@ -166,6 +166,12 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 {"type":"config_extensions","version":1}
 {"type":"config_extensions","ids":["…"]}
 
+{"type":"extensions","version":1}
+{"type":"extensions","extensions":[{"id":"…","name":"…","description":"…","version":"1.0","enabled":true,"options_url":"chrome-extension://…/options.html"}]}
+
+{"type":"set_extension_enabled","version":1,"id":"…","enabled":false}
+{"type":"set"}   |   {"type":"refused","why":"…"}
+
 {"type":"media_devices","version":1}
 {"type":"media_devices","cameras":[{"id":"/dev/video2","name":"USB Camera"}],"microphones":[…]}
 
@@ -198,6 +204,12 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
   Settings app's too ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md#from-the-settings-app)).
   `load_unpacked` replies once the extension has loaded, or with why it did
   not.
+- `extensions` and `set_extension_enabled` are the Settings app's too, in
+  place of `chrome.management`
+  ([APP-MODULES.md](/docs/architecture/APP-MODULES.md#domiciles-own-state)).
+  `extensions` lists the shell profile's extensions, without apps, themes or
+  Chrome's components; `options_url` is left out when there is no options
+  page.
 - `media_devices` and `set_media_device` are the Settings app's too. They list
   each kind's devices in the order of Chrome's device ranking in the shell
   profile's prefs, and move one to the top. A site that names no device gets
