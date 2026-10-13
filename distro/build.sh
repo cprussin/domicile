@@ -12,8 +12,8 @@
 #   SHA256SUMS
 #
 # Nix is the source of the pins: the engine is the one `nix build .#engine`
-# fetches, and bun, node and nfpm are the flake's nixpkgs'. The packages ship
-# upstream's bun binary, the source of nixpkgs' `bun`.
+# fetches, bun is the flake's `.#bun`, and node and nfpm are the flake's
+# nixpkgs'. The packages ship upstream's bun binary, the source of `.#bun`.
 #
 # Builds the workspace in this checkout, as `shellPage`, `appExtension` and
 # `shellWorkspace` do in `flake.nix`.
@@ -47,13 +47,13 @@ store_path() { # installable
 }
 
 echo "== tools and pins from the flake =="
-PATH="$(store_path 'nixpkgs#bun^out')/bin:$(store_path 'nixpkgs#nodejs_24^out')/bin:$PATH"
+PATH="$(store_path '.#bun^out')/bin:$(store_path 'nixpkgs#nodejs_24^out')/bin:$PATH"
 NFPM="$(store_path 'nixpkgs#nfpm^out')/bin/nfpm"
 UNZIP="$(store_path 'nixpkgs#unzip^out')/bin/unzip"
 UNZSTD="$(store_path 'nixpkgs#zstd^bin')/bin/unzstd"
 READELF="$(store_path 'nixpkgs#binutils-unwrapped^out')/bin/readelf"
 ENGINE_TARBALL="$(store_path .#engine.src)"
-BUN_ZIP="$(store_path nixpkgs#bun.src)"
+BUN_ZIP="$(store_path .#bun.src)"
 
 echo "== the workspace =="
 # As `nodeModules` and `sharedShellConfigure`: no install scripts, and `CI`
