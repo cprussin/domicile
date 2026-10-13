@@ -54,18 +54,12 @@ item when it ships.
      or by site ([HISTORY.md](docs/HISTORY.md)).
    - A guard that runs the app's native messaging host in the engine.
 
-9. **Split up the compositor's `main.rs`.** Left in it: event-loop state,
-   startup (`run`), the surface commit path, casting, the engine pump, the
-   Wayland protocol handlers, window placement and popups, latency driving,
-   outputs and scale, idle and lock glue, config adoption, the clipboard and
-   client spawning.
+9. **Web apps.** [WEB-APPS.md](docs/architecture/WEB-APPS.md).
+   - `domicile install-app` from a web app manifest.
+   - A guard that the engine lists an app window with `isApp` and records no
+     visits for it.
 
-10. **Web apps.** [WEB-APPS.md](docs/architecture/WEB-APPS.md).
-    - `domicile install-app` from a web app manifest.
-    - A guard that the engine lists an app window with `isApp` and records no
-      visits for it.
-
-11. **Distribution packages.**
+10. **Distribution packages.**
     [RUNNING-A-DESKTOP.md](docs/RUNNING-A-DESKTOP.md#other-distributions).
     - No APT or RPM repository, AUR package or COPR, so upgrades are by hand.
     - The shell builder ships the whole workspace's `node_modules`, about

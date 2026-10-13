@@ -17,10 +17,13 @@ use tracing::{debug, warn};
 
 use crate::chrome_hub::{Chrome, ChromeHub};
 use crate::client_requests::ClientRequest;
+use crate::grepped;
 use crate::lock::Asked;
+use crate::locking::say_what_the_lock_refused;
 use crate::peer_process::peer_pid;
 use crate::scale::output_scale;
-use crate::{chrome_key, desktop_environment, grepped, home_directory, say_what_the_lock_refused};
+use crate::spawning::{desktop_environment, home_directory};
+use crate::theme_turnover::chrome_key;
 
 /// A chrome request answered on its own connection thread.
 ///

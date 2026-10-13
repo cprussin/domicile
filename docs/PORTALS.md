@@ -258,7 +258,7 @@ client that connects through that listener is sandboxed.
 - **The shell** reads each window's sandbox from `DomicileWindow`
   ([WRITING-A-SHELL.md](WRITING-A-SHELL.md#windows)).
 - New privileged globals filter on `sees_privileged_globals` in
-  `packages/domicile-compositor/src/main.rs`.
+  `packages/domicile-compositor/src/clients.rs`.
 
 ## Wayland capture
 

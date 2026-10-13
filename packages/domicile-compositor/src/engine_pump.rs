@@ -1,0 +1,472 @@
+//! Running the engine's events on the Wayland thread, returning the buffers it
+//! lets go of, and rejoining an engine that replaced it.
+
+use std::time::Instant;
+
+use smithay::reexports::{
+    calloop::{
+        generic::Generic,
+        timer::{TimeoutAction, Timer},
+        Interest, LoopHandle, Mode, PostAction, RegistrationToken,
+    },
+    wayland_server::DisplayHandle,
+};
+use smithay::wayland::{
+    selection::data_device::set_data_device_selection,
+    selection::primary_selection::set_primary_selection,
+};
+use tracing::{error, info, warn};
+
+use crate::compositor_casts::capturer;
+use crate::configure_answers::{ConfigureAnswers, Resize, Resized};
+use crate::dmabuf_descriptor::descriptor_from;
+use crate::engine::Clipboard;
+use crate::engine_buffers::Returned;
+use crate::engine_session::{Dispatched, EngineSession, Release, Submitted};
+use crate::selections::Holder;
+use crate::surface_commit::{committed_buffer, CommittedBuffer};
+use crate::which_engine::another_engine;
+use crate::{engine, thread_priority};
+use crate::{CalloopData, DomicileCompositor};
+
+impl DomicileCompositor {
+    /// Run the engine's pending work and act on its events.
+    ///
+    /// Called only from the engine's calloop source, because the ABI's
+    /// callbacks fire inside `dispatch`. `dh` is needed to create `wl_output`s
+    /// when a display list rearranges the desktop.
+    fn pump_the_engine(&mut self, dh: &DisplayHandle) {
+        let Some(session) = self.engine.as_mut() else {
+            return;
+        };
+        let Dispatched {
+            events,
+            releases,
+            shown,
+        } = session.dispatch(Instant::now());
+        let overdue = session.overdue(Instant::now());
+        self.take_back(releases.into_iter().chain(overdue));
+        for (app_id, frame) in shown {
+            self.frame_shown(&app_id);
+            self.frame_callbacks.submitted(&app_id, frame);
+        }
+
+        for event in events {
+            match event {
+                // The page's layout box changed. Send `xdg_toplevel.configure`
+                // with the new size.
+                engine::Event::Configure {
+                    surface,
+                    width,
+                    height,
+                    scale,
+                    number,
+                } => {
+                    let app_id = self
+                        .engine
+                        .as_ref()
+                        .and_then(|session| session.app_for(surface))
+                        .map(str::to_owned);
+                    let Some(app_id) = app_id else {
+                        continue;
+                    };
+                    // Now embedded, so a frame committed earlier can be shown.
+                    // Often a popup's only frame.
+                    let waited = self
+                        .engine
+                        .as_mut()
+                        .map(|session| session.show_what_was_waiting(surface, Instant::now()));
+                    match waited {
+                        Some(Ok(Some(frame))) => {
+                            self.frame_shown(&app_id);
+                            self.frame_callbacks.submitted(&app_id, frame);
+                        }
+                        Some(Err(refused)) => {
+                            warn!(%app_id, "the engine would not take the frame that waited for this window");
+                            self.returned(refused.buffer);
+                        }
+                        Some(Ok(None)) | None => {}
+                    }
+                    // A popup's size comes from its positioner, not the page.
+                    if self.popups.iter().any(|(id, _)| *id == app_id) {
+                        continue;
+                    }
+                    let Some(toplevel) = self.toplevel_for(&app_id) else {
+                        tracing::debug!(%app_id, "the engine configured an app with no toplevel");
+                        continue;
+                    };
+                    // The engine sends device pixels; a configure is logical.
+                    // Unconverted, a window on a 1.2x display draws 1.2x too
+                    // small.
+                    //
+                    // Use the scale the engine sends with the box. The reported
+                    // ratio is a fallback for older engines.
+                    let device_size = (width, height);
+                    let (width, height) = crate::scale::logical_box(
+                        device_size,
+                        scale.unwrap_or(self.device_pixel_ratio),
+                    );
+                    tracing::debug!(%app_id, width, height, "engine configure -> client");
+                    match number {
+                        Some(number) => {
+                            let resize = Resize {
+                                number,
+                                device_size,
+                                size: (width, height),
+                            };
+                            let resized = self
+                                .configure_answers
+                                .entry(app_id.clone())
+                                .or_insert_with(ConfigureAnswers::new)
+                                .resize(resize, Instant::now());
+                            match resized {
+                                Resized::Send(resize) => {
+                                    self.send_resize(&app_id, &toplevel, resize)
+                                }
+                                Resized::Waits(until) => self.resize_when_overdue(app_id, until),
+                                Resized::Coalesced => {}
+                            }
+                        }
+                        // Sends only if the size differs from the last
+                        // acknowledged configure.
+                        None => {
+                            toplevel.with_pending_state(|state| {
+                                state.size = Some((width as i32, height as i32).into());
+                            });
+                            toplevel.send_pending_configure();
+                        }
+                    }
+                }
+                // Handled by the session, with the buffers.
+                engine::Event::Released { .. } | engine::Event::Imported { .. } => {}
+                engine::Event::FrameDone { surface, frame } => {
+                    let app_id = self
+                        .engine
+                        .as_ref()
+                        .and_then(|session| session.app_for(surface))
+                        .map(str::to_owned);
+                    if let Some(app_id) = app_id {
+                        let callbacks = self.frame_callbacks.done(&app_id, frame);
+                        self.send_frames(callbacks);
+                    }
+                }
+                engine::Event::Presented {
+                    surface,
+                    frame,
+                    shown,
+                } => {
+                    let app_id = self
+                        .engine
+                        .as_ref()
+                        .and_then(|session| session.app_for(surface))
+                        .map(str::to_owned);
+                    let presented = app_id.as_deref().and_then(|app_id| {
+                        self.frame_callbacks
+                            .presented(app_id, frame)
+                            .map(|presented| (app_id, presented))
+                    });
+                    if let Some((app_id, presented)) = presented {
+                        self.present(app_id, presented, shown);
+                    }
+                }
+                engine::Event::Captured {
+                    capture,
+                    frame,
+                    captured,
+                } => self.cast_captured(capture, frame, captured),
+                engine::Event::CaptureEnded { capture } => {
+                    let capturer = capturer(&mut self.engine, &mut self.cast_test_pattern);
+                    self.casting.capture_ended(capture, capturer);
+                }
+                // A copy in a page or browser window. The browser is not our
+                // Wayland client, so this is how its copies reach the seat and
+                // the desktop has one clipboard.
+                //
+                // The engine is not told back; it already has the copy.
+                engine::Event::Copied {
+                    clipboard,
+                    contents,
+                } => {
+                    let mimes = contents.mimes();
+                    self.took_a_copy(clipboard, contents);
+                    // Set the seat's selection, so Wayland clients can paste
+                    // it.
+                    match clipboard {
+                        Clipboard::Copy => {
+                            set_data_device_selection(
+                                &self.display_handle,
+                                &self.seat,
+                                mimes.clone(),
+                                Holder::Desk(clipboard),
+                            );
+                            self.hub.portals.selection_changed(mimes, None);
+                        }
+                        Clipboard::Primary => set_primary_selection(
+                            &self.display_handle,
+                            &self.seat,
+                            mimes,
+                            Holder::Desk(clipboard),
+                        ),
+                    }
+                }
+                // The engine holds DRM master, so on a tty this is the only
+                // monitor report. `replugged_into` decides whether the engine
+                // defines the desktop. `adopt_the_desktop` does nothing for an
+                // unchanged list, which a modeset-triggered hotplug reports.
+                engine::Event::Displays(displays) => {
+                    // Kept so a config reload can match against the plugged-in
+                    // monitors. Always the full list; anything absent is
+                    // unplugged.
+                    self.engine_displays = displays.clone();
+                    match self.screens.replugged_into(
+                        &displays,
+                        &self.config.current().output,
+                        &self.vendors,
+                    ) {
+                        // The config describes the desktop and DRM does not
+                        // override it. A monitor that arrives while the screens
+                        // are dark comes up lit, so darken it again.
+                        Ok(None) => self.keep_the_screens_dark(),
+                        // `adopt_the_desktop` sets every connector's power,
+                        // dark ones included.
+                        Ok(Some(screens)) => self.adopt_the_desktop(dh, screens),
+                        // A matching profile cannot be applied. Keep the
+                        // current desktop, as `ConfigStore` does for an
+                        // unparseable edit, and name the config problem.
+                        Err(err) => {
+                            tracing::warn!(
+                                %err,
+                                "the profile these monitors matched cannot be applied to them; \
+                                 keeping the desktop that is up"
+                            );
+                            // Keep it dark too; the unplaced monitor came up
+                            // lit.
+                            self.keep_the_screens_dark();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// A buffer the engine let go of goes back to whoever owns it: the client,
+    /// as a `wl_buffer.release`, or the pool of the compositor's own.
+    pub fn returned(&mut self, buffer: Submitted) {
+        match buffer {
+            Submitted::Client(buffer) => buffer.release(),
+            Submitted::Upload(id) => self.uploads.give_back(id),
+        }
+    }
+
+    /// Returns buffers the engine gave back to their clients, logging any viz
+    /// held past the deadline.
+    fn take_back(&mut self, releases: impl IntoIterator<Item = Release>) {
+        for release in releases {
+            match release.why {
+                Returned::Released => {}
+                // Include the app id: if only one window's buffers expire, viz
+                // is probably not drawing that surface.
+                Returned::Expired => {
+                    // Separate messages so `app_id` only ever holds an app id.
+                    // `window_gone` drops all holds when it forgets an app, so
+                    // an unclaimed expiry means the window went first.
+                    match self
+                        .engine
+                        .as_ref()
+                        .and_then(|session| session.app_for(release.surface))
+                    {
+                        Some(app_id) => tracing::error!(
+                            app_id,
+                            "the engine never released a client buffer; taking it back so the \
+                             client can draw. Something in viz is holding a dmabuf it has \
+                             finished with"
+                        ),
+                        None => tracing::error!(
+                            "the engine never released a buffer belonging to a window that has \
+                             since gone; taking it back"
+                        ),
+                    }
+                }
+                Returned::Abandoned => {
+                    tracing::debug!("a held buffer came back because its window went away")
+                }
+            }
+            self.returned(release.buffer);
+        }
+    }
+
+    /// Wakes the loop when the soonest superseded hold expires, unless a wake
+    /// is armed.
+    ///
+    /// Viz may keep a buffer and send nothing, so the engine's fd alone would
+    /// never apply the deadline. Taking it back lets a single-buffered client
+    /// draw; tearing once and logging it is better than freezing it. A wake
+    /// can come after its hold was released, and then only re-arms.
+    pub fn arm_the_hold_deadline(&mut self) {
+        if self.hold_deadline.is_some() {
+            return;
+        }
+        let Some(due) = self.engine.as_ref().and_then(EngineSession::next_overdue) else {
+            return;
+        };
+        let armed = self
+            .loop_handle
+            .insert_source(Timer::from_deadline(due), |_, _, data: &mut CalloopData| {
+                let state = &mut data.state;
+                state.hold_deadline = None;
+                let overdue = state
+                    .engine
+                    .as_mut()
+                    .map(|session| session.overdue(Instant::now()))
+                    .unwrap_or_default();
+                state.take_back(overdue);
+                state.arm_the_hold_deadline();
+                TimeoutAction::Drop
+            })
+            // Timers register nothing with the kernel, so inserting cannot
+            // fail.
+            .expect("the compositor's own loop takes a timer");
+        self.hold_deadline = Some(armed);
+    }
+
+    /// Join an engine that replaced the current one, and restore what the old
+    /// one knew.
+    ///
+    /// The compositor outlives its engine: `domicile-launch` can start a new
+    /// engine under a running compositor (`domicile_launch::restart`), and
+    /// clients keep their connection and windows. [`EngineSession::reconnect`]
+    /// handles what the old browser created.
+    ///
+    /// Does nothing when the same engine's page reloads (`domicile
+    /// load-shell`); see [`another_engine`].
+    ///
+    /// If the dial fails, it is logged and the session is kept. Held buffers
+    /// are returned either way, and the next page hello retries.
+    pub fn rejoin_the_engine(&mut self, served_by: Option<i32>) {
+        let replaced = another_engine(self.engine_process, served_by);
+        // Record the serving process for later hellos. Keep the old one if the
+        // kernel gave no credential.
+        self.engine_process = served_by.or(self.engine_process);
+        if !replaced || self.engine.is_none() {
+            return;
+        }
+        warn!(
+            served_by,
+            "the engine this desktop was drawing through has been replaced; rejoining it"
+        );
+        // The old engine's captures are gone with it, and it reports no more
+        // frames.
+        self.casting.engine_replaced();
+        let unreported = self.frame_callbacks.take_all();
+        self.answer_unreported(unreported);
+        let session = self
+            .engine
+            .as_mut()
+            .expect("a desktop with no engine has nothing to rejoin, and said so above");
+        // The dmabuf is reference-counted, and the session holds the client's
+        // buffer, so its fds are still valid. shm windows resubmit their
+        // compositor-owned copy.
+        let uploads = &self.uploads;
+        let rejoined = session.reconnect(
+            &|submitted| match submitted {
+                Submitted::Client(buffer) => match committed_buffer(buffer) {
+                    Some(CommittedBuffer::Gpu(dmabuf)) => Some(descriptor_from(&dmabuf)),
+                    Some(CommittedBuffer::Pixels { .. }) | None => None,
+                },
+                Submitted::Upload(id) => uploads.get(*id).map(descriptor_from),
+            },
+            Instant::now(),
+        );
+        match &rejoined.dialed {
+            Ok(()) => {
+                thread_priority::raise_the_engine_thread();
+                self.watch_the_engines_fd();
+                // The new engine numbers its boxes afresh, and shows none of
+                // the old one's frames.
+                self.configure_answers.clear();
+                self.shown.clear();
+                // The new engine does not know the profile, and
+                // `Screens::replugged_into` ignores an unchanged list, so
+                // restate the connectors or disabled ones come back lit.
+                self.state_the_connectors();
+                // The new browser starts with empty clipboards, so restore
+                // them.
+                self.tell_the_engine_the_copies();
+                info!(
+                    shown = rejoined.shown.len(),
+                    blank = rejoined.blank.len(),
+                    returned = rejoined.releases.len(),
+                    "rejoined the engine and restated this desktop to it"
+                );
+            }
+            Err(err) => error!(
+                %err,
+                "there is a new engine at the broker socket and this compositor could not \
+                 join it; every window on this desktop will be blank until one it can join \
+                 arrives"
+            ),
+        }
+        for app_id in &rejoined.blank {
+            error!(
+                app_id,
+                "this window's last frame could not be put back on the new engine, so it is \
+                 on the page with nothing in it until its client draws again"
+            );
+        }
+        // Return every buffer the old engine held, joined or not. A client owed
+        // a release never draws again.
+        for release in rejoined.releases {
+            self.returned(release.buffer);
+        }
+    }
+
+    /// Watch the current engine's fd, and stop watching the previous one.
+    ///
+    /// The old fd is closed with its engine, and a source left on it would
+    /// spin.
+    fn watch_the_engines_fd(&mut self) {
+        if let Some(watching) = self.engine_source.take() {
+            self.loop_handle.remove(watching);
+        }
+        let Some(session) = self.engine.as_ref() else {
+            return;
+        };
+        match poll_the_engine(&self.loop_handle, session.fd()) {
+            Ok(watching) => self.engine_source = Some(watching),
+            // Logged, not fatal. Without the watch nothing from the engine is
+            // heard, but ending every client over it would defeat the
+            // compositor outliving its engine.
+            Err(err) => error!(
+                %err,
+                "the engine's fd could not be watched, so nothing it says will be heard; \
+                 this desktop is still serving its clients and has to be restarted to draw"
+            ),
+        }
+    }
+}
+
+/// Watch the engine's fd, so [`DomicileCompositor::pump_the_engine`] runs when
+/// the engine has events.
+///
+/// Separate because a replacement engine brings a new fd.
+pub fn poll_the_engine(
+    handle: &LoopHandle<'static, CalloopData>,
+    fd: std::os::fd::RawFd,
+) -> Result<RegistrationToken, Box<dyn std::error::Error>> {
+    // Duplicate the fd: the source outlives this call, and the engine closes
+    // the original when dropped.
+    //
+    // SAFETY: the fd belongs to the live engine and is valid until it is
+    // destroyed. It is duplicated before this returns and never used as a
+    // borrow afterward.
+    let owned = unsafe { std::os::fd::BorrowedFd::borrow_raw(fd) }.try_clone_to_owned()?;
+    Ok(handle.insert_source(
+        Generic::new(owned, Interest::READ, Mode::Level),
+        |_, _, data: &mut CalloopData| {
+            let dh = data.display.handle();
+            data.state.pump_the_engine(&dh);
+            data.state.arm_the_hold_deadline();
+            Ok(PostAction::Continue)
+        },
+    )?)
+}
