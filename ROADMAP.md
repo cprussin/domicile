@@ -43,7 +43,6 @@ item when it ships.
    - Shell options ([SHELL-OPTIONS.md](docs/architecture/SHELL-OPTIONS.md)).
    - A list of sites with stored data. History clears cookies by time range
      or by site ([HISTORY.md](docs/HISTORY.md)).
-   - A guard that runs the app's native messaging host in the engine.
 
 7. **Web apps.** [WEB-APPS.md](docs/architecture/WEB-APPS.md).
    - `DomicileHost.openAppWindow(url)`, for a shell's own launcher.
