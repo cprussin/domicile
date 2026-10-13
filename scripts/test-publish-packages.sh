@@ -22,6 +22,14 @@ tree() { git -C "$ROOT" status --porcelain; git -C "$ROOT" diff | sha256sum; }
 before="$(tree)"
 version="0.0.0-alpha-$(git -C "$ROOT" rev-parse --short=12 HEAD)"
 
+public="$(cd "$ROOT/packages" && for manifest in */package.json; do
+  [ "$(jq -r .private "$manifest")" = "false" ] && dirname "$manifest"
+done | sort)"
+listed="$(grep -v '^\(#\|$\)' "$ROOT/.github/scripts/published-packages" | sort)"
+[ "$public" = "$listed" ] &&
+  ok "every public package is in published-packages, and nothing else" ||
+  fail "every public package is in published-packages, and nothing else" "$(diff <(echo "$public") <(echo "$listed"))"
+
 if ! DOMICILE_PUBLISH_DRY_RUN="$OUT" "$PUBLISH" >"$OUT/log" 2>&1; then
   fail "the dry run succeeds" "$(tail -20 "$OUT/log")"
 fi
