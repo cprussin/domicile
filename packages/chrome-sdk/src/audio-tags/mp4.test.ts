@@ -19,16 +19,29 @@ const bigEndian = (value: number): number[] => [
   value & 0xff,
 ];
 
+/** `parts` end to end, in one typed array so a megabyte body copies once. */
+const joined = (...parts: readonly ArrayLike<number>[]): Uint8Array => {
+  const bytes = new Uint8Array(
+    parts.reduce((length, part) => length + part.length, 0),
+  );
+  parts.reduce((at, part) => {
+    bytes.set(part, at);
+    return at + part.length;
+  }, 0);
+  return bytes;
+};
+
 /** A box of type `kind`: four bytes, `©` written as 0xa9. */
-const box = (kind: string, body: number[]): number[] => [
-  ...bigEndian(8 + body.length),
-  ...Array.from(kind, (letter) => letter.charCodeAt(0)),
-  ...body,
-];
+const box = (kind: string, body: ArrayLike<number>): Uint8Array =>
+  joined(
+    bigEndian(8 + body.length),
+    Array.from(kind, (letter) => letter.charCodeAt(0)),
+    body,
+  );
 
 /** A `data` box: `type` 1 is UTF-8, 13 JPEG and 14 PNG. */
-const data = (type: number, body: number[]): number[] =>
-  box("data", [...bigEndian(type), ...bigEndian(0), ...body]);
+const data = (type: number, body: ArrayLike<number>): Uint8Array =>
+  box("data", joined(bigEndian(type), bigEndian(0), body));
 
 const noTags = {
   album: undefined,
@@ -94,22 +107,23 @@ describe("mp4Tags", () => {
   });
 
   it("passes over an item too big to send", async () => {
-    const cover = box("covr", data(14, Array(1024 * 1024 + 64 * 1024).fill(0)));
-    const bytes = new Uint8Array([
-      ...box(
-        "moov",
+    const cover = box(
+      "covr",
+      data(14, new Uint8Array(1024 * 1024 + 64 * 1024)),
+    );
+    const bytes = box(
+      "moov",
+      box(
+        "udta",
         box(
-          "udta",
-          box("meta", [
-            0,
-            0,
-            0,
-            0,
-            ...box("ilst", [...cover, ...box("©nam", data(1, text("Song")))]),
-          ]),
+          "meta",
+          joined(
+            [0, 0, 0, 0],
+            box("ilst", joined(cover, box("©nam", data(1, text("Song"))))),
+          ),
         ),
       ),
-    ]);
+    );
 
     expect(await mp4Tags(reading(bytes))).toStrictEqual(
       Ok({ ...noTags, title: "Song" }),

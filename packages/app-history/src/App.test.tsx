@@ -260,16 +260,11 @@ describe(App, () => {
     });
 
     it("keeps scrolling after a removal fails", async () => {
-      const many: FakePage[] = Array.from({ length: 160 }, (_, index) => ({
-        title: `Page ${index}`,
-        url: `https://${index}.test/`,
-        visits: [at(9, 14, 0) - index * 60_000],
-      }));
-      const { user } = renderApp(many, {
+      const { user } = renderApp(HISTORY, {
         deleteVisits: () => Promise.reject(new Error("history is locked")),
       });
       await user.click(
-        await screen.findByRole("button", { name: "Actions for Page 0" }),
+        await screen.findByRole("button", { name: "Actions for Cats" }),
       );
       await user.click(
         await screen.findByRole("menuitem", { name: "Remove from history" }),

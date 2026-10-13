@@ -27,45 +27,55 @@ const bigEndian = (size: number, bytes: number): number[] =>
     (_, at) => (size >> (8 * (bytes - 1 - at))) & 0xff,
   );
 
+/** `parts` end to end, in one typed array so a megabyte body copies once. */
+const joined = (...parts: readonly ArrayLike<number>[]): Uint8Array => {
+  const bytes = new Uint8Array(
+    parts.reduce((length, part) => length + part.length, 0),
+  );
+  parts.reduce((at, part) => {
+    bytes.set(part, at);
+    return at + part.length;
+  }, 0);
+  return bytes;
+};
+
 /** One frame, framed as ID3v2.`version` frames it. */
-const frame = (version: 2 | 3 | 4, id: string, body: number[]): number[] => {
+const frame = (
+  version: 2 | 3 | 4,
+  id: string,
+  body: ArrayLike<number>,
+): Uint8Array => {
   switch (version) {
     case 2: {
-      return [...text(id), ...bigEndian(body.length, 3), ...body];
+      return joined(text(id), bigEndian(body.length, 3), body);
     }
     case 3: {
-      return [...text(id), ...bigEndian(body.length, 4), 0, 0, ...body];
+      return joined(text(id), bigEndian(body.length, 4), [0, 0], body);
     }
     case 4: {
-      return [...text(id), ...synchsafe(body.length), 0, 0, ...body];
+      return joined(text(id), synchsafe(body.length), [0, 0], body);
     }
   }
 };
 
 /** A tag holding `body`, its frames. */
-const tag = (version: 2 | 3 | 4, body: number[], flags = 0): Uint8Array =>
-  new Uint8Array([
-    ...text("ID3"),
-    version,
-    0,
-    flags,
-    ...synchsafe(body.length),
-    ...body,
-  ]);
+const tag = (
+  version: 2 | 3 | 4,
+  body: ArrayLike<number>,
+  flags = 0,
+): Uint8Array =>
+  joined(text("ID3"), [version, 0, flags], synchsafe(body.length), body);
 
 /** A UTF-8 text frame's body. */
 const utf8 = (said: string): number[] => [3, ...text(said)];
 
 /** An APIC body: `kind` is the picture type, 3 for the front cover. */
-const apic = (mime: string, kind: number, data: number[]): number[] => [
-  0,
-  ...text(mime),
-  0,
-  kind,
-  ...text("a description"),
-  0,
-  ...data,
-];
+const apic = (
+  mime: string,
+  kind: number,
+  data: ArrayLike<number>,
+): Uint8Array =>
+  joined([0], text(mime), [0, kind], text("a description"), [0], data);
 
 /** `body` with a 0x00 after each 0xff a sync word or a 0x00 follows. */
 const unsynchronized = (body: number[]): number[] =>
@@ -140,10 +150,13 @@ describe("id3v2Tags", () => {
   });
 
   it("leaves out a cover too big to send or of no stated kind", async () => {
-    const bytes = tag(4, [
-      ...frame(4, "APIC", apic("image/png", 3, Array(1024 * 1024 + 1).fill(0))),
-      ...frame(4, "APIC", apic("", 3, [1, 2, 3])),
-    ]);
+    const bytes = tag(
+      4,
+      joined(
+        frame(4, "APIC", apic("image/png", 3, new Uint8Array(1024 * 1024 + 1))),
+        frame(4, "APIC", apic("", 3, [1, 2, 3])),
+      ),
+    );
 
     expect(await id3v2Tags(reading(bytes), 0)).toStrictEqual(Ok(noTags));
   });
