@@ -37,8 +37,11 @@ two layers disagreed and the lower one refused. This makes the import agree
 with the usage its caller asked for.
 
 Strictly additive: the retry runs only where the current code returns nullptr.
-Nothing on the Wayland path reads GbmBuffer::GetFlags() -- its only two callers
-are in ui/ozone/platform/drm, which this configuration does not build.
+Nothing on the Wayland path reads GbmBuffer::GetFlags(). The DRM platform
+(0012) does: DrmThread adds a framebuffer only to a SCANOUT buffer, so a buffer
+this imports for sampling cannot be scanned out. It reaches a plane only
+through overlay promotion, which is off on the DRM platform here, and
+GbmPixmap::ScheduleOverlayPlane never queues it (0112).
 
 Not reproduced on crux, which is NVIDIA. The decode and the code path are the
 evidence; the hardware check belongs on the reporter's machine.

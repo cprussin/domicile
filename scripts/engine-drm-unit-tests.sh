@@ -43,6 +43,7 @@ SUITES=(
   DrmClipboardTest:12
   DrmEdidSerialTest:18
   DrmPointerCrossingTest:20
+  GbmPixmapScanoutTest:2
   ScrollAcceleratorTest:7
   WheelTicksTest:3
   WaylandKeyboardWithoutKeymapTest:1
