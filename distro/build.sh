@@ -16,7 +16,7 @@
 # fetches, bun is the flake's `.#bun`, and node and nfpm are the flake's
 # nixpkgs'. The packages ship upstream's bun binary, the source of `.#bun`.
 #
-# Builds the workspace in this checkout, as `shellPage`, `appExtension` and
+# Builds the workspace in this checkout, as `shellPage`, `appModule` and
 # `shellWorkspace` do in `flake.nix`.
 set -euo pipefail
 

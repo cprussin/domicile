@@ -4,8 +4,13 @@
 import type { Browser } from "./browser";
 import type { HistoryItem, HistorySource } from "./history-page";
 
-/** One page in the fake history: its title and visit times. */
-export type FakePage = { title: string; url: string; visits: number[] };
+/** One page in the fake history: its icon, title and visit times. */
+export type FakePage = {
+  favicon?: string | undefined;
+  title: string;
+  url: string;
+  visits: number[];
+};
 
 /**
  * A {@link HistorySource} over `pages`. `search` returns the pages with a
@@ -28,7 +33,13 @@ export const fakeHistory = (pages: FakePage[]): HistorySource => ({
         })
         .toSorted((a, b) => b.latest - a.latest)
         .slice(0, maxResults)
-        .map(({ page }): HistoryItem => ({ title: page.title, url: page.url })),
+        .map(
+          ({ page }): HistoryItem => ({
+            favicon: page.favicon,
+            title: page.title,
+            url: page.url,
+          }),
+        ),
     ),
 });
 
@@ -66,7 +77,6 @@ export const fakeBrowser = (pages: FakePage[]) => {
       changed();
       return Promise.resolve();
     },
-    faviconUrl: (pageUrl) => `favicon:${pageUrl}`,
     onChange: (listener) => {
       listeners.add(listener);
       return () => {

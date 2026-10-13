@@ -122,7 +122,7 @@ pub enum CliError {
 }
 
 /// A parsed `domicile` command line.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Invocation {
     /// Run a desktop on this shell, with the compositor reading `config`.
     ///

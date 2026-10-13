@@ -75,7 +75,7 @@ options.
 - [ ] `domicile-config`: an opaque `shell_options` key
 - [ ] the compositor sends `options` in `shell_config`; the SDK exposes it
 - [ ] the builder writes `options.json`; `settings_files` reports it
-- [ ] `domicile-settings-host` validates `shell_options` writes against it
+- [ ] `domicile-app-host` validates `shell_options` writes against it
 - [ ] the Settings app's Shell page draws the form
 - [ ] manganese declares its options and reads them with `useShellOptions`
 

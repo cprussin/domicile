@@ -1,11 +1,13 @@
-//! The Settings app's host: `domicile-settings-host`.
+//! The host Domicile's apps spawn: `domicile-app-host`.
 //!
-//! The app spawns this host and the two exchange messages over the host's
-//! stdin and stdout, each a 4-byte length and UTF-8 JSON. The
-//! host asks the running desktop which files to edit ([`Request::SettingsFiles`])
-//! rather than taking a path from the page, and forwards site permissions,
-//! extensions, media devices and addresses to open to the engine through the
-//! desktop. See `docs/SETTINGS.md`.
+//! An app spawns this host and the two exchange messages over the host's
+//! stdin and stdout, each a 4-byte length and UTF-8 JSON. For Settings, the
+//! host asks the running desktop which files to edit
+//! ([`Request::SettingsFiles`]) rather than taking a path from the page, and
+//! forwards site permissions, extensions, media devices and addresses to open
+//! to the engine through the desktop. For History, it forwards history
+//! searches, deletions and clearing browsing data. See `docs/SETTINGS.md` and
+//! `docs/HISTORY.md`.
 //!
 //! ```text
 //! {"id":1,"type":"read"}
@@ -34,6 +36,14 @@
 //!   {"id":11,"type":"stored"}
 //! {"id":12,"type":"open_url","url":"chrome-extension://…/options.html"}
 //!   {"id":12,"type":"opened"}
+//! {"id":13,"type":"history","text":"…","end_time":1700000000123.5,"max_results":100}
+//!   {"id":13,"type":"history","items":[{"url":…,"title":…,"favicon":"data:…"}]}   (favicon null if none)
+//! {"id":14,"type":"visits","url":"https://example.com/"}
+//!   {"id":14,"type":"visits","times":[1700000000123.5]}
+//! {"id":15,"type":"delete_history","visits":[1700000000123.5]}
+//!   {"id":15,"type":"deleted"}
+//! {"id":16,"type":"clear_browsing_data","since":0,"types":["cookies"],"origins":["https://example.com"]}
+//!   {"id":16,"type":"cleared"}   (no origins clears every origin)
 //! any request
 //!   {"id":…,"type":"refused","why":"…"}
 //! pushed when a file changes on disk
@@ -49,6 +59,7 @@ use serde_json::{json, Value};
 
 use crate::config_path::is_module;
 use crate::control::{Request, Response, SettingsFiles};
+use crate::history::{BrowsingData, HistoryQuery};
 use crate::media_devices::MediaKind;
 use crate::site_permissions::SitePermission;
 
@@ -145,6 +156,10 @@ enum AppRequest {
     // `extension`, since the message's own `id` is the request's.
     SetExtensionEnabled { extension: String, enabled: bool },
     OpenUrl { url: String },
+    History(HistoryQuery),
+    Visits { url: String },
+    DeleteHistory { visits: Vec<f64> },
+    ClearBrowsingData(BrowsingData),
 }
 
 /// Which file a write replaces.
@@ -253,6 +268,26 @@ fn carry_out(request: AppRequest, host: &Host) -> Result<Value, String> {
             Response::Opened => Ok(json!({"type": "opened"})),
             other => Err(refusal_or_surprise(other)),
         },
+        AppRequest::History(query) => match (host.ask)(&Request::History(query))? {
+            Response::History { items } => Ok(json!({"type": "history", "items": items})),
+            other => Err(refusal_or_surprise(other)),
+        },
+        AppRequest::Visits { url } => match (host.ask)(&Request::Visits { url })? {
+            Response::Visits { times } => Ok(json!({"type": "visits", "times": times})),
+            other => Err(refusal_or_surprise(other)),
+        },
+        AppRequest::DeleteHistory { visits } => {
+            match (host.ask)(&Request::DeleteHistory { visits })? {
+                Response::Deleted => Ok(json!({"type": "deleted"})),
+                other => Err(refusal_or_surprise(other)),
+            }
+        }
+        AppRequest::ClearBrowsingData(data) => {
+            match (host.ask)(&Request::ClearBrowsingData(data))? {
+                Response::Cleared => Ok(json!({"type": "cleared"})),
+                other => Err(refusal_or_surprise(other)),
+            }
+        }
     }
 }
 

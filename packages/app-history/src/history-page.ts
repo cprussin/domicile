@@ -6,14 +6,18 @@ import { appendEntries } from "./entries";
 
 /**
  * Schemes of pages the list leaves out: Domicile's own, such as the shell's
- * `domicile://shell/`, and extensions', this app's included.
+ * `domicile://shell/` and an app's `domicile://app-<id>/`, and extensions'.
  */
 const HIDDEN_SCHEMES = ["domicile:", "chrome-extension:"];
 
-/** A page in the history, as `chrome.history.search` gives it. */
-export type HistoryItem = { title: string; url: string };
+/** A page in the history, and its icon as a `data:` URL, if it has one. */
+export type HistoryItem = {
+  favicon: string | undefined;
+  title: string;
+  url: string;
+};
 
-/** The parts of `chrome.history` the list reads. */
+/** The parts of the history the list reads. */
 export type HistorySource = {
   /**
    * Pages with a visit before `endTime` whose title or URL matches `text`,
@@ -32,6 +36,8 @@ export type HistorySource = {
 export type Entry = {
   /** The day's local midnight. */
   day: number;
+  /** The page's icon as a `data:` URL, if it has one. */
+  favicon: string | undefined;
   id: string;
   /** The latest of `visits`. */
   time: number;
@@ -124,6 +130,7 @@ export const loadSince = async (
 const byDay = (item: HistoryItem, visits: readonly number[]): Entry[] =>
   [...Map.groupBy(visits, startOfDay)].map(([day, onDay]) => ({
     day,
+    favicon: item.favicon,
     id: `${day} ${item.url}`,
     time: Math.max(...onDay),
     title: item.title,

@@ -9,7 +9,7 @@ config, its shell's source, its extensions and its site permissions. See
 domicile run-app .vite/app/settings.js
 ```
 
-- Spawns `domicile-settings-host` (`domicile_launch::settings`) and speaks
+- Spawns `domicile-app-host` (`domicile_launch::app_host`) and speaks
   length-prefixed JSON with it over stdin and stdout.
 - Writes each change as soon as it is made. A read-only or module config is
   shown, not changed, with the reason.
@@ -22,7 +22,6 @@ domicile run-app .vite/app/settings.js
 |---|---|
 | `src/index.tsx` | `main(root, host)`, the module's entry. |
 | `src/host.ts` | The settings host process, every reply parsed with Zod. |
-| `src/frames.ts` | The host's framing on stdin and stdout. |
 | `src/extensions.ts` | The browser's extensions, through the host. |
 | `src/config-document.ts` | The config as JSON: read and set one value, keeping the rest. |
 | `src/config-schema.ts` | The config's sections with the compositor's defaults. |

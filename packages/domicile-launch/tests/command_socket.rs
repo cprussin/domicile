@@ -7,16 +7,18 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use domicile_launch::command::{
-    config_extensions_line, extensions_line, load_shell_line, load_unpacked_line,
-    media_devices_line, open_url_line, set_extension_enabled_line, set_media_device_line,
-    set_site_permission_line, site_permissions_line, uninstall_extension_line,
+    clear_browsing_data_line, config_extensions_line, delete_history_line, extensions_line,
+    history_line, load_shell_line, load_unpacked_line, media_devices_line, open_url_line,
+    set_extension_enabled_line, set_media_device_line, set_site_permission_line,
+    site_permissions_line, uninstall_extension_line, visits_line,
 };
 use domicile_launch::command_socket::{
-    config_extensions, extensions, load_shell, load_unpacked, media_devices, open_url,
-    set_extension_enabled, set_media_device, set_site_permission, site_permissions,
-    uninstall_extension, CommandError,
+    clear_browsing_data, config_extensions, delete_history, extensions, history, load_shell,
+    load_unpacked, media_devices, open_url, set_extension_enabled, set_media_device,
+    set_site_permission, site_permissions, uninstall_extension, visits, CommandError,
 };
 use domicile_launch::extensions::InstalledExtension;
+use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
@@ -327,5 +329,83 @@ fn the_engine_is_told_to_disable_an_extension_and_says_it_stored_it() {
     assert_eq!(
         heard.join().expect("the engine was listening"),
         set_extension_enabled_line("abcdefghijklmnopabcdefghijklmnop", false)
+    );
+}
+
+#[test]
+fn the_engine_searches_its_history() {
+    let (_scratch, path) = scratch();
+    let heard = an_engine(
+        &path,
+        Some(
+            "{\"type\":\"history\",\"items\":[{\"url\":\"https://a.example/\",\"title\":\"A\"}]}\n",
+        ),
+    );
+    let query = HistoryQuery {
+        text: "a".to_string(),
+        end_time: 1_700_000_000_123.5,
+        max_results: 10,
+    };
+
+    assert_eq!(
+        history(&path, &query, BRIEFLY).expect("the engine searched it"),
+        vec![HistoryItem {
+            url: "https://a.example/".to_string(),
+            title: "A".to_string(),
+            favicon: None,
+        }]
+    );
+    assert_eq!(
+        heard.join().expect("the engine was listening"),
+        history_line(&query)
+    );
+}
+
+#[test]
+fn the_engine_lists_a_page_s_visits() {
+    let (_scratch, path) = scratch();
+    let heard = an_engine(
+        &path,
+        Some("{\"type\":\"visits\",\"times\":[1700000000123.5]}\n"),
+    );
+
+    assert_eq!(
+        visits(&path, "https://a.example/", BRIEFLY).expect("the engine listed them"),
+        vec![1_700_000_000_123.5]
+    );
+    assert_eq!(
+        heard.join().expect("the engine was listening"),
+        visits_line("https://a.example/")
+    );
+}
+
+#[test]
+fn the_engine_is_told_to_delete_visits_and_says_it_deleted_them() {
+    let (_scratch, path) = scratch();
+    let heard = an_engine(&path, Some("{\"type\":\"deleted\"}\n"));
+
+    delete_history(&path, &[1_700_000_000_123.5], BRIEFLY).expect("the engine deleted them");
+
+    assert_eq!(
+        heard.join().expect("the engine was listening"),
+        delete_history_line(&[1_700_000_000_123.5])
+    );
+}
+
+#[test]
+fn the_engine_is_told_to_clear_browsing_data_and_says_it_cleared_it() {
+    let (_scratch, path) = scratch();
+    let heard = an_engine(&path, Some("{\"type\":\"cleared\"}\n"));
+    let data = BrowsingData {
+        since: 0.0,
+        types: vec!["cookies".to_string()],
+        origins: Some(vec!["https://a.example".to_string()]),
+    };
+
+    clear_browsing_data(&path, &data, BRIEFLY).expect("the engine cleared it");
+
+    assert_eq!(
+        heard.join().expect("the engine was listening"),
+        clear_browsing_data_line(&data)
     );
 }

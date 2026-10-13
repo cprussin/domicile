@@ -302,37 +302,6 @@
         '';
       };
 
-      # One of Domicile's own apps: an unpacked Chrome extension that every
-      # desktop installs from `libexec/domicile/apps`. See
-      # docs/HISTORY.md.
-      appExtension = name: pkgs.stdenv.mkDerivation {
-        pname = "domicile-app-${name}";
-        version = "0.0.0";
-        src = self;
-        nativeBuildInputs = [ pkgs.bun pkgs.nodejs_24 ];
-        configurePhase = sharedShellConfigure;
-        buildPhase = ''
-          runHook preBuild
-          node_modules/.bin/turbo build:vite \
-            --filter "./packages/app-${name}" --no-daemon
-          runHook postBuild
-        '';
-        installPhase = ''
-          runHook preInstall
-          cp -R "packages/app-${name}/.vite/extension" "$out"
-          runHook postInstall
-        '';
-        # The engine logs a directory without a manifest and loads nothing.
-        doInstallCheck = true;
-        installCheckPhase = ''
-          [ -f "$out/manifest.json" ] || {
-            echo "${name} built no manifest.json; it has:" >&2
-            ls "$out" >&2
-            exit 1
-          }
-        '';
-      };
-
       # One of Domicile's own apps as an app module: its directory, which
       # `domicile-<name>` runs with `domicile run-app`. See
       # docs/architecture/APP-MODULES.md.
@@ -416,15 +385,13 @@
       #   bin/domicile-xdg-open       what `xdg-open` is inside a desktop
       #   bin/domicile-history        opens the History app
       #   bin/domicile-settings       opens the Settings app
-      #   bin/domicile-settings-host  what the Settings app spawns for the
+      #   bin/domicile-app-host       what Domicile's apps spawn for the
       #                               desktop's state
       #   libexec/domicile/engine     the Chromium tree, `chrome` inside it
       #   libexec/domicile/builder    builds a shell from an entry or a package
       #   libexec/domicile/shells/    Domicile's prebuilt shells, which
       #                               `@domicile-desktop/manganese` names,
       #                               and the splash
-      #   libexec/domicile/apps/      Domicile's own apps, which every
-      #                               desktop installs
       #   libexec/domicile/app-modules/
       #                               Domicile's own app modules, which
       #                               `domicile-<name>` runs
@@ -457,10 +424,11 @@
         cp ${domicileBinaries}/bin/domicile-xdg-open "$out/bin/domicile-xdg-open"
         # Opens the History app. Copied for the same reason as above.
         cp ${domicileBinaries}/bin/domicile-history "$out/bin/domicile-history"
-        # Opens the Settings app, and the host it spawns, which asks the
-        # desktop over `DOMICILE_SOCK`. Copied for the same reason.
+        # Opens the Settings app. Copied for the same reason.
         cp ${domicileBinaries}/bin/domicile-settings "$out/bin/domicile-settings"
-        cp ${domicileBinaries}/bin/domicile-settings-host "$out/bin/domicile-settings-host"
+        # The host Domicile's apps spawn, which asks the desktop over
+        # `DOMICILE_SOCK`. Copied for the same reason.
+        cp ${domicileBinaries}/bin/domicile-app-host "$out/bin/domicile-app-host"
         # The web link handler and the file making it the default.
         mkdir -p "$out/share/applications"
         substitute ${./nix/domicile-open-url.desktop} \
@@ -475,10 +443,9 @@
         ln -s ${shellPage "simple"} "$out/libexec/domicile/shells/simple"
         # What a desktop shows while it builds its shell on first start.
         ln -s ${shellPage "splash"} "$out/libexec/domicile/shells/splash"
-        mkdir -p "$out/libexec/domicile/apps"
-        ln -s ${appExtension "history"} "$out/libexec/domicile/apps/history"
         mkdir -p "$out/libexec/domicile/app-modules"
         ln -s ${appModule "settings"} "$out/libexec/domicile/app-modules/settings"
+        ln -s ${appModule "history"} "$out/libexec/domicile/app-modules/history"
         # What the launcher offers of Domicile's own.
         ${launcherFile {
           id = "history";
@@ -603,7 +570,7 @@
         # binary is not installed.
         cargoBuildFlags = [
           "-p" "domicile-compositor" "--bin" "domicile-compositor"
-          "-p" "domicile-launch" "--bin" "domicile" "--bin" "domicile-open-url" "--bin" "domicile-xdg-open" "--bin" "domicile-history" "--bin" "domicile-settings" "--bin" "domicile-settings-host"
+          "-p" "domicile-launch" "--bin" "domicile" "--bin" "domicile-open-url" "--bin" "domicile-xdg-open" "--bin" "domicile-history" "--bin" "domicile-settings" "--bin" "domicile-app-host"
         ];
 
         # CI's `cargo-test` job runs the tests on every push; repeating them
@@ -689,7 +656,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-D3zkLn7ktiCaoyGWZArQmGQuiMfto5qgxRFak7ORgMQ=";
+        outputHash = "sha256-76VTtQaXsuntxrC1ddV6v7ZQRGCTOcy/Y0eRvovglqA=";
       };
 
       # The production modules `shellWorkspace` ships, from
@@ -715,7 +682,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-BvuovV+yHOAENBNqiQKivVbGjneu7oF3tf/VhozUYh8=";
+        outputHash = "sha256-OmdKYiUl4NSM8BQxHT/MTAWx15tXJkIBcFgTRyci2bk=";
       };
 
 

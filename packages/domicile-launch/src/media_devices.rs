@@ -2,8 +2,7 @@
 //! it does not ask for a particular one.
 //!
 //! The same shape crosses three hops, as [`crate::site_permissions`] does: the
-//! engine's command socket, the control socket and the Settings app's native
-//! messaging host.
+//! engine's command socket, the control socket and `domicile-app-host`.
 
 use serde::{Deserialize, Serialize};
 

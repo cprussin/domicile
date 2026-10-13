@@ -16,6 +16,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 
 | Name | What it is |
 |---|---|
+| `app-host-frames` | `encodeFrame` and `frameDecoder`: the length-prefixed JSON an app module and `domicile-app-host` speak over stdio. |
 | `Accordion` | Stack of sections that open and close. |
 | `Autocomplete` | Text field with a suggestion list the caller supplies and ranks. |
 | `Avatar` | Avatar with an initials or gradient fallback. |

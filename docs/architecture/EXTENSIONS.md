@@ -72,7 +72,7 @@ extensions on and off through `chrome.management`
 
 A home-manager config is read-only, so the Settings app also installs and
 uninstalls through the engine's command socket, relayed by
-`domicile-settings-host` and `domicile`
+`domicile-app-host` and `domicile`
 ([CONTROL-CHANNEL.md](/packages/domicile-engine/docs/CONTROL-CHANNEL.md#command-socket)):
 
 | Command | Does |

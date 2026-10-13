@@ -1,4 +1,5 @@
-// What "Clear browsing data" removes, as `chrome.browsingData.remove` takes it.
+// What "Clear browsing data" removes, as the app host's `clear_browsing_data`
+// takes it.
 
 /** How far back the dialog clears. */
 export enum TimeRange {
@@ -56,10 +57,6 @@ export const since = (range: TimeRange, now: number): number => {
   }
 };
 
-/** The `dataToRemove` argument for `kinds`. */
-export const dataToRemove = (
-  kinds: ReadonlySet<DataKind>,
-): Record<string, boolean> =>
-  Object.fromEntries(
-    [...kinds].flatMap((kind) => DATA_TYPES[kind].map((type) => [type, true])),
-  );
+/** The data types `kinds` clear. */
+export const dataTypes = (kinds: ReadonlySet<DataKind>): string[] =>
+  [...kinds].flatMap((kind) => DATA_TYPES[kind]);

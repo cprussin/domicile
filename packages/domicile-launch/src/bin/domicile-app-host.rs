@@ -1,8 +1,9 @@
-//! The Settings app's host. The app spawns it, with the compositor's
+//! The host Domicile's apps spawn. An app spawns it, with the compositor's
 //! environment, and it stops when its stdin closes.
 //!
-//! The protocol is in `domicile_launch::settings`; this file reads the
-//! environment, the files and the sockets. See `docs/SETTINGS.md`.
+//! The protocol is in `domicile_launch::app_host`; this file reads the
+//! environment, the files and the sockets. See `docs/SETTINGS.md` and
+//! `docs/HISTORY.md`.
 
 use std::ffi::CString;
 use std::io::Write;
@@ -11,11 +12,12 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 
+use domicile_launch::app_host::{answer, read_message, watched, write_message, Host};
 use domicile_launch::control::{Request, Response};
 use domicile_launch::control_socket::{advertised, ask, PATIENCE, VARIABLE};
 use domicile_launch::folder_chooser::choose_folder;
+use domicile_launch::history::CLEAR_WITHIN;
 use domicile_launch::notification::session_bus;
-use domicile_launch::settings::{answer, read_message, watched, write_message, Host};
 use notify::Watcher as _;
 use serde_json::json;
 
@@ -24,7 +26,7 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         // stderr reaches the engine's log; stdout belongs to Chrome.
         Err(why) => {
-            eprintln!("domicile-settings-host: {why}");
+            eprintln!("domicile-app-host: {why}");
             ExitCode::FAILURE
         }
     }
@@ -33,9 +35,14 @@ fn main() -> ExitCode {
 fn run() -> Result<(), String> {
     let socket =
         advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
-    // The desktop waits up to PATIENCE on the engine for site permissions.
+    // The desktop waits up to PATIENCE on the engine for most requests, and
+    // up to CLEAR_WITHIN to clear browsing data.
     let asking = |request: &Request| {
-        ask(&socket, request, Some(PATIENCE * 2)).map_err(|why| why.to_string())
+        let patience = match request {
+            Request::ClearBrowsingData(_) => CLEAR_WITHIN + PATIENCE,
+            _ => PATIENCE * 2,
+        };
+        ask(&socket, request, Some(patience)).map_err(|why| why.to_string())
     };
     let output = Arc::new(Mutex::new(std::io::stdout()));
     let _watching = watching(&asking, Arc::clone(&output))?;
@@ -85,14 +92,14 @@ fn watching(
             Ok(event) => event,
             // The app still answers; it just misses edits made elsewhere.
             Err(why) => {
-                eprintln!("domicile-settings-host: a watch failed: {why}");
+                eprintln!("domicile-app-host: a watch failed: {why}");
                 return;
             }
         };
         let changed = event.kind.is_create() || event.kind.is_modify() || event.kind.is_remove();
         if changed && event.paths.iter().any(|path| edited.contains(path)) {
             if let Err(why) = say(&output, &json!({"type": "changed"})) {
-                eprintln!("domicile-settings-host: {why}");
+                eprintln!("domicile-app-host: {why}");
             }
         }
     })

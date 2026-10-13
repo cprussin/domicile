@@ -30,6 +30,7 @@
 
 pub mod address;
 pub mod app_entry;
+pub mod app_host;
 pub mod apps;
 pub mod arguments;
 pub mod build_progress;
@@ -49,6 +50,7 @@ pub mod folder_chooser;
 pub mod graphical_session;
 pub mod handshake;
 pub mod heard;
+pub mod history;
 pub mod install_app;
 pub mod media_devices;
 pub mod milestones;
@@ -59,7 +61,6 @@ pub mod profile_claim;
 pub mod profile_path;
 pub mod restart;
 pub mod session;
-pub mod settings;
 pub mod shell_path;
 pub mod shell_source;
 pub mod site_permissions;

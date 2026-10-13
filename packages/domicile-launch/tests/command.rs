@@ -4,12 +4,13 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use domicile_launch::command::{
-    config_extensions_line, extensions_line, load_shell_line, load_unpacked_line,
-    media_devices_line, open_app_line, open_url_line, reply, run_app_line,
-    set_extension_enabled_line, set_media_device_line, set_site_permission_line,
-    site_permissions_line, uninstall_extension_line, Reply,
+    clear_browsing_data_line, config_extensions_line, delete_history_line, extensions_line,
+    history_line, load_shell_line, load_unpacked_line, media_devices_line, open_app_line,
+    open_url_line, reply, run_app_line, set_extension_enabled_line, set_media_device_line,
+    set_site_permission_line, site_permissions_line, uninstall_extension_line, visits_line, Reply,
 };
 use domicile_launch::extensions::InstalledExtension;
+use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
@@ -254,4 +255,84 @@ fn an_engine_lists_each_kind_s_devices_most_preferred_first() {
             microphones: vec![],
         })
     );
+}
+
+#[test]
+fn history_is_searched_by_text_before_a_time_and_each_row_may_carry_a_favicon() {
+    // Times are fractional milliseconds, as `chrome.history` gives them.
+    assert_eq!(
+        history_line(&HistoryQuery {
+            text: "news".to_string(),
+            end_time: 1_700_000_000_123.5,
+            max_results: 100,
+        }),
+        "{\"type\":\"history\",\"version\":1,\"text\":\"news\",\"end_time\":1700000000123.5,\"max_results\":100}\n"
+    );
+    // A row without a favicon has no `favicon`.
+    assert_eq!(
+        reply(
+            "{\"type\":\"history\",\"items\":[\
+             {\"url\":\"https://a.example/\",\"title\":\"A\",\"favicon\":\"data:image/png;base64,AAAA\"},\
+             {\"url\":\"https://b.example/\",\"title\":\"\"}]}"
+        )
+        .unwrap(),
+        Reply::History {
+            items: vec![
+                HistoryItem {
+                    url: "https://a.example/".to_string(),
+                    title: "A".to_string(),
+                    favicon: Some("data:image/png;base64,AAAA".to_string()),
+                },
+                HistoryItem {
+                    url: "https://b.example/".to_string(),
+                    title: String::new(),
+                    favicon: None,
+                },
+            ]
+        }
+    );
+}
+
+#[test]
+fn a_page_s_visits_are_the_times_it_was_visited() {
+    assert_eq!(
+        visits_line("https://a.example/"),
+        "{\"type\":\"visits\",\"version\":1,\"url\":\"https://a.example/\"}\n"
+    );
+    assert_eq!(
+        reply("{\"type\":\"visits\",\"times\":[1700000000123.5,1700000000456.25]}").unwrap(),
+        Reply::Visits {
+            times: vec![1_700_000_000_123.5, 1_700_000_000_456.25]
+        }
+    );
+}
+
+#[test]
+fn visits_are_deleted_by_their_times() {
+    assert_eq!(
+        delete_history_line(&[1_700_000_000_123.5]),
+        "{\"type\":\"delete_history\",\"version\":1,\"visits\":[1700000000123.5]}\n"
+    );
+    assert_eq!(reply("{\"type\":\"deleted\"}").unwrap(), Reply::Deleted);
+}
+
+#[test]
+fn browsing_data_is_cleared_since_a_time_and_for_every_origin_unless_some_are_named() {
+    let since = BrowsingData {
+        since: 1_700_000_000_123.5,
+        types: vec!["cookies".to_string(), "cache".to_string()],
+        origins: None,
+    };
+    assert_eq!(
+        clear_browsing_data_line(&since),
+        "{\"type\":\"clear_browsing_data\",\"version\":1,\"since\":1700000000123.5,\"types\":[\"cookies\",\"cache\"]}\n"
+    );
+    assert_eq!(
+        clear_browsing_data_line(&BrowsingData {
+            origins: Some(vec!["https://a.example".to_string()]),
+            ..since
+        }),
+        "{\"type\":\"clear_browsing_data\",\"version\":1,\"since\":1700000000123.5,\"types\":[\"cookies\",\"cache\"],\"origins\":[\"https://a.example\"]}\n"
+    );
+    assert_eq!(reply("{\"type\":\"cleared\"}").unwrap(), Reply::Cleared);
 }

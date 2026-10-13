@@ -1,9 +1,13 @@
-// The settings host, `domicile-settings-host`, which the app runs: the
+// `domicile-app-host`, the process the app runs, as Settings uses it: the
 // desktop's config and shell files, its site permissions, the extensions it
 // loads and uninstalls, and its cameras and microphones. Every reply is
-// parsed. The protocol is `domicile_launch::settings`'s.
+// parsed. The protocol is `domicile_launch::app_host`'s.
 
 import type { Result } from "@cprussin/option-result";
+import {
+  encodeFrame,
+  frameDecoder,
+} from "@domicile-desktop/component-library/app-host-frames";
 import type {
   Exit,
   Subprocess,
@@ -12,10 +16,8 @@ import type {
 } from "@domicile-desktop/sdk/system";
 import { z } from "zod";
 
-import { encodeFrame, frameDecoder } from "./frames";
-
 /** The command that starts the host. */
-const HOST = ["domicile-settings-host"];
+const HOST = ["domicile-app-host"];
 
 export const PERMISSIONS = [
   "camera",

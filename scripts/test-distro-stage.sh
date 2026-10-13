@@ -110,7 +110,7 @@ for app in history settings; do
   put "$WORKSPACE/packages/app-$app/icons/$app.svg" "$app"
   put "$WORKSPACE/packages/app-$app/icons/$app-preview.svg" "$app"
 done
-put "$WORKSPACE/packages/app-history/.vite/extension/manifest.json" '{}'
+put "$WORKSPACE/packages/app-history/.vite/app/history.js" 'export const main = () => {};'
 put "$WORKSPACE/packages/app-settings/.vite/app/settings.js" 'export const main = () => {};'
 # A crate: no `package.json`, so not part of the workspace.
 put "$WORKSPACE/packages/domicile-launch/Cargo.toml" ''
@@ -153,12 +153,7 @@ for shell in manganese simple splash; do
     ok "the $shell shell is prebuilt" ||
     fail "the $shell shell is prebuilt" "no $LIBEXEC/shells/$shell/shell.js"
 done
-for app in history; do
-  [ -f "$LIBEXEC/apps/$app/manifest.json" ] &&
-    ok "the $app app is installed" ||
-    fail "the $app app is installed" "no $LIBEXEC/apps/$app/manifest.json"
-done
-for module in settings; do
+for module in settings history; do
   [ -f "$LIBEXEC/app-modules/$module/$module.js" ] &&
     ok "the $module app module is installed" ||
     fail "the $module app module is installed" "no $LIBEXEC/app-modules/$module/$module.js"
@@ -254,10 +249,10 @@ refused() { # what, needle, stage.sh arguments...
   fi
 }
 
-mv "$BINARIES/domicile-settings-host" "$WORK/held"
-refused "a missing binary is named" domicile-settings-host \
+mv "$BINARIES/domicile-app-host" "$WORK/held"
+refused "a missing binary is named" domicile-app-host \
   "$BINARIES" "$ENGINE" "$BUN" "$WORKSPACE"
-mv "$WORK/held" "$BINARIES/domicile-settings-host"
+mv "$WORK/held" "$BINARIES/domicile-app-host"
 
 rm "$ENGINE/libdomicile_engine.so"
 refused "an engine without its library is named" libdomicile_engine.so \

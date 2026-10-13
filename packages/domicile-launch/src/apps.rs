@@ -15,7 +15,3 @@ pub fn apps_in(apps: &Path) -> std::io::Result<Vec<PathBuf>> {
     found.sort();
     Ok(found)
 }
-
-/// The History app's page. The id is fixed by the `key` in
-/// `packages/app-history`'s manifest.
-pub const HISTORY: &str = "chrome-extension://dimbckmbklbplcobppahmnepgiponamj/history.html";

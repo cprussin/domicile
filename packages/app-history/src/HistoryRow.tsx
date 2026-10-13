@@ -2,6 +2,7 @@ import { Button } from "@domicile-desktop/component-library/Button";
 import type { Point } from "@domicile-desktop/component-library/ContextMenu";
 import { CheckIcon } from "@phosphor-icons/react/dist/ssr/Check";
 import { DotsThreeVerticalIcon } from "@phosphor-icons/react/dist/ssr/DotsThreeVertical";
+import { GlobeSimpleIcon } from "@phosphor-icons/react/dist/ssr/GlobeSimple";
 import type { CSSProperties, MouseEvent } from "react";
 import { memo } from "react";
 
@@ -12,7 +13,6 @@ import type { Entry } from "./history-page";
 
 type Props = {
   entry: Entry;
-  faviconUrl: string;
   /** Where the row sits in its day, which staggers its arrival. */
   index: number;
   leaving: boolean;
@@ -28,7 +28,8 @@ type Props = {
 };
 
 /**
- * One visited page: its time, icon, title and URL, linking to the page.
+ * One visited page: its time, icon, title and URL, linking to the page. A
+ * page without an icon gets a globe.
  *
  * The icon is the row's check box. A click or middle-click opens the page in a
  * new window; a right click or the end button opens the row's menu.
@@ -36,7 +37,6 @@ type Props = {
 export const HistoryRow = memo(
   ({
     entry,
-    faviconUrl,
     index,
     leaving,
     menuOpen,
@@ -88,13 +88,17 @@ export const HistoryRow = memo(
             tabIndex={-1}
             type="button"
           >
-            <img
-              alt=""
-              className={faviconStyles}
-              data-favicon=""
-              draggable={false}
-              src={faviconUrl}
-            />
+            {entry.favicon === undefined ? (
+              <GlobeSimpleIcon className={faviconStyles} data-favicon="" />
+            ) : (
+              <img
+                alt=""
+                className={faviconStyles}
+                data-favicon=""
+                draggable={false}
+                src={entry.favicon}
+              />
+            )}
             <span className={tickStyles} data-tick="">
               <CheckIcon weight="bold" />
             </span>
@@ -232,6 +236,7 @@ const checkStyles = css({
 
 const faviconStyles = css({
   blockSize: 4,
+  color: "muted",
   gridArea: "1 / 1",
   inlineSize: 4,
   transition:

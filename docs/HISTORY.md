@@ -1,8 +1,9 @@
 # History
 
 Every desktop has a History app: Chrome's history page for browser windows.
-`domicile-history`, or **History** in the launcher, opens it in an app window
-([WEB-APPS.md](architecture/WEB-APPS.md)).
+`domicile-history`, or **History** in the launcher, opens it in an app window.
+It is an app module ([APP-MODULES.md](architecture/APP-MODULES.md)), not an
+extension.
 
 - Lists visits by day, newest first, with search, "More from this site",
   removing entries and **Clear browsing data** (history, cookies, cached files
@@ -15,19 +16,32 @@ Every desktop has a History app: Chrome's history page for browser windows.
 
 ## How it works
 
+```
+History page ─ spawn, stdio ─▶ domicile-app-host ─ DOMICILE_SOCK ─▶ domicile ─ command socket ─▶ engine
+ (app module)                                         history,                       history,
+                                                      visits,                        visits,
+                                                      delete_history,                delete_history,
+                                                      clear_browsing_data            clear_browsing_data
+```
+
 | Part | Where |
 |---|---|
 | Visits and their favicons go into the profile's history | `AttachTabHelpers` gives every tab guest a `HistoryTabHelper` and a favicon driver (`chrome/browser/domicile/domicile_tab_helpers.cc`). An app window gets `AttachAppTabHelpers`, which leaves out the `HistoryTabHelper`. Patch 0106 lets the helper record a guest, which is in no `Browser`. |
-| The app | An unpacked MV3 extension with the `history`, `browsingData` and `favicon` permissions. Its manifest `key` fixes its id, `dimbckmbklbplcobppahmnepgiponamj`. |
-| Installing it | The flake puts it in `libexec/domicile/apps/history`. `domicile` passes `--apps` to the compositor, which adds each directory there to the config's `extensions.unpacked` (`domicile_launch::apps`). `DOMICILE_APPS` names another directory. |
-| Opening it | `domicile-history` runs `domicile open-app chrome-extension://dimbckmbklbplcobppahmnepgiponamj/history.html`. |
-| The tray | The app's manifest names no action, so the tray leaves it out. See [EXTENSIONS.md](architecture/EXTENSIONS.md#the-tray). |
+| The app | `history.js`, an app module in `libexec/domicile/app-modules/history`. `DOMICILE_APP_MODULES` names another directory of app modules. |
+| The host | `domicile-app-host`, which Settings also spawns ([SETTINGS.md](SETTINGS.md#how-it-works)). Protocol: `domicile_launch::app_host`. |
+| Listing and searching | The engine's `history` command: the pages matching a search, last visited before a time, each with its favicon as a `data:` URL. `visits` gives the times a page was visited. |
+| Removing entries | The engine's `delete_history` command deletes visits by their times. |
+| Clearing browsing data | The engine's `clear_browsing_data` command clears the named data types since a time, for the named origins or every origin. |
+| Opening it | `domicile-history` runs `domicile run-app` on `history.js`. |
+
+Times are milliseconds since the epoch, fractional, on every hop.
 
 ## Key decisions
 
-- **An extension over a `chrome://history` page.** `HistoryUI` crashes a
-  `<webview>` (patch 0083). `chrome.history` and `chrome.browsingData` give an
-  extension page everything the history page does.
+- **An app module over a `chrome://history` page.** `HistoryUI` crashes a
+  `<webview>` (patch 0083). The engine's commands give the app what the
+  history page reads and deletes.
+- **Favicons as `data:` URLs.** An app page cannot load `chrome://favicon2`.
 - **Private browser windows record nothing**, as in Chrome: they are in the
   off-the-record profile, which has no history.
 - **App windows record nothing.** An app ([WEB-APPS.md](architecture/WEB-APPS.md))

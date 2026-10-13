@@ -5,6 +5,7 @@ import type { Entry } from "./history-page";
 
 const entry = (url: string, day: number, visits: number[]): Entry => ({
   day,
+  favicon: undefined,
   id: `${day} ${url}`,
   time: Math.max(...visits),
   title: url,
