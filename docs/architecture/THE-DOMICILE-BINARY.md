@@ -30,6 +30,7 @@ domicile which-shell              # ask the running desktop which shell it serve
 domicile load-shell <shell>       # replace the running desktop's shell
 domicile open-url <url>           # open a URL in the running desktop (BROWSER)
 domicile open-app <url>           # open a URL as an app: no address bar (WEB-APPS.md)
+domicile install-app <url>        # write a desktop entry from the site's web app manifest; needs no desktop
 domicile screenshot               # the shell's interactive screenshot (Print in manganese)
 domicile screenshot <file>        # write a PNG of the running desk
 domicile send-shell <word>…       # run a shell command, as a SendShell keybinding does
@@ -78,6 +79,10 @@ temp directory. The modules that spawn processes or bind sockets stay thin.
 | `config_path` | yes | which config file a run uses: `--config`, the default location, or none, and which case it was |
 | `config_watch` | no | watches the config's directory and reports edits |
 | `xdg_open` | yes | `xdg-open` inside a desktop: http(s) goes to `open-url`, anything else to the next `xdg-open` on `PATH` |
+| `install_app` | no | `install-app`: fetches the page, its manifest and icon through an injected fetch, and writes the entry and icon under the data home |
+| `web_app` | yes | the page's manifest link, and the name, start URL and icon a manifest gives |
+| `web_address` | yes | resolves a manifest's and its icons' addresses against where they were found; origins |
+| `desktop_entry` | yes | the desktop entry `install-app` writes, escaped, and its file name |
 | `address` | yes | what `open-url` sends the engine: a URL as given, or a path as a `file://` URL relative to the caller's directory |
 | `spawn` | yes | the engine and compositor commands as data, so flag lists are testable |
 | `session` | yes | what the compositor publishes once up, and waiting for it |

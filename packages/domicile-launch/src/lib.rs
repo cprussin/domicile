@@ -14,6 +14,9 @@
 //!   ([`compositor_socket`]).
 //! - `domicile power-off` and `domicile reboot`: asked in the desktop's
 //!   Access dialog ([`power`]).
+//! - `domicile install-app`: reads a site's web app manifest ([`web_app`],
+//!   [`web_address`]) and writes a desktop entry ([`desktop_entry`],
+//!   [`install_app`]).
 //! - Failed runs report the compositor's last output ([`heard`]).
 //! - Domicile's own apps, which every desktop installs ([`apps`]).
 //! - The compositor's side: its command line ([`arguments`]), the session
@@ -37,10 +40,12 @@ pub mod config_path;
 pub mod config_watch;
 pub mod control;
 pub mod control_socket;
+pub mod desktop_entry;
 pub mod folder_chooser;
 pub mod graphical_session;
 pub mod handshake;
 pub mod heard;
+pub mod install_app;
 pub mod media_devices;
 pub mod milestones;
 pub mod notification;
@@ -57,4 +62,6 @@ pub mod site_permissions;
 pub mod spawn;
 pub mod splash;
 pub mod supervise;
+pub mod web_address;
+pub mod web_app;
 pub mod xdg_open;
