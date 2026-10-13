@@ -8,7 +8,28 @@
   outputs = { self, nixpkgs }:
     let
       system = "x86_64-linux";
-      pkgs = import nixpkgs { inherit system; };
+      pkgs = import nixpkgs { inherit system; overlays = [ bunOverlay ]; };
+
+      # The bun `package.json` asks for, ahead of nixpkgs'. The x86_64 build is
+      # nixpkgs' choice of upstream zip. Drop this once nixpkgs ships it.
+      # `scripts/nix-the-flake-ships-the-bun-package-json-asks-for.sh` checks
+      # the version.
+      bunOverlay = final: prev: {
+        bun = prev.bun.overrideAttrs (finalAttrs: old: {
+          version = "1.4.2";
+          # As nixpkgs' own `src`. Restated, or nixpkgs warns that only the
+          # version changed.
+          src = finalAttrs.passthru.sources.${final.stdenv.hostPlatform.system};
+          passthru = old.passthru // {
+            sources = old.passthru.sources // {
+              x86_64-linux = final.fetchurl {
+                url = "https://github.com/oven-sh/bun/releases/download/bun-v${finalAttrs.version}/bun-linux-x64-baseline.zip";
+                hash = "sha256-xngEDxT+BEDrg503y9DOTAUaMtpygGrJfeamqra/co8=";
+              };
+            };
+          };
+        });
+      };
 
       # Tools to build and test the pure-logic Rust crates and the TypeScript
       # workspace. No graphics libraries, so `nix develop` stays fast.
@@ -767,6 +788,10 @@
         # The shell builder on its own, for `DOMICILE_BUILDER`.
         builder = domicileBuilder;
       };
+
+      # The nixpkgs this flake builds with, so scripts take tools such as
+      # `.#bun` from the same set.
+      legacyPackages.${system} = pkgs;
 
       # `nix run` offers only running a desktop and building the engine.
       # Checks, e2e scripts and measurements need a checkout; run them as
