@@ -108,6 +108,9 @@ Understood and not scheduled.
 - **Browser window context menus have only Chrome's core items.** No spelling
   suggestions, page or extension items.
 - **Client-drawn cursor surfaces show a plain arrow.**
+- **Unknown: whether the engine's pointer follows `theme.cursor_theme` and
+  `cursor_size`.** Applications get them through the settings portal; the
+  engine is given neither.
 - **Unknown: whether viz hit testing must agree with Domicile's.**
   [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#open-questions).
 
@@ -146,9 +149,6 @@ Understood and not scheduled.
 - **The session portal setup is only checked at evaluation.** Nothing here
   runs a user manager, an unclean exit leaves stale environment variables,
   and a nested desktop doesn't register.
-- **The settings portal has no cursor or font keys** in
-  `org.gnome.desktop.interface` (`cursor-theme`, `cursor-size`, `font-name`,
-  `monospace-font-name`). The config has nothing to serve them from.
 - **Wayland capture is monitors only, into shm, one shot per frame.** No
   toplevel sources, cursor sessions or dmabufs; `wf-recorder` is slow.
   [PORTALS.md](docs/PORTALS.md).

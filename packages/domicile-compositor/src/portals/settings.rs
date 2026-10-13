@@ -7,7 +7,8 @@
 //! wipe's start frame (see `domicile_host::theme_turnover`). `accent-color`,
 //! `contrast` and `reduced-motion` come from the config's `theme` section and
 //! change on reload. `org.gnome.desktop.interface` repeats the color scheme
-//! and motion for GTK 3, and carries `icon-theme`, which shells read too.
+//! and motion for GTK 3, and carries the icon theme, which shells read too,
+//! and the cursor and fonts.
 
 use std::collections::HashMap;
 
@@ -22,17 +23,32 @@ const NAMESPACE: &str = "org.freedesktop.appearance";
 /// The color scheme key in [`NAMESPACE`] and [`INTERFACE`].
 const COLOR_SCHEME: &str = "color-scheme";
 
-/// GNOME's interface settings, where GTK reads the icon theme.
+/// GNOME's interface settings, where GTK reads the icon theme, cursor and
+/// fonts.
 const INTERFACE: &str = "org.gnome.desktop.interface";
 
 /// The icon theme key in [`INTERFACE`].
 const ICON_THEME: &str = "icon-theme";
+
+/// The cursor and font keys in [`INTERFACE`].
+const CURSOR_THEME: &str = "cursor-theme";
+const CURSOR_SIZE: &str = "cursor-size";
+const FONT_NAME: &str = "font-name";
+const MONOSPACE_FONT_NAME: &str = "monospace-font-name";
 
 /// GNOME's animation switch in [`INTERFACE`], the inverse of `reduced-motion`.
 const ENABLE_ANIMATIONS: &str = "enable-animations";
 
 /// The theme every icon theme inherits, signaled when the config's is unset.
 const HICOLOR: &str = "hicolor";
+
+/// What a client falls back to without a cursor or font setting, signaled
+/// when the config's is unset: XCursor's `default` theme, and GTK's size and
+/// fonts.
+const DEFAULT_CURSOR_THEME: &str = "default";
+const DEFAULT_CURSOR_SIZE: i32 = 24;
+const DEFAULT_FONT_NAME: &str = "Sans 10";
+const DEFAULT_MONOSPACE_FONT_NAME: &str = "Monospace 10";
 
 /// The `org.freedesktop.impl.portal.Settings` version implemented. Version 2
 /// adds `ReadOne`.
@@ -71,6 +87,10 @@ pub struct Appearance {
     pub contrast: Contrast,
     pub reduced_motion: bool,
     pub icon_theme: Option<String>,
+    pub cursor_theme: Option<String>,
+    pub cursor_size: Option<u16>,
+    pub font_name: Option<String>,
+    pub monospace_font_name: Option<String>,
 }
 
 impl From<&ThemeConfig> for Appearance {
@@ -80,6 +100,10 @@ impl From<&ThemeConfig> for Appearance {
             contrast: theme.contrast,
             reduced_motion: theme.reduced_motion,
             icon_theme: theme.icon_theme.clone(),
+            cursor_theme: theme.cursor_theme.clone(),
+            cursor_size: theme.cursor_size,
+            font_name: theme.font_name.clone(),
+            monospace_font_name: theme.monospace_font_name.clone(),
         }
     }
 }
@@ -199,11 +223,16 @@ pub fn changed(
 /// A served setting: its namespace, key and value.
 type Setting = (&'static str, &'static str, OwnedValue);
 
-/// Every key served and its value. `icon-theme` is served only when set.
+/// Every key served and its value. The [`named`] keys are served only when
+/// set.
 fn values(theme: Theme, appearance: &Appearance) -> Vec<Setting> {
     let mut served = looks(theme, appearance);
     served.extend(gnome_looks(theme, appearance));
-    served.extend(appearance.icon_theme.as_deref().map(icon_theme));
+    served.extend(
+        named(appearance)
+            .into_iter()
+            .filter_map(|(key, set, _)| set.map(|value| (INTERFACE, key, value))),
+    );
     served
 }
 
@@ -263,25 +292,45 @@ fn gnome_looks(theme: Theme, appearance: &Appearance) -> [Setting; 2] {
     ]
 }
 
-fn icon_theme(name: &str) -> Setting {
-    (
-        INTERFACE,
-        ICON_THEME,
-        OwnedValue::try_from(Value::from(name)).expect("a string holds no file descriptors"),
-    )
+/// The keys in [`INTERFACE`] named by the config, each with its value when
+/// set and the value signaled when a reload unsets it.
+fn named(appearance: &Appearance) -> [(&'static str, Option<OwnedValue>, OwnedValue); 5] {
+    let text = |name: &str| {
+        OwnedValue::try_from(Value::from(name)).expect("a string holds no file descriptors")
+    };
+    let text_or = |key, set: &Option<String>, unset| (key, set.as_deref().map(text), text(unset));
+    [
+        text_or(ICON_THEME, &appearance.icon_theme, HICOLOR),
+        text_or(CURSOR_THEME, &appearance.cursor_theme, DEFAULT_CURSOR_THEME),
+        (
+            CURSOR_SIZE,
+            appearance
+                .cursor_size
+                .map(|size| OwnedValue::from(i32::from(size))),
+            OwnedValue::from(DEFAULT_CURSOR_SIZE),
+        ),
+        text_or(FONT_NAME, &appearance.font_name, DEFAULT_FONT_NAME),
+        text_or(
+            MONOSPACE_FONT_NAME,
+            &appearance.monospace_font_name,
+            DEFAULT_MONOSPACE_FONT_NAME,
+        ),
+    ]
 }
 
 /// The keys whose values differ between two looks, with their new values.
 ///
-/// An icon theme the config stops setting is signaled as [`HICOLOR`]: a
+/// A [`named`] key the config stops setting is signaled as its unset value: a
 /// client has no other way to hear that it went.
 fn moved(was_theme: Theme, was: &Appearance, theme: Theme, now: &Appearance) -> Vec<Setting> {
     let signaled = |theme: Theme, appearance: &Appearance| {
         let mut signaled = looks(theme, appearance);
         signaled.extend(gnome_looks(theme, appearance));
-        signaled.push(icon_theme(
-            appearance.icon_theme.as_deref().unwrap_or(HICOLOR),
-        ));
+        signaled.extend(
+            named(appearance)
+                .into_iter()
+                .map(|(key, set, unset)| (INTERFACE, key, set.unwrap_or(unset))),
+        );
         signaled
     };
     signaled(was_theme, was)
@@ -313,7 +362,7 @@ mod tests {
                 accent_color: Some(AccentColor([0xff, 0x33, 0])),
                 contrast: Contrast::High,
                 reduced_motion: true,
-                icon_theme: None,
+                ..Appearance::default()
             },
         };
 
@@ -332,7 +381,7 @@ mod tests {
             accent_color: Some(AccentColor([0xff, 0x33, 0x0a])),
             contrast: Contrast::High,
             reduced_motion: true,
-            icon_theme: None,
+            ..Appearance::default()
         });
 
         assert_eq!(
@@ -427,6 +476,71 @@ mod tests {
         assert_eq!(
             moved(Theme::Dark, &now, Theme::Dark, &was),
             [(INTERFACE, ICON_THEME, string("hicolor"))]
+        );
+    }
+
+    #[test]
+    fn the_cursor_and_fonts_are_gnomes_interface_settings() {
+        let settings = Settings {
+            theme: Theme::Dark,
+            appearance: Appearance {
+                cursor_theme: Some("Bibata-Modern-Ice".into()),
+                cursor_size: Some(32),
+                font_name: Some("Inter 11".into()),
+                monospace_font_name: Some("Iosevka 12".into()),
+                ..Appearance::default()
+            },
+        };
+
+        assert_eq!(
+            settings.read_one(INTERFACE, CURSOR_THEME),
+            Ok(string("Bibata-Modern-Ice"))
+        );
+        // GNOME's schema types the size `i`.
+        assert_eq!(
+            settings.read_one(INTERFACE, CURSOR_SIZE),
+            Ok(OwnedValue::from(32i32))
+        );
+        assert_eq!(
+            settings.read_one(INTERFACE, FONT_NAME),
+            Ok(string("Inter 11"))
+        );
+        assert_eq!(
+            settings.read_one(INTERFACE, MONOSPACE_FONT_NAME),
+            Ok(string("Iosevka 12"))
+        );
+    }
+
+    #[test]
+    fn no_cursor_or_fonts_are_left_to_the_next_backend() {
+        let settings = Settings {
+            theme: Theme::Dark,
+            appearance: Appearance::default(),
+        };
+
+        for key in [CURSOR_THEME, CURSOR_SIZE, FONT_NAME, MONOSPACE_FONT_NAME] {
+            assert!(settings.read_one(INTERFACE, key).is_err(), "{key}");
+        }
+    }
+
+    #[test]
+    fn a_cursor_and_fonts_unset_by_a_reload_are_the_toolkit_defaults() {
+        let was = Appearance {
+            cursor_theme: Some("Bibata-Modern-Ice".into()),
+            cursor_size: Some(32),
+            font_name: Some("Inter 11".into()),
+            monospace_font_name: Some("Iosevka 12".into()),
+            ..Appearance::default()
+        };
+
+        assert_eq!(
+            moved(Theme::Dark, &was, Theme::Dark, &Appearance::default()),
+            [
+                (INTERFACE, CURSOR_THEME, string("default")),
+                (INTERFACE, CURSOR_SIZE, OwnedValue::from(24i32)),
+                (INTERFACE, FONT_NAME, string("Sans 10")),
+                (INTERFACE, MONOSPACE_FONT_NAME, string("Monospace 10")),
+            ]
         );
     }
 

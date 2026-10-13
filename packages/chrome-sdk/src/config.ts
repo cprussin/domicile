@@ -317,11 +317,31 @@ export type ThemeConfig = {
   accent_color?: AccentColor | null;
   contrast?: Contrast;
   /**
+   * The cursor size in logical pixels. Unset leaves clients their own.
+   * Zero is refused.
+   */
+  cursor_size?: number | null;
+  /**
+   * The XCursor theme's directory name, such as `Adwaita`. Unset leaves
+   * clients their own.
+   */
+  cursor_theme?: string | null;
+  /**
+   * The interface font as a Pango description, such as `Inter 11`. Unset
+   * leaves clients their own.
+   */
+  font_name?: string | null;
+  /**
    * The freedesktop icon theme's directory name, such as `Papirus-Dark`.
    * Unset leaves shells with `hicolor`.
    */
   icon_theme?: string | null;
   mode?: ThemeMode;
+  /**
+   * The fixed-width font as a Pango description, such as `Iosevka 12`.
+   * Unset leaves clients their own.
+   */
+  monospace_font_name?: string | null;
   /** Asks clients to keep animation to a minimum. */
   reduced_motion?: boolean;
 };

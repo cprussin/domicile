@@ -436,15 +436,49 @@ fn a_desk_that_states_its_look_gets_it() {
 }
 
 #[test]
-fn rejects_an_icon_theme_that_is_not_a_directory_name() {
-    for name in ["", ".", "..", "Papirus/Dark"] {
-        let err =
-            Config::parse(&format!(r#"{{ "theme": {{ "icon_theme": "{name}" }} }}"#)).unwrap_err();
-        assert!(
-            matches!(err, ConfigError::Validation(_)),
-            "{name:?}: got {err:?}"
-        );
+fn a_desk_that_states_its_cursor_and_fonts_gets_them() {
+    let theme = Config::parse(
+        r#"
+{ "theme": { "cursor_theme": "Bibata-Modern-Ice", "cursor_size": 32,
+             "font_name": "Inter 11", "monospace_font_name": "Iosevka 12" } }
+"#,
+    )
+    .unwrap()
+    .theme;
+    assert_eq!(
+        (
+            theme.cursor_theme.as_deref(),
+            theme.cursor_size,
+            theme.font_name.as_deref(),
+            theme.monospace_font_name.as_deref()
+        ),
+        (
+            Some("Bibata-Modern-Ice"),
+            Some(32),
+            Some("Inter 11"),
+            Some("Iosevka 12")
+        )
+    );
+}
+
+#[test]
+fn rejects_an_icon_or_cursor_theme_that_is_not_a_directory_name() {
+    for key in ["icon_theme", "cursor_theme"] {
+        for name in ["", ".", "..", "Papirus/Dark"] {
+            let err =
+                Config::parse(&format!(r#"{{ "theme": {{ "{key}": "{name}" }} }}"#)).unwrap_err();
+            assert!(
+                matches!(err, ConfigError::Validation(_)),
+                "{key} {name:?}: got {err:?}"
+            );
+        }
     }
+}
+
+#[test]
+fn rejects_a_cursor_size_of_zero() {
+    let err = Config::parse(r#"{ "theme": { "cursor_size": 0 } }"#).unwrap_err();
+    assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
 }
 
 #[test]

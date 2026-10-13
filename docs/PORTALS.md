@@ -216,7 +216,7 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 
 | Interface | Compositor | Shell UI |
 |---|---|---|
-| Settings | `org.freedesktop.appearance` `color-scheme`, `accent-color`, `contrast`, `reduced-motion` from shell config; `org.gnome.desktop.interface` `color-scheme` (`prefer-dark`/`prefer-light`), `enable-animations` (the inverse of `reduced_motion`), and `icon-theme` when `theme.icon_theme` is set; no cursor or font keys | — |
+| Settings | `org.freedesktop.appearance` `color-scheme`, `accent-color`, `contrast`, `reduced-motion` from shell config; `org.gnome.desktop.interface` `color-scheme` (`prefer-dark`/`prefer-light`), `enable-animations` (the inverse of `reduced_motion`), and `icon-theme`, `cursor-theme`, `cursor-size`, `font-name`, `monospace-font-name` when the matching `theme` key is set | — |
 | FileChooser | `OpenFile`, `SaveFile`, `SaveFiles`; filters, `current_folder`, `choices` | picker (component-library's `FilePicker`) |
 | AppChooser | candidates from desktop entries and `mimeapps.list`; `UpdateChoices` | app list |
 | OpenURI | (frontend) | via AppChooser |

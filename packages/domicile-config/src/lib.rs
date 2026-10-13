@@ -584,20 +584,43 @@ pub struct ThemeConfig {
     /// The freedesktop icon theme's directory name, such as `Papirus-Dark`.
     /// Unset leaves shells with `hicolor`.
     pub icon_theme: Option<String>,
+    /// The XCursor theme's directory name, such as `Adwaita`. Unset leaves
+    /// clients their own.
+    pub cursor_theme: Option<String>,
+    /// The cursor size in logical pixels. Unset leaves clients their own.
+    /// Zero is refused.
+    pub cursor_size: Option<u16>,
+    /// The interface font as a Pango description, such as `Inter 11`. Unset
+    /// leaves clients their own.
+    pub font_name: Option<String>,
+    /// The fixed-width font as a Pango description, such as `Iosevka 12`.
+    /// Unset leaves clients their own.
+    pub monospace_font_name: Option<String>,
 }
 
 impl ThemeConfig {
     fn validate(&self) -> Result<(), ConfigError> {
-        // A theme is a directory under each `icons` directory.
-        match self
-            .icon_theme
-            .as_deref()
-            .filter(|name| matches!(*name, "" | "." | "..") || name.contains('/'))
-        {
-            Some(name) => Err(ConfigError::Validation(format!(
-                "theme.icon_theme {name:?} is not an icon theme's directory name"
+        // Icon and cursor themes are each a directory under each `icons`
+        // directory.
+        let not_a_directory = [
+            ("icon_theme", &self.icon_theme),
+            ("cursor_theme", &self.cursor_theme),
+        ]
+        .into_iter()
+        .find_map(|(key, name)| {
+            name.as_deref()
+                .filter(|name| matches!(*name, "" | "." | "..") || name.contains('/'))
+                .map(|name| (key, name))
+        });
+        match (not_a_directory, self.cursor_size) {
+            (Some((key, name)), _) => Err(ConfigError::Validation(format!(
+                "theme.{key} {name:?} is not a theme's directory name"
             ))),
-            None => Ok(()),
+            (None, Some(0)) => Err(ConfigError::Validation(
+                "theme.cursor_size must be at least 1; leave the key out for the clients' own"
+                    .into(),
+            )),
+            (None, _) => Ok(()),
         }
     }
 }
