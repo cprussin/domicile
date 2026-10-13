@@ -29,6 +29,10 @@ A config module exports `Shell = runManganese(options)` (see
 - **`topBar`**: the bar's `left`, `middle` and `right` columns. Defaults to
   `DEFAULT_TOP_BAR`.
 
+It also exports the bar items (`Clock`, `Battery`, …), the commands bindings
+use (`focus`, `workspace`, `mode`, …), and `Shell`, which is `runManganese()`
+and is what `"shell": "@domicile-desktop/manganese"` loads.
+
 ## More
 
 - [Window management](docs/WINDOW-MANAGEMENT.md): workspaces, screens, focus,

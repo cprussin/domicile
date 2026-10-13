@@ -94,13 +94,25 @@ domicile github:me/my-cool-shell         # a repository
 domicile @domicile-desktop/manganese     # Domicile's own, prebuilt
 ```
 
+- `domicile load-shell` and a JSON config's `shell` take the same forms.
+  Relative paths resolve from the working directory, or from the config file.
+- A `.js` with no bare imports is a bundle and is served as is. Any other
+  `.js`, `.ts` or `.tsx` is an entry and is built.
 - An entry's packages go in the nearest `package.json` and `bun.lock` above
   it, created next to it if there are none.
 - `@domicile-desktop/*` and React always come from the running Domicile.
 - A package with a prebuilt module declares it in `package.json` as
   `"domicile": { "shell": "dist/shell.js" }` and is served as is. Otherwise it
   is built from its entry.
-- Builds are cached under `$XDG_CACHE_HOME/domicile/shells`.
+- Builds are cached under `$XDG_CACHE_HOME/domicile/shells`, keyed on the
+  entry's local imports, the lockfile and Domicile's install. A cache hit
+  builds nothing.
+- On first start, a build that takes over 500 ms runs behind a splash
+  ([`shell-splash`](/packages/shell-splash/README.md)). Nothing else runs in
+  its place, so a desktop never shows a shell the user did not choose.
+- A failed first build is printed, or shown on the splash, and the desktop
+  does not start. A failed `load-shell` prints the error and keeps the
+  running shell.
 
 Users of your shell never run `domicile-compositor` and do not need a config
 file.

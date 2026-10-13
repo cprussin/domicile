@@ -66,6 +66,9 @@ domicile send-shell ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor �
 
 ## Key decisions
 
+- **Keybindings are shell props, not config.** They name the shell's
+  commands, and TypeScript types them. Cost: a shell that fails to load has no
+  keys. Recover with `domicile load-shell` from another VT or ssh.
 - **Chords name keysyms** (`parenleft`), as in sway. The compositor owns the
   xkb keymap, so it reports which key types each keysym.
 - **The compositor sends the key table; the chords stay in the page.** Data

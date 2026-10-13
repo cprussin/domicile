@@ -46,10 +46,17 @@ tarball somewhere outside the repo — the only check that can catch an
 `exports` entry pointing at a file `files` does not ship, or a `catalog:` that
 survived into a published manifest.
 
-`@domicile-desktop/sdk` is published to npm and is the only package here that is
-not `private`. It is the one place `useSortedKeys` is turned off — for
-the whole manifest, in `biome.json`'s `overrides`, since the rule cannot be
-scoped to one key. It is the `exports` map that needs it: export conditions are matched top to bottom, so `"types"` must come
+Every package that is not `private` (`@domicile-desktop/sdk`,
+`component-library`, `manganese` and the `system-*` libraries) is published to
+npm. Each merge to main publishes `0.0.0-alpha-<sha>` as `latest`
+(`publish-packages.yml`) with npm trusted publishing, so there is no token and
+each version has provenance. There is no semver until a release. The published
+copies serve editors and third-party shells; a shell `domicile` builds always
+uses the running Domicile's copies.
+
+`biome.json`'s `overrides` turn `useSortedKeys` off for the published
+manifests whose `exports` use conditions, for the whole manifest, since the
+rule cannot be scoped to one key. It is the `exports` map that needs it: export conditions are matched top to bottom, so `"types"` must come
 before `"default"`, and sorting them alphabetically would make a lint rule
 enforce a semantic bug in an artifact that leaves this repo. It works today even
 sorted wrongly — TypeScript falls back to the sibling `.d.ts` — which is exactly
