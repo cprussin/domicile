@@ -54,7 +54,7 @@ item when it ships.
    - Checked by installing in containers; no packaged session has run on
      hardware.
 
-9. **Revisit the docs for users.** Start with the README.
+8. **Revisit the docs for users.** Start with the README.
    - A clearer reading path through the docs.
    - Screenshots and videos of manganese.
    - A short getting started guide: installing and setup.
@@ -63,12 +63,12 @@ item when it ships.
      - The built-in browser.
      - Chrome extensions.
      - The launcher.
-     - Web apps (item 7).
+     - Web apps (the Web apps item).
      - Top bar, system tray, notifications, clipboard history, wallpaper,
        screen lock, several monitors, and the Settings and History apps.
    - A short guide to customizing:
      - Configuring manganese.
-     - Composing manganese's packages into a custom desktop (item 5).
+     - Composing manganese's packages into a custom desktop.
      - Writing a desktop from scratch
        ([WRITING-A-SHELL.md](docs/WRITING-A-SHELL.md)).
 
@@ -163,3 +163,8 @@ Understood and not scheduled.
 - **Engine CI is one machine.** `crux` runs one cold build at a time, and a
   build from scratch takes 4h 16m.
   [BUILD-MACHINE.md](packages/domicile-engine/docs/BUILD-MACHINE.md#build-cost).
+- **A guard's engine once crashed in fontconfig.** A use-after-free in the
+  browser process's font service (`FontDataServiceImpl::MatchFamilyName` →
+  `FcConfigSubstituteWithPat` → `FcStrHashIgnoreCase`), seen once in
+  `guard-webview-tabs`. Not the shared font cache. Rerun it; an ASan engine
+  build would find what freed the string.
