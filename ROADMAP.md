@@ -40,31 +40,27 @@ item when it ships.
 5. **Native density on every monitor: test on hardware.**
    [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
 
-6. **home-manager builds a TS config.** `nix/home-manager.nix` should build a
-   TS config directory with `bun2nix`; it writes `domicile.json`.
-   [COMPOSABLE-SHELLS.md](docs/architecture/COMPOSABLE-SHELLS.md).
-
-7. **Split manganese into small packages.** Clock, tray, mixer and window
+6. **Split manganese into small packages.** Clock, tray, mixer and window
    management as their own packages; manganese composes them. No design doc.
 
-8. **Settings app.** [SETTINGS.md](docs/SETTINGS.md).
+7. **Settings app.** [SETTINGS.md](docs/SETTINGS.md).
    - Shell options ([SHELL-OPTIONS.md](docs/architecture/SHELL-OPTIONS.md)).
    - A persistent theme choice, which needs a store for desktop state.
    - A list of sites with stored data. History clears cookies by time range
      or by site ([HISTORY.md](docs/HISTORY.md)).
    - A guard that runs the app's native messaging host in the engine.
 
-9. **Web apps.** [WEB-APPS.md](docs/architecture/WEB-APPS.md).
+8. **Web apps.** [WEB-APPS.md](docs/architecture/WEB-APPS.md).
    - A guard that the engine lists an app window with `isApp` and records no
      visits for it.
 
-10. **Distribution packages.**
-    [RUNNING-A-DESKTOP.md](docs/RUNNING-A-DESKTOP.md#other-distributions).
-    - No APT or RPM repository, AUR package or COPR, so upgrades are by hand.
-    - The shell builder ships the whole workspace's `node_modules`, about
-      600 MB with the dev tools.
-    - Checked by installing in containers; no packaged session has run on
-      hardware.
+9. **Distribution packages.**
+   [RUNNING-A-DESKTOP.md](docs/RUNNING-A-DESKTOP.md#other-distributions).
+   - No APT or RPM repository, AUR package or COPR, so upgrades are by hand.
+   - The shell builder ships the whole workspace's `node_modules`, about
+     600 MB with the dev tools.
+   - Checked by installing in containers; no packaged session has run on
+     hardware.
 
 ## In the engine fork (the agent on `crux`)
 
@@ -141,7 +137,7 @@ Understood and not scheduled.
 ### Theme
 
 - **A theme picked from the toggle lasts only until restart.** Needs the
-  desktop-state store (repository item 8).
+  desktop-state store (the Settings app item).
 
 ### Session and portals
 

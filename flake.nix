@@ -3,9 +3,14 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # Fetches the packages of a home-manager TS config from its `bun.nix`.
+    bun2nix = {
+      url = "github:nix-community/bun2nix?ref=2.1.2";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs }:
+  outputs = { self, nixpkgs, bun2nix }:
     let
       system = "x86_64-linux";
       pkgs = import nixpkgs { inherit system; overlays = [ bunOverlay ]; };
@@ -714,6 +719,7 @@
       homeManagerModules = rec {
         domicile = import ./nix/home-manager.nix {
           domicilePackages = self.packages.${system};
+          bun2nix = bun2nix.packages.${system}.default;
         };
         # `default` for `imports = [domicile.homeManagerModules.default]`;
         # `domicile` for configurations that import several flakes' modules.
@@ -870,6 +876,27 @@
               ];
               specialArgs = { inherit pkgs; };
             };
+            # The module with `nix/test-ts-config`, a TS config that imports a
+            # package from npm, as its config directory.
+            fromDirectory = directory: pkgs.lib.evalModules {
+              modules = [
+                stub
+                self.homeManagerModules.domicile
+                {
+                  programs.domicile = {
+                    enable = true;
+                    configDirectory = directory;
+                    settings.idle.warn_before_seconds = 5;
+                  };
+                }
+              ];
+              specialArgs = { inherit pkgs; };
+            };
+            fromTs = (fromDirectory ./nix/test-ts-config).config;
+            # A directory with no `domicile.{ts,tsx,js,mjs}` fails evaluation.
+            withoutModule = builtins.tryEval
+              (fromDirectory ./nix/launcher).config.programs.domicile.shell;
+
             appEntry = withApp.config.xdg.desktopEntries.Music;
             # Built as home-manager builds it, so `desktop-file-validate` runs.
             appFile = pkgs.makeDesktopItem {
@@ -1016,6 +1043,23 @@
               exit 1
             }
             test -e ${appFile}/share/applications/Music.desktop
+
+            # A TS config's exports are written over `settings`, so the
+            # module's defaults do not replace them. Its `Shell` is built
+            # and becomes the shell.
+            cp -f ${fromTs.xdg.configFile."domicile/domicile.json".source} config.json
+            expect '.idle.blank_after_seconds == 600'
+            expect '.idle.warn_before_seconds == 5'
+            expect '.input.keyboard.xkb_layout == "de"'
+            expect '.shell == "${fromTs.programs.domicile.shell}"'
+            grep -qF 'a desktop from a TS config' ${fromTs.programs.domicile.shell} || {
+              echo "the TS config's Shell did not build into ${fromTs.programs.domicile.shell}" >&2
+              exit 1
+            }
+            [ ${pkgs.lib.boolToString withoutModule.success} = false ] || {
+              echo "a config directory without a config module evaluated" >&2
+              exit 1
+            }
 
             touch "$out"
           '';
