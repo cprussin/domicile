@@ -713,6 +713,17 @@ describe("Launcher", () => {
     expect(panel.launched).toStrictEqual([Launch.Opened("Notes/today.org")]);
   });
 
+  it("takes the Enter it launches with from the window it focuses", async () => {
+    // The engine forwards a key the page leaves to the window with the
+    // keyboard, which the launch has just moved.
+    using panel = launcher();
+
+    await panel.user.type(panel.box(), "today");
+    await panel.rows();
+
+    expect(fireEvent.keyDown(panel.box(), { key: "Enter" })).toBe(false);
+  });
+
   it("asks what to open the row with on Shift+Enter", async () => {
     using panel = launcher();
 
