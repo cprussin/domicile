@@ -1,8 +1,12 @@
 // Pointer resize of a tiled window's edge (sway's `floating_modifier` drag).
 // Converts the drag in pixels to a share of the container the edge divides.
 
-import type { Direction } from "../direction";
-import { Axis, axisOf as axisOfDirection, isForward } from "../direction";
+import {
+  Axis,
+  axisOf as axisOfDirection,
+  Direction,
+  isForward,
+} from "../direction";
 import type { Rect } from "../rect";
 import { areaOf } from "./frames";
 import type { Container, LayoutNode } from "./node";
@@ -16,9 +20,10 @@ import type { Tiling } from "./tiling";
  * The tiling with the `edge` side of window `id` moved `by` pixels (positive is
  * right or down).
  *
- * `area` and `gap` are the tiling's layout box, used to convert pixels to a
- * share. Returns `tiling` unchanged at the workspace edge. Throws if `id` is
- * not tiled here.
+ * An `edge` on the workspace's edge can't move, so the opposite edge moves
+ * instead, the same way. `area` and `gap` are the tiling's layout box, used to
+ * convert pixels to a share. Returns `tiling` unchanged when neither edge can
+ * move. Throws if `id` is not tiled here.
  */
 export const stretched = (
   tiling: Tiling,
@@ -33,13 +38,32 @@ export const stretched = (
   if (root === undefined || path === undefined) {
     throw new Error(`layout tree: no tiled window ${id} to stretch`);
   } else {
-    const along = ancestorsOf(root, path).find((ancestor) =>
-      movable(ancestor, edge),
-    );
-    return along === undefined
+    const ancestors = ancestorsOf(root, path);
+    const boundary =
+      boundaryOf(ancestors, edge) ?? boundaryOf(ancestors, oppositeOf(edge));
+    return boundary === undefined
       ? tiling
-      : { ...tiling, root: withEdgeMoved(root, along, edge, by, area, gap) };
+      : {
+          ...tiling,
+          root: withEdgeMoved(
+            root,
+            boundary.along,
+            boundary.edge,
+            by,
+            area,
+            gap,
+          ),
+        };
   }
+};
+
+/** The nearest ancestor whose boundary on `edge`'s side can move, if any. */
+const boundaryOf = (
+  ancestors: readonly Ancestor[],
+  edge: Direction,
+): { along: Ancestor; edge: Direction } | undefined => {
+  const along = ancestors.find((ancestor) => movable(ancestor, edge));
+  return along === undefined ? undefined : { along, edge };
 };
 
 /**
@@ -108,5 +132,23 @@ const shareOf = (container: Container, at: number): number => {
     throw new Error(`layout tree: no share for child ${at.toString()}`);
   } else {
     return fraction;
+  }
+};
+
+/** The edge across the window from `edge`. */
+const oppositeOf = (edge: Direction): Direction => {
+  switch (edge) {
+    case Direction.Left: {
+      return Direction.Right;
+    }
+    case Direction.Right: {
+      return Direction.Left;
+    }
+    case Direction.Up: {
+      return Direction.Down;
+    }
+    case Direction.Down: {
+      return Direction.Up;
+    }
   }
 };

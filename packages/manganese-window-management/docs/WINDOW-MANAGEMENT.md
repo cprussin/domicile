@@ -213,8 +213,9 @@ announces a window only then, so its title, app id and limits are known.
 - A move aims only once the pointer is 8px from the press, so clicking a tab
   never drops it beside its container's open tab.
 - **Meta+right-drag** or **Meta+Shift+drag** resizes from the
-  corner nearest the pointer. See `tree/stretch.ts`. Unlike a move, a resize
-  does not make the window transparent.
+  corner nearest the pointer. An edge on the screen's edge can't move, so the
+  opposite edge follows the pointer instead. See `tree/stretch.ts`. Unlike a
+  move, a resize does not make the window transparent.
 - **Shared edges resize without a modifier**, over the window's border and the
   gap beside it (`tiled/borders.ts`).
 - Fullscreen windows cannot be dragged, nor can a fullscreen group by its
