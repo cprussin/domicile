@@ -81,6 +81,8 @@ The compositor enforces the lock. While `locked` is `true`:
 - No client receives any key, click, scroll or pointer motion.
 - `closeApp`, `spawn` and `copyClipboardEntry` do nothing and log a warning.
 - `searchFiles` never settles. Retry once `locked` is `false`.
+- `fetchWithCookies` rejects. The engine refuses it, from the compositor's
+  `locked` message.
 - `setTheme` still works.
 - System calls fail with `locked`, except reads under `/sys`, the calls
   `system-battery`, `system-backlight` and `system-audio` make for the

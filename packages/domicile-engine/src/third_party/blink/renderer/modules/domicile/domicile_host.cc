@@ -20,6 +20,8 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_cursor_shape.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_fetch_header.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_fetch_response.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_search.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h"
 #include "third_party/blink/renderer/core/css/media_query_list.h"
@@ -126,7 +128,8 @@ DomicileHost::DomicileHost(LocalDOMWindow& window)
       tray_(&window),
       tray_receiver_(this, &window),
       windows_(&window),
-      windows_receiver_(this, &window) {}
+      windows_receiver_(this, &window),
+      shell_fetch_(&window) {}
 
 DomicileHost::~DomicileHost() = default;
 
@@ -1464,6 +1467,65 @@ void DomicileHost::closeBrowserWindow(ScriptState*,
   }
 }
 
+namespace {
+
+// The browser's answer to fetchWithCookies(): a response, or why there is
+// none.
+void Fetched(ScriptPromiseResolver<DomicileFetchResponse>* resolver,
+             domicile::mojom::blink::ShellFetchResponsePtr response,
+             const String& error) {
+  if (!response) {
+    resolver->RejectWithDOMException(DOMExceptionCode::kNetworkError, error);
+    return;
+  }
+  auto* answer = DomicileFetchResponse::Create();
+  answer->setStatus(response->status);
+  answer->setUrl(response->url.GetString());
+  answer->setBody(response->body);
+  resolver->Resolve(answer);
+}
+
+}  // namespace
+
+// Not Ready(): the browser answers this, and a fetch should not open the
+// compositor's channel.
+ScriptPromise<DomicileFetchResponse> DomicileHost::fetchWithCookies(
+    ScriptState* script_state,
+    const String& url,
+    const HeapVector<Member<DomicileFetchHeader>>& headers,
+    const String& sapisid_hash_origin,
+    ExceptionState& exception_state) {
+  const KURL resolved = window_->CompleteURL(url);
+  if (!resolved.IsValid()) {
+    exception_state.ThrowTypeError("url must be an address");
+    return EmptyPromise();
+  }
+  if (!window_->GetFrame()) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "There is no browser for this document to fetch through.");
+    return EmptyPromise();
+  }
+  if (!shell_fetch_.is_bound()) {
+    window_->GetBrowserInterfaceBroker().GetInterface(
+        shell_fetch_.BindNewPipeAndPassReceiver(
+            window_->GetTaskRunner(TaskType::kInternalDefault)));
+  }
+  Vector<domicile::mojom::blink::ShellFetchHeaderPtr> sent;
+  sent.reserve(headers.size());
+  for (const auto& header : headers) {
+    sent.push_back(domicile::mojom::blink::ShellFetchHeader::New(
+        header->name(), header->value()));
+  }
+  auto* resolver =
+      MakeGarbageCollected<ScriptPromiseResolver<DomicileFetchResponse>>(
+          script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  shell_fetch_->Fetch(resolved, std::move(sent), sapisid_hash_origin,
+                      BindOnce(&Fetched, WrapPersistent(resolver)));
+  return promise;
+}
+
 // Stored, like Displays: the event signals a change and the attribute holds
 // the list, so a shell that mounts late can still read it.
 void DomicileHost::WindowsChanged(
@@ -1586,6 +1648,7 @@ void DomicileHost::Trace(Visitor* visitor) const {
   visitor->Trace(density_listener_);
   visitor->Trace(windows_);
   visitor->Trace(windows_receiver_);
+  visitor->Trace(shell_fetch_);
   visitor->Trace(input_listeners_);
   EventTarget::Trace(visitor);
   AppInputClient::Trace(visitor);
