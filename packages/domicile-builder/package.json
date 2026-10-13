@@ -16,6 +16,10 @@
     "@types/bun": "catalog:",
     "typescript": "catalog:"
   },
+  "files": [
+    "src/**",
+    "!src/**/*.test.ts"
+  ],
   "license": "MIT",
   "name": "@domicile-desktop/builder",
   "private": true,

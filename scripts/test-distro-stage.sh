@@ -55,33 +55,69 @@ mkdir -p "$ENGINE/locales"
 touch "$ENGINE/chrome" "$ENGINE/libdomicile_engine.so" "$ENGINE/locales/en-US.pak"
 chmod +x "$ENGINE/chrome"
 
-# Prints its arguments, so the builder's command line can be read back.
-BUN="$WORK/bun"
-printf '#!/bin/sh\necho "$@"\n' >"$BUN"
-chmod +x "$BUN"
+# stage.sh installs the workspace's modules with the bun it ships.
+BUN="$(command -v bun)" || { echo "SKIP: no bun to install the workspace with"; exit 77; }
 
+# A bun workspace shaped like this repository's, installable offline: its
+# third-party packages are tarballs named by absolute path, which the staged
+# copy's lockfile finds too.
 WORKSPACE="$WORK/workspace"
-page() { # package, file
-  mkdir -p "$(dirname "$WORKSPACE/packages/$1/$2")"
-  echo "$1" >"$WORKSPACE/packages/$1/$2"
-  echo '{}' >"$WORKSPACE/packages/$1/package.json"
+VENDOR="$WORK/vendor"
+put() { # file, text
+  mkdir -p "$(dirname "$1")"
+  printf '%s\n' "$2" >"$1"
 }
-mkdir -p "$WORKSPACE/node_modules/.cache" "$WORKSPACE/node_modules/vite"
-echo '{}' >"$WORKSPACE/package.json"
-echo cached >"$WORKSPACE/node_modules/.cache/junk"
-echo vite >"$WORKSPACE/node_modules/vite/index.js"
+# A workspace package's manifest: its name, then `fields`.
+manifest() { # package, fields
+  put "$WORKSPACE/packages/$1/package.json" \
+    "{\"name\":\"@domicile-desktop/$1\",\"version\":\"0.0.0\"${2:-}}"
+}
+# Packs `$VENDOR/<name>/package` into `$VENDOR/<name>.tgz`.
+vendor() { # name
+  put "$VENDOR/$1/package/package.json" "{\"name\":\"$1\",\"version\":\"1.0.0\"}"
+  put "$VENDOR/$1/package/index.js" "$1"
+  tar -C "$VENDOR/$1" -czf "$VENDOR/$1.tgz" package
+}
+put "$WORKSPACE/package.json" '{"name":"stand-in","private":true,"workspaces":["packages/*"]}'
+put "$WORKSPACE/bunfig.toml" '[install]'
+put "$VENDOR/vite/package/index.js.map" '{}'
+put "$VENDOR/vite/package/README.md" vite
+put "$VENDOR/vite/package/LICENSE" MIT
+vendor vite
+vendor typescript
+vendor lightningcss-linux-x64-musl
+
+manifest domicile-builder ",\"files\":[\"src/**\",\"!src/**/*.test.ts\"],
+  \"dependencies\":{\"@domicile-desktop/sdk\":\"workspace:*\",\"vite\":\"$VENDOR/vite.tgz\",
+    \"lightningcss-linux-x64-musl\":\"$VENDOR/lightningcss-linux-x64-musl.tgz\"},
+  \"devDependencies\":{\"@domicile-desktop/test-support\":\"workspace:*\",\"typescript\":\"$VENDOR/typescript.tgz\"}"
+# Prints its arguments, so the builder's command line can be read back.
+put "$WORKSPACE/packages/domicile-builder/src/main.ts" 'console.log(process.argv.slice(1).join(" "));'
+put "$WORKSPACE/packages/domicile-builder/src/main.test.ts" test
+manifest sdk ',"files":["dist/**"]'
+put "$WORKSPACE/packages/sdk/src/index.ts" sdk
+put "$WORKSPACE/packages/sdk/dist/index.js" sdk
+manifest test-support
+put "$WORKSPACE/packages/test-support/src/preload.ts" test-support
+manifest shell-manganese ',"files":["src/**"],"dependencies":{"@domicile-desktop/sdk":"workspace:*"}'
+put "$WORKSPACE/packages/shell-manganese/src/index.tsx" manganese
 for shell in manganese simple splash; do
-  page "shell-$shell" .vite/renderer/main_window/shell.js
+  [ -f "$WORKSPACE/packages/shell-$shell/package.json" ] || manifest "shell-$shell"
+  put "$WORKSPACE/packages/shell-$shell/.vite/renderer/main_window/shell.js" "$shell"
 done
 for app in history settings; do
-  page "app-$app" .vite/extension/manifest.json
-  page "app-$app" "icons/$app.svg"
-  page "app-$app" "icons/$app-preview.svg"
+  manifest "app-$app"
+  put "$WORKSPACE/packages/app-$app/.vite/extension/manifest.json" '{}'
+  put "$WORKSPACE/packages/app-$app/icons/$app.svg" "$app"
+  put "$WORKSPACE/packages/app-$app/icons/$app-preview.svg" "$app"
 done
-page domicile-builder src/main.ts
 # A crate: no `package.json`, so not part of the workspace.
-mkdir -p "$WORKSPACE/packages/domicile-launch/src"
-touch "$WORKSPACE/packages/domicile-launch/Cargo.toml"
+put "$WORKSPACE/packages/domicile-launch/Cargo.toml" ''
+# As `distro/build.sh` installs before it builds.
+(cd "$WORKSPACE" && "$BUN" install --ignore-scripts --no-progress >/dev/null 2>&1) || {
+  echo "the stand-in workspace would not install" >&2
+  exit 1
+}
 
 # ---- a complete stage ------------------------------------------------------
 
@@ -126,16 +162,25 @@ echo "the builder runs the bundled bun against the bundled workspace"
 expect "the builder's command line" \
   "$LIBEXEC/workspace/packages/domicile-builder/src/main.ts --domicile $LIBEXEC/workspace --entry desk.tsx" \
   "$("$LIBEXEC/builder" --entry desk.tsx 2>&1)"
-[ -f "$LIBEXEC/workspace/node_modules/vite/index.js" ] &&
-  [ -f "$LIBEXEC/workspace/package.json" ] &&
-  ok "the workspace has its modules" ||
-  fail "the workspace has its modules" "$(ls -a "$LIBEXEC/workspace" 2>&1)"
-[ ! -e "$LIBEXEC/workspace/node_modules/.cache" ] &&
-  ok "without the module cache" ||
-  fail "without the module cache" "node_modules/.cache was copied"
-[ ! -e "$LIBEXEC/workspace/packages/domicile-launch" ] &&
-  ok "and without the crates" ||
-  fail "and without the crates" "packages/domicile-launch was copied"
+SHIPPED="$LIBEXEC/workspace/packages"
+present() { # what, file under the shipped packages
+  [ -f "$SHIPPED/$2" ] && ok "$1" || fail "$1" "no $SHIPPED/$2"
+}
+absent() { # what, path under the shipped packages
+  [ ! -e "$SHIPPED/$2" ] && [ ! -L "$SHIPPED/$2" ] && ok "$1" || fail "$1" "$SHIPPED/$2 was shipped"
+}
+present "the packages manganese uses" shell-manganese/node_modules/@domicile-desktop/sdk/dist/index.js
+present "and the builder's production dependencies" domicile-builder/node_modules/vite/index.js
+present "with their licenses" domicile-builder/node_modules/vite/LICENSE
+absent "without its development dependencies" domicile-builder/node_modules/typescript
+absent "or the musl builds of native modules" domicile-builder/node_modules/lightningcss-linux-x64-musl
+absent "or the workspace packages only they use" test-support/src
+absent "only the files a package publishes" sdk/src
+absent "without tests" domicile-builder/src/main.test.ts
+absent "without the shells' builds" shell-manganese/.vite
+absent "without the crates" domicile-launch
+expect "without source maps or readmes" "" \
+  "$(find "$LIBEXEC/workspace" -name '*.map' -o -name 'README*')"
 
 echo "the session and what it starts"
 SESSION="$USR/share/wayland-sessions/domicile.desktop"
