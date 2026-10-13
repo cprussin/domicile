@@ -5,6 +5,7 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -16,8 +17,13 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/types/expected.h"
+#include "chrome/browser/domicile/domicile_media_devices.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
+#include "chrome/browser/profiles/profile.h"
+#include "components/domicile/browser/command_protocol.h"
 #include "components/domicile/browser/site_permissions.h"
 #include "components/domicile/browser/web_view_guest.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
@@ -26,6 +32,7 @@
 #include "components/permissions/permission_request_manager.h"
 #include "components/permissions/permission_uma_constants.h"
 #include "components/permissions/resolvers/permission_prompt_options.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/media_stream_request.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
@@ -175,6 +182,48 @@ class ChromeMediaAccess : public MediaAccess {
     return MediaCaptureDevicesDispatcher::GetInstance()
         ->CheckMediaAccessPermission(&frame, origin, type);
   }
+
+  mojom::WebViewMediaDevicesPtr ListDevices(
+      content::BrowserContext& context) override {
+    const MediaDeviceList list = RankedMediaDevices(PrefsOf(context));
+    return mojom::WebViewMediaDevices::New(Mojom(list.cameras),
+                                           Mojom(list.microphones));
+  }
+
+  base::expected<void, std::string> PreferDevice(
+      content::BrowserContext& context,
+      mojom::WebViewMediaDeviceKind kind,
+      const std::string& id) override {
+    return PreferMediaDevice(PrefsOf(context), KindOf(kind), id);
+  }
+
+ private:
+  // The original profile's prefs, so a private window's choice is the
+  // profile's, as Chrome's settings are.
+  static PrefService& PrefsOf(content::BrowserContext& context) {
+    return *Profile::FromBrowserContext(&context)
+                ->GetOriginalProfile()
+                ->GetPrefs();
+  }
+
+  static std::vector<mojom::WebViewMediaDevicePtr> Mojom(
+      const std::vector<MediaDevice>& devices) {
+    std::vector<mojom::WebViewMediaDevicePtr> listed;
+    for (const MediaDevice& device : devices) {
+      listed.push_back(mojom::WebViewMediaDevice::New(device.id, device.name));
+    }
+    return listed;
+  }
+
+  static MediaDeviceKind KindOf(mojom::WebViewMediaDeviceKind kind) {
+    switch (kind) {
+      case mojom::WebViewMediaDeviceKind::kCamera:
+        return MediaDeviceKind::kCamera;
+      case mojom::WebViewMediaDeviceKind::kMicrophone:
+        return MediaDeviceKind::kMicrophone;
+    }
+    NOTREACHED();
+  }
 };
 
 }  // namespace
@@ -189,6 +238,7 @@ void AttachPermissionPrompts(content::WebContents& guest) {
 void UseChromeForGuestMedia() {
   static base::NoDestructor<ChromeMediaAccess> access;
   WebViewGuest::SetMediaAccess(access.get());
+  StartListingMediaDevices();
 }
 
 }  // namespace domicile

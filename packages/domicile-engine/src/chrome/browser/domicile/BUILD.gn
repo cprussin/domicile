@@ -31,6 +31,8 @@ source_set("domicile") {
     "domicile_extension_tray.h",
     "domicile_file_dialogs.cc",
     "domicile_file_dialogs.h",
+    "domicile_media_devices.cc",
+    "domicile_media_devices.h",
     "domicile_permissions.cc",
     "domicile_permissions.h",
     "domicile_pointer_warp.cc",
@@ -107,8 +109,9 @@ source_set("domicile") {
     # socket.
     "//components/content_settings/core/browser",
     "//components/content_settings/core/common",
-    # The Settings app's camera and microphone: Chrome's device ranking in the
-    # profile's prefs (patch 0109).
+    # The camera and microphone a page gets when it names none: Chrome's device
+    # ranking in the profile's prefs (patch 0109), for the Settings app and the
+    # shell.
     "//chrome/browser/media/prefs",
     # DevTools for a guest's page: Chrome's front end and its bindings.
     "//chrome/browser/devtools",

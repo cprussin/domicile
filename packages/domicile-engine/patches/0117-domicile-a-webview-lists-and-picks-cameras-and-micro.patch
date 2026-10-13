@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 13 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a webview lists and picks cameras and microphones
+
+The shell's site permissions panel picks the camera and microphone a
+page gets when it names none. HTMLWebViewElement's mediaDevices() and
+setMediaDevice() answer with two dictionaries, DomicileMediaDevice and
+DomicileMediaDevices.
+
+Blink lists every dictionary's IDL file and generated bindings, so both
+are added here.
+---
+ third_party/blink/renderer/bindings/generated_in_core.gni | 4 ++++
+ third_party/blink/renderer/bindings/idl_in_core.gni       | 2 ++
+ 2 files changed, 6 insertions(+)
+
+diff --git a/third_party/blink/renderer/bindings/generated_in_core.gni b/third_party/blink/renderer/bindings/generated_in_core.gni
+index dc647d3..e3ff3be 100644
+--- a/third_party/blink/renderer/bindings/generated_in_core.gni
++++ b/third_party/blink/renderer/bindings/generated_in_core.gni
+@@ -212,6 +212,10 @@ generated_dictionary_sources_in_core = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_dom_rect_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_device.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_device.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_media_device.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_media_device.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_media_devices.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_media_devices.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_drag_event_init.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_drag_event_init.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_edit_context_init.cc",
+diff --git a/third_party/blink/renderer/bindings/idl_in_core.gni b/third_party/blink/renderer/bindings/idl_in_core.gni
+index 2b5407e..bb8774c 100644
+--- a/third_party/blink/renderer/bindings/idl_in_core.gni
++++ b/third_party/blink/renderer/bindings/idl_in_core.gni
+@@ -467,6 +467,8 @@ static_idl_files_in_core = [
+   "//third_party/blink/renderer/core/html/domicile/domicile_device.idl",
+   "//third_party/blink/renderer/core/html/domicile/domicile_device_request_event.idl",
+   "//third_party/blink/renderer/core/html/domicile/domicile_dialog_event.idl",
++  "//third_party/blink/renderer/core/html/domicile/domicile_media_device.idl",
++  "//third_party/blink/renderer/core/html/domicile/domicile_media_devices.idl",
+   "//third_party/blink/renderer/core/html/html_geolocation_element.idl",
+   "//third_party/blink/renderer/core/html/html_head_element.idl",
+   "//third_party/blink/renderer/core/html/html_heading_element.idl",
+-- 
+2.43.0
+

@@ -1,0 +1,11 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// A camera or microphone, as HTMLWebViewElement.mediaDevices() lists it.
+dictionary DomicileMediaDevice {
+  // The system's id for it, which `setMediaDevice()` takes.
+  required DOMString id;
+
+  // The name the system gives it, such as "USB Camera".
+  required DOMString name;
+};
