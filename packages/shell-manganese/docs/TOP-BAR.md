@@ -18,6 +18,7 @@ package's default export path:
 | `Clock` | `@domicile-desktop/manganese-bar-module-clock` |
 | `Mode` | `@domicile-desktop/manganese-bar-module-mode` |
 | `ThemeSwitch` | `@domicile-desktop/manganese-bar-module-theme-switch` |
+| `IdleInhibitor` | `@domicile-desktop/manganese-bar-module-idle-inhibitor` |
 | `Network` | `@domicile-desktop/manganese-bar-module-network` |
 | `Bluetooth` | `@domicile-desktop/manganese-bar-module-bluetooth` |
 | `Volume` | `@domicile-desktop/manganese-bar-module-volume` |
@@ -64,8 +65,8 @@ Every bar and the lock screen share one watch per system readout. See
 - **left**: launcher button, tray, workspaces
 - **center**: clock
 - **right**: sharing indicator (while recorded), binding mode (when not
-  `default`), theme selector, brightness, volume, Bluetooth, network, battery,
-  notification bell
+  `default`), theme selector, idle inhibitor, brightness, volume, Bluetooth,
+  network, battery, notification bell
 
 ## On the lock screen
 
@@ -154,6 +155,16 @@ Every bar and the lock screen share one watch per system readout. See
 - Hidden on machines without a battery, and until UPower answers.
 - Read from UPower by
   [`@domicile-desktop/system-battery`](../../system-battery/README.md).
+
+## Idle inhibitor
+
+- A coffee cup. Click to keep the screens from blanking or locking on idle;
+  click again to let them. While on, the cup is filled on a lit circle.
+- Every bar shows the same inhibitor. It is disabled until the portal answers.
+- Held through the Inhibit portal's idle flag, since the shell has no Wayland
+  surface ([IDLE.md](../../../docs/IDLE.md#idle-inhibitors)).
+- A shell reload lets go of it, and the cup starts outlined.
+- Not on the lock screen.
 
 ## Brightness
 
