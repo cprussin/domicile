@@ -1,11 +1,14 @@
 # The Domicile package for each distribution, made by nfpm from the tree
-# `distro/stage.sh` lays out. `distro/build.sh` fills in the `@…@` values:
+# `distro/stage.sh` lays out. Its `@…@` values:
 #
 # - `@stage@`: the staged tree.
 # - `@distro@`: this directory.
 # - `@pam@`: which `pam/` file is `/etc/pam.d/domicile`.
 # - `@version@`: from the commit's time, so a later commit is a newer package.
 # - `@glibc@`: the newest glibc symbol version any staged binary uses.
+#
+# `distro/nfpm-config.sh` fills them in. Its `--without-apparmor` drops the
+# lines between `# AppArmor 4 {` and `# AppArmor 4 }`.
 #
 # Each format lists its dependencies by its own names. RPM names libraries by
 # soname, so one list serves Fedora and openSUSE.
@@ -60,10 +63,12 @@ contents:
   - src: "@distro@/limits.conf"
     dst: /etc/security/limits.d/10-domicile.conf
     type: config|noreplace
+  # AppArmor 4 {
   - src: "@distro@/apparmor-engine"
     dst: /etc/apparmor.d/domicile-engine
     type: config|noreplace
     packager: deb
+  # AppArmor 4 }
 
 scripts:
   postinstall: "@distro@/postinstall.sh"
@@ -109,8 +114,10 @@ overrides:
       - libgl1-mesa-dri
       - libgtk-3-0
       - libpulse0
+    # AppArmor 4 {
     scripts:
       postinstall: "@distro@/postinstall-deb.sh"
+    # AppArmor 4 }
 
   rpm:
     depends:
@@ -152,8 +159,8 @@ overrides:
       - libgtk-3.so.0()(64bit)
       - libpulse.so.0()(64bit)
 
-  # nfpm writes no `optdepend`, so what other formats recommend is required
-  # here, except GTK, which the engine loads only if it is installed.
+  # nfpm writes no `optdepend`; `distro/arch-optdepends.sh` adds the list in
+  # `distro/arch-optdepends`.
   archlinux:
     depends:
       - glibc>=@glibc@
@@ -177,18 +184,14 @@ overrides:
       - wayland
       - pam
       - systemd
-      - upower
-      - hwdata
-      - libpulse
-      - curl
-      - xdg-desktop-portal
-      - gsettings-desktop-schemas
 
 deb:
   compression: zstd
+  # AppArmor 4 {
   # The AppArmor profile uses `userns`, which AppArmor 4 added.
   breaks:
     - apparmor (<< 4.0)
+  # AppArmor 4 }
 rpm:
   compression: zstd
   summary: A Wayland compositor whose renderer is a web engine

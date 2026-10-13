@@ -290,7 +290,8 @@ They run the same desktop as `nix run github:cprussin/domicile/stable`.
 
 | Distribution | Package | Install |
 |---|---|---|
-| Debian 13+, Ubuntu 24.04+ | `domicile_<version>_amd64.deb` | `sudo apt install ./domicile_*.deb` |
+| Debian 13+, Ubuntu 24.04+ | `domicile_<version>_amd64.deb` | `sudo apt install ./domicile_*_amd64.deb` |
+| Debian 12, Ubuntu 22.04 | `domicile_<version>_amd64.noapparmor.deb` | `sudo apt install ./domicile_*.noapparmor.deb` |
 | Fedora, RHEL 10+ | `domicile-<version>-1.fedora.x86_64.rpm` | `sudo dnf install ./domicile-*.fedora.x86_64.rpm` |
 | openSUSE Tumbleweed | `domicile-<version>-1.opensuse.x86_64.rpm` | `sudo zypper install --allow-unsigned-rpm ./domicile-*.opensuse.x86_64.rpm` |
 | Arch | `domicile-<version>-1-x86_64.pkg.tar.zst` | `sudo pacman -U ./domicile-*.pkg.tar.zst` |
@@ -316,11 +317,14 @@ The package installs what [the NixOS module](#the-machines-half) provides:
   [limits](#thread-priorities) (`/etc/security/limits.d/10-domicile.conf`).
 - **Portal routing:** Domicile's backend and `domicile-portals.conf`. `Secret`
   goes to `gnome-keyring`, which you install.
-- **On Ubuntu, an AppArmor profile** that lets the engine's sandbox make user
-  namespaces. Without it the engine does not start.
-- **Recommended:** UPower (the battery readout), hwdata (monitor makers),
-  `pactl` (the volume readout), curl, `xdg-desktop-portal`. Arch requires
-  them.
+- **On Ubuntu 24.04+, an AppArmor profile** that lets the engine's sandbox
+  make user namespaces. Without it the engine does not start. The
+  `noapparmor` package has none: Debian 12 and Ubuntu 22.04 do not restrict
+  user namespaces, and their AppArmor predates the profile's `userns` rule.
+- **Shutdown and Reboot** launcher entries, which ask in Domicile's dialog
+  first.
+- **Recommended** (optional on Arch): UPower (the battery readout), hwdata
+  (monitor makers), `pactl` (the volume readout), curl, `xdg-desktop-portal`.
 
 There is no package repository. Upgrade by installing a newer release's
 package.

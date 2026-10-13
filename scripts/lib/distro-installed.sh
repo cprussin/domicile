@@ -37,6 +37,19 @@ for elf in /usr/bin/domicile* "$LIBEXEC/bun" "$LIBEXEC"/engine/chrome \
   fi
 done
 
+# Domicile's programs bind every symbol they use: a library older than the one
+# they were built against can lack one, which `--list` alone does not catch.
+for program in /usr/bin/domicile*; do
+  # What `ldd -r` runs.
+  if listed="$(LD_TRACE_LOADED_OBJECTS=1 LD_WARN=yes LD_BIND_NOW=yes \
+    "$LOADER" "$program" 2>&1)" &&
+    ! echo "$listed" | grep -q 'undefined symbol'; then
+    pass "every symbol $program uses resolves"
+  else
+    fail "every symbol $program uses resolves" "$listed"
+  fi
+done
+
 # What the compositor and engine load at run time, by soname.
 for library in libEGL.so.1 libgbm.so.1 libwayland-client.so.0 \
   libwayland-egl.so.1 libpam.so.0; do
@@ -101,6 +114,15 @@ if [ -f /etc/pam.d/domicile ]; then
   done
 else
   fail "the domicile PAM service is installed"
+fi
+
+# Arch's optional dependencies, which `distro/arch-optdepends.sh` adds.
+if command -v pacman >/dev/null; then
+  info="$(pacman -Qi domicile)"
+  check "UPower is an optional dependency" \
+    sh -c 'echo "$1" | sed -n "/^Optional Deps/,/^[A-Z]/p" | grep -q upower' sh "$info"
+  check "and not a required one" \
+    sh -c '! echo "$1" | grep "^Depends On" | grep -q upower' sh "$info"
 fi
 
 [ "$FAILED" -eq 0 ]

@@ -1,0 +1,9 @@
+# The Arch package's optional dependencies, which `distro/arch-optdepends.sh`
+# adds: what the other formats in `distro/nfpm.yaml` recommend, except GTK
+# and Mesa's drivers, which Arch's required `mesa` holds.
+upower: the battery readout
+hwdata: monitor makers' names
+libpulse: pactl, for the volume readout
+curl: bookmark icons
+xdg-desktop-portal: portals for apps
+gsettings-desktop-schemas: the engine's GSettings schemas, without which it logs errors

@@ -6,6 +6,7 @@
 # Writes to <out>:
 #
 #   domicile_<version>_amd64.deb                  Debian 13+, Ubuntu 24.04+
+#   domicile_<version>_amd64.noapparmor.deb       Debian 12, Ubuntu 22.04
 #   domicile-<version>-1.fedora.x86_64.rpm        Fedora, RHEL 10+
 #   domicile-<version>-1.opensuse.x86_64.rpm      openSUSE Tumbleweed
 #   domicile-<version>-1-x86_64.pkg.tar.zst       Arch
@@ -50,7 +51,9 @@ echo "== tools and pins from the flake =="
 PATH="$(store_path '.#bun^out')/bin:$(store_path 'nixpkgs#nodejs_24^out')/bin:$PATH"
 NFPM="$(store_path 'nixpkgs#nfpm^out')/bin/nfpm"
 UNZIP="$(store_path 'nixpkgs#unzip^out')/bin/unzip"
-UNZSTD="$(store_path 'nixpkgs#zstd^bin')/bin/unzstd"
+# `zstd` for `distro/arch-optdepends.sh` too.
+ZSTD_BIN="$(store_path 'nixpkgs#zstd^bin')/bin"
+PATH="$ZSTD_BIN:$PATH"
 READELF="$(store_path 'nixpkgs#binutils-unwrapped^out')/bin/readelf"
 ENGINE_TARBALL="$(store_path .#engine.src)"
 BUN_ZIP="$(store_path .#bun.src)"
@@ -71,7 +74,7 @@ node_modules/.bin/turbo build:vite --no-daemon \
 
 echo "== the engine and bun =="
 mkdir -p "$WORK/engine" "$WORK/bun"
-tar --use-compress-program="$UNZSTD" -xf "$ENGINE_TARBALL" -C "$WORK/engine"
+tar --use-compress-program="$ZSTD_BIN/unzstd" -xf "$ENGINE_TARBALL" -C "$WORK/engine"
 # The tarball holds one directory, with `chrome` directly inside.
 ENGINE="$(echo "$WORK"/engine/*/)"
 "$UNZIP" -q -j "$BUN_ZIP" '*/bun' -d "$WORK/bun"
@@ -103,29 +106,23 @@ echo "== packages: version $VERSION, glibc $GLIBC =="
 # nfpm's Arch packager holds every file open until it finishes, and the
 # workspace alone is over 20,000 files.
 ulimit -n "$(ulimit -Hn)"
-package() { # nfpm packager, pam file, target
-  local config="$WORK/nfpm-$2.yaml"
-  sed -e "s|@stage@|$WORK/stage|g" \
-    -e "s|@distro@|$ROOT/distro|g" \
-    -e "s|@pam@|$2|g" \
-    -e "s|@version@|$VERSION|g" \
-    -e "s|@glibc@|$GLIBC|g" \
-    distro/nfpm.yaml >"$config"
-  if grep -nE '@[a-z]+@' "$config"; then
-    echo "build.sh: distro/nfpm.yaml has a placeholder build.sh does not fill" >&2
-    exit 1
-  fi
+package() { # nfpm packager, pam file, target, nfpm-config.sh flags...
+  local config="$WORK/nfpm-$3.yaml"
+  distro/nfpm-config.sh "$WORK/stage" "$2" "$VERSION" "$GLIBC" "${@:4}" >"$config"
   "$NFPM" package --config "$config" --packager "$1" --target "$OUT/$3"
 }
 MADE=(
   "domicile_${VERSION}_amd64.deb"
+  "domicile_${VERSION}_amd64.noapparmor.deb"
   "domicile-$VERSION-1.fedora.x86_64.rpm"
   "domicile-$VERSION-1.opensuse.x86_64.rpm"
   "domicile-$VERSION-1-x86_64.pkg.tar.zst"
 )
 package deb debian "${MADE[0]}"
-package rpm fedora "${MADE[1]}"
-package rpm opensuse "${MADE[2]}"
-package archlinux archlinux "${MADE[3]}"
+package deb debian "${MADE[1]}" --without-apparmor
+package rpm fedora "${MADE[2]}"
+package rpm opensuse "${MADE[3]}"
+package archlinux archlinux "${MADE[4]}"
+distro/arch-optdepends.sh "$OUT/${MADE[4]}" distro/arch-optdepends
 
 (cd "$OUT" && sha256sum "${MADE[@]}" >SHA256SUMS)

@@ -41,6 +41,9 @@ NOTES="$(cat <<NOTES
 Domicile for Debian, Ubuntu, Fedora, openSUSE and Arch, built from \`$head\`
 with the official engine (series \`${official:0:12}\`).
 
+Debian 12 and Ubuntu 22.04: \`domicile_*.noapparmor.deb\`. Debian 13+ and
+Ubuntu 24.04+: \`domicile_*_amd64.deb\`.
+
 Install and set up: [Other distributions](https://github.com/$GITHUB_REPOSITORY/blob/$head/docs/RUNNING-A-DESKTOP.md#other-distributions).
 NOTES
 )"

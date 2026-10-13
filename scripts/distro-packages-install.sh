@@ -5,8 +5,8 @@
 #   DOMICILE_DISTRO_PACKAGES=<dir> scripts/distro-packages-install.sh
 #
 # <dir> holds `distro/build.sh`'s output. `DOMICILE_DISTROS` picks
-# distributions, space separated: debian ubuntu fedora opensuse arch (the
-# default is all). Recommended packages are not installed, so the install
+# distributions, space separated: debian debian-12 ubuntu ubuntu-22.04 fedora
+# opensuse arch (the default is all). Recommended packages are not installed, so the install
 # proves the hard dependencies are enough. No GPU is needed: nothing draws.
 set -uo pipefail
 
@@ -30,7 +30,9 @@ PACKAGES="$(cd "$PACKAGES" && pwd)"
 image_of() {
   case "$1" in
     (debian) echo debian:trixie ;;
+    (debian-12) echo debian:bookworm ;;
     (ubuntu) echo ubuntu:24.04 ;;
+    (ubuntu-22.04) echo ubuntu:22.04 ;;
     (fedora) echo fedora:44 ;;
     (opensuse) echo opensuse/tumbleweed:latest ;;
     (arch) echo archlinux:latest ;;
@@ -39,7 +41,8 @@ image_of() {
 }
 package_of() {
   case "$1" in
-    (debian | ubuntu) echo '*.deb' ;;
+    (debian | ubuntu) echo '*_amd64.deb' ;;
+    (debian-12 | ubuntu-22.04) echo '*.noapparmor.deb' ;;
     (fedora) echo '*.fedora.x86_64.rpm' ;;
     (opensuse) echo '*.opensuse.x86_64.rpm' ;;
     (arch) echo '*.pkg.tar.zst' ;;
@@ -47,7 +50,7 @@ package_of() {
 }
 install_of() {
   case "$1" in
-    (debian | ubuntu)
+    (debian | debian-12 | ubuntu | ubuntu-22.04)
       echo 'apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$1"' ;;
     (fedora) echo 'dnf install -y --nogpgcheck --setopt=install_weak_deps=False "$1"' ;;
     (opensuse) echo 'zypper --non-interactive install --no-recommends --allow-unsigned-rpm "$1"' ;;
@@ -56,7 +59,7 @@ install_of() {
 }
 
 FAILED=0
-for distro in ${DOMICILE_DISTROS:-debian ubuntu fedora opensuse arch}; do
+for distro in ${DOMICILE_DISTROS:-debian debian-12 ubuntu ubuntu-22.04 fedora opensuse arch}; do
   image="$(image_of "$distro")" || {
     echo "no distribution named $distro" >&2
     exit 1
