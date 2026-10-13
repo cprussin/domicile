@@ -1,6 +1,6 @@
 # The `packages/` directories published to npm, one per line, dependencies
 # first, so a package is never on npm before what it needs. Read by
-# publish-packages.sh and scripts/npm-bootstrap.sh.
+# publish-packages.sh.
 chrome-sdk
 system-apps
 system-audio

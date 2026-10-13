@@ -56,9 +56,9 @@ uses the running Domicile's copies.
 
 A new public package goes in `.github/scripts/published-packages`, after what
 it depends on. npm gives a trusted publisher only to a package it has, so
-before the merge that first publishes it, an owner of the scope runs
-`scripts/npm-bootstrap.sh claim` (a placeholder `0.0.0-0`) and `trust`. After
-the workflow has published it, `retire` removes the placeholder.
+before the merge that first publishes it, an owner of the scope publishes a
+placeholder version by hand and names `publish-packages.yml` its trusted
+publisher.
 
 `biome.json`'s `overrides` turn `useSortedKeys` off for the published
 manifests whose `exports` use conditions, for the whole manifest, since the

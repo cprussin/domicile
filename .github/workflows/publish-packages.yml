@@ -7,7 +7,7 @@ name: Publish packages
 # whose trusted publisher on npmjs.com names this repository and file, and adds
 # provenance. A package without a trusted publisher refuses the publish. npm
 # attaches one only to an existing package, so a new package is first claimed
-# and given its trusted publisher with scripts/npm-bootstrap.sh.
+# by hand with a placeholder version and given its trusted publisher there.
 on:
   push:
     branches: [main]
