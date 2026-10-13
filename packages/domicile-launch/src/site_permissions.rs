@@ -2,7 +2,7 @@
 //!
 //! The same shape crosses three hops: the engine's command socket
 //! ([`crate::command`]), the control socket ([`crate::control`]) and the
-//! Settings app's native messaging host ([`crate::settings`]). The names match
+//! Settings app's host ([`crate::settings`]). The names match
 //! the shell's `WEBVIEW_PERMISSIONS` and the engine's
 //! `components/domicile/browser/site_permissions.h`.
 

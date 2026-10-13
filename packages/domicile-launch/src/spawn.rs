@@ -140,8 +140,8 @@ pub fn engine(
     args.extend(extra.rest.into_iter().map(OsString::from));
     Spawn {
         args,
-        // For `domicile-settings-host`, which the engine starts for the
-        // Settings app and which asks this desktop for its files.
+        // For the programs the engine starts, such as native messaging
+        // hosts, so they reach this desktop.
         env: vec![(VARIABLE.to_string(), runtime.control.clone().into())],
         program: engine.join("chrome"),
     }

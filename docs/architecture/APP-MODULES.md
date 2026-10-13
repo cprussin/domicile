@@ -105,11 +105,11 @@ An app reaches Domicile's own state through programs it spawns. Each inherits
 
 | App | Spawns | For |
 |---|---|---|
-| Settings | `domicile-app-host`, over stdio | config and shell files, site permissions, media devices, extensions |
+| Settings | `domicile-settings-host`, over stdio | config and shell files, site permissions, media devices, extensions |
 | History | `domicile-app-host`, over stdio | history, favicons, clearing browsing data |
 
-- `domicile-app-host` is `domicile-settings-host` renamed, with the same
-  length-prefixed JSON framing. It asks the desktop over `DOMICILE_SOCK`, and
+- `domicile-settings-host` keeps its length-prefixed JSON framing, and History
+  shares it as `domicile-app-host` once History moves. It asks the desktop over `DOMICILE_SOCK`, and
   the supervisor relays engine requests over the command socket.
 - New engine commands:
 
@@ -124,9 +124,10 @@ An app reaches Domicile's own state through programs it spawns. Each inherits
 
 ### Installing
 
-- Domicile's apps are built into `libexec/domicile/apps/<name>/`.
-  `domicile-history` and `domicile-settings` run `domicile run-app` on their
-  entry module. Nothing is added to the profile.
+- Domicile's apps are built into `libexec/domicile/app-modules/<name>/`, or
+  `DOMICILE_APP_MODULES/<name>/`. `domicile-history` and `domicile-settings`
+  run `domicile run-app` on its `<name>.js`. Nothing is added to the profile.
+- `domicile` links the hosts into the apps' `PATH`, beside `xdg-open`.
 - Any other app ships a desktop entry:
 
   ```ini
@@ -169,7 +170,7 @@ An app reaches Domicile's own state through programs it spawns. Each inherits
 - [x] guard: `run_app` runs `main`, an app's system call crosses, and a
   `<webview>` not opened for the app cannot open its URL
   (`guard-app-module.sh`)
-- [ ] Settings as an app: `domicile-app-host`, engine `extensions` and
+- [x] Settings as an app: `settings.js`, engine `extensions` and
   `set_extension_enabled`
 - [ ] History as an app: engine `history`, `delete_history` and
   `clear_browsing_data`

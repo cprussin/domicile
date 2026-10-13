@@ -4,8 +4,7 @@
 #
 # Chrome derives an extension's id from its key: the first 128 bits of the
 # SHA-256 of the key, one letter from `a` to `p` per hex digit. A new key with
-# the old id in `apps.rs` opens a page no extension serves, and for Settings,
-# lets no extension start its native messaging host.
+# the old id in `apps.rs` opens a page no extension serves.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -13,7 +12,7 @@ APPS="$ROOT/packages/domicile-launch/src/apps.rs"
 failed=0
 
 # app package, the constant in apps.rs that names its page
-for app in "history HISTORY" "settings SETTINGS"; do
+for app in "history HISTORY"; do
   read -r name constant <<<"$app"
   manifest="$ROOT/packages/app-$name/public/manifest.json"
   key="$(sed -n 's/^ *"key": "\([^"]*\)",*$/\1/p' "$manifest")"

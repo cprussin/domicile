@@ -1,8 +1,7 @@
-// In-memory stand-ins for the settings host and `chrome.management`, for the
-// app's tests.
+// An in-memory stand-in for the settings host, for the app's tests.
 
-import type { Extensions, InstalledExtension } from "./extensions";
 import type {
+  InstalledExtension,
   MediaDevices,
   SettingsFiles,
   SettingsHost,
@@ -17,18 +16,24 @@ export type FakeHostState = {
   chosen: string | undefined;
   /** The ids the engine says the config installed. */
   configExtensions: string[];
+  /** The extensions in the profile, which switches change. */
+  installed: InstalledExtension[];
   sites: SiteSettings;
   media: MediaDevices;
   /** The reason every write is refused, if any. */
   refuse?: string | undefined;
 };
 
-/** A host over `state`, which writes change; `writes` records each. */
+/**
+ * A host over `state`, which writes change; `writes`, `opened` and the rest
+ * record each request.
+ */
 export const fakeHost = (state: FakeHostState) => {
   const changes = new Set<() => void>();
   const writes: { file: Target; text: string }[] = [];
   const loaded: string[] = [];
   const uninstalled: string[] = [];
+  const opened: string[] = [];
   /** Each folder the picker returned. */
   const chosen: (string | undefined)[] = [];
   const host: SettingsHost = {
@@ -37,6 +42,7 @@ export const fakeHost = (state: FakeHostState) => {
       return Promise.resolve(state.chosen);
     },
     configExtensions: () => Promise.resolve([...state.configExtensions]),
+    extensions: () => Promise.resolve(structuredClone(state.installed)),
     loadUnpacked: (directory) => {
       loaded.push(directory);
       return Promise.resolve("c".repeat(32));
@@ -48,7 +54,20 @@ export const fakeHost = (state: FakeHostState) => {
         changes.delete(listener);
       };
     },
+    openUrl: (url) => {
+      opened.push(url);
+      return Promise.resolve();
+    },
     read: () => Promise.resolve(structuredClone(state.files)),
+    setExtensionEnabled: (id, enabled) => {
+      const found = state.installed.find((extension) => extension.id === id);
+      if (found === undefined) {
+        throw new Error(`No extension ${id}`);
+      } else {
+        found.enabled = enabled;
+        return Promise.resolve();
+      }
+    },
     setMediaDevice: (kind, id) => {
       const list = kind === "camera" ? "cameras" : "microphones";
       const preferred = state.media[list].filter((device) => device.id === id);
@@ -97,33 +116,14 @@ export const fakeHost = (state: FakeHostState) => {
       listener();
     }
   };
-  return { change, chosen, host, loaded, state, uninstalled, writes };
-};
-
-/** `chrome.management` over `installed`, which switches change. */
-export const fakeExtensions = (installed: InstalledExtension[]) => {
-  const opened: string[] = [];
-  const extensions: Extensions = {
-    list: () => Promise.resolve(structuredClone(installed)),
-    // The fake's list changes only through `setEnabled`, which the page
-    // follows by listing again.
-    onChange: () => () => {
-      /* nothing to stop */
-    },
-    openOptions: (url) => {
-      opened.push(url);
-      return Promise.resolve();
-    },
-    selfId: "acpgnhiblklkgbkcjgbabkcmdmchdphk",
-    setEnabled: (id, enabled) => {
-      const found = installed.find((extension) => extension.id === id);
-      if (found === undefined) {
-        throw new Error(`No extension ${id}`);
-      } else {
-        found.enabled = enabled;
-        return Promise.resolve();
-      }
-    },
+  return {
+    change,
+    chosen,
+    host,
+    loaded,
+    opened,
+    state,
+    uninstalled,
+    writes,
   };
-  return { extensions, installed, opened };
 };

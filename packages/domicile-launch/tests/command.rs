@@ -4,10 +4,12 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use domicile_launch::command::{
-    config_extensions_line, load_shell_line, load_unpacked_line, media_devices_line, open_app_line,
-    open_url_line, reply, run_app_line, set_media_device_line, set_site_permission_line,
+    config_extensions_line, extensions_line, load_shell_line, load_unpacked_line,
+    media_devices_line, open_app_line, open_url_line, reply, run_app_line,
+    set_extension_enabled_line, set_media_device_line, set_site_permission_line,
     site_permissions_line, uninstall_extension_line, Reply,
 };
+use domicile_launch::extensions::InstalledExtension;
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
@@ -170,6 +172,54 @@ fn an_engine_lists_the_extensions_the_config_installed() {
         Reply::ConfigExtensions {
             ids: vec!["abcdefghijklmnopabcdefghijklmnop".to_string()]
         }
+    );
+}
+
+#[test]
+fn an_engine_lists_every_installed_extension_and_its_options_page() {
+    assert_eq!(
+        extensions_line(),
+        "{\"type\":\"extensions\",\"version\":1}\n"
+    );
+    // An extension without an options page has no `options_url`.
+    assert_eq!(
+        reply(
+            "{\"type\":\"extensions\",\"extensions\":[\
+             {\"id\":\"abcdefghijklmnopabcdefghijklmnop\",\"name\":\"Dark Reader\",\"description\":\"Dark mode\",\"version\":\"4.9\",\"enabled\":true,\"options_url\":\"chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html\"},\
+             {\"id\":\"bcdefghijklmnopabcdefghijklmnopa\",\"name\":\"Tabs\",\"description\":\"\",\"version\":\"1.0\",\"enabled\":false}]}"
+        )
+        .unwrap(),
+        Reply::Extensions {
+            extensions: vec![
+                InstalledExtension {
+                    id: "abcdefghijklmnopabcdefghijklmnop".to_string(),
+                    name: "Dark Reader".to_string(),
+                    description: "Dark mode".to_string(),
+                    version: "4.9".to_string(),
+                    enabled: true,
+                    options_url: Some(
+                        "chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html"
+                            .to_string()
+                    ),
+                },
+                InstalledExtension {
+                    id: "bcdefghijklmnopabcdefghijklmnopa".to_string(),
+                    name: "Tabs".to_string(),
+                    description: String::new(),
+                    version: "1.0".to_string(),
+                    enabled: false,
+                    options_url: None,
+                },
+            ]
+        }
+    );
+}
+
+#[test]
+fn an_extension_is_enabled_or_disabled_by_id() {
+    assert_eq!(
+        set_extension_enabled_line("abcdefghijklmnopabcdefghijklmnop", false),
+        "{\"type\":\"set_extension_enabled\",\"version\":1,\"id\":\"abcdefghijklmnopabcdefghijklmnop\",\"enabled\":false}\n"
     );
 }
 

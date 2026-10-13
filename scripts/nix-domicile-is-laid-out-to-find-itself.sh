@@ -40,10 +40,22 @@ for program in domicile-history domicile-settings domicile-settings-host; do
     exit 1
   }
 done
-for app in history settings; do
+for app in history; do
   [ -f "$out/libexec/domicile/apps/$app/manifest.json" ] || {
     echo "libexec/domicile/apps/$app holds no manifest.json, so no desktop" >&2
     echo "  installs it" >&2
+    exit 1
+  }
+done
+for module in settings; do
+  [ -f "$out/libexec/domicile/app-modules/$module/$module.js" ] || {
+    echo "libexec/domicile/app-modules/$module holds no $module.js, so" >&2
+    echo "  domicile-$module has nothing to run" >&2
+    exit 1
+  }
+  [ ! -e "$out/libexec/domicile/apps/$module" ] || {
+    echo "libexec/domicile/apps/$module exists, so every desktop installs" >&2
+    echo "  $module as an extension" >&2
     exit 1
   }
 done

@@ -1,6 +1,6 @@
-// Vite config for a shell, which Domicile loads as a module instead of an HTML
-// page. The build emits a fixed `shell.js`, keeps the entry's exports, and
-// inlines CSS into the module. Mistakes here give a blank or unstyled desktop
+// Vite config for a shell or an app module, which Domicile loads as a module
+// instead of an HTML page. The build emits a fixed file name (`shell.js` by
+// default), keeps the entry's exports, and inlines CSS into the module. Mistakes here give a blank or unstyled desktop
 // with no error. See docs/SHELL-PACKAGING.md.
 //
 // CSS goes in the module to avoid a theme flash. A stylesheet `<link>` blocks
@@ -56,13 +56,15 @@ const installStyles = (css: string): string =>
 export type ShellBuild = {
   /** The shell's entry module, relative to the config. */
   readonly entry: string;
+  /** The module's file name; `shell.js` by default. An app names its own. */
+  readonly fileName?: string;
 };
 
 /**
  * The `build` and `plugins` a shell's vite config needs. Spread it into the
  * shell's own config.
  */
-export const shellBuild = ({ entry }: ShellBuild) => ({
+export const shellBuild = ({ entry, fileName = "shell.js" }: ShellBuild) => ({
   build: {
     // No content hash, so configs and packages can name the module path.
     //
@@ -70,7 +72,7 @@ export const shellBuild = ({ entry }: ShellBuild) => ({
     // `Shell` and all code only it reaches.
     rollupOptions: {
       input: entry,
-      output: { entryFileNames: "shell.js" },
+      output: { entryFileNames: fileName },
       preserveEntrySignatures: "exports-only" as const,
     },
     sourcemap: true,

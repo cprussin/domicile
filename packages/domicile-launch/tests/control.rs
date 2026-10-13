@@ -8,6 +8,7 @@ use domicile_launch::control::{
     answer, parse_response, Desktop, LoadShell, OpenUrl, Response, Screenshot, SendShell,
     SettingsFiles, Shot,
 };
+use domicile_launch::extensions::InstalledExtension;
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
@@ -425,6 +426,57 @@ fn a_desktop_asked_which_extensions_the_config_installed_asks_the_engine() {
     );
 }
 
+#[test]
+fn a_desktop_asked_for_its_extensions_asks_the_engine() {
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"extensions\"}",
+            &Desktop {
+                extensions: &|| Ok(vec![an_extension()]),
+                ..nothing_dialed()
+            }
+        ),
+        Response::Extensions {
+            extensions: vec![an_extension()]
+        }
+    );
+}
+
+#[test]
+fn a_desktop_told_to_disable_an_extension_tells_the_engine() {
+    let told = RefCell::new(None);
+    let answered = reply_to(
+        "{\"type\":\"set_extension_enabled\",\"id\":\"abcdefghijklmnopabcdefghijklmnop\",\"enabled\":false}",
+        &Desktop {
+            set_extension_enabled: &|id, enabled| {
+                told.replace(Some((id.to_string(), enabled)));
+                Ok(())
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(
+        told.take(),
+        Some(("abcdefghijklmnopabcdefghijklmnop".to_string(), false))
+    );
+    assert_eq!(answered, Response::Stored);
+}
+
+/// An installed extension with an options page.
+fn an_extension() -> InstalledExtension {
+    InstalledExtension {
+        id: "abcdefghijklmnopabcdefghijklmnop".to_string(),
+        name: "Dark Reader".to_string(),
+        description: "Dark mode".to_string(),
+        version: "4.9".to_string(),
+        enabled: true,
+        options_url: Some(
+            "chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html".to_string(),
+        ),
+    }
+}
+
 /// What the engine stores: camera's default, and one site's camera.
 fn a_camera() -> MediaDevices {
     MediaDevices {
@@ -463,6 +515,7 @@ fn nothing_dialed() -> Desktop<'static> {
     Desktop {
         capture: &|_| panic!("only screenshot captures anything"),
         config_extensions: &|| panic!("only config_extensions lists the config's extensions"),
+        extensions: &|| panic!("only extensions lists every extension"),
         files: &NO_FILES,
         load: &|_, _| panic!("only load_shell loads anything"),
         load_unpacked: &|_| panic!("only load_unpacked loads an extension"),
@@ -473,6 +526,7 @@ fn nothing_dialed() -> Desktop<'static> {
         run_app: &|_, _| panic!("only run_app runs an app module"),
         permissions: &|| panic!("only site_permissions lists site permissions"),
         send: &|_| panic!("only send_shell sends anything"),
+        set_extension_enabled: &|_, _| panic!("only set_extension_enabled enables one"),
         set_media_device: &|_, _| panic!("only set_media_device prefers one"),
         set_permission: &|_| panic!("only set_site_permission sets one"),
         uninstall_extension: &|_| panic!("only uninstall_extension uninstalls one"),

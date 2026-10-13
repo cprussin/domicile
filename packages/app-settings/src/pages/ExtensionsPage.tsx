@@ -9,8 +9,8 @@ import { useId } from "react";
 import { css } from "../../styled-system/css";
 import { circle, flex } from "../../styled-system/patterns";
 import type { ConfigEditor, Report } from "../config-editor";
-import type { Extensions, InstalledExtension } from "../extensions";
-import type { SettingsHost } from "../host";
+import type { Extensions } from "../extensions";
+import type { InstalledExtension, SettingsHost } from "../host";
 import { ListSetting } from "../ListSetting";
 import { Notice } from "../Notice";
 import { Page } from "../Page";
@@ -88,7 +88,6 @@ export const ExtensionsPage = ({
                 store,
                 uninstall: host.uninstallExtension,
               })}
-              self={extension.id === extensions.selfId}
             />
           ))}
         </ul>
@@ -191,8 +190,6 @@ const uninstaller = ({
 
 type ExtensionRowProps = {
   extension: InstalledExtension;
-  /** Whether this is the Settings app, which cannot switch itself off. */
-  self: boolean;
   onEnabled: (enabled: boolean) => void;
   onOptions: (url: string) => void;
   /** Uninstalls it, or `undefined` if the page cannot. */
@@ -205,7 +202,6 @@ const ExtensionRow = ({
   onEnabled,
   onOptions,
   onUninstall,
-  self,
 }: ExtensionRowProps) => {
   const { description, enabled, name, optionsUrl, version } = extension;
   const nameId = useId();
@@ -246,14 +242,12 @@ const ExtensionRow = ({
             <TrashIcon size={16} />
           </Button>
         )}
-        {!self && (
-          <Switch
-            aria-labelledby={nameId}
-            checked={enabled}
-            label="On"
-            onCheckedChange={onEnabled}
-          />
-        )}
+        <Switch
+          aria-labelledby={nameId}
+          checked={enabled}
+          label="On"
+          onCheckedChange={onEnabled}
+        />
       </div>
     </li>
   );
