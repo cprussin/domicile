@@ -63,6 +63,13 @@ pub enum ChromeMessage {
     /// First message after connecting; declares the version the chrome speaks.
     Hello { protocol_version: u32 },
 
+    /// First message from an app's connection, in place of `Hello`.
+    ///
+    /// The connection may send only [`ChromeMessage::SystemRequest`]s for
+    /// files, processes and D-Bus, and hears only their answers. See
+    /// `docs/architecture/APP-MODULES.md`.
+    AppHello { protocol_version: u32 },
+
     /// The chrome's `devicePixelRatio`.
     ///
     /// The compositor advertises it as the `wl_output` scale so clients render
