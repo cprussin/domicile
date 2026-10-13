@@ -12,8 +12,9 @@ guard is headless and software-composited, with no GPU and no Wayland.
 
 So this accepts the connection, answers `hello` with a keyboard with Tab on
 evdev 15 -- the page grabs Alt+Tab by name, and the engine resolves a name
-against the keyboard the compositor describes -- and reads. It answers nothing
-else: no other message the browser sends on this socket has an answer.
+against the keyboard the compositor describes -- then `idle`, and reads. It
+answers nothing else: no other message the browser sends on this socket has an
+answer.
 
 IT IS ALSO THE ASSERTION THAT A CLAIM IS NO LONGER RELAYED. Every line the
 browser writes is printed here, so `grab_shortcut` appearing in this log would
@@ -29,8 +30,13 @@ import socket
 import sys
 
 # The keyboard, as the compositor's `shell_config` describes it: each keysym
-# and the evdev key it is on.
-KEYBOARD = {"type": "shell_config", "keys": {"Tab": 15}}
+# and the evdev key it is on. Then `idle`, on the same socket, which tells the
+# page the keyboard has reached it: a chord claimed before that is matched only
+# once the keyboard arrives.
+ANSWER = [
+    {"type": "shell_config", "keys": {"Tab": 15}},
+    {"type": "idle", "idle": True},
+]
 
 
 def is_hello(line):
@@ -68,8 +74,10 @@ def serve(path):
                     line, remainder = remainder.split(b"\n", 1)
                     print("said: %s" % line.decode("utf-8", "replace"), flush=True)
                     if is_hello(line):
-                        connection.sendall((json.dumps(KEYBOARD) + "\n").encode("utf-8"))
-                        print("sent: %s" % json.dumps(KEYBOARD), flush=True)
+                        for message in ANSWER:
+                            text = json.dumps(message)
+                            connection.sendall((text + "\n").encode("utf-8"))
+                            print("sent: %s" % text, flush=True)
         print("the channel went away", flush=True)
 
 
