@@ -48,14 +48,20 @@ describe("parseHostMessage", () => {
 
   it("normalizes a missing app title and desktop id to undefined", () => {
     const message = parseHostMessage(
-      '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":[640,480],"dialog":true,"client_frame":false,"owner":{"pid":7,"uid":1000,"gid":1000,"pidfd_inode":null}}',
+      '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":[640,480],"dialog":true,"client_frame":false,"owner":{"pid":7,"uid":1000,"gid":1000,"pidfd_inode":null,"sandbox":null}}',
     );
     expect(message).toStrictEqual({
       app_id: "term",
       client_frame: false,
       desktop_id: undefined,
       dialog: true,
-      owner: { gid: 1000, pid: 7, pidfd_inode: undefined, uid: 1000 },
+      owner: {
+        gid: 1000,
+        pid: 7,
+        pidfd_inode: undefined,
+        sandbox: undefined,
+        uid: 1000,
+      },
       size: [640, 480],
       title: undefined,
       type: "app_appeared",
@@ -64,10 +70,21 @@ describe("parseHostMessage", () => {
 
   it("decodes the process that owns a window", () => {
     const message = parseHostMessage(
-      '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":[640,480],"dialog":false,"client_frame":false,"owner":{"pid":4242,"uid":1001,"gid":100,"pidfd_inode":5021}}',
+      '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":[640,480],"dialog":false,"client_frame":false,"owner":{"pid":4242,"uid":1001,"gid":100,"pidfd_inode":5021,"sandbox":null}}',
     );
     expect(message).toMatchObject({
       owner: { gid: 100, pid: 4242, pidfd_inode: 5021, uid: 1001 },
+    });
+  });
+
+  it("decodes the sandbox a window's client connected from", () => {
+    const message = parseHostMessage(
+      '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":[640,480],"dialog":false,"client_frame":false,"owner":{"pid":4242,"uid":1001,"gid":100,"pidfd_inode":null,"sandbox":{"engine":"org.flatpak","app_id":null,"instance_id":"3"}}}',
+    );
+    expect(message).toMatchObject({
+      owner: {
+        sandbox: { app_id: undefined, engine: "org.flatpak", instance_id: "3" },
+      },
     });
   });
 

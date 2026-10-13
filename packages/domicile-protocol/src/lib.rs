@@ -241,7 +241,7 @@ pub enum ChromeMessage {
 ///
 /// The kernel records it at `connect(2)` (`SO_PEERCRED`), so the client cannot
 /// forge it, unlike its app id or title.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Owner {
     pub pid: i32,
     pub uid: u32,
@@ -250,6 +250,21 @@ pub struct Owner {
     /// the system is up, so it tells a reused pid apart. `None` on kernels
     /// without pidfs (before Linux 6.9).
     pub pidfd_inode: Option<u64>,
+    /// The sandbox the client connected from, through a
+    /// `wp_security_context_v1` listener; `None` for an unsandboxed client.
+    pub sandbox: Option<Sandbox>,
+}
+
+/// What a sandbox engine said about a client when it created its
+/// `wp_security_context_v1`. Each is `None` when the engine did not say.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Sandbox {
+    /// The sandbox engine, such as `org.flatpak`.
+    pub engine: Option<String>,
+    /// The engine's id for the application.
+    pub app_id: Option<String>,
+    /// The engine's id for this instance of the application.
+    pub instance_id: Option<String>,
 }
 
 /// Messages sent from the host to the chrome (in-page client).

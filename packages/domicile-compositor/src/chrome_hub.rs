@@ -316,6 +316,7 @@ pub mod fixture {
             uid: 1000,
             gid: 1000,
             pidfd_inode: None,
+            sandbox: None,
         });
         host.app_mapped(
             &app_id,

@@ -142,6 +142,10 @@ impl GlobalDispatch<ZwlrScreencopyManagerV1, ()> for DomicileCompositor {
     ) {
         data_init.init(resource, ());
     }
+
+    fn can_view(client: Client, _: &()) -> bool {
+        crate::sees_privileged_globals(&client)
+    }
 }
 
 impl Dispatch<ZwlrScreencopyManagerV1, ()> for DomicileCompositor {

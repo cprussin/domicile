@@ -227,6 +227,10 @@ impl GlobalDispatch<ExtOutputImageCaptureSourceManagerV1, ()> for DomicileCompos
     ) {
         data_init.init(resource, ());
     }
+
+    fn can_view(client: Client, _: &()) -> bool {
+        crate::sees_privileged_globals(&client)
+    }
 }
 
 impl Dispatch<ExtOutputImageCaptureSourceManagerV1, ()> for DomicileCompositor {
@@ -272,6 +276,10 @@ impl GlobalDispatch<ExtImageCopyCaptureManagerV1, ()> for DomicileCompositor {
         data_init: &mut DataInit<'_, Self>,
     ) {
         data_init.init(resource, ());
+    }
+
+    fn can_view(client: Client, _: &()) -> bool {
+        crate::sees_privileged_globals(&client)
     }
 }
 

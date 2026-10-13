@@ -17,6 +17,7 @@ const OWNER: Owner = Owner {
     uid: 1000,
     gid: 1000,
     pidfd_inode: None,
+    sandbox: None,
 };
 
 // ---- app lifecycle --------------------------------------------------------
@@ -31,8 +32,9 @@ fn a_window_names_the_process_that_owns_it() {
         uid: 1001,
         gid: 100,
         pidfd_inode: Some(5021),
+        sandbox: None,
     };
-    let app = host.app_created(owner);
+    let app = host.app_created(owner.clone());
 
     let announced = host.app_mapped(&app, mapped());
     assert!(
