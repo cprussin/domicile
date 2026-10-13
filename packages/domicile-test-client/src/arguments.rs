@@ -100,6 +100,10 @@ pub struct Arguments {
     /// The maximize or fullscreen request to make on its first configure, if
     /// any. `Fullscreen` names the first output the client bound.
     pub ask_to: Option<AskTo>,
+
+    /// Whether to bind `xdg_wm_base` at version 1, as a client too old for
+    /// tiled states does.
+    pub xdg_wm_base_v1: bool,
 }
 
 /// An `xdg_toplevel` request about the window's state.
@@ -182,6 +186,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut resize_to = None;
     let mut buffer_transform = None;
     let mut ask_to = None;
+    let mut xdg_wm_base_v1 = None;
 
     let mut args = args.into_iter();
     while let Some(argument) = args.next() {
@@ -261,6 +266,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--ask-to" => {
                 take(&mut ask_to, &flag, window_request(&mut args, &flag)?)?;
             }
+            "--xdg-wm-base-v1" => {
+                take(&mut xdg_wm_base_v1, &flag, true)?;
+            }
             _ => return Err(ArgumentError::Unknown { argument: flag }),
         }
     }
@@ -285,6 +293,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         resize_to,
         buffer_transform,
         ask_to,
+        xdg_wm_base_v1: xdg_wm_base_v1.unwrap_or(false),
     })
 }
 

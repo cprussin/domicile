@@ -469,15 +469,22 @@ impl DomicileCompositor {
 /// Replace the states a shell sets on `toplevel` with `states`, and configure
 /// it if they changed.
 ///
-/// Smithay drops tiled states for a client bound below `xdg_wm_base` version 2.
 /// `activated` and `suspended` are the compositor's and are kept.
 fn set_window_states(toplevel: &ToplevelSurface, states: &[WindowState]) {
+    let maximized_for_tiled = toplevel.version() < TILED_SINCE
+        && !states.contains(&WindowState::Fullscreen)
+        && states.iter().copied().any(is_tiled);
     toplevel.with_pending_state(|pending| {
         for state in SHELL_STATES {
             pending.states.unset(state);
         }
         for state in states {
             pending.states.set(xdg_state(*state));
+        }
+        // Smithay drops tiled states for these clients. `maximized` is the
+        // nearest they know: no shadows, and the configured size.
+        if maximized_for_tiled {
+            pending.states.set(xdg_toplevel::State::Maximized);
         }
     });
     // Before the first configure, that configure carries them.
@@ -495,6 +502,19 @@ const SHELL_STATES: [xdg_toplevel::State; 6] = [
     xdg_toplevel::State::Maximized,
     xdg_toplevel::State::Fullscreen,
 ];
+
+/// The `xdg_wm_base` version that added the tiled states.
+const TILED_SINCE: u32 = 2;
+
+fn is_tiled(state: WindowState) -> bool {
+    matches!(
+        state,
+        WindowState::TiledLeft
+            | WindowState::TiledRight
+            | WindowState::TiledTop
+            | WindowState::TiledBottom
+    )
+}
 
 fn xdg_state(state: WindowState) -> xdg_toplevel::State {
     match state {

@@ -109,8 +109,6 @@ Understood and not scheduled.
 - **Browser window context menus have only Chrome's core items.** No spelling
   suggestions, page or extension items.
 - **Client-drawn cursor surfaces show a plain arrow.**
-- **A client bound below `xdg_wm_base` version 2 gets no tiled states.** sway
-  sends it `maximized` instead.
 - **Unknown: whether viz hit testing must agree with Domicile's.**
   [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#open-questions).
 

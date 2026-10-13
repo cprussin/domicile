@@ -409,3 +409,12 @@ fn a_window_request_xdg_toplevel_has_no_name_for_is_refused() {
         })
     );
 }
+
+#[test]
+fn a_client_can_be_asked_to_bind_the_first_xdg_wm_base() {
+    assert!(given(&["--xdg-wm-base-v1"]).unwrap().xdg_wm_base_v1);
+    assert!(
+        !given(&[]).unwrap().xdg_wm_base_v1,
+        "and binds the newest it knows unless told"
+    );
+}

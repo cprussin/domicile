@@ -5,7 +5,8 @@
 /**
  * An `xdg_toplevel` state the shell sets on a window. Tiled states tell a
  * client its edges touch something, so it draws no shadow, rounded corners or
- * resize border there. A client too old for tiled states is sent none.
+ * resize border there. A client too old for tiled states is sent `Maximized`
+ * instead.
  */
 export enum WindowState {
   TiledLeft,

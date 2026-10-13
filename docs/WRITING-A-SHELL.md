@@ -280,7 +280,10 @@ await system(domicile).setWindowStates(appId, [
   compositor's own states (`activated`, `suspended`) are kept.
 - States outlive a shell reload. Set them again for every window you lay out;
   setting the same states configures nothing.
-- A client bound below `xdg_wm_base` version 2 gets no tiled states.
+- A client bound below `xdg_wm_base` version 2 has no tiled states. Given any
+  tiled state and no `Fullscreen`, it gets `maximized` instead, as in sway, so
+  it drops its shadows and takes its box's size. A client asking to unmaximize
+  stays maximized until the shell's states change.
 - An unknown `appId` fails with `SystemErrorKind.NotFound`.
 
 A client asks to be maximized or fullscreen (a terminal's fullscreen key, a
