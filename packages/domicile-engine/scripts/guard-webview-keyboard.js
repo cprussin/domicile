@@ -164,8 +164,17 @@ export const Shell = (_root, desktop) => {
     say(`zoom factor=${view.zoom}`);
   });
 
-  host.grabShortcut(ALT_TAB);
-  say(`claimed ${ALT_TAB}`);
+  // The stand-in sends `idle` after the keyboard, on the same socket, so once
+  // `idle` is set the keyboard has reached this page. A chord claimed earlier
+  // reaches the browser's registry only when the keyboard arrives, and the
+  // guard presses Alt+Tab as soon as this says `claimed`.
+  const waiting = setInterval(() => {
+    if (host.idle === true) {
+      clearInterval(waiting);
+      host.grabShortcut(ALT_TAB);
+      say(`claimed ${ALT_TAB}`);
+    }
+  }, 100);
 
   // Set `src` after attaching: it requests a guest, which needs a frame.
   document.body.append(view);
