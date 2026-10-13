@@ -73,6 +73,8 @@ log="$(cat "$WORK/log")"
 contains "as packages-<commit>, at the commit" \
   "gh release create packages-${head:0:12} --target $head" "$log"
 contains "not marked latest" "--latest=false" "$log"
+contains "naming the package for Debian 12 and Ubuntu 22.04" \
+  'Debian 12 and Ubuntu 22.04: `domicile_*.noapparmor.deb`' "$log"
 contains "with every package" "$WORK/packages/SHA256SUMS $WORK/packages/domicile_0.1_amd64.deb" "$log"
 
 echo "a release that exists gets its assets again"

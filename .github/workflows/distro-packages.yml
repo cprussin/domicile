@@ -105,7 +105,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        distro: [debian, ubuntu, fedora, opensuse, arch]
+        distro: [debian, debian-12, ubuntu, ubuntu-22.04, fedora, opensuse, arch]
     env:
       # Docker is on the runner, so the check must run.
       DOMICILE_CHECK_STRICT: "1"
