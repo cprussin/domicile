@@ -20,7 +20,8 @@ launcher, opens it in an app window
   browser windows. An installed extension shows by its name.
 - **Camera and microphone device:** under Camera and Microphone, the device a
   site gets when it does not ask for a particular one. A site that names a
-  device still gets that device.
+  device still gets that device. Manganese's address bar site permissions panel picks
+  the same device.
 - **Code:** the config file and the shell's source in a plain text editor
   (line numbers, Tab indents, Enter keeps indentation, Ctrl+S saves).
 - Source and design: [`packages/app-settings`](/packages/app-settings/README.md).

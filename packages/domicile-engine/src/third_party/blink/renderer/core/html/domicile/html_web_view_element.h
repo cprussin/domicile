@@ -9,6 +9,8 @@
 #include <utility>
 
 #include "components/domicile/mojom/web_view_guest.mojom-blink.h"
+#include "third_party/blink/renderer/bindings/core/v8/idl_types.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/html/html_frame_element_base.h"
@@ -23,8 +25,10 @@ class DomicileContextMenuEvent;
 class DomicileDeviceRequestEvent;
 class DomicileDialogEvent;
 class DomicileFileChooserEvent;
+class DomicileMediaDevices;
 class DomicilePermissionRequestEvent;
 class ExceptionState;
+class ScriptState;
 
 // <webview>: a browser page embedded in a shell, driven by `src`, goBack(),
 // goForward(), stop() and reload(). Defined by the fork because a custom
@@ -150,6 +154,12 @@ class CORE_EXPORT HTMLWebViewElement final
   void setSitePermission(const String& permission,
                          const String& setting,
                          ExceptionState&);
+  ScriptPromise<DomicileMediaDevices> mediaDevices(ScriptState*,
+                                                   ExceptionState&);
+  ScriptPromise<IDLUndefined> setMediaDevice(ScriptState*,
+                                             const String& kind,
+                                             const String& id,
+                                             ExceptionState&);
 
   // Releases the permission request once answered. See
   // `permission_request_`.

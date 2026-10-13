@@ -100,6 +100,7 @@ Headless.
 | `guard-webview-survives-load-shell.sh` | a browser window's page keeps running across `load_shell`, and the new shell's `<webview window>` shows it |
 | `guard-webview-hidden.sh` | a browser window's page is hidden while its `<webview>` is `display: none`, visible once shown, and hidden again after |
 | `guard-webview-permissions.sh` | a page's `getUserMedia` asks the shell over `domicile-permission-request`; the shell's allow reaches the page and is stored for the site (patch 0103) |
+| `guard-webview-media-devices.sh` | a `<webview>` lists the fake cameras, and `setMediaDevice` puts the chosen one first, the camera a page that names none gets (patch 0117) |
 | `guard-webview-upload.sh` | `<input type="file">` asks the shell over `domicile-file-chooser`, and the page reads the chosen file (patch 0053) |
 | `guard-webview-download.sh` | a download asks the shell, lands at the chosen path (patch 0053), and is counted in progress, then as finished until the shell clears it |
 | `guard-webview-save-picker.sh` | `showSaveFilePicker()` asks the shell (patch 0086) |
