@@ -105,18 +105,18 @@ An app reaches Domicile's own state through programs it spawns. Each inherits
 
 | App | Spawns | For |
 |---|---|---|
-| Settings | `domicile-settings-host`, over stdio | config and shell files, site permissions, media devices, extensions |
+| Settings | `domicile-app-host`, over stdio | config and shell files, site permissions, media devices, extensions |
 | History | `domicile-app-host`, over stdio | history, favicons, clearing browsing data |
 
-- `domicile-settings-host` keeps its length-prefixed JSON framing, and History
-  shares it as `domicile-app-host` once History moves. It asks the desktop over `DOMICILE_SOCK`, and
+- Both spawn `domicile-app-host`, framed as a 4-byte length and JSON
+  (`domicile_launch::app_host`). It asks the desktop over `DOMICILE_SOCK`, and
   the supervisor relays engine requests over the command socket.
 - New engine commands:
 
   | Command | Replaces |
   |---|---|
   | `extensions`, `set_extension_enabled` | `chrome.management` |
-  | `history`, `delete_history` | `chrome.history` |
+  | `history`, `visits`, `delete_history` | `chrome.history` |
   | `clear_browsing_data` | `chrome.browsingData` |
 
   `history` returns each row's favicon as a `data:` URL, since an app page
@@ -127,7 +127,8 @@ An app reaches Domicile's own state through programs it spawns. Each inherits
 - Domicile's apps are built into `libexec/domicile/app-modules/<name>/`, or
   `DOMICILE_APP_MODULES/<name>/`. `domicile-history` and `domicile-settings`
   run `domicile run-app` on its `<name>.js`. Nothing is added to the profile.
-- `domicile` links the hosts into the apps' `PATH`, beside `xdg-open`.
+- `domicile` links `domicile-app-host` into the apps' `PATH`, beside
+  `xdg-open`.
 - Any other app ships a desktop entry:
 
   ```ini
@@ -172,8 +173,8 @@ An app reaches Domicile's own state through programs it spawns. Each inherits
   (`guard-app-module.sh`)
 - [x] Settings as an app: `settings.js`, engine `extensions` and
   `set_extension_enabled`
-- [ ] History as an app: engine `history`, `delete_history` and
-  `clear_browsing_data`
+- [x] History as an app: `history.js`, engine `history`, `visits`,
+  `delete_history` and `clear_browsing_data`, relayed by `domicile-app-host`
 - [ ] remove apps as extensions: `--apps`, `DOMICILE_APPS`, the native
   messaging manifest, `domicile_launch::apps`; update HISTORY.md, SETTINGS.md
   and WEB-APPS.md

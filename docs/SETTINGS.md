@@ -47,7 +47,7 @@ not in the Extensions page or any extension list.
 ## How it works
 
 ```
-Settings page ─ spawn, stdio ─▶ domicile-settings-host ─ DOMICILE_SOCK ─▶ domicile ─ command socket ─▶ engine
+Settings page ─ spawn, stdio ─▶ domicile-app-host ─ DOMICILE_SOCK ─▶ domicile ─ command socket ─▶ engine
  (app module)                       reads and writes the files    settings_files,                site_permissions,
                                                                      site_permissions,              set_site_permission,
                                                                      extensions,                    load_unpacked,
@@ -62,7 +62,7 @@ Settings page ─ spawn, stdio ─▶ domicile-settings-host ─ DOMICILE_SOCK �
 | Part | Where |
 |---|---|
 | The app | `settings.js`, an app module in `libexec/domicile/app-modules/settings`. `DOMICILE_APP_MODULES` names another directory of app modules. |
-| The host | `domicile-settings-host`, beside `domicile`. The app spawns it with the system API and frames each message as a 4-byte little-endian length and UTF-8 JSON. Protocol: `domicile_launch::settings`. |
+| The host | `domicile-app-host`, beside `domicile`, which History also spawns ([HISTORY.md](HISTORY.md#how-it-works)). The app spawns it with the system API and frames each message as a 4-byte little-endian length and UTF-8 JSON. Protocol: `domicile_launch::app_host`. |
 | Finding the host | `domicile` links it into the apps' `PATH` (the runtime's `bin`, beside `xdg-open`). |
 | Which files | The host asks the desktop (`settings_files` on the control socket) on every request. The page never names a path. |
 | Writable | `access(W_OK)` on the file, following links. |

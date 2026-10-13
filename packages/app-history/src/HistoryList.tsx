@@ -11,7 +11,6 @@ import type { Entry } from "./history-page";
 
 type Props = {
   days: readonly Day[];
-  faviconUrl: (pageUrl: string) => string;
   leaving: ReadonlySet<string>;
   /** The row whose menu is open. */
   menuFor: string | undefined;
@@ -48,7 +47,6 @@ type DaySectionProps = Omit<Props, "days"> & { day: Day };
 
 const DaySection = ({
   day,
-  faviconUrl,
   leaving,
   menuFor,
   now,
@@ -78,7 +76,6 @@ const DaySection = ({
         {day.entries.map((entry, index) => (
           <HistoryRow
             entry={entry}
-            faviconUrl={faviconUrl(entry.url)}
             index={index}
             key={entry.id}
             leaving={leaving.has(entry.id)}

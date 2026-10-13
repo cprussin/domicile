@@ -7,10 +7,8 @@ import { ClearDataDialog } from "./ClearDataDialog";
 const NOW = 1_000_000_000_000;
 const HOUR_MS = 60 * 60 * 1000;
 
-type Cleared = {
-  since: number;
-  dataToRemove: Readonly<Record<string, boolean>>;
-};
+/** What the dialog asked to clear, its types sorted. */
+type Cleared = { since: number; types: readonly string[] };
 
 /** The dialog, open, resolving with what it asked to clear. */
 const renderDialog = () => {
@@ -22,8 +20,8 @@ const renderDialog = () => {
         onFailed={() => undefined}
         onOpenChange={() => undefined}
         open
-        removeBrowsingData={(since, dataToRemove) => {
-          resolve({ dataToRemove, since });
+        removeBrowsingData={(since, types) => {
+          resolve({ since, types: types.toSorted() });
           return Promise.resolve();
         }}
       />,
@@ -37,18 +35,18 @@ describe(ClearDataDialog, () => {
     const { cleared, user } = renderDialog();
     await user.click(await screen.findByRole("button", { name: "Clear data" }));
     expect(await cleared).toEqual({
-      dataToRemove: {
-        cache: true,
-        cacheStorage: true,
-        cookies: true,
-        fileSystems: true,
-        history: true,
-        indexedDB: true,
-        localStorage: true,
-        serviceWorkers: true,
-        webSQL: true,
-      },
       since: NOW - HOUR_MS,
+      types: [
+        "cache",
+        "cacheStorage",
+        "cookies",
+        "fileSystems",
+        "history",
+        "indexedDB",
+        "localStorage",
+        "serviceWorkers",
+        "webSQL",
+      ],
     });
   });
 
@@ -68,8 +66,8 @@ describe(ClearDataDialog, () => {
     await user.click(await screen.findByRole("option", { name: "All time" }));
     await user.click(screen.getByRole("button", { name: "Clear data" }));
     expect(await cleared).toEqual({
-      dataToRemove: { cache: true, downloads: true },
       since: 0,
+      types: ["cache", "downloads"],
     });
   });
 

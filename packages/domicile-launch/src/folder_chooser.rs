@@ -3,7 +3,7 @@
 //! (`docs/PORTALS.md`).
 //!
 //! A page cannot learn the absolute path of a folder picked with
-//! `<input type="file">`, so `domicile-settings-host` asks the portal instead.
+//! `<input type="file">`, so `domicile-app-host` asks the portal instead.
 
 use std::collections::HashMap;
 use std::ffi::OsString;

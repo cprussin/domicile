@@ -23,9 +23,9 @@ use domicile_launch::app_entry::app_entry;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
 use domicile_launch::cli::{invocation, CliError, Invocation};
 use domicile_launch::command_socket::{
-    config_extensions, extensions, load_shell, load_unpacked, media_devices, open_app, open_url,
-    run_app, set_extension_enabled, set_media_device, set_site_permission, site_permissions,
-    uninstall_extension,
+    clear_browsing_data, config_extensions, delete_history, extensions, history, load_shell,
+    load_unpacked, media_devices, open_app, open_url, run_app, set_extension_enabled,
+    set_media_device, set_site_permission, site_permissions, uninstall_extension, visits,
 };
 use domicile_launch::components::{apps, builder, components, our_shell, Components};
 use domicile_launch::compositor_socket::{screenshot, send_shell};
@@ -40,6 +40,7 @@ use domicile_launch::control_socket::{
 };
 use domicile_launch::graphical_session;
 use domicile_launch::heard::Heard;
+use domicile_launch::history::CLEAR_WITHIN;
 use domicile_launch::install_app::{data_home, install_app, Fetched};
 use domicile_launch::milestones::{reach, Milestone};
 use domicile_launch::notification;
@@ -426,7 +427,7 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
             eprintln!("domicile: the screenshot was canceled");
             Ok(ExitCode::FAILURE)
         }
-        // Only `domicile-settings-host` asks for these.
+        // Only `domicile-app-host` asks for these.
         Response::SettingsFiles { .. }
         | Response::SitePermissions(_)
         | Response::Stored
@@ -434,7 +435,11 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         | Response::Uninstalled
         | Response::ConfigExtensions { .. }
         | Response::MediaDevices(_)
-        | Response::Extensions { .. } => Err(format!(
+        | Response::Extensions { .. }
+        | Response::History { .. }
+        | Response::Visits { .. }
+        | Response::Deleted
+        | Response::Cleared => Err(format!(
             "the desktop answered {answer:?}, which no command asks for"
         )),
         // Print the desktop's own reason.
@@ -529,11 +534,11 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         "xdg-open",
         &binary.with_file_name("domicile-xdg-open"),
     )?;
-    // The Settings app spawns its host by name.
+    // Domicile's apps spawn their host by name.
     shim(
         &places.shims,
-        "domicile-settings-host",
-        &binary.with_file_name("domicile-settings-host"),
+        "domicile-app-host",
+        &binary.with_file_name("domicile-app-host"),
     )?;
 
     // Print the choices before starting anything, so later failures can be
@@ -944,6 +949,16 @@ fn answer_a_command(
                 set_extension_enabled: &|id, enabled| {
                     set_extension_enabled(engine, id, enabled, ANSWER_WITHIN)
                         .map_err(|why| why.to_string())
+                },
+                history: &|query| {
+                    history(engine, query, ANSWER_WITHIN).map_err(|why| why.to_string())
+                },
+                visits: &|url| visits(engine, url, ANSWER_WITHIN).map_err(|why| why.to_string()),
+                delete_history: &|times| {
+                    delete_history(engine, times, ANSWER_WITHIN).map_err(|why| why.to_string())
+                },
+                clear_browsing_data: &|data| {
+                    clear_browsing_data(engine, data, CLEAR_WITHIN).map_err(|why| why.to_string())
                 },
             },
         )

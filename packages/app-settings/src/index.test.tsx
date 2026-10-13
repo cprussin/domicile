@@ -29,7 +29,7 @@ describe(main, () => {
     ).toBeInTheDocument();
     expect(calls).toContainEqual(
       expect.objectContaining({
-        argv: ["domicile-settings-host"],
+        argv: ["domicile-app-host"],
         call: "spawn",
         stdin: true,
       }),

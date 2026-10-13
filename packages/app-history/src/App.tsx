@@ -171,7 +171,6 @@ export const App = ({ browser, now = Date.now }: Props) => {
               list={
                 <HistoryList
                   days={days}
-                  faviconUrl={browser.faviconUrl}
                   leaving={leaving}
                   menuFor={menu?.entry.id}
                   now={now()}

@@ -1,155 +1,145 @@
 import { describe, expect, it } from "bun:test";
 
-import type { ChromeApi } from "./browser";
-import { chromeBrowser } from "./browser";
+import { hostBrowser } from "./browser";
+import type { HistoryHost } from "./host";
 
-const ORIGIN = "chrome-extension://dimbckmbklbplcobppahmnepgiponamj/";
-
-/** A fake `chrome` that answers with `answers` and records each call. */
-const fakeChrome = (
-  answers: { search?: unknown; getVisits?: unknown } = {},
+/** A host that records each call and answers with `answers`. */
+const fakeHost = (
+  answers: Partial<Pick<HistoryHost, "history" | "visits">> = {},
 ) => {
   const calls: [string, ...unknown[]][] = [];
-  const event = (name: string) => ({
-    addListener: (listener: () => void) => {
-      calls.push([`${name}.addListener`, listener]);
-    },
-    removeListener: (listener: () => void) => {
-      calls.push([`${name}.removeListener`, listener]);
-    },
-  });
   const record =
-    (name: string, answer?: unknown) =>
+    (name: string) =>
     (...args: unknown[]) => {
       calls.push([name, ...args]);
-      return Promise.resolve(answer);
+      return Promise.resolve();
     };
-  const api: ChromeApi = {
-    browsingData: { remove: record("browsingData.remove") },
-    history: {
-      deleteRange: record("history.deleteRange"),
-      getVisits: record("history.getVisits", answers.getVisits),
-      onVisited: event("onVisited"),
-      onVisitRemoved: event("onVisitRemoved"),
-      search: record("history.search", answers.search),
-    },
-    runtime: {
-      getURL: (path: string) => `${ORIGIN}${path.replace(/^\//, "")}`,
-    },
-    tabs: { create: record("tabs.create") },
+  const host: HistoryHost = {
+    clearBrowsingData: record("clearBrowsingData"),
+    deleteHistory: record("deleteHistory"),
+    history: answers.history ?? (() => Promise.resolve([])),
+    openUrl: record("openUrl"),
+    visits: answers.visits ?? (() => Promise.resolve([])),
   };
-  return { api, calls };
+  return { calls, host };
 };
 
-describe(chromeBrowser, () => {
-  describe("history", () => {
-    it("searches the whole history before `endTime`", async () => {
-      const { api, calls } = fakeChrome({
-        search: [
-          { id: "1", title: "A", url: "https://a.test/" },
-          { id: "2", url: "https://b.test/" },
-        ],
-      });
-      expect(
-        await chromeBrowser(api).search({
-          endTime: 5,
-          maxResults: 150,
-          text: "a",
-        }),
-      ).toEqual([
-        { title: "A", url: "https://a.test/" },
-        { title: "", url: "https://b.test/" },
-      ]);
-      expect(calls).toEqual([
-        [
-          "history.search",
-          { endTime: 5, maxResults: 150, startTime: 0, text: "a" },
-        ],
-      ]);
-    });
+/** A window and document the test focuses and shows. */
+const fakePage = () => {
+  const document = Object.assign(new EventTarget(), {
+    visibilityState: "hidden" as DocumentVisibilityState,
+  });
+  return { document, window: new EventTarget() };
+};
 
-    it("rejects a result it can't read", () => {
-      const { api } = fakeChrome({ search: [{ title: "A" }] });
-      expect(
-        chromeBrowser(api).search({ endTime: 5, maxResults: 1, text: "" }),
-      ).rejects.toThrow();
-    });
-
-    it("gives a page's visit times", async () => {
-      const { api, calls } = fakeChrome({
-        getVisits: [
-          { id: "1", visitId: "1", visitTime: 10.5 },
-          { id: "1", visitId: "2", visitTime: 20 },
-        ],
-      });
-      expect(await chromeBrowser(api).getVisits("https://a.test/")).toEqual([
-        10.5, 20,
-      ]);
-      expect(calls).toEqual([
-        ["history.getVisits", { url: "https://a.test/" }],
-      ]);
-    });
-
-    it("deletes each visit by the few microseconds around it", async () => {
-      const { api, calls } = fakeChrome();
-      await chromeBrowser(api).deleteVisits([1000, 2000]);
-      expect(calls).toEqual([
-        ["history.deleteRange", { endTime: 1000.002, startTime: 999.998 }],
-        ["history.deleteRange", { endTime: 2000.002, startTime: 1999.998 }],
-      ]);
-    });
-
-    it("reports visits and removals until stopped", () => {
-      const { api, calls } = fakeChrome();
-      const changed = () => undefined;
-      const stop = chromeBrowser(api).onChange(changed);
-      stop();
-      expect(calls).toEqual([
-        ["onVisited.addListener", changed],
-        ["onVisitRemoved.addListener", changed],
-        ["onVisited.removeListener", changed],
-        ["onVisitRemoved.removeListener", changed],
-      ]);
-    });
+/** The browser over `host`, with a fake page and no clipboard. */
+const browserOver = (host: HistoryHost, page = fakePage()) =>
+  hostBrowser(host, page, {
+    writeText: () => Promise.reject(new Error("no clipboard")),
   });
 
-  it("clears browsing data since a time", async () => {
-    const { api, calls } = fakeChrome();
-    await chromeBrowser(api).removeBrowsingData(42, { cache: true });
+/** Counts the calls `browser.onChange` makes until stopped. */
+const counted = (browser: ReturnType<typeof hostBrowser>) => {
+  const count = { changes: 0 };
+  const stop = browser.onChange(() => {
+    count.changes += 1;
+  });
+  return { count, stop };
+};
+
+describe(hostBrowser, () => {
+  it("searches the history and gives a page's visits", async () => {
+    const item = { favicon: undefined, title: "A", url: "https://a.test/" };
+    const browser = browserOver(
+      fakeHost({
+        history: (query) => {
+          expect(query).toEqual({ endTime: 5, maxResults: 150, text: "a" });
+          return Promise.resolve([item]);
+        },
+        visits: (url) => Promise.resolve(url === item.url ? [10.5, 20] : []),
+      }).host,
+    );
+    expect(
+      await browser.search({ endTime: 5, maxResults: 150, text: "a" }),
+    ).toEqual([item]);
+    expect(await browser.getVisits(item.url)).toEqual([10.5, 20]);
+  });
+
+  it("deletes visits, then reports a change", async () => {
+    const { calls, host } = fakeHost();
+    const browser = browserOver(host);
+    const { count } = counted(browser);
+    await browser.deleteVisits([1000, 2000]);
+    expect(calls).toEqual([["deleteHistory", [1000, 2000]]]);
+    expect(count.changes).toBe(1);
+  });
+
+  it("clears browsing data since a time, then reports a change", async () => {
+    const { calls, host } = fakeHost();
+    const browser = browserOver(host);
+    const { count } = counted(browser);
+    await browser.removeBrowsingData(42, ["cache", "history"]);
     expect(calls).toEqual([
-      ["browsingData.remove", { since: 42 }, { cache: true }],
+      ["clearBrowsingData", { since: 42, types: ["cache", "history"] }],
     ]);
+    expect(count.changes).toBe(1);
   });
 
   it("clears cookies and site data for a page's origin", async () => {
-    const { api, calls } = fakeChrome();
-    await chromeBrowser(api).clearSiteData("https://a.test:8080/b?c=1");
+    const { calls, host } = fakeHost();
+    await browserOver(host).clearSiteData("https://a.test:8080/b?c=1");
     expect(calls).toEqual([
       [
-        "browsingData.remove",
-        { origins: ["https://a.test:8080"] },
+        "clearBrowsingData",
         {
-          cacheStorage: true,
-          cookies: true,
-          fileSystems: true,
-          indexedDB: true,
-          localStorage: true,
-          serviceWorkers: true,
-          webSQL: true,
+          origins: ["https://a.test:8080"],
+          since: 0,
+          types: [
+            "cacheStorage",
+            "cookies",
+            "fileSystems",
+            "indexedDB",
+            "localStorage",
+            "serviceWorkers",
+            "webSQL",
+          ],
         },
       ],
     ]);
   });
 
+  it("reports a change when the window gains focus or is shown, until stopped", () => {
+    const page = fakePage();
+    const { count, stop } = counted(browserOver(fakeHost().host, page));
+    page.window.dispatchEvent(new Event("focus"));
+    page.document.dispatchEvent(new Event("visibilitychange"));
+    page.document.visibilityState = "visible";
+    page.document.dispatchEvent(new Event("visibilitychange"));
+    expect(count.changes).toBe(2);
+
+    stop();
+    page.window.dispatchEvent(new Event("focus"));
+    page.document.dispatchEvent(new Event("visibilitychange"));
+    expect(count.changes).toBe(2);
+  });
+
+  it("stops reporting its own changes once stopped", async () => {
+    const browser = browserOver(fakeHost().host);
+    const { count, stop } = counted(browser);
+    stop();
+    await browser.deleteVisits([1000]);
+    expect(count.changes).toBe(0);
+  });
+
   it("opens a page in a new window", async () => {
-    const { api, calls } = fakeChrome();
-    await chromeBrowser(api).openInNewWindow("https://a.test/");
-    expect(calls).toEqual([["tabs.create", { url: "https://a.test/" }]]);
+    const { calls, host } = fakeHost();
+    await browserOver(host).openInNewWindow("https://a.test/");
+    expect(calls).toEqual([["openUrl", "https://a.test/"]]);
   });
 
   it("copies text to the clipboard", async () => {
     const copied = await new Promise((resolve) => {
-      chromeBrowser(fakeChrome().api, {
+      hostBrowser(fakeHost().host, fakePage(), {
         writeText: (text) => {
           resolve(text);
           return Promise.resolve();
@@ -159,13 +149,5 @@ describe(chromeBrowser, () => {
         .catch(() => undefined);
     });
     expect(copied).toBe("https://a.test/");
-  });
-
-  it("gives a page's favicon from the extension's favicon service", () => {
-    expect(
-      chromeBrowser(fakeChrome().api).faviconUrl("https://a.test/?q=1"),
-    ).toBe(
-      `${ORIGIN}_favicon/?pageUrl=https%3A%2F%2Fa.test%2F%3Fq%3D1&size=32`,
-    );
   });
 });

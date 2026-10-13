@@ -2,8 +2,7 @@
 //! lists, enables and disables.
 //!
 //! The same shape crosses three hops, as [`crate::media_devices`] does: the
-//! engine's command socket, the control socket and the Settings app's native
-//! messaging host.
+//! engine's command socket, the control socket and `domicile-app-host`.
 
 use serde::{Deserialize, Serialize};
 

@@ -1,45 +1,16 @@
-// The extension APIs the app uses, with every answer parsed. `chrome` is the
-// global an extension page gets; only the surface used here is declared.
+// Everything the app does outside the page, over the app host and the
+// clipboard. The host pushes no events, so the history counts as changed when
+// the window comes back into view and after the app's own removals.
 
-import { z } from "zod";
+import { DataKind, dataTypes } from "./clear-data";
+import type { HistorySource } from "./history-page";
+import type { HistoryHost } from "./host";
 
-import { DataKind, dataToRemove } from "./clear-data";
-import type { HistoryItem, HistorySource } from "./history-page";
-
-/** A `chrome.*` event. */
-type ChromeEvent = {
-  addListener: (listener: () => void) => void;
-  removeListener: (listener: () => void) => void;
+/** The window and document whose focus and visibility the app follows. */
+export type Page = {
+  document: EventTarget & { visibilityState: DocumentVisibilityState };
+  window: EventTarget;
 };
-
-/** The parts of the `chrome` global the app calls. */
-export type ChromeApi = {
-  browsingData: {
-    remove: (
-      options: { origins: string[] } | { since: number },
-      dataToRemove: Readonly<Record<string, boolean>>,
-    ) => Promise<unknown>;
-  };
-  history: {
-    deleteRange: (range: {
-      endTime: number;
-      startTime: number;
-    }) => Promise<unknown>;
-    getVisits: (details: { url: string }) => Promise<unknown>;
-    onVisited: ChromeEvent;
-    onVisitRemoved: ChromeEvent;
-    search: (query: {
-      endTime: number;
-      maxResults: number;
-      startTime: number;
-      text: string;
-    }) => Promise<unknown>;
-  };
-  runtime: { getURL: (path: string) => unknown };
-  tabs: { create: (properties: { url: string }) => Promise<unknown> };
-};
-
-declare const chrome: ChromeApi;
 
 /** Everything the app does outside the page. */
 export type Browser = HistorySource & {
@@ -48,78 +19,61 @@ export type Browser = HistorySource & {
   copyText: (text: string) => Promise<void>;
   /** Removes the visits at exactly these times. */
   deleteVisits: (visits: readonly number[]) => Promise<void>;
-  /** A 32px icon for `pageUrl`, from the browser's favicon cache. */
-  faviconUrl: (pageUrl: string) => string;
-  /** Calls `listener` whenever a visit is added or removed. */
+  /** Calls `listener` whenever the history may have changed. */
   onChange: (listener: () => void) => () => void;
   openInNewWindow: (url: string) => Promise<void>;
-  /** `chrome.browsingData.remove`, for data changed since `since`. */
+  /** Removes data of `types`, in `DataTypeSet`'s names, changed since `since`. */
   removeBrowsingData: (
     since: number,
-    dataToRemove: Readonly<Record<string, boolean>>,
+    types: readonly string[],
   ) => Promise<void>;
 };
 
-/**
- * Half the span deleted around each visit, in milliseconds. The API passes
- * microsecond visit times as fractional milliseconds and truncates them on
- * the way back, so an exact range could miss the visit by one microsecond.
- */
-const VISIT_SLACK_MS = 0.002;
-
-/** The app's {@link Browser}, over the extension APIs. */
-export const chromeBrowser = (
-  api: ChromeApi = chrome,
+/** The app's {@link Browser}, over the app host. */
+export const hostBrowser = (
+  host: HistoryHost,
+  page: Page = { document, window },
   clipboard: Pick<Clipboard, "writeText"> = navigator.clipboard,
 ): Browser => {
-  const url = (path: string) => z.string().parse(api.runtime.getURL(path));
+  const listeners = new Set<() => void>();
+  const changed = () => {
+    for (const listener of listeners) {
+      listener();
+    }
+  };
   return {
-    clearSiteData: async (pageUrl) => {
-      await api.browsingData.remove(
-        { origins: [new URL(pageUrl).origin] },
-        dataToRemove(new Set([DataKind.Cookies])),
-      );
-    },
+    clearSiteData: (pageUrl) =>
+      host.clearBrowsingData({
+        origins: [new URL(pageUrl).origin],
+        since: 0,
+        types: dataTypes(new Set([DataKind.Cookies])),
+      }),
     copyText: (text) => clipboard.writeText(text),
     deleteVisits: async (visits) => {
-      for (const visit of visits) {
-        await api.history.deleteRange({
-          endTime: visit + VISIT_SLACK_MS,
-          startTime: visit - VISIT_SLACK_MS,
-        });
-      }
+      await host.deleteHistory(visits);
+      changed();
     },
-    faviconUrl: (pageUrl) =>
-      url(`/_favicon/?pageUrl=${encodeURIComponent(pageUrl)}&size=32`),
-    getVisits: async (pageUrl) =>
-      visitsSchema
-        .parse(await api.history.getVisits({ url: pageUrl }))
-        .map((visit) => visit.visitTime),
+    getVisits: (pageUrl) => host.visits(pageUrl),
     onChange: (listener) => {
-      api.history.onVisited.addListener(listener);
-      api.history.onVisitRemoved.addListener(listener);
+      const shown = () => {
+        if (page.document.visibilityState === "visible") {
+          listener();
+        }
+      };
+      listeners.add(listener);
+      page.window.addEventListener("focus", listener);
+      page.document.addEventListener("visibilitychange", shown);
       return () => {
-        api.history.onVisited.removeListener(listener);
-        api.history.onVisitRemoved.removeListener(listener);
+        listeners.delete(listener);
+        page.window.removeEventListener("focus", listener);
+        page.document.removeEventListener("visibilitychange", shown);
       };
     },
-    openInNewWindow: async (pageUrl) => {
-      await api.tabs.create({ url: pageUrl });
+    openInNewWindow: (url) => host.openUrl(url),
+    removeBrowsingData: async (since, types) => {
+      await host.clearBrowsingData({ since, types });
+      changed();
     },
-    removeBrowsingData: async (since, dataToRemove) => {
-      await api.browsingData.remove({ since }, dataToRemove);
-    },
-    search: async ({ endTime, maxResults, text }) =>
-      itemsSchema.parse(
-        await api.history.search({ endTime, maxResults, startTime: 0, text }),
-      ),
+    search: (query) => host.history(query),
   };
 };
-
-const itemsSchema = z.array(
-  z
-    .object({ title: z.string().optional(), url: z.string() })
-    .transform(({ title, url }): HistoryItem => ({ title: title ?? "", url })),
-);
-
-const visitsSchema = z.array(z.object({ visitTime: z.number() }));

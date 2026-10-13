@@ -11,13 +11,14 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::extensions::InstalledExtension;
+use crate::history::{BrowsingData, HistoryItem, HistoryQuery};
 use crate::media_devices::{MediaDevices, MediaKind};
 use crate::site_permissions::{SitePermission, SiteSettings};
 
 /// A request to a running desktop.
 ///
 /// Each variant needs a matching CLI verb in [`crate::cli`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Request {
     /// Report the shell this desktop is running.
@@ -46,7 +47,7 @@ pub enum Request {
     /// Send this command to the shell, as a `send-shell` keybinding would.
     SendShell { command: Vec<String> },
     /// Report the files the Settings app edits. Asked by
-    /// `domicile-settings-host`, which reads and writes them itself.
+    /// `domicile-app-host`, which reads and writes them itself.
     SettingsFiles,
     /// Report every permission's default and every site's own setting. The
     /// engine keeps them.
@@ -69,6 +70,14 @@ pub enum Request {
     Extensions,
     /// Enable or disable an extension.
     SetExtensionEnabled { id: String, enabled: bool },
+    /// Search the engine's history.
+    History(HistoryQuery),
+    /// Report when a page was visited.
+    Visits { url: String },
+    /// Delete the visits made at these times.
+    DeleteHistory { visits: Vec<f64> },
+    /// Clear the engine's browsing data.
+    ClearBrowsingData(BrowsingData),
 }
 
 /// The files the Settings app edits, as the desktop found them at startup.
@@ -84,7 +93,7 @@ pub struct SettingsFiles {
 }
 
 /// A desktop's response.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Response {
     /// The absolute path of the module the desktop is serving.
@@ -137,6 +146,18 @@ pub enum Response {
 
     /// Answers `extensions`.
     Extensions { extensions: Vec<InstalledExtension> },
+
+    /// Answers `history`.
+    History { items: Vec<HistoryItem> },
+
+    /// Answers `visits`.
+    Visits { times: Vec<f64> },
+
+    /// The engine deleted the visits.
+    Deleted,
+
+    /// The engine cleared the browsing data.
+    Cleared,
 
     /// The request was unknown or could not be carried out.
     ///
@@ -236,6 +257,27 @@ pub type ListExtensions<'a> = &'a dyn Fn() -> Result<Vec<InstalledExtension>, St
 /// tests.
 pub type SetExtensionEnabled<'a> = &'a dyn Fn(&str, bool) -> Result<(), String>;
 
+/// Asks the engine for the history rows a search finds.
+///
+/// [`crate::command_socket::history`] in a desktop; a closure in tests.
+pub type SearchHistory<'a> = &'a dyn Fn(&HistoryQuery) -> Result<Vec<HistoryItem>, String>;
+
+/// Asks the engine when a page was visited.
+///
+/// [`crate::command_socket::visits`] in a desktop; a closure in tests.
+pub type ListVisits<'a> = &'a dyn Fn(&str) -> Result<Vec<f64>, String>;
+
+/// Tells the engine to delete visits.
+///
+/// [`crate::command_socket::delete_history`] in a desktop; a closure in tests.
+pub type DeleteHistory<'a> = &'a dyn Fn(&[f64]) -> Result<(), String>;
+
+/// Tells the engine to clear browsing data.
+///
+/// [`crate::command_socket::clear_browsing_data`] in a desktop; a closure in
+/// tests.
+pub type ClearBrowsingData<'a> = &'a dyn Fn(&BrowsingData) -> Result<(), String>;
+
 /// What a request can learn about or do to the running desktop.
 ///
 /// The dials reach the engine and the compositor; they are injected so
@@ -259,6 +301,10 @@ pub struct Desktop<'a> {
     pub set_media_device: SetMediaDevice<'a>,
     pub extensions: ListExtensions<'a>,
     pub set_extension_enabled: SetExtensionEnabled<'a>,
+    pub history: SearchHistory<'a>,
+    pub visits: ListVisits<'a>,
+    pub delete_history: DeleteHistory<'a>,
+    pub clear_browsing_data: ClearBrowsingData<'a>,
 }
 
 /// How a screenshot the compositor took ended.
@@ -354,6 +400,26 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
         Ok(Request::SetExtensionEnabled { id, enabled }) => {
             to_line(&match (desktop.set_extension_enabled)(&id, enabled) {
                 Ok(()) => Response::Stored,
+                Err(why) => Response::Refused { why },
+            })
+        }
+        Ok(Request::History(query)) => to_line(&match (desktop.history)(&query) {
+            Ok(items) => Response::History { items },
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::Visits { url }) => to_line(&match (desktop.visits)(&url) {
+            Ok(times) => Response::Visits { times },
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::DeleteHistory { visits }) => {
+            to_line(&match (desktop.delete_history)(&visits) {
+                Ok(()) => Response::Deleted,
+                Err(why) => Response::Refused { why },
+            })
+        }
+        Ok(Request::ClearBrowsingData(data)) => {
+            to_line(&match (desktop.clear_browsing_data)(&data) {
+                Ok(()) => Response::Cleared,
                 Err(why) => Response::Refused { why },
             })
         }

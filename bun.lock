@@ -14,7 +14,9 @@
       "version": "0.0.0",
       "dependencies": {
         "@base-ui/react": "catalog:",
+        "@cprussin/option-result": "catalog:",
         "@domicile-desktop/component-library": "workspace:*",
+        "@domicile-desktop/sdk": "workspace:*",
         "@phosphor-icons/react": "catalog:",
         "react": "catalog:",
         "react-dom": "catalog:",

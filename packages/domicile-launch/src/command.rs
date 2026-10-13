@@ -1,6 +1,6 @@
-//! The protocol the supervisor uses to send `load-shell`, `open-url` and the
-//! Settings app's site permissions, extensions and media devices to the
-//! engine.
+//! The protocol the supervisor uses to send `load-shell`, `open-url`, the
+//! Settings app's site permissions, extensions and media devices, and the
+//! History app's history and browsing data to the engine.
 //!
 //! One JSON line each way per connection:
 //!
@@ -39,9 +39,23 @@
 //!
 //! {"type":"set_extension_enabled","version":1,"id":"…","enabled":false}
 //! {"type":"set"}   |   {"type":"refused","why":"…"}
+//!
+//! {"type":"history","version":1,"text":"…","end_time":1700000000123.5,"max_results":100}
+//! {"type":"history","items":[{"url":"…","title":"…","favicon":"data:…"}]}   |   {"type":"refused","why":"…"}
+//!
+//! {"type":"visits","version":1,"url":"https://example.com/"}
+//! {"type":"visits","times":[1700000000123.5]}   |   {"type":"refused","why":"…"}
+//!
+//! {"type":"delete_history","version":1,"visits":[1700000000123.5]}
+//! {"type":"deleted"}   |   {"type":"refused","why":"…"}
+//!
+//! {"type":"clear_browsing_data","version":1,"since":0,"types":["cookies"],"origins":["https://example.com"]}
+//! {"type":"cleared"}   |   {"type":"refused","why":"…"}
 //! ```
 //!
-//! `options_url` is left out for an extension without an options page.
+//! `options_url` is left out for an extension without an options page, and
+//! `favicon` for a history row without a favicon. `origins` is left out to
+//! clear every origin. Times are milliseconds since the epoch, fractional.
 //!
 //! The engine side is C++ in the fork
 //! (`components/domicile/browser/command_protocol.cc`, tested in
@@ -54,6 +68,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::extensions::InstalledExtension;
+use crate::history::{BrowsingData, HistoryItem, HistoryQuery};
 use crate::media_devices::{MediaDevices, MediaKind};
 use crate::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
@@ -66,7 +81,7 @@ use crate::site_permissions::{Permission, Setting, SitePermission, SiteSettings}
 const VERSION: u32 = 1;
 
 /// The engine's reply.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Reply {
     /// The engine is serving the shell.
@@ -88,6 +103,14 @@ pub enum Reply {
     MediaDevices(MediaDevices),
     /// Every extension installed in the engine's profile.
     Extensions { extensions: Vec<InstalledExtension> },
+    /// The history rows a search found, newest first.
+    History { items: Vec<HistoryItem> },
+    /// When a page was visited, in milliseconds since the epoch.
+    Visits { times: Vec<f64> },
+    /// The engine deleted the visits.
+    Deleted,
+    /// The engine cleared the browsing data.
+    Cleared,
     /// The engine refused, with its reason.
     Refused { why: String },
 }
@@ -200,6 +223,43 @@ pub fn set_extension_enabled_line(id: &str, enabled: bool) -> String {
     })
 }
 
+/// The request for the history rows `query` finds.
+pub fn history_line(query: &HistoryQuery) -> String {
+    line(&Command::History {
+        version: VERSION,
+        text: &query.text,
+        end_time: query.end_time,
+        max_results: query.max_results,
+    })
+}
+
+/// The request for the times `url` was visited.
+pub fn visits_line(url: &str) -> String {
+    line(&Command::Visits {
+        version: VERSION,
+        url,
+    })
+}
+
+/// The request to delete the visits made at `visits`, each a time in
+/// milliseconds since the epoch.
+pub fn delete_history_line(visits: &[f64]) -> String {
+    line(&Command::DeleteHistory {
+        version: VERSION,
+        visits,
+    })
+}
+
+/// The request to clear `data`.
+pub fn clear_browsing_data_line(data: &BrowsingData) -> String {
+    line(&Command::ClearBrowsingData {
+        version: VERSION,
+        since: data.since,
+        types: &data.types,
+        origins: data.origins.as_deref(),
+    })
+}
+
 /// Parses one reply line, without its trailing newline.
 ///
 /// An unparseable reply is an error, not a [`Reply::Refused`]: it comes from
@@ -268,6 +328,28 @@ enum Command<'a> {
         version: u32,
         id: &'a str,
         enabled: bool,
+    },
+    History {
+        version: u32,
+        text: &'a str,
+        end_time: f64,
+        max_results: u32,
+    },
+    Visits {
+        version: u32,
+        url: &'a str,
+    },
+    DeleteHistory {
+        version: u32,
+        visits: &'a [f64],
+    },
+    ClearBrowsingData {
+        version: u32,
+        since: f64,
+        types: &'a [String],
+        // Left out for every origin.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        origins: Option<&'a [String]>,
     },
 }
 

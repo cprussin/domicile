@@ -50,9 +50,11 @@ trap cleanup EXIT INT TERM
 mkdir -p "$WORK/first" "$WORK/second"
 : >"$WORK/first/shell.js"
 : >"$WORK/second/shell.js"
-# The Settings app module `domicile-settings` runs.
-mkdir -p "$WORK/app-modules/settings"
-: >"$WORK/app-modules/settings/settings.js"
+# The app modules `domicile-settings` and `domicile-history` run.
+for app in settings history; do
+  mkdir -p "$WORK/app-modules/$app"
+  : >"$WORK/app-modules/$app/$app.js"
+done
 
 # The stub engine's next answer, read per connection, so one desktop can test
 # both success and refusal.
@@ -377,10 +379,7 @@ fi
 
 echo "== open-app, Settings and History reach the engine as app windows =="
 for opener in "domicile open-app https://example.com/" domicile-settings domicile-history; do
-  case "$opener" in
-    domicile-history) WANT_URL="chrome-extension://dimbckmbklbplcobppahmnepgiponamj/history.html" ;;
-    *) WANT_URL="https://example.com/" ;;
-  esac
+  WANT_URL="https://example.com/"
   # shellcheck disable=SC2086 # `opener` is a program and its arguments.
   if ! env DOMICILE_SOCK="$SOCK" DOMICILE_APP_MODULES="$WORK/app-modules" \
          "$TARGET/debug/"$opener >"$WORK/app.log" 2>&1; then
@@ -390,10 +389,13 @@ for opener in "domicile open-app https://example.com/" domicile-settings domicil
   fi
   HEARD="$(tail -n 1 "$WORK/engine-heard" 2>/dev/null)"
   WANT="{\"type\":\"open_url\",\"version\":1,\"url\":\"$WANT_URL\",\"app\":true}"
-  if [ "$opener" = domicile-settings ]; then
-    ROOT_DIR="$(realpath "$WORK/app-modules/settings")"
-    WANT="{\"type\":\"run_app\",\"version\":1,\"root\":\"$ROOT_DIR\",\"module\":\"settings.js\"}"
-  fi
+  case "$opener" in
+    domicile-settings | domicile-history)
+      APP="${opener#domicile-}"
+      ROOT_DIR="$(realpath "$WORK/app-modules/$APP")"
+      WANT="{\"type\":\"run_app\",\"version\":1,\"root\":\"$ROOT_DIR\",\"module\":\"$APP.js\"}"
+      ;;
+  esac
   if [ "$HEARD" = "$WANT" ]; then
     echo "PASS: $opener: $HEARD"
   else
@@ -413,11 +415,11 @@ else
   echo "      is not $TARGET/debug/domicile-xdg-open"
   FAILED=1
 fi
-if [ "$(readlink "$SHIMS/domicile-settings-host")" = "$TARGET/debug/domicile-settings-host" ]; then
-  echo "PASS: $SHIMS/domicile-settings-host, which the Settings app spawns"
+if [ "$(readlink "$SHIMS/domicile-app-host")" = "$TARGET/debug/domicile-app-host" ]; then
+  echo "PASS: $SHIMS/domicile-app-host, which Domicile's apps spawn"
 else
   echo "FAIL: the first directory on the apps' PATH, '$SHIMS', has no"
-  echo "      domicile-settings-host for the Settings app to spawn"
+  echo "      domicile-app-host for Domicile's apps to spawn"
   FAILED=1
 fi
 

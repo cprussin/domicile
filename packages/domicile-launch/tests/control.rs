@@ -9,6 +9,7 @@ use domicile_launch::control::{
     SettingsFiles, Shot,
 };
 use domicile_launch::extensions::InstalledExtension;
+use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
@@ -463,6 +464,108 @@ fn a_desktop_told_to_disable_an_extension_tells_the_engine() {
     assert_eq!(answered, Response::Stored);
 }
 
+#[test]
+fn a_desktop_asked_to_search_history_asks_the_engine() {
+    let asked = RefCell::new(None);
+    let answered = reply_to(
+        "{\"type\":\"history\",\"text\":\"a\",\"end_time\":1700000000123.5,\"max_results\":10}",
+        &Desktop {
+            history: &|query| {
+                asked.replace(Some(query.clone()));
+                Ok(vec![a_row()])
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(
+        asked.take(),
+        Some(HistoryQuery {
+            text: "a".to_string(),
+            end_time: 1_700_000_000_123.5,
+            max_results: 10,
+        })
+    );
+    assert_eq!(
+        answered,
+        Response::History {
+            items: vec![a_row()]
+        }
+    );
+}
+
+#[test]
+fn a_desktop_asked_for_a_page_s_visits_asks_the_engine() {
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"visits\",\"url\":\"https://a.example/\"}",
+            &Desktop {
+                visits: &|url| {
+                    assert_eq!(url, "https://a.example/");
+                    Ok(vec![1_700_000_000_123.5])
+                },
+                ..nothing_dialed()
+            }
+        ),
+        Response::Visits {
+            times: vec![1_700_000_000_123.5]
+        }
+    );
+}
+
+#[test]
+fn a_desktop_told_to_delete_visits_tells_the_engine() {
+    let told = RefCell::new(Vec::new());
+    let answered = reply_to(
+        "{\"type\":\"delete_history\",\"visits\":[1700000000123.5]}",
+        &Desktop {
+            delete_history: &|visits| {
+                told.replace(visits.to_vec());
+                Ok(())
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(told.take(), vec![1_700_000_000_123.5]);
+    assert_eq!(answered, Response::Deleted);
+}
+
+#[test]
+fn a_desktop_told_to_clear_browsing_data_tells_the_engine() {
+    let told = RefCell::new(None);
+    let answered = reply_to(
+        "{\"type\":\"clear_browsing_data\",\"since\":0,\"types\":[\"cookies\"]}",
+        &Desktop {
+            clear_browsing_data: &|data| {
+                told.replace(Some(data.clone()));
+                Ok(())
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    // No `origins` is every origin.
+    assert_eq!(
+        told.take(),
+        Some(BrowsingData {
+            since: 0.0,
+            types: vec!["cookies".to_string()],
+            origins: None,
+        })
+    );
+    assert_eq!(answered, Response::Cleared);
+}
+
+/// A history row with a favicon.
+fn a_row() -> HistoryItem {
+    HistoryItem {
+        url: "https://a.example/".to_string(),
+        title: "A".to_string(),
+        favicon: Some("data:image/png;base64,AAAA".to_string()),
+    }
+}
+
 /// An installed extension with an options page.
 fn an_extension() -> InstalledExtension {
     InstalledExtension {
@@ -514,9 +617,12 @@ fn reply_to(line: &str, desktop: &Desktop) -> Response {
 fn nothing_dialed() -> Desktop<'static> {
     Desktop {
         capture: &|_| panic!("only screenshot captures anything"),
+        clear_browsing_data: &|_| panic!("only clear_browsing_data clears anything"),
         config_extensions: &|| panic!("only config_extensions lists the config's extensions"),
+        delete_history: &|_| panic!("only delete_history deletes visits"),
         extensions: &|| panic!("only extensions lists every extension"),
         files: &NO_FILES,
+        history: &|_| panic!("only history searches the history"),
         load: &|_, _| panic!("only load_shell loads anything"),
         load_unpacked: &|_| panic!("only load_unpacked loads an extension"),
         media_devices: &|| panic!("only media_devices lists media devices"),
@@ -530,6 +636,7 @@ fn nothing_dialed() -> Desktop<'static> {
         set_media_device: &|_, _| panic!("only set_media_device prefers one"),
         set_permission: &|_| panic!("only set_site_permission sets one"),
         uninstall_extension: &|_| panic!("only uninstall_extension uninstalls one"),
+        visits: &|_| panic!("only visits lists a page's visits"),
     }
 }
 

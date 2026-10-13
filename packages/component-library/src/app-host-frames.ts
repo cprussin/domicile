@@ -1,6 +1,6 @@
-// The settings host's framing on stdin and stdout: each message is a 4-byte
-// little-endian length, then that many bytes of UTF-8 JSON. The host's side
-// is `domicile_launch::settings`.
+// The framing of `domicile-app-host`, the process app modules spawn, on its
+// stdin and stdout: each message is a 4-byte little-endian length, then that
+// many bytes of UTF-8 JSON.
 
 /** The bytes of the length before each message. */
 const LENGTH_BYTES = 4;

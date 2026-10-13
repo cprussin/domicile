@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Tests `domicile-settings-host` as Chrome runs it: framed messages on stdin
+# Tests `domicile-app-host` as an app runs it: framed messages on stdin
 # and stdout, and the desktop asked over DOMICILE_SOCK.
 #
-#   ./scripts/test-the-settings-host-edits-the-desktops-files.sh
+#   ./scripts/test-the-app-host-edits-the-desktops-files.sh
 #
-# The unit tests cover the protocol (`domicile_launch::settings`). This covers
+# The unit tests cover the protocol (`domicile_launch::app_host`). This covers
 # the binary: the framing on real pipes, reading and writing real files, the
 # read-only check, and the change notice when a file is edited elsewhere. The
 # desktop is a fake that answers `settings_files`.
@@ -16,10 +16,10 @@ TARGET="${CARGO_TARGET_DIR:-$ROOT/target}"
 command -v cargo >/dev/null 2>&1 || { echo "SKIP: no cargo"; exit 77; }
 command -v python3 >/dev/null 2>&1 || { echo "SKIP: no python3"; exit 77; }
 
-echo "== building domicile-settings-host =="
-( cd "$ROOT" && cargo build -q -p domicile-launch --bin domicile-settings-host ) || {
-  echo "FAIL: domicile-settings-host would not build"; exit 1; }
-HOST="$TARGET/debug/domicile-settings-host"
+echo "== building domicile-app-host =="
+( cd "$ROOT" && cargo build -q -p domicile-launch --bin domicile-app-host ) || {
+  echo "FAIL: domicile-app-host would not build"; exit 1; }
+HOST="$TARGET/debug/domicile-app-host"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT

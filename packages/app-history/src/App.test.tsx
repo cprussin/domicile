@@ -85,6 +85,26 @@ describe(App, () => {
       );
     });
 
+    it("shows each page's icon, or a globe for a page without one", async () => {
+      renderApp([
+        {
+          favicon: "data:image/png;base64,QQ==",
+          title: "Cats",
+          url: "https://www.cats.test/",
+          visits: [at(9, 14, 5)],
+        },
+        { title: "Dogs", url: "https://dogs.test/", visits: [at(9, 9, 30)] },
+      ]);
+      const cats = await screen.findByRole("checkbox", { name: "Select Cats" });
+      expect(within(cats).getByRole("presentation")).toHaveAttribute(
+        "src",
+        "data:image/png;base64,QQ==",
+      );
+      const dogs = screen.getByRole("checkbox", { name: "Select Dogs" });
+      expect(within(dogs).queryByRole("presentation")).toBeNull();
+      expect(dogs.querySelector("svg[data-favicon]")).not.toBeNull();
+    });
+
     it("says when the history is empty", async () => {
       renderApp([]);
       expect(

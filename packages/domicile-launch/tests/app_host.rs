@@ -1,13 +1,14 @@
-//! Tests for the Settings app's native messaging host.
+//! Tests for `domicile-app-host`, which Domicile's apps spawn.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use domicile_launch::app_host::{answer, read_message, watched, write_message, Host};
 use domicile_launch::control::{Request, Response, SettingsFiles};
 use domicile_launch::extensions::InstalledExtension;
+use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
-use domicile_launch::settings::{answer, read_message, watched, write_message, Host};
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 use serde_json::{json, Value};
 
@@ -284,6 +285,80 @@ fn an_address_is_opened_in_a_browser_window_on_the_desktop() {
 }
 
 #[test]
+fn history_is_searched_on_the_desktop_and_a_row_without_a_favicon_has_null() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({
+            "id": 20,
+            "type": "history",
+            "text": "a",
+            "end_time": 1_700_000_000_123.5,
+            "max_results": 10,
+        })),
+        json!({
+            "id": 20,
+            "type": "history",
+            "items": [{"url": "https://a.example/", "title": "A", "favicon": null}],
+        })
+    );
+    assert_eq!(
+        host.asked.take().last(),
+        Some(&Request::History(HistoryQuery {
+            text: "a".to_string(),
+            end_time: 1_700_000_000_123.5,
+            max_results: 10,
+        }))
+    );
+}
+
+#[test]
+fn a_page_s_visits_are_the_desktop_s() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({"id": 21, "type": "visits", "url": "https://a.example/"})),
+        json!({"id": 21, "type": "visits", "times": [1_700_000_000_123.5]})
+    );
+}
+
+#[test]
+fn visits_are_deleted_on_the_desktop() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({"id": 22, "type": "delete_history", "visits": [1_700_000_000_123.5]})),
+        json!({"id": 22, "type": "deleted"})
+    );
+    assert_eq!(
+        host.asked.take().last(),
+        Some(&Request::DeleteHistory {
+            visits: vec![1_700_000_000_123.5]
+        })
+    );
+}
+
+#[test]
+fn browsing_data_is_cleared_on_the_desktop_for_the_origins_named() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({
+            "id": 23,
+            "type": "clear_browsing_data",
+            "since": 0,
+            "types": ["cookies"],
+            "origins": ["https://a.example"],
+        })),
+        json!({"id": 23, "type": "cleared"})
+    );
+    assert_eq!(
+        host.asked.take().last(),
+        Some(&Request::ClearBrowsingData(BrowsingData {
+            since: 0.0,
+            types: vec!["cookies".to_string()],
+            origins: Some(vec!["https://a.example".to_string()]),
+        }))
+    );
+}
+
+#[test]
 fn a_folder_is_chosen_with_the_desktop_s_picker() {
     let host = a_host(FILES.clone());
     assert_eq!(
@@ -420,6 +495,18 @@ impl Fake {
                         },
                         Request::SetExtensionEnabled { .. } => Response::Stored,
                         Request::OpenUrl { .. } => Response::Opened,
+                        Request::History(_) => Response::History {
+                            items: vec![HistoryItem {
+                                url: "https://a.example/".to_string(),
+                                title: "A".to_string(),
+                                favicon: None,
+                            }],
+                        },
+                        Request::Visits { .. } => Response::Visits {
+                            times: vec![1_700_000_000_123.5],
+                        },
+                        Request::DeleteHistory { .. } => Response::Deleted,
+                        Request::ClearBrowsingData(_) => Response::Cleared,
                         other => panic!("the host never asks {other:?}"),
                     })
                 },

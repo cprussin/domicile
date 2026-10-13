@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
+import {
+  encodeFrame,
+  frameDecoder,
+} from "@domicile-desktop/component-library/app-host-frames";
 import type {
   Exit,
   Subprocess,
@@ -8,8 +12,6 @@ import type {
   SystemError,
 } from "@domicile-desktop/sdk/system";
 import { Signal, SystemErrorKind } from "@domicile-desktop/sdk/system";
-
-import { encodeFrame, frameDecoder } from "./frames";
 import type { SitePermission } from "./host";
 import { spawnedHost } from "./host";
 
@@ -33,7 +35,7 @@ const fakeSystem = (failures: SystemError[] = []) => {
   const processes: FakeProcess[] = [];
   const system: Pick<System, "spawn"> = {
     spawn: (argv, options) => {
-      expect(argv).toEqual(["domicile-settings-host"]);
+      expect(argv).toEqual(["domicile-app-host"]);
       expect(options).toEqual({ stdin: true });
       const failure = failures.shift();
       return Promise.resolve(
@@ -356,8 +358,8 @@ describe(spawnedHost, () => {
       [
         "its stderr",
         Ok({ code: 1, signal: undefined }),
-        "domicile-settings-host: DOMICILE_SOCK is not set\n",
-        "domicile-settings-host: DOMICILE_SOCK is not set",
+        "domicile-app-host: DOMICILE_SOCK is not set\n",
+        "domicile-app-host: DOMICILE_SOCK is not set",
       ],
       [
         "its exit code",

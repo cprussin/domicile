@@ -6,12 +6,13 @@ import { loadPage, loadSince } from "./history-page";
 const at = (day: number, hour: number, minute = 0) =>
   new Date(2026, 9, day, hour, minute).getTime();
 
-const OWN = "chrome-extension://dimbckmbklbplcobppahmnepgiponamj/";
+const OWN = "domicile://app-0123456789abcdef0123456789abcdef/";
 
 describe(loadPage, () => {
-  it("shows each page once per day at its latest visit, newest first", async () => {
+  it("shows each page once per day at its latest visit, newest first, with its icon", async () => {
     const source = fakeHistory([
       {
+        favicon: "data:image/png;base64,QQ==",
         title: "A",
         url: "https://a.test/",
         visits: [at(8, 9), at(9, 10), at(9, 14)],
@@ -26,6 +27,7 @@ describe(loadPage, () => {
     expect(page.entries).toEqual([
       {
         day: at(9, 0),
+        favicon: "data:image/png;base64,QQ==",
         id: `${at(9, 0)} https://a.test/`,
         time: at(9, 14),
         title: "A",
@@ -34,6 +36,7 @@ describe(loadPage, () => {
       },
       {
         day: at(9, 0),
+        favicon: undefined,
         id: `${at(9, 0)} https://b.test/`,
         time: at(9, 12),
         title: "B",
@@ -42,6 +45,7 @@ describe(loadPage, () => {
       },
       {
         day: at(8, 0),
+        favicon: "data:image/png;base64,QQ==",
         id: `${at(8, 0)} https://a.test/`,
         time: at(8, 9),
         title: "A",
@@ -84,7 +88,7 @@ describe(loadPage, () => {
   it("leaves out extensions' pages and Domicile's", async () => {
     // The shell's own window is a Chrome tab too, so its visits are recorded.
     const source = fakeHistory([
-      { title: "History", url: `${OWN}history.html`, visits: [at(9, 9)] },
+      { title: "History", url: OWN, visits: [at(9, 9)] },
       {
         title: "Vault",
         url: "chrome-extension://vault/popup.html",
@@ -117,7 +121,10 @@ describe(loadPage, () => {
   it("throws when a full page has a result with no visit before endTime", async () => {
     const source = {
       getVisits: () => Promise.resolve([at(9, 12)]),
-      search: () => Promise.resolve([{ title: "A", url: "https://a.test/" }]),
+      search: () =>
+        Promise.resolve([
+          { favicon: undefined, title: "A", url: "https://a.test/" },
+        ]),
     };
     await expect(
       loadPage(source, {

@@ -67,8 +67,8 @@ temp directory. The modules that spawn processes or bind sockets stay thin.
 | `cli` | yes | arguments, and the error for each bad one |
 | `components` | yes | finds the engine and compositor from the binary's path or the environment; the builder, bundled shells and apps when needed |
 | `apps` | no | lists Domicile's own apps, which the compositor installs with the config's extensions; see [HISTORY.md](/docs/HISTORY.md) |
-| `settings` | yes | `domicile-settings-host`: what the Settings app spawns to read and write the files the desktop names |
-| `site_permissions` | yes | a site's permission and setting, as the engine, the control socket and the Settings host carry it |
+| `app_host` | yes | `domicile-app-host`: what Domicile's apps spawn to read and write the files the desktop names and reach the engine's history, extensions and site settings |
+| `site_permissions` | yes | a site's permission and setting, as the engine, the control socket and the app host carry it |
 | `shell_path` | yes | name or path → module to load and the directory it is served from |
 | `shell_source` | yes | classifies a shell argument: module, entry to build, bundled shell, or package |
 | `build_progress` | yes | parses builder output into a terminal progress bar |
@@ -320,7 +320,7 @@ domicile open-app    ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
 domicile run-app     ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
 domicile screenshot  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor
 domicile send-shell  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor ─▶ every page
-domicile-settings-host ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine   (site permissions; settings_files stops at the supervisor)
+domicile-app-host    ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine   (settings_files stops at the supervisor)
 ```
 
 Several desktops per session:

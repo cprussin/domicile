@@ -33,21 +33,14 @@ out="$(nix build --no-link --print-out-paths .#domicile)"
   echo "libexec/domicile/engine holds no chrome" >&2
   exit 1
 }
-for program in domicile-history domicile-settings domicile-settings-host; do
+for program in domicile-history domicile-settings domicile-app-host; do
   [ -x "$out/bin/$program" ] && [ ! -L "$out/bin/$program" ] || {
     echo "bin/$program is missing or a symlink, so it cannot find the" >&2
     echo "  \`domicile\` beside it" >&2
     exit 1
   }
 done
-for app in history; do
-  [ -f "$out/libexec/domicile/apps/$app/manifest.json" ] || {
-    echo "libexec/domicile/apps/$app holds no manifest.json, so no desktop" >&2
-    echo "  installs it" >&2
-    exit 1
-  }
-done
-for module in settings; do
+for module in settings history; do
   [ -f "$out/libexec/domicile/app-modules/$module/$module.js" ] || {
     echo "libexec/domicile/app-modules/$module holds no $module.js, so" >&2
     echo "  domicile-$module has nothing to run" >&2

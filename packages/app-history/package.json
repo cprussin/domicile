@@ -1,13 +1,15 @@
 {
   "dependencies": {
     "@base-ui/react": "catalog:",
+    "@cprussin/option-result": "catalog:",
     "@domicile-desktop/component-library": "workspace:*",
+    "@domicile-desktop/sdk": "workspace:*",
     "@phosphor-icons/react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "zod": "catalog:"
   },
-  "description": "The History app: a Chrome extension page that browses, searches and clears the browsing history.",
+  "description": "The History app: an app module that browses, searches and clears the browsing history.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@domicile-desktop/test-support": "workspace:*",

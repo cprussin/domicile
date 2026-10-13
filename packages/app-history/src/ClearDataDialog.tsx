@@ -16,7 +16,7 @@ import { useState } from "react";
 import { css } from "../styled-system/css";
 import { flex, hstack } from "../styled-system/patterns";
 import type { Browser } from "./browser";
-import { DataKind, dataToRemove, since, TimeRange } from "./clear-data";
+import { DataKind, dataTypes, since, TimeRange } from "./clear-data";
 
 const TIME_RANGES = [
   { label: "Last hour", value: TimeRange.LastHour },
@@ -102,7 +102,7 @@ export const ClearDataDialog = ({
 
   const clear = () => {
     setClearing(true);
-    removeBrowsingData(since(range, now()), dataToRemove(kinds))
+    removeBrowsingData(since(range, now()), dataTypes(kinds))
       .then(
         () => {
           onOpenChange(false);
