@@ -1,17 +1,17 @@
 //! The PAM `crate::lock::Verifier`, for the user this process runs as.
 //!
-//! Runs `pam_authenticate` through the service `lock.pam_service` names, as
-//! other Linux lock screens do. See `docs/LOCK.md`.
+//! Runs `pam_authenticate` through `lock.pam_service` (`domicile` unless the
+//! config names another), as other Linux lock screens do. See `docs/LOCK.md`.
 //!
 //! The system must declare the service (as with swaylock's
-//! `security.pam.services.swaylock`); a home-manager module cannot. A desk
-//! naming a service missing from `/etc/pam.d` fails at startup, because
-//! Linux-PAM would fall back to the `other` stack: a deny on NixOS, the login
-//! stack on Debian. The file is checked on every attempt for the same reason.
+//! `security.pam.services.swaylock`); a home-manager module cannot. Without
+//! the file, Linux-PAM would fall back to the `other` stack: a deny on NixOS,
+//! the login stack on Debian. So the file is checked on every attempt, and a
+//! desk without it still locks but opens to nothing until the file is added.
 //!
-//! libpam is loaded at run time rather than linked, so a desk without PAM
-//! needs no libpam, and a desk with PAM reports a missing one by name at
-//! startup. The flake puts `pam` on the compositor's runpath.
+//! libpam is loaded at run time rather than linked, so a missing one is
+//! reported by name at startup. The flake puts `pam` on the compositor's
+//! runpath.
 //!
 //! Only `pam_authenticate` runs: no `pam_acct_mgmt` or `pam_setcred`. Every
 //! prompt is answered with the one passphrase the page sent, so a stack that
@@ -24,7 +24,7 @@ use std::ptr;
 use domicile_protocol::Passphrase;
 use libloading::Library;
 use thiserror::Error;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use crate::lock::{CouldNotCheck, Verdict, Verifier};
 
@@ -47,23 +47,11 @@ const PAM_PROMPT_ECHO_ON: c_int = 2;
 const PAM_ERROR_MSG: c_int = 3;
 const PAM_TEXT_INFO: c_int = 4;
 
-/// Why a desk that asked for PAM cannot have it. Each is fatal at startup: see
-/// `crate::lock::chosen`.
+/// Why this desk cannot use PAM at all. Each is fatal at startup, and a reload
+/// that hits one keeps the current lock.
 #[derive(Debug, Error)]
 pub enum NoPam {
-    #[error(
-        "lock.pam_service is {service:?}, and there is no {} for PAM to read it from, so \
-         this desk has nothing to open it with. The machine has to declare the service -- \
-         on NixOS, `security.pam.services.{service} = {{}};` in its system configuration, \
-         which a home-manager module cannot do",
-        file.display()
-    )]
-    Service { service: String, file: PathBuf },
-
-    #[error(
-        "lock.pam_service is set, and {library} would not load, so this desk has nothing \
-         to open it with: {source}"
-    )]
+    #[error("{library} would not load, so this desk has nothing to unlock it with: {source}")]
     Library {
         library: String,
         #[source]
@@ -88,6 +76,30 @@ pub enum NoPam {
     User { uid: libc::uid_t },
 }
 
+/// [`Pam::for_this_user`], logging an error when the machine does not declare
+/// the service.
+pub fn for_the_desk(service: &str, confdir: &Path) -> Result<Pam, NoPam> {
+    let pam = Pam::for_this_user(service, confdir)?;
+    if let Some(why) = pam.undeclared() {
+        error!(%why, "this desktop locks, and cannot be unlocked until the file is added");
+    }
+    Ok(pam)
+}
+
+/// The machine does not declare the PAM service, so nothing unlocks the desk.
+#[derive(Debug, Error)]
+#[error(
+    "there is no {} for PAM to read the service {service:?} from, so this desktop locks and \
+     nothing unlocks it. Declare the service: on NixOS, `security.pam.services.{service} = \
+     {{}};` in the system configuration; elsewhere, install Domicile's package or add that \
+     file (see docs/LOCK.md)",
+    file.display()
+)]
+pub struct Undeclared {
+    service: String,
+    file: PathBuf,
+}
+
 /// PAM, for the user this process runs as, through one service.
 pub struct Pam {
     libpam: Libpam,
@@ -106,18 +118,28 @@ impl Pam {
     /// The user comes from `getuid` and the password database, never `$USER`.
     /// Whoever starts the process controls its environment, so trusting
     /// `$USER` would let them unlock with their own password.
+    ///
+    /// A service missing from `confdir` is no error here: see
+    /// [`Pam::undeclared`].
     pub fn for_this_user(service: &str, confdir: &Path) -> Result<Pam, NoPam> {
-        let file = service_file(service, confdir)?;
         // SAFETY: `getuid` cannot fail and touches nothing.
         let user = user_named_by(unsafe { libc::getuid() })?;
         Ok(Pam {
             libpam: Libpam::load(LIBRARY)?,
-            service: CString::new(service)
-                .expect("a service with a NUL in it has no file, which was refused above"),
-            file,
+            service: CString::new(service).expect("the config refuses a service with a NUL in it"),
+            file: confdir.join(service),
             confdir: CString::new(confdir.as_os_str().as_encoded_bytes())
-                .expect("a directory with a NUL in it has no file in it, which was refused above"),
+                .expect("a command-line argument holds no NUL"),
             user,
+        })
+    }
+
+    /// Why nothing unlocks the desk, when the machine does not declare the
+    /// service.
+    pub fn undeclared(&self) -> Option<Undeclared> {
+        (!self.file.exists()).then(|| Undeclared {
+            service: self.service.to_string_lossy().into_owned(),
+            file: self.file.clone(),
         })
     }
 }
@@ -138,14 +160,11 @@ impl Verifier for Pam {
             // C reads only up to the NUL, so the prefix would also open the
             // desk. No real password contains a NUL.
             Ok(false)
-        } else if !self.file.exists() {
-            Err(CouldNotCheck(format!(
-                "there is no {} any more, and PAM would answer with its `other` service \
-                 instead",
-                self.file.display()
-            )))
         } else {
-            self.libpam.authenticate(self, typed)
+            match self.undeclared() {
+                Some(why) => Err(CouldNotCheck(why.to_string())),
+                None => self.libpam.authenticate(self, typed),
+            }
         }
     }
 }
@@ -256,19 +275,6 @@ unsafe fn symbol<T: Copy>(loaded: &Library, library: &str, name: &'static str) -
             symbol: name,
             source,
         })
-}
-
-/// The file `service` is read from, or why the desk cannot start with it.
-fn service_file(service: &str, confdir: &Path) -> Result<PathBuf, NoPam> {
-    let file = confdir.join(service);
-    if file.exists() {
-        Ok(file)
-    } else {
-        Err(NoPam::Service {
-            service: service.to_string(),
-            file,
-        })
-    }
 }
 
 /// The name the password database gives `uid`.
@@ -524,6 +530,42 @@ mod tests {
             why.contains(&confdir.path().join(SERVICE).display().to_string()),
             "it names the file: {why}"
         );
+    }
+
+    #[test]
+    fn a_service_the_machine_does_not_declare_opens_nothing_until_it_is_added() {
+        // The desk still locks: refusing to would fail open. Every passphrase
+        // is an error naming the file, never PAM's `other` stack, and adding
+        // the file opens the desk without a restart.
+        let confdir = tempfile::tempdir().expect("a directory");
+        let pam = Pam::for_this_user(SERVICE, confdir.path())
+            .expect("PAM, for this user, before the service exists");
+        let file = confdir.path().join(SERVICE).display().to_string();
+
+        let said = pam
+            .undeclared()
+            .expect("the missing service is reported at startup")
+            .to_string();
+        assert!(said.contains(&file), "it names the file: {said}");
+        assert!(
+            said.contains("security.pam.services.domicile-test = {};"),
+            "and what a NixOS machine declares: {said}"
+        );
+        let Err(CouldNotCheck(why)) = pam.opens_the_desk(&Passphrase::from("friend")) else {
+            panic!("a service that is not there is not a verdict");
+        };
+        assert!(
+            why.contains(&file),
+            "each attempt names the file too: {why}"
+        );
+
+        std::fs::write(
+            confdir.path().join(SERVICE),
+            "auth required pam_permit.so\n",
+        )
+        .expect("the service");
+        assert!(pam.undeclared().is_none());
+        assert_eq!(pam.opens_the_desk(&Passphrase::from("friend")), Ok(true));
     }
 
     #[test]

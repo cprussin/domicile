@@ -1,4 +1,4 @@
-# The service `lock.pam_service = "domicile"` names: it checks the passphrase
-# that unlocks the desk. See docs/LOCK.md.
+# The PAM service that unlocks the desk unless `lock.pam_service` names
+# another: it checks the user's password. See docs/LOCK.md.
 @include common-auth
 @include common-account

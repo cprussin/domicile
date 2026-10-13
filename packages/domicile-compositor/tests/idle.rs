@@ -8,7 +8,7 @@
 
 mod running;
 
-use domicile_protocol::{ChromeMessage, HostMessage, SystemEvent, SystemRequest};
+use domicile_protocol::{ChromeMessage, HostMessage, SystemEvent, SystemReply, SystemRequest};
 
 use crate::running::Compositor;
 
@@ -89,6 +89,37 @@ fn a_key_during_the_warning_keeps_the_screens_on() {
         })
         .expect("the warning is called off");
     compositor.wait_for_log("somebody is at this desktop again; its screens stay on");
+}
+
+/// Blanking alone leaves the desktop unlocked: a page on the dark desk still
+/// starts a process, which a locked one refuses.
+#[test]
+fn a_desk_that_blanks_without_a_lock_timeout_stays_unlocked() {
+    let compositor = Compositor::started_with(A_DESK_THAT_BLANKS);
+    let mut chrome = compositor.chrome();
+    compositor.wait_for_log("nobody is at this desktop; its screens go dark");
+
+    chrome
+        .say(&ChromeMessage::SystemRequest {
+            id: 2,
+            request: SystemRequest::Spawn {
+                argv: vec!["true".into()],
+                cwd: None,
+                env: Default::default(),
+                stdin: false,
+            },
+        })
+        .expect("the chrome socket takes a system call");
+    let replied = chrome
+        .wait_for(|message| matches!(message, HostMessage::SystemReply { id: 2, .. }))
+        .expect("the call is answered");
+    assert_eq!(
+        replied,
+        HostMessage::SystemReply {
+            id: 2,
+            reply: SystemReply::Started,
+        }
+    );
 }
 
 /// A timeout added by reload blanks a desk that started with none.

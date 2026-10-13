@@ -76,6 +76,7 @@ const settingsSchema = z.strictObject({
   idle: z
     .strictObject({
       blank_after_seconds: z.number().int().positive().optional(),
+      lock_after_seconds: z.number().int().positive().optional(),
       warn_before_seconds: z.number().int().positive().optional(),
     })
     .prefault({}),
@@ -95,7 +96,6 @@ const settingsSchema = z.strictObject({
   lock: z
     .strictObject({
       pam_service: z.string().optional(),
-      passphrase_hash: z.string().optional(),
     })
     .prefault({}),
   lockdown: z

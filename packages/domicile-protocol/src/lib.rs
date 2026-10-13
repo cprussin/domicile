@@ -483,9 +483,6 @@ pub enum HostMessage {
     /// reload, an engine crash or an edited shell cannot unlock it. The page
     /// still receives its own keys, which is how it collects the passphrase
     /// for [`ChromeMessage::Unlock`]. Sent on each change and on connect.
-    ///
-    /// Not sent when no passphrase is configured, because such a desktop
-    /// cannot lock.
     Locked { locked: bool },
 
     /// The theme the windows now use.

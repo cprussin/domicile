@@ -119,8 +119,6 @@ impl DomicileCompositor {
     /// Whether the desktop is locked. Checked by
     /// [`handle_client_request`](DomicileCompositor::handle_client_request)
     /// before input reaches the seat.
-    ///
-    /// A desktop that cannot lock is never locked.
     pub fn the_desk_is_locked(&self) -> bool {
         self.lock.locked()
     }
@@ -139,13 +137,8 @@ impl DomicileCompositor {
     ///
     /// Essential: a reloaded page missed the original lock broadcast and would
     /// otherwise show an unlocked desktop.
-    ///
-    /// Silent if the desktop cannot lock, like
-    /// [`tell_a_new_chrome_whether_anybody_is_here`](DomicileCompositor::tell_a_new_chrome_whether_anybody_is_here).
     pub fn tell_a_new_chrome_whether_the_desk_is_locked(&self) {
-        if self.lock.can_lock() {
-            self.tell_the_chromes_whether_the_desk_is_locked();
-        }
+        self.tell_the_chromes_whether_the_desk_is_locked();
     }
 
     /// Tell applications watching the session whether the screens are blanked

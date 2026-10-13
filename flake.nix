@@ -577,10 +577,9 @@
         doCheck = false;
 
         # Add `dlopen`ed libraries to the rpath: libEGL for dmabuf import, the
-        # Wayland and X11 client libraries winit probes, libpam for the lock
-        # screen's `lock.pam_service`, and libxcrypt for its
-        # `lock.passphrase_hash`. `/run/opengl-driver/lib` comes
-        # first so NixOS uses the EGL matching its kernel driver.
+        # Wayland and X11 client libraries winit probes, and libpam for the
+        # lock screen. `/run/opengl-driver/lib` comes first so NixOS uses the
+        # EGL matching its kernel driver.
         #
         # - `DOMICILE_PNP_IDS`: hwdata's EDID vendor table. Read at run time,
         #   not vendored, because it is GPL-2+.
@@ -594,7 +593,7 @@
           patchelf --add-rpath "${pkgs.lib.makeLibraryPath (with pkgs; [
             libGL mesa libgbm wayland libxkbcommon
             libx11 libxcursor libxrandr libxi
-            pam libxcrypt
+            pam
           ])}" "$out/bin/domicile-compositor"
           wrapProgram "$out/bin/domicile-compositor" \
             --prefix LD_LIBRARY_PATH : "/run/opengl-driver/lib" \
@@ -1212,9 +1211,8 @@
               exit 1
             }
 
-            # The PAM service `lock.pam_service` names. Home-manager cannot
-            # declare it, and a desktop configured to lock fails to start
-            # without it.
+            # The PAM service that unlocks the desk. Home-manager cannot
+            # declare it, and without it a locked desk opens to nothing.
             [ ${pkgs.lib.boolToString (machine.config.security.pam.services ? domicile)} = true ] || {
               echo "the module declared no domicile PAM service" >&2
               exit 1
@@ -1328,10 +1326,9 @@
               pkgs.libxcursor
               pkgs.libxrandr
               pkgs.libxi
-              # libpam and libxcrypt for the lock screen, so tests use the
-              # same ones as the package instead of the host's.
+              # libpam for the lock screen, so tests use the same one as the
+              # package instead of the host's.
               pkgs.pam
-              pkgs.libxcrypt
             ]}:${pkgs.lib.makeLibraryPath engineRuntimeLibs}";
           shellHook = ''
             echo "domicile dev shell (full: +wayland +drm +gl)"

@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use domicile_config::{
-    AccentColor, Config, ConfigError, ConfigStore, Contrast, DisplayConfig, LockVerifier,
-    LockdownConfig, ThemeMode,
+    AccentColor, Config, ConfigError, ConfigStore, Contrast, DisplayConfig, LockdownConfig,
+    ThemeMode,
 };
 
 // ---- parsing & defaults ---------------------------------------------------
@@ -180,6 +180,62 @@ fn rejects_a_timeout_of_no_time_at_all() {
 }
 
 #[test]
+fn a_desk_that_asked_for_no_lock_timeout_never_locks_on_its_own() {
+    // Blanking alone does not lock; only the shell's `lock()` would.
+    let idle = Config::parse(
+        r#"
+{ "idle": { "blank_after_seconds": 600 } }
+"#,
+    )
+    .unwrap()
+    .idle;
+    assert_eq!(idle.lock_after(), None);
+}
+
+#[test]
+fn a_lock_timeout_stands_on_its_own_clock() {
+    // Shorter, longer, or with no blanking at all.
+    for (stated, lock_after) in [
+        (
+            r#"{ "blank_after_seconds": 600, "lock_after_seconds": 300 }"#,
+            300,
+        ),
+        (
+            r#"{ "blank_after_seconds": 300, "lock_after_seconds": 600 }"#,
+            600,
+        ),
+        (r#"{ "lock_after_seconds": 900 }"#, 900),
+    ] {
+        let idle = Config::parse(&format!(r#"{{ "idle": {stated} }}"#))
+            .unwrap()
+            .idle;
+        assert_eq!(
+            idle.lock_after(),
+            Some(Duration::from_secs(lock_after)),
+            "{stated}"
+        );
+    }
+}
+
+#[test]
+fn rejects_a_lock_timeout_of_no_time_at_all() {
+    // "Never" is spelled by leaving the key out.
+    let err = Config::parse(
+        r#"
+{ "idle": { "lock_after_seconds": 0 } }
+"#,
+    )
+    .unwrap_err();
+    let ConfigError::Validation(message) = &err else {
+        panic!("a zero lock timeout is refused rather than taken: {err:?}");
+    };
+    assert!(
+        message.contains("idle.lock_after_seconds"),
+        "the message should name the key: {message}"
+    );
+}
+
+#[test]
 fn a_desk_that_states_a_warning_gets_it_before_the_timeout() {
     let idle = Config::parse(
         r#"
@@ -226,139 +282,55 @@ fn rejects_a_warning_that_cannot_come_before_its_timeout() {
 // ---- lock -----------------------------------------------------------------
 
 #[test]
-fn a_desk_that_states_no_verifier_cannot_lock() {
-    // No lock key means the desk never locks: a locked desk with no verifier
-    // could not be unlocked.
-    assert_eq!(Config::parse("{}").unwrap().lock.verifier(), None);
-}
-
-/// `mkpasswd "open sesame"`.
-const HASH: &str = "$y$j9T$mMzyBSKNKxkbivH7ik1.T.$iM4gXKt2j/qEPlwG5bMwAYPJa15M//yqCKSEin8n0P/";
-
-#[test]
-fn a_desk_that_states_a_passphrase_hash_is_opened_by_it() {
-    let lock = Config::parse(&format!(
-        r#"{{ "lock": {{ "passphrase_hash": "{HASH}" }} }}"#
-    ))
-    .unwrap()
-    .lock;
-    assert_eq!(lock.verifier(), Some(LockVerifier::PassphraseHash(HASH)));
+fn a_desk_that_names_no_pam_service_unlocks_through_domicile() {
+    // The NixOS module and the distribution packages declare `domicile`.
+    assert_eq!(Config::parse("{}").unwrap().lock.service(), "domicile");
 }
 
 #[test]
-fn rejects_a_passphrase_in_plain_text() {
-    // The config is often in the world-readable Nix store, so it holds only a
-    // hash.
-    let err = Config::parse(
-        r#"
-{ "lock": { "passphrase": "open sesame" } }
-"#,
-    )
-    .unwrap_err();
-    assert!(
-        err.to_string().contains("passphrase_hash"),
-        "the message should name the key that replaces it: {err}"
-    );
-}
-
-#[test]
-fn a_desk_that_names_a_pam_service_is_opened_by_pam() {
+fn a_desk_that_names_a_pam_service_unlocks_through_it() {
     let lock = Config::parse(
         r#"
-{ "lock": { "pam_service": "domicile" } }
+{ "lock": { "pam_service": "login" } }
 "#,
     )
     .unwrap()
     .lock;
-    assert_eq!(
-        lock.verifier(),
-        Some(LockVerifier::Pam {
-            service: "domicile"
-        })
-    );
+    assert_eq!(lock.service(), "login");
 }
 
 #[test]
-fn rejects_a_desk_that_states_both_verifiers() {
-    // A config with both is refused, so a passphrase hash is never mistaken
-    // for a PAM fallback.
-    let err = Config::parse(
-        r#"
-{ "lock": { "passphrase_hash": "$6$salt$hash", "pam_service": "domicile" } }
-"#,
-    )
-    .unwrap_err();
-    let ConfigError::Validation(message) = &err else {
-        panic!("two verifiers are refused rather than one of them picked: {err:?}");
-    };
-    assert!(
-        message.contains("lock.passphrase_hash") && message.contains("lock.pam_service"),
-        "the message should name both keys: {message}"
-    );
+fn rejects_a_passphrase_of_its_own_in_either_form() {
+    // The account password unlocks the desk, so the error names the key that
+    // is left.
+    for stated in [
+        r#"{ "lock": { "passphrase": "open sesame" } }"#,
+        r#"{ "lock": { "passphrase_hash": "$y$j9T$salt$hash" } }"#,
+    ] {
+        let err = Config::parse(stated).unwrap_err();
+        assert!(
+            err.to_string().contains("pam_service"),
+            "the message should name the key that is left: {err}"
+        );
+    }
 }
 
 #[test]
-fn rejects_a_pam_service_of_nothing_at_all() {
-    let err = Config::parse(
-        r#"
-{ "lock": { "pam_service": "" } }
-"#,
-    )
-    .unwrap_err();
-    let ConfigError::Validation(message) = &err else {
-        panic!("an empty service is refused rather than taken: {err:?}");
-    };
-    assert!(
-        message.contains("lock.pam_service"),
-        "the message should name the key: {message}"
-    );
-}
-
-#[test]
-fn rejects_a_passphrase_hash_of_nothing_at_all() {
-    // "Never lock" is spelled by leaving the key out.
-    let err = Config::parse(
-        r#"
-{ "lock": { "passphrase_hash": "" } }
-"#,
-    )
-    .unwrap_err();
-    let ConfigError::Validation(message) = &err else {
-        panic!("an empty hash is refused rather than taken: {err:?}");
-    };
-    assert!(
-        message.contains("lock.passphrase_hash"),
-        "the message should name the key: {message}"
-    );
-}
-
-#[test]
-fn a_passphrase_hash_is_not_in_what_a_log_line_would_print() {
-    // The config sits inside the compositor's `Restatement`, so its `Debug`
-    // redacts the hash before anything prints it. A log line should not hand
-    // out something to crack offline.
-    let secret = HASH;
-    let config = Config::parse(&format!(
-        r#"
-{{ "lock": {{ "passphrase_hash": "{secret}" }} }}
-"#
-    ))
-    .unwrap();
-
-    assert!(!format!("{:?}", config.lock).contains(secret));
-    assert!(
-        !format!("{config:?}").contains(secret),
-        "the whole config is what a reload would print"
-    );
-    assert!(
-        !format!("{:?}", config.lock.verifier()).contains(secret),
-        "and neither is the verifier the compositor chooses from it"
-    );
-    // Redaction must not lose the value.
-    assert_eq!(
-        config.lock.verifier(),
-        Some(LockVerifier::PassphraseHash(secret))
-    );
+fn rejects_a_pam_service_that_is_no_file_name_in_pam_d() {
+    // PAM reads the service from a file named after it.
+    for service in ["", ".", "..", "../shadow", "domicile\\u0000"] {
+        let err = Config::parse(&format!(
+            r#"{{ "lock": {{ "pam_service": "{service}" }} }}"#
+        ))
+        .unwrap_err();
+        let ConfigError::Validation(message) = &err else {
+            panic!("{service:?} is refused rather than taken: {err:?}");
+        };
+        assert!(
+            message.contains("lock.pam_service"),
+            "the message should name the key: {message}"
+        );
+    }
 }
 
 // ---- theme ----------------------------------------------------------------

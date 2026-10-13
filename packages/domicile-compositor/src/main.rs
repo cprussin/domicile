@@ -10,7 +10,7 @@
 //! `docs/architecture/WINDOW-COMPOSITING.md`.
 
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
@@ -105,7 +105,6 @@ mod once_per_window;
 mod outbound;
 mod outputs;
 mod pam;
-mod passphrase_hash;
 mod peer_process;
 mod pnp_ids;
 mod popups;
@@ -562,16 +561,15 @@ struct DomicileCompositor {
     /// Kept so a reload can remove or replace it; a calloop source can only be
     /// removed by its token.
     idle_clock: Option<RegistrationToken>,
-    /// The lock.
-    ///
-    /// Has no verifier, and never locks, if the config sets neither
-    /// `lock.passphrase_hash` nor `lock.pam_service`. See
-    /// [`crate::lock::chosen`].
+    /// The lock, opened by PAM through `lock.pam_service`.
     ///
     /// Kept across reloads, which only swap its verifier
     /// ([`rekey_the_lock`](DomicileCompositor::rekey_the_lock)). Rebuilding it
     /// would unlock the desktop.
     lock: Lock,
+    /// Where PAM services are read from: [`pam::SERVICES`] unless the command
+    /// line names another. Kept for the verifier a reload builds.
+    pam_confdir: PathBuf,
     /// The theme change in progress, if any, and its current phase's deadline.
     turnover: Option<Turnover<usize>>,
     turnover_deadline: Option<RegistrationToken>,
@@ -1081,14 +1079,17 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    // If the config's verifier is unusable (no PAM service, or a hash libcrypt
-    // refuses), fail and say why. Running without the configured lock would
-    // contradict the config.
-    // See `crate::lock::chosen`.
+    // A machine without libpam, or a uid with no user, is fatal: a desktop
+    // that cannot lock fails open. A missing service is not; see
+    // `pam::Pam::undeclared`.
     //
     // Verdicts come back to this loop; see `heard_the_verdict`.
+    let pam_confdir = arguments
+        .pam_confdir
+        .clone()
+        .unwrap_or_else(|| PathBuf::from(pam::SERVICES));
     let lock = Lock::held_by(
-        lock::chosen(config.lock.verifier(), Path::new(pam::SERVICES))?,
+        Box::new(pam::for_the_desk(config.lock.service(), &pam_confdir)?),
         move |verdict| {
             verdicts
                 .send(verdict)
@@ -1188,6 +1189,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         idle_clock: None,
         // Starts unlocked. Built once, never on reload; see the field.
         lock,
+        pam_confdir,
         turnover: None,
         turnover_deadline: None,
         casting: {

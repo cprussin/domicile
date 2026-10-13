@@ -59,13 +59,6 @@ for library in libEGL.so.1 libgbm.so.1 libwayland-client.so.0 \
     fail "$library is on the loader path" "ldconfig -p does not list it"
   fi
 done
-# libxcrypt's soname differs by distribution; see the compositor's
-# `passphrase_hash.rs`.
-if ldconfig -p | grep -Eq '^[[:space:]]*libcrypt\.so\.[12] '; then
-  pass "libcrypt is on the loader path"
-else
-  fail "libcrypt is on the loader path" "ldconfig -p lists neither libcrypt.so.2 nor libcrypt.so.1"
-fi
 
 echo '{}' >/tmp/domicile.json
 check "domicile runs" /usr/bin/domicile check-config /tmp/domicile.json

@@ -14,7 +14,7 @@ use domicile_protocol::{
     ChromeMessage, HostMessage, Passphrase, SystemEvent, SystemReply, SystemRequest, UnlockRefusal,
 };
 
-use crate::running::Compositor;
+use crate::running::{Compositor, THE_PASSPHRASE};
 
 /// `a`, in evdev codes. The client traces `key(serial, time, code, state)`, so
 /// the end of that line identifies the key and whether it was pressed.
@@ -26,26 +26,22 @@ const A_PRESS_OF_IT: &str = ", 30, 1)";
 /// The client's trace line for a release of that key.
 const A_RELEASE_OF_IT: &str = ", 30, 0)";
 
-/// The passphrase these configs' hash (`mkpasswd "open sesame"`) was made
-/// from, and the one the tests type.
-const THE_PASSPHRASE: &str = "open sesame";
-
-/// A desktop that can lock but has no idle timeout.
-const A_DESK_THAT_CAN_LOCK: &str = r#"
+/// A desktop with no idle timeout, unlocked through PAM's `domicile` service:
+/// the fixture's, which takes [`THE_PASSPHRASE`].
+const A_DESK: &str = r#"
 {
-  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
-  "lock": { "passphrase_hash": "$y$j9T$mMzyBSKNKxkbivH7ik1.T.$iM4gXKt2j/qEPlwG5bMwAYPJa15M//yqCKSEin8n0P/" }
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] }
 }
 "#;
 
-/// The same desktop, with the shortest idle timeout the config accepts.
+/// The same desktop, with the shortest lock timeout the config accepts and
+/// no blanking.
 ///
 /// One second, because `IdleConfig` refuses zero.
 const A_DESK_THAT_LOCKS_IN_A_SECOND: &str = r#"
 {
   "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
-  "idle": { "blank_after_seconds": 1 },
-  "lock": { "passphrase_hash": "$y$j9T$mMzyBSKNKxkbivH7ik1.T.$iM4gXKt2j/qEPlwG5bMwAYPJa15M//yqCKSEin8n0P/" }
+  "idle": { "lock_after_seconds": 1 }
 }
 "#;
 
@@ -66,10 +62,10 @@ fn lock_the_desk(compositor: &Compositor, chrome: &mut domicile_test_chrome::Chr
         .wait_for(|message| matches!(message, HostMessage::Locked { locked: true }))
         .expect("a desk nobody is at locks itself and says so");
 
-    // Removing the timeout also turns the screens back on, so the desktop is
-    // lit, locked, and cannot lock again.
-    compositor.reconfigure(A_DESK_THAT_CAN_LOCK);
-    compositor.wait_for_log("the idle timeout changed while the screens were off");
+    // Removing the timeout leaves the desktop locked, and unable to lock again.
+    // The first reload restarted the clock too.
+    compositor.reconfigure(A_DESK);
+    compositor.wait_for_log_times("the idle clock starts over from the reloaded timeouts", 2);
 }
 
 /// Type a key at whichever window has the keyboard, press and release.
@@ -127,7 +123,7 @@ fn a_client_being_typed_at(
 /// gives two; a lock that never opens gives none.
 #[test]
 fn a_locked_desk_refuses_the_keys_and_the_passphrase_starts_them_again() {
-    let compositor = Compositor::started_with(A_DESK_THAT_CAN_LOCK);
+    let compositor = Compositor::started_with(A_DESK);
     let (mut chrome, mut client, app_id) = a_client_being_typed_at(&compositor);
 
     lock_the_desk(&compositor, &mut chrome);
@@ -166,7 +162,7 @@ fn a_locked_desk_refuses_the_keys_and_the_passphrase_starts_them_again() {
 /// existed.
 #[test]
 fn a_page_that_connects_over_a_locked_desk_is_told_so() {
-    let compositor = Compositor::started_with(A_DESK_THAT_CAN_LOCK);
+    let compositor = Compositor::started_with(A_DESK);
     let mut chrome = compositor.chrome();
     lock_the_desk(&compositor, &mut chrome);
 
@@ -187,7 +183,7 @@ fn a_page_that_connects_over_a_locked_desk_is_told_so() {
 /// Both the typed and the correct passphrase are checked against the log.
 #[test]
 fn a_passphrase_the_desk_refuses_leaves_it_shut_says_so_and_stays_out_of_the_log() {
-    let compositor = Compositor::started_with(A_DESK_THAT_CAN_LOCK);
+    let compositor = Compositor::started_with(A_DESK);
     let mut chrome = compositor.chrome();
     lock_the_desk(&compositor, &mut chrome);
     let wrong = "hunter2";
@@ -217,7 +213,7 @@ fn a_passphrase_the_desk_refuses_leaves_it_shut_says_so_and_stays_out_of_the_log
 /// the `locked: true` that answers it.
 #[test]
 fn a_page_listening_hears_why_the_desk_refused_a_passphrase() {
-    let compositor = Compositor::started_with(A_DESK_THAT_CAN_LOCK);
+    let compositor = Compositor::started_with(A_DESK);
     let mut chrome = compositor.chrome();
     lock_the_desk(&compositor, &mut chrome);
     chrome
@@ -274,7 +270,7 @@ fn a_page_listening_hears_why_the_desk_refused_a_passphrase() {
 /// resets the idle timer, but a held Shift sends nothing.
 #[test]
 fn a_key_held_when_the_desk_locks_is_let_go_of_for_the_client() {
-    let compositor = Compositor::started_with(A_DESK_THAT_CAN_LOCK);
+    let compositor = Compositor::started_with(A_DESK);
     let (mut chrome, mut client, app_id) = a_client_being_typed_at(&compositor);
 
     // Pressed and never released.
@@ -307,7 +303,7 @@ fn a_key_held_when_the_desk_locks_is_let_go_of_for_the_client() {
 /// already be in the log, and a count of one is exact.
 #[test]
 fn a_locked_desk_starts_no_program_and_the_passphrase_lets_the_next_one_run() {
-    let compositor = Compositor::started_with(A_DESK_THAT_CAN_LOCK);
+    let compositor = Compositor::started_with(A_DESK);
     let mut chrome = compositor.chrome();
     lock_the_desk(&compositor, &mut chrome);
 
@@ -374,7 +370,7 @@ fn say_start(chrome: &mut domicile_test_chrome::Chrome, reported: &std::path::Pa
 fn a_locked_desk_answers_no_search_and_the_passphrase_lets_the_next_one_find_the_file() {
     let home = tempfile::tempdir().expect("a home to lay out");
     std::fs::write(home.path().join("plan.org"), "").expect("the file");
-    let compositor = Compositor::started_in_a_home(A_DESK_THAT_CAN_LOCK, Some(home.path()));
+    let compositor = Compositor::started_in_a_home(A_DESK, Some(home.path()));
     let mut chrome = an_indexed_desk_locked(&compositor);
 
     say_search(&mut chrome, "plan");
@@ -404,7 +400,7 @@ fn a_locked_desk_answers_no_search_and_the_passphrase_lets_the_next_one_find_the
 /// afterward is refused, which shows the lock took effect.
 #[test]
 fn a_shell_can_lock_the_desk_on_purpose() {
-    let compositor = Compositor::started_with(A_DESK_THAT_CAN_LOCK);
+    let compositor = Compositor::started_with(A_DESK);
     let (mut chrome, _client, app_id) = a_client_being_typed_at(&compositor);
     chrome
         .wait_for(|message| matches!(message, HostMessage::Locked { locked: false }))
@@ -419,6 +415,50 @@ fn a_shell_can_lock_the_desk_on_purpose() {
 
     press_a(&mut chrome, &app_id);
     compositor.wait_for_log("this desktop is locked");
+}
+
+/// A machine that declares no PAM service still locks, says at startup which
+/// file to add, and opens to nothing.
+///
+/// Failing open would leave the desk unlocked; PAM's `other` stack would let
+/// in whatever it lets in.
+#[test]
+fn a_desk_whose_pam_service_the_machine_lacks_locks_and_opens_to_nothing() {
+    let compositor = Compositor::started_where_pam_declares_nothing(A_DESK);
+    compositor.wait_for_log("security.pam.services.domicile = {};");
+    let mut chrome = compositor.chrome();
+    chrome
+        .say(&ChromeMessage::SystemRequest {
+            id: 5,
+            request: SystemRequest::UnlockRefusals,
+        })
+        .expect("the chrome socket takes a system call");
+
+    chrome
+        .say(&ChromeMessage::Lock)
+        .expect("the chrome socket takes a lock");
+    chrome
+        .wait_for(|message| matches!(message, HostMessage::Locked { locked: true }))
+        .expect("the desk locks although nothing can open it");
+    chrome
+        .say(&ChromeMessage::Unlock {
+            passphrase: Passphrase::from(THE_PASSPHRASE),
+        })
+        .expect("the chrome socket takes an unlock");
+
+    assert_eq!(
+        chrome
+            .wait_for(|message| matches!(message, HostMessage::SystemEvent { id: 5, .. }))
+            .expect("the page hears the refusal"),
+        HostMessage::SystemEvent {
+            id: 5,
+            event: SystemEvent::UnlockRefused {
+                refusal: UnlockRefusal::Unverifiable,
+                failures: 1,
+                retry_in_ms: 0,
+            },
+        }
+    );
 }
 
 /// A chrome on a desktop whose home is indexed, then locked.

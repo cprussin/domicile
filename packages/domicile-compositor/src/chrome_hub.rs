@@ -153,7 +153,7 @@ impl ChromeHub {
 
     /// Whether the desktop is locked, for chrome connection threads.
     ///
-    /// A desktop that cannot lock is never locked.
+    /// Unlocked until startup hands the hub the lock.
     pub fn the_desk_is_locked(&self) -> bool {
         self.lock.get().is_some_and(Seen::locked)
     }

@@ -50,9 +50,8 @@ domicile-test-chrome = { path = "../domicile-test-chrome" }
 # `src/peer_process.rs`).
 libc = "0.2"
 # The dlopen crate Smithay uses. Probes for libEGL before Smithay loads it
-# (Smithay treats a missing library as fatal), loads libpam only when the lock
-# names a PAM service (see `src/pam.rs`), and libcrypt only when it states a
-# passphrase hash (see `src/passphrase_hash.rs`), so none is linked.
+# (Smithay treats a missing library as fatal) and loads libpam for the lock
+# (see `src/pam.rs`), so neither is linked.
 libloading = "0.9"
 # Screen casting: a PipeWire video producer per stream (see `src/casting/`).
 pipewire = { version = "0.10", features = ["v0_3_34"] }

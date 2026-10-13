@@ -23,6 +23,9 @@ use domicile_test_chrome::Chrome;
 /// rendering, which is slow.
 const PATIENCE: Duration = Duration::from_secs(20);
 
+/// The passphrase the run's `domicile` PAM service takes.
+pub const THE_PASSPHRASE: &str = "open sesame";
+
 /// A compositor process and the directory it was given.
 pub struct Compositor {
     child: Child,
@@ -76,7 +79,29 @@ impl Compositor {
         home: Option<&std::path::Path>,
         env: &[(&str, &str)],
     ) -> Compositor {
+        Compositor::started(config, home, env, true)
+    }
+
+    /// The same, on a machine that declares no PAM service.
+    pub fn started_where_pam_declares_nothing(config: &str) -> Compositor {
+        Compositor::started(config, None, &[], false)
+    }
+
+    /// Every run reads PAM services from its own directory, never the
+    /// runner's `/etc/pam.d`. When `declared`, it holds a `domicile` service
+    /// that takes [`THE_PASSPHRASE`].
+    fn started(
+        config: &str,
+        home: Option<&std::path::Path>,
+        env: &[(&str, &str)],
+        declared: bool,
+    ) -> Compositor {
         let directory = tempfile::tempdir().expect("a runtime directory");
+        let pam_confdir = directory.path().join("pam.d");
+        std::fs::create_dir_all(&pam_confdir).expect("a directory of PAM services");
+        if declared {
+            declare_the_service(directory.path(), &pam_confdir);
+        }
         let config_file = directory.path().join("config.json");
         std::fs::write(&config_file, config).expect("the config is written");
         let session_file = directory.path().join("session.json");
@@ -91,6 +116,8 @@ impl Compositor {
             .arg(&session_file)
             .arg("--config")
             .arg(&config_file)
+            .arg("--pam-confdir")
+            .arg(&pam_confdir)
             // Its own, so its displays cannot collide with the runner's.
             .env("XDG_RUNTIME_DIR", directory.path())
             // The file index's source and cache, both private to this run.
@@ -365,6 +392,38 @@ impl Drop for Compositor {
 ///
 /// A pipe nobody reads fills and blocks the writer. Bytes are decoded lossily
 /// so a stray non-UTF-8 byte does not truncate the log.
+/// Writes a `domicile` PAM service into `confdir` that takes
+/// [`THE_PASSPHRASE`] and refuses anything else.
+///
+/// Real PAM, with the password check replaced by a script in `scripts`, as in
+/// `crate::pam`'s tests: `pam_unix` needs a real user's password, which no
+/// runner has.
+fn declare_the_service(scripts: &std::path::Path, confdir: &std::path::Path) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let script = scripts.join("check-the-passphrase");
+    // Builtins only: `pam_exec` runs this with no `PATH`. `read` fails on input
+    // with no trailing newline, which `pam_exec` sends, so the comparison
+    // gives the verdict.
+    std::fs::write(
+        &script,
+        format!("#!/bin/sh\nIFS= read -r typed\n[ \"$typed\" = '{THE_PASSPHRASE}' ]\n"),
+    )
+    .expect("the script");
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
+        .expect("the script runs");
+    std::fs::write(
+        confdir.join("domicile"),
+        format!(
+            "auth [success=1 default=ignore] pam_exec.so expose_authtok quiet {}\n\
+             auth requisite pam_deny.so\n\
+             auth required pam_permit.so\n",
+            script.display()
+        ),
+    )
+    .expect("the service");
+}
+
 fn drain(mut pipe: impl std::io::Read + Send + 'static, said: &Arc<Mutex<String>>) {
     let writing = said.clone();
     std::thread::spawn(move || {

@@ -136,7 +136,7 @@ An edit applies to the running desktop, and windows stay open:
 | `files.omit` | Launcher file index rebuilt |
 | `extensions` | Extensions installed or removed ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)) |
 | `lockdown` | Applications told through the Lockdown portal |
-| `lock` | The next passphrase is checked against the new verifier. The desktop never unlocks from a reload ([LOCK.md](LOCK.md#reloading)) |
+| `lock` | The next passphrase is checked through the new PAM service. The desktop never unlocks from a reload ([LOCK.md](LOCK.md#reloading)) |
 
 - A config module is watched with its directory, except `node_modules` and
   dot directories. An edit re-evaluates it and, if it is the shell, rebuilds
@@ -148,9 +148,9 @@ An edit applies to the running desktop, and windows stay open:
   stays.
 - A keyboard xkb cannot compile is rejected and logged. The current layout
   stays.
-- A `lock.pam_service` the machine does not declare, or a
-  `lock.passphrase_hash` libxcrypt refuses, is rejected and logged. The
-  current lock stays.
+- A `lock.pam_service` the machine does not declare is taken, and logged:
+  nothing unlocks the desktop until the file is added
+  ([LOCK.md](LOCK.md#failures-fail-closed)).
 
 ## Other sections
 
@@ -172,15 +172,17 @@ A shell for users of other layouts must set them here; nothing else does.
 
 `idle.blank_after_seconds` is how long the desktop goes without input before
 the screens turn off. Any key, click, scroll or pointer motion turns them back
-on.
+on. `idle.lock_after_seconds` is how long before it locks.
 
 - Unset means the screens never blank. `0` is an error.
 - `idle.warn_before_seconds` warns the shell that long before blanking, so it
   can dim or count down ([SHELL-IDLE-AND-LOCK.md](SHELL-IDLE-AND-LOCK.md#warning-before-blanking)).
   Unset means no warning. It must be at least `1` and less than
   `blank_after_seconds`.
-- The same timeout locks the desktop if `lock` is set.
-- Apps can block blanking (for example, during a video) with
+- `idle.lock_after_seconds` runs on its own clock from the same input, so it
+  may be shorter or longer than `blank_after_seconds`. Unset means the desktop
+  locks only when the shell asks. `0` is an error.
+- Apps can block blanking and locking (for example, during a video) with
   `zwp_idle_inhibit_manager_v1`. This involves only the app and the
   compositor.
 - Shell side: [SHELL-IDLE-AND-LOCK.md](SHELL-IDLE-AND-LOCK.md#idle).
@@ -188,14 +190,13 @@ on.
 
 ## Lock
 
-Set one of these to enable locking. Setting both is an error, and neither may
-be empty.
+The user's password unlocks the desktop, checked by PAM.
 
-- `lock.pam_service`: a PAM service that checks the desktop user's password.
-- `lock.passphrase_hash`: the crypt(3) hash of a passphrase, as `mkpasswd`
-  prints it and NixOS's `hashedPassword` takes it. The config is often
-  world-readable, so it holds only the hash. A method libxcrypt calls weak
-  (MD5, DES) is an error.
+- `lock.pam_service`: the PAM service that checks it. Unset is `domicile`,
+  which the NixOS module and the distribution packages declare. Empty, or a
+  name that is not a file name in `/etc/pam.d`, is an error.
+- Without `/etc/pam.d/<service>`, the desktop still locks and nothing unlocks
+  it. [LOCK.md](LOCK.md#verifiers) says which file to add.
 
 Shell side: [SHELL-IDLE-AND-LOCK.md](SHELL-IDLE-AND-LOCK.md#locking).
 Implementation: [LOCK.md](LOCK.md).

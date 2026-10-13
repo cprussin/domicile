@@ -363,11 +363,7 @@ impl DomicileCompositor {
             ClientRequest::Unlock { passphrase } => self.offered_the_passphrase(&passphrase),
             ClientRequest::HeldAwakeByThePortal { held } => self.held_awake_by_the_portal(held),
             ClientRequest::Lock => {
-                if self.lock.can_lock() {
-                    self.shut_the_desk("the shell asked for this desktop to be locked");
-                } else {
-                    warn!("a chrome asked to lock a desktop that has no lock");
-                }
+                self.shut_the_desk("the shell asked for this desktop to be locked")
             }
             ClientRequest::TurnTheWindows { theme, chromes } => {
                 // Replace any turnover in progress; its windows are about to

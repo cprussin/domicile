@@ -79,6 +79,9 @@ impl DomicileCompositor {
     /// Handle the idle timer. Returns when to fire next; see
     /// [`Idle::next_check`].
     fn the_idle_clock_came_round(&mut self) -> Duration {
+        // First, so the lock screen is up before a modeset lights a screen,
+        // and so `next_check` knows the lock has fired.
+        self.lock_if_nobody_is_here("nobody is at this desktop; it locks itself");
         let now = Instant::now();
         let on_the_desktop = self.surfaces_on_the_desktop();
         let idle = self
@@ -98,13 +101,21 @@ impl DomicileCompositor {
                 "nobody is at this desktop; its screens go dark"
             );
             self.tell_the_chromes_whether_anybody_is_here();
-            // Lock too, before the modeset, so the lock screen is up before the
-            // screen lights. Input wakes the screens but only the passphrase
-            // unlocks.
-            self.shut_the_desk("nobody is at this desktop; it locks itself");
             self.state_the_connectors();
         }
         next
+    }
+
+    /// Lock the desktop, logging `why`, if `idle.lock_after_seconds` has
+    /// passed with nobody here. See [`Idle::lock_due`].
+    fn lock_if_nobody_is_here(&mut self, why: &str) {
+        let toplevels = &self.toplevels;
+        let Some(idle) = self.idle.as_mut() else {
+            return;
+        };
+        if idle.lock_due(Instant::now(), || desktop_surfaces(toplevels)) {
+            self.shut_the_desk(why);
+        }
     }
 
     /// Arm the idle timer for [`Idle::next_check`], replacing any existing
@@ -193,7 +204,7 @@ impl DomicileCompositor {
     /// that can never trigger. A blanking desktop sends `false` even when
     /// active.
     pub fn tell_a_new_chrome_whether_anybody_is_here(&self) {
-        if self.idle.is_some() {
+        if self.idle.as_ref().is_some_and(Idle::blanks) {
             self.tell_the_chromes_whether_anybody_is_here();
         }
     }
@@ -266,7 +277,11 @@ impl DomicileCompositor {
     /// Act on an inhibitor state change, logging `why`.
     ///
     /// Sets the connectors only when the screens go dark or come back.
+    ///
+    /// Also locks a desktop whose lock timeout passed while an inhibitor held
+    /// it.
     fn the_inhibitors_changed(&mut self, edge: Option<Blanking>, why: &str) {
+        self.lock_if_nobody_is_here("nothing holds this desktop awake now; it locks itself");
         let Some(edge) = edge else {
             return;
         };

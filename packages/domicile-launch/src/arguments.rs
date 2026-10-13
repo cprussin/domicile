@@ -37,6 +37,9 @@ pub struct Arguments {
     /// Domicile's own apps, installed with the config's extensions. See
     /// [`crate::apps`].
     pub apps: Option<PathBuf>,
+    /// Where PAM services are read from. `None` is the machine's
+    /// `/etc/pam.d`; tests name a directory holding a service of their own.
+    pub pam_confdir: Option<PathBuf>,
 }
 
 /// A command line the compositor will not run.
@@ -70,6 +73,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut expect_a_page = None;
     let mut scope_clients = None;
     let mut apps = None;
+    let mut pam_confdir = None;
 
     let mut args = args.into_iter();
     let mut seen = Vec::new();
@@ -91,6 +95,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             EXPECT_A_PAGE => &mut expect_a_page,
             SCOPE_CLIENTS => &mut scope_clients,
             APPS => &mut apps,
+            PAM_CONFDIR => &mut pam_confdir,
             _ => return Err(ArgumentError::Unknown { argument: flag }),
         };
         let value = match joined {
@@ -125,6 +130,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             None => false,
         },
         apps: apps.map(PathBuf::from),
+        pam_confdir: pam_confdir.map(PathBuf::from),
     })
 }
 
@@ -135,6 +141,7 @@ const ENGINE_SOCKET: &str = "--engine-socket";
 const EXPECT_A_PAGE: &str = "--expect-a-page";
 const SCOPE_CLIENTS: &str = "--scope-clients";
 const APPS: &str = "--apps";
+const PAM_CONFDIR: &str = "--pam-confdir";
 
 /// Parses the `yes` or `no` given to `--expect-a-page`.
 ///

@@ -33,7 +33,7 @@
 //!   window. A described display sets its own scale.
 //! - A keyboard xkb cannot compile, or a keysym it cannot type, is refused
 //!   (see `retype_the_desktop` and `rebind_the_keys`).
-//! - A `lock.pam_service` the machine lacks is refused (see
+//! - A `lock.pam_service` on a machine without libpam is refused (see
 //!   `rekey_the_lock`).
 //! - Changing the idle timeout wakes blanked screens (see
 //!   `reset_the_idle_clock`).
@@ -234,7 +234,7 @@ mod tests {
     #[test]
     fn a_lock_that_moved_is_restated() {
         let was = parsed(A_DVORAK_DESK);
-        let now = parsed(A_DESK_THAT_LOCKS);
+        let now = parsed(A_DESK_UNLOCKED_BY_LOGIN);
 
         assert_eq!(
             Restatement::between(&was, &now).lock,
@@ -314,13 +314,13 @@ mod tests {
 }
 "#;
 
-    /// The same desk, locked by a passphrase.
-    const A_DESK_THAT_LOCKS: &str = r#"
+    /// The same desk, unlocked through another PAM service.
+    const A_DESK_UNLOCKED_BY_LOGIN: &str = r#"
 {
   "input": {
     "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:swapescape"] }
   },
-  "lock": { "passphrase_hash": "$y$j9T$0jTZN1rZSlhdm48mn5lVm/$Bb0mHOJ7gIqNJGkYTVpSIRqSPVJtoJRORWwsQ9pmsZ/" },
+  "lock": { "pam_service": "login" },
   "output": { "displays": [{ "name": "one", "size": [1024, 768] }] }
 }
 "#;

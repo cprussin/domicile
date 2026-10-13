@@ -194,8 +194,10 @@
       `applications` option. See docs/LAUNCHER.md.
     '';
     "lock.passphrase" = ''
-      Set `lock.passphrase_hash` to the passphrase's hash from `mkpasswd`
-      instead. See docs/LOCK.md.
+      The account password unlocks the desk, through PAM. See docs/LOCK.md.
+    '';
+    "lock.passphrase_hash" = ''
+      The account password unlocks the desk, through PAM. See docs/LOCK.md.
     '';
   };
 
@@ -383,8 +385,7 @@ in {
                 `null`, the default, never blanks. A blank screen looks like a
                 crash, so this is opt-in.
 
-                Blanking also locks a desk that sets a `lock` verifier. Without
-                a timeout, the desk locks only when its shell asks.
+                Blanking does not lock; see `lock_after_seconds`.
 
                 Applied on reload, including adding or removing the timeout.
                 Blanked screens turn back on when this changes.
@@ -405,53 +406,43 @@ in {
               default = null;
               example = 30;
             };
+            lock_after_seconds = lib.mkOption {
+              description = ''
+                Seconds without input before the desk locks. It runs on its own
+                clock, so it may be shorter or longer than
+                `blank_after_seconds`. Apps holding the screens on hold the
+                lock off too.
+
+                `null`, the default, locks only when the shell asks. Applied on
+                reload.
+              '';
+              type = lib.types.nullOr lib.types.ints.positive;
+              default = null;
+              example = 900;
+            };
           };
 
           lock = {
             pam_service = lib.mkOption {
               description = ''
-                The PAM service that unlocks the desk with the user's password.
+                The PAM service that checks the user's password to unlock the
+                desk. `null`, the default, is `domicile`.
 
                 Home-manager cannot declare a PAM service. The flake's NixOS
-                module declares one, or declare it yourself:
+                module declares `domicile`, or declare it yourself:
 
                     security.pam.services.domicile = {};
 
-                and set this to `"domicile"`. If the service is missing, the
-                desk fails to start and says what to declare, instead of falling
-                back to PAM's `other` service.
+                Without it the desk still locks, and nothing unlocks it until
+                the service is declared. See docs/LOCK.md.
 
-                With this and `passphrase_hash` both `null` (the default), the desk
-                never locks, since nothing could unlock it. Setting both is
-                refused.
-
-                The compositor delivers no input to clients while locked, so the
-                lock holds across a shell reload or an engine restart.
-
-                The desk locks when `idle.blank_after_seconds` elapses or when
-                its shell asks. Applied on reload to the next unlock; a reload
-                never unlocks a locked desk.
+                The desk locks when `idle.lock_after_seconds` elapses or when
+                its shell asks. Applied on reload; a reload never unlocks a
+                locked desk.
               '';
               type = lib.types.nullOr lib.types.str;
               default = null;
-              example = "domicile";
-            };
-
-            passphrase_hash = lib.mkOption {
-              description = ''
-                The crypt(3) hash of a passphrase that unlocks the desk, for
-                machines without a PAM service, as for `hashedPassword`. Make
-                one with `mkpasswd`. Prefer `pam_service`.
-
-                The hash is in the world-readable Nix store. The desk refuses a
-                method its libxcrypt calls weak, such as MD5 or DES.
-
-                `pam_service`'s notes on locking apply here too, including that
-                only one of the two may be set.
-              '';
-              type = lib.types.nullOr lib.types.str;
-              default = null;
-              example = "$y$j9T$mMzyBSKNKxkbivH7ik1.T.$iM4gXKt2j/qEPlwG5bMwAYPJa15M//yqCKSEin8n0P/";
+              example = "login";
             };
           };
 

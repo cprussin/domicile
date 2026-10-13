@@ -220,31 +220,48 @@ describe(App, () => {
       });
     });
 
-    it("unlocks with the user's password through PAM", async () => {
-      const { host, user } = await renderApp("Power & lock");
-      await choose(user, "Unlock with", "Your password");
-      await user.type(
-        screen.getByRole("textbox", { name: "PAM service" }),
-        "domicile",
-      );
+    it("locks after a time of its own, and never once it is cleared", async () => {
+      const { host, user } = await renderApp("Power & lock", {
+        config: { idle: { blank_after_seconds: 300 } },
+      });
+      const after = screen.getByRole("textbox", {
+        name: "Lock after (seconds)",
+      });
+      await user.type(after, "900");
       await user.tab();
       await waitFor(() => {
-        expect(written(host.writes).lock).toEqual({ pam_service: "domicile" });
+        expect(written(host.writes).idle).toEqual({
+          blank_after_seconds: 300,
+          lock_after_seconds: 900,
+        });
+      });
+      await user.clear(after);
+      await user.tab();
+      await waitFor(() => {
+        expect(written(host.writes).idle).toEqual({ blank_after_seconds: 300 });
       });
     });
 
-    it("unlocks with a passphrase hash", async () => {
+    it("unlocks through another PAM service", async () => {
       const { host, user } = await renderApp("Power & lock");
-      await choose(user, "Unlock with", "A passphrase hash");
       await user.type(
-        screen.getByRole("textbox", { name: "Passphrase hash" }),
-        "$6$salt$hash",
+        screen.getByRole("textbox", { name: "PAM service" }),
+        "login",
       );
       await user.tab();
       await waitFor(() => {
-        expect(written(host.writes).lock).toEqual({
-          passphrase_hash: "$6$salt$hash",
-        });
+        expect(written(host.writes).lock).toEqual({ pam_service: "login" });
+      });
+    });
+
+    it("unlocks through domicile once the service is cleared", async () => {
+      const { host, user } = await renderApp("Power & lock", {
+        config: { lock: { pam_service: "login" } },
+      });
+      await user.clear(screen.getByRole("textbox", { name: "PAM service" }));
+      await user.tab();
+      await waitFor(() => {
+        expect(written(host.writes)).toEqual({});
       });
     });
 

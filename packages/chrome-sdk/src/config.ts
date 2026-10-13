@@ -157,11 +157,12 @@ export type FilesConfig = {
 export type FilesOmit = string[];
 
 /**
- * When an idle desktop turns its screens off.
+ * When an idle desktop turns its screens off, and when it locks.
  *
- * Absent means never, and that is the default: a blank screen looks like a
- * crash, so a shell must opt in. When `lock` sets a verifier,
- * blanking also locks the desk. See `docs/IDLE.md`.
+ * Absent means neither, and that is the default: a blank screen looks like a
+ * crash, so a shell must opt in. The two timeouts run on separate clocks
+ * from the same input and inhibitors, so either may be the shorter. See
+ * `docs/IDLE.md`.
  *
  * The unit is in the key name because a generator writes this file.
  */
@@ -172,6 +173,13 @@ export type IdleConfig = {
    * Absent means never. Zero is refused.
    */
   blank_after_seconds?: number | null;
+  /**
+   * Seconds without input before the desktop locks.
+   *
+   * Absent means the desktop locks only when its shell asks. Zero is
+   * refused.
+   */
+  lock_after_seconds?: number | null;
   /**
    * Seconds before the screens go dark that the shell is warned, so it can
    * dim or count down. Input in that time calls the blanking off.
@@ -203,36 +211,19 @@ export type KeyboardConfig = {
 };
 
 /**
- * What unlocks this desk.
+ * What unlocks this desk: the user's password, checked by PAM.
  *
- * Absent means the desk never locks, and that is the default: a locked desk
- * with no verifier cannot be unlocked. Such a desk never sends
- * `HostMessage::Locked`.
- *
- * Set one verifier:
- * - `pam_service` authenticates the desk's user against a PAM service.
- * - `passphrase_hash` is for machines without a PAM service. The file is
- *   generated, often into the world-readable Nix store, so it holds a hash
- *   rather than the passphrase.
- *
- * A config with both is refused, so a passphrase is never mistaken for a PAM
- * fallback. A PAM service that does not exist, or a hash the machine's
- * libcrypt will not take, stops the compositor from starting. See
- * `docs/LOCK.md#verifiers`.
+ * If `/etc/pam.d` lacks the service, the desk still locks, and nothing
+ * unlocks it until the file is added. See `docs/LOCK.md#verifiers`.
  */
 export type LockConfig = {
   /**
    * The PAM service the desk's user authenticates against.
    *
-   * The system must declare it in `/etc/pam.d/`; on NixOS,
-   * `security.pam.services.<name> = {};`. The docs use `"domicile"`.
+   * Absent means `"domicile"`, which the NixOS module and the distribution
+   * packages declare.
    */
   pam_service?: string | null;
-  /**
-   * The crypt(3) hash of the passphrase that unlocks this desk, as
-   * `mkpasswd` prints. An empty string is refused.
-   */
-  passphrase_hash?: string | null;
 };
 
 /**

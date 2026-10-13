@@ -3,7 +3,7 @@
 //! changed.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
@@ -16,12 +16,11 @@ use domicile_protocol::Theme;
 use crate::file_indexing::Heard;
 use crate::idle::Idle;
 use crate::keymap::compiled_keymap;
-use crate::lock::Rekeying;
 use crate::portals::shell_appearance;
 use crate::restatement::Restatement;
 use crate::scale::output_scale;
 use crate::{grepped, DomicileCompositor};
-use crate::{lock, pam, shell_config};
+use crate::{pam, shell_config};
 
 /// Convert a config theme to the protocol's.
 ///
@@ -210,9 +209,9 @@ impl DomicileCompositor {
         self.set_output_scale(output_scale(self.device_pixel_ratio, max_scale));
     }
 
-    /// Apply a new `idle` timeout.
+    /// Apply new `idle` timeouts.
     ///
-    /// The clock restarts from now.
+    /// The clock restarts from now, for blanking and locking alike.
     ///
     /// A dark desktop is woken. The new clock starts awake ([`Idle::after`]),
     /// so it can never report [`Blanking::ComeBack`] for screens the old clock
@@ -225,13 +224,14 @@ impl DomicileCompositor {
             (Some(clock), Some(previous)) => Some(clock.takes_over_from(previous)),
             (clock, _) => clock,
         };
+        debug!("the idle clock starts over from the reloaded timeouts");
         // Not fatal on reload, unlike at startup: the desktop just stops
-        // blanking. Logged so it is not silent.
+        // blanking and locking on its own. Logged so it is not silent.
         if let Err(why) = self.arm_the_idle_clock() {
             error!(
                 %why,
-                "no clock for the reloaded idle timeout, so this desktop's screens \
-                 will not blank until it is restarted"
+                "no clock for the reloaded idle timeouts, so this desktop will not \
+                 blank or lock on its own until it is restarted"
             );
         }
         // The new clock starts lit, so a warning running is over.
@@ -270,21 +270,14 @@ impl DomicileCompositor {
 
     /// Apply a new `lock`. See [`Lock::rekeyed`].
     ///
-    /// A PAM service the machine lacks, or a hash libcrypt refuses, is
-    /// refused, keeping the current verifier, as startup refuses it.
+    /// PAM that startup would refuse keeps the current verifier.
     pub fn rekey_the_lock(&mut self, lock: &LockConfig) {
-        match lock::chosen(lock.verifier(), Path::new(pam::SERVICES)) {
+        match pam::for_the_desk(lock.service(), &self.pam_confdir) {
             Err(why) => error!(%why, "the reloaded lock cannot be used; the current one stays"),
-            Ok(verifier) => match self.lock.rekeyed(verifier) {
-                Rekeying::Applied if self.lock.can_lock() => info!("taking up a reloaded lock"),
-                Rekeying::Applied => {
-                    info!("the reloaded config removes the lock; this desktop no longer locks")
-                }
-                Rekeying::OnceOpened => warn!(
-                    "the reloaded config removes the lock while this desktop is locked; \
-                     it stays locked until the current passphrase opens it"
-                ),
-            },
+            Ok(verifier) => {
+                self.lock.rekeyed(Box::new(verifier));
+                info!("taking up a reloaded lock");
+            }
         }
     }
 }
