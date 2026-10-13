@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The desk's state attributes on the desktop -- idle, lock, both themes,
 # clipboard, tray, modifiers -- say what the compositor said, to a shell that
-# reads them late.
+# reads them without listening for their events.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-desk-state.sh /build/chromium/src
@@ -90,38 +90,21 @@ wait_for_line "$TRIES" "GUARD listening" "$ENGINE_LOG" || {
   tail -40 "$ENGINE_LOG" >&2
   exit 1
 }
-wait_for_line "$TRIES" "GUARD state " "$ENGINE_LOG"
-sleep 1
-
-STATE=$(grep -oE '"GUARD state .*"' "$ENGINE_LOG" | head -1)
-
-FAILURE=$(STATE="$STATE" python3 - <<'PY'
-import json, os
-
-line = os.environ["STATE"]
-if not line:
-    print("the page never read the state, so the module did not run or an attribute threw")
-    raise SystemExit
-state = json.loads(line[len('"GUARD state '):-1])
-wanted = {
-    "altKey": True,
-    "clipboard": [{"id": 7, "preview": "hello"}],
-    "ctrlKey": False,
-    "idle": True,
-    "locked": False,
-    "shiftKey": True,
-    "theme": "light",
-    "tray": [
-        {"bus": ":1.42", "id": "nm", "itemIsMenu": False, "menu": "/MenuBar", "title": "Network"},
-        {"bus": "org.kde.StatusNotifierItem-7-1", "id": "sync", "itemIsMenu": True, "menu": "", "title": "Sync"},
-    ],
-    "windowsTheme": "dark",
+wait_for_line "$TRIES" "sent the sequence" "$SOCKET_LOG" || {
+  annotate_from "guard-desk-state: the compositor stand-in never finished its sequence" "$SOCKET_LOG"
+  tail -20 "$SOCKET_LOG" >&2
+  exit 1
 }
-wrong = sorted(k for k in wanted if state.get(k) != wanted[k])
-if wrong:
-    print("the attributes do not say what the compositor said: %s" % ", ".join("%s is %s, wanted %s" % (k, json.dumps(state.get(k)), json.dumps(wanted[k])) for k in wrong))
-PY
-)
+
+# The page logs a reading whenever one changes. The browser applies the
+# stand-in's lines some time after they are sent, later on a loaded machine,
+# so judge the latest reading until it is right or the deadline passes.
+for _ in $(seq 1 "$TRIES"); do
+  FAILURE="$(python3 "$SCRIPTS/guard-desk-state-verdict.py" "$ENGINE_LOG")"
+  [ -z "$FAILURE" ] && break
+  sleep 0.25
+done
+STATE=$(grep -oE '"GUARD state .*"' "$ENGINE_LOG" | tail -1)
 
 echo "page: $STATE"
 
@@ -134,4 +117,4 @@ if [ -n "$FAILURE" ]; then
   tail -40 "$ENGINE_LOG" >&2
   exit 1
 fi
-echo "PASS: a shell that reads late reads the desk's state"
+echo "PASS: a shell that reads without listening reads the desk's state"
