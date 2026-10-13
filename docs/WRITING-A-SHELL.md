@@ -216,6 +216,14 @@ Each entry in `domicile.windows` describes one client window.
   names its desktop entry, for example `org.gnome.Nautilus` for
   `org.gnome.Nautilus.desktop`. It is `""` until the client sets one. Look up
   the entry's `Icon=` to draw the app's icon.
+- **Owner:** `pid`, `uid` and `gid` name the process that connected the
+  window's client, as the kernel recorded it (`SO_PEERCRED`). The client
+  cannot forge them; `title` and `desktopId` are its own claims.
+  - `pidfdInode` is the inode of that process's pidfd. No other process gets it
+    until reboot, so it tells a reused pid apart. `null` before Linux 6.9.
+  - All four are `null` for a popup; read its parent's.
+  - A process inside a container has its pid in the compositor's pid
+    namespace.
 - **Cursor:** `cursor` is the CSS cursor a client wants over its window. Set it
   with `element.style.cursor = cursor` (in React, `<app style={{ cursor }}>`).
 - **Size:** the `<app>` element's layout box is the window size. The engine

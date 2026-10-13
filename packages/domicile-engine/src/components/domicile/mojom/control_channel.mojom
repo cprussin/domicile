@@ -149,6 +149,17 @@ struct DisplayInfo {
   DisplayTransform transform;
 };
 
+// The process that connected a window's client, as the kernel recorded it at
+// connect(2). The client cannot forge it.
+struct WindowOwner {
+  int32 pid;
+  uint32 uid;
+  uint32 gid;
+  // The inode of the process's pidfd, which tells a reused pid apart. Null on
+  // kernels without pidfs.
+  uint64? pidfd_inode;
+};
+
 // One thing that was copied, as a row of the clipboard's history.
 //
 // A preview and an id rather than the text. The compositor keeps the bytes and
@@ -396,8 +407,10 @@ interface ControlChannelClient {
   // A window drew its first frame, at `width` x `height`. `desktop_id` is
   // empty when the client set none. `dialog`: the client gave it a parent or
   // a fixed size. `client_frame`: the client asked to draw its own frame.
+  // `owner` is null when the compositor named none.
   AppAppeared(string app_id, string title, string desktop_id, double width,
-              double height, bool dialog, bool client_frame);
+              double height, bool dialog, bool client_frame,
+              WindowOwner? owner);
 
   AppResized(string app_id, double width, double height);
 

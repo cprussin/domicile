@@ -32,6 +32,17 @@ const titleSchema = z
   .transform((title) => title ?? undefined)
   .transform((title) => (title === "" ? undefined : title));
 
+const ownerSchema = z.looseObject({
+  gid: z.number(),
+  pid: z.number(),
+  // `null` on kernels without pidfs; normalized to `undefined`.
+  pidfd_inode: z
+    .number()
+    .nullable()
+    .transform((inode) => inode ?? undefined),
+  uid: z.number(),
+});
+
 const welcomeSchema = z.looseObject({
   protocol_version: z.number(),
   type: z.literal("welcome"),
@@ -51,6 +62,8 @@ const appAppearedSchema = z.looseObject({
     .transform((desktopId) => desktopId ?? undefined),
   // The client has a parent window or a fixed size.
   dialog: z.boolean(),
+  // The process that connected the window's client, from `SO_PEERCRED`.
+  owner: ownerSchema,
   // The size of the first frame.
   size: sizeSchema,
   title: titleSchema,

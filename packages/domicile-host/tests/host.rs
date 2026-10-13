@@ -6,11 +6,42 @@
 use domicile_host::ipc::apply_chrome_message;
 use domicile_host::{AppId, Host, Mapped};
 use domicile_protocol::{
-    Appearance, ChromeMessage, DisplayInfo, DisplayTransform, HostMessage, Theme, PROTOCOL_VERSION,
+    Appearance, ChromeMessage, DisplayInfo, DisplayTransform, HostMessage, Owner, Theme,
+    PROTOCOL_VERSION,
 };
 use domicile_scene::KeyboardTarget;
 
+/// A window's owner, for tests about anything else.
+const OWNER: Owner = Owner {
+    pid: 1,
+    uid: 1000,
+    gid: 1000,
+    pidfd_inode: None,
+};
+
 // ---- app lifecycle --------------------------------------------------------
+
+#[test]
+fn a_window_names_the_process_that_owns_it() {
+    // The shell needs an owner the client cannot forge. The compositor reads
+    // it off the client's socket before the window exists.
+    let mut host = Host::new();
+    let owner = Owner {
+        pid: 4242,
+        uid: 1001,
+        gid: 100,
+        pidfd_inode: Some(5021),
+    };
+    let app = host.app_created(owner);
+
+    let announced = host.app_mapped(&app, mapped());
+    assert!(
+        matches!(announced.first(), Some(HostMessage::AppAppeared { owner: told, .. }) if *told == owner),
+        "{announced:?}"
+    );
+    // The replay for a reloading chrome includes it.
+    assert_eq!(host.open_apps().first(), announced.first());
+}
 
 #[test]
 fn a_window_says_what_it_is_called_when_the_client_says_it() {
@@ -36,6 +67,7 @@ fn a_window_says_what_it_is_called_when_the_client_says_it() {
             size: SIZE,
             dialog: false,
             client_frame: false,
+            owner: OWNER,
         })
     );
     // An unchanged title sends nothing.
@@ -68,6 +100,7 @@ fn a_window_says_which_desktop_entry_it_is_when_the_client_says_it() {
             size: SIZE,
             dialog: false,
             client_frame: false,
+            owner: OWNER,
         })
     );
     // An unchanged id sends nothing.
@@ -84,7 +117,7 @@ fn a_window_is_announced_when_it_first_draws_with_what_its_client_said_before() 
     // A client sets its title, app id and limits before its first frame. The
     // shell places a window once, so it needs them in the announcement.
     let mut host = Host::new();
-    let app = host.app_created();
+    let app = host.app_created(OWNER);
 
     assert_eq!(host.app_titled(&app, Some("pinentry".to_string())), None);
     assert_eq!(host.app_desktop_id(&app, "pinentry-qt".to_string()), None);
@@ -104,6 +137,7 @@ fn a_window_is_announced_when_it_first_draws_with_what_its_client_said_before() 
             size: SIZE,
             dialog: false,
             client_frame: true,
+            owner: OWNER,
         },
         HostMessage::AppMinSize {
             app_id: app.clone(),
@@ -128,7 +162,7 @@ fn a_window_is_announced_when_it_first_draws_with_what_its_client_said_before() 
 fn a_window_with_a_parent_or_a_fixed_size_is_a_dialog() {
     let dialog = |limits: ((f64, f64), (f64, f64)), hints: Mapped| {
         let mut host = Host::new();
-        let app = host.app_created();
+        let app = host.app_created(OWNER);
         host.app_min_size(&app, limits.0);
         host.app_max_size(&app, limits.1);
         match host.app_mapped(&app, hints).first() {
@@ -158,7 +192,7 @@ fn a_window_with_a_parent_or_a_fixed_size_is_a_dialog() {
 fn a_window_that_has_not_drawn_is_never_mentioned_to_the_chromes() {
     // The chromes have not heard of it.
     let mut host = Host::new();
-    let app = host.app_created();
+    let app = host.app_created(OWNER);
 
     assert_eq!(host.focus_requested(&app), None);
     assert_eq!(host.popup_placed(&app, (0.0, 0.0), (1.0, 1.0), false), None);
@@ -191,6 +225,7 @@ fn a_chrome_that_arrives_late_is_told_about_every_window_already_open() {
             size: SIZE,
             dialog: false,
             client_frame: false,
+            owner: OWNER,
         },
         HostMessage::AppAppeared {
             app_id: second,
@@ -199,6 +234,7 @@ fn a_chrome_that_arrives_late_is_told_about_every_window_already_open() {
             size: SIZE,
             dialog: false,
             client_frame: false,
+            owner: OWNER,
         },
     ]
     .into_iter()
@@ -209,6 +245,7 @@ fn a_chrome_that_arrives_late_is_told_about_every_window_already_open() {
         size: SIZE,
         dialog: false,
         client_frame: false,
+        owner: OWNER,
     }))
     // Then the focus holder: the chrome, since no app has focus.
     .chain(std::iter::once(HostMessage::FocusChanged { app_id: None }))
@@ -352,7 +389,7 @@ fn a_chrome_that_arrives_late_is_told_who_has_the_keyboard() {
 fn each_window_gets_its_own_id() {
     let mut host = Host::new();
 
-    assert_ne!(host.app_created(), host.app_created());
+    assert_ne!(host.app_created(OWNER), host.app_created(OWNER));
 }
 
 #[test]
@@ -721,7 +758,7 @@ fn mapped() -> Mapped {
 
 /// A window that has drawn its first frame, announced to the chromes.
 fn drawn(host: &mut Host) -> AppId {
-    let app = host.app_created();
+    let app = host.app_created(OWNER);
     host.app_mapped(&app, mapped());
     app
 }
