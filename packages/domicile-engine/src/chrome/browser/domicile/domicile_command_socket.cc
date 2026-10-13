@@ -20,6 +20,7 @@
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/no_destructor.h"
+#include "base/strings/strcat.h"
 #include "base/types/expected.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
 #include "chrome/browser/domicile/domicile_extension_installer.h"
@@ -32,6 +33,7 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
+#include "components/domicile/browser/app_roots.h"
 #include "components/domicile/browser/command_protocol.h"
 #include "components/domicile/browser/shell_source.h"
 #include "components/domicile/browser/site_permissions.h"
@@ -124,6 +126,17 @@ bool LoadShellIntoTheShellWindow(const base::FilePath& root,
   shell->GetController().LoadURLWithParams(params);
   LOG(INFO) << "domicile: now serving " << module << " out of " << root;
   return true;
+}
+
+// Serves the app module `module` under `root` and opens an app window pinned
+// to it. See docs/architecture/APP-MODULES.md.
+bool RunAppInAnAppWindow(const base::FilePath& root,
+                         const std::string& module) {
+  const std::string host = AppRoots::Get().Add(root, module);
+  LOG(INFO) << "domicile: running the app " << module << " out of " << root
+            << " at " << kDomicileScheme << "://" << host << "/";
+  return OpenAppModuleWindow(
+      GURL(base::StrCat({kDomicileScheme, "://", host, "/"})), host);
 }
 
 // Opens a browser window at `url`, as for a page's target="_blank", or with
@@ -274,6 +287,7 @@ void AnswerOnUIThread(const std::string& line, CommandReply reply) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   AnswerCommand(line,
                 {.load_shell = &LoadShellIntoTheShellWindow,
+                 .run_app = &RunAppInAnAppWindow,
                  .open_url = &OpenUrlInABrowserWindow,
                  .list_site_permissions = &ListShellSitePermissions,
                  .set_site_permission = &SetShellSitePermission,

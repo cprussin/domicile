@@ -8,6 +8,7 @@
 #include "base/logging.h"
 #include "components/domicile/browser/browser_pages.h"
 #include "components/domicile/browser/web_view_guest.h"
+#include "components/domicile/browser/web_view_url.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/navigation_throttle_registry.h"
 
@@ -30,13 +31,31 @@ BrowserPageThrottle::~BrowserPageThrottle() = default;
 
 content::NavigationThrottle::ThrottleCheckResult
 BrowserPageThrottle::WillStartRequest() {
+  return Check();
+}
+
+content::NavigationThrottle::ThrottleCheckResult
+BrowserPageThrottle::WillRedirectRequest() {
+  return Check();
+}
+
+content::NavigationThrottle::ThrottleCheckResult BrowserPageThrottle::Check() {
   const GURL& url = navigation_handle()->GetURL();
+  const WebViewGuest* guest =
+      WebViewGuest::FromWebContents(navigation_handle()->GetWebContents());
   if (IsBrowserPage(url)) {
     // A guard script greps for this line to tell this refusal apart from an
     // ordinary load failure.
     LOG(INFO) << "domicile: a <webview> was refused a page Chrome serves "
                  "itself: "
               << url.spec();
+    return CANCEL;
+  } else if (!MayShowInWebView(url, guest->app_host())) {
+    // A page's link or redirect into domicile://, which only an app's own
+    // window may show, and only its own app. See
+    // docs/architecture/APP-MODULES.md.
+    LOG(WARNING) << "domicile: a <webview> may not show " << url.spec()
+                 << "; it is canceled.";
     return CANCEL;
   } else {
     return PROCEED;
