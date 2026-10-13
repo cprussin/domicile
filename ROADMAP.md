@@ -44,7 +44,6 @@ item when it ships.
    - A persistent theme choice, which needs a store for desktop state.
    - A list of sites with stored data. History clears cookies by time range
      or by site ([HISTORY.md](docs/HISTORY.md)).
-   - A guard that runs the app's native messaging host in the engine.
 
 7. **Web apps.** [WEB-APPS.md](docs/architecture/WEB-APPS.md).
    - A guard that the engine lists an app window with `isApp` and records no
