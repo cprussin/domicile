@@ -6,6 +6,7 @@ import { Layout } from "../tree/node";
 import type { WindowAction as Action } from "../window-state";
 import { WindowAction } from "../window-state";
 import { parseCommand } from "./command";
+import { MediaKey } from "./media-key";
 
 /** Parse a command as written after `send-shell`. */
 const parsing = (command: string) => parseCommand(command.split(" "));
@@ -18,6 +19,12 @@ describe("parseCommand", () => {
     ["clipboard", WindowAction.ClipboardToggled()],
     ["screenshot", WindowAction.ScreenshotTaken()],
     ["search-clipboard", WindowAction.ClipboardSearched()],
+    ["volume up", WindowAction.MediaKeyPressed(MediaKey.VolumeUp)],
+    ["volume down", WindowAction.MediaKeyPressed(MediaKey.VolumeDown)],
+    ["volume mute", WindowAction.MediaKeyPressed(MediaKey.VolumeMute)],
+    ["mic mute", WindowAction.MediaKeyPressed(MediaKey.MicMute)],
+    ["brightness up", WindowAction.MediaKeyPressed(MediaKey.BrightnessUp)],
+    ["brightness down", WindowAction.MediaKeyPressed(MediaKey.BrightnessDown)],
     ["focus left", WindowAction.FocusStepped(Direction.Left)],
     ["focus right", WindowAction.FocusStepped(Direction.Right)],
     ["focus up", WindowAction.FocusStepped(Direction.Up)],

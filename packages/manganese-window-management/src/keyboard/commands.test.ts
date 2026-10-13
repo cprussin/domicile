@@ -3,11 +3,14 @@ import { KeyActionKind } from "@domicile-desktop/sdk/key-action";
 
 import { parseCommand } from "./command";
 import {
+  brightness,
   DEFAULT_KEYBINDINGS,
   DEFAULT_MODES,
   exec,
+  micMute,
   screenshot,
   searchClipboard,
+  volume,
 } from "./commands";
 
 describe("manganese's default keys", () => {
@@ -57,6 +60,22 @@ describe("manganese's default keys", () => {
       args: ["screenshot"],
       kind: KeyActionKind.SendShell,
     });
+  });
+
+  it("change the volume and brightness on the media keys", () => {
+    expect(DEFAULT_KEYBINDINGS).toMatchObject({
+      XF86AudioLowerVolume: volume("down"),
+      XF86AudioMicMute: micMute(),
+      XF86AudioMute: volume("mute"),
+      XF86AudioRaiseVolume: volume("up"),
+      XF86MonBrightnessDown: brightness("down"),
+      XF86MonBrightnessUp: brightness("up"),
+    });
+    expect([volume("up"), micMute(), brightness("down")]).toEqual([
+      { args: ["volume", "up"], kind: KeyActionKind.SendShell },
+      { args: ["mic", "mute"], kind: KeyActionKind.SendShell },
+      { args: ["brightness", "down"], kind: KeyActionKind.SendShell },
+    ]);
   });
 
   it("search the clipboard on Meta+Shift+space", () => {

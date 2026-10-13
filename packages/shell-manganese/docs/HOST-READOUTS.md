@@ -14,6 +14,9 @@ The page reads both itself through libraries, as it does the battery; see
 - Each is a `sharedWatch` (`@domicile-desktop/manganese-host/shared-watch`): the first reader
   starts the library's watch, the last one stops it, and a late reader gets
   the current value. Components read it with `useSharedWatch`.
+- The desktop also holds the sound and backlight watches for the volume and
+  brightness keys (`useVolumeKeys`, `useBrightnessKeys`), so those two run
+  whether or not a bar shows them.
 - So a desk runs one `pactl subscribe`, one `udevadm monitor` and one D-Bus
   match each for UPower, the network service and BlueZ, whatever the monitor
   count.

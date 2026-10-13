@@ -29,6 +29,14 @@ export const clipboard = () => command("clipboard");
 export const searchClipboard = () => command("search-clipboard");
 /** Take a screenshot, picking the area in a dialog. */
 export const screenshot = () => command("screenshot");
+/** Step the default output's volume, or toggle its mute. */
+export const volume = (change: "up" | "down" | "mute") =>
+  command("volume", change);
+/** Toggle the default input's mute. */
+export const micMute = () => command("mic", "mute");
+/** Step the screen's brightness. */
+export const brightness = (change: "up" | "down") =>
+  command("brightness", change);
 /** Move the focus, or focus the parent or child container. */
 export const focus = (to: Way | "parent" | "child" | "mode_toggle") =>
   command("focus", to);
@@ -115,6 +123,12 @@ export const DEFAULT_KEYBINDINGS: ModeKeybindings = {
   "Meta+v": split("v"),
   "Meta+w": layout("tabbed"),
   Print: screenshot(),
+  XF86AudioLowerVolume: volume("down"),
+  XF86AudioMicMute: micMute(),
+  XF86AudioMute: volume("mute"),
+  XF86AudioRaiseVolume: volume("up"),
+  XF86MonBrightnessDown: brightness("down"),
+  XF86MonBrightnessUp: brightness("up"),
   ...everyWay("", focus),
   ...everyWay("Shift+", move),
   ...everyWorkspace("", workspace),

@@ -24,7 +24,9 @@
   },
   "exports": {
     ".": "./src/bar-item.tsx",
-    "./fixture": "./src/fixture.ts"
+    "./desk-backlight": "./src/desk-backlight.ts",
+    "./fixture": "./src/fixture.ts",
+    "./useBrightnessKeys": "./src/useBrightnessKeys.ts"
   },
   "files": [
     "src/**",

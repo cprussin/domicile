@@ -2,8 +2,8 @@
 //
 // - Commands use sway's syntax where sway has one (`focus left`, `layout
 //   tabbed`), so sway bindings can be copied over. `lock`, `launcher`,
-//   `clipboard`, `search-clipboard`, `screenshot` and `resize grow
-//   <direction>` are manganese's own.
+//   `clipboard`, `search-clipboard`, `screenshot`, `volume`, `mic`,
+//   `brightness` and `resize grow <direction>` are manganese's own.
 // - `exec <argv…>` runs the argv directly, not through `sh -c` as sway does.
 // - An unknown command is a config error, so it returns an `Err`, not a throw.
 //
@@ -16,6 +16,7 @@ import { Axis, Direction } from "../direction";
 import { Layout } from "../tree/node";
 import type { WindowAction as Action } from "../window-state";
 import { WindowAction, WORKSPACES } from "../window-state";
+import { MediaKey } from "./media-key";
 
 /** Sway's direction words. */
 const DIRECTIONS: readonly (readonly [word: string, way: Direction])[] = [
@@ -42,6 +43,12 @@ const COMMANDS: ReadonlyMap<string, Action> = new Map<string, Action>([
   ["screenshot", WindowAction.ScreenshotTaken()],
   // The newest copy, as a site or a search.
   ["search-clipboard", WindowAction.ClipboardSearched()],
+  ["volume up", WindowAction.MediaKeyPressed(MediaKey.VolumeUp)],
+  ["volume down", WindowAction.MediaKeyPressed(MediaKey.VolumeDown)],
+  ["volume mute", WindowAction.MediaKeyPressed(MediaKey.VolumeMute)],
+  ["mic mute", WindowAction.MediaKeyPressed(MediaKey.MicMute)],
+  ["brightness up", WindowAction.MediaKeyPressed(MediaKey.BrightnessUp)],
+  ["brightness down", WindowAction.MediaKeyPressed(MediaKey.BrightnessDown)],
   ...DIRECTIONS.map(
     ([word, way]): Command => [`focus ${word}`, WindowAction.FocusStepped(way)],
   ),
