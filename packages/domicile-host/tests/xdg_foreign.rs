@@ -11,6 +11,7 @@ const OWNER: Owner = Owner {
     uid: 1000,
     gid: 1000,
     pidfd_inode: None,
+    sandbox: None,
 };
 
 fn parent_window(handle: &str) -> String {

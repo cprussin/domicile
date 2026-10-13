@@ -242,6 +242,24 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 Outside the portal, the compositor serves `ext-data-control-v1`, so clipboard
 managers and `wl-paste` work without a focused window.
 
+## Sandboxed clients
+
+The compositor serves `wp_security_context_v1`. A sandbox engine (Flatpak,
+or an integrator's container launcher) opens a listener with it, and every
+client that connects through that listener is sandboxed.
+
+- **Hidden from sandboxed clients:** `ext-data-control-v1`,
+  `zwlr_data_control_v1`, `ext-image-copy-capture-v1`,
+  `ext-image-capture-source-v1`, `zwlr_screencopy_manager_v1` and
+  `wp_security_context_manager_v1` (the protocol forbids nesting).
+- **Kept:** `wl_data_device`, the clipboard while focused, and the portals,
+  which ask the shell.
+- **Unsandboxed clients** see every global.
+- **The shell** reads each window's sandbox from `DomicileWindow`
+  ([WRITING-A-SHELL.md](WRITING-A-SHELL.md#windows)).
+- New privileged globals filter on `sees_privileged_globals` in
+  `packages/domicile-compositor/src/main.rs`.
+
 ## Wayland capture
 
 The compositor also serves `ext-image-copy-capture-v1` (with
@@ -255,8 +273,10 @@ v3, so `grim` and `wf-recorder` work. The code is `src/screencopy/`.
   frame copies at once and reports the whole buffer damaged.
 - **A resized monitor** gets new constraints on the next ext capture, which
   fails with `buffer_constraints`. An unplugged one stops its sessions.
-- **No asking and no lock check.** Any client may capture, as any client may
-  use data control. The portal refuses no capture while locked either: a
+- **No asking and no lock check.** Any unsandboxed client may capture, as it
+  may use data control; a sandboxed one is offered neither
+  ([Sandboxed clients](#sandboxed-clients)). The portal refuses no capture
+  while locked either: a
   running cast or a granted screenshot shows the lock screen.
 - Left out: toplevel sources, the pointer and cursor sessions (a cursor
   session's capture session stops at once), and dmabufs.

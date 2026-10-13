@@ -374,6 +374,7 @@ fn wire_shape_is_pinned() {
             uid: 1000,
             gid: 1000,
             pidfd_inode: None,
+            sandbox: None,
         },
     })
     .unwrap();

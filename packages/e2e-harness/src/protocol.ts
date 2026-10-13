@@ -32,6 +32,18 @@ const titleSchema = z
   .transform((title) => title ?? undefined)
   .transform((title) => (title === "" ? undefined : title));
 
+/** A string the sandbox engine may leave unset: `null`, normalized. */
+const unsetSchema = z
+  .string()
+  .nullable()
+  .transform((value) => value ?? undefined);
+
+const sandboxSchema = z.looseObject({
+  app_id: unsetSchema,
+  engine: unsetSchema,
+  instance_id: unsetSchema,
+});
+
 const ownerSchema = z.looseObject({
   gid: z.number(),
   pid: z.number(),
@@ -40,6 +52,11 @@ const ownerSchema = z.looseObject({
     .number()
     .nullable()
     .transform((inode) => inode ?? undefined),
+  // The `wp_security_context_v1` the client connected through, or `null`
+  // for an unsandboxed client; normalized to `undefined`.
+  sandbox: sandboxSchema
+    .nullable()
+    .transform((sandbox) => sandbox ?? undefined),
   uid: z.number(),
 });
 

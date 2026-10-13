@@ -221,9 +221,18 @@ Each entry in `domicile.windows` describes one client window.
   cannot forge them; `title` and `desktopId` are its own claims.
   - `pidfdInode` is the inode of that process's pidfd. No other process gets it
     until reboot, so it tells a reused pid apart. `null` before Linux 6.9.
-  - All four are `null` for a popup; read its parent's.
+  - All of these are `null` for a popup; read its parent's.
   - A process inside a container has its pid in the compositor's pid
     namespace.
+- **Sandbox:** `sandboxed` is `true` when the client connected through a
+  sandbox engine's `wp_security_context_v1` listener. Such a client sees no
+  data control or screen capture globals
+  ([PORTALS.md](PORTALS.md#sandboxed-clients)).
+  - `sandboxEngine`, `sandboxAppId` and `sandboxInstanceId` are what the
+    engine said, for example `org.flatpak`, the Flatpak app id and its
+    instance id. `null` where it said nothing.
+  - The engine sets them, not the client, so a shell can trust them as far as
+    it trusts the engine.
 - **Cursor:** `cursor` is the CSS cursor a client wants over its window. Set it
   with `element.style.cursor = cursor` (in React, `<app style={{ cursor }}>`).
 - **Size:** the `<app>` element's layout box is the window size. The engine

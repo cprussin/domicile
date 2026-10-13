@@ -791,6 +791,19 @@ export type DomicileWindow = {
    */
   readonly pidfdInode: number | null;
   /**
+   * Whether the client connected through a sandbox engine's
+   * wp_security_context_v1 listener. A sandboxed client sees no clipboard
+   * or screen capture globals. Null for a popup.
+   */
+  readonly sandboxed: boolean | null;
+  /**
+   * What the sandbox engine said about the client, such as `org.flatpak`, its
+   * app id and its instance id. Null where it said nothing, or for no sandbox.
+   */
+  readonly sandboxEngine: string | null;
+  readonly sandboxAppId: string | null;
+  readonly sandboxInstanceId: string | null;
+  /**
    * The size the client last committed, in CSS pixels; null until it has
    * committed one.
    */
