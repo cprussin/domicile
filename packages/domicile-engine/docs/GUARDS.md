@@ -82,6 +82,7 @@ Headless.
 | `guard-webview-framing.sh` | a site that refuses framing still shows |
 | `guard-webview-notifications.sh` | a page must ask before it notifies, even in a profile that stores an allow-all default (patch 0105) |
 | `guard-webview-history.sh` | back, forward, reload and stop; the element's navigation state, load progress, address and connection security |
+| `guard-webview-untrusted-cert.sh` | an https page with a self-signed certificate reads `security` `dangerous`; the same certificate trusted reads `secure` |
 | `guard-webview-find.sh` | find in page, including a cross-site frame; find next starts from the active match (patch 0073) |
 | `guard-webview-keyboard.sh` | a desktop shortcut pressed in a guest is caught; an unclaimed Ctrl+R goes to the shell as `domicile-guest-keydown` |
 | `guard-webview-escape.sh` | Escape with an unfocused browser window does not crash the browser (patch 0037) |

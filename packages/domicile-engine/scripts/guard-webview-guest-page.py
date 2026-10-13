@@ -15,9 +15,12 @@ guest-loaded, guest-mousedown and guest-resized are asserted. guest-keydown
 and guest-window-focus are diagnostics only: a headless window may get no key
 or focus events. A press is routed by hit test, not focus, so guest-mousedown
 arrives either way.
+
+With --cert and --key it serves https, for the untrusted certificate guard.
 """
 
 import argparse
+import ssl
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -104,10 +107,16 @@ def main():
         required=True,
         help="0 for any free one; the serving line names the one taken",
     )
+    parser.add_argument("--cert", help="a PEM certificate; serves https with it")
+    parser.add_argument("--key", help="the PEM private key for --cert")
     arguments = parser.parse_args()
 
     # Loopback only: nothing off this machine should reach a test fixture.
     server = ThreadingHTTPServer(("127.0.0.1", arguments.port), ShowsWhatItWasGiven)
+    if arguments.cert is not None:
+        tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        tls.load_cert_chain(arguments.cert, arguments.key)
+        server.socket = tls.wrap_socket(server.socket, server_side=True)
     # Flushed before serve_forever, because guards wait on this line.
     print("serving %s on 127.0.0.1:%d" % (PATH, server.server_address[1]), flush=True)
     server.serve_forever()
