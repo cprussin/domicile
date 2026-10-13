@@ -82,10 +82,14 @@ wait_for() { # $1 how patient, $2 what the log holds, $3 alive or dead
   # Started out here with output discarded. The block exits on every failing
   # case without killing what it started, and a background process holding the
   # command substitution's write end would keep it open for 900s.
+  #
+  # Killed with SIGKILL. This shell has an EXIT trap, so bash catches SIGTERM,
+  # and the forked child keeps that handler until it execs `sleep`. A SIGTERM
+  # in that gap is lost, and `wait` then sits out the whole sleep.
   local comp
   sleep 900 >/dev/null 2>&1 & comp=$!
   if [ "$3" = dead ]; then
-    kill "$comp" 2>/dev/null
+    kill -KILL "$comp" 2>/dev/null
     wait "$comp" 2>/dev/null
   fi
   local began; began="$(date +%s)"
@@ -98,7 +102,7 @@ wait_for() { # $1 how patient, $2 what the log holds, $3 alive or dead
     eval "$BLOCK" >"$dir/out" 2>&1
   )
   local waited=$(($(date +%s) - began))
-  kill "$comp" 2>/dev/null
+  kill -KILL "$comp" 2>/dev/null
   wait "$comp" 2>/dev/null
   # The annotation's title only. `annotate_from` appends the compositor log
   # after `%0A%0A`, and that varies with the fixture, not the behavior.
