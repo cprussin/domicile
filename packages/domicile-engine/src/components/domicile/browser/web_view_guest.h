@@ -285,6 +285,15 @@ class WebViewGuest : public mojom::WebViewGuest,
   // page.
   const std::string& window_id() const { return window_id_; }
 
+  // Pins this window to the app module at `app_host`, the only domicile://
+  // address it may then show, and which may bind an app channel in it. Set
+  // once, before the first navigation. See
+  // docs/architecture/APP-MODULES.md.
+  void PinToApp(const std::string& app_host);
+
+  // The app host this window is pinned to, or empty for any other window.
+  const std::string& app_host() const { return app_host_; }
+
   // This guest's WebContents. Lives as long as the guest.
   content::WebContents& contents() const { return *guest_contents_; }
 
@@ -829,6 +838,9 @@ class WebViewGuest : public mojom::WebViewGuest,
 
   // See window_id().
   const std::string window_id_;
+
+  // See PinToApp.
+  std::string app_host_;
 
   // A browser window's owner: the shell's WebContents, which survives shell
   // reloads. Null for a shell's own page, which uses `owner_rfh_id_`.

@@ -105,7 +105,9 @@ that trust from reaching anything else.
 - **Binding:** only the `domicile` that the engine hands to `Shell` in a
   `domicile://shell` document has `callSystem()`, through the control
   channel's own binding. `<webview>` guests, extensions and `domicile://home`
-  never do.
+  never do. An app module's `DomicileAppHost` has it too, for files,
+  processes and D-Bus only
+  ([APP-MODULES.md](architecture/APP-MODULES.md#the-host)).
 - **Content Security Policy:** `domicile://shell` serves `script-src 'self'`.
   A script injected through a notification body, window title or file name
   does not run ([SHELL-PACKAGING.md](SHELL-PACKAGING.md#scripts)).
