@@ -15,8 +15,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
-# Dependencies first, so a package is never on npm before what it needs.
-PACKAGES=(chrome-sdk system-apps system-audio system-backlight system-battery component-library system-network system-bluetooth shell-manganese)
+mapfile -t PACKAGES < <(grep -v '^\(#\|$\)' .github/scripts/published-packages)
 VERSION="0.0.0-alpha-$(git rev-parse --short=12 HEAD)"
 OUT="${DOMICILE_PUBLISH_DRY_RUN:-$(mktemp -d)}"
 

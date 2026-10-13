@@ -54,6 +54,12 @@ each version has provenance. There is no semver until a release. The published
 copies serve editors and third-party shells; a shell `domicile` builds always
 uses the running Domicile's copies.
 
+A new public package goes in `.github/scripts/published-packages`, after what
+it depends on. npm gives a trusted publisher only to a package it has, so
+before the merge that first publishes it, an owner of the scope runs
+`scripts/npm-bootstrap.sh claim` (a placeholder `0.0.0-0`) and `trust`. After
+the workflow has published it, `retire` removes the placeholder.
+
 `biome.json`'s `overrides` turn `useSortedKeys` off for the published
 manifests whose `exports` use conditions, for the whole manifest, since the
 rule cannot be scoped to one key. It is the `exports` map that needs it: export conditions are matched top to bottom, so `"types"` must come
