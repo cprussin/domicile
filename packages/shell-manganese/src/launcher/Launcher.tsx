@@ -272,6 +272,9 @@ const Query = ({
             // end of a narrowed list.
             setStepped(steppedTo(highlighted ?? 0, step, choices.length));
           } else if (event.key === "Enter" && chosen !== undefined) {
+            // Taken, or the engine forwards it to the window the launch
+            // focuses.
+            event.preventDefault();
             onLaunch(event.shiftKey ? openWithOf(chosen) : launchOf(chosen));
           } else if (event.key === "Tab") {
             // Keep focus in the box (see `keepKeyboardIn`).
