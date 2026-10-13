@@ -87,7 +87,7 @@ ENGINE="$WORK/engine"
 mkdir -p "$ENGINE/out/Domicile"
 cat >"$ENGINE/out/Domicile/chrome" <<'EOF'
 #!/usr/bin/env python3
-import os, re, socket, sys, threading, urllib.error, urllib.request
+import os, re, socket, ssl, sys, threading, urllib.error, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 given = dict(a.split("=", 1) for a in sys.argv[1:] if "=" in a)
@@ -104,9 +104,12 @@ record("engine.args", " ".join(sys.argv[1:]))
 # The page before the broker: a guard waits only for the broker socket, then
 # runs its probe (which exits at once here) and kills the engine. A page
 # fetched after the socket opens loses that race on a loaded runner.
-page = re.search(r"http://(?:127\.0\.0\.1|localhost):[0-9]+[^&]*", given["--app"]).group(0)
+page = re.search(r"https?://(?:127\.0\.0\.1|localhost):[0-9]+[^&]*", given["--app"]).group(0)
+# The untrusted certificate guard serves https with a certificate nothing
+# trusts. This asks whether the page is served, not whether it is trusted.
+unverified = ssl._create_unverified_context()
 try:
-    with urllib.request.urlopen(page, timeout=5) as answer:
+    with urllib.request.urlopen(page, timeout=5, context=unverified) as answer:
         record("engine.page", "answered")
 except urllib.error.HTTPError:
     record("engine.page", "answered")
