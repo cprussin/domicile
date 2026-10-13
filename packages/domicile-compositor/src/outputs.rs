@@ -109,7 +109,7 @@ fn current_mode(advertised: &Advertised) -> OutputMode {
 ///
 /// `screens.rs` avoids Smithay for testability and `domicile-config` has no
 /// Smithay dependency, so the conversion lives here. Rotations only.
-fn as_wl_transform(transform: domicile_config::Transform) -> Transform {
+pub(crate) fn as_wl_transform(transform: domicile_config::Transform) -> Transform {
     match transform {
         domicile_config::Transform::Normal => Transform::Normal,
         domicile_config::Transform::Rotate90 => Transform::_90,

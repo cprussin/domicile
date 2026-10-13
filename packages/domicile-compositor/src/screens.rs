@@ -376,7 +376,7 @@ impl Screens {
                         output.logical.1,
                     ),
                     scale: output.scale,
-                    upright: output.transform == Transform::Normal,
+                    transform: output.transform,
                 })
             })
             .collect();
@@ -396,7 +396,7 @@ impl Screens {
                 .iter()
                 .map(|output| output.scale)
                 .fold(f64::MIN, f64::max),
-            upright: true,
+            transform: Transform::Normal,
         }]
     }
 
@@ -1111,8 +1111,8 @@ mod tests {
                 screens.outputs[0].logical.1
             )
         );
-        assert!(cast[0].upright);
-        assert!(!cast[1].upright);
+        assert_eq!(cast[0].transform, Transform::Normal);
+        assert_eq!(cast[1].transform, Transform::Rotate90);
     }
 
     #[test]
@@ -1148,7 +1148,7 @@ mod tests {
                 display: 0,
                 desk: (0, 0, 1280, 800),
                 scale: 2.0,
-                upright: true,
+                transform: Transform::Normal,
             }]
         );
     }

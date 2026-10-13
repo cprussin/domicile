@@ -5,7 +5,11 @@
 //! so it takes the highest density it touches, and lower-density monitors are
 //! scaled up. See `docs/PORTALS.md`.
 
+use domicile_config::Transform;
+
+use crate::buffer_transform::{crop_in_buffer, upright_size};
 use crate::casting::pacing::Rect;
+use crate::outputs::as_wl_transform;
 
 /// A monitor, as a stream source sees it.
 #[derive(Clone, Debug, PartialEq)]
@@ -18,9 +22,8 @@ pub struct Screen {
     pub desk: Rect,
     /// Device pixels per logical pixel.
     pub scale: f64,
-    /// Whether it is unrotated. A rotated monitor's frames are turned, which
-    /// streams do not undo.
-    pub upright: bool,
+    /// How it is turned. Its frames are the panel's pixels, turned this way.
+    pub transform: Transform,
 }
 
 /// A stream's size and pieces.
@@ -46,8 +49,6 @@ pub struct Piece {
 pub enum LayoutError {
     #[error("the rectangle is on no monitor")]
     Offscreen,
-    #[error("the rectangle is on a rotated monitor, which is not cast yet")]
-    Rotated,
 }
 
 /// The stream of `target`, a rectangle of the desktop in logical pixels.
@@ -56,9 +57,6 @@ pub fn layout(target: Rect, screens: &[Screen]) -> Result<Layout, LayoutError> {
         .iter()
         .filter_map(|screen| Some((screen, intersection(target, screen.desk)?)))
         .collect();
-    if touched.iter().any(|(screen, _)| !screen.upright) {
-        return Err(LayoutError::Rotated);
-    }
     let scale = touched
         .iter()
         .map(|(screen, _)| screen.scale)
@@ -92,10 +90,13 @@ pub fn layout(target: Rect, screens: &[Screen]) -> Result<Layout, LayoutError> {
     })
 }
 
-/// `from`, logical pixels of a monitor `logical` big, in a frame whose
-/// `content` shows that monitor.
-pub fn in_frame(from: Rect, logical: (i32, i32), content: Rect) -> Rect {
-    let (x_scale, y_scale) = frame_scale(logical, content);
+/// `from`, logical pixels of a monitor `logical` big and turned by
+/// `transform`, in a frame whose `content` shows that monitor's panel.
+pub fn in_frame(from: Rect, logical: (i32, i32), transform: Transform, content: Rect) -> Rect {
+    let turn = as_wl_transform(transform);
+    let upright = (logical.0 as u32, logical.1 as u32);
+    let from = crop_in_buffer(from, upright, turn);
+    let (x_scale, y_scale) = frame_scale(panel(upright, turn), content);
     let left = content.0 + (f64::from(from.0) * x_scale).round() as i32;
     let top = content.1 + (f64::from(from.1) * y_scale).round() as i32;
     let right = content.0 + (f64::from(from.0 + from.2) * x_scale).round() as i32;
@@ -108,16 +109,21 @@ pub fn in_frame(from: Rect, logical: (i32, i32), content: Rect) -> Rect {
 pub fn damage_in_stream(
     piece: &Piece,
     logical: (i32, i32),
+    transform: Transform,
     content: Rect,
     damage: Rect,
 ) -> Option<Rect> {
-    let (x_scale, y_scale) = frame_scale(logical, content);
+    let turn = as_wl_transform(transform);
+    let panel = panel((logical.0 as u32, logical.1 as u32), turn);
+    let (x_scale, y_scale) = frame_scale(panel, content);
     // Out to whole logical pixels, so a partly damaged pixel is redrawn.
     let left = (f64::from(damage.0 - content.0) / x_scale).floor() as i32;
     let top = (f64::from(damage.1 - content.1) / y_scale).floor() as i32;
     let right = (f64::from(damage.0 + damage.2 - content.0) / x_scale).ceil() as i32;
     let bottom = (f64::from(damage.1 + damage.3 - content.1) / y_scale).ceil() as i32;
-    let hit = intersection((left, top, right - left, bottom - top), piece.from)?;
+    let on_panel = (left, top, right - left, bottom - top);
+    let upright = crop_in_buffer(on_panel, (panel.0 as u32, panel.1 as u32), turn.invert());
+    let hit = intersection(upright, piece.from)?;
     let x_out = f64::from(piece.to.2) / f64::from(piece.from.2);
     let y_out = f64::from(piece.to.3) / f64::from(piece.from.3);
     let out_left = piece.to.0 + (f64::from(hit.0 - piece.from.0) * x_out).floor() as i32;
@@ -130,6 +136,13 @@ pub fn damage_in_stream(
         out_right - out_left,
         out_bottom - out_top,
     ))
+}
+
+/// The size of a panel showing a monitor `upright` big, turned by `turn`, in
+/// logical pixels.
+fn panel(upright: (u32, u32), turn: smithay::utils::Transform) -> (i32, i32) {
+    let (width, height) = upright_size(upright, turn);
+    (width as i32, height as i32)
 }
 
 /// Frame pixels per logical pixel, across and down.
@@ -151,6 +164,8 @@ pub fn intersection(a: Rect, b: Rect) -> Option<Rect> {
 
 #[cfg(test)]
 mod tests {
+    use domicile_config::Transform;
+
     use super::{damage_in_stream, in_frame, layout, Layout, LayoutError, Piece, Screen};
 
     /// A 1920x1080 monitor at 1x, and a 2560x1600 one at 2x to its right.
@@ -161,14 +176,14 @@ mod tests {
                 display: 1,
                 desk: (0, 0, 1920, 1080),
                 scale: 1.0,
-                upright: true,
+                transform: Transform::Normal,
             },
             Screen {
                 name: "drm-2".into(),
                 display: 2,
                 desk: (1920, 0, 1280, 800),
                 scale: 2.0,
-                upright: true,
+                transform: Transform::Normal,
             },
         ]
     }
@@ -219,23 +234,62 @@ mod tests {
     }
 
     #[test]
-    fn a_region_on_a_rotated_monitor_is_refused() {
-        let mut desk = desk();
-        desk[1].upright = false;
+    fn a_rotated_monitor_is_laid_out_by_its_upright_box() {
+        let mut turned = desk();
+        turned[1].transform = Transform::Rotate270;
 
         assert_eq!(
-            layout((1800, 100, 240, 100), &desk),
-            Err(LayoutError::Rotated)
+            layout((1800, 100, 240, 100), &turned),
+            layout((1800, 100, 240, 100), &desk())
         );
-        assert!(layout((0, 0, 100, 100), &desk).is_ok());
     }
 
     #[test]
     fn a_monitors_part_is_found_inside_the_letterbox() {
         // A 1280x800 monitor captured into 1000x1000, letterboxed to 1000x625.
         assert_eq!(
-            in_frame((640, 400, 640, 400), (1280, 800), (0, 187, 1000, 625)),
+            in_frame(
+                (640, 400, 640, 400),
+                (1280, 800),
+                Transform::Normal,
+                (0, 187, 1000, 625)
+            ),
             (500, 500, 500, 312)
+        );
+    }
+
+    #[test]
+    fn a_rotated_monitors_part_is_found_in_its_turned_frame() {
+        // A 1080x1920 monitor on its side: its frame is the panel's 1920x1080.
+        // `crop_in_buffer` maps its top left corner to the frame's bottom left.
+        assert_eq!(
+            in_frame(
+                (0, 0, 100, 50),
+                (1080, 1920),
+                Transform::Rotate270,
+                (0, 0, 1920, 1080)
+            ),
+            (0, 980, 50, 100)
+        );
+    }
+
+    #[test]
+    fn a_rotated_monitors_frame_damage_lands_where_its_piece_is_drawn() {
+        let piece = Piece {
+            display: 2,
+            from: (0, 0, 100, 50),
+            to: (0, 0, 100, 50),
+        };
+
+        assert_eq!(
+            damage_in_stream(
+                &piece,
+                (1080, 1920),
+                Transform::Rotate270,
+                (0, 0, 1920, 1080),
+                (0, 980, 50, 100)
+            ),
+            Some((0, 0, 100, 50))
         );
     }
 
@@ -249,11 +303,23 @@ mod tests {
 
         // Frame pixels (10, 220) to (30, 240) are logical (5, 110) to (15, 120).
         assert_eq!(
-            damage_in_stream(&piece, (1280, 800), (0, 0, 2560, 1600), (10, 220, 20, 20)),
+            damage_in_stream(
+                &piece,
+                (1280, 800),
+                Transform::Normal,
+                (0, 0, 2560, 1600),
+                (10, 220, 20, 20)
+            ),
             Some((250, 20, 20, 20))
         );
         assert_eq!(
-            damage_in_stream(&piece, (1280, 800), (0, 0, 2560, 1600), (0, 1000, 20, 20)),
+            damage_in_stream(
+                &piece,
+                (1280, 800),
+                Transform::Normal,
+                (0, 0, 2560, 1600),
+                (0, 1000, 20, 20)
+            ),
             None
         );
     }
