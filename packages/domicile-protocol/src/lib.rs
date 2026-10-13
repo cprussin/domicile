@@ -1502,7 +1502,7 @@ pub enum SystemRequest {
 
 /// An `xdg_toplevel` state the shell sets with
 /// [`SystemRequest::SetWindowStates`]. A client bound below `xdg_wm_base`
-/// version 2 is sent no tiled state.
+/// version 2 is sent `maximized` in place of tiled states.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WindowState {

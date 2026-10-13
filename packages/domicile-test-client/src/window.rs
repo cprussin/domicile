@@ -238,6 +238,8 @@ struct Client {
     ask_for_focus: Option<AskForFocus>,
     /// See [`crate::arguments::Arguments::ask_to`]. Taken once asked.
     ask_to: Option<AskTo>,
+    /// See [`crate::arguments::Arguments::xdg_wm_base_v1`].
+    xdg_wm_base_v1: bool,
     /// The serial of the keyboard's last `enter`, for
     /// [`AskForFocus::WhenLeft`].
     entered_at: Option<u32>,
@@ -444,6 +446,7 @@ impl Client {
             resize_to: asked.resize_to,
             ask_for_focus: asked.ask_for_focus,
             ask_to: asked.ask_to,
+            xdg_wm_base_v1: asked.xdg_wm_base_v1,
             entered_at: None,
             hold_the_screens_on: asked.hold_the_screens_on,
             outlive_its_window: asked.outlive_its_window,
@@ -486,7 +489,9 @@ impl Client {
                 }
                 // 6 for the `suspended` state, sent only to clients that bind 6.
                 "xdg_wm_base" => {
-                    self.globals.wm_base = Some(registry.bind(name, version.min(6), handle, ()));
+                    let newest = if self.xdg_wm_base_v1 { 1 } else { 6 };
+                    self.globals.wm_base =
+                        Some(registry.bind(name, version.min(newest), handle, ()));
                 }
                 "wp_cursor_shape_manager_v1" => {
                     self.globals.cursor = Some(registry.bind(name, version.min(1), handle, ()));

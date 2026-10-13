@@ -52,6 +52,46 @@ fn the_states_a_shell_sets_reach_the_client() {
     );
 }
 
+/// A client bound below `xdg_wm_base` version 2 has no tiled states, so it is
+/// told `maximized` instead, as sway does: it then drops its shadows and takes
+/// the size it is given.
+#[test]
+fn a_tiled_client_too_old_for_tiled_states_is_maximized() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let mut client = compositor.client_with("app", &["--xdg-wm-base-v1"]);
+    let app_id = appeared(&mut chrome);
+    let tiled = vec![WindowState::TiledLeft, WindowState::TiledRight];
+
+    set(&mut chrome, 1, &app_id, tiled.clone());
+    assert!(
+        client.wait_for_trace(".states(maximized)", 1),
+        "the client was not maximized in place of tiled; it traced:\n{}",
+        client.trace()
+    );
+
+    set(&mut chrome, 2, &app_id, tiled.clone());
+    std::thread::sleep(Duration::from_millis(500));
+    assert_eq!(
+        client.trace().matches(".states(").count(),
+        2,
+        "the same states configured the client again; it traced:\n{}",
+        client.trace()
+    );
+
+    set(
+        &mut chrome,
+        3,
+        &app_id,
+        vec![WindowState::Fullscreen, WindowState::TiledLeft],
+    );
+    assert!(
+        client.wait_for_trace(".states(fullscreen)", 1),
+        "a fullscreen window was maximized too; it traced:\n{}",
+        client.trace()
+    );
+}
+
 #[test]
 fn states_for_a_window_the_compositor_does_not_know_are_refused() {
     let compositor = Compositor::started_with(ONE_DISPLAY);
