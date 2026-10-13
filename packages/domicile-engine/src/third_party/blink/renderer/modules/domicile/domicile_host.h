@@ -10,6 +10,7 @@
 #include "components/domicile/mojom/browser_windows.mojom-blink.h"
 #include "components/domicile/mojom/control_channel.mojom-blink.h"
 #include "components/domicile/mojom/extension_tray.mojom-blink.h"
+#include "components/domicile/mojom/shell_fetch.mojom-blink.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_chord.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
@@ -46,6 +47,8 @@ class DomicileNotification;
 class DomicileExtension;
 class DomicileWindow;
 class DomicileFileSearch;
+class DomicileFetchHeader;
+class DomicileFetchResponse;
 struct DomicileWindowState;
 class LocalDOMWindow;
 class MediaQueryList;
@@ -204,6 +207,14 @@ class MODULES_EXPORT DomicileHost final
                                 const String& url,
                                 ExceptionState&);
   void closeBrowserWindow(ScriptState*, const String& id, ExceptionState&);
+  // GETs `url` with the profile's cookies, through the browser's own pipe.
+  // The browser refuses what the page may not send; see the IDL.
+  ScriptPromise<DomicileFetchResponse> fetchWithCookies(
+      ScriptState*,
+      const String& url,
+      const HeapVector<Member<DomicileFetchHeader>>& headers,
+      const String& sapisid_hash_origin,
+      ExceptionState&);
   // Every client window, in the order they appeared. Not const: reading it
   // binds the channel, which is what has the compositor announce them.
   const FrozenArray<DomicileWindow>& windows();
@@ -462,6 +473,9 @@ class MODULES_EXPORT DomicileHost final
   HeapMojoRemote<domicile::mojom::blink::BrowserWindows> windows_;
   HeapMojoReceiver<domicile::mojom::blink::BrowserWindowsClient, DomicileHost>
       windows_receiver_;
+  // The fetches with the profile's cookies, the browser's own pipe too. Bound
+  // on the first fetch, since nothing arrives on it unasked.
+  HeapMojoRemote<domicile::mojom::blink::ShellFetch> shell_fetch_;
 
   // A chord grabbed by name, and the press it is on the last keyboard heard.
   struct GrabbedChord {

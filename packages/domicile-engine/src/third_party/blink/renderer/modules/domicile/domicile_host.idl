@@ -301,6 +301,26 @@
   [CallWith=ScriptState, RaisesException] undefined closeBrowserWindow(
       DOMString id);
 
+  // GETs `url` from the browser process with the cookies of the profile the
+  // ordinary browser windows use, so a bar item can read a site the user is
+  // signed in to. Resolves with the response, whatever its status. Rejects
+  // with a NetworkError for a network failure or a refusal: an address that
+  // is not https, a `Cookie` header or one the browser sets itself, or a
+  // locked desk. Redirects are followed on https only; one that leaves the
+  // origin drops `headers`.
+  //
+  // With `sapisidHashOrigin`, an https origin such as
+  // "https://mail.google.com", the browser also sends the `Authorization:
+  // SAPISIDHASH` header Google's first-party APIs take, computed from the
+  // SAPISID cookie, and follows no redirect. The page never sees the cookie.
+  //
+  // Handled by the browser process, over its own pipe: see
+  // components/domicile/mojom/shell_fetch.mojom.
+  [CallWith=ScriptState, RaisesException] Promise<DomicileFetchResponse>
+      fetchWithCookies(USVString url,
+                       sequence<DomicileFetchHeader> headers,
+                       DOMString? sapisidHashOrigin);
+
   // An answer to callSystem(), as a MessageEvent whose `data` is the
   // compositor's `system_reply`, `system_event` or `system_end` line.
   attribute EventHandler onsystem;
