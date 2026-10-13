@@ -347,10 +347,8 @@
 
       # The built workspace a shell is built against: the builder's
       # `--domicile`, from which it resolves manganese and React. Laid out like
-      # this repository, because that is the layout the builder reads.
-      #
-      # Copies every package with a `package.json`: each `node_modules` links
-      # its workspace siblings, and the fixup rejects dangling links.
+      # this repository, because that is the layout the builder reads. Holds
+      # only what the builder and manganese ship, as `distro/stage.sh` does.
       shellWorkspace = pkgs.stdenv.mkDerivation {
         pname = "domicile-shell-workspace";
         version = "0.0.0";
@@ -365,11 +363,9 @@
         '';
         installPhase = ''
           runHook preInstall
-          mkdir -p "$out/packages"
-          cp -a package.json node_modules "$out/"
-          for manifest in packages/*/package.json; do
-            cp -a "$(dirname "$manifest")" "$out/packages/"
-          done
+          cp -a ${shellModules} "$out"
+          chmod -R u+w "$out"
+          bash ${./distro/shell-workspace.sh} files ${pkgs.bun}/bin/bun "$PWD" "$out"
           runHook postInstall
         '';
       };
@@ -607,9 +603,18 @@
         '';
       };
 
+      # The workspace's manifests and lockfile: all `bun install` reads, so
+      # editing source does not refetch the modules.
+      workspaceManifests = pkgs.lib.fileset.toSource {
+        root = ./.;
+        fileset = pkgs.lib.fileset.unions ([ ./package.json ./bun.lock ./bunfig.toml ]
+          ++ pkgs.lib.mapAttrsToList (name: _: ./packages + "/${name}/package.json")
+            (pkgs.lib.filterAttrs
+              (name: _: builtins.pathExists (./packages + "/${name}/package.json"))
+              (builtins.readDir ./packages)));
+      };
+
       # Everything `bun install` fetches, as one fixed-output derivation.
-      #
-      # `src` holds only the manifests, so editing source does not refetch.
       # Install scripts are skipped so the result is reproducible.
       #
       # Update `outputHash` by hand whenever `bun.lock` changes. A stale hash
@@ -620,14 +625,7 @@
       nodeModules = pkgs.stdenv.mkDerivation {
         pname = "domicile-node-modules";
         version = "0.0.0";
-        src = pkgs.lib.fileset.toSource {
-          root = ./.;
-          fileset = pkgs.lib.fileset.unions ([ ./package.json ./bun.lock ./bunfig.toml ]
-            ++ pkgs.lib.mapAttrsToList (name: _: ./packages + "/${name}/package.json")
-              (pkgs.lib.filterAttrs
-                (name: _: builtins.pathExists (./packages + "/${name}/package.json"))
-                (builtins.readDir ./packages)));
-        };
+        src = workspaceManifests;
         nativeBuildInputs = [ pkgs.bun ];
         dontConfigure = true;
         buildPhase = ''
@@ -659,6 +657,32 @@
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
         outputHash = "sha256-4pq1Hq3i8F7gVS6gltC36+MlDJFz1MHCivVKKJYgpNM=";
+      };
+
+      # The production modules `shellWorkspace` ships, from
+      # `distro/shell-workspace.sh modules`. A fixed-output derivation like
+      # `nodeModules`, and its `outputHash` goes stale with the same changes.
+      shellModules = pkgs.stdenv.mkDerivation {
+        pname = "domicile-shell-modules";
+        version = "0.0.0";
+        src = workspaceManifests;
+        nativeBuildInputs = [ pkgs.bun ];
+        dontConfigure = true;
+        dontBuild = true;
+        installPhase = ''
+          runHook preInstall
+          export HOME="$TMPDIR"
+          bash ${./distro/shell-workspace.sh} modules ${pkgs.bun}/bin/bun "$PWD" "$out"
+          rm -rf "$out/node_modules/.cache"
+          # As in `nodeModules`.
+          find "$out/node_modules/.bun" -mindepth 3 -maxdepth 3 \
+            -type d -path '*/node_modules/.bin' -exec rm -rf {} +
+          runHook postInstall
+        '';
+        dontFixup = true;
+        outputHashMode = "recursive";
+        outputHashAlgo = "sha256";
+        outputHash = "sha256-HZSlE2TEif9I3/S2qIirGVb+P5+OzfDgEzGCL/aezbo=";
       };
 
 
