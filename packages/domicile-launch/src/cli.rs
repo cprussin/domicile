@@ -7,6 +7,7 @@
 use std::path::PathBuf;
 
 use crate::control::Request;
+use crate::power::Power;
 
 /// An invalid `domicile` command line.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -22,7 +23,8 @@ pub enum CliError {
          load-shell <shell>, open-url <url>, open-app <url>, screenshot \
          [file], or \
          send-shell <command>…. Or \
-         check-config <file> to check a config without running it.\n"
+         check-config <file> to check a config without running it, or \
+         power-off or reboot to turn the computer off or restart it.\n"
     )]
     NoShell,
     #[error(
@@ -129,6 +131,9 @@ pub enum Invocation {
     Screenshot { file: Option<String> },
     /// Check that the compositor takes this config, without running a desktop.
     Check { config: PathBuf },
+    /// Power off or reboot the computer, after a yes in the desktop's Access
+    /// dialog.
+    Power { power: Power },
 }
 
 /// Parses the command line.
@@ -154,6 +159,10 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
         return match verb {
             Verb::Asking(request) => match args.next() {
                 None => Ok(Invocation::Ask { request }),
+                Some(extra) => Err(CliError::Extra { extra, verb: first }),
+            },
+            Verb::Powering(power) => match args.next() {
+                None => Ok(Invocation::Power { power }),
                 Some(extra) => Err(CliError::Extra { extra, verb: first }),
             },
             Verb::Loading => match (args.next(), args.next()) {
@@ -241,6 +250,8 @@ enum Verb {
     Sending,
     /// `check-config`, which takes a config file.
     Checking,
+    /// `power-off` or `reboot`, which take no arguments.
+    Powering(Power),
 }
 
 /// The verb `word` names, if any.
@@ -255,6 +266,8 @@ fn verb(word: &str) -> Option<Verb> {
         "screenshot" => Some(Verb::Capturing),
         "send-shell" => Some(Verb::Sending),
         "check-config" => Some(Verb::Checking),
+        "power-off" => Some(Verb::Powering(Power::Off)),
+        "reboot" => Some(Verb::Powering(Power::Reboot)),
         _ => None,
     }
 }

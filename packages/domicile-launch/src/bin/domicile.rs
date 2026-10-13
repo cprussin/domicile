@@ -11,6 +11,7 @@
 
 use std::io::{BufRead, BufReader, IsTerminal, Write};
 use std::os::unix::net::UnixStream;
+use std::os::unix::process::CommandExt as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::sync::mpsc::{channel, Receiver};
@@ -41,6 +42,7 @@ use domicile_launch::heard::Heard;
 use domicile_launch::milestones::{reach, Milestone};
 use domicile_launch::notification;
 use domicile_launch::platform::platform;
+use domicile_launch::power::{confirmed, Power};
 use domicile_launch::profile_claim::claim;
 use domicile_launch::profile_path::profile_directory;
 use domicile_launch::restart::{
@@ -114,6 +116,23 @@ fn run() -> Result<ExitCode, String> {
                 .transpose()?,
         }),
         Invocation::Check { config } => check(&config).map(|()| ExitCode::SUCCESS),
+        Invocation::Power { power } => powered(power),
+    }
+}
+
+/// Runs `systemctl` for `power` once the user says yes in the desktop's
+/// Access dialog.
+///
+/// The session bus has no call timeout: the dialog waits on the user.
+fn powered(power: Power) -> Result<ExitCode, String> {
+    let bus = zbus::blocking::Connection::session()
+        .map_err(|why| format!("cannot reach the session bus: {why}"))?;
+    match confirmed(&bus, power)? {
+        true => Err(format!(
+            "cannot run systemctl: {}",
+            Command::new("systemctl").args(power.systemctl()).exec()
+        )),
+        false => Ok(ExitCode::SUCCESS),
     }
 }
 

@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use domicile_launch::cli::{invocation, CliError, Invocation};
 use domicile_launch::control::Request;
+use domicile_launch::power::Power;
 
 fn run(args: &[&str]) -> Result<Invocation, CliError> {
     invocation(args.iter().map(|arg| (*arg).to_string()))
@@ -179,6 +180,27 @@ fn screenshot_takes_one_file_and_the_extra_word_is_named() {
         run(&["screenshot", "a.png", "b.png"]),
         Err(CliError::ExtraToSave {
             extra: "b.png".to_string()
+        })
+    );
+}
+
+#[test]
+fn power_off_and_reboot_are_verbs_that_take_nothing() {
+    assert_eq!(
+        run(&["power-off"]),
+        Ok(Invocation::Power { power: Power::Off })
+    );
+    assert_eq!(
+        run(&["reboot"]),
+        Ok(Invocation::Power {
+            power: Power::Reboot
+        })
+    );
+    assert_eq!(
+        run(&["reboot", "now"]),
+        Err(CliError::Extra {
+            verb: "reboot".to_string(),
+            extra: "now".to_string()
         })
     );
 }

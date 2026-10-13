@@ -109,8 +109,7 @@ fill "$ROOT/nix/domicile-open-url.desktop" "$USR/share/applications/domicile-ope
 install -D -m 644 "$ROOT/nix/domicile-mimeapps.list" \
   "$USR/share/applications/domicile-mimeapps.list"
 
-# The launcher entries whose `Exec` is a program of Domicile's. Shutdown and
-# Reboot are `flake.nix`'s alone: theirs is a script in the store.
+# The launcher's entries for Domicile's own programs.
 mkdir -p "$STAGE$ICONS"
 launcher() { # id, directory holding <id>.svg and <id>-preview.svg
   cp "$2/$1.svg" "$2/$1-preview.svg" "$STAGE$ICONS/"
@@ -120,6 +119,8 @@ launcher() { # id, directory holding <id>.svg and <id>-preview.svg
 launcher history "$WORKSPACE/packages/app-history/icons"
 launcher settings "$WORKSPACE/packages/app-settings/icons"
 launcher screenshot "$ROOT/nix/launcher"
+launcher shutdown "$ROOT/nix/launcher"
+launcher reboot "$ROOT/nix/launcher"
 
 install -D -m 644 "$ROOT/nix/domicile.portal" \
   "$USR/share/xdg-desktop-portal/portals/domicile.portal"
