@@ -30,6 +30,7 @@ import { typedAddress } from "../../address/typed-address";
 import { ConnectionIndicator } from "./ConnectionIndicator";
 import { DownloadIndicator } from "./DownloadIndicator";
 import type { Downloads } from "./downloads";
+import type { MediaDeviceChoice } from "./media-devices";
 import { SitePermissions } from "./SitePermissions";
 import type { SitePermission } from "./site-permissions";
 import type { PermissionRequest } from "./usePermissionRequest";
@@ -54,6 +55,11 @@ type Props = {
   canGoForward: boolean;
   /** The page's downloads, shown while any are in progress or finished. */
   downloads: Downloads;
+  /**
+   * The cameras and microphones the site permissions panel picks from, or
+   * nothing from an engine without them.
+   */
+  mediaDevices?: MediaDeviceChoice | undefined;
   /** Whether the window is private, which the bar says in its own color. */
   isPrivate: boolean;
   /** How far the page has loaded, from 0 to 1. Shown only while `loading`. */
@@ -108,6 +114,7 @@ export const AddressBar = ({
   isPrivate,
   loadProgress,
   loading,
+  mediaDevices,
   onBack,
   onClearDownloads,
   onForward,
@@ -206,6 +213,7 @@ export const AddressBar = ({
           <>
             <ConnectionIndicator security={security} url={address} />
             <SitePermissions
+              devices={mediaDevices}
               onSet={onSetSitePermission}
               permissions={sitePermissions}
               request={permissionRequest}

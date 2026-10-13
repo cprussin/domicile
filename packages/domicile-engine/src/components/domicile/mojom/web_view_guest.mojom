@@ -187,6 +187,27 @@ struct WebViewDevice {
   string name;
 };
 
+// A camera or microphone, as WebViewGuest.ListMediaDevices lists it.
+struct WebViewMediaDevice {
+  // The system's id for it, which SetMediaDevice takes.
+  string id;
+  // The name the system gives it, such as "USB Camera".
+  string name;
+};
+
+// Each kind's devices, most preferred first. A page that names no device gets
+// the first.
+struct WebViewMediaDevices {
+  array<WebViewMediaDevice> cameras;
+  array<WebViewMediaDevice> microphones;
+};
+
+// Which list a media device is in.
+enum WebViewMediaDeviceKind {
+  kCamera,
+  kMicrophone,
+};
+
 // Renderer -> browser, bound per document.
 interface WebViewGuestHost {
   // Gives `placeholder_frame` a guest page.
@@ -532,4 +553,14 @@ interface WebViewGuest {
   // page has no site, which happens when it navigates as the shell sends.
   SetSitePermission(WebViewPermission permission,
                     WebViewPermissionSetting setting);
+
+  // The cameras and microphones, ranked by the profile's preference. The
+  // preference is the profile's, not the site's, so every guest lists the
+  // same order.
+  ListMediaDevices() => (WebViewMediaDevices devices);
+
+  // Ranks device `id` first among `kind`'s, so a page that names no device
+  // gets it, as Chrome's camera and microphone settings do. Answers why not
+  // when no connected device of that kind has the id.
+  SetMediaDevice(WebViewMediaDeviceKind kind, string id) => (string? refusal);
 };
