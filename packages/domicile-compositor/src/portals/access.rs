@@ -37,7 +37,7 @@ impl Access {
     }
 }
 
-/// The request a call describes. A label of the wrong type reads as absent.
+/// The request a call describes. An option of the wrong type reads as absent.
 fn dialog(
     title: String,
     subtitle: String,
@@ -55,6 +55,10 @@ fn dialog(
         body,
         grant_label: label("grant_label"),
         deny_label: label("deny_label"),
+        destructive: options
+            .remove("destructive")
+            .and_then(|value| bool::try_from(value).ok())
+            .unwrap_or(false),
     })
 }
 
@@ -84,6 +88,7 @@ mod tests {
                 ("grant_label", Value::from("Allow")),
                 ("deny_label", Value::from(7u32)),
                 ("modal", Value::from(true)),
+                ("destructive", Value::from(true)),
             ]),
         );
 
@@ -95,7 +100,23 @@ mod tests {
                 body: String::new(),
                 grant_label: Some("Allow".into()),
                 deny_label: None,
+                destructive: true,
             })
         );
+    }
+
+    #[test]
+    fn a_question_is_not_destructive_unless_it_says_so() {
+        let asked = dialog(
+            "Use the camera?".into(),
+            String::new(),
+            String::new(),
+            options(vec![("destructive", Value::from("yes"))]),
+        );
+
+        let PortalKind::Access(asked) = asked else {
+            panic!("an access dialog");
+        };
+        assert!(!asked.destructive);
     }
 }

@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use domicile_launch::notification::connected;
 use domicile_launch::power::{confirmed, Power};
+use domicile_protocol::SHELL_APP_ID;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 
 /// What one `AccessDialog` was asked.
@@ -17,6 +18,7 @@ struct Asked {
     subtitle: String,
     grant: String,
     deny: String,
+    destructive: bool,
 }
 
 /// An Access portal that answers every `AccessDialog` with `response`.
@@ -50,6 +52,7 @@ impl Portal {
             subtitle,
             grant: text(&options, "grant_label"),
             deny: text(&options, "deny_label"),
+            destructive: bool::try_from(&options["destructive"]).unwrap(),
         });
         (self.response, HashMap::new())
     }
@@ -97,11 +100,12 @@ fn power_off_asks_in_the_access_dialog() {
                 "/org/freedesktop/portal/desktop/request/launcher/shutdown_{}",
                 std::process::id()
             ),
-            app_id: "domicile-shutdown".to_string(),
+            app_id: SHELL_APP_ID.to_string(),
             title: "Shut down?".to_string(),
-            subtitle: "Every open window closes.".to_string(),
+            subtitle: String::new(),
             grant: "Shut down".to_string(),
             deny: "Cancel".to_string(),
+            destructive: true,
         }]
     );
 }
@@ -111,7 +115,7 @@ fn reboot_asks_its_own_question() {
     let (_server, client, asked) = a_portal(0);
     assert_eq!(confirmed(&client, Power::Reboot), Ok(true));
     let asked = asked.lock().unwrap();
-    assert_eq!(asked[0].app_id, "domicile-reboot");
+    assert!(asked[0].handle.contains("/launcher/reboot_"));
     assert_eq!(asked[0].title, "Reboot?");
     assert_eq!(asked[0].grant, "Reboot");
 }

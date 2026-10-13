@@ -81,6 +81,8 @@ export type AccessBody = {
   body: string;
   grantLabel: string | undefined;
   denyLabel: string | undefined;
+  /** Allowing cannot be undone, such as shutting down. */
+  destructive: boolean;
 };
 
 /** What an app chooser opens, and the applications it offers. */
@@ -828,6 +830,7 @@ const accessSchema = z
   .object({
     body: z.string(),
     deny_label: z.string().optional(),
+    destructive: z.boolean(),
     grant_label: z.string().optional(),
     subtitle: z.string(),
     title: z.string(),
@@ -836,6 +839,7 @@ const accessSchema = z
     (body): AccessBody => ({
       body: body.body,
       denyLabel: body.deny_label,
+      destructive: body.destructive,
       grantLabel: body.grant_label,
       subtitle: body.subtitle,
       title: body.title,

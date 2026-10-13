@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 
+use domicile_protocol::SHELL_APP_ID;
 use zbus::zvariant::{ObjectPath, OwnedValue, Value};
 
 /// The desktop's own portal backend, which the compositor serves.
@@ -59,6 +60,7 @@ pub fn confirmed(bus: &zbus::blocking::Connection, power: Power) -> Result<bool,
     let options = HashMap::from([
         ("grant_label", Value::from(grant)),
         ("deny_label", Value::from("Cancel")),
+        ("destructive", Value::from(true)),
     ]);
     let (response, _): (u32, HashMap<String, OwnedValue>) = bus
         .call_method(
@@ -66,15 +68,7 @@ pub fn confirmed(bus: &zbus::blocking::Connection, power: Power) -> Result<bool,
             BACKEND_PATH,
             Some(ACCESS),
             "AccessDialog",
-            &(
-                handle,
-                format!("domicile-{}", power.id()),
-                "",
-                title,
-                "Every open window closes.",
-                "",
-                options,
-            ),
+            &(handle, SHELL_APP_ID, "", title, "", "", options),
         )
         .and_then(|reply| reply.body().deserialize())
         .map_err(|why| format!("the desktop's Access dialog did not answer: {why}"))?;

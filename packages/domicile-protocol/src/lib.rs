@@ -868,6 +868,9 @@ pub struct AccessDialog {
     /// The deny button's label; the shell's own when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deny_label: Option<String>,
+    /// Whether allowing does something that cannot be undone, such as
+    /// shutting down. Domicile's own option, not the spec's.
+    pub destructive: bool,
 }
 
 /// An `AppChooser` request: what to open, and the applications offered.

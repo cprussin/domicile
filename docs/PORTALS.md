@@ -220,7 +220,7 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 | FileChooser | `OpenFile`, `SaveFile`, `SaveFiles`; filters, `current_folder`, `choices` | picker (component-library's `FilePicker`) |
 | AppChooser | candidates from desktop entries and `mimeapps.list`; `UpdateChoices` | app list |
 | OpenURI | (frontend) | via AppChooser |
-| Access | — | yes/no prompt with the app's name |
+| Access | `grant_label`, `deny_label`; Domicile's own `destructive` makes the yes a danger button | yes/no prompt with the app's name; none for Domicile's own questions |
 | Account | user name, avatar from `AccountsService`, else passwd | confirm; allowed with the `access` answer |
 | Email | opens the `mailto:` handler from `mimeapps.list` with the fields; attachments as `attach=`, which Thunderbird ignores | — |
 | Notification | v2, direct to `domicile_host::notifications` | existing drawer |
