@@ -144,14 +144,14 @@ mod tests {
                 display: 1,
                 desk: (0, 0, 2, 1),
                 scale: 1.0,
-                upright: true,
+                transform: domicile_config::Transform::Normal,
             },
             Screen {
                 name: "drm-2".into(),
                 display: 2,
                 desk: (2, -1, 1, 1),
                 scale: 2.0,
-                upright: true,
+                transform: domicile_config::Transform::Normal,
             },
         ]
     }

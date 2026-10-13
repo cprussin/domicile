@@ -29,7 +29,7 @@ use smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer;
 use smithay::utils::Transform;
 use tracing::{debug, warn};
 
-use crate::buffer_transform::Sampled;
+use crate::buffer_transform::{upright_size, Sampled};
 use crate::casting::captured;
 use crate::casting::captures::{Capturer, Captures, Frame};
 use crate::casting::cursor::{arrow, embed, plan, CursorMode, Plan, Sprite};
@@ -43,6 +43,7 @@ use crate::casting::region::{self, damage_in_stream, in_frame, Layout, Screen};
 use crate::casting::shots::{self, compose, desk_of, monitors, Desk, Developed, Shown};
 use crate::casting::{Candidate, Event, Listener, Region, Request, Source, StreamId};
 use crate::engine::{CaptureId, CapturedFrame};
+use crate::outputs::as_wl_transform;
 
 /// A window's frame, as its commit brought it.
 pub struct Committed<'a> {
@@ -520,7 +521,7 @@ impl Streams {
                     .screens
                     .iter()
                     .find(|screen| screen.display == piece.display)?;
-                Some((piece.display, mode(screen)))
+                Some((piece.display, panel_mode(screen)))
             })
             .collect()
     }
@@ -743,12 +744,12 @@ impl Streams {
         self.captures
             .keep(capture, id, Frame { snapshot, content }, kept, capturer);
         self.develop(renderer.as_deref_mut(), capturer);
-        let logical = self
+        let turned = self
             .screens
             .iter()
             .find(|screen| screen.display == display)
-            .map(|screen| (screen.desk.2, screen.desk.3));
-        let Some(logical) = logical else {
+            .map(|screen| ((screen.desk.2, screen.desk.3), screen.transform));
+        let Some((logical, transform)) = turned else {
             return self.next_due();
         };
         for stream in self.captures.streams_of(display) {
@@ -760,7 +761,7 @@ impl Streams {
                 .pieces
                 .iter()
                 .filter(|piece| piece.display == display)
-                .filter_map(|piece| damage_in_stream(piece, logical, content, damage))
+                .filter_map(|piece| damage_in_stream(piece, logical, transform, content, damage))
                 .collect();
             if !damage.is_empty() {
                 self.offer(stream, damage, renderer.as_deref_mut(), now);
@@ -1000,11 +1001,14 @@ fn named(open: Vec<Candidate>) -> (Vec<ShotWindow>, HashMap<String, String>) {
     (windows, descriptions)
 }
 
-/// A screen's mode: its logical size at its density.
-fn mode(screen: &Screen) -> (u32, u32) {
-    (
-        (f64::from(screen.desk.2) * screen.scale).round() as u32,
-        (f64::from(screen.desk.3) * screen.scale).round() as u32,
+/// A screen's mode: its logical size at its density, as its panel lies.
+fn panel_mode(screen: &Screen) -> (u32, u32) {
+    upright_size(
+        (
+            (f64::from(screen.desk.2) * screen.scale).round() as u32,
+            (f64::from(screen.desk.3) * screen.scale).round() as u32,
+        ),
+        as_wl_transform(screen.transform),
     )
 }
 
@@ -1077,9 +1081,14 @@ fn view<'a>(
                         .find(|screen| screen.display == piece.display)?;
                     Some(Layer {
                         snapshot: &frame.snapshot,
-                        from: in_frame(piece.from, (screen.desk.2, screen.desk.3), frame.content),
+                        from: in_frame(
+                            piece.from,
+                            (screen.desk.2, screen.desk.3),
+                            screen.transform,
+                            frame.content,
+                        ),
                         to: piece.to,
-                        transform: Transform::Normal,
+                        transform: as_wl_transform(screen.transform),
                     })
                 })
                 .collect::<Option<Vec<_>>>()?;
@@ -1202,12 +1211,14 @@ mod tests {
     #[derive(Default)]
     struct Engine {
         started: Vec<i64>,
+        sizes: Vec<(u32, u32)>,
         stopped: Vec<CaptureId>,
     }
 
     impl Capturer for Engine {
-        fn start(&mut self, display: i64, _: (u32, u32), _: u32) -> Result<CaptureId, String> {
+        fn start(&mut self, display: i64, size: (u32, u32), _: u32) -> Result<CaptureId, String> {
             self.started.push(display);
+            self.sizes.push(size);
             Ok(display as CaptureId)
         }
         fn resize(&mut self, _: CaptureId, _: (u32, u32)) {}
@@ -1225,28 +1236,32 @@ mod tests {
                 display: 1,
                 desk: (0, 0, 1, 1),
                 scale: 1.0,
-                upright: true,
+                transform: domicile_config::Transform::Normal,
             },
             Screen {
                 name: "drm-2".into(),
                 display: 2,
                 desk: (1, 0, 1, 1),
                 scale: 2.0,
-                upright: true,
+                transform: domicile_config::Transform::Normal,
             },
         ]
     }
 
     /// A shared memory frame of `size`, every pixel `[blue, 0, 0, 255]`.
     fn frame(size: (u32, u32), blue: u8) -> CapturedFrame {
+        painted(size, &vec![blue; (size.0 * size.1) as usize])
+    }
+
+    /// A shared memory frame of `size`, each pixel `[blue, 0, 0, 255]` with
+    /// its blue byte from `blues`, row by row.
+    fn painted(size: (u32, u32), blues: &[u8]) -> CapturedFrame {
         // SAFETY: a fresh memfd, owned here.
         let fd = unsafe { libc::memfd_create(c"frame".as_ptr(), 0) };
         assert!(fd >= 0, "a memfd");
         // SAFETY: `fd` is open and owned by nothing else.
         let fd = unsafe { OwnedFd::from_raw_fd(fd) };
-        let pixels: Vec<u8> = (0..size.0 * size.1)
-            .flat_map(|_| [blue, 0, 0, 255])
-            .collect();
+        let pixels: Vec<u8> = blues.iter().flat_map(|&blue| [blue, 0, 0, 255]).collect();
         std::fs::File::from(fd.try_clone().expect("a duplicate"))
             .write_all(&pixels)
             .expect("written");
@@ -1374,6 +1389,50 @@ mod tests {
         assert_eq!(blue, [20, 20, 20, 20]);
         assert_eq!(desk.place, (1, 0, 1, 1));
         assert_eq!(engine.stopped, [2]);
+    }
+
+    #[test]
+    fn a_rotated_monitors_shot_is_captured_as_its_panel_and_turned_upright() {
+        let mut streams = Streams::new(channel().0, None);
+        streams.screens(
+            vec![Screen {
+                name: "drm-1".into(),
+                display: 1,
+                desk: (0, 0, 1, 2),
+                scale: 1.0,
+                transform: domicile_config::Transform::Rotate90,
+            }],
+            None,
+        );
+        let mut engine = Engine::default();
+        let (developed, heard) = mpsc::channel();
+
+        streams.request(
+            Request::ShootMonitor {
+                stream: StreamId(9),
+                name: "drm-1".into(),
+                region: None,
+                developed: Box::new(move |desk| developed.send(desk).expect("heard")),
+            },
+            Vec::new,
+            None,
+            Some(&mut engine),
+        );
+        assert_eq!(engine.sizes, [(2, 1)], "the panel lies on its side");
+        streams.captured(
+            1,
+            1,
+            Ok(painted((2, 1), &[10, 20])),
+            None,
+            &mut engine,
+            Instant::now(),
+        );
+
+        // A quarter turn puts the panel's right edge at the monitor's top.
+        let desk: Desk = heard.try_recv().expect("developed").expect("a desk");
+        let blue: Vec<u8> = desk.shot.bgra.chunks(4).map(|pixel| pixel[0]).collect();
+        assert_eq!((desk.shot.width, desk.shot.height), (1, 2));
+        assert_eq!(blue, [20, 10]);
     }
 
     #[test]
