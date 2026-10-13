@@ -37,7 +37,9 @@ A `.ts`, `.tsx`, `.js` or `.mjs` config is evaluated to JSON.
 - The `Shell` export is the shell to run when none is given.
 - In a JSON config, name the shell with `"shell"`, relative to the config
   file: `{ "shell": "@domicile-desktop/manganese" }`.
-- Every other export is a top-level section of the schema.
+- Every other export is a top-level section of the schema. Keybindings are
+  shell props, so a `keybindings` or `modes` export is an unknown section and is
+  rejected.
 
 ```tsx
 // ~/.config/domicile/domicile.tsx
@@ -50,7 +52,11 @@ export const Shell = runManganese();
 
 - Styling custom manganese bar items:
   [CUSTOM-BAR-ITEMS.md](/packages/shell-manganese/docs/CUSTOM-BAR-ITEMS.md).
-- Design: [COMPOSABLE-SHELLS.md](/docs/architecture/COMPOSABLE-SHELLS.md).
+- `@domicile-desktop/*` and React resolve to the running Domicile's copies,
+  whatever `package.json` says. Building it:
+  [SHELL-PACKAGING.md](SHELL-PACKAGING.md#distributing).
+- How it is evaluated:
+  [THE-DOMICILE-BINARY.md](/docs/architecture/THE-DOMICILE-BINARY.md#config-modules).
 
 ## Types and schema
 
@@ -132,6 +138,10 @@ An edit applies to the running desktop, and windows stay open:
 | `lockdown` | Applications told through the Lockdown portal |
 | `lock` | The next passphrase is checked against the new verifier. The desktop never unlocks from a reload ([LOCK.md](LOCK.md#reloading)) |
 
+- A config module is watched with its directory, except `node_modules` and
+  dot directories. An edit re-evaluates it and, if it is the shell, rebuilds
+  and reloads the shell. A failure is logged, posted as a notification, and
+  leaves the desktop as it was.
 - `startup` is read only at startup. Rerunning it would duplicate its
   commands.
 - A file that fails to parse is rejected and logged. The last good config

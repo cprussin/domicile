@@ -94,7 +94,7 @@ The `domicile` binary starts the engine, then the compositor:
 `domicile` builds neither; it finds both next to its own path. A shell given
 as source is built by `domicile-builder`. See
 [THE-DOMICILE-BINARY.md](THE-DOMICILE-BINARY.md) and
-[COMPOSABLE-SHELLS.md](COMPOSABLE-SHELLS.md).
+[SHELL-PACKAGING.md](/docs/SHELL-PACKAGING.md#distributing).
 
 ## Crate layout
 

@@ -31,6 +31,14 @@ A JavaScript module whose `Shell` export is a function.
 
 - Domicile serves the module, imports it into a page it writes, and calls
   `Shell` with the element to draw in.
+- Only `Shell` is read; other exports are ignored. A config module's settings
+  exports do not apply when it is loaded as a shell.
+- Importing the module may only install its stylesheet. A config module is
+  also imported under Bun, which has no DOM, so all DOM work goes in `Shell`.
+- If the module fails to load, has no `Shell`, or `Shell` throws, the page
+  shows the error.
+- The contract is framework-agnostic. `runManganese` is manganese's React
+  adapter.
 - Each Wayland window becomes an `<app>` element in your page. Where you put
   the element is where the window is. Placing windows is the shell's job.
 - The compositor handles clients, input, outputs and pixels.

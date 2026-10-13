@@ -99,6 +99,22 @@ temp directory. The modules that spawn processes or bind sockets stay thin.
 | `notification` | no | sends desktop notifications for errors after startup, such as a broken config edit |
 | `power` | no | `power-off` and `reboot`: the question in the desktop's Access dialog and the `systemctl` command |
 
+### Config modules
+
+A `.ts`, `.tsx`, `.js` or `.mjs` config ([SHELL-CONFIG.md](/docs/SHELL-CONFIG.md#a-config-module))
+becomes JSON before the compositor sees it:
+
+1. `domicile` runs the builder with `--evaluate`. It bundles the config for
+   Bun, with `@domicile-desktop/*` and React from the install and stylesheets
+   stubbed.
+2. The builder imports it and writes every export but `Shell` to
+   `$XDG_CACHE_HOME/domicile/shells/configs/<key>.json`.
+3. `domicile` copies that file to `<runtime>/config.json` and gives the
+   compositor that path, which it watches.
+
+The compositor only parses JSON (`domicile-config`). It never runs
+JavaScript. `config_watch` re-runs these steps on an edit.
+
 ### Home Manager module
 
 `nix/home-manager.nix` writes the config file that `config_path` reads. It
@@ -138,7 +154,28 @@ Checks:
   bar.
 - A built bundle, or a bundled shell (`@domicile-desktop/manganese`, prebuilt
   under `libexec/domicile/shells`), needs no build.
-- See [COMPOSABLE-SHELLS.md](/docs/architecture/COMPOSABLE-SHELLS.md).
+- Users need no build toolchain. The supervisor only spawns the builder; the
+  builder owns the bundler
+  ([`domicile-builder`](/packages/domicile-builder/README.md)).
+- Bun installs and runs the builder and TS configs. Vite bundles, through
+  `shellBuild` and Panda's postcss plugin, so a user's shell gets the same
+  build manganese ships.
+- `@domicile-desktop/*` and React always come from the install. Two copies of
+  React break hooks, and a mismatched SDK speaks a different protocol.
+- No fallback shell runs during a slow first build; the splash does. A shell
+  the user did not configure looks correct but is wrong.
+
+### Compositor settings stay outside the shell
+
+- Displays and extensions apply before any page exists, and a broken shell
+  must not lose the monitors. One config module holds both; each consumer
+  reads its own exports.
+- home-manager builds a config module with `bun2nix`, so nothing builds at
+  login.
+
+### "Desk" is not a user-facing name
+
+No export, config key or CLI word uses it.
 
 ### No watch mode
 
@@ -357,6 +394,8 @@ Supervisor side:
   arguments.
 - `control::answer` takes the engine calls (`load`, `open`) as parameters, so
   routing stays string-in, string-out under test.
+- The client builds an entry or package before it dials, so `root` and
+  `module` name the build output and the wire stays the same.
 - The client resolves the path with `shell_path`, using its own working
   directory and `HOME`. Both sockets carry an absolute root and module. A path
   that names nothing is refused in the client's terminal.

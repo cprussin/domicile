@@ -2,7 +2,8 @@
 
 Builds a shell module from a user's TypeScript or JavaScript file, so a desktop
 can be configured without a project or build step. See
-[COMPOSABLE-SHELLS.md](../../docs/architecture/COMPOSABLE-SHELLS.md).
+[SHELL-PACKAGING.md](../../docs/SHELL-PACKAGING.md#distributing) and
+[THE-DOMICILE-BINARY.md](../../docs/architecture/THE-DOMICILE-BINARY.md#domicile-builds-shells-nothing-else).
 
 ## Usage
 
