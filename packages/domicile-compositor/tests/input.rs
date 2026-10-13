@@ -8,6 +8,7 @@
 mod running;
 
 use domicile_protocol::{ChromeMessage, HostMessage};
+use smithay::input::keyboard::xkb;
 
 use crate::running::Compositor;
 
@@ -362,10 +363,10 @@ fn the_keymap_the_config_names_reaches_the_chrome() {
     let HostMessage::Keymap { keymap } = told else {
         unreachable!("the wait matched on the variant");
     };
-    let top_left = key_block(&keymap, "AD01");
-    assert!(
-        top_left.contains("apostrophe"),
-        "on `dvorak` the key qwerty prints `q` on is an apostrophe, and this          keymap says: {top_left}"
+    assert_eq!(
+        unshifted_on(&keymap, "AD01"),
+        "apostrophe",
+        "on `dvorak` the key qwerty prints `q` on is an apostrophe"
     );
 }
 
@@ -397,7 +398,7 @@ fn a_keyboard_edited_on_disk_reaches_the_client_and_the_chrome() {
         unreachable!("the wait matched on the variant");
     };
     assert_eq!(
-        group_name(&keymap),
+        layout_name(&keymap),
         "English (US)",
         "the browser process is typing on the layout the file now names"
     );
@@ -438,32 +439,42 @@ fn a_keymap_the_reload_cannot_compile_leaves_the_desktop_typing() {
         unreachable!("the wait matched on the variant");
     };
     assert_eq!(
-        group_name(&keymap),
+        layout_name(&keymap),
         "English (Dvorak)",
         "the retained keymap is the last one that compiled, not xkb's own fallback"
     );
 }
 
-/// The `key <NAME> { ... };` block of a compiled keymap.
-fn key_block(keymap: &str, name: &str) -> String {
-    let opens = format!("key <{name}>");
-    let at = keymap
-        .find(&opens)
-        .unwrap_or_else(|| panic!("no key <{name}> in the keymap:\n{keymap}"));
-    let rest = &keymap[at..];
-    let ends = rest.find("};").expect("a key block closes");
-    rest[..ends].to_string()
+/// A keymap the chrome was sent, compiled as the browser compiles it.
+///
+/// The text itself varies by libxkbcommon version: 1.12 writes keysyms as hex
+/// and group names as `name[1]`, so the tests read it back rather than search
+/// it.
+fn read_back(keymap: &str) -> xkb::Keymap {
+    let context = xkb::Context::new(xkb::CONTEXT_NO_FLAGS);
+    xkb::Keymap::new_from_string(
+        &context,
+        keymap.to_string(),
+        xkb::KEYMAP_FORMAT_TEXT_V1,
+        xkb::KEYMAP_COMPILE_NO_FLAGS,
+    )
+    .unwrap_or_else(|| panic!("xkb cannot read the keymap the chrome was sent:\n{keymap}"))
 }
 
-/// The name of a compiled keymap's first group, such as `English (Dvorak)`.
-///
-/// The test client reads the same field from its keymap fd.
-fn group_name(keymap: &str) -> String {
-    let opens = "name[Group1]=\"";
-    let at = keymap
-        .find(opens)
-        .unwrap_or_else(|| panic!("no group name in the keymap:\n{keymap}"));
-    let rest = &keymap[at + opens.len()..];
-    let ends = rest.find('"').expect("a group name closes");
-    rest[..ends].to_string()
+/// The keysym name on the first level of the key named `name` in the first
+/// layout of `keymap`.
+fn unshifted_on(keymap: &str, name: &str) -> String {
+    let keymap = read_back(keymap);
+    let key = keymap
+        .key_by_name(name)
+        .unwrap_or_else(|| panic!("no key <{name}> in the keymap"));
+    match keymap.key_get_syms_by_level(key, 0, 0) {
+        [keysym] => xkb::keysym_get_name(*keysym),
+        other => panic!("<{name}> has {} keysyms unshifted", other.len()),
+    }
+}
+
+/// The name of the first layout of `keymap`, such as `English (Dvorak)`.
+fn layout_name(keymap: &str) -> String {
+    read_back(keymap).layout_get_name(0).to_string()
 }

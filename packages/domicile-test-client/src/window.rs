@@ -2256,14 +2256,28 @@ fn layout_named_by(fd: std::os::fd::OwnedFd, size: u32) -> String {
     let Ok(text) = String::from_utf8(text) else {
         return "not text".to_string();
     };
-    let opens = "name[Group1]=\"";
-    let Some(at) = text.find(opens) else {
-        return "no group name".to_string();
+    first_group_name(&text).to_string()
+}
+
+/// The first group name in a keymap's text, or why there is none.
+///
+/// The first `name[...]` in `xkb_symbols`. libxkbcommon 1.12 writes the group
+/// as `1`, older versions as `Group1`.
+fn first_group_name(text: &str) -> &str {
+    let Some(symbols) = text.find("xkb_symbols") else {
+        return "no xkb_symbols";
     };
-    let rest = &text[at + opens.len()..];
+    let Some(at) = text[symbols..].find("name[") else {
+        return "no group name";
+    };
+    let rest = &text[symbols + at..];
+    let Some(opens) = rest.find('"') else {
+        return "an unopened group name";
+    };
+    let rest = &rest[opens + 1..];
     match rest.find('"') {
-        None => "an unclosed group name".to_string(),
-        Some(ends) => rest[..ends].to_string(),
+        None => "an unclosed group name",
+        Some(ends) => &rest[..ends],
     }
 }
 
@@ -2273,9 +2287,25 @@ mod tests {
     use wayland_client::protocol::wl_shm;
 
     use super::{
-        buffer_size, halves, shm_format, COLORS, TRANSLUCENT_ALPHA, TRANSLUCENT_COLORS,
-        TURNED_COLORS,
+        buffer_size, first_group_name, halves, shm_format, COLORS, TRANSLUCENT_ALPHA,
+        TRANSLUCENT_COLORS, TURNED_COLORS,
     };
+
+    #[test]
+    fn a_group_name_is_read_however_its_group_is_written() {
+        // libxkbcommon 1.12 writes `name[1]` where older versions write
+        // `name[Group1]`. A key type's `level_name` is not a group name.
+        let types = "xkb_types {\n\ttype \"ONE\" {\n\t\tlevel_name[1]= \"Any\";\n\t};\n};\n";
+        for group in ["Group1", "1"] {
+            let symbols =
+                format!("xkb_symbols \"pc\" {{\n\tname[{group}]=\"English (US)\";\n}};\n");
+            assert_eq!(
+                first_group_name(&format!("{types}{symbols}")),
+                "English (US)",
+                "written as name[{group}]"
+            );
+        }
+    }
 
     #[test]
     fn a_buffer_drawn_on_its_side_is_the_window_on_its_side() {
