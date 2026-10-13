@@ -57,8 +57,8 @@ in {
     # screen show the battery. NixOS enables it only for desktops that ask.
     services.upower.enable = lib.mkDefault true;
 
-    # Named by `lock.pam_service = "domicile"`. A desk whose PAM service is
-    # missing fails to start.
+    # The PAM service that unlocks a desk unless `lock.pam_service` names
+    # another. Without it, a locked desk opens to nothing.
     security.pam.services.domicile = {};
 
     # The engine and compositor ask for nice -8 on the threads that draw and

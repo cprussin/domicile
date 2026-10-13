@@ -1,9 +1,20 @@
 # Idle blanking
 
 The compositor turns the screens off after `idle.blank_after_seconds` without
-input. If `lock` is configured, the desktop locks at the same moment
+input, and locks the desktop after `idle.lock_after_seconds`
 ([LOCK.md](LOCK.md)). What a shell does with this:
 [SHELL-IDLE-AND-LOCK.md](SHELL-IDLE-AND-LOCK.md#idle).
+
+## Two clocks
+
+- Both timeouts count from the same last input, and the same inhibitors hold
+  both off. Either may be the shorter.
+- Blanking does not lock. Without `lock_after_seconds` the desktop locks only
+  when the shell calls `lock()`.
+- `Idle::lock_due` reports the lock edge once per spell without input. The
+  timer, and any inhibitor change, checks it before a modeset, so the lock
+  screen is up before a screen lights.
+- Releasing the last inhibitor after either timeout acts at once.
 
 ## Blanking
 

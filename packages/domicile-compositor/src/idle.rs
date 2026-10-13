@@ -1,4 +1,5 @@
-//! Decides when the desktop is idle and its screens should blank.
+//! Decides when the desktop is idle: when its screens should blank, and when
+//! it should lock.
 //!
 //! This module is pure logic over the current time and the surfaces with
 //! windows, so it can be tested without a clock, a display or Wayland.
@@ -16,8 +17,9 @@
 //!   [`Idle::held_by_portals`].
 //! - The shell gets the state, not the edge, since a reloaded page missed
 //!   earlier edges. See [`announced`].
-//! - Blanking does not block input. The dark edge also engages
-//!   [`crate::lock`], which does.
+//! - `idle.lock_after_seconds` runs a second clock from the same input and
+//!   inhibitors. [`Idle::lock_due`] reports its edge, and the compositor
+//!   engages [`crate::lock`]. Blanking itself does not block input.
 
 use std::time::{Duration, Instant};
 
@@ -60,13 +62,18 @@ pub trait StillThere {
 
 /// The idle timer and the inhibitors holding it off.
 ///
-/// Exists only when the config sets a timeout. Without one (`IdleConfig`'s
-/// `None`) the screens never blank.
+/// Exists only when the config sets a blank or lock timeout. Without one the
+/// screens never blank and the desktop locks only when its shell asks.
 pub struct Idle<S> {
-    blank_after: Duration,
+    /// `None` for screens that never blank.
+    blank_after: Option<Duration>,
     /// How long before the timeout the shell is warned, if at all. Less than
     /// `blank_after`, which `IdleConfig` checks.
     warn_before: Option<Duration>,
+    /// `None` for a desktop that locks only when its shell asks.
+    lock_after: Option<Duration>,
+    /// Whether [`Idle::lock_due`] has fired since the last input.
+    locked_since_stirred: bool,
     /// The last input, or creation time if there has been none.
     stirred_at: Instant,
     stage: Stage,
@@ -81,9 +88,11 @@ pub struct Idle<S> {
 
 impl<S: StillThere + PartialEq> Idle<S> {
     pub fn after(idle: &IdleConfig, now: Instant) -> Option<Idle<S>> {
-        idle.blank_after().map(|blank_after| Idle {
-            blank_after,
+        (idle.blank_after().is_some() || idle.lock_after().is_some()).then(|| Idle {
+            blank_after: idle.blank_after(),
             warn_before: idle.warn_before(),
+            lock_after: idle.lock_after(),
+            locked_since_stirred: false,
             stirred_at: now,
             stage: Stage::Lit,
             inhibitors: Vec::new(),
@@ -95,6 +104,7 @@ impl<S: StillThere + PartialEq> Idle<S> {
     /// warning off.
     pub fn stirred(&mut self, now: Instant) -> Option<Blanking> {
         self.stirred_at = now;
+        self.locked_since_stirred = false;
         let was = self.stage;
         self.stage = Stage::Lit;
         match was {
@@ -114,6 +124,22 @@ impl<S: StillThere + PartialEq> Idle<S> {
         } else {
             self.settle(now, on_the_desktop)
         }
+    }
+
+    /// Whether the desktop should lock now: `true` once for each spell
+    /// without input that outlasts `idle.lock_after_seconds`.
+    ///
+    /// Inhibitors hold it off as they hold off blanking, and releasing the
+    /// last one after the timeout locks at once. Called after every client
+    /// dispatch, so it lists the desktop only once the timeout has passed.
+    pub fn lock_due(&mut self, now: Instant, on_the_desktop: impl FnOnce() -> Vec<S>) -> bool {
+        let due = !self.locked_since_stirred
+            && self
+                .lock_after
+                .is_some_and(|lock_after| now.duration_since(self.stirred_at) >= lock_after)
+            && !self.held(&on_the_desktop());
+        self.locked_since_stirred |= due;
+        due
     }
 
     /// Adds an inhibitor. `Some` only when this lights a dark desktop.
@@ -196,6 +222,12 @@ impl<S: StillThere + PartialEq> Idle<S> {
         self
     }
 
+    /// Whether the screens ever blank. A desktop that only locks says nothing
+    /// to the shell about idleness.
+    pub fn blanks(&self) -> bool {
+        self.blank_after.is_some()
+    }
+
     /// Whether the screens are off.
     ///
     /// Callers that configure connectors for other reasons (hotplug, reload)
@@ -206,30 +238,42 @@ impl<S: StillThere + PartialEq> Idle<S> {
 
     /// When the screens go dark, while the shell is being warned of it.
     pub fn blanks_at(&self) -> Option<Instant> {
-        (self.stage == Stage::Warned).then(|| self.stirred_at + self.blank_after)
+        self.blank_after
+            .filter(|_| self.stage == Stage::Warned)
+            .map(|blank_after| self.stirred_at + blank_after)
     }
 
     /// The delay before the timer should fire again.
     ///
-    /// The next of the warning and the timeout still to come, so an inhibitor
-    /// released between them still blanks on time. When dark, or when
-    /// inhibited past both, it is the time from input to its first check:
-    /// input resets the clock without re-arming the timer, so the timer must
-    /// come round before that input's warning. It is never zero, which would
-    /// spin the event loop.
+    /// The soonest of the warning, the blanking and the lock still to come, so
+    /// an inhibitor released between them still acts on time. When none is to
+    /// come, it is the time from input to its first check: input resets the
+    /// clock without re-arming the timer, so the timer must come round before
+    /// that input's first deadline. It is never zero, which would spin the
+    /// event loop.
     pub fn next_check(&self, now: Instant) -> Duration {
-        let first_check = self.blank_after - self.warn_before.unwrap_or_default();
-        let warns_at = self.stirred_at + first_check;
-        let blanks_at = self.stirred_at + self.blank_after;
-        let still_to_come: &[Instant] = match self.stage {
-            Stage::Lit => &[warns_at, blanks_at],
-            Stage::Warned => &[blanks_at],
-            Stage::Dark => &[],
+        let warns_after = self
+            .blank_after
+            .map(|blank_after| blank_after - self.warn_before.unwrap_or_default());
+        let first_check = [warns_after, self.lock_after]
+            .into_iter()
+            .flatten()
+            .min()
+            .expect("a clock has a blank or a lock timeout");
+        let blanking_to_come = match self.stage {
+            Stage::Lit => [warns_after, self.blank_after],
+            Stage::Warned => [None, self.blank_after],
+            Stage::Dark => [None, None],
         };
-        still_to_come
-            .iter()
-            .find(|at| **at > now)
-            .map_or(first_check, |at| *at - now)
+        let locking_to_come = self.lock_after.filter(|_| !self.locked_since_stirred);
+        blanking_to_come
+            .into_iter()
+            .chain([locking_to_come])
+            .flatten()
+            .map(|after| self.stirred_at + after)
+            .filter(|at| *at > now)
+            .min()
+            .map_or(first_check, |at| at - now)
     }
 
     /// Updates the state and returns the edge, if any.
@@ -258,23 +302,28 @@ impl<S: StillThere + PartialEq> Idle<S> {
     /// [`holds`].
     fn due(&self, now: Instant, on_the_desktop: &[S]) -> Stage {
         let still = now.duration_since(self.stirred_at);
-        let held = self.held_by_portals
+        match self.blank_after {
+            None => Stage::Lit,
+            Some(_) if self.held(on_the_desktop) => Stage::Lit,
+            Some(blank_after) if still >= blank_after => Stage::Dark,
+            Some(blank_after)
+                if self
+                    .warn_before
+                    .is_some_and(|warn_before| still >= blank_after - warn_before) =>
+            {
+                Stage::Warned
+            }
+            Some(_) => Stage::Lit,
+        }
+    }
+
+    /// Whether an inhibitor holds the desktop awake.
+    fn held(&self, on_the_desktop: &[S]) -> bool {
+        self.held_by_portals
             || self
                 .inhibitors
                 .iter()
-                .any(|inhibitor| holds(inhibitor, on_the_desktop));
-        let warned = self
-            .warn_before
-            .is_some_and(|warn_before| still >= self.blank_after - warn_before);
-        if held {
-            Stage::Lit
-        } else if still >= self.blank_after {
-            Stage::Dark
-        } else if warned {
-            Stage::Warned
-        } else {
-            Stage::Lit
-        }
+                .any(|inhibitor| holds(inhibitor, on_the_desktop))
     }
 }
 
@@ -434,6 +483,7 @@ mod tests {
             &IdleConfig {
                 blank_after_seconds: Some(AFTER.as_secs()),
                 warn_before_seconds: None,
+                lock_after_seconds: None,
             },
             start,
         )
@@ -446,10 +496,29 @@ mod tests {
             &IdleConfig {
                 blank_after_seconds: Some(AFTER.as_secs()),
                 warn_before_seconds: Some(WARNING.as_secs()),
+                lock_after_seconds: None,
             },
             start,
         )
         .expect("a timeout was stated")
+    }
+
+    /// A timer that locks after `lock_after` and blanks after `blank_after`,
+    /// if at all, starting at `start`.
+    fn locking_desk(
+        blank_after: Option<Duration>,
+        lock_after: Duration,
+        start: Instant,
+    ) -> Idle<Inhibitor> {
+        Idle::after(
+            &IdleConfig {
+                blank_after_seconds: blank_after.map(|after| after.as_secs()),
+                warn_before_seconds: None,
+                lock_after_seconds: Some(lock_after.as_secs()),
+            },
+            start,
+        )
+        .expect("a lock timeout was stated")
     }
 
     /// A desktop with a window on `surface`.
@@ -474,6 +543,83 @@ mod tests {
     #[test]
     fn a_desktop_that_states_no_timeout_has_nothing_to_watch() {
         assert!(Idle::<Inhibitor>::after(&IdleConfig::default(), Instant::now()).is_none());
+    }
+
+    #[test]
+    fn a_desktop_that_only_locks_has_a_clock_and_never_goes_dark() {
+        let start = Instant::now();
+        let mut idle = locking_desk(None, AFTER, start);
+        assert_eq!(idle.next_check(start), AFTER);
+        assert!(!idle.lock_due(start + AFTER / 2, || SHOWING_NOTHING.to_vec()));
+        assert!(idle.lock_due(start + AFTER, || SHOWING_NOTHING.to_vec()));
+        assert_eq!(idle.elapsed(start + AFTER * 2, SHOWING_NOTHING), None);
+        assert!(!idle.dark());
+    }
+
+    #[test]
+    fn a_desktop_that_only_blanks_never_locks_on_its_own() {
+        let start = Instant::now();
+        let mut idle = desk(start);
+        idle.elapsed(start + AFTER, SHOWING_NOTHING);
+        assert!(!idle.lock_due(start + AFTER * 10, || SHOWING_NOTHING.to_vec()));
+    }
+
+    #[test]
+    fn the_lock_comes_once_for_each_spell_without_input() {
+        // Shutting a locked desk again would redraw the lock screen.
+        let start = Instant::now();
+        let mut idle = locking_desk(None, AFTER, start);
+        assert!(idle.lock_due(start + AFTER, || SHOWING_NOTHING.to_vec()));
+        assert!(!idle.lock_due(start + AFTER * 2, || SHOWING_NOTHING.to_vec()));
+
+        let back = start + AFTER * 3;
+        idle.stirred(back);
+        assert!(!idle.lock_due(back + AFTER / 2, || SHOWING_NOTHING.to_vec()));
+        assert!(idle.lock_due(back + AFTER, || SHOWING_NOTHING.to_vec()));
+    }
+
+    #[test]
+    fn a_lock_sooner_than_blanking_locks_a_lit_desktop_then_blanks_it() {
+        let start = Instant::now();
+        let lock_after = AFTER / 2;
+        let mut idle = locking_desk(Some(AFTER), lock_after, start);
+        assert_eq!(idle.next_check(start), lock_after);
+
+        assert_eq!(idle.elapsed(start + lock_after, SHOWING_NOTHING), None);
+        assert!(idle.lock_due(start + lock_after, || SHOWING_NOTHING.to_vec()));
+        assert_eq!(idle.next_check(start + lock_after), AFTER - lock_after);
+        assert_eq!(
+            idle.elapsed(start + AFTER, SHOWING_NOTHING),
+            Some(Blanking::GoDark)
+        );
+    }
+
+    #[test]
+    fn a_lock_later_than_blanking_locks_a_dark_desktop() {
+        let start = Instant::now();
+        let lock_after = AFTER * 2;
+        let mut idle = locking_desk(Some(AFTER), lock_after, start);
+        assert_eq!(
+            idle.elapsed(start + AFTER, SHOWING_NOTHING),
+            Some(Blanking::GoDark)
+        );
+        assert!(!idle.lock_due(start + AFTER, || SHOWING_NOTHING.to_vec()));
+        assert_eq!(idle.next_check(start + AFTER), lock_after - AFTER);
+        assert!(idle.lock_due(start + lock_after, || SHOWING_NOTHING.to_vec()));
+    }
+
+    #[test]
+    fn a_film_holds_the_lock_off_and_its_end_locks_at_once() {
+        // The same veto as for blanking: nobody touching a desk playing a
+        // video is still watching it.
+        let start = Instant::now();
+        let mut idle = locking_desk(None, AFTER, start);
+        let film = Inhibitor::on(1);
+        idle.inhibited_by(film.clone(), start, &showing(1));
+        assert!(!idle.lock_due(start + AFTER, || showing(1).to_vec()));
+
+        idle.uninhibited_by(&film, start + AFTER * 2, &showing(1));
+        assert!(idle.lock_due(start + AFTER * 2, || showing(1).to_vec()));
     }
 
     #[test]

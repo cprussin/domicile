@@ -114,9 +114,8 @@ platform. CI only checks that this evaluates.
 
 ## PAM lock
 
-Import `nixosModules.default` and set `programs.domicile.enable`,
-`lock.pam_service = "domicile"` and `idle.blank_after_seconds = 60`. Leave the
-machine until it locks.
+Import `nixosModules.default` and set `programs.domicile.enable` and
+`idle.lock_after_seconds = 60`. Leave the machine until it locks.
 
 - Your password gives `the passphrase opened this desktop`.
 - A wrong password gives `a passphrase this desktop did not take` a couple of

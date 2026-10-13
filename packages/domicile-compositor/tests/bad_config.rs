@@ -38,35 +38,6 @@ fn a_config_that_will_not_load_is_a_sentence_that_names_its_file() {
     );
 }
 
-/// A lock PAM service missing from the machine is fatal, and the error says
-/// what to declare.
-///
-/// The config parses; the machine lacks the service. Starting anyway would
-/// leave the desk unlocked or behind PAM's `other` stack. This reads the real
-/// `/etc/pam.d`, which has no service by this name.
-#[test]
-fn a_desk_whose_pam_service_the_machine_lacks_says_what_to_declare() {
-    let directory = tempfile::tempdir().expect("a directory");
-    let config = directory.path().join("domicile.json");
-    let service = "domicile-a-service-no-machine-declares";
-    std::fs::write(
-        &config,
-        format!(r#"{{ "lock": {{ "pam_service": "{service}" }} }}"#),
-    )
-    .expect("the config");
-
-    let said = refusal(&config);
-
-    assert!(
-        said.contains(&format!("/etc/pam.d/{service}")),
-        "it should name the file PAM would read: {said}"
-    );
-    assert!(
-        said.contains(&format!("security.pam.services.{service} = {{}};")),
-        "and what a NixOS machine declares to have one: {said}"
-    );
-}
-
 /// A `keybindings` table is refused by name, since shells own key bindings
 /// and the keys would otherwise do nothing.
 #[test]

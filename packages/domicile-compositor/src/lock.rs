@@ -13,23 +13,20 @@
 //! The idle timeout ([`crate::idle`]) or `ChromeMessage::Lock` locks the
 //! desktop. See `docs/LOCK.md`.
 
-use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Instant;
 
-use domicile_config::LockVerifier;
 use domicile_host::system::Reach;
 use domicile_host::unlock_refusals::Refused;
 use domicile_protocol::{HostMessage, Passphrase, UnlockRefusal};
 
 use crate::chrome_connection::ConnectionRequest;
 use crate::client_requests::ClientRequest;
-use crate::pam::{NoPam, Pam};
-use crate::passphrase_hash::{NoHash, PassphraseHash};
 use crate::unlock_backoff::Backoff;
 
-/// Checks whether a passphrase unlocks the desktop.
+/// Checks whether a passphrase unlocks the desktop: [`crate::pam::Pam`] on a
+/// real desk.
 ///
 /// May block (PAM delays on a wrong password), so [`Lock::offered`] calls it on
 /// its own thread. It takes a [`Passphrase`] rather than a `&str` so the value
@@ -50,50 +47,6 @@ pub type Verdict = Result<bool, CouldNotCheck>;
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{0}")]
 pub struct CouldNotCheck(pub String);
-
-/// Builds the verifier the config names, or `None` when it names none.
-///
-/// `None` means no lock at all. A lock that refused everything would lock
-/// itself on idle and never open again.
-///
-/// Returns `Err` when the config asks for PAM and the service file is missing
-/// in `pam_confdir` ([`crate::pam::SERVICES`] in production), or states a hash
-/// libcrypt refuses. At startup the compositor then fails to start rather than
-/// run without its lock. On a reload it refuses the change and keeps the
-/// current lock.
-pub fn chosen(
-    stated: Option<LockVerifier<'_>>,
-    pam_confdir: &Path,
-) -> Result<Option<Box<dyn Verifier>>, NoVerifier> {
-    match stated {
-        None => Ok(None),
-        Some(LockVerifier::PassphraseHash(hash)) => {
-            Ok(Some(Box::new(PassphraseHash::checked(hash)?)))
-        }
-        Some(LockVerifier::Pam { service }) => {
-            Ok(Some(Box::new(Pam::for_this_user(service, pam_confdir)?)))
-        }
-    }
-}
-
-/// Why the verifier the config names cannot be used.
-#[derive(Debug, thiserror::Error)]
-pub enum NoVerifier {
-    #[error(transparent)]
-    Pam(#[from] NoPam),
-    #[error(transparent)]
-    Hash(#[from] NoHash),
-}
-
-/// What a reload's [`Lock::rekeyed`] did with the new verifier.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Rekeying {
-    /// The new verifier, or none, is in place.
-    Applied,
-    /// The config removed the verifier while the desktop is locked. The old one
-    /// stays until it unlocks the desktop.
-    OnceOpened,
-}
 
 /// What offering a passphrase started.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -154,13 +107,9 @@ impl State {
 
 /// The screen lock and the verifier that opens it.
 ///
-/// Without a verifier (see [`chosen`]) the desktop never locks.
-///
 /// `state` is shared with every [`Seen`]; only `Lock` changes it.
 pub struct Lock {
-    verifier: Option<Arc<dyn Verifier>>,
-    /// Drop `verifier` once it opens the desktop. See [`Rekeying::OnceOpened`].
-    retiring: bool,
+    verifier: Arc<dyn Verifier>,
     answer: Arc<dyn Fn(Verdict) + Send + Sync>,
     state: Arc<Mutex<State>>,
     backoff: Backoff,
@@ -172,45 +121,28 @@ impl Lock {
     /// `answer` receives each verdict on the verifier's thread. The compositor
     /// sends it to its event loop, which passes it to [`Lock::answered`].
     pub fn held_by(
-        verifier: Option<Box<dyn Verifier>>,
+        verifier: Box<dyn Verifier>,
         answer: impl Fn(Verdict) + Send + Sync + 'static,
     ) -> Lock {
         Lock {
-            verifier: verifier.map(Arc::from),
-            retiring: false,
+            verifier: Arc::from(verifier),
             answer: Arc::new(answer),
             state: Arc::new(Mutex::new(State::Open)),
             backoff: Backoff::default(),
         }
     }
 
-    /// Whether a verifier is configured, so the desktop can lock.
-    pub fn can_lock(&self) -> bool {
-        self.verifier.is_some()
-    }
-
     /// Replaces the verifier with the one a reloaded config names.
     ///
     /// Never unlocks. A check already running cannot unlock either: the
     /// passphrase was checked against a verifier the config no longer names.
-    /// Removing the verifier while locked keeps it until it opens the desktop,
-    /// since nothing else could. The wait after refused passphrases stays.
-    pub fn rekeyed(&mut self, verifier: Option<Box<dyn Verifier>>) -> Rekeying {
+    /// The wait after refused passphrases stays.
+    pub fn rekeyed(&mut self, verifier: Box<dyn Verifier>) {
         let mut state = self.state.lock().unwrap();
-        match (verifier, &mut *state) {
-            (None, State::Shut | State::Checking { .. }) => {
-                self.retiring = true;
-                Rekeying::OnceOpened
-            }
-            (verifier, state) => {
-                if let State::Checking { overtaken } = state {
-                    *overtaken = true;
-                }
-                self.verifier = verifier.map(Arc::from);
-                self.retiring = false;
-                Rekeying::Applied
-            }
+        if let State::Checking { overtaken } = &mut *state {
+            *overtaken = true;
         }
+        self.verifier = Arc::from(verifier);
     }
 
     /// Whether the desktop is locked. See [`State::locked`].
@@ -223,8 +155,7 @@ impl Lock {
         Seen(Arc::clone(&self.state))
     }
 
-    /// Locks the desktop. Returns `true` only when it was unlocked and a
-    /// verifier can open it again.
+    /// Locks the desktop. Returns `true` only when it was unlocked.
     ///
     /// Blanking can repeat while locked. Sending `locked: true` again would
     /// make the shell redraw its lock screen and could discard a half-typed
@@ -232,11 +163,11 @@ impl Lock {
     pub fn shut(&mut self) -> bool {
         let mut state = self.state.lock().unwrap();
         match *state {
-            State::Open if self.can_lock() => {
+            State::Open => {
                 *state = State::Shut;
                 true
             }
-            State::Open | State::Shut | State::Checking { .. } => false,
+            State::Shut | State::Checking { .. } => false,
         }
     }
 
@@ -264,11 +195,7 @@ impl Lock {
             }),
             State::Shut => {
                 *state = State::Checking { overtaken: false };
-                let verifier = Arc::clone(
-                    self.verifier
-                        .as_ref()
-                        .expect("a shut desk has a verifier to open it"),
-                );
+                let verifier = Arc::clone(&self.verifier);
                 let answer = Arc::clone(&self.answer);
                 // Moved into the check and dropped when it ends, so no copy
                 // outlives the verdict.
@@ -295,10 +222,6 @@ impl Lock {
             State::Checking { overtaken } => match verdict {
                 Ok(true) if !overtaken => {
                     *state = State::Open;
-                    if self.retiring {
-                        self.verifier = None;
-                        self.retiring = false;
-                    }
                     self.backoff.opened();
                     Unlocking::Opened
                 }
@@ -477,19 +400,17 @@ pub fn announced(locked: bool) -> HostMessage {
 mod tests {
     use domicile_protocol::{HostMessage, Passphrase, PortalAnswer, Theme, TrayAction};
 
-    use std::path::Path;
     use std::sync::mpsc;
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
 
-    use domicile_config::LockVerifier;
     use domicile_host::system::Reach;
     use domicile_host::unlock_refusals::Refused;
     use domicile_protocol::UnlockRefusal;
 
     use super::{
-        announced, chosen, refused, Asked, CouldNotCheck, Lock, Offer, Refusal, Rekeying,
-        Unlocking, Verdict, Verifier,
+        announced, refused, Asked, CouldNotCheck, Lock, Offer, Refusal, Unlocking, Verdict,
+        Verifier,
     };
     use crate::chrome_connection::ConnectionRequest;
     use crate::client_requests::ClientRequest;
@@ -513,7 +434,7 @@ mod tests {
     /// compositor.
     fn held_by(verifier: impl Verifier + 'static) -> (Lock, mpsc::Receiver<Verdict>) {
         let (told, heard) = mpsc::channel();
-        let lock = Lock::held_by(Some(Box::new(verifier)), move |verdict| {
+        let lock = Lock::held_by(Box::new(verifier), move |verdict| {
             told.send(verdict).expect("the test is listening")
         });
         (lock, heard)
@@ -549,79 +470,6 @@ mod tests {
             failures,
             retry_in: Duration::from_secs(retry_in),
         }
-    }
-
-    #[test]
-    fn a_desk_that_states_no_verifier_has_no_lock_at_all() {
-        // A lock that refused everything would lock on idle and never open.
-        assert!(chosen(None, Path::new("/nonexistent"))
-            .expect("nothing stated is nothing to fail")
-            .is_none());
-    }
-
-    #[test]
-    fn the_passphrase_the_configured_hash_was_made_from_opens_the_desk() {
-        // `mkpasswd "open sesame"`.
-        let verifier = chosen(
-            Some(LockVerifier::PassphraseHash(
-                "$y$j9T$mMzyBSKNKxkbivH7ik1.T.$iM4gXKt2j/qEPlwG5bMwAYPJa15M//yqCKSEin8n0P/",
-            )),
-            Path::new("/nonexistent"),
-        )
-        .expect("a hash needs only libcrypt from the machine")
-        .expect("a hash was stated");
-        assert_eq!(
-            verifier.opens_the_desk(&Passphrase::from("open sesame")),
-            Ok(true)
-        );
-        assert_eq!(
-            verifier.opens_the_desk(&Passphrase::from("open sesam")),
-            Ok(false)
-        );
-    }
-
-    #[test]
-    fn a_desk_whose_hash_libcrypt_refuses_does_not_come_up() {
-        // A passphrase pasted in plain text, and md5crypt, which libxcrypt
-        // calls legacy or leaves out. A desk that could never open, or one a
-        // copy of its config opens in seconds, is refused.
-        for hash in ["open sesame", "$1$saltsalt$qjXMvbEw8oaL.CzflDugX/"] {
-            let Err(why) = chosen(
-                Some(LockVerifier::PassphraseHash(hash)),
-                Path::new("/nonexistent"),
-            ) else {
-                panic!("{hash} is refused");
-            };
-            let said = why.to_string();
-            assert!(said.contains("mkpasswd"), "it says how to make one: {said}");
-            assert!(!said.contains(hash), "it does not print the value: {said}");
-        }
-    }
-
-    #[test]
-    fn a_desk_that_asked_for_a_pam_service_the_machine_lacks_does_not_come_up() {
-        // Linux-PAM falls back to the `other` stack for a missing service,
-        // which denies everything on some distributions and allows a normal
-        // login on others. Neither is what the config asked for, so fail with
-        // a message that says what to declare.
-        let confdir = tempfile::tempdir().expect("a directory");
-        let Err(why) = chosen(
-            Some(LockVerifier::Pam {
-                service: "domicile",
-            }),
-            confdir.path(),
-        ) else {
-            panic!("a PAM service with no file behind it is refused");
-        };
-        let said = why.to_string();
-        assert!(
-            said.contains(&confdir.path().join("domicile").display().to_string()),
-            "it names the file it looked for: {said}"
-        );
-        assert!(
-            said.contains("security.pam.services.domicile = {};"),
-            "and what a NixOS machine has to declare: {said}"
-        );
     }
 
     #[test]
@@ -820,31 +668,11 @@ mod tests {
     }
 
     #[test]
-    fn a_desk_with_no_verifier_shuts_only_once_a_reload_gives_it_one() {
-        let (told, _heard) = mpsc::channel();
-        let mut lock = Lock::held_by(None, move |verdict| {
-            told.send(verdict).expect("the test is listening")
-        });
-        assert!(!lock.can_lock());
-        assert!(!lock.shut(), "a lock nothing opens would never open");
-
-        assert_eq!(
-            lock.rekeyed(Some(Box::new(OnlyTheWord("friend")))),
-            Rekeying::Applied
-        );
-        assert!(lock.can_lock());
-        assert!(lock.shut());
-    }
-
-    #[test]
     fn a_shut_desk_opens_to_the_reloaded_verifier_only() {
         let (mut lock, heard) = desk();
         lock.shut();
 
-        assert_eq!(
-            lock.rekeyed(Some(Box::new(OnlyTheWord("enemy")))),
-            Rekeying::Applied
-        );
+        lock.rekeyed(Box::new(OnlyTheWord("enemy")));
         assert!(lock.locked(), "a reload never opens the desk");
         assert_eq!(
             offer(&mut lock, &heard, "friend"),
@@ -864,7 +692,7 @@ mod tests {
             Offer::Checking
         );
 
-        lock.rekeyed(Some(Box::new(OnlyTheWord("enemy"))));
+        lock.rekeyed(Box::new(OnlyTheWord("enemy")));
         let verdict = heard
             .recv_timeout(Duration::from_secs(10))
             .expect("the verifier answers");
@@ -888,26 +716,12 @@ mod tests {
             offer_at(&mut lock, &heard, "enemy", then);
         }
 
-        lock.rekeyed(Some(Box::new(OnlyTheWord("friend"))));
+        lock.rekeyed(Box::new(OnlyTheWord("friend")));
 
         assert_eq!(
             lock.offered(&Passphrase::from("friend"), then + Duration::from_secs(2)),
             Offer::TooSoon(told(UnlockRefusal::TooSoon, 3, 3))
         );
-    }
-
-    #[test]
-    fn a_verifier_removed_while_shut_still_opens_the_desk_then_goes() {
-        // Dropping it at once would leave nothing able to open the desk.
-        let (mut lock, heard) = desk();
-        lock.shut();
-
-        assert_eq!(lock.rekeyed(None), Rekeying::OnceOpened);
-        assert!(lock.locked(), "a reload never opens the desk");
-        assert_eq!(offer(&mut lock, &heard, "friend"), Unlocking::Opened);
-
-        assert!(!lock.can_lock());
-        assert!(!lock.shut());
     }
 
     #[test]

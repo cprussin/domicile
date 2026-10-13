@@ -1,9 +1,11 @@
 # The screen lock
 
-A desktop with `lock` configured locks when the screens blank
-([IDLE.md](IDLE.md)). While locked, nothing the chrome forwards reaches a
-client, and nothing it asks of the desktop is done. What a shell does with
-this: [SHELL-IDLE-AND-LOCK.md](SHELL-IDLE-AND-LOCK.md#locking).
+The desktop locks after `idle.lock_after_seconds` without input
+([IDLE.md](IDLE.md#two-clocks)) or when the shell calls `lock()`, and the
+user's password unlocks it. While locked, nothing the
+chrome forwards reaches a client, and nothing it asks of the desktop is done.
+What a shell does with this:
+[SHELL-IDLE-AND-LOCK.md](SHELL-IDLE-AND-LOCK.md#locking).
 
 ## Where the lock is enforced
 
@@ -90,40 +92,37 @@ library sends; the libraries' tests and the allowlist's both check it.
 
 ## Verifiers
 
-`crate::lock::Verifier` checks a passphrase. The config picks one:
+`crate::lock::Verifier` checks a passphrase. On a desk it is `crate::pam`:
+`pam_authenticate` for the compositor's uid, through `lock.pam_service`, or
+`domicile` when unset.
 
-| `lock` setting | Verifier | Note |
-|---|---|---|
-| `"pam_service": "domicile"` | `crate::pam`: `pam_authenticate` as the compositor's uid | The machine must declare the service: `nixosModules.default`, or `security.pam.services.domicile = {};`. A home-manager module cannot |
-| `"passphrase_hash": "$y$…"` | `crate::passphrase_hash`: libxcrypt's `crypt_rn`, then a constant-time compare | A crypt(3) hash from `mkpasswd`, as NixOS's `hashedPassword` takes. The config is world-readable, so it holds only the hash |
-| neither | none | The desktop never locks |
-| both | refused at parse | Neither is a fallback for the other |
+The machine declares the service; a home-manager module cannot:
 
-`lock.passphrase_hash`:
+- **NixOS:** `nixosModules.default`, or `security.pam.services.domicile = {};`.
+- **Distribution packages** install `/etc/pam.d/domicile` (`distro/pam/`).
+- **Anywhere else**, add `/etc/pam.d/domicile`: copy the file for your
+  distribution from `distro/pam/`. Each includes the distribution's password
+  stack.
 
-- `crypt_checksalt` judges the hash when the config is read. Only
-  `CRYPT_SALT_OK` is taken: a hash libxcrypt cannot read, or whose method it
-  calls disabled, legacy (MD5, DES) or too cheap, is refused. A world-readable
-  weak hash is quick to crack.
-- libcrypt is loaded with `dlopen`: `libcrypt.so.2` (NixOS, Fedora, Arch), else
-  `libcrypt.so.1` (Debian, openSUSE). It needs libxcrypt 4.3 or later.
+Without the file the desktop still locks, and nothing unlocks it. See
+[Failures fail closed](#failures-fail-closed).
+
+Tests inject their own verifier: unit tests pass one to `Lock::held_by`, and
+`tests/running` starts the compositor with `--pam-confdir` pointing at a
+`pam_exec` service of its own.
 
 ## Reloading
 
-A reload that changes `lock` swaps the verifier (`Lock::rekeyed`). It never
-unlocks the desktop.
+A reload that changes `lock.pam_service` swaps the verifier
+(`Lock::rekeyed`). It never unlocks the desktop.
 
-- **A new verifier** checks the next passphrase. A check already running
+- **The new service** checks the next passphrase. A check already running
   against the old one cannot unlock: its `Ok(true)` is refused, but not
   counted as a wrong passphrase.
 - **The wait** after refused passphrases is kept
   ([Refusals and the wait](#refusals-and-the-wait)).
-- **A removed verifier** at a locked desktop is kept until it unlocks the
-  desktop, then dropped. Dropping it at once would leave nothing able to
-  unlock.
-- **A PAM service the machine lacks**, or a hash libxcrypt refuses, is refused
-  and logged. The current lock stays. Nothing retries until `lock` changes
-  again, so fix the machine and edit `lock`, or restart.
+- **A machine without libpam** refuses the reload and logs it. The current lock
+  stays.
 
 ## Checking a passphrase
 
@@ -132,8 +131,8 @@ unlocks the desktop.
   `heard_the_verdict`, which calls `Lock::answered`.
 - The desktop stays locked during the check. A second `unlock` during a check is
   dropped.
-- A passphrase containing NUL is refused before PAM or libcrypt sees it. C
-  would read only the part before the NUL.
+- A passphrase containing NUL is refused before PAM sees it. C would read only
+  the part before the NUL.
 - `domicile_protocol::Passphrase` does not print itself, so no log line holds
   what was typed. Linux-PAM overwrites its copy before freeing it.
 - A refusal sends `SystemEvent::UnlockRefused` to every page listening with
@@ -170,12 +169,12 @@ Only `PAM_AUTH_ERR` means a wrong passphrase. Any other PAM failure is
 
 | When | Missing | Result |
 |---|---|---|
-| Startup | `/etc/pam.d/<service>` | The compositor exits, naming the file and what to declare. Linux-PAM would otherwise fall back to its `other` service |
-| Startup | `libpam.so.0` or its `pam_start_confdir` | The compositor exits, naming the library. PAM is loaded with `dlopen`, so a desktop without PAM needs none |
+| Startup or reload | `/etc/pam.d/<service>` | An error names the file and what to declare. The desktop starts and locks as usual |
+| Each attempt | `/etc/pam.d/<service>` | `Unverifiable`, naming the file. Adding the file fixes the next attempt, without a restart. Linux-PAM would otherwise fall back to its `other` service |
+| Startup | `libpam.so.0` or its `pam_start_confdir` | The compositor exits, naming the library |
 | Startup | a user for the uid | The compositor exits |
-| Startup | libxcrypt, or a `lock.passphrase_hash` it takes | The compositor exits, naming the library or why the hash is refused, and not the hash |
-| Each attempt | `crypt_rn` fails | `Unverifiable` |
-| Each attempt | `/etc/pam.d/<service>` removed | `Unverifiable` |
+
+A desktop without libpam or a user cannot lock, so it does not start.
 
 `pam_start_confdir` gets `/etc/pam.d` explicitly, so the checked directory and
 the read directory match.
@@ -184,6 +183,7 @@ the read directory match.
 
 ```
 nobody is at this desktop; it locks itself
+nothing holds this desktop awake now; it locks itself
 this desktop is locked; what the shell forwarded reaches no client
 this desktop is locked; what the shell asked for is not done
 checking a passphrase; the desk stays locked meanwhile
@@ -191,8 +191,7 @@ a passphrase this desktop did not take; it stays locked
 a passphrase offered during the wait after refused ones; it was not checked
 the passphrase opened this desktop
 this desktop could not check a passphrase, so it stays locked
+this desktop locks, and cannot be unlocked until the file is added
 taking up a reloaded lock
-the reloaded config removes the lock; this desktop no longer locks
-the reloaded config removes the lock while this desktop is locked; it stays locked until the current passphrase opens it
 the reloaded lock cannot be used; the current one stays
 ```

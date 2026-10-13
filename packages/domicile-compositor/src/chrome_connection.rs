@@ -647,7 +647,7 @@ mod tests {
     use crate::chrome_hub::{Chrome, ChromeHub};
     use crate::client_requests::ClientRequest;
     use crate::file_indexing::Offered;
-    use crate::lock::{Lock, Offer, Unlocking};
+    use crate::lock::{Lock, Offer, Unlocking, Verdict, Verifier};
     use crate::portals::Portals;
 
     #[test]
@@ -738,17 +738,15 @@ mod tests {
             search: domicile_host::file_search::FileSearch::new(vec!["plan.org".into()]),
             indexing: false,
         }));
-        let verifier = crate::lock::chosen(
-            // `mkpasswd friend`.
-            Some(domicile_config::LockVerifier::PassphraseHash(
-                "$y$j9T$0jTZN1rZSlhdm48mn5lVm/$Bb0mHOJ7gIqNJGkYTVpSIRqSPVJtoJRORWwsQ9pmsZ/",
-            )),
-            std::path::Path::new("/nonexistent"),
-        )
-        .expect("a hash needs only libcrypt from the machine")
-        .expect("a hash was stated");
+        /// Opens to `"friend"`.
+        struct Friendly;
+        impl Verifier for Friendly {
+            fn opens_the_desk(&self, passphrase: &Passphrase) -> Verdict {
+                Ok(passphrase.as_str() == "friend")
+            }
+        }
         let (told, heard) = std::sync::mpsc::channel();
-        let mut lock = Lock::held_by(Some(verifier), move |verdict| {
+        let mut lock = Lock::held_by(Box::new(Friendly), move |verdict| {
             told.send(verdict).expect("the test is listening")
         });
         hub.lock.set(lock.seen()).expect("the hub has no lock yet");

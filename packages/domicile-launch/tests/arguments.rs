@@ -340,3 +340,27 @@ fn the_apps_are_read_as_a_path() {
         Some(PathBuf::from("/usr/libexec/domicile/apps"))
     );
 }
+
+/// A real desk reads `/etc/pam.d`, which the compositor names.
+#[test]
+fn pam_services_come_from_the_machine_unless_the_command_line_says_otherwise() {
+    let parsed = parse(the_required_two()).expect("both are there");
+
+    assert_eq!(parsed.pam_confdir, None);
+}
+
+/// Tests point the lock at a PAM service of their own.
+#[test]
+fn a_directory_of_pam_services_is_read_as_a_path() {
+    let parsed = parse([
+        "--chrome-socket",
+        "/run/chrome.sock",
+        "--session",
+        "/run/session.json",
+        "--pam-confdir",
+        "/run/pam.d",
+    ])
+    .expect("a command line with a PAM directory parses");
+
+    assert_eq!(parsed.pam_confdir, Some(PathBuf::from("/run/pam.d")));
+}

@@ -179,21 +179,22 @@ Configure it with `files.omit` and manganese's `applications` option:
 ## Blanking and locking
 
 ```json
-{ "idle": { "blank_after_seconds": 600 }, "lock": { "pam_service": "domicile" } }
+{ "idle": { "blank_after_seconds": 600, "lock_after_seconds": 900 } }
 ```
 
 - Screens turn off after `idle.blank_after_seconds` without input. Unset never
   blanks. `0` is an error.
 - Apps playing video can keep the screens on.
-- Set `lock.pam_service` or `lock.passphrase_hash` (not both) to lock the desktop
-  when the screens go dark.
-- `lock.pam_service` needs the machine to declare the PAM service: use the
+- The desktop locks after `idle.lock_after_seconds` without input, on its own
+  clock from blanking. Unset locks only when the shell asks. Your password
+  unlocks it.
+- The password is checked by the PAM service `domicile` (`lock.pam_service`
+  names another). The machine declares it: use the
   [NixOS module](#the-machines-half) or add
   `security.pam.services.domicile = {};`. A home-manager module cannot. The
-  [distribution packages](#other-distributions) install it. If the service is
-  missing, Domicile does not start and names the line to add.
-- `lock.passphrase_hash` takes a hash from `mkpasswd`, so the passphrase
-  stays out of the world-readable Nix store.
+  [distribution packages](#other-distributions) install it. Elsewhere, add
+  `/etc/pam.d/domicile` ([LOCK.md](LOCK.md#verifiers)). Without it the desktop
+  still locks, nothing unlocks it, and the log names the file to add.
 - A `lock` edit applies on reload. It never unlocks a locked desktop
   ([LOCK.md](LOCK.md#reloading)).
 
@@ -264,7 +265,7 @@ It provides:
 - **The `domicile` login session.** It runs the shell your config names, so one
   session serves every desktop. Without the module,
   `services.displayManager.sessionPackages = [domicile]` adds it.
-- **The `domicile` PAM service**, for `lock.pam_service = "domicile"`.
+- **The `domicile` PAM service**, which unlocks the desktop.
 - **The `domicile` group.** Its members' login sessions may lower nice values
   to -10 and use realtime priority 8; see
   [Thread priorities](#thread-priorities). Add yourself with
@@ -327,7 +328,7 @@ The package installs what [the NixOS module](#the-machines-half) provides:
   bun the shell builder runs on.
 - **The `domicile` session** (`/usr/share/wayland-sessions/domicile.desktop`)
   and its user units.
-- **`/etc/pam.d/domicile`**, for `lock.pam_service = "domicile"`. It includes
+- **`/etc/pam.d/domicile`**, which unlocks the desktop. It includes
   the distribution's stack: `common-auth` on Debian and openSUSE,
   `password-auth` on Fedora, `system-local-login` on Arch.
 - **The `domicile` group** (`/usr/lib/sysusers.d/domicile.conf`) and its

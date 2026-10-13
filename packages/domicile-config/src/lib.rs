@@ -380,11 +380,12 @@ impl std::fmt::Display for Axis {
     }
 }
 
-/// When an idle desktop turns its screens off.
+/// When an idle desktop turns its screens off, and when it locks.
 ///
-/// Absent means never, and that is the default: a blank screen looks like a
-/// crash, so a shell must opt in. When `lock` sets a verifier,
-/// blanking also locks the desk. See `docs/IDLE.md`.
+/// Absent means neither, and that is the default: a blank screen looks like a
+/// crash, so a shell must opt in. The two timeouts run on separate clocks
+/// from the same input and inhibitors, so either may be the shorter. See
+/// `docs/IDLE.md`.
 ///
 /// The unit is in the key name because a generator writes this file.
 // `PartialEq` lets a reload detect a change; see the compositor's
@@ -402,6 +403,11 @@ pub struct IdleConfig {
     /// Absent means no warning. It must be at least 1 and less than
     /// `blank_after_seconds`.
     pub warn_before_seconds: Option<u64>,
+    /// Seconds without input before the desktop locks.
+    ///
+    /// Absent means the desktop locks only when its shell asks. Zero is
+    /// refused.
+    pub lock_after_seconds: Option<u64>,
 }
 
 impl IdleConfig {
@@ -417,7 +423,20 @@ impl IdleConfig {
         self.warn_before_seconds.map(Duration::from_secs)
     }
 
+    /// How long the desktop goes without input before it locks, or `None`
+    /// for only when the shell asks.
+    pub fn lock_after(&self) -> Option<Duration> {
+        self.lock_after_seconds.map(Duration::from_secs)
+    }
+
     fn validate(&self) -> Result<(), ConfigError> {
+        if self.lock_after_seconds == Some(0) {
+            return Err(ConfigError::Validation(
+                "idle.lock_after_seconds must be at least 1 second; leave the key out \
+                 for a desktop that locks only when its shell asks"
+                    .into(),
+            ));
+        }
         if self.blank_after_seconds == Some(0) {
             return Err(ConfigError::Validation(
                 "idle.blank_after_seconds must be at least 1 second; leave the key out \
@@ -437,116 +456,41 @@ impl IdleConfig {
     }
 }
 
-/// What unlocks this desk.
+/// What unlocks this desk: the user's password, checked by PAM.
 ///
-/// Absent means the desk never locks, and that is the default: a locked desk
-/// with no verifier cannot be unlocked. Such a desk never sends
-/// `HostMessage::Locked`.
-///
-/// Set one verifier:
-/// - `pam_service` authenticates the desk's user against a PAM service.
-/// - `passphrase_hash` is for machines without a PAM service. The file is
-///   generated, often into the world-readable Nix store, so it holds a hash
-///   rather than the passphrase.
-///
-/// A config with both is refused, so a passphrase is never mistaken for a PAM
-/// fallback. A PAM service that does not exist, or a hash the machine's
-/// libcrypt will not take, stops the compositor from starting. See
-/// `docs/LOCK.md#verifiers`.
+/// If `/etc/pam.d` lacks the service, the desk still locks, and nothing
+/// unlocks it until the file is added. See `docs/LOCK.md#verifiers`.
 // `PartialEq` lets a reload detect a change; see the compositor's
 // `Restatement`.
-#[derive(Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct LockConfig {
-    /// The crypt(3) hash of the passphrase that unlocks this desk, as
-    /// `mkpasswd` prints. An empty string is refused.
-    // The `Debug` impl below redacts it. It is `pub` so
-    // `scripts/test-the-home-manager-module-agrees.sh` can check that this
-    // struct accepts every key the home-manager module writes.
-    pub passphrase_hash: Option<String>,
     /// The PAM service the desk's user authenticates against.
     ///
-    /// The system must declare it in `/etc/pam.d/`; on NixOS,
-    /// `security.pam.services.<name> = {};`. The docs use `"domicile"`.
+    /// Absent means `"domicile"`, which the NixOS module and the distribution
+    /// packages declare.
+    // `pub` so `scripts/test-the-home-manager-module-agrees.sh` can check that
+    // this struct accepts every key the home-manager module writes.
     pub pam_service: Option<String>,
 }
 
-/// The verifier a desk configured.
-///
-/// Borrows from the config.
-#[derive(PartialEq, Eq)]
-pub enum LockVerifier<'a> {
-    /// `lock.passphrase_hash`: what the user types, hashed with this hash's
-    /// method and salt, has to give this hash.
-    PassphraseHash(&'a str),
-    /// `lock.pam_service`: the desk's user, authenticated by PAM against this
-    /// service.
-    Pam { service: &'a str },
-}
-
 impl LockConfig {
-    /// What opens this desk, or `None` for one that never locks.
-    pub fn verifier(&self) -> Option<LockVerifier<'_>> {
-        match (self.passphrase_hash.as_deref(), self.pam_service.as_deref()) {
-            (None, None) => None,
-            (Some(hash), None) => Some(LockVerifier::PassphraseHash(hash)),
-            (None, Some(service)) => Some(LockVerifier::Pam { service }),
-            (Some(_), Some(_)) => {
-                unreachable!("validate refuses a [lock] that states both verifiers")
-            }
-        }
+    /// The PAM service that unlocks this desk.
+    pub fn service(&self) -> &str {
+        self.pam_service.as_deref().unwrap_or("domicile")
     }
 
     fn validate(&self) -> Result<(), ConfigError> {
-        if self.passphrase_hash.as_deref() == Some("") {
-            return Err(ConfigError::Validation(
-                "lock.passphrase_hash must not be empty; leave the key out for a desktop \
-                 that never locks"
-                    .into(),
-            ));
-        }
-        if self.pam_service.as_deref() == Some("") {
-            return Err(ConfigError::Validation(
-                "lock.pam_service must not be empty; name the PAM service this desk \
-                 authenticates against, or leave the key out"
-                    .into(),
-            ));
-        }
-        if self.passphrase_hash.is_some() && self.pam_service.is_some() {
-            return Err(ConfigError::Validation(
-                "lock.passphrase_hash and lock.pam_service are two ways to open this desk \
-                 and it takes one; neither is a fallback for the other"
-                    .into(),
-            ));
-        }
-        Ok(())
-    }
-}
-
-/// Redacts the passphrase hash, so a log line holds nothing to crack offline.
-///
-/// The redaction lives on the type because `Config`'s derived `Debug` and the
-/// compositor's `Restatement` both print it.
-impl std::fmt::Debug for LockConfig {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("LockConfig")
-            .field(
-                "passphrase_hash",
-                &self.passphrase_hash.as_ref().map(|_| "<redacted>"),
-            )
-            .field("pam_service", &self.pam_service)
-            .finish()
-    }
-}
-
-/// Redacts the passphrase hash, as [`LockConfig`]'s `Debug` does.
-impl std::fmt::Debug for LockVerifier<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LockVerifier::PassphraseHash(_) => f.write_str("PassphraseHash(<redacted>)"),
-            LockVerifier::Pam { service } => {
-                f.debug_struct("Pam").field("service", service).finish()
-            }
+        // PAM reads a service from the file of that name in `/etc/pam.d`.
+        match self.pam_service.as_deref().filter(|name| {
+            matches!(*name, "" | "." | "..") || name.contains('/') || name.contains('\0')
+        }) {
+            Some(name) => Err(ConfigError::Validation(format!(
+                "lock.pam_service {name:?} is not a file name in /etc/pam.d; name the PAM \
+                 service this desk authenticates against, or leave the key out for \
+                 `domicile`"
+            ))),
+            None => Ok(()),
         }
     }
 }

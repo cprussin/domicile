@@ -18,20 +18,11 @@ use crate::running::Compositor;
 
 const A_DESK: &str = r#"{ "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] } }"#;
 
-/// A desktop that can lock but has no idle timeout.
-const A_DESK_THAT_CAN_LOCK: &str = r#"
-{
-  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
-  "lock": { "passphrase_hash": "$y$j9T$mMzyBSKNKxkbivH7ik1.T.$iM4gXKt2j/qEPlwG5bMwAYPJa15M//yqCKSEin8n0P/" }
-}
-"#;
-
 /// The same desktop, locking after a second idle.
 const A_DESK_THAT_LOCKS_IN_A_SECOND: &str = r#"
 {
   "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
-  "idle": { "blank_after_seconds": 1 },
-  "lock": { "passphrase_hash": "$y$j9T$mMzyBSKNKxkbivH7ik1.T.$iM4gXKt2j/qEPlwG5bMwAYPJa15M//yqCKSEin8n0P/" }
+  "idle": { "lock_after_seconds": 1 }
 }
 "#;
 
@@ -151,7 +142,7 @@ fn a_page_s_processes_end_with_its_connection() {
 /// read the kernel, for the battery.
 #[test]
 fn a_locked_desk_runs_nothing_but_reads_the_kernel() {
-    let compositor = Compositor::started_with(A_DESK_THAT_CAN_LOCK);
+    let compositor = Compositor::started_with(A_DESK);
     let mut chrome = compositor.chrome();
     chrome
         .wait_for(|message| matches!(message, HostMessage::Locked { locked: false }))
@@ -160,7 +151,7 @@ fn a_locked_desk_runs_nothing_but_reads_the_kernel() {
     chrome
         .wait_for(|message| matches!(message, HostMessage::Locked { locked: true }))
         .expect("a desk nobody is at locks itself");
-    compositor.reconfigure(A_DESK_THAT_CAN_LOCK);
+    compositor.reconfigure(A_DESK);
 
     call(&mut chrome, 1, shell("true"));
     let SystemReply::Failed { error } = reply(&mut chrome, 1) else {

@@ -28,7 +28,8 @@ domicile.addEventListener("idlechanged", idle);
   the [warning](#warning-before-blanking).
 - Undo idle changes when `idle` is `false`. The repaint finishes before the screens
   relight.
-- Input still reaches clients while blanked. To block it, configure `lock`.
+- Input still reaches clients while blanked. Blanking does not lock; see
+  [Locking](#locking).
 - With no timeout configured, `idle` stays `null`.
 
 ### Warning before blanking
@@ -62,8 +63,9 @@ await (await system(domicile).idleWarnings()).match({
 
 ## Locking
 
-The compositor locks the desktop at the idle timeout, or when the shell calls
-`lock()`, if the config sets `lock.pam_service` or `lock.passphrase_hash`.
+The compositor locks the desktop after `idle.lock_after_seconds` without
+input, or when the shell calls `lock()`. That timeout is separate from
+blanking. The user's password unlocks it, checked by PAM.
 
 ```ts
 domicile.addEventListener("lockedchanged", () => {

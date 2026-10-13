@@ -365,8 +365,7 @@ const idleSchema = z.looseObject({
 // still gets keys, so it can draw a lock screen and send the passphrase with
 // `unlock`.
 //
-// Sent on change and on connect. Not sent when `lock` sets no verifier. See
-// `docs/LOCK.md`.
+// Sent on change and on connect. See `docs/LOCK.md`.
 const lockedSchema = z.looseObject({
   // Required: defaulting to `false` would hide the lock screen while input
   // stays blocked.

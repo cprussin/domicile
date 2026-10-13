@@ -43,8 +43,7 @@ const now = () => NOW;
 describe("useLocked", () => {
   it("is open until the compositor has said otherwise", () => {
     // Starts unlocked. The compositor reports the lock state on connect;
-    // starting locked would flash the lock screen on every connect, even on
-    // desktops with no lock configured.
+    // starting locked would flash the lock screen on every connect.
     const host = client();
 
     const { result } = renderHook(() => useLocked(host.domicile));
