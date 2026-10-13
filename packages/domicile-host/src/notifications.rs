@@ -59,6 +59,17 @@ pub struct Notify {
     pub expire_timeout: i32,
     /// A portal notification's icon. `Notify` has none.
     pub icon: Option<Icon>,
+    /// The bus name it came from, if it came over the bus.
+    pub sender: Option<String>,
+}
+
+/// The application that sent a notification, for starting it again.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Application {
+    /// Its unique bus name, which is gone once it quits.
+    pub bus_name: String,
+    /// Its `desktop-entry` hint: its desktop file id without `.desktop`.
+    pub desktop_entry: String,
 }
 
 /// An icon as the notification portal sends it.
@@ -83,6 +94,8 @@ pub struct Hints {
     pub resident: bool,
     /// `x-kde-origin-name`: the site that sent a Web Notification.
     pub origin_name: Option<String>,
+    /// `desktop-entry`: the sender's desktop file id, without `.desktop`.
+    pub desktop_entry: Option<String>,
 }
 
 /// Raw pixels, as the `image-data` hint sends them: rows of RGB or RGBA bytes,
@@ -120,6 +133,7 @@ pub struct Notifications {
 struct Entry {
     shown: Notification,
     resident: bool,
+    application: Option<Application>,
 }
 
 impl Notifications {
@@ -153,9 +167,18 @@ impl Notifications {
             .flatten()
             .map(|at| self.entries.remove(at).shown.id);
         let id = replaced.unwrap_or_else(|| self.fresh_id());
+        let application = notify
+            .sender
+            .clone()
+            .zip(notify.hints.desktop_entry.clone())
+            .map(|(bus_name, desktop_entry)| Application {
+                bus_name,
+                desktop_entry,
+            });
         let entry = Entry {
             resident: notify.hints.resident,
             shown: self.shown(id, notify, now),
+            application,
         };
         self.entries.push(entry);
         let evicted = (self.entries.len() > HISTORY).then(|| self.entries.remove(0).shown.id);
@@ -200,6 +223,16 @@ impl Notifications {
             }
             closed
         })
+    }
+
+    /// The application that sent `id`, if it came over the bus and named its
+    /// desktop entry.
+    pub fn application(&self, id: u32) -> Option<&Application> {
+        self.entries
+            .iter()
+            .find(|entry| entry.shown.id == id)?
+            .application
+            .as_ref()
     }
 
     /// Reply to `id`, which [`Self::invoke`] answers as an action.
@@ -889,6 +922,44 @@ mod tests {
             );
 
             assert_eq!(icon, Some(data_url("image/svg+xml", b"<svg/>")));
+        }
+    }
+
+    mod applications {
+        use super::*;
+
+        fn from_chat(desktop_entry: Option<&str>) -> Notify {
+            Notify {
+                sender: Some(":1.42".into()),
+                hints: Hints {
+                    desktop_entry: desktop_entry.map(String::from),
+                    ..Hints::default()
+                },
+                ..notify("New message")
+            }
+        }
+
+        #[test]
+        fn a_notification_knows_the_application_that_sent_it() {
+            // So a press can start it again once it has quit.
+            let mut notifications = held(Vec::new());
+            let Notified { id, .. } = notifications.notify(from_chat(Some("org.example.Chat")), 0);
+
+            assert_eq!(
+                notifications.application(id),
+                Some(&Application {
+                    bus_name: ":1.42".into(),
+                    desktop_entry: "org.example.Chat".into(),
+                })
+            );
+        }
+
+        #[test]
+        fn one_that_names_no_desktop_entry_has_no_application_to_start() {
+            let mut notifications = held(Vec::new());
+            let Notified { id, .. } = notifications.notify(from_chat(None), 0);
+
+            assert_eq!(notifications.application(id), None);
         }
     }
 

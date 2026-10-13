@@ -28,7 +28,8 @@ type Props = {
 
 /**
  * The notification drawer, sliding out from the bell's edge. Each notification
- * can be pressed or cleared, or all cleared at once.
+ * can be pressed or cleared, or all cleared at once. A press closes the drawer,
+ * which would cover the window it raises.
  *
  * A notification stays here after its toast is gone, until it is cleared or its
  * application withdraws it. See docs/architecture/NOTIFICATIONS.md.
@@ -91,6 +92,8 @@ export const NotificationDrawer = memo(
                 now={now}
                 onAction={(key) => {
                   onAction(notification.id, key);
+                  // Out of the way of the window the action raises.
+                  onOpenChange(false);
                 }}
                 onClose={() => {
                   onDismiss([notification.id]);

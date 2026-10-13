@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { Axis, Direction } from "./direction";
 import { SURFACE_TUCK, TITLE_BAR } from "./rect";
 import { Layout, LayoutNode, windowsIn } from "./tree/node";
-import { focusedNodeOf, windowsOf } from "./tree/tiling";
+import { focusedNodeOf, shownOver, windowsOf } from "./tree/tiling";
 import { appWindowId, browserWindowId } from "./window";
 import type { WindowState } from "./window-state";
 import {
@@ -118,11 +118,46 @@ describe("the windows a host announces", () => {
     const state = reduce(
       desktop("kitty", "editor"),
       WindowAction.WorkspaceSelected("2"),
-      WindowAction.FocusRequested("kitty"),
+      WindowAction.FocusRequested(APP("kitty")),
     );
 
     expect(currentHere(state)).toBe("1");
     expect(activeIdOf(state)).toBe(APP("kitty"));
+  });
+
+  it("shows the hidden tab of a window it grants the keyboard", () => {
+    // As from a notification click: the window must be seen, not only focused.
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.LayoutSet(Layout.Tabbed),
+      WindowAction.FocusRequested(APP("kitty")),
+    );
+
+    const { root } = workspaceNamed(state, "1").tiling;
+    expect(activeIdOf(state)).toBe(APP("kitty"));
+    expect(root === undefined ? undefined : shownOver(root, APP("kitty"))).toBe(
+      APP("kitty"),
+    );
+  });
+
+  it("warps the pointer to a window it grants the keyboard", () => {
+    // Counted as a key press is: the pointer is elsewhere, and focus follows
+    // it, so it would take the keyboard back.
+    const state = desktop("kitty", "editor");
+
+    expect(
+      reduceWindows(state, WindowAction.FocusRequested(APP("kitty"))).pressed,
+    ).toBe(state.pressed + 1);
+  });
+
+  it("leaves a window that already has the keyboard as it is", () => {
+    // A launched window asks with the launch's token once it opens focused.
+    // Where the pointer goes is then the new window's rule.
+    const state = desktop("kitty", "editor");
+
+    expect(
+      reduceWindows(state, WindowAction.FocusRequested(APP("editor"))),
+    ).toBe(state);
   });
 });
 
@@ -1234,7 +1269,9 @@ describe("the pointer", () => {
     );
 
     expect(
-      currentHere(reduceWindows(state, WindowAction.FocusRequested("editor"))),
+      currentHere(
+        reduceWindows(state, WindowAction.FocusRequested(APP("editor"))),
+      ),
     ).toBe("2");
   });
 

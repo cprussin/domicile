@@ -570,8 +570,8 @@ fn answer(
         .interface::<_, Notification>(OBJECT_PATH)?;
     backends
         .notifications
-        .on_portal_action(move |invoked: Invoked<OwnedValue>| {
-            notification::invoked(&notification, invoked)
+        .on_portal_action(move |invoked: Invoked<OwnedValue>, token| {
+            notification::invoked(&notification, invoked, token)
         });
     connection.request_name(BUS_NAME)?;
     debug!(
@@ -1471,6 +1471,7 @@ mod tests {
                 action: "app.open".into(),
                 target: Some(OwnedValue::try_from(Value::from("inbox")).expect("ownable")),
             },
+            "t0k".into(),
         );
 
         assert_eq!(
@@ -1488,12 +1489,16 @@ mod tests {
             (app_id.as_str(), id.as_str(), action.as_str()),
             ("org.example.App", "update", "app.open")
         );
+        // The target, then the platform data with a token the application
+        // raises its window with.
+        let [target, platform_data] = <[OwnedValue; 2]>::try_from(parameter).expect("two values");
+        assert_eq!(String::try_from(target), Ok("inbox".to_string()));
         assert_eq!(
-            parameter
-                .into_iter()
-                .map(String::try_from)
-                .collect::<Vec<_>>(),
-            [Ok("inbox".to_string())]
+            HashMap::<String, String>::try_from(platform_data),
+            Ok(HashMap::from([(
+                "activation-token".to_string(),
+                "t0k".to_string()
+            )]))
         );
     }
 

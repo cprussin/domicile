@@ -217,7 +217,7 @@ mod grepped {
     ///
     /// A refused reload sends no message, so this line is the only sign of it.
     pub const KEYS_REFUSED: &str = "keeping the keys the shells were last told";
-    /// [`activation::earned`](crate::activation::earned) dropped a focus
+    /// [`activation::granted`](crate::activation::granted) dropped a focus
     /// request.
     ///
     /// A dropped request sends no message, so this line is the only sign of
@@ -831,6 +831,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             home_directory().as_deref(),
         ),
         config.theme.icon_theme.clone(),
+        {
+            let display = socket_name.clone();
+            let scoped = arguments.scope_clients;
+            Box::new(move |command, token| {
+                spawn_client(command, &display, scoped, child_nice, Some(token))
+            })
+        },
     );
     // State shared by the Wayland thread and chrome connections.
     let (hub, outbound_rx) = ChromeHub::new(
@@ -851,7 +858,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             {
                 let display = socket_name.clone();
                 let scoped = arguments.scope_clients;
-                move |command| spawn_client(command, &display, scoped, child_nice)
+                move |command| spawn_client(command, &display, scoped, child_nice, None)
             },
             portals::ScreenCasting {
                 casting: casting::Casting::new(cast_requests.clone()),
@@ -1460,7 +1467,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Startup commands, once the desktop is live. Not run on reload; see
     // `StartupConfig`.
     for command in &config.startup.commands {
-        spawn_client(command, &socket_name, arguments.scope_clients, child_nice);
+        spawn_client(
+            command,
+            &socket_name,
+            arguments.scope_clients,
+            child_nice,
+            None,
+        );
     }
 
     // Raised last, so the service threads started above stay at the nice

@@ -77,6 +77,15 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key)
   - Portal notifications have no reply field.
   - Chrome sends a Web Notification's text action (`type: "text"`) as
     `inline-reply`, and takes the reply back from `NotificationReplied`.
+- **A press raises the notification's source.**
+  - The compositor mints an `xdg-activation` token for each press and emits
+    `ActivationToken` before `ActionInvoked`, as spec 1.2 orders. A portal
+    notification gets it as `activation-token` in the platform data. The app
+    raises its window with it, and the shell shows that window's workspace and
+    tab and warps the pointer to it.
+  - An app that has quit is started instead, from its `desktop-entry` hint,
+    when its bus name is gone. The portal starts its own apps.
+  - A press in the drawer closes the drawer, which would cover the window.
 - **A site raises its own window.** Its `client.focus()` or `window.focus()`
   fires `domicile-focus-request` on the `<webview>`
   (`WebViewGuest::ActivateContents`), and the shell raises it.

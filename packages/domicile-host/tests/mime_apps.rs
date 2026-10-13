@@ -4,7 +4,7 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use domicile_host::mime_apps::{default_handler, lists};
+use domicile_host::mime_apps::{default_handler, launch_command, lists};
 
 /// A directory holding `files`, as relative paths and text.
 fn written(files: &[(&str, &str)]) -> tempfile::TempDir {
@@ -222,6 +222,32 @@ mod commands {
     #[test]
     fn a_command_that_cannot_be_read_is_nothing() {
         assert_eq!(run(r#"mail "unterminated"#), None);
+    }
+}
+
+mod launching {
+    use super::*;
+
+    #[test]
+    fn an_application_starts_by_its_desktop_entrys_name_without_its_field_codes() {
+        // As a notification's `desktop-entry` hint names it: no `.desktop`.
+        let applications = written(&[(
+            "org/example.Chat.desktop",
+            &handler("chat --new-window %U", "x-scheme-handler/chat"),
+        )]);
+        assert_eq!(
+            launch_command("org-example.Chat", &[applications.path().to_path_buf()]),
+            Some(vec!["chat".into(), "--new-window".into()])
+        );
+    }
+
+    #[test]
+    fn an_application_not_installed_starts_nothing() {
+        let applications = written(&[("mail.desktop", &handler("mail", "text/x-mail"))]);
+        assert_eq!(
+            launch_command("chat", &[applications.path().to_path_buf()]),
+            None
+        );
     }
 }
 

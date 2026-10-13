@@ -105,6 +105,11 @@ type Props = {
    * appearing under a still pointer.
    */
   onHover: (id: string, at: Spot) => void;
+  /**
+   * Browser window `id`'s page or an extension asked for it in front. See
+   * `BrowserWindow`.
+   */
+  onFocusRequest: (id: string) => void;
   /** A browser window's page icon. See `BrowserWindow`. */
   onIcon: (window: string, icon: string) => void;
   onMove: (id: string, x: number, y: number) => void;
@@ -155,6 +160,7 @@ export const Stage = memo(
     onDrop,
     onDropOn,
     onFloat,
+    onFocusRequest,
     onFullscreen,
     onGrab,
     onGroupDropOn,
@@ -310,6 +316,7 @@ export const Stage = memo(
                 hasKeyboard={window.id === focusedId}
                 key={window.id}
                 motion={motion}
+                onFocusRequest={onFocusRequest}
                 onHover={onHover}
                 onIcon={onIcon}
                 onPageFullscreen={onPageFullscreen}
@@ -706,6 +713,7 @@ type WindowContentsProps = {
   fullscreen: boolean;
   hasKeyboard: boolean;
   motion: WindowMotion;
+  onFocusRequest: (id: string) => void;
   onHover: (id: string, at: Spot) => void;
   onIcon: (window: string, icon: string) => void;
   onPageFullscreen: (id: string, fullscreen: boolean) => void;
@@ -738,6 +746,7 @@ const WindowContents = memo(
     fullscreen,
     hasKeyboard,
     motion,
+    onFocusRequest,
     onHover,
     onIcon,
     onPageFullscreen,
@@ -762,6 +771,9 @@ const WindowContents = memo(
     const reached = useCallback(() => {
       onSelect(id);
     }, [id, onSelect]);
+    const asked = useCallback(() => {
+      onFocusRequest(id);
+    }, [id, onFocusRequest]);
     const ended = useCallback(() => {
       onPlayedOut(id, motion, screen, "contents");
     }, [id, motion, onPlayedOut, screen]);
@@ -814,6 +826,7 @@ const WindowContents = memo(
             isApp={window.isApp}
             isPrivate={window.isPrivate}
             motion={motion}
+            onFocusRequest={asked}
             onIcon={onIcon}
             onMotionEnded={ended}
             onPageFullscreen={pageFilled}

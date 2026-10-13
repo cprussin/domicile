@@ -15,6 +15,7 @@ use domicile_host::clipboard::Contents;
 use domicile_host::theme_turnover::{Turnover, CAPTURE_WITHIN};
 use domicile_protocol::{Passphrase, PortalAnswer, Theme, TrayAction, WindowState};
 
+use crate::activation;
 use crate::chrome_hub::announce_open_apps;
 use crate::engine::Clipboard;
 use crate::lock::Asked;
@@ -336,9 +337,10 @@ impl DomicileCompositor {
                     server.dismiss(ids);
                 }
             }
+            // With a token, so the application can raise its window.
             ClientRequest::InvokeNotificationAction { id, action } => {
                 if let Some(server) = self.hub.notifications.get() {
-                    server.invoke(id, action);
+                    server.invoke(id, action, activation::mint(&mut self.xdg_activation_state));
                 }
             }
             ClientRequest::ReplyToNotification { id, text } => {
@@ -437,11 +439,14 @@ impl DomicileCompositor {
                 // connection checked the id.
                 None => debug!(%app_id, "window states: a window with no toplevel"),
             },
+            // A launch from a key or the launcher, so it may raise the
+            // window of an app already running.
             ClientRequest::Spawn { command } => spawn_client(
                 &command,
                 &self.hub.wayland_display,
                 self.scope_clients,
                 self.hub.child_nice,
+                Some(&activation::mint(&mut self.xdg_activation_state)),
             ),
             ClientRequest::CloseApp { app_id } => match self.toplevel_for(&app_id) {
                 Some(toplevel) => {

@@ -154,7 +154,7 @@ export const useWindows = (
     // The compositor forwards the request without granting it;
     // `reduceWindows` decides.
     const focusRequested = ({ appId }: { appId: string }) => {
-      dispatch(Action.FocusRequested(appId));
+      dispatch(Action.FocusRequested(appWindowId(appId)));
     };
     // Every browser window, from the engine. After `domicile load-shell` it
     // holds the previous shell's windows.

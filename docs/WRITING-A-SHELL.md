@@ -391,6 +391,12 @@ Only requests made since the keyboard last moved arrive. The compositor drops a
 token whose serial is older than the keyboard's last `enter`, or has none: that
 is a window taking focus back on its own, not something the user did.
 
+The compositor mints its own tokens for what the user does in the shell:
+`spawn` (as `XDG_ACTIVATION_TOKEN`) and a notification press (as
+`ActivationToken`). So a singleton app launched again, or an app whose
+notification was pressed, asks with `focusrequested`. Only the newest such
+token is good, for 10 seconds.
+
 ### Where focus is
 
 `domicile.focusedWindow` is the client that holds the keyboard, `null` while

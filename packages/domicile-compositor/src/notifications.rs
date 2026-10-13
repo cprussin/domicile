@@ -7,7 +7,10 @@
 //! [`HostMessage::Notifications`](domicile_protocol::HostMessage::Notifications).
 //! Presses, replies and clears come back as `invoke_notification_action`,
 //! `reply_to_notification` and `dismiss_notifications`, and the application
-//! gets `ActionInvoked`, `NotificationReplied` and `NotificationClosed`. See
+//! gets `ActionInvoked`, `NotificationReplied` and `NotificationClosed`. A
+//! press comes with an `xdg-activation` token (`ActivationToken`), which the
+//! application raises its window with. A press on a notification whose
+//! application has quit starts it instead, from its `desktop-entry` hint. See
 //! `docs/architecture/NOTIFICATIONS.md`.
 //!
 //! The notification model is in `domicile_host::notifications`; this module
@@ -29,7 +32,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use domicile_host::notifications::{Hints, Image, Notifications, Notified, Notify};
+use domicile_host::mime_apps::launch_command;
+use domicile_host::notifications::{Application, Hints, Image, Notifications, Notified, Notify};
 use domicile_host::portal_notifications::{Invoked, PortalNotification, PortalNotifications};
 use domicile_host::tray::TrayIcons;
 use domicile_protocol::Notification;
@@ -80,8 +84,13 @@ enum Reason {
 enum Event {
     /// The user cleared these.
     Dismiss { ids: Vec<u32> },
-    /// The user pressed `action` on `id`.
-    Invoke { id: u32, action: String },
+    /// The user pressed `action` on `id`. `token` lets its application raise
+    /// its window; see [`crate::activation`].
+    Invoke {
+        id: u32,
+        action: String,
+        token: String,
+    },
     /// The user replied `text` to `id`.
     Reply { id: u32, text: String },
     /// A portal notification pushed this one out of the history.
@@ -131,9 +140,10 @@ impl NotificationServer {
         let _ = self.told.send(Event::Dismiss { ids });
     }
 
-    /// The user pressed `action` on `id`.
-    pub fn invoke(&self, id: u32, action: String) {
-        let _ = self.told.send(Event::Invoke { id, action });
+    /// The user pressed `action` on `id`. Its application gets `token` to
+    /// raise its window with.
+    pub fn invoke(&self, id: u32, action: String, token: String) {
+        let _ = self.told.send(Event::Invoke { id, action, token });
     }
 
     /// The user replied `text` to `id`.
@@ -178,25 +188,41 @@ impl NotificationServer {
     }
 
     /// Call `invoked` with each action the user takes on a portal
-    /// notification.
-    pub fn on_portal_action(&self, invoked: impl Fn(Invoked<OwnedValue>) + Send + Sync + 'static) {
+    /// notification, and the token its application raises its window with.
+    pub fn on_portal_action(
+        &self,
+        invoked: impl Fn(Invoked<OwnedValue>, String) + Send + Sync + 'static,
+    ) {
         if self.store.portal_actions.set(Box::new(invoked)).is_err() {
             panic!("portal notifications have one listener");
         }
     }
 }
 
-/// Start the notification server. Icons are looked up under `data_dirs`, in
-/// the icon theme `theme`.
+/// Starts a command with an `xdg-activation` token; see
+/// [`crate::spawning::spawn_client`].
+pub type Launch = Box<dyn Fn(&[String], &str) + Send>;
+
+/// Start the notification server. Icons and applications are looked up under
+/// `data_dirs`, icons in the icon theme `theme`. `launch` starts an
+/// application that quit before its notification was pressed.
 ///
 /// Returns once the thread is spawned, like [`crate::tray::serve`].
 /// [`NotificationServer::listen`] says where the notifications go.
-pub fn serve(data_dirs: Vec<PathBuf>, theme: Option<String>) -> NotificationServer {
+pub fn serve(data_dirs: Vec<PathBuf>, theme: Option<String>, launch: Launch) -> NotificationServer {
     let (told, events) = channel();
+    let applications: Vec<PathBuf> = data_dirs
+        .iter()
+        .map(|dir| dir.join("applications"))
+        .collect();
     let store = Arc::new(Store::new(data_dirs, theme));
     let serving = Arc::clone(&store);
     thread::spawn(move || {
-        if let Err(why) = answer(serving, &events) {
+        let starting = Starting {
+            applications,
+            launch,
+        };
+        if let Err(why) = answer(serving, &events, &starting) {
             warn!(
                 %why,
                 "this desktop is not the notification server; its applications' \
@@ -207,11 +233,14 @@ pub fn serve(data_dirs: Vec<PathBuf>, theme: Option<String>) -> NotificationServ
     NotificationServer { told, store }
 }
 
+/// Passes a press on a portal notification, and its token, to the portal.
+type PortalAction = Box<dyn Fn(Invoked<OwnedValue>, String) + Send + Sync>;
+
 /// The notifications, and who is told when they change.
 struct Store {
     held: Mutex<Held>,
     publish: OnceLock<Box<dyn Fn(Vec<Notification>) + Send + Sync>>,
-    portal_actions: OnceLock<Box<dyn Fn(Invoked<OwnedValue>) + Send + Sync>>,
+    portal_actions: OnceLock<PortalAction>,
 }
 
 /// The history, and which of it the portal added.
@@ -223,8 +252,10 @@ struct Held {
 /// What a press on a notification did.
 enum Pressed {
     /// `ActionInvoked` goes to the bus, and `NotificationClosed` if it closes.
+    /// Or, if `application` has quit, it is started.
     Bus {
         closes: bool,
+        application: Option<Application>,
     },
     /// `ActionInvoked` goes to the portal.
     Portal(Invoked<OwnedValue>),
@@ -279,9 +310,13 @@ impl Store {
                     .invoke(&mut held.notifications, id, action)
                     .map_or(Pressed::NotOffered, Pressed::Portal)
             } else {
+                let application = held.notifications.application(id).cloned();
                 held.notifications
                     .invoke(id, action)
-                    .map_or(Pressed::NotOffered, |closes| Pressed::Bus { closes })
+                    .map_or(Pressed::NotOffered, |closes| Pressed::Bus {
+                        closes,
+                        application,
+                    })
             }
         })
     }
@@ -289,7 +324,7 @@ impl Store {
 
 /// Serve the name and handle user events in order. Returns on failure or
 /// when the compositor exits.
-fn answer(store: Arc<Store>, events: &Receiver<Event>) -> zbus::Result<()> {
+fn answer(store: Arc<Store>, events: &Receiver<Event>, starting: &Starting) -> zbus::Result<()> {
     let connection = Connection::session()?;
     connection.object_server().at(
         SERVER_PATH,
@@ -311,15 +346,16 @@ fn answer(store: Arc<Store>, events: &Receiver<Event>) -> zbus::Result<()> {
                     closed(&server, id, Reason::Dismissed);
                 }
             }
-            Event::Invoke { id, action } => match store.press(id, &action) {
-                Pressed::Bus { closes } => {
-                    invoked(&server, id, &action);
-                    if closes {
-                        closed(&server, id, Reason::Dismissed);
-                    }
-                }
+            Event::Invoke { id, action, token } => match store.press(id, &action) {
+                Pressed::Bus {
+                    closes,
+                    application,
+                } => match quit(application.as_ref(), |name| owned(&connection, name)) {
+                    Some(desktop_entry) => starting.start(desktop_entry, &token),
+                    None => pressed_on_the_bus(&server, id, &action, &token, closes),
+                },
                 Pressed::Portal(pressed) => match store.portal_actions.get() {
-                    Some(portal) => portal(pressed),
+                    Some(portal) => portal(pressed, token),
                     None => warn!(%id, "a portal notification's action has no portal to go to"),
                 },
                 Pressed::NotOffered => {
@@ -341,6 +377,48 @@ fn answer(store: Arc<Store>, events: &Receiver<Event>) -> zbus::Result<()> {
     Ok(())
 }
 
+/// Starting applications that quit before their notification was pressed.
+struct Starting {
+    /// Where their desktop entries are.
+    applications: Vec<PathBuf>,
+    launch: Launch,
+}
+
+impl Starting {
+    /// Start the application `desktop_entry` names, handing it `token`.
+    fn start(&self, desktop_entry: &str, token: &str) {
+        match launch_command(desktop_entry, &self.applications) {
+            Some(command) => (self.launch)(&command, token),
+            None => warn!(
+                %desktop_entry,
+                "a notification's application quit, and has no desktop entry to start it with"
+            ),
+        }
+    }
+}
+
+/// The desktop entry to start for a press on a notification from
+/// `application`, or `None` if it is still running (`owned` says whether a bus
+/// name is) or names no desktop entry.
+fn quit(application: Option<&Application>, owned: impl Fn(&str) -> bool) -> Option<&str> {
+    application
+        .filter(|application| !owned(&application.bus_name))
+        .map(|application| application.desktop_entry.as_str())
+}
+
+/// Whether `name` is on the bus. A failed question counts as on: the press
+/// then goes to the bus as it did before applications were started.
+fn owned(connection: &Connection, name: &str) -> bool {
+    let asked = zbus::blocking::fdo::DBusProxy::new(connection).and_then(|bus| {
+        let name = zbus::names::BusName::try_from(name).map_err(zbus::Error::from)?;
+        bus.name_has_owner(name).map_err(zbus::Error::from)
+    });
+    asked.unwrap_or_else(|why| {
+        warn!(%why, %name, "could not ask whether a notification's application is running");
+        true
+    })
+}
+
 /// Emit `NotificationClosed`. A failure is logged and ignored, as in
 /// `crate::tray::listed`.
 fn closed(server: &InterfaceRef<Server>, id: u32, reason: Reason) {
@@ -351,6 +429,26 @@ fn closed(server: &InterfaceRef<Server>, id: u32, reason: Reason) {
     ));
     if let Err(why) = said {
         warn!(%why, %id, "a notification's closing could not be said");
+    }
+}
+
+/// Tell `id`'s application the user pressed `action`: `ActivationToken`
+/// first, as the spec orders it, then `ActionInvoked`, and
+/// `NotificationClosed` if it `closes`.
+fn pressed_on_the_bus(
+    server: &InterfaceRef<Server>,
+    id: u32,
+    action: &str,
+    token: &str,
+    closes: bool,
+) {
+    let said = zbus::block_on(Server::activation_token(server.signal_emitter(), id, token));
+    if let Err(why) = said {
+        warn!(%why, %id, "a notification's activation token could not be said");
+    }
+    invoked(server, id, action);
+    if closes {
+        closed(server, id, Reason::Dismissed);
     }
 }
 
@@ -407,12 +505,14 @@ fn hints(mut sent: HashMap<String, OwnedValue>) -> Hints {
         .and_then(|value| bool::try_from(value).ok())
         .unwrap_or(false);
     let origin_name = first(&["x-kde-origin-name"]).and_then(|value| String::try_from(value).ok());
+    let desktop_entry = first(&["desktop-entry"]).and_then(|value| String::try_from(value).ok());
     Hints {
         urgency,
         image_data,
         image_path,
         resident,
         origin_name,
+        desktop_entry,
     }
 }
 
@@ -436,6 +536,7 @@ impl Server {
     async fn notify(
         &self,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+        #[zbus(header)] header: zbus::message::Header<'_>,
         app_name: String,
         replaces_id: u32,
         app_icon: String,
@@ -455,6 +556,7 @@ impl Server {
             hints: self::hints(hints),
             expire_timeout,
             icon: None,
+            sender: header.sender().map(|sender| sender.to_string()),
         };
         let notified = self.store.change(|held| {
             let notified = held.notifications.notify(sent, now());
@@ -514,6 +616,13 @@ impl Server {
     ) -> zbus::Result<()>;
 
     #[zbus(signal)]
+    async fn activation_token(
+        emitter: &SignalEmitter<'_>,
+        id: u32,
+        activation_token: &str,
+    ) -> zbus::Result<()>;
+
+    #[zbus(signal)]
     async fn notification_replied(
         emitter: &SignalEmitter<'_>,
         id: u32,
@@ -524,8 +633,71 @@ impl Server {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::portals::socket_pair;
     use domicile_host::portal_notifications::{Action, Priority};
     use zbus::zvariant::Value;
+
+    #[test]
+    fn a_press_starts_an_application_that_has_quit() {
+        let chat = Application {
+            bus_name: ":1.42".into(),
+            desktop_entry: "org.example.Chat".into(),
+        };
+        assert_eq!(quit(Some(&chat), |_| false), Some("org.example.Chat"));
+        // Still running: it hears the press and raises its own window.
+        assert_eq!(quit(Some(&chat), |name| name == ":1.42"), None);
+        // Nothing to start.
+        assert_eq!(quit(None, |_| false), None);
+    }
+
+    #[test]
+    fn a_press_hands_the_application_a_token_before_the_action() {
+        // The spec's order: the application raises its window with the token
+        // when it hears the action.
+        let (server, client) = socket_pair::connected(|builder| {
+            builder
+                .serve_at(
+                    SERVER_PATH,
+                    Server {
+                        store: Arc::new(Store::new(Vec::new(), None)),
+                    },
+                )
+                .expect("served")
+        });
+        let iface = server
+            .object_server()
+            .interface::<_, Server>(SERVER_PATH)
+            .expect("served");
+        let mut messages = zbus::blocking::MessageIterator::from(&client);
+
+        pressed_on_the_bus(&iface, 7, "default", "t0k", false);
+
+        let signals: Vec<String> = messages
+            .by_ref()
+            .map(|message| message.expect("a message"))
+            .filter(|message| message.message_type() == zbus::message::Type::Signal)
+            .take(2)
+            .map(|message| {
+                let member = message.header().member().expect("a member").to_string();
+                match member.as_str() {
+                    "ActivationToken" => {
+                        let (id, token): (u32, String) =
+                            message.body().deserialize().expect("its arguments");
+                        format!("{member} {id} {token}")
+                    }
+                    _ => {
+                        let (id, action): (u32, String) =
+                            message.body().deserialize().expect("its arguments");
+                        format!("{member} {id} {action}")
+                    }
+                }
+            })
+            .collect();
+        assert_eq!(
+            signals,
+            ["ActivationToken 7 t0k", "ActionInvoked 7 default"]
+        );
+    }
 
     /// A server with no bus, and what it publishes.
     fn unserved() -> (NotificationServer, Receiver<Vec<Notification>>) {
@@ -635,7 +807,7 @@ mod tests {
 
         assert!(matches!(
             server.store.press(bus, "default"),
-            Pressed::Bus { closes: true }
+            Pressed::Bus { closes: true, .. }
         ));
         assert!(matches!(
             server.store.press(bus, "default"),
@@ -741,6 +913,7 @@ mod tests {
                 image_path: Some("/tmp/chrome-icon".into()),
                 resident: true,
                 origin_name: Some("chat.example.com".into()),
+                desktop_entry: Some("firefox".into()),
             }
         );
     }
