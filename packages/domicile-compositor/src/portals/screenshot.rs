@@ -487,7 +487,7 @@ mod tests {
     use zbus::blocking::Connection;
     use zbus::zvariant::{ObjectPath, Value};
 
-    use crate::portals::socket_pair::connected;
+    use crate::portals::socket_pair::connected_both;
     use crate::portals::OBJECT_PATH;
 
     const INTERFACE: &str = "org.freedesktop.impl.portal.Screenshot";
@@ -646,13 +646,17 @@ mod tests {
                 copy,
             },
         };
-        let (server, client) =
-            connected(|builder| builder.serve_at(OBJECT_PATH, backend).expect("served"));
         // The frontend serves its store on the bus; here, the client's end.
-        client
-            .object_server()
-            .at(PERMISSION_STORE_PATH, store.clone())
-            .expect("the store served");
+        // Served by the builder, whose `build` waits for the object server to
+        // listen; served later, a `Lookup` can arrive first and is dropped.
+        let (server, client) = connected_both(
+            |builder| builder.serve_at(OBJECT_PATH, backend).expect("served"),
+            |builder| {
+                builder
+                    .serve_at(PERMISSION_STORE_PATH, store.clone())
+                    .expect("the store served")
+            },
+        );
         Served {
             client,
             queue,
