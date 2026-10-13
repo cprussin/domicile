@@ -93,6 +93,22 @@ export type DomicileAppEventInit = EventInit & {
   appId?: string;
 };
 
+/** A request header `DomicileHost.fetchWithCookies()` sends. */
+export type DomicileFetchHeader = {
+  name: string;
+  value: string;
+};
+
+/** What `DomicileHost.fetchWithCookies()` resolves with. */
+export type DomicileFetchResponse = {
+  /** The HTTP status, such as 200 or 401. */
+  readonly status: number;
+  /** The address the response came from, after redirects. */
+  readonly url: string;
+  /** The body, as text. */
+  readonly body: string;
+};
+
 /** What `DomicileHost.searchFiles()` resolves with. */
 export type DomicileFileSearch = {
   /**
@@ -591,6 +607,28 @@ export type DomicileHost = {
    * id does nothing.
    */
   closeBrowserWindow(id: string): void;
+  /**
+   * GETs `url` from the browser process with the cookies of the profile the
+   * ordinary browser windows use, so a bar item can read a site the user is
+   * signed in to. Resolves with the response, whatever its status. Rejects
+   * with a NetworkError for a network failure or a refusal: an address that
+   * is not https, a `Cookie` header or one the browser sets itself, or a
+   * locked desk. Redirects are followed on https only; one that leaves the
+   * origin drops `headers`.
+   *
+   * With `sapisidHashOrigin`, an https origin such as
+   * "https://mail.google.com", the browser also sends the `Authorization:
+   * SAPISIDHASH` header Google's first-party APIs take, computed from the
+   * SAPISID cookie, and follows no redirect. The page never sees the cookie.
+   *
+   * Handled by the browser process, over its own pipe: see
+   * components/domicile/mojom/shell_fetch.mojom.
+   */
+  fetchWithCookies(
+    url: string,
+    headers: readonly DomicileFetchHeader[],
+    sapisidHashOrigin: string | null,
+  ): Promise<DomicileFetchResponse>;
   /**
    * The screens of the desktop.
    *

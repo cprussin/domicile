@@ -27,6 +27,12 @@ package's default export path:
 | `Notifications` | `@domicile-desktop/manganese-bar-module-notifications` |
 | `Sharing` | `@domicile-desktop/manganese-bar-module-sharing` |
 
+Items no default bar has, which take props:
+
+| Item | Package |
+|---|---|
+| `Gmail` | `@domicile-desktop/manganese-bar-module-gmail` |
+
 ```tsx
 import { runManganese } from "@domicile-desktop/manganese";
 import { Clock } from "@domicile-desktop/manganese-bar-module-clock";
@@ -221,6 +227,30 @@ Every bar and the lock screen share one watch per system readout. See
 - While the bar has this item, the portal dialogs' indicator leaves screen
   casts out, so each shows once. Without it, the indicator lists them.
 - See [PORTALS.md](../../../docs/PORTALS.md).
+
+## Gmail
+
+`<Gmail email="me@gmail.com" nickname="Work" />`: one account's inbox,
+read with the Google sign-in of the browser windows' profile. Not in
+`DEFAULT_BAR`.
+
+- **Signed out:** a **Sign in to me@gmail.com** button opens Google's
+  account chooser for that address in a browser window.
+- **Empty inbox:** nothing.
+- **Nothing unread:** an envelope, the nickname and the conversation count.
+- **Unread:** the same with `unread / total`, bold in `accent`.
+- Click opens the inbox in a browser window.
+- Read every minute, and not while the desktop is locked. Counts are
+  conversations, as Gmail's inbox counts them.
+- How it reads:
+  - The Atom feed (`/mail/u/<email>/feed/atom`) says whether the profile is
+    signed in to the address, and the unread count.
+  - The Gmail API's INBOX label, through `clients6.google.com` with Google's
+    cookie authentication (`SAPISIDHASH`), gives the total. This is
+    undocumented. When it fails, the item shows the feed's unread count
+    alone, and nothing with none unread.
+  - Both go through `fetchWithCookies`
+    ([SHELL-SYSTEM-ACCESS.md](../../../docs/SHELL-SYSTEM-ACCESS.md#the-browsers-cookies)).
 
 ## Tray
 

@@ -1,0 +1,55 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+module domicile.mojom;
+
+import "url/mojom/url.mojom";
+
+// GET requests the browser makes for the shell with the default profile's
+// cookies, the ones its browser windows use. For a bar item that reads a
+// signed-in site, such as a mail count.
+//
+// The cookies stay in the browser: the page never reads them, and the browser
+// computes the one value a site derives from a cookie (SAPISIDHASH) itself.
+//
+// Access control is the binder's, as for BrowserWindows: the browser binds
+// this only for a document with the shell's origin. The rest is
+// components/domicile/browser/shell_fetch.h: https only, no `Cookie` header,
+// and nothing while the desk is locked.
+//
+// See "The browser's cookies" in the Domicile repository's
+// docs/SHELL-SYSTEM-ACCESS.md.
+
+// One request header.
+struct ShellFetchHeader {
+  string name;
+  string value;
+};
+
+// What a request got back.
+struct ShellFetchResponse {
+  // The HTTP status, after redirects.
+  uint16 status;
+  // The address the response came from, after redirects.
+  url.mojom.Url url;
+  // The body, as UTF-8 text.
+  string body;
+};
+
+// Renderer -> browser, bound per document.
+interface ShellFetch {
+  // GETs `url` with the profile's cookies and `headers`. With
+  // `sapisid_hash_origin`, an https origin such as "https://mail.google.com",
+  // also sends `Authorization: SAPISIDHASH <time>_<sha1>` from the SAPISID
+  // cookie the request carries, and follows no redirect.
+  //
+  // An unhashed request follows redirects on https only, and drops `headers`
+  // on one that leaves the first address's origin.
+  //
+  // Answers with a response, or with no response and why: refused, the
+  // network error, or a desk that locked while the request was in flight.
+  Fetch(url.mojom.Url url,
+        array<ShellFetchHeader> headers,
+        string? sapisid_hash_origin)
+      => (ShellFetchResponse? response, string error);
+};

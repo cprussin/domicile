@@ -654,6 +654,30 @@ source_set("desk_lock") {
   ]
 }
 
+# What the browser checks and computes for the shell's fetches with the
+# profile's cookies: the refusals and the SAPISIDHASH. Its own target for
+# :pointer_warp's reason: the decisions are here, where a test reaches them
+# with no profile, and the request is in //chrome/browser/domicile, which is
+# where the profile's network context is.
+source_set("shell_fetch") {
+  sources = [
+    "browser/shell_fetch.cc",
+    "browser/shell_fetch.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//components/domicile/mojom",
+  ]
+
+  deps = [
+    "//net",
+    # `IsRequestHeaderSafe`: the headers the network stack sets itself.
+    "//services/network/public/cpp",
+    "//url",
+  ]
+}
+
 # The shell's system calls, wrapped and recognized on their way through
 # :control_channel. Its own target for :line_framer's reason: it is the part a
 # test reaches with a string. //base only.
@@ -752,6 +776,7 @@ source_set("unit_tests") {
     "browser/private_pages_unittest.cc",
     "browser/shell_source_unittest.cc",
     "browser/shell_url_loader_factory_unittest.cc",
+    "browser/shell_fetch_unittest.cc",
     "browser/shell_origin_unittest.cc",
     "browser/shell_windows_unittest.cc",
     "browser/shortcut_registry_unittest.cc",
@@ -805,6 +830,7 @@ source_set("unit_tests") {
     ":pointer_warp",
     ":portal_request",
     ":private_pages",
+    ":shell_fetch",
     ":shell_origin",
     ":shell_scheme",
     ":shell_source",
