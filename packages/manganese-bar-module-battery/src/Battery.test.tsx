@@ -64,6 +64,19 @@ describe("Battery", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("keeps room for its widest readout", () => {
+    // A charging `100%` is the widest, so the item never grows past it.
+    const battery = heldBattery();
+    render(<Battery battery={battery.battery} />);
+
+    battery.report({ charge: 0.5, charging: false });
+
+    expect(screen.getByText("100%").closest("[aria-hidden]")).not.toBeNull();
+    expect(
+      screen.queryByRole("img", { name: "Charging" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("follows the battery as it drains", () => {
     const battery = heldBattery();
     render(<Battery battery={battery.battery} />);

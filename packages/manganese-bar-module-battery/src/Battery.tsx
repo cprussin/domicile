@@ -24,6 +24,9 @@ type Props = {
  * The bolt matters because a full battery and a machine on AC look the same on
  * the meter.
  *
+ * Holds the width of its widest readout, a charging `100%`, so the items
+ * beside it never move.
+ *
  * Draws nothing until UPower reports a battery, so a machine without one shows
  * no false empty meter.
  */
@@ -40,26 +43,33 @@ const Meter = ({ reading }: { reading: BatteryReading }) => {
     <div
       className={rootStyles({ charge: chargeOf(percent, reading.charging) })}
     >
-      {reading.charging && (
-        <LightningIcon
-          aria-label="Charging"
-          role="img"
-          size={10}
-          weight="fill"
-        />
-      )}
-      <div
-        aria-label="Battery"
-        aria-valuemax={100}
-        aria-valuemin={0}
-        aria-valuenow={percent}
-        className={caseStyles}
-        role="meter"
-      >
-        {/* Not a token: the fill width is the charge itself. */}
-        <div className={fillStyles} style={{ inlineSize: `${percent}%` }} />
+      <div aria-hidden className={sizerStyles}>
+        <LightningIcon size={10} weight="fill" />
+        <div className={caseStyles} />
+        <span className={percentStyles}>100%</span>
       </div>
-      <span className={percentStyles}>{percent}%</span>
+      <div className={readoutStyles}>
+        {reading.charging && (
+          <LightningIcon
+            aria-label="Charging"
+            role="img"
+            size={10}
+            weight="fill"
+          />
+        )}
+        <div
+          aria-label="Battery"
+          aria-valuemax={100}
+          aria-valuemin={0}
+          aria-valuenow={percent}
+          className={caseStyles}
+          role="meter"
+        >
+          {/* Not a token: the fill width is the charge itself. */}
+          <div className={fillStyles} style={{ inlineSize: `${percent}%` }} />
+        </div>
+        <span className={percentStyles}>{percent}%</span>
+      </div>
     </div>
   );
 };
@@ -69,7 +79,13 @@ const Meter = ({ reading }: { reading: BatteryReading }) => {
  * it all red, and one animation flashes it all.
  */
 const rootStyles = cva({
-  base: hstack.raw({ gap: 1 }),
+  // The sizer and the readout share one cell, so the sizer sets the width and
+  // the readout centers in it.
+  base: {
+    alignItems: "center",
+    display: "grid",
+    justifyItems: "center",
+  },
   variants: {
     charge: {
       // The whole readout turns red, not just the meter.
@@ -85,6 +101,11 @@ const rootStyles = cva({
     },
   },
 });
+
+// An invisible charging `100%`, which is as wide as the readout gets.
+const sizerStyles = hstack({ gap: 1, gridArea: "1 / 1", visibility: "hidden" });
+
+const readoutStyles = hstack({ gap: 1, gridArea: "1 / 1" });
 
 // Drawn in `currentcolor` so it follows the readout's color.
 const caseStyles = css({
@@ -119,7 +140,7 @@ const fillStyles = css({
 const percentStyles = css({
   // 10px to match the bar; the font-size scale jumps from 8px to 12px.
   fontSize: "0.625rem",
-  // Fixed-width digits so the bar's width does not change with the charge.
+  // Fixed-width digits, so the readout does not shift as the charge changes.
   fontVariantNumeric: "tabular-nums",
   whiteSpace: "nowrap",
 });

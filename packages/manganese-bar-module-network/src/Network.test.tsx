@@ -122,6 +122,7 @@ describe("Network", () => {
       network.report(online(Link.Wired("Wired connection 1")));
 
       expect(screen.getByRole("img", { name: "Wired" })).toBeVisible();
+      expect(screen.getByText("Wired")).toBeVisible();
       expect(screen.queryByText("Wired connection 1")).not.toBeInTheDocument();
     });
 
@@ -142,6 +143,22 @@ describe("Network", () => {
       network.report(online(Link.None()));
 
       expect(screen.getByRole("img", { name: "Offline" })).toBeVisible();
+      expect(screen.getByText("Offline")).toBeVisible();
+    });
+
+    it("keeps one width, cutting a long name short", () => {
+      const network = heldNetwork();
+      render(<Item network={network.watch} />);
+      const width = css({ inlineSize: 24 });
+
+      network.report(online(Link.None()));
+      expect(screen.getByRole("button").className).toContain(width);
+
+      network.report(online(Link.Wifi("A network with a long name", 0.9)));
+      expect(screen.getByRole("button").className).toContain(width);
+      expect(
+        screen.getByText("A network with a long name").className,
+      ).toContain(css({ textOverflow: "ellipsis" }));
     });
   });
 
