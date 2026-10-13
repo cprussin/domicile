@@ -87,6 +87,7 @@ describe("watchPortalRequests", () => {
         app_id: "org.example.App",
         body: {
           body: "",
+          destructive: true,
           grant_label: "Allow",
           subtitle: "Example wants to see you",
           title: "Use the camera?",
@@ -103,6 +104,7 @@ describe("watchPortalRequests", () => {
         body: {
           body: "",
           denyLabel: undefined,
+          destructive: true,
           grantLabel: "Allow",
           subtitle: "Example wants to see you",
           title: "Use the camera?",

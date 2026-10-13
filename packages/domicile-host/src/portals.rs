@@ -202,6 +202,7 @@ mod tests {
             body: String::new(),
             grant_label: None,
             deny_label: None,
+            destructive: false,
         })
     }
 

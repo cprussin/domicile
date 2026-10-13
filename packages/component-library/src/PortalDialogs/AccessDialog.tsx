@@ -6,8 +6,8 @@ import { ModalDialog } from "../ModalDialog/ModalDialog";
 
 type Props = {
   answer: (answer: PortalAnswer) => void;
-  /** Who asks, as the dialog names them. */
-  asker: string;
+  /** Who asks, as the dialog names them; unnamed when the shell asks. */
+  asker: string | undefined;
   body: AccessBody;
   screen: string | undefined;
 };
@@ -30,6 +30,7 @@ export const AccessDialog = ({ answer, asker, body, screen }: Props) => (
           onClick={() => {
             answer(Answer.Access());
           }}
+          variant={body.destructive ? "danger" : "primary"}
         >
           {body.grantLabel ?? "Allow"}
         </Button>
@@ -44,7 +45,7 @@ export const AccessDialog = ({ answer, asker, body, screen }: Props) => (
     screen={screen}
     title={body.title}
   >
-    <p className={askerStyles}>{`${asker} asks`}</p>
+    {asker !== undefined && <p className={askerStyles}>{`${asker} asks`}</p>}
     {body.subtitle !== "" && <p className={textStyles}>{body.subtitle}</p>}
     {body.body !== "" && <p className={textStyles}>{body.body}</p>}
   </ModalDialog>

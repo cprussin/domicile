@@ -26,6 +26,7 @@ fn access() -> PortalRequest {
             body: "".into(),
             grant_label: Some("Allow".into()),
             deny_label: None,
+            destructive: false,
         }),
     }
 }
@@ -42,7 +43,7 @@ fn a_request_carries_its_kind_beside_an_untyped_body() {
 
     assert_eq!(
         written,
-        r#"{"type":"portal_requests","items":[{"id":1,"app_id":"org.example.App","parent_app_id":"app-3","kind":"access","body":{"title":"Use the camera?","subtitle":"Example wants to see you","body":"","grant_label":"Allow"}}],"capturing":[]}"#
+        r#"{"type":"portal_requests","items":[{"id":1,"app_id":"org.example.App","parent_app_id":"app-3","kind":"access","body":{"title":"Use the camera?","subtitle":"Example wants to see you","body":"","grant_label":"Allow","destructive":false}}],"capturing":[]}"#
     );
 }
 
@@ -237,6 +238,7 @@ fn a_request_takes_only_answers_of_its_own_kind() {
         body: String::new(),
         grant_label: None,
         deny_label: None,
+        destructive: false,
     });
     let chose = |choice: &str| PortalAnswer::AppChooser {
         choice: choice.into(),

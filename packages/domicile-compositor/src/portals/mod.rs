@@ -1225,6 +1225,7 @@ mod tests {
                     body: String::new(),
                     grant_label: Some("Allow".into()),
                     deny_label: None,
+                    destructive: false,
                 }),
             }]
         );

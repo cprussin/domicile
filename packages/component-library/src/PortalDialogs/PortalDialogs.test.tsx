@@ -13,6 +13,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { Button } from "../Button/Button";
 import { DisplayProvider } from "../Screen/DisplayProvider";
 import type { DisplaySource } from "../Screen/display-source";
 import { PortalDialogs } from "./PortalDialogs";
@@ -53,6 +54,7 @@ const access = (id: number, body: object = {}) => ({
   app_id: "org.example.App",
   body: {
     body: "It will see you.",
+    destructive: false,
     subtitle: "Example wants the camera",
     title: "Use the camera?",
     ...body,
@@ -365,6 +367,27 @@ describe("PortalDialogs", () => {
 
       expect(screen.getByRole("button", { name: "Sure" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Never" })).toBeInTheDocument();
+    });
+
+    it("marks a destructive question's yes as dangerous", () => {
+      const danger = render(<Button variant="danger">Shut down</Button>);
+      const dangerous = within(danger.container).getByRole("button").className;
+      danger.unmount();
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([access(1, { destructive: true, grant_label: "Shut down" })]);
+
+      expect(screen.getByRole("button", { name: "Shut down" }).className).toBe(
+        dangerous,
+      );
+    });
+
+    it("asks the shell's own question without naming an asker", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([{ ...access(1), app_id: SHELL_APP_ID }]);
+
+      expect(screen.queryByText(/asks$/)).not.toBeInTheDocument();
     });
 
     it("asks to share the user's name and picture, naming the application and its reason", async () => {

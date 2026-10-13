@@ -434,6 +434,7 @@ fn the_portal_requests_ride_with_the_handshake() {
             body: String::new(),
             grant_label: None,
             deny_label: None,
+            destructive: false,
         }),
     };
     let remote = Capturing {

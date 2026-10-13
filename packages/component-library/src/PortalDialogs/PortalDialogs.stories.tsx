@@ -44,6 +44,7 @@ const access = {
   app_id: "org.example.Camera",
   body: {
     body: "It can see you until it closes.",
+    destructive: false,
     subtitle: "Camera wants to use your webcam",
     title: "Allow the camera?",
   },

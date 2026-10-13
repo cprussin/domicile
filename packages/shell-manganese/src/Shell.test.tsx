@@ -1191,7 +1191,12 @@ describe("Shell", () => {
           items: [
             {
               app_id: "org.example.App",
-              body: { body: "", subtitle: "", title: "Use the camera?" },
+              body: {
+                body: "",
+                destructive: false,
+                subtitle: "",
+                title: "Use the camera?",
+              },
               id: 1,
               kind: "access",
             },

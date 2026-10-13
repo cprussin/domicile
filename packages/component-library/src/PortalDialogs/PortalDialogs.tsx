@@ -186,7 +186,7 @@ const Dialog = ({
       return (
         <AccessDialog
           answer={answer}
-          asker={asker}
+          asker={request.appId === SHELL_APP_ID ? undefined : asker}
           body={request.body}
           screen={screen}
         />
