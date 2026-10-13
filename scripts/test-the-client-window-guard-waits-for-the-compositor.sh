@@ -57,14 +57,14 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 # The compositor's line once startup is far enough to start a client. Built
-# from the format string at domicile-compositor's main.rs:813, so rewording
-# that log site must be mirrored here.
+# from the format string in domicile-compositor's chrome_connection.rs, so
+# rewording that log site must be mirrored here.
 #
 # `bind_chrome_socket` runs on the main thread and a failed bind ends the run,
 # so this line means the socket is bound. The wayland socket the client dials
 # is created before it.
 UP='2026-09-22T00:03:21.004411Z  INFO domicile_compositor: chrome protocol socket up path="/run/user/0/domicile-client-window.sock"'
-# Built from engine_session.rs:208. Only a client produces this line, so a wait
+# Built from engine_session.rs. Only a client produces this line, so a wait
 # it satisfies cannot finish before the client starts.
 BROKERED='2026-09-22T00:04:29.112233Z  INFO domicile_compositor: the browser brokered a frame sink app_id=app-1 surface=1'
 # Runs the wait against a compositor whose log holds `$2` and which is `alive`

@@ -421,7 +421,7 @@ if [ -z "$FOUND" ]; then
   if grep -aq "giving up looking" "$COMP_LOG" 2>/dev/null; then
     annotate "guard-shell: the compositor stopped searching before this" \
          "poll ran out, so 'not found' means 'not looked for'. Its budget is" \
-         "FIND_FOR in domicile-compositor's main.rs"
+         "FIND_FOR in domicile-compositor's spike_probes.rs"
     exit 1
   fi
   annotate "guard-shell: the client's window is not on $SHELL_NAME's page"
