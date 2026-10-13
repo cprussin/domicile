@@ -1,32 +1,21 @@
-// The app's native messaging host, `domicile-settings-host`: the desktop's
-// config and shell files, its site permissions, the extensions it loads and
-// uninstalls, and its cameras and microphones. Every reply is parsed.
-// The protocol is `domicile_launch::settings`'s.
+// The settings host, `domicile-settings-host`, which the app runs: the
+// desktop's config and shell files, its site permissions, the extensions it
+// loads and uninstalls, and its cameras and microphones. Every reply is
+// parsed. The protocol is `domicile_launch::settings`'s.
 
+import type { Result } from "@cprussin/option-result";
+import type {
+  Exit,
+  Subprocess,
+  System,
+  SystemError,
+} from "@domicile-desktop/sdk/system";
 import { z } from "zod";
 
-/** The host's name in its native messaging manifest. */
-const HOST = "domicile.settings";
+import { encodeFrame, frameDecoder } from "./frames";
 
-/** A `chrome.*` event. */
-type ChromeEvent<Listener> = {
-  addListener: (listener: Listener) => void;
-};
-
-/** The parts of a `chrome.runtime.Port` the app uses. */
-export type NativePort = {
-  onDisconnect: ChromeEvent<() => void>;
-  onMessage: ChromeEvent<(message: unknown) => void>;
-  postMessage: (message: unknown) => void;
-};
-
-/** The parts of `chrome.runtime` the app uses. */
-export type NativeRuntime = {
-  connectNative: (application: string) => NativePort;
-  lastError: { message?: string | undefined } | undefined;
-};
-
-declare const chrome: { runtime: NativeRuntime };
+/** The command that starts the host. */
+const HOST = ["domicile-settings-host"];
 
 export const PERMISSIONS = [
   "camera",
@@ -90,6 +79,23 @@ const mediaDevicesSchema = z.object({
  */
 export type MediaDevices = z.infer<typeof mediaDevicesSchema>;
 
+const extensionSchema = z
+  .object({
+    description: z.string(),
+    enabled: z.boolean(),
+    id: z.string(),
+    name: z.string(),
+    options_url: z.string().nullish(),
+    version: z.string(),
+  })
+  .transform(({ options_url, ...extension }) => ({
+    ...extension,
+    optionsUrl: options_url ?? undefined,
+  }));
+
+/** An extension in the browser windows' profile. */
+export type InstalledExtension = z.output<typeof extensionSchema>;
+
 /** Which list a device is in. */
 export type MediaKind = "camera" | "microphone";
 
@@ -126,6 +132,11 @@ export type SettingsHost = {
   uninstallExtension: (id: string) => Promise<void>;
   /** The ids of the extensions the config installed, which only it removes. */
   configExtensions: () => Promise<string[]>;
+  /** Every extension in the browser windows' profile. */
+  extensions: () => Promise<InstalledExtension[]>;
+  setExtensionEnabled: (id: string, enabled: boolean) => Promise<void>;
+  /** Opens `url` in a browser window. */
+  openUrl: (url: string) => Promise<void>;
   mediaDevices: () => Promise<MediaDevices>;
   /** Gives device `id` to sites that ask for a `kind` without naming one. */
   setMediaDevice: (kind: MediaKind, id: string) => Promise<void>;
@@ -134,45 +145,62 @@ export type SettingsHost = {
 };
 
 /**
- * The host over native messaging. It connects on the first request, and
- * again after it goes away, since Chrome stops a host whose port closes.
+ * The host as a process the app spawns, speaking framed JSON on its stdin and
+ * stdout. It starts on the first request, and again after it ends.
  */
-export const nativeHost = (
-  runtime: NativeRuntime = chrome.runtime,
-): SettingsHost => {
+export const spawnedHost = (system: Pick<System, "spawn">): SettingsHost => {
   const pending = new Map<number, Pending>();
   const changes = new Set<() => void>();
-  let port: NativePort | undefined;
+  let running: Promise<Subprocess> | undefined;
   let lastId = 0;
 
-  const connected = (): NativePort => {
-    if (port === undefined) {
-      const opened = runtime.connectNative(HOST);
-      opened.onMessage.addListener((message) => {
-        received(message, pending, changes);
-      });
-      opened.onDisconnect.addListener(() => {
-        port = undefined;
-        const why = new Error(
-          runtime.lastError?.message ?? "The settings host stopped",
-        );
-        for (const waiting of pending.values()) {
-          waiting.reject(why);
-        }
-        pending.clear();
-      });
-      port = opened;
-      return opened;
+  const ended = (why: Error) => {
+    running = undefined;
+    for (const waiting of pending.values()) {
+      waiting.reject(why);
+    }
+    pending.clear();
+  };
+
+  const connected = (): Promise<Subprocess> => {
+    if (running === undefined) {
+      const starting = system.spawn(HOST, { stdin: true }).then((spawned) =>
+        spawned.match({
+          Err: (error) => {
+            running = undefined;
+            throw new Error(error.message);
+          },
+          Ok: (process) => {
+            follow(process, (message) => {
+              received(message, pending, changes);
+            }).then(ended, (error: unknown) => {
+              ended(new Error("The settings host stopped", { cause: error }));
+            });
+            return process;
+          },
+        }),
+      );
+      running = starting;
+      return starting;
     } else {
-      return port;
+      return running;
     }
   };
 
   const ask = (request: Record<string, unknown>) =>
     new Promise<Reply>((resolve, reject) => {
       lastId += 1;
-      pending.set(lastId, { reject, resolve });
-      connected().postMessage({ ...request, id: lastId });
+      const id = lastId;
+      pending.set(id, { reject, resolve });
+      connected().then(
+        (process) => {
+          process.write(encodeFrame({ ...request, id }));
+        },
+        (error: unknown) => {
+          pending.delete(id);
+          reject(error);
+        },
+      );
     });
 
   return {
@@ -190,6 +218,14 @@ export const nativeHost = (
         return reply.ids;
       } else {
         throw unexpected(reply, "config_extensions");
+      }
+    },
+    extensions: async () => {
+      const reply = await ask({ type: "extensions" });
+      if (reply.type === "extensions") {
+        return reply.extensions;
+      } else {
+        throw unexpected(reply, "extensions");
       }
     },
     loadUnpacked: async (directory) => {
@@ -210,10 +246,19 @@ export const nativeHost = (
     },
     onChange: (listener) => {
       changes.add(listener);
-      connected();
+      // A failed start fails the requests made with it, which report it.
+      connected().catch(() => {
+        /* reported by the requests */
+      });
       return () => {
         changes.delete(listener);
       };
+    },
+    openUrl: async (url) => {
+      const reply = await ask({ type: "open_url", url });
+      if (reply.type !== "opened") {
+        throw unexpected(reply, "opened");
+      }
     },
     read: async () => {
       const reply = await ask({ type: "read" });
@@ -225,6 +270,16 @@ export const nativeHost = (
         };
       } else {
         throw unexpected(reply, "files");
+      }
+    },
+    setExtensionEnabled: async (extension, enabled) => {
+      const reply = await ask({
+        enabled,
+        extension,
+        type: "set_extension_enabled",
+      });
+      if (reply.type !== "stored") {
+        throw unexpected(reply, "stored");
       }
     },
     setMediaDevice: async (kind, device) => {
@@ -302,6 +357,12 @@ const replySchema = z.discriminatedUnion("type", [
     id: z.number(),
     type: z.literal("media_devices"),
   }),
+  z.object({
+    extensions: z.array(extensionSchema),
+    id: z.number(),
+    type: z.literal("extensions"),
+  }),
+  z.object({ id: z.number(), type: z.literal("opened") }),
   z.object({ id: z.number(), type: z.literal("refused"), why: z.string() }),
   z.object({ type: z.literal("changed") }),
 ]);
@@ -337,3 +398,55 @@ const received = (
 /** The error for a reply of the wrong type. */
 const unexpected = (reply: Reply, wanted: Reply["type"]) =>
   new Error(`The settings host answered ${reply.type}, not ${wanted}`);
+
+/**
+ * Hands each message `process` writes to `received` until it ends, and
+ * resolves with why it ended. A message `received` throws on stops it.
+ */
+const follow = async (
+  process: Subprocess,
+  received: (message: unknown) => void,
+): Promise<Error> => {
+  const decode = frameDecoder();
+  const [broken, stderr, exit] = await Promise.all([
+    eachChunk(process.stdout, (chunk) => {
+      for (const message of decode(chunk)) {
+        received(message);
+      }
+    }).then(
+      () => undefined,
+      (error: unknown) => {
+        process.kill();
+        return new Error("The settings host sent a bad message", {
+          cause: error,
+        });
+      },
+    ),
+    new Response(process.stderr).text(),
+    process.exited,
+  ]);
+  return broken ?? new Error(whyEnded(stderr, exit));
+};
+
+/** Why the host ended: what it said on stderr, or how it exited. */
+const whyEnded = (stderr: string, exit: Result<Exit, SystemError>): string =>
+  stderr.trim() === ""
+    ? exit.match({
+        Err: (error) => error.message,
+        Ok: ({ code, signal }) =>
+          signal === undefined
+            ? `The settings host exited with code ${String(code)}`
+            : `The settings host was killed by signal ${String(signal)}`,
+      })
+    : stderr.trim();
+
+/** Calls `each` with every chunk `stream` reads, until it closes. */
+const eachChunk = async (
+  stream: ReadableStream<Uint8Array>,
+  each: (chunk: Uint8Array) => void,
+) => {
+  const reader = stream.getReader();
+  for (let read = await reader.read(); !read.done; read = await reader.read()) {
+    each(read.value);
+  }
+};

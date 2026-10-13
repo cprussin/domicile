@@ -1,5 +1,5 @@
-// Entry point of `settings.html`: follows the desktop's theme and motion
-// setting, and mounts the app over its host and the extension APIs.
+// The app module Domicile runs: follows the desktop's theme and motion
+// setting, and mounts the app over the settings host it spawns.
 
 import {
   followReducedMotion,
@@ -7,29 +7,29 @@ import {
 } from "@domicile-desktop/component-library/media-theme-source";
 import { ThemeProvider } from "@domicile-desktop/component-library/ThemeProvider";
 import { applyTheme } from "@domicile-desktop/component-library/theme-core";
+import type { AppMain } from "@domicile-desktop/sdk/app";
+import { system } from "@domicile-desktop/sdk/system";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { App } from "./App";
-import { chromeExtensions } from "./extensions";
-import { nativeHost } from "./host";
+import { hostExtensions } from "./extensions";
+import { spawnedHost } from "./host";
 
 import "./global.css";
 
-const themes = mediaThemeSource();
-// Before the first paint, so the page never flashes the other theme.
-applyTheme(themes.theme ?? "dark");
-followReducedMotion();
-
-const root = document.getElementById("root");
-if (root === null) {
-  throw new Error("settings.html has no #root");
-} else {
+export const main: AppMain = (root, host) => {
+  const themes = mediaThemeSource();
+  // Before the first paint, so the window never flashes the other theme.
+  applyTheme(themes.theme ?? "dark");
+  followReducedMotion();
+  document.title = "Settings";
+  const settings = spawnedHost(system(host));
   createRoot(root).render(
     <StrictMode>
       <ThemeProvider source={themes}>
-        <App extensions={chromeExtensions()} host={nativeHost()} />
+        <App extensions={hostExtensions(settings)} host={settings} />
       </ThemeProvider>
     </StrictMode>,
   );
-}
+};

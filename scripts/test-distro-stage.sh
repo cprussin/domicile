@@ -107,10 +107,11 @@ for shell in manganese simple splash; do
 done
 for app in history settings; do
   manifest "app-$app"
-  put "$WORKSPACE/packages/app-$app/.vite/extension/manifest.json" '{}'
   put "$WORKSPACE/packages/app-$app/icons/$app.svg" "$app"
   put "$WORKSPACE/packages/app-$app/icons/$app-preview.svg" "$app"
 done
+put "$WORKSPACE/packages/app-history/.vite/extension/manifest.json" '{}'
+put "$WORKSPACE/packages/app-settings/.vite/app/settings.js" 'export const main = () => {};'
 # A crate: no `package.json`, so not part of the workspace.
 put "$WORKSPACE/packages/domicile-launch/Cargo.toml" ''
 # As `distro/build.sh` installs before it builds.
@@ -152,10 +153,18 @@ for shell in manganese simple splash; do
     ok "the $shell shell is prebuilt" ||
     fail "the $shell shell is prebuilt" "no $LIBEXEC/shells/$shell/shell.js"
 done
-for app in history settings; do
+for app in history; do
   [ -f "$LIBEXEC/apps/$app/manifest.json" ] &&
     ok "the $app app is installed" ||
     fail "the $app app is installed" "no $LIBEXEC/apps/$app/manifest.json"
+done
+for module in settings; do
+  [ -f "$LIBEXEC/app-modules/$module/$module.js" ] &&
+    ok "the $module app module is installed" ||
+    fail "the $module app module is installed" "no $LIBEXEC/app-modules/$module/$module.js"
+  [ ! -e "$LIBEXEC/apps/$module" ] &&
+    ok "the $module app is not installed as an extension" ||
+    fail "the $module app is not installed as an extension" "$LIBEXEC/apps/$module exists"
 done
 
 echo "the builder runs the bundled bun against the bundled workspace"

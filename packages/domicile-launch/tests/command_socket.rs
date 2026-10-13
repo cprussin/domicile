@@ -7,14 +7,16 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use domicile_launch::command::{
-    config_extensions_line, load_shell_line, load_unpacked_line, media_devices_line, open_url_line,
-    set_media_device_line, set_site_permission_line, site_permissions_line,
-    uninstall_extension_line,
+    config_extensions_line, extensions_line, load_shell_line, load_unpacked_line,
+    media_devices_line, open_url_line, set_extension_enabled_line, set_media_device_line,
+    set_site_permission_line, site_permissions_line, uninstall_extension_line,
 };
 use domicile_launch::command_socket::{
-    config_extensions, load_shell, load_unpacked, media_devices, open_url, set_media_device,
-    set_site_permission, site_permissions, uninstall_extension, CommandError,
+    config_extensions, extensions, load_shell, load_unpacked, media_devices, open_url,
+    set_extension_enabled, set_media_device, set_site_permission, site_permissions,
+    uninstall_extension, CommandError,
 };
+use domicile_launch::extensions::InstalledExtension;
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
@@ -286,5 +288,44 @@ fn the_engine_lists_the_extensions_the_config_installed() {
     assert_eq!(
         heard.join().expect("the engine was listening"),
         config_extensions_line()
+    );
+}
+
+#[test]
+fn the_engine_lists_every_installed_extension() {
+    let (_scratch, path) = scratch();
+    let heard = an_engine(
+        &path,
+        Some("{\"type\":\"extensions\",\"extensions\":[{\"id\":\"abcdefghijklmnopabcdefghijklmnop\",\"name\":\"Tabs\",\"description\":\"\",\"version\":\"1.0\",\"enabled\":true}]}\n"),
+    );
+
+    assert_eq!(
+        extensions(&path, BRIEFLY).expect("the engine listed them"),
+        vec![InstalledExtension {
+            id: "abcdefghijklmnopabcdefghijklmnop".to_string(),
+            name: "Tabs".to_string(),
+            description: String::new(),
+            version: "1.0".to_string(),
+            enabled: true,
+            options_url: None,
+        }]
+    );
+    assert_eq!(
+        heard.join().expect("the engine was listening"),
+        extensions_line()
+    );
+}
+
+#[test]
+fn the_engine_is_told_to_disable_an_extension_and_says_it_stored_it() {
+    let (_scratch, path) = scratch();
+    let heard = an_engine(&path, Some("{\"type\":\"set\"}\n"));
+
+    set_extension_enabled(&path, "abcdefghijklmnopabcdefghijklmnop", false, BRIEFLY)
+        .expect("the engine stored it");
+
+    assert_eq!(
+        heard.join().expect("the engine was listening"),
+        set_extension_enabled_line("abcdefghijklmnopabcdefghijklmnop", false)
     );
 }

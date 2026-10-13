@@ -1,6 +1,5 @@
-//! The Settings app's native messaging host. Chrome starts it when the app
-//! connects, with the engine's environment, and stops it when the app's port
-//! closes.
+//! The Settings app's host. The app spawns it, with the compositor's
+//! environment, and it stops when its stdin closes.
 //!
 //! The protocol is in `domicile_launch::settings`; this file reads the
 //! environment, the files and the sockets. See `docs/SETTINGS.md`.

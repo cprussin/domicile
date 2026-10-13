@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
-import type { Extensions, InstalledExtension } from "./extensions";
-import type { SettingsHost } from "./host";
+import type { Extensions } from "./extensions";
+import type { InstalledExtension, SettingsHost } from "./host";
 
 /**
  * The installed extensions and the ids the config installed, listed again on
