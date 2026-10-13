@@ -237,6 +237,21 @@ pub enum ChromeMessage {
     AnswerPortalRequest { id: u32, answer: PortalAnswer },
 }
 
+/// The process on the far end of a client's connection.
+///
+/// The kernel records it at `connect(2)` (`SO_PEERCRED`), so the client cannot
+/// forge it, unlike its app id or title.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Owner {
+    pub pid: i32,
+    pub uid: u32,
+    pub gid: u32,
+    /// The inode of the process's pidfd, which no other process gets while
+    /// the system is up, so it tells a reused pid apart. `None` on kernels
+    /// without pidfs (before Linux 6.9).
+    pub pidfd_inode: Option<u64>,
+}
+
 /// Messages sent from the host to the chrome (in-page client).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -279,6 +294,8 @@ pub enum HostMessage {
         /// The compositor still answers "server side"; a shell can leave its
         /// own frame off such a window where that suits it.
         client_frame: bool,
+        /// The process that connected the window's client.
+        owner: Owner,
     },
 
     /// A window's title, sent whenever it changes.

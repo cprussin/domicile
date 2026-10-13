@@ -5,7 +5,7 @@
 
 use domicile_protocol::{
     negotiate, ChromeMessage, ClipboardEntry, CursorShape, DisplayInfo, DisplayTransform,
-    HostMessage, Passphrase, PROTOCOL_VERSION,
+    HostMessage, Owner, Passphrase, PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -369,6 +369,12 @@ fn wire_shape_is_pinned() {
         size: [640.0, 480.0],
         dialog: true,
         client_frame: true,
+        owner: Owner {
+            pid: 7,
+            uid: 1000,
+            gid: 1000,
+            pidfd_inode: None,
+        },
     })
     .unwrap();
     assert_eq!(v["size"], serde_json::json!([640.0, 480.0]));

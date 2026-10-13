@@ -144,17 +144,20 @@ by_id = {w["appId"]: w for w in windows}
 
 def default(**fields):
     window = {"clientFrame": False, "cursor": "default", "desktopId": "", "dialog": False,
-              "grab": False, "height": None, "maxHeight": None,
+              "gid": None, "grab": False, "height": None, "maxHeight": None,
               "maxWidth": None, "minHeight": None, "minWidth": None, "parent": None,
-              "title": "", "width": None, "x": None, "y": None}
+              "pid": None, "pidfdInode": None, "title": "", "uid": None, "width": None,
+              "x": None, "y": None}
     window.update(fields)
     return window
 
 wanted = [
     default(appId="first", title="Retitled", desktopId="org.example.First", width=800,
-            height=600, minWidth=100, minHeight=50, cursor="zoom-out"),
+            height=600, minWidth=100, minHeight=50, cursor="zoom-out", pid=4141,
+            uid=1000, gid=1000),
     default(appId="second", title="Second", desktopId="org.example.Second", width=640,
-            height=480, cursor="grab", dialog=True, clientFrame=True),
+            height=480, cursor="grab", dialog=True, clientFrame=True, pid=4242,
+            uid=4294967294, gid=100, pidfdInode=5021),
     default(appId="menu", parent="second", x=10, y=20, width=120, height=90, grab=True),
 ]
 

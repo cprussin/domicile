@@ -102,6 +102,31 @@ fn a_chrome_that_connects_late_is_told_about_a_window_already_open() {
         .expect("the catch-up names who has the keyboard, after the windows");
 }
 
+/// A window's `app_appeared` names the process that connected its client.
+///
+/// Only a real client has a socket for `SO_PEERCRED` to read.
+#[test]
+fn a_window_names_the_process_that_owns_it() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let client = compositor.client("an owned window");
+
+    let appeared = chrome
+        .wait_for(|message| matches!(message, HostMessage::AppAppeared { .. }))
+        .expect("a client that opened a window is announced to the chrome");
+    let HostMessage::AppAppeared { owner, .. } = appeared else {
+        unreachable!("the wait matched on this variant")
+    };
+
+    // SAFETY: `getuid` cannot fail and touches no memory.
+    let uid = unsafe { libc::getuid() };
+    assert_eq!(
+        (owner.pid, owner.uid),
+        (client.pid() as i32, uid),
+        "the window should name the test client, which this test started"
+    );
+}
+
 /// A chrome's `spawn` starts a process on this compositor's display.
 ///
 /// A process that inherits the compositor's own `WAYLAND_DISPLAY` opens on the
@@ -232,7 +257,7 @@ fn a_client_that_reaches_the_socket_is_said_to_have_arrived() {
 
     let client = compositor.client("arriving");
 
-    compositor.wait_for_log(&format!("app client connected pid=Some({})", client.pid()));
+    compositor.wait_for_log(&format!("app client connected pid={}", client.pid()));
 }
 
 /// A window is announced when it first draws, with its size and what its

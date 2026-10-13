@@ -29,11 +29,12 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # DomicileDisplayRegions 27, DomicileDeskTargeter 4, PlaceholderStage 3,
 # SystemCall 4, PortalRequest 3, FileChoice 13, DisplayCapture 7,
 # CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, SitePermissions 11,
-# ControlChannel 2, DeviceChoices 9, SurfaceFrames 6,
+# ControlChannel 3, DeviceChoices 9, SurfaceFrames 6,
 # GuestDialogs 6, DownloadTally 6, SurfaceSubmits 4,
 # PrivatePages 3, ShellOrigin 2.
 #
-# 303, and it was 301 — only the shell's origin binding the broker is two
+# 304, and it was 303 — a window's owner reaching the page is one more
+# ControlChannel case. Before that 303, and it was 301 — only the shell's origin binding the broker is two
 # ShellOrigin cases. Before that 301, and it was 300 — counting a <webview>'s finished downloads apart is one
 # more DownloadTally case. Before that 300, and it was 301 — Ctrl+wheel zooming again drops the one WheelAction
 # case. Before that 301, and it was 300 — a window's size and hints reaching the page is one
@@ -111,7 +112,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=303
+FLOOR=304
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

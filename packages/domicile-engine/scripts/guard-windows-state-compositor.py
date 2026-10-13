@@ -43,6 +43,7 @@ SEQUENCE = [
         "size": [300, 200],
         "dialog": False,
         "client_frame": False,
+        "owner": {"pid": 4141, "uid": 1000, "gid": 1000, "pidfd_inode": None},
     },
     {
         "type": "app_appeared",
@@ -52,6 +53,7 @@ SEQUENCE = [
         "size": [640, 480],
         "dialog": True,
         "client_frame": True,
+        "owner": {"pid": 4242, "uid": 4294967294, "gid": 100, "pidfd_inode": 5021},
     },
     {
         "type": "app_appeared",

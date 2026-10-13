@@ -1093,8 +1093,15 @@ void DomicileHost::AppAppeared(const String& app_id,
                                double width,
                                double height,
                                bool dialog,
-                               bool client_frame) {
+                               bool client_frame,
+                               domicile::mojom::blink::WindowOwnerPtr owner) {
   DomicileWindowState& state = WindowNamed(app_id);
+  if (owner) {
+    state.pid = owner->pid;
+    state.uid = owner->uid;
+    state.gid = owner->gid;
+    state.pidfd_inode = owner->pidfd_inode;
+  }
   state.title = title;
   state.desktop_id = desktop_id;
   state.width = width;
