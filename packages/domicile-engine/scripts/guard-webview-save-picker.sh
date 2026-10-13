@@ -44,6 +44,8 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS/lib-last-words.sh"
 # shellcheck source=packages/domicile-engine/scripts/lib-ports.sh
 . "$SCRIPTS/lib-ports.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-profile.sh
+. "$SCRIPTS/lib-profile.sh"
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
@@ -90,7 +92,8 @@ cleanup() {
   if [ ${#STARTED[@]} -gt 0 ]; then
     kill "${STARTED[@]}" 2>/dev/null
   fi
-  rm -rf "$PROFILE" "$HOME_DIR"
+  remove_profile "$PROFILE"
+  rm -rf "$HOME_DIR"
 }
 trap cleanup EXIT
 

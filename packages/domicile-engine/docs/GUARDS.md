@@ -31,6 +31,7 @@ toolchain shell ([BUILD-MACHINE.md](BUILD-MACHINE.md#toolchain-shell)).
 | `lib-compositor-cleanup.sh` | stops a nested compositor and its whole process group |
 | `lib-control-budget.sh` | sizes a control's timeout from how long its guard took |
 | `lib-ports.sh` | gives each guard free ports, since two engine jobs share `crux` |
+| `lib-profile.sh` | removes a guard's profile at exit, retrying while the engine's children still write into it |
 
 ## Compositing
 
