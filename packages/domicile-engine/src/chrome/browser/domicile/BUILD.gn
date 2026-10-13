@@ -39,6 +39,8 @@ source_set("domicile") {
     "domicile_permissions.h",
     "domicile_pointer_warp.cc",
     "domicile_pointer_warp.h",
+    "domicile_shell_fetch.cc",
+    "domicile_shell_fetch.h",
     "domicile_shell_windows.cc",
     "domicile_shell_windows.h",
     "domicile_tab_helpers.cc",
@@ -141,5 +143,11 @@ source_set("domicile") {
     "//ui/compositor",
     "//ui/ozone",
     "//ui/views",
+    # The shell's fetches with the profile's cookies: the profile's network
+    # context, refused while the desk is locked.
+    "//components/domicile:desk_lock",
+    "//components/domicile:shell_fetch",
+    "//services/network/public/cpp",
+    "//services/network/public/mojom",
   ]
 }

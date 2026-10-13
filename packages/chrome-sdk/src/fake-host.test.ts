@@ -145,6 +145,17 @@ describe("FakeDomicileHost", () => {
     ]);
   });
 
+  it("records an ask and hands back a promise", () => {
+    const fake = new FakeDomicileHost();
+
+    const fetched = fake.host.fetchWithCookies("https://example.com", [], null);
+
+    expect(fetched).toBeInstanceOf(Promise);
+    expect(fake.calls).toStrictEqual([
+      ["fetchWithCookies", "https://example.com", [], null],
+    ]);
+  });
+
   it("dispatches a moment with its fields", () => {
     const fake = new FakeDomicileHost();
     const chords: string[] = [];
