@@ -46,6 +46,8 @@ command -v nix >/dev/null || {
   exit 1
 }
 
+# CI sets UNDER_WAYLAND_RUNTIME_DIR per job, so a concurrent job's sweep and
+# socket removal below never reach this one's.
 export XDG_RUNTIME_DIR="${UNDER_WAYLAND_RUNTIME_DIR:-/tmp/domicile-under-wayland-rt}"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"

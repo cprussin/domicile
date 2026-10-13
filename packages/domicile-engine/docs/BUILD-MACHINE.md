@@ -92,7 +92,9 @@ rebuild.
      apply and compile;
   2. otherwise an unused tree, then the least recently used one.
 - A tree another run holds is skipped. `crux` has two heavy runners, so two
-  engine jobs can run at once.
+  engine jobs can run at once. Each job's nested compositor
+  (`under-wayland.sh`) runs in its own runtime directory,
+  `UNDER_WAYLAND_RUNTIME_DIR` under the job's temp directory.
 - If every tree is held, one run waits up to 45 minutes
   (`DOMICILE_TREE_WAIT`). Any other run is refused.
 - A tree held by a run that GitHub reports finished is cleared before the

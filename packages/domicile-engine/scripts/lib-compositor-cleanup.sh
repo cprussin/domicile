@@ -11,19 +11,23 @@
 # bus. Leaked compositors hold memory and EGL contexts on the render node that
 # later guards measure.
 #
-# Processes are found by environment: `DOMICILE_COMPOSITOR=<pid>:<start time>`
-# is set on the compositor's `env` only, so the bus, sway and swaybg inherit it
-# and the caller's other children do not. /proc/<pid>/environ holds the exec
-# environment, so it cannot change while read. Child walks miss orphans, and
-# process group ids can be reused.
+# Processes are found by environment:
+# `DOMICILE_NESTED_COMPOSITOR_OWNER=<pid>:<start time>` is set on the
+# compositor's `env` only, so the bus, sway and swaybg inherit it and the
+# caller's other children do not. Not `DOMICILE_COMPOSITOR`: `domicile` reads
+# that as the compositor binary's path, so every guard's desktop carries it.
+# /proc/<pid>/environ holds the exec environment, so it cannot change while
+# read. Child walks miss orphans, and process group ids can be reused.
 #
 # The owner is a pid plus its start time, read from /proc, because a pid alone
 # can be reused. Variables exported by the running shell do not appear in its
 # /proc environ, so they cannot mark ownership.
 #
-# XDG_RUNTIME_DIR alone does not separate runs: crux's two runners share a user
-# and, through PrivateTmp, the same XDG_RUNTIME_DIR path. A sweep that ignored
-# owner liveness would kill the other job's live compositor.
+# XDG_RUNTIME_DIR alone does not separate runs: crux's runners share a user and
+# a process table, and each has its own /tmp, so the default path is the same
+# string on each. CI gives each job its own path (`UNDER_WAYLAND_RUNTIME_DIR`
+# in engine.yml); a person's runs still share the default. A sweep that ignored
+# owner liveness would kill the other run's live compositor.
 #
 # Each rule protects a compositor that may be in use; each has a case in
 # `scripts/test-under-wayland-cleanup.sh`:
@@ -32,6 +36,8 @@
 #   - the leftover sweep spares compositors whose owner (pid and start time)
 #     is still running;
 #   - only compositors with this XDG_RUNTIME_DIR are considered;
+#   - a desktop `domicile` started is not a compositor, though it carries
+#     `DOMICILE_COMPOSITOR`;
 #   - SIGTERM first (sway takes swaybg with it; the bus exits on its own),
 #     then SIGKILL so cleanup cannot hang.
 
@@ -64,7 +70,7 @@ compositor_owner() {
 # The `env` words that mark a compositor as this run's. The caller adds the
 # rest of the compositor's environment.
 compositor_env() {
-  printf '%s\n' "DOMICILE_COMPOSITOR=$(compositor_owner)"
+  printf '%s\n' "DOMICILE_NESTED_COMPOSITOR_OWNER=$(compositor_owner)"
 }
 
 # Whether the marker's owner is alive: its pid exists with the same start
@@ -82,7 +88,7 @@ compositor_pids() {
     [ "$pid" = "$$" ] && continue
     environ="$( { tr '\0' '\n' < "$entry/environ"; } 2>/dev/null )"
     [ -n "$environ" ] || continue
-    owner="$(printf '%s\n' "$environ" | sed -n 's/^DOMICILE_COMPOSITOR=//p')"
+    owner="$(printf '%s\n' "$environ" | sed -n 's/^DOMICILE_NESTED_COMPOSITOR_OWNER=//p')"
     [ -n "$owner" ] || continue
     printf '%s\n' "$environ" |
       grep -Fqx "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" || continue

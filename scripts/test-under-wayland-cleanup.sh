@@ -101,7 +101,8 @@ wait_for() { # what, then the command that says it is so
 # and `SPAWNED` updates are lost.
 a_compositor() { # owner [what the children do]
   local owner="$1" children="${2:-sleep 300}"
-  env DOMICILE_COMPOSITOR="$owner" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+  env DOMICILE_NESTED_COMPOSITOR_OWNER="$owner" \
+    XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
     bash -c "$children & $children & wait" >/dev/null 2>&1 &
   BOOKKEEPER=$!
   # Disown so the shell does not report each kill; the trap still has the pid.
@@ -125,11 +126,22 @@ children_of() { # pid
   { cat "/proc/$1/task/$1/children"; } 2>/dev/null
 }
 
-# Whether a process carries the marker. Its environ reflects only what it was
-# exec'd with, so this is true only after the exec.
-is_marked() { # pid, owner
+# Whether a process carries an environment entry. Its environ reflects only
+# what it was exec'd with, so this is true only after the exec.
+is_marked() { # pid, NAME=value
   { tr '\0' '\n' < "/proc/$1/environ"; } 2>/dev/null |
-    grep -Fqx "DOMICILE_COMPOSITOR=$2"
+    grep -Fqx "$2"
+}
+
+# Whether a process is running. A killed child stays in /proc as a zombie
+# until the shell reaps it, so that does not count.
+is_up() { # pid
+  local stat
+  stat="$( { cat "/proc/$1/stat"; } 2>/dev/null )"
+  case "$(printf '%s\n' "${stat##*) }" | awk '{ print $1 }')" in
+    '' | Z) echo no ;;
+    *) echo yes ;;
+  esac
 }
 
 alive() { # owner
@@ -218,7 +230,7 @@ kill -KILL "$IMPOSTOR" 2>/dev/null
 # --- somebody else's runtime directory ---------------------------------------
 
 ELSEWHERE_DIR="$(mktemp -d)"
-env DOMICILE_COMPOSITOR=999998:1 XDG_RUNTIME_DIR="$ELSEWHERE_DIR" \
+env DOMICILE_NESTED_COMPOSITOR_OWNER=999998:1 XDG_RUNTIME_DIR="$ELSEWHERE_DIR" \
   sleep 300 >/dev/null 2>&1 &
 ELSEWHERE=$!
 disown "$ELSEWHERE"
@@ -227,12 +239,30 @@ SPAWNED="$SPAWNED $ELSEWHERE"
 # so wait until it is up. Check the process table, since the library must
 # not see it.
 wait_for "the compositor elsewhere to be up" \
-  is_marked "$ELSEWHERE" 999998:1
+  is_marked "$ELSEWHERE" DOMICILE_NESTED_COMPOSITOR_OWNER=999998:1
 expect "a compositor in another runtime directory is none of this one's business" \
   0 alive
 expect "not even by name" 0 alive 999998:1
 kill -KILL "$ELSEWHERE" 2>/dev/null
 rm -rf "$ELSEWHERE_DIR"
+
+# --- a desktop is not a compositor -------------------------------------------
+
+# `domicile` reads `DOMICILE_COMPOSITOR` as the compositor binary's path, and
+# its components inherit it. A guard's desktop on another runner has this
+# XDG_RUNTIME_DIR path too, so a sweep that took the path for a dead owner
+# would stop that guard's desktop.
+env DOMICILE_COMPOSITOR=/w/target/debug/domicile-compositor \
+  XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" sleep 300 >/dev/null 2>&1 &
+DESKTOP=$!
+disown "$DESKTOP"
+SPAWNED="$SPAWNED $DESKTOP"
+wait_for "the desktop to be up" \
+  is_marked "$DESKTOP" DOMICILE_COMPOSITOR=/w/target/debug/domicile-compositor
+kill_compositors >/dev/null 2>&1
+expect "the sweep leaves a desktop started by domicile alone" yes \
+  is_up "$DESKTOP"
+kill -KILL "$DESKTOP" 2>/dev/null
 
 # --- one that will not take SIGTERM ------------------------------------------
 

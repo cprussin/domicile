@@ -183,14 +183,16 @@ jobs:
       - uses: actions/checkout@v7
 
       # A per-job TMPDIR. `nix-shell` and `nix develop` leave directories in
-      # TMPDIR, and the last step drops this one. See
-      # .github/scripts/engine-job-tmp.sh.
+      # TMPDIR, and the last step drops this one. It also holds
+      # `under-wayland.sh`'s runtime directory, so concurrent jobs never share
+      # a nested compositor's sockets. See .github/scripts/engine-job-tmp.sh.
       - name: A temp directory for this job
         run: |
           set -euo pipefail
           dir="$(.github/scripts/engine-job-tmp.sh make)"
           echo "TMPDIR=$dir" >>"$GITHUB_ENV"
           echo "DOMICILE_JOB_TMP=$dir" >>"$GITHUB_ENV"
+          echo "UNDER_WAYLAND_RUNTIME_DIR=$dir/wl" >>"$GITHUB_ENV"
 
       # Picks and locks a tree in one step, so no other run can take it in
       # between. Prefers a tree already at this pin, which skips the reset,
@@ -430,6 +432,7 @@ jobs:
           dir="$(.github/scripts/engine-job-tmp.sh make)"
           echo "TMPDIR=$dir" >>"$GITHUB_ENV"
           echo "DOMICILE_JOB_TMP=$dir" >>"$GITHUB_ENV"
+          echo "UNDER_WAYLAND_RUNTIME_DIR=$dir/wl" >>"$GITHUB_ENV"
 
       # A tree someone took since the build may have been reset, and checking
       # it would prove nothing.
