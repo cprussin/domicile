@@ -20,8 +20,8 @@ Exec=domicile open-app <url>
   stay out of the history ([HISTORY.md](/docs/HISTORY.md)).
 - **Its page's new windows** (`target="_blank"`, `window.open`) are browser
   windows, as a link out of a Chrome app opens in the browser.
-- **Settings and History** open this way: `domicile-settings` and
-  `domicile-history` run `domicile open-app` with their extension pages.
+- **Settings and History** are app modules, which open in app windows too
+  ([APP-MODULES.md](APP-MODULES.md)).
 
 ### Shipping an app
 
@@ -52,11 +52,9 @@ The home-manager module writes one for each of `programs.domicile.webApps`
   printed.
 - **Fetching:** the `curl` on `PATH`. The desktop's `PATH` has one.
 
-An app that needs the system (files, native programs) is an unpacked MV3
-extension, as Settings is ([SETTINGS.md](/docs/SETTINGS.md)): `chrome.*` APIs,
-plus native messaging for anything else. The config's `extensions.unpacked`
-installs it, and its desktop entry opens `chrome-extension://<id>/<page>`. A
-manifest `key` pins the id.
+An app that needs the system (files, native programs, D-Bus) is an app
+module, as Settings is ([APP-MODULES.md](APP-MODULES.md)): its desktop entry
+runs `domicile run-app <entry.js>`.
 
 ## Key decisions
 
@@ -88,7 +86,7 @@ manifest `key` pins the id.
 ## Plan
 
 - [x] app windows: `domicile open-app`, `isApp`, manganese draws no address
-  bar; Settings and History open as apps
+  bar
 - [x] off the app's origin, show a read-only address bar, as Chrome does for an
   installed app
 - [x] `domicile install-app <url>`: read the site's web app manifest (`name`,

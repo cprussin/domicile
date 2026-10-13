@@ -14,8 +14,8 @@ use serde_json::{json, Value};
 
 #[test]
 fn a_message_is_its_length_then_its_json() {
-    // Chrome's native messaging framing: a 32-bit length in native byte
-    // order, then that many bytes of UTF-8 JSON.
+    // A 32-bit length in native byte order, then that many bytes of UTF-8
+    // JSON.
     let mut sent = Vec::new();
     write_message(&mut sent, &json!({"type": "changed"})).expect("a Vec takes any write");
 
@@ -34,7 +34,7 @@ fn a_message_reads_back_and_the_end_of_input_is_no_message() {
         read_message(&mut reader).expect("a whole message"),
         Some(json!({"id": 1, "type": "read"}))
     );
-    // Chrome closes stdin when the app's port closes.
+    // The app closes stdin when it is done with the host.
     assert_eq!(read_message(&mut reader).expect("a clean end"), None);
 }
 

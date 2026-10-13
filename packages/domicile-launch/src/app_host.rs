@@ -63,12 +63,9 @@ use crate::history::{BrowsingData, HistoryQuery};
 use crate::media_devices::MediaKind;
 use crate::site_permissions::SitePermission;
 
-/// The largest message Chrome accepts from a host.
-const MOST_CHROME_TAKES: usize = 1024 * 1024;
-
-/// The largest message the host reads. Chrome sends at most 64 MiB; a page's
-/// file is far smaller.
-const MOST_THE_HOST_READS: u32 = 16 * 1024 * 1024;
+/// The largest message the host reads or writes. A page's file, or a page of
+/// history with its icons, is far smaller.
+const MOST_A_MESSAGE_HOLDS: u32 = 16 * 1024 * 1024;
 
 /// What the host reaches outside itself, injected for tests.
 pub struct Host<'a> {
@@ -97,7 +94,7 @@ pub fn answer(message: &Value, host: &Host) -> Value {
     reply
 }
 
-/// Reads one framed message, or `None` once Chrome closes the input.
+/// Reads one framed message, or `None` once the app closes the input.
 pub fn read_message(input: &mut impl Read) -> std::io::Result<Option<Value>> {
     let mut length = [0_u8; 4];
     match input.read_exact(&mut length) {
@@ -105,7 +102,7 @@ pub fn read_message(input: &mut impl Read) -> std::io::Result<Option<Value>> {
         other => other?,
     }
     let length = u32::from_ne_bytes(length);
-    if length > MOST_THE_HOST_READS {
+    if length > MOST_A_MESSAGE_HOLDS {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             format!("a {length}-byte message is larger than any file the app edits"),
@@ -121,16 +118,13 @@ pub fn read_message(input: &mut impl Read) -> std::io::Result<Option<Value>> {
 /// Writes one framed message and flushes it.
 pub fn write_message(output: &mut impl Write, message: &Value) -> std::io::Result<()> {
     let body = serde_json::to_vec(message).map_err(std::io::Error::other)?;
-    if body.len() > MOST_CHROME_TAKES {
+    if body.len() > MOST_A_MESSAGE_HOLDS as usize {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            format!(
-                "a {}-byte reply is larger than Chrome takes from a host",
-                body.len()
-            ),
+            format!("a {}-byte reply is larger than an app takes", body.len()),
         ));
     }
-    let length = u32::try_from(body.len()).expect("checked against MOST_CHROME_TAKES");
+    let length = u32::try_from(body.len()).expect("checked against MOST_A_MESSAGE_HOLDS");
     output.write_all(&length.to_ne_bytes())?;
     output.write_all(&body)?;
     output.flush()

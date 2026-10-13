@@ -20,7 +20,6 @@
 //!   [`web_address`]) and writes a desktop entry ([`desktop_entry`],
 //!   [`install_app`]).
 //! - Failed runs report the compositor's last output ([`heard`]).
-//! - Domicile's own apps, which every desktop installs ([`apps`]).
 //! - The compositor's side: its command line ([`arguments`]), the session
 //!   document it publishes ([`session`]), and whether a page connected
 //!   ([`handshake`]).
@@ -31,7 +30,6 @@
 pub mod address;
 pub mod app_entry;
 pub mod app_host;
-pub mod apps;
 pub mod arguments;
 pub mod build_progress;
 pub mod cli;

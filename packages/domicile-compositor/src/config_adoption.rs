@@ -3,7 +3,6 @@
 //! changed.
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
@@ -34,18 +33,15 @@ pub fn theme_on_the_wire(mode: ThemeMode) -> Theme {
     }
 }
 
-/// Give the host the config's `extensions` and Domicile's own `apps`, for
-/// chromes that connect later.
+/// Give the host the config's `extensions`, for chromes that connect later.
 ///
 /// Config paths came from JSON, so they are UTF-8 and `display` is lossless.
-/// App paths are under the installation's `libexec`.
-pub fn hand_over_the_extensions(host: &mut Host, extensions: &ExtensionsConfig, apps: &[PathBuf]) {
+pub fn hand_over_the_extensions(host: &mut Host, extensions: &ExtensionsConfig) {
     host.set_extensions(
         extensions.web_store.clone(),
         extensions
             .unpacked
             .iter()
-            .chain(apps)
             .map(|path| path.display().to_string())
             .collect(),
     );
@@ -86,7 +82,7 @@ impl DomicileCompositor {
             // list.
             let told = {
                 let mut host = self.hub.host.lock().unwrap();
-                hand_over_the_extensions(&mut host, extensions, &self.apps);
+                hand_over_the_extensions(&mut host, extensions);
                 host.describe_extensions()
             };
             self.hub.broadcast(
@@ -288,10 +284,8 @@ mod tests {
 
     use super::hand_over_the_extensions;
 
-    /// Domicile's own apps go to the engine as unpacked extensions after the
-    /// config's, so editing the config never uninstalls them.
     #[test]
-    fn domicile_s_own_apps_are_installed_with_the_configs_extensions() {
+    fn the_configs_extensions_go_to_the_host() {
         let mut host = domicile_host::Host::new();
         hand_over_the_extensions(
             &mut host,
@@ -299,16 +293,12 @@ mod tests {
                 web_store: vec!["ddkjiahejlhfcafbddmgiahcphecmpfh".to_string()],
                 unpacked: vec![std::path::PathBuf::from("/home/u/my-extension")],
             },
-            &[std::path::PathBuf::from("/d/libexec/domicile/apps/history")],
         );
         assert_eq!(
             host.describe_extensions(),
             Some(HostMessage::Extensions {
                 web_store: vec!["ddkjiahejlhfcafbddmgiahcphecmpfh".to_string()],
-                unpacked: vec![
-                    "/home/u/my-extension".to_string(),
-                    "/d/libexec/domicile/apps/history".to_string(),
-                ],
+                unpacked: vec!["/home/u/my-extension".to_string()],
             })
         );
     }
