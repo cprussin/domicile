@@ -33,6 +33,21 @@ Usual causes:
   - a cursor with a bitmap (`BitmapCursorFactory` gives none);
   - a touchpad branch in `CreateConverter`.
 
+## A primary plane display cannot read
+
+    Not scanning out a <format> buffer (<size>, modifier <n>) allocated or imported without GBM_BO_USE_SCANOUT
+
+- The buffer has no framebuffer, so patch `0112` queues no plane for it. For
+  the primary plane, the screen keeps its last frame. Logged once per buffer.
+- The usual cause: the scanout allocation for the window's buffers failed, and
+  `OzoneImageBackingFactory` retried it, without a log, as a buffer for
+  sampling only.
+- Find out why the scanout allocation failed with
+  `--vmodule=gbm_wrapper=1,drm_framebuffer=4`. `drm_framebuffer` logs a failed
+  `AddFramebuffer2` only at level 4.
+- Reported on virtio-gpu with virgl
+  ([A tty desktop in a virtio-gpu VM](HARDWARE-CHECKS.md#a-tty-desktop-in-a-virtio-gpu-vm)).
+
 ## Scanout and render cards can differ
 
 ozone/drm does not support software compositing. A GPU process that falls back
