@@ -65,8 +65,16 @@ describe("stretched", () => {
     });
   });
 
-  it("leaves the tree alone at the edge of the workspace", () => {
-    expect(stretched(ROW, "a", Direction.Left, -100, AREA, 0)).toBe(ROW);
+  it("moves the opposite edge when the dragged one is the workspace's", () => {
+    expect(
+      stretched(ROW, "a", Direction.Left, -100, AREA, 0).root,
+    ).toMatchObject({ fractions: [0.4, 0.6] });
+  });
+
+  it("leaves a window with no movable edge alone", () => {
+    const alone = { depth: 1, root: LayoutNode.Window("a") };
+
+    expect(stretched(alone, "a", Direction.Left, -100, AREA, 0)).toBe(alone);
   });
 
   it("stops at the smallest share rather than squeezing a window out", () => {
