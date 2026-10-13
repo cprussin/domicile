@@ -27,6 +27,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
+#include "base/types/expected.h"
 #include "components/domicile/browser/context_menu.h"
 #include "components/domicile/browser/download_tally.h"
 #include "components/domicile/browser/file_choice.h"
@@ -1359,6 +1360,23 @@ void WebViewGuest::SetSitePermission(
   map->SetContentSettingDefaultScope(
       site, site, type,
       StoredSetting(setting, map->GetDefaultContentSetting(type)));
+}
+
+void WebViewGuest::ListMediaDevices(ListMediaDevicesCallback callback) {
+  CHECK(guest_contents_);
+  std::move(callback).Run(
+      Media().ListDevices(*guest_contents_->GetBrowserContext()));
+}
+
+void WebViewGuest::SetMediaDevice(mojom::WebViewMediaDeviceKind kind,
+                                  const std::string& id,
+                                  SetMediaDeviceCallback callback) {
+  CHECK(guest_contents_);
+  const base::expected<void, std::string> preferred =
+      Media().PreferDevice(*guest_contents_->GetBrowserContext(), kind, id);
+  std::move(callback).Run(preferred.has_value()
+                              ? std::nullopt
+                              : std::make_optional(preferred.error()));
 }
 
 void WebViewGuest::CopyAddress(const GURL& url) {

@@ -5,7 +5,6 @@
 
 #include <unistd.h>
 
-#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -21,12 +20,10 @@
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/no_destructor.h"
-#include "base/strings/strcat.h"
 #include "base/types/expected.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
 #include "chrome/browser/domicile/domicile_extension_installer.h"
-#include "chrome/browser/media/prefs/capture_device_ranking.h"
-#include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
+#include "chrome/browser/domicile/domicile_media_devices.h"
 #include "chrome/browser/profiles/profile.h"
 #include "base/task/bind_post_task.h"
 #include "chrome/browser/ui/browser_window/public/browser_collection.h"
@@ -40,7 +37,6 @@
 #include "components/domicile/browser/site_permissions.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
 #include "components/permissions/permissions_client.h"
-#include "components/prefs/pref_service.h"
 #include "components/domicile/common/domicile_scheme.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -54,7 +50,6 @@
 #include "net/socket/stream_socket.h"
 #include "net/socket/unix_domain_server_socket_posix.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
-#include "third_party/blink/public/common/mediastream/media_stream_request.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -248,38 +243,16 @@ std::optional<std::vector<std::string>> ListTheShellProfilesConfigExtensions() {
   return ConfigExtensionsOf(*profile);
 }
 
-std::vector<MediaDevice> Listed(const blink::MediaStreamDevices& devices) {
-  std::vector<MediaDevice> listed;
-  for (const blink::MediaStreamDevice& device : devices) {
-    listed.push_back({.id = device.id, .name = device.name});
-  }
-  return listed;
-}
-
-// The cameras and microphones, ranked by the shell profile's preference as
-// Chrome ranks them for a site that names no device
-// (MediaCaptureDevicesDispatcher::GetPreferredVideoDeviceForBrowserContext).
+// The cameras and microphones, ranked by the shell profile's preference.
 std::optional<MediaDeviceList> ListShellMediaDevices() {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   Profile* profile = ShellProfile();
   if (profile == nullptr) {
     return std::nullopt;
   }
-  PrefService& prefs = *profile->GetPrefs();
-  MediaCaptureDevicesDispatcher* dispatcher =
-      MediaCaptureDevicesDispatcher::GetInstance();
-  blink::MediaStreamDevices cameras = dispatcher->GetVideoCaptureDevices();
-  media_prefs::PreferenceRankVideoDeviceInfos(prefs, cameras);
-  blink::MediaStreamDevices microphones = dispatcher->GetAudioCaptureDevices();
-  media_prefs::PreferenceRankAudioDeviceInfos(prefs, microphones);
-  MediaDeviceList list;
-  list.cameras = Listed(cameras);
-  list.microphones = Listed(microphones);
-  return list;
+  return RankedMediaDevices(*profile->GetPrefs());
 }
 
-// Ranks device `id` above every other connected device of its kind, as
-// Chrome's own camera and microphone settings do.
 base::expected<void, std::string> PreferShellMediaDevice(
     MediaDeviceKind kind,
     const std::string& id) {
@@ -289,29 +262,7 @@ base::expected<void, std::string> PreferShellMediaDevice(
     return base::unexpected(
         "this engine has no shell, and so no profile to store the device in");
   }
-  PrefService& prefs = *profile->GetPrefs();
-  MediaCaptureDevicesDispatcher* dispatcher =
-      MediaCaptureDevicesDispatcher::GetInstance();
-  const blink::MediaStreamDevices& devices =
-      kind == MediaDeviceKind::kCamera ? dispatcher->GetVideoCaptureDevices()
-                                       : dispatcher->GetAudioCaptureDevices();
-  const auto found =
-      std::ranges::find(devices, id, &blink::MediaStreamDevice::id);
-  if (found == devices.end()) {
-    return base::unexpected(base::StrCat(
-        {"no connected ",
-         kind == MediaDeviceKind::kCamera ? "camera" : "microphone",
-         " has the id \"", id, "\""}));
-  }
-  switch (kind) {
-    case MediaDeviceKind::kCamera:
-      media_prefs::UpdateVideoDevicePreferenceRanking(prefs, found, devices);
-      break;
-    case MediaDeviceKind::kMicrophone:
-      media_prefs::UpdateAudioDevicePreferenceRanking(prefs, found, devices);
-      break;
-  }
-  return base::ok();
+  return PreferMediaDevice(*profile->GetPrefs(), kind, id);
 }
 
 // One request line, answered from the UI thread.
@@ -491,11 +442,6 @@ void StartCommandSocket() {
   if (!command_line.HasSwitch(kDomicileCommandSocketSwitch)) {
     return;
   }
-
-  // Chrome lists cameras and microphones only once something has asked for
-  // them, and the list arrives later. Asking now means the Settings app's
-  // first `media_devices` finds them.
-  MediaCaptureDevicesDispatcher::GetInstance()->GetVideoCaptureDevices();
 
   // A net socket needs an IO message pump; the IO thread has one, and the
   // traffic is too light for a dedicated thread.
