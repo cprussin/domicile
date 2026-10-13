@@ -193,6 +193,10 @@
       `applications.omit` and `applications.bookmarks` are manganese's
       `applications` option. See docs/LAUNCHER.md.
     '';
+    "lock.passphrase" = ''
+      Set `lock.passphrase_hash` to the passphrase's hash from `mkpasswd`
+      instead. See docs/LOCK.md.
+    '';
   };
 
   removed = import ./removed-settings.nix {inherit lib;} removedSettings;
@@ -417,7 +421,7 @@ in {
                 desk fails to start and says what to declare, instead of falling
                 back to PAM's `other` service.
 
-                With this and `passphrase` both `null` (the default), the desk
+                With this and `passphrase_hash` both `null` (the default), the desk
                 never locks, since nothing could unlock it. Setting both is
                 refused.
 
@@ -433,21 +437,21 @@ in {
               example = "domicile";
             };
 
-            passphrase = lib.mkOption {
+            passphrase_hash = lib.mkOption {
               description = ''
-                A passphrase that unlocks the desk, for machines without a PAM
-                service. Prefer `pam_service`.
+                The crypt(3) hash of a passphrase that unlocks the desk, for
+                machines without a PAM service, as for `hashedPassword`. Make
+                one with `mkpasswd`. Prefer `pam_service`.
 
-                This is not secret: the file is in the world-readable Nix store,
-                so any user on the machine can read it. It only stops someone at
-                the keyboard.
+                The hash is in the world-readable Nix store. The desk refuses a
+                method its libxcrypt calls weak, such as MD5 or DES.
 
                 `pam_service`'s notes on locking apply here too, including that
                 only one of the two may be set.
               '';
               type = lib.types.nullOr lib.types.str;
               default = null;
-              example = "open sesame";
+              example = "$y$j9T$mMzyBSKNKxkbivH7ik1.T.$iM4gXKt2j/qEPlwG5bMwAYPJa15M//yqCKSEin8n0P/";
             };
           };
 

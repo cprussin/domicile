@@ -95,13 +95,15 @@ overrides:
       - libinput10
       - libcairo2
       - libpango-1.0-0
-      # The compositor. libEGL, Wayland's and PAM's are loaded at run time.
+      # The compositor. libEGL, Wayland's, PAM's and libcrypt's are loaded at
+      # run time.
       - libpipewire-0.3-0
       - libegl1
       - libegl-mesa0 | libegl-vendor
       - libwayland-client0
       - libwayland-egl1
       - libpam0g
+      - libcrypt1
       # logind, `systemd-run`, `busctl` and `udevadm`.
       - systemd
     recommends:
@@ -148,6 +150,8 @@ overrides:
       - libwayland-client.so.0()(64bit)
       - libwayland-egl.so.1()(64bit)
       - libpam.so.0()(64bit)
+      # libcrypt is `libcrypt.so.2` on Fedora and `libcrypt.so.1` on openSUSE,
+      # so no one soname serves both. Each one's PAM package requires it.
       - systemd
     recommends:
       - upower
@@ -183,6 +187,7 @@ overrides:
       - libglvnd
       - wayland
       - pam
+      - libxcrypt
       - systemd
 
 deb:

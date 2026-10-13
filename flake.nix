@@ -581,8 +581,9 @@
         doCheck = false;
 
         # Add `dlopen`ed libraries to the rpath: libEGL for dmabuf import, the
-        # Wayland and X11 client libraries winit probes, and libpam for the
-        # lock screen's `lock.pam_service`. `/run/opengl-driver/lib` comes
+        # Wayland and X11 client libraries winit probes, libpam for the lock
+        # screen's `lock.pam_service`, and libxcrypt for its
+        # `lock.passphrase_hash`. `/run/opengl-driver/lib` comes
         # first so NixOS uses the EGL matching its kernel driver.
         #
         # - `DOMICILE_PNP_IDS`: hwdata's EDID vendor table. Read at run time,
@@ -597,7 +598,7 @@
           patchelf --add-rpath "${pkgs.lib.makeLibraryPath (with pkgs; [
             libGL mesa libgbm wayland libxkbcommon
             libx11 libxcursor libxrandr libxi
-            pam
+            pam libxcrypt
           ])}" "$out/bin/domicile-compositor"
           wrapProgram "$out/bin/domicile-compositor" \
             --prefix LD_LIBRARY_PATH : "/run/opengl-driver/lib" \
@@ -1303,9 +1304,10 @@
               pkgs.libxcursor
               pkgs.libxrandr
               pkgs.libxi
-              # libpam for the lock screen, so tests use the same PAM as the
-              # package instead of the host's.
+              # libpam and libxcrypt for the lock screen, so tests use the
+              # same ones as the package instead of the host's.
               pkgs.pam
+              pkgs.libxcrypt
             ]}:${pkgs.lib.makeLibraryPath engineRuntimeLibs}";
           shellHook = ''
             echo "domicile dev shell (full: +wayland +drm +gl)"

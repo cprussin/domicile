@@ -138,8 +138,9 @@ An edit applies to the running desktop, and windows stay open:
   stays.
 - A keyboard xkb cannot compile is rejected and logged. The current layout
   stays.
-- A `lock.pam_service` the machine does not declare is rejected and logged.
-  The current lock stays.
+- A `lock.pam_service` the machine does not declare, or a
+  `lock.passphrase_hash` libxcrypt refuses, is rejected and logged. The
+  current lock stays.
 
 ## Other sections
 
@@ -181,9 +182,10 @@ Set one of these to enable locking. Setting both is an error, and neither may
 be empty.
 
 - `lock.pam_service`: a PAM service that checks the desktop user's password.
-- `lock.passphrase`: a fixed string. On NixOS the config, and so the
-  passphrase, is in the world-readable Nix store. It protects against someone
-  at the keyboard, not someone who can read the disk.
+- `lock.passphrase_hash`: the crypt(3) hash of a passphrase, as `mkpasswd`
+  prints it and NixOS's `hashedPassword` takes it. The config is often
+  world-readable, so it holds only the hash. A method libxcrypt calls weak
+  (MD5, DES) is an error.
 
 Shell side: [SHELL-IDLE-AND-LOCK.md](SHELL-IDLE-AND-LOCK.md#locking).
 Implementation: [LOCK.md](LOCK.md).

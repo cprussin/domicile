@@ -233,6 +233,21 @@ describe(App, () => {
       });
     });
 
+    it("unlocks with a passphrase hash", async () => {
+      const { host, user } = await renderApp("Power & lock");
+      await choose(user, "Unlock with", "A passphrase hash");
+      await user.type(
+        screen.getByRole("textbox", { name: "Passphrase hash" }),
+        "$6$salt$hash",
+      );
+      await user.tab();
+      await waitFor(() => {
+        expect(written(host.writes).lock).toEqual({
+          passphrase_hash: "$6$salt$hash",
+        });
+      });
+    });
+
     it("asks apps not to use the camera", async () => {
       const { host, user } = await renderApp("Privacy");
       await user.click(

@@ -232,18 +232,32 @@ fn a_desk_that_states_no_verifier_cannot_lock() {
     assert_eq!(Config::parse("{}").unwrap().lock.verifier(), None);
 }
 
+/// `mkpasswd "open sesame"`.
+const HASH: &str = "$y$j9T$mMzyBSKNKxkbivH7ik1.T.$iM4gXKt2j/qEPlwG5bMwAYPJa15M//yqCKSEin8n0P/";
+
 #[test]
-fn a_desk_that_states_a_passphrase_is_opened_by_it() {
-    let lock = Config::parse(
+fn a_desk_that_states_a_passphrase_hash_is_opened_by_it() {
+    let lock = Config::parse(&format!(
+        r#"{{ "lock": {{ "passphrase_hash": "{HASH}" }} }}"#
+    ))
+    .unwrap()
+    .lock;
+    assert_eq!(lock.verifier(), Some(LockVerifier::PassphraseHash(HASH)));
+}
+
+#[test]
+fn rejects_a_passphrase_in_plain_text() {
+    // The config is often in the world-readable Nix store, so it holds only a
+    // hash.
+    let err = Config::parse(
         r#"
 { "lock": { "passphrase": "open sesame" } }
 "#,
     )
-    .unwrap()
-    .lock;
-    assert_eq!(
-        lock.verifier(),
-        Some(LockVerifier::Passphrase("open sesame"))
+    .unwrap_err();
+    assert!(
+        err.to_string().contains("passphrase_hash"),
+        "the message should name the key that replaces it: {err}"
     );
 }
 
@@ -266,11 +280,11 @@ fn a_desk_that_names_a_pam_service_is_opened_by_pam() {
 
 #[test]
 fn rejects_a_desk_that_states_both_verifiers() {
-    // A config with both is refused, so a passphrase is never mistaken for a
-    // PAM fallback.
+    // A config with both is refused, so a passphrase hash is never mistaken
+    // for a PAM fallback.
     let err = Config::parse(
         r#"
-{ "lock": { "passphrase": "open sesame", "pam_service": "domicile" } }
+{ "lock": { "passphrase_hash": "$6$salt$hash", "pam_service": "domicile" } }
 "#,
     )
     .unwrap_err();
@@ -278,7 +292,7 @@ fn rejects_a_desk_that_states_both_verifiers() {
         panic!("two verifiers are refused rather than one of them picked: {err:?}");
     };
     assert!(
-        message.contains("lock.passphrase") && message.contains("lock.pam_service"),
+        message.contains("lock.passphrase_hash") && message.contains("lock.pam_service"),
         "the message should name both keys: {message}"
     );
 }
@@ -301,33 +315,32 @@ fn rejects_a_pam_service_of_nothing_at_all() {
 }
 
 #[test]
-fn rejects_a_passphrase_of_nothing_at_all() {
-    // An empty passphrase could mean "anyone can unlock" or "never lock";
-    // "never" is spelled by leaving the key out. So it is refused.
+fn rejects_a_passphrase_hash_of_nothing_at_all() {
+    // "Never lock" is spelled by leaving the key out.
     let err = Config::parse(
         r#"
-{ "lock": { "passphrase": "" } }
+{ "lock": { "passphrase_hash": "" } }
 "#,
     )
     .unwrap_err();
     let ConfigError::Validation(message) = &err else {
-        panic!("an empty passphrase is refused rather than taken: {err:?}");
+        panic!("an empty hash is refused rather than taken: {err:?}");
     };
     assert!(
-        message.contains("lock.passphrase"),
+        message.contains("lock.passphrase_hash"),
         "the message should name the key: {message}"
     );
 }
 
 #[test]
-fn a_passphrase_is_not_in_what_a_log_line_would_print() {
-    // The config holds the passphrase and sits inside the compositor's
-    // `Restatement`, so its `Debug` must redact it before anything prints it.
-    // `domicile_protocol::Passphrase` does the same on the wire.
-    let secret = "correct horse battery staple";
+fn a_passphrase_hash_is_not_in_what_a_log_line_would_print() {
+    // The config sits inside the compositor's `Restatement`, so its `Debug`
+    // redacts the hash before anything prints it. A log line should not hand
+    // out something to crack offline.
+    let secret = HASH;
     let config = Config::parse(&format!(
         r#"
-{{ "lock": {{ "passphrase": "{secret}" }} }}
+{{ "lock": {{ "passphrase_hash": "{secret}" }} }}
 "#
     ))
     .unwrap();
@@ -344,7 +357,7 @@ fn a_passphrase_is_not_in_what_a_log_line_would_print() {
     // Redaction must not lose the value.
     assert_eq!(
         config.lock.verifier(),
-        Some(LockVerifier::Passphrase(secret))
+        Some(LockVerifier::PassphraseHash(secret))
     );
 }
 

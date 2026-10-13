@@ -12,13 +12,13 @@ import { TextSetting } from "../TextSetting";
 enum Unlock {
   Never = "never",
   Password = "password",
-  Passphrase = "passphrase",
+  PassphraseHash = "passphrase_hash",
 }
 
 const UNLOCKS = [
   { label: "Don't lock", value: Unlock.Never },
   { label: "Your password", value: Unlock.Password },
-  { label: "A passphrase", value: Unlock.Passphrase },
+  { label: "A passphrase hash", value: Unlock.PassphraseHash },
 ] as const;
 
 /** `idle` and `lock`: when the screens go dark, and how the desktop unlocks. */
@@ -29,7 +29,7 @@ export const PowerPage = ({ description, editor, title }: ConfigPageProps) => {
   // Chosen before its field is filled in, since an empty one is refused.
   const [unlock, setUnlock] = useState(unlockOf(lock));
   // Sets the lock to `key` alone, refusing an empty value.
-  const commitLock = (key: "pam_service" | "passphrase", text: string) => {
+  const commitLock = (key: "pam_service" | "passphrase_hash", text: string) => {
     if (text === "") {
       report("Can't unlock with nothing")("Fill this in, or pick Don't lock");
       return false;
@@ -105,16 +105,16 @@ export const PowerPage = ({ description, editor, title }: ConfigPageProps) => {
             />
           </SettingRow>
         )}
-        {unlock === Unlock.Passphrase && (
+        {unlock === Unlock.PassphraseHash && (
           <SettingRow
-            hint="Kept in the config in plain text, which on NixOS anyone can read."
-            title="Passphrase"
+            hint="The passphrase's hash from mkpasswd. The config can be readable by anyone, so it holds only the hash."
+            title="Passphrase hash"
           >
             <TextSetting
               disabled={disabled}
-              label="Passphrase"
-              onCommit={(passphrase) => commitLock("passphrase", passphrase)}
-              value={lock.passphrase ?? ""}
+              label="Passphrase hash"
+              onCommit={(hash) => commitLock("passphrase_hash", hash)}
+              value={lock.passphrase_hash ?? ""}
             />
           </SettingRow>
         )}
@@ -126,9 +126,9 @@ export const PowerPage = ({ description, editor, title }: ConfigPageProps) => {
 const unlockOf = (lock: Settings["lock"]): Unlock => {
   if (lock.pam_service !== undefined) {
     return Unlock.Password;
-  } else if (lock.passphrase === undefined) {
+  } else if (lock.passphrase_hash === undefined) {
     return Unlock.Never;
   } else {
-    return Unlock.Passphrase;
+    return Unlock.PassphraseHash;
   }
 };

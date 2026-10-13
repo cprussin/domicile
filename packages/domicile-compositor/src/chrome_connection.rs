@@ -692,11 +692,14 @@ mod tests {
             indexing: false,
         }));
         let verifier = crate::lock::chosen(
-            Some(domicile_config::LockVerifier::Passphrase("friend")),
+            // `mkpasswd friend`.
+            Some(domicile_config::LockVerifier::PassphraseHash(
+                "$y$j9T$0jTZN1rZSlhdm48mn5lVm/$Bb0mHOJ7gIqNJGkYTVpSIRqSPVJtoJRORWwsQ9pmsZ/",
+            )),
             std::path::Path::new("/nonexistent"),
         )
-        .expect("a passphrase needs nothing from the machine")
-        .expect("a passphrase was stated");
+        .expect("a hash needs only libcrypt from the machine")
+        .expect("a hash was stated");
         let (told, heard) = std::sync::mpsc::channel();
         let mut lock = Lock::held_by(Some(verifier), move |verdict| {
             told.send(verdict).expect("the test is listening")

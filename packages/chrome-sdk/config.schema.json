@@ -230,16 +230,16 @@
     },
     "LockConfig": {
       "additionalProperties": false,
-      "description": "What unlocks this desk.\n\nAbsent means the desk never locks, and that is the default: a locked desk\nwith no verifier cannot be unlocked. Such a desk never sends\n`HostMessage::Locked`.\n\nSet one verifier:\n- `pam_service` authenticates the desk's user against a PAM service.\n- `passphrase` is for machines without a PAM service. The file is\n  generated, often into the world-readable Nix store, so any user can read\n  it.\n\nA config with both is refused, so a passphrase is never mistaken for a PAM\nfallback. A PAM service that does not exist stops the compositor from\nstarting. See `docs/LOCK.md#verifiers`.",
+      "description": "What unlocks this desk.\n\nAbsent means the desk never locks, and that is the default: a locked desk\nwith no verifier cannot be unlocked. Such a desk never sends\n`HostMessage::Locked`.\n\nSet one verifier:\n- `pam_service` authenticates the desk's user against a PAM service.\n- `passphrase_hash` is for machines without a PAM service. The file is\n  generated, often into the world-readable Nix store, so it holds a hash\n  rather than the passphrase.\n\nA config with both is refused, so a passphrase is never mistaken for a PAM\nfallback. A PAM service that does not exist, or a hash the machine's\nlibcrypt will not take, stops the compositor from starting. See\n`docs/LOCK.md#verifiers`.",
       "properties": {
         "pam_service": {
           "default": null,
           "description": "The PAM service the desk's user authenticates against.\n\nThe system must declare it in `/etc/pam.d/`; on NixOS,\n`security.pam.services.<name> = {};`. The docs use `\"domicile\"`.",
           "type": ["string", "null"]
         },
-        "passphrase": {
+        "passphrase_hash": {
           "default": null,
-          "description": "A passphrase that unlocks this desk. An empty string is refused.",
+          "description": "The crypt(3) hash of the passphrase that unlocks this desk, as\n`mkpasswd` prints. An empty string is refused.",
           "type": ["string", "null"]
         }
       },

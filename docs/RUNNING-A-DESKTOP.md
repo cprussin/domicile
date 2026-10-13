@@ -185,15 +185,15 @@ Configure it with `files.omit` and manganese's `applications` option:
 - Screens turn off after `idle.blank_after_seconds` without input. Unset never
   blanks. `0` is an error.
 - Apps playing video can keep the screens on.
-- Set `lock.pam_service` or `lock.passphrase` (not both) to lock the desktop
+- Set `lock.pam_service` or `lock.passphrase_hash` (not both) to lock the desktop
   when the screens go dark.
 - `lock.pam_service` needs the machine to declare the PAM service: use the
   [NixOS module](#the-machines-half) or add
   `security.pam.services.domicile = {};`. A home-manager module cannot. The
   [distribution packages](#other-distributions) install it. If the service is
   missing, Domicile does not start and names the line to add.
-- `lock.passphrase` is world-readable in the Nix store. It only stops someone
-  at the keyboard.
+- `lock.passphrase_hash` takes a hash from `mkpasswd`, so the passphrase
+  stays out of the world-readable Nix store.
 - A `lock` edit applies on reload. It never unlocks a locked desktop
   ([LOCK.md](LOCK.md#reloading)).
 

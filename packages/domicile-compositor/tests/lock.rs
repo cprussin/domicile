@@ -26,14 +26,15 @@ const A_PRESS_OF_IT: &str = ", 30, 1)";
 /// The client's trace line for a release of that key.
 const A_RELEASE_OF_IT: &str = ", 30, 0)";
 
-/// The passphrase these configs set, and the one the tests type.
+/// The passphrase these configs' hash (`mkpasswd "open sesame"`) was made
+/// from, and the one the tests type.
 const THE_PASSPHRASE: &str = "open sesame";
 
 /// A desktop that can lock but has no idle timeout.
 const A_DESK_THAT_CAN_LOCK: &str = r#"
 {
   "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
-  "lock": { "passphrase": "open sesame" }
+  "lock": { "passphrase_hash": "$y$j9T$mMzyBSKNKxkbivH7ik1.T.$iM4gXKt2j/qEPlwG5bMwAYPJa15M//yqCKSEin8n0P/" }
 }
 "#;
 
@@ -44,7 +45,7 @@ const A_DESK_THAT_LOCKS_IN_A_SECOND: &str = r#"
 {
   "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
   "idle": { "blank_after_seconds": 1 },
-  "lock": { "passphrase": "open sesame" }
+  "lock": { "passphrase_hash": "$y$j9T$mMzyBSKNKxkbivH7ik1.T.$iM4gXKt2j/qEPlwG5bMwAYPJa15M//yqCKSEin8n0P/" }
 }
 "#;
 

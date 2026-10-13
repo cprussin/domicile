@@ -95,7 +95,7 @@ const settingsSchema = z.strictObject({
   lock: z
     .strictObject({
       pam_service: z.string().optional(),
-      passphrase: z.string().optional(),
+      passphrase_hash: z.string().optional(),
     })
     .prefault({}),
   lockdown: z
