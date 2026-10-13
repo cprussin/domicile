@@ -64,7 +64,7 @@ done
 need "$BUN" "bun"
 
 rm -rf "$STAGE"
-mkdir -p "$USR/bin" "$LIBEXEC/shells" "$LIBEXEC/apps" "$LIBEXEC/workspace/packages"
+mkdir -p "$USR/bin" "$LIBEXEC/shells" "$LIBEXEC/apps"
 
 # Copies, not symlinks: `domicile` finds its siblings from `current_exe`.
 for program in "${PROGRAMS[@]}"; do
@@ -78,42 +78,9 @@ cp -a "$ENGINE" "$LIBEXEC/engine"
 install -m 755 "$BUN" "$LIBEXEC/bun"
 install -m 755 "$ROOT/distro/builder" "$LIBEXEC/builder"
 
-# What the builder needs of `shellWorkspace` in `flake.nix`: the builder and
-# manganese, the workspace packages they depend on, and their production
-# modules, installed from `bun.lock`. Every manifest is copied because the
-# frozen install checks the lockfile against all of them.
-SHIPPED="$LIBEXEC/workspace"
-ROOTS=(domicile-builder shell-manganese)
-cp "$WORKSPACE/package.json" "$WORKSPACE/bun.lock" "$WORKSPACE/bunfig.toml" "$SHIPPED/"
-for manifest in "$WORKSPACE"/packages/*/package.json; do
-  package="$(basename "$(dirname "$manifest")")"
-  mkdir -p "$SHIPPED/packages/$package"
-  cp "$manifest" "$SHIPPED/packages/$package/"
-done
-(cd "$SHIPPED" && "$BUN" install --production --frozen-lockfile --ignore-scripts \
-  --no-progress "${ROOTS[@]/#/--filter=./packages/}")
-# The workspace packages the install linked, by directory name.
-linked() {
-  local packages target
-  packages="$(cd "$SHIPPED/packages" && pwd -P)"
-  find "$SHIPPED"/packages/*/node_modules -type l -print0 |
-    while IFS= read -r -d '' link; do
-      target="$(readlink -f "$link")"
-      [ "$(dirname "$target")" != "$packages" ] || basename "$target"
-    done | sort -u
-}
-# Each package's published files: what `bun pm pack` would pack.
-for package in "${ROOTS[@]}" $(linked); do
-  (cd "$WORKSPACE/packages/$package" && "$BUN" pm pack --dry-run --ignore-scripts) |
-    sed -n 's/^packed [^ ]* //p' |
-    while IFS= read -r file; do
-      install -D -m 644 "$WORKSPACE/packages/$package/$file" "$SHIPPED/packages/$package/$file"
-    done
-done
-find "$SHIPPED/node_modules" -type f \( -name '*.map' -o -iname 'README*' \) -delete
-# bun installs native modules for both C libraries; the packages need glibc.
-rm -rf "$SHIPPED"/node_modules/.bun/*-musl@*
-find "$SHIPPED" -xtype l -delete
+# What the builder needs, as in `shellWorkspace` in `flake.nix`.
+"$ROOT/distro/shell-workspace.sh" modules "$BUN" "$WORKSPACE" "$LIBEXEC/workspace"
+"$ROOT/distro/shell-workspace.sh" files "$BUN" "$WORKSPACE" "$LIBEXEC/workspace"
 
 for shell in "${SHELLS[@]}"; do
   cp -a "$WORKSPACE/packages/shell-$shell/.vite/renderer/main_window" \
