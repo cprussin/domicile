@@ -85,6 +85,7 @@ jobs:
           dir="$(.github/scripts/engine-job-tmp.sh make)"
           echo "TMPDIR=$dir" >>"$GITHUB_ENV"
           echo "DOMICILE_JOB_TMP=$dir" >>"$GITHUB_ENV"
+          echo "UNDER_WAYLAND_RUNTIME_DIR=$dir/wl" >>"$GITHUB_ENV"
 
       # Take and lock a tree from the pool; see engine.yml. This job always
       # resets and compiles, so it always takes the compile slot too.
