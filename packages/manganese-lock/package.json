@@ -1,0 +1,56 @@
+{
+  "dependencies": {
+    "@domicile-desktop/component-library": "workspace:*",
+    "@domicile-desktop/manganese-bar": "workspace:*",
+    "@domicile-desktop/manganese-bar-module-clock": "workspace:*",
+    "@domicile-desktop/manganese-host": "workspace:*",
+    "@domicile-desktop/sdk": "workspace:*",
+    "@pandacss/dev": "catalog:",
+    "@phosphor-icons/react": "catalog:",
+    "react": "catalog:"
+  },
+  "description": "Manganese's lock screen: the passphrase field and a bar of what a locked desktop allows.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/manganese-window-management": "workspace:*",
+    "@domicile-desktop/test-support": "workspace:*",
+    "@pandacss/preset-panda": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@testing-library/user-event": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "postcss": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    "./Lock": "./src/Lock.tsx",
+    "./LockBar": "./src/LockBar.tsx",
+    "./panda-preset": "./src/panda-preset.ts",
+    "./useLocked": "./src/useLocked.ts"
+  },
+  "files": [
+    "src/**",
+    "styled-system/**",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx"
+  ],
+  "license": "MIT",
+  "name": "@domicile-desktop/manganese-lock",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "directory": "packages/manganese-lock",
+    "type": "git",
+    "url": "git+https://github.com/cprussin/domicile.git"
+  },
+  "scripts": {
+    "prepare": "panda codegen --silent",
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}

@@ -1,0 +1,926 @@
+import { describe, expect, it } from "bun:test";
+import { act, renderHook } from "@testing-library/react";
+
+import { token } from "../styled-system/tokens";
+import type { Placement } from "./placement";
+import { LEAVING } from "./placement";
+import type { Shown } from "./shown";
+import { Layout } from "./tree/node";
+import { useWindowMotion } from "./useWindowMotion";
+import { ShellWindow } from "./window";
+import type { WindowMotion } from "./window-motion";
+
+const TERMINAL = ShellWindow.App("term", "kitty");
+const EDITOR = ShellWindow.App("nvim", "nvim");
+
+const placementOf = (id: string): Placement => ({
+  bar: { height: 30, width: 1200, x: 0, y: 32 },
+  bare: false,
+  behind: undefined,
+  depth: 0,
+  frame: { height: 800, width: 1200, x: 0, y: 32 },
+  id,
+  selected: false,
+  soleTab: false,
+  strip: undefined,
+  surface: { height: 770, width: 1200, x: 0, y: 62 },
+  tabbed: undefined,
+});
+
+/** A desk with one screen: its workspace, open windows and shown windows. */
+const desktop = (
+  current: string,
+  windows: readonly ShellWindow[],
+  showing: readonly ShellWindow[] = windows,
+): Shown => ({
+  activeId: showing[0]?.id,
+  current,
+  placements: showing.map(({ id }) => placementOf(id)),
+  scratchpad: [],
+  tabs: [],
+  windows,
+});
+
+/** The screen most cases use. */
+const SCREEN = "screen";
+
+const showing = (shown: Shown) =>
+  renderHook((next: Shown) => useWindowMotion({ [SCREEN]: next }), {
+    initialProps: shown,
+  });
+
+/** A desk of several screens, each showing its own workspace. */
+const showingDesk = (desk: Readonly<Record<string, Shown>>) =>
+  renderHook((next: Readonly<Record<string, Shown>>) => useWindowMotion(next), {
+    initialProps: desk,
+  });
+
+const motionOf = (
+  result: { current: ReturnType<typeof useWindowMotion> },
+  id: string,
+): WindowMotion | undefined =>
+  result.current.drawn.find((drawn) => drawn.window.id === id)?.motion;
+
+describe("useWindowMotion", () => {
+  describe("a window that has opened", () => {
+    it("grows in", () => {
+      const { rerender, result } = showing(desktop("1", [TERMINAL]));
+
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR]));
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("opening");
+    });
+
+    it("is done when it says it has grown in", () => {
+      const { rerender, result } = showing(desktop("1", [TERMINAL]));
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR]));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "opening", SCREEN, "contents");
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("resting");
+    });
+
+    // A window coming back into view (from behind a tab or another workspace)
+    // must not play the opening animation, or every switch would look like many
+    // windows opening.
+    it("is not what a window merely coming back into view does", () => {
+      const { rerender, result } = showing(
+        desktop("1", [TERMINAL, EDITOR], [TERMINAL]),
+      );
+
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR]));
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("resting");
+    });
+  });
+
+  describe("a window that has closed", () => {
+    it("goes on being drawn, shrinking away from the box it had", () => {
+      const { rerender, result } = showing(desktop("1", [TERMINAL, EDITOR]));
+
+      act(() => {
+        rerender(desktop("1", [TERMINAL]));
+      });
+
+      expect(
+        result.current.drawn.find((drawn) => drawn.window.id === EDITOR.id),
+      ).toMatchObject({
+        motion: "closing",
+        // At its old box, above the windows moving into it.
+        placement: { ...placementOf(EDITOR.id), depth: LEAVING },
+      });
+    });
+
+    it("is let go of when it says it has gone", () => {
+      const { rerender, result } = showing(desktop("1", [TERMINAL, EDITOR]));
+      act(() => {
+        rerender(desktop("1", [TERMINAL]));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "closing", SCREEN, "contents");
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBeUndefined();
+    });
+  });
+
+  // Sent to the scratchpad or to a workspace no screen shows. It stays open,
+  // so it stays in the window list.
+  describe("a window sent off the screen", () => {
+    const drawnOf = (
+      result: { current: ReturnType<typeof useWindowMotion> },
+      id: string,
+    ) => result.current.drawn.find((drawn) => drawn.window.id === id);
+
+    it("shrinks away from the box it had", () => {
+      const { rerender, result } = showing(desktop("1", [TERMINAL, EDITOR]));
+
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR], [TERMINAL]));
+      });
+
+      expect(drawnOf(result, EDITOR.id)).toMatchObject({
+        motion: "sending",
+        // At its old box, above the windows moving into it.
+        placement: { ...placementOf(EDITOR.id), depth: LEAVING },
+      });
+    });
+
+    it("is hidden when it says it has gone", () => {
+      const { rerender, result } = showing(desktop("1", [TERMINAL, EDITOR]));
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR], [TERMINAL]));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "sending", SCREEN, "contents");
+      });
+
+      expect(drawnOf(result, EDITOR.id)).toMatchObject({
+        motion: "resting",
+        placement: undefined,
+      });
+    });
+
+    it("leaves from its new box when shown and sent again", () => {
+      const moved = (placement: Placement): Placement => ({
+        ...placement,
+        frame: { ...placement.frame, x: 600 },
+      });
+      const { rerender, result } = showing(desktop("1", [TERMINAL, EDITOR]));
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR], [TERMINAL]));
+      });
+      const shownAgain = desktop("1", [TERMINAL, EDITOR]);
+      act(() => {
+        rerender({
+          ...shownAgain,
+          placements: shownAgain.placements.map(moved),
+        });
+      });
+      expect(motionOf(result, EDITOR.id)).toBe("resting");
+
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR], [TERMINAL]));
+      });
+
+      expect(drawnOf(result, EDITOR.id)).toMatchObject({
+        motion: "sending",
+        placement: { ...moved(placementOf(EDITOR.id)), depth: LEAVING },
+      });
+    });
+
+    it("closes up along its strip when it was a tab", () => {
+      const tabs = (showing: readonly ShellWindow[]): Shown => ({
+        ...desktop("1", [TERMINAL, EDITOR], showing),
+        placements: showing.map(({ id }) => ({
+          ...placementOf(id),
+          tabbed: Layout.Tabbed,
+        })),
+      });
+      const { rerender, result } = showing(tabs([TERMINAL, EDITOR]));
+
+      act(() => {
+        rerender(tabs([TERMINAL]));
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("sending-tab");
+    });
+
+    // Its contents fade after its bar collapses; see `movingStyles`.
+    it("is let go of when its contents finish, not its bar", () => {
+      const tabs = (showing: readonly ShellWindow[]): Shown => ({
+        ...desktop("1", [TERMINAL, EDITOR], showing),
+        placements: showing.map(({ id }) => ({
+          ...placementOf(id),
+          tabbed: Layout.Tabbed,
+        })),
+      });
+      const { rerender, result } = showing(tabs([TERMINAL, EDITOR]));
+      act(() => {
+        rerender(tabs([TERMINAL]));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "sending-tab", SCREEN, "bar");
+      });
+      expect(motionOf(result, EDITOR.id)).toBe("sending-tab");
+
+      act(() => {
+        result.current.onPlayedOut(
+          EDITOR.id,
+          "sending-tab",
+          SCREEN,
+          "contents",
+        );
+      });
+      expect(motionOf(result, EDITOR.id)).toBe("resting");
+    });
+  });
+
+  // The scratchpad is a drop-down: its windows slide up off the top of the
+  // screen and back down.
+  describe("the scratchpad", () => {
+    const stowed: Shown = {
+      ...desktop("1", [TERMINAL, EDITOR], [TERMINAL]),
+      scratchpad: [EDITOR.id],
+    };
+
+    it("slides a window sent to it up off the screen", () => {
+      const { rerender, result } = showing(desktop("1", [TERMINAL, EDITOR]));
+
+      act(() => {
+        rerender(stowed);
+      });
+
+      expect(
+        result.current.drawn.find((drawn) => drawn.window.id === EDITOR.id),
+      ).toMatchObject({
+        motion: "stowing",
+        placement: { ...placementOf(EDITOR.id), depth: LEAVING },
+      });
+    });
+
+    // It slides off whole, so it lifts by the whole window, not its tab.
+    it("slides a tab sent to it up with its contents", () => {
+      const tab = (placement: Placement): Placement => ({
+        ...placement,
+        tabbed: Layout.Tabbed,
+      });
+      const { rerender, result } = showing({
+        ...desktop("1", [TERMINAL, EDITOR]),
+        placements: [TERMINAL, EDITOR].map(({ id }) => tab(placementOf(id))),
+      });
+
+      act(() => {
+        rerender({ ...stowed, placements: [tab(placementOf(TERMINAL.id))] });
+      });
+
+      expect(
+        result.current.drawn.find((drawn) => drawn.window.id === EDITOR.id)
+          ?.placement?.frame,
+      ).toEqual(placementOf(EDITOR.id).frame);
+    });
+
+    it("hides the window once it has slid off", () => {
+      const { rerender, result } = showing(desktop("1", [TERMINAL, EDITOR]));
+      act(() => {
+        rerender(stowed);
+      });
+
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "stowing", SCREEN, "contents");
+      });
+
+      expect(
+        result.current.drawn.find((drawn) => drawn.window.id === EDITOR.id)
+          ?.placement,
+      ).toBeUndefined();
+    });
+
+    // Each slide is the other played backwards, so the new one starts where
+    // the one it cuts short had got to.
+    describe("a slide cut short by the other", () => {
+      const SLIDE = Number.parseFloat(token("durations.slow"));
+
+      const clocked = (shown: Shown) => {
+        const clock = { now: 0 };
+        const hook = renderHook(
+          (next: Shown) => useWindowMotion({ [SCREEN]: next }, () => clock.now),
+          { initialProps: shown },
+        );
+        return { ...hook, clock };
+      };
+
+      const drawnOf = (
+        result: { current: ReturnType<typeof useWindowMotion> },
+        id: string,
+      ) => result.current.drawn.find((drawn) => drawn.window.id === id);
+
+      it("slides a window hidden partway down back up from where it is", () => {
+        const { clock, rerender, result } = clocked(stowed);
+        act(() => {
+          rerender(desktop("1", [TERMINAL, EDITOR]));
+        });
+        clock.now = 200;
+
+        act(() => {
+          rerender(stowed);
+        });
+
+        expect(drawnOf(result, EDITOR.id)).toMatchObject({
+          motion: "stowing",
+          rewound: SLIDE - 200,
+        });
+      });
+
+      it("slides a window shown partway up back down from where it is", () => {
+        const { clock, rerender, result } = clocked(
+          desktop("1", [TERMINAL, EDITOR]),
+        );
+        act(() => {
+          rerender(stowed);
+        });
+        clock.now = 100;
+
+        act(() => {
+          rerender(desktop("1", [TERMINAL, EDITOR]));
+        });
+
+        expect(drawnOf(result, EDITOR.id)).toMatchObject({
+          motion: "dropping",
+          rewound: SLIDE - 100,
+        });
+      });
+
+      it("starts a slide from the top when the other has finished", () => {
+        const { clock, rerender, result } = clocked(stowed);
+        act(() => {
+          rerender(desktop("1", [TERMINAL, EDITOR]));
+        });
+        act(() => {
+          result.current.onPlayedOut(EDITOR.id, "dropping", SCREEN, "contents");
+        });
+        clock.now = 200;
+
+        act(() => {
+          rerender(stowed);
+        });
+
+        expect(drawnOf(result, EDITOR.id)?.rewound).toBe(0);
+      });
+    });
+
+    it("slides a window it shows down onto the screen", () => {
+      const { rerender, result } = showing(stowed);
+
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR]));
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("dropping");
+    });
+
+    // Sent from a workspace no screen shows, so nothing on screen moves.
+    it("slides down a window it took while nothing on screen changed", () => {
+      const elsewhere = desktop("1", [TERMINAL, EDITOR], [TERMINAL]);
+      const { rerender, result } = showing(elsewhere);
+      act(() => {
+        rerender({ ...elsewhere, scratchpad: [EDITOR.id] });
+      });
+
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR]));
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("dropping");
+    });
+
+    // Hidden before it finished growing in, it never reports that it has.
+    it("slides down a window sent to it while it was opening", () => {
+      const { rerender, result } = showing(
+        desktop("1", [TERMINAL], [TERMINAL]),
+      );
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR]));
+      });
+      act(() => {
+        rerender(stowed);
+      });
+
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR]));
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("dropping");
+    });
+
+    it("is done showing it when it says it has slid down", () => {
+      const { rerender, result } = showing(stowed);
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR]));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "dropping", SCREEN, "contents");
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("resting");
+    });
+  });
+
+  // A new tab opens within its strip. Its contents fade in over the tab it
+  // replaces instead of growing.
+  describe("a tab that has opened", () => {
+    const tabs = (windows: readonly ShellWindow[]): Shown => ({
+      ...desktop("1", windows),
+      placements: windows.map(({ id }) => ({
+        ...placementOf(id),
+        tabbed: Layout.Tabbed,
+      })),
+    });
+
+    it("opens out rather than growing in", () => {
+      const { rerender, result } = showing(tabs([TERMINAL]));
+
+      act(() => {
+        rerender(tabs([TERMINAL, EDITOR]));
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("opening-tab");
+    });
+
+    it("is done when it says it has opened out", () => {
+      const { rerender, result } = showing(tabs([TERMINAL]));
+      act(() => {
+        rerender(tabs([TERMINAL, EDITOR]));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(
+          EDITOR.id,
+          "opening-tab",
+          SCREEN,
+          "contents",
+        );
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("resting");
+    });
+  });
+
+  // A closing tab closes within its strip. If it was shown, its contents fade
+  // to the replacing tab instead of shrinking.
+  describe("a tab that has closed", () => {
+    const tabs = (windows: readonly ShellWindow[]): Shown => ({
+      ...desktop("1", windows),
+      placements: windows.map(({ id }) => ({
+        ...placementOf(id),
+        tabbed: Layout.Tabbed,
+      })),
+    });
+
+    it("closes up rather than shrinking away", () => {
+      const { rerender, result } = showing(tabs([TERMINAL, EDITOR]));
+
+      act(() => {
+        rerender(tabs([TERMINAL]));
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("closing-tab");
+    });
+
+    it("is let go of when it says it has closed up", () => {
+      const { rerender, result } = showing(tabs([TERMINAL, EDITOR]));
+      act(() => {
+        rerender(tabs([TERMINAL]));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(
+          EDITOR.id,
+          "closing-tab",
+          SCREEN,
+          "contents",
+        );
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBeUndefined();
+    });
+
+    // Its contents fade after its bar collapses; see `movingStyles`. Ending
+    // with the bar would cut the fade short and show the desktop.
+    it("waits for its contents to fade, not its bar", () => {
+      const { rerender, result } = showing(tabs([TERMINAL, EDITOR]));
+      act(() => {
+        rerender(tabs([TERMINAL]));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "closing-tab", SCREEN, "bar");
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("closing-tab");
+    });
+
+    it("is let go of with its bar when it was hidden", () => {
+      const hiddenTab = (windows: readonly ShellWindow[]): Shown => ({
+        ...tabs(windows),
+        placements: windows.map(({ id }) => ({
+          ...placementOf(id),
+          bare: false,
+          behind: id === EDITOR.id ? placementOf(id).surface : undefined,
+          surface: id === EDITOR.id ? undefined : placementOf(id).surface,
+          tabbed: Layout.Tabbed,
+        })),
+      });
+      const { rerender, result } = showing(hiddenTab([TERMINAL, EDITOR]));
+      act(() => {
+        rerender(hiddenTab([TERMINAL]));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "closing-tab", SCREEN, "bar");
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBeUndefined();
+    });
+  });
+
+  describe("a float raised over another", () => {
+    const floating = (on: string, under: string): Shown => ({
+      ...desktop("1", [TERMINAL, EDITOR]),
+      placements: [
+        { ...placementOf(on), depth: 2 },
+        { ...placementOf(under), depth: 1 },
+      ],
+    });
+
+    it("shuffles over the one it covered, which shuffles under it", () => {
+      const { rerender, result } = showing(floating(TERMINAL.id, EDITOR.id));
+
+      act(() => {
+        rerender(floating(EDITOR.id, TERMINAL.id));
+      });
+
+      expect(
+        result.current.drawn.map(({ motion, restack, window }) => [
+          window.id,
+          motion,
+          restack?.from,
+          restack?.to,
+        ]),
+      ).toStrictEqual([
+        [TERMINAL.id, "restacking", 2, 1],
+        [EDITOR.id, "restacking", 1, 2],
+      ]);
+    });
+
+    it("is done when it says it has shuffled", () => {
+      const { rerender, result } = showing(floating(TERMINAL.id, EDITOR.id));
+      act(() => {
+        rerender(floating(EDITOR.id, TERMINAL.id));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "restacking", SCREEN, "contents");
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("resting");
+      expect(motionOf(result, TERMINAL.id)).toBe("restacking");
+    });
+
+    // Browsers restart an animation only when its name changes. A window raised
+    // again while shuffling, or in the frame it finished, must get the other
+    // name, or it plays nothing and never reports finishing.
+    it("starts over when raised back before it has finished", () => {
+      const { rerender, result } = showing(floating(TERMINAL.id, EDITOR.id));
+      act(() => {
+        rerender(floating(EDITOR.id, TERMINAL.id));
+      });
+
+      act(() => {
+        rerender(floating(TERMINAL.id, EDITOR.id));
+      });
+
+      expect(motionOf(result, TERMINAL.id)).toBe("restacking-again");
+      expect(motionOf(result, EDITOR.id)).toBe("restacking-again");
+    });
+
+    it("starts over when raised back once it has finished", () => {
+      const { rerender, result } = showing(floating(TERMINAL.id, EDITOR.id));
+      act(() => {
+        rerender(floating(EDITOR.id, TERMINAL.id));
+      });
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "restacking", SCREEN, "contents");
+        result.current.onPlayedOut(
+          TERMINAL.id,
+          "restacking",
+          SCREEN,
+          "contents",
+        );
+      });
+
+      act(() => {
+        rerender(floating(TERMINAL.id, EDITOR.id));
+      });
+      expect(motionOf(result, TERMINAL.id)).toBe("restacking-again");
+
+      act(() => {
+        result.current.onPlayedOut(
+          TERMINAL.id,
+          "restacking-again",
+          SCREEN,
+          "contents",
+        );
+        result.current.onPlayedOut(
+          EDITOR.id,
+          "restacking-again",
+          SCREEN,
+          "contents",
+        );
+      });
+      act(() => {
+        rerender(floating(EDITOR.id, TERMINAL.id));
+      });
+      expect(motionOf(result, TERMINAL.id)).toBe("restacking");
+    });
+  });
+
+  describe("a tab switch", () => {
+    const tabbed = (on: ShellWindow, off: ShellWindow): Shown => ({
+      ...desktop("1", [TERMINAL, EDITOR]),
+      placements: [
+        placementOf(on.id),
+        {
+          ...placementOf(off.id),
+          bare: false,
+          behind: placementOf(off.id).surface,
+          surface: undefined,
+        },
+      ],
+    });
+
+    it("fades the window revealed in over the one it hides", () => {
+      const { rerender, result } = showing(tabbed(TERMINAL, EDITOR));
+
+      act(() => {
+        rerender(tabbed(EDITOR, TERMINAL));
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("revealing");
+      expect(motionOf(result, TERMINAL.id)).toBe("concealing");
+    });
+
+    it("is done with each window when it says it has finished", () => {
+      const { rerender, result } = showing(tabbed(TERMINAL, EDITOR));
+      act(() => {
+        rerender(tabbed(EDITOR, TERMINAL));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "revealing", SCREEN, "contents");
+        result.current.onPlayedOut(
+          TERMINAL.id,
+          "concealing",
+          SCREEN,
+          "contents",
+        );
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("resting");
+      expect(motionOf(result, TERMINAL.id)).toBe("resting");
+    });
+
+    // Each gets the other name so the browser restarts it.
+    it("turns back when switched back before it has finished", () => {
+      const { rerender, result } = showing(tabbed(TERMINAL, EDITOR));
+      act(() => {
+        rerender(tabbed(EDITOR, TERMINAL));
+      });
+
+      act(() => {
+        rerender(tabbed(TERMINAL, EDITOR));
+      });
+
+      expect(motionOf(result, TERMINAL.id)).toBe("revealing");
+      expect(motionOf(result, EDITOR.id)).toBe("concealing");
+    });
+  });
+
+  describe("a tab uncovered by a close", () => {
+    const shownOver = (hidden: ShellWindow): Shown => ({
+      ...desktop("1", [TERMINAL, EDITOR]),
+      placements: [
+        placementOf(TERMINAL.id),
+        {
+          ...placementOf(hidden.id),
+          bare: false,
+          behind: placementOf(hidden.id).surface,
+          surface: undefined,
+        },
+      ],
+    });
+
+    // Its depth would otherwise ease up from the hidden tabs', letting one of
+    // them show through the closing tab.
+    it("holds its depth while the closed tab fades", () => {
+      const { rerender, result } = showing(shownOver(EDITOR));
+
+      act(() => {
+        rerender(desktop("1", [EDITOR]));
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("uncovering");
+    });
+
+    it("holds its depth while a tab sent away fades", () => {
+      const { rerender, result } = showing(shownOver(EDITOR));
+
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR], [EDITOR]));
+      });
+
+      expect(motionOf(result, TERMINAL.id)).toBe("sending");
+      expect(motionOf(result, EDITOR.id)).toBe("uncovering");
+    });
+
+    it("is done when it says it has finished", () => {
+      const { rerender, result } = showing(shownOver(EDITOR));
+      act(() => {
+        rerender(desktop("1", [EDITOR]));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(EDITOR.id, "uncovering", SCREEN, "contents");
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("resting");
+    });
+  });
+
+  describe("a workspace switch", () => {
+    it("slides the workspace arriving in from the side it was on", () => {
+      const { rerender, result } = showing(
+        desktop("1", [TERMINAL, EDITOR], [TERMINAL]),
+      );
+
+      act(() => {
+        rerender(desktop("2", [TERMINAL, EDITOR], [EDITOR]));
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("arriving-from-end");
+    });
+
+    it("and slides the one being left off the other way", () => {
+      const { rerender, result } = showing(
+        desktop("1", [TERMINAL, EDITOR], [TERMINAL]),
+      );
+
+      act(() => {
+        rerender(desktop("2", [TERMINAL, EDITOR], [EDITOR]));
+      });
+
+      expect(
+        result.current.drawn.find((drawn) => drawn.window.id === TERMINAL.id),
+      ).toMatchObject({
+        motion: "leaving-to-start",
+        placement: placementOf(TERMINAL.id),
+      });
+    });
+
+    it("goes the other way when the switch goes back", () => {
+      const { rerender, result } = showing(
+        desktop("2", [TERMINAL, EDITOR], [EDITOR]),
+      );
+
+      act(() => {
+        rerender(desktop("1", [TERMINAL, EDITOR], [TERMINAL]));
+      });
+
+      expect(motionOf(result, TERMINAL.id)).toBe("arriving-from-start");
+    });
+
+    // The focused window's bar stays focused while its workspace leaves.
+    it("keeps the workspace being left saying where the keyboard was", () => {
+      const { rerender, result } = showing(
+        desktop("1", [TERMINAL, EDITOR], [TERMINAL]),
+      );
+
+      act(() => {
+        rerender(desktop("2", [TERMINAL, EDITOR], [EDITOR]));
+      });
+
+      expect(
+        result.current.drawn.find((drawn) => drawn.window.id === TERMINAL.id)
+          ?.focused,
+      ).toBe(true);
+    });
+
+    it("is over when one of the windows says it has finished sliding", () => {
+      const { rerender, result } = showing(
+        desktop("1", [TERMINAL, EDITOR], [TERMINAL]),
+      );
+      act(() => {
+        rerender(desktop("2", [TERMINAL, EDITOR], [EDITOR]));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(
+          EDITOR.id,
+          "arriving-from-end",
+          SCREEN,
+          "contents",
+        );
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("resting");
+      expect(motionOf(result, TERMINAL.id)).toBe("resting");
+    });
+  });
+
+  // Each window is drawn once, on the screen showing it, and a workspace switch
+  // affects only its screen.
+  describe("on a desk of two screens", () => {
+    const WINDOWS = [TERMINAL, EDITOR];
+    const desk = (left: string) => ({
+      left: desktop(left, WINDOWS, left === "1" ? [TERMINAL] : []),
+      right: desktop("2", WINDOWS, [EDITOR]),
+    });
+
+    it("draws each window once, on the screen showing it", () => {
+      const { result } = showingDesk(desk("1"));
+
+      expect(
+        result.current.drawn.map(({ screen, window }) => [window.id, screen]),
+      ).toStrictEqual([
+        [TERMINAL.id, "left"],
+        [EDITOR.id, "right"],
+      ]);
+    });
+
+    it("slides only the screen whose workspace switched", () => {
+      const { rerender, result } = showingDesk(desk("1"));
+
+      act(() => {
+        rerender(desk("3"));
+      });
+
+      expect(motionOf(result, TERMINAL.id)).toBe("leaving-to-start");
+      expect(motionOf(result, EDITOR.id)).toBe("resting");
+    });
+
+    it("ends a switch on the screen whose window says it has finished", () => {
+      const { rerender, result } = showingDesk(desk("1"));
+      act(() => {
+        rerender(desk("3"));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(
+          TERMINAL.id,
+          "leaving-to-start",
+          "right",
+          "contents",
+        );
+      });
+      expect(motionOf(result, TERMINAL.id)).toBe("leaving-to-start");
+
+      act(() => {
+        result.current.onPlayedOut(
+          TERMINAL.id,
+          "leaving-to-start",
+          "left",
+          "contents",
+        );
+      });
+      expect(motionOf(result, TERMINAL.id)).toBe("resting");
+    });
+
+    it("does not send a window off the screen when another screen shows it", () => {
+      const { rerender, result } = showingDesk(desk("1"));
+
+      act(() => {
+        rerender({
+          left: desktop("1", WINDOWS, []),
+          right: desktop("2", WINDOWS, [EDITOR, TERMINAL]),
+        });
+      });
+
+      expect(result.current.drawn).toMatchObject([
+        { motion: "resting", screen: "right", window: TERMINAL },
+        { motion: "resting", screen: "right", window: EDITOR },
+      ]);
+    });
+  });
+});

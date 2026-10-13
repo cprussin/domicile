@@ -145,7 +145,10 @@ Web side:
 - `packages/system-audio`: the mixer's sound server, through `pactl` and
   `parec` on the SDK's system calls.
 - `packages/domicile-builder`: builds a shell from a user's TS/JS entry.
-- `packages/shell-manganese`: the reference desktop.
+- `packages/shell-manganese`: the reference desktop, composed from the
+  `packages/manganese-*` libraries: the bar and one package per bar item,
+  window management, the launcher, notifications, clipboard, lock screen and
+  wallpaper.
 - `packages/shell-simple`: a desktop with only windows.
 - `packages/shell-splash`: the page shown while `domicile` builds a shell on
   first start.

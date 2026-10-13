@@ -1,0 +1,60 @@
+{
+  "dependencies": {
+    "@cprussin/option-result": "catalog:",
+    "@domicile-desktop/component-library": "workspace:*",
+    "@domicile-desktop/manganese-bar": "workspace:*",
+    "@domicile-desktop/manganese-host": "workspace:*",
+    "@domicile-desktop/manganese-page-requests": "workspace:*",
+    "@domicile-desktop/sdk": "workspace:*",
+    "@domicile-desktop/system-apps": "workspace:*",
+    "@pandacss/dev": "catalog:",
+    "react": "catalog:",
+    "zod": "catalog:"
+  },
+  "description": "A manganese bar item: the system tray: apps' StatusNotifierItems and extension actions.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/test-support": "workspace:*",
+    "@pandacss/preset-panda": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@testing-library/user-event": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "postcss": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    ".": "./src/bar-item.tsx",
+    "./extensions/shown": "./src/extensions/shown.ts",
+    "./extensions/useExtensions": "./src/extensions/useExtensions.ts",
+    "./tray-context": "./src/tray-context.ts",
+    "./tray-entry": "./src/tray-entry.ts",
+    "./useTray": "./src/useTray.ts",
+    "./useTrayOrder": "./src/useTrayOrder.ts"
+  },
+  "files": [
+    "src/**",
+    "styled-system/**",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx"
+  ],
+  "license": "MIT",
+  "name": "@domicile-desktop/manganese-bar-module-tray",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "directory": "packages/manganese-bar-module-tray",
+    "type": "git",
+    "url": "git+https://github.com/cprussin/domicile.git"
+  },
+  "scripts": {
+    "prepare": "panda codegen --silent",
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}

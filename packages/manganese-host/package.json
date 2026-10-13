@@ -1,0 +1,61 @@
+{
+  "dependencies": {
+    "@cprussin/option-result": "catalog:",
+    "@domicile-desktop/component-library": "workspace:*",
+    "@domicile-desktop/sdk": "workspace:*",
+    "@pandacss/dev": "catalog:",
+    "react": "catalog:"
+  },
+  "description": "Helpers every part of Domicile's manganese desktop shares: the desktop as React context, one value per desktop, and shared watches.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/system-apps": "workspace:*",
+    "@domicile-desktop/test-support": "workspace:*",
+    "@pandacss/preset-panda": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@testing-library/user-event": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "postcss": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    "./domicile-context": "./src/domicile-context.ts",
+    "./domicile-elements": {
+      "types": "./src/domicile-elements.d.ts"
+    },
+    "./followed-icon-theme": "./src/followed-icon-theme.ts",
+    "./per-host": "./src/per-host.ts",
+    "./shared-watch": "./src/shared-watch.ts",
+    "./superseded": "./src/superseded.ts",
+    "./use-provided": "./src/use-provided.ts",
+    "./useRequests": "./src/useRequests.ts",
+    "./useSharedWatch": "./src/useSharedWatch.ts",
+    "./watch-host": "./src/watch-host.ts"
+  },
+  "files": [
+    "src/**",
+    "styled-system/**",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx"
+  ],
+  "license": "MIT",
+  "name": "@domicile-desktop/manganese-host",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "directory": "packages/manganese-host",
+    "type": "git",
+    "url": "git+https://github.com/cprussin/domicile.git"
+  },
+  "scripts": {
+    "prepare": "panda codegen --silent",
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}

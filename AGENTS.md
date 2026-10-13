@@ -190,16 +190,16 @@ How to use, configure and debug Domicile. No authority level.
 | [/packages/domicile-engine/docs/SOURCE-MAP.md](/packages/domicile-engine/docs/SOURCE-MAP.md) | Where the surface-embedding code lives under `src/`. |
 | [/packages/domicile-engine/docs/TESTING.md](/packages/domicile-engine/docs/TESTING.md) | Engine unit test suites, their filters and minimum counts, and the command that runs what CI runs. |
 | [/packages/e2e-harness/docs/SCRIPT-VERDICTS.md](/packages/e2e-harness/docs/SCRIPT-VERDICTS.md) | Exit codes, `scripts/lib/harness.sh` helpers, required script structure, and the rules `src/verdicts.ts` enforces. |
-| [/packages/shell-manganese/docs/WINDOW-MANAGEMENT.md](/packages/shell-manganese/docs/WINDOW-MANAGEMENT.md) | Layout tree, screens and workspaces, focus, pointer warping, dragging, title bars, animations. |
-| [/packages/shell-manganese/docs/FOCUS-INTERNALS.md](/packages/shell-manganese/docs/FOCUS-INTERNALS.md) | How pointer warping, browser-window focus and modifier drags over clients work. |
-| [/packages/shell-manganese/docs/KEYS.md](/packages/shell-manganese/docs/KEYS.md) | Default bindings, resize mode, commands, keysym rules, a sample config, differences from sway. |
+| [/packages/manganese-window-management/docs/WINDOW-MANAGEMENT.md](/packages/manganese-window-management/docs/WINDOW-MANAGEMENT.md) | Layout tree, screens and workspaces, focus, pointer warping, dragging, title bars, animations. |
+| [/packages/manganese-window-management/docs/FOCUS-INTERNALS.md](/packages/manganese-window-management/docs/FOCUS-INTERNALS.md) | How pointer warping, browser-window focus and modifier drags over clients work. |
+| [/packages/manganese-window-management/docs/KEYS.md](/packages/manganese-window-management/docs/KEYS.md) | Default bindings, resize mode, commands, keysym rules, a sample config, differences from sway. |
 | [/packages/shell-manganese/docs/TOP-BAR.md](/packages/shell-manganese/docs/TOP-BAR.md) | The `bar` option and its items: workspaces, clock, network, Bluetooth, battery, brightness, volume, notifications, tray. |
 | [/packages/shell-manganese/docs/HOST-READOUTS.md](/packages/shell-manganese/docs/HOST-READOUTS.md) | How backlight and audio are read for the top bar. |
 | [/packages/shell-manganese/docs/CUSTOM-BAR-ITEMS.md](/packages/shell-manganese/docs/CUSTOM-BAR-ITEMS.md) | Using manganese's Panda CSS in custom bar items. |
-| [/packages/shell-manganese/docs/LAUNCHER.md](/packages/shell-manganese/docs/LAUNCHER.md) | Launcher row order, sources and previews. |
-| [/packages/shell-manganese/docs/CLIPBOARD.md](/packages/shell-manganese/docs/CLIPBOARD.md) | Clipboard history and the browser-window clipboard on tty vs nested. |
-| [/packages/shell-manganese/docs/WALLPAPER.md](/packages/shell-manganese/docs/WALLPAPER.md) | Wallpaper rotation, per-theme photos, crossfade, sources. |
-| [/packages/shell-manganese/docs/SOURCE.md](/packages/shell-manganese/docs/SOURCE.md) | Directory-level source map. |
+| [/packages/manganese-launcher/docs/LAUNCHER.md](/packages/manganese-launcher/docs/LAUNCHER.md) | Launcher row order, sources and previews. |
+| [/packages/manganese-clipboard/docs/CLIPBOARD.md](/packages/manganese-clipboard/docs/CLIPBOARD.md) | Clipboard history and the browser-window clipboard on tty vs nested. |
+| [/packages/manganese-wallpaper/docs/WALLPAPER.md](/packages/manganese-wallpaper/docs/WALLPAPER.md) | Wallpaper rotation, per-theme photos, crossfade, sources. |
+| [/packages/shell-manganese/docs/SOURCE.md](/packages/shell-manganese/docs/SOURCE.md) | How the root composes manganese's packages, and its source map. |
 
 ## Checking your work
 

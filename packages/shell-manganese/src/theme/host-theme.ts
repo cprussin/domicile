@@ -1,8 +1,7 @@
 import type { Theme } from "@domicile-desktop/component-library/theme-core";
 import type { ThemeSource } from "@domicile-desktop/component-library/theme-source";
+import { watchHost } from "@domicile-desktop/manganese-host/watch-host";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
-
-import { watchHost } from "../host/watch-host";
 import { rememberedTheme, rememberTheme } from "./remembered-theme";
 
 /**

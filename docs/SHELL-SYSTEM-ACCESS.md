@@ -71,7 +71,7 @@ recorded output.
 | Notifications, tray, portals | D-Bus servers that own a bus name |
 | The home file index and `searchFiles` | speed: only the matches cross to the page |
 | Launching apps (`spawn`) | a client outlives a shell reload and runs on the compositor's Wayland display |
-| Clipboard history (`copyClipboardEntry`) | the compositor serves the paste, so it outlives the client that copied; full text stays out of the page ([CLIPBOARD.md](../packages/shell-manganese/docs/CLIPBOARD.md)) |
+| Clipboard history (`copyClipboardEntry`) | the compositor serves the paste, so it outlives the client that copied; full text stays out of the page ([CLIPBOARD.md](../packages/manganese-clipboard/docs/CLIPBOARD.md)) |
 | Theme (`theme`, `windowsTheme`) | clients read it from the portal's `Settings`; the compositor switches them only after every chrome captures its old frame |
 
 ## Wire

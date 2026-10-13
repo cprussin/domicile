@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
+import { applicationsConfigSchema } from "@domicile-desktop/manganese-launcher/applications-config";
+import { floatingRulesSchema } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
+
+import { exec } from "@domicile-desktop/manganese-window-management/keyboard/commands";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { act, within } from "@testing-library/react";
-
-import { exec } from "./keyboard/commands";
-import { applicationsConfigSchema } from "./launcher/applications-config";
 import { mountManganese } from "./mount-manganese";
-import { floatingRulesSchema } from "./window-management/floating/floating-rules";
 
 /** A fake desktop describing one screen. */
 const onADesk = (): FakeDomicileHost => {

@@ -2,15 +2,17 @@ import { DisplayProvider } from "@domicile-desktop/component-library/DisplayProv
 import type { DisplaySource } from "@domicile-desktop/component-library/display-source";
 import { Provider } from "@domicile-desktop/component-library/Provider";
 import type { ThemeSource } from "@domicile-desktop/component-library/theme-source";
+import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
+import type { ApplicationsConfig } from "@domicile-desktop/manganese-launcher/applications-config";
+import type { FloatingRules } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
+import {
+  DEFAULT_KEYBINDINGS,
+  DEFAULT_MODES,
+} from "@domicile-desktop/manganese-window-management/keyboard/commands";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
-
 import { Desktop } from "./Desktop";
-import { DEFAULT_KEYBINDINGS, DEFAULT_MODES } from "./keyboard/commands";
-import type { ApplicationsConfig } from "./launcher/applications-config";
-import type { BarLayout } from "./top-bar/layout";
-import { DEFAULT_BAR } from "./top-bar/layout";
-import type { FloatingRules } from "./window-management/floating/floating-rules";
+import { DEFAULT_BAR } from "./default-bars";
 
 type Props = {
   /**

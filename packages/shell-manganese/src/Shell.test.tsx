@@ -1,5 +1,29 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { standaloneThemeSource } from "@domicile-desktop/component-library/standalone-theme-source";
+import { useBar } from "@domicile-desktop/manganese-bar/bar-context";
+import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
+import {
+  answerSystemCalls,
+  THINKPAD_BACKLIGHT,
+} from "@domicile-desktop/manganese-bar-module-brightness/fixture";
+import { Clock } from "@domicile-desktop/manganese-bar-module-clock";
+import { LauncherButton } from "@domicile-desktop/manganese-bar-module-launcher-button";
+import { WorkspaceSwitcher } from "@domicile-desktop/manganese-bar-module-workspace-switcher";
+import type { ApplicationsConfig } from "@domicile-desktop/manganese-launcher/applications-config";
+import { answerOpening } from "@domicile-desktop/manganese-launcher/fixture";
+import { useNotificationsDrawer } from "@domicile-desktop/manganese-notifications/notifications-context";
+import { grabCursorStyles } from "@domicile-desktop/manganese-window-management/grab-cursor-styles";
+import {
+  DEFAULT_KEYBINDINGS,
+  DEFAULT_MODES,
+} from "@domicile-desktop/manganese-window-management/keyboard/commands";
+import {
+  SURFACE_TUCK,
+  TITLE_BAR,
+} from "@domicile-desktop/manganese-window-management/rect";
+import { hostDisplays } from "@domicile-desktop/manganese-window-management/screens/host-displays";
+import { GrabCursor } from "@domicile-desktop/manganese-window-management/useGrabCursor";
+import { movingStyles } from "@domicile-desktop/manganese-window-management/window-styles";
 import { APP_TAG_NAME } from "@domicile-desktop/sdk/app-element";
 import type {
   DomicileDisplay,
@@ -25,22 +49,8 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-
 import { css } from "../styled-system/css";
-import { answerSystemCalls, THINKPAD_BACKLIGHT } from "./brightness/fixture";
-import { DEFAULT_KEYBINDINGS, DEFAULT_MODES } from "./keyboard/commands";
-import type { ApplicationsConfig } from "./launcher/applications-config";
-import { answerOpening } from "./launcher/fixture";
-import { useNotificationsDrawer } from "./notifications/notifications-context";
 import { Shell } from "./Shell";
-import { hostDisplays } from "./screens/host-displays";
-import { useBar } from "./top-bar/bar-context";
-import { BarClock, BarLauncher, BarWorkspaces } from "./top-bar/bar-items";
-import type { BarLayout } from "./top-bar/layout";
-import { grabCursorStyles } from "./window-management/grab-cursor-styles";
-import { SURFACE_TUCK, TITLE_BAR } from "./window-management/rect";
-import { GrabCursor } from "./window-management/useGrabCursor";
-import { movingStyles } from "./window-management/window-styles";
 
 // Displays in the engine's shape, so every render exercises the mapping in
 // `screens/host-displays.ts`. Two landscape monitors side by side.
@@ -814,8 +824,11 @@ describe("Shell", () => {
       // A custom item beside some of manganese's, the rest left out.
       const { container } = renderingShell([LEFT], {
         center: [<span key="mail">mail 3/12</span>],
-        left: [<BarLauncher key="launcher" />, <BarWorkspaces key="spaces" />],
-        right: [<BarClock key="clock" />],
+        left: [
+          <LauncherButton key="launcher" />,
+          <WorkspaceSwitcher key="spaces" />,
+        ],
+        right: [<Clock key="clock" />],
       });
 
       const bar = container.querySelector("header");
@@ -867,38 +880,6 @@ describe("Shell", () => {
         expect(drawn.unread).toBeGreaterThan(before.unread);
       });
       expect(drawn.bar).toBe(before.bar);
-    });
-
-    it("draws its text white, with a shadow to keep it off the wallpaper", () => {
-      // The bar has no background, so the shadow separates text from the
-      // wallpaper. Checked by declarations because Panda hashes class names.
-      const { container } = renderShell();
-
-      const bar = container.querySelector("header");
-      expect(bar?.className).toContain(css({ color: "white" }));
-      expect(bar?.className).toContain(css({ textShadow: "textOverPhoto" }));
-    });
-
-    it("hangs a scrim below itself so the text survives a bright wallpaper", () => {
-      // The text shadow alone is too thin for a bright wallpaper. The scrim
-      // extends below the bar so the gradient is not weakest under the text,
-      // so it is a separate layer that ignores the pointer.
-      const { container } = renderShell();
-
-      expect(container.querySelector("header")?.className).toContain(
-        css({
-          "&::before": {
-            backgroundImage: "{gradients.scrimOverPhoto}",
-            content: '""',
-            insetBlockEnd: -4,
-            insetBlockStart: 0,
-            insetInline: 0,
-            pointerEvents: "none",
-            position: "absolute",
-            zIndex: -1,
-          },
-        }),
-      );
     });
 
     it("draws no focus ring on anything in it", () => {

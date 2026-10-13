@@ -4,6 +4,68 @@ import { useTheme } from "@domicile-desktop/component-library/ThemeProvider";
 import { createToastManager } from "@domicile-desktop/component-library/Toaster";
 import { usePictureUrl } from "@domicile-desktop/component-library/usePictureUrl";
 import { usePortalWallpaper } from "@domicile-desktop/component-library/usePortalWallpaper";
+import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
+import { popupShown } from "@domicile-desktop/manganese-bar-module-tray/extensions/shown";
+import { useExtensions } from "@domicile-desktop/manganese-bar-module-tray/extensions/useExtensions";
+import type { TrayState } from "@domicile-desktop/manganese-bar-module-tray/tray-context";
+import { TrayContext } from "@domicile-desktop/manganese-bar-module-tray/tray-context";
+import { trayEntries } from "@domicile-desktop/manganese-bar-module-tray/tray-entry";
+import { useTray } from "@domicile-desktop/manganese-bar-module-tray/useTray";
+import { useTrayOrder } from "@domicile-desktop/manganese-bar-module-tray/useTrayOrder";
+import { Clipboard } from "@domicile-desktop/manganese-clipboard/Clipboard";
+import { useClipboard } from "@domicile-desktop/manganese-clipboard/useClipboard";
+import { DomicileContext } from "@domicile-desktop/manganese-host/domicile-context";
+import { sharedIconTheme } from "@domicile-desktop/manganese-host/followed-icon-theme";
+import { appSearch } from "@domicile-desktop/manganese-launcher/app-search";
+import type { ApplicationsConfig } from "@domicile-desktop/manganese-launcher/applications-config";
+import { Launcher } from "@domicile-desktop/manganese-launcher/Launcher";
+import type { Launch } from "@domicile-desktop/manganese-launcher/launch";
+import { LaunchKind } from "@domicile-desktop/manganese-launcher/launch";
+import type { LauncherControl } from "@domicile-desktop/manganese-launcher/launcher-context";
+import { LauncherContext } from "@domicile-desktop/manganese-launcher/launcher-context";
+import { OpenWith } from "@domicile-desktop/manganese-launcher/OpenWith";
+import { useOpeningApps } from "@domicile-desktop/manganese-launcher/useOpeningApps";
+import { Lock } from "@domicile-desktop/manganese-lock/Lock";
+import { LockBar } from "@domicile-desktop/manganese-lock/LockBar";
+import { useLocked } from "@domicile-desktop/manganese-lock/useLocked";
+import { NotificationDrawer } from "@domicile-desktop/manganese-notifications/NotificationDrawer";
+import { NotificationToasts } from "@domicile-desktop/manganese-notifications/NotificationToasts";
+import type { NotificationsDrawer } from "@domicile-desktop/manganese-notifications/notifications-context";
+import { NotificationsContext } from "@domicile-desktop/manganese-notifications/notifications-context";
+import { useNotifications } from "@domicile-desktop/manganese-notifications/useNotifications";
+import { useNow } from "@domicile-desktop/manganese-notifications/useNow";
+import { Wallpaper } from "@domicile-desktop/manganese-wallpaper/Wallpaper";
+import { desktopClientIcons } from "@domicile-desktop/manganese-window-management/client-icons";
+import type { Direction } from "@domicile-desktop/manganese-window-management/direction";
+import type { FloatingRules } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
+import { useKeybindings } from "@domicile-desktop/manganese-window-management/keyboard/useKeybindings";
+import { useModifiers } from "@domicile-desktop/manganese-window-management/keyboard/useModifiers";
+import type { Geometry } from "@domicile-desktop/manganese-window-management/placement";
+import type {
+  Focus,
+  Spot,
+} from "@domicile-desktop/manganese-window-management/pointer-warp";
+import type { Rect } from "@domicile-desktop/manganese-window-management/rect";
+import { Stage } from "@domicile-desktop/manganese-window-management/Stage";
+import { shownWindowsOf } from "@domicile-desktop/manganese-window-management/screens/shown-windows";
+import type { StageScreen } from "@domicile-desktop/manganese-window-management/screens/stage-screens";
+import { useScreenFollowsPointer } from "@domicile-desktop/manganese-window-management/screens/useScreenFollowsPointer";
+import { useShared } from "@domicile-desktop/manganese-window-management/screens/useShared";
+import { useStageScreens } from "@domicile-desktop/manganese-window-management/screens/useStageScreens";
+import type { Aim } from "@domicile-desktop/manganese-window-management/tiled/aim";
+import { AimKind } from "@domicile-desktop/manganese-window-management/tiled/aim";
+import type { NodeRef } from "@domicile-desktop/manganese-window-management/tree/path";
+import { useClientIcons } from "@domicile-desktop/manganese-window-management/useClientIcons";
+import { usePointerWarp } from "@domicile-desktop/manganese-window-management/usePointerWarp";
+import { useWindows } from "@domicile-desktop/manganese-window-management/useWindows";
+import { WindowKind } from "@domicile-desktop/manganese-window-management/window";
+import {
+  activeIsPrivate,
+  screenOfApp,
+  WindowAction,
+} from "@domicile-desktop/manganese-window-management/window-state";
+import type { Workspaces } from "@domicile-desktop/manganese-window-management/workspaces-context";
+import { WorkspacesContext } from "@domicile-desktop/manganese-window-management/workspaces-context";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { previewFile } from "@domicile-desktop/sdk/file-preview";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
@@ -11,70 +73,10 @@ import { ownedChords } from "@domicile-desktop/sdk/own-keybindings";
 import { system } from "@domicile-desktop/sdk/system";
 import type { ReactNode } from "react";
 import { useCallback, useMemo, useState } from "react";
-
-import { Clipboard } from "./clipboard/Clipboard";
-import { useClipboard } from "./clipboard/useClipboard";
-import { popupShown } from "./extensions/shown";
-import { useExtensions } from "./extensions/useExtensions";
-import { sharedIconTheme } from "./followed-icon-theme";
-import { DomicileContext } from "./host/domicile-context";
-import { useKeybindings } from "./keyboard/useKeybindings";
-import { useModifiers } from "./keyboard/useModifiers";
-import { appSearch } from "./launcher/app-search";
-import type { ApplicationsConfig } from "./launcher/applications-config";
-import { Launcher } from "./launcher/Launcher";
-import type { Launch } from "./launcher/launch";
-import { LaunchKind } from "./launcher/launch";
-import type { LauncherControl } from "./launcher/launcher-context";
-import { LauncherContext } from "./launcher/launcher-context";
-import { OpenWith } from "./launcher/OpenWith";
-import { useOpeningApps } from "./launcher/useOpeningApps";
-import { Lock } from "./lock/Lock";
-import { LockBar } from "./lock/LockBar";
-import { useLocked } from "./lock/useLocked";
-import { NotificationDrawer } from "./notifications/NotificationDrawer";
-import { NotificationToasts } from "./notifications/NotificationToasts";
-import type { NotificationsDrawer } from "./notifications/notifications-context";
-import { NotificationsContext } from "./notifications/notifications-context";
-import { useNotifications } from "./notifications/useNotifications";
-import { useNow } from "./notifications/useNow";
+import { LOCK_BAR } from "./default-bars";
 import { Monitor } from "./screens/Monitor";
 import { NoScreens } from "./screens/NoScreens";
-import { shownWindowsOf } from "./screens/shown-windows";
-import type { StageScreen } from "./screens/stage-screens";
-import { useScreenFollowsPointer } from "./screens/useScreenFollowsPointer";
-import { useShared } from "./screens/useShared";
-import { useStageScreens } from "./screens/useStageScreens";
-import type { BarLayout } from "./top-bar/layout";
-import { LOCK_BAR } from "./top-bar/layout";
-import { showsSharing } from "./top-bar/shows-sharing";
-import type { TrayState } from "./tray/tray-context";
-import { TrayContext } from "./tray/tray-context";
-import { trayEntries } from "./tray/tray-entry";
-import { useTray } from "./tray/useTray";
-import { useTrayOrder } from "./tray/useTrayOrder";
-import { Wallpaper } from "./wallpaper/Wallpaper";
-import { desktopClientIcons } from "./window-management/client-icons";
-import type { Direction } from "./window-management/direction";
-import type { FloatingRules } from "./window-management/floating/floating-rules";
-import type { Geometry } from "./window-management/placement";
-import type { Focus, Spot } from "./window-management/pointer-warp";
-import type { Rect } from "./window-management/rect";
-import { Stage } from "./window-management/Stage";
-import type { Aim } from "./window-management/tiled/aim";
-import { AimKind } from "./window-management/tiled/aim";
-import type { NodeRef } from "./window-management/tree/path";
-import { useClientIcons } from "./window-management/useClientIcons";
-import { usePointerWarp } from "./window-management/usePointerWarp";
-import { useWindows } from "./window-management/useWindows";
-import { WindowKind } from "./window-management/window";
-import {
-  activeIsPrivate,
-  screenOfApp,
-  WindowAction,
-} from "./window-management/window-state";
-import type { Workspaces } from "./window-management/workspaces-context";
-import { WorkspacesContext } from "./window-management/workspaces-context";
+import { showsSharing } from "./shows-sharing";
 
 type Props = {
   /** What the launcher offers beside files. */

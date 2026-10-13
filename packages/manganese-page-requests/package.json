@@ -1,0 +1,57 @@
+{
+  "dependencies": {
+    "@domicile-desktop/component-library": "workspace:*",
+    "@domicile-desktop/sdk": "workspace:*",
+    "@pandacss/dev": "catalog:",
+    "@phosphor-icons/react": "catalog:",
+    "react": "catalog:",
+    "zod": "catalog:"
+  },
+  "description": "Manganese's prompts for a web page's permission, device and dialog requests.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/test-support": "workspace:*",
+    "@pandacss/preset-panda": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@testing-library/user-event": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "postcss": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    "./DeviceAsk": "./src/DeviceAsk.tsx",
+    "./PageDialog": "./src/PageDialog.tsx",
+    "./PermissionAsk": "./src/PermissionAsk.tsx",
+    "./permission-names": "./src/permission-names.tsx",
+    "./site-permissions": "./src/site-permissions.ts",
+    "./useDeviceRequest": "./src/useDeviceRequest.ts",
+    "./useDialogRequest": "./src/useDialogRequest.ts",
+    "./usePermissionRequest": "./src/usePermissionRequest.ts"
+  },
+  "files": [
+    "src/**",
+    "styled-system/**",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx"
+  ],
+  "license": "MIT",
+  "name": "@domicile-desktop/manganese-page-requests",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "directory": "packages/manganese-page-requests",
+    "type": "git",
+    "url": "git+https://github.com/cprussin/domicile.git"
+  },
+  "scripts": {
+    "prepare": "panda codegen --silent",
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}

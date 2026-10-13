@@ -19,6 +19,7 @@
     ".": {
       "types": "./matchers.d.ts"
     },
+    "./emitted-stylesheet": "./src/emitted-stylesheet.ts",
     "./lock-screen-readouts": "./src/lock-screen-readouts.ts",
     "./preload": "./src/preload.ts"
   },

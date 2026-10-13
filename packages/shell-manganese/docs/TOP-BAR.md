@@ -7,14 +7,30 @@ below it.
 
 `runManganese({ bar })` takes three columns of React nodes: `left`, `center`
 (centered on the screen) and `right`. Mix manganese's items with your own.
-Manganese's items take no props:
+Each of manganese's items is its own package, takes no props, and is that
+package's default export path:
 
-`LauncherButton`, `Tray`, `WorkspaceSwitcher`, `Clock`, `Mode`, `ThemeSwitch`,
-`Network`, `Bluetooth`, `Volume`, `Brightness`, `Battery`, `Notifications`,
-`Sharing`.
+| Item | Package |
+|---|---|
+| `LauncherButton` | `@domicile-desktop/manganese-bar-module-launcher-button` |
+| `Tray` | `@domicile-desktop/manganese-bar-module-tray` |
+| `WorkspaceSwitcher` | `@domicile-desktop/manganese-bar-module-workspace-switcher` |
+| `Clock` | `@domicile-desktop/manganese-bar-module-clock` |
+| `Mode` | `@domicile-desktop/manganese-bar-module-mode` |
+| `ThemeSwitch` | `@domicile-desktop/manganese-bar-module-theme-switch` |
+| `Network` | `@domicile-desktop/manganese-bar-module-network` |
+| `Bluetooth` | `@domicile-desktop/manganese-bar-module-bluetooth` |
+| `Volume` | `@domicile-desktop/manganese-bar-module-volume` |
+| `Brightness` | `@domicile-desktop/manganese-bar-module-brightness` |
+| `Battery` | `@domicile-desktop/manganese-bar-module-battery` |
+| `Notifications` | `@domicile-desktop/manganese-bar-module-notifications` |
+| `Sharing` | `@domicile-desktop/manganese-bar-module-sharing` |
 
 ```tsx
-import { Clock, runManganese, Tray, WorkspaceSwitcher } from "@domicile-desktop/manganese";
+import { runManganese } from "@domicile-desktop/manganese";
+import { Clock } from "@domicile-desktop/manganese-bar-module-clock";
+import { Tray } from "@domicile-desktop/manganese-bar-module-tray";
+import { WorkspaceSwitcher } from "@domicile-desktop/manganese-bar-module-workspace-switcher";
 
 export const Shell = runManganese({
   bar: {
@@ -27,9 +43,10 @@ export const Shell = runManganese({
 
 Each item reads what it shows from context:
 
-- `useBar()` (`src/top-bar/bar-context.ts`): the bar's `screen` and whether
-  the desktop is `locked`.
-- `useDomicile()`: the desktop. Readouts are watched once per desktop
+- `useBar()` (`@domicile-desktop/manganese-bar/bar-context`): the bar's
+  `screen` and whether the desktop is `locked`.
+- `useDomicile()` (`@domicile-desktop/manganese-host/domicile-context`): the
+  desktop. Readouts are watched once per desktop
   ([Host readouts](HOST-READOUTS.md#one-watch-per-desk)).
 - The launcher, notification drawer, tray and workspaces each have a context
   the desktop provides: `useLauncher()`, `useNotificationsDrawer()`,
@@ -41,7 +58,8 @@ To style your own items with manganese's Panda CSS, see
 Every bar and the lock screen share one watch per system readout. See
 [Host readouts](HOST-READOUTS.md#one-watch-per-desk).
 
-`DEFAULT_BAR` (`src/top-bar/layout.tsx`) is:
+`DEFAULT_BAR` (`src/default-bars.tsx`, exported by
+`@domicile-desktop/manganese`) is:
 
 - **left**: launcher button, tray, workspaces
 - **center**: clock
@@ -52,7 +70,7 @@ Every bar and the lock screen share one watch per system readout. See
 ## On the lock screen
 
 - The lock screen draws the same bar on every screen, with only brightness,
-  volume, Bluetooth and battery (`LOCK_BAR`, `src/top-bar/layout.tsx`). The
+  volume, Bluetooth and battery (`LOCK_BAR`, `src/default-bars.tsx`). The
   `bar` option does not change it.
 - Each item offers only what a locked desktop allows
   ([LOCK.md](../../../docs/LOCK.md#lock-screen-readouts)):

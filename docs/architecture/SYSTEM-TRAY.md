@@ -25,7 +25,7 @@ shell menu ─ dbusCall / dbusMatch (callSystem) ─▶ compositor ─▶ com.ca
 | `tray` attribute, `activateTrayItem()` | `components/domicile/mojom/control_channel.mojom`, `modules/domicile/domicile_tray_*`, patch 0063 |
 | SDK: `DomicileTrayItem`, `tray`, `activateTrayItem`; `TrayItem`, `TrayAction` | `@domicile-desktop/sdk/domicile-host`, `@domicile-desktop/sdk/tray` |
 | Menus: `watchMenu` reads, follows and clicks an item's dbusmenu | `@domicile-desktop/sdk/dbusmenu` |
-| Manganese tray: one reorderable row shared with extension actions; menus drawn with `ContextMenu`, entry icons looked up with `@domicile-desktop/system-apps/app-icons` | `packages/shell-manganese/src/tray/` |
+| Manganese tray: one reorderable row shared with extension actions; menus drawn with `ContextMenu`, entry icons looked up with `@domicile-desktop/system-apps/app-icons` | `packages/manganese-bar-module-tray/src/` |
 
 ## Key decisions
 

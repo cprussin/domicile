@@ -27,7 +27,7 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key)
 | Sites ask before they notify; the shell page is allowed; a notification that stays up is not marked critical | patch 0105, `guard-webview-notifications.sh`; for the shell page, `guard-shell-web-apis.sh` |
 | SDK: `DomicileNotification`, `notifications`, `dismissNotifications`, `invokeNotificationAction`, `replyToNotification`; `Notification` | `@domicile-desktop/sdk/domicile-host`, `@domicile-desktop/sdk/notification` |
 | `Toaster` component | `@domicile-desktop/component-library/Toaster` |
-| Manganese toasts, bell and drawer | `packages/shell-manganese/src/notifications/` |
+| Manganese toasts, bell and drawer | `packages/manganese-notifications/src/` |
 
 ## Key decisions
 

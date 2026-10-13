@@ -129,6 +129,6 @@ the page in devtools does not unlock the desktop.
   lock.
 
 Manganese's lock screen:
-[`lock/Lock.tsx`](/packages/shell-manganese/src/lock/Lock.tsx),
-[`lock/LockBar.tsx`](/packages/shell-manganese/src/lock/LockBar.tsx) and
-[`lock/useLocked.ts`](/packages/shell-manganese/src/lock/useLocked.ts).
+[`lock/Lock.tsx`](/packages/manganese-lock/src/Lock.tsx),
+[`lock/LockBar.tsx`](/packages/manganese-lock/src/LockBar.tsx) and
+[`lock/useLocked.ts`](/packages/manganese-lock/src/useLocked.ts).

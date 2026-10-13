@@ -3,7 +3,7 @@
 `<webview>` is a tag built into the engine. It shows a web page in its own
 browsing context. A browser window in a shell is an address bar you draw over a
 `<webview>`. Manganese's is
-[`BrowserWindow.tsx`](/packages/shell-manganese/src/window-management/BrowserWindow.tsx).
+[`BrowserWindow.tsx`](/packages/manganese-window-management/src/BrowserWindow.tsx).
 
 Part of [WRITING-A-SHELL.md](WRITING-A-SHELL.md). Extensions are in
 [SHELL-EXTENSIONS.md](SHELL-EXTENSIONS.md).

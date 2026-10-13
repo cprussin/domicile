@@ -71,7 +71,7 @@ text/plain=org.gnome.TextEditor.desktop
 ```
 
 Shift+Enter asks which application to open it with. See manganese's
-[launcher doc](../packages/shell-manganese/docs/LAUNCHER.md#opening-a-file).
+[launcher doc](../packages/manganese-launcher/docs/LAUNCHER.md#opening-a-file).
 
 ## Bookmarks
 

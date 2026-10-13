@@ -6,7 +6,7 @@ the shell. The shell draws their toolbar buttons (actions) and popups.
 
 Part of [WRITING-A-SHELL.md](WRITING-A-SHELL.md). Design:
 [EXTENSIONS.md](/docs/architecture/EXTENSIONS.md). Manganese's tray button:
-[`extensions/ExtensionAction.tsx`](/packages/shell-manganese/src/extensions/ExtensionAction.tsx).
+[`extensions/ExtensionAction.tsx`](/packages/manganese-bar-module-tray/src/extensions/ExtensionAction.tsx).
 
 ## The config
 

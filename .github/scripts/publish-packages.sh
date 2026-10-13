@@ -44,13 +44,9 @@ done
 bun install --ignore-scripts
 
 # What the tarballs hold that git does not: each library's `dist/` and the
-# Panda `styled-system/` the component library and manganese import.
-bun run turbo run prepare build \
-  --filter @domicile-desktop/sdk --filter @domicile-desktop/system-audio \
-  --filter @domicile-desktop/system-backlight --filter @domicile-desktop/system-battery \
-  --filter @domicile-desktop/component-library \
-  --filter @domicile-desktop/system-network --filter @domicile-desktop/system-bluetooth \
-  --filter @domicile-desktop/manganese
+# Panda `styled-system/` the component library and manganese's packages
+# import. Manganese depends on every other package published here.
+bun run turbo run prepare build --filter "@domicile-desktop/manganese..."
 
 for package in "${PACKAGES[@]}"; do
   (cd "packages/$package" && bun pm pack --quiet --ignore-scripts --destination "$OUT")

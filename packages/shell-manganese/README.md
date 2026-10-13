@@ -13,6 +13,25 @@ layout and keys, under a transparent top bar.
   are drawn once for the whole desktop. See
   [ONE-PAGE-FOR-THE-DESK.md](../../docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
 
+## Packages
+
+`@domicile-desktop/manganese` composes these into a desktop. Use them to build
+your own.
+
+| Package | Holds |
+|---|---|
+| [`manganese-host`](../manganese-host/README.md) | The desktop as React context, one value per desktop, shared watches |
+| [`manganese-bar`](../manganese-bar/README.md) | The top bar and the context its items read |
+| `manganese-bar-module-*` | One bar item each: `launcher-button`, `tray`, `workspace-switcher`, `clock`, `mode`, `theme-switch`, `brightness`, `volume`, `bluetooth`, `network`, `battery`, `notifications`, `sharing` |
+| [`manganese-window-management`](../manganese-window-management/README.md) | Tiling, floating, workspaces, keybindings and commands, window chrome |
+| [`manganese-launcher`](../manganese-launcher/README.md) | The launcher |
+| [`manganese-notifications`](../manganese-notifications/README.md) | Toasts and the drawer |
+| [`manganese-clipboard`](../manganese-clipboard/README.md) | Clipboard history |
+| [`manganese-lock`](../manganese-lock/README.md) | The lock screen |
+| [`manganese-wallpaper`](../manganese-wallpaper/README.md) | The wallpaper |
+| [`manganese-address`](../manganese-address/README.md) | Typed text as a web address or a search |
+| [`manganese-page-requests`](../manganese-page-requests/README.md) | A page's permission, device and dialog prompts |
+
 ## Configure
 
 A config module exports `Shell = runManganese(options)` (see
@@ -25,28 +44,23 @@ A config module exports `Shell = runManganese(options)` (see
   `DEFAULT_BAR`. See [TOP-BAR.md](docs/TOP-BAR.md).
 - **`floating`**: rules for client windows that open floating, such as
   `[{ app: "pinentry" }, { app: "^Slack$", title: "^Huddle" }]`. See
-  [WINDOW-MANAGEMENT.md](docs/WINDOW-MANAGEMENT.md#opening-floating).
+  [WINDOW-MANAGEMENT.md](../manganese-window-management/docs/WINDOW-MANAGEMENT.md#opening-floating).
 - **`keybindings`**: the key table. Defaults to `DEFAULT_KEYBINDINGS` and
-  `DEFAULT_MODES`, sway's keys on Meta.
+  `DEFAULT_MODES` from
+  `@domicile-desktop/manganese-window-management/keyboard/commands`, sway's
+  keys on Meta. See [KEYS.md](../manganese-window-management/docs/KEYS.md).
 
-It also exports the bar items (`Clock`, `Battery`, …), the commands bindings
-use (`focus`, `workspace`, `mode`, …), and `Shell`, which is `runManganese()`
-and is what `"shell": "@domicile-desktop/manganese"` loads.
+It also exports `DEFAULT_BAR`, and `Shell`, which is `runManganese()` and is
+what `"shell": "@domicile-desktop/manganese"` loads. Bar items and the
+commands bindings use (`focus`, `workspace`, `mode`, …) come from their own
+packages.
 
 ## More
 
-- [Window management](docs/WINDOW-MANAGEMENT.md): workspaces, screens, focus,
-  floating, dragging, title bars and animations.
-- [Keys](docs/KEYS.md): default bindings, commands, and the differences from
-  sway.
-- [The top bar](docs/TOP-BAR.md): workspaces, clock, battery, brightness,
-  volume, notifications and tray.
-- [The launcher](docs/LAUNCHER.md), [the clipboard](docs/CLIPBOARD.md) and
-  [the wallpaper](docs/WALLPAPER.md).
+- [The top bar](docs/TOP-BAR.md): its items and the default layout.
+- [Custom bar items](docs/CUSTOM-BAR-ITEMS.md): styling your own bar items.
 - [Host readouts](docs/HOST-READOUTS.md): how the backlight and audio are
   read.
-- [Custom bar items](docs/CUSTOM-BAR-ITEMS.md): styling your own bar items.
-- [Focus internals](docs/FOCUS-INTERNALS.md).
 - [Source layout](docs/SOURCE.md).
 
 ## Build and run

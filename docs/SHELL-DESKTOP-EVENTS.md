@@ -89,7 +89,7 @@ domicile.activateTrayItem(id, "primary"); // or "secondary", "context"
   ([SYSTEM-TRAY.md](/docs/architecture/SYSTEM-TRAY.md)).
 - `itemIsMenu` is the item's `ItemIsMenu`: open its menu on the primary
   button instead of sending `"primary"`.
-- Manganese's: [`tray/Tray.tsx`](/packages/shell-manganese/src/tray/Tray.tsx).
+- Manganese's: [`tray/Tray.tsx`](/packages/manganese-bar-module-tray/src/Tray.tsx).
 
 ## Notifications
 
@@ -113,7 +113,7 @@ domicile.dismissNotifications([id]);              // clear; the app is told
 - An action with key `"inline-reply"` (`INLINE_REPLY_NOTIFICATION_ACTION`) is
   a reply field, not a button. Its `label` labels the field.
 - Design: [NOTIFICATIONS.md](/docs/architecture/NOTIFICATIONS.md).
-  Manganese's: [`notifications/`](/packages/shell-manganese/src/notifications/).
+  Manganese's: [`notifications/`](/packages/manganese-notifications/src/).
 
 ## Application dialogs
 

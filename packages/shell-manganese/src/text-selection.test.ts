@@ -1,8 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
-import { loadEmittedStylesheet } from "./emitted-stylesheet";
+import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 
-loadEmittedStylesheet(document);
+loadEmittedStylesheet(
+  document,
+  new URL("../styled-system/styles.css", import.meta.url),
+);
 
 describe("text selection", () => {
   it("is off across the shell", () => {
