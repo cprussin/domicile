@@ -1101,6 +1101,12 @@ void DomicileHost::AppAppeared(const String& app_id,
     state.uid = owner->uid;
     state.gid = owner->gid;
     state.pidfd_inode = owner->pidfd_inode;
+    state.sandboxed = !owner->sandbox.is_null();
+    if (owner->sandbox) {
+      state.sandbox_engine = owner->sandbox->engine;
+      state.sandbox_app_id = owner->sandbox->app_id;
+      state.sandbox_instance_id = owner->sandbox->instance_id;
+    }
   }
   state.title = title;
   state.desktop_id = desktop_id;
