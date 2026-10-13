@@ -34,6 +34,30 @@ describe("bundle", () => {
     expect(built).toContain("@layer utilities");
   }, 120_000);
 
+  // An item no default bar has still resolves from Domicile's install.
+  it("builds an entry with a bar item no default bar has", async () => {
+    const desk = mkdtempSync(path.join(tmpdir(), "domicile-builder-"));
+    const entry = path.join(desk, "domicile.tsx");
+    writeFileSync(
+      entry,
+      `import { DEFAULT_BAR, runManganese } from "@domicile-desktop/manganese";
+         import { Gmail } from "@domicile-desktop/manganese-bar-module-gmail";
+         export const Shell = runManganese({
+           bar: {
+             ...DEFAULT_BAR,
+             right: [<Gmail email="me@gmail.com" key="gmail" nickname="Work" />],
+           },
+         });`,
+    );
+
+    const out = path.join(desk, "out");
+    await bundle(entry, out, DOMICILE, [entry]);
+
+    expect(readFileSync(path.join(out, "shell.js"), "utf8")).toContain(
+      "Sign in to ",
+    );
+  }, 120_000);
+
   // Panda only emits rules for `css()` calls it scans, so the user's files
   // must be scanned too.
   it("builds the rules of the user's own `css()` calls", async () => {

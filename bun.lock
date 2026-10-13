@@ -294,6 +294,32 @@
         "typescript": "catalog:",
       },
     },
+    "packages/manganese-bar-module-gmail": {
+      "name": "@domicile-desktop/manganese-bar-module-gmail",
+      "version": "0.0.0",
+      "dependencies": {
+        "@cprussin/option-result": "catalog:",
+        "@domicile-desktop/component-library": "workspace:*",
+        "@domicile-desktop/manganese-host": "workspace:*",
+        "@domicile-desktop/sdk": "workspace:*",
+        "@pandacss/dev": "catalog:",
+        "@phosphor-icons/react": "catalog:",
+        "react": "catalog:",
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/test-support": "workspace:*",
+        "@pandacss/preset-panda": "catalog:",
+        "@testing-library/react": "catalog:",
+        "@testing-library/user-event": "catalog:",
+        "@types/bun": "catalog:",
+        "@types/react": "catalog:",
+        "@types/react-dom": "catalog:",
+        "postcss": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/manganese-bar-module-launcher-button": {
       "name": "@domicile-desktop/manganese-bar-module-launcher-button",
       "version": "0.0.0",
@@ -731,6 +757,7 @@
         "@domicile-desktop/manganese-bar-module-bluetooth": "workspace:*",
         "@domicile-desktop/manganese-bar-module-brightness": "workspace:*",
         "@domicile-desktop/manganese-bar-module-clock": "workspace:*",
+        "@domicile-desktop/manganese-bar-module-gmail": "workspace:*",
         "@domicile-desktop/manganese-bar-module-launcher-button": "workspace:*",
         "@domicile-desktop/manganese-bar-module-mode": "workspace:*",
         "@domicile-desktop/manganese-bar-module-network": "workspace:*",
@@ -1054,6 +1081,8 @@
     "@domicile-desktop/manganese-bar-module-brightness": ["@domicile-desktop/manganese-bar-module-brightness@workspace:packages/manganese-bar-module-brightness"],
 
     "@domicile-desktop/manganese-bar-module-clock": ["@domicile-desktop/manganese-bar-module-clock@workspace:packages/manganese-bar-module-clock"],
+
+    "@domicile-desktop/manganese-bar-module-gmail": ["@domicile-desktop/manganese-bar-module-gmail@workspace:packages/manganese-bar-module-gmail"],
 
     "@domicile-desktop/manganese-bar-module-launcher-button": ["@domicile-desktop/manganese-bar-module-launcher-button@workspace:packages/manganese-bar-module-launcher-button"],
 

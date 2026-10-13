@@ -1,0 +1,14 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// What `DomicileHost.fetchWithCookies()` resolves with.
+dictionary DomicileFetchResponse {
+  // The HTTP status, such as 200 or 401.
+  unsigned short status = 0;
+
+  // The address the response came from, after redirects.
+  USVString url = "";
+
+  // The body, as text.
+  DOMString body = "";
+};
