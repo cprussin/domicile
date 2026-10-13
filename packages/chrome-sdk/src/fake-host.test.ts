@@ -54,6 +54,21 @@ describe("FakeDomicileHost", () => {
     ]);
   });
 
+  it("lists a window with no sandbox until one is given", () => {
+    const fake = new FakeDomicileHost();
+
+    fake.appear("term");
+
+    expect(fake.host.windows).toMatchObject([
+      {
+        sandboxAppId: null,
+        sandboxEngine: null,
+        sandboxed: null,
+        sandboxInstanceId: null,
+      },
+    ]);
+  });
+
   it("sets state and dispatches its change event", () => {
     const fake = new FakeDomicileHost();
     const heard: string[] = [];

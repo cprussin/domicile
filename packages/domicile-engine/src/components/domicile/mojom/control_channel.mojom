@@ -158,6 +158,16 @@ struct WindowOwner {
   // The inode of the process's pidfd, which tells a reused pid apart. Null on
   // kernels without pidfs.
   uint64? pidfd_inode;
+  // Set when the client connected through a wp_security_context_v1 listener.
+  WindowSandbox? sandbox;
+};
+
+// What a sandbox engine said about a client when it created its security
+// context. Each is null when the engine did not say.
+struct WindowSandbox {
+  string? engine;
+  string? app_id;
+  string? instance_id;
 };
 
 // One thing that was copied, as a row of the clipboard's history.

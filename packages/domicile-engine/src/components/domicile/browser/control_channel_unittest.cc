@@ -63,16 +63,24 @@ class FakeClient : public mojom::ControlChannelClient {
         client_frame ? " client_frame" : "", Owned(owner).c_str()));
   }
 
-  // The owner as " owner pid/uid/gid/inode", or "" for none.
+  // The owner as " owner pid/uid/gid/inode", then its sandbox as
+  // " sandbox engine/app/instance" with "-" for an unset one, or "" for none.
   static std::string Owned(const mojom::WindowOwnerPtr& owner) {
     if (!owner) {
       return "";
     }
-    return base::StringPrintf(
-        " owner %d/%u/%u/%s", owner->pid, owner->uid, owner->gid,
-        owner->pidfd_inode
-            ? base::NumberToString(*owner->pidfd_inode).c_str()
-            : "none");
+    const std::string inode =
+        owner->pidfd_inode ? base::NumberToString(*owner->pidfd_inode)
+                           : "none";
+    const std::string sandbox =
+        owner->sandbox
+            ? base::StringPrintf(" sandbox %s/%s/%s",
+                                 owner->sandbox->engine.value_or("-").c_str(),
+                                 owner->sandbox->app_id.value_or("-").c_str(),
+                                 owner->sandbox->instance_id.value_or("-").c_str())
+            : "";
+    return base::StringPrintf(" owner %d/%u/%u/%s%s", owner->pid, owner->uid,
+                              owner->gid, inode.c_str(), sandbox.c_str());
   }
   void AppResized(const std::string&, double, double) override {}
   void AppMinSize(const std::string&, double, double) override {}
@@ -214,14 +222,16 @@ TEST_F(ControlChannelTest, AWindowReachesThePageWithItsOwner) {
       "{\"type\":\"app_appeared\",\"app_id\":\"app-2\",\"title\":"
       "\"b\",\"desktop_id\":null,\"size\":[400.0,300.0],"
       "\"dialog\":false,\"client_frame\":false,\"owner\":{\"pid\":7,"
-      "\"uid\":1000,\"gid\":1000,\"pidfd_inode\":null}}\n"
+      "\"uid\":1000,\"gid\":1000,\"pidfd_inode\":null,\"sandbox\":"
+      "{\"engine\":\"org.flatpak\",\"app_id\":null,\"instance_id\":\"3\"}}}\n"
       "{\"type\":\"locked\",\"locked\":false}\n");
   EXPECT_TRUE(client_.locked_.Wait());
 
   EXPECT_EQ(client_.heard_,
             (std::vector<std::string>{
                 "appeared app-1 a  400x300 owner 4242/4294967294/100/5021",
-                "appeared app-2 b  400x300 owner 7/1000/1000/none",
+                "appeared app-2 b  400x300 owner 7/1000/1000/none sandbox "
+                "org.flatpak/-/3",
                 "locked false"}));
 }
 
