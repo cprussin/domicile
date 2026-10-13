@@ -229,7 +229,7 @@ impl GlobalDispatch<ExtOutputImageCaptureSourceManagerV1, ()> for DomicileCompos
     }
 
     fn can_view(client: Client, _: &()) -> bool {
-        crate::sees_privileged_globals(&client)
+        crate::clients::sees_privileged_globals(&client)
     }
 }
 
@@ -279,7 +279,7 @@ impl GlobalDispatch<ExtImageCopyCaptureManagerV1, ()> for DomicileCompositor {
     }
 
     fn can_view(client: Client, _: &()) -> bool {
-        crate::sees_privileged_globals(&client)
+        crate::clients::sees_privileged_globals(&client)
     }
 }
 

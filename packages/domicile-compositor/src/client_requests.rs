@@ -18,7 +18,10 @@ use domicile_protocol::{Passphrase, PortalAnswer, Theme, TrayAction, WindowState
 use crate::chrome_hub::announce_open_apps;
 use crate::engine::Clipboard;
 use crate::lock::Asked;
-use crate::{say_what_the_lock_refused, spawn_client, window_geometry, DomicileCompositor};
+use crate::locking::say_what_the_lock_refused;
+use crate::spawning::spawn_client;
+use crate::surface_commit::window_geometry;
+use crate::DomicileCompositor;
 
 /// A chrome request that must run on the Wayland thread, where the seat and
 /// surfaces live.
@@ -28,7 +31,7 @@ use crate::{say_what_the_lock_refused, spawn_client, window_geometry, DomicileCo
 #[derive(Debug, PartialEq)]
 pub enum ClientRequest {
     /// Every chrome in `chromes` was told `theme`. Switch the windows once
-    /// they have captured. See [`chrome_key`](crate::chrome_key).
+    /// they have captured. See [`chrome_key`](crate::theme_turnover::chrome_key).
     TurnTheWindows {
         theme: Theme,
         chromes: Vec<usize>,

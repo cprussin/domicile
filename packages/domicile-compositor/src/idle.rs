@@ -2,7 +2,7 @@
 //!
 //! This module is pure logic over the current time and the surfaces with
 //! windows, so it can be tested without a clock, a display or Wayland.
-//! `main.rs` applies the result. See `docs/IDLE.md`.
+//! `blanking.rs` applies the result. See `docs/IDLE.md`.
 //!
 //! - Methods report only edges, since each change costs a modeset. Ask
 //!   [`Idle::dark`] for the state.

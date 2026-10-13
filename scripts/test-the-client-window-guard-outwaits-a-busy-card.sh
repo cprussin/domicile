@@ -60,7 +60,7 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 # The line the compositor logs for the color at the center of the browser's
-# window. Built from the format string at domicile-compositor's main.rs:2295,
+# window. Built from the format string at domicile-compositor's spike_probes.rs:157,
 # so rewording that log site must be mirrored here.
 drew_line() { # $1 what viz handed back, in ARGB
   printf "2026-09-22T00:03:29.112233Z  INFO domicile::engine::spike: engine drew #%s at the center of the browser's window\n" "$1"

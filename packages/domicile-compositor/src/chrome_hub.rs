@@ -22,7 +22,8 @@ use crate::frame_report::{report, FrameTimings, FrameWindow, REPORT_EVERY};
 use crate::lock::Seen;
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::portals::Portals;
-use crate::{chrome_key, eis, notifications, tray};
+use crate::theme_turnover::chrome_key;
+use crate::{eis, notifications, tray};
 
 /// One connected chrome: where to write to it.
 pub struct Chrome {

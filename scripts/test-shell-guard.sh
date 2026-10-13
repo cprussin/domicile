@@ -46,7 +46,7 @@ trap 'rm -rf "$FIXTURES"' EXIT
 # - JOINED and EMBEDDING are copied from real CI logs (ANSI stripped).
 #   Chromium stamps local time and the compositor stamps UTC.
 # - APPEARED is built from the format string in domicile-compositor's
-#   main.rs. If that log site is reworded, this test still passes while the
+#   windows.rs. If that log site is reworded, this test still passes while the
 #   guard stops matching.
 APPEARED='2026-09-07T11:37:14.581795Z  INFO domicile_compositor: toplevel drew -> app_appeared app_id=app-1'
 JOINED='2026-09-07T11:37:13.641032Z  INFO domicile_compositor: chrome agreed the protocol; it now gets the desktop'
@@ -57,7 +57,7 @@ DESCRIBED='2026-09-07T11:37:13.642011Z  INFO domicile_compositor: told the chrom
 NO_DISPLAYS='2026-09-07T11:37:13.642011Z  INFO domicile_compositor: told the chrome about 0 display(s)'
 EMBEDDING='[875919:875919:0907/043334.191180:INFO:third_party/blink/renderer/platform/graphics/external_surface_embedder.cc:100] domicile: embedding "app-1" at LocalSurfaceId(1, 1, 8D4C...) under FrameSinkId(6, 3), 992x639'
 NOISE='[875919:875919:0907/043334.201180:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address'
-# Built from engine_session.rs and main.rs. A real compositor log has both
+# Built from engine_session.rs and spike_probes.rs. A real compositor log has both
 # before any client submits a frame, so a check matching `frame` instead of
 # `first frame` would always pass.
 BROKERED='2026-09-07T11:37:14.601033Z  INFO domicile_compositor: the browser brokered a frame sink app_id=app-1 surface=1'
@@ -196,7 +196,7 @@ FRAME="$(awk '/^# `engine found` already implies a first frame, since the probe 
   exit 1
 }
 
-# Built from main.rs's log site, with the same caveat as APPEARED.
+# Built from spike_probes.rs's log site, with the same caveat as APPEARED.
 FIRST_FRAME='2026-09-07T11:37:15.101020Z  INFO domicile_compositor: the engine took this app'"'"'s first frame app_id=app-1'
 
 # Not `eval ... | head -1`: a pipeline runs the block in a subshell, so its

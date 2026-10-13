@@ -1,6 +1,6 @@
 //! The screen lock's state and the list of requests it refuses.
 //!
-//! Everything here decides over values passed in; `main.rs` applies the
+//! Everything here decides over values passed in; `locking.rs` applies the
 //! decisions to the seat. That keeps the lock testable without a screen or a
 //! client.
 //!
