@@ -80,6 +80,35 @@ describe("framesOf", () => {
     expect(frameFor(tiled, "b").bar).toMatchObject({ width: 735, x: 265 });
   });
 
+  // As a float's are, so a client's box stays on the pixel grid.
+  it("puts every edge of a split on a whole pixel, keeping the gaps", () => {
+    const thirds = (layout: Layout.SplitH | Layout.SplitV) =>
+      framesOf(
+        {
+          depth: 1,
+          root: LayoutNode.Container(
+            layout,
+            [LayoutNode.Window("a"), LayoutNode.Window("b")],
+            0,
+            [1 / 3, 2 / 3],
+          ),
+        },
+        AREA,
+        20,
+      );
+    const row = thirds(Layout.SplitH);
+    const column = thirds(Layout.SplitV);
+
+    // 980 shared out a third and two thirds is 326.67 and 653.33.
+    expect(frameFor(row, "a").bar).toMatchObject({ width: 327, x: 0 });
+    expect(frameFor(row, "b").bar).toMatchObject({ width: 653, x: 347 });
+    expect(frameFor(column, "a").bar).toMatchObject({ y: 0 });
+    expect(frameFor(column, "b").bar).toMatchObject({ y: 347 });
+    expect(frameFor(column, "b").surface).toMatchObject({
+      height: 653 - TITLE_BAR + SURFACE_TUCK,
+    });
+  });
+
   it("leaves room at the end of a split of one, where the next window opens", () => {
     const lone = (layout: Layout) =>
       framesOf(

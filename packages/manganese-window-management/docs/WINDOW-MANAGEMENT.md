@@ -21,6 +21,8 @@ Manganese uses sway's layout model. For the key bindings, see
   another group is replaced by it.
 - A split of one window leaves 64px empty at its end, where the next window
   opens.
+- Every edge of a split lies on a whole pixel, as a float's does. Shares are
+  kept exact; only the boxes round.
 - There are 10 workspaces for the whole desktop, plus the scratchpad and floating
   windows.
 - A window is either a Wayland client or a browser window the shell opened.
