@@ -59,6 +59,16 @@ namespace domicile {
 //   -> {"type":"config_extensions","ids":["..."]}
 //   -> {"type":"refused","why":"..."}
 //
+//   {"type":"extensions","version":1}
+//   -> {"type":"extensions","extensions":[{"id":"...","name":"...",
+//       "description":"...","version":"1.0","enabled":true,
+//       "options_url":"chrome-extension://.../options.html"}]}
+//   -> {"type":"refused","why":"..."}
+//
+//   {"type":"set_extension_enabled","version":1,"id":"...","enabled":false}
+//   -> {"type":"set"}
+//   -> {"type":"refused","why":"..."}
+//
 //   {"type":"media_devices","version":1}
 //   -> {"type":"media_devices",
 //       "cameras":[{"id":"/dev/video2","name":"USB Camera"}],
@@ -156,6 +166,33 @@ using UninstallExtension =
 using ListConfigExtensions =
     base::FunctionRef<std::optional<std::vector<std::string>>()>;
 
+// An extension in the shell's profile, as the Settings app lists it.
+struct InstalledExtension {
+  InstalledExtension();
+  InstalledExtension(const InstalledExtension&);
+  InstalledExtension& operator=(const InstalledExtension&);
+  ~InstalledExtension();
+
+  std::string id;
+  std::string name;
+  std::string description;
+  std::string version;
+  bool enabled = false;
+  // Empty when the extension has no options page.
+  GURL options_url;
+};
+
+// Carries out `extensions`: every extension in the shell's profile, apps,
+// themes and Chrome's own left out. Returns nothing if there is no shell, and
+// so no profile to read.
+using ListExtensions =
+    base::FunctionRef<std::optional<std::vector<InstalledExtension>>()>;
+
+// Carries out `set_extension_enabled`, or says why it did not.
+using SetExtensionEnabled =
+    base::FunctionRef<base::expected<void, std::string>(const std::string& id,
+                                                       bool enabled)>;
+
 // A camera or a microphone.
 struct MediaDevice {
   // The system's id for it, which Chrome's device preference stores.
@@ -197,6 +234,8 @@ struct CommandActions {
   LoadUnpacked load_unpacked;
   UninstallExtension uninstall_extension;
   ListConfigExtensions list_config_extensions;
+  ListExtensions list_extensions;
+  SetExtensionEnabled set_extension_enabled;
   ListMediaDevices list_media_devices;
   SetMediaDevice set_media_device;
 };

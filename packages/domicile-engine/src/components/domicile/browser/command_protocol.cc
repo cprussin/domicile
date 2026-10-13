@@ -33,6 +33,8 @@ constexpr char kSetSitePermissionCommand[] = "set_site_permission";
 constexpr char kLoadUnpacked[] = "load_unpacked";
 constexpr char kUninstallExtension[] = "uninstall_extension";
 constexpr char kConfigExtensions[] = "config_extensions";
+constexpr char kExtensions[] = "extensions";
+constexpr char kSetExtensionEnabled[] = "set_extension_enabled";
 constexpr char kMediaDevices[] = "media_devices";
 constexpr char kSetMediaDevice[] = "set_media_device";
 
@@ -65,6 +67,9 @@ std::string AnswerUninstallExtension(const base::DictValue& request,
                                      UninstallExtension uninstall_extension);
 std::string AnswerConfigExtensions(
     ListConfigExtensions list_config_extensions);
+std::string AnswerExtensions(ListExtensions list_extensions);
+std::string AnswerSetExtensionEnabled(const base::DictValue& request,
+                                      SetExtensionEnabled set_extension_enabled);
 std::string AnswerMediaDevices(ListMediaDevices list_media_devices);
 std::string AnswerSetMediaDevice(const base::DictValue& request,
                                  SetMediaDevice set_media_device);
@@ -76,6 +81,12 @@ SitePermissionList::SitePermissionList(const SitePermissionList&) = default;
 SitePermissionList& SitePermissionList::operator=(const SitePermissionList&) =
     default;
 SitePermissionList::~SitePermissionList() = default;
+
+InstalledExtension::InstalledExtension() = default;
+InstalledExtension::InstalledExtension(const InstalledExtension&) = default;
+InstalledExtension& InstalledExtension::operator=(const InstalledExtension&) =
+    default;
+InstalledExtension::~InstalledExtension() = default;
 
 MediaDeviceList::MediaDeviceList() = default;
 MediaDeviceList::MediaDeviceList(const MediaDeviceList&) = default;
@@ -155,6 +166,15 @@ void AnswerCommand(std::string_view line,
         AnswerConfigExtensions(actions.list_config_extensions));
     return;
   }
+  if (*type == kExtensions) {
+    std::move(reply).Run(AnswerExtensions(actions.list_extensions));
+    return;
+  }
+  if (*type == kSetExtensionEnabled) {
+    std::move(reply).Run(
+        AnswerSetExtensionEnabled(*request, actions.set_extension_enabled));
+    return;
+  }
   if (*type == kMediaDevices) {
     std::move(reply).Run(AnswerMediaDevices(actions.list_media_devices));
     return;
@@ -170,6 +190,7 @@ void AnswerCommand(std::string_view line,
        kListSitePermissionsCommand,
        "\", \"", kSetSitePermissionCommand, "\", \"", kLoadUnpacked, "\", \"",
        kUninstallExtension, "\", \"", kConfigExtensions, "\", \"",
+       kExtensions, "\", \"", kSetExtensionEnabled, "\", \"",
        kMediaDevices, "\" and \"", kSetMediaDevice, "\""})));
 }
 
@@ -399,6 +420,51 @@ std::string AnswerConfigExtensions(
   reply.Set("type", kConfigExtensions);
   reply.Set("ids", std::move(listed));
   return Line(std::move(reply));
+}
+
+std::string AnswerExtensions(ListExtensions list_extensions) {
+  const std::optional<std::vector<InstalledExtension>> extensions =
+      list_extensions();
+  if (!extensions) {
+    return RefusedCommand(
+        "this engine has no shell, and so no profile whose extensions to "
+        "list");
+  }
+  base::ListValue listed;
+  for (const InstalledExtension& extension : *extensions) {
+    base::DictValue entry;
+    entry.Set("id", extension.id);
+    entry.Set("name", extension.name);
+    entry.Set("description", extension.description);
+    entry.Set("version", extension.version);
+    entry.Set("enabled", extension.enabled);
+    if (extension.options_url.is_valid()) {
+      entry.Set("options_url", extension.options_url.spec());
+    }
+    listed.Append(std::move(entry));
+  }
+  base::DictValue reply;
+  reply.Set("type", kExtensions);
+  reply.Set("extensions", std::move(listed));
+  return Line(std::move(reply));
+}
+
+std::string AnswerSetExtensionEnabled(
+    const base::DictValue& request,
+    SetExtensionEnabled set_extension_enabled) {
+  const std::string* id = request.FindString("id");
+  const std::optional<bool> enabled = request.FindBool("enabled");
+  if (id == nullptr || !enabled) {
+    return RefusedCommand(
+        "set_extension_enabled needs an \"id\" and whether it is "
+        "\"enabled\"");
+  }
+  const base::expected<void, std::string> set =
+      set_extension_enabled(*id, *enabled);
+  if (!set.has_value()) {
+    return RefusedCommand(set.error());
+  }
+  return Done("set");
 }
 
 base::ListValue DeviceEntries(const std::vector<MediaDevice>& devices) {

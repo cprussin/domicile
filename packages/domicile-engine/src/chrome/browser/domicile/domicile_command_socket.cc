@@ -256,6 +256,27 @@ std::optional<std::vector<std::string>> ListTheShellProfilesConfigExtensions() {
   return ConfigExtensionsOf(*profile);
 }
 
+// The shell profile's extensions, for the Settings app.
+std::optional<std::vector<InstalledExtension>> ListShellExtensions() {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  Profile* profile = ShellProfile();
+  if (profile == nullptr) {
+    return std::nullopt;
+  }
+  return ExtensionsOf(*profile);
+}
+
+base::expected<void, std::string> SetShellExtensionEnabled(
+    const std::string& id,
+    bool enabled) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  Profile* profile = ShellProfile();
+  if (profile == nullptr) {
+    return base::unexpected(kNoProfile);
+  }
+  return SetExtensionEnabledIn(*profile, id, enabled);
+}
+
 // The cameras and microphones, ranked by the shell profile's preference.
 std::optional<MediaDeviceList> ListShellMediaDevices() {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -295,6 +316,8 @@ void AnswerOnUIThread(const std::string& line, CommandReply reply) {
                  .uninstall_extension = &UninstallFromTheShellProfile,
                  .list_config_extensions =
                      &ListTheShellProfilesConfigExtensions,
+                 .list_extensions = &ListShellExtensions,
+                 .set_extension_enabled = &SetShellExtensionEnabled,
                  .list_media_devices = &ListShellMediaDevices,
                  .set_media_device = &PreferShellMediaDevice},
                 std::move(reply));

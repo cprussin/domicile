@@ -47,6 +47,8 @@ struct Told {
   std::string uninstalled;
   std::optional<MediaDeviceKind> device_kind;
   std::string device;
+  std::string toggled;
+  std::optional<bool> enabled;
 };
 
 // The id the recording `load_unpacked` gives what it loads, and the one the
@@ -63,6 +65,24 @@ SitePermissionList StoredSettings() {
   list.sites = {{url::Origin::Create(GURL("https://meet.example")),
                  WebViewPermission::kCamera, WebViewPermissionSetting::kAllow}};
   return list;
+}
+
+// What the recording `extensions` answers: one extension with an options page,
+// and one switched off without.
+std::vector<InstalledExtension> InstalledExtensions() {
+  InstalledExtension dark;
+  dark.id = kExtensionId;
+  dark.name = "Dark Reader";
+  dark.description = "Dark mode for every site";
+  dark.version = "4.9";
+  dark.enabled = true;
+  dark.options_url =
+      GURL("chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html");
+  InstalledExtension quiet;
+  quiet.id = "ponmlkjihgfedcbaponmlkjihgfedcba";
+  quiet.name = "Quiet";
+  quiet.version = "1.0";
+  return {dark, quiet};
 }
 
 // What the recording `list_media_devices` answers: one camera, and two
@@ -142,6 +162,23 @@ std::string Answer(std::string_view line,
     }
     return std::vector<std::string>{kExtensionId};
   };
+  auto list_extensions =
+      [has_window]() -> std::optional<std::vector<InstalledExtension>> {
+    if (!has_window) {
+      return std::nullopt;
+    }
+    return InstalledExtensions();
+  };
+  auto set_extension_enabled =
+      [told, has_window](const std::string& id,
+                         bool enabled) -> base::expected<void, std::string> {
+    told->toggled = id;
+    told->enabled = enabled;
+    if (!has_window) {
+      return base::unexpected("no shell");
+    }
+    return base::ok();
+  };
   auto list_media_devices = [has_window]() -> std::optional<MediaDeviceList> {
     if (!has_window) {
       return std::nullopt;
@@ -169,6 +206,8 @@ std::string Answer(std::string_view line,
                  .load_unpacked = load_unpacked,
                  .uninstall_extension = uninstall_extension,
                  .list_config_extensions = list_config_extensions,
+                 .list_extensions = list_extensions,
+                 .set_extension_enabled = set_extension_enabled,
                  .list_media_devices = list_media_devices,
                  .set_media_device = set_media_device},
                 base::BindOnce([](std::string* out,
@@ -605,6 +644,52 @@ TEST(CommandProtocolTest, ListsTheExtensionsTheConfigInstalled) {
   EXPECT_EQ(TypeOf(Answer(R"({"type":"config_extensions","version":1})",
                           &told, /*has_window=*/false)),
             "refused");
+}
+
+// The Settings app's Extensions page, which these replace `chrome.management`
+// for. See docs/architecture/APP-MODULES.md.
+TEST(CommandProtocolTest, ListsTheProfilesExtensions) {
+  Told told;
+  EXPECT_EQ(
+      base::JSONReader::ReadDict(
+          Answer(R"({"type":"extensions","version":1})", &told),
+          base::JSON_PARSE_RFC),
+      base::JSONReader::ReadDict(
+          R"({"type":"extensions","extensions":[)"
+          R"({"id":"abcdefghijklmnopabcdefghijklmnop","name":"Dark Reader",)"
+          R"("description":"Dark mode for every site","version":"4.9",)"
+          R"("enabled":true,"options_url":)"
+          R"("chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html"},)"
+          R"({"id":"ponmlkjihgfedcbaponmlkjihgfedcba","name":"Quiet",)"
+          R"("description":"","version":"1.0","enabled":false}]})",
+          base::JSON_PARSE_RFC));
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"extensions","version":1})", &told,
+                          /*has_window=*/false)),
+            "refused");
+}
+
+TEST(CommandProtocolTest, SwitchesAnExtensionOnOrOff) {
+  Told told;
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"set_extension_enabled","version":1,)"
+                          R"("id":"abcdefghijklmnopabcdefghijklmnop",)"
+                          R"("enabled":false})",
+                          &told)),
+            "set");
+  EXPECT_EQ(told.toggled, kExtensionId);
+  EXPECT_EQ(told.enabled, false);
+}
+
+TEST(CommandProtocolTest, RefusesASwitchWithoutAnIdAndAnEnabled) {
+  Told told;
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"set_extension_enabled","version":1,)"
+                          R"("id":"abcdefghijklmnopabcdefghijklmnop"})",
+                          &told)),
+            "refused");
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"set_extension_enabled","version":1,)"
+                          R"("enabled":true})",
+                          &told)),
+            "refused");
+  EXPECT_FALSE(told.enabled.has_value());
 }
 
 }  // namespace
