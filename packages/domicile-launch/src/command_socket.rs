@@ -12,10 +12,12 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::command::{
-    config_extensions_line, load_shell_line, load_unpacked_line, media_devices_line, open_app_line,
-    open_url_line, reply, run_app_line, set_media_device_line, set_site_permission_line,
+    config_extensions_line, extensions_line, load_shell_line, load_unpacked_line,
+    media_devices_line, open_app_line, open_url_line, reply, run_app_line,
+    set_extension_enabled_line, set_media_device_line, set_site_permission_line,
     site_permissions_line, uninstall_extension_line, Reply,
 };
+use crate::extensions::InstalledExtension;
 use crate::media_devices::{MediaDevices, MediaKind};
 use crate::site_permissions::{SitePermission, SiteSettings};
 
@@ -170,6 +172,32 @@ pub fn set_media_device(
     carry_out(
         socket,
         &set_media_device_line(kind, id),
+        Reply::Set,
+        patience,
+    )
+}
+
+/// Asks the engine at `socket` for every extension installed in its profile.
+pub fn extensions(
+    socket: &Path,
+    patience: Duration,
+) -> Result<Vec<InstalledExtension>, CommandError> {
+    match answered(socket, &extensions_line(), patience)? {
+        Reply::Extensions { extensions } => Ok(extensions),
+        other => Err(unexpected(socket, &other)),
+    }
+}
+
+/// Tells the engine at `socket` to enable or disable extension `id`.
+pub fn set_extension_enabled(
+    socket: &Path,
+    id: &str,
+    enabled: bool,
+    patience: Duration,
+) -> Result<(), CommandError> {
+    carry_out(
+        socket,
+        &set_extension_enabled_line(id, enabled),
         Reply::Set,
         patience,
     )

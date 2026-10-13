@@ -333,6 +333,37 @@
         '';
       };
 
+      # One of Domicile's own apps as an app module: its directory, which
+      # `domicile-<name>` runs with `domicile run-app`. See
+      # docs/architecture/APP-MODULES.md.
+      appModule = name: pkgs.stdenv.mkDerivation {
+        pname = "domicile-app-${name}";
+        version = "0.0.0";
+        src = self;
+        nativeBuildInputs = [ pkgs.bun pkgs.nodejs_24 ];
+        configurePhase = sharedShellConfigure;
+        buildPhase = ''
+          runHook preBuild
+          node_modules/.bin/turbo build:vite \
+            --filter "./packages/app-${name}" --no-daemon
+          runHook postBuild
+        '';
+        installPhase = ''
+          runHook preInstall
+          cp -R "packages/app-${name}/.vite/app" "$out"
+          runHook postInstall
+        '';
+        # `domicile run-app` fails on a missing module.
+        doInstallCheck = true;
+        installCheckPhase = ''
+          [ -f "$out/${name}.js" ] || {
+            echo "${name} built no ${name}.js; it has:" >&2
+            ls "$out" >&2
+            exit 1
+          }
+        '';
+      };
+
       # A launcher entry, `domicile-<id>.desktop`, for something Domicile
       # does: `nix/launcher/domicile-<id>.desktop` filled in, as
       # `distro/stage.sh` does. The icon is `<icon>` and the launcher's
@@ -385,9 +416,8 @@
       #   bin/domicile-xdg-open       what `xdg-open` is inside a desktop
       #   bin/domicile-history        opens the History app
       #   bin/domicile-settings       opens the Settings app
-      #   bin/domicile-settings-host  the Settings app's native messaging
-      #                               host, which `domicile` lists in the
-      #                               engine's profile
+      #   bin/domicile-settings-host  what the Settings app spawns for the
+      #                               desktop's state
       #   libexec/domicile/engine     the Chromium tree, `chrome` inside it
       #   libexec/domicile/builder    builds a shell from an entry or a package
       #   libexec/domicile/shells/    Domicile's prebuilt shells, which
@@ -395,6 +425,9 @@
       #                               and the splash
       #   libexec/domicile/apps/      Domicile's own apps, which every
       #                               desktop installs
+      #   libexec/domicile/app-modules/
+      #                               Domicile's own app modules, which
+      #                               `domicile-<name>` runs
       #   share/applications/         launcher entries for History,
       #                               Settings, Screenshot, Shutdown and
       #                               Reboot
@@ -424,8 +457,8 @@
         cp ${domicileBinaries}/bin/domicile-xdg-open "$out/bin/domicile-xdg-open"
         # Opens the History app. Copied for the same reason as above.
         cp ${domicileBinaries}/bin/domicile-history "$out/bin/domicile-history"
-        # Opens the Settings app, and its native messaging host, which asks
-        # the desktop over `DOMICILE_SOCK`. Copied for the same reason.
+        # Opens the Settings app, and the host it spawns, which asks the
+        # desktop over `DOMICILE_SOCK`. Copied for the same reason.
         cp ${domicileBinaries}/bin/domicile-settings "$out/bin/domicile-settings"
         cp ${domicileBinaries}/bin/domicile-settings-host "$out/bin/domicile-settings-host"
         # The web link handler and the file making it the default.
@@ -444,7 +477,8 @@
         ln -s ${shellPage "splash"} "$out/libexec/domicile/shells/splash"
         mkdir -p "$out/libexec/domicile/apps"
         ln -s ${appExtension "history"} "$out/libexec/domicile/apps/history"
-        ln -s ${appExtension "settings"} "$out/libexec/domicile/apps/settings"
+        mkdir -p "$out/libexec/domicile/app-modules"
+        ln -s ${appModule "settings"} "$out/libexec/domicile/app-modules/settings"
         # What the launcher offers of Domicile's own.
         ${launcherFile {
           id = "history";
@@ -656,7 +690,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-Q+g2tMToYjhMdYw8rhpl2E+Y/I0Pf02bpQBMiBwMZLc=";
+        outputHash = "sha256-D3zkLn7ktiCaoyGWZArQmGQuiMfto5qgxRFak7ORgMQ=";
       };
 
       # The production modules `shellWorkspace` ships, from
@@ -682,7 +716,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-99aysca3byDqVl8WSEHRGQ5z3BxL/yzIgJv/byWTmWI=";
+        outputHash = "sha256-BvuovV+yHOAENBNqiQKivVbGjneu7oF3tf/VhozUYh8=";
       };
 
 

@@ -32,7 +32,16 @@
 //!
 //! {"type":"set_media_device","version":1,"kind":"camera","id":"/dev/video2"}
 //! {"type":"set"}   |   {"type":"refused","why":"…"}
+//!
+//! {"type":"extensions","version":1}
+//! {"type":"extensions","extensions":[{"id":"…","name":"…","description":"…","version":"1.0","enabled":true,"options_url":"chrome-extension://…/options.html"}]}
+//! {"type":"refused","why":"…"}
+//!
+//! {"type":"set_extension_enabled","version":1,"id":"…","enabled":false}
+//! {"type":"set"}   |   {"type":"refused","why":"…"}
 //! ```
+//!
+//! `options_url` is left out for an extension without an options page.
 //!
 //! The engine side is C++ in the fork
 //! (`components/domicile/browser/command_protocol.cc`, tested in
@@ -44,6 +53,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use crate::extensions::InstalledExtension;
 use crate::media_devices::{MediaDevices, MediaKind};
 use crate::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
@@ -65,7 +75,8 @@ pub enum Reply {
     Opened,
     /// Every permission's default and every site's own setting.
     SitePermissions(SiteSettings),
-    /// The engine stored a site's setting or a preferred media device.
+    /// The engine stored a site's setting, a preferred media device or
+    /// whether an extension is enabled.
     Set,
     /// The engine loaded an unpacked extension, which has this id.
     LoadedUnpacked { id: String },
@@ -75,6 +86,8 @@ pub enum Reply {
     ConfigExtensions { ids: Vec<String> },
     /// Each kind's media devices, most preferred first.
     MediaDevices(MediaDevices),
+    /// Every extension installed in the engine's profile.
+    Extensions { extensions: Vec<InstalledExtension> },
     /// The engine refused, with its reason.
     Refused { why: String },
 }
@@ -173,6 +186,20 @@ pub fn set_media_device_line(kind: MediaKind, id: &str) -> String {
     })
 }
 
+/// The request for every extension installed in the engine's profile.
+pub fn extensions_line() -> String {
+    line(&Command::Extensions { version: VERSION })
+}
+
+/// The request to enable or disable extension `id`.
+pub fn set_extension_enabled_line(id: &str, enabled: bool) -> String {
+    line(&Command::SetExtensionEnabled {
+        version: VERSION,
+        id,
+        enabled,
+    })
+}
+
 /// Parses one reply line, without its trailing newline.
 ///
 /// An unparseable reply is an error, not a [`Reply::Refused`]: it comes from
@@ -233,6 +260,14 @@ enum Command<'a> {
         version: u32,
         kind: MediaKind,
         id: &'a str,
+    },
+    Extensions {
+        version: u32,
+    },
+    SetExtensionEnabled {
+        version: u32,
+        id: &'a str,
+        enabled: bool,
     },
 }
 

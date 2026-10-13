@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use domicile_launch::components::{apps, builder, components, our_shell, Components};
+use domicile_launch::components::{app_module, apps, builder, components, our_shell, Components};
 
 fn nothing(_: &str) -> Option<String> {
     None
@@ -163,4 +163,45 @@ fn a_desktop_without_apps_beside_it_has_none() {
         }),
         None
     );
+}
+
+#[test]
+fn domicile_s_own_app_module_is_beside_the_engine_or_where_the_environment_says() {
+    let shipped = |path: &Path| path == Path::new("/usr/libexec/domicile/app-modules/settings");
+    assert_eq!(
+        app_module(
+            Path::new("/usr/bin/domicile"),
+            "settings",
+            &nothing,
+            &shipped
+        ),
+        Ok(PathBuf::from(
+            "/usr/libexec/domicile/app-modules/settings/settings.js"
+        ))
+    );
+    assert_eq!(
+        app_module(
+            Path::new("/usr/bin/domicile"),
+            "settings",
+            &|name| (name == "DOMICILE_APP_MODULES").then(|| "/src/modules".to_string()),
+            &shipped
+        ),
+        Ok(PathBuf::from("/src/modules/settings/settings.js"))
+    );
+}
+
+#[test]
+fn a_missing_app_module_names_where_it_looked() {
+    let missing = app_module(
+        Path::new("/usr/bin/domicile"),
+        "settings",
+        &nothing,
+        &|_| false,
+    )
+    .unwrap_err();
+    assert_eq!(
+        missing.looked,
+        PathBuf::from("/usr/libexec/domicile/app-modules/settings")
+    );
+    assert_eq!(missing.variable, "DOMICILE_APP_MODULES");
 }

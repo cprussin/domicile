@@ -3,10 +3,10 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { App } from "./App";
-import type { InstalledExtension } from "./extensions";
+import { hostExtensions } from "./extensions";
 import type { FakeHostState } from "./fake-host";
-import { fakeExtensions, fakeHost } from "./fake-host";
-import type { SettingsFiles } from "./host";
+import { fakeHost } from "./fake-host";
+import type { InstalledExtension, SettingsFiles } from "./host";
 
 const CONFIG_PATH = "/home/me/.config/domicile/domicile.json";
 const SHELL_PATH = "/home/me/.config/domicile/shell.ts";
@@ -99,16 +99,16 @@ const renderApp = async (
     chosen: chosen ?? undefined,
     configExtensions,
     files: files(config, writable),
+    installed: structuredClone(INSTALLED),
     media: structuredClone(MEDIA),
     refuse,
     sites: structuredClone(SITES),
   });
-  const extensions = fakeExtensions(structuredClone(INSTALLED));
   const user = userEvent.setup();
-  render(<App extensions={extensions.extensions} host={host.host} />);
+  render(<App extensions={hostExtensions(host.host)} host={host.host} />);
   await user.click(await screen.findByRole("button", { name: page }));
   await screen.findByRole("heading", { level: 1, name: page });
-  return { extensions, host, user };
+  return { host, user };
 };
 
 /** The config the app last wrote. */
@@ -308,23 +308,23 @@ describe(App, () => {
 
   describe("extensions", () => {
     it("turns an extension off", async () => {
-      const { extensions, user } = await renderApp("Extensions");
+      const { host, user } = await renderApp("Extensions");
       await user.click(
         await screen.findByRole("switch", { name: "uBlock Origin Lite" }),
       );
       await waitFor(() => {
-        expect(extensions.installed[0]?.enabled).toBe(false);
+        expect(host.state.installed[0]?.enabled).toBe(false);
       });
     });
 
     it("opens an extension's options", async () => {
-      const { extensions, user } = await renderApp("Extensions");
+      const { host, user } = await renderApp("Extensions");
       await user.click(
         await screen.findByRole("button", {
           name: "Options for uBlock Origin Lite",
         }),
       );
-      expect(extensions.opened).toEqual([
+      expect(host.opened).toEqual([
         `chrome-extension://${UBLOCK}/dashboard.html`,
       ]);
     });

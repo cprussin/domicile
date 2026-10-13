@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use domicile_launch::control::{Request, Response, SettingsFiles};
+use domicile_launch::extensions::InstalledExtension;
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::settings::{answer, read_message, watched, write_message, Host};
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
@@ -230,6 +231,59 @@ fn the_config_s_extensions_are_the_desktop_s() {
 }
 
 #[test]
+fn every_installed_extension_is_the_desktop_s() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({"id": 17, "type": "extensions"})),
+        json!({
+            "id": 17,
+            "type": "extensions",
+            "extensions": [{
+                "id": ID,
+                "name": "Tabs",
+                "description": "",
+                "version": "1.0",
+                "enabled": true,
+                "options_url": null,
+            }],
+        })
+    );
+}
+
+#[test]
+fn an_extension_is_disabled_on_the_desktop() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(
+            &json!({"id": 18, "type": "set_extension_enabled", "extension": ID, "enabled": false})
+        ),
+        json!({"id": 18, "type": "stored"})
+    );
+    assert_eq!(
+        host.asked.take().last(),
+        Some(&Request::SetExtensionEnabled {
+            id: ID.to_string(),
+            enabled: false,
+        })
+    );
+}
+
+#[test]
+fn an_address_is_opened_in_a_browser_window_on_the_desktop() {
+    // How the app opens an extension's options page.
+    let host = a_host(FILES.clone());
+    let options = format!("chrome-extension://{ID}/options.html");
+    assert_eq!(
+        host.answer(&json!({"id": 19, "type": "open_url", "url": options})),
+        json!({"id": 19, "type": "opened"})
+    );
+    assert_eq!(
+        host.asked.take().last(),
+        Some(&Request::OpenUrl { url: options })
+    );
+}
+
+#[test]
 fn a_folder_is_chosen_with_the_desktop_s_picker() {
     let host = a_host(FILES.clone());
     assert_eq!(
@@ -354,6 +408,18 @@ impl Fake {
                         Request::ConfigExtensions => Response::ConfigExtensions {
                             ids: vec![ID.to_string()],
                         },
+                        Request::Extensions => Response::Extensions {
+                            extensions: vec![InstalledExtension {
+                                id: ID.to_string(),
+                                name: "Tabs".to_string(),
+                                description: String::new(),
+                                version: "1.0".to_string(),
+                                enabled: true,
+                                options_url: None,
+                            }],
+                        },
+                        Request::SetExtensionEnabled { .. } => Response::Stored,
+                        Request::OpenUrl { .. } => Response::Opened,
                         other => panic!("the host never asks {other:?}"),
                     })
                 },

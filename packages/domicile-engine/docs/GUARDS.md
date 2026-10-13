@@ -122,7 +122,6 @@ Headless.
 | `guard-webview-tabs.sh` | `tabs.query` and `tabs.setZoom` target the focused `<webview>` (patch 0057) |
 | `guard-webview-active-tab.sh` | a tray click grants `activeTab` to the focused tab |
 | `guard-webview-popup-window.sh` | `windows.create({type: "popup"})` opens a browser window the shell draws at the requested size |
-| `guard-settings-host.sh` | the engine starts `domicile-settings-host` for the Settings app, which reads the config the desktop names; another extension id is refused |
 
 ## Spikes
 
