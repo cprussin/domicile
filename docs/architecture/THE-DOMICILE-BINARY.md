@@ -103,7 +103,8 @@ temp directory. The modules that spawn processes or bind sockets stay thin.
 
 `nix/home-manager.nix` writes the config file that `config_path` reads. It
 has one option per field of the `domicile-config` schema and generates JSON
-with `pkgs.formats.json`.
+with `pkgs.formats.json`. `configDirectory` adds a config module's exports,
+evaluated at build time by the builder.
 
 Every config struct is `deny_unknown_fields`, so one unknown key rejects the
 whole file (see Config file) and the desk does not start. So:

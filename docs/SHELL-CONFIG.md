@@ -91,6 +91,19 @@ export const Shell = runManganese();
 - The build runs `domicile check-config` on the file, so a key the compositor
   refuses fails `home-manager switch` instead of the desk. Run it yourself on
   a hand-written config: `domicile check-config ~/.config/domicile/domicile.json`.
+- `configDirectory` builds a config module at `home-manager switch`:
+
+  ```nix
+  programs.domicile.configDirectory = ./domicile;
+  ```
+
+  - The directory holds one `domicile.{ts,tsx,js,mjs}`, its `package.json`
+    and `bun.lock`, and a `bun.nix`. Write `bun.nix` with
+    `bunx bun2nix -o bun.nix` after each change to `bun.lock`.
+  - Every package the config imports must be in `bun.lock`. The build has no
+    network, so it cannot add one.
+  - Exports are written over `settings`; `settings` fills in the rest.
+  - `Shell` is bundled into the store and becomes `shell`.
 - `webApps` installs sites as apps. Each gets a desktop entry that runs
   `domicile open-app <url>` ([WEB-APPS.md](/docs/architecture/WEB-APPS.md)):
 

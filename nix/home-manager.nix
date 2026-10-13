@@ -5,11 +5,16 @@
 # `settings` mirrors the `domicile-config` crate's schema;
 # `scripts/test-the-home-manager-module-agrees.sh` checks that they match.
 # `settings` is freeform so a newer domicile works with an older module.
+# `configDirectory` builds a TS config into that file and a shell.
 #
 # The login session belongs to the NixOS module (`nix/nixos.nix`).
 #
-# Curried so `domicilePackages` can supply this flake's package defaults.
-{domicilePackages}: {
+# Curried so `domicilePackages` can supply this flake's package defaults and
+# `bun2nix` its `fetchBunDeps`.
+{
+  domicilePackages,
+  bun2nix,
+}: {
   lib,
   pkgs,
   config,
@@ -196,11 +201,65 @@
   # compositor refuses fails the build instead of the desk.
   checkedConfig = settings: let
     written = json.generate "domicile.json" settings;
+    # A TS config's exports go over `settings`, so the module's defaults do not
+    # replace them.
+    file =
+      if cfg.configDirectory == null
+      then written
+      else
+        pkgs.runCommandLocal "domicile.json" {nativeBuildInputs = [pkgs.jq];} ''
+          jq -s '.[0] * .[1]' ${written} ${built}/config.json >"$out"
+        '';
   in
     pkgs.runCommandLocal "domicile.json" {} ''
-      ${cfg.package}/bin/domicile check-config ${written}
-      cp ${written} "$out"
+      ${cfg.package}/bin/domicile check-config ${file}
+      cp ${file} "$out"
     '';
+
+  # `configDirectory` built: `config.json` holds every export but `Shell`, and
+  # `shell/` the bundled `Shell`. bun's cache comes from the directory's
+  # `bun.nix`, so the builder installs without a network.
+  #
+  # Forces `entry` first, so a directory without a config module fails on that
+  # instead of on a missing `bun.nix`.
+  built = let
+    entry = configModuleIn cfg.configDirectory;
+  in
+    builtins.seq entry (pkgs.runCommand "domicile-config" {
+      nativeBuildInputs = [pkgs.jq];
+      bunDeps = bun2nix.fetchBunDeps {bunNix = cfg.configDirectory + "/bun.nix";};
+    } ''
+      set -o pipefail
+      export HOME="$TMPDIR"
+      export BUN_INSTALL_CACHE_DIR="$TMPDIR/bun-cache"
+      # Dereferenced and writable: bun copies packages out of its cache and
+      # fails on read-only store files.
+      cp -rL "$bunDeps/share/bun-cache" "$BUN_INSTALL_CACHE_DIR"
+      cp -r ${cfg.configDirectory} config
+      chmod -R u+w "$BUN_INSTALL_CACHE_DIR" config
+
+      # Runs the builder and prints `field` of its `step` line.
+      run() { # step field builder-arguments...
+        ${cfg.package}/libexec/domicile/builder "''${@:3}" --cache "$TMPDIR/cache" \
+          | tee /dev/stderr \
+          | jq -rR "fromjson? | select(.step == \"$1\") | $2"
+      }
+      evaluated=$(run evaluated .config --evaluate config/${entry})
+      shell=$(run built .root --entry config/${entry})
+      mkdir "$out"
+      cp "$evaluated" "$out/config.json"
+      cp -r "$shell" "$out/shell"
+    '');
+
+  # The one `domicile.{ts,tsx,js,mjs}` in `directory`.
+  configModuleIn = directory: let
+    found =
+      lib.filter (name: lib.pathExists (directory + "/${name}"))
+      (map (extension: "domicile.${extension}") ["ts" "tsx" "js" "mjs"]);
+  in
+    if lib.length found == 1
+    then lib.head found
+    else throw "programs.domicile.configDirectory: ${toString directory} must hold one of domicile.{ts,tsx,js,mjs}, and holds ${toString (lib.length found)}";
 in {
   imports = [
     (lib.mkRemovedOptionModule ["programs" "domicile" "defaultBrowser"] ''
@@ -238,6 +297,20 @@ in {
       type = lib.types.nullOr lib.types.path;
       default = null;
       example = lib.literalExpression "\"\${domicile.packages.\${system}.manganese}/shell.js\"";
+    };
+
+    configDirectory = lib.mkOption {
+      description = ''
+        A directory holding a TS or JS config, `domicile.{ts,tsx,js,mjs}`,
+        with its `package.json`, `bun.lock` and the `bun.nix` that
+        `bunx bun2nix -o bun.nix` writes. The build evaluates its exports into
+        the config file over `settings`, and builds its `Shell` as `shell`.
+
+        `null` leaves the config to `settings` and `shell`.
+      '';
+      type = lib.types.nullOr lib.types.path;
+      default = null;
+      example = lib.literalExpression "./domicile";
     };
 
     settings = lib.mkOption {
@@ -562,6 +635,9 @@ in {
     # so an explicit `settings.shell` wins.
     programs.domicile.settings.shell =
       lib.mkIf (cfg.shell != null) (lib.mkDefault (toString cfg.shell));
+
+    programs.domicile.shell =
+      lib.mkIf (cfg.configDirectory != null) (lib.mkDefault "${built}/shell/shell.js");
 
     # Wrap only when there is a shell to add.
     programs.domicile.finalPackage =

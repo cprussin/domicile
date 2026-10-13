@@ -209,8 +209,11 @@ notification server, and manganese shows them as toasts.
 - **No fallback shell during the first build.** A desktop running a shell the
   user did not configure looks correct but is wrong. Startup shows the splash
   instead, which has no keys and no windows.
-- **home-manager builds a TS config with `bun2nix`.** The module takes a
-  directory holding the config and its `bun.lock`. JSON stays the default.
+- **home-manager builds a TS config with `bun2nix`.** `configDirectory`
+  takes a directory holding the config, its `bun.lock` and the `bun.nix`
+  generated from it. The build writes the exports to `domicile.json` and the
+  bundled `Shell` to the store, so nothing builds at login. JSON stays the
+  default.
 - **"Desk" is not a user-facing name.** No export, config key or CLI word uses
   it.
 
@@ -223,7 +226,4 @@ Done:
 - [x] Phase 3: JSON and TS config, config watch and reload
 - [x] Phase 4: packages published to npm
 - [x] `schemars` schema and generated `@domicile-desktop/sdk/config` types
-
-Open:
-
-- [ ] `nix/home-manager.nix` builds a TS config directory with `bun2nix`
+- [x] `nix/home-manager.nix` builds a TS config directory with `bun2nix`
