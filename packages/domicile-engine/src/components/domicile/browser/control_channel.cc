@@ -209,6 +209,8 @@ double Number(const base::Value& value) {
   return 0.0;
 }
 
+mojom::WindowSandboxPtr SandboxOf(const base::DictValue* sandbox);
+
 // A window's owner, or null for a message with none or a malformed one. The
 // uid, gid and inode go through a double because base::Value's whole numbers
 // are a signed int, which a uid above 2^31 does not fit.
@@ -227,7 +229,23 @@ mojom::WindowOwnerPtr OwnerOf(const base::DictValue* owner) {
     pidfd_inode = static_cast<uint64_t>(*inode);
   }
   return mojom::WindowOwner::New(*pid, static_cast<uint32_t>(*uid),
-                                 static_cast<uint32_t>(*gid), pidfd_inode);
+                                 static_cast<uint32_t>(*gid), pidfd_inode,
+                                 SandboxOf(owner->FindDict("sandbox")));
+}
+
+// A string the sandbox engine may leave unset.
+std::optional<std::string> Unset(const std::string* value) {
+  return value ? std::make_optional(*value) : std::nullopt;
+}
+
+// A window's sandbox, or null for an unsandboxed client.
+mojom::WindowSandboxPtr SandboxOf(const base::DictValue* sandbox) {
+  if (!sandbox) {
+    return nullptr;
+  }
+  return mojom::WindowSandbox::New(Unset(sandbox->FindString("engine")),
+                                   Unset(sandbox->FindString("app_id")),
+                                   Unset(sandbox->FindString("instance_id")));
 }
 
 // Which way up a monitor is, by the name the compositor wrote.

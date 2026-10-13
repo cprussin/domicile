@@ -182,7 +182,8 @@ impl Compositor {
         self.client_on_with(&self.session.wayland_display, title, extra)
     }
 
-    fn client_on(&self, display: &str, title: &str) -> Client {
+    /// The same, on `display`: a name in the runtime directory or a path.
+    pub fn client_on(&self, display: &str, title: &str) -> Client {
         self.client_on_with(display, title, &[])
     }
 
@@ -218,6 +219,11 @@ impl Compositor {
             .env("WAYLAND_DISPLAY", &self.session.wayland_display)
             .env("XDG_RUNTIME_DIR", &self.runtime_dir);
         command
+    }
+
+    /// The socket the compositor listens on for applications.
+    pub fn wayland_socket(&self) -> PathBuf {
+        self.runtime_dir.join(self.wayland_display())
     }
 
     /// The display the compositor published for applications.

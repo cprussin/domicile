@@ -65,6 +65,7 @@ pub fn peer_owner(stream: &UnixStream) -> io::Result<Owner> {
             uid: credentials.uid,
             gid: credentials.gid,
             pidfd_inode: peer_pidfd_inode(stream)?,
+            sandbox: None,
         }),
         _ => Err(io::Error::last_os_error()),
     }

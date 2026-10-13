@@ -74,6 +74,10 @@ use smithay::wayland::{
     },
     idle_inhibit::{IdleInhibitHandler, IdleInhibitManagerState},
     output::{OutputHandler, OutputManagerState},
+    security_context::{
+        SecurityContext, SecurityContextHandler, SecurityContextListenerSource,
+        SecurityContextState,
+    },
     selection::data_device::{
         current_data_device_selection_userdata, request_data_device_client_selection,
         set_data_device_focus, set_data_device_selection, ClientDndGrabHandler, DataDeviceHandler,
@@ -109,8 +113,9 @@ use smithay::{
     delegate_compositor, delegate_content_type, delegate_cursor_shape, delegate_data_control,
     delegate_data_device, delegate_dmabuf, delegate_ext_data_control, delegate_fractional_scale,
     delegate_idle_inhibit, delegate_kde_decoration, delegate_output, delegate_presentation,
-    delegate_primary_selection, delegate_seat, delegate_shm, delegate_single_pixel_buffer,
-    delegate_viewporter, delegate_xdg_activation, delegate_xdg_decoration, delegate_xdg_shell,
+    delegate_primary_selection, delegate_seat, delegate_security_context, delegate_shm,
+    delegate_single_pixel_buffer, delegate_viewporter, delegate_xdg_activation,
+    delegate_xdg_decoration, delegate_xdg_shell,
 };
 use tracing::{debug, error, info, warn};
 
@@ -221,7 +226,7 @@ use domicile_launch::arguments::arguments;
 use domicile_launch::handshake::{silence, Handshake, WAIT_FOR_A_PAGE};
 use domicile_launch::session::{publish, Session};
 use domicile_protocol::{
-    ChromeMessage, CursorShape, HostMessage, Owner, Passphrase, Theme, WindowRequest,
+    ChromeMessage, CursorShape, HostMessage, Owner, Passphrase, Sandbox, Theme, WindowRequest,
 };
 use smithay::backend::renderer::gles::GlesRenderer;
 use zbus::zvariant::OwnedObjectPath;
@@ -686,12 +691,52 @@ impl ClientState {
         }
     }
 
+    /// Whether this client may see privileged globals. See
+    /// [`sees_privileged_globals`].
+    fn is_privileged(&self) -> bool {
+        match &self.owner {
+            Some(owner) => owner.sandbox.is_none(),
+            None => true,
+        }
+    }
+
     fn chrome() -> Self {
         ClientState {
             is_chrome: true,
             ..ClientState::default()
         }
     }
+}
+
+/// Whether `client` may see privileged globals: data control, screen capture
+/// and `wp_security_context_manager_v1`. A client that connected through a
+/// security context may not; the protocol requires the last.
+///
+/// Every privileged global filters on this.
+fn sees_privileged_globals(client: &Client) -> bool {
+    client
+        .get_data::<ClientState>()
+        .is_some_and(ClientState::is_privileged)
+}
+
+/// Accepts an app client on `stream`, from `sandbox` if it came through a
+/// security context's listener.
+fn accept_app_client(mut display: DisplayHandle, stream: UnixStream, sandbox: Option<Sandbox>) {
+    // Before `insert_client`, which takes the stream.
+    let owner = match peer_owner(&stream) {
+        Ok(owner) => Owner { sandbox, ..owner },
+        Err(err) => {
+            // A window whose owner the shell cannot know is refused rather
+            // than shown unattributed.
+            warn!(%err, "a client's credentials would not read; refusing it");
+            return;
+        }
+    };
+    // Pairs with `spawning client` to time a launch.
+    debug!(pid = owner.pid, "{}", grepped::ARRIVED);
+    display
+        .insert_client(stream, Arc::new(ClientState::app(owner)))
+        .expect("failed to insert client");
 }
 
 /// The process that connected `surface`'s client.
@@ -701,7 +746,11 @@ impl ClientState {
 fn owner_of(surface: &WlSurface) -> Owner {
     surface
         .client()
-        .and_then(|client: Client| client.get_data::<ClientState>().and_then(|data| data.owner))
+        .and_then(|client: Client| {
+            client
+                .get_data::<ClientState>()
+                .and_then(|data| data.owner.clone())
+        })
         .expect("an app's client is alive and was read on arrival")
 }
 
@@ -5599,6 +5648,30 @@ impl ExtDataControlHandler for DomicileCompositor {
 
 delegate_ext_data_control!(DomicileCompositor);
 
+impl SecurityContextHandler for DomicileCompositor {
+    /// Accepts on a sandbox's listener, marking each client with the sandbox.
+    fn context_created(&mut self, source: SecurityContextListenerSource, context: SecurityContext) {
+        let sandbox = Sandbox {
+            engine: context.sandbox_engine,
+            app_id: context.app_id,
+            instance_id: context.instance_id,
+        };
+        debug!(?sandbox, "a sandbox opened a listener");
+        let listening =
+            self.loop_handle
+                .insert_source(source, move |stream, _, data: &mut CalloopData| {
+                    accept_app_client(data.display.handle(), stream, Some(sandbox.clone()));
+                });
+        if let Err(err) = listening {
+            // Dropping the source closes the listener, so the sandbox's
+            // clients fail to connect rather than connect unmarked.
+            warn!(%err, "a sandbox's listener would not join the event loop");
+        }
+    }
+}
+
+delegate_security_context!(DomicileCompositor);
+
 impl WlrDataControlHandler for DomicileCompositor {
     fn data_control_state(&self) -> &WlrDataControlState {
         &self.wlr_data_control_state
@@ -6109,17 +6182,20 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut seat_state = SeatState::new();
     let data_device_state = DataDeviceState::new::<DomicileCompositor>(&dh);
     let primary_selection_state = PrimarySelectionState::new::<DomicileCompositor>(&dh);
-    // Every client sees both, as a clipboard manager is an ordinary client.
+    // Every unsandboxed client sees both, as a clipboard manager is an
+    // ordinary client.
     let ext_data_control_state = ExtDataControlState::new::<DomicileCompositor, _>(
         &dh,
         Some(&primary_selection_state),
-        |_| true,
+        sees_privileged_globals,
     );
     let wlr_data_control_state = WlrDataControlState::new::<DomicileCompositor, _>(
         &dh,
         Some(&primary_selection_state),
-        |_| true,
+        sees_privileged_globals,
     );
+    // Sandbox engines such as Flatpak open a listener for their clients here.
+    SecurityContextState::new::<DomicileCompositor, _>(&dh, sees_privileged_globals);
     // Advertise a keyboard and pointer.
     let mut seat: Seat<DomicileCompositor> = seat_state.new_wl_seat(&dh, "domicile");
     // The seat's keymap is what every client receives. A keymap xkb cannot
@@ -6575,22 +6651,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Accept on the sockets bound above.
     let handle = event_loop.handle();
     handle.insert_source(source, move |stream, _, data: &mut CalloopData| {
-        // Before `insert_client`, which takes the stream.
-        let owner = match peer_owner(&stream) {
-            Ok(owner) => owner,
-            Err(err) => {
-                // A window whose owner the shell cannot know is refused rather
-                // than shown unattributed.
-                warn!(%err, "a client's credentials would not read; refusing it");
-                return;
-            }
-        };
-        // Pairs with `spawning client` to time a launch.
-        debug!(pid = owner.pid, "{}", grepped::ARRIVED);
-        data.display
-            .handle()
-            .insert_client(stream, Arc::new(ClientState::app(owner)))
-            .expect("failed to insert client");
+        accept_app_client(data.display.handle(), stream, None);
     })?;
     handle.insert_source(chrome_source, move |stream, _, data: &mut CalloopData| {
         data.display

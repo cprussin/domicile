@@ -30,6 +30,8 @@ so the copy outlives the client that copied it.
 
 - The compositor serves `ext-data-control-v1` and `zwlr_data_control_v1`, so
   clipboard managers, `wl-copy` and `wl-paste` work with no window focused.
+  Sandboxed clients are not offered them
+  ([PORTALS.md](/docs/PORTALS.md#sandboxed-clients)).
 - Both selections. A data-control copy enters the history like any other, and
   a restored row is what data-control clients read.
 - Tested in `packages/domicile-compositor/tests/selection.rs` and
