@@ -20,7 +20,7 @@ pub fn url_for(target: &str, here: &Path) -> String {
 }
 
 /// Whether `word` starts with a URL scheme and its colon.
-fn has_scheme(word: &str) -> bool {
+pub(crate) fn has_scheme(word: &str) -> bool {
     match word.split_once(':') {
         Some((scheme, _)) => {
             let mut chars = scheme.chars();

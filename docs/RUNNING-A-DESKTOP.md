@@ -76,7 +76,8 @@ Settings live in `~/.config/domicile/domicile.json` (or `.ts`/`.js`). Reference:
   theme.
 - `domicile open-url <url>` does the same from a terminal on the desktop.
   `domicile open-app <url>` opens it as an app, without an address bar
-  ([WEB-APPS.md](architecture/WEB-APPS.md)).
+  ([WEB-APPS.md](architecture/WEB-APPS.md)). `domicile install-app <url>`
+  adds a site to your applications from its web app manifest.
 
 ## Screenshots
 

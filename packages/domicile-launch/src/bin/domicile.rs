@@ -39,6 +39,7 @@ use domicile_launch::control_socket::{
 };
 use domicile_launch::graphical_session;
 use domicile_launch::heard::Heard;
+use domicile_launch::install_app::{data_home, install_app, Fetched};
 use domicile_launch::milestones::{reach, Milestone};
 use domicile_launch::notification;
 use domicile_launch::platform::platform;
@@ -76,6 +77,9 @@ const SPLASH_AFTER: Duration = Duration::from_millis(500);
 /// How long the splash shows "Ready" before the built shell crossfades in.
 /// Matches the `ending` duration in `packages/shell-splash`.
 const SPLASH_ENDING: Duration = Duration::from_millis(900);
+
+/// Seconds `install-app` gives each fetch.
+const FETCH_WITHIN: &str = "30";
 
 /// How many of the compositor's last stderr lines to repeat when a run gives
 /// up.
@@ -117,6 +121,7 @@ fn run() -> Result<ExitCode, String> {
         }),
         Invocation::Check { config } => check(&config).map(|()| ExitCode::SUCCESS),
         Invocation::Power { power } => powered(power),
+        Invocation::InstallApp { url } => installed(&url),
     }
 }
 
@@ -134,6 +139,37 @@ fn powered(power: Power) -> Result<ExitCode, String> {
         )),
         false => Ok(ExitCode::SUCCESS),
     }
+}
+
+/// Installs the site at `url` as an app and says where its entry went.
+fn installed(url: &str) -> Result<ExitCode, String> {
+    let home = data_home(&|name| std::env::var(name).ok())
+        .ok_or("nowhere to install apps -- neither XDG_DATA_HOME nor HOME is set")?;
+    let entry = install_app(url, &home, &curl).map_err(|why| why.to_string())?;
+    println!("{}", entry.display());
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Fetches `url` with the `curl` on `PATH`, following redirects.
+fn curl(url: &str) -> Result<Fetched, String> {
+    let answer = Command::new("curl")
+        .args(["--silent", "--show-error", "--fail", "--location"])
+        .args(["--max-time", FETCH_WITHIN])
+        // After the body, on its own line: where it landed.
+        .args(["--write-out", "\\n%{url_effective}", "--", url])
+        .output()
+        .map_err(|why| format!("cannot run curl, which fetches the site: {why}"))?;
+    if !answer.status.success() {
+        return Err(String::from_utf8_lossy(&answer.stderr).trim().to_string());
+    }
+    let mut body = answer.stdout;
+    let landed = body
+        .iter()
+        .rposition(|&byte| byte == b'\n')
+        .ok_or("curl did not say where the site landed")?;
+    let url = String::from_utf8_lossy(&body[landed + 1..]).into_owned();
+    body.truncate(landed);
+    Ok(Fetched { url, body })
 }
 
 /// Resolves the shell for `domicile load-shell` on the client side.

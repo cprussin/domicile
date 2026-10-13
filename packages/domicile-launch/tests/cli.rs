@@ -139,6 +139,23 @@ fn open_app_is_the_verb_that_takes_an_app_address() {
 }
 
 #[test]
+fn install_app_is_the_verb_that_takes_a_site() {
+    assert_eq!(
+        run(&["install-app", "https://example.com/"]).unwrap(),
+        Invocation::InstallApp {
+            url: "https://example.com/".to_string()
+        }
+    );
+    assert_eq!(run(&["install-app"]), Err(CliError::NothingToInstall));
+    assert_eq!(
+        run(&["install-app", "https://a.example", "https://b.example"]),
+        Err(CliError::ExtraToInstall {
+            extra: "https://b.example".to_string()
+        })
+    );
+}
+
+#[test]
 fn open_url_with_nothing_to_open_is_refused() {
     assert_eq!(run(&["open-url"]), Err(CliError::NothingToOpen));
 }

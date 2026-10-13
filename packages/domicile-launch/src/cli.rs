@@ -24,7 +24,8 @@ pub enum CliError {
          [file], or \
          send-shell <command>…. Or \
          check-config <file> to check a config without running it, or \
-         power-off or reboot to turn the computer off or restart it.\n"
+         power-off or reboot to turn the computer off or restart it, or \
+         install-app <url> to add a site to your applications.\n"
     )]
     NoShell,
     #[error(
@@ -67,6 +68,17 @@ pub enum CliError {
          address is one app window."
     )]
     ExtraToOpenAsApp { extra: String },
+    #[error(
+        "install-app takes the address of the site to install, and was given \
+         nothing:\n\n    \
+         domicile install-app https://example.com\n"
+    )]
+    NothingToInstall,
+    #[error(
+        "install-app takes one address, and it was given {extra} as well. One \
+         address is one app."
+    )]
+    ExtraToInstall { extra: String },
     #[error("screenshot takes one file, and it was given {extra} as well.")]
     ExtraToSave { extra: String },
     #[error(
@@ -124,6 +136,9 @@ pub enum Invocation {
     ///
     /// Kept as typed, like [`Invocation::Open`]'s.
     OpenApp { target: String },
+    /// Write a desktop entry that opens the site at `url` as an app. Needs no
+    /// running desktop.
+    InstallApp { url: String },
     /// Tell the running desktop to write a PNG of the desk to this file, or,
     /// with none, to take the shell's interactive screenshot.
     ///
@@ -179,6 +194,11 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (None, _) => Err(CliError::NothingToOpenAsApp),
                 (Some(target), None) => Ok(Invocation::OpenApp { target }),
                 (Some(_), Some(extra)) => Err(CliError::ExtraToOpenAsApp { extra }),
+            },
+            Verb::Installing => match (args.next(), args.next()) {
+                (None, _) => Err(CliError::NothingToInstall),
+                (Some(url), None) => Ok(Invocation::InstallApp { url }),
+                (Some(_), Some(extra)) => Err(CliError::ExtraToInstall { extra }),
             },
             Verb::Sending => {
                 let command: Vec<String> = args.collect();
@@ -244,6 +264,8 @@ enum Verb {
     Opening,
     /// `open-app`, which takes an address.
     OpeningApp,
+    /// `install-app`, which takes an address.
+    Installing,
     /// `screenshot`, which takes a file or nothing.
     Capturing,
     /// `send-shell`, which takes one or more words.
@@ -263,6 +285,7 @@ fn verb(word: &str) -> Option<Verb> {
         "load-shell" => Some(Verb::Loading),
         "open-url" => Some(Verb::Opening),
         "open-app" => Some(Verb::OpeningApp),
+        "install-app" => Some(Verb::Installing),
         "screenshot" => Some(Verb::Capturing),
         "send-shell" => Some(Verb::Sending),
         "check-config" => Some(Verb::Checking),

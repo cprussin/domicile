@@ -39,6 +39,19 @@ Launchers list it like any application ([LAUNCHER.md](/docs/LAUNCHER.md)).
 The home-manager module writes one for each of `programs.domicile.webApps`
 ([SHELL-CONFIG.md](/docs/SHELL-CONFIG.md#home-manager)).
 
+`domicile install-app <url>` writes one from the site's web app manifest:
+
+- **Manifest:** the page's `<link rel="manifest">`. `name` (else
+  `short_name`) is the entry's name. `start_url` (else the page) is what it
+  opens, and must be on the page's origin.
+- **Icon:** the manifest's SVG, else its largest PNG, as the launcher draws
+  only those. Maskable-only icons are skipped. Saved to
+  `$XDG_DATA_HOME/domicile/app-icons/`.
+- **Entry:** `$XDG_DATA_HOME/applications/domicile-app-<host-and-path>.desktop`,
+  named after the start URL, so installing again replaces it. Its path is
+  printed.
+- **Fetching:** the `curl` on `PATH`. The desktop's `PATH` has one.
+
 An app that needs the system (files, native programs) is an unpacked MV3
 extension, as Settings is ([SETTINGS.md](/docs/SETTINGS.md)): `chrome.*` APIs,
 plus native messaging for anything else. The config's `extensions.unpacked`
@@ -57,6 +70,12 @@ manifest `key` pins the id.
   flags.
 - **Desktop entries over a Domicile app format.** Launchers, `xdg` tools and
   home-manager already make and read them.
+- **`install-app` fetches with `curl` over an HTTP crate.** The desktop already
+  ships `curl` for bookmark icons, and an HTTP and TLS stack would be a new
+  dependency for one verb.
+- **`install-app`'s entry runs `domicile` from `PATH`.** A store path would
+  break once garbage-collected; home-manager's entries name one because each
+  generation rewrites them.
 - **Every `open-app` opens a window.** An app can have several windows, as a
   browser can.
 - **A read-only address off the app's origin, none on it.** Only a program the
@@ -72,7 +91,7 @@ manifest `key` pins the id.
   bar; Settings and History open as apps
 - [x] off the app's origin, show a read-only address bar, as Chrome does for an
   installed app
-- [ ] `domicile install-app <url>`: read the site's web app manifest (`name`,
+- [x] `domicile install-app <url>`: read the site's web app manifest (`name`,
   `icons`, `start_url`) and write a desktop entry to
   `~/.local/share/applications`
 - [x] home-manager `webApps.<name> = { url; icon; }`, which writes desktop
