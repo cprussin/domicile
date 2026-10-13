@@ -14,11 +14,11 @@ describe("evaluate", () => {
     const config = path.join(desk, "domicile.tsx");
     writeFileSync(
       config,
-      `import { DEFAULT_TOP_BAR, runManganese } from "@domicile-desktop/manganese";
+      `import { DEFAULT_BAR, runManganese } from "@domicile-desktop/manganese";
          export const input = { keyboard: { xkb_variant: "dvp" } };
          export const extensions = { web_store: ["abc"] };
          export const Shell = runManganese({
-           topBar: { ...DEFAULT_TOP_BAR, middle: [<span key="m">mail</span>] },
+           bar: { ...DEFAULT_BAR, center: [<span key="m">mail</span>] },
          });`,
     );
     const out = path.join(desk, "config.json");

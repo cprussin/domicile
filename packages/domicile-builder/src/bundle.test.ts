@@ -17,10 +17,10 @@ describe("bundle", () => {
     const entry = path.join(desk, "domicile.tsx");
     writeFileSync(
       entry,
-      `import { DEFAULT_TOP_BAR, runManganese } from "@domicile-desktop/manganese";
+      `import { DEFAULT_BAR, runManganese } from "@domicile-desktop/manganese";
          const Mail = () => <span>mail 3/12</span>;
          export const Shell = runManganese({
-           topBar: { ...DEFAULT_TOP_BAR, middle: [<Mail key="mail" />] },
+           bar: { ...DEFAULT_BAR, center: [<Mail key="mail" />] },
          });`,
     );
 
@@ -48,10 +48,10 @@ describe("bundle", () => {
     );
     writeFileSync(
       entry,
-      `import { DEFAULT_TOP_BAR, runManganese } from "@domicile-desktop/manganese";
+      `import { DEFAULT_BAR, runManganese } from "@domicile-desktop/manganese";
          import { Mail } from "./mail";
          export const Shell = runManganese({
-           topBar: { ...DEFAULT_TOP_BAR, middle: [<Mail key="mail" />] },
+           bar: { ...DEFAULT_BAR, center: [<Mail key="mail" />] },
          });`,
     );
 

@@ -4,8 +4,8 @@ import { LightbulbFilamentIcon } from "@phosphor-icons/react/dist/ssr/LightbulbF
 import type { WheelEvent } from "react";
 
 import { css } from "../../styled-system/css";
-import type { SharedBacklight } from "../readouts/readouts";
 import { BrightnessSlider } from "./BrightnessSlider";
+import type { SharedBacklight } from "./desk-backlight";
 import { useBrightness } from "./useBrightness";
 
 /** How far one wheel notch over the icon moves the brightness. */

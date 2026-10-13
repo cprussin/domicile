@@ -40,12 +40,12 @@ describe("mountManganese", () => {
     const mounted = await act(() =>
       mountManganese(root, fake.host, {
         applications,
-        floating,
-        topBar: {
+        bar: {
+          center: [],
           left: [<span key="mail">mail 3/12</span>],
-          middle: [],
           right: [],
         },
+        floating,
       }),
     );
 

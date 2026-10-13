@@ -21,13 +21,13 @@ A config module exports `Shell = runManganese(options)` (see
 - **`applications`**: `omit`, desktop file IDs the launcher hides, and
   `bookmarks`, pages it opens by name. See
   [LAUNCHER.md](/docs/LAUNCHER.md).
+- **`bar`**: the bar's `left`, `center` and `right` columns. Defaults to
+  `DEFAULT_BAR`. See [TOP-BAR.md](docs/TOP-BAR.md).
 - **`floating`**: rules for client windows that open floating, such as
   `[{ app: "pinentry" }, { app: "^Slack$", title: "^Huddle" }]`. See
   [WINDOW-MANAGEMENT.md](docs/WINDOW-MANAGEMENT.md#opening-floating).
 - **`keybindings`**: the key table. Defaults to `DEFAULT_KEYBINDINGS` and
   `DEFAULT_MODES`, sway's keys on Meta.
-- **`topBar`**: the bar's `left`, `middle` and `right` columns. Defaults to
-  `DEFAULT_TOP_BAR`.
 
 It also exports the bar items (`Clock`, `Battery`, …), the commands bindings
 use (`focus`, `workspace`, `mode`, …), and `Shell`, which is `runManganese()`

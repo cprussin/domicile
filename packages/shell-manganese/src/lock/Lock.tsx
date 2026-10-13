@@ -37,7 +37,7 @@ type Props = {
    */
   onUnlock: (passphrase: string) => void;
   /** Drawn across the top of each screen, such as `LockBar`. */
-  bar?: ReactNode;
+  bar?: ((screen: string) => ReactNode) | undefined;
   /**
    * A picture an application set for the lock screen through the Wallpaper
    * portal, as a URL. Covers each screen in place of the blurred desktop.
@@ -215,7 +215,7 @@ export const Lock = memo(
           <PopoverContainer value={panels ?? undefined}>
             {(displays ?? []).map(({ name }) => (
               <BarRegion key={name} screen={name}>
-                {bar}
+                {bar(name)}
               </BarRegion>
             ))}
           </PopoverContainer>

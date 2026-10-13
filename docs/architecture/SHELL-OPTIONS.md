@@ -13,7 +13,7 @@ export const options = defineOptions({
     format: option.choice("Clock format", ["24h", "12h"], "24h"),
     seconds: option.toggle("Show seconds", false),
   },
-  topBar: {
+  bar: {
     position: option.choice("Bar position", ["top", "bottom"], "top"),
   },
   gaps: option.number("Gap between windows", 8, { min: 0, max: 64 }),
@@ -31,7 +31,7 @@ export const Shell = runManganese(); // reads them with useShellOptions(options)
 
 ## Problem
 
-- A shell's options are arguments in code: `runManganese({ topBar: … })`.
+- A shell's options are arguments in code: `runManganese({ bar: … })`.
   The Settings app can edit the file as text, not as settings.
 - Rewriting code from a form breaks on anything but literals: spreads, imports,
   computed values, comments.
@@ -49,7 +49,7 @@ export const Shell = runManganese(); // reads them with useShellOptions(options)
 | Read | `useShellOptions(options)` parses the values against the declaration: an unknown key or a bad value is dropped with a console error, and a missing one takes its default. |
 | Edit | `settings_files` reports `options.json`. The Settings app's **Shell** page draws one control per option and writes `shell_options` like any other key. The host validates values against the declaration before writing. |
 
-Arguments in code win over options: `runManganese({ topBar })` fixes the bar
+Arguments in code win over options: `runManganese({ bar })` fixes the bar
 whatever `shell_options` says. The form marks no option as overridden, since
 it cannot see the code; the shell's docs say which arguments shadow which
 options.

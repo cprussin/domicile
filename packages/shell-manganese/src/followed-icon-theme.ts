@@ -6,22 +6,15 @@ import type { IconThemeSystem } from "@domicile-desktop/sdk/icon-theme";
 import { watchIconTheme } from "@domicile-desktop/sdk/icon-theme";
 import { system } from "@domicile-desktop/sdk/system";
 
+import { perHost } from "./host/per-host";
+
 /** The icon theme as last read, or `undefined` for `hicolor` only. */
 export type IconTheme = () => Promise<string | undefined>;
 
-const shared = new WeakMap<DomicileHost, IconTheme>();
-
 /** {@link followIconTheme} for `domicile`, started on first use. */
-export const sharedIconTheme = (domicile: DomicileHost): IconTheme => {
-  const known = shared.get(domicile);
-  if (known === undefined) {
-    const theme = followIconTheme(system(domicile));
-    shared.set(domicile, theme);
-    return theme;
-  } else {
-    return known;
-  }
-};
+export const sharedIconTheme: (domicile: DomicileHost) => IconTheme = perHost(
+  (domicile) => followIconTheme(system(domicile)),
+);
 
 /**
  * Follows the icon theme from now on. Answers once the first read settles.

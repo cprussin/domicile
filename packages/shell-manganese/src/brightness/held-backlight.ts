@@ -1,7 +1,6 @@
 import { act } from "@testing-library/react";
-
-import type { SharedBacklight } from "../readouts/readouts";
 import { sharedWatch } from "../readouts/shared-watch";
+import type { SharedBacklight } from "./desk-backlight";
 
 /**
  * A test-controlled backlight: `backlight` replaces the system's, `report`

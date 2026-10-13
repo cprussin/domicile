@@ -6,9 +6,10 @@ The page reads both itself through libraries, as it does the battery; see
 
 ## One watch per desk
 
-- `src/readouts/readouts.ts` holds the battery, backlight, sound, network and
-  Bluetooth watches. `Desktop` makes it once for the page; every bar and the
-  lock screen read from it.
+- The battery, backlight, sound, network and Bluetooth watches are made once
+  per desktop (`perHost`, `src/host/per-host.ts`), each beside its item:
+  `deskBattery`, `deskBacklight`, `deskSound`, `deskNetwork`, `deskBluetooth`.
+  Every bar and the lock screen read the same ones.
 - Each is a `sharedWatch` (`src/readouts/shared-watch.ts`): the first reader
   starts the library's watch, the last one stops it, and a late reader gets
   the current value. Components read it with `useSharedWatch`.

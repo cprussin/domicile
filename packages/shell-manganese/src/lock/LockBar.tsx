@@ -1,17 +1,17 @@
-import type { BarReadouts } from "../top-bar/bar-context";
-import { BarReadoutsContext } from "../top-bar/bar-context";
-import { LOCK_TOP_BAR } from "../top-bar/layout";
-import { BarColumns } from "../top-bar/TopBar";
+import { BarContext } from "../top-bar/bar-context";
+import type { BarLayout } from "../top-bar/layout";
+import { TopBar } from "../top-bar/TopBar";
 
-type Props = Omit<BarReadouts, "locked">;
+type Props = {
+  /** The items, such as `LOCK_BAR`'s. Each offers only what a lock allows. */
+  layout: BarLayout;
+  /** The monitor this bar is on. */
+  screen: string;
+};
 
-/**
- * The lock screen's bar: the desktop's bar with only brightness, volume,
- * Bluetooth and battery, each limited to what a locked desktop allows. See
- * docs/LOCK.md.
- */
-export const LockBar = ({ domicile, readouts }: Props) => (
-  <BarReadoutsContext value={{ domicile, locked: true, readouts }}>
-    <BarColumns layout={LOCK_TOP_BAR} />
-  </BarReadoutsContext>
+/** The lock screen's bar on monitor `screen`. See docs/LOCK.md. */
+export const LockBar = ({ layout, screen }: Props) => (
+  <BarContext value={{ locked: true, screen }}>
+    <TopBar layout={layout} />
+  </BarContext>
 );

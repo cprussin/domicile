@@ -1,92 +1,18 @@
-// Context for bar items, so items in a user's layout need no props.
+// What a bar tells the items in it.
 
-import type {
-  DomicileHost,
-  DomicileTrayItem,
-} from "@domicile-desktop/sdk/domicile-host";
-import type { Extension } from "@domicile-desktop/sdk/extension";
-import { createContext, useContext } from "react";
+import { createContext } from "react";
 
-import type { Readouts } from "../readouts/readouts";
-import type { TrayOrder } from "../tray/useTrayOrder";
+import { useProvided } from "../host/use-provided";
 
-/** What a monitor's bar provides to its items. */
+/** One bar: the desktop's on a screen, or the lock screen's. */
 export type Bar = {
-  /** The workspace on screen. */
-  current: string;
-  /**
-   * The desktop: the source of system calls, and the target for extension
-   * actions.
-   */
-  domicile: DomicileHost;
-  /** The extensions with an action, shown in the tray. */
-  extensions: readonly Extension[];
-  /** Whether this screen has keyboard focus. */
-  focused: boolean;
-  /** The current binding mode; the bar shows it unless it is `default`. */
-  mode: string;
-  /** Open an extension's popup, or close the open one with `undefined`. */
-  onOpenExtension: (id: string | undefined) => void;
-  /** Open the launcher. */
-  onOpenLauncher: () => void;
-  /** Open the drawer of notifications. */
-  onOpenNotifications: () => void;
-  onSelectWorkspace: (name: string) => void;
-  /** The extension whose popup is open, or `undefined`. */
-  openedExtension: string | undefined;
-  /** The desk's system readouts, shared by every bar. */
-  readouts: Readouts;
-  /** The monitor this bar is on, which the mixer opens over. */
-  screen: string;
-  /** The applications' tray icons. */
-  tray: readonly DomicileTrayItem[];
-  /** The tray order and how to change it by dragging. */
-  trayOrder: TrayOrder;
-  /** How many notifications arrived since the drawer was last opened. */
-  unread: number;
-  /** This screen's workspaces. */
-  workspaces: readonly string[];
-};
-
-/**
- * What the readout items read: Bluetooth, volume, brightness and battery. The
- * lock screen's bar gives only this.
- */
-export type BarReadouts = Pick<Bar, "domicile" | "readouts"> & {
   /** Whether the desktop is locked, so items offer only what it allows. */
   locked: boolean;
+  /** The monitor this bar is on, where its panels open. */
+  screen: string;
 };
 
 export const BarContext = createContext<Bar | undefined>(undefined);
 
-export const BarReadoutsContext = createContext<BarReadouts | undefined>(
-  undefined,
-);
-
-/**
- * The bar this item is on.
- *
- * Throws outside a bar, since an item has nothing to show without one.
- */
-export const useBar = (): Bar => {
-  const bar = useContext(BarContext);
-  if (bar === undefined) {
-    throw new Error("manganese: a bar item was rendered outside the top bar");
-  }
-  return bar;
-};
-
-/**
- * The readouts of the bar this item is on, the desktop's or the lock
- * screen's.
- *
- * Throws outside a bar, as {@link useBar} does.
- */
-export const useBarReadouts = (): BarReadouts => {
-  const bar = useContext(BarReadoutsContext);
-  if (bar === undefined) {
-    throw new Error("manganese: a bar item was rendered outside a bar");
-  } else {
-    return bar;
-  }
-};
+/** The bar this item is on. Throws outside a bar. */
+export const useBar = (): Bar => useProvided(BarContext, "a bar (BarContext)");

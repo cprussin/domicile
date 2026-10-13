@@ -8,10 +8,10 @@ import { SpeakerSimpleXIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimple
 import type { WheelEvent } from "react";
 
 import { css } from "../../styled-system/css";
-import type { SoundControls } from "../readouts/readouts";
 import type { SharedWatch } from "../readouts/shared-watch";
 import { useSharedWatch } from "../readouts/useSharedWatch";
 import { ask } from "./ask";
+import type { SoundControls } from "./desk-sound";
 import { Level } from "./Level";
 import { Mixer } from "./Mixer";
 import { primary } from "./primary";
