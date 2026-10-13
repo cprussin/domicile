@@ -278,5 +278,59 @@ TEST(ShellDocumentTest, LeavesAHashInAFilenameAlone) {
   EXPECT_NE(document.find("a%23b.js"), std::string::npos);
 }
 
+// An app module's files, served from its own root at its own host. See
+// docs/architecture/APP-MODULES.md.
+
+constexpr char kAppHost[] = "app-3f34b27d8967e876d882c16c62df92be";
+
+base::FilePath AppRoot() {
+  return base::FilePath("/opt/notes");
+}
+
+TEST(ShellURLLoaderFactoryTest, ResolvesAnAppsFileUnderItsRoot) {
+  base::FilePath path;
+  ASSERT_TRUE(ShellURLLoaderFactory::ResolveAppPath(
+      AppRoot(), kAppHost,
+      GURL(std::string("domicile://") + kAppHost + "/assets/notes.js"),
+      &path));
+  EXPECT_EQ(path, AppRoot().Append("assets").Append("notes.js"));
+}
+
+TEST(ShellURLLoaderFactoryTest, AnAppServesNothingAtAnotherHost) {
+  base::FilePath path;
+  EXPECT_FALSE(ShellURLLoaderFactory::ResolveAppPath(
+      AppRoot(), kAppHost, GURL("domicile://shell/notes.js"), &path));
+  EXPECT_FALSE(ShellURLLoaderFactory::ResolveAppPath(
+      AppRoot(), kAppHost,
+      GURL("domicile://app-00000000000000000000000000000000/notes.js"),
+      &path));
+}
+
+TEST(AppDocumentTest, NamesTheModuleItsAppIsIn) {
+  // Blink's DomicileApp reads this element and runs the module's `main`.
+  const std::string document = ShellURLLoaderFactory::AppDocument("notes.js");
+  EXPECT_NE(document.find("<meta content=\"./notes.js\" "
+                          "name=\"domicile-app-module\" />"),
+            std::string::npos);
+  EXPECT_EQ(document.find("domicile-shell-module"), std::string::npos);
+  EXPECT_EQ(document.find("<script"), std::string::npos);
+}
+
+TEST(AppDocumentTest, EncodesTheModuleName) {
+  const std::string document =
+      ShellURLLoaderFactory::AppDocument("a\"><script>b.js");
+  EXPECT_EQ(document.find("<script>b.js"), std::string::npos);
+}
+
+TEST(AppDocumentTest, LeavesTheScriptPolicyToTheApp) {
+  // An app may load code from anywhere, as a native program may. See
+  // docs/architecture/APP-MODULES.md.
+  const network::mojom::URLResponseHeadPtr head =
+      ShellURLLoaderFactory::AppDocumentHead();
+  ASSERT_TRUE(head->headers);
+  EXPECT_FALSE(head->headers->HasHeader("Content-Security-Policy"));
+  EXPECT_TRUE(head->headers->HasHeaderValue("Cache-Control", "no-store"));
+}
+
 }  // namespace
 }  // namespace domicile

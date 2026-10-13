@@ -1,0 +1,22 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// The host an app module is handed: system calls and their answers, the
+// shell's system access without its window manager. See
+// docs/architecture/APP-MODULES.md.
+//
+// Not a web standard. It exists in Domicile's engine fork, on an app
+// module's document in its own app window, and nowhere else.
+[
+    Exposed=Window,
+    RuntimeEnabled=DomicileControlChannel,
+    SecureContext
+] interface DomicileAppHost : EventTarget {
+  // A system call, as DomicileHost.callSystem(). The compositor answers only
+  // files, processes and D-Bus, and fails the rest with permission_denied.
+  [CallWith=ScriptState, RaisesException] undefined callSystem(
+      unsigned long id, DOMString request);
+
+  // An answer to callSystem(), as a MessageEvent whose `data` is the line.
+  attribute EventHandler onsystem;
+};

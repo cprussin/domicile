@@ -206,6 +206,7 @@ source_set("shell_scheme") {
   ]
 
   public_deps = [
+    ":app_roots",
     ":common",
     ":desk_lock",
     ":shell_source",
@@ -237,6 +238,26 @@ source_set("shell_source") {
     ":common",
     "//base",
   ]
+}
+
+# The app modules the browser serves, by host. See
+# docs/architecture/APP-MODULES.md.
+#
+# Its own target for :shell_source's reason: the command socket adds to it and
+# the scheme reads it, and neither half needs the other's dependencies.
+source_set("app_roots") {
+  sources = [
+    "browser/app_roots.cc",
+    "browser/app_roots.h",
+  ]
+
+  public_deps = [
+    ":common",
+    "//base",
+  ]
+
+  # The host is a hash of the root.
+  deps = [ "//crypto" ]
 }
 
 # What a running engine can be told about the shell it serves, and the
@@ -485,6 +506,7 @@ source_set("browser_page_throttle") {
   deps = [
     ":browser_pages",
     ":web_view_guest",
+    ":web_view_url",
     "//base",
   ]
 }
@@ -655,6 +677,26 @@ source_set("portal_request") {
   public_deps = [ "//base" ]
 }
 
+# An app module's channel, in the browser process: system calls only. See
+# docs/architecture/APP-MODULES.md. Its own target for :control_channel's
+# reason; it needs //net and none of the shell's sinks.
+source_set("app_channel") {
+  sources = [
+    "browser/app_channel.cc",
+    "browser/app_channel.h",
+  ]
+
+  public_deps = [
+    ":common",
+    ":line_framer",
+    ":system_call",
+    "//base",
+    "//components/domicile/mojom",
+    "//mojo/public/cpp/bindings",
+    "//net",
+  ]
+}
+
 source_set("control_channel") {
   sources = [
     "browser/control_channel.cc",
@@ -683,6 +725,8 @@ source_set("unit_tests") {
   testonly = true
 
   sources = [
+    "browser/app_channel_unittest.cc",
+    "browser/app_roots_unittest.cc",
     "browser/browser_pages_unittest.cc",
     "browser/color_scheme_unittest.cc",
     "browser/command_protocol_unittest.cc",
@@ -734,6 +778,8 @@ source_set("unit_tests") {
   }
 
   deps = [
+    ":app_channel",
+    ":app_roots",
     ":browser",
     ":browser_pages",
     ":color_scheme",

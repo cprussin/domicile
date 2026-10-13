@@ -33,6 +33,9 @@ struct Told {
   bool asked = false;
   base::FilePath root;
   std::string module;
+  bool ran = false;
+  base::FilePath app_root;
+  std::string app_module;
   bool opened = false;
   std::string url;
   bool app = false;
@@ -82,6 +85,13 @@ std::string Answer(std::string_view line,
     told->asked = true;
     told->root = root;
     told->module = module;
+    return has_window;
+  };
+  auto run_app = [told, has_window](const base::FilePath& root,
+                                    const std::string& module) {
+    told->ran = true;
+    told->app_root = root;
+    told->app_module = module;
     return has_window;
   };
   auto open_url = [told, has_window](const GURL& url, bool app) {
@@ -152,6 +162,7 @@ std::string Answer(std::string_view line,
   std::string reply;
   AnswerCommand(line,
                 {.load_shell = load_shell,
+                 .run_app = run_app,
                  .open_url = open_url,
                  .list_site_permissions = list_site_permissions,
                  .set_site_permission = set_site_permission,
@@ -203,6 +214,41 @@ TEST(CommandProtocolTest, LoadsTheShellARequestNames) {
   EXPECT_EQ(told.module, "desktop.js");
   // The reply is one line and includes its newline.
   EXPECT_EQ(reply.find('\n'), reply.size() - 1);
+}
+
+// An app module, opened by `domicile run-app`. See
+// docs/architecture/APP-MODULES.md.
+TEST(CommandProtocolTest, RunsTheAppARequestNames) {
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"run_app","version":1,"root":"/opt/notes","module":"notes.js"})",
+      &told);
+
+  EXPECT_EQ(TypeOf(reply), "opened");
+  EXPECT_TRUE(told.ran);
+  EXPECT_EQ(told.app_root, base::FilePath("/opt/notes"));
+  EXPECT_EQ(told.app_module, "notes.js");
+}
+
+TEST(CommandProtocolTest, RefusesAnAppWithoutAnAbsoluteRootAndAModule) {
+  Told told;
+  EXPECT_EQ(TypeOf(Answer(
+                R"({"type":"run_app","version":1,"root":"notes","module":"notes.js"})",
+                &told)),
+            "refused");
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"run_app","version":1,"root":"/opt/notes"})",
+                          &told)),
+            "refused");
+  EXPECT_FALSE(told.ran);
+}
+
+TEST(CommandProtocolTest, RefusesAnAppWithNoShellToDrawIt) {
+  Told told;
+  EXPECT_EQ(
+      TypeOf(Answer(
+          R"({"type":"run_app","version":1,"root":"/opt/notes","module":"notes.js"})",
+          &told, /*has_window=*/false)),
+      "refused");
 }
 
 TEST(CommandProtocolTest, RefusesALineThatIsNotARequest) {
