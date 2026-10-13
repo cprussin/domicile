@@ -41,7 +41,6 @@ item when it ships.
 
 6. **Settings app.** [SETTINGS.md](docs/SETTINGS.md).
    - Shell options ([SHELL-OPTIONS.md](docs/architecture/SHELL-OPTIONS.md)).
-   - A persistent theme choice, which needs a store for desktop state.
    - A list of sites with stored data. History clears cookies by time range
      or by site ([HISTORY.md](docs/HISTORY.md)).
    - A guard that runs the app's native messaging host in the engine.
@@ -127,12 +126,6 @@ Understood and not scheduled.
 ### Clipboard
 
 - **A nested desktop's browser uses the host's clipboard.**
-- **Clipboard history skips the primary selection.**
-
-### Theme
-
-- **A theme picked from the toggle lasts only until restart.** Needs the
-  desktop-state store (the Settings app item).
 
 ### Session and portals
 
