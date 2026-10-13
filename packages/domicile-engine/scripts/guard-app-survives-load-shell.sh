@@ -339,7 +339,7 @@ second shell-loaded)"
 "switch 1 2 1 1 0 "* | "still 1 2 1 1 0 "*)
   FAILURE="the compositor never searched for the new color or gave up, so \
 'not found' means 'not looked for'. Its budget is FIND_FOR in \
-domicile-compositor's main.rs"
+domicile-compositor's spike_probes.rs"
   ;;
 "switch 1 2 1 1 1 0 "*)
   FAILURE="THE APP FROZE: no frame the client drew after the reload reached \
