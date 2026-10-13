@@ -167,10 +167,10 @@ describe("Lock", () => {
   });
 
   describe("the bar", () => {
-    it("is drawn across each screen", () => {
+    it("is drawn across each screen, for that screen", () => {
       render(
         <Lock
-          bar={<p>Bar</p>}
+          bar={(name) => <p>{`Bar on ${name}`}</p>}
           checking={false}
           locked
           onUnlock={() => undefined}
@@ -182,18 +182,22 @@ describe("Lock", () => {
 
       expect(
         screen
-          .getAllByText("Bar")
-          .map((bar) =>
+          .getAllByText(/^Bar on/)
+          .map((bar) => [
+            bar.textContent,
             bar.closest("[data-screen]")?.getAttribute("data-screen"),
-          ),
-      ).toEqual(["left", "right"]);
+          ]),
+      ).toEqual([
+        ["Bar on left", "left"],
+        ["Bar on right", "right"],
+      ]);
     });
 
     it("is not drawn while the desk is open", () => {
       // The desktop's own bar has the same controls.
       render(
         <Lock
-          bar={<p>Bar</p>}
+          bar={() => <p>Bar</p>}
           checking={false}
           locked={false}
           onUnlock={() => undefined}
@@ -210,11 +214,11 @@ describe("Lock", () => {
       // The page's body is under the sheet.
       const { container } = render(
         <Lock
-          bar={
+          bar={() => (
             <Popover trigger={<button type="button">Brightness</button>}>
               Level
             </Popover>
-          }
+          )}
           checking={false}
           locked
           onUnlock={() => undefined}
@@ -256,7 +260,7 @@ describe("Lock", () => {
       // A slider takes focus on a click, and the next key typed would move it.
       render(
         <Lock
-          bar={<Slider label="Brightness" max={100} min={0} value={50} />}
+          bar={() => <Slider label="Brightness" max={100} min={0} value={50} />}
           checking={false}
           locked
           onUnlock={() => undefined}
@@ -276,11 +280,11 @@ describe("Lock", () => {
       // Taking it back to the field would close the panel.
       render(
         <Lock
-          bar={
+          bar={() => (
             <Popover trigger={<button type="button">Brightness</button>}>
               <Slider label="Level" max={100} min={0} value={50} />
             </Popover>
-          }
+          )}
           checking={false}
           locked
           onUnlock={() => undefined}

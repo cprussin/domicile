@@ -31,11 +31,12 @@ import { answerSystemCalls, THINKPAD_BACKLIGHT } from "./brightness/fixture";
 import { DEFAULT_KEYBINDINGS, DEFAULT_MODES } from "./keyboard/commands";
 import type { ApplicationsConfig } from "./launcher/applications-config";
 import { answerOpening } from "./launcher/fixture";
+import { useNotificationsDrawer } from "./notifications/notifications-context";
 import { Shell } from "./Shell";
 import { hostDisplays } from "./screens/host-displays";
-import { useBar, useBarReadouts } from "./top-bar/bar-context";
+import { useBar } from "./top-bar/bar-context";
 import { BarClock, BarLauncher, BarWorkspaces } from "./top-bar/bar-items";
-import type { TopBarLayout } from "./top-bar/layout";
+import type { BarLayout } from "./top-bar/layout";
 import { grabCursorStyles } from "./window-management/grab-cursor-styles";
 import { SURFACE_TUCK, TITLE_BAR } from "./window-management/rect";
 import { GrabCursor } from "./window-management/useGrabCursor";
@@ -215,7 +216,7 @@ let domicile: Desk;
  */
 const renderingShell = (
   desktop: readonly DomicileDisplay[] | undefined,
-  topBar?: TopBarLayout,
+  bar?: BarLayout,
   keybindings: ShellKeybindings = MANGANESE_KEYS,
 ) => {
   domicile = new Desk();
@@ -228,11 +229,11 @@ const renderingShell = (
   const rendered = render(
     <Shell
       applications={NO_APPLICATIONS}
+      bar={bar}
       displays={hostDisplays(client)}
       domicile={client}
       keybindings={keybindings}
       theme={standaloneThemeSource()}
-      topBar={topBar}
     />,
   );
   return rendered;
@@ -812,8 +813,8 @@ describe("Shell", () => {
     it("lays out the items it is given, in the columns it is given them in", () => {
       // A custom item beside some of manganese's, the rest left out.
       const { container } = renderingShell([LEFT], {
+        center: [<span key="mail">mail 3/12</span>],
         left: [<BarLauncher key="launcher" />, <BarWorkspaces key="spaces" />],
-        middle: [<span key="mail">mail 3/12</span>],
         right: [<BarClock key="clock" />],
       });
 
@@ -839,19 +840,18 @@ describe("Shell", () => {
     });
 
     it("redraws only the items that read what changed", async () => {
-      const drawn = { bar: 0, readouts: 0 };
+      const drawn = { bar: 0, unread: 0 };
+      const ReadsUnread = () => {
+        drawn.unread += 1;
+        return <span>{useNotificationsDrawer().unread}</span>;
+      };
       const ReadsBar = () => {
         drawn.bar += 1;
-        return <span>{useBar().current}</span>;
-      };
-      const ReadsReadouts = () => {
-        drawn.readouts += 1;
-        useBarReadouts();
-        return undefined;
+        return <span>{useBar().screen}</span>;
       };
       renderingShell([LEFT], {
-        left: [<ReadsBar key="bar" />, <ReadsReadouts key="readouts" />],
-        middle: [],
+        center: [],
+        left: [<ReadsUnread key="unread" />, <ReadsBar key="bar" />],
         right: [],
       });
       clientAppears("term");
@@ -862,11 +862,11 @@ describe("Shell", () => {
       expect(drawn).toEqual(before);
 
       domicile.set({ notifications: [arrived(7, "New message")] });
-      // The bar's unread count changes; the readouts do not.
+      // The unread count changes; the bar's screen does not.
       await waitFor(() => {
-        expect(drawn.bar).toBeGreaterThan(before.bar);
+        expect(drawn.unread).toBeGreaterThan(before.unread);
       });
-      expect(drawn.readouts).toBe(before.readouts);
+      expect(drawn.bar).toBe(before.bar);
     });
 
     it("draws its text white, with a shadow to keep it off the wallpaper", () => {

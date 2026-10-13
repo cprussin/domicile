@@ -1,83 +1,42 @@
 import { describe, expect, it } from "bun:test";
-import type { Result } from "@cprussin/option-result";
-import { Ok } from "@cprussin/option-result";
-import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
-import type { SystemError } from "@domicile-desktop/sdk/system";
-import type { Bluetooth } from "@domicile-desktop/system-bluetooth/bluetooth";
 import { render, screen } from "@testing-library/react";
+import { isValidElement } from "react";
 
-import { heldBattery } from "../battery/held-battery";
-import { heldBacklight } from "../brightness/held-backlight";
-import { sharedWatch } from "../readouts/shared-watch";
-import { heldSound, laptop } from "../volume/fixture";
+import { useBar } from "../top-bar/bar-context";
+import {
+  BarBattery,
+  BarBluetooth,
+  BarBrightness,
+  BarVolume,
+} from "../top-bar/bar-items";
+import { LOCK_BAR } from "../top-bar/layout";
 import { LockBar } from "./LockBar";
 
-/**
- * The bar on a desk with every readout, reporting Bluetooth on. The network
- * throws if the bar watches it.
- */
-const shown = () => {
-  const battery = heldBattery();
-  const backlight = heldBacklight();
-  const sound = heldSound();
-  render(
-    <LockBar
-      domicile={new FakeDomicileHost().host}
-      readouts={{
-        audio: sound.audio,
-        backlight: backlight.backlight,
-        battery: battery.battery,
-        bluetooth: sharedWatch(
-          (
-            onBluetooth: (bluetooth: Result<Bluetooth, SystemError>) => void,
-          ) => {
-            onBluetooth(
-              Ok({
-                adapters: [
-                  {
-                    discovering: false,
-                    path: "/org/bluez/hci0",
-                    powered: true,
-                  },
-                ],
-                devices: [],
-              }),
-            );
-            return () => undefined;
-          },
-        ),
-        network: sharedWatch(() => {
-          throw new Error("test: the lock screen's bar has no network");
-        }),
-        sound: sound.server,
-        wifi: sharedWatch(() => {
-          throw new Error("test: the lock screen's bar has no Wi-Fi");
-        }),
-      }}
-    />,
-  );
-  return { backlight, battery, sound };
+/** Says what the bar it is on tells its items. */
+const ReadsBar = () => {
+  const { locked, screen } = useBar();
+  return <span>{`${screen} ${locked ? "locked" : "open"}`}</span>;
 };
 
 describe("LockBar", () => {
-  it("shows brightness, volume, Bluetooth and battery, as the desktop's bar does", () => {
-    const { backlight, battery, sound } = shown();
+  it("tells its items the desktop is locked, and which screen they are on", () => {
+    render(
+      <LockBar
+        layout={{ center: [], left: [<ReadsBar key="reads" />], right: [] }}
+        screen="left"
+      />,
+    );
 
-    battery.report({ charge: 0.8, charging: false });
-    backlight.report(0.42);
-    sound.report(laptop);
-
-    expect(
-      [...screen.getByRole("banner").querySelectorAll("[aria-label]")].map(
-        (item) => item.getAttribute("aria-label"),
-      ),
-    ).toEqual(["Brightness 42%", "Volume 50%", "Bluetooth on", "Battery"]);
+    expect(screen.getByText("left locked")).toBeInTheDocument();
   });
+});
 
-  it("shows Bluetooth without turning it on or off", () => {
-    // A locked desk refuses it.
-    shown();
-
-    expect(screen.getByRole("img", { name: "Bluetooth on" })).toBeVisible();
+describe("LOCK_BAR", () => {
+  it("is brightness, volume, Bluetooth and battery, as the desktop's bar has them", () => {
+    expect(
+      [...LOCK_BAR.left, ...LOCK_BAR.center, ...LOCK_BAR.right].map((item) =>
+        isValidElement(item) ? item.type : item,
+      ),
+    ).toEqual([BarBrightness, BarVolume, BarBluetooth, BarBattery]);
   });
 });

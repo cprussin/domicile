@@ -9,7 +9,7 @@ import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 import type { ApplicationsOptions } from "./launcher/applications-config";
 import { applicationsConfigSchema } from "./launcher/applications-config";
 import { mountManganese } from "./mount-manganese";
-import type { TopBarLayout } from "./top-bar/layout";
+import type { BarLayout } from "./top-bar/layout";
 import type { FloatingOptions } from "./window-management/floating/floating-rules";
 import { floatingRulesSchema } from "./window-management/floating/floating-rules";
 
@@ -42,17 +42,17 @@ export {
   BarBluetooth as Bluetooth,
   BarBrightness as Brightness,
   BarClock as Clock,
-  BarLauncher as Launcher,
+  BarLauncher as LauncherButton,
   BarMode as Mode,
   BarNetwork as Network,
   BarNotifications as Notifications,
   BarSharing as Sharing,
-  BarThemeSelector as ThemeSelector,
+  BarThemeSelector as ThemeSwitch,
   BarTray as Tray,
   BarVolume as Volume,
   BarWorkspaces as WorkspaceSwitcher,
 } from "./top-bar/bar-items";
-export { DEFAULT_TOP_BAR, type TopBarLayout } from "./top-bar/layout";
+export { type BarLayout, DEFAULT_BAR } from "./top-bar/layout";
 
 /** Options for `runManganese`. */
 export type ManganeseOptions = {
@@ -61,6 +61,11 @@ export type ManganeseOptions = {
    * and `bookmarks`, pages to open by name. See `docs/LAUNCHER.md`.
    */
   readonly applications?: ApplicationsOptions;
+  /**
+   * Each monitor's bar: `left`, `center` and `right` columns of items, such as
+   * `[<Clock />]`. Defaults to `DEFAULT_BAR`. See `docs/TOP-BAR.md`.
+   */
+  readonly bar?: BarLayout;
   /**
    * Client windows that open floating at the size they drew, as sway's
    * `for_window [app_id=…] floating enable`. Each rule matches regular
@@ -73,8 +78,6 @@ export type ManganeseOptions = {
    * `DEFAULT_KEYBINDINGS` and `DEFAULT_MODES` (sway's, on Meta).
    */
   readonly keybindings?: ShellKeybindings;
-  /** Layout of every monitor's bar. Defaults to manganese's own. */
-  readonly topBar?: TopBarLayout;
 };
 
 /** Build a `Shell` that mounts manganese with `options`. */

@@ -1,5 +1,5 @@
-// The items of manganese's bar. Each reads its bar from context, so a layout
-// only names them.
+// The items of manganese's bar. Each reads what it shows from context, so a
+// layout only names them.
 
 import { ThemeSwitch } from "@domicile-desktop/component-library/ThemeSwitch";
 import { system } from "@domicile-desktop/sdk/system";
@@ -7,22 +7,33 @@ import { useMemo } from "react";
 
 import { css } from "../../styled-system/css";
 import { Battery } from "../battery/Battery";
+import { deskBattery } from "../battery/desk-battery";
 import { Bluetooth } from "../bluetooth/Bluetooth";
+import { deskBluetooth } from "../bluetooth/desk-bluetooth";
 import { Brightness } from "../brightness/Brightness";
+import { deskBacklight } from "../brightness/desk-backlight";
 import { Clock } from "../clock/Clock";
+import { useDomicile } from "../host/domicile-context";
 import { LauncherButton } from "../launcher/LauncherButton";
+import { useLauncher } from "../launcher/launcher-context";
+import { deskNetwork } from "../network/desk-network";
 import { Network } from "../network/Network";
 import { NotificationBell } from "../notifications/NotificationBell";
+import { useNotificationsDrawer } from "../notifications/notifications-context";
 import { Sharing } from "../sharing/Sharing";
 import { Tray } from "../tray/Tray";
+import { useTrayState } from "../tray/tray-context";
+import { deskSound } from "../volume/desk-sound";
 import { Volume } from "../volume/Volume";
-import { useBar, useBarReadouts } from "./bar-context";
+import { workspacesOn } from "../window-management/window-state";
+import { useWorkspaces } from "../window-management/workspaces-context";
+import { useBar } from "./bar-context";
 import { Workspaces } from "./Workspaces";
 
 /** The launcher button: opens the panel `mod+Space` opens. */
 export const BarLauncher = () => {
-  const { onOpenLauncher } = useBar();
-  return <LauncherButton onOpen={onOpenLauncher} />;
+  const { toggle } = useLauncher();
+  return <LauncherButton onOpen={toggle} />;
 };
 
 /**
@@ -30,35 +41,37 @@ export const BarLauncher = () => {
  * in the user's order.
  */
 export const BarTray = () => {
-  const {
-    domicile,
-    extensions,
-    onOpenExtension,
-    openedExtension,
-    tray,
-    trayOrder,
-  } = useBar();
+  const domicile = useDomicile();
+  const { screen } = useBar();
+  const { extensions, items, open, opened, order } = useTrayState();
   return (
     <Tray
       domicile={domicile}
       extensions={extensions}
-      items={tray}
-      onMove={trayOrder.move}
-      onOpen={onOpenExtension}
-      opened={openedExtension}
-      order={trayOrder.order}
+      items={items}
+      onMove={order.move}
+      onOpen={(extension) => {
+        open(screen, extension);
+      }}
+      opened={opened?.screen === screen ? opened.extension : undefined}
+      order={order.order}
     />
   );
 };
 
 /** This screen's workspaces, with the visible one marked. */
 export const BarWorkspaces = () => {
-  const { current, focused, onSelectWorkspace, workspaces } = useBar();
+  const { screen } = useBar();
+  const { current, focused, homes, select } = useWorkspaces();
+  const workspaces = useMemo(
+    () => workspacesOn({ homes }, screen),
+    [homes, screen],
+  );
   return (
     <Workspaces
-      current={current}
-      focused={focused}
-      onSelect={onSelectWorkspace}
+      current={shownOn(current, screen)}
+      focused={focused === screen}
+      onSelect={select}
       workspaces={workspaces}
     />
   );
@@ -69,7 +82,7 @@ export const BarClock = () => <Clock />;
 
 /** The current binding mode, shown only when it is not `default`. */
 export const BarMode = () => {
-  const { mode } = useBar();
+  const { mode } = useWorkspaces();
   return mode === "default" ? undefined : (
     <span className={modeStyles}>{mode}</span>
   );
@@ -83,14 +96,9 @@ export const BarThemeSelector = () => <ThemeSwitch />;
 
 /** The primary network connection, whose panel controls Wi-Fi. */
 export const BarNetwork = () => {
-  const { domicile, readouts } = useBar();
-  return (
-    <Network
-      domicile={domicile}
-      network={readouts.network}
-      wifi={readouts.wifi}
-    />
-  );
+  const domicile = useDomicile();
+  const { network, wifi } = deskNetwork(domicile);
+  return <Network domicile={domicile} network={network} wifi={wifi} />;
 };
 
 /**
@@ -98,10 +106,11 @@ export const BarNetwork = () => {
  * locked.
  */
 export const BarBluetooth = () => {
-  const { domicile, locked, readouts } = useBarReadouts();
+  const domicile = useDomicile();
+  const { locked } = useBar();
   return (
     <Bluetooth
-      bluetooth={readouts.bluetooth}
+      bluetooth={deskBluetooth(domicile)}
       domicile={domicile}
       locked={locked}
     />
@@ -113,38 +122,43 @@ export const BarBluetooth = () => {
  * locked.
  */
 export const BarVolume = () => {
-  const { locked, readouts } = useBarReadouts();
-  return (
-    <Volume audio={readouts.audio} locked={locked} server={readouts.sound} />
-  );
+  const { audio, sound } = deskSound(useDomicile());
+  const { locked } = useBar();
+  return <Volume audio={audio} locked={locked} server={sound} />;
 };
 
 /** The screen brightness. */
-export const BarBrightness = () => {
-  const { readouts } = useBarReadouts();
-  return <Brightness backlight={readouts.backlight} />;
-};
+export const BarBrightness = () => (
+  <Brightness backlight={deskBacklight(useDomicile())} />
+);
 
 /** The battery charge. */
-export const BarBattery = () => {
-  const { readouts } = useBarReadouts();
-  return <Battery battery={readouts.battery} />;
-};
+export const BarBattery = () => (
+  <Battery battery={deskBattery(useDomicile())} />
+);
 
 /**
  * Shown while an application records the desktop: who records what, and a
  * button to stop each.
  */
 export const BarSharing = () => {
-  const { domicile } = useBar();
+  const domicile = useDomicile();
   const files = useMemo(() => system(domicile), [domicile]);
   return <Sharing host={domicile} system={files} />;
 };
 
 /** The bell, which opens the notification drawer. */
 export const BarNotifications = () => {
-  const { onOpenNotifications, unread } = useBar();
-  return <NotificationBell onOpen={onOpenNotifications} unread={unread} />;
+  const { screen } = useBar();
+  const { open, unread } = useNotificationsDrawer();
+  return (
+    <NotificationBell
+      onOpen={() => {
+        open(screen);
+      }}
+      unread={unread}
+    />
+  );
 };
 
 // Uses capitals rather than a color, since the bar's text is always white.
@@ -152,3 +166,16 @@ const modeStyles = css({
   fontSize: "0.625rem",
   textTransform: "uppercase",
 });
+
+/** The workspace `screen` shows. Throws for a screen with none. */
+const shownOn = (
+  current: Readonly<Record<string, string>>,
+  screen: string,
+): string => {
+  const workspace = current[screen];
+  if (workspace === undefined) {
+    throw new Error(`manganese: screen ${screen} shows no workspace`);
+  } else {
+    return workspace;
+  }
+};

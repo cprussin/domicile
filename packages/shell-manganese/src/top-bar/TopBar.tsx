@@ -1,10 +1,8 @@
-import { Children, memo, useMemo } from "react";
+import { Children, memo } from "react";
 
 import { css } from "../../styled-system/css";
 import { grid, hstack } from "../../styled-system/patterns";
-import type { Bar } from "./bar-context";
-import { BarContext, BarReadoutsContext } from "./bar-context";
-import type { TopBarLayout } from "./layout";
+import type { BarLayout } from "./layout";
 
 /**
  * The bar's height.
@@ -15,15 +13,10 @@ import type { TopBarLayout } from "./layout";
  */
 export const TOP_BAR = 32;
 
-type Props = Bar & {
-  /** The items in each of the bar's three columns. */
-  layout: TopBarLayout;
-};
-
 /**
- * The bar across the top of a screen: three columns of items, each reading the
- * bar through {@link BarContext}. Defaults to manganese's layout; see
- * `layout.tsx`.
+ * The bar across the top of a screen: three columns of items. Items read what
+ * they show from context, and the bar they are on from `BarContext`,
+ * which the caller provides.
  *
  * Windows are laid out below it, so only the wallpaper is behind it unless the
  * user drags a float up or fills the screen.
@@ -31,37 +24,15 @@ type Props = Bar & {
  * It paints a dark gradient behind the text that extends below the bar, so it
  * fades into the wallpaper instead of ending at a line.
  *
- * The middle column is centered on the screen regardless of the outer columns,
+ * The center column is centered on the screen regardless of the outer columns,
  * so the clock does not shift as items change.
  *
- * Memoized, as are its columns, so an item redraws only when the context it
- * reads changes.
+ * Memoized, so an item redraws only when the context it reads changes.
  */
-export const TopBar = memo(({ layout, ...bar }: Props) => {
-  const { domicile, readouts } = bar;
-  const barReadouts = useMemo(
-    () => ({ domicile, locked: false, readouts }),
-    [domicile, readouts],
-  );
-  return (
-    // A fresh object only when a prop changed, which every `useBar` item
-    // reads.
-    <BarContext value={bar}>
-      <BarReadoutsContext value={barReadouts}>
-        <BarColumns layout={layout} />
-      </BarReadoutsContext>
-    </BarContext>
-  );
-});
-
-/**
- * The bar's columns and look, with no context of its own: the caller provides
- * what its items read, as `LockBar` does with only the readouts.
- */
-export const BarColumns = memo(({ layout }: { layout: TopBarLayout }) => (
+export const TopBar = memo(({ layout }: { layout: BarLayout }) => (
   <header className={barStyles} style={{ blockSize: `${TOP_BAR}px` }}>
     <div className={startStyles}>{Children.toArray(layout.left)}</div>
-    <div className={middleStyles}>{Children.toArray(layout.middle)}</div>
+    <div className={centerStyles}>{Children.toArray(layout.center)}</div>
     <div className={endStyles}>{Children.toArray(layout.right)}</div>
   </header>
 ));
@@ -98,7 +69,7 @@ const barStyles = grid({
   // theme toggle depends on it: it draws in `currentcolor`, so without this it
   // would turn black on a light desktop.
   color: "white",
-  // Equal outer columns keep the middle one centered on the screen.
+  // Equal outer columns keep the center one centered on the screen.
   gridTemplateColumns: "1fr auto 1fr",
   insetBlockStart: 0,
   insetInline: 0,
@@ -112,6 +83,6 @@ const barStyles = grid({
 
 const startStyles = hstack({ gap: 4 });
 
-const middleStyles = css({ justifySelf: "center" });
+const centerStyles = css({ justifySelf: "center" });
 
 const endStyles = hstack({ gap: 3, justify: "flex-end" });

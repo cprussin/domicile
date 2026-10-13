@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-
-import type { SharedBacklight } from "../readouts/readouts";
 import { useSharedWatch } from "../readouts/useSharedWatch";
+import type { SharedBacklight } from "./desk-backlight";
 
 /** The backlight as a control draws it. */
 export type BrightnessControl = {

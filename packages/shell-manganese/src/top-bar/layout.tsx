@@ -19,12 +19,12 @@ import {
 } from "./bar-items";
 
 /**
- * The bar's three columns. `middle` is centered on the screen regardless of the
+ * The bar's three columns. `center` is centered on the screen regardless of the
  * other two, so a clock there does not shift as items change.
  */
-export type TopBarLayout = {
+export type BarLayout = {
   readonly left: readonly ReactNode[];
-  readonly middle: readonly ReactNode[];
+  readonly center: readonly ReactNode[];
   readonly right: readonly ReactNode[];
 };
 
@@ -35,13 +35,13 @@ export type TopBarLayout = {
  * the right column, so it is seen. The bell is last because the drawer it
  * opens slides out from that edge.
  */
-export const DEFAULT_TOP_BAR: TopBarLayout = {
+export const DEFAULT_BAR: BarLayout = {
+  center: [<BarClock key="clock" />],
   left: [
     <BarLauncher key="launcher" />,
     <BarTray key="tray" />,
     <BarWorkspaces key="workspaces" />,
   ],
-  middle: [<BarClock key="clock" />],
   right: [
     <BarSharing key="sharing" />,
     <BarMode key="mode" />,
@@ -59,9 +59,9 @@ export const DEFAULT_TOP_BAR: TopBarLayout = {
  * The lock screen's bar: the readouts a locked desktop allows, in the default
  * bar's order.
  */
-export const LOCK_TOP_BAR: TopBarLayout = {
+export const LOCK_BAR: BarLayout = {
+  center: [],
   left: [],
-  middle: [],
   right: [
     <BarBrightness key="brightness" />,
     <BarVolume key="volume" />,

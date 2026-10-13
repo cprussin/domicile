@@ -26,16 +26,16 @@ The engine serves this page over `domicile://` and hands `Shell` the desktop.
 | `screens/` | The screen source, the per-screen bar (`Monitor.tsx`), and screen adjacency. |
 | `keyboard/` | Commands, default bindings, `bindKeys` wiring, held modifiers. |
 | `address/` | Parsing typed text as a URL or search, shared by the launcher and address bar. |
-| `top-bar/` | Bar columns, default layout, and bar items. |
+| `top-bar/` | Bar columns, the bar's context, default layouts, and bar items. |
 | `launcher/`, `clipboard/`, `notifications/`, `tray/`, `extensions/` | Those features. |
-| `readouts/` | The desk's system readouts, one watch each, shared by every bar and the lock screen. |
-| `battery/`, `brightness/`, `volume/`, `clock/` | Bar readouts and where each reads from. |
+| `readouts/` | `sharedWatch`: one watch read by many components. |
+| `battery/`, `brightness/`, `volume/`, `clock/` | Bar readouts and where each reads from, each watched once per desktop (`desk-*.ts`). |
 | `network/`, `bluetooth/` | Bar items on `@domicile-desktop/system-network` and `system-bluetooth`, and their panels. |
 | `requests/` | Requests a panel sends to a system service, with each one's progress and refusal. |
 | `lock/` | Lock screen, with a bar of Bluetooth, volume, brightness and battery. |
 | `theme/` | Theme from the host or the last session. |
 | `wallpaper/` | Wallpaper and its photo list. |
-| `host/` | Helpers for the desktop: watching an attribute, and spotting a superseded search. |
+| `host/` | Helpers for the desktop: its context, one value per desktop (`perHost`), required contexts, watching an attribute, and spotting a superseded search. |
 
 ## Custom elements
 

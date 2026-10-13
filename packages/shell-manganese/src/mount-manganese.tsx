@@ -18,15 +18,15 @@ import { Shell as Chrome } from "./Shell";
 import { hostDisplays } from "./screens/host-displays";
 import { hostTheme } from "./theme/host-theme";
 import { rememberedTheme } from "./theme/remembered-theme";
-import type { TopBarLayout } from "./top-bar/layout";
+import type { BarLayout } from "./top-bar/layout";
 import type { FloatingRules } from "./window-management/floating/floating-rules";
 
 /** What `mountManganese` draws, from `runManganese`'s parsed options. */
 type MountOptions = {
   readonly applications: ApplicationsConfig;
+  readonly bar?: BarLayout | undefined;
   readonly floating: FloatingRules;
   readonly keybindings?: ShellKeybindings | undefined;
-  readonly topBar?: TopBarLayout | undefined;
 };
 
 /** Mount manganese into `root`. Returns the React root it rendered. */
@@ -55,12 +55,12 @@ export const mountManganese = (
   reactRoot.render(
     <Chrome
       applications={options.applications}
+      bar={options.bar}
       displays={displays}
       domicile={domicile}
       floating={options.floating}
       keybindings={options.keybindings}
       theme={theme}
-      topBar={options.topBar}
     />,
   );
   return reactRoot;

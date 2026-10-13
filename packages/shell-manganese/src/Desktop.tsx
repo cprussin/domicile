@@ -9,6 +9,7 @@ import { previewFile } from "@domicile-desktop/sdk/file-preview";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { ownedChords } from "@domicile-desktop/sdk/own-keybindings";
 import { system } from "@domicile-desktop/sdk/system";
+import type { ReactNode } from "react";
 import { useCallback, useMemo, useState } from "react";
 
 import { Clipboard } from "./clipboard/Clipboard";
@@ -16,6 +17,7 @@ import { useClipboard } from "./clipboard/useClipboard";
 import { popupShown } from "./extensions/shown";
 import { useExtensions } from "./extensions/useExtensions";
 import { sharedIconTheme } from "./followed-icon-theme";
+import { DomicileContext } from "./host/domicile-context";
 import { useKeybindings } from "./keyboard/useKeybindings";
 import { useModifiers } from "./keyboard/useModifiers";
 import { appSearch } from "./launcher/app-search";
@@ -23,6 +25,8 @@ import type { ApplicationsConfig } from "./launcher/applications-config";
 import { Launcher } from "./launcher/Launcher";
 import type { Launch } from "./launcher/launch";
 import { LaunchKind } from "./launcher/launch";
+import type { LauncherControl } from "./launcher/launcher-context";
+import { LauncherContext } from "./launcher/launcher-context";
 import { OpenWith } from "./launcher/OpenWith";
 import { useOpeningApps } from "./launcher/useOpeningApps";
 import { Lock } from "./lock/Lock";
@@ -30,17 +34,22 @@ import { LockBar } from "./lock/LockBar";
 import { useLocked } from "./lock/useLocked";
 import { NotificationDrawer } from "./notifications/NotificationDrawer";
 import { NotificationToasts } from "./notifications/NotificationToasts";
+import type { NotificationsDrawer } from "./notifications/notifications-context";
+import { NotificationsContext } from "./notifications/notifications-context";
 import { useNotifications } from "./notifications/useNotifications";
 import { useNow } from "./notifications/useNow";
-import { readouts as deskReadouts } from "./readouts/readouts";
 import { Monitor } from "./screens/Monitor";
 import { NoScreens } from "./screens/NoScreens";
 import { shownWindowsOf } from "./screens/shown-windows";
 import type { StageScreen } from "./screens/stage-screens";
 import { useScreenFollowsPointer } from "./screens/useScreenFollowsPointer";
+import { useShared } from "./screens/useShared";
 import { useStageScreens } from "./screens/useStageScreens";
-import type { TopBarLayout } from "./top-bar/layout";
+import type { BarLayout } from "./top-bar/layout";
+import { LOCK_BAR } from "./top-bar/layout";
 import { showsSharing } from "./top-bar/shows-sharing";
+import type { TrayState } from "./tray/tray-context";
+import { TrayContext } from "./tray/tray-context";
 import { trayEntries } from "./tray/tray-entry";
 import { useTray } from "./tray/useTray";
 import { useTrayOrder } from "./tray/useTrayOrder";
@@ -64,17 +73,19 @@ import {
   screenOfApp,
   WindowAction,
 } from "./window-management/window-state";
+import type { Workspaces } from "./window-management/workspaces-context";
+import { WorkspacesContext } from "./window-management/workspaces-context";
 
 type Props = {
   /** What the launcher offers beside files. */
   applications: ApplicationsConfig;
+  /** The layout of every monitor's bar. */
+  bar: BarLayout;
   domicile: DomicileHost;
   /** Which client windows open floating, besides dialogs. */
   floating: FloatingRules;
   /** The keys this desktop binds, merged under the config's. */
   keybindings: ShellKeybindings;
-  /** The layout of every monitor's bar. */
-  topBar: TopBarLayout;
 };
 
 /**
@@ -87,10 +98,10 @@ type Props = {
  */
 export const Desktop = ({
   applications,
+  bar,
   domicile,
   floating,
   keybindings,
-  topBar,
 }: Props) => {
   const displays = useDisplays();
   // The wallpaper advances only this theme's rotation, and holds it while
@@ -150,10 +161,6 @@ export const Desktop = ({
 
   // Subscribed once for the desk, not per bar: there is a bar per monitor.
   const extensions = useExtensions(domicile);
-
-  // The battery, backlight, sound, network and Bluetooth. Each library's
-  // watch runs once for every bar and the lock screen.
-  const readouts = useMemo(() => deskReadouts(domicile), [domicile]);
 
   // Tray icons, subscribed once for the desk.
   const tray = useTray(domicile);
@@ -301,9 +308,48 @@ export const Desktop = ({
   // Frames with their bars; the page's own boxes leave those out and still
   // count a hidden tab.
   const shownWindows = useCallback(() => shownWindowsOf(screens), [screens]);
-  const lockBar = useMemo(
-    () => <LockBar domicile={domicile} readouts={readouts} />,
-    [domicile, readouts],
+  // What the bars' items read. Each is its own context, so an item redraws
+  // only when what it reads changes.
+  const launcherControl = useMemo(
+    () => ({
+      toggle: () => {
+        act(WindowAction.LauncherToggled());
+      },
+    }),
+    [act],
+  );
+  const drawer = useMemo(
+    () => ({ open: openNotifications, unread: notifications.unread }),
+    [notifications.unread, openNotifications],
+  );
+  const trayState = useMemo(
+    () => ({
+      extensions,
+      items: tray,
+      open: openExtension,
+      opened,
+      order: trayOrder,
+    }),
+    [extensions, opened, openExtension, tray, trayOrder],
+  );
+  // Kept while each screen shows the same workspace, though `screens` changes
+  // with every window.
+  const current = useShared(
+    Object.fromEntries(
+      screens.map((shown) => [shown.geometry.name, shown.current]),
+    ),
+  );
+  const shownWorkspaces = useMemo(
+    () => ({
+      current,
+      focused: windows.focused,
+      homes: windows.homes,
+      mode: windows.mode,
+      select: (workspace: string) => {
+        act(WindowAction.WorkspaceSelected(workspace));
+      },
+    }),
+    [act, current, windows.focused, windows.homes, windows.mode],
   );
 
   // A global shortcuts review flags these.
@@ -324,7 +370,13 @@ export const Desktop = ({
   useScreenFollowsPointer({ act, displays, focused: windows.focused });
 
   return (
-    <>
+    <BarProviders
+      domicile={domicile}
+      drawer={drawer}
+      launcher={launcherControl}
+      tray={trayState}
+      workspaces={shownWorkspaces}
+    >
       {/*
         First, so it paints under everything. It does not wait for the
         desktop to connect.
@@ -335,26 +387,8 @@ export const Desktop = ({
         render after the host reports it, once the reducer gives it a
         workspace.
       */}
-      {screens.map(({ current, geometry: { name } }) => (
-        <Monitor
-          act={act}
-          current={current}
-          domicile={domicile}
-          extensions={extensions}
-          focused={windows.focused === name}
-          homes={windows.homes}
-          key={name}
-          mode={windows.mode}
-          name={name}
-          onOpenExtension={openExtension}
-          onOpenNotifications={openNotifications}
-          opened={opened?.screen === name ? opened.extension : undefined}
-          readouts={readouts}
-          topBar={topBar}
-          tray={tray}
-          trayOrder={trayOrder}
-          unread={notifications.unread}
-        />
+      {screens.map(({ geometry: { name } }) => (
+        <Monitor bar={bar} key={name} name={name} />
       ))}
       {/*
         Every window, once for the desk and after every bar, so a window wins a
@@ -450,7 +484,7 @@ export const Desktop = ({
       */}
       <PortalDialogs
         host={domicile}
-        omitScreenCasts={showsSharing(topBar)}
+        omitScreenCasts={showsSharing(bar)}
         screen={windows.focused}
         screenOf={screenOf}
         shellChords={shellChords}
@@ -474,9 +508,41 @@ export const Desktop = ({
         screen={windows.focused}
       />
       <NoScreens />
-    </>
+    </BarProviders>
   );
 };
+
+/** The lock screen's bar on monitor `screen`. */
+const lockBar = (screen: string) => (
+  <LockBar layout={LOCK_BAR} screen={screen} />
+);
+
+/** Everything the bars' items read, desktop-wide. */
+const BarProviders = ({
+  children,
+  domicile,
+  drawer,
+  launcher,
+  tray,
+  workspaces,
+}: {
+  children: ReactNode;
+  domicile: DomicileHost;
+  drawer: NotificationsDrawer;
+  launcher: LauncherControl;
+  tray: TrayState;
+  workspaces: Workspaces;
+}) => (
+  <DomicileContext value={domicile}>
+    <WorkspacesContext value={workspaces}>
+      <LauncherContext value={launcher}>
+        <NotificationsContext value={drawer}>
+          <TrayContext value={tray}>{children}</TrayContext>
+        </NotificationsContext>
+      </LauncherContext>
+    </WorkspacesContext>
+  </DomicileContext>
+);
 
 /**
  * The focused window's contents box, or the whole screen when it has no

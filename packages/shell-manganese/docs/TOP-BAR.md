@@ -5,11 +5,11 @@ below it.
 
 ## Layout
 
-`runManganese({ topBar })` takes three columns of React nodes: `left`,
-`middle` (centered on the screen) and `right`. Mix manganese's items with your
-own. Manganese's items take no props:
+`runManganese({ bar })` takes three columns of React nodes: `left`, `center`
+(centered on the screen) and `right`. Mix manganese's items with your own.
+Manganese's items take no props:
 
-`Launcher`, `Tray`, `WorkspaceSwitcher`, `Clock`, `Mode`, `ThemeSelector`,
+`LauncherButton`, `Tray`, `WorkspaceSwitcher`, `Clock`, `Mode`, `ThemeSwitch`,
 `Network`, `Bluetooth`, `Volume`, `Brightness`, `Battery`, `Notifications`,
 `Sharing`.
 
@@ -17,13 +17,23 @@ own. Manganese's items take no props:
 import { Clock, runManganese, Tray, WorkspaceSwitcher } from "@domicile-desktop/manganese";
 
 export const Shell = runManganese({
-  topBar: {
+  bar: {
     left: [<Tray key="tray" />, <WorkspaceSwitcher key="workspaces" />],
-    middle: [<Clock key="clock" />],
+    center: [<Clock key="clock" />],
     right: [<MailCount key="mail" />],
   },
 });
 ```
+
+Each item reads what it shows from context:
+
+- `useBar()` (`src/top-bar/bar-context.ts`): the bar's `screen` and whether
+  the desktop is `locked`.
+- `useDomicile()`: the desktop. Readouts are watched once per desktop
+  ([Host readouts](HOST-READOUTS.md#one-watch-per-desk)).
+- The launcher, notification drawer, tray and workspaces each have a context
+  the desktop provides: `useLauncher()`, `useNotificationsDrawer()`,
+  `useTrayState()`, `useWorkspaces()`.
 
 To style your own items with manganese's Panda CSS, see
 [CUSTOM-BAR-ITEMS.md](CUSTOM-BAR-ITEMS.md).
@@ -31,10 +41,10 @@ To style your own items with manganese's Panda CSS, see
 Every bar and the lock screen share one watch per system readout. See
 [Host readouts](HOST-READOUTS.md#one-watch-per-desk).
 
-`DEFAULT_TOP_BAR` (`src/top-bar/layout.tsx`) is:
+`DEFAULT_BAR` (`src/top-bar/layout.tsx`) is:
 
 - **left**: launcher button, tray, workspaces
-- **middle**: clock
+- **center**: clock
 - **right**: sharing indicator (while recorded), binding mode (when not
   `default`), theme selector, brightness, volume, Bluetooth, network, battery,
   notification bell
@@ -42,8 +52,8 @@ Every bar and the lock screen share one watch per system readout. See
 ## On the lock screen
 
 - The lock screen draws the same bar on every screen, with only brightness,
-  volume, Bluetooth and battery (`LOCK_TOP_BAR`, `src/lock/LockBar.tsx`). The
-  `topBar` option does not change it.
+  volume, Bluetooth and battery (`LOCK_BAR`, `src/top-bar/layout.tsx`). The
+  `bar` option does not change it.
 - Each item offers only what a locked desktop allows
   ([LOCK.md](../../../docs/LOCK.md#lock-screen-readouts)):
   - Bluetooth: the icon, named as on the desktop; not a button.

@@ -8,8 +8,8 @@ import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { Desktop } from "./Desktop";
 import { DEFAULT_KEYBINDINGS, DEFAULT_MODES } from "./keyboard/commands";
 import type { ApplicationsConfig } from "./launcher/applications-config";
-import type { TopBarLayout } from "./top-bar/layout";
-import { DEFAULT_TOP_BAR } from "./top-bar/layout";
+import type { BarLayout } from "./top-bar/layout";
+import { DEFAULT_BAR } from "./top-bar/layout";
 import type { FloatingRules } from "./window-management/floating/floating-rules";
 
 type Props = {
@@ -18,6 +18,8 @@ type Props = {
    * the installed applications again.
    */
   applications: ApplicationsConfig;
+  /** The layout of every monitor's bar. Defaults to manganese's. */
+  bar?: BarLayout | undefined;
   /**
    * The source of display descriptions.
    *
@@ -34,8 +36,6 @@ type Props = {
    * in, like {@link displays}, so the shell uses the desktop's theme.
    */
   theme: ThemeSource;
-  /** The layout of every monitor's bar. Defaults to manganese's. */
-  topBar?: TopBarLayout | undefined;
 };
 
 /**
@@ -45,21 +45,21 @@ type Props = {
  */
 export const Shell = ({
   applications,
+  bar = DEFAULT_BAR,
   displays,
   domicile,
   floating = NO_FLOATING_RULES,
   keybindings = DEFAULT_SHELL_KEYBINDINGS,
   theme,
-  topBar = DEFAULT_TOP_BAR,
 }: Props) => (
   <Provider theme={theme}>
     <DisplayProvider source={displays}>
       <Desktop
         applications={applications}
+        bar={bar}
         domicile={domicile}
         floating={floating}
         keybindings={keybindings}
-        topBar={topBar}
       />
     </DisplayProvider>
   </Provider>
