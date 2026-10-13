@@ -24,6 +24,8 @@ so the copy outlives the client that copied it.
   `Image (image/webp)` when it is not a PNG. Selections with neither (file
   drags) are skipped.
 - Memory only. Nothing is written to disk.
+- The clipboard only. The primary selection (highlighted text) stays out of
+  the history, so every highlight does not bury what was copied.
 - An empty history shows a message.
 
 ## Clipboard managers
