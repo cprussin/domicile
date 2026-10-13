@@ -3,6 +3,7 @@
 
 #include "components/domicile/browser/command_protocol.h"
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -11,6 +12,7 @@
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
+#include "base/time/time.h"
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "components/domicile/mojom/web_view_guest.mojom-shared.h"
@@ -49,6 +51,10 @@ struct Told {
   std::string device;
   std::string toggled;
   std::optional<bool> enabled;
+  std::optional<HistorySearch> search;
+  std::string visits_of;
+  std::optional<std::vector<base::Time>> deleted;
+  std::optional<BrowsingDataClearing> clearing;
 };
 
 // The id the recording `load_unpacked` gives what it loads, and the one the
@@ -83,6 +89,22 @@ std::vector<InstalledExtension> InstalledExtensions() {
   quiet.name = "Quiet";
   quiet.version = "1.0";
   return {dark, quiet};
+}
+
+// What the recording `history` finds: a page with a favicon, and one without.
+std::vector<HistoryEntry> VisitedPages() {
+  HistoryEntry news;
+  news.url = GURL("https://news.example/");
+  news.title = "News";
+  news.favicon_png = {0x89, 'P', 'N', 'G'};
+  HistoryEntry plain;
+  plain.url = GURL("https://plain.example/");
+  return {news, plain};
+}
+
+// `us` microseconds after the Unix epoch, the precision history keeps.
+base::Time AtMicroseconds(int64_t us) {
+  return base::Time::UnixEpoch() + base::Microseconds(us);
 }
 
 // What the recording `list_media_devices` answers: one camera, and two
@@ -196,6 +218,43 @@ std::string Answer(std::string_view line,
     }
     return base::ok();
   };
+  auto search_history = [told, has_window](const HistorySearch& search,
+                                           HistoryFound found) {
+    told->search = search;
+    if (!has_window) {
+      std::move(found).Run(base::unexpected("no shell"));
+      return;
+    }
+    std::move(found).Run(base::ok(VisitedPages()));
+  };
+  auto list_visits = [told, has_window](const GURL& url, VisitsFound found) {
+    told->visits_of = url.spec();
+    if (!has_window) {
+      std::move(found).Run(base::unexpected("no shell"));
+      return;
+    }
+    std::move(found).Run(base::ok(std::vector<base::Time>{
+        AtMicroseconds(1700000000000500), AtMicroseconds(1700000000123000)}));
+  };
+  auto delete_visits = [told, has_window](const std::vector<base::Time>& visits,
+                                          CommandDone done) {
+    told->deleted = visits;
+    if (!has_window) {
+      std::move(done).Run(base::unexpected("no shell"));
+      return;
+    }
+    std::move(done).Run(base::ok());
+  };
+  auto clear_browsing_data = [told, has_window](
+                                 const BrowsingDataClearing& clearing,
+                                 CommandDone done) {
+    told->clearing = clearing;
+    if (!has_window) {
+      std::move(done).Run(base::unexpected("no shell"));
+      return;
+    }
+    std::move(done).Run(base::ok());
+  };
   std::string reply;
   AnswerCommand(line,
                 {.load_shell = load_shell,
@@ -209,7 +268,11 @@ std::string Answer(std::string_view line,
                  .list_extensions = list_extensions,
                  .set_extension_enabled = set_extension_enabled,
                  .list_media_devices = list_media_devices,
-                 .set_media_device = set_media_device},
+                 .set_media_device = set_media_device,
+                 .search_history = search_history,
+                 .list_visits = list_visits,
+                 .delete_visits = delete_visits,
+                 .clear_browsing_data = clear_browsing_data},
                 base::BindOnce([](std::string* out,
                                   std::string line) { *out = std::move(line); },
                                &reply));
@@ -690,6 +753,168 @@ TEST(CommandProtocolTest, RefusesASwitchWithoutAnIdAndAnEnabled) {
                           &told)),
             "refused");
   EXPECT_FALSE(told.enabled.has_value());
+}
+
+// The History app, which these replace `chrome.history` and
+// `chrome.browsingData` for. See docs/architecture/APP-MODULES.md.
+TEST(CommandProtocolTest, ListsHistoryWithEachPagesFavicon) {
+  Told told;
+  EXPECT_EQ(
+      base::JSONReader::ReadDict(
+          Answer(R"({"type":"history","version":1,"text":"news",)"
+                 R"("end_time":1700000000000.5,"max_results":100})",
+                 &told),
+          base::JSON_PARSE_RFC),
+      base::JSONReader::ReadDict(
+          R"({"type":"history","items":[)"
+          R"({"url":"https://news.example/","title":"News",)"
+          R"("favicon":"data:image/png;base64,iVBORw=="},)"
+          R"({"url":"https://plain.example/","title":""}]})",
+          base::JSON_PARSE_RFC));
+  ASSERT_TRUE(told.search.has_value());
+  EXPECT_EQ(told.search->text, "news");
+  EXPECT_EQ(told.search->end_time, AtMicroseconds(1700000000000500));
+  EXPECT_EQ(told.search->max_results, 100);
+
+  const std::string refused =
+      Answer(R"({"type":"history","version":1,"text":"",)"
+             R"("end_time":1700000000000,"max_results":100})",
+             &told, /*has_window=*/false);
+  EXPECT_EQ(TypeOf(refused), "refused");
+  EXPECT_THAT(WhyOf(refused), HasSubstr("no shell"));
+}
+
+TEST(CommandProtocolTest, RefusesAHistorySearchMissingAField) {
+  Told told;
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"history","version":1,)"
+                          R"("end_time":1700000000000,"max_results":100})",
+                          &told)),
+            "refused");
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"history","version":1,"text":"",)"
+                          R"("max_results":100})",
+                          &told)),
+            "refused");
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"history","version":1,"text":"",)"
+                          R"("end_time":1700000000000,"max_results":0})",
+                          &told)),
+            "refused");
+  EXPECT_FALSE(told.search.has_value());
+}
+
+TEST(CommandProtocolTest, ListsAPagesVisits) {
+  Told told;
+  EXPECT_EQ(base::JSONReader::ReadDict(
+                Answer(R"({"type":"visits","version":1,)"
+                       R"("url":"https://news.example/"})",
+                       &told),
+                base::JSON_PARSE_RFC),
+            base::JSONReader::ReadDict(
+                R"({"type":"visits",)"
+                R"("times":[1700000000000.5,1700000000123.0]})",
+                base::JSON_PARSE_RFC));
+  EXPECT_EQ(told.visits_of, "https://news.example/");
+
+  told.visits_of.clear();
+  const std::string refused = Answer(
+      R"({"type":"visits","version":1,"url":"not a url"})", &told);
+  EXPECT_EQ(TypeOf(refused), "refused");
+  EXPECT_THAT(WhyOf(refused), HasSubstr("not a url"));
+  EXPECT_TRUE(told.visits_of.empty());
+}
+
+// A visit time arrives as fractional milliseconds, which a double holds only
+// to within a fraction of a microsecond; it is the nearest microsecond.
+TEST(CommandProtocolTest, DeletesTheVisitsARequestNames) {
+  Told told;
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"delete_history","version":1,)"
+                          R"("visits":[1700000000000.123,1700000000999]})",
+                          &told)),
+            "deleted");
+  EXPECT_EQ(told.deleted,
+            (std::vector<base::Time>{AtMicroseconds(1700000000000123),
+                                     AtMicroseconds(1700000000999000)}));
+
+  const std::string refused =
+      Answer(R"({"type":"delete_history","version":1,"visits":[1]})", &told,
+             /*has_window=*/false);
+  EXPECT_EQ(TypeOf(refused), "refused");
+  EXPECT_THAT(WhyOf(refused), HasSubstr("no shell"));
+}
+
+TEST(CommandProtocolTest, RefusesADeletionThatIsNotAListOfTimes) {
+  Told told;
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"delete_history","version":1})", &told)),
+            "refused");
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"delete_history","version":1,)"
+                          R"("visits":[1700000000000,"yesterday"]})",
+                          &told)),
+            "refused");
+  EXPECT_FALSE(told.deleted.has_value());
+}
+
+TEST(CommandProtocolTest, ClearsTheBrowsingDataARequestNames) {
+  Told told;
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"clear_browsing_data","version":1,)"
+                          R"("since":1700000000000,)"
+                          R"("types":["history","cookies","cache"]})",
+                          &told)),
+            "cleared");
+  ASSERT_TRUE(told.clearing.has_value());
+  EXPECT_EQ(told.clearing->since, AtMicroseconds(1700000000000000));
+  EXPECT_EQ(told.clearing->kinds,
+            (std::vector<BrowsingDataKind>{BrowsingDataKind::kHistory,
+                                           BrowsingDataKind::kCookies,
+                                           BrowsingDataKind::kCache}));
+  EXPECT_TRUE(told.clearing->origins.empty());
+
+  // Since 0 is all time, as for `chrome.browsingData`.
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"clear_browsing_data","version":1,)"
+                          R"("since":0,"types":["localStorage"],)"
+                          R"("origins":["https://a.example"]})",
+                          &told)),
+            "cleared");
+  EXPECT_TRUE(told.clearing->since.is_null());
+  EXPECT_EQ(told.clearing->origins,
+            std::vector<url::Origin>{
+                url::Origin::Create(GURL("https://a.example"))});
+
+  const std::string refused =
+      Answer(R"({"type":"clear_browsing_data","version":1,"since":0,)"
+             R"("types":["cache"]})",
+             &told, /*has_window=*/false);
+  EXPECT_EQ(TypeOf(refused), "refused");
+  EXPECT_THAT(WhyOf(refused), HasSubstr("no shell"));
+}
+
+TEST(CommandProtocolTest, RefusesBrowsingDataItCannotClear) {
+  Told told;
+  const std::string unknown =
+      Answer(R"({"type":"clear_browsing_data","version":1,"since":0,)"
+             R"("types":["cookies","appcache"]})",
+             &told);
+  EXPECT_EQ(TypeOf(unknown), "refused");
+  EXPECT_THAT(WhyOf(unknown), HasSubstr("appcache"));
+
+  const std::string not_a_site =
+      Answer(R"({"type":"clear_browsing_data","version":1,"since":0,)"
+             R"("types":["cookies"],"origins":["not a url"]})",
+             &told);
+  EXPECT_EQ(TypeOf(not_a_site), "refused");
+  EXPECT_THAT(WhyOf(not_a_site), HasSubstr("not a url"));
+
+  // History is kept per visit, not per site.
+  const std::string per_site =
+      Answer(R"({"type":"clear_browsing_data","version":1,"since":0,)"
+             R"("types":["history"],"origins":["https://a.example"]})",
+             &told);
+  EXPECT_EQ(TypeOf(per_site), "refused");
+  EXPECT_THAT(WhyOf(per_site), HasSubstr("history"));
+
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"clear_browsing_data","version":1,)"
+                          R"("types":["cookies"]})",
+                          &told)),
+            "refused");
+  EXPECT_FALSE(told.clearing.has_value());
 }
 
 }  // namespace
