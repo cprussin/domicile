@@ -8,10 +8,11 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
-use domicile_host::system::{locked_out, reach, Handled, System};
+use domicile_host::system::{locked_out, reach, refused_to_an_app, Handled, System};
 use domicile_launch::handshake::Handshake;
 use domicile_protocol::{
-    ChromeMessage, HostMessage, SystemError, SystemErrorKind, SystemRequest, Theme,
+    negotiate, ChromeMessage, HostMessage, SystemError, SystemErrorKind, SystemRequest, Theme,
+    PROTOCOL_VERSION,
 };
 use tracing::{debug, warn};
 
@@ -213,6 +214,9 @@ fn read_chrome_messages(
     // because a socket can send `hello` twice, and the writer must not be added
     // twice.
     let mut joined = false;
+    // Whether this connection is an app's, which may make only the system
+    // calls an app may. See `docs/architecture/APP-MODULES.md`.
+    let mut app = false;
     for line in reader.lines() {
         let Ok(line) = line else { break };
         let said = parse_chrome(line.trim());
@@ -226,6 +230,12 @@ fn read_chrome_messages(
             tracing::trace!("chrome -> host chrome_msg=an unlock, whose passphrase is not printed");
         } else {
             tracing::trace!(chrome_msg = %line.trim(), "chrome -> host");
+        }
+        if app {
+            if !write_responses(hub, writer, answer_an_app(hub, &system, said)) {
+                return;
+            }
+            continue;
         }
         let responses = match said {
             // `hello` means a page started (including after a reload or crash),
@@ -282,6 +292,20 @@ fn read_chrome_messages(
                     );
                 }
                 responses
+            }
+            // Never joins the broadcast list and is not announced as a
+            // chrome, so an app hears nothing of the desktop.
+            Ok(ChromeMessage::AppHello { protocol_version }) => {
+                if ready {
+                    warn!("a chrome that said hello then said app_hello; ignored");
+                    Vec::new()
+                } else {
+                    app = negotiate(protocol_version).is_ok();
+                    debug!(app, "an app connected");
+                    vec![HostMessage::Welcome {
+                        protocol_version: PROTOCOL_VERSION,
+                    }]
+                }
             }
             // Sent to the Wayland thread so a locked desktop can refuse it.
             Ok(ChromeMessage::Spawn { command }) => {
@@ -502,6 +526,29 @@ fn answer_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Vec<
             Vec::new()
         }
         None => answered_on_the_connection(hub, request),
+    }
+}
+
+/// Answer a message from an app's connection: a system call it may make, or
+/// nothing.
+fn answer_an_app(
+    hub: &ChromeHub,
+    system: &System,
+    said: Result<ChromeMessage, serde_json::Error>,
+) -> Vec<HostMessage> {
+    match said {
+        Ok(ChromeMessage::SystemRequest { id, request }) => match refused_to_an_app(id, &request) {
+            Some(refusal) => vec![refusal],
+            None => call_the_system(hub, system, id, request),
+        },
+        Ok(_) => {
+            warn!("an app sent a message only a shell may send; dropped");
+            Vec::new()
+        }
+        Err(err) => {
+            warn!(%err, "{}", grepped::UNPARSEABLE);
+            Vec::new()
+        }
     }
 }
 
@@ -1022,5 +1069,141 @@ mod tests {
             ),
             "the handshake, and then the one client asked to close"
         );
+    }
+
+    /// An app's connection, as the engine opens one for an app document. See
+    /// `docs/architecture/APP-MODULES.md`.
+    mod apps {
+        use std::io::Write as _;
+
+        use domicile_protocol::{SystemErrorKind, SystemReply};
+
+        use super::*;
+
+        /// The page side of an app connection after its `app_hello`, the
+        /// compositor's requests, and the thread serving it.
+        fn an_app() -> (
+            UnixStream,
+            BufReader<UnixStream>,
+            Arc<ChromeHub>,
+            smithay::reexports::calloop::channel::Channel<ClientRequest>,
+            thread::JoinHandle<()>,
+        ) {
+            let (request_tx, requests) = channel::<ClientRequest>();
+            let (hub, _outbound) = ChromeHub::new(
+                request_tx,
+                1,
+                OsString::from("wayland-1"),
+                0,
+                Portals::to_nobody(),
+            );
+            let (page, compositor) = UnixStream::pair().expect("a socket pair");
+            page.set_read_timeout(Some(Duration::from_secs(10)))
+                .expect("a read timeout");
+            let writer = Arc::new(Mutex::new(
+                compositor.try_clone().expect("the stream clones"),
+            ));
+            let serving = {
+                let hub = hub.clone();
+                thread::spawn(move || {
+                    chrome_connection(hub, compositor, writer, Arc::new(Handshake::new()))
+                })
+            };
+            let version = domicile_protocol::PROTOCOL_VERSION;
+            writeln!(
+                &page,
+                "{{\"type\":\"app_hello\",\"protocol_version\":{version}}}"
+            )
+            .expect("the page can write");
+            let heard = BufReader::new(page.try_clone().expect("the stream clones"));
+            (page, heard, hub, requests, serving)
+        }
+
+        fn next(heard: &mut BufReader<UnixStream>) -> HostMessage {
+            let mut line = String::new();
+            heard.read_line(&mut line).expect("a line in time");
+            serde_json::from_str(&line).expect("a host message")
+        }
+
+        #[test]
+        fn an_app_is_welcomed_and_hears_nothing_of_the_desktop() {
+            let (page, mut heard, hub, requests, serving) = an_app();
+
+            assert_eq!(
+                next(&mut heard),
+                HostMessage::Welcome {
+                    protocol_version: domicile_protocol::PROTOCOL_VERSION,
+                }
+            );
+            assert!(
+                hub.chromes.lock().unwrap().is_empty(),
+                "an app is not sent broadcasts"
+            );
+            drop((page, heard));
+            serving.join().expect("the connection thread ends at EOF");
+            assert!(
+                requests.try_recv().is_err(),
+                "an app is not announced to the Wayland thread as a chrome"
+            );
+        }
+
+        #[test]
+        fn an_app_reads_a_file() {
+            let home = tempfile::tempdir().expect("a temp dir");
+            let file = home.path().join("notes.txt");
+            std::fs::write(&file, "hi").expect("the file is written");
+            let (page, mut heard, _hub, _requests, serving) = an_app();
+            next(&mut heard);
+
+            writeln!(
+                &page,
+                "{}",
+                serde_json::json!({
+                    "type": "system_request",
+                    "id": 1,
+                    "request": {"call": "read_file", "path": file},
+                })
+            )
+            .expect("the page can write");
+
+            assert!(matches!(
+                next(&mut heard),
+                HostMessage::SystemReply {
+                    id: 1,
+                    reply: SystemReply::Read { .. },
+                }
+            ));
+            drop((page, heard));
+            serving.join().expect("the connection thread ends at EOF");
+        }
+
+        #[test]
+        fn an_app_may_not_drive_the_desktop() {
+            let (page, mut heard, _hub, requests, serving) = an_app();
+            next(&mut heard);
+
+            for message in [
+                "{\"type\":\"close_app\",\"app_id\":\"term\"}",
+                "{\"type\":\"spawn\",\"command\":[\"kitty\"]}",
+                "{\"type\":\"system_request\",\"id\":2,\"request\":{\"call\":\"shell_commands\"}}",
+            ] {
+                writeln!(&page, "{message}").expect("the page can write");
+            }
+
+            let HostMessage::SystemReply {
+                id: 2,
+                reply: SystemReply::Failed { error },
+            } = next(&mut heard)
+            else {
+                panic!("expected call 2 to fail");
+            };
+            assert_eq!(error.kind, SystemErrorKind::PermissionDenied);
+            drop((page, heard));
+            serving.join().expect("the connection thread ends at EOF");
+            assert!(
+                requests.try_recv().is_err(),
+                "nothing an app sends reaches the Wayland thread"
+            );
+        }
     }
 }

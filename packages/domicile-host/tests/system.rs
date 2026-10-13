@@ -7,7 +7,7 @@ use std::sync::mpsc::{channel, Receiver};
 use std::time::{Duration, Instant};
 
 use domicile_host::priority;
-use domicile_host::system::{locked_out, reach, Handled, Reach, System};
+use domicile_host::system::{locked_out, reach, refused_to_an_app, Handled, Reach, System};
 use domicile_protocol::{
     Bus, FileType, HostMessage, Signal, Stream, SystemEnd, SystemErrorKind, SystemEvent,
     SystemReply, SystemRequest,
@@ -1080,6 +1080,61 @@ mod locked {
             locked_out(4, &SystemRequest::Stdin { data: "".into() }),
             None
         );
+    }
+}
+
+/// What an app connection may call. See `docs/architecture/APP-MODULES.md`.
+mod apps {
+    use super::*;
+
+    #[test]
+    fn an_app_may_use_files_processes_and_d_bus() {
+        for allowed in [
+            SystemRequest::ReadFile {
+                path: "notes.txt".into(),
+                offset: 0,
+                length: None,
+            },
+            SystemRequest::Watch {
+                path: "notes.txt".into(),
+            },
+            spawn(&["true"]),
+            SystemRequest::Stdin { data: "".into() },
+            SystemRequest::Kill {
+                signal: Signal::Term,
+            },
+        ] {
+            assert_eq!(refused_to_an_app(4, &allowed), None, "{allowed:?}");
+        }
+    }
+
+    /// These belong to the window manager, which a Wayland client cannot
+    /// reach either.
+    #[test]
+    fn an_app_may_not_reach_the_desktop() {
+        for refused in [
+            SystemRequest::Screenshot { file: None },
+            SystemRequest::ShellCommands,
+            SystemRequest::SendShell {
+                command: vec!["focus".into(), "right".into()],
+            },
+            SystemRequest::IdleWarnings,
+            SystemRequest::UnlockRefusals,
+            SystemRequest::WindowRequests,
+            SystemRequest::SetWindowStates {
+                app_id: "app-1".into(),
+                states: Vec::new(),
+            },
+        ] {
+            let Some(HostMessage::SystemReply {
+                id: 4,
+                reply: SystemReply::Failed { error },
+            }) = refused_to_an_app(4, &refused)
+            else {
+                panic!("expected a failure for {refused:?}");
+            };
+            assert_eq!(error.kind, SystemErrorKind::PermissionDenied);
+        }
     }
 }
 

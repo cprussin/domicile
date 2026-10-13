@@ -237,6 +237,43 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
     }
 }
 
+/// What an app connection is told when it asks for more than files,
+/// processes and D-Bus, or nothing when it may ask.
+///
+/// The rest belongs to the window manager, which a Wayland client cannot reach
+/// either. See `docs/architecture/APP-MODULES.md`.
+pub fn refused_to_an_app(id: u32, request: &SystemRequest) -> Option<HostMessage> {
+    match request {
+        SystemRequest::ReadFile { .. }
+        | SystemRequest::WriteFile { .. }
+        | SystemRequest::ReadDir { .. }
+        | SystemRequest::Stat { .. }
+        | SystemRequest::Watch { .. }
+        | SystemRequest::Unwatch
+        | SystemRequest::Spawn { .. }
+        | SystemRequest::Stdin { .. }
+        | SystemRequest::CloseStdin
+        | SystemRequest::Kill { .. }
+        | SystemRequest::DbusCall { .. }
+        | SystemRequest::DbusMatch { .. } => None,
+        SystemRequest::Screenshot { .. }
+        | SystemRequest::ShellCommands
+        | SystemRequest::SendShell { .. }
+        | SystemRequest::IdleWarnings
+        | SystemRequest::UnlockRefusals
+        | SystemRequest::SetWindowStates { .. }
+        | SystemRequest::WindowRequests => Some(HostMessage::SystemReply {
+            id,
+            reply: SystemReply::Failed {
+                error: SystemError {
+                    kind: SystemErrorKind::PermissionDenied,
+                    message: "an app may use files, processes and D-Bus only".into(),
+                },
+            },
+        }),
+    }
+}
+
 impl System {
     /// A system for one connection. Relative paths and processes start from
     /// `home`. Processes inherit this process's environment changed by

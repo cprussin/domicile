@@ -25,6 +25,9 @@ fn chrome_messages_round_trip() {
     chrome_round_trip(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
     });
+    chrome_round_trip(&ChromeMessage::AppHello {
+        protocol_version: PROTOCOL_VERSION,
+    });
     chrome_round_trip(&ChromeMessage::FocusApp {
         app_id: "term".into(),
     });

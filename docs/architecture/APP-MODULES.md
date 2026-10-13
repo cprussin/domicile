@@ -161,7 +161,7 @@ An app reaches Domicile's own state through programs it spawns. Each inherits
 
 ## Plan
 
-- [ ] compositor: app connections, system tier only
+- [x] compositor: app connections, system tier only
 - [ ] engine: `domicile://app-<id>/`, the `main` runner, `DomicileAppHost`,
   `run_app`, guests pinned to an app
 - [ ] supervisor: `domicile run-app`; SDK: `DomicileAppHost`, `system()`
