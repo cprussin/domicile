@@ -48,6 +48,8 @@ item when it ships.
    - `DomicileHost.openAppWindow(url)`, for a shell's own launcher.
    - A guard that the engine lists an app window with `isApp` and records no
      visits for it.
+   - App modules: `domicile run-app`, and History and Settings as app modules
+     instead of extensions ([APP-MODULES.md](docs/architecture/APP-MODULES.md)).
 
 8. **Distribution packages.**
    [RUNNING-A-DESKTOP.md](docs/RUNNING-A-DESKTOP.md#other-distributions).
