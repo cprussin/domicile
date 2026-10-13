@@ -1,0 +1,4 @@
+# The service `lock.pam_service = "domicile"` names: it checks the passphrase
+# that unlocks the desk. See docs/LOCK.md.
+auth     include common-auth
+account  include common-account

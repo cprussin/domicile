@@ -65,6 +65,16 @@ item when it ships.
     - A guard that the engine lists an app window with `isApp` and records no
       visits for it.
 
+11. **Distribution packages.**
+    [RUNNING-A-DESKTOP.md](docs/RUNNING-A-DESKTOP.md#other-distributions).
+    - No APT or RPM repository, AUR package or COPR, so upgrades are by hand.
+    - The shell builder ships the whole workspace's `node_modules`, about
+      600 MB with the dev tools.
+    - No Shutdown and Reboot launcher entries: the flake's run a script from
+      the store.
+    - Checked by installing in containers; no packaged session has run on
+      hardware.
+
 ## In the engine fork (the agent on `crux`)
 
 1. **Measure presentation.** Nothing reads a lit CRTC, so overlay promotion,

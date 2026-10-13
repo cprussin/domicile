@@ -9,6 +9,8 @@
 # build of the same series. A commit qualifies when its official and checked
 # pins share a series, which is when engine-pin.nix picks the official engine.
 #
+# Sets the step output `promoted` to the commit when it moves stable.
+#
 # Only moves forward: the push is not forced. A stable that already contains
 # this commit is left alone. A stable that is not an ancestor is refused, since
 # someone put it there.
@@ -54,3 +56,6 @@ fi
 
 git push -q origin "$head:refs/heads/stable"
 echo "stable is now ${head:0:12}, official engine series ${official:0:12}"
+# stable.yml packages what it promoted. Outside Actions there is no step
+# output.
+echo "promoted=$head" >>"${GITHUB_OUTPUT:-/dev/null}"

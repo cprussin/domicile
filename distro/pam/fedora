@@ -1,0 +1,6 @@
+# The service `lock.pam_service = "domicile"` names: it checks the passphrase
+# that unlocks the desk. See docs/LOCK.md. `password-auth`, unlike
+# `system-auth`, has no fingerprint or smart card step, which the typed
+# passphrase cannot answer.
+auth     include password-auth
+account  include password-auth

@@ -1,0 +1,194 @@
+# The Domicile package for each distribution, made by nfpm from the tree
+# `distro/stage.sh` lays out. `distro/build.sh` fills in the `@…@` values:
+#
+# - `@stage@`: the staged tree.
+# - `@distro@`: this directory.
+# - `@pam@`: which `pam/` file is `/etc/pam.d/domicile`.
+# - `@version@`: from the commit's time, so a later commit is a newer package.
+# - `@glibc@`: the newest glibc symbol version any staged binary uses.
+#
+# Each format lists its dependencies by its own names. RPM names libraries by
+# soname, so one list serves Fedora and openSUSE.
+name: domicile
+arch: amd64
+platform: linux
+version: "@version@"
+version_schema: none
+release: "1"
+section: x11
+priority: optional
+maintainer: Connor Prussin <connor@prussin.net>
+description: |-
+  A Wayland compositor whose renderer is a web engine.
+  Installs the `domicile` login session, the engine, the manganese and simple
+  shells, the PAM service the lock uses and the `domicile` group.
+vendor: Domicile
+homepage: https://github.com/cprussin/domicile
+license: MIT AND BSD-3-Clause
+
+# Only Domicile's own files and directories: owning `/usr/bin` or `/usr/share`
+# conflicts with RPM's `filesystem` package.
+contents:
+  - src: "@stage@/usr/bin/*"
+    dst: /usr/bin/
+  - src: "@stage@/usr/libexec/domicile"
+    dst: /usr/libexec/domicile
+    type: tree
+  - src: "@stage@/usr/share/domicile"
+    dst: /usr/share/domicile
+    type: tree
+  - src: "@stage@/usr/share/doc/domicile"
+    dst: /usr/share/doc/domicile
+    type: tree
+  - src: "@stage@/usr/share/applications/*"
+    dst: /usr/share/applications/
+  - src: "@stage@/usr/share/wayland-sessions/*"
+    dst: /usr/share/wayland-sessions/
+  - src: "@stage@/usr/share/xdg-desktop-portal/portals/*"
+    dst: /usr/share/xdg-desktop-portal/portals/
+  - src: "@stage@/usr/share/xdg-desktop-portal/domicile-portals.conf"
+    dst: /usr/share/xdg-desktop-portal/domicile-portals.conf
+  - src: "@stage@/usr/lib/systemd/user/*"
+    dst: /usr/lib/systemd/user/
+  - src: "@stage@/usr/lib/sysusers.d/*"
+    dst: /usr/lib/sysusers.d/
+  - src: "@distro@/pam/@pam@"
+    dst: /etc/pam.d/domicile
+    type: config|noreplace
+  # Sorted before PipeWire's and JACK's files: pam_limits takes the last
+  # matching group line, so a larger grant of theirs still wins.
+  - src: "@distro@/limits.conf"
+    dst: /etc/security/limits.d/10-domicile.conf
+    type: config|noreplace
+  - src: "@distro@/apparmor-engine"
+    dst: /etc/apparmor.d/domicile-engine
+    type: config|noreplace
+    packager: deb
+
+scripts:
+  postinstall: "@distro@/postinstall.sh"
+
+overrides:
+  deb:
+    depends:
+      - libc6 (>= @glibc@)
+      - libgcc-s1
+      # The engine.
+      - libglib2.0-0
+      - libnss3
+      - libnspr4
+      - libatk1.0-0
+      - libatk-bridge2.0-0
+      - libatspi2.0-0
+      - libdbus-1-3
+      - libcups2
+      - libexpat1
+      - libxkbcommon0
+      - libasound2
+      - libgbm1
+      - libudev1
+      - libinput10
+      - libcairo2
+      - libpango-1.0-0
+      # The compositor. libEGL, Wayland's and PAM's are loaded at run time.
+      - libpipewire-0.3-0
+      - libegl1
+      - libegl-mesa0 | libegl-vendor
+      - libwayland-client0
+      - libwayland-egl1
+      - libpam0g
+      # logind, `systemd-run`, `busctl` and `udevadm`.
+      - systemd
+    recommends:
+      - upower
+      - hwdata
+      - pulseaudio-utils
+      - curl
+      - xdg-desktop-portal
+      - gsettings-desktop-schemas
+      - libgl1-mesa-dri
+      - libgtk-3-0
+      - libpulse0
+    scripts:
+      postinstall: "@distro@/postinstall-deb.sh"
+
+  rpm:
+    depends:
+      - libc.so.6(GLIBC_@glibc@)(64bit)
+      - libgcc_s.so.1()(64bit)
+      - libglib-2.0.so.0()(64bit)
+      - libgobject-2.0.so.0()(64bit)
+      - libgio-2.0.so.0()(64bit)
+      - libnss3.so()(64bit)
+      - libnssutil3.so()(64bit)
+      - libsmime3.so()(64bit)
+      - libnspr4.so()(64bit)
+      - libatk-1.0.so.0()(64bit)
+      - libatk-bridge-2.0.so.0()(64bit)
+      - libatspi.so.0()(64bit)
+      - libdbus-1.so.3()(64bit)
+      - libcups.so.2()(64bit)
+      - libexpat.so.1()(64bit)
+      - libxkbcommon.so.0()(64bit)
+      - libasound.so.2()(64bit)
+      - libgbm.so.1()(64bit)
+      - libudev.so.1()(64bit)
+      - libinput.so.10()(64bit)
+      - libcairo.so.2()(64bit)
+      - libpango-1.0.so.0()(64bit)
+      - libpipewire-0.3.so.0()(64bit)
+      - libEGL.so.1()(64bit)
+      - libwayland-client.so.0()(64bit)
+      - libwayland-egl.so.1()(64bit)
+      - libpam.so.0()(64bit)
+      - systemd
+    recommends:
+      - upower
+      - hwdata
+      - pulseaudio-utils
+      - curl
+      - xdg-desktop-portal
+      - gsettings-desktop-schemas
+      - libgtk-3.so.0()(64bit)
+      - libpulse.so.0()(64bit)
+
+  # nfpm writes no `optdepend`, so what other formats recommend is required
+  # here, except GTK, which the engine loads only if it is installed.
+  archlinux:
+    depends:
+      - glibc>=@glibc@
+      - gcc-libs
+      - glib2
+      - nss
+      - nspr
+      - at-spi2-core
+      - dbus
+      - libcups
+      - expat
+      - libxkbcommon
+      - alsa-lib
+      - mesa
+      - systemd-libs
+      - libinput
+      - cairo
+      - pango
+      - pipewire
+      - libglvnd
+      - wayland
+      - pam
+      - systemd
+      - upower
+      - hwdata
+      - libpulse
+      - curl
+      - xdg-desktop-portal
+      - gsettings-desktop-schemas
+
+deb:
+  compression: zstd
+  # The AppArmor profile uses `userns`, which AppArmor 4 added.
+  breaks:
+    - apparmor (<< 4.0)
+rpm:
+  compression: zstd
+  summary: A Wayland compositor whose renderer is a web engine

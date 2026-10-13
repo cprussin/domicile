@@ -66,9 +66,12 @@ merge() { # checked series, official series
   git -C "$WORK/repo" rev-parse HEAD
 }
 
+# `$WORK/output` is the step's `GITHUB_OUTPUT`, fresh for each run.
 promote() {
   local out
-  if out="$(cd "$WORK/repo" && bash .github/scripts/promote-stable.sh 2>&1)"; then
+  : >"$WORK/output"
+  if out="$(cd "$WORK/repo" && GITHUB_OUTPUT="$WORK/output" \
+      bash .github/scripts/promote-stable.sh 2>&1)"; then
     printf 'ok\n%s\n' "$out"
   else
     printf 'refused\n%s\n' "$out"
@@ -76,6 +79,7 @@ promote() {
 }
 status() { printf '%s\n' "$1" | head -1; }
 stable() { git -C "$WORK/remote" rev-parse -q --verify refs/heads/stable 2>/dev/null || echo missing; }
+promoted() { sed -n 's/^promoted=//p' "$WORK/output"; }
 
 echo "== a main that runs the official engine is stable =="
 
@@ -84,6 +88,7 @@ tip="$(merge aaaa aaaa)"
 out="$(promote)"
 expect "the promotion succeeds" ok "$(status "$out")"
 expect "and stable is made, at main" "$tip" "$(stable)"
+expect "and the step says which commit it promoted" "$tip" "$(promoted)"
 
 tip="$(merge aaaa aaaa)"
 out="$(promote)"
@@ -98,6 +103,7 @@ out="$(promote)"
 expect "the promotion succeeds" ok "$(status "$out")"
 contains "and says why it did nothing" "series bbbb" "$out"
 expect "and leaves stable where it was" "$before" "$(stable)"
+expect "and the step says it promoted nothing" "" "$(promoted)"
 
 echo "== the night's pin brings stable up to main =="
 
@@ -114,6 +120,7 @@ git -C "$WORK/repo" checkout -q --detach "$tip"
 out="$(promote)"
 expect "the promotion succeeds" ok "$(status "$out")"
 expect "and does not take stable back" "$newer" "$(stable)"
+expect "and the step says it promoted nothing" "" "$(promoted)"
 
 echo "== a stable that is not main's is refused, not overwritten =="
 

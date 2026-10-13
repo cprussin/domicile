@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=History
+Comment=Browse, search and clear the pages browser windows visited
+Exec=@bin@/domicile-history
+Icon=@icon@
+X-Domicile-Preview=@preview@
+Terminal=false

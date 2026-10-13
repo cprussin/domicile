@@ -1,7 +1,8 @@
 # Running a desktop
 
-How to run, install and configure a Domicile desktop. You need Nix and either a
-Wayland session or a console login.
+How to run, install and configure a Domicile desktop. You need Nix, or a
+[package for your distribution](#other-distributions), and either a Wayland
+session or a console login.
 
 ```sh
 nix run github:cprussin/domicile/stable#manganese   # tiling, sway's keys, address bar
@@ -187,8 +188,9 @@ Configure it with `files.omit` and manganese's `applications` option:
   when the screens go dark.
 - `lock.pam_service` needs the machine to declare the PAM service: use the
   [NixOS module](#the-machines-half) or add
-  `security.pam.services.domicile = {};`. A home-manager module cannot. If the
-  service is missing, Domicile does not start and names the line to add.
+  `security.pam.services.domicile = {};`. A home-manager module cannot. The
+  [distribution packages](#other-distributions) install it. If the service is
+  missing, Domicile does not start and names the line to add.
 - `lock.passphrase` is world-readable in the Nix store. It only stops someone
   at the keyboard.
 - A `lock` edit applies on reload. It never unlocks a locked desktop
@@ -210,8 +212,10 @@ desktop stays smooth while the machine is busy.
 - `setpriority` to -8 needs an `RLIMIT_NICE` of at least 28, or
   `CAP_SYS_NICE`. Most sessions have 0.
 - **NixOS:** join the [`domicile` group](#the-machines-half).
+- **[Distribution packages](#other-distributions):** join the `domicile`
+  group.
 - **Elsewhere:** grant the same limits in
-  `/etc/security/limits.d/domicile.conf` and log in again:
+  `/etc/security/limits.d/10-domicile.conf` and log in again:
 
   ```
   @domicile - nice -10
@@ -276,3 +280,63 @@ It provides:
   The home-manager module offers the same for home-manager's `xdg.portal`.
 
 It does not enable a display manager or set the default session.
+
+## Other distributions
+
+Each commit `stable` moves to is released as packages for Debian, Ubuntu,
+Fedora, openSUSE and Arch, tagged `packages-<commit>`:
+[releases](https://github.com/cprussin/domicile/releases?q=packages-&expanded=true).
+They run the same desktop as `nix run github:cprussin/domicile/stable`.
+
+| Distribution | Package | Install |
+|---|---|---|
+| Debian 13+, Ubuntu 24.04+ | `domicile_<version>_amd64.deb` | `sudo apt install ./domicile_*.deb` |
+| Fedora, RHEL 10+ | `domicile-<version>-1.fedora.x86_64.rpm` | `sudo dnf install ./domicile-*.fedora.x86_64.rpm` |
+| openSUSE Tumbleweed | `domicile-<version>-1.opensuse.x86_64.rpm` | `sudo zypper install --allow-unsigned-rpm ./domicile-*.opensuse.x86_64.rpm` |
+| Arch | `domicile-<version>-1-x86_64.pkg.tar.zst` | `sudo pacman -U ./domicile-*.pkg.tar.zst` |
+
+Then:
+
+1. Join the `domicile` group: `sudo usermod -aG domicile "$USER"`.
+2. Name a shell in `~/.config/domicile/domicile.json`:
+   `{ "shell": "@domicile-desktop/manganese" }`.
+3. Log out and pick the **Domicile** session in your display manager.
+
+The package installs what [the NixOS module](#the-machines-half) provides:
+
+- **Domicile:** `/usr/bin/domicile` and its programs, and under
+  `/usr/libexec/domicile` the engine, the prebuilt shells and apps, and the
+  bun the shell builder runs on.
+- **The `domicile` session** (`/usr/share/wayland-sessions/domicile.desktop`)
+  and its user units.
+- **`/etc/pam.d/domicile`**, for `lock.pam_service = "domicile"`. It includes
+  the distribution's stack: `common-auth` on Debian and openSUSE,
+  `password-auth` on Fedora, `system-local-login` on Arch.
+- **The `domicile` group** (`/usr/lib/sysusers.d/domicile.conf`) and its
+  [limits](#thread-priorities) (`/etc/security/limits.d/10-domicile.conf`).
+- **Portal routing:** Domicile's backend and `domicile-portals.conf`. `Secret`
+  goes to `gnome-keyring`, which you install.
+- **On Ubuntu, an AppArmor profile** that lets the engine's sandbox make user
+  namespaces. Without it the engine does not start.
+- **Recommended:** UPower (the battery readout), hwdata (monitor makers),
+  `pactl` (the volume readout), curl, `xdg-desktop-portal`. Arch requires
+  them.
+
+There is no package repository. Upgrade by installing a newer release's
+package.
+
+### Nix on another distribution
+
+`nix profile install github:cprussin/domicile/stable#domicile` installs
+Domicile without the machine's half. Add it by hand, from this repository:
+
+- **Session:** `nix/domicile-session.desktop` as
+  `/usr/local/share/wayland-sessions/domicile.desktop`, with `@bin@` replaced
+  by your profile's `bin` as an absolute path (`/home/<you>/.nix-profile/bin`).
+- **PAM:** your distribution's file from `distro/pam/` as
+  `/etc/pam.d/domicile`.
+- **Group and limits:** `distro/sysusers.conf` as
+  `/etc/sysusers.d/domicile.conf` (then `sudo systemd-sysusers`), and
+  `distro/limits.conf` as `/etc/security/limits.d/10-domicile.conf`.
+- **User units:** link `~/.nix-profile/lib/systemd/user/domicile-*.target`
+  into `~/.config/systemd/user/`.
