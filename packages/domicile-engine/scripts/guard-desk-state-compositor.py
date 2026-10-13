@@ -4,7 +4,8 @@ the desk's state attributes on `DomicileHost` say what the compositor said.
 
 It answers `hello` with a `welcome`, then says idle, lock, both themes, the
 clipboard, the tray and the modifiers -- and prints every line the browser
-writes. The page reads only after all of it.
+writes, then `sent the sequence`. The guard judges the page's reading after
+that line.
 """
 
 import argparse

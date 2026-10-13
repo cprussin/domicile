@@ -41,9 +41,8 @@
 # fire. This separates the delegate's matching from a harness that drives no
 # key at all.
 #
-# The control's <iframe> stays empty: it does not load the http page on a
-# domicile:// document. The control only decides whether the chord fires, so
-# this does not matter. `$HTTP_LOG` shows whether the page was requested.
+# The control's <iframe> loads the same page, and the element takes the
+# keyboard only after it has. See step 4.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -206,16 +205,12 @@ DEBUG_PORT="$(devtools_port "$PROFILE" "$TRIES")" || {
 }
 echo "the shell claimed Alt+Tab, showing a <$KIND>"
 
-# 4. Wait for a page in the window.
-#
-#    Skipped in the control: an <iframe> has no guest, so `GUARD guest-loaded`
-#    never appears, and the verdict does not read `SAW_PAGE` in the control.
-#    Waiting would cost the full `$TRIES`. The control's readings, the claim
-#    (step 3) and the focus (step 6), are waited for separately.
-if [ "$NEGATIVE" != "1" ]; then
-  wait_for_line "$TRIES" "GUARD guest-loaded" "$ENGINE_LOG" ||
-    echo "nothing ever loaded in the window" >&2
-fi
+# 4. Wait for a page in the window, in both runs. The next key makes the page
+#    focus the element, and the control's <iframe> replaces its first frame
+#    when the page loads. Focus taken before that stays with the old frame, so
+#    keys go to the shell's document and the shell's own claim fires.
+wait_for_line "$TRIES" "GUARD guest-loaded" "$ENGINE_LOG" ||
+  echo "nothing ever loaded in the window" >&2
 
 # 5. A key while the shell still has the keyboard. The shell document must
 #    report it, and it triggers focusing the window.
