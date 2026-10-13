@@ -736,7 +736,7 @@ fn announced(app: &App, mapped: Mapped) -> Vec<HostMessage> {
         size: wire_size(app.size.expect("a mapped window has a size")),
         dialog: mapped.has_parent || is_fixed(app.min_size, app.max_size),
         client_frame: mapped.client_frame,
-        owner: app.owner,
+        owner: app.owner.clone(),
     };
     let min = (app.min_size != NO_LIMIT).then(|| HostMessage::AppMinSize {
         app_id: app.app_id.clone(),

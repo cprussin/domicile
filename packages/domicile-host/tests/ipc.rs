@@ -21,6 +21,7 @@ const OWNER: Owner = Owner {
     uid: 1000,
     gid: 1000,
     pidfd_inode: None,
+    sandbox: None,
 };
 
 /// One chrome connection's [`Host`] and handshake state.

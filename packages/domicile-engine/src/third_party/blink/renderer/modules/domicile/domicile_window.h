@@ -25,6 +25,11 @@ struct DomicileWindowState {
   std::optional<uint32_t> uid;
   std::optional<uint32_t> gid;
   std::optional<uint64_t> pidfd_inode;
+  std::optional<bool> sandboxed;
+  // Null where the sandbox engine said nothing, or for no sandbox.
+  String sandbox_engine;
+  String sandbox_app_id;
+  String sandbox_instance_id;
   std::optional<double> width;
   std::optional<double> height;
   std::optional<double> min_width;
@@ -56,6 +61,12 @@ class MODULES_EXPORT DomicileWindow final : public ScriptWrappable {
   std::optional<uint32_t> uid() const { return state_.uid; }
   std::optional<uint32_t> gid() const { return state_.gid; }
   std::optional<uint64_t> pidfdInode() const { return state_.pidfd_inode; }
+  std::optional<bool> sandboxed() const { return state_.sandboxed; }
+  const String& sandboxEngine() const { return state_.sandbox_engine; }
+  const String& sandboxAppId() const { return state_.sandbox_app_id; }
+  const String& sandboxInstanceId() const {
+    return state_.sandbox_instance_id;
+  }
   std::optional<double> width() const { return state_.width; }
   std::optional<double> height() const { return state_.height; }
   std::optional<double> minWidth() const { return state_.min_width; }
