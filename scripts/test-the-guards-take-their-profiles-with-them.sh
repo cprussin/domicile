@@ -9,6 +9,10 @@
 # the profile, and the job's $TMPDIR is too deep for the 107-byte Unix socket
 # path limit (see spike.sh).
 #
+# The removal goes through `remove_profile` from `lib-profile.sh`: a bare
+# `rm -rf` races the engine's children, which still write into the profile
+# after the browser is killed.
+#
 # A script that passes its profile to spike.sh with a `PROFILE=... \` prefix
 # leaves the removal to spike.sh, which is checked too.
 set -u
@@ -27,8 +31,11 @@ for script in "$SCRIPTS"/*.sh; do
     ?*) on_exit=$(sed -n "/^$handler() {/,/^}/p" "$script") ;;
     *) on_exit="" ;;
   esac
-  if ! printf '%s\n' "$on_exit" | grep -qF 'rm -rf "$PROFILE"'; then
-    echo "FAIL: $(basename "$script") leaves \$PROFILE behind when it exits" >&2
+  if ! printf '%s\n' "$on_exit" | grep -qF 'remove_profile "$PROFILE"'; then
+    echo "FAIL: $(basename "$script") does not remove_profile \$PROFILE when it exits" >&2
+    failed=1
+  elif ! grep -qF '. "$SCRIPTS/lib-profile.sh"' "$script"; then
+    echo "FAIL: $(basename "$script") calls remove_profile without sourcing lib-profile.sh" >&2
     failed=1
   fi
 done

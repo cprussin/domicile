@@ -56,6 +56,8 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS/lib-annotate.sh"
 # shellcheck source=packages/domicile-engine/scripts/lib-compositor-cleanup.sh
 . "$SCRIPTS/lib-compositor-cleanup.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-profile.sh
+. "$SCRIPTS/lib-profile.sh"
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
@@ -112,7 +114,7 @@ cleanup() {
   fi
   kill_compositors "$(compositor_owner)"
   wait
-  rm -rf "$PROFILE"
+  remove_profile "$PROFILE"
 }
 trap cleanup EXIT
 

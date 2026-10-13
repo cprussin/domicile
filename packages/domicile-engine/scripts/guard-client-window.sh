@@ -29,6 +29,8 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS/lib-annotate.sh"
 # shellcheck source=packages/domicile-engine/scripts/lib-control-budget.sh
 . "$SCRIPTS/lib-control-budget.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-profile.sh
+. "$SCRIPTS/lib-profile.sh"
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
@@ -74,7 +76,7 @@ cleanup() {
     kill "${STARTED[@]}" 2>/dev/null
   fi
   rm -f "$ENGINE_LOG" "$COMP_LOG" "$CLI_LOG"
-  rm -rf "$PROFILE"
+  remove_profile "$PROFILE"
 }
 trap cleanup EXIT
 
