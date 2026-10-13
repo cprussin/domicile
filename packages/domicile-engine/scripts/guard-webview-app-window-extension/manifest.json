@@ -1,0 +1,11 @@
+{
+  "background": {
+    "service_worker": "background.js"
+  },
+  "description": "Reports which of the guard's pages the history holds after each visit, for guard-webview-app-window.sh.",
+  "host_permissions": ["http://127.0.0.1/*"],
+  "manifest_version": 3,
+  "name": "Domicile app window guard",
+  "permissions": ["history"],
+  "version": "1"
+}
