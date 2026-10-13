@@ -45,6 +45,8 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS/lib-ports.sh"
 # shellcheck source=packages/domicile-engine/scripts/lib-control-budget.sh
 . "$SCRIPTS/lib-control-budget.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-profile.sh
+. "$SCRIPTS/lib-profile.sh"
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
@@ -82,7 +84,7 @@ cleanup() {
     kill "${STARTED[@]}" 2>/dev/null
     wait "${STARTED[@]}" 2>/dev/null
   fi
-  rm -rf "$PROFILE"
+  remove_profile "$PROFILE"
 }
 trap cleanup EXIT
 
