@@ -13,6 +13,9 @@ import { Wallpaper } from "./Wallpaper";
 /** How long each photograph shows; one rotation tick. */
 const DWELL_MS = 60_000;
 
+/** How long the first photographs have to load before the one from the repository shows. */
+const FALLBACK_DELAY_MS = 3000;
+
 /** Crossfade duration in ms. */
 const CROSSFADE_MS = Number.parseFloat(token("durations.crossfade")) * 1000;
 
@@ -88,9 +91,15 @@ describe("Wallpaper", () => {
     loadPhotos(container);
 
     expect(layer(container, "dark", "current")).toEqual([photo("dark", 0)]);
-    expect(layer(container, "dark", "waiting")).toEqual([photo("dark", 1)]);
+    // The photograph from the repository waits too, until the network is late.
+    expect(layer(container, "dark", "waiting")).toEqual([
+      WALLPAPER_FALLBACKS.dark,
+      photo("dark", 1),
+    ]);
     expect(layer(container, "light", "current")).toEqual([photo("light", 0)]);
-    expect(layer(container, "light", "waiting")).toEqual([]);
+    expect(layer(container, "light", "waiting")).toEqual([
+      WALLPAPER_FALLBACKS.light,
+    ]);
   });
 
   it("holds the other theme's photograph until that theme is shown", () => {
@@ -309,16 +318,80 @@ describe("Wallpaper", () => {
     );
   });
 
-  it("shows a photograph from the repository under each theme's rotation", () => {
-    // Without a network no photograph loads, so the desktop shows this one.
-    const { container } = render(<Wallpaper theme="dark" />, {
-      wrapper: OnOneScreen,
+  describe("the photograph from the repository", () => {
+    // It shows only when the network is slow or down. Shown at once, it would
+    // flash on every start before the first photograph loads.
+
+    it("stays hidden while the first photographs load", () => {
+      const { container } = render(<Wallpaper theme="dark" />, {
+        wrapper: OnOneScreen,
+      });
+
+      for (const theme of THEMES) {
+        expect(layer(container, theme, "fallback")).toEqual([]);
+        expect(layer(container, theme, "waiting")).toContain(
+          WALLPAPER_FALLBACKS[theme],
+        );
+      }
     });
 
-    for (const theme of THEMES) {
-      expect(layer(container, theme, "fallback")).toEqual([
-        WALLPAPER_FALLBACKS[theme],
-      ]);
-    }
+    it("shows under each theme's rotation once the photographs are late", () => {
+      jest.useFakeTimers();
+      const { container } = render(<Wallpaper theme="dark" />, {
+        wrapper: OnOneScreen,
+      });
+
+      act(() => {
+        jest.advanceTimersByTime(FALLBACK_DELAY_MS - 1);
+      });
+      expect(layer(container, "dark", "fallback")).toEqual([]);
+      act(() => {
+        jest.advanceTimersByTime(1);
+      });
+
+      for (const theme of THEMES) {
+        expect(layer(container, theme, "fallback")).toEqual([
+          WALLPAPER_FALLBACKS[theme],
+        ]);
+      }
+      jest.useRealTimers();
+    });
+
+    it("shows as soon as a photograph fails to load", () => {
+      // Without a network a request fails at once, and the desktop would be
+      // blank until the delay ran out.
+      const { container } = render(<Wallpaper theme="dark" />, {
+        wrapper: OnOneScreen,
+      });
+      const failed = container.querySelector(`img[src="${photo("dark", 0)}"]`);
+      if (failed === null) {
+        throw new Error("test: the first photograph is not mounted");
+      }
+      fireEvent.error(failed);
+
+      for (const theme of THEMES) {
+        expect(layer(container, theme, "fallback")).toEqual([
+          WALLPAPER_FALLBACKS[theme],
+        ]);
+      }
+    });
+
+    it("fades in", () => {
+      // It shows over the bare page, not under another photograph.
+      const { container } = render(<Wallpaper theme="dark" />, {
+        wrapper: OnOneScreen,
+      });
+      const image = container.querySelector(
+        `img[src="${WALLPAPER_FALLBACKS.dark}"]`,
+      );
+
+      expect(image?.className).toContain(
+        css({
+          '&[data-wallpaper="fallback"]': {
+            transition: "opacity {durations.crossfade} {easings.in-out}",
+          },
+        }),
+      );
+    });
   });
 });

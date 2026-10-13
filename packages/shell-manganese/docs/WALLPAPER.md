@@ -22,8 +22,9 @@ A photograph behind the whole desktop, changing every minute. Source:
   title, fetched via `Special:FilePath?width=`. The same photos always show,
   and the browser caches them. No credit line is needed.
 - **Offline**: each theme has one photo in the repo
-  (`src/wallpaper/fallback-*.jpg`) under its rotation. A remote photo stays
-  transparent until it loads.
+  (`src/wallpaper/fallback-*.jpg`) under its rotation. It fades in only once a
+  remote photo fails or 3s pass without the remote photos loading, so it does
+  not flash on start. A remote photo stays transparent until it loads.
 - **Retries**: a photo that fails to load retries after 1s, doubling the wait
   up to 60s, until it loads. The network can be down, or up with no internet,
   for any length of time.

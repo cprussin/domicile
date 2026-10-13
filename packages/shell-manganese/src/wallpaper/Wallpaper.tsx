@@ -16,6 +16,12 @@ import { WALLPAPER_FALLBACKS, WALLPAPER_PHOTOS } from "./photos";
 const DWELL_MS = 60_000;
 
 /**
+ * How long the first photographs have to load before the photograph from the
+ * repository shows. Shown at once, it would flash on every start.
+ */
+const FALLBACK_DELAY_MS = 3000;
+
+/**
  * Crossfade duration in ms. Read from the same token as the CSS transition so
  * the two stay in sync.
  */
@@ -63,6 +69,12 @@ export const Wallpaper = ({ held = false, picture, theme }: Props) => {
   const [settled, setSettled] = useState(true);
   // Whether a minute has passed since the last step.
   const [due, setDue] = useState(false);
+  // Whether the photograph from the repository shows: once the first
+  // photographs are late or one fails.
+  const [fallback, setFallback] = useState(false);
+  const showFallback = () => {
+    setFallback(true);
+  };
   // An effect event, so a theme switch does not advance the hidden rotation.
   const advance = useEffectEvent(() => {
     setSteps((previous) => ({ ...previous, [theme]: previous[theme] + 1 }));
@@ -76,6 +88,15 @@ export const Wallpaper = ({ held = false, picture, theme }: Props) => {
     }, DWELL_MS);
     return () => {
       clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFallback(true);
+    }, FALLBACK_DELAY_MS);
+    return () => {
+      clearTimeout(timer);
     };
   }, []);
 
@@ -103,6 +124,8 @@ export const Wallpaper = ({ held = false, picture, theme }: Props) => {
         // The whole page until the host describes the screens, so the
         // desktop is not blank while it starts.
         <ScreenWallpaper
+          fallback={fallback}
+          onPhotoError={showFallback}
           picture={picture}
           screen={undefined}
           settled={settled}
@@ -112,7 +135,9 @@ export const Wallpaper = ({ held = false, picture, theme }: Props) => {
       ) : (
         displays.map(({ name }) => (
           <ScreenWallpaper
+            fallback={fallback}
             key={name}
+            onPhotoError={showFallback}
             picture={picture}
             screen={name}
             settled={settled}
@@ -126,6 +151,10 @@ export const Wallpaper = ({ held = false, picture, theme }: Props) => {
 };
 
 type RotationProps = {
+  /** Whether the photograph from the repository shows. */
+  fallback: boolean;
+  /** Called when a photograph fails to load. */
+  onPhotoError: () => void;
   /** Whether the shown rotation's fade has finished. */
   settled: boolean;
   /** The theme shown. */
@@ -163,9 +192,15 @@ const ScreenWallpaper = ({
 
 /**
  * Both themes' photographs at their steps, over each theme's photograph from
- * the repository.
+ * the repository once `fallback`.
  */
-const Rotation = ({ settled, shown, steps }: RotationProps) => (
+const Rotation = ({
+  fallback,
+  onPhotoError,
+  settled,
+  shown,
+  steps,
+}: RotationProps) => (
   <>
     {THEMES.map((theme) => (
       <div
@@ -179,7 +214,7 @@ const Rotation = ({ settled, shown, steps }: RotationProps) => (
         <img
           alt=""
           className={layerStyles}
-          data-wallpaper={Layer.Fallback}
+          data-wallpaper={fallback ? Layer.Fallback : Layer.Waiting}
           src={WALLPAPER_FALLBACKS[theme]}
         />
         {WALLPAPER_PHOTOS[theme].map((photo, index, photos) =>
@@ -198,6 +233,7 @@ const Rotation = ({ settled, shown, steps }: RotationProps) => (
                 photos.length,
                 settled || theme !== shown,
               )}
+              onError={onPhotoError}
               src={photo}
             />
           ) : undefined,

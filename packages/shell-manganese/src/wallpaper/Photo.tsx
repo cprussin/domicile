@@ -11,11 +11,18 @@ const FIRST_RETRY_MS = 1000;
  */
 const MAX_RETRY_MS = 60_000;
 
+type Props = {
+  layer: Layer;
+  /** Called on each failed attempt. */
+  onError: () => void;
+  src: string;
+};
+
 /**
  * A photograph in the rotation in role `layer`. It stays transparent until it
  * loads, and retries with a doubling wait while it fails.
  */
-export const Photo = ({ layer, src }: { layer: Layer; src: string }) => {
+export const Photo = ({ layer, onError, src }: Props) => {
   // Failed attempts so far. Keys the `<img>`, so each retry is a new element
   // and a new request.
   const [failures, setFailures] = useState(0);
@@ -44,6 +51,7 @@ export const Photo = ({ layer, src }: { layer: Layer; src: string }) => {
       key={failures}
       onError={() => {
         setFailed(true);
+        onError();
       }}
       onLoad={() => {
         setLoaded(true);

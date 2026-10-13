@@ -16,7 +16,10 @@ export enum Layer {
   Previous = "previous",
   /** Transparent: loading, or loaded and waiting for its turn. */
   Waiting = "waiting",
-  /** The photograph from the repository, opaque under the rotation. */
+  /**
+   * The photograph from the repository, opaque under the rotation. Shown only
+   * once the network photographs are late or fail.
+   */
   Fallback = "fallback",
 }
 
@@ -25,14 +28,20 @@ export const layerStyles = css({
   // Stacking comes from the role because on wrap-around the incoming
   // photograph is the earlier element.
   //
-  // Only this role transitions. Other role changes happen under an opaque
-  // photograph, and a transition on them could draw over the incoming one.
+  // Only the current and fallback roles transition. Other role changes happen
+  // under an opaque photograph, and a transition on them could draw over the
+  // incoming one. The fallback shows over the bare page, under every other
+  // role.
   '&[data-wallpaper="current"]': {
     opacity: 1,
     transition: "opacity {durations.crossfade} {easings.in-out}",
     zIndex: 1,
   },
-  '&[data-wallpaper="fallback"], &[data-wallpaper="previous"]': {
+  '&[data-wallpaper="fallback"]': {
+    opacity: 1,
+    transition: "opacity {durations.crossfade} {easings.in-out}",
+  },
+  '&[data-wallpaper="previous"]': {
     opacity: 1,
   },
   blockSize: "100%",
