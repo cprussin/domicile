@@ -71,8 +71,28 @@ export const Shell = (_root, desktop) => {
     console.log(`GUARD ${what}`);
   };
 
+  /**
+   * Resolves once the element holds its page. The control's <iframe> replaces
+   * its first, same-origin frame when the cross-origin page loads, and focus
+   * taken before that stays with the replaced frame, so keys reach this
+   * document. A <webview>'s guest is focused on the interval below as it
+   * attaches.
+   */
+  const holdsItsPage = (view, kind) =>
+    kind === "iframe"
+      ? new Promise((resolve) => {
+          view.addEventListener("load", () => {
+            if (view.contentDocument === null) {
+              resolve();
+            }
+          });
+        })
+      : Promise.resolve();
+
   const parameters = new URLSearchParams(location.search);
-  const view = buildView(required(parameters, "kind"));
+  const kind = required(parameters, "kind");
+  const view = buildView(kind);
+  const pageLoaded = holdsItsPage(view, kind);
 
   view.style.position = "absolute";
   view.style.inset = "0";
@@ -152,7 +172,8 @@ export const Shell = (_root, desktop) => {
   view.setAttribute("src", required(parameters, "src"));
 
   // Focuses the window, as `BrowserWindow.tsx` does. Runs between the guard's
-  // two keystrokes so they read before and after.
+  // two keystrokes so they read before and after, and not before the element
+  // holds its page.
   //
   // Repeats on an interval: attaching is asynchronous and signals nothing, and
   // focusing an element before its page exists does nothing.
@@ -165,13 +186,19 @@ export const Shell = (_root, desktop) => {
   const takeTheKeyboard = () => {
     if (!taking) {
       taking = true;
-      setInterval(() => {
-        view.focus();
-        if (!announced && document.activeElement === view) {
-          announced = true;
-          say("window-focused");
-        }
-      }, 200);
+      pageLoaded
+        .then(() => {
+          setInterval(() => {
+            view.focus();
+            if (!announced && document.activeElement === view) {
+              announced = true;
+              say("window-focused");
+            }
+          }, 200);
+        })
+        .catch((error) => {
+          say(`take-the-keyboard-failed ${error}`);
+        });
     }
   };
 

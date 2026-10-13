@@ -206,14 +206,19 @@ for guard in guard-client-window guard-shell guard-webview-framing \
   done
 done
 
-# The keyboard control has no budget. It must skip waiting for
-# `GUARD guest-loaded`, which its <iframe> removes and its verdict never reads.
+# The keyboard control has no budget. Its <iframe> loads the same page as the
+# positive run's guest, and focus taken before that load stays with the
+# frame it replaces, so keys reach the shell's document. Both runs must wait
+# for `GUARD guest-loaded` before the first key, with no NEGATIVE guard.
 keyboard="$GUARDS/guard-webview-keyboard.sh"
-if grep -B4 'wait_for_line "$TRIES" "GUARD guest-loaded"' "$keyboard" |
-     grep -q 'NEGATIVE.*!= *"1"'; then
-  ok "the keyboard control does not wait for the guest its <iframe> removed"
+wait_line="$(grep -n 'wait_for_line "$TRIES" "GUARD guest-loaded"' "$keyboard" | head -1 | cut -d: -f1)"
+key_line="$(grep -n '^python3 .*guard-webview-keyboard-key.py' "$keyboard" | head -1 | cut -d: -f1)"
+if [ -n "$wait_line" ] && [ -n "$key_line" ] && [ "$wait_line" -lt "$key_line" ] &&
+   ! grep -B4 'wait_for_line "$TRIES" "GUARD guest-loaded"' "$keyboard" |
+     grep -q 'NEGATIVE'; then
+  ok "both keyboard runs wait for the page in the element before the first key"
 else
-  printf '  FAIL  the keyboard control does not wait for the guest its <iframe> removed
+  printf '  FAIL  both keyboard runs wait for the page in the element before the first key
 '
   FAILED=$((FAILED + 1))
 fi
