@@ -6,7 +6,7 @@
 // shortens it so commands act on a container. Storing the selection as a depth
 // keeps it consistent with the chain.
 
-import type { Container, LayoutNode } from "./node";
+import type { Container, LayoutNode, WindowNode } from "./node";
 import { lastFocusIn, NodeKind, showsOneChild, windowsIn } from "./node";
 import type { Path } from "./path";
 import { ancestorsOf, nodeAt, pathTo } from "./path";
@@ -105,9 +105,12 @@ export const withFocusOn = (tiling: Tiling, id: string): Tiling => {
   if (root === undefined || path === undefined) {
     throw new Error(`layout tree: no tiled window ${id} to focus`);
   } else {
-    // Stamp only a focus change, so the focused window stays the latest.
+    // Stamp a window not already the latest, so a window opened focused (still
+    // at 0) is stamped, and focusing the latest again keeps its identity.
+    const latest = lastFocusIn(root);
+    const { focusedAt } = windowAt(root, path);
     const stamp =
-      focusedWindowIn(root) === id ? undefined : lastFocusIn(root) + 1;
+      focusedAt > 0 && focusedAt === latest ? undefined : latest + 1;
     return { depth: path.length, root: pointedAt(root, path, stamp) };
   }
 };
@@ -167,6 +170,15 @@ export const focusedChildIn = (container: Container): LayoutNode => {
     );
   } else {
     return child;
+  }
+};
+
+const windowAt = (root: LayoutNode, path: Path): WindowNode => {
+  const node = nodeAt(root, path);
+  if (node.kind === NodeKind.Window) {
+    return node;
+  } else {
+    throw new Error("layout tree: a focus path ends at a container");
   }
 };
 

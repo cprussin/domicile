@@ -62,11 +62,7 @@ describe("droppedOn", () => {
     );
 
     expect(dropped.root).toMatchObject({
-      children: [
-        LayoutNode.Window("b"),
-        LayoutNode.Window("a"),
-        LayoutNode.Window("c"),
-      ],
+      children: [{ id: "b" }, { id: "a" }, { id: "c" }],
       layout: Layout.SplitH,
     });
     expect(focusedIdOf(dropped)).toBe("a");
@@ -105,7 +101,7 @@ describe("droppedOn", () => {
       droppedOn(pair, { id: "a", up: 0 }, { id: "b", up: 0 }, Direction.Down)
         .root,
     ).toMatchObject({
-      children: [LayoutNode.Window("b"), LayoutNode.Window("a")],
+      children: [{ id: "b" }, { id: "a" }],
       layout: Layout.SplitV,
     });
   });
@@ -133,11 +129,7 @@ describe("droppedOn", () => {
         droppedOn(TABS, { id: "c", up: 0 }, { id: "a", up: 0 }, Direction.Right)
           .root,
       ).toMatchObject({
-        children: [
-          LayoutNode.Window("a"),
-          LayoutNode.Window("c"),
-          LayoutNode.Window("b"),
-        ],
+        children: [{ id: "a" }, { id: "c" }, { id: "b" }],
         layout: Layout.Tabbed,
       });
     });
@@ -149,10 +141,10 @@ describe("droppedOn", () => {
       ).toMatchObject({
         children: [
           {
-            children: [LayoutNode.Window("a"), LayoutNode.Window("b")],
+            children: [{ id: "a" }, { id: "b" }],
             layout: Layout.Tabbed,
           },
-          LayoutNode.Window("c"),
+          { id: "c" },
         ],
         layout: Layout.SplitH,
       });
@@ -186,9 +178,9 @@ describe("droppedOn", () => {
 
       expect(dropped.root).toMatchObject({
         children: [
-          LayoutNode.Window("c"),
+          { id: "c" },
           {
-            children: [LayoutNode.Window("a"), LayoutNode.Window("b")],
+            children: [{ id: "a" }, { id: "b" }],
             layout: Layout.Tabbed,
           },
         ],

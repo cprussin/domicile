@@ -181,7 +181,7 @@ describe("movedBy", () => {
     };
 
     expect(movedBy(nested, Direction.Right).root).toEqual(
-      LayoutNode.Container(Layout.SplitH, [LayoutNode.Window("a")]),
+      LayoutNode.Container(Layout.SplitH, [LayoutNode.Window("a", 1)]),
     );
   });
 

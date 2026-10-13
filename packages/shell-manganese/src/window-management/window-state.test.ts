@@ -650,7 +650,10 @@ describe("the workspaces", () => {
     expect(workspaceNamed(state, "2").tiling.root).toEqual(
       LayoutNode.Container(
         Layout.Tabbed,
-        [LayoutNode.Window(APP("kitty")), LayoutNode.Window(APP("editor"))],
+        [
+          LayoutNode.Window(APP("kitty"), 2),
+          LayoutNode.Window(APP("editor"), 3),
+        ],
         1,
       ),
     );
@@ -988,7 +991,9 @@ describe("moves across screens", () => {
     expect(state.focused).toBe("right");
     // In the workspace's tab group, as a window opened there would be.
     expect(workspaceOn(state, "right").tiling.root).toEqual(
-      LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window(APP("editor"))]),
+      LayoutNode.Container(Layout.Tabbed, [
+        LayoutNode.Window(APP("editor"), 2),
+      ]),
     );
   });
 });

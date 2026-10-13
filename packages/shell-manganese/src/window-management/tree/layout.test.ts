@@ -44,9 +44,9 @@ describe("split", () => {
   });
 
   it("leaves the focus on the window inside it", () => {
-    expect(focusedNodeOf(split(ROW, Axis.Vertical))).toEqual(
-      LayoutNode.Window("a"),
-    );
+    expect(focusedNodeOf(split(ROW, Axis.Vertical))).toMatchObject({
+      id: "a",
+    });
   });
 
   it("splits a workspace of one window too", () => {
@@ -63,7 +63,7 @@ describe("split", () => {
     };
 
     expect(split(group, Axis.Vertical).root).toEqual(
-      LayoutNode.Container(Layout.SplitV, [LayoutNode.Window("a")]),
+      LayoutNode.Container(Layout.SplitV, [LayoutNode.Window("a", 1)]),
     );
   });
 

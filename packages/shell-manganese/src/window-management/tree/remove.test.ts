@@ -57,6 +57,12 @@ describe("removed", () => {
     expect(focusedIdOf(removed(opened, "d"))).toBe("a");
   });
 
+  it("hands the focus to the window opened before the one that closed", () => {
+    const opened = inserted(inserted(withFocusOn(ROW, "a"), "d"), "e");
+
+    expect(focusedIdOf(removed(opened, "e"))).toBe("d");
+  });
+
   it("leaves the focus where it was when something else closed", () => {
     expect(focusedIdOf(removed(ROW, "a"))).toBe("b");
   });
