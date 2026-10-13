@@ -1,8 +1,10 @@
 //! Files, watches, processes, D-Bus, screenshots, shell commands, idle
-//! warnings and the lock's refusals for one chrome connection. The compositor
-//! takes the screenshots ([`System::screenshotting_with`]), shares the shell
-//! commands ([`System::sharing_shell_commands`]) and idle warnings
-//! ([`System::sharing_idle_warnings`]) between connections, and sends the
+//! warnings, the lock's refusals and window states for one chrome connection.
+//! The compositor takes the screenshots ([`System::screenshotting_with`]),
+//! sets window states ([`System::setting_window_states_with`]), shares the
+//! shell commands ([`System::sharing_shell_commands`]), idle warnings
+//! ([`System::sharing_idle_warnings`]) and window requests
+//! ([`System::sharing_window_requests`]) between connections, and sends the
 //! refusals ([`System::sharing_unlock_refusals`]).
 //!
 //! [`System::handle`] runs a `ChromeMessage::SystemRequest` and sends every
@@ -26,7 +28,7 @@ use std::time::{Instant, UNIX_EPOCH};
 
 use domicile_protocol::{
     Bus, DirEntry, FileType, HostMessage, Signal, Stream, SystemEnd, SystemError, SystemErrorKind,
-    SystemEvent, SystemReply, SystemRequest,
+    SystemEvent, SystemReply, SystemRequest, WindowState,
 };
 use notify::{EventKindMask, RecursiveMode, Watcher};
 use zbus::blocking::{Connection, MessageIterator};
@@ -40,6 +42,8 @@ use crate::lock_screen_readouts::is_a_readout;
 use crate::priority;
 use crate::shell_commands::ShellCommands;
 use crate::unlock_refusals::UnlockRefusals;
+use crate::window_requests::WindowRequests;
+use crate::AppId;
 
 /// How much of a process's output one event carries at most.
 const CHUNK: usize = 64 * 1024;
@@ -73,7 +77,15 @@ pub struct System {
     idle_warnings: IdleWarnings,
     /// The pages that hear the lock refuse a passphrase.
     unlock_refusals: UnlockRefusals,
+    /// Sets a window's states; `None` on a system that sets none.
+    set_window_states: Option<SetWindowStates>,
+    /// The pages that hear a client's window requests.
+    window_requests: WindowRequests,
 }
+
+/// Replaces the states the shell set on a window.
+pub type SetWindowStates =
+    Arc<dyn Fn(AppId, Vec<WindowState>) -> Result<(), SystemError> + Send + Sync>;
 
 /// Takes a screenshot, into the file if one is given, and returns where it
 /// went. Blocks until it is kept, the dialog included.
@@ -134,6 +146,8 @@ pub enum Reach {
     Readout,
     /// It only hears what the desktop sends it later.
     Listens,
+    /// It arranges windows, as `setAppBounds` does.
+    Arranges,
     /// Anything else.
     Acts,
 }
@@ -175,7 +189,9 @@ pub fn reach(request: &SystemRequest) -> Reach {
         },
         SystemRequest::ShellCommands
         | SystemRequest::IdleWarnings
-        | SystemRequest::UnlockRefusals => Reach::Listens,
+        | SystemRequest::UnlockRefusals
+        | SystemRequest::WindowRequests => Reach::Listens,
+        SystemRequest::SetWindowStates { .. } => Reach::Arranges,
         SystemRequest::WriteFile { .. }
         | SystemRequest::Stdin { .. }
         | SystemRequest::Screenshot { .. }
@@ -203,7 +219,9 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::ShellCommands
         | SystemRequest::IdleWarnings
         | SystemRequest::UnlockRefusals
-        | SystemRequest::SendShell { .. } => Some(HostMessage::SystemReply {
+        | SystemRequest::SendShell { .. }
+        | SystemRequest::SetWindowStates { .. }
+        | SystemRequest::WindowRequests => Some(HostMessage::SystemReply {
             id,
             reply: SystemReply::Failed {
                 error: SystemError {
@@ -245,6 +263,8 @@ impl System {
             shell_commands: ShellCommands::default(),
             idle_warnings: IdleWarnings::default(),
             unlock_refusals: UnlockRefusals::default(),
+            set_window_states: None,
+            window_requests: WindowRequests::default(),
         }
     }
 
@@ -285,6 +305,22 @@ impl System {
     /// `refusals`.
     pub fn sharing_unlock_refusals(mut self, refusals: UnlockRefusals) -> System {
         self.unlock_refusals = refusals;
+        self
+    }
+
+    /// This system, setting window states through `set`.
+    pub fn setting_window_states_with(
+        mut self,
+        set: impl Fn(AppId, Vec<WindowState>) -> Result<(), SystemError> + Send + Sync + 'static,
+    ) -> System {
+        self.set_window_states = Some(Arc::new(set));
+        self
+    }
+
+    /// This system, telling a page that listens each window request sent
+    /// through `requests`.
+    pub fn sharing_window_requests(mut self, requests: WindowRequests) -> System {
+        self.window_requests = requests;
         self
     }
 
@@ -617,6 +653,42 @@ impl System {
                 (self.tell)(HostMessage::SystemReply { id, reply });
                 Handled::Done
             }
+            SystemRequest::SetWindowStates { app_id, states } => {
+                let reply = match &self.set_window_states {
+                    Some(set) => match set(app_id, states) {
+                        Ok(()) => SystemReply::Set,
+                        Err(error) => failed(error),
+                    },
+                    None => failed(SystemError {
+                        kind: SystemErrorKind::Other,
+                        message: "this desktop sets no window states".into(),
+                    }),
+                };
+                (self.tell)(HostMessage::SystemReply { id, reply });
+                Handled::Done
+            }
+            SystemRequest::WindowRequests => self.starting(id, |system| {
+                let (tell, running) = (system.tell.clone(), Arc::downgrade(&system.running));
+                let listener = system
+                    .window_requests
+                    .listen(Arc::new(move |(app_id, request)| {
+                        let Some(running) = running.upgrade() else {
+                            return;
+                        };
+                        // Under the lock, as for shell commands.
+                        let running = running.lock().unwrap();
+                        if matches!(running.get(&id), Some(Running::Listening(_))) {
+                            tell(HostMessage::SystemEvent {
+                                id,
+                                event: SystemEvent::WindowRequest {
+                                    app_id: app_id.clone(),
+                                    request: request.clone(),
+                                },
+                            });
+                        }
+                    }));
+                Ok((Running::Listening(listener), Box::new(|| {})))
+            }),
         }
     }
 

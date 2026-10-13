@@ -46,7 +46,7 @@ use smithay::reexports::{
     },
     wayland_server::{
         backend::{ClientData, ClientId, DisconnectReason},
-        protocol::{wl_buffer, wl_callback::WlCallback, wl_seat, wl_surface::WlSurface},
+        protocol::{wl_buffer, wl_callback::WlCallback, wl_output, wl_seat, wl_surface::WlSurface},
         Client, Display, DisplayHandle, Resource as _, WEnum,
     },
 };
@@ -220,7 +220,9 @@ use domicile_host::Host;
 use domicile_launch::arguments::arguments;
 use domicile_launch::handshake::{silence, Handshake, WAIT_FOR_A_PAGE};
 use domicile_launch::session::{publish, Session};
-use domicile_protocol::{ChromeMessage, CursorShape, HostMessage, Passphrase, Theme};
+use domicile_protocol::{
+    ChromeMessage, CursorShape, HostMessage, Passphrase, Theme, WindowRequest,
+};
 use smithay::backend::renderer::gles::GlesRenderer;
 use zbus::zvariant::OwnedObjectPath;
 
@@ -5198,6 +5200,30 @@ impl XdgShellHandler for DomicileCompositor {
     fn move_request(&mut self, _surface: ToplevelSurface, _seat: wl_seat::WlSeat, _serial: Serial) {
     }
 
+    fn maximize_request(&mut self, surface: ToplevelSurface) {
+        self.pass_on_a_window_request(&surface, WindowRequest::Maximize);
+    }
+
+    fn unmaximize_request(&mut self, surface: ToplevelSurface) {
+        self.pass_on_a_window_request(&surface, WindowRequest::Unmaximize);
+    }
+
+    fn fullscreen_request(
+        &mut self,
+        surface: ToplevelSurface,
+        output: Option<wl_output::WlOutput>,
+    ) {
+        let display = output
+            .as_ref()
+            .and_then(Output::from_resource)
+            .map(|output| output.name());
+        self.pass_on_a_window_request(&surface, WindowRequest::Fullscreen { display });
+    }
+
+    fn unfullscreen_request(&mut self, surface: ToplevelSurface) {
+        self.pass_on_a_window_request(&surface, WindowRequest::Unfullscreen);
+    }
+
     fn resize_request(
         &mut self,
         _surface: ToplevelSurface,
@@ -5222,6 +5248,25 @@ impl XdgShellHandler for DomicileCompositor {
 }
 
 delegate_xdg_shell!(DomicileCompositor);
+
+impl DomicileCompositor {
+    /// Tell the pages listening what a client asked of its window, and answer
+    /// with a configure of the states it has.
+    ///
+    /// The shell decides and sets states with `set_window_states`. xdg-shell
+    /// requires the configure even when nothing changed. Before the first
+    /// configure, that configure is the answer.
+    fn pass_on_a_window_request(&self, surface: &ToplevelSurface, request: WindowRequest) {
+        // `None` for the chrome's own window, which is never announced.
+        if let Some(app_id) = self.app_id_of(surface.wl_surface()) {
+            debug!(%app_id, ?request, "a window request -> the shell");
+            self.hub.outbound.window_request(app_id, request);
+        }
+        if surface.is_initial_configure_sent() {
+            surface.send_configure();
+        }
+    }
+}
 
 // ---- xdg-activation: a client asking for the keyboard ---------------------
 

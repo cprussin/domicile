@@ -11,6 +11,7 @@ import {
   system,
   UnlockRefusal,
 } from "./system";
+import { WindowRequest, WindowState } from "./window-state";
 
 /**
  * A desktop that records system calls and answers them as the
@@ -510,6 +511,83 @@ describe("unlock refusals", () => {
         UnlockRefusal.TooSoon,
       ].map((refusal) => ({ failures: 3, refusal, retryInMs: 5000 })),
     );
+  });
+});
+
+describe("window states", () => {
+  it("replaces the states the shell set on a window", async () => {
+    const host = new FakeHost();
+    const setting = system(host).setWindowStates("app-1", [
+      WindowState.TiledLeft,
+      WindowState.TiledRight,
+      WindowState.TiledTop,
+      WindowState.TiledBottom,
+      WindowState.Maximized,
+      WindowState.Fullscreen,
+    ]);
+    host.reply(1, { kind: "set" });
+
+    expect(host.calls).toStrictEqual([
+      [
+        1,
+        {
+          app_id: "app-1",
+          call: "set_window_states",
+          states: [
+            "tiled_left",
+            "tiled_right",
+            "tiled_top",
+            "tiled_bottom",
+            "maximized",
+            "fullscreen",
+          ],
+        },
+      ],
+    ]);
+    expect(await setting).toStrictEqual(Ok("set"));
+  });
+
+  it("says the compositor knows no such window", async () => {
+    const host = new FakeHost();
+    const setting = system(host).setWindowStates("gone", []);
+    host.reply(1, {
+      error: { kind: "not_found", message: "no window gone" },
+      kind: "failed",
+    });
+
+    expect(await setting).toStrictEqual(
+      Err({ kind: SystemErrorKind.NotFound, message: "no window gone" }),
+    );
+  });
+
+  it("streams each maximize and fullscreen request clients make", async () => {
+    const host = new FakeHost();
+    const listening = system(host).windowRequests();
+    host.reply(1, { kind: "started" });
+    const requests = started(await listening);
+    for (const request of [
+      { kind: "maximize" },
+      { kind: "unmaximize" },
+      { display: "left", kind: "fullscreen" },
+      { display: null, kind: "fullscreen" },
+      { kind: "unfullscreen" },
+    ]) {
+      host.event(1, { app_id: "app-1", kind: "window_request", request });
+    }
+    requests.stop();
+    host.end(1, { kind: "stopped" });
+
+    expect(host.calls).toStrictEqual([
+      [1, { call: "window_requests" }],
+      [1, { call: "unwatch" }],
+    ]);
+    expect(await Array.fromAsync(requests.items)).toStrictEqual([
+      WindowRequest.Maximize("app-1"),
+      WindowRequest.Unmaximize("app-1"),
+      WindowRequest.Fullscreen("app-1", "left"),
+      WindowRequest.Fullscreen("app-1", undefined),
+      WindowRequest.Unfullscreen("app-1"),
+    ]);
   });
 });
 

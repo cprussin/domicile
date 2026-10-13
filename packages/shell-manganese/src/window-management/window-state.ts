@@ -689,8 +689,8 @@ export const WindowAction = {
   }),
 
   /**
-   * The page in browser window `id` entered or left fullscreen. See
-   * `pageFullscreened`.
+   * The page in browser window `id`, or the client of app window `id`, asked
+   * to enter or leave fullscreen. See `pageFullscreened`.
    */
   PageFullscreened: (id: string, fullscreen: boolean) => ({
     fullscreen,

@@ -5,7 +5,9 @@ import {
 } from "@domicile-desktop/sdk/app-element";
 import type { CursorShape } from "@domicile-desktop/sdk/cursor-shape";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { SystemErrorKind, system } from "@domicile-desktop/sdk/system";
+import { WindowState } from "@domicile-desktop/sdk/window-state";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { css, cx } from "../../styled-system/css";
 import type { Rect } from "./rect";
@@ -28,6 +30,14 @@ import {
   shuffledBy,
   windowStyles,
 } from "./window-styles";
+
+/** What a tiled window tells its client: something touches every edge. */
+const TILED: readonly WindowState[] = [
+  WindowState.TiledLeft,
+  WindowState.TiledRight,
+  WindowState.TiledTop,
+  WindowState.TiledBottom,
+];
 
 /**
  * The box a window off screen reports. Empty, so the compositor stops its
@@ -53,6 +63,8 @@ type Props = {
    * the pointer.
    */
   dragging: boolean;
+  /** Whether this window floats rather than tiles. */
+  floating: boolean;
   /** The host's id for this window's client. */
   appId: string;
   /**
@@ -127,6 +139,7 @@ export const AppWindow = ({
   depth,
   domicile,
   dragging,
+  floating,
   focused,
   frame,
   fullscreen,
@@ -192,6 +205,30 @@ export const AppWindow = ({
   useEffect(() => {
     domicile.setAppBounds(appId, x, y, width, height);
   }, [appId, domicile, height, width, x, y]);
+
+  // Tells the client how it is laid out, so a tiled window draws no shadow,
+  // rounded corners or resize border of its own. Floats get none, as in sway.
+  const host = useMemo(() => system(domicile), [domicile]);
+  useEffect(() => {
+    host
+      .setWindowStates(appId, statesOf(fullscreen, floating))
+      .then((set) => {
+        set.match({
+          Err: (error) => {
+            // A window that closed has no states left to set.
+            if (error.kind !== SystemErrorKind.NotFound) {
+              // biome-ignore lint/suspicious/noConsole: surfacing states the compositor refused
+              console.error(`The states of ${appId} were not set`, error);
+            }
+          },
+          Ok: () => undefined,
+        });
+      })
+      .catch((error: unknown) => {
+        // biome-ignore lint/suspicious/noConsole: surfacing a broken system call
+        console.error(`The states of ${appId} were not set`, error);
+      });
+  }, [appId, floating, fullscreen, host]);
 
   // Cancels the engine's default focus-on-click. The shell owns focus:
   // `WindowFrame` reports the press and `focused` drives the effect above.
@@ -284,3 +321,17 @@ export const AppWindow = ({
 
 // The title bar draws the top edge, so the surface meets it flush.
 const appStyles = css({ borderBlockStartWidth: 0 });
+
+/** The states a window's client is told, by how the window is laid out. */
+const statesOf = (
+  fullscreen: boolean,
+  floating: boolean,
+): readonly WindowState[] => {
+  if (fullscreen) {
+    return [WindowState.Fullscreen];
+  } else if (floating) {
+    return [];
+  } else {
+    return TILED;
+  }
+};

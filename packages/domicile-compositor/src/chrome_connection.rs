@@ -10,7 +10,9 @@ use std::thread;
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
 use domicile_host::system::{locked_out, reach, Handled, System};
 use domicile_launch::handshake::Handshake;
-use domicile_protocol::{ChromeMessage, HostMessage, SystemRequest, Theme};
+use domicile_protocol::{
+    ChromeMessage, HostMessage, SystemError, SystemErrorKind, SystemRequest, Theme,
+};
 use tracing::{debug, warn};
 
 use crate::chrome_hub::{Chrome, ChromeHub};
@@ -186,7 +188,23 @@ fn read_chrome_messages(
     })
     .sharing_shell_commands(hub.shell_commands.clone())
     .sharing_idle_warnings(hub.idle_warnings.clone())
-    .sharing_unlock_refusals(hub.unlock_refusals.clone());
+    .sharing_unlock_refusals(hub.unlock_refusals.clone())
+    .setting_window_states_with({
+        let hub = hub.clone();
+        move |app_id, states| {
+            // Checked here so the page hears of a bad id. A window that closes
+            // before the Wayland thread gets this is logged there.
+            if hub.host.lock().unwrap().app(&app_id).is_none() {
+                return Err(SystemError {
+                    kind: SystemErrorKind::NotFound,
+                    message: format!("no window {app_id}"),
+                });
+            }
+            hub.send_request(ClientRequest::SetWindowStates { app_id, states });
+            Ok(())
+        }
+    })
+    .sharing_window_requests(hub.window_requests.clone());
     let mut ready = false;
     // Whether this connection is in the broadcast list. Separate from `ready`
     // because a socket can send `hello` twice, and the writer must not be added

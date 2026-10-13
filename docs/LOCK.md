@@ -26,14 +26,14 @@ desktop treats it.
 | Input | `Key`, pointer motion, buttons, axis, leave; the same from EIS clients (`crate::eis`) | Dropped (`debug` log) |
 | Commands | `CloseApp`, `Spawn`, `CopyClipboardEntry`, tray, notifications | Refused (`warn` log) |
 | Reads on the connection | `SearchFiles` | Answered with nothing (`warn` log) |
-| System calls | `SystemRequest`, except reads under `/sys`, lock screen readouts, listening for shell commands or unlock refusals, and calls that stop something running | A call that starts something is answered `locked`; `stdin` is dropped (`warn` log) |
-| Allowed | `ChromeHello`, `Lock`, `Unlock`, `KeyboardFocus`, output scale and size, window bounds, `ClipboardCopied`, theme | Handled normally |
+| System calls | `SystemRequest`, except reads under `/sys`, lock screen readouts, listening for shell commands, unlock refusals or window requests, setting window states, and calls that stop something running | A call that starts something is answered `locked`; `stdin` is dropped (`warn` log) |
+| Allowed | `ChromeHello`, `Lock`, `Unlock`, `KeyboardFocus`, output scale and size, window bounds and states, `ClipboardCopied`, theme | Handled normally |
 
 Why some requests are allowed:
 
 - `ChromeHello`: a reloaded page learns the desktop is locked from the answer.
-- `SetOutputScale`, `SetOutputSize`, `SetAppBounds`: nothing replays them
-  after unlock.
+- `SetOutputScale`, `SetOutputSize`, `SetAppBounds`, `set_window_states`:
+  nothing replays them after unlock.
 - `KeyboardFocus`: refusing it would leave the shell and the compositor disagreeing
   about focus after unlock. No key reaches the window while locked anyway.
 - `ClipboardCopied`: it is a client's copy, and the history must match pastes.
@@ -45,8 +45,8 @@ Why some requests are allowed:
   battery and Bluetooth and sets the brightness and volume. See
   [Lock screen readouts](#lock-screen-readouts).
 - `unwatch`, `close_stdin`, `kill`: they stop what the shell started.
-- `shell_commands`: it only listens. A page reloaded while locked still hears
-  `domicile send-shell` after unlock. `send_shell` itself is refused.
+- `shell_commands`, `window_requests`: they only listen. A page reloaded
+  while locked still hears them after unlock. `send_shell` itself is refused.
 - `unlock_refusals`: it only listens, and a lock screen needs it while locked.
 
 ## Lock screen readouts

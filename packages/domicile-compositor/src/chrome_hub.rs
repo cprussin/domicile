@@ -11,6 +11,7 @@ use domicile_host::idle_warnings::IdleWarnings;
 use domicile_host::ipc::{apply_chrome_message, to_line};
 use domicile_host::shell_commands::ShellCommands;
 use domicile_host::unlock_refusals::UnlockRefusals;
+use domicile_host::window_requests::WindowRequests;
 use domicile_host::Host;
 use domicile_protocol::{ChromeMessage, HostMessage, Theme};
 use smithay::reexports::calloop::channel::Sender;
@@ -85,6 +86,10 @@ pub struct ChromeHub {
     /// The pages listening for the lock's refusals, shared by every
     /// connection's `System`. See [`crate::lock`].
     pub unlock_refusals: UnlockRefusals,
+    /// The pages listening for clients' window requests, shared by every
+    /// connection's `System`. The writer thread sends to them; see
+    /// [`Outbound::WindowRequest`].
+    pub window_requests: WindowRequests,
 }
 
 impl ChromeHub {
@@ -114,6 +119,7 @@ impl ChromeHub {
             shell_commands: ShellCommands::default(),
             idle_warnings: IdleWarnings::default(),
             unlock_refusals: UnlockRefusals::default(),
+            window_requests: WindowRequests::default(),
         });
         (hub, outbound_rx)
     }
@@ -236,7 +242,13 @@ pub fn serve_outbound(hub: Arc<ChromeHub>, outbound: OutboundReceiver) {
             report(&mut window, &hub);
             continue;
         };
-        let Outbound::Message(message) = item;
+        let message = match item {
+            Outbound::Message(message) => message,
+            Outbound::WindowRequest(app_id, request) => {
+                hub.window_requests.send(&(app_id, request));
+                continue;
+            }
+        };
         // Encoded once; every chrome gets the same line.
         let line = to_line(&message);
         let mut chromes = hub.chromes.lock().unwrap();
@@ -275,7 +287,9 @@ pub mod fixture {
     pub fn queued(outbound: &crate::outbound::OutboundReceiver) -> Vec<HostMessage> {
         let mut seen = Vec::new();
         while let Some(Some(item)) = outbound.recv_until(Duration::from_millis(100)) {
-            let Outbound::Message(message) = item;
+            let Outbound::Message(message) = item else {
+                panic!("these tests queue no window requests");
+            };
             seen.push(message);
         }
         seen

@@ -16,6 +16,8 @@ import type {
   SystemReplyMessage,
 } from "./system-message";
 import { parseSystemMessage } from "./system-message";
+import type { WindowState } from "./window-state";
+import { WindowRequest, wireWindowState } from "./window-state";
 
 /** Why a system call failed, as the compositor said. */
 export enum SystemErrorKind {
@@ -264,6 +266,22 @@ export type System = {
    * page listening hears every refusal. Allowed while the desktop is locked.
    */
   unlockRefusals: () => Promise<Result<Listening<UnlockRefused>, SystemError>>;
+  /**
+   * Replace the `xdg_toplevel` states the shell set on window `appId`, and
+   * configure it. States last until the shell replaces them, across reloads.
+   * Fails {@link SystemErrorKind.NotFound} for a window the compositor does
+   * not know. Allowed while the desktop is locked.
+   */
+  setWindowStates: (
+    appId: string,
+    states: readonly WindowState[],
+  ) => Promise<Result<"set", SystemError>>;
+  /**
+   * Hear each maximize and fullscreen request a client makes. The compositor
+   * grants none; grant one with {@link System.setWindowStates}. Allowed while
+   * the desktop is locked.
+   */
+  windowRequests: () => Promise<Result<Listening<WindowRequest>, SystemError>>;
 };
 
 /** What {@link system} needs of the desktop `Shell` is handed. */
@@ -350,6 +368,16 @@ export const system = (host: SystemHost): System => {
       }),
     screenshot: () =>
       oneShot(calls, { call: "screenshot" }, (reply) => keptOf(reply)),
+    setWindowStates: (appId, states) =>
+      oneShot(
+        calls,
+        {
+          app_id: appId,
+          call: "set_window_states",
+          states: states.map(wireWindowState),
+        },
+        (reply) => (reply.kind === "set" ? "set" : unexpected(reply)),
+      ),
     shellCommands: () =>
       listening(calls, { call: "shell_commands" }, (event) =>
         event.kind === "shell_command" ? event.command : unexpected(event),
@@ -378,6 +406,12 @@ export const system = (host: SystemHost): System => {
     watch: (path) =>
       listening(calls, { call: "watch", path }, (event) =>
         event.kind === "changed" ? event.path : unexpected(event),
+      ),
+    windowRequests: () =>
+      listening(calls, { call: "window_requests" }, (event) =>
+        event.kind === "window_request"
+          ? windowRequest(event.app_id, event.request)
+          : unexpected(event),
       ),
     writeFile: (path, data, options) =>
       oneShot(
@@ -690,6 +724,24 @@ const keptOf = (reply: Reply): ScreenshotKept => {
       return ScreenshotKept.Copied();
     default:
       return unexpected(reply);
+  }
+};
+
+type WireWindowRequest = Extract<Event, { kind: "window_request" }>["request"];
+
+const windowRequest = (
+  appId: string,
+  request: WireWindowRequest,
+): WindowRequest => {
+  switch (request.kind) {
+    case "maximize":
+      return WindowRequest.Maximize(appId);
+    case "unmaximize":
+      return WindowRequest.Unmaximize(appId);
+    case "fullscreen":
+      return WindowRequest.Fullscreen(appId, request.display ?? undefined);
+    case "unfullscreen":
+      return WindowRequest.Unfullscreen(appId);
   }
 };
 

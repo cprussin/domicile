@@ -1454,6 +1454,46 @@ pub enum SystemRequest {
     /// [`SystemReply::Started`], then a [`SystemEvent::UnlockRefused`] per
     /// refusal, to every page listening. [`SystemRequest::Unwatch`] ends it.
     UnlockRefusals,
+    /// Replace the `xdg_toplevel` states the shell sets on window `app_id`
+    /// with `states`, and configure it. Answered with [`SystemReply::Set`],
+    /// or [`SystemErrorKind::NotFound`] for a window the compositor does not
+    /// know. See `docs/WRITING-A-SHELL.md`.
+    SetWindowStates {
+        app_id: String,
+        states: Vec<WindowState>,
+    },
+    /// Report each maximize and fullscreen request a client makes. Answered
+    /// with [`SystemReply::Started`], then a [`SystemEvent::WindowRequest`]
+    /// per request. [`SystemRequest::Unwatch`] ends it.
+    WindowRequests,
+}
+
+/// An `xdg_toplevel` state the shell sets with
+/// [`SystemRequest::SetWindowStates`]. A client bound below `xdg_wm_base`
+/// version 2 is sent no tiled state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WindowState {
+    TiledLeft,
+    TiledRight,
+    TiledTop,
+    TiledBottom,
+    Maximized,
+    Fullscreen,
+}
+
+/// What a client asked of its window. The compositor only reports it; the
+/// shell grants it with [`SystemRequest::SetWindowStates`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum WindowRequest {
+    Maximize,
+    Unmaximize,
+    /// `display` is the [`DisplayInfo::name`] the client named, if any.
+    Fullscreen {
+        display: Option<String>,
+    },
+    Unfullscreen,
 }
 
 /// The `app_id` of a portal dialog the shell asked for itself, such as
@@ -1510,6 +1550,8 @@ pub enum SystemReply {
     Copied,
     /// At least one page heard the command.
     Sent,
+    /// The window's states were replaced.
+    Set,
     /// The call failed. Nothing else follows under this id.
     Failed { error: SystemError },
 }
@@ -1558,6 +1600,11 @@ pub enum SystemEvent {
         refusal: UnlockRefusal,
         failures: u32,
         retry_in_ms: u64,
+    },
+    /// The client of window `app_id` asked for `request`.
+    WindowRequest {
+        app_id: String,
+        request: WindowRequest,
     },
     /// A D-Bus signal a match named, its body written as
     /// [`SystemReply::Returned`]'s is.

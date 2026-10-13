@@ -5,13 +5,15 @@ use std::time::Instant;
 
 use smithay::backend::input::{Axis, AxisSource, ButtonState};
 use smithay::input::pointer::{AxisFrame, MotionEvent};
+use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::utils::SERIAL_COUNTER;
 use smithay::wayland::compositor::with_states;
+use smithay::wayland::shell::xdg::ToplevelSurface;
 use tracing::{debug, warn};
 
 use domicile_host::clipboard::Contents;
 use domicile_host::theme_turnover::{Turnover, CAPTURE_WITHIN};
-use domicile_protocol::{Passphrase, PortalAnswer, Theme, TrayAction};
+use domicile_protocol::{Passphrase, PortalAnswer, Theme, TrayAction, WindowState};
 
 use crate::chrome_hub::announce_open_apps;
 use crate::engine::Clipboard;
@@ -76,6 +78,12 @@ pub enum ClientRequest {
     SetAppBounds {
         app_id: String,
         bounds: domicile_scene::Bounds,
+    },
+    /// The page replaced the states it set on window `app_id`. See
+    /// [`set_window_states`].
+    SetWindowStates {
+        app_id: String,
+        states: Vec<WindowState>,
     },
     /// The chrome asked the client of `app_id` to close its window.
     CloseApp {
@@ -424,6 +432,12 @@ impl DomicileCompositor {
                 // Logged in case the chrome sent a bogus id.
                 None => debug!(%app_id, "bounds: a window with no toplevel"),
             },
+            ClientRequest::SetWindowStates { app_id, states } => match self.toplevel_for(&app_id) {
+                Some(toplevel) => set_window_states(&toplevel, &states),
+                // The window closed while the message was in flight; the
+                // connection checked the id.
+                None => debug!(%app_id, "window states: a window with no toplevel"),
+            },
             ClientRequest::Spawn { command } => spawn_client(
                 &command,
                 &self.hub.wayland_display,
@@ -449,5 +463,46 @@ impl DomicileCompositor {
                 },
             },
         }
+    }
+}
+
+/// Replace the states a shell sets on `toplevel` with `states`, and configure
+/// it if they changed.
+///
+/// Smithay drops tiled states for a client bound below `xdg_wm_base` version 2.
+/// `activated` and `suspended` are the compositor's and are kept.
+fn set_window_states(toplevel: &ToplevelSurface, states: &[WindowState]) {
+    toplevel.with_pending_state(|pending| {
+        for state in SHELL_STATES {
+            pending.states.unset(state);
+        }
+        for state in states {
+            pending.states.set(xdg_state(*state));
+        }
+    });
+    // Before the first configure, that configure carries them.
+    if toplevel.is_initial_configure_sent() {
+        toplevel.send_pending_configure();
+    }
+}
+
+/// Every `xdg_toplevel` state a shell sets.
+const SHELL_STATES: [xdg_toplevel::State; 6] = [
+    xdg_toplevel::State::TiledLeft,
+    xdg_toplevel::State::TiledRight,
+    xdg_toplevel::State::TiledTop,
+    xdg_toplevel::State::TiledBottom,
+    xdg_toplevel::State::Maximized,
+    xdg_toplevel::State::Fullscreen,
+];
+
+fn xdg_state(state: WindowState) -> xdg_toplevel::State {
+    match state {
+        WindowState::TiledLeft => xdg_toplevel::State::TiledLeft,
+        WindowState::TiledRight => xdg_toplevel::State::TiledRight,
+        WindowState::TiledTop => xdg_toplevel::State::TiledTop,
+        WindowState::TiledBottom => xdg_toplevel::State::TiledBottom,
+        WindowState::Maximized => xdg_toplevel::State::Maximized,
+        WindowState::Fullscreen => xdg_toplevel::State::Fullscreen,
     }
 }

@@ -305,6 +305,7 @@ export const Stage = memo(
                 }
                 domicile={domicile}
                 dragging={stretching || held.has(window.id)}
+                floating={desk.floats.has(window.id)}
                 focused={focused}
                 fullscreen={desk.fullscreen.get(window.id) === false}
                 hasKeyboard={window.id === focusedId}
@@ -701,6 +702,7 @@ type WindowContentsProps = {
   clickThrough: boolean;
   domicile: DomicileHost;
   dragging: boolean;
+  floating: boolean;
   focused: boolean;
   fullscreen: boolean;
   hasKeyboard: boolean;
@@ -732,6 +734,7 @@ const WindowContents = memo(
     clickThrough,
     domicile,
     dragging,
+    floating,
     focused,
     fullscreen,
     hasKeyboard,
@@ -787,6 +790,7 @@ const WindowContents = memo(
             depth={contents?.depth ?? 0}
             domicile={domicile}
             dragging={dragging}
+            floating={floating}
             focused={focused}
             frame={placement?.frame}
             fullscreen={fullscreen}

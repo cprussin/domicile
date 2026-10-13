@@ -4,21 +4,23 @@
 //! answers frame callbacks and flushes clients, so a stall on a socket freezes
 //! input for every client, long enough for a held key to start repeating.
 //!
-//! The queue is unbounded. It carries only lifecycle messages, which are the
-//! chrome's model of the world and cannot be dropped. They are small and
-//! arrive at the rate windows open and close.
+//! The queue is unbounded. It carries only lifecycle messages and clients'
+//! window requests, which cannot be dropped. They are small and arrive at the
+//! rate windows open, close and change state.
 
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::time::Duration;
 
-use domicile_protocol::HostMessage;
+use domicile_host::AppId;
+use domicile_protocol::{HostMessage, WindowRequest};
 
 /// Something on its way to the chrome.
-///
-/// An enum with one variant, so adding an item that is not a `HostMessage`
-/// does not change the channel's type at every use.
 pub enum Outbound {
     Message(HostMessage),
+    /// For the pages listening for window requests. Sent here because each
+    /// page is written to under its connection's lock, which may wait on a
+    /// chrome that is not reading.
+    WindowRequest(AppId, WindowRequest),
 }
 
 /// The sending half, held by the Wayland thread.
@@ -41,6 +43,11 @@ impl OutboundSender {
     /// Queue a lifecycle message. Never waits and never drops.
     pub fn message(&self, message: HostMessage) {
         let _ = self.sender.send(Outbound::Message(message));
+    }
+
+    /// Queue a client's window request. Never waits and never drops.
+    pub fn window_request(&self, app_id: AppId, request: WindowRequest) {
+        let _ = self.sender.send(Outbound::WindowRequest(app_id, request));
     }
 }
 

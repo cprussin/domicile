@@ -947,6 +947,107 @@ mod unlock_refusals {
     }
 }
 
+/// Window states the shell sets, and the maximize and fullscreen requests it
+/// hears from clients.
+mod window_states {
+    use domicile_host::window_requests::WindowRequests;
+    use domicile_protocol::{SystemError, WindowRequest, WindowState};
+
+    use super::*;
+
+    fn tile_left_and_right() -> SystemRequest {
+        SystemRequest::SetWindowStates {
+            app_id: "app-1".into(),
+            states: vec![WindowState::TiledLeft, WindowState::TiledRight],
+        }
+    }
+
+    #[test]
+    fn setting_states_hands_them_to_the_compositor() {
+        let (told, asked) = channel();
+        let (system, heard) = system_in(&std::env::temp_dir());
+        let system = system.setting_window_states_with(move |app_id, states| {
+            told.send((app_id, states)).unwrap();
+            Ok(())
+        });
+
+        system.handle(1, tile_left_and_right());
+
+        assert_eq!(reply(&heard, 1), SystemReply::Set);
+        assert_eq!(
+            asked.recv().unwrap(),
+            (
+                "app-1".to_string(),
+                vec![WindowState::TiledLeft, WindowState::TiledRight]
+            )
+        );
+    }
+
+    #[test]
+    fn states_the_compositor_refused_say_why() {
+        let (system, heard) = system_in(&std::env::temp_dir());
+        let system = system.setting_window_states_with(|_, _| {
+            Err(SystemError {
+                kind: SystemErrorKind::NotFound,
+                message: "no window app-1".into(),
+            })
+        });
+
+        system.handle(1, tile_left_and_right());
+
+        assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::NotFound);
+    }
+
+    #[test]
+    fn a_system_that_sets_no_states_says_so() {
+        let (system, heard) = system_in(&std::env::temp_dir());
+
+        system.handle(1, tile_left_and_right());
+
+        assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::Other);
+    }
+
+    #[test]
+    fn a_page_listening_hears_each_request_until_it_stops() {
+        let requests = WindowRequests::default();
+        let (system, heard) = system_in(&std::env::temp_dir());
+        let page = system.sharing_window_requests(requests.clone());
+        page.handle(7, SystemRequest::WindowRequests);
+        assert_eq!(reply(&heard, 7), SystemReply::Started);
+
+        requests.send(&("app-1".into(), WindowRequest::Maximize));
+        assert_eq!(
+            next(&heard),
+            HostMessage::SystemEvent {
+                id: 7,
+                event: SystemEvent::WindowRequest {
+                    app_id: "app-1".into(),
+                    request: WindowRequest::Maximize,
+                },
+            }
+        );
+
+        page.handle(7, SystemRequest::Unwatch);
+        requests.send(&("app-1".into(), WindowRequest::Unmaximize));
+        assert_eq!(
+            next(&heard),
+            HostMessage::SystemEnd {
+                id: 7,
+                end: SystemEnd::Stopped,
+            }
+        );
+        assert!(heard.recv_timeout(Duration::from_millis(100)).is_err());
+    }
+
+    /// Both arrange windows or listen, as `setAppBounds` does, so a lock
+    /// screen's layout stays right.
+    #[test]
+    fn setting_states_arranges_and_hearing_requests_listens() {
+        assert_eq!(reach(&tile_left_and_right()), Reach::Arranges);
+        assert_eq!(reach(&SystemRequest::WindowRequests), Reach::Listens);
+    }
+}
+
 /// What a refused request gets while the desktop is locked.
 mod locked {
     use super::*;

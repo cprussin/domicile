@@ -96,6 +96,19 @@ pub struct Arguments {
     /// The buffer is drawn turned, half [`crate::window::TURNED_COLORS`]`[0]`
     /// and half `[1]` across, so a check can tell which way it is shown.
     pub buffer_transform: Option<Transform>,
+
+    /// The maximize or fullscreen request to make on its first configure, if
+    /// any. `Fullscreen` names the first output the client bound.
+    pub ask_to: Option<AskTo>,
+}
+
+/// An `xdg_toplevel` request about the window's state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AskTo {
+    Maximize,
+    Unmaximize,
+    Fullscreen,
+    Unfullscreen,
 }
 
 /// When the client takes its idle inhibitor.
@@ -141,6 +154,9 @@ pub enum ArgumentError {
     #[error("--buffer-transform wants a wl_output.transform name, not {value}")]
     NotATransform { value: String },
 
+    #[error("--ask-to wants maximize, unmaximize, fullscreen or unfullscreen, not {value}")]
+    NotAWindowRequest { value: String },
+
     #[error("unknown argument {argument}")]
     Unknown { argument: String },
 }
@@ -165,6 +181,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut max_size = None;
     let mut resize_to = None;
     let mut buffer_transform = None;
+    let mut ask_to = None;
 
     let mut args = args.into_iter();
     while let Some(argument) = args.next() {
@@ -241,6 +258,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--buffer-transform" => {
                 take(&mut buffer_transform, &flag, turn(&mut args, &flag)?)?;
             }
+            "--ask-to" => {
+                take(&mut ask_to, &flag, window_request(&mut args, &flag)?)?;
+            }
             _ => return Err(ArgumentError::Unknown { argument: flag }),
         }
     }
@@ -264,6 +284,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         max_size,
         resize_to,
         buffer_transform,
+        ask_to,
     })
 }
 
@@ -316,6 +337,21 @@ fn turn(args: &mut impl Iterator<Item = OsString>, flag: &str) -> Result<Transfo
         "flipped-180" => Ok(Transform::Flipped180),
         "flipped-270" => Ok(Transform::Flipped270),
         _ => Err(ArgumentError::NotATransform { value: stated }),
+    }
+}
+
+/// The window request named after a flag.
+fn window_request(
+    args: &mut impl Iterator<Item = OsString>,
+    flag: &str,
+) -> Result<AskTo, ArgumentError> {
+    let stated = value(args, flag)?;
+    match stated.as_str() {
+        "maximize" => Ok(AskTo::Maximize),
+        "unmaximize" => Ok(AskTo::Unmaximize),
+        "fullscreen" => Ok(AskTo::Fullscreen),
+        "unfullscreen" => Ok(AskTo::Unfullscreen),
+        _ => Err(ArgumentError::NotAWindowRequest { value: stated }),
     }
 }
 

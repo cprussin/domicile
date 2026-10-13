@@ -103,6 +103,17 @@ For how warping, browser-window focus and modifier drags work, see
 - A browser window fills its screen while its page is fullscreen, such as
   after a video's fullscreen button (`pageFullscreened`), and hides its address
   bar. Leaving fullscreen with Meta+F or the title bar takes the page out too.
+- A client window fills its screen while its client asks to be fullscreen,
+  the same way. Maximize requests change nothing, as in sway.
+
+## Client states
+
+`AppWindow` sets each client's `xdg_toplevel` states, so a client that draws
+its own frame leaves out its shadow, rounded corners and resize border:
+
+- tiled: `tiled_left`, `tiled_right`, `tiled_top`, `tiled_bottom`
+- floating: none, as in sway
+- fullscreen on its own: `fullscreen`
 
 ## Floating windows
 
