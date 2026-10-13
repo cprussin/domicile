@@ -252,8 +252,12 @@ const stripStyles = cva({
   },
 });
 
-/** Level with the tabs, which sit below the strip's top inset. */
+/**
+ * Level with the tabs, which sit below the strip's top inset, and centered as
+ * `StripButtons` centers the group buttons.
+ */
 const newTabStyles = flex({
+  align: "center",
   insetBlockEnd: "1px",
   insetBlockStart: 1,
   paddingInlineStart: 0.5,
