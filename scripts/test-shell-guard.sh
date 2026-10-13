@@ -88,9 +88,11 @@ verdict() { # $1 compositor log, $2 engine log, $3 (optional) engine log after 2
       ( sleep 2; printf '%s\n' "$3" >>"$dir/engine" ) &
     fi
     if [ "$live" = yes ]; then
+      # SIGKILL: a SIGTERM before the child execs `sleep` is lost to the
+      # EXIT trap's handler, and the sleep holds this substitution open.
       sleep 60 & DOMICILE_PID=$!
       eval "$BLOCK" 2>/dev/null | tail -1
-      kill $DOMICILE_PID 2>/dev/null
+      kill -KILL $DOMICILE_PID 2>/dev/null
     else
       sleep 0 & DOMICILE_PID=$!
       wait "$DOMICILE_PID"
