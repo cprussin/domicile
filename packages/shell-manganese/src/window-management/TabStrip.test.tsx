@@ -56,6 +56,15 @@ const partOf = (container: HTMLElement, selector: string): HTMLElement => {
   }
 };
 
+const parentOf = (element: HTMLElement): HTMLElement => {
+  const parent = element.parentElement;
+  if (parent === null) {
+    throw new Error("test: the element has no parent");
+  } else {
+    return parent;
+  }
+};
+
 describe("TabStrip", () => {
   // One box for the whole strip, so no seam shows between its tabs.
   it("draws the whole strip as one box at its group's depth", () => {
@@ -199,6 +208,22 @@ describe("TabStrip", () => {
       });
       fireEvent.click(screen.getByRole("button", { name: "New tab" }));
       await added;
+    });
+
+    it("centers the new-tab button level with the group buttons", () => {
+      const { container, getByRole } = render(<TabStrip {...stripProps} />);
+      const newTab = globalThis.getComputedStyle(
+        partOf(container, "[data-new-tab]"),
+      );
+      const buttons = globalThis.getComputedStyle(
+        parentOf(getByRole("button", { name: "Float group" })),
+      );
+
+      expect(newTab.alignItems).toBe("center");
+      expect([newTab.insetBlockStart, newTab.insetBlockEnd]).toStrictEqual([
+        buttons.insetBlockStart,
+        buttons.insetBlockEnd,
+      ]);
     });
 
     it("holds the handle that drags the whole group", () => {

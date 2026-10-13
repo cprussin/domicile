@@ -67,7 +67,7 @@ const endStyles = css({ pointerEvents: "none" });
 
 /**
  * At the strip's far end, level with the new-tab button at its start (see
- * `newTabStyles` in `TitleBar`).
+ * `newTabStyles` in `TabStrip`).
  */
 const controlStyles = hstack({
   gap: 0,
