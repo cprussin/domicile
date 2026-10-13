@@ -1,0 +1,8 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// A request header `DomicileHost.fetchWithCookies()` sends.
+dictionary DomicileFetchHeader {
+  required ByteString name;
+  required ByteString value;
+};

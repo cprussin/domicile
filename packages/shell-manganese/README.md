@@ -22,7 +22,7 @@ your own.
 |---|---|
 | [`manganese-host`](../manganese-host/README.md) | The desktop as React context, one value per desktop, shared watches |
 | [`manganese-bar`](../manganese-bar/README.md) | The top bar and the context its items read |
-| `manganese-bar-module-*` | One bar item each: `launcher-button`, `tray`, `workspace-switcher`, `clock`, `mode`, `theme-switch`, `idle-inhibitor`, `brightness`, `volume`, `bluetooth`, `network`, `battery`, `notifications`, `sharing` |
+| `manganese-bar-module-*` | One bar item each: `launcher-button`, `tray`, `workspace-switcher`, `clock`, `mode`, `theme-switch`, `idle-inhibitor`, `brightness`, `volume`, `bluetooth`, `network`, `battery`, `notifications`, `sharing`, and `gmail`, which no default bar has |
 | [`manganese-window-management`](../manganese-window-management/README.md) | Tiling, floating, workspaces, keybindings and commands, window chrome |
 | [`manganese-launcher`](../manganese-launcher/README.md) | The launcher |
 | [`manganese-notifications`](../manganese-notifications/README.md) | Toasts and the drawer |

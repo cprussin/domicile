@@ -45,6 +45,38 @@ export const Shell = async (root, domicile) => {
 - A reload starts every library from nothing: each reads its state again, so a
   readout is empty until its first reply.
 
+## The browser's cookies
+
+`fetchWithCookies(url, headers, sapisidHashOrigin)` GETs an https address
+from the engine's browser process with the cookies of the profile the
+ordinary browser windows use. A bar item reads a site the user signed in to
+in a browser window, with no sign-in of its own.
+
+```ts
+const inbox = await domicile.fetchWithCookies(
+  "https://mail.google.com/mail/u/me@gmail.com/feed/atom",
+  [],
+  null,
+);
+// { status: 200, url: "https://mail.google.com/…", body: "<?xml…" }
+```
+
+- Resolves with `status`, the final `url` after redirects, and the `body` as
+  text, whatever the status. Rejects with a `NetworkError` for a network
+  failure or a refusal.
+- Refused: an address that is not https, a `Cookie` header, a header the
+  network stack sets itself (`Host`, `Content-Length`, …), and every request
+  while the desk is locked, or that it locked during.
+- Redirects are followed on https only. One to another origin drops the
+  page's headers.
+- `sapisidHashOrigin`, such as `"https://mail.google.com"`, adds the
+  `Authorization: SAPISIDHASH …` header Google's first-party APIs take. The
+  engine computes it from the SAPISID cookie the request carries, so the
+  cookie never reaches the page. A hashed request follows no redirect.
+- Only the shell's `domicile` has it; app modules do not.
+- Engine side:
+  [CONTROL-CHANNEL.md](../packages/domicile-engine/docs/CONTROL-CHANNEL.md#outside-the-control-channel).
+
 ## Libraries
 
 | Package | Source |
