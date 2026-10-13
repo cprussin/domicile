@@ -43,8 +43,6 @@ item when it ships.
 
 6. **Web apps.** [WEB-APPS.md](docs/architecture/WEB-APPS.md).
    - `DomicileHost.openAppWindow(url)`, for a shell's own launcher.
-   - App modules: `domicile run-app`, and History and Settings as app modules
-     instead of extensions ([APP-MODULES.md](docs/architecture/APP-MODULES.md)).
 
 7. **Distribution packages.**
    [RUNNING-A-DESKTOP.md](docs/RUNNING-A-DESKTOP.md#other-distributions).

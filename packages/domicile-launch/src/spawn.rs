@@ -140,8 +140,8 @@ pub fn engine(
     args.extend(extra.rest.into_iter().map(OsString::from));
     Spawn {
         args,
-        // For the programs the engine starts, such as native messaging
-        // hosts, so they reach this desktop.
+        // For the programs the engine starts, such as an app's
+        // `domicile-app-host`, so they reach this desktop.
         env: vec![(VARIABLE.to_string(), runtime.control.clone().into())],
         program: engine.join("chrome"),
     }
@@ -162,8 +162,6 @@ pub fn engine(
 ///   `libdomicile_engine.so` the compositor `dlopen`s. The compositor removes
 ///   it again for its clients.
 ///
-/// `apps` passes `--apps`, Domicile's own apps for the compositor to install.
-///
 /// `scope_clients` passes `--scope-clients yes`, for a desk that is the login
 /// session.
 #[allow(clippy::too_many_arguments)] // Each from a different part of the run.
@@ -172,7 +170,6 @@ pub fn compositor(
     engine: &Path,
     browser: &Path,
     data: &Path,
-    apps: Option<&Path>,
     runtime: &Runtime,
     config: Option<&Path>,
     scope_clients: bool,
@@ -210,10 +207,6 @@ pub fn compositor(
     if let Some(path) = config {
         args.push("--config".into());
         args.push(path.into());
-    }
-    if let Some(apps) = apps {
-        args.push("--apps".into());
-        args.push(apps.into());
     }
     if scope_clients {
         args.push("--scope-clients".into());

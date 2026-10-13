@@ -379,9 +379,6 @@ struct DomicileCompositor {
     /// Whether clients start in their own systemd scopes; see
     /// [`crate::app_scope`].
     scope_clients: bool,
-    /// Domicile's own apps, installed with every config's extensions; see
-    /// [`domicile_launch::apps`].
-    apps: Vec<PathBuf>,
     /// Mapped toplevels, paired with the host-assigned app id (Wayland-thread only).
     toplevels: Vec<(String, ToplevelSurface)>,
     /// Where the page last said each window is, in desktop logical units
@@ -700,17 +697,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         Some(path) => Config::load(path)?,
         None => Config::default(),
     };
-    // Unreadable apps are fatal for the same reason: `domicile` names the
-    // directory only when it exists.
-    let apps = match &arguments.apps {
-        Some(directory) => domicile_launch::apps::apps_in(directory).map_err(|why| {
-            format!(
-                "cannot list Domicile's apps in {}: {why}",
-                directory.display()
-            )
-        })?,
-        None => Vec::new(),
-    };
 
     let mut event_loop: EventLoop<CalloopData> = EventLoop::try_new()?;
     let display: Display<DomicileCompositor> = Display::new()?;
@@ -875,7 +861,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         hand_over_the_keys(&mut host, keys);
         // Extensions, which the browser process installs. See
         // `docs/architecture/EXTENSIONS.md`.
-        hand_over_the_extensions(&mut host, &config.extensions, &apps);
+        hand_over_the_extensions(&mut host, &config.extensions);
         // The theme, so the page paints correctly the first time. Set, not
         // `take_up_the_theme`, since there is nobody to broadcast to yet.
         host.set_theme(theme_on_the_wire(config.theme.mode));
@@ -1136,7 +1122,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         gpu,
         hub,
         scope_clients: arguments.scope_clients,
-        apps,
         toplevels: Vec::new(),
         app_bounds: HashMap::new(),
         held_frames: HeldFrames::new(),

@@ -24,7 +24,7 @@ use serde_json::json;
 fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
-        // stderr reaches the engine's log; stdout belongs to Chrome.
+        // stdout carries the replies to the app, so errors go to stderr.
         Err(why) => {
             eprintln!("domicile-app-host: {why}");
             ExitCode::FAILURE

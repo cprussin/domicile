@@ -311,7 +311,6 @@ fn the_compositor_is_a_producer_to_the_engine() {
         Path::new("/l/engine"),
         Path::new("/b/domicile-open-url"),
         Path::new("/d/share"),
-        None,
         &runtime(),
         None,
         false,
@@ -347,7 +346,6 @@ fn the_session_puts_each_client_in_its_own_scope() {
         Path::new("/l/engine"),
         Path::new("/b/domicile-open-url"),
         Path::new("/d/share"),
-        None,
         &runtime(),
         None,
         true,
@@ -374,7 +372,6 @@ fn the_compositor_carries_this_desktops_control_socket_to_everything_it_starts()
         Path::new("/l/engine"),
         Path::new("/b/domicile-open-url"),
         Path::new("/d/share"),
-        None,
         &runtime(),
         None,
         false,
@@ -388,7 +385,8 @@ fn the_compositor_carries_this_desktops_control_socket_to_everything_it_starts()
 
 #[test]
 fn the_engine_carries_this_desktops_control_socket_to_what_it_starts() {
-    // Native messaging hosts the engine starts reach this desktop with it.
+    // An app's `domicile-app-host`, started by the engine, reaches this
+    // desktop with it.
     let spawned = engine(
         Path::new("/l/engine"),
         &shell(),
@@ -411,7 +409,6 @@ fn a_link_an_app_opens_opens_in_this_desktop() {
         Path::new("/l/engine"),
         Path::new("/b/domicile-open-url"),
         Path::new("/d/share"),
-        None,
         &runtime(),
         None,
         false,
@@ -431,7 +428,6 @@ fn xdg_open_is_this_desktops_for_every_app_it_starts() {
         Path::new("/l/engine"),
         Path::new("/b/domicile-open-url"),
         Path::new("/d/share"),
-        None,
         &runtime(),
         None,
         false,
@@ -455,7 +451,6 @@ fn a_link_an_app_opens_through_gio_or_a_portal_opens_in_this_desktop_too() {
         Path::new("/l/engine"),
         Path::new("/b/domicile-open-url"),
         Path::new("/d/share"),
-        None,
         &runtime(),
         None,
         false,
@@ -476,7 +471,6 @@ fn a_machine_with_no_data_directories_keeps_the_defaults_behind_this_desktops() 
         Path::new("/l/engine"),
         Path::new("/b/domicile-open-url"),
         Path::new("/d/share"),
-        None,
         &runtime(),
         None,
         false,
@@ -498,7 +492,6 @@ fn the_engines_libraries_go_in_front_of_whatever_was_there() {
         Path::new("/l/engine"),
         Path::new("/b/domicile-open-url"),
         Path::new("/d/share"),
-        None,
         &runtime(),
         None,
         false,
@@ -519,7 +512,6 @@ fn the_compositor_is_quiet_unless_asked_otherwise() {
         Path::new("/l/engine"),
         Path::new("/b/domicile-open-url"),
         Path::new("/d/share"),
-        None,
         &runtime(),
         None,
         false,
@@ -536,7 +528,6 @@ fn the_compositor_is_quiet_unless_asked_otherwise() {
         Path::new("/l/engine"),
         Path::new("/b/domicile-open-url"),
         Path::new("/d/share"),
-        None,
         &runtime(),
         None,
         false,
@@ -702,7 +693,6 @@ fn the_compositor_is_given_the_config_it_was_started_with() {
         Path::new("/l/engine"),
         Path::new("/b/domicile-open-url"),
         Path::new("/d/share"),
-        None,
         &runtime(),
         Some(Path::new("/etc/domicile/desk.json")),
         false,
@@ -733,7 +723,6 @@ fn a_desktop_with_no_config_is_given_no_flag_rather_than_an_empty_one() {
         Path::new("/l/engine"),
         Path::new("/b/domicile-open-url"),
         Path::new("/d/share"),
-        None,
         &runtime(),
         None,
         false,
@@ -742,25 +731,5 @@ fn a_desktop_with_no_config_is_given_no_flag_rather_than_an_empty_one() {
     assert!(
         !args.iter().any(|arg| arg == "--config"),
         "no config was asked for, so none should be named: {args:?}"
-    );
-}
-
-#[test]
-fn the_compositor_is_told_where_domicile_s_own_apps_are() {
-    // The compositor installs each app with the config's extensions.
-    let args = args_of(&compositor(
-        Path::new("/b/domicile-compositor"),
-        Path::new("/l/engine"),
-        Path::new("/b/domicile-open-url"),
-        Path::new("/d/share"),
-        Some(Path::new("/l/apps")),
-        &runtime(),
-        None,
-        false,
-        &|_| None,
-    ));
-    assert!(
-        args.windows(2).any(|pair| pair == ["--apps", "/l/apps"]),
-        "{args:?}"
     );
 }

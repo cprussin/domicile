@@ -2,20 +2,9 @@
 
 An app is a JavaScript module whose `main` export Domicile calls with a root
 element and a host, as it calls a shell's `Shell`. `domicile run-app
-/path/to/entry.js` opens it in an app window. History and Settings become app
-modules, so Domicile installs no extensions of its own.
-
-## Problem
-
-History and Settings are unpacked MV3 extensions
-([HISTORY.md](/docs/HISTORY.md), [SETTINGS.md](/docs/SETTINGS.md)):
-
-- The compositor adds them to every profile's `extensions.unpacked`.
-- They show wherever extensions show: Settings' Extensions page,
-  `chrome.management`, and extension switchers such as manganese's.
-- A local web app that needs the system has to be an extension
-  ([WEB-APPS.md](WEB-APPS.md#shipping-an-app)), with a pinned `key`, a
-  native messaging host and a manifest written into the profile.
+/path/to/entry.js` opens it in an app window. History and Settings are app
+modules ([HISTORY.md](/docs/HISTORY.md), [SETTINGS.md](/docs/SETTINGS.md)),
+so Domicile installs no extensions of its own.
 
 ## Design
 
@@ -140,6 +129,10 @@ An app reaches Domicile's own state through programs it spawns. Each inherits
 
 ## Key decisions
 
+- **An app module over an unpacked extension.** An extension shows wherever
+  extensions show: Settings' Extensions page, `chrome.management` and
+  extension switchers such as manganese's. One that needs the system also
+  needs a pinned `key`, a native messaging host and a manifest in the profile.
 - **A module with `main(root, host)` over an HTML entry.** It matches the
   shell's `Shell(root, domicile)`, and the engine owns the document, so the
   host reaches only the module Domicile ran.
@@ -175,7 +168,7 @@ An app reaches Domicile's own state through programs it spawns. Each inherits
   `set_extension_enabled`
 - [x] History as an app: `history.js`, engine `history`, `visits`,
   `delete_history` and `clear_browsing_data`, relayed by `domicile-app-host`
-- [ ] remove apps as extensions: `--apps`, `DOMICILE_APPS`, the native
+- [x] remove apps as extensions: `--apps`, `DOMICILE_APPS`, the native
   messaging manifest, `domicile_launch::apps`; update HISTORY.md, SETTINGS.md
   and WEB-APPS.md
 

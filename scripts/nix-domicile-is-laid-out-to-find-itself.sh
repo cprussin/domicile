@@ -46,11 +46,6 @@ for module in settings history; do
     echo "  domicile-$module has nothing to run" >&2
     exit 1
   }
-  [ ! -e "$out/libexec/domicile/apps/$module" ] || {
-    echo "libexec/domicile/apps/$module exists, so every desktop installs" >&2
-    echo "  $module as an extension" >&2
-    exit 1
-  }
 done
 
 # Each launcher entry's program, icon and preview, which a launcher finds by
