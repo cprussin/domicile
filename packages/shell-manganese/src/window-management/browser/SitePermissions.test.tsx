@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { MediaDeviceChoice, MediaDevices } from "./media-devices";
 import { SitePermissions } from "./SitePermissions";
 import type { SitePermission } from "./site-permissions";
 import type { PermissionRequest } from "./usePermissionRequest";
@@ -33,7 +34,88 @@ const requestFor = (
   permissions,
 });
 
+/** Devices whose order `prefer` changes, recording each choice. */
+const devicesFor = (
+  devices: MediaDevices,
+  preferred: string[],
+): MediaDeviceChoice => {
+  let current = devices;
+  return {
+    list: () => Promise.resolve(current),
+    prefer: (kind, id) => {
+      preferred.push(`${kind} ${id}`);
+      const list = kind === "camera" ? "cameras" : "microphones";
+      current = {
+        ...current,
+        [list]: [
+          ...current[list].filter((device) => device.id === id),
+          ...current[list].filter((device) => device.id !== id),
+        ],
+      };
+      return Promise.resolve();
+    },
+  };
+};
+
+const CAMERAS: MediaDevices = {
+  cameras: [
+    { id: "/dev/video0", name: "Integrated Camera" },
+    { id: "/dev/video2", name: "USB Camera" },
+  ],
+  microphones: [{ id: "default", name: "Default" }],
+};
+
 describe("SitePermissions", () => {
+  describe("the device a page gets", () => {
+    it("picks the camera a page gets when it names none", async () => {
+      const preferred: string[] = [];
+      render(
+        <SitePermissions
+          devices={devicesFor(CAMERAS, preferred)}
+          onSet={NO_SET}
+          permissions={SITE}
+          request={undefined}
+          url="https://meet.example.com/abc"
+        />,
+      );
+      await userEvent.click(button());
+
+      const camera = await screen.findByRole("combobox", {
+        name: "Camera device",
+      });
+      expect(camera).toHaveTextContent("Integrated Camera");
+      expect(
+        screen.getByRole("combobox", { name: "Microphone device" }),
+      ).toHaveTextContent("Default");
+
+      await userEvent.click(camera);
+      await userEvent.click(screen.getByRole("option", { name: "USB Camera" }));
+
+      expect(preferred).toStrictEqual(["camera /dev/video2"]);
+      expect(
+        await screen.findByRole("combobox", { name: "Camera device" }),
+      ).toHaveTextContent("USB Camera");
+    });
+
+    it("offers no choice from an engine without one", async () => {
+      render(
+        <SitePermissions
+          devices={undefined}
+          onSet={NO_SET}
+          permissions={SITE}
+          request={undefined}
+          url="https://meet.example.com/abc"
+        />,
+      );
+      await userEvent.click(button());
+
+      expect(screen.getByRole("combobox", { name: "Camera" })).toBeTruthy();
+      expect(
+        screen.queryByRole("combobox", { name: "Camera device" }),
+      ).toBeNull();
+    });
+  });
+
   describe("the site's settings", () => {
     it("lists each permission with its setting", async () => {
       render(

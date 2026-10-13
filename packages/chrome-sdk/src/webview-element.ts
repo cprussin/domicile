@@ -380,6 +380,12 @@ export const WEBVIEW_PERMISSION_SETTINGS = ["ask", "allow", "block"] as const;
 export type WebViewPermissionSetting =
   (typeof WEBVIEW_PERMISSION_SETTINGS)[number];
 
+/** The kinds of device {@link HTMLWebViewElement.setMediaDevice} takes. */
+export const WEBVIEW_MEDIA_DEVICE_KINDS = ["camera", "microphone"] as const;
+
+export type WebViewMediaDeviceKind =
+  (typeof WEBVIEW_MEDIA_DEVICE_KINDS)[number];
+
 /**
  * Global declarations for the engine's `<webview>`.
  *
@@ -520,6 +526,21 @@ declare global {
       permission: WebViewPermission,
       setting: WebViewPermissionSetting,
     ): void;
+    /**
+     * The cameras and microphones, each most preferred first: a page that
+     * names no device gets the first. The preference is the profile's, not
+     * the site's. Rejects with an `InvalidStateError` before the view has a
+     * page.
+     *
+     * External data; parse it at the boundary.
+     */
+    mediaDevices(): Promise<DomicileMediaDevices>;
+    /**
+     * Give device `id` to pages that ask for a `kind` without naming one.
+     * Rejects with a `NotFoundError` when no connected device of that kind
+     * has the id.
+     */
+    setMediaDevice(kind: WebViewMediaDeviceKind, id: string): Promise<void>;
     goBack(): void;
     goForward(): void;
     stop(): void;
@@ -626,6 +647,20 @@ declare global {
     deny(): void;
     dismiss(): void;
   }
+
+  /** A camera or microphone, as `mediaDevices()` lists it. */
+  type DomicileMediaDevice = {
+    /** The system's id for it, which `setMediaDevice()` takes. */
+    readonly id: string;
+    /** The name the system gives it, such as `USB Camera`. */
+    readonly name: string;
+  };
+
+  /** Each kind's devices, most preferred first. */
+  type DomicileMediaDevices = {
+    readonly cameras: readonly DomicileMediaDevice[];
+    readonly microphones: readonly DomicileMediaDevice[];
+  };
 
   /** A device a {@link DomicileDeviceRequestEvent} offers. */
   type DomicileDevice = {

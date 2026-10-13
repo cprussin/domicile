@@ -322,6 +322,13 @@ frame.addEventListener(WEBVIEW_PERMISSION_REQUEST_EVENT, (event) => {
   `https` or `chrome-extension`. An extension's pages share one origin, so a
   choice made in a browser window holds in its action popup. `view.setSitePermission(permission, setting)` stores one.
   `domicile-site-permissions-change` signals a change.
+- **Camera and microphone device:** `view.mediaDevices()` resolves with
+  `{cameras, microphones}`, each `{id, name}`, most preferred first. A page
+  that names no device gets the first. `view.setMediaDevice(kind, id)` puts
+  one first, for `kind` `camera` or `microphone`; it rejects with
+  `NotFoundError` for an id no connected device has. The preference is the
+  profile's, not the site's, and there is no change event, so list again
+  when showing it.
 - **Notifications** default to `ask`, like the rest
   ([NOTIFICATIONS.md](/docs/architecture/NOTIFICATIONS.md)).
 - **Screen capture** (`getDisplayMedia`) is refused.

@@ -18,6 +18,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
+#include "base/types/expected.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/domicile/browser/download_tally.h"
@@ -149,6 +150,17 @@ class MediaAccess {
   virtual bool Check(content::RenderFrameHost& frame,
                      const url::Origin& origin,
                      blink::mojom::MediaStreamType type) = 0;
+
+  // The cameras and microphones, ranked by `context`'s profile's preference.
+  virtual mojom::WebViewMediaDevicesPtr ListDevices(
+      content::BrowserContext& context) = 0;
+
+  // Ranks device `id` first among `kind`'s for `context`'s profile, or says
+  // why not.
+  virtual base::expected<void, std::string> PreferDevice(
+      content::BrowserContext& context,
+      mojom::WebViewMediaDeviceKind kind,
+      const std::string& id) = 0;
 };
 
 // The page behind a <webview>: an inner WebContents attached as a guest.
@@ -423,6 +435,12 @@ class WebViewGuest : public mojom::WebViewGuest,
   // OnContentSettingChanged.
   void SetSitePermission(mojom::WebViewPermission permission,
                          mojom::WebViewPermissionSetting setting) override;
+
+  // The profile's camera and microphone preference, through MediaAccess.
+  void ListMediaDevices(ListMediaDevicesCallback callback) override;
+  void SetMediaDevice(mojom::WebViewMediaDeviceKind kind,
+                      const std::string& id,
+                      SetMediaDeviceCallback callback) override;
 
   // content::BrowserPluginGuestDelegate:
   content::WebContents* GetOwnerWebContents() override;
