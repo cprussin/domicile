@@ -10,6 +10,8 @@
 //!   [`control_socket`]).
 //! - `domicile load-shell` and `domicile open-url`: forwarded to the engine
 //!   ([`command`], [`command_socket`], [`address`]).
+//! - `domicile run-app`: an app module ([`app_entry`]), forwarded to the
+//!   engine like `load-shell`.
 //! - `domicile screenshot`: forwarded to the compositor
 //!   ([`compositor_socket`]).
 //! - `domicile power-off` and `domicile reboot`: asked in the desktop's
@@ -27,6 +29,7 @@
 //! `docs/architecture/THE-DOMICILE-BINARY.md`.
 
 pub mod address;
+pub mod app_entry;
 pub mod apps;
 pub mod arguments;
 pub mod build_progress;

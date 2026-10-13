@@ -11,6 +11,10 @@
     "typescript": "catalog:"
   },
   "exports": {
+    "./app": {
+      "types": "./dist/app.d.ts",
+      "default": "./dist/app.js"
+    },
     "./app-element": {
       "types": "./dist/app-element.d.ts",
       "default": "./dist/app-element.js"

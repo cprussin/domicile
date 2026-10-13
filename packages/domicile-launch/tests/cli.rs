@@ -122,6 +122,23 @@ fn open_url_is_the_verb_that_takes_an_address() {
 }
 
 #[test]
+fn run_app_is_the_verb_that_takes_an_app_module() {
+    assert_eq!(
+        run(&["run-app", "./notes/notes.js"]).unwrap(),
+        Invocation::RunApp {
+            entry: "./notes/notes.js".to_string()
+        }
+    );
+    assert_eq!(run(&["run-app"]), Err(CliError::NothingToRun));
+    assert_eq!(
+        run(&["run-app", "./a.js", "./b.js"]),
+        Err(CliError::ExtraToRun {
+            extra: "./b.js".to_string()
+        })
+    );
+}
+
+#[test]
 fn open_app_is_the_verb_that_takes_an_app_address() {
     assert_eq!(
         run(&["open-app", "https://example.com/"]).unwrap(),

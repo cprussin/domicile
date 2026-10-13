@@ -5,8 +5,8 @@ use std::path::Path;
 
 use domicile_launch::command::{
     config_extensions_line, load_shell_line, load_unpacked_line, media_devices_line, open_app_line,
-    open_url_line, reply, set_media_device_line, set_site_permission_line, site_permissions_line,
-    uninstall_extension_line, Reply,
+    open_url_line, reply, run_app_line, set_media_device_line, set_site_permission_line,
+    site_permissions_line, uninstall_extension_line, Reply,
 };
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
@@ -19,6 +19,14 @@ fn a_load_shell_names_the_version_it_is_written_in() {
     assert_eq!(
         load_shell_line(Path::new("/x/dist"), Path::new("shell.js")),
         "{\"type\":\"load_shell\",\"version\":1,\"root\":\"/x/dist\",\"module\":\"shell.js\"}\n"
+    );
+}
+
+#[test]
+fn a_run_app_names_the_apps_root_and_module() {
+    assert_eq!(
+        run_app_line(Path::new("/opt/notes"), Path::new("notes.js")),
+        "{\"type\":\"run_app\",\"version\":1,\"root\":\"/opt/notes\",\"module\":\"notes.js\"}\n"
     );
 }
 

@@ -32,6 +32,10 @@ pub enum Request {
     /// Open this URL in an app window: a browser window the shell draws
     /// without an address bar. See `docs/architecture/WEB-APPS.md`.
     OpenApp { url: String },
+    /// Run the app module `module` under `root` in an app window. The client
+    /// resolves both ([`crate::app_entry`]). See
+    /// `docs/architecture/APP-MODULES.md`.
+    RunApp { root: PathBuf, module: PathBuf },
     /// Write a PNG of the whole desk to this absolute path, or, with no
     /// `file`, take the shell's interactive screenshot.
     ///
@@ -156,6 +160,11 @@ pub type LoadShell<'a> = &'a dyn Fn(&Path, &Path) -> Result<(), String>;
 /// in a desktop; a closure in tests.
 pub type OpenUrl<'a> = &'a dyn Fn(&str) -> Result<(), String>;
 
+/// Tells the engine to run an app module.
+///
+/// [`crate::command_socket::run_app`] in a desktop; a closure in tests.
+pub type RunApp<'a> = &'a dyn Fn(&Path, &Path) -> Result<(), String>;
+
 /// Tells the compositor to take a screenshot, into the file if one is given.
 ///
 /// [`crate::compositor_socket::screenshot`] in a desktop; a closure in tests.
@@ -218,6 +227,7 @@ pub struct Desktop<'a> {
     pub load: LoadShell<'a>,
     pub open: OpenUrl<'a>,
     pub open_app: OpenUrl<'a>,
+    pub run_app: RunApp<'a>,
     pub capture: Screenshot<'a>,
     pub send: SendShell<'a>,
     pub permissions: SitePermissions<'a>,
@@ -259,6 +269,10 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Err(why) => Response::Refused { why },
         }),
         Ok(Request::OpenApp { url }) => to_line(&match (desktop.open_app)(&url) {
+            Ok(()) => Response::Opened,
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::RunApp { root, module }) => to_line(&match (desktop.run_app)(&root, &module) {
             Ok(()) => Response::Opened,
             Err(why) => Response::Refused { why },
         }),
