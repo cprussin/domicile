@@ -141,8 +141,6 @@ Understood and not scheduled.
   page sees `visibilitychange` twice (`WebViewGuest::AttachWindowTo`).
 - **Resize cost is unmeasured.**
   [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#embed-deadlines).
-- **The padlock's `dangerous` state is untested against the engine.** Needs
-  an https fixture with an untrusted cert.
 
 ### Clipboard
 

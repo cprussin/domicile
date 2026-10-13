@@ -298,6 +298,7 @@ if wanted engine; then
       scripts/engine-guard-webview-escape.sh \
       scripts/engine-guard-webview-browser-page.sh \
       scripts/engine-guard-webview-history.sh \
+      scripts/engine-guard-webview-untrusted-cert.sh \
       scripts/engine-guard-webview-find.sh \
       scripts/engine-guard-webview-click.sh \
       scripts/engine-guard-webview-activate.sh \
