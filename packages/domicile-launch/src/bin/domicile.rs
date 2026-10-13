@@ -20,12 +20,12 @@ use std::time::{Duration, Instant};
 
 use domicile_launch::address::url_for;
 use domicile_launch::app_entry::app_entry;
-use domicile_launch::apps::list_the_settings_host;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
 use domicile_launch::cli::{invocation, CliError, Invocation};
 use domicile_launch::command_socket::{
-    config_extensions, load_shell, load_unpacked, media_devices, open_app, open_url, run_app,
-    set_media_device, set_site_permission, site_permissions, uninstall_extension,
+    config_extensions, extensions, load_shell, load_unpacked, media_devices, open_app, open_url,
+    run_app, set_extension_enabled, set_media_device, set_site_permission, site_permissions,
+    uninstall_extension,
 };
 use domicile_launch::components::{apps, builder, components, our_shell, Components};
 use domicile_launch::compositor_socket::{screenshot, send_shell};
@@ -433,7 +433,8 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         | Response::LoadedUnpacked { .. }
         | Response::Uninstalled
         | Response::ConfigExtensions { .. }
-        | Response::MediaDevices(_) => Err(format!(
+        | Response::MediaDevices(_)
+        | Response::Extensions { .. } => Err(format!(
             "the desktop answered {answer:?}, which no command asks for"
         )),
         // Print the desktop's own reason.
@@ -493,21 +494,6 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     let profile = claim(&kept)
         .map_err(|why| format!("cannot claim a profile beside {}: {why}", kept.display()))?;
 
-    // Lets the Settings app start its host, which ships beside this binary.
-    let settings_host = binary.with_file_name("domicile-settings-host");
-    match settings_host.exists() {
-        true => list_the_settings_host(&profile.path, &settings_host).map_err(|why| {
-            format!(
-                "cannot list the Settings app's host in {}: {why}",
-                profile.path.display()
-            )
-        })?,
-        false => println!(
-            "settings: no {} beside domicile, so the Settings app cannot read the config",
-            settings_host.display()
-        ),
-    }
-
     // A per-run directory for sockets, so concurrent desktops do not collide.
     let runtime = tempdir().map_err(|why| format!("no runtime directory: {why}"))?;
 
@@ -538,7 +524,17 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         shims: runtime.join("bin"),
         session: runtime.join("session.json"),
     };
-    shim_xdg_open(&places.shims, &binary.with_file_name("domicile-xdg-open"))?;
+    shim(
+        &places.shims,
+        "xdg-open",
+        &binary.with_file_name("domicile-xdg-open"),
+    )?;
+    // The Settings app spawns its host by name.
+    shim(
+        &places.shims,
+        "domicile-settings-host",
+        &binary.with_file_name("domicile-settings-host"),
+    )?;
 
     // Print the choices before starting anything, so later failures can be
     // read against them. Print the absolute module path, not its directory, so
@@ -944,6 +940,11 @@ fn answer_a_command(
                 set_media_device: &|kind, id| {
                     set_media_device(engine, kind, id, ANSWER_WITHIN).map_err(|why| why.to_string())
                 },
+                extensions: &|| extensions(engine, ANSWER_WITHIN).map_err(|why| why.to_string()),
+                set_extension_enabled: &|id, enabled| {
+                    set_extension_enabled(engine, id, enabled, ANSWER_WITHIN)
+                        .map_err(|why| why.to_string())
+                },
             },
         )
     }) {
@@ -1297,16 +1298,16 @@ impl Drop for SaidSession {
     }
 }
 
-/// Links `domicile-xdg-open` as `xdg-open` in `shims`; see
+/// Links `program` as `name` in `shims`, first on the apps' `PATH`. See
 /// `domicile_launch::xdg_open`.
 ///
 /// A symlink, not a copy, so the program can find `domicile` next to its real
 /// path.
-fn shim_xdg_open(shims: &Path, program: &Path) -> Result<(), String> {
+fn shim(shims: &Path, name: &str, program: &Path) -> Result<(), String> {
     std::fs::create_dir_all(shims)
         .map_err(|why| format!("cannot make {}: {why}", shims.display()))?;
-    std::os::unix::fs::symlink(program, shims.join("xdg-open"))
-        .map_err(|why| format!("cannot put xdg-open in {}: {why}", shims.display()))
+    std::os::unix::fs::symlink(program, shims.join(name))
+        .map_err(|why| format!("cannot put {name} in {}: {why}", shims.display()))
 }
 
 /// The installation's `share` directory, which holds `domicile-mimeapps.list`

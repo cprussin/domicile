@@ -119,6 +119,28 @@ pub fn apps(
     }
 }
 
+/// The entry module of Domicile's own app `name`, `<name>/<name>.js` in
+/// `DOMICILE_APP_MODULES` or `libexec/domicile/app-modules`. See
+/// `docs/architecture/APP-MODULES.md`.
+pub fn app_module(
+    binary: &Path,
+    name: &str,
+    env: &dyn Fn(&str) -> Option<String>,
+    exists: &dyn Fn(&Path) -> bool,
+) -> Result<PathBuf, Missing> {
+    let root = match env("DOMICILE_APP_MODULES") {
+        Some(named) => PathBuf::from(named).join(name),
+        None => one(
+            "app of Domicile's by that name",
+            "DOMICILE_APP_MODULES",
+            libexec(binary).join("app-modules").join(name),
+            env,
+            exists,
+        )?,
+    };
+    Ok(root.join(format!("{name}.js")))
+}
+
 /// The `libexec/domicile` directory next to `binary`'s `bin`.
 fn libexec(binary: &Path) -> PathBuf {
     binary

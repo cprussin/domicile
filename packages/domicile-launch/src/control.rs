@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::extensions::InstalledExtension;
 use crate::media_devices::{MediaDevices, MediaKind};
 use crate::site_permissions::{SitePermission, SiteSettings};
 
@@ -64,6 +65,10 @@ pub enum Request {
     MediaDevices,
     /// Give this device to sites that ask for a `kind` without naming one.
     SetMediaDevice { kind: MediaKind, id: String },
+    /// Report every extension installed in the engine's profile.
+    Extensions,
+    /// Enable or disable an extension.
+    SetExtensionEnabled { id: String, enabled: bool },
 }
 
 /// The files the Settings app edits, as the desktop found them at startup.
@@ -114,7 +119,8 @@ pub enum Response {
     /// Answers `site_permissions`.
     SitePermissions(SiteSettings),
 
-    /// The engine stored the site's setting or the preferred media device.
+    /// The engine stored the site's setting, the preferred media device or
+    /// whether the extension is enabled.
     Stored,
 
     /// The engine loaded the unpacked extension, which has this id.
@@ -128,6 +134,9 @@ pub enum Response {
 
     /// Answers `media_devices`.
     MediaDevices(MediaDevices),
+
+    /// Answers `extensions`.
+    Extensions { extensions: Vec<InstalledExtension> },
 
     /// The request was unknown or could not be carried out.
     ///
@@ -216,6 +225,17 @@ pub type ListMediaDevices<'a> = &'a dyn Fn() -> Result<MediaDevices, String>;
 /// tests.
 pub type SetMediaDevice<'a> = &'a dyn Fn(MediaKind, &str) -> Result<(), String>;
 
+/// Asks the engine for every extension installed in its profile.
+///
+/// [`crate::command_socket::extensions`] in a desktop; a closure in tests.
+pub type ListExtensions<'a> = &'a dyn Fn() -> Result<Vec<InstalledExtension>, String>;
+
+/// Tells the engine to enable or disable an extension.
+///
+/// [`crate::command_socket::set_extension_enabled`] in a desktop; a closure in
+/// tests.
+pub type SetExtensionEnabled<'a> = &'a dyn Fn(&str, bool) -> Result<(), String>;
+
 /// What a request can learn about or do to the running desktop.
 ///
 /// The dials reach the engine and the compositor; they are injected so
@@ -237,6 +257,8 @@ pub struct Desktop<'a> {
     pub config_extensions: ConfigExtensions<'a>,
     pub media_devices: ListMediaDevices<'a>,
     pub set_media_device: SetMediaDevice<'a>,
+    pub extensions: ListExtensions<'a>,
+    pub set_extension_enabled: SetExtensionEnabled<'a>,
 }
 
 /// How a screenshot the compositor took ended.
@@ -321,6 +343,16 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
         }),
         Ok(Request::SetMediaDevice { kind, id }) => {
             to_line(&match (desktop.set_media_device)(kind, &id) {
+                Ok(()) => Response::Stored,
+                Err(why) => Response::Refused { why },
+            })
+        }
+        Ok(Request::Extensions) => to_line(&match (desktop.extensions)() {
+            Ok(extensions) => Response::Extensions { extensions },
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::SetExtensionEnabled { id, enabled }) => {
+            to_line(&match (desktop.set_extension_enabled)(&id, enabled) {
                 Ok(()) => Response::Stored,
                 Err(why) => Response::Refused { why },
             })

@@ -31,7 +31,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 mapfile -t PROGRAMS < <(grep -v '^#' "$ROOT/distro/programs")
 SHELLS=(manganese simple splash)
-APPS=(history settings)
+APPS=(history)
+APP_MODULES=(settings)
 
 # What `domicile` resolves at run time, and where `PREFIX` puts it.
 PREFIX=/usr
@@ -61,10 +62,13 @@ done
 for app in "${APPS[@]}"; do
   need "$WORKSPACE/packages/app-$app/.vite/extension/manifest.json" "built $app app"
 done
+for module in "${APP_MODULES[@]}"; do
+  need "$WORKSPACE/packages/app-$module/.vite/app/$module.js" "built $module app"
+done
 need "$BUN" "bun"
 
 rm -rf "$STAGE"
-mkdir -p "$USR/bin" "$LIBEXEC/shells" "$LIBEXEC/apps"
+mkdir -p "$USR/bin" "$LIBEXEC/shells" "$LIBEXEC/apps" "$LIBEXEC/app-modules"
 
 # Copies, not symlinks: `domicile` finds its siblings from `current_exe`.
 for program in "${PROGRAMS[@]}"; do
@@ -88,6 +92,9 @@ for shell in "${SHELLS[@]}"; do
 done
 for app in "${APPS[@]}"; do
   cp -a "$WORKSPACE/packages/app-$app/.vite/extension" "$LIBEXEC/apps/$app"
+done
+for module in "${APP_MODULES[@]}"; do
+  cp -a "$WORKSPACE/packages/app-$module/.vite/app" "$LIBEXEC/app-modules/$module"
 done
 
 # Fills `@bin@`, `@icon@` and `@preview@` in a template from `nix/`, as

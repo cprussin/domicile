@@ -1,10 +1,11 @@
-//! The Settings app's native messaging host: `domicile-settings-host`.
+//! The Settings app's host: `domicile-settings-host`.
 //!
-//! The app is an extension, so it cannot read files. Chrome starts this host
-//! for it and the two exchange messages over the host's stdin and stdout. The
+//! The app spawns this host and the two exchange messages over the host's
+//! stdin and stdout, each a 4-byte length and UTF-8 JSON. The
 //! host asks the running desktop which files to edit ([`Request::SettingsFiles`])
 //! rather than taking a path from the page, and forwards site permissions,
-//! extensions and media devices to the engine through the desktop. See `docs/SETTINGS.md`.
+//! extensions, media devices and addresses to open to the engine through the
+//! desktop. See `docs/SETTINGS.md`.
 //!
 //! ```text
 //! {"id":1,"type":"read"}
@@ -27,6 +28,12 @@
 //!   {"id":8,"type":"media_devices","cameras":[{"id":…,"name":…}],"microphones":[…]}
 //! {"id":9,"type":"set_media_device","kind":"camera","device":"…"}
 //!   {"id":9,"type":"stored"}
+//! {"id":10,"type":"extensions"}
+//!   {"id":10,"type":"extensions","extensions":[{"id":…,"name":…,"description":…,"version":…,"enabled":true,"options_url":…}]}   (options_url null if none)
+//! {"id":11,"type":"set_extension_enabled","extension":"…","enabled":false}
+//!   {"id":11,"type":"stored"}
+//! {"id":12,"type":"open_url","url":"chrome-extension://…/options.html"}
+//!   {"id":12,"type":"opened"}
 //! any request
 //!   {"id":…,"type":"refused","why":"…"}
 //! pushed when a file changes on disk
@@ -134,6 +141,10 @@ enum AppRequest {
     MediaDevices,
     // `device`, since the message's own `id` is the request's.
     SetMediaDevice { kind: MediaKind, device: String },
+    Extensions,
+    // `extension`, since the message's own `id` is the request's.
+    SetExtensionEnabled { extension: String, enabled: bool },
+    OpenUrl { url: String },
 }
 
 /// Which file a write replaces.
@@ -223,6 +234,25 @@ fn carry_out(request: AppRequest, host: &Host) -> Result<Value, String> {
                 other => Err(refusal_or_surprise(other)),
             }
         }
+        AppRequest::Extensions => match (host.ask)(&Request::Extensions)? {
+            Response::Extensions { extensions } => {
+                Ok(json!({"type": "extensions", "extensions": extensions}))
+            }
+            other => Err(refusal_or_surprise(other)),
+        },
+        AppRequest::SetExtensionEnabled { extension, enabled } => {
+            match (host.ask)(&Request::SetExtensionEnabled {
+                id: extension,
+                enabled,
+            })? {
+                Response::Stored => Ok(json!({"type": "stored"})),
+                other => Err(refusal_or_surprise(other)),
+            }
+        }
+        AppRequest::OpenUrl { url } => match (host.ask)(&Request::OpenUrl { url })? {
+            Response::Opened => Ok(json!({"type": "opened"})),
+            other => Err(refusal_or_surprise(other)),
+        },
     }
 }
 

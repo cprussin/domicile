@@ -1,32 +1,34 @@
 # @domicile-desktop/app-settings
 
-The Settings app: an unpacked MV3 Chrome extension whose page,
-`settings.html`, edits the desktop's config, its shell's source, its
-extensions and its site permissions. See [SETTINGS.md](/docs/SETTINGS.md).
+The Settings app: an app module, `settings.js`, that edits the desktop's
+config, its shell's source, its extensions and its site permissions. See
+[SETTINGS.md](/docs/SETTINGS.md) and
+[APP-MODULES.md](/docs/architecture/APP-MODULES.md).
 
-- Reaches the desktop through its native messaging host,
-  `domicile-settings-host` (`domicile_launch::settings`).
+```sh
+domicile run-app .vite/app/settings.js
+```
+
+- Spawns `domicile-settings-host` (`domicile_launch::settings`) and speaks
+  length-prefixed JSON with it over stdin and stdout.
 - Writes each change as soon as it is made. A read-only or module config is
   shown, not changed, with the reason.
 - Follows `prefers-color-scheme` and `prefers-reduced-motion`, which Domicile
   sets from the desktop.
 
-The manifest's `key` pins the id, so
-`domicile open-app chrome-extension://acpgnhiblklkgbkcjgbabkcmdmchdphk/settings.html`
-opens it, and the host's manifest lets only this id start it.
-
 ## Layout
 
 | Path | What |
 |---|---|
-| `src/host.ts` | The native messaging host, every reply parsed with Zod. |
-| `src/extensions.ts` | `chrome.management`, parsed. |
+| `src/index.tsx` | `main(root, host)`, the module's entry. |
+| `src/host.ts` | The settings host process, every reply parsed with Zod. |
+| `src/frames.ts` | The host's framing on stdin and stdout. |
+| `src/extensions.ts` | The browser's extensions, through the host. |
 | `src/config-document.ts` | The config as JSON: read and set one value, keeping the rest. |
 | `src/config-schema.ts` | The config's sections with the compositor's defaults. |
 | `src/config-state.ts` | Whether the form can change the config, and why not. |
 | `src/pages/` | One component per page. |
 | `src/CodeEditor.tsx`, `src/editing.ts` | The text editor and its keys. |
-| `public/manifest.json` | The extension manifest. |
 | `icons/` | The app icon and the launcher preview. |
 
 ## Build and test
@@ -36,5 +38,4 @@ bun run turbo build:vite --filter @domicile-desktop/app-settings
 bun run turbo test --filter @domicile-desktop/app-settings
 ```
 
-The build is the whole extension, in `.vite/extension/`. The flake copies it
-to `libexec/domicile/apps/settings`.
+The build is the module and its source map, in `.vite/app/`.
