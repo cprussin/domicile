@@ -1,8 +1,9 @@
 # The screen lock
 
 The desktop locks after `idle.lock_after_seconds` without input
-([IDLE.md](IDLE.md#two-clocks)) or when the shell calls `lock()`, and the
-user's password unlocks it. While locked, nothing the
+([IDLE.md](IDLE.md#two-clocks)), before the machine sleeps, when logind locks
+the session ([Sleep and logind](#sleep-and-logind)) or when the shell calls
+`lock()`, and the user's password unlocks it. While locked, nothing the
 chrome forwards reaches a client, and nothing it asks of the desktop is done.
 What a shell does with this:
 [SHELL-IDLE-AND-LOCK.md](SHELL-IDLE-AND-LOCK.md#locking).
@@ -89,6 +90,20 @@ library sends; the libraries' tests and the allowlist's both check it.
   screens light.
 - **The compositor releases held keys when the desktop locks** (`release_pressed_keys`).
   The refusal would drop the release and leave the key stuck down.
+
+## Sleep and logind
+
+`crate::logind` listens to logind on the system bus.
+
+- **Sleep:** the compositor holds a `delay` inhibitor on `sleep`. On
+  `PrepareForSleep(true)` it locks, waits 1 second for the shell to draw its
+  lock screen, then closes the inhibitor and the machine sleeps. On waking it
+  takes a new one. Closing the lid sleeps the same way.
+- **`loginctl lock-session`:** logind sends the session's `Lock` signal, and
+  the compositor locks. `loginctl unlock-session` does nothing; only the
+  passphrase unlocks.
+- **No logind**, or a compositor in no session: the log says so and the
+  desktop runs as usual, without that lock.
 
 ## Verifiers
 
@@ -184,6 +199,11 @@ the read directory match.
 ```
 nobody is at this desktop; it locks itself
 nothing holds this desktop awake now; it locks itself
+the machine is going to sleep, so this desktop locks
+this desktop is locked; the machine can sleep
+logind asked for this desktop to be locked
+this desktop does not hear logind, so it does not lock before the machine sleeps
+this desktop does not hear its logind session, so `loginctl lock-session` does not lock it
 this desktop is locked; what the shell forwarded reaches no client
 this desktop is locked; what the shell asked for is not done
 checking a passphrase; the desk stays locked meanwhile

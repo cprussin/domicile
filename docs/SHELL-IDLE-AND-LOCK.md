@@ -64,7 +64,8 @@ await (await system(domicile).idleWarnings()).match({
 ## Locking
 
 The compositor locks the desktop after `idle.lock_after_seconds` without
-input, or when the shell calls `lock()`. That timeout is separate from
+input, before the machine sleeps, when logind locks the session, or when the
+shell calls `lock()`. That timeout is separate from
 blanking. The user's password unlocks it, checked by PAM.
 
 ```ts
