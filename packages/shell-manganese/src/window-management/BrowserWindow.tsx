@@ -20,6 +20,7 @@ import { BrowserCommand, browserCommandFor } from "./browser/browser-command";
 import { DeviceAsk } from "./browser/DeviceAsk";
 import { FindBar } from "./browser/FindBar";
 import { LinkTarget } from "./browser/LinkTarget";
+import { mediaDeviceChoiceFor } from "./browser/media-devices";
 import { PageDialog } from "./browser/PageDialog";
 import { PageMenu } from "./browser/PageMenu";
 import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
@@ -262,6 +263,12 @@ export const BrowserWindow = ({
   // The page's site's permissions, and the request it is waiting on. The
   // engine draws no prompt; the address bar's site permissions panel does.
   const sitePermissions = useSitePermissions(view);
+  // The camera and microphone a page that names none gets, picked in the
+  // same panel.
+  const mediaDevices = useMemo(
+    () => (view === null ? undefined : mediaDeviceChoiceFor(view)),
+    [view],
+  );
   const permissionRequest = usePermissionRequest(view);
   // The device the page asked for. The engine draws no chooser; this window
   // asks over the page, address bar or not.
@@ -556,6 +563,7 @@ export const BrowserWindow = ({
           isPrivate={isPrivate}
           loading={loading}
           loadProgress={loadProgress}
+          mediaDevices={mediaDevices}
           onBack={drive((loaded) => {
             loaded.goBack();
           })}

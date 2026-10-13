@@ -1,0 +1,9 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// Each kind's devices, most preferred first. A page that names no device gets
+// the first.
+dictionary DomicileMediaDevices {
+  required sequence<DomicileMediaDevice> cameras;
+  required sequence<DomicileMediaDevice> microphones;
+};

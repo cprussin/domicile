@@ -307,6 +307,7 @@ if wanted engine; then
       scripts/engine-guard-webview-target-url.sh \
       scripts/engine-guard-webview-fullscreen.sh \
       scripts/engine-guard-webview-device-request.sh \
+      scripts/engine-guard-webview-media-devices.sh \
       scripts/engine-guard-webview-dialog.sh \
       scripts/engine-guard-webview-context-menu.sh \
       scripts/engine-guard-webview-upload.sh \
