@@ -285,19 +285,35 @@ It does not enable a display manager or set the default session.
 ## Other distributions
 
 Each commit `stable` moves to is released as packages for Debian, Ubuntu,
-Fedora, openSUSE and Arch, tagged `packages-<commit>`:
-[releases](https://github.com/cprussin/domicile/releases?q=packages-&expanded=true).
-They run the same desktop as `nix run github:cprussin/domicile/stable`.
+Fedora, openSUSE and Arch. They run the same desktop as
+`nix run github:cprussin/domicile/stable`.
 
-| Distribution | Package | Install |
-|---|---|---|
-| Debian 13+, Ubuntu 24.04+ | `domicile_<version>_amd64.deb` | `sudo apt install ./domicile_*_amd64.deb` |
-| Debian 12, Ubuntu 22.04 | `domicile_<version>_amd64.noapparmor.deb` | `sudo apt install ./domicile_*.noapparmor.deb` |
-| Fedora, RHEL 10+ | `domicile-<version>-1.fedora.x86_64.rpm` | `sudo dnf install ./domicile-*.fedora.x86_64.rpm` |
-| openSUSE Tumbleweed | `domicile-<version>-1.opensuse.x86_64.rpm` | `sudo zypper install --allow-unsigned-rpm ./domicile-*.opensuse.x86_64.rpm` |
-| Arch | `domicile-<version>-1-x86_64.pkg.tar.zst` | `sudo pacman -U ./domicile-*.pkg.tar.zst` |
+- **`packages-latest`** holds the newest packages under fixed names, so the
+  commands below always fetch them.
+- **`packages-<commit>`** holds each commit's packages, with the version in
+  their names:
+  [releases](https://github.com/cprussin/domicile/releases?q=packages-&expanded=true).
 
-Then:
+Download your distribution's package and `SHA256SUMS`, and check the package:
+
+```sh
+base=https://github.com/cprussin/domicile/releases/download/packages-latest
+pkg=domicile_amd64.deb   # your package from the table below
+curl -fL -O "$base/$pkg" -O "$base/SHA256SUMS"
+sha256sum --check --ignore-missing SHA256SUMS
+```
+
+Then install it:
+
+| Distribution | Install |
+|---|---|
+| Debian 13+, Ubuntu 24.04+ | `sudo apt install ./domicile_amd64.deb` |
+| Debian 12, Ubuntu 22.04 | `sudo apt install ./domicile_amd64.noapparmor.deb` |
+| Fedora, RHEL 10+ | `sudo dnf install ./domicile-fedora.x86_64.rpm` |
+| openSUSE Tumbleweed | `sudo zypper install --allow-unsigned-rpm ./domicile-opensuse.x86_64.rpm` |
+| Arch | `sudo pacman -U ./domicile-x86_64.pkg.tar.zst` |
+
+After installing:
 
 1. Join the `domicile` group: `sudo usermod -aG domicile "$USER"`.
 2. Name a shell in `~/.config/domicile/domicile.json`:
@@ -327,8 +343,8 @@ The package installs what [the NixOS module](#the-machines-half) provides:
 - **Recommended** (optional on Arch): UPower (the battery readout), hwdata
   (monitor makers), `pactl` (the volume readout), curl, `xdg-desktop-portal`.
 
-There is no package repository. Upgrade by installing a newer release's
-package.
+There is no package repository. Upgrade by downloading and installing the
+package again.
 
 ### Nix on another distribution
 

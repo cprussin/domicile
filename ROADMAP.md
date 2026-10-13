@@ -52,7 +52,9 @@ item when it ships.
 
 8. **Distribution packages.**
    [RUNNING-A-DESKTOP.md](docs/RUNNING-A-DESKTOP.md#other-distributions).
-   - No APT or RPM repository, AUR package or COPR, so upgrades are by hand.
+   - Released on GitHub only. APT and RPM repositories, package signing, an
+     AUR package and COPR wait until users ask for them; until then upgrades
+     are by hand.
    - Checked by installing in containers; no packaged session has run on
      hardware.
 
