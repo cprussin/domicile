@@ -27,6 +27,10 @@ namespace domicile {
 //   -> {"type":"loaded"}
 //   -> {"type":"refused","why":"..."}
 //
+//   {"type":"run_app","version":1,"root":"/opt/notes","module":"notes.js"}
+//   -> {"type":"opened"}
+//   -> {"type":"refused","why":"..."}
+//
 //   {"type":"open_url","version":1,"url":"https://example.com/"}
 //   {"type":"open_url","version":1,"url":"https://example.com/","app":true}
 //   -> {"type":"opened"}
@@ -83,6 +87,13 @@ inline constexpr int kCommandVersion = 1;
 // Carries out `load_shell`: serves this shell and shows it. Returns false if
 // there is no shell window to load it into.
 using LoadShell =
+    base::FunctionRef<bool(const base::FilePath& root,
+                           const std::string& module)>;
+
+// Carries out `run_app`: serves the app module `module` under `root` and opens
+// an app window on it. Returns false if there is no shell to own the window.
+// See docs/architecture/APP-MODULES.md.
+using RunApp =
     base::FunctionRef<bool(const base::FilePath& root,
                            const std::string& module)>;
 
@@ -179,6 +190,7 @@ using SetMediaDevice =
 // What each command does, injected so this file can be tested with strings.
 struct CommandActions {
   LoadShell load_shell;
+  RunApp run_app;
   OpenUrl open_url;
   ListSitePermissions list_site_permissions;
   SetSitePermission set_site_permission;

@@ -49,6 +49,7 @@ source_set("domicile") {
     "//base",
     "//chrome/browser/ui/browser_window",
     "//chrome/browser/web_applications",
+    "//components/domicile:app_roots",
     "//components/domicile:command_protocol",
     "//components/domicile:common",
     "//components/domicile:pointer_warp",
