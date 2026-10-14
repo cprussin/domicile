@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Lays out the `/usr` tree every distribution package is made from.
 #
-#   distro/stage.sh <binaries> <engine> <bun> <workspace> <stage>
+#   distro/stage.sh <binaries> <engine> <bun> <workspace> <rev> <stage>
 #
 # - <binaries>: the Rust binaries `flake.nix` installs, built by
 #   `distro/binaries.sh`.
@@ -9,6 +9,7 @@
 # - <bun>: the bun binary the shell builder runs with. It also installs the
 #   builder's modules.
 # - <workspace>: a checkout after `distro/build.sh`'s workspace build.
+# - <rev>: <workspace>'s commit, whose version the shipped packages carry.
 # - <stage>: created; `<stage>/usr` is the tree.
 #
 # The layout is `domicilePackage`'s in `flake.nix` with `/usr` as the prefix,
@@ -17,15 +18,16 @@
 # limits, AppArmor) differs by distribution and is in `distro/nfpm.yaml`.
 set -euo pipefail
 
-[ "$#" -eq 5 ] || {
-  echo "usage: stage.sh <binaries> <engine> <bun> <workspace> <stage>" >&2
+[ "$#" -eq 6 ] || {
+  echo "usage: stage.sh <binaries> <engine> <bun> <workspace> <rev> <stage>" >&2
   exit 2
 }
 BINARIES="$1"
 ENGINE="$2"
 BUN="$3"
 WORKSPACE="$4"
-STAGE="$5"
+REV="$5"
+STAGE="$6"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -81,6 +83,7 @@ install -m 755 "$ROOT/distro/builder" "$LIBEXEC/builder"
 # What the builder needs, as in `shellWorkspace` in `flake.nix`.
 "$ROOT/distro/shell-workspace.sh" modules "$BUN" "$WORKSPACE" "$LIBEXEC/workspace"
 "$ROOT/distro/shell-workspace.sh" files "$BUN" "$WORKSPACE" "$LIBEXEC/workspace"
+"$ROOT/scripts/stamp-version.sh" "$REV" "$LIBEXEC"/workspace/packages/*/package.json >/dev/null
 
 for shell in "${SHELLS[@]}"; do
   cp -a "$WORKSPACE/packages/shell-$shell/.vite/renderer/main_window" \
