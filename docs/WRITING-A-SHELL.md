@@ -246,8 +246,14 @@ Each entry in `domicile.windows` describes one client window.
   - `sandboxEngine`, `sandboxAppId` and `sandboxInstanceId` are what the
     engine said, for example `org.flatpak`, the Flatpak app id and its
     instance id. `null` where it said nothing.
-  - The engine sets them, not the client, so a shell can trust them as far as
-    it trusts the engine.
+  - They come from `wp_security_context_v1`, so they are claims by whichever
+    client created the context. Any unsandboxed client can create one with
+    any values.
+  - `sandboxInstanceId` is passed through verbatim and is fixed for the
+    client's life.
+  - Don't base a security decision on them alone. Check them against `pid`,
+    `uid` and `gid`, for example the pid plus its start time or
+    `pidfdInode`.
 - **Cursor:** `cursor` is the CSS cursor a client wants over its window. Set it
   with `element.style.cursor = cursor` (in React, `<app style={{ cursor }}>`).
 - **Size:** the `<app>` element's layout box is the window size. The engine
