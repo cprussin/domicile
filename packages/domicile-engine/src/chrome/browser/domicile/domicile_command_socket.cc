@@ -126,10 +126,21 @@ ShellWindowState LookForTheShellWindow() {
                                     : ShellWindowState::kAbsent;
 }
 
-// How long `load_shell` waits for the shell window's first page. Under the
-// supervisor's wait for a reply (`PATIENCE` in domicile-launch's
-// control_socket.rs), so the supervisor hears the refusal and asks again.
+// How long `load_shell`, `run_app` and `open_url` wait for the shell window's
+// first page. Under the supervisor's wait for a reply (`PATIENCE` in
+// domicile-launch's control_socket.rs), so the supervisor hears the refusal.
 constexpr base::TimeDelta kFirstPagePatience = base::Seconds(3);
+
+// Runs `ready` once the shell window shows a page.
+//
+// The socket binds before the shell window's first page commits, so a command
+// sent at login can arrive while that page is loading. Each command that needs
+// the shell's page waits for it rather than refusing.
+void WhenTheShellWindowCanTakeIt(ShellWindowReady ready) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  WhenTheShellWindowHasAPage(base::BindRepeating(&LookForTheShellWindow),
+                             kFirstPagePatience, std::move(ready));
+}
 
 // Serves the shell at `root`/`module` and loads it into the shell window's
 // page, or refuses when there is none.
@@ -170,36 +181,57 @@ void LoadShellIntoAPage(const base::FilePath& root,
 }
 
 // Serves the shell at `root`/`module` and loads it into the shell window, once
-// that window shows a page.
-//
-// The socket binds before the shell window's first page commits, so a shell
-// built quickly can arrive while that page is loading. The load navigates from
-// the committed page, so this waits for it rather than refusing.
+// that window shows a page. The load navigates from the committed page.
 void LoadShellIntoTheShellWindow(const base::FilePath& root,
                                  const std::string& module,
                                  ShellLoaded loaded) {
-  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  WhenTheShellWindowHasAPage(
-      base::BindRepeating(&LookForTheShellWindow), kFirstPagePatience,
+  WhenTheShellWindowCanTakeIt(
       base::BindOnce(&LoadShellIntoAPage, root, module, std::move(loaded)));
 }
 
 // Serves the app module `module` under `root` and opens an app window pinned
-// to it. See docs/architecture/APP-MODULES.md.
-bool RunAppInAnAppWindow(const base::FilePath& root,
-                         const std::string& module) {
+// to it, or refuses when there is no shell page to own it. See
+// docs/architecture/APP-MODULES.md.
+void RunAppOnceTheShellHasAPage(const base::FilePath& root,
+                                const std::string& module,
+                                WindowOpened opened,
+                                bool has_a_page) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (!has_a_page) {
+    std::move(opened).Run(false);
+    return;
+  }
   const std::string host = AppRoots::Get().Add(root, module);
   LOG(INFO) << "domicile: running the app " << module << " out of " << root
             << " at " << kDomicileScheme << "://" << host << "/";
-  return OpenAppModuleWindow(
-      GURL(base::StrCat({kDomicileScheme, "://", host, "/"})), host);
+  std::move(opened).Run(OpenAppModuleWindow(
+      GURL(base::StrCat({kDomicileScheme, "://", host, "/"})), host));
+}
+
+// Runs the app module once the shell window shows a page, which owns the app
+// window.
+void RunAppInAnAppWindow(const base::FilePath& root,
+                         const std::string& module,
+                         WindowOpened opened) {
+  WhenTheShellWindowCanTakeIt(base::BindOnce(&RunAppOnceTheShellHasAPage, root,
+                                             module, std::move(opened)));
 }
 
 // Opens a browser window at `url`, as for a page's target="_blank", or with
-// `app` an app window. The shell sees it in its window list. See
-// domicile_browser_windows.h.
-bool OpenUrlInABrowserWindow(const GURL& url, bool app) {
-  return OpenBrowserWindow(url, app);
+// `app` an app window, or refuses when there is no shell page to own it. The
+// shell sees it in its window list. See domicile_browser_windows.h.
+void OpenUrlOnceTheShellHasAPage(const GURL& url,
+                                 bool app,
+                                 WindowOpened opened,
+                                 bool has_a_page) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  std::move(opened).Run(has_a_page && OpenBrowserWindow(url, app));
+}
+
+// Opens the window once the shell window shows a page, which owns it.
+void OpenUrlInABrowserWindow(const GURL& url, bool app, WindowOpened opened) {
+  WhenTheShellWindowCanTakeIt(base::BindOnce(&OpenUrlOnceTheShellHasAPage, url,
+                                             app, std::move(opened)));
 }
 
 // The site settings of the shell's profile, which browser windows share, or
@@ -406,8 +438,8 @@ void ClearShellBrowsingData(const BrowsingDataClearing& clearing,
 //
 // Runs on the UI thread because `ShellSource` is unlocked and UI-thread only,
 // and loading a shell navigates a window. `reply` is bound to the IO thread,
-// so it may be called from any thread, and later for `load_shell`,
-// `load_unpacked` and the History app's commands.
+// so it may be called from any thread, and later for `load_shell`, `run_app`,
+// `open_url`, `load_unpacked` and the History app's commands.
 void AnswerOnUIThread(const std::string& line, CommandReply reply) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   AnswerCommand(line,
