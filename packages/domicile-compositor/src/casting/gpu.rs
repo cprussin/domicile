@@ -10,7 +10,7 @@ use smithay::backend::allocator::Fourcc;
 use smithay::backend::renderer::gles::{GlesError, GlesRenderer, GlesTexture};
 use smithay::backend::renderer::{
     Bind, Color32F, ExportMem as _, Frame, ImportDma as _, ImportMem as _, ImportMemWl as _,
-    Renderer as _,
+    Offscreen as _, Renderer as _,
 };
 use smithay::reexports::wayland_server::protocol::{wl_buffer::WlBuffer, wl_shm};
 use smithay::utils::{Physical, Rectangle, Size, Transform};
@@ -129,6 +129,10 @@ pub fn snapshot(
 ///
 /// Waits for the GPU. Taken only for a frame on the GPU cast to a consumer
 /// that refused dmabufs.
+///
+/// Draws the crop into a buffer of its own first: a dmabuf GLES imports as
+/// `GL_TEXTURE_EXTERNAL_OES` cannot back the framebuffer a read needs, and
+/// Smithay does not say which ones it imported that way.
 pub fn read_back(
     renderer: &mut GlesRenderer,
     texture: &GlesTexture,
@@ -136,18 +140,34 @@ pub fn read_back(
     target: &mut [u8],
     stride: usize,
 ) -> Result<(), FillError> {
-    let region = Rectangle::new((crop.0, crop.1).into(), (crop.2, crop.3).into());
-    let mapping = renderer.copy_texture(texture, region, Fourcc::Argb8888)?;
-    // Rows come back in memory order, top first unless the texture is
-    // y-inverted. Smithay's `TextureMapping::flipped` is `true` for every
-    // GLES read, so it cannot say which.
-    let flipped = texture.is_y_inverted();
+    let size = Size::from((crop.2, crop.3));
+    let mut upright: GlesTexture = renderer.create_buffer(Fourcc::Argb8888, size)?;
+    let whole = Rectangle::from_size((crop.2, crop.3).into());
+    let mut framebuffer = renderer.bind(&mut upright)?;
+    let mut frame = renderer.render(&mut framebuffer, whole.size, Transform::Normal)?;
+    frame.clear(Color32F::TRANSPARENT, &[whole])?;
+    Frame::render_texture_from_to(
+        &mut frame,
+        texture,
+        Rectangle::new(
+            (f64::from(crop.0), f64::from(crop.1)).into(),
+            (f64::from(crop.2), f64::from(crop.3)).into(),
+        ),
+        whole,
+        &[whole],
+        &[],
+        Transform::Normal,
+        1.0,
+    )?;
+    frame.finish()?.wait().map_err(|_| FillError::Interrupted)?;
+    drop(framebuffer);
+    // Rows come back top first: Smithay drew the texture upright, y-inverted
+    // or not, into a buffer that is not.
+    let mapping = renderer.copy_texture(&upright, Rectangle::from_size(size), Fourcc::Argb8888)?;
     let pixels = renderer.map_texture(&mapping)?;
     let row = crop.2 as usize * 4;
-    let height = crop.3 as usize;
-    for y in 0..height {
-        let from = if flipped { height - 1 - y } else { y } * row;
-        target[y * stride..y * stride + row].copy_from_slice(&pixels[from..from + row]);
+    for (y, from) in pixels.chunks_exact(row).enumerate() {
+        target[y * stride..y * stride + row].copy_from_slice(from);
     }
     Ok(())
 }
@@ -262,7 +282,7 @@ fn texture_of(renderer: &mut GlesRenderer, snapshot: &Snapshot) -> Result<GlesTe
 
 #[cfg(test)]
 mod tests {
-    use smithay::backend::renderer::Offscreen as _;
+    use smithay::backend::renderer::gles::ffi;
 
     use super::*;
     use crate::casting::cursor::arrow;
@@ -288,6 +308,49 @@ mod tests {
         read_back(&mut renderer, &texture, (0, 0, 2, 2), &mut target, 8).expect("read back");
 
         assert_eq!(target, CORNERS);
+    }
+
+    /// A texture that cannot back a framebuffer, as a dmabuf imported as
+    /// `GL_TEXTURE_EXTERNAL_OES` cannot, still reads back.
+    #[test]
+    fn a_texture_that_cannot_be_drawn_into_reads_back() {
+        let (mut renderer, _) = headless_renderer().expect("EGL: llvmpipe will do");
+        // Luminance is not color-renderable in GLES.
+        let id = renderer
+            .with_context(|gl| {
+                let mut id = 0;
+                // SAFETY: the context is current, and the pixels outlive the
+                // upload.
+                unsafe {
+                    gl.GenTextures(1, &mut id);
+                    gl.BindTexture(ffi::TEXTURE_2D, id);
+                    gl.TexImage2D(
+                        ffi::TEXTURE_2D,
+                        0,
+                        ffi::LUMINANCE as i32,
+                        2,
+                        1,
+                        0,
+                        ffi::LUMINANCE,
+                        ffi::UNSIGNED_BYTE,
+                        [10u8, 20].as_ptr().cast(),
+                    );
+                    gl.BindTexture(ffi::TEXTURE_2D, 0);
+                }
+                id
+            })
+            .expect("the context is current");
+        // SAFETY: `id` is the texture made above, and the renderer owns it
+        // from here. Smithay has no shader for luminance; its `RGBA` one
+        // samples it the same.
+        let texture = unsafe {
+            GlesTexture::from_raw(&renderer, Some(ffi::RGBA), true, id, Size::from((2, 1)))
+        };
+        let mut target = [0; 8];
+
+        read_back(&mut renderer, &texture, (0, 0, 2, 1), &mut target, 8).expect("read back");
+
+        assert_eq!(target, [10, 10, 10, 255, 20, 20, 20, 255]);
     }
 
     /// [`CORNERS`] drawn a quarter turn counterclockwise: the upright frame's
