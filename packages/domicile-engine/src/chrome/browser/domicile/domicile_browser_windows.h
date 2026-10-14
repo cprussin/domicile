@@ -33,7 +33,9 @@ namespace domicile {
 // Every open and close sends the whole list to every shell document of the
 // profile. A reloaded shell learns its windows this way.
 
-// Installs WebViewGuest's BrowserWindowHost. Called once, from StartDesk.
+// Installs WebViewGuest's BrowserWindowHost and the finder a capture of one
+// browser window uses (components/domicile/browser/
+// browser_window_capture_target.h). Called once, from StartDesk.
 void StartBrowserWindows();
 
 // Opens a browser window at `url` in the shell's profile, for `domicile

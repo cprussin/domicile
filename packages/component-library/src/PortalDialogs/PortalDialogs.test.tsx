@@ -1293,7 +1293,7 @@ describe("PortalDialogs", () => {
       ).toBeInTheDocument();
     });
 
-    it("saves a window the shell shows as its whole frame on the desk", async () => {
+    it("saves a window the shell shows from its own frame, without what is over it", async () => {
       const host = new FakeHost();
       render(
         <PortalDialogs
@@ -1307,17 +1307,11 @@ describe("PortalDialogs", () => {
       await userEvent.click(
         screen.getByRole("button", { name: "kitty: ~/src" }),
       );
+      expect(screen.getByRole("dialog")).not.toHaveTextContent("Not on screen");
       await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
       expect(host.answers).toEqual([
-        [
-          1,
-          {
-            area: { height: 20, width: 40, x: 20, y: 10 },
-            copy: false,
-            kind: "screenshot",
-          },
-        ],
+        [1, { copy: false, id: "app-3", kind: "screenshot_window" }],
       ]);
     });
 
@@ -1339,7 +1333,7 @@ describe("PortalDialogs", () => {
       ]);
     });
 
-    it("offers each browser window the shell shows, clipped to the desk", async () => {
+    it("saves each browser window the shell shows from its page alone", async () => {
       const host = new FakeHost();
       host.fake.set({
         browserWindows: [
@@ -1367,14 +1361,7 @@ describe("PortalDialogs", () => {
       await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
       expect(host.answers).toEqual([
-        [
-          1,
-          {
-            area: { height: 80, width: 180, x: 120, y: 20 },
-            copy: false,
-            kind: "screenshot",
-          },
-        ],
+        [1, { copy: false, id: "1", kind: "screenshot_browser_window" }],
       ]);
     });
 
@@ -1401,20 +1388,17 @@ describe("PortalDialogs", () => {
       await userEvent.click(
         windows.getByRole("button", { name: "kitty: ~/src" }),
       );
+      expect(screen.getByRole("dialog")).not.toHaveTextContent("Not on screen");
+      await userEvent.click(
+        windows.getByRole("button", { name: "Browser: Pull requests" }),
+      );
       await userEvent.click(screen.getByRole("button", { name: "Save" }));
       for (const element of elements) {
         element.remove();
       }
 
       expect(host.answers).toEqual([
-        [
-          1,
-          {
-            area: { height: 20, width: 40, x: 20, y: 10 },
-            copy: false,
-            kind: "screenshot",
-          },
-        ],
+        [1, { copy: false, id: "1", kind: "screenshot_browser_window" }],
       ]);
     });
 

@@ -86,6 +86,7 @@ impl Account {
             | PortalAnswer::Print { .. }
             | PortalAnswer::Screenshot { .. }
             | PortalAnswer::ScreenshotWindow { .. }
+            | PortalAnswer::ScreenshotBrowserWindow { .. }
             | PortalAnswer::PickColor { .. }
             | PortalAnswer::Stop
             | PortalAnswer::Pressed

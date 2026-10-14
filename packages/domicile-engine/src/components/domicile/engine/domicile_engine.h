@@ -108,8 +108,9 @@ typedef struct DomicileDmabuf {
   DomicileDmabufPlane planes[4];
 } DomicileDmabuf;
 
-// A display capture id. Zero is never valid and is
-// domicile_display_capture_start's failure return.
+// A capture id, of a display or a browser window. Zero is never valid and is
+// the failure return of domicile_display_capture_start and
+// domicile_browser_window_capture_start.
 typedef uint32_t DomicileCaptureId;
 
 // Where a captured frame's pixels are.
@@ -557,6 +558,19 @@ domicile_display_capture_start(DomicileEngine* engine,
                                uint32_t width,
                                uint32_t height,
                                uint32_t max_fps);
+
+// Captures what browser window `window_id` shows, alone, for a screenshot.
+// Returns the capture id, or zero if no such window has a page drawn.
+//
+// `window_id` is the id the shell's browser window list gives, borrowed for
+// the call. Frames arrive through `captured` at the page's size in pixels,
+// until domicile_display_capture_resize, and otherwise as for
+// domicile_display_capture_start, whose resize, stop and release functions
+// this capture also takes. Blocks for the browser's answer.
+DOMICILE_ENGINE_EXPORT DomicileCaptureId
+domicile_browser_window_capture_start(DomicileEngine* engine,
+                                      const char* window_id,
+                                      uint32_t max_fps);
 
 // Captures at `width` x `height` from the next frame on.
 DOMICILE_ENGINE_EXPORT void domicile_display_capture_resize(

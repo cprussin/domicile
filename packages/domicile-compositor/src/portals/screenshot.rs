@@ -50,6 +50,8 @@ pub type CopyPng = Arc<dyn Fn(Vec<u8>) -> Result<(), String> + Send + Sync>;
 pub struct Shots {
     pub shoot: Shoot,
     pub shoot_window: ShootWindow,
+    /// Shoots a browser window's page alone, by the engine's window id.
+    pub shoot_browser_window: ShootWindow,
     pub save: Save,
     pub copy: CopyPng,
 }
@@ -61,6 +63,9 @@ impl Shots {
         Shots {
             shoot: Arc::new(|| Box::pin(async { Err("no desk here".into()) })),
             shoot_window: Arc::new(|_| Box::pin(async { Err("no windows here".into()) })),
+            shoot_browser_window: Arc::new(|_| {
+                Box::pin(async { Err("no browser windows here".into()) })
+            }),
             save: Arc::new(|_| Err("no pictures here".into())),
             copy: Arc::new(|_| Err("no clipboard here".into())),
         }
@@ -356,8 +361,8 @@ struct Picked {
     copy: bool,
 }
 
-/// The shot a picker over `desk` kept: an area of the desk, or a window's own
-/// last frame.
+/// The shot a picker over `desk` kept: an area of the desk, a window's own
+/// last frame, or a browser window's page alone.
 async fn picked(shots: &Shots, desk: &Desk, answer: PortalAnswer) -> Result<Picked, Unpicked> {
     match answer {
         PortalAnswer::Screenshot { area, copy } => Ok(Picked {
@@ -365,6 +370,10 @@ async fn picked(shots: &Shots, desk: &Desk, answer: PortalAnswer) -> Result<Pick
             copy,
         }),
         PortalAnswer::ScreenshotWindow { id, copy } => (shots.shoot_window)(id)
+            .await
+            .map(|shot| Picked { shot, copy })
+            .map_err(Unpicked::Failed),
+        PortalAnswer::ScreenshotBrowserWindow { id, copy } => (shots.shoot_browser_window)(id)
             .await
             .map(|shot| Picked { shot, copy })
             .map_err(Unpicked::Failed),
@@ -377,6 +386,19 @@ pub fn shooting(casting: Casting) -> Shoot {
     Arc::new(move || {
         let (replier, developed) = crate::reply::reply();
         casting.shoot(Box::new(move |desk| replier.send(desk)));
+        Box::pin(async move {
+            developed
+                .await
+                .unwrap_or_else(|| Err("the compositor dropped the shot".into()))
+        })
+    })
+}
+
+/// A [`ShootWindow`] that captures browser windows through `casting`.
+pub fn shooting_browser_windows(casting: Casting) -> ShootWindow {
+    Arc::new(move |id| {
+        let (replier, developed) = crate::reply::reply();
+        casting.shoot_browser_window(id, Box::new(move |shot| replier.send(shot)));
         Box::pin(async move {
             developed
                 .await
@@ -589,6 +611,23 @@ mod tests {
         })
     }
 
+    /// Browser window `1`'s page, captured alone: one opaque blue pixel.
+    fn browser_page() -> ShootWindow {
+        Arc::new(|id| {
+            Box::pin(async move {
+                if id == "1" {
+                    Ok(Shot {
+                        width: 1,
+                        height: 1,
+                        bgra: vec![255, 0, 0, 255],
+                    })
+                } else {
+                    Err(format!("no browser window {id}"))
+                }
+            })
+        })
+    }
+
     /// A [`Shoot`] that always answers `shot`.
     fn shot_of(shot: Result<Desk, String>) -> Shoot {
         Arc::new(move || {
@@ -640,6 +679,7 @@ mod tests {
             shots: Shots {
                 shoot: shot_of(shot),
                 shoot_window: own_frame(),
+                shoot_browser_window: browser_page(),
                 save: {
                     let dir = album.path().join("Screenshots");
                     saving_into(move || dir.clone())
@@ -904,6 +944,27 @@ mod tests {
     }
 
     #[test]
+    fn a_browser_window_picked_is_saved_from_its_page_alone() {
+        // Whatever the shell draws over the window, such as a notification,
+        // is on the frozen desk but not in the page.
+        let served = served(Ok(desk()));
+        let picking = calling(&served, "Screenshot", vec![("interactive", true)]);
+        let asked = next(&served);
+
+        served.queue.answer(
+            asked[0].id,
+            PortalAnswer::ScreenshotBrowserWindow {
+                id: "1".into(),
+                copy: false,
+            },
+        );
+
+        let (response, results) = picking.join().expect("returned");
+        assert_eq!(response, 0);
+        assert_eq!(png_at(&results["uri"]), ((1, 1), vec![0, 0, 255, 255]));
+    }
+
+    #[test]
     fn a_dismissed_picker_answers_one() {
         let served = served(Ok(desk()));
         let picking = calling(&served, "Screenshot", vec![("interactive", true)]);
@@ -974,6 +1035,7 @@ mod tests {
         let shots = Shots {
             shoot: shot_of(shot),
             shoot_window: own_frame(),
+            shoot_browser_window: browser_page(),
             save: {
                 let dir = album.path().join("Screenshots");
                 saving_into(move || dir.clone())

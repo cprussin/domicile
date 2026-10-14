@@ -147,16 +147,21 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   - The picker lists screens and windows apart. A screen is named by its
     make and model, a window by its application's desktop entry and its
     title.
-  - A window the shell shows is its box on the desk, so it shows what is
-    over it. The box leaves out the shell's title bar or tab. The shell
-    passes its boxes as `shownWindows`; without them the picker reads the
-    page's `<app>` and `<webview window>` boxes. A box is placed with the
-    frozen desk's `desk` rectangle: the page's CSS pixels are the desk's
+  - A window is answered `screenshot_window` and saved from the last frame
+    it showed, which the engine still holds. What is over it, such as a
+    notification, is left out, and so is the shell's title bar or tab. This
+    covers windows the shell does not show (a hidden tab, another
+    workspace).
+  - The picker outlines a shown window on the frozen desk by its box. The
+    shell passes its boxes as `shownWindows`; without them the picker reads
+    the page's `<app>` and `<webview window>` boxes. A box is placed with
+    the frozen desk's `desk` rectangle: the page's CSS pixels are the desk's
     logical pixels.
-  - A window the shell does not show (a hidden tab, another workspace) is
-    answered `screenshot_window` and saved from the last frame it showed,
-    which the engine still holds. A browser window not on screen is not
-    offered: the engine draws it.
+  - A browser window is answered `screenshot_browser_window` by its
+    browser window id. The engine captures its page's own frame sink
+    (`CaptureBrowserWindow`) and the compositor saves the first frame. The
+    shot is the page alone: no address bar, title bar or anything over it.
+    One not on screen is not offered: its page draws no frames.
   - The frontend checks the `PermissionStore` for a non-interactive
     screenshot (`permission_store_checked`). Without that, the backend asks
     through an `Access` dialog once per app and keeps the answer in the same

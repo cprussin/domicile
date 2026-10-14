@@ -201,6 +201,7 @@ impl Print {
             | PortalAnswer::ScreenCast { .. }
             | PortalAnswer::Screenshot { .. }
             | PortalAnswer::ScreenshotWindow { .. }
+            | PortalAnswer::ScreenshotBrowserWindow { .. }
             | PortalAnswer::PickColor { .. }
             | PortalAnswer::GlobalShortcuts { .. }
             | PortalAnswer::Pressed

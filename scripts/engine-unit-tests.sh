@@ -18,9 +18,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 . "$ROOT/scripts/lib/engine-guard.sh"
 require_engine_out
 
-FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*:CommandProtocolTest.*:DomicileDisplayListTest.*:DomicileKeyboardLayoutTest.*:ShellWindowsTest.*:ShellWindowPlacesTest.*:LineFramerTest.*:DesktopPrefsTest.*:SurfaceCropTest.*:SurfaceTransformTest.*:SurfaceAlphaTest.*:ExtensionInstallerTest.*:ExtensionTrayEntryTest.*:DeskTabsTest.*:DeskGeometryTest.*:DomicileDisplayRegionsTest.*:DomicileDeskTargeterTest.*:PlaceholderStageTest.*:SystemCallTest.*:PortalRequestTest.*:FileChoiceTest.*:DisplayCaptureTest.*:CapturedFourccTest.*:DisplayCaptureTargetTest.*:HeldChordsTest.*:SitePermissionsTest.*:ControlChannelTest.*:DeviceChoicesTest.*:SurfaceFramesTest.*:GuestDialogsTest.*:DownloadTallyTest.*:SurfaceSubmitsTest.*:PrivatePagesTest.*:ShellOriginTest.*:AppRootsTest.*:AppChannelTest.*:AppDocumentTest.*:WebViewUrlTest.*:ShellFetchTest.*'
+FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*:CommandProtocolTest.*:DomicileDisplayListTest.*:DomicileKeyboardLayoutTest.*:ShellWindowsTest.*:ShellWindowPlacesTest.*:LineFramerTest.*:DesktopPrefsTest.*:SurfaceCropTest.*:SurfaceTransformTest.*:SurfaceAlphaTest.*:ExtensionInstallerTest.*:ExtensionTrayEntryTest.*:DeskTabsTest.*:DeskGeometryTest.*:DomicileDisplayRegionsTest.*:DomicileDeskTargeterTest.*:PlaceholderStageTest.*:SystemCallTest.*:PortalRequestTest.*:FileChoiceTest.*:DisplayCaptureTest.*:CapturedFourccTest.*:DisplayCaptureTargetTest.*:HeldChordsTest.*:SitePermissionsTest.*:ControlChannelTest.*:DeviceChoicesTest.*:SurfaceFramesTest.*:GuestDialogsTest.*:DownloadTallyTest.*:SurfaceSubmitsTest.*:PrivatePagesTest.*:ShellOriginTest.*:AppRootsTest.*:AppChannelTest.*:AppDocumentTest.*:WebViewUrlTest.*:ShellFetchTest.*:BrowserWindowCaptureTargetTest.*'
 
-# Every suite in the filter, counted rather than estimated: FrameSinkBroker 37,
+# Every suite in the filter, counted rather than estimated: FrameSinkBroker 39,
 # WindowDiff 7, EngineEventQueue 7, ShortcutRegistry 10, ShellURLLoaderFactory
 # 12, ShellDocument 14, ShellSource 3, CursorShape 3, CommandProtocol 40,
 # DomicileDisplayList 8, DomicileKeyboardLayout 3, ShellWindows 8,
@@ -32,8 +32,10 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # ControlChannel 3, DeviceChoices 9, SurfaceFrames 6,
 # GuestDialogs 6, DownloadTally 6, SurfaceSubmits 4,
 # PrivatePages 3, ShellOrigin 2, AppRoots 4, AppChannel 2, AppDocument 3,
-# WebViewUrl 5, ShellFetch 15.
+# WebViewUrl 5, ShellFetch 15, BrowserWindowCaptureTarget 3.
 #
+# 355, and it was 350 — capturing a browser window alone is three
+# BrowserWindowCaptureTarget cases and two FrameSinkBroker ones. Before that
 # 350, and it was 348 — each display's connector is two DomicileDisplayList
 # cases. Before that 348, and it was 333 — the shell's fetches with the profile's cookies are 15
 # ShellFetch cases. Before that 333, and it was 326 — the History app's history and browsing data are
@@ -120,7 +122,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=350
+FLOOR=355
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.
