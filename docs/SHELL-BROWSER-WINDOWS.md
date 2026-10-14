@@ -195,7 +195,8 @@ Draw the context menu yourself:
 - Back, reload and "open in new window" (`openBrowserWindow`) need no menu
   action.
 - `view.inspect()` opens DevTools for the page in a new browser window. It
-  arrives in the next `browser_windows`, like any other window.
+  arrives in the next `browser_windows`, like any other window. DevTools draws
+  its own context menus, so its window fires no `domicile-context-menu`.
 - Manganese's `browser/page-menu.ts` builds Chrome's menu from the event.
 
 Desktop chords from `bindKeys` still work while a guest has focus. They arrive

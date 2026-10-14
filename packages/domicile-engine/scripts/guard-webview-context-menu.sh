@@ -21,6 +21,8 @@
 # - the shell got the menu, with the link and picture under the click
 # - "inspect" opened a browser window at devtools://
 # - the browser logged DevTools attached in the new window
+# - a right click in DevTools drew its own HTML menu: the engine has no native
+#   menus, so `domicile_devtools.cc` tells the front end to use its soft menu
 #
 # Control (NEGATIVE=1): the page cancels its own `contextmenu`, as a site with
 # its own menu does. The page must hear the press and the shell nothing.
@@ -70,6 +72,7 @@ fi
 ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-webview-context-menu$WHICH-engine.log}"
 HTTP_LOG="${HTTP_LOG:-/tmp/domicile-webview-context-menu$WHICH-http.log}"
 CLICK_LOG="${CLICK_LOG:-/tmp/domicile-webview-context-menu$WHICH-mouse.log}"
+TOOLS_LOG="${TOOLS_LOG:-/tmp/domicile-webview-context-menu$WHICH-devtools.log}"
 
 STARTED=()
 cleanup() {
@@ -175,6 +178,18 @@ saw() { # $1 pattern
   grep -qF "$1" "$ENGINE_LOG" && echo 1 || echo 0
 }
 
+# 6. A right click in DevTools' front end. The control never opens DevTools.
+rm -f "$TOOLS_LOG"
+if [ "$NEGATIVE" != "1" ] &&
+  [ "$(saw "domicile: DevTools is attached in a <webview>.")" = "1" ]; then
+  python3 "$SCRIPTS/guard-webview-devtools-menu.py" --port "$DEBUG_PORT" \
+    >"$TOOLS_LOG" 2>&1 ||
+    echo "the right click in DevTools could not be driven; see $TOOLS_LOG" >&2
+fi
+SAW_SOFT_MENU=0
+grep -q "^soft-menu at " "$TOOLS_LOG" 2>/dev/null && SAW_SOFT_MENU=1
+echo "the right click in DevTools: $(cat "$TOOLS_LOG" 2>/dev/null)"
+
 SAW_SHELL=$(saw "GUARD shell-loaded")
 SAW_CHROME=$(saw "GUARD chrome-mousedown")
 SAW_PAGE=$(saw "GUARD page-loaded")
@@ -191,6 +206,7 @@ echo "shell=$SAW_SHELL page=$SAW_PAGE"
 echo "the shell's document saw: press=$SAW_CHROME menu=$SAW_MENU asked=$SAW_ASKED"
 echo "the page in the window saw: contextmenu=$SAW_PRESS"
 echo "the browser process said: attached=$SAW_ATTACHED"
+echo "DevTools' front end drew: soft-menu=$SAW_SOFT_MENU"
 echo
 
 # Decided here, in a block `scripts/test-webview-context-menu-guard.sh` runs
@@ -234,10 +250,15 @@ elif [ "$SAW_ATTACHED" != "1" ]; then
 window loaded devtools:// and the browser never bound it to the page. \
 That is DevToolsFrontendWatcher in domicile_devtools.cc -- the front end \
 never committed in the guest, or DevToolsUI made no bindings for it"
+elif [ "$SAW_SOFT_MENU" != "1" ]; then
+  FAILURE="DevTools attached, and a right click in it drew no menu of its \
+own. The engine draws no native menus, so the front end must use its soft \
+menu: WebViewDevToolsDelegate::ReadyForTest in domicile_devtools.cc never \
+sent setUseSoftMenu, or the front end never loaded"
 else
   PASSED="a right click in a browser window handed the shell a menu with the \
-link and the picture under it, and its \"inspect\" opened DevTools for the \
-page in a window the shell drew"
+link and the picture under it, its \"inspect\" opened DevTools for the page \
+in a window the shell drew, and DevTools drew its own context menu"
 fi
 
 if [ -n "$PASSED" ]; then
@@ -250,6 +271,8 @@ echo "the engine's last words:" >&2
 tail -40 "$ENGINE_LOG" >&2
 echo "what the clicks did:" >&2
 tail -20 "$CLICK_LOG" >&2
+echo "what the right click in DevTools found:" >&2
+tail -20 "$TOOLS_LOG" >&2 2>/dev/null
 echo "what the server was asked for:" >&2
 tail -20 "$HTTP_LOG" >&2
 exit 1
