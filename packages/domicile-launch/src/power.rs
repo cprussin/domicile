@@ -37,11 +37,19 @@ impl Power {
         }
     }
 
-    /// The dialog's title and its yes.
-    fn question(self) -> (&'static str, &'static str) {
+    /// The dialog's title, what happens, and its yes.
+    fn question(self) -> (&'static str, &'static str, &'static str) {
         match self {
-            Power::Off => ("Shut down?", "Shut down"),
-            Power::Reboot => ("Reboot?", "Reboot"),
+            Power::Off => (
+                "Shut down?",
+                "Are you sure you want to shut down? Unsaved work is lost.",
+                "Shut down",
+            ),
+            Power::Reboot => (
+                "Reboot?",
+                "Are you sure you want to reboot? Unsaved work is lost.",
+                "Reboot",
+            ),
         }
     }
 }
@@ -50,7 +58,7 @@ impl Power {
 ///
 /// A canceled dialog, or one with no shell to show it, is a no.
 pub fn confirmed(bus: &zbus::blocking::Connection, power: Power) -> Result<bool, String> {
-    let (title, grant) = power.question();
+    let (title, subtitle, grant) = power.question();
     let handle = format!(
         "{BACKEND_PATH}/request/launcher/{}_{}",
         power.id(),
@@ -68,7 +76,7 @@ pub fn confirmed(bus: &zbus::blocking::Connection, power: Power) -> Result<bool,
             BACKEND_PATH,
             Some(ACCESS),
             "AccessDialog",
-            &(handle, SHELL_APP_ID, "", title, "", "", options),
+            &(handle, SHELL_APP_ID, "", title, subtitle, "", options),
         )
         .and_then(|reply| reply.body().deserialize())
         .map_err(|why| format!("the desktop's Access dialog did not answer: {why}"))?;
