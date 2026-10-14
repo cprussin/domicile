@@ -42,6 +42,8 @@ String DomicileDialogEvent::dialogType() const {
       return "confirm";
     case domicile::mojom::blink::WebViewDialogType::kPrompt:
       return "prompt";
+    case domicile::mojom::blink::WebViewDialogType::kBeforeUnload:
+      return "beforeunload";
   }
   NOTREACHED();
 }
@@ -70,6 +72,15 @@ void DomicileDialogEvent::dismiss(ExceptionState& exception_state) {
 void DomicileDialogEvent::DismissIfUnanswered() {
   if (answer_) {
     Run(false, g_empty_string);
+  }
+}
+
+// A listener may have answered without claiming.
+void DomicileDialogEvent::AnswerUnclaimed() {
+  if (answer_) {
+    Run(dialog_type_ ==
+            domicile::mojom::blink::WebViewDialogType::kBeforeUnload,
+        g_empty_string);
   }
 }
 

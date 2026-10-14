@@ -7,7 +7,10 @@ import {
 import { useEffect, useState } from "react";
 import { z } from "zod";
 
-/** An `alert()`, `confirm()` or `prompt()` the page is paused on. */
+/**
+ * An `alert()`, `confirm()`, `prompt()` or `beforeunload` the page is paused
+ * on.
+ */
 export type DialogRequest = {
   type: WebViewDialogType;
   /** The calling frame's origin, or `null` for one with no site. */

@@ -836,7 +836,7 @@ void HTMLWebViewElement::DeviceRequestAnswered(
 }
 
 // Held in `dialog_` until answered. If no listener calls `preventDefault()`,
-// the shell shows nothing, so dismiss immediately.
+// the shell shows nothing, so answer immediately (AnswerUnclaimed).
 void HTMLWebViewElement::DialogRequested(
     const KURL& origin,
     domicile::mojom::blink::WebViewDialogType type,
@@ -855,7 +855,7 @@ void HTMLWebViewElement::DialogRequested(
   dialog_ = event;
   DispatchEvent(*event);
   if (!event->defaultPrevented()) {
-    event->DismissIfUnanswered();
+    event->AnswerUnclaimed();
   }
 }
 

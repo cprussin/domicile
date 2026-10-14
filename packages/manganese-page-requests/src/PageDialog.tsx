@@ -19,7 +19,8 @@ type Props = {
 };
 
 /**
- * A page's `alert()`, `confirm()` or `prompt()`, over the page it pauses.
+ * A page's `alert()`, `confirm()`, `prompt()` or `beforeunload`, over the page
+ * it pauses.
  *
  * Covers only its page, as Chrome's tab-modal dialogs do: the rest of the
  * desktop stays usable. Styled as the library's `ModalDialog` popup. Enter is
@@ -32,7 +33,7 @@ export const PageDialog = ({ asker, ref, request }: Props) => {
   const titleId = useId();
   const messageId = useId();
   const [value, setValue] = useState(request.defaultValue);
-  const name = asker ?? hostOf(request.origin);
+  const words = wordsFor(request, asker ?? hostOf(request.origin));
   return (
     <div className={scrimStyles}>
       {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: Escape cancels the dialog wherever focus is in it, as base-ui's dialogs do */}
@@ -54,10 +55,10 @@ export const PageDialog = ({ asker, ref, request }: Props) => {
         role="alertdialog"
       >
         <h2 className={titleStyles} id={titleId}>
-          {name === undefined ? "This page says" : `${name} says`}
+          {words.title}
         </h2>
         <p className={messageStyles} id={messageId}>
-          {request.message}
+          {words.message}
         </p>
         {request.type === "prompt" && (
           <Input
@@ -80,12 +81,35 @@ export const PageDialog = ({ asker, ref, request }: Props) => {
             type="submit"
             variant="accent"
           >
-            OK
+            {words.accept}
           </Button>
         </footer>
       </form>
     </div>
   );
+};
+
+/**
+ * The dialog's title, text and OK button. A `beforeunload` has Chrome's words,
+ * since Chrome shows no text from the page.
+ */
+const wordsFor = (
+  request: DialogRequest,
+  name: string | undefined,
+): { accept: string; message: string; title: string } => {
+  if (request.type === "beforeunload") {
+    return {
+      accept: "Leave",
+      message: "Changes you made may not be saved.",
+      title: "Leave site?",
+    };
+  } else {
+    return {
+      accept: "OK",
+      message: request.message,
+      title: name === undefined ? "This page says" : `${name} says`,
+    };
+  }
 };
 
 /**
