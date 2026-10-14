@@ -30,7 +30,8 @@
 #   the shell heard fullscreen       the element's `pageFullscreen` turned true
 #   the page entered fullscreen      the page's own `fullscreenchange`, so the
 #                                     renderer saw the grant
-#   Escape left fullscreen           the element and the page both left
+#   Escape left fullscreen           the element and the page both left, with
+#                                     Escape typed on Caps Lock
 #   the button entered again         a second request works after the first
 #   exitPageFullscreen() left it     the shell's way out
 #
@@ -77,9 +78,11 @@ WINDOW_X=$((WIDTH / 2))
 PLAIN_Y=$((STRIP_HEIGHT + (HEIGHT - STRIP_HEIGHT) / 4))
 BUTTON_Y=$((STRIP_HEIGHT + 3 * (HEIGHT - STRIP_HEIGHT) / 4))
 
-# Escape in every form the path needs; see guard-webview-escape.sh.
-ESCAPE_EVDEV=1
-ESCAPE_CODE="Escape"
+# Escape in every form the path needs; see guard-webview-escape.sh. Typed on
+# Caps Lock, as `caps:swapescape` does: Escape is the key the layout makes, not
+# the physical key.
+ESCAPE_EVDEV=58
+ESCAPE_CODE="CapsLock"
 ESCAPE_KEY="Escape"
 ESCAPE_VKEY=27
 

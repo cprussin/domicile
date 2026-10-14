@@ -1133,8 +1133,13 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
   // A release lets go of a chord the page holds, wherever it was pressed. One
   // after a chord this took arrives only through patch 0100: Chromium drops
   // the key-ups of a handled key-down before they reach a delegate.
+  //
+  // Keys are matched by what the layout makes them, not by the physical key,
+  // so a remapped key (`ctrl:nocaps`, `caps:swapescape`) acts as what it types.
+  const ui::DomKey key(event.dom_key);
   if (event.GetType() == blink::WebInputEvent::Type::kKeyUp) {
-    ShortcutRegistry::Get().Release(chord, page);
+    ShortcutRegistry::Get().Release(
+        chord, ui::KeycodeConverter::IsDomKeyForModifier(key), page);
     return content::KeyboardEventProcessingResult::NOT_HANDLED;
   }
 
@@ -1148,8 +1153,7 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
 
   // Escape leaves page fullscreen before the page sees it, as in Chrome, so a
   // page cannot keep the user in.
-  if (page_fullscreen_ &&
-      static_cast<ui::DomCode>(event.dom_code) == ui::DomCode::ESCAPE) {
+  if (page_fullscreen_ && key == ui::DomKey::ESCAPE) {
     guest_contents_->ExitFullscreen(/*will_cause_resize=*/true);
     return content::KeyboardEventProcessingResult::HANDLED;
   }
