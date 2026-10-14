@@ -19,4 +19,9 @@
   // attribute. While set, a new box shows without waiting for the client to
   // draw at it.
   [CEReactions, Reflect] attribute boolean resizing;
+
+  // The synced frame of the window to show. Reflects the `frame` attribute.
+  // Set it in the same update that applies the move the frame goes with; see
+  // docs/architecture/FRAME-SYNCED-SURFACES.md.
+  [CEReactions, Reflect] attribute unsigned long frame;
 };

@@ -18,6 +18,11 @@ Event names and full types are in `src/app-element.ts` and
   it, up to viz's default deadline. Set the `resizing` attribute (or
   `element.resizing = true`) while the user drags an edge: each box then shows
   at once, without waiting. Removing it waits once for the final size.
+- **Synced frames:** the `frame` attribute (or `element.frame`) names the
+  synced frame of the window to show. Setting it holds the page's frame until
+  the window has that frame, up to viz's default deadline. Unset is frame 0.
+  The compositor names no synced frames yet; see
+  [FRAME-SYNCED-SURFACES.md](/docs/architecture/FRAME-SYNCED-SURFACES.md).
 - **Scale:** call `domicile.setAppBounds(appId, x, y, width, height)` with
   the element's box in page pixels whenever it moves or resizes. The client
   draws at the scale of the monitor holding most of the box. An unreported

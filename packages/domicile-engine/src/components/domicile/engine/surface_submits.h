@@ -26,6 +26,8 @@ struct SurfaceSubmit {
   gfx::Rect crop;
   gfx::Rect damage;
   uint64_t box = 0;
+  // The synced frame the submit goes up at (common/synced_frame.h).
+  uint32_t frame = 0;
   BufferTransform transform = BufferTransform::kNormal;
   // What viz waits on before it samples the buffer: the browser's token for
   // the buffer's acquire fence. Empty for a buffer the compositor finished

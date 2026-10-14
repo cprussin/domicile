@@ -38,9 +38,9 @@ Edits seven files Chromium owns, five of them Blink's. The design doc's
  .../core/html/canvas/html_canvas_element.cc   | 64 +++++++++++++++++++
  .../core/html/canvas/html_canvas_element.h    | 29 +++++++++
  .../core/html/canvas/html_canvas_element.idl  |  9 +++
- third_party/blink/renderer/platform/BUILD.gn  |  3 +
+ third_party/blink/renderer/platform/BUILD.gn  |  4 +
  .../platform/runtime_enabled_features.json5   | 10 +++
- 7 files changed, 128 insertions(+), 1 deletion(-)
+ 7 files changed, 129 insertions(+), 1 deletion(-)
 
 diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
 index bbce70cd..0e54687d 100644
@@ -264,18 +264,19 @@ index b6fe4189..632cc5da 100644
  
  // https://html.spec.whatwg.org/C/#blobcallback
 diff --git a/third_party/blink/renderer/platform/BUILD.gn b/third_party/blink/renderer/platform/BUILD.gn
-index 0adcb689..37d502a8 100644
+index 0adcb689..ab29268a 100644
 --- a/third_party/blink/renderer/platform/BUILD.gn
 +++ b/third_party/blink/renderer/platform/BUILD.gn
-@@ -305,6 +305,7 @@ group("blink_platform_public_deps") {
+@@ -305,6 +305,8 @@ group("blink_platform_public_deps") {
      "//gpu/command_buffer/common",
      "//gpu/command_buffer/common:gles2_utils",
      "//net",
++    "//components/domicile:synced_frame",
 +    "//components/domicile/mojom:mojom_blink",
      "//services/device/public/mojom:generic_sensor_blink",
      "//services/device/public/mojom:mojom_blink",
      "//services/network/public/cpp",
-@@ -1042,6 +1043,8 @@ component("platform") {
+@@ -1042,6 +1044,8 @@ component("platform") {
      "graphics/draw_looper_builder.h",
      "graphics/exported_canvas_resource.cc",
      "graphics/exported_canvas_resource.h",
