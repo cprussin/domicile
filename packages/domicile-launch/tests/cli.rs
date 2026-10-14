@@ -173,6 +173,23 @@ fn install_app_is_the_verb_that_takes_a_site() {
 }
 
 #[test]
+fn uninstall_app_is_the_verb_that_takes_an_app_address() {
+    assert_eq!(
+        run(&["uninstall-app", "https://example.com/"]).unwrap(),
+        Invocation::UninstallApp {
+            url: "https://example.com/".to_string()
+        }
+    );
+    assert_eq!(run(&["uninstall-app"]), Err(CliError::NothingToUninstall));
+    assert_eq!(
+        run(&["uninstall-app", "https://a.example", "https://b.example"]),
+        Err(CliError::ExtraToUninstall {
+            extra: "https://b.example".to_string()
+        })
+    );
+}
+
+#[test]
 fn open_url_with_nothing_to_open_is_refused() {
     assert_eq!(run(&["open-url"]), Err(CliError::NothingToOpen));
 }

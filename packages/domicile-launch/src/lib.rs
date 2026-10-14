@@ -19,6 +19,8 @@
 //! - `domicile install-app`: reads a site's web app manifest ([`web_app`],
 //!   [`web_address`]) and writes a desktop entry ([`desktop_entry`],
 //!   [`install_app`]).
+//! - `domicile uninstall-app`: removes that entry and its icon
+//!   ([`uninstall_app`]).
 //! - Failed runs report the compositor's last output ([`heard`]).
 //! - The compositor's side: its command line ([`arguments`]), the session
 //!   document it publishes ([`session`]), and whether a page connected
@@ -65,6 +67,7 @@ pub mod site_permissions;
 pub mod spawn;
 pub mod splash;
 pub mod supervise;
+pub mod uninstall_app;
 pub mod web_address;
 pub mod web_app;
 pub mod xdg_open;

@@ -26,7 +26,8 @@ pub enum CliError {
          send-shell <command>…. Or \
          check-config <file> to check a config without running it, or \
          power-off or reboot to turn the computer off or restart it, or \
-         install-app <url> to add a site to your applications.\n"
+         install-app <url> to add a site to your applications, or \
+         uninstall-app <url> to remove one.\n"
     )]
     NoShell,
     #[error(
@@ -90,6 +91,17 @@ pub enum CliError {
          address is one app."
     )]
     ExtraToInstall { extra: String },
+    #[error(
+        "uninstall-app takes the address the app opens, and was given \
+         nothing:\n\n    \
+         domicile uninstall-app https://example.com/\n"
+    )]
+    NothingToUninstall,
+    #[error(
+        "uninstall-app takes one address, and it was given {extra} as well. One \
+         address is one app."
+    )]
+    ExtraToUninstall { extra: String },
     #[error("screenshot takes one file, and it was given {extra} as well.")]
     ExtraToSave { extra: String },
     #[error(
@@ -154,6 +166,9 @@ pub enum Invocation {
     /// Write a desktop entry that opens the site at `url` as an app. Needs no
     /// running desktop.
     InstallApp { url: String },
+    /// Remove the desktop entry and icon `install-app` wrote for `url`, the
+    /// address it was given or the start URL. Needs no running desktop.
+    UninstallApp { url: String },
     /// Tell the running desktop to write a PNG of the desk to this file, or,
     /// with none, to take the shell's interactive screenshot.
     ///
@@ -219,6 +234,11 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (None, _) => Err(CliError::NothingToInstall),
                 (Some(url), None) => Ok(Invocation::InstallApp { url }),
                 (Some(_), Some(extra)) => Err(CliError::ExtraToInstall { extra }),
+            },
+            Verb::Uninstalling => match (args.next(), args.next()) {
+                (None, _) => Err(CliError::NothingToUninstall),
+                (Some(url), None) => Ok(Invocation::UninstallApp { url }),
+                (Some(_), Some(extra)) => Err(CliError::ExtraToUninstall { extra }),
             },
             Verb::Sending => {
                 let command: Vec<String> = args.collect();
@@ -288,6 +308,8 @@ enum Verb {
     RunningApp,
     /// `install-app`, which takes an address.
     Installing,
+    /// `uninstall-app`, which takes an address.
+    Uninstalling,
     /// `screenshot`, which takes a file or nothing.
     Capturing,
     /// `send-shell`, which takes one or more words.
@@ -309,6 +331,7 @@ fn verb(word: &str) -> Option<Verb> {
         "open-app" => Some(Verb::OpeningApp),
         "run-app" => Some(Verb::RunningApp),
         "install-app" => Some(Verb::Installing),
+        "uninstall-app" => Some(Verb::Uninstalling),
         "screenshot" => Some(Verb::Capturing),
         "send-shell" => Some(Verb::Sending),
         "check-config" => Some(Verb::Checking),

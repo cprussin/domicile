@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use crate::desktop_entry::{desktop_entry, file_stem};
 use crate::web_address::origin;
-use crate::web_app::{manifest_link, web_app, WebAppError};
+use crate::web_app::{manifest_link, web_app, IconKind, WebAppError};
 
 /// Why a site was not installed.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -49,22 +49,32 @@ pub fn install_app(
     let stem = file_stem(&app.start_url);
     let icon = match app.icon {
         Some(icon) => {
-            let path = data_home
-                .join("domicile/app-icons")
-                .join(format!("{stem}.{}", icon.kind.extension()));
+            let path = icon_path(data_home, &stem, icon.kind);
             written(&path, &fetched(fetch, &icon.url)?.body)?;
             Some(path)
         }
         None => None,
     };
-    let entry = data_home
-        .join("applications")
-        .join(format!("{stem}.desktop"));
+    let entry = entry_path(data_home, &stem);
     written(
         &entry,
-        desktop_entry(&app.name, &app.start_url, icon.as_deref()).as_bytes(),
+        desktop_entry(&app.name, &app.start_url, icon.as_deref(), url).as_bytes(),
     )?;
     Ok(entry)
+}
+
+/// Where the desktop entry for the app named `stem` goes.
+pub fn entry_path(data_home: &Path, stem: &str) -> PathBuf {
+    data_home
+        .join("applications")
+        .join(format!("{stem}.desktop"))
+}
+
+/// Where the `kind` icon for the app named `stem` goes.
+pub fn icon_path(data_home: &Path, stem: &str, kind: IconKind) -> PathBuf {
+    data_home
+        .join("domicile/app-icons")
+        .join(format!("{stem}.{}", kind.extension()))
 }
 
 /// `$XDG_DATA_HOME`, else `~/.local/share`, or `None` when neither is set.
