@@ -62,6 +62,31 @@ TEST(DeskGeometryTest, NoDisplaysIsNoDesk) {
   EXPECT_EQ(DeskGeometryOf({}), std::nullopt);
 }
 
+TEST(DeskGeometryTest, ALayoutThatLightsDisplaysIsTheDesk) {
+  EXPECT_EQ(DeskPlacesKept({kLaptop, kRight}, {kLaptop, kCenter, kRight},
+                           {kLaptop.id, kCenter.id, kRight.id}),
+            std::vector<DeskPlace>({kLaptop, kRight}));
+}
+
+TEST(DeskGeometryTest, ABlankKeepsTheDeskItTurnedOff) {
+  // Laying the desk out again on the primary would move the page to a new
+  // window and drop every presenter, then do it all again on waking.
+  EXPECT_EQ(DeskPlacesKept({}, {kLaptop, kCenter, kRight},
+                           {kLaptop.id, kCenter.id, kRight.id}),
+            std::vector<DeskPlace>({kLaptop, kCenter, kRight}));
+}
+
+TEST(DeskGeometryTest, AMonitorUnpluggedDuringABlankLeavesTheDesk) {
+  // Its window would sit on a display that is gone.
+  EXPECT_EQ(
+      DeskPlacesKept({}, {kLaptop, kCenter, kRight}, {kLaptop.id, kRight.id}),
+      std::vector<DeskPlace>({kLaptop, kRight}));
+}
+
+TEST(DeskGeometryTest, BeforeAnyLayoutThereIsNoDesk) {
+  EXPECT_TRUE(DeskPlacesKept({}, {}, {kLaptop.id}).empty());
+}
+
 TEST(DeskGeometryTest, EachDisplayShowsThePageFromItsOwnCorner) {
   // In the display's logical pixels, so the page's origin is above and left
   // of the display's.

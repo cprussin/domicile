@@ -14,6 +14,10 @@ input, and locks the desktop after `idle.lock_after_seconds`
 - `Idle::lock_due` reports the lock edge once per spell without input. The
   timer, and any inhibitor change, checks it before a modeset, so the lock
   screen is up before a screen lights.
+- Blanking waits until 1 second after the lock (`LOCK_SCREEN_DRAWS_WITHIN`),
+  so the shell draws its lock screen on every monitor first. A monitor the
+  page is mirrored to can show its last frame when it lights again, and that
+  frame must not be the unlocked desktop.
 - Releasing the last inhibitor after either timeout acts at once.
 
 ## Blanking
@@ -28,6 +32,9 @@ Blanking uses the same path as any layout change,
   not `Screens::scanout`, which omits monitors no profile names.
 - **Relighting sends `Screens::scanout` again:** the profile's connectors, or
   the empty list.
+- **The engine keeps the desk through a blank** (`DeskPlacesKept`). A layout
+  that lights nothing leaves the shell's window and every presenter in place,
+  so each monitor shows the page's current frame when it lights again.
 - The engine lights a new monitor on its own, so the hotplug path also calls
   `keep_the_screens_dark`. A monitor plugged in while blanked stays off.
 - `crate::idle` holds the clock and is unit-tested. The compositor sends a

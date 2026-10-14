@@ -26,6 +26,8 @@ struct DeskPlace {
   gfx::Rect desk;
   float scale = 1.0f;
   float refresh_hz = 0.0f;
+
+  friend bool operator==(const DeskPlace&, const DeskPlace&) = default;
 };
 
 // The shell page that spans the desk.
@@ -38,6 +40,16 @@ struct DeskGeometry {
   // BeginFrames drive the page; ties go to the first (the primary).
   int64_t host = 0;
 };
+
+// The places to lay the desk out on: `lit`, the compositor's layout now.
+//
+// A layout that lights no display is a blank: every screen is off. The desk
+// stays at `before`, the places it was last laid out on, less any display not
+// in `plugged_in`. Its windows and presenters then outlive the blank, and each
+// monitor shows the page's current frame when it lights again.
+std::vector<DeskPlace> DeskPlacesKept(const std::vector<DeskPlace>& lit,
+                                      const std::vector<DeskPlace>& before,
+                                      const std::vector<int64_t>& plugged_in);
 
 // The desk page's geometry, or `std::nullopt` if no display is lit.
 std::optional<DeskGeometry> DeskGeometryOf(const std::vector<DeskPlace>& lit);

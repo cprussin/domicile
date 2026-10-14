@@ -6,7 +6,6 @@
 
 use std::os::fd::OwnedFd;
 use std::thread;
-use std::time::Duration;
 
 use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
 use tracing::{debug, info, warn};
@@ -14,12 +13,8 @@ use zbus::blocking::{proxy, Connection, Proxy};
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedObjectPath;
 
+use crate::lock::LOCK_SCREEN_DRAWS_WITHIN;
 use crate::{CalloopData, DomicileCompositor};
-
-/// How long sleep waits after the desktop locks, so the shell can draw its
-/// lock screen. Otherwise the unlocked desktop shows on waking until it does.
-/// Under logind's default `InhibitDelayMaxSec`, 5 seconds.
-const LOCK_SCREEN_DRAWS_WITHIN: Duration = Duration::from_secs(1);
 
 const LOGIND: &str = "org.freedesktop.login1";
 const MANAGER: &str = "/org/freedesktop/login1";
