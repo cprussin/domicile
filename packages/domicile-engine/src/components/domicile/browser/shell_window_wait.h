@@ -26,8 +26,8 @@ using ShellWindowReady = base::OnceCallback<void(bool has_a_page)>;
 
 // Runs `ready` once the window `look` finds shows a page.
 //
-// The engine takes commands before its first page commits, so a `load_shell`
-// can arrive while the window is still opening. Looks again on the current
+// The engine takes commands before its first page commits, so a `load_shell`,
+// `run_app` or `open_url` can arrive while the window is still opening. Looks again on the current
 // sequence while it is, and gives up after `patience`. Runs `ready` before
 // returning when the window already shows a page or there is none.
 void WhenTheShellWindowHasAPage(LookForTheShellWindow look,

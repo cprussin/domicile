@@ -68,8 +68,13 @@ std::string Done(std::string_view type) {
 void AnswerLoadShell(const base::DictValue& request,
                      LoadShell load_shell,
                      CommandReply reply);
-std::string AnswerRunApp(const base::DictValue& request, RunApp run_app);
-std::string AnswerOpenUrl(const base::DictValue& request, OpenUrl open_url);
+void AnswerRunApp(const base::DictValue& request,
+                  RunApp run_app,
+                  CommandReply reply);
+void AnswerOpenUrl(const base::DictValue& request,
+                   OpenUrl open_url,
+                   CommandReply reply);
+void AnswerOpened(const std::string& refusal, CommandReply reply, bool opened);
 std::string AnswerSitePermissions(ListSitePermissions list_site_permissions);
 std::string AnswerSetSitePermission(const base::DictValue& request,
                                     SetSitePermission set_site_permission);
@@ -173,11 +178,11 @@ void AnswerCommand(std::string_view line,
     return;
   }
   if (*type == kRunApp) {
-    std::move(reply).Run(AnswerRunApp(*request, actions.run_app));
+    AnswerRunApp(*request, actions.run_app, std::move(reply));
     return;
   }
   if (*type == kOpenUrl) {
-    std::move(reply).Run(AnswerOpenUrl(*request, actions.open_url));
+    AnswerOpenUrl(*request, actions.open_url, std::move(reply));
     return;
   }
   if (*type == kListSitePermissionsCommand) {
@@ -294,50 +299,68 @@ void AnswerLoadShell(const base::DictValue& request,
                  std::move(reply)));
 }
 
-std::string AnswerRunApp(const base::DictValue& request, RunApp run_app) {
+void AnswerRunApp(const base::DictValue& request,
+                  RunApp run_app,
+                  CommandReply reply) {
   const std::string* root = request.FindString("root");
   const std::string* module = request.FindString("module");
   if (root == nullptr || module == nullptr || module->empty()) {
-    return RefusedCommand(
+    std::move(reply).Run(RefusedCommand(
         "run_app needs a \"root\", the directory the app is served out of, "
-        "and a \"module\", its entry as a name under the root");
+        "and a \"module\", its entry as a name under the root"));
+    return;
   }
   // Absolute for load_shell's reason. `domicile run-app` resolves the path and
   // makes it canonical, so one directory is one app.
   const base::FilePath app_root = base::FilePath::FromUTF8Unsafe(*root);
   if (!app_root.IsAbsolute()) {
-    return RefusedCommand(
-        base::StrCat({"\"", *root, "\" is not an absolute path"}));
+    std::move(reply).Run(RefusedCommand(
+        base::StrCat({"\"", *root, "\" is not an absolute path"})));
+    return;
   }
-  if (!run_app(app_root, *module)) {
-    return RefusedCommand("this engine has no shell page to open an app in");
-  }
-  return Done("opened");
+  run_app(app_root, *module,
+          base::BindOnce(
+              &AnswerOpened,
+              std::string("this engine has no shell page to open an app in"),
+              std::move(reply)));
 }
 
-std::string AnswerOpenUrl(const base::DictValue& request, OpenUrl open_url) {
+void AnswerOpenUrl(const base::DictValue& request,
+                   OpenUrl open_url,
+                   CommandReply reply) {
   const std::string* url = request.FindString("url");
   if (url == nullptr) {
-    return RefusedCommand("open_url needs a \"url\": the address to open");
+    std::move(reply).Run(
+        RefusedCommand("open_url needs a \"url\": the address to open"));
+    return;
   }
   // Validated here so an invalid URL is refused instead of opening an empty
   // window and reporting success.
   const GURL parsed(*url);
   if (!parsed.is_valid()) {
-    return RefusedCommand(
-        base::StrCat({"\"", *url, "\" is not a URL this engine can open"}));
+    std::move(reply).Run(RefusedCommand(
+        base::StrCat({"\"", *url, "\" is not a URL this engine can open"})));
+    return;
   }
   // Optional, so a supervisor older than app windows is still understood.
   const base::Value* app = request.Find("app");
   if (app != nullptr && !app->is_bool()) {
-    return RefusedCommand(
+    std::move(reply).Run(RefusedCommand(
         "open_url's \"app\" is true for an app window or false for a "
-        "browser window");
+        "browser window"));
+    return;
   }
-  if (!open_url(parsed, app != nullptr && app->GetBool())) {
-    return RefusedCommand("this engine has no shell page to open it in");
-  }
-  return Done("opened");
+  open_url(
+      parsed, app != nullptr && app->GetBool(),
+      base::BindOnce(&AnswerOpened,
+                     std::string("this engine has no shell page to open it in"),
+                     std::move(reply)));
+}
+
+// Replies to `run_app` or `open_url` once its window opened, or with
+// `refusal` when there was no shell to own it.
+void AnswerOpened(const std::string& refusal, CommandReply reply, bool opened) {
+  std::move(reply).Run(opened ? Done("opened") : RefusedCommand(refusal));
 }
 
 std::string AnswerSitePermissions(ListSitePermissions list_site_permissions) {
