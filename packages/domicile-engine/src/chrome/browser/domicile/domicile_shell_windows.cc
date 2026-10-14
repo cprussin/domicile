@@ -69,14 +69,15 @@ bool ScansOut() {
              kOzonePlatformSwitch) == kScanoutPlatform;
 }
 
-// The desk's page geometry, from the compositor's last layout and the current
-// displays. `std::nullopt` until a layout names a current display.
+// The desk's page geometry and the places it is laid out on.
 struct Desk {
   DeskGeometry geometry;
   std::vector<DeskPlace> places;
 };
 
-std::optional<Desk> DeskOf(const std::vector<display::Display>& displays) {
+// The places the compositor's last layout lights among the current displays.
+std::vector<DeskPlace> LitPlacesOf(
+    const std::vector<display::Display>& displays) {
   std::vector<DeskPlace> places;
   for (const content::DomicileDeskDisplay& lit : content::GetDomicileDesk()) {
     const auto found =
@@ -89,11 +90,25 @@ std::optional<Desk> DeskOf(const std::vector<display::Display>& displays) {
                                .scale = lit.scale,
                                .refresh_hz = found->display_frequency()});
   }
+  return places;
+}
+
+// The desk laid out on `places`, or `std::nullopt` for none.
+std::optional<Desk> DeskOf(std::vector<DeskPlace> places) {
   const std::optional<DeskGeometry> geometry = DeskGeometryOf(places);
   if (!geometry.has_value()) {
     return std::nullopt;
   }
   return Desk{.geometry = *geometry, .places = std::move(places)};
+}
+
+std::vector<int64_t> IdsOf(const std::vector<display::Display>& displays) {
+  std::vector<int64_t> ids;
+  ids.reserve(displays.size());
+  for (const display::Display& display : displays) {
+    ids.push_back(display.id());
+  }
+  return ids;
 }
 
 // A shell window and the display nearest its current rectangle.
@@ -313,8 +328,10 @@ class ShellWindows : public display::DisplayObserver {
     const std::vector<display::Display> all =
         display::Screen::Get()->GetAllDisplays();
     // Only the host display gets a shell window; the others get presenters.
-    // Until the compositor sends a layout, the primary display hosts.
-    const std::optional<Desk> desk = DeskOf(all);
+    // Until the compositor sends a layout, the primary display hosts. A blank
+    // keeps the desk it turned off; see `DeskPlacesKept`.
+    places_kept_ = DeskPlacesKept(LitPlacesOf(all), places_kept_, IdsOf(all));
+    const std::optional<Desk> desk = DeskOf(places_kept_);
     std::vector<display::Display> displays = all;
     if (!all.empty()) {
       const int64_t host =
@@ -530,6 +547,8 @@ class ShellWindows : public display::DisplayObserver {
   std::vector<int64_t> opening_;
   bool reconcile_posted_ = false;
   ShellWindowPlaces places_;
+  // The places the desk was last laid out on.
+  std::vector<DeskPlace> places_kept_;
   DeskPresenters presenters_;
   std::vector<std::unique_ptr<ShellPageWatch>> watches_;
   base::CallbackListSubscription desk_laid_out_;
