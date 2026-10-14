@@ -83,6 +83,9 @@ pub fn encode(shot: &Shot) -> Vec<u8> {
     let mut encoder = ::png::Encoder::new(&mut bytes, shot.width, shot.height);
     encoder.set_color(::png::ColorType::Rgba);
     encoder.set_depth(::png::BitDepth::Eight);
+    // A desk of mixed densities is tens of megapixels. The default level takes
+    // seconds to encode one, and the shell's picker waits for it.
+    encoder.set_compression(::png::Compression::Fast);
     let mut writer = encoder
         .write_header()
         .expect("a PNG header writes to memory");

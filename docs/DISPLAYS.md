@@ -124,8 +124,9 @@ window so each can rotate and scale on its own.
   pixels a configure uses.
 - `rotate-270` turns content a quarter clockwise, for a panel on its left side.
   This matches `wl_output` and kanshi. `RotationOf` in `drm_screen.cc` converts.
-- A rotated monitor's capture is the panel's pixels. Screenshots and monitor
-  and region casts turn it upright (`casting::region::in_frame`).
+- A rotated monitor's capture is upright. viz captures the window's frame
+  before it turns it for the panel, so screenshots and monitor and region
+  casts read it as they read any other monitor.
 - A client that pre-rotates its buffer for a rotated panel
   (`wl_surface.set_buffer_transform`) is shown and cast upright. See
   [WINDOW-COMPOSITING.md](architecture/WINDOW-COMPOSITING.md#pre-rotated-buffers).

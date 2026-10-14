@@ -382,7 +382,6 @@ impl Screens {
                         output.logical.1,
                     ),
                     scale: output.scale,
-                    transform: output.transform,
                 })
             })
             .collect();
@@ -402,7 +401,6 @@ impl Screens {
                 .iter()
                 .map(|output| output.scale)
                 .fold(f64::MIN, f64::max),
-            transform: Transform::Normal,
         }]
     }
 
@@ -1107,8 +1105,7 @@ mod tests {
 
     #[test]
     fn a_tty_casts_each_monitor_from_its_own_capture() {
-        let mut screens = Screens::from_the_engine(&two_plugged_in(), &unspelled());
-        screens.outputs[1].transform = Transform::Rotate90;
+        let screens = Screens::from_the_engine(&two_plugged_in(), &unspelled());
 
         let cast = screens.cast_screens();
 
@@ -1124,8 +1121,6 @@ mod tests {
                 screens.outputs[0].logical.1
             )
         );
-        assert_eq!(cast[0].transform, Transform::Normal);
-        assert_eq!(cast[1].transform, Transform::Rotate90);
     }
 
     #[test]
@@ -1161,7 +1156,6 @@ mod tests {
                 display: 0,
                 desk: (0, 0, 1280, 800),
                 scale: 2.0,
-                transform: Transform::Normal,
             }]
         );
     }
