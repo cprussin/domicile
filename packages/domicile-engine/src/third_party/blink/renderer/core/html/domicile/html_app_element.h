@@ -141,6 +141,9 @@ class CORE_EXPORT HTMLAppElement final : public HTMLElement,
 
   bool CreateLayer();
 
+  // `allocated` at the synced frame the `frame` attribute names.
+  viz::LocalSurfaceId AtFrame(const viz::LocalSurfaceId& allocated) const;
+
   // Send `event` to the client `app_id` names, through `client`.
   void ForwardInput(AppInputClient& client,
                     const String& app_id,
@@ -154,6 +157,10 @@ class CORE_EXPORT HTMLAppElement final : public HTMLElement,
   bool MapToContent(const MouseEvent& event,
                     gfx::PointF& point,
                     gfx::SizeF& size);
+
+  // The LocalSurfaceId the embedder last allocated, before `frame` applies.
+  // Invalid before the first embed.
+  viz::LocalSurfaceId allocated_;
 
   // The size last sent to the producer. Kept so that a layout that did not
   // change the box does not reconfigure the client, which would make every

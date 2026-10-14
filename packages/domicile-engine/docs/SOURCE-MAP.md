@@ -18,6 +18,7 @@ under `src/`. Design: [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md).
 | `components/domicile/browser/shell_origin.{h,cc}` | whether an origin is the shell's; only the shell's frames are bound to the provider |
 | `content/browser/domicile/domicile_frame_sink_broker.{h,cc}` | the browser's single broker, the socket a producer connects to, and the frame binder that refuses every frame but the shell |
 | `third_party/blink/renderer/platform/graphics/external_surface_embedder.{h,cc}` | the page side: allocates the `LocalSurfaceId`, gets the `FrameSinkId`, pairs them |
+| `components/domicile/common/synced_frame.{h,cc}` | the `LocalSurfaceId` of a synced frame, which the engine library submits at and `<app frame>` embeds |
 
 - `browser_main_loop.cc` creates the broker at startup.
 - The socket opens only when `--domicile-broker-socket` names a path.
@@ -58,6 +59,6 @@ Test-only. `spike.sh` runs it, and `guard-css-and-resize.sh` runs `spike.sh`.
   capturer), `display_capture_target_unittest.cc`,
   `browser_window_capture_target_unittest.cc`, `window_diff_unittest.cc`,
   `engine_event_queue_unittest.cc`, `surface_frames_unittest.cc`,
-  `surface_submits_unittest.cc`.
+  `surface_submits_unittest.cc`, `synced_frame_unittest.cc`.
 - The Blink side and the probe have no unit tests. They need a display
   compositor. `spike.sh` and `guard-css-and-resize.sh` cover them.
