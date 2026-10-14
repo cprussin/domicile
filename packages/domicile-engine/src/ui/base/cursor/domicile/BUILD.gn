@@ -1,0 +1,55 @@
+# Copyright 2026 Connor Prussin
+# SPDX-License-Identifier: MIT
+
+# The desk config's pointer theme. The control channel sets it and the DRM
+# platform's cursor factory reads it. A component, so the browser and the
+# Ozone library share one instance in a component build.
+component("desk_cursor_theme") {
+  sources = [
+    "desk_cursor_theme.cc",
+    "desk_cursor_theme.h",
+  ]
+
+  defines = [ "IS_DESK_CURSOR_THEME_IMPL" ]
+
+  public_deps = [ "//base" ]
+}
+
+# Reads XCursor themes for the DRM platform, which has no toolkit to do it.
+# Patch 0121 links it into //ui/ozone/platform/drm.
+source_set("xcursor_theme") {
+  sources = [
+    "xcursor_theme.cc",
+    "xcursor_theme.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//skia",
+    "//ui/base/cursor",
+    "//ui/gfx/geometry",
+  ]
+
+  deps = [ "//ui/gfx:gfx_skia" ]
+}
+
+# Tested from //components/domicile:unit_tests.
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "desk_cursor_theme_unittest.cc",
+    "xcursor_theme_unittest.cc",
+  ]
+
+  deps = [
+    ":desk_cursor_theme",
+    ":xcursor_theme",
+    "//base",
+    "//base/test:test_support",
+    "//skia",
+    "//testing/gtest",
+    "//ui/base/cursor",
+    "//ui/gfx/geometry",
+  ]
+}

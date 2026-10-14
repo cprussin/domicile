@@ -13,7 +13,7 @@
 use std::collections::HashMap;
 
 use domicile_config::{AccentColor, Contrast, ThemeConfig};
-use domicile_protocol::Theme;
+use domicile_protocol::{CursorTheme, Theme};
 use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
 
@@ -46,7 +46,7 @@ const HICOLOR: &str = "hicolor";
 /// when the config's is unset: XCursor's `default` theme, and GTK's size and
 /// fonts.
 const DEFAULT_CURSOR_THEME: &str = "default";
-const DEFAULT_CURSOR_SIZE: i32 = 24;
+const DEFAULT_CURSOR_SIZE: u16 = 24;
 const DEFAULT_FONT_NAME: &str = "Sans 10";
 const DEFAULT_MONOSPACE_FONT_NAME: &str = "Monospace 10";
 
@@ -118,7 +118,20 @@ impl From<&Appearance> for domicile_protocol::Appearance {
                 .map(|AccentColor([r, g, b])| format!("#{r:02x}{g:02x}{b:02x}")),
             high_contrast: appearance.contrast == Contrast::High,
             reduced_motion: appearance.reduced_motion,
+            cursor: cursor_theme(appearance),
         }
+    }
+}
+
+/// The pointer theme for the browser process, or `None` for its own art when
+/// the config sets neither key. A key left out is what a client falls back to.
+fn cursor_theme(appearance: &Appearance) -> Option<CursorTheme> {
+    match (&appearance.cursor_theme, appearance.cursor_size) {
+        (None, None) => None,
+        (name, size) => Some(CursorTheme {
+            name: name.as_deref().unwrap_or(DEFAULT_CURSOR_THEME).into(),
+            size: size.unwrap_or(DEFAULT_CURSOR_SIZE),
+        }),
     }
 }
 
@@ -307,7 +320,7 @@ fn named(appearance: &Appearance) -> [(&'static str, Option<OwnedValue>, OwnedVa
             appearance
                 .cursor_size
                 .map(|size| OwnedValue::from(i32::from(size))),
-            OwnedValue::from(DEFAULT_CURSOR_SIZE),
+            OwnedValue::from(i32::from(DEFAULT_CURSOR_SIZE)),
         ),
         text_or(FONT_NAME, &appearance.font_name, DEFAULT_FONT_NAME),
         text_or(
@@ -390,7 +403,53 @@ mod tests {
                 accent_color: Some("#ff330a".into()),
                 high_contrast: true,
                 reduced_motion: true,
+                cursor: None,
             }
+        );
+    }
+
+    #[test]
+    fn the_browser_is_told_the_cursor_theme_and_size() {
+        let told = domicile_protocol::Appearance::from(&Appearance {
+            cursor_theme: Some("Bibata-Modern-Amber-Right".into()),
+            cursor_size: Some(64),
+            ..Appearance::default()
+        });
+
+        assert_eq!(
+            told.cursor,
+            Some(CursorTheme {
+                name: "Bibata-Modern-Amber-Right".into(),
+                size: 64,
+            })
+        );
+    }
+
+    /// The browser fills in what the config leaves out as a client does.
+    #[test]
+    fn a_cursor_key_left_out_is_the_toolkit_default() {
+        let theme_only = domicile_protocol::Appearance::from(&Appearance {
+            cursor_theme: Some("Adwaita".into()),
+            ..Appearance::default()
+        });
+        let size_only = domicile_protocol::Appearance::from(&Appearance {
+            cursor_size: Some(48),
+            ..Appearance::default()
+        });
+
+        assert_eq!(
+            theme_only.cursor,
+            Some(CursorTheme {
+                name: "Adwaita".into(),
+                size: 24,
+            })
+        );
+        assert_eq!(
+            size_only.cursor,
+            Some(CursorTheme {
+                name: "default".into(),
+                size: 48,
+            })
         );
     }
 

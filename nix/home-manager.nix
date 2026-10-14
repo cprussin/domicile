@@ -525,8 +525,9 @@ in {
           theme.cursor_theme = lib.mkOption {
             description = ''
               The cursor theme applications draw their cursors from, by its
-              directory name under `share/icons`, through the settings portal.
-              Install the theme's package too. `null`, the default, leaves each
+              directory name under `share/icons`, through the settings portal,
+              and the engine draws the pointer from on a tty. Install the
+              theme's package too. `null`, the default, leaves each
               application its own.
             '';
             type = lib.types.nullOr lib.types.str;
@@ -535,7 +536,7 @@ in {
           };
 
           theme.cursor_size = lib.mkOption {
-            description = "The cursor size applications draw, in logical pixels, through the settings portal. `null`, the default, leaves each application its own.";
+            description = "The cursor size applications draw, in logical pixels, through the settings portal, and the engine draws the pointer at on a tty. `null`, the default, leaves each application its own.";
             type = lib.types.nullOr (lib.types.ints.between 1 65535);
             default = null;
             example = 32;

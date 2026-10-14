@@ -528,11 +528,11 @@ pub struct ThemeConfig {
     /// The freedesktop icon theme's directory name, such as `Papirus-Dark`.
     /// Unset leaves shells with `hicolor`.
     pub icon_theme: Option<String>,
-    /// The XCursor theme's directory name, such as `Adwaita`. Unset leaves
-    /// clients their own.
+    /// The XCursor theme's directory name, such as `Adwaita`, for clients
+    /// and the engine's pointer. Unset leaves clients their own.
     pub cursor_theme: Option<String>,
-    /// The cursor size in logical pixels. Unset leaves clients their own.
-    /// Zero is refused.
+    /// The cursor size in logical pixels, for clients and the engine's
+    /// pointer. Unset leaves clients their own. Zero is refused.
     pub cursor_size: Option<u16>,
     /// The interface font as a Pango description, such as `Inter 11`. Unset
     /// leaves clients their own.

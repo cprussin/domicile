@@ -132,7 +132,8 @@ An edit applies to the running desktop, and windows stay open:
 | `idle.blank_after_seconds`, `idle.warn_before_seconds` | Idle timer restarts. Dark screens relight |
 | `theme.mode` | Shell and windows repaint |
 | `theme.accent_color`, `contrast`, `reduced_motion` | Shell and windows that read the settings portal follow |
-| `theme.cursor_theme`, `cursor_size`, `font_name`, `monospace_font_name` | Windows that read the settings portal follow |
+| `theme.cursor_theme`, `cursor_size` | The pointer on a tty is redrawn; windows that read the settings portal follow |
+| `theme.font_name`, `monospace_font_name` | Windows that read the settings portal follow |
 | `theme.icon_theme` | Shell and windows that read the settings portal follow; tray icons redrawn and later notifications drawn in it; manganese on the next menu or launcher opening, and title bars when a new app id appears |
 | `files.omit` | Launcher file index rebuilt |
 | `extensions` | Extensions installed or removed ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)) |
@@ -259,8 +260,22 @@ Applications read the rest through the settings portal
   `font-name` and `monospace-font-name`. Unset leaves each to the next portal
   backend; a reload that unsets one signals the toolkit default: `default`,
   `24`, `Sans 10`, `Monospace 10`.
-- The engine draws every pointer, including a window's. Whether it follows
-  the cursor keys is unknown; see [ROADMAP.md](/ROADMAP.md#windows-and-clients).
+
+The engine draws every pointer on a tty, including a window's, from
+`cursor_theme` at `cursor_size`:
+
+- Either key alone fills in the other's toolkit default. Neither draws
+  Chromium's own arrows.
+- The theme is looked up in `XCURSOR_PATH`, else in `$XDG_DATA_HOME/icons`,
+  `~/.icons`, `icons` under each of `XDG_DATA_DIRS`, and
+  `/usr/share/pixmaps`, in that order. Inherited themes are followed.
+- A cursor the theme lacks is Chromium's own.
+- The engine logs `the desk's pointer theme is "<theme>" at <size> px`, then
+  `loaded <n> cursors from "<theme>"`, or `no cursor theme "<theme>" on
+  the XCursor path`.
+- A cursor larger than the GPU's cursor plane, often 64 or 256 pixels, is
+  cut off.
+- Nested, the host draws the pointer from its own theme.
 
 In manganese:
 

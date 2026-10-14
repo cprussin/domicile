@@ -309,13 +309,13 @@ export type ThemeConfig = {
   accent_color?: AccentColor | null;
   contrast?: Contrast;
   /**
-   * The cursor size in logical pixels. Unset leaves clients their own.
-   * Zero is refused.
+   * The cursor size in logical pixels, for clients and the engine's
+   * pointer. Unset leaves clients their own. Zero is refused.
    */
   cursor_size?: number | null;
   /**
-   * The XCursor theme's directory name, such as `Adwaita`. Unset leaves
-   * clients their own.
+   * The XCursor theme's directory name, such as `Adwaita`, for clients
+   * and the engine's pointer. Unset leaves clients their own.
    */
   cursor_theme?: string | null;
   /**
