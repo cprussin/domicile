@@ -16,6 +16,7 @@ constexpr uint32_t kTab = 15;
 constexpr uint32_t kEnter = 28;
 constexpr uint32_t kA = 30;
 constexpr uint32_t kLeftAlt = 56;
+constexpr uint32_t kCapsLock = 58;
 
 Chord AltTab() {
   return Chord{kTab, /*alt=*/true, /*ctrl=*/false, /*shift=*/false,
@@ -146,11 +147,25 @@ TEST(ShortcutRegistryTest, AClaimedKeyOrAModifierComingUpIsToldToItsPage) {
   const Chord alt_up{kLeftAlt, /*alt=*/false, /*ctrl=*/false,
                      /*shift=*/false, /*meta=*/false};
 
-  registry.Release(tab_up, kLeft);
-  registry.Release(alt_up, kLeft);
+  registry.Release(tab_up, /*modifier=*/false, kLeft);
+  registry.Release(alt_up, /*modifier=*/true, kLeft);
 
   EXPECT_EQ(left.releases(), (std::vector{tab_up, alt_up}));
   EXPECT_TRUE(right.releases().empty());
+}
+
+// A modifier is the layout's, not the key's: with `ctrl:nocaps`, Caps Lock
+// coming up lets go of a Ctrl chord.
+TEST(ShortcutRegistryTest, AKeyTheLayoutMakesAModifierComingUpIsTold) {
+  ShortcutRegistry registry;
+  RecordingChannel channel(registry);
+  registry.Grab(AltTab());
+  const Chord caps_up{kCapsLock, /*alt=*/false, /*ctrl=*/false,
+                      /*shift=*/false, /*meta=*/false};
+
+  registry.Release(caps_up, /*modifier=*/true, kLeft);
+
+  EXPECT_EQ(channel.releases(), (std::vector{caps_up}));
 }
 
 // Every key typed into a site would otherwise cross to the shell.
@@ -161,7 +176,7 @@ TEST(ShortcutRegistryTest, AnyOtherKeyComingUpIsNotTold) {
 
   registry.Release(Chord{kA, /*alt=*/true, /*ctrl=*/false, /*shift=*/false,
                          /*meta=*/false},
-                   kLeft);
+                   /*modifier=*/false, kLeft);
 
   EXPECT_TRUE(channel.releases().empty());
 }

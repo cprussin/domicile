@@ -3,8 +3,6 @@
 
 #include "components/domicile/browser/shortcut_registry.h"
 
-#include <linux/input.h>
-
 #include <algorithm>
 #include <utility>
 
@@ -12,27 +10,6 @@
 #include "base/no_destructor.h"
 
 namespace domicile {
-
-namespace {
-
-// Whether `keycode` is one of the keys a chord's modifiers are held on.
-bool IsModifierKey(uint32_t keycode) {
-  switch (keycode) {
-    case KEY_LEFTALT:
-    case KEY_RIGHTALT:
-    case KEY_LEFTCTRL:
-    case KEY_RIGHTCTRL:
-    case KEY_LEFTSHIFT:
-    case KEY_RIGHTSHIFT:
-    case KEY_LEFTMETA:
-    case KEY_RIGHTMETA:
-      return true;
-    default:
-      return false;
-  }
-}
-
-}  // namespace
 
 // static
 ShortcutRegistry& ShortcutRegistry::Get() {
@@ -97,11 +74,13 @@ bool ShortcutRegistry::Press(const Chord& chord, const Page& page) {
   return true;
 }
 
-void ShortcutRegistry::Release(const Chord& chord, const Page& page) {
+void ShortcutRegistry::Release(const Chord& chord,
+                               bool modifier,
+                               const Page& page) {
   std::vector<ShortcutCallback> tell;
   {
     base::AutoLock held(lock_);
-    if (!IsGrabbedKey(chord.keycode) && !IsModifierKey(chord.keycode)) {
+    if (!IsGrabbedKey(chord.keycode) && !modifier) {
       return;
     }
     for (const Channel& channel : channels_) {
