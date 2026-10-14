@@ -23,7 +23,8 @@ namespace domicile {
 //   (WebViewGuest::RequestWindow). DevToolsUI gives it unattached
 //   DevToolsUIBindings.
 // - This attaches those bindings to the oldest page waiting, with a delegate
-//   that focuses or closes the window.
+//   that focuses or closes the window and turns on DevTools' HTML context
+//   menu, since the engine has no native menus.
 
 // Open DevTools on `frame`'s page (a <webview> guest), inspecting the element
 // at `root_point` (root view coordinates) when given. If DevTools is already
