@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { css } from "../styled-system/css";
 import { Gmail } from "./Gmail";
 import type { Inbox as InboxReading } from "./inbox";
 import { Inbox } from "./inbox";
@@ -59,8 +58,6 @@ const opened = (reading: InboxReading, name: string) =>
     fireEvent.click(screen.getByRole("button", { name }));
   });
 
-const HIGHLIGHTED = css({ color: "accent" });
-
 describe("Gmail", () => {
   it("shows nothing before the first reading", () => {
     const { container } = render(
@@ -113,17 +110,17 @@ describe("Gmail", () => {
         name: "Work: 12 conversations",
       });
       expect(button).toHaveTextContent("Work12");
-      expect(button.className).not.toContain(HIGHLIGHTED);
+      expect(button).toHaveAttribute("data-unread", "false");
     });
 
-    it("shows unread of total, highlighted, with something unread", () => {
+    it("shows unread of total, lit, with something unread", () => {
       shown(Inbox.Counted(12, 3));
 
       const button = screen.getByRole("button", {
         name: "Work: 3 unread of 12 conversations",
       });
       expect(button).toHaveTextContent("Work3 / 12");
-      expect(button.className).toContain(HIGHLIGHTED);
+      expect(button).toHaveAttribute("data-unread", "true");
     });
 
     it("opens the account's inbox", async () => {
@@ -133,22 +130,6 @@ describe("Gmail", () => {
           "Work: 3 unread of 12 conversations",
         ),
       ).toBe("https://mail.google.com/mail/?authuser=me%40example.com");
-    });
-  });
-
-  describe("unread only", () => {
-    it("shows nothing with nothing unread", () => {
-      const { container } = shown(Inbox.Unread(0));
-
-      expect(container).toBeEmptyDOMElement();
-    });
-
-    it("shows the unread count, highlighted", () => {
-      shown(Inbox.Unread(3));
-
-      const button = screen.getByRole("button", { name: "Work: 3 unread" });
-      expect(button).toHaveTextContent("Work3");
-      expect(button.className).toContain(HIGHLIGHTED);
     });
   });
 });

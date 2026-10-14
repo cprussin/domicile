@@ -1,7 +1,7 @@
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimple";
-import { css, cva } from "../styled-system/css";
+import { css } from "../styled-system/css";
 import { hstack } from "../styled-system/patterns";
 import { inboxAddress, signInAddress } from "./addresses";
 import type { Inbox } from "./inbox";
@@ -19,7 +19,7 @@ type Props = {
 };
 
 /**
- * One Gmail account on the bar: its conversation count, highlighted while any
+ * One Gmail account on the bar: its conversation count, lit while any
  * is unread. A click opens the inbox. While the browser is not signed in to
  * the account, a button opens Google's sign-in instead.
  *
@@ -44,7 +44,7 @@ const Reading = ({ email, inbox, nickname, onOpen }: ReadingProps) => {
     case InboxKind.SignedOut:
       return (
         <button
-          className={itemStyles({ unread: false })}
+          className={itemStyles}
           onClick={() => {
             onOpen(signInAddress(email));
           }}
@@ -73,17 +73,6 @@ const Reading = ({ email, inbox, nickname, onOpen }: ReadingProps) => {
           unread={inbox.unread > 0}
         />
       );
-    case InboxKind.Unread:
-      return inbox.unread === 0 ? undefined : (
-        <Count
-          email={email}
-          figure={inbox.unread.toString()}
-          label={`${nickname}: ${inbox.unread.toString()} unread`}
-          nickname={nickname}
-          onOpen={onOpen}
-          unread
-        />
-      );
   }
 };
 
@@ -106,7 +95,8 @@ const Count = ({
 }: CountProps) => (
   <button
     aria-label={label}
-    className={itemStyles({ unread })}
+    className={itemStyles}
+    data-unread={unread}
     onClick={() => {
       onOpen(inboxAddress(email));
     }}
@@ -115,36 +105,35 @@ const Count = ({
   >
     <EnvelopeSimpleIcon aria-hidden size={15} weight="bold" />
     <span className={textStyles}>{nickname}</span>
-    <span className={figureStyles}>{figure}</span>
+    <span className={figureStyles} data-figure="">
+      {figure}
+    </span>
   </button>
 );
 
-// Matches the network item's button.
-const itemStyles = cva({
-  base: hstack.raw({
-    _hover: {
-      backgroundColor: "color-mix(in oklab, white 16%, transparent)",
-    },
-    backgroundColor: "transparent",
-    blockSize: 7,
-    borderRadius: "full",
-    borderStyle: "none",
-    cursor: "pointer",
-    flexShrink: 0,
-    font: "inherit",
-    gap: 1,
-    justifyContent: "center",
-    paddingBlock: 0,
-    paddingInline: 1.5,
-    transition: "background-color {durations.fast} {easings.default}",
-  }),
-  variants: {
-    // Unread mail stands out from the rest of the bar.
-    unread: {
-      false: { color: "inherit" },
-      true: { color: "accent", fontWeight: "bold" },
-    },
+// Matches the network item's button. Unread mail lights the item as the idle
+// inhibitor lights when on, and sets the count in semibold.
+const itemStyles = hstack({
+  _hover: {
+    backgroundColor: "color-mix(in oklab, white 16%, transparent)",
   },
+  "&[data-unread=true]": {
+    backgroundColor: "color-mix(in oklab, white 24%, transparent)",
+  },
+  "&[data-unread=true] [data-figure]": { fontWeight: "semibold" },
+  backgroundColor: "transparent",
+  blockSize: 7,
+  borderRadius: "full",
+  borderStyle: "none",
+  color: "inherit",
+  cursor: "pointer",
+  flexShrink: 0,
+  font: "inherit",
+  gap: 1,
+  justifyContent: "center",
+  paddingBlock: 0,
+  paddingInline: 1.5,
+  transition: "background-color {durations.fast} {easings.default}",
 });
 
 // 10px to match the bar's other figures; no font-size token fits.

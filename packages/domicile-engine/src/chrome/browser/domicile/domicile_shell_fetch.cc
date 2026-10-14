@@ -48,7 +48,8 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
       semantics {
         sender: "Domicile shell"
         description:
-          "A GET the desktop's shell makes with the profile's cookies, such "
+          "A GET or POST the desktop's shell makes with the profile's "
+          "cookies, such "
           "as a bar item reading the user's unread mail count."
         trigger: "The shell's own polling, as the user configured it."
         data: "The cookies the profile holds for the address."
@@ -63,39 +64,65 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
 
 using FetchCallback = mojom::ShellFetch::FetchCallback;
 
+// What the page asked to send, as checked by ShellFetchRefusal and
+// ShellFetchMethodRefusal.
+struct Asked {
+  GURL url;
+  std::string method;
+  std::vector<mojom::ShellFetchHeaderPtr> headers;
+  std::optional<std::string> body;
+};
+
 // One request, from its start to the page's answer. Owns its loader and
 // deletes itself once it has answered; the loader always finishes, at the
 // latest at kShellFetchTimeout.
 class PendingFetch {
  public:
-  // GETs `url` as GaiaAuthFetcher does: the profile's cookies for the
-  // address's own site. `authorization` is a SAPISIDHASH, or empty. A hashed
-  // request follows no redirect, so the hash goes nowhere else.
+  // Sends what was asked as GaiaAuthFetcher does: the profile's cookies for
+  // the address's own site, so SameSite cookies go too.
+  //
+  // A POST is a same-origin CORS request from the address's own origin, as a
+  // site's own page sends it: `Origin` is that origin, `Sec-Fetch-Site:
+  // same-origin` and `Sec-Fetch-Mode: cors`, with no preflight. A GET has no
+  // initiator, as a navigation the user typed, so it may be redirected to
+  // another site's sign-in.
+  // `authorization` is a SAPISIDHASH, or empty. See ShellFetchFollowsRedirects
+  // for which requests may be redirected.
   static void Start(network::SharedURLLoaderFactory& factory,
-                    const GURL& url,
-                    std::vector<mojom::ShellFetchHeaderPtr> headers,
+                    Asked asked,
                     const std::string& authorization,
                     FetchCallback callback) {
-    const url::Origin origin = url::Origin::Create(url);
+    const url::Origin origin = url::Origin::Create(asked.url);
     auto request = std::make_unique<network::ResourceRequest>();
-    request->url = url;
-    for (const mojom::ShellFetchHeaderPtr& header : headers) {
+    request->url = asked.url;
+    request->method = asked.method;
+    for (const mojom::ShellFetchHeaderPtr& header : asked.headers) {
       request->headers.SetHeader(header->name, header->value);
     }
     if (!authorization.empty()) {
       request->headers.SetHeader(net::HttpRequestHeaders::kAuthorization,
                                  authorization);
+    }
+    if (!ShellFetchFollowsRedirects(asked.method, !authorization.empty())) {
       request->redirect_mode = network::mojom::RedirectMode::kError;
     }
     request->credentials_mode = network::mojom::CredentialsMode::kInclude;
+    if (asked.method == net::HttpRequestHeaders::kPostMethod) {
+      request->request_initiator = origin;
+      request->mode = network::mojom::RequestMode::kCors;
+    }
     request->site_for_cookies = net::SiteForCookies::FromOrigin(origin);
     request->trusted_params = network::ResourceRequest::TrustedParams();
     request->trusted_params->isolation_info =
         net::IsolationInfo::CreateForInternalRequest(origin);
     // Deletes itself in Finish().
     PendingFetch* fetch =
-        new PendingFetch(std::move(request), std::move(headers),
+        new PendingFetch(std::move(request), std::move(asked.headers),
                          std::move(callback));
+    if (asked.body.has_value()) {
+      // The page's `Content-Type` header stays: none is given here.
+      fetch->loader_->AttachStringForUpload(std::move(*asked.body));
+    }
     fetch->loader_->DownloadToString(
         &factory,
         base::BindOnce(&PendingFetch::Downloaded, base::Unretained(fetch)),
@@ -187,18 +214,24 @@ class ShellFetchService final
  private:
   // mojom::ShellFetch:
   void Fetch(const GURL& url,
+             const std::string& method,
              std::vector<mojom::ShellFetchHeaderPtr> headers,
+             const std::optional<std::string>& body,
              const std::optional<std::string>& sapisid_hash_origin,
              FetchCallback callback) override {
     std::optional<std::string> refusal = ShellFetchRefusal(
         url, headers, sapisid_hash_origin, DeskLock::IsLocked());
+    if (!refusal.has_value()) {
+      refusal = ShellFetchMethodRefusal(method, body);
+    }
     if (refusal.has_value()) {
       std::move(callback).Run(nullptr, *refusal);
       return;
     }
+    Asked asked{url, method, std::move(headers), body};
     if (!sapisid_hash_origin.has_value()) {
       PendingFetch::Start(*partition_->GetURLLoaderFactoryForBrowserProcess(),
-                          url, std::move(headers), std::string(),
+                          std::move(asked), std::string(),
                           std::move(callback));
       return;
     }
@@ -208,12 +241,11 @@ class ShellFetchService final
         url, net::CookieOptions::MakeAllInclusive(),
         net::CookiePartitionKeyCollection(),
         base::BindOnce(&ShellFetchService::Hash, weak_factory_.GetWeakPtr(),
-                       url, std::move(headers), *sapisid_hash_origin,
+                       std::move(asked), *sapisid_hash_origin,
                        std::move(callback)));
   }
 
-  void Hash(const GURL& url,
-            std::vector<mojom::ShellFetchHeaderPtr> headers,
+  void Hash(Asked asked,
             const std::string& origin,
             FetchCallback callback,
             const net::CookieAccessResultList& cookies,
@@ -225,12 +257,12 @@ class ShellFetchService final
     std::optional<std::string> sapisid = SapisidAmong(named);
     if (!sapisid.has_value()) {
       std::move(callback).Run(
-          nullptr, base::StrCat({"no SAPISID cookie is sent to ", url.host()}));
+          nullptr,
+          base::StrCat({"no SAPISID cookie is sent to ", asked.url.host()}));
       return;
     }
     PendingFetch::Start(
-        *partition_->GetURLLoaderFactoryForBrowserProcess(), url,
-        std::move(headers),
+        *partition_->GetURLLoaderFactoryForBrowserProcess(), std::move(asked),
         SapisidHash(*sapisid, origin, base::Time::Now().ToTimeT()),
         std::move(callback));
   }
