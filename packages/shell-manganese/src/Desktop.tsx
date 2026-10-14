@@ -5,6 +5,8 @@ import { createToastManager } from "@domicile-desktop/component-library/Toaster"
 import { usePictureUrl } from "@domicile-desktop/component-library/usePictureUrl";
 import { usePortalWallpaper } from "@domicile-desktop/component-library/usePortalWallpaper";
 import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
+import { deskBacklight } from "@domicile-desktop/manganese-bar-module-brightness/desk-backlight";
+import { useBrightnessKeys } from "@domicile-desktop/manganese-bar-module-brightness/useBrightnessKeys";
 import { popupShown } from "@domicile-desktop/manganese-bar-module-tray/extensions/shown";
 import { useExtensions } from "@domicile-desktop/manganese-bar-module-tray/extensions/useExtensions";
 import type { TrayState } from "@domicile-desktop/manganese-bar-module-tray/tray-context";
@@ -12,6 +14,8 @@ import { TrayContext } from "@domicile-desktop/manganese-bar-module-tray/tray-co
 import { trayEntries } from "@domicile-desktop/manganese-bar-module-tray/tray-entry";
 import { useTray } from "@domicile-desktop/manganese-bar-module-tray/useTray";
 import { useTrayOrder } from "@domicile-desktop/manganese-bar-module-tray/useTrayOrder";
+import { deskSound } from "@domicile-desktop/manganese-bar-module-volume/desk-sound";
+import { useVolumeKeys } from "@domicile-desktop/manganese-bar-module-volume/useVolumeKeys";
 import { Clipboard } from "@domicile-desktop/manganese-clipboard/Clipboard";
 import { useClipboard } from "@domicile-desktop/manganese-clipboard/useClipboard";
 import { DomicileContext } from "@domicile-desktop/manganese-host/domicile-context";
@@ -63,6 +67,7 @@ import {
   activeIsPrivate,
   screenOfApp,
   WindowAction,
+  WindowActionKind,
 } from "@domicile-desktop/manganese-window-management/window-state";
 import type { Workspaces } from "@domicile-desktop/manganese-window-management/workspaces-context";
 import { WorkspacesContext } from "@domicile-desktop/manganese-window-management/workspaces-context";
@@ -74,6 +79,7 @@ import { system } from "@domicile-desktop/sdk/system";
 import type { ReactNode } from "react";
 import { useCallback, useMemo, useState } from "react";
 import { LOCK_BAR } from "./default-bars";
+import { pressMediaKey } from "./media-keys";
 import { Monitor } from "./screens/Monitor";
 import { NoScreens } from "./screens/NoScreens";
 import { showsSharing } from "./shows-sharing";
@@ -247,18 +253,30 @@ export const Desktop = ({
     [],
   );
 
+  const volumeKeys = useVolumeKeys(deskSound(domicile));
+  const brightnessKeys = useBrightnessKeys(deskBacklight(domicile));
+
   // Shift is spent whether or not a window was floated: the user pressed it
   // for the chord, so it should not carry over to the next window. Both the
   // page's keydown and the compositor's forwarded chords come through here.
+  // A media key changes no window, so it neither spends Shift nor moves the
+  // pointer.
   const onAction = useCallback(
     (action: WindowAction) => {
-      spendShift();
-      act(action);
-      // Moves the pointer with the keyboard; see `usePointerWarp`. Dispatched
-      // in the same turn so both land in one render.
-      act(WindowAction.KeyPressed());
+      if (action.kind === WindowActionKind.MediaKeyPressed) {
+        pressMediaKey(
+          { brightness: brightnessKeys, volume: volumeKeys },
+          action.key,
+        );
+      } else {
+        spendShift();
+        act(action);
+        // Moves the pointer with the keyboard; see `usePointerWarp`.
+        // Dispatched in the same turn so both land in one render.
+        act(WindowAction.KeyPressed());
+      }
     },
-    [act, spendShift],
+    [act, brightnessKeys, spendShift, volumeKeys],
   );
 
   // Memoized so the stage redraws only when what it shows changes.

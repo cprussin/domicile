@@ -12,6 +12,7 @@ import type { DomicileBrowserWindow } from "@domicile-desktop/sdk/domicile-host"
 import type { Axis, Direction } from "./direction";
 import type { Float } from "./floating/float";
 import { floatHolds, limitedTo, movedTo } from "./floating/float";
+import type { MediaKey } from "./keyboard/media-key";
 import type { Popup } from "./popup";
 import type { Rect } from "./rect";
 import { SURFACE_TUCK, TITLE_BAR } from "./rect";
@@ -341,6 +342,7 @@ export enum WindowActionKind {
   LauncherDismissed,
   LauncherToggled,
   LayoutSet,
+  MediaKeyPressed,
   ModeSet,
   ModeSwapped,
   NewTabPressed,
@@ -665,6 +667,12 @@ export const WindowAction = {
   LayoutSet: (layout: Layout) => ({
     kind: WindowActionKind.LayoutSet as const,
     layout,
+  }),
+
+  /** A volume, microphone or brightness key. The shell sets the level. */
+  MediaKeyPressed: (key: MediaKey) => ({
+    key,
+    kind: WindowActionKind.MediaKeyPressed as const,
   }),
 
   /**
@@ -1127,6 +1135,10 @@ const reduceAction = (
     }
     case WindowActionKind.ScreenshotTaken: {
       // The compositor takes it, through the portal dialog.
+      return state;
+    }
+    case WindowActionKind.MediaKeyPressed: {
+      // The shell sets the volume or brightness; no window changes.
       return state;
     }
     case WindowActionKind.CommandExecuted: {

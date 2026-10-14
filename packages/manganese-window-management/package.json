@@ -32,6 +32,7 @@
     "./floating/floating-rules": "./src/floating/floating-rules.ts",
     "./grab-cursor-styles": "./src/grab-cursor-styles.ts",
     "./keyboard/commands": "./src/keyboard/commands.ts",
+    "./keyboard/media-key": "./src/keyboard/media-key.ts",
     "./keyboard/useKeybindings": "./src/keyboard/useKeybindings.ts",
     "./keyboard/useModifiers": "./src/keyboard/useModifiers.ts",
     "./panda-preset": "./src/panda-preset.ts",

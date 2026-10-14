@@ -25,6 +25,9 @@ Manganese binds sway's keys on Meta (Super, `Mod4`) by default:
 | Meta+Shift+Space | Open the copied URL, or search Google for the copied text. |
 | Meta+Shift+Return | Lock. Does nothing if the config has no `lock`. |
 | Print | Take a screenshot: pick the area in the screenshot dialog. Ctrl+C there copies it instead of saving. |
+| XF86AudioRaiseVolume / XF86AudioLowerVolume | Raise or lower the default output's volume by 5%, between 0 and 100%. |
+| XF86AudioMute / XF86AudioMicMute | Toggle the mute of the default output / the default microphone. |
+| XF86MonBrightnessUp / XF86MonBrightnessDown | Raise or lower the brightness by 5%. |
 | Meta+R | Enter resize mode. |
 
 There is no terminal key. Bind one with `exec`.
@@ -41,7 +44,8 @@ There is no terminal key. Bind one with `exec`.
 ## Commands
 
 Build commands with the exported helpers (`focus`, `move`, `workspace`,
-`moveToWorkspace`, `grow`, `mode`, `exec`, `searchClipboard`, …). They use sway's names:
+`moveToWorkspace`, `grow`, `mode`, `exec`, `searchClipboard`, `volume`,
+`micMute`, `brightness`, …). They use sway's names:
 
 | Command | Action |
 |---|---|
@@ -69,6 +73,9 @@ Manganese-only commands:
 | `screenshot` | Take a screenshot, as Print does. |
 | `search-clipboard` | Open the newest copy in a browser window: as a site if it is a URL, else as a search. Reads the first 160 characters. |
 | `resize grow left/right/up/down` | Grow the window that way. |
+| `volume up/down/mute` | Step the default output's volume, or toggle its mute. |
+| `mic mute` | Toggle the default microphone's mute. |
+| `brightness up/down` | Step the brightness. |
 
 - `mode(name)` comes from the SDK's `bindKeys`. Each monitor's page keeps its
   own mode. The bar shows any mode other than `default`.
@@ -77,6 +84,9 @@ Manganese-only commands:
 - An unknown command logs to the console and does nothing.
 - While the launcher is open, only the `launcher` command and mode changes
   run.
+- `volume`, `mic` and `brightness` use the sound server and backlight the
+  bar's items read ([HOST-READOUTS.md](../../shell-manganese/docs/HOST-READOUTS.md)).
+  They do nothing without a sound server or a backlight.
 
 ## Key names
 
