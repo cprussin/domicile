@@ -99,20 +99,32 @@ describe("Network", () => {
       render(<Item network={network.watch} />);
 
       network.report(online(Link.Wifi("Home", 0.72)));
-      expect(screen.getByText("Home")).toBeVisible();
       expect(
-        screen.getByRole("img", { name: "Wi-Fi, strong signal" }),
+        screen.getByRole("img", { name: "Wi-Fi, strong signal: Home" }),
       ).toBeVisible();
 
       network.report(online(Link.Wifi("Home", 0.5)));
       expect(
-        screen.getByRole("img", { name: "Wi-Fi, fair signal" }),
+        screen.getByRole("img", { name: "Wi-Fi, fair signal: Home" }),
       ).toBeVisible();
 
       network.report(online(Link.Wifi("Home", 0.2)));
       expect(
-        screen.getByRole("img", { name: "Wi-Fi, weak signal" }),
+        screen.getByRole("img", { name: "Wi-Fi, weak signal: Home" }),
       ).toBeVisible();
+    });
+
+    it("shows only an icon, and names the link on hover", () => {
+      const network = heldNetwork();
+      render(<Item network={network.watch} />);
+
+      network.report(online(Link.Wifi("Home", 0.72)));
+
+      expect(screen.queryByText("Home")).not.toBeInTheDocument();
+      expect(screen.getByRole("button")).toHaveAttribute(
+        "title",
+        "Wi-Fi, strong signal: Home",
+      );
     });
 
     it("marks a wired link", () => {
@@ -122,8 +134,6 @@ describe("Network", () => {
       network.report(online(Link.Wired("Wired connection 1")));
 
       expect(screen.getByRole("img", { name: "Wired" })).toBeVisible();
-      expect(screen.getByText("Wired")).toBeVisible();
-      expect(screen.queryByText("Wired connection 1")).not.toBeInTheDocument();
     });
 
     it("names any other link", () => {
@@ -132,8 +142,7 @@ describe("Network", () => {
 
       network.report(online(Link.Other("wg0")));
 
-      expect(screen.getByRole("img", { name: "Network" })).toBeVisible();
-      expect(screen.getByText("wg0")).toBeVisible();
+      expect(screen.getByRole("img", { name: "Network: wg0" })).toBeVisible();
     });
 
     it("says when there is none", () => {
@@ -143,22 +152,6 @@ describe("Network", () => {
       network.report(online(Link.None()));
 
       expect(screen.getByRole("img", { name: "Offline" })).toBeVisible();
-      expect(screen.getByText("Offline")).toBeVisible();
-    });
-
-    it("keeps one width, cutting a long name short", () => {
-      const network = heldNetwork();
-      render(<Item network={network.watch} />);
-      const width = css({ inlineSize: 24 });
-
-      network.report(online(Link.None()));
-      expect(screen.getByRole("button").className).toContain(width);
-
-      network.report(online(Link.Wifi("A network with a long name", 0.9)));
-      expect(screen.getByRole("button").className).toContain(width);
-      expect(
-        screen.getByText("A network with a long name").className,
-      ).toContain(css({ textOverflow: "ellipsis" }));
     });
   });
 
@@ -178,7 +171,9 @@ describe("Network", () => {
       );
     }
     expect(
-      screen.getByRole("img", { name: "Wi-Fi, strong signal, no internet" }),
+      screen.getByRole("img", {
+        name: "Wi-Fi, strong signal: Cafe, no internet",
+      }),
     ).toBeVisible();
   });
 
@@ -200,7 +195,7 @@ describe("Network", () => {
       expect(wifi.started).toBe(0);
 
       await userEvent.click(
-        screen.getByRole("button", { name: "Wi-Fi, strong signal Home" }),
+        screen.getByRole("button", { name: "Wi-Fi, strong signal: Home" }),
       );
       wifi.report(Ok(None()));
 
