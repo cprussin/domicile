@@ -29,7 +29,8 @@ export type Placement = {
   bar: Rect;
   /**
    * Whether it draws no title bar: a bare float's window, whose client draws
-   * its own frame over the whole box. See `isBare`.
+   * its own frame over the whole box (see `isBare`), or a window whose page or
+   * client is fullscreen (see `pageFullscreened`).
    */
   bare: boolean;
   /**
@@ -172,10 +173,7 @@ export const placementsOf = (
     ...floating.flatMap(({ depth, float, frames: inFloat }) =>
       inFloat.map((frame) =>
         isBare(float)
-          ? {
-              ...placed({ ...frame, surface: rectOf(float) }, depth),
-              bare: true,
-            }
+          ? placedBare(frame, rectOf(float), depth)
           : placed(frame, depth),
       ),
     ),
@@ -190,7 +188,15 @@ export const placementsOf = (
         : undefined,
     placements: [
       ...laidOut.filter(({ id }) => !covered.includes(id)),
-      ...filled.frames.map((frame) => placed(frame, FULLSCREEN)),
+      ...filled.frames.map((frame) =>
+        workspace.fullscreen?.bare === true
+          ? placedBare(
+              frame,
+              fullscreenArea(workspace.fullscreen, geometry),
+              FULLSCREEN,
+            )
+          : placed(frame, FULLSCREEN),
+      ),
     ],
     tabs: [
       // Tabs are keyed by window, so the strips a fullscreen group draws again
@@ -282,12 +288,22 @@ const fullscreenIn = (workspace: Workspace, geometry: Geometry): Tiled => {
   const full = fullscreenOn(workspace);
   return full === undefined
     ? { frames: [], tabs: [] }
-    : framesOf(
-        full.tiling,
-        full.global ? geometry.desktop : geometry.screen,
-        INNER_GAP,
-      );
+    : framesOf(full.tiling, fullscreenArea(full, geometry), INNER_GAP);
 };
+
+/** The screen a fullscreen fills, or the desktop for `fullscreen global`. */
+const fullscreenArea = ({ global }: { global: boolean }, geometry: Geometry) =>
+  global ? geometry.desktop : geometry.screen;
+
+/**
+ * One window's frame with no bar, its contents filling `box`: a bare float, or
+ * a window whose page or client is fullscreen, such as a video, as in a
+ * browser. See `pageFullscreened`.
+ */
+const placedBare = (frame: Frame, box: Rect, depth: number): Placement => ({
+  ...placed({ ...frame, surface: box }, depth),
+  bare: true,
+});
 
 /**
  * One window's frame, stacked at `depth`. The only place a {@link Placement}

@@ -489,6 +489,7 @@ describe("pageFullscreened", () => {
     const full = pageFullscreened(tiling("a", "b"), "a", true);
 
     expect(full.fullscreen).toEqual({
+      bare: true,
       byPage: true,
       global: false,
       id: "a",
@@ -497,13 +498,55 @@ describe("pageFullscreened", () => {
     expect(pageFullscreened(full, "a", false).fullscreen).toBeUndefined();
   });
 
-  it("keeps a window the user made fullscreen when its page leaves", () => {
+  it("drops the bar of a window the user made fullscreen while its page is", () => {
     const full = fullscreenToggled(tiling("a", "b"), false);
+    const page = pageFullscreened(full, "b", true);
 
-    expect(
-      pageFullscreened(pageFullscreened(full, "b", true), "b", false)
-        .fullscreen,
-    ).toEqual(full.fullscreen);
+    expect(page.fullscreen).toEqual({
+      bare: true,
+      global: false,
+      id: "b",
+      up: 0,
+    });
+    expect(pageFullscreened(page, "b", false).fullscreen).toEqual(
+      full.fullscreen,
+    );
+  });
+
+  // The page reports its fullscreen each time its window mounts.
+  it("changes nothing when the page repeats itself", () => {
+    const full = fullscreenToggled(tiling("a", "b"), false);
+    const page = pageFullscreened(full, "b", true);
+
+    expect(pageFullscreened(full, "b", false)).toBe(full);
+    expect(pageFullscreened(page, "b", true)).toBe(page);
+  });
+
+  it("stays a fullscreen page over every screen and back", () => {
+    const page = pageFullscreened(tiling("a", "b"), "b", true);
+    const global = fullscreenToggled(page, true);
+
+    expect(global.fullscreen).toEqual({
+      bare: true,
+      byPage: true,
+      global: true,
+      id: "b",
+      up: 0,
+    });
+    expect(fullscreenToggled(global, false).fullscreen).toEqual(
+      page.fullscreen,
+    );
+    expect(pageFullscreened(global, "b", false).fullscreen).toBeUndefined();
+  });
+
+  it("fullscreens a group around a fullscreen page with its bars", () => {
+    const page = pageFullscreened(tiling("a", "b"), "b", true);
+
+    expect(fullscreenToggled(parentFocused(page), false).fullscreen).toEqual({
+      global: false,
+      id: "b",
+      up: 1,
+    });
   });
 
   it("keeps another window fullscreen when a page leaves", () => {

@@ -2194,10 +2194,10 @@ describe("Shell", () => {
       const tiled = boxOf(browserWindow(container));
 
       fullscreens(true);
-      // A fullscreen window covers the top bar too.
+      // A fullscreen page covers the top bar and its own title bar too.
       expect(boxOf(browserWindow(container))).toMatchObject({
-        height: `${(1080 - TITLE_BAR + SURFACE_TUCK).toString()}px`,
-        y: `${(TITLE_BAR - SURFACE_TUCK).toString()}px`,
+        height: "1080px",
+        y: "0px",
       });
 
       fullscreens(false);

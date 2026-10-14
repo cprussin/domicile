@@ -57,6 +57,11 @@ import {
  */
 export type Fullscreen = NodeRef & {
   /**
+   * Whether the window's page or client is fullscreen, such as a video, so it
+   * draws no title bar. See {@link pageFullscreened}.
+   */
+  bare?: true;
+  /**
    * Whether the window's page or client asked for it, so its leaving
    * fullscreen ends it. See {@link pageFullscreened}.
    */
@@ -513,15 +518,20 @@ export const fullscreenToggled = (
   ) {
     return { ...workspace, fullscreen: undefined };
   } else {
-    return { ...workspace, fullscreen: { ...target, global } };
+    // A fullscreen page stays one when it spreads to every screen and back.
+    const same = was !== undefined && sameNode(workspace, was, target);
+    return {
+      ...workspace,
+      fullscreen: same ? { ...was, ...target, global } : { ...target, global },
+    };
   }
 };
 
 /**
  * Window `id`'s page or client entered or left fullscreen, as a video's
  * fullscreen button does. The window fills its screen while its page or
- * client is fullscreen. A window the user made fullscreen stays so when its
- * page or client leaves.
+ * client is fullscreen, without its bar. A window the user made fullscreen
+ * stays so, with its bar, when its page or client leaves.
  */
 export const pageFullscreened = (
   workspace: Workspace,
@@ -530,15 +540,22 @@ export const pageFullscreened = (
 ): Workspace => {
   const was = workspace.fullscreen;
   const own = was !== undefined && was.id === id && was.up === 0;
-  if (fullscreen && !own) {
-    return {
-      ...workspace,
-      fullscreen: { byPage: true, global: false, id, up: 0 },
-    };
-  } else if (!fullscreen && own && was.byPage === true) {
+  if (!own) {
+    return fullscreen
+      ? {
+          ...workspace,
+          fullscreen: { bare: true, byPage: true, global: false, id, up: 0 },
+        }
+      : workspace;
+  } else if (fullscreen === (was.bare === true)) {
+    return workspace;
+  } else if (fullscreen) {
+    return { ...workspace, fullscreen: { ...was, bare: true } };
+  } else if (was.byPage === true) {
     return { ...workspace, fullscreen: undefined };
   } else {
-    return workspace;
+    const { bare: _, ...barred } = was;
+    return { ...workspace, fullscreen: barred };
   }
 };
 
