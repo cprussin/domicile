@@ -65,9 +65,11 @@ pub struct Advertised {
     /// spelled out from hwdata's `pnp.ids` when known, or empty.
     ///
     /// Sent as `wl_output.description`. Profiles match either maker spelling.
-    /// The output name stays `drm-<id>` so clients keep their output. Only the
-    /// engine's displays have one. See "Monitor names" in `docs/DISPLAYS.md`.
+    /// Only the engine's displays have one. See "Monitor names" in `docs/DISPLAYS.md`.
     pub description: String,
+    /// The engine display it shows, by [`Display::id`]. `None` on a described
+    /// or nested desktop.
+    pub display: Option<i64>,
     /// The panel's size in millimeters, or [`UNKNOWN_PHYSICAL_MM`]. Only the
     /// engine's displays report one.
     pub physical_mm: (i32, i32),
@@ -208,6 +210,7 @@ impl Screens {
                         // is no rotation to apply.
                         transform: Transform::Normal,
                         description: String::new(),
+                        display: None,
                         physical_mm: UNKNOWN_PHYSICAL_MM,
                         refresh_mhz: UNKNOWN_REFRESH_MHZ,
                     }
@@ -241,6 +244,7 @@ impl Screens {
                     scale: 1.0,
                     transform: Transform::Normal,
                     description: advertised_description(display, vendors),
+                    display: Some(display.id),
                     physical_mm: display.physical_mm,
                     refresh_mhz: display.refresh_mhz,
                 }
@@ -292,6 +296,7 @@ impl Screens {
                 scale: f64::from(scale),
                 transform: Transform::Normal,
                 description: String::new(),
+                display: None,
                 physical_mm: UNKNOWN_PHYSICAL_MM,
                 refresh_mhz: UNKNOWN_REFRESH_MHZ,
             }],
@@ -306,8 +311,8 @@ impl Screens {
     pub fn from_the_layout(layout: &Layout, displays: &[Display], vendors: &Vendors) -> Screens {
         Screens {
             follows_the_window: false,
-            // By the engine's id: `drm-<id>` is this compositor's naming, which
-            // the engine does not know.
+            // By the engine's id: an output name is this compositor's naming,
+            // which the engine does not know.
             scanout: layout
                 .scanout()
                 .iter()
@@ -339,6 +344,7 @@ impl Screens {
                         scale: placed.scale,
                         transform: placed.transform,
                         description: advertised_description(display, vendors),
+                        display: Some(display.id),
                         physical_mm: display.physical_mm,
                         refresh_mhz: display.refresh_mhz,
                     }
@@ -368,7 +374,7 @@ impl Screens {
             .filter_map(|output| {
                 Some(crate::casting::Screen {
                     name: output.name.clone(),
-                    display: display_id_of(&output.name)?,
+                    display: output.display?,
                     desk: (
                         output.position.0,
                         output.position.1,
@@ -629,15 +635,16 @@ fn overlap_area(a: &Bounds, b: &Bounds) -> f64 {
 
 /// The `wl_output` name for an engine display.
 ///
-/// Ozone derives the id from the EDID, so it survives a replug.
+/// `drm-<id>` for a monitor with an EDID name: ozone derives the id from the
+/// EDID, so it survives a replug, and profiles already name it. A monitor with
+/// none is named after its connector, as sway names it. `drm-<id>` again from
+/// an engine that reports no connector.
 fn name_of(display: &Display) -> String {
-    format!("drm-{}", display.id)
-}
-
-/// The engine display a `wl_output` named by [`name_of`] is, or `None` for
-/// another name.
-fn display_id_of(name: &str) -> Option<i64> {
-    name.strip_prefix("drm-")?.parse().ok()
+    if display.description.is_empty() && !display.connector.is_empty() {
+        display.connector.clone()
+    } else {
+        format!("drm-{}", display.id)
+    }
 }
 
 /// The engine's id for the display named `name`. The inverse of [`name_of`],
@@ -723,6 +730,7 @@ mod tests {
                     scale: 1.0,
                     transform: Transform::Normal,
                     description: String::new(),
+                    display: None,
                     // A described display is not a panel, so neither value is
                     // known.
                     physical_mm: UNKNOWN_PHYSICAL_MM,
@@ -736,6 +744,7 @@ mod tests {
                     scale: 2.0,
                     transform: Transform::Normal,
                     description: String::new(),
+                    display: None,
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
                 },
@@ -827,6 +836,7 @@ mod tests {
             scale: 1.0,
             transform: Transform::Normal,
             description: String::new(),
+            display: None,
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
         };
@@ -855,6 +865,7 @@ mod tests {
             scale: 1.0,
             transform: Transform::Normal,
             description: String::new(),
+            display: None,
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
         };
@@ -877,6 +888,7 @@ mod tests {
             scale: -2.0,
             transform: Transform::Normal,
             description: String::new(),
+            display: None,
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
         };
@@ -1054,6 +1066,7 @@ mod tests {
             scale: 1.0,
             transform: Transform::Normal,
             description: String::new(),
+            display: None,
             physical_mm: UNKNOWN_PHYSICAL_MM,
             refresh_mhz: UNKNOWN_REFRESH_MHZ,
         };
@@ -1161,6 +1174,7 @@ mod tests {
                 Display {
                     id: 1,
                     description: "BOE NE135A1M-NY1".into(),
+                    connector: String::new(),
                     position: (0, 0),
                     size: (2880, 1920),
                     physical_mm: (597, 336),
@@ -1169,6 +1183,7 @@ mod tests {
                 Display {
                     id: 2,
                     description: String::new(),
+                    connector: String::new(),
                     position: (2880, 0),
                     size: (1920, 1080),
                     physical_mm: (0, 0),
@@ -1189,6 +1204,7 @@ mod tests {
                     transform: Transform::Normal,
                     // A laptop panel has an EDID name; a projector has none.
                     description: "BOE NE135A1M-NY1".into(),
+                    display: Some(1),
                     // The panel's values pass through, and so do the second
                     // display's zeros.
                     physical_mm: (597, 336),
@@ -1202,6 +1218,7 @@ mod tests {
                     scale: 1.0,
                     transform: Transform::Normal,
                     description: String::new(),
+                    display: Some(2),
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
                 },
@@ -1219,6 +1236,7 @@ mod tests {
         vec![Display {
             id: 1,
             description: LAPTOP_PANEL.into(),
+            connector: String::new(),
             position: (0, 0),
             size: (2880, 1920),
             physical_mm: (597, 336),
@@ -1228,6 +1246,101 @@ mod tests {
 
     /// The laptop's EDID description, which a profile can match.
     const LAPTOP_PANEL: &str = "BOE NE135A1M-NY1";
+
+    #[test]
+    fn a_monitor_with_no_edid_name_is_named_after_its_connector() {
+        // The laptop panel has an EDID name, so it keeps `drm-<id>` and the
+        // profiles that name it.
+        let screens = Screens::from_the_engine(&panel_and_projector(), &unspelled());
+
+        assert_eq!(
+            screens
+                .outputs()
+                .map(|output| output.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["drm-1", PROJECTOR_CONNECTOR]
+        );
+    }
+
+    #[test]
+    fn a_monitor_named_after_its_connector_is_cast_as_its_display() {
+        let screens = Screens::from_the_engine(&panel_and_projector(), &unspelled());
+
+        let cast = screens.cast_screens();
+
+        assert_eq!(
+            cast.iter()
+                .map(|screen| (screen.name.as_str(), screen.display))
+                .collect::<Vec<_>>(),
+            vec![("drm-1", 1), (PROJECTOR_CONNECTOR, 2)]
+        );
+    }
+
+    #[test]
+    fn a_profile_can_name_a_monitor_by_its_connector() {
+        let placed = Screens::nested()
+            .replugged_into(
+                &panel_and_projector(),
+                &output(&format!(
+                    r#"
+{{
+  "output": {{
+    "profiles": [
+      {{
+        "name": "presenting",
+        "displays": [
+          {{ "display": "{PROJECTOR_CONNECTOR}", "position": [0, 0] }},
+          {{ "display": "{LAPTOP_PANEL}", "enabled": false }}
+        ]
+      }}
+    ]
+  }}
+}}
+"#
+                )),
+                &unspelled(),
+            )
+            .expect("the profile should be applicable")
+            .expect("a matched profile defines the desktop");
+
+        assert_eq!(
+            placed
+                .outputs()
+                .map(|output| output.name.as_str())
+                .collect::<Vec<_>>(),
+            vec![PROJECTOR_CONNECTOR]
+        );
+        assert_eq!(
+            placed
+                .scanout()
+                .iter()
+                .map(|connector| (connector.id, connector.enabled))
+                .collect::<Vec<_>>(),
+            vec![(2, true), (1, false)]
+        );
+    }
+
+    /// The laptop, named from its EDID, and a projector with no EDID name.
+    fn panel_and_projector() -> Vec<Display> {
+        vec![
+            Display {
+                connector: "eDP-1".into(),
+                ..plugged_in()[0].clone()
+            },
+            Display {
+                id: 2,
+                description: String::new(),
+                connector: PROJECTOR_CONNECTOR.into(),
+                position: (2880, 0),
+                size: (1920, 1080),
+                physical_mm: (0, 0),
+                refresh_mhz: 0,
+            },
+        ]
+    }
+
+    /// The projector's connector, which names it.
+    const PROJECTOR_CONNECTOR: &str = "HDMI-A-1";
 
     /// The output settings `text` configures.
     fn output(text: &str) -> OutputConfig {
@@ -1303,6 +1416,7 @@ mod tests {
                     // From the engine's reading; a profile does not rename a
                     // display.
                     description: DESK_MONITOR.into(),
+                    display: Some(2),
                     physical_mm: UNKNOWN_PHYSICAL_MM,
                     refresh_mhz: UNKNOWN_REFRESH_MHZ,
                 },
@@ -1314,6 +1428,7 @@ mod tests {
                     scale: 1.5,
                     transform: Transform::Normal,
                     description: LAPTOP_PANEL.into(),
+                    display: Some(1),
                     physical_mm: (597, 336),
                     refresh_mhz: 59_997,
                 },
@@ -1533,6 +1648,7 @@ mod tests {
             Display {
                 id: 1,
                 description: LAPTOP_PANEL.into(),
+                connector: String::new(),
                 position: (0, 0),
                 size: (2880, 1920),
                 physical_mm: (597, 336),
@@ -1541,6 +1657,7 @@ mod tests {
             Display {
                 id: 2,
                 description: DESK_MONITOR.into(),
+                connector: String::new(),
                 position: (2880, 0),
                 size: (1920, 1080),
                 physical_mm: (0, 0),
@@ -1601,6 +1718,7 @@ mod tests {
                 scale: 2.0,
                 transform: Transform::Normal,
                 description: String::new(),
+                display: None,
                 // A window has no physical size or refresh rate.
                 physical_mm: UNKNOWN_PHYSICAL_MM,
                 refresh_mhz: UNKNOWN_REFRESH_MHZ,

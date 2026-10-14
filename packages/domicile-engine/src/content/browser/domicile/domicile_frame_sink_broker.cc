@@ -121,8 +121,9 @@ class DomicileDisplayWatcher : public display::DisplayObserver {
 
  private:
   void Read() {
-    broker_->OnDisplaysChanged(
-        domicile::DisplayListFor(display::Screen::Get()->GetAllDisplays()));
+    broker_->OnDisplaysChanged(domicile::DisplayListFor(
+        display::Screen::Get()->GetAllDisplays(),
+        ui::OzonePlatform::GetInstance()->GetDomicileConnectors()));
   }
 
   const raw_ptr<domicile::FrameSinkBroker> broker_;

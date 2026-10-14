@@ -177,7 +177,7 @@ loads.
 memory. A dmabuf capture needs a GPU and a monitor.
 
 ```sh
-DOMICILE_CAST_MONITOR=drm-<id> domicile …
+DOMICILE_CAST_MONITOR=<output> domicile …
 pw-link domicile-cast:capture_1 <consumer>:input_1
 ```
 

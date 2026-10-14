@@ -175,6 +175,17 @@ typedef struct DomicileDisplay {
   int32_t refresh_mhz;
 } DomicileDisplay;
 
+// A display and the connector it is on, for `connected_displays`.
+typedef struct DomicileConnectedDisplay {
+  DomicileDisplay display;
+  // The kernel's name for the connector, as sway uses it: "DP-1", "HDMI-A-1",
+  // "eDP-1". Never null.
+  //
+  // The compositor names a monitor whose `name` is "" after it. Borrowed for
+  // the call; copy it to keep it.
+  const char* connector;
+} DomicileConnectedDisplay;
+
 // How the compositor wants one display's connector driven.
 //
 // The reverse of DomicileDisplay: the compositor's config decides, but the
@@ -325,6 +336,14 @@ typedef struct DomicileEngineCallbacks {
                    DomicileSurfaceId surface,
                    uint64_t request,
                    DomicileBufferId buffer);
+  // Like `displays`, plus each display's connector. `displays` points at
+  // `count` records borrowed for the call.
+  //
+  // Called instead of `displays` when set. An older engine ignores it and
+  // keeps calling `displays`.
+  void (*connected_displays)(void* user_data,
+                             const DomicileConnectedDisplay* displays,
+                             uint32_t count);
 } DomicileEngineCallbacks;
 
 // Returns nonzero. Exists so a compositor can tell an engine that calls

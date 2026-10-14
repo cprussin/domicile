@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/display_observer.h"
@@ -64,6 +65,11 @@ class SnapshotBuilder {
     native_mode_size_.reset();
     return *this;
   }
+  // The kernel's name for the connector, as the GPU process sets it.
+  SnapshotBuilder& Connector(std::string connector) {
+    connector_ = std::move(connector);
+    return *this;
+  }
 
   std::unique_ptr<display::DisplaySnapshot> Build() {
     display::DisplaySnapshot::DisplayModeList modes;
@@ -73,7 +79,7 @@ class SnapshotBuilder {
           *native_mode_size_, /*interlaced=*/false, native_refresh_hz_));
       native = modes.back().get();
     }
-    return std::make_unique<display::DisplaySnapshot>(
+    auto snapshot = std::make_unique<display::DisplaySnapshot>(
         id_, id_, id_, /*connector_index=*/0u, origin_, physical_size_mm_,
         display::DISPLAY_CONNECTION_TYPE_HDMI, /*base_connector_id=*/1u,
         /*path_topology=*/std::vector<uint64_t>(),
@@ -86,6 +92,8 @@ class SnapshotBuilder {
         /*year_of_manufacture=*/0, gfx::Size(),
         display::VariableRefreshRateState::kVrrNotCapable,
         display::DrmFormatsAndModifiers());
+    snapshot->set_domicile_connector(connector_);
+    return snapshot;
   }
 
  private:
@@ -97,6 +105,7 @@ class SnapshotBuilder {
   float native_refresh_hz_ = 60.f;
   int64_t product_code_ = display::DisplaySnapshot::kInvalidProductCode;
   std::vector<uint8_t> edid_;
+  std::string connector_ = "DP-1";
 };
 
 // Returns an EDID with `serial` in its first display descriptor.
@@ -585,6 +594,75 @@ TEST(DrmScreenTest, AHotplugReachesADisplayObserver) {
   screen.OnDisplaysChanged(Pointers(snapshots), {});
 
   EXPECT_EQ(observer.added(), std::vector<int64_t>{11});
+  screen.RemoveObserver(&observer);
+}
+
+// The compositor names a monitor with no EDID name after its connector.
+TEST(DrmScreenTest, TheScreenKnowsEachDisplaysConnector) {
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager, nullptr);
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(SnapshotBuilder().Id(11).Connector("eDP-1").Build());
+  snapshots.push_back(SnapshotBuilder()
+                          .Id(12)
+                          .Origin(gfx::Point(1920, 0))
+                          .Connector("HDMI-A-1")
+                          .Build());
+
+  screen.OnDisplaysChanged(Pointers(snapshots), {});
+
+  EXPECT_EQ(screen.connectors(),
+            (base::flat_map<int64_t, std::string>{{11, "eDP-1"},
+                                                  {12, "HDMI-A-1"}}));
+}
+
+TEST(DrmScreenTest, AnUnpluggedDisplaysConnectorIsForgotten) {
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager, nullptr);
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> unplugged;
+  unplugged.push_back(SnapshotBuilder().Id(11).Connector("DP-1").Build());
+  screen.OnDisplaysChanged(Pointers(unplugged), {});
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> plugged;
+  plugged.push_back(SnapshotBuilder().Id(12).Connector("DP-2").Build());
+
+  screen.OnDisplaysChanged(Pointers(plugged), {});
+
+  EXPECT_EQ(screen.connectors(),
+            (base::flat_map<int64_t, std::string>{{12, "DP-2"}}));
+}
+
+// Records the connector the screen gives each display as it is added.
+class ConnectorObserver : public display::DisplayObserver {
+ public:
+  explicit ConnectorObserver(const DrmScreen* screen) : screen_(screen) {}
+
+  void OnDisplayAdded(const display::Display& display) override {
+    const auto connector = screen_->connectors().find(display.id());
+    heard_.push_back(connector == screen_->connectors().end()
+                         ? std::string()
+                         : connector->second);
+  }
+
+  const std::vector<std::string>& heard() const { return heard_; }
+
+ private:
+  const raw_ptr<const DrmScreen> screen_;
+  std::vector<std::string> heard_;
+};
+
+// The browser reads the connectors when the display list notifies it, so they
+// must be current by then.
+TEST(DrmScreenTest, AnObserverOfAHotplugReadsTheNewDisplaysConnector) {
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager, nullptr);
+  ConnectorObserver observer(&screen);
+  screen.AddObserver(&observer);
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(SnapshotBuilder().Id(11).Connector("HDMI-A-1").Build());
+
+  screen.OnDisplaysChanged(Pointers(snapshots), {});
+
+  EXPECT_EQ(observer.heard(), std::vector<std::string>{"HDMI-A-1"});
   screen.RemoveObserver(&observer);
 }
 

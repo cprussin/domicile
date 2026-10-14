@@ -214,14 +214,15 @@ class FakeDisplayCaptureObserver : public mojom::DisplayCaptureObserver {
   mojo::Receiver<mojom::DisplayCaptureObserver> receiver_{this};
 };
 
-// One named 597x336mm panel at the origin, at just under 60Hz.
+// One named 597x336mm panel on eDP-1 at the origin, at just under 60Hz.
 //
 // Every field is nonzero so tests catch a field dropped in transit.
 std::vector<mojom::DisplayPtr> OneDisplay(int64_t id, const gfx::Size& size) {
   std::vector<mojom::DisplayPtr> displays;
   displays.push_back(mojom::Display::New(id, gfx::Rect(size),
                                          gfx::Size(597, 336),
-                                         "DEL DELL U3219Q 2ZLS413", 59997));
+                                         "DEL DELL U3219Q 2ZLS413", 59997,
+                                         "eDP-1"));
   return displays;
 }
 
@@ -969,6 +970,7 @@ TEST_F(FrameSinkBrokerTest, AnObserverIsToldTheDisplaysAlreadyRead) {
   EXPECT_EQ(observer.lists_[0][0]->physical_size_mm, gfx::Size(597, 336));
   EXPECT_EQ(observer.lists_[0][0]->name, "DEL DELL U3219Q 2ZLS413");
   EXPECT_EQ(observer.lists_[0][0]->refresh_mhz, 59997);
+  EXPECT_EQ(observer.lists_[0][0]->connector, "eDP-1");
 }
 
 TEST_F(FrameSinkBrokerTest, AProducerSaysWhichConnectorsToLight) {

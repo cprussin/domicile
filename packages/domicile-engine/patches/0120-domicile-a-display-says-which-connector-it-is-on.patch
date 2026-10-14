@@ -1,0 +1,263 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 13 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a display says which connector it is on
+
+The compositor names a monitor with no EDID make, model or serial after
+its connector ("HDMI-A-1"), as sway does. Only the GPU process reads the
+connector, so:
+
+- CreateDisplaySnapshot sets DisplaySnapshot::domicile_connector from
+  the connector's type and number (domicile/connector_name.cc).
+- DisplaySnapshot's mojom carries it to the browser process, and Clone()
+  keeps it.
+- OzonePlatform::GetDomicileConnectors lends DrmScreen's connectors to
+  the browser, since display::Display has no field for them. Every other
+  platform has none.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ ui/display/mojom/display_snapshot.mojom           |   2 ++
+ ui/display/mojom/display_snapshot_mojom_traits.cc |   6 ++++++
+ ui/display/mojom/display_snapshot_mojom_traits.h  |   5 +++++
+ ui/display/types/display_snapshot.cc              |   1 +
+ ui/display/types/display_snapshot.h               |  11 +++++++++++
+ ui/ozone/platform/drm/BUILD.gn                    |   3 +++
+ ui/ozone/platform/drm/common/drm_util.cc          |   8 +++++++-
+ ui/ozone/platform/drm/ozone_platform_drm.cc       |  19 ++++++++++++++++---
+ ui/ozone/public/ozone_platform.cc                 |   5 +++++
+ ui/ozone/public/ozone_platform.h                  |   5 +++++
+ 10 files changed, 61 insertions(+), 4 deletions(-)
+
+diff --git a/ui/display/mojom/display_snapshot.mojom b/ui/display/mojom/display_snapshot.mojom
+index f286766..79db6d0 100644
+--- a/ui/display/mojom/display_snapshot.mojom
++++ b/ui/display/mojom/display_snapshot.mojom
+@@ -56,4 +56,6 @@
+   // and corresponding lists of modifiers for each one.
+   [EnableIf=is_chromeos]
+   map<uint32, array<uint64>> drm_formats_and_modifiers;
++  // DOMICILE: the kernel's name for the connector ("HDMI-A-1"), or empty.
++  string domicile_connector;
+ };
+diff --git a/ui/display/mojom/display_snapshot_mojom_traits.cc b/ui/display/mojom/display_snapshot_mojom_traits.cc
+index 0bec6d2..84c4908 100644
+--- a/ui/display/mojom/display_snapshot_mojom_traits.cc
++++ b/ui/display/mojom/display_snapshot_mojom_traits.cc
+@@ -186,6 +186,12 @@
+       std::move(edid), current_mode, native_mode, data.product_code(),
+       data.year_of_manufacture(), maximum_cursor_size,
+       variable_refresh_rate_state, drm_formats_and_modifiers);
++
++  std::string domicile_connector;
++  if (!data.ReadDomicileConnector(&domicile_connector)) {
++    return false;
++  }
++  (*out)->set_domicile_connector(domicile_connector);
+   return true;
+ }
+ 
+diff --git a/ui/display/mojom/display_snapshot_mojom_traits.h b/ui/display/mojom/display_snapshot_mojom_traits.h
+index f0225e6..7261ece 100644
+--- a/ui/display/mojom/display_snapshot_mojom_traits.h
++++ b/ui/display/mojom/display_snapshot_mojom_traits.h
+@@ -183,6 +183,11 @@
+     return snapshot->GetDRMFormatsAndModifiers();
+   }
+ 
++  static const std::string& domicile_connector(
++      const std::unique_ptr<display::DisplaySnapshot>& snapshot) {
++    return snapshot->domicile_connector();
++  }
++
+   static bool Read(display::mojom::DisplaySnapshotDataView data,
+                    std::unique_ptr<display::DisplaySnapshot>* out);
+ };
+diff --git a/ui/display/types/display_snapshot.cc b/ui/display/types/display_snapshot.cc
+index f58fecf..5dff7d6 100644
+--- a/ui/display/types/display_snapshot.cc
++++ b/ui/display/types/display_snapshot.cc
+@@ -127,6 +127,7 @@
+   // Set current mode in case it is non-native (because non-native modes are not
+   // cloned).
+   clone->set_current_mode(current_mode_);
++  clone->set_domicile_connector(domicile_connector_);
+ 
+   return clone;
+ }
+diff --git a/ui/display/types/display_snapshot.h b/ui/display/types/display_snapshot.h
+index 44c1bd9..c099867 100644
+--- a/ui/display/types/display_snapshot.h
++++ b/ui/display/types/display_snapshot.h
+@@ -141,6 +141,14 @@
+   }
+   const DrmFormatsAndModifiers& GetDRMFormatsAndModifiers() const {
+     return drm_formats_and_modifiers_;
++  }
++  // DOMICILE: the kernel's name for this display's connector ("HDMI-A-1"), or
++  // empty if the platform did not set it. Domicile's compositor names a
++  // monitor with no EDID name after it. A setter rather than a constructor
++  // argument, so the constructor's many callers are untouched.
++  const std::string& domicile_connector() const { return domicile_connector_; }
++  void set_domicile_connector(const std::string& connector) {
++    domicile_connector_ = connector;
+   }
+ 
+   // Clones display state.
+@@ -281,6 +289,9 @@
+   // A list of supported Linux DRM formats and corresponding lists of modifiers
+   // for each one.
+   const DrmFormatsAndModifiers drm_formats_and_modifiers_;
++
++  // DOMICILE: see `domicile_connector()`.
++  std::string domicile_connector_;
+ };
+ 
+ }  // namespace display
+diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
+index db4abf9..88ae8ac 100644
+--- a/ui/ozone/platform/drm/BUILD.gn
++++ b/ui/ozone/platform/drm/BUILD.gn
+@@ -120,6 +120,8 @@
+     "host/drm_window_host.cc",
+     "host/drm_window_host.h",
+     "host/drm_window_host_manager.cc",
++    "domicile/connector_name.cc",
++    "domicile/connector_name.h",
+     "domicile/drm_cursor_factory.cc",
+     "domicile/drm_cursor_factory.h",
+     "domicile/drm_fullscreen.cc",
+@@ -260,6 +262,7 @@
+     "gpu/mock_drm_modifiers_filter.cc",
+     "gpu/mock_drm_modifiers_filter.h",
+     "gpu/proxy_helpers_unittest.cc",
++    "domicile/connector_name_unittest.cc",
+     "domicile/drm_cursor_factory_unittest.cc",
+     "domicile/drm_fullscreen_unittest.cc",
+     "domicile/drm_input_controller_unittest.cc",
+diff --git a/ui/ozone/platform/drm/common/drm_util.cc b/ui/ozone/platform/drm/common/drm_util.cc
+index f52391d..85e22de 100644
+--- a/ui/ozone/platform/drm/common/drm_util.cc
++++ b/ui/ozone/platform/drm/common/drm_util.cc
+@@ -40,6 +40,7 @@
+ #include "ui/ozone/platform/drm/common/hardware_display_controller_info.h"
+ #include "ui/ozone/platform/drm/common/scoped_drm_types.h"
+ #include "ui/ozone/platform/drm/common/tile_property.h"
++#include "ui/ozone/platform/drm/domicile/connector_name.h"
+ 
+ namespace ui {
+ 
+@@ -1012,7 +1013,7 @@
+     }
+   }
+ 
+-  return std::make_unique<display::DisplaySnapshot>(
++  auto snapshot = std::make_unique<display::DisplaySnapshot>(
+       port_display_id, port_display_id, edid_display_id, connector_index,
+       gfx::Point(), physical_size, type, base_connector_id, path_topology,
+       is_aspect_preserving_scaling, has_overscan, privacy_screen_state,
+@@ -1020,6 +1021,11 @@
+       std::move(modes), panel_orientation, edid, current_mode, native_mode,
+       product_code, year_of_manufacture, maximum_cursor_size,
+       variable_refresh_rate_state, drm_formats_and_modifiers);
++  // DOMICILE: only this process reads the connector. Domicile's compositor
++  // names a monitor with no EDID name after it.
++  snapshot->set_domicile_connector(ConnectorName(
++      info->connector()->connector_type, info->connector()->connector_type_id));
++  return snapshot;
+ }
+ 
+ int GetFourCCFormatForOpaqueFramebuffer(viz::SharedImageFormat format) {
+diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
+index a4698d0..724d754 100644
+--- a/ui/ozone/platform/drm/ozone_platform_drm.cc
++++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
+@@ -9,12 +9,15 @@
+ #include <xf86drm.h>
+ 
+ #include <memory>
++#include <string>
+ #include <utility>
+ 
+ #include "base/check.h"
+ #include "base/command_line.h"
+ #include "base/containers/flat_set.h"
++#include "base/containers/flat_map.h"
+ #include "base/functional/bind.h"
++#include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
+ #include "base/notreached.h"
+ #include "base/task/single_thread_task_runner.h"
+@@ -111,9 +114,10 @@
+     // the display list and lights what comes back; until that answer arrives
+     // DrmScreen reports the displayless fallback its header describes, which
+     // is why this seeds it rather than leaving the list empty.
+-    static_cast<DrmScreen*>(screen)->OnDisplaysChanged({}, {});
+-    modeset_ = std::make_unique<DrmModeset>(CreateNativeDisplayDelegate(),
+-                                            static_cast<DrmScreen*>(screen));
++    screen_ = static_cast<DrmScreen*>(screen);
++    screen_->OnDisplaysChanged({}, {});
++    modeset_ =
++        std::make_unique<DrmModeset>(CreateNativeDisplayDelegate(), screen_);
+     modeset_->Start();
+ 
+     // And the console this is running on, which logind owns. `TakeControl`
+@@ -197,6 +201,12 @@
+ 
+   void SetDomicileCopiedCallback(DomicileCopied copied) override {
+     clipboard_.SetCopiedCallback(std::move(copied));
++  }
++
++  // DOMICILE: asked when the display list changes, so after `InitScreen`.
++  base::flat_map<int64_t, std::string> GetDomicileConnectors() const override {
++    CHECK(screen_) << "domicile: connectors asked for before InitScreen";
++    return screen_->connectors();
+   }
+ 
+   GpuPlatformSupportHost* GetGpuPlatformSupportHost() override {
+@@ -531,6 +541,9 @@
+   // platform exists, which is what a browser whose compositor has not
+   // connected yet should say.
+   DrmClipboard clipboard_;
++  // DOMICILE: the screen `InitScreen` was given. Not owned; display::Screen
++  // owns it.
++  raw_ptr<DrmScreen> screen_ = nullptr;
+   std::unique_ptr<DrmModeset> modeset_;
+   // And after event_factory_ozone_ for the same kind of reason: it observes
+   // that event source for as long as it lives. And after modeset_, which it
+diff --git a/ui/ozone/public/ozone_platform.cc b/ui/ozone/public/ozone_platform.cc
+index 264fadd..581d305 100644
+--- a/ui/ozone/public/ozone_platform.cc
++++ b/ui/ozone/public/ozone_platform.cc
+@@ -135,6 +135,11 @@
+   return nullptr;
+ }
+ 
++base::flat_map<int64_t, std::string> OzonePlatform::GetDomicileConnectors()
++    const {
++  return {};
++}
++
+ PlatformGLEGLUtility* OzonePlatform::GetPlatformGLEGLUtility() {
+   return nullptr;
+ }
+diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
+index 53def9d..e0dbd22 100644
+--- a/ui/ozone/public/ozone_platform.h
++++ b/ui/ozone/public/ozone_platform.h
+@@ -401,6 +401,11 @@
+   using DomicileCopied = base::RepeatingCallback<
+       void(ClipboardBuffer, const DomicileClipboardContents&)>;
+   virtual void SetDomicileCopiedCallback(DomicileCopied copied) {}
++  // DOMICILE: the kernel's name for each display's connector ("HDMI-A-1"), by
++  // `display::Display::id()`, which has no field for it. Domicile's compositor
++  // names a monitor with no EDID name after it. Empty on every platform but
++  // DRM, which alone has connectors.
++  virtual base::flat_map<int64_t, std::string> GetDomicileConnectors() const;
+   virtual PlatformClipboard* GetPlatformClipboard();
+   virtual std::unique_ptr<InputMethod> CreateInputMethod(
+       ImeKeyEventDispatcher* ime_key_event_dispatcher,
+-- 
+2.43.0
+

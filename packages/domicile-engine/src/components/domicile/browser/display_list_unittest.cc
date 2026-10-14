@@ -30,7 +30,7 @@ display::Display Panel() {
 }
 
 TEST(DomicileDisplayListTest, ADisplayIsItsIdAndWhereItIsOnTheDesktop) {
-  const std::vector<mojom::DisplayPtr> list = DisplayListFor({Panel()});
+  const std::vector<mojom::DisplayPtr> list = DisplayListFor({Panel()}, {});
 
   ASSERT_EQ(list.size(), 1u);
   EXPECT_EQ(list[0]->id, 7);
@@ -39,7 +39,7 @@ TEST(DomicileDisplayListTest, ADisplayIsItsIdAndWhereItIsOnTheDesktop) {
 
 // The result must be exact: clients divide the mode by the wl_output size.
 TEST(DomicileDisplayListTest, ThePanelsMillimetersComeBackOutOfItsDensity) {
-  const std::vector<mojom::DisplayPtr> list = DisplayListFor({Panel()});
+  const std::vector<mojom::DisplayPtr> list = DisplayListFor({Panel()}, {});
 
   ASSERT_EQ(list.size(), 1u);
   EXPECT_EQ(list[0]->physical_size_mm, gfx::Size(597, 336));
@@ -47,7 +47,7 @@ TEST(DomicileDisplayListTest, ThePanelsMillimetersComeBackOutOfItsDensity) {
 
 // display::Display uses Hz and wl_output uses mHz.
 TEST(DomicileDisplayListTest, ARefreshRateCrossesInMillihertz) {
-  const std::vector<mojom::DisplayPtr> list = DisplayListFor({Panel()});
+  const std::vector<mojom::DisplayPtr> list = DisplayListFor({Panel()}, {});
 
   ASSERT_EQ(list.size(), 1u);
   EXPECT_EQ(list[0]->refresh_mhz, 59997);
@@ -56,7 +56,7 @@ TEST(DomicileDisplayListTest, ARefreshRateCrossesInMillihertz) {
 // The name lets a user identify a monitor in a layout; the id is not
 // human-readable.
 TEST(DomicileDisplayListTest, APanelsNameCrossesAsItWasBuilt) {
-  const std::vector<mojom::DisplayPtr> list = DisplayListFor({Panel()});
+  const std::vector<mojom::DisplayPtr> list = DisplayListFor({Panel()}, {});
 
   ASSERT_EQ(list.size(), 1u);
   EXPECT_EQ(list[0]->name, "DEL DELL U3219Q 2ZLS413");
@@ -67,10 +67,30 @@ TEST(DomicileDisplayListTest, APanelsNameCrossesAsItWasBuilt) {
 TEST(DomicileDisplayListTest, ADisplayWithNoNameCrossesAsEmpty) {
   const display::Display unnamed(9, gfx::Rect(0, 0, 1280, 800));
 
-  const std::vector<mojom::DisplayPtr> list = DisplayListFor({unnamed});
+  const std::vector<mojom::DisplayPtr> list = DisplayListFor({unnamed}, {});
 
   ASSERT_EQ(list.size(), 1u);
   EXPECT_EQ(list[0]->name, "");
+}
+
+// The compositor names a monitor with no EDID name after its connector.
+TEST(DomicileDisplayListTest, EachDisplayCrossesWithItsConnector) {
+  const display::Display unnamed(9, gfx::Rect(1920, 0, 1280, 800));
+
+  const std::vector<mojom::DisplayPtr> list =
+      DisplayListFor({Panel(), unnamed}, {{7, "eDP-1"}, {9, "HDMI-A-1"}});
+
+  ASSERT_EQ(list.size(), 2u);
+  EXPECT_EQ(list[0]->connector, "eDP-1");
+  EXPECT_EQ(list[1]->connector, "HDMI-A-1");
+}
+
+// A platform with no connectors, such as a nested browser, names none.
+TEST(DomicileDisplayListTest, ADisplayOnNoConnectorCrossesWithNone) {
+  const std::vector<mojom::DisplayPtr> list = DisplayListFor({Panel()}, {});
+
+  ASSERT_EQ(list.size(), 1u);
+  EXPECT_EQ(list[0]->connector, "");
 }
 
 // Projectors and virtual outputs report no density or rate. wl_output uses
@@ -78,7 +98,7 @@ TEST(DomicileDisplayListTest, ADisplayWithNoNameCrossesAsEmpty) {
 TEST(DomicileDisplayListTest, ADisplayThatReportedNeitherSaysSo) {
   const display::Display unknown(9, gfx::Rect(0, 0, 1280, 800));
 
-  const std::vector<mojom::DisplayPtr> list = DisplayListFor({unknown});
+  const std::vector<mojom::DisplayPtr> list = DisplayListFor({unknown}, {});
 
   ASSERT_EQ(list.size(), 1u);
   EXPECT_EQ(list[0]->physical_size_mm, gfx::Size());
