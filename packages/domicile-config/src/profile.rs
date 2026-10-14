@@ -123,12 +123,14 @@ pub struct DisplayPlacement {
     /// monitors report none.
     #[serde(default)]
     pub mode: Option<(u32, u32)>,
-    /// The top-left corner in the profile's coordinate space.
+    /// The top-left corner in the profile's coordinate space. May be negative.
     ///
-    /// May be negative.
+    /// Absent puts the display in a row right of the positioned ones, in
+    /// profile order and level with their top. The row uses logical widths
+    /// and follows each monitor's current mode.
     // [`Layout`] normalizes it; these values do not leave this crate.
     #[serde(default)]
-    pub position: (i32, i32),
+    pub position: Option<(i32, i32)>,
     /// Device pixels per logical pixel.
     ///
     /// Fractional, because real scales are: 1.5 on a 2880x1920 panel gives a
@@ -320,14 +322,18 @@ impl Layout {
         if let Some((placement, display)) = misstated(profile, connected) {
             return Err(unavailable(profile, placement, display));
         }
-        let placed = profile
+        let enabled = profile
             .displays
             .iter()
             .filter(|placement| placement.enabled)
+            .collect::<Vec<_>>();
+        let placed = enabled
+            .iter()
             .map(|placement| placed(profile, placement, connected))
             .collect::<Result<Vec<_>, _>>()?;
         // Parsing refuses a profile that enables no display.
         assert!(!placed.is_empty(), "a profile enables at least one display");
+        let placed = beside(profile, &enabled, placed)?;
         let near = (
             nearest(&placed, |display| display.position.0),
             nearest(&placed, |display| display.position.1),
@@ -430,7 +436,8 @@ pub struct Placed {
 
 /// One display of the profile, at the matched monitor's mode.
 ///
-/// Positions are still the profile's; [`Layout::of`] normalizes them.
+/// Positions are still the profile's, and the origin for an entry without
+/// one; [`beside`] places those and [`Layout::of`] normalizes them all.
 fn placed(
     profile: &Profile,
     placement: &DisplayPlacement,
@@ -444,13 +451,58 @@ fn placed(
         // The output name, not what the config wrote: clients already have a
         // `wl_output` under this name.
         name: display.name.clone(),
-        position: placement.position,
+        position: placement.position.unwrap_or_default(),
         mode,
         logical: logical(mode, placement.transform, placement.scale)
             .ok_or_else(|| vanished(profile, placement, mode))?,
         scale: placement.scale,
         transform: placement.transform,
     })
+}
+
+/// `placed`, with each display the profile gives no position put in a row
+/// right of the positioned ones.
+///
+/// The row starts at the positioned displays' right edge, level with their
+/// top, as the engine puts unnamed connectors past the named ones. With none
+/// positioned it starts at the origin. `enabled` and `placed` are in the same
+/// order.
+fn beside(
+    profile: &Profile,
+    enabled: &[&DisplayPlacement],
+    placed: Vec<Placed>,
+) -> Result<Vec<Placed>, ConfigError> {
+    let positioned = || {
+        enabled
+            .iter()
+            .zip(&placed)
+            .filter(|(placement, _)| placement.position.is_some())
+            .map(|(_, display)| display)
+    };
+    // Widened like `extent`: a right edge can exceed `i32`.
+    let mut edge = positioned()
+        .map(|display| i64::from(display.position.0) + i64::from(display.logical.0))
+        .max()
+        .unwrap_or(0);
+    let top = positioned()
+        .map(|display| display.position.1)
+        .min()
+        .unwrap_or(0);
+
+    let mut arranged = Vec::with_capacity(enabled.len());
+    for (placement, display) in enabled.iter().zip(placed) {
+        if placement.position.is_some() {
+            arranged.push(display);
+        } else {
+            let start = i32::try_from(edge).map_err(|_| crowded(profile, &display))?;
+            edge += i64::from(display.logical.0);
+            arranged.push(Placed {
+                position: (start, top),
+                ..display
+            });
+        }
+    }
+    Ok(arranged)
 }
 
 /// Each connector's origin on the engine's own desktop, in physical pixels.
@@ -622,6 +674,15 @@ fn unreachable(profile: &Profile, furthest: &Placed) -> ConfigError {
         "output profile {} reaches {} at ({}, {}), which puts the desktop's far \
          corner beyond what a position on one desktop can describe",
         profile.name, furthest.name, furthest.position.0, furthest.position.1
+    ))
+}
+
+/// The error for a display with no position left right of the positioned ones.
+fn crowded(profile: &Profile, display: &Placed) -> ConfigError {
+    ConfigError::Validation(format!(
+        "output profile {} has no position for {}: its positioned displays end \
+         beyond what a corner of one desktop can describe",
+        profile.name, display.name
     ))
 }
 

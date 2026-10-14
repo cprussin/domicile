@@ -326,6 +326,52 @@ describe(App, () => {
         ]);
       });
     });
+
+    it("writes a profile monitor's position at the origin", async () => {
+      // A profile monitor with no position goes right of the others, so
+      // `[0, 0]` has to be written out.
+      const { host, user } = await renderApp("Displays", {
+        config: {
+          output: {
+            profiles: [{ displays: [{ display: "drm-1" }], name: "laptop" }],
+          },
+        },
+      });
+      const x = screen.getByRole("textbox", { name: "drm-1 x" });
+      expect(x).toHaveValue("");
+      await user.type(x, "0");
+      await user.tab();
+      await waitFor(() => {
+        expect(written(host.writes).output.profiles).toEqual([
+          {
+            displays: [{ display: "drm-1", position: [0, 0] }],
+            name: "laptop",
+          },
+        ]);
+      });
+    });
+
+    it("leaves a cleared profile monitor for the desktop to place", async () => {
+      const { host, user } = await renderApp("Displays", {
+        config: {
+          output: {
+            profiles: [
+              {
+                displays: [{ display: "drm-1", position: [1920, 0] }],
+                name: "laptop",
+              },
+            ],
+          },
+        },
+      });
+      await user.clear(screen.getByRole("textbox", { name: "drm-1 x" }));
+      await user.tab();
+      await waitFor(() => {
+        expect(written(host.writes).output.profiles).toEqual([
+          { displays: [{ display: "drm-1" }], name: "laptop" },
+        ]);
+      });
+    });
   });
 
   describe("extensions", () => {

@@ -32,6 +32,7 @@ const ROTATIONS = [
 const WHOLE = { integer: true, positive: false } as const;
 const COUNT = { integer: true, positive: true } as const;
 const SCALE = { integer: false, positive: true } as const;
+const ORIGIN = [0, 0] as const;
 
 /** `output`: the profiles that place monitors, and described displays. */
 export const DisplaysPage = ({
@@ -241,6 +242,7 @@ const PlacementRow = ({ editor, path, placement }: PlacementRowProps) => {
       />
       <PositionSetting
         editor={editor}
+        fallback={undefined}
         name={name}
         path={[...path, "position"]}
         position={placement.position}
@@ -308,6 +310,7 @@ const DescribedDisplay = ({
       />
       <PositionSetting
         editor={editor}
+        fallback={ORIGIN}
         name={name}
         path={[...path, "position"]}
         position={display.position}
@@ -336,31 +339,54 @@ const DescribedDisplay = ({
   );
 };
 
+type Point = readonly [number, number];
+
 type PositionSettingProps = {
   editor: ConfigEditor;
   name: string;
   path: ConfigPath;
-  position: readonly [number, number];
+  position: Point | undefined;
+  /**
+   * The default, which is written as no value. Without one, a cleared field
+   * writes no position, and the desktop places the display.
+   */
+  fallback: Point | undefined;
 };
 
-/** A position's x and y, written together; `[0, 0]` is the default. */
+/** A position's x and y, written together. */
 const PositionSetting = ({
   editor,
+  fallback,
   name,
   path,
   position,
 }: PositionSettingProps) => {
-  const [x, y] = position;
-  const commit = (next: [number, number]) => {
-    editor.set(path, next[0] === 0 && next[1] === 0 ? undefined : next);
+  const [x, y] = position ?? [undefined, undefined];
+  const commit = (next: Point | undefined) => {
+    editor.set(
+      path,
+      next === undefined ||
+        (fallback !== undefined &&
+          next[0] === fallback[0] &&
+          next[1] === fallback[1])
+        ? undefined
+        : next,
+    );
   };
+  const onEmpty =
+    fallback === undefined
+      ? () => {
+          commit(undefined);
+        }
+      : undefined;
   return (
     <>
       <NumberInput
         editor={editor}
         label={`${name} x`}
+        onEmpty={onEmpty}
         onNumber={(value) => {
-          commit([value, y]);
+          commit([value, y ?? 0]);
         }}
         rule={WHOLE}
         value={x}
@@ -368,8 +394,9 @@ const PositionSetting = ({
       <NumberInput
         editor={editor}
         label={`${name} y`}
+        onEmpty={onEmpty}
         onNumber={(value) => {
-          commit([x, value]);
+          commit([x ?? 0, value]);
         }}
         rule={WHOLE}
         value={y}
@@ -412,14 +439,18 @@ type NumberInputProps = {
   editor: ConfigEditor;
   label: string;
   rule: NumberRule;
-  value: number;
+  /** `undefined` shows an empty field. */
+  value: number | undefined;
   onNumber: (value: number) => void;
+  /** Takes a cleared field. Without it, an empty field is refused. */
+  onEmpty?: (() => void) | undefined;
 };
 
 /** A narrow text field that takes a number, reporting one it refuses. */
 const NumberInput = ({
   editor,
   label,
+  onEmpty,
   onNumber,
   rule,
   value,
@@ -427,19 +458,25 @@ const NumberInput = ({
   <TextSetting
     disabled={editor.readOnly !== undefined}
     label={label}
-    onCommit={(text) =>
-      parseNumber(text, rule).match({
-        Err: (why) => {
-          editor.report(`Not a ${label}`)(why);
-          return false;
-        },
-        Ok: (number) => {
-          onNumber(number);
-          return true;
-        },
-      })
-    }
-    value={value.toString()}
+    onCommit={(text) => {
+      if (onEmpty !== undefined && text.trim() === "") {
+        onEmpty();
+        return true;
+      } else {
+        return parseNumber(text, rule).match({
+          Err: (why) => {
+            editor.report(`Not a ${label}`)(why);
+            return false;
+          },
+          Ok: (number) => {
+            onNumber(number);
+            return true;
+          },
+        });
+      }
+    }}
+    placeholder={onEmpty === undefined ? undefined : "Auto"}
+    value={value?.toString() ?? ""}
     width={16}
   />
 );

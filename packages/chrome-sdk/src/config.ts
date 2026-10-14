@@ -104,11 +104,13 @@ export type DisplayPlacement = {
    */
   mode?: [number, number] | null;
   /**
-   * The top-left corner in the profile's coordinate space.
+   * The top-left corner in the profile's coordinate space. May be negative.
    *
-   * May be negative.
+   * Absent puts the display in a row right of the positioned ones, in
+   * profile order and level with their top. The row uses logical widths
+   * and follows each monitor's current mode.
    */
-  position?: [number, number];
+  position?: [number, number] | null;
   /**
    * Device pixels per logical pixel.
    *

@@ -97,8 +97,8 @@
           "type": ["array", "null"]
         },
         "position": {
-          "default": [0, 0],
-          "description": "The top-left corner in the profile's coordinate space.\n\nMay be negative.",
+          "default": null,
+          "description": "The top-left corner in the profile's coordinate space. May be negative.\n\nAbsent puts the display in a row right of the positioned ones, in\nprofile order and level with their top. The row uses logical widths\nand follows each monitor's current mode.",
           "maxItems": 2,
           "minItems": 2,
           "prefixItems": [
@@ -111,7 +111,7 @@
               "type": "integer"
             }
           ],
-          "type": "array"
+          "type": ["array", "null"]
         },
         "scale": {
           "default": 1.0,

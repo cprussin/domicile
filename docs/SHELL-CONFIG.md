@@ -325,7 +325,8 @@ Shell side: [SHELL-DESKTOP-EVENTS.md](SHELL-DESKTOP-EVENTS.md#theme).
 ```
 
 Each profile entry sets `enabled`, `position`, a fractional `scale`, a
-`transform`, and optionally `mode`.
+`transform`, and optionally `mode`. An entry without `position` goes right of
+the positioned ones, in profile order.
 
 ### Naming a display
 
