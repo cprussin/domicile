@@ -48,6 +48,9 @@ pub enum IconKind {
 }
 
 impl IconKind {
+    /// Every kind.
+    pub const ALL: [IconKind; 2] = [IconKind::Png, IconKind::Svg];
+
     /// The file extension, which tells the launcher the format.
     pub fn extension(self) -> &'static str {
         match self {

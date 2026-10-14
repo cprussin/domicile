@@ -3,12 +3,22 @@
 
 use std::path::Path;
 
-/// The desktop entry for an app called `name` that starts at `start_url`.
+/// The key naming the address `install-app` was given, so `uninstall-app`
+/// takes the same one.
+const INSTALLED_FROM: &str = "X-Domicile-Installed-From=";
+
+/// The desktop entry for an app called `name` that starts at `start_url`,
+/// installed from `installed_from`.
 ///
 /// `icon` is an absolute path. Values are escaped per the Desktop Entry
 /// Specification, so a site's name or address cannot add a line or a field
 /// code.
-pub fn desktop_entry(name: &str, start_url: &str, icon: Option<&Path>) -> String {
+pub fn desktop_entry(
+    name: &str,
+    start_url: &str,
+    icon: Option<&Path>,
+    installed_from: &str,
+) -> String {
     let icon = icon
         .map(|icon| format!("Icon={}\n", escaped(&icon.to_string_lossy())))
         .unwrap_or_default();
@@ -17,10 +27,21 @@ pub fn desktop_entry(name: &str, start_url: &str, icon: Option<&Path>) -> String
          Type=Application\n\
          Name={}\n\
          {icon}\
-         Exec=domicile open-app {}\n",
+         Exec=domicile open-app {}\n\
+         {INSTALLED_FROM}{}\n",
         escaped(name),
         escaped(&quoted(start_url)).replace('%', "%%"),
+        escaped(installed_from),
     )
+}
+
+/// The address `entry` was installed from, or `None` for an entry from
+/// before `install-app` wrote one.
+pub fn installed_from(entry: &str) -> Option<String> {
+    entry
+        .lines()
+        .find_map(|line| line.strip_prefix(INSTALLED_FROM))
+        .map(unescaped)
 }
 
 /// The file name, without `.desktop`, for an app that starts at `start_url`:
@@ -63,4 +84,23 @@ fn escaped(value: &str) -> String {
             _ => c.to_string(),
         })
         .collect()
+}
+
+/// `value` with [`escaped`]'s escapes undone.
+fn unescaped(value: &str) -> String {
+    let mut chars = value.chars();
+    let mut out = String::new();
+    while let Some(c) = chars.next() {
+        out.push(match c {
+            '\\' => match chars.next() {
+                Some('n') => '\n',
+                Some('t') => '\t',
+                Some('r') => '\r',
+                Some(other) => other,
+                None => '\\',
+            },
+            _ => c,
+        });
+    }
+    out
 }

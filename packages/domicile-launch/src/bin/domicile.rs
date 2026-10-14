@@ -58,6 +58,7 @@ use domicile_launch::shell_source::{shell_source, ShellSource};
 use domicile_launch::spawn::{compositor, engine, Runtime};
 use domicile_launch::splash::{lay_out, tell, when_the_engine_answers, Progress};
 use domicile_launch::supervise::{catch_interrupts, interrupted, Running, ASK_EVERY};
+use domicile_launch::uninstall_app::uninstall_app;
 
 /// How long each startup milestone may take. A debug build on a loaded
 /// machine takes seconds.
@@ -131,6 +132,7 @@ fn run() -> Result<ExitCode, String> {
         Invocation::Check { config } => check(&config).map(|()| ExitCode::SUCCESS),
         Invocation::Power { power } => powered(power),
         Invocation::InstallApp { url } => installed(&url),
+        Invocation::UninstallApp { url } => uninstalled(&url),
     }
 }
 
@@ -156,6 +158,16 @@ fn installed(url: &str) -> Result<ExitCode, String> {
         .ok_or("nowhere to install apps -- neither XDG_DATA_HOME nor HOME is set")?;
     let entry = install_app(url, &home, &curl).map_err(|why| why.to_string())?;
     println!("{}", entry.display());
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Removes the app installed from or opening `url` and says which files went.
+fn uninstalled(url: &str) -> Result<ExitCode, String> {
+    let home = data_home(&|name| std::env::var(name).ok())
+        .ok_or("no apps to uninstall -- neither XDG_DATA_HOME nor HOME is set")?;
+    for removed in uninstall_app(url, &home).map_err(|why| why.to_string())? {
+        println!("removed {}", removed.display());
+    }
     Ok(ExitCode::SUCCESS)
 }
 

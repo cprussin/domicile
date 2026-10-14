@@ -78,6 +78,7 @@ Settings live in `~/.config/domicile/domicile.json` (or `.ts`/`.js`). Reference:
   `domicile open-app <url>` opens it as an app, without an address bar
   ([WEB-APPS.md](architecture/WEB-APPS.md)). `domicile install-app <url>`
   adds a site to your applications from its web app manifest.
+  `domicile uninstall-app <url>` removes it, given the same address.
 
 ## Screenshots
 

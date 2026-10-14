@@ -32,6 +32,7 @@ domicile open-url <url>           # open a URL in the running desktop (BROWSER)
 domicile open-app <url>           # open a URL as an app: no address bar (WEB-APPS.md)
 domicile run-app <module>         # run an app module in an app window (APP-MODULES.md)
 domicile install-app <url>        # write a desktop entry from the site's web app manifest; needs no desktop
+domicile uninstall-app <url>      # remove the entry and icon install-app wrote, given its address or start URL
 domicile screenshot               # the shell's interactive screenshot (Print in manganese)
 domicile screenshot <file>        # write a PNG of the running desk
 domicile send-shell <word>…       # run a shell command, as a SendShell keybinding does
@@ -80,9 +81,10 @@ temp directory. The modules that spawn processes or bind sockets stay thin.
 | `config_watch` | no | watches the config's directory and reports edits |
 | `xdg_open` | yes | `xdg-open` inside a desktop: http(s) goes to `open-url`, anything else to the next `xdg-open` on `PATH` |
 | `install_app` | no | `install-app`: fetches the page, its manifest and icon through an injected fetch, and writes the entry and icon under the data home |
+| `uninstall_app` | no | `uninstall-app`: removes the entry and icons named after the start URL, or whose entry was installed from the URL, without the network |
 | `web_app` | yes | the page's manifest link, and the name, start URL and icon a manifest gives |
 | `web_address` | yes | resolves a manifest's and its icons' addresses against where they were found; origins |
-| `desktop_entry` | yes | the desktop entry `install-app` writes, escaped, and its file name |
+| `desktop_entry` | yes | the desktop entry `install-app` writes, escaped, its file name, and the address it was installed from |
 | `app_entry` | no | the module `run-app` names: its canonical directory and file name |
 | `address` | yes | what `open-url` sends the engine: a URL as given, or a path as a `file://` URL relative to the caller's directory |
 | `spawn` | yes | the engine and compositor commands as data, so flag lists are testable |

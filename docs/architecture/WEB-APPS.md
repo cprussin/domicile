@@ -49,8 +49,20 @@ The home-manager module writes one for each of `programs.domicile.webApps`
   `$XDG_DATA_HOME/domicile/app-icons/`.
 - **Entry:** `$XDG_DATA_HOME/applications/domicile-app-<host-and-path>.desktop`,
   named after the start URL, so installing again replaces it. Its path is
-  printed.
+  printed. `X-Domicile-Installed-From` records `<url>` as given.
 - **Fetching:** the `curl` on `PATH`. The desktop's `PATH` has one.
+
+`domicile uninstall-app <url>` removes that entry and its icon, without the
+network:
+
+- **`<url>`** is the address given to `install-app`, or the start URL (the
+  address after `domicile open-app` in the entry). Entries installed before
+  `X-Domicile-Installed-From` existed take only the start URL.
+- **Found by:** the file name from `<url>` as a start URL; else each
+  `domicile-app-*.desktop` whose `X-Domicile-Installed-From` is `<url>`.
+- **Removed:** only those `<stem>.desktop` and `<stem>.{png,svg}` in the two
+  directories above. Each path is printed.
+- **Nothing there** exits non-zero, naming the URL.
 
 An app that needs the system (files, native programs, D-Bus) is an app
 module, as Settings is ([APP-MODULES.md](APP-MODULES.md)): its desktop entry
