@@ -1,4 +1,5 @@
-import { CoffeeIcon } from "@phosphor-icons/react/dist/ssr/Coffee";
+import { EyeIcon } from "@phosphor-icons/react/dist/ssr/Eye";
+import { EyeClosedIcon } from "@phosphor-icons/react/dist/ssr/EyeClosed";
 import { useSyncExternalStore } from "react";
 
 import { cva } from "../styled-system/css";
@@ -11,8 +12,8 @@ type Props = {
 };
 
 /**
- * A coffee cup that keeps the screens on: outlined and dimmed while they blank
- * when idle, filled on a lit circle while held. Disabled until the portal answers.
+ * An eye that keeps the screens on: closed and dimmed while they blank when
+ * idle, open on a lit circle while held. Disabled until the portal answers.
  */
 export const IdleInhibitorToggle = ({ inhibitor }: Props) => {
   const at = useSyncExternalStore(inhibitor.subscribe, inhibitor.current);
@@ -31,7 +32,11 @@ export const IdleInhibitorToggle = ({ inhibitor }: Props) => {
       title={label}
       type="button"
     >
-      <CoffeeIcon size={15} weight={held ? "fill" : "bold"} />
+      {held ? (
+        <EyeIcon size={15} weight="bold" />
+      ) : (
+        <EyeClosedIcon size={15} weight="bold" />
+      )}
     </button>
   );
 };

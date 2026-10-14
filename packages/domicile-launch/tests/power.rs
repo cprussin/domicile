@@ -102,7 +102,7 @@ fn power_off_asks_in_the_access_dialog() {
             ),
             app_id: SHELL_APP_ID.to_string(),
             title: "Shut down?".to_string(),
-            subtitle: String::new(),
+            subtitle: "Are you sure you want to shut down? Unsaved work is lost.".to_string(),
             grant: "Shut down".to_string(),
             deny: "Cancel".to_string(),
             destructive: true,
@@ -117,6 +117,10 @@ fn reboot_asks_its_own_question() {
     let asked = asked.lock().unwrap();
     assert!(asked[0].handle.contains("/launcher/reboot_"));
     assert_eq!(asked[0].title, "Reboot?");
+    assert_eq!(
+        asked[0].subtitle,
+        "Are you sure you want to reboot? Unsaved work is lost."
+    );
     assert_eq!(asked[0].grant, "Reboot");
 }
 

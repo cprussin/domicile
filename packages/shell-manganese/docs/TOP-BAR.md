@@ -115,10 +115,11 @@ Every bar and the lock screen share one watch per system readout. See
   is on the system bus first in that order
   ([`@domicile-desktop/system-network`](../../system-network/README.md)).
   iwd and wpa_supplicant report Wi-Fi only.
-- Wi-Fi: a signal icon graded strong, fair or weak by thirds, and the SSID.
-  Wired: a network icon and `Wired`. Any other kind, such as a VPN: a network
-  icon and its name. No connection: a crossed-out Wi-Fi icon and `Offline`.
-- One fixed width. A long name is cut short with an ellipsis.
+- An icon only. Wi-Fi: a signal icon graded strong, fair or weak by thirds.
+  Wired, or any other kind such as a VPN: a network icon. No connection: a
+  crossed-out Wi-Fi icon.
+- Hover for the kind and the SSID or VPN name, e.g.
+  `Wi-Fi, strong signal: Home`.
 - Dims with no connection. Turns `warning` when NetworkManager reports limited
   connectivity or a captive portal.
 - Hidden without any of the three.
@@ -153,8 +154,9 @@ Every bar and the lock screen share one watch per system readout. See
 
 ## Battery
 
-- A bolt when on AC, a meter filled to the level, and the percentage.
-- Always as wide as a charging `100%`, centered in that width.
+- A meter filled to the level, with a bolt in it when on AC, and the
+  percentage.
+- Always as wide as `100%`.
 - At 10% or less it turns `danger`. At 5% or less it also flashes
   (`chargeFlashing`). Both thresholds use the displayed percentage. Neither
   applies on AC.
@@ -164,13 +166,12 @@ Every bar and the lock screen share one watch per system readout. See
 
 ## Idle inhibitor
 
-- A coffee cup. Click to keep the screens from blanking or locking on idle;
-  click again to let them. While on, the cup is filled on a lit circle; while
-  off, it is dimmed.
+- An eye: closed and dimmed while the screens blank and lock on idle, open on a
+  lit circle while they are kept on. Click to toggle.
 - Every bar shows the same inhibitor. It is disabled until the portal answers.
 - Held through the Inhibit portal's idle flag, since the shell has no Wayland
   surface ([IDLE.md](../../../docs/IDLE.md#idle-inhibitors)).
-- A shell reload lets go of it, and the cup starts outlined.
+- A shell reload lets go of it, and the eye starts closed.
 - Not on the lock screen.
 
 ## Brightness
@@ -245,7 +246,7 @@ read with the Google sign-in of the browser windows' profile. Not in
 - Read every minute, and not while the desktop is locked. Counts are
   conversations, as Gmail's inbox counts them.
 - How it reads:
-  - The Atom feed (`/mail/u/<email>/feed/atom`) says whether the profile is
+  - The Atom feed (`/mail/feed/atom?authuser=<email>`) says whether the profile is
     signed in to the address, and the unread count.
   - The Gmail API's INBOX label, through `clients6.google.com` with Google's
     cookie authentication (`SAPISIDHASH`), gives the total. This is

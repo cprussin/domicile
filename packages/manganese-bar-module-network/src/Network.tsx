@@ -17,8 +17,7 @@ import type { Wifi } from "@domicile-desktop/system-network/wifi";
 import { NetworkIcon } from "@phosphor-icons/react/dist/ssr/Network";
 import { WifiSlashIcon } from "@phosphor-icons/react/dist/ssr/WifiSlash";
 import { useMemo } from "react";
-import { css, cva } from "../styled-system/css";
-import { hstack } from "../styled-system/patterns";
+import { cva } from "../styled-system/css";
 import { signalOf } from "./signal";
 import { WifiPanel } from "./WifiPanel";
 import { WifiSignalIcon } from "./WifiSignalIcon";
@@ -37,12 +36,12 @@ type Props = {
 };
 
 /**
- * The network item on the bar: an icon for the primary connection, and the
- * Wi-Fi network's or VPN's name, or the link's kind. Dims with no link, and
- * turns `warning` when the link does not reach the internet. A click opens the {@link WifiPanel}.
+ * The network item on the bar: an icon for the primary connection, named on
+ * hover with the Wi-Fi network or VPN. Dims with no link, and turns `warning`
+ * when the link does not reach the internet. A click opens the
+ * {@link WifiPanel}.
  *
- * Holds one width so the items beside it never move; a long name is cut
- * short.
+ * An icon alone, so its width never changes with the name.
  *
  * Draws nothing until the network service answers, and nothing on an error,
  * so a machine without one shows no item.
@@ -77,7 +76,10 @@ const Item = ({
   const online =
     connectivity !== Connectivity.Limited &&
     connectivity !== Connectivity.Portal;
-  const label = online ? describe(link) : `${describe(link)}, no internet`;
+  const name = nameOf(link);
+  const named =
+    name === undefined ? describe(link) : `${describe(link)}: ${name}`;
+  const label = online ? named : `${named}, no internet`;
   return (
     <Popover
       align="center"
@@ -89,10 +91,10 @@ const Item = ({
             linked: link.kind !== LinkKind.None,
             online,
           })}
+          title={label}
           type="button"
         >
           <LinkIcon label={label} link={link} />
-          <Name link={link} />
         </button>
       }
       wide
@@ -129,43 +131,25 @@ const LinkIcon = ({ label, link }: { label: string; link: Link }) => {
   }
 };
 
-/**
- * The Wi-Fi network or VPN, or else the link's kind, so the item is never an
- * icon alone in a wide button. The kind repeats the icon's name, so screen
- * readers skip it.
- */
-const Name = ({ link }: { link: Link }) => {
-  const name = nameOf(link);
-  return name === undefined ? (
-    <span aria-hidden className={nameStyles}>
-      {describe(link)}
-    </span>
-  ) : (
-    <span className={nameStyles}>{name}</span>
-  );
-};
-
-// Matches the volume item's button, at a fixed width.
+// Matches the volume item's button.
 const triggerStyles = cva({
-  base: hstack.raw({
+  base: {
     _hover: {
       backgroundColor: "color-mix(in oklab, white 16%, transparent)",
     },
+    alignItems: "center",
     backgroundColor: "transparent",
     blockSize: 7,
     borderRadius: "full",
     borderStyle: "none",
     cursor: "pointer",
+    display: "inline-flex",
     flexShrink: 0,
-    font: "inherit",
-    gap: 1,
-    // Fits a name of about a dozen letters.
-    inlineSize: 24,
+    inlineSize: 7,
     justifyContent: "center",
-    paddingBlock: 0,
-    paddingInline: 1.5,
+    padding: 0,
     transition: "background-color {durations.fast} {easings.default}",
-  }),
+  },
   variants: {
     linked: {
       false: { opacity: "disabled" },
@@ -176,15 +160,6 @@ const triggerStyles = cva({
       true: { color: "inherit" },
     },
   },
-});
-
-const nameStyles = css({
-  // 10px to match the bar's other figures; no font-size token fits.
-  fontSize: "0.625rem",
-  minInlineSize: 0,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
 });
 
 /** What the icon shows, for its accessible name. */

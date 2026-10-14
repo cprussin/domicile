@@ -54,7 +54,7 @@ in a browser window, with no sign-in of its own.
 
 ```ts
 const inbox = await domicile.fetchWithCookies(
-  "https://mail.google.com/mail/u/me@gmail.com/feed/atom",
+  "https://mail.google.com/mail/feed/atom?authuser=me%40gmail.com",
   [],
   null,
 );

@@ -8,7 +8,7 @@ import { Inbox } from "./inbox";
 import { readInbox } from "./read-inbox";
 
 const EMAIL = "me@example.com";
-const FEED = "https://mail.google.com/mail/u/me@example.com/feed/atom";
+const FEED = "https://mail.google.com/mail/feed/atom?authuser=me%40example.com";
 const LABEL = "https://clients6.google.com/gmail/v1/users/me/labels/INBOX";
 
 /** A feed as Gmail serves it, with `unread` unread conversations. */
