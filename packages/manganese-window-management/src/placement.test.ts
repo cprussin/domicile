@@ -245,11 +245,38 @@ describe("placementsOf", () => {
       WindowAction.FullscreenToggled(false),
     );
 
+    expect(placementFor(state, "editor")?.bare).toBe(false);
     expect(placementFor(state, "editor")?.surface).toMatchObject({
       height: 1080 - TITLE_BAR + SURFACE_TUCK,
       width: 1920,
       x: 0,
       y: TITLE_BAR - SURFACE_TUCK,
+    });
+  });
+
+  // A fullscreen video covers its tab too, as in a browser.
+  it("fills the screen without a bar for a fullscreen page", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.PageFullscreened(appWindowId("editor"), true),
+    );
+
+    expect(placementFor(state, "editor")).toMatchObject({
+      bare: true,
+      surface: GEOMETRY.screen,
+    });
+  });
+
+  it("keeps a fullscreen page bare over every screen", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.PageFullscreened(appWindowId("editor"), true),
+      WindowAction.FullscreenToggled(true),
+    );
+
+    expect(placementFor(state, "editor")).toMatchObject({
+      bare: true,
+      surface: GEOMETRY.desktop,
     });
   });
 
