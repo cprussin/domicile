@@ -120,8 +120,8 @@ Every bar and the lock screen share one watch per system readout. See
   crossed-out Wi-Fi icon.
 - Hover for the kind and the SSID or VPN name, e.g.
   `Wi-Fi, strong signal: Home`.
-- Turns `warning` when NetworkManager reports limited connectivity or a
-  captive portal.
+- Dims with no connection. Turns `warning` when NetworkManager reports limited
+  connectivity or a captive portal.
 - Hidden without any of the three.
 - Click for the Wi-Fi panel, from NetworkManager or iwd. With wpa_supplicant
   alone it says there is no Wi-Fi device.
@@ -138,8 +138,8 @@ Every bar and the lock screen share one watch per system readout. See
 ## Bluetooth
 
 - From BlueZ ([`@domicile-desktop/system-bluetooth`](../../system-bluetooth/README.md)).
-- An icon for off, on, or on with a device connected. Its name and tooltip
-  list the connected devices, each with its battery, e.g.
+- An icon for off, on, or on with a device connected. Dims while off. Its name
+  and tooltip list the connected devices, each with its battery, e.g.
   `Bluetooth: WH-1000XM4 (80%)`.
 - Click for the Bluetooth panel:
   - A switch turns every adapter on or off.
@@ -166,8 +166,8 @@ Every bar and the lock screen share one watch per system readout. See
 
 ## Idle inhibitor
 
-- An eye: closed while the screens blank and lock on idle, open on a lit
-  circle while they are kept on. Click to toggle.
+- An eye: closed and dimmed while the screens blank and lock on idle, open on a
+  lit circle while they are kept on. Click to toggle.
 - Every bar shows the same inhibitor. It is disabled until the portal answers.
 - Held through the Inhibit portal's idle flag, since the shell has no Wayland
   surface ([IDLE.md](../../../docs/IDLE.md#idle-inhibitors)).
@@ -186,10 +186,11 @@ Every bar and the lock screen share one watch per system readout. See
 
 ## Volume
 
-- A speaker icon with zero, one or two waves, or a cross when muted. Hidden
-  with no sound server.
+- A speaker icon with zero, one (under 50%) or two waves, or a cross when
+  muted. Dims while muted. Hidden with no sound server.
 - Scroll over it to step the output by 5%. Click for the mixer:
-  - Default output and default input, each with mute, slider, level meter and
+  - Default output and default input, each with mute, slider, level meter (gray
+    while muted) and
     port, a quiet `Select` after its name. These are the server's defaults;
     with no default, the first output and the first input that isn't a
     monitor.

@@ -1,8 +1,8 @@
 import { Slider } from "@domicile-desktop/component-library/Slider";
 import { MicrophoneIcon } from "@phosphor-icons/react/dist/ssr/Microphone";
 import { MicrophoneSlashIcon } from "@phosphor-icons/react/dist/ssr/MicrophoneSlash";
-import { SpeakerSimpleHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleHigh";
-import { SpeakerSimpleXIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleX";
+import { SpeakerHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerHigh";
+import { SpeakerXIcon } from "@phosphor-icons/react/dist/ssr/SpeakerX";
 import { useState } from "react";
 
 import { css } from "../styled-system/css";
@@ -70,6 +70,7 @@ export const Level = ({
       <Slider
         label={label}
         level={meter}
+        levelMuted={muted}
         max={100}
         min={0}
         onValueChange={(value) => {
@@ -97,11 +98,7 @@ const MuteIcon = ({
 }) => {
   switch (direction) {
     case "output":
-      return muted ? (
-        <SpeakerSimpleXIcon size={14} />
-      ) : (
-        <SpeakerSimpleHighIcon size={14} />
-      );
+      return muted ? <SpeakerXIcon size={14} /> : <SpeakerHighIcon size={14} />;
     case "input":
       return muted ? (
         <MicrophoneSlashIcon size={14} />

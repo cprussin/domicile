@@ -2,13 +2,13 @@ import { Popover } from "@domicile-desktop/component-library/Popover";
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
 import type { Audio, AudioDevice } from "@domicile-desktop/system-audio/audio";
-import { SpeakerSimpleHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleHigh";
-import { SpeakerSimpleLowIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleLow";
-import { SpeakerSimpleNoneIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleNone";
-import { SpeakerSimpleSlashIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleSlash";
-import { SpeakerSimpleXIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSimpleX";
+import { SpeakerHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerHigh";
+import { SpeakerLowIcon } from "@phosphor-icons/react/dist/ssr/SpeakerLow";
+import { SpeakerNoneIcon } from "@phosphor-icons/react/dist/ssr/SpeakerNone";
+import { SpeakerSlashIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSlash";
+import { SpeakerXIcon } from "@phosphor-icons/react/dist/ssr/SpeakerX";
 import type { WheelEvent } from "react";
-import { css } from "../styled-system/css";
+import { css, cva } from "../styled-system/css";
 import { ask } from "./ask";
 import type { SoundControls } from "./desk-sound";
 import { Level } from "./Level";
@@ -31,8 +31,8 @@ type Props = {
  * Top bar volume item: a speaker icon that opens the {@link Mixer}. The wheel
  * over the icon changes the default output's volume.
  *
- * Renders nothing until the server reports, so it stays hidden without a
- * sound server. The mixer meters only while open, because metering a
+ * Dims while the default output is muted. Renders nothing until the server
+ * reports, so it stays hidden without a sound server. The mixer meters only while open, because metering a
  * microphone records it.
  *
  * On a locked desktop the panel holds only the default output's volume and
@@ -53,7 +53,7 @@ export const Volume = ({ audio: watch, locked = false, server }: Props) => {
         trigger={
           <button
             aria-label={triggerLabel(output)}
-            className={triggerStyles}
+            className={triggerStyles({ muted: output?.muted === true })}
             onWheel={(event) => {
               if (output !== undefined) {
                 ask(server.setVolume(output.id, stepped(output, event)));
@@ -116,15 +116,15 @@ const triggerLabel = (output: AudioDevice | undefined) => {
 /** A speaker icon whose waves show the default output's rough volume. */
 const Speaker = ({ output }: { output: AudioDevice | undefined }) => {
   if (output === undefined) {
-    return <SpeakerSimpleSlashIcon size={15} weight="bold" />;
+    return <SpeakerSlashIcon size={15} weight="bold" />;
   } else if (output.muted) {
-    return <SpeakerSimpleXIcon size={15} weight="bold" />;
+    return <SpeakerXIcon size={15} weight="bold" />;
   } else if (output.volume === 0) {
-    return <SpeakerSimpleNoneIcon size={15} weight="bold" />;
+    return <SpeakerNoneIcon size={15} weight="bold" />;
   } else if (output.volume < 0.5) {
-    return <SpeakerSimpleLowIcon size={15} weight="bold" />;
+    return <SpeakerLowIcon size={15} weight="bold" />;
   } else {
-    return <SpeakerSimpleHighIcon size={15} weight="bold" />;
+    return <SpeakerHighIcon size={15} weight="bold" />;
   }
 };
 
@@ -138,22 +138,30 @@ const stepped = (output: AudioDevice, event: WheelEvent) => {
 };
 
 // Matches the brightness item's button.
-const triggerStyles = css({
-  _hover: {
-    backgroundColor: "color-mix(in oklab, white 16%, transparent)",
+const triggerStyles = cva({
+  base: {
+    _hover: {
+      backgroundColor: "color-mix(in oklab, white 16%, transparent)",
+    },
+    alignItems: "center",
+    backgroundColor: "transparent",
+    blockSize: 7,
+    borderRadius: "full",
+    borderStyle: "none",
+    cursor: "pointer",
+    display: "inline-flex",
+    flexShrink: 0,
+    inlineSize: 7,
+    justifyContent: "center",
+    padding: 0,
+    transition: "background-color {durations.fast} {easings.default}",
   },
-  alignItems: "center",
-  backgroundColor: "transparent",
-  blockSize: 7,
-  borderRadius: "full",
-  borderStyle: "none",
-  cursor: "pointer",
-  display: "inline-flex",
-  flexShrink: 0,
-  inlineSize: 7,
-  justifyContent: "center",
-  padding: 0,
-  transition: "background-color {durations.fast} {easings.default}",
+  variants: {
+    muted: {
+      false: {},
+      true: { opacity: "disabled" },
+    },
+  },
 });
 
 // As wide as the brightness item's slider.

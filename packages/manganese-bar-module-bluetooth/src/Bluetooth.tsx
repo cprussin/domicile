@@ -13,7 +13,7 @@ import { BluetoothIcon } from "@phosphor-icons/react/dist/ssr/Bluetooth";
 import { BluetoothConnectedIcon } from "@phosphor-icons/react/dist/ssr/BluetoothConnected";
 import { BluetoothSlashIcon } from "@phosphor-icons/react/dist/ssr/BluetoothSlash";
 import { useMemo } from "react";
-import { css } from "../styled-system/css";
+import { cva } from "../styled-system/css";
 import { BluetoothPanel } from "./BluetoothPanel";
 import type { BluetoothActions } from "./bluetooth-actions";
 import { BLUETOOTH_ACTIONS } from "./bluetooth-actions";
@@ -34,7 +34,7 @@ type Props = {
 
 /**
  * The Bluetooth item on the bar: an icon for off, on or connected, named with
- * the connected devices and their batteries. A click opens the {@link BluetoothPanel}. On a locked
+ * the connected devices and their batteries. Dims while off. A click opens the {@link BluetoothPanel}. On a locked
  * desktop it is the icon alone.
  *
  * Draws nothing until BlueZ answers, on a D-Bus error, or with no adapter.
@@ -68,7 +68,12 @@ const Status = ({ reading }: { reading: Reading }) => {
   const connected = reading.devices.filter((device) => device.connected);
   const label = labelOf(on, connected);
   return (
-    <span aria-label={label} className={statusStyles} role="img" title={label}>
+    <span
+      aria-label={label}
+      className={statusStyles({ on })}
+      role="img"
+      title={label}
+    >
       <Icon connected={connected.length > 0} on={on} />
     </span>
   );
@@ -95,7 +100,7 @@ const Item = ({
       trigger={
         <button
           aria-label={label}
-          className={triggerStyles}
+          className={triggerStyles({ on })}
           title={label}
           type="button"
         >
@@ -121,33 +126,49 @@ const Icon = ({ connected, on }: { connected: boolean; on: boolean }) => {
 
 // Not the library's `Button`: its ghost variant uses `muted` text, which is
 // unreadable over the wallpaper. Matches the volume control.
-const triggerStyles = css({
-  _hover: {
-    backgroundColor: "color-mix(in oklab, white 16%, transparent)",
+const triggerStyles = cva({
+  base: {
+    _hover: {
+      backgroundColor: "color-mix(in oklab, white 16%, transparent)",
+    },
+    alignItems: "center",
+    backgroundColor: "transparent",
+    blockSize: 7,
+    borderRadius: "full",
+    borderStyle: "none",
+    color: "inherit",
+    cursor: "pointer",
+    display: "inline-flex",
+    flexShrink: 0,
+    inlineSize: 7,
+    justifyContent: "center",
+    padding: 0,
+    transition: "background-color {durations.fast} {easings.default}",
   },
-  alignItems: "center",
-  backgroundColor: "transparent",
-  blockSize: 7,
-  borderRadius: "full",
-  borderStyle: "none",
-  color: "inherit",
-  cursor: "pointer",
-  display: "inline-flex",
-  flexShrink: 0,
-  inlineSize: 7,
-  justifyContent: "center",
-  padding: 0,
-  transition: "background-color {durations.fast} {easings.default}",
+  variants: {
+    on: {
+      false: { opacity: "disabled" },
+      true: {},
+    },
+  },
 });
 
 // The button's box, so the bar's spacing is the same while locked.
-const statusStyles = css({
-  alignItems: "center",
-  blockSize: 7,
-  display: "inline-flex",
-  flexShrink: 0,
-  inlineSize: 7,
-  justifyContent: "center",
+const statusStyles = cva({
+  base: {
+    alignItems: "center",
+    blockSize: 7,
+    display: "inline-flex",
+    flexShrink: 0,
+    inlineSize: 7,
+    justifyContent: "center",
+  },
+  variants: {
+    on: {
+      false: { opacity: "disabled" },
+      true: {},
+    },
+  },
 });
 
 /** Its name and tooltip: whether it is on, and each connected device's battery. */

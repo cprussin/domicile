@@ -41,6 +41,28 @@ describe("Mixer", () => {
       ).toHaveAttribute("aria-valuenow", "0");
     });
 
+    it("marks a muted device's meter", () => {
+      const sound = heldSound();
+      mixer(sound, {
+        ...laptop,
+        inputs: laptop.inputs.map((input) => ({ ...input, muted: true })),
+      });
+
+      sound.levels(
+        new Map([
+          ["output:speakers", 1],
+          ["input:mic", 1],
+        ]),
+      );
+
+      expect(
+        screen.getByRole("meter", { name: "Volume level" }),
+      ).not.toHaveAttribute("data-muted");
+      expect(
+        screen.getByRole("meter", { name: "Microphone level" }),
+      ).toHaveAttribute("data-muted");
+    });
+
     it("has the first microphone when the server's default input is a monitor", () => {
       const sound = heldSound();
       mixer(sound, {

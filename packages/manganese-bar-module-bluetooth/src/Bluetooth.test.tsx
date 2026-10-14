@@ -8,6 +8,7 @@ import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import type { Bluetooth as Reading } from "@domicile-desktop/system-bluetooth/bluetooth";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { css } from "../styled-system/css";
 import { Bluetooth } from "./Bluetooth";
 import { heldActions } from "./held-actions";
 
@@ -115,7 +116,7 @@ describe("Bluetooth", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("says whether it is on, and what is connected", () => {
+  it("says whether it is on, dimmed when off, and what is connected", () => {
     const bluetooth = heldBluetooth();
     render(
       <Bluetooth
@@ -126,10 +127,14 @@ describe("Bluetooth", () => {
     );
 
     bluetooth.report(reading(false, []));
-    expect(screen.getByRole("button", { name: "Bluetooth off" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Bluetooth off" }).className,
+    ).toContain(css({ opacity: "disabled" }));
 
     bluetooth.report(reading(true, []));
-    expect(screen.getByRole("button", { name: "Bluetooth on" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Bluetooth on" }).className,
+    ).not.toContain(css({ opacity: "disabled" }));
 
     bluetooth.report(reading(true, ["WH-1000XM4", "MX Master 3"]));
     expect(
@@ -178,6 +183,11 @@ describe("Bluetooth", () => {
     expect(
       screen.getByRole("img", { name: "Bluetooth: WH-1000XM4 (80%)" }),
     ).toHaveAttribute("title", "Bluetooth: WH-1000XM4 (80%)");
+
+    bluetooth.report(reading(false, []));
+    expect(
+      screen.getByRole("img", { name: "Bluetooth off" }).className,
+    ).toContain(css({ opacity: "disabled" }));
   });
 
   it("opens its panel on a click", async () => {

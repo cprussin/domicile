@@ -2,7 +2,7 @@ import { EyeIcon } from "@phosphor-icons/react/dist/ssr/Eye";
 import { EyeClosedIcon } from "@phosphor-icons/react/dist/ssr/EyeClosed";
 import { useSyncExternalStore } from "react";
 
-import { css } from "../styled-system/css";
+import { cva } from "../styled-system/css";
 import type { IdleInhibitor } from "./idle-inhibitor";
 import { Inhibiting } from "./idle-inhibitor";
 
@@ -12,8 +12,8 @@ type Props = {
 };
 
 /**
- * An eye that keeps the screens on: closed while they blank when idle, open on
- * a lit circle while held. Disabled until the portal answers.
+ * An eye that keeps the screens on: closed and dimmed while they blank when
+ * idle, open on a lit circle while held. Disabled until the portal answers.
  */
 export const IdleInhibitorToggle = ({ inhibitor }: Props) => {
   const at = useSyncExternalStore(inhibitor.subscribe, inhibitor.current);
@@ -25,7 +25,7 @@ export const IdleInhibitorToggle = ({ inhibitor }: Props) => {
     <button
       aria-label={label}
       aria-pressed={held}
-      className={toggleStyles}
+      className={toggleStyles({ held })}
       data-inhibiting={held}
       disabled={at === Inhibiting.Taking || at === Inhibiting.Releasing}
       onClick={inhibitor.toggle}
@@ -43,24 +43,32 @@ export const IdleInhibitorToggle = ({ inhibitor }: Props) => {
 
 // Not the library's `Button`: its ghost variant uses `muted` text, which is
 // unreadable over the wallpaper. This uses the bar's white, like the bulb.
-const toggleStyles = css({
-  _disabled: { cursor: "progress" },
-  _hover: {
-    backgroundColor: "color-mix(in oklab, white 16%, transparent)",
+const toggleStyles = cva({
+  base: {
+    _disabled: { cursor: "progress" },
+    _hover: {
+      backgroundColor: "color-mix(in oklab, white 16%, transparent)",
+    },
+    "&[data-inhibiting=true]": {
+      backgroundColor: "color-mix(in oklab, white 24%, transparent)",
+    },
+    alignItems: "center",
+    backgroundColor: "transparent",
+    blockSize: 7,
+    borderRadius: "full",
+    borderStyle: "none",
+    cursor: "pointer",
+    display: "inline-flex",
+    flexShrink: 0,
+    inlineSize: 7,
+    justifyContent: "center",
+    padding: 0,
+    transition: "background-color {durations.fast} {easings.default}",
   },
-  "&[data-inhibiting=true]": {
-    backgroundColor: "color-mix(in oklab, white 24%, transparent)",
+  variants: {
+    held: {
+      false: { opacity: "disabled" },
+      true: {},
+    },
   },
-  alignItems: "center",
-  backgroundColor: "transparent",
-  blockSize: 7,
-  borderRadius: "full",
-  borderStyle: "none",
-  cursor: "pointer",
-  display: "inline-flex",
-  flexShrink: 0,
-  inlineSize: 7,
-  justifyContent: "center",
-  padding: 0,
-  transition: "background-color {durations.fast} {easings.default}",
 });
