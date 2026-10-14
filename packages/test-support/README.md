@@ -12,6 +12,8 @@ screen's recorded system requests.
   - prints DOM nodes as markup in failed matchers (`src/node-inspection.ts`);
   - registers `<app>` as a known element (`src/app-element.ts`);
   - registers `<search>`, which happy-dom lacks (`src/search-element.ts`);
+  - imports an SVG as a `data:` URL, as Vite inlines one
+    (`src/svg-data-url.ts`);
   - leaves frames at their `src` without fetching, since only the engine serves
     `domicile://` pages.
 - **`matchers.d.ts`** (the root `types` entry): types for the jest-dom matchers
