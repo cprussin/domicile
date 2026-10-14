@@ -3,6 +3,7 @@
 
 #include "ui/ozone/platform/drm/domicile/drm_screen.h"
 
+#include <drm_fourcc.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -12,10 +13,12 @@
 
 #include "base/check.h"
 #include "base/containers/flat_set.h"
+#include "components/viz/common/resources/shared_image_format.h"
 #include "ui/display/display_finder.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/display/types/display_mode.h"
 #include "ui/display/util/edid_parser.h"
+#include "ui/gfx/display_color_spaces.h"
 #include "ui/ozone/platform/drm/domicile/drm_pointer_crossing.h"
 #include "ui/ozone/platform/drm/domicile/edid_name.h"
 #include "ui/ozone/platform/drm/host/drm_cursor.h"
@@ -69,6 +72,24 @@ void TurnAndScale(display::Display& screen,
   screen.set_size_in_pixels(pixels);
 }
 
+// Draws `screen`'s frames in BGRA_8888 when the device's planes take no
+// XBGR8888.
+//
+// Linux's default frame format, RGBA_8888, scans out through an AB24
+// framebuffer on an XB24 plane. virtio-gpu takes only XR24 and AR24, so those
+// frames get no framebuffer and the screen stays black. BGRA_8888 uses AR24
+// and XR24, as on ChromeOS.
+void DrawInAFormatThePlanesTake(display::Display& screen,
+                                const display::DisplaySnapshot& snapshot) {
+  if (snapshot.GetDRMFormatsAndModifiers().contains(DRM_FORMAT_XBGR8888)) {
+    return;
+  }
+  gfx::DisplayColorSpaces color_spaces = screen.GetColorSpaces();
+  color_spaces.SetOutputFormats(viz::SinglePlaneFormat::kBGRA_8888,
+                                viz::SinglePlaneFormat::kBGRA_8888);
+  screen.SetColorSpaces(color_spaces);
+}
+
 // Returns the snapshot's native mode size, or the displayless bounds if it
 // has no mode.
 gfx::Size SizeOf(const display::DisplaySnapshot& snapshot) {
@@ -115,6 +136,7 @@ display::Display DisplayFromSnapshot(const display::DisplaySnapshot& snapshot,
   if (!name.empty()) {
     screen.set_label(name);
   }
+  DrawInAFormatThePlanesTake(screen, snapshot);
   return screen;
 }
 
