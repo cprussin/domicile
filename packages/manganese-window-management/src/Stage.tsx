@@ -42,6 +42,7 @@ import { TileBorder } from "./tiled/TileBorder";
 import { TileGrab } from "./tiled/TileGrab";
 import { titleFocus } from "./title-focus";
 import type { StripPlace } from "./tree/frames";
+import { tabKeyOf } from "./tree/frames";
 import { windowsIn } from "./tree/node";
 import type { NodeRef } from "./tree/path";
 import { focusedWindowIn } from "./tree/tiling";
@@ -253,9 +254,7 @@ export const Stage = memo(
             tab.well === undefined ? undefined : (
               <Sliding
                 frame={tab.well}
-                // A shown group's own shown group can be named after the same
-                // window, so the depth of its strip tells the two apart.
-                key={`well-${tab.id}-${tab.strip.group.node.up.toString()}`}
+                key={`well-${tabKeyOf(tab)}`}
                 motion={motion}
                 on={screenNamed(desk, screen)}
                 rewound={0}
@@ -408,7 +407,7 @@ export const Stage = memo(
                 frame={tab.strip.box}
                 fullscreen={groupFills(screens, tab.strip.group.windows)}
                 id={tab.id}
-                key={`tab-${tab.id}`}
+                key={`tab-${tabKeyOf(tab)}`}
                 motion={motion}
                 on={screenNamed(desk, screen)}
                 onAim={setAim}
@@ -645,7 +644,7 @@ export const Stage = memo(
                 // `placement.ts`.
                 fullscreen={desk.fullscreen.get(tab.id) === false}
                 icon={iconOf(tabbed, clientIcons)}
-                key={tab.id}
+                key={tabKeyOf(tab)}
                 motion={motion}
                 on={screenNamed(desk, screen)}
                 onClose={onClose}

@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { WELL_MARGIN } from "../gaps";
 import { SURFACE_TUCK, TITLE_BAR } from "../rect";
-import { areaOf, framesOf } from "./frames";
+import { areaOf, framesOf, tabKeyOf } from "./frames";
 import { Layout, LayoutNode } from "./node";
 import { NOTHING_TILED } from "./tiling";
 
@@ -470,6 +470,30 @@ describe("framesOf", () => {
       x: WELL_MARGIN,
       y: TITLE_BAR + WELL_MARGIN,
     });
+  });
+
+  it("keys apart the tabs of nested groups named after one window", () => {
+    // Both groups' tabs are named after "a", the window focus last left.
+    const tiled = framesOf(
+      {
+        depth: 2,
+        root: LayoutNode.Container(Layout.Tabbed, [
+          LayoutNode.Container(Layout.Tabbed, [
+            LayoutNode.Container(Layout.SplitH, [
+              LayoutNode.Window("a"),
+              LayoutNode.Window("b"),
+            ]),
+            LayoutNode.Window("c"),
+          ]),
+          LayoutNode.Window("d"),
+        ]),
+      },
+      AREA,
+      0,
+    );
+
+    expect(tiled.tabs.map(({ id }) => id)).toEqual(["a", "a"]);
+    expect(new Set(tiled.tabs.map((tab) => tabKeyOf(tab))).size).toBe(2);
   });
 
   it("lays a container out in its well, inset from the well's edges", () => {
