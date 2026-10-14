@@ -298,6 +298,40 @@ fn a_fixed_size_window_is_announced_as_a_dialog_at_the_size_it_drew() {
     assert!(client_frame, "the client asked to draw its own frame");
 }
 
+/// A window a client makes another's dialog after both have drawn has the
+/// chrome told whose it is.
+#[test]
+fn a_window_made_a_dialog_after_it_drew_has_the_chrome_told_whose() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let _client = compositor.client_with("a window with a dialog", &["--dialog"]);
+    let appeared = |chrome: &mut domicile_test_chrome::Chrome| {
+        let appeared = chrome
+            .wait_for(|message| matches!(message, HostMessage::AppAppeared { .. }))
+            .expect("a client that drew a window is announced to the chrome");
+        let HostMessage::AppAppeared { app_id, dialog, .. } = appeared else {
+            unreachable!("the wait matched on this variant")
+        };
+        (app_id, dialog)
+    };
+    let (window, _) = appeared(&mut chrome);
+    let (dialog, parented_at_first_frame) = appeared(&mut chrome);
+    assert!(
+        !parented_at_first_frame,
+        "the dialog has no parent until after it drew"
+    );
+
+    assert_eq!(
+        chrome
+            .wait_for(|message| matches!(message, HostMessage::AppTransientFor { .. }))
+            .expect("a parent set after the first frame reaches the chrome"),
+        HostMessage::AppTransientFor {
+            app_id: dialog,
+            transient_for: Some(window),
+        }
+    );
+}
+
 /// A client's minimum and maximum sizes reach the chrome.
 ///
 /// Electron apps set a minimum size and do not draw below it. Both limits are

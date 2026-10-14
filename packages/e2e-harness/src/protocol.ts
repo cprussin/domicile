@@ -137,6 +137,25 @@ const appClosedSchema = z.looseObject({
   type: z.literal("app_closed"),
 });
 
+// The window a toplevel is a dialog for (`xdg_toplevel.set_parent`), sent on
+// change. `null` on the wire for none; normalized to `undefined`.
+const appTransientForSchema = z.looseObject({
+  app_id: z.string(),
+  transient_for: z
+    .string()
+    .nullable()
+    .transform((parent) => parent ?? undefined),
+  type: z.literal("app_transient_for"),
+});
+
+// Whether a window wants attention: set when the compositor drops its
+// activation request, cleared when it gets the keyboard.
+const appUrgentSchema = z.looseObject({
+  app_id: z.string(),
+  type: z.literal("app_urgent"),
+  urgent: z.boolean(),
+});
+
 // The held modifiers, sent on change. The page cannot see them while a window
 // has keyboard focus, but needs them for gestures such as alt-drag.
 const modifiersSchema = z.looseObject({
@@ -551,6 +570,8 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   appCursorSchema,
   appPresentedSchema,
   appSuspendedSchema,
+  appTransientForSchema,
+  appUrgentSchema,
   displaysSchema,
   keymapSchema,
   extensionsSchema,
@@ -588,6 +609,8 @@ export type AppMinSizeMessage = z.infer<typeof appMinSizeSchema>;
 export type AppMaxSizeMessage = z.infer<typeof appMaxSizeSchema>;
 export type AppClosedMessage = z.infer<typeof appClosedSchema>;
 export type AppCursorMessage = z.infer<typeof appCursorSchema>;
+export type AppTransientForMessage = z.infer<typeof appTransientForSchema>;
+export type AppUrgentMessage = z.infer<typeof appUrgentSchema>;
 export type DisplaysMessage = z.infer<typeof displaysSchema>;
 export type KeymapMessage = z.infer<typeof keymapSchema>;
 export type FocusChangedMessage = z.infer<typeof focusChangedSchema>;

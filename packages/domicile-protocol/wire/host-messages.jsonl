@@ -12,6 +12,9 @@
 {"type":"app_cursor","app_id":"app-2","cursor":"vertical-text"}
 {"type":"app_presented","app_id":"app-2"}
 {"type":"app_suspended","app_id":"app-2","suspended":true}
+{"type":"app_transient_for","app_id":"app-4","transient_for":"app-2"}
+{"type":"app_transient_for","app_id":"app-4","transient_for":null}
+{"type":"app_urgent","app_id":"app-2","urgent":true}
 {"type":"displays","displays":[{"name":"left","position":[0,0],"size":[1920,1080],"scale":1,"mode":[1920,1080],"transform":"normal"},{"name":"right","position":[1920,0],"size":[2560,1440],"scale":2,"mode":[5120,2880],"transform":"normal"}]}
 {"type":"displays","displays":[{"name":"domicile-0","position":[0,0],"size":[1280,800],"scale":1,"mode":[1280,800],"transform":"normal"}]}
 {"type":"displays","displays":[{"name":"drm-3","position":[0,0],"size":[1800,3200],"scale":2,"mode":[3840,2160],"transform":"rotate-270"}]}

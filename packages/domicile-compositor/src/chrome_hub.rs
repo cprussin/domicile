@@ -180,7 +180,7 @@ pub fn broadcast_focus_decision(hub: &ChromeHub, decision: ChromeMessage) {
         let _ = apply_chrome_message(&mut host, &mut ready, decision);
         host.focus_change()
     };
-    if let Some(message) = moved {
+    for message in moved {
         hub.broadcast(message);
     }
 }

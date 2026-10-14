@@ -446,6 +446,14 @@ interface ControlChannelClient {
   // The compositor marked a window `suspended`, or cleared it.
   AppSuspended(string app_id, bool suspended);
 
+  // The window `app_id` is a dialog for (xdg_toplevel.set_parent); empty for
+  // none.
+  AppTransientFor(string app_id, string transient_for);
+
+  // Whether a window wants attention: the compositor dropped its activation
+  // request and it has not had the keyboard since.
+  AppUrgent(string app_id, bool urgent);
+
   // A grabbed shortcut fired. Named for the event rather than the struct,
   // which would shadow the type inside the generated class.
   //
