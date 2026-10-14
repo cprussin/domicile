@@ -420,6 +420,9 @@ export const domicilePreset = definePreset({
           disabled: { value: "0.6" },
           // Fades a dragged element so the drop target shows through.
           dragging: { value: "0.4" },
+          // Fades a bar item that is off, muted or offline, so the state reads
+          // at a glance over the wallpaper.
+          inactive: { value: "0.35" },
           pulseMin: { value: "0.3" },
         },
         // Without this, Panda treats numeric sizes as pixels

@@ -20,7 +20,7 @@ describe("IdleInhibitorToggle", () => {
     );
     const toggle = screen.getByRole("button", { name: OFF });
     expect(toggle).toHaveAttribute("aria-pressed", "false");
-    expect(toggle.className).toContain(css({ opacity: "disabled" }));
+    expect(toggle.className).toContain(css({ opacity: "inactive" }));
 
     await userEvent.click(toggle);
     expect(toggle).toBeDisabled();
@@ -34,6 +34,6 @@ describe("IdleInhibitorToggle", () => {
       "true",
     );
     expect(toggle).toBeEnabled();
-    expect(toggle.className).not.toContain(css({ opacity: "disabled" }));
+    expect(toggle.className).not.toContain(css({ opacity: "inactive" }));
   });
 });

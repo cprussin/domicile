@@ -67,7 +67,7 @@ const toggleStyles = cva({
   },
   variants: {
     held: {
-      false: { opacity: "disabled" },
+      false: { opacity: "inactive" },
       true: {},
     },
   },

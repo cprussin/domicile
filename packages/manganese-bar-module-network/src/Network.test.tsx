@@ -151,13 +151,13 @@ describe("Network", () => {
 
       network.report(online(Link.Wired("Wired connection 1")));
       expect(screen.getByRole("button").className).not.toContain(
-        css({ opacity: "disabled" }),
+        css({ opacity: "inactive" }),
       );
 
       network.report(online(Link.None()));
       expect(screen.getByRole("img", { name: "Offline" })).toBeVisible();
       expect(screen.getByRole("button").className).toContain(
-        css({ opacity: "disabled" }),
+        css({ opacity: "inactive" }),
       );
     });
   });
