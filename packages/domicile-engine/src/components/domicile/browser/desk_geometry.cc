@@ -10,6 +10,19 @@
 
 namespace domicile {
 
+std::vector<DeskPlace> DeskPlacesKept(const std::vector<DeskPlace>& lit,
+                                      const std::vector<DeskPlace>& before,
+                                      const std::vector<int64_t>& plugged_in) {
+  if (!lit.empty()) {
+    return lit;
+  }
+  std::vector<DeskPlace> kept = before;
+  std::erase_if(kept, [&plugged_in](const DeskPlace& place) {
+    return !std::ranges::contains(plugged_in, place.id);
+  });
+  return kept;
+}
+
 std::optional<DeskGeometry> DeskGeometryOf(const std::vector<DeskPlace>& lit) {
   if (lit.empty()) {
     return std::nullopt;
