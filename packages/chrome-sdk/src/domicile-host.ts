@@ -900,6 +900,18 @@ export type DomicileWindow = {
   readonly dialog: boolean;
   /** The client asked to draw its own frame (client-side decorations). */
   readonly clientFrame: boolean;
+  /**
+   * The window this one is a dialog for (xdg_toplevel.set_parent), following
+   * every change; null for none, and for a popup. When the parent closes, this
+   * names the parent's own parent.
+   */
+  readonly transientFor: string | null;
+  /**
+   * The compositor dropped the window's request for the keyboard (a token
+   * from before the keyboard last moved, or a stale one), and the window has
+   * not had the keyboard since. False while it holds the keyboard.
+   */
+  readonly urgent: boolean;
   readonly cursor: DomicileCursorShape;
   /**
    * A popup's parent window and its place relative to it, and whether it

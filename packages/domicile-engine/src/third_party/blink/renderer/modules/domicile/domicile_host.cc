@@ -1194,6 +1194,19 @@ void DomicileHost::AppCursor(const String& app_id,
   WindowsChanged();
 }
 
+void DomicileHost::AppTransientFor(const String& app_id,
+                                   const String& transient_for) {
+  // Empty on the pipe is no parent, which the page reads as null.
+  WindowNamed(app_id).transient_for =
+      transient_for.empty() ? String() : transient_for;
+  WindowsChanged();
+}
+
+void DomicileHost::AppUrgent(const String& app_id, bool urgent) {
+  WindowNamed(app_id).urgent = urgent;
+  WindowsChanged();
+}
+
 void DomicileHost::ShortcutPressed(
     domicile::mojom::blink::ShortcutPtr shortcut) {
   FireShortcut(DomicilePress{shortcut->keycode, shortcut->alt, shortcut->ctrl,

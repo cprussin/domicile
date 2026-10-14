@@ -95,6 +95,15 @@ class FakeClient : public mojom::ControlChannelClient {
                    bool) override {}
   void AppClosed(const std::string&) override {}
   void AppCursor(const std::string&, mojom::CursorShape) override {}
+  void AppTransientFor(const std::string& app_id,
+                       const std::string& transient_for) override {
+    heard_.push_back(base::StringPrintf("transient %s for %s", app_id.c_str(),
+                                        transient_for.c_str()));
+  }
+  void AppUrgent(const std::string& app_id, bool urgent) override {
+    heard_.push_back(base::StringPrintf("urgent %s %s", app_id.c_str(),
+                                        urgent ? "true" : "false"));
+  }
   void ShortcutPressed(mojom::ShortcutPtr) override {}
   void ShortcutReleased(mojom::ShortcutPtr) override {}
   void Modifiers(bool, bool, bool, bool) override {}
@@ -235,6 +244,24 @@ TEST_F(ControlChannelTest, AWindowReachesThePageWithItsOwner) {
                 "appeared app-2 b  400x300 owner 7/1000/1000/none sandbox "
                 "org.flatpak/-/3",
                 "locked false"}));
+}
+
+// A null parent is a dialog no longer, not a malformed line.
+TEST_F(ControlChannelTest, AWindowsParentAndUrgencyReachThePage) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  Say("{\"type\":\"app_transient_for\",\"app_id\":\"app-4\","
+      "\"transient_for\":\"app-2\"}\n"
+      "{\"type\":\"app_transient_for\",\"app_id\":\"app-4\","
+      "\"transient_for\":null}\n"
+      "{\"type\":\"app_urgent\",\"app_id\":\"app-2\",\"urgent\":true}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_,
+            (std::vector<std::string>{"transient app-4 for app-2",
+                                      "transient app-4 for ",
+                                      "urgent app-2 true", "locked false"}));
 }
 
 // The browser process draws the pointer on a tty, so the theme stops there.

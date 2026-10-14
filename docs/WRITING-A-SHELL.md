@@ -261,7 +261,15 @@ Each entry in `domicile.windows` describes one client window.
   your own UI, such as sizing a dialog.
 - **Dialogs:** `dialog` is `true` when the client gave the window a parent or
   a fixed size, as sway reads them. `shell-manganese` floats such a window at
-  its drawn size.
+  its drawn size. `dialog` is fixed at the first frame.
+- **Parent:** `transientFor` is the `appId` of the window this one is a dialog
+  for (`xdg_toplevel.set_parent`), or `null`. It follows every change. When the
+  parent closes, it names the parent's own parent, as xdg-shell says.
+- **Urgency:** `urgent` is `true` when the compositor dropped the window's
+  focus request (see [A client asking for focus](#a-client-asking-for-focus))
+  and the window has not had the keyboard since. It clears when the window gets
+  the keyboard, and is never set on the window holding it. Draw it as an
+  attention hint, such as a highlighted workspace or title.
 - **Client frames:** `clientFrame` is `true` when the client asked to draw its
   own frame. `shell-manganese` leaves its title bar off such a window while it
   floats.
@@ -396,7 +404,13 @@ it, or ignore it.
 
 Only requests made since the keyboard last moved arrive. The compositor drops a
 token whose serial is older than the keyboard's last `enter`, or has none: that
-is a window taking focus back on its own, not something the user did.
+is a window taking focus back on its own, not something the user did. Such a
+window is marked `urgent` instead.
+
+A request that arrives is the shell's to decide, so the compositor marks no
+window `urgent` for it: ignoring a request is silent, and the compositor cannot
+tell it apart from a grant still on its way. A shell that ignores one and wants
+it shown keeps its own mark.
 
 The compositor mints its own tokens for what the user does in the shell:
 `spawn` (as `XDG_ACTIVATION_TOKEN`) and a notification press (as

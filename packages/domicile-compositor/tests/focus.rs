@@ -122,6 +122,37 @@ fn a_request_without_a_serial_is_not_heard() {
     assert_not_heard(&mut chrome, &app_id);
 }
 
+/// A window whose request is dropped wants attention until it gets the
+/// keyboard.
+#[test]
+fn a_window_not_heard_wants_attention_until_it_has_the_keyboard() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let _client = compositor.client_with("eager", &["--ask-for-focus"]);
+    let app_id = appeared(&mut chrome);
+
+    assert_eq!(
+        chrome
+            .wait_for(|message| matches!(message, HostMessage::AppUrgent { .. }))
+            .expect("a dropped request marks its window"),
+        HostMessage::AppUrgent {
+            app_id: app_id.clone(),
+            urgent: true,
+        }
+    );
+
+    focus(&mut chrome, &app_id);
+    assert_eq!(
+        chrome
+            .wait_for(|message| matches!(message, HostMessage::AppUrgent { .. }))
+            .expect("the keyboard arriving clears the mark"),
+        HostMessage::AppUrgent {
+            app_id,
+            urgent: false,
+        }
+    );
+}
+
 /// Gives `app_id` the keyboard and waits for the chrome to be told.
 fn focus(chrome: &mut domicile_test_chrome::Chrome, app_id: &str) {
     chrome
