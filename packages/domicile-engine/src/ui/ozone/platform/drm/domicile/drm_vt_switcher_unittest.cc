@@ -12,6 +12,8 @@
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
+#include "ui/events/platform/platform_event_dispatcher.h"
+#include "ui/events/platform/platform_event_source.h"
 #include "ui/events/types/event_type.h"
 
 namespace ui {
@@ -22,6 +24,24 @@ KeyEvent Pressed(KeyboardCode key, int flags) {
 }
 
 constexpr int kChord = EF_CONTROL_DOWN | EF_ALT_DOWN;
+
+// An event source a test can dispatch through, as the evdev thread does.
+class TestEventSource : public PlatformEventSource {
+ public:
+  void Dispatch(Event* event) { DispatchEvent(event); }
+};
+
+// Stands in for a window: takes every event and counts them.
+class CountingWindow : public PlatformEventDispatcher {
+ public:
+  bool CanDispatchEvent(const PlatformEvent&) override { return true; }
+  uint32_t DispatchEvent(const PlatformEvent&) override {
+    dispatched++;
+    return POST_DISPATCH_STOP_PROPAGATION;
+  }
+
+  int dispatched = 0;
+};
 
 // Builds logind's reply to a `Get` of `Session.Seat`: a variant holding `(so)`.
 std::unique_ptr<dbus::Response> SeatAnswer(const std::string& id,
@@ -74,6 +94,37 @@ TEST(DrmVtSwitcherTest, AKeyThatIsNotAFunctionKeyNamesNoConsole) {
   EXPECT_FALSE(VtForChord(Pressed(VKEY_A, kChord)).has_value());
   EXPECT_FALSE(VtForChord(Pressed(VKEY_F13, kChord)).has_value());
   EXPECT_FALSE(VtForChord(Pressed(VKEY_DELETE, kChord)).has_value());
+}
+
+// The chord switches consoles, so no window sees it. A terminal would
+// otherwise print `^[[1;7Q` for Ctrl+Alt+F2.
+TEST(DrmVtSwitcherTest, NoWindowSeesTheChord) {
+  TestEventSource events;
+  DrmConsoleChordSink sink(&events);
+  CountingWindow window;
+  events.AddPlatformEventDispatcher(&window);
+
+  KeyEvent chord = Pressed(VKEY_F2, kChord);
+  events.Dispatch(&chord);
+
+  EXPECT_EQ(window.dispatched, 0);
+  events.RemovePlatformEventDispatcher(&window);
+}
+
+// Any other key, including a shell's `Ctrl+Alt+Shift+F1`, reaches the window.
+TEST(DrmVtSwitcherTest, EveryOtherKeyReachesTheWindow) {
+  TestEventSource events;
+  DrmConsoleChordSink sink(&events);
+  CountingWindow window;
+  events.AddPlatformEventDispatcher(&window);
+
+  KeyEvent shells = Pressed(VKEY_F1, kChord | EF_SHIFT_DOWN);
+  KeyEvent typed = Pressed(VKEY_A, kChord);
+  events.Dispatch(&shells);
+  events.Dispatch(&typed);
+
+  EXPECT_EQ(window.dispatched, 2);
+  events.RemovePlatformEventDispatcher(&window);
 }
 
 // Deactivation drops the display.

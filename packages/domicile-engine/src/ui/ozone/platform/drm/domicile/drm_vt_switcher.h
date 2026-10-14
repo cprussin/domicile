@@ -19,6 +19,7 @@
 #include "dbus/object_proxy.h"
 #include "ui/display/types/native_display_delegate.h"
 #include "ui/events/event.h"
+#include "ui/events/platform/platform_event_dispatcher.h"
 #include "ui/events/platform/platform_event_observer.h"
 #include "ui/events/platform/platform_event_source.h"
 
@@ -110,6 +111,31 @@ struct VtStep {
 // commit over another console's frame.
 VtStep StepVtSwitch(VtState state, VtEvent event, bool succeeded);
 
+// Keeps `Ctrl+Alt+F<n>` from every window, so a page or client never sees the
+// console chord. `DrmVtSwitcher` still switches on it: observers see an event
+// before any dispatcher does.
+//
+// Dispatchers are asked in the order they were added, so this works only if
+// it is added before any `DrmWindowHost`. `DrmVtSwitcher` owns one and is
+// built in `InitScreen`, ahead of every window.
+class DrmConsoleChordSink : public PlatformEventDispatcher {
+ public:
+  // Adds itself to `events`, which must outlive this.
+  explicit DrmConsoleChordSink(PlatformEventSource* events);
+
+  DrmConsoleChordSink(const DrmConsoleChordSink&) = delete;
+  DrmConsoleChordSink& operator=(const DrmConsoleChordSink&) = delete;
+
+  ~DrmConsoleChordSink() override;
+
+  // PlatformEventDispatcher:
+  bool CanDispatchEvent(const PlatformEvent& event) override;
+  uint32_t DispatchEvent(const PlatformEvent& event) override;
+
+ private:
+  const raw_ptr<PlatformEventSource> events_;
+};
+
 // Handles `Ctrl+Alt+F<n>` and drops or retakes the display as the session's
 // `Active` property changes. Design: docs/TTY-SESSION.md#console-switching.
 //
@@ -163,6 +189,7 @@ class DrmVtSwitcher : public PlatformEventObserver {
 
   std::unique_ptr<display::NativeDisplayDelegate> delegate_;
   raw_ptr<PlatformEventSource> events_;
+  DrmConsoleChordSink chord_sink_;
   const raw_ptr<DrmModeset> modeset_;  // Not owned; outlives this.
   scoped_refptr<dbus::Bus> bus_;
   raw_ptr<dbus::ObjectProxy> session_ = nullptr;
