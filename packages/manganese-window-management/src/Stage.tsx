@@ -12,8 +12,10 @@ import { FloatShadow } from "./floating/FloatShadow";
 import type { Float } from "./floating/float";
 import { floatHolds } from "./floating/float";
 import { floatBordersOf } from "./floating/float-borders";
+import { castsFloatShadow, floatCovers } from "./floating/float-covers";
 import { ScratchpadBackdrop } from "./floating/ScratchpadBackdrop";
 import { GrabbingSheet } from "./GrabbingSheet";
+import { GroupWell } from "./GroupWell";
 import type { Modifiers } from "./keyboard/useModifiers";
 import type {
   Geometry,
@@ -27,20 +29,13 @@ import type { Spot } from "./pointer-warp";
 import type { Popup } from "./popup";
 import { popupsOver } from "./popup";
 import type { Rect } from "./rect";
-import { spanning } from "./rect";
 import type { Restack } from "./restacking";
 import { SettleHandoffs } from "./SettleHandoffs";
 import type { StageScreen } from "./screens/stage-screens";
 import { useShared } from "./screens/useShared";
 import { TabStrip } from "./TabStrip";
 import { TitleBar } from "./TitleBar";
-import type {
-  Aim,
-  DropTargets,
-  FloatCover,
-  TabTarget,
-  Target,
-} from "./tiled/aim";
+import type { Aim, DropTargets, TabTarget, Target } from "./tiled/aim";
 import { bordersOf } from "./tiled/borders";
 import { DropIndicator } from "./tiled/DropIndicator";
 import { TileBorder } from "./tiled/TileBorder";
@@ -216,6 +211,7 @@ export const Stage = memo(
     // a dragged float carries all its windows.
     const held = useMemo(() => heldBy(desk, movingId), [desk, movingId]);
     const { onPlayedOut } = motions;
+    const tabsShown = motions.tabs.map(({ tab }) => tab);
     return (
       <main>
         <SettleHandoffs>
@@ -248,6 +244,35 @@ export const Stage = memo(
                 </Sliding>
               ) : undefined;
             },
+          )}
+          {/*
+          Before every window and glow, so the windows of each group shown in
+          a tab, and their glows, lie on its well.
+        */}
+          {motions.tabs.map(({ motion, screen, tab }) =>
+            tab.well === undefined ? undefined : (
+              <Sliding
+                frame={tab.well}
+                // A shown group's own shown group can be named after the same
+                // window, so the depth of its strip tells the two apart.
+                key={`well-${tab.id}-${tab.strip.group.node.up.toString()}`}
+                motion={motion}
+                on={screenNamed(desk, screen)}
+                rewound={0}
+              >
+                <GroupWell
+                  // None for fullscreen floats, as for `FloatShadow`.
+                  castsShadow={
+                    !desk.fullscreen.has(tab.id) &&
+                    castsFloatShadow(desk.floats.get(tab.id), tab, tabsShown)
+                  }
+                  depth={tab.depth}
+                  dragging={stretching || held.has(tab.id)}
+                  motion={motion}
+                  rect={tab.well}
+                />
+              </Sliding>
+            ),
           )}
           {/*
           Before every window too, so the windows at its depth cover all but
@@ -1301,35 +1326,6 @@ const tabTargets = (screens: readonly StageScreen[]): readonly TabTarget[] =>
       ? [{ at: strip.at, depth, id, rect: bar, strip: strip.box, tabbed }]
       : [],
   );
-
-/**
- * Each float's box, spanning its windows' frames, which hides the targets
- * behind it. Excludes fullscreen screens, as {@link tabTargets} does.
- */
-const floatCovers = (screens: readonly StageScreen[]): readonly FloatCover[] =>
-  screens
-    .filter(({ fullscreen }) => fullscreen === undefined)
-    .flatMap(({ floats, screenful }) =>
-      floats.flatMap((float) => {
-        const windows = windowsIn(float.root);
-        const inside = screenful.placements.filter(({ id }) =>
-          windows.includes(id),
-        );
-        const [first, ...rest] = inside;
-        return first === undefined
-          ? []
-          : [
-              {
-                depth: first.depth,
-                frame: rest.reduce(
-                  (box, { frame }) => spanning(box, frame),
-                  first.frame,
-                ),
-                windows,
-              },
-            ];
-      }),
-    );
 
 /** The placements of screens with nothing fullscreen. */
 const shownPlacements = (

@@ -259,6 +259,8 @@ announces a window only then, so its title, app id and limits are known.
 - A hidden tab shows only its close button. Dividers separate hidden tabs.
 - A tab for a nested container shows the name of its last-focused window, an
   icon for its layout and its window count.
+- A shown nested container sits in a well under its tab, in the open tab's
+  color, with a 10px margin around its windows (`GroupWell.tsx`).
 - A bar has four states, set as `data-focus` (`title-focus.ts`): sway's
   `focused`, `focused_inactive` and `unfocused`, plus `leaf` for the focused
   window inside a selected group.
