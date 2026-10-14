@@ -38,8 +38,8 @@ type Props = {
 
 /**
  * The network item on the bar: an icon for the primary connection, and the
- * Wi-Fi network's or VPN's name, or the link's kind. Turns `warning` when the
- * link does not reach the internet. A click opens the {@link WifiPanel}.
+ * Wi-Fi network's or VPN's name, or the link's kind. Dims with no link, and
+ * turns `warning` when the link does not reach the internet. A click opens the {@link WifiPanel}.
  *
  * Holds one width so the items beside it never move; a long name is cut
  * short.
@@ -84,7 +84,13 @@ const Item = ({
       side="bottom"
       tone="overPhoto"
       trigger={
-        <button className={triggerStyles({ online })} type="button">
+        <button
+          className={triggerStyles({
+            linked: link.kind !== LinkKind.None,
+            online,
+          })}
+          type="button"
+        >
           <LinkIcon label={label} link={link} />
           <Name link={link} />
         </button>
@@ -161,6 +167,10 @@ const triggerStyles = cva({
     transition: "background-color {durations.fast} {easings.default}",
   }),
   variants: {
+    linked: {
+      false: { opacity: "disabled" },
+      true: {},
+    },
     online: {
       false: { color: "warning" },
       true: { color: "inherit" },

@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { css } from "../styled-system/css";
 import { device, heldSound, laptop } from "./fixture";
 import { Volume } from "./Volume";
 
@@ -25,12 +26,12 @@ describe("Volume", () => {
       expect(screen.queryByRole("button")).not.toBeInTheDocument();
     });
 
-    it("says the default output's volume, and when it is muted", () => {
+    it("says the default output's volume, and dims when it is muted", () => {
       const sound = heldSound();
       shown(sound);
       expect(
-        screen.getByRole("button", { name: "Volume 50%" }),
-      ).toBeInTheDocument();
+        screen.getByRole("button", { name: "Volume 50%" }).className,
+      ).not.toContain(css({ opacity: "disabled" }));
 
       sound.report({
         ...laptop,
@@ -38,8 +39,22 @@ describe("Volume", () => {
       });
 
       expect(
-        screen.getByRole("button", { name: "Volume muted" }),
-      ).toBeInTheDocument();
+        screen.getByRole("button", { name: "Volume muted" }).className,
+      ).toContain(css({ opacity: "disabled" }));
+    });
+
+    it("draws more waves the louder the default output", () => {
+      const sound = heldSound();
+      shown(sound);
+      const icon = (volume: number) => {
+        sound.report({
+          ...laptop,
+          outputs: [device({ default: true, volume })],
+        });
+        return screen.getByRole("button").innerHTML;
+      };
+
+      expect(new Set([icon(0), icon(0.3), icon(0.8)]).size).toBe(3);
     });
 
     it("turns the default output with the wheel", () => {

@@ -13,29 +13,46 @@ type Props = Omit<
    * current audio volume. Omit for no meter.
    */
   level?: number | undefined;
+  /** Grays the meter, for a level nobody hears, such as a muted device's. */
+  levelMuted?: boolean | undefined;
 };
 
 /**
  * A single-value slider over base-ui's Slider. Drawn in `currentcolor` so it
  * fits any background.
  */
-export const Slider = ({ label, level, ...rootProps }: Props) => (
+export const Slider = ({
+  label,
+  level,
+  levelMuted = false,
+  ...rootProps
+}: Props) => (
   <BaseSlider.Root className={rootStyles} {...rootProps}>
     <BaseSlider.Control className={controlStyles}>
       <BaseSlider.Track className={trackStyles}>
         <BaseSlider.Indicator className={indicatorStyles} />
         <BaseSlider.Thumb aria-label={label} className={thumbStyles} />
       </BaseSlider.Track>
-      {level !== undefined && <Meter label={label} level={level} />}
+      {level !== undefined && (
+        <Meter label={label} level={level} muted={levelMuted} />
+      )}
     </BaseSlider.Control>
   </BaseSlider.Root>
 );
 
 /**
  * The level meter: a thin green line under the track, so it isn't mistaken
- * for a second slider.
+ * for a second slider. Gray while muted.
  */
-const Meter = ({ label, level }: { label: string; level: number }) => {
+const Meter = ({
+  label,
+  level,
+  muted,
+}: {
+  label: string;
+  level: number;
+  muted: boolean;
+}) => {
   const percent = Math.round(Math.min(1, Math.max(0, level)) * 100);
   return (
     <span
@@ -44,6 +61,7 @@ const Meter = ({ label, level }: { label: string; level: number }) => {
       aria-valuemin={0}
       aria-valuenow={percent}
       className={meterStyles}
+      data-muted={muted ? "" : undefined}
       role="meter"
     >
       <span className={meterFillStyles} style={{ inlineSize: `${percent}%` }} />
@@ -69,6 +87,9 @@ const controlStyles = css({
 });
 
 const meterStyles = css({
+  "&[data-muted] > *": {
+    backgroundColor: "muted",
+  },
   backgroundColor: "color-mix(in oklab, currentcolor 12%, transparent)",
   blockSize: "2px",
   borderRadius: "full",

@@ -30,6 +30,23 @@ describe(Slider, () => {
         screen.getByRole("meter", { name: "Volume level" }),
       ).toHaveAttribute("aria-valuenow", "25");
     });
+
+    it("marks a muted level", () => {
+      render(
+        <Slider
+          label="Volume"
+          level={0.25}
+          levelMuted
+          max={100}
+          min={0}
+          value={42}
+        />,
+      );
+
+      expect(
+        screen.getByRole("meter", { name: "Volume level" }),
+      ).toHaveAttribute("data-muted");
+    });
   });
 
   describe("interactions", () => {

@@ -136,14 +136,21 @@ describe("Network", () => {
       expect(screen.getByText("wg0")).toBeVisible();
     });
 
-    it("says when there is none", () => {
+    it("says when there is none, dimmed", () => {
       const network = heldNetwork();
       render(<Item network={network.watch} />);
 
-      network.report(online(Link.None()));
+      network.report(online(Link.Wired("Wired connection 1")));
+      expect(screen.getByRole("button").className).not.toContain(
+        css({ opacity: "disabled" }),
+      );
 
+      network.report(online(Link.None()));
       expect(screen.getByRole("img", { name: "Offline" })).toBeVisible();
       expect(screen.getByText("Offline")).toBeVisible();
+      expect(screen.getByRole("button").className).toContain(
+        css({ opacity: "disabled" }),
+      );
     });
 
     it("keeps one width, cutting a long name short", () => {
