@@ -3,9 +3,9 @@ import { appIdOf, browserIdOf } from "../window";
 import type { StageScreen } from "./stage-screens";
 
 /**
- * The windows on screen, each cropped to its contents: a screenshot of one
- * leaves out its title bar or tab. A hidden tab has no contents on screen, so
- * it is left out.
+ * The windows on screen, each cropped to its contents, for the screenshot
+ * picker to outline. A hidden tab has no contents on screen, so it is left
+ * out.
  */
 export const shownWindowsOf = (
   screens: readonly StageScreen[],

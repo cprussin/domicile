@@ -716,6 +716,16 @@ impl crate::casting::Capturer for EngineSession {
             .map_err(|why| why.to_string())
     }
 
+    fn start_browser_window(
+        &mut self,
+        window: &str,
+        max_fps: u32,
+    ) -> Result<crate::engine::CaptureId, String> {
+        self.engine
+            .start_browser_window_capture(window, max_fps)
+            .map_err(|why| why.to_string())
+    }
+
     fn resize(&mut self, capture: crate::engine::CaptureId, size: (u32, u32)) {
         self.engine.resize_capture(capture, size);
     }

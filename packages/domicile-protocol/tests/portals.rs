@@ -849,6 +849,13 @@ fn the_screenshot_and_color_answers_the_sdk_sends_parse() {
             },
         ),
         (
+            r#"{"kind":"screenshot_browser_window","id":"1","copy":true}"#,
+            PortalAnswer::ScreenshotBrowserWindow {
+                id: "1".into(),
+                copy: true,
+            },
+        ),
+        (
             r#"{"kind":"pick_color","x":5,"y":6}"#,
             PortalAnswer::PickColor { x: 5, y: 6 },
         ),
@@ -891,6 +898,14 @@ fn a_frozen_desk_takes_only_its_own_answer_inside_the_frame() {
     assert!(!picker.accepts(&window("app-9")), "not on the desk");
     assert!(!picking.accepts(&window("app-3")));
     assert_eq!(window("app-3").response(), 0);
+    // The engine owns browser windows and refuses one that is not open.
+    let browser = PortalAnswer::ScreenshotBrowserWindow {
+        id: "1".into(),
+        copy: false,
+    };
+    assert!(picker.accepts(&browser));
+    assert!(!picking.accepts(&browser));
+    assert_eq!(browser.response(), 0);
     assert!(picking.accepts(&PortalAnswer::PickColor { x: 299, y: 99 }));
     assert!(!picking.accepts(&PortalAnswer::PickColor { x: 300, y: 0 }));
     assert!(!picking.accepts(&area(0, 0, 1, 1)));

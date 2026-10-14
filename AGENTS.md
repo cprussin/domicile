@@ -37,6 +37,20 @@ a tree holding both teaches both.
 group of `./scripts/check.sh`. The one exemption is a spelling that is somebody
 else's API — `nix-store --realise` is Nix's flag, not a word.
 
+## Change the engine when the engine is the right place
+
+Fix a problem in the layer that owns it, even when that layer is the engine.
+An engine change costs a release build on `crux`; that cost is never a reason
+to:
+
+- work around the engine from the compositor or the shell,
+- ship a weaker fix or implementation than the engine change would give,
+- or drop or narrow a user-facing feature.
+
+If the right fix needs the engine, make the engine change in the same pull
+request. See [RELEASES.md](/packages/domicile-engine/docs/RELEASES.md) for how
+CI builds and pins it.
+
 ## Post-edit audit (non-negotiable)
 
 After finishing edits — and before declaring a change done or opening a

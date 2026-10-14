@@ -56,6 +56,7 @@
 #include "components/viz/common/surfaces/local_surface_id.h"
 #include "mojo/core/embedder/embedder.h"
 #include "mojo/core/embedder/scoped_ipc_support.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -416,7 +417,16 @@ class Surface : public mojom::SurfaceObserver,
 constexpr size_t kMostCapturedPlanes =
     std::extent_v<decltype(DomicileCapturedFrame::planes)>;
 
-// One display capture, for a screen cast.
+// Asks the broker to start a capture through the pipes it is given, and
+// replies whether it started.
+using AskToCapture =
+    base::OnceCallback<void(mojom::FrameSinkBroker*,
+                            mojo::PendingReceiver<mojom::DisplayCapture>,
+                            mojo::PendingRemote<mojom::DisplayCaptureObserver>,
+                            base::OnceCallback<void(bool)>)>;
+
+// One capture, of a display for a screen cast or of a browser window for a
+// screenshot.
 //
 // Runs on the engine's mojo thread, like Surface, and reports to the
 // compositor only through the EngineEventQueue. Holds each frame until the
@@ -434,14 +444,10 @@ class Capture : public mojom::DisplayCaptureObserver {
   ~Capture() override = default;
 
   void Start(mojom::FrameSinkBroker* broker,
-             int64_t display_id,
-             const gfx::Size& size,
-             uint32_t max_fps,
+             AskToCapture ask,
              base::OnceCallback<void(bool)> done) {
-    broker->CaptureDisplay(display_id, size, max_fps,
-                           control_.BindNewPipeAndPassReceiver(),
-                           observer_.BindNewPipeAndPassRemote(),
-                           std::move(done));
+    std::move(ask).Run(broker, control_.BindNewPipeAndPassReceiver(),
+                       observer_.BindNewPipeAndPassRemote(), std::move(done));
   }
 
   // Starts hearing the browser close the capture. Called only once it
@@ -956,11 +962,33 @@ struct DomicileEngine {
   DomicileCaptureId StartCapture(int64_t display_id,
                                  const gfx::Size& size,
                                  uint32_t max_fps) {
-    DomicileCaptureId started = 0;
-    RunOnThreadAndWait(base::BindOnce(&DomicileEngine::StartCaptureOnThread,
-                                      base::Unretained(this), display_id, size,
-                                      max_fps, &started));
-    return started;
+    return StartCaptureWith(base::BindOnce(
+        [](int64_t display_id, const gfx::Size& size, uint32_t max_fps,
+           domicile::mojom::FrameSinkBroker* broker,
+           mojo::PendingReceiver<domicile::mojom::DisplayCapture> capture,
+           mojo::PendingRemote<domicile::mojom::DisplayCaptureObserver>
+               observer,
+           base::OnceCallback<void(bool)> done) {
+          broker->CaptureDisplay(display_id, size, max_fps, std::move(capture),
+                                 std::move(observer), std::move(done));
+        },
+        display_id, size, max_fps));
+  }
+
+  // Blocks for the browser's answer, like StartCapture.
+  DomicileCaptureId StartBrowserWindowCapture(const std::string& window_id,
+                                              uint32_t max_fps) {
+    return StartCaptureWith(base::BindOnce(
+        [](const std::string& window_id, uint32_t max_fps,
+           domicile::mojom::FrameSinkBroker* broker,
+           mojo::PendingReceiver<domicile::mojom::DisplayCapture> capture,
+           mojo::PendingRemote<domicile::mojom::DisplayCaptureObserver>
+               observer,
+           base::OnceCallback<void(bool)> done) {
+          broker->CaptureBrowserWindow(window_id, max_fps, std::move(capture),
+                                       std::move(observer), std::move(done));
+        },
+        window_id, max_fps));
   }
 
   void ResizeCapture(DomicileCaptureId capture, const gfx::Size& size) {
@@ -1036,9 +1064,15 @@ struct DomicileEngine {
     return record;
   }
 
-  void StartCaptureOnThread(int64_t display_id,
-                            const gfx::Size& size,
-                            uint32_t max_fps,
+  DomicileCaptureId StartCaptureWith(domicile::AskToCapture ask) {
+    DomicileCaptureId started = 0;
+    RunOnThreadAndWait(base::BindOnce(&DomicileEngine::StartCaptureOnThread,
+                                      base::Unretained(this), std::move(ask),
+                                      &started));
+    return started;
+  }
+
+  void StartCaptureOnThread(domicile::AskToCapture ask,
                             DomicileCaptureId* started) {
     if (!broker_) {
       return;
@@ -1054,7 +1088,7 @@ struct DomicileEngine {
     // Synchronous because the ABI is; see CreateSurfaceOnThread.
     base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
     bool ok = false;
-    raw->Start(broker_.get(), display_id, size, max_fps,
+    raw->Start(broker_.get(), std::move(ask),
                base::BindOnce(
                    [](base::RunLoop* loop, bool* ok, bool result) {
                      *ok = result;
@@ -1686,6 +1720,17 @@ DomicileCaptureId domicile_display_capture_start(DomicileEngine* engine,
   return engine->StartCapture(
       display_id,
       gfx::Size(static_cast<int>(width), static_cast<int>(height)), max_fps);
+}
+
+DomicileCaptureId domicile_browser_window_capture_start(DomicileEngine* engine,
+                                                        const char* window_id,
+                                                        uint32_t max_fps) {
+  // The browser refuses a zero rate as a bad message, which would close the
+  // whole connection.
+  if (!engine || !window_id || max_fps == 0) {
+    return 0;
+  }
+  return engine->StartBrowserWindowCapture(window_id, max_fps);
 }
 
 void domicile_display_capture_resize(DomicileEngine* engine,
