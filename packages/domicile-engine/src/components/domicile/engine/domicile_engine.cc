@@ -570,7 +570,8 @@ class Displays : public mojom::DisplayListObserver {
                         .height = one->bounds.height(),
                         .physical_width_mm = one->physical_size_mm.width(),
                         .physical_height_mm = one->physical_size_mm.height(),
-                        .refresh_mhz = one->refresh_mhz});
+                        .refresh_mhz = one->refresh_mhz,
+                        .connector = one->connector});
     }
     queue_->Push(event);
   }
@@ -749,24 +750,26 @@ struct DomicileEngine {
           }
           break;
         case domicile::EngineEvent::Type::kDisplays:
-          if (callbacks_.displays) {
-            // Convert to the ABI's record, whose `name` is a `const char*`.
-            // The strings belong to `event`, which lives in the drained vector
-            // until the loop ends, so they outlive the callback as the header
-            // promises.
+          // Convert to the ABI's records, whose strings are `const char*`.
+          // The strings belong to `event`, which lives in the drained vector
+          // until the loop ends, so they outlive the callback as the header
+          // promises.
+          if (callbacks_.connected_displays) {
+            std::vector<DomicileConnectedDisplay> records;
+            records.reserve(event.displays.size());
+            for (const domicile::EngineDisplay& display : event.displays) {
+              records.push_back(DomicileConnectedDisplay{
+                  .display = RecordOf(display),
+                  .connector = display.connector.c_str()});
+            }
+            callbacks_.connected_displays(
+                callbacks_.user_data, records.data(),
+                static_cast<uint32_t>(records.size()));
+          } else if (callbacks_.displays) {
             std::vector<DomicileDisplay> records;
             records.reserve(event.displays.size());
             for (const domicile::EngineDisplay& display : event.displays) {
-              records.push_back(DomicileDisplay{
-                  .id = display.id,
-                  .name = display.name.c_str(),
-                  .x = display.x,
-                  .y = display.y,
-                  .width = display.width,
-                  .height = display.height,
-                  .physical_width_mm = display.physical_width_mm,
-                  .physical_height_mm = display.physical_height_mm,
-                  .refresh_mhz = display.refresh_mhz});
+              records.push_back(RecordOf(display));
             }
             callbacks_.displays(callbacks_.user_data, records.data(),
                                 static_cast<uint32_t>(records.size()));
@@ -990,6 +993,19 @@ struct DomicileEngine {
   }
 
  private:
+  // The ABI's record of `display`, pointing at the name `display` owns.
+  static DomicileDisplay RecordOf(const domicile::EngineDisplay& display) {
+    return DomicileDisplay{.id = display.id,
+                           .name = display.name.c_str(),
+                           .x = display.x,
+                           .y = display.y,
+                           .width = display.width,
+                           .height = display.height,
+                           .physical_width_mm = display.physical_width_mm,
+                           .physical_height_mm = display.physical_height_mm,
+                           .refresh_mhz = display.refresh_mhz};
+  }
+
   // The ABI's record of `frame`, pointing at the fds `frame` owns.
   static DomicileCapturedFrame RecordOf(
       const domicile::EngineCapturedFrame& frame) {

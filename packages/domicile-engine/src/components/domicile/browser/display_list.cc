@@ -3,6 +3,7 @@
 
 #include "components/domicile/browser/display_list.h"
 
+#include <string>
 #include <vector>
 
 #include "base/numerics/safe_conversions.h"
@@ -36,14 +37,17 @@ gfx::Size PhysicalSizeMm(const display::Display& screen) {
 }  // namespace
 
 std::vector<mojom::DisplayPtr> DisplayListFor(
-    const std::vector<display::Display>& displays) {
+    const std::vector<display::Display>& displays,
+    const base::flat_map<int64_t, std::string>& connectors) {
   std::vector<mojom::DisplayPtr> list;
   list.reserve(displays.size());
   // Not named `display`, which would shadow the namespace.
   for (const display::Display& screen : displays) {
+    const auto connector = connectors.find(screen.id());
     list.push_back(mojom::Display::New(
         screen.id(), screen.bounds(), PhysicalSizeMm(screen), screen.label(),
-        base::ClampRound(screen.display_frequency() * kMillihertzPerHertz)));
+        base::ClampRound(screen.display_frequency() * kMillihertzPerHertz),
+        connector == connectors.end() ? std::string() : connector->second));
   }
   return list;
 }

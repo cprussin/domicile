@@ -100,8 +100,9 @@ impl Profile {
 pub struct DisplayPlacement {
     /// The connected display this entry places, matched by exact name.
     ///
-    /// On a tty the output name is `drm-<id>`. Ozone derives the id from the
-    /// EDID, so it survives a replug. A panel name also matches.
+    /// On a tty the output name is `drm-<id>`, or the connector (`HDMI-A-1`)
+    /// for a monitor with no EDID name. Ozone derives the id from the EDID, so
+    /// it survives a replug. A panel name also matches.
     pub display: String,
     /// Whether the display is part of the desktop.
     ///
@@ -247,8 +248,9 @@ impl Transform {
 /// the engine.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Connected {
-    /// The advertised output name: `drm-<id>` on a tty, with ozone's id from
-    /// the EDID. Always present.
+    /// The advertised output name: on a tty, `drm-<id>` with ozone's id from
+    /// the EDID, or the connector for a monitor with no EDID name. Always
+    /// present.
     pub name: String,
     /// The panel's `"<MAKE> <MODEL> <SERIAL>"` from its EDID, or empty if it
     /// has none.
@@ -368,7 +370,8 @@ impl Layout {
 /// page inside is logical and upright.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Scanout {
-    /// The output name (`drm-<id>` on a tty) the engine knows the monitor by.
+    /// The output name (`drm-<id>` or a connector on a tty) the engine knows
+    /// the monitor by.
     ///
     /// May differ from what the profile wrote, which can be a panel name.
     pub name: String,
@@ -407,8 +410,8 @@ pub struct Desk {
 /// One display of an applied profile, placed in the desktop's own coordinates.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Placed {
-    /// The output name (`drm-<id>` on a tty): the `wl_output`'s name and how
-    /// the chrome addresses the screen.
+    /// The output name (`drm-<id>` or a connector on a tty): the
+    /// `wl_output`'s name and how the chrome addresses the screen.
     ///
     /// May differ from what the profile wrote, which can be a panel name.
     pub name: String,

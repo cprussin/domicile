@@ -72,6 +72,12 @@ struct Display {
   // there is no mode. Clients are paced by wl_surface.frame, so zero is
   // harmless.
   int32 refresh_mhz;
+
+  // The kernel's name for the display's connector ("HDMI-A-1"), or empty on a
+  // platform with no connectors. The producer names a monitor with no `name`
+  // after it, as sway does. Read in the GPU process by
+  // ui/ozone/platform/drm/domicile/connector_name.cc.
+  string connector;
 };
 
 // How the producer wants one display's connector driven.

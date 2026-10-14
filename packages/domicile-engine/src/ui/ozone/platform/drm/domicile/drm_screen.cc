@@ -227,6 +227,12 @@ void DrmScreen::OnDisplaysChanged(
   const std::vector<display::Display> displays =
       DisplaysFromSnapshots(snapshots, layout);
 
+  // Before the list changes, so its observers read the new connectors.
+  connectors_.clear();
+  for (const display::DisplaySnapshot* snapshot : snapshots) {
+    connectors_[snapshot->display_id()] = snapshot->domicile_connector();
+  }
+
   // Not always the first snapshot: a profile may turn the laptop panel off.
   const size_t primary = PrimaryIndexForLayout(snapshots, layout);
 

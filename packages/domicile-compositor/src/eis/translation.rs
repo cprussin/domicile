@@ -234,6 +234,7 @@ mod tests {
                 scale: 1.0,
                 transform: Transform::Normal,
                 description: String::new(),
+                display: None,
                 physical_mm: (0, 0),
                 refresh_mhz: 0,
             }],

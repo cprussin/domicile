@@ -533,6 +533,7 @@ mod tests {
         Display {
             id,
             description: String::new(),
+            connector: String::new(),
             position,
             size: (1920, 1080),
             physical_mm: (600, 340),

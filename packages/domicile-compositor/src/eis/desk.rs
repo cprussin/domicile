@@ -185,6 +185,7 @@ mod tests {
             scale,
             transform: Transform::Normal,
             description: String::new(),
+            display: None,
             physical_mm: (0, 0),
             refresh_mhz: 0,
         }
