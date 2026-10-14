@@ -15,7 +15,7 @@
 
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use domicile_host::system::Reach;
 use domicile_host::unlock_refusals::Refused;
@@ -24,6 +24,11 @@ use domicile_protocol::{HostMessage, Passphrase, UnlockRefusal};
 use crate::chrome_connection::ConnectionRequest;
 use crate::client_requests::ClientRequest;
 use crate::unlock_backoff::Backoff;
+
+/// How long the shell gets to draw its lock screen before the screens go dark
+/// or the machine sleeps. Otherwise the unlocked desktop shows on waking until
+/// it does. Under logind's default `InhibitDelayMaxSec`, 5 seconds.
+pub const LOCK_SCREEN_DRAWS_WITHIN: Duration = Duration::from_secs(1);
 
 /// Checks whether a passphrase unlocks the desktop: [`crate::pam::Pam`] on a
 /// real desk.

@@ -14,6 +14,10 @@ input, and locks the desktop after `idle.lock_after_seconds`
 - `Idle::lock_due` reports the lock edge once per spell without input. The
   timer, and any inhibitor change, checks it before a modeset, so the lock
   screen is up before a screen lights.
+- Blanking waits until 1 second after the lock (`LOCK_SCREEN_DRAWS_WITHIN`),
+  so the shell draws its lock screen on every monitor first. A monitor the
+  page is mirrored to can show its last frame when it lights again, and that
+  frame must not be the unlocked desktop.
 - Releasing the last inhibitor after either timeout acts at once.
 
 ## Blanking
