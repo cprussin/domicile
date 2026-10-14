@@ -21,6 +21,7 @@
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
+#include "components/domicile/browser/browser_window_capture_target.h"
 #include "components/domicile/browser/external_surface_provider.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/resources/shared_image_format.h"
@@ -337,13 +338,23 @@ class FrameSinkBrokerTest : public testing::Test {
                             base::Unretained(this)),
         base::BindRepeating(&FrameSinkBrokerTest::RecordClipboard,
                             base::Unretained(this)),
-        base::BindRepeating(&FrameSinkBrokerTest::CaptureTarget));
+        base::BindRepeating(&FrameSinkBrokerTest::CaptureTarget),
+        base::BindRepeating(&FrameSinkBrokerTest::BrowserWindowTarget));
     page_ = broker_->NewEmbedRequester();
   }
 
   // Fake for the browser's windows: display 7's window is the page's.
   static std::optional<viz::FrameSinkId> CaptureTarget(int64_t display_id) {
     return display_id == 7 ? std::optional(kPageFrameSinkId) : std::nullopt;
+  }
+
+  // Fake for //chrome's browser windows: window "1" is open, drawn by the
+  // page's frame sink.
+  static std::optional<BrowserWindowCaptureTarget> BrowserWindowTarget(
+      const std::string& window_id) {
+    return window_id == "1" ? BrowserWindowCaptureTargetOf(
+                                  kPageFrameSinkId, gfx::Size(800, 600), 1.0f)
+                            : std::nullopt;
   }
 
   // Fake for aura::Env's GPU: none, as when headless, unless a test gives
@@ -1191,6 +1202,37 @@ TEST_F(FrameSinkBrokerTest, ADisplayWithNoWindowIsRefused) {
   remote->CaptureDisplay(8, gfx::Size(1920, 1080), 30,
                          capture.BindNewPipeAndPassReceiver(),
                          observer.BindRemote(), started.GetCallback());
+
+  EXPECT_FALSE(started.Get());
+  RunUntilIdle();
+  EXPECT_FALSE(capture.is_connected());
+}
+
+TEST_F(FrameSinkBrokerTest, AnOpenBrowserWindowIsCapturedAlone) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  FakeDisplayCaptureObserver observer;
+  mojo::Remote<mojom::DisplayCapture> capture;
+
+  base::test::TestFuture<bool> started;
+  remote->CaptureBrowserWindow("1", 30, capture.BindNewPipeAndPassReceiver(),
+                               observer.BindRemote(), started.GetCallback());
+
+  EXPECT_TRUE(started.Get());
+  RunUntilIdle();
+  EXPECT_TRUE(capture.is_connected());
+}
+
+TEST_F(FrameSinkBrokerTest, ABrowserWindowThatIsNotOpenIsRefused) {
+  // As when the window closed after the producer heard of it.
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  FakeDisplayCaptureObserver observer;
+  mojo::Remote<mojom::DisplayCapture> capture;
+
+  base::test::TestFuture<bool> started;
+  remote->CaptureBrowserWindow("2", 30, capture.BindNewPipeAndPassReceiver(),
+                               observer.BindRemote(), started.GetCallback());
 
   EXPECT_FALSE(started.Get());
   RunUntilIdle();

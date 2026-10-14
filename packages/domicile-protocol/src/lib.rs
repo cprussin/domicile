@@ -700,6 +700,9 @@ impl PortalKind {
             (PortalKind::Screenshot(desk), PortalAnswer::ScreenshotWindow { id, .. }) => {
                 desk.windows.iter().any(|window| window.id == *id)
             }
+            // The engine owns the browser window list, and refuses an id no
+            // window has.
+            (PortalKind::Screenshot(_), PortalAnswer::ScreenshotBrowserWindow { .. }) => true,
             (PortalKind::PickColor(desk), PortalAnswer::PickColor { x, y }) => {
                 *x < desk.width && *y < desk.height
             }
@@ -718,6 +721,7 @@ impl PortalKind {
                 | PortalAnswer::Print { .. }
                 | PortalAnswer::Screenshot { .. }
                 | PortalAnswer::ScreenshotWindow { .. }
+                | PortalAnswer::ScreenshotBrowserWindow { .. }
                 | PortalAnswer::PickColor { .. }
                 | PortalAnswer::Stop
                 | PortalAnswer::Pressed
@@ -1334,6 +1338,15 @@ pub enum PortalAnswer {
         #[serde(default)]
         copy: bool,
     },
+    /// A browser window of a [`PortalKind::Screenshot`] the user picked, by
+    /// the id the engine's browser window list gives it. Saved from the
+    /// engine's capture of its page alone, so nothing over it is in the shot.
+    /// `copy` as for [`PortalAnswer::Screenshot`].
+    ScreenshotBrowserWindow {
+        id: String,
+        #[serde(default)]
+        copy: bool,
+    },
     /// The pixel of a [`PortalKind::PickColor`] the user picked.
     PickColor { x: u32, y: u32 },
     /// The [`BoundShortcut`] with this id fired. Answers no request.
@@ -1362,6 +1375,7 @@ impl PortalAnswer {
             | PortalAnswer::Print { .. }
             | PortalAnswer::Screenshot { .. }
             | PortalAnswer::ScreenshotWindow { .. }
+            | PortalAnswer::ScreenshotBrowserWindow { .. }
             | PortalAnswer::PickColor { .. }
             | PortalAnswer::Stop => 0,
             PortalAnswer::Canceled => 1,

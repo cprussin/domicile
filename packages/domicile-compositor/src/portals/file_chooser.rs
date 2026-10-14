@@ -244,6 +244,7 @@ impl Asked {
             | PortalAnswer::GlobalShortcuts { .. }
             | PortalAnswer::Screenshot { .. }
             | PortalAnswer::ScreenshotWindow { .. }
+            | PortalAnswer::ScreenshotBrowserWindow { .. }
             | PortalAnswer::PickColor { .. }
             | PortalAnswer::Pressed
             | PortalAnswer::Released

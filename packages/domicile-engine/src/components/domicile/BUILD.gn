@@ -35,7 +35,8 @@ source_set("browser") {
   # that is arithmetic rather than plumbing. It is still not //content.
   public_deps = [
     # Public so the browser's broker in //content, which depends only on this
-    # target, finds a display's window with it.
+    # target, finds a display's window with it, and a browser window's page.
+    ":browser_window_capture_target",
     ":display_capture_target",
     # Public for the same reason: //content binds a page to the broker only if
     # it is the shell.
@@ -70,6 +71,22 @@ source_set("display_capture_target") {
   public_deps = [
     "//components/viz/common",
     "//ui/display",
+    "//ui/gfx/geometry",
+  ]
+}
+
+# A browser window's own frame sink, for a capture of the window alone. A
+# target of its own for :display_capture_target's reason: the windows are
+# //chrome's, which sets the finder, and the broker in //content asks it.
+source_set("browser_window_capture_target") {
+  sources = [
+    "browser/browser_window_capture_target.cc",
+    "browser/browser_window_capture_target.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//components/viz/common",
     "//ui/gfx/geometry",
   ]
 }
@@ -752,6 +769,7 @@ source_set("unit_tests") {
     "browser/app_channel_unittest.cc",
     "browser/app_roots_unittest.cc",
     "browser/browser_pages_unittest.cc",
+    "browser/browser_window_capture_target_unittest.cc",
     "browser/color_scheme_unittest.cc",
     "browser/command_protocol_unittest.cc",
     "browser/context_menu_unittest.cc",
@@ -807,6 +825,7 @@ source_set("unit_tests") {
     ":app_roots",
     ":browser",
     ":browser_pages",
+    ":browser_window_capture_target",
     ":color_scheme",
     ":command_protocol",
     ":context_menu",

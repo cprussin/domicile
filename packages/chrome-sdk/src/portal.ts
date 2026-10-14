@@ -596,6 +596,11 @@ export enum PortalAnswerKind {
    * its own last frame.
    */
   ScreenshotWindow,
+  /**
+   * A browser window of a {@link PortalKind.Screenshot} the user picked, saved
+   * from the engine's capture of its page alone.
+   */
+  ScreenshotBrowserWindow,
   /** The pixel of a {@link PortalKind.PickColor} the user picked. */
   PickColor,
   /** The user dismissed or denied the dialog. */
@@ -655,6 +660,15 @@ export const PortalAnswer = {
     area,
     copy,
     kind: PortalAnswerKind.Screenshot as const,
+  }),
+  /**
+   * A browser window, by its `DomicileBrowserWindow` id; `copy` as above.
+   * Nothing the shell draws over the window is in the shot.
+   */
+  ScreenshotBrowserWindow: (id: string, copy: boolean) => ({
+    copy,
+    id,
+    kind: PortalAnswerKind.ScreenshotBrowserWindow as const,
   }),
   /** One of the request's windows, by {@link ShotWindow.id}; `copy` as above. */
   ScreenshotWindow: (id: string, copy: boolean) => ({
@@ -1455,6 +1469,12 @@ const wireAnswer = (answer: PortalAnswer): object => {
       return { area: answer.area, copy: answer.copy, kind: "screenshot" };
     case PortalAnswerKind.ScreenshotWindow:
       return { copy: answer.copy, id: answer.id, kind: "screenshot_window" };
+    case PortalAnswerKind.ScreenshotBrowserWindow:
+      return {
+        copy: answer.copy,
+        id: answer.id,
+        kind: "screenshot_browser_window",
+      };
     case PortalAnswerKind.PickColor:
       return { kind: "pick_color", x: answer.at.x, y: answer.at.y };
     case PortalAnswerKind.Refused:

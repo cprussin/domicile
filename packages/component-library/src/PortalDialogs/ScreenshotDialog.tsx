@@ -39,13 +39,30 @@ type Props = {
 enum PickKind {
   Area,
   Window,
+  BrowserWindow,
 }
 
 const Pick = {
   /** An area of the frozen desk. */
   Area: (area: ShotRect) => ({ area, kind: PickKind.Area as const }),
-  /** A window not on screen, from its own last frame. */
-  Window: (id: string) => ({ id, kind: PickKind.Window as const }),
+  /**
+   * A browser window from the engine's capture of its page, without what is
+   * over it. `area` is where the shell shows it on the frozen desk.
+   */
+  BrowserWindow: (id: string, area: ShotRect) => ({
+    area,
+    id,
+    kind: PickKind.BrowserWindow as const,
+  }),
+  /**
+   * A window from its own last frame, without what is over it. `area` is
+   * where the shell shows it on the frozen desk, if it does.
+   */
+  Window: (id: string, area: ShotRect | undefined) => ({
+    area,
+    id,
+    kind: PickKind.Window as const,
+  }),
 };
 
 type Pick = ReturnType<(typeof Pick)[keyof typeof Pick]>;
@@ -55,10 +72,9 @@ type Choice = { icon: ReactNode; name: string; pick: Pick };
 
 /**
  * Picks what to save of a frozen desk: all of it, a screen, a window, or an
- * area dragged over it. A window the shell shows is its whole frame on the
- * desk; one it does not show, such as a hidden tab, is saved from its own
- * last frame. Ctrl+C copies the pick to the clipboard instead of saving it.
- * Dismissing it cancels.
+ * area dragged over it. A window is saved from its own frame, so what is
+ * over it, such as a notification, is left out. Ctrl+C copies the pick to
+ * the clipboard instead of saving it. Dismissing it cancels.
  */
 export const ScreenshotDialog = ({
   answer,
@@ -183,7 +199,7 @@ export const ScreenshotDialog = ({
           </ChoiceGroup>
         )}
       </div>
-      {pick.kind === PickKind.Window && (
+      {pick.kind === PickKind.Window && pick.area === undefined && (
         <p className={askerStyles}>
           Not on screen: saved as it last drew itself.
         </p>
@@ -212,7 +228,7 @@ export const ScreenshotDialog = ({
           draggable={false}
           src={body.frame}
         />
-        {pick.kind === PickKind.Area && (
+        {pick.area !== undefined && (
           <div className={pickedStyles} style={placed(pick.area, body)} />
         )}
       </div>
@@ -297,6 +313,8 @@ const answerOf = (pick: Pick, copy: boolean): PortalAnswer => {
       return Answer.Screenshot(pick.area, copy);
     case PickKind.Window:
       return Answer.ScreenshotWindow(pick.id, copy);
+    case PickKind.BrowserWindow:
+      return Answer.ScreenshotBrowserWindow(pick.id, copy);
   }
 };
 
@@ -308,10 +326,7 @@ const isCopy = (event: KeyboardEvent): boolean =>
   !event.shiftKey &&
   event.key.toLowerCase() === "c";
 
-/**
- * What saving window `id` keeps: its frame on the desk while the shell shows
- * it there, else its own last frame.
- */
+/** Window `id`, placed on the desk while the shell shows it there. */
 const pickOf = (
   desk: FrozenDesk,
   shown: readonly ShownWindow[],
@@ -320,13 +335,16 @@ const pickOf = (
   const window = shown.find(
     (window) => window.kind === ShownWindowKind.App && window.appId === id,
   );
-  const area = window === undefined ? undefined : onFrame(desk, window.box);
-  return area === undefined ? Pick.Window(id) : Pick.Area(area);
+  return Pick.Window(
+    id,
+    window === undefined ? undefined : onFrame(desk, window.box),
+  );
 };
 
 /**
- * `window` as a choice when it is a listed browser window on the desk. The
- * engine draws a browser window, so one not on screen has nothing to save.
+ * `window` as a choice when it is a listed browser window on the desk. A
+ * browser window's page draws only while shown, so one not on screen has
+ * nothing to save.
  */
 const browserChoices = (
   desk: FrozenDesk,
@@ -345,7 +363,7 @@ const browserChoices = (
             {
               icon: <GlobeIcon aria-hidden />,
               name: `Browser: ${titled(browser.title)}`,
-              pick: Pick.Area(area),
+              pick: Pick.BrowserWindow(browser.id, area),
             },
           ];
     }
