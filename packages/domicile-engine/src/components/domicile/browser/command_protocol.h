@@ -129,17 +129,23 @@ using LoadShell = base::FunctionRef<void(const base::FilePath& root,
                                          const std::string& module,
                                          ShellLoaded loaded)>;
 
+// Runs once with whether `run_app` or `open_url` opened its window: false if
+// there is no shell to own it.
+using WindowOpened = base::OnceCallback<void(bool opened)>;
+
 // Carries out `run_app`: serves the app module `module` under `root` and opens
-// an app window on it. Returns false if there is no shell to own the window.
-// See docs/architecture/APP-MODULES.md.
-using RunApp =
-    base::FunctionRef<bool(const base::FilePath& root,
-                           const std::string& module)>;
+// an app window on it. Runs `opened` once, possibly after returning, as the
+// shell window's first page may still be loading. See
+// docs/architecture/APP-MODULES.md.
+using RunApp = base::FunctionRef<void(const base::FilePath& root,
+                                      const std::string& module,
+                                      WindowOpened opened)>;
 
 // Carries out `open_url`: opens a browser window at `url`, or with `app` an app
-// window, which the shell draws without an address bar. Returns false if there
-// is no shell to own the window.
-using OpenUrl = base::FunctionRef<bool(const GURL& url, bool app)>;
+// window, which the shell draws without an address bar. Runs `opened` once,
+// possibly after returning, as for `run_app`.
+using OpenUrl =
+    base::FunctionRef<void(const GURL& url, bool app, WindowOpened opened)>;
 
 // One site's stored setting for one permission.
 struct StoredSitePermission {
@@ -365,9 +371,9 @@ struct CommandActions {
 using CommandReply = base::OnceCallback<void(std::string)>;
 
 // Answers one request line (without its newline). `reply` runs once: before
-// this returns, except for `load_shell`, `load_unpacked`, `history`, `visits`,
-// `delete_history` and `clear_browsing_data`, which answer once their action
-// is done.
+// this returns, except for `load_shell`, `run_app`, `open_url`,
+// `load_unpacked`, `history`, `visits`, `delete_history` and
+// `clear_browsing_data`, which answer once their action is done.
 void AnswerCommand(std::string_view line,
                    const CommandActions& actions,
                    CommandReply reply);

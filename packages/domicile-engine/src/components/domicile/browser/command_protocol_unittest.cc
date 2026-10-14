@@ -36,6 +36,10 @@ struct Told {
   // Set to hold `load_shell`'s answer in `held_load` instead of giving it.
   bool hold_load = false;
   ShellLoaded held_load;
+  // Set to hold `run_app`'s or `open_url`'s answer in `held_open` instead of
+  // giving it.
+  bool hold_open = false;
+  WindowOpened held_open;
   // The last reply, which a held command gives after Answer returns.
   std::string reply;
   bool asked = false;
@@ -141,17 +145,27 @@ std::string Answer(std::string_view line,
     std::move(loaded).Run(has_window);
   };
   auto run_app = [told, has_window](const base::FilePath& root,
-                                    const std::string& module) {
+                                    const std::string& module,
+                                    WindowOpened opened) {
     told->ran = true;
     told->app_root = root;
     told->app_module = module;
-    return has_window;
+    if (told->hold_open) {
+      told->held_open = std::move(opened);
+      return;
+    }
+    std::move(opened).Run(has_window);
   };
-  auto open_url = [told, has_window](const GURL& url, bool app) {
+  auto open_url = [told, has_window](const GURL& url, bool app,
+                                     WindowOpened opened) {
     told->opened = true;
     told->url = url.spec();
     told->app = app;
-    return has_window;
+    if (told->hold_open) {
+      told->held_open = std::move(opened);
+      return;
+    }
+    std::move(opened).Run(has_window);
   };
   auto list_site_permissions =
       [has_window]() -> std::optional<SitePermissionList> {
@@ -364,6 +378,21 @@ TEST(CommandProtocolTest, RefusesAnAppWithNoShellToDrawIt) {
       "refused");
 }
 
+TEST(CommandProtocolTest, AnswersAnAppOnceTheShellWindowCanTakeIt) {
+  // An app run at login can arrive while the shell window's first page is
+  // still loading.
+  Told told;
+  told.hold_open = true;
+  EXPECT_EQ(
+      Answer(
+          R"({"type":"run_app","version":1,"root":"/opt/notes","module":"notes.js"})",
+          &told),
+      "");
+
+  std::move(told.held_open).Run(true);
+  EXPECT_EQ(TypeOf(told.reply), "opened");
+}
+
 TEST(CommandProtocolTest, RefusesALineThatIsNotARequest) {
   Told told;
   EXPECT_EQ(TypeOf(Answer("load_shell /home/someone/desktop", &told)),
@@ -522,6 +551,20 @@ TEST(CommandProtocolTest, RefusesWhenThereIsNoShellPageToOpenIn) {
              &told, /*has_window=*/false);
   EXPECT_EQ(TypeOf(reply), "refused");
   EXPECT_THAT(WhyOf(reply), HasSubstr("shell page"));
+}
+
+TEST(CommandProtocolTest, AnswersAnAddressOnceTheShellWindowCanTakeIt) {
+  // An address opened at login can arrive while the shell window's first page
+  // is still loading.
+  Told told;
+  told.hold_open = true;
+  EXPECT_EQ(
+      Answer(R"({"type":"open_url","version":1,"url":"https://example.com/"})",
+             &told),
+      "");
+
+  std::move(told.held_open).Run(true);
+  EXPECT_EQ(TypeOf(told.reply), "opened");
 }
 
 TEST(CommandProtocolTest, ListsEachPermissionsDefaultAndEachSitesSetting) {
