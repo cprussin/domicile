@@ -60,6 +60,7 @@ source_set("domicile") {
     "//components/domicile:common",
     "//components/domicile:pointer_warp",
     "//components/domicile:shell_source",
+    "//components/domicile:shell_window_wait",
     "//components/domicile:shell_windows",
     "//components/tabs:public",
     "//content/public/browser",
