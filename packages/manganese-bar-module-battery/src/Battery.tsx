@@ -3,6 +3,7 @@ import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch"
 import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
 import type { Battery as BatteryReading } from "@domicile-desktop/system-battery/battery";
 import { LightningIcon } from "@phosphor-icons/react/dist/ssr/Lightning";
+import { useId } from "react";
 import { css, cva, cx } from "../styled-system/css";
 import { hstack } from "../styled-system/patterns";
 
@@ -11,6 +12,9 @@ const DANGEROUS_PERCENT = 10;
 
 /** At or below this percentage the readout also flashes. */
 const FLASHING_PERCENT = 5;
+
+/** The fill's widest extent, between the inside's 1-unit gaps. */
+const FILL_WIDTH = 18;
 
 type Props = {
   /** The desk's battery, from UPower. */
@@ -35,40 +39,78 @@ export const Battery = ({ battery }: Props) =>
     Some: (reading) => <Meter reading={reading} />,
   });
 
-/** The readout once there is a reading. */
+/**
+ * The readout once there is a reading.
+ *
+ * The meter is one SVG, 1 unit to a CSS pixel, so its outline has the same
+ * weight on every side at any display scale.
+ */
 const Meter = ({ reading }: { reading: BatteryReading }) => {
   const percent = Math.round(reading.charge * 100);
+  const halo = useId();
   return (
     <div
       className={rootStyles({ charge: chargeOf(percent, reading.charging) })}
     >
-      <div
+      <svg
         aria-label="Battery"
         aria-valuemax={100}
         aria-valuemin={0}
         aria-valuenow={percent}
-        className={caseStyles}
+        className={meterStyles}
         role="meter"
+        viewBox="0 0 24 12"
       >
-        {/* Not tokens: the clips follow the charge itself. */}
-        <div
-          className={fillStyles({ charging: reading.charging })}
-          style={{ clipPath: `inset(0 ${100 - percent}% 0 0)` }}
+        {reading.charging && (
+          // Cuts a gap around the bolt out of the fill.
+          <mask id={halo}>
+            <rect fill="white" height="12" width="24" />
+            {/* 60 of the icon's 256 units: about 1px around the bolt. */}
+            <LightningIcon
+              color="black"
+              size={8}
+              stroke="black"
+              strokeLinejoin="round"
+              strokeWidth={60}
+              weight="fill"
+              x={7.5}
+              y={2}
+            />
+          </mask>
+        )}
+        <rect
+          fill="none"
+          height="10.5"
+          rx="2.25"
+          stroke="currentcolor"
+          strokeWidth="1.5"
+          width="21.5"
+          x="0.75"
+          y="0.75"
+        />
+        {/* The terminal nub; its left end hides under the outline. */}
+        <rect fill="currentcolor" height="4" rx="1" width="2" x="22" y="4" />
+        <rect
+          fill="currentcolor"
+          height="7"
+          mask={reading.charging ? `url(#${halo})` : undefined}
+          rx="1"
+          width={(FILL_WIDTH * percent) / 100}
+          x="2.5"
+          y="2.5"
         />
         {reading.charging && (
-          <div
-            className={boltStyles}
-            style={{ clipPath: `inset(0 0 0 ${percent}%)` }}
-          >
-            <LightningIcon
-              aria-label="Charging"
-              role="img"
-              size={8}
-              weight="fill"
-            />
-          </div>
+          // Centered in the inside, which runs from 1.5 to 21.5.
+          <LightningIcon
+            aria-label="Charging"
+            role="img"
+            size={8}
+            weight="fill"
+            x={7.5}
+            y={2}
+          />
         )}
-      </div>
+      </svg>
       <span className={percentSlotStyles}>
         <span aria-hidden className={percentSizerStyles}>
           100%
@@ -101,63 +143,11 @@ const rootStyles = cva({
   },
 });
 
-// Drawn in `currentcolor` so it follows the readout's color.
-const caseStyles = css({
-  // The terminal nub.
-  _after: {
-    backgroundColor: "currentcolor",
-    blockSize: 1,
-    borderEndEndRadius: "xs",
-    borderStartEndRadius: "xs",
-    content: '""',
-    inlineSize: 0.5,
-    insetBlockStart: "50%",
-    insetInlineStart: "100%",
-    position: "absolute",
-    transform: "translateY(-50%)",
-  },
-  // Tall enough to hold the bolt.
+// One CSS pixel per unit of the viewBox.
+const meterStyles = css({
   blockSize: 3,
-  border: "1px solid currentcolor",
-  borderRadius: "xs",
+  flexShrink: 0,
   inlineSize: 6,
-  // Leaves room for the nub, which sits outside the box.
-  marginInlineEnd: 0.5,
-  padding: 0.25,
-  position: "relative",
-});
-
-// Full width, clipped to the charge, so the bolt's hole stays centered.
-const fillStyles = cva({
-  base: {
-    backgroundColor: "currentcolor",
-    blockSize: "100%",
-  },
-  variants: {
-    charging: {
-      false: {},
-      // Cuts the bolt out of the fill, so it shows where the fill is. The path
-      // is Phosphor's filled Lightning, and a mask's colors only set opacity,
-      // so neither is a token.
-      true: {
-        maskComposite: "exclude",
-        maskImage:
-          "url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'><path d='M213.85,125.46l-112,120a8,8,0,0,1-13.69-7l14.66-73.33L45.19,143.49a8,8,0,0,1-3-13l112-120a8,8,0,0,1,13.69,7L153.18,90.9l57.63,21.61a8,8,0,0,1,3,12.95Z'/></svg>\"), linear-gradient(black, black)",
-        maskPosition: "center",
-        maskRepeat: "no-repeat",
-        maskSize: "auto 100%, 100% 100%",
-      },
-    },
-  },
-});
-
-// Over the case's inside, clipped to where the fill is not.
-const boltStyles = css({
-  alignItems: "center",
-  display: "flex",
-  inset: 0.25,
-  justifyContent: "center",
-  position: "absolute",
 });
 
 // A hidden `100%` sets the width; the figure ends where it does.
@@ -172,6 +162,9 @@ const percentStyles = css({
   // Fixed-width digits, so the figure does not shift as the charge changes.
   fontVariantNumeric: "tabular-nums",
   gridArea: "1 / 1",
+  // Keeps the item as tall as the meter. A taller line centers the meter on a
+  // half pixel, which blurs its outline.
+  lineHeight: "none",
   whiteSpace: "nowrap",
 });
 
