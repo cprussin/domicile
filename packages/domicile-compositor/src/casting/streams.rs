@@ -14,6 +14,8 @@
 //!   that show the pointer.
 //! - A shot of the desk (see [`shots`](crate::casting::shots)) shows every
 //!   monitor like a stream, until each has a frame.
+//! - A shot of a browser window alone is the first frame of an engine
+//!   capture of its page, which then stops.
 
 use std::collections::{HashMap, HashSet};
 use std::os::fd::OwnedFd;
@@ -40,7 +42,9 @@ use crate::casting::pacing::{within, Due, Pacing, Rect};
 use crate::casting::paint::paint;
 use crate::casting::producer::{self, BufferId, StreamFormat, Target, ToPipewire, ToWayland};
 use crate::casting::region::{self, damage_in_stream, in_frame, Layout, Screen};
-use crate::casting::shots::{self, compose, desk_of, monitors, Desk, Developed, Shown};
+use crate::casting::shots::{
+    self, compose, desk_of, monitors, Desk, Developed, DevelopedWindow, Shown,
+};
 use crate::casting::{Candidate, Event, Listener, Region, Request, Source, StreamId};
 use crate::engine::{CaptureId, CapturedFrame};
 use crate::outputs::as_wl_transform;
@@ -104,6 +108,9 @@ pub struct Streams {
     captures: Captures,
     /// Shots waiting for their monitors' frames.
     shooting: Vec<Shooting>,
+    /// Shots of one browser window alone, by the capture whose first frame
+    /// they wait for.
+    browser_shots: HashMap<CaptureId, DevelopedWindow>,
     sprite: Sprite,
 }
 
@@ -185,6 +192,7 @@ impl Streams {
             screens: Vec::new(),
             captures: Captures::default(),
             shooting: Vec::new(),
+            browser_shots: HashMap::new(),
             sprite: arrow(),
         }
     }
@@ -227,6 +235,9 @@ impl Streams {
             } => {
                 let part = self.monitor_part(&name, region);
                 self.shoot(stream, part, Vec::new(), developed, renderer, capturer);
+            }
+            Request::ShootBrowserWindow { id, developed } => {
+                self.shoot_browser_window(&id, developed, capturer);
             }
             Request::ShootWindow { app_id, developed } => developed(
                 self.shown
@@ -353,6 +364,28 @@ impl Streams {
                     developed,
                 });
                 self.develop(renderer, capturer);
+            }
+            Err(why) => developed(Err(why)),
+        }
+    }
+
+    /// Takes a shot of browser window `id` alone, from a capture of its page.
+    /// `developed` hears it with the capture's first frame, or why it failed.
+    fn shoot_browser_window(
+        &mut self,
+        id: &str,
+        developed: DevelopedWindow,
+        capturer: Option<&mut (dyn Capturer + 'static)>,
+    ) {
+        let Some(capturer) = capturer else {
+            developed(Err(
+                "no engine is connected to capture the browser window".into()
+            ));
+            return;
+        };
+        match capturer.start_browser_window(id, MAX_FRAMERATE) {
+            Ok(capture) => {
+                self.browser_shots.insert(capture, developed);
             }
             Err(why) => developed(Err(why)),
         }
@@ -718,6 +751,15 @@ impl Streams {
         capturer: &mut (dyn Capturer + 'static),
         now: Instant,
     ) -> Option<Instant> {
+        if let Some(developed) = self.browser_shots.remove(&capture) {
+            let shot = captured
+                .map_err(|why| why.to_string())
+                .and_then(|frame| shots::browser_window(&frame, renderer));
+            // Stopping releases the frame, so only once it is read.
+            capturer.stop(capture);
+            developed(shot);
+            return self.next_due();
+        }
         let Some(display) = self.captures.display_of(capture) else {
             capturer.release(capture, id);
             return self.next_due();
@@ -776,6 +818,9 @@ impl Streams {
         capture: CaptureId,
         mut capturer: Option<&mut (dyn Capturer + 'static)>,
     ) {
+        if let Some(developed) = self.browser_shots.remove(&capture) {
+            developed(Err("the engine stopped capturing the browser window".into()));
+        }
         for stream in self.captures.ended(capture) {
             self.end_or_fail(
                 stream,
@@ -791,6 +836,9 @@ impl Streams {
         self.captures = Captures::default();
         for shooting in self.shooting.drain(..) {
             (shooting.developed)(Err("the engine was replaced".into()));
+        }
+        for (_, developed) in self.browser_shots.drain() {
+            developed(Err("the engine was replaced".into()));
         }
         let desk: Vec<StreamId> = self
             .casts
@@ -1207,19 +1255,28 @@ mod tests {
     use crate::casting::{Candidate, Region, Request, Source, StreamId};
     use crate::engine::{CaptureId, CapturedFrame, CapturedPixels, SharedFd};
 
-    /// An engine that numbers captures by display and records stops.
+    /// An engine that numbers captures by display, captures browser windows
+    /// as 100, and records stops.
     #[derive(Default)]
     struct Engine {
         started: Vec<i64>,
         sizes: Vec<(u32, u32)>,
+        browser_windows: Vec<String>,
         stopped: Vec<CaptureId>,
     }
+
+    /// The capture [`Engine`] starts for a browser window.
+    const BROWSER_WINDOW: CaptureId = 100;
 
     impl Capturer for Engine {
         fn start(&mut self, display: i64, size: (u32, u32), _: u32) -> Result<CaptureId, String> {
             self.started.push(display);
             self.sizes.push(size);
             Ok(display as CaptureId)
+        }
+        fn start_browser_window(&mut self, window: &str, _: u32) -> Result<CaptureId, String> {
+            self.browser_windows.push(window.into());
+            Ok(BROWSER_WINDOW)
         }
         fn resize(&mut self, _: CaptureId, _: (u32, u32)) {}
         fn stop(&mut self, capture: CaptureId) {
@@ -1507,6 +1564,60 @@ mod tests {
 
         assert!(heard.try_recv().expect("developed").is_err());
         assert_eq!(engine.stopped, [1]);
+    }
+
+    #[test]
+    fn a_browser_window_is_shot_alone_from_its_captures_first_frame() {
+        let (mut streams, mut engine) = (streams(), Engine::default());
+        let (developed, heard) = mpsc::channel();
+        streams.request(
+            Request::ShootBrowserWindow {
+                id: "1".into(),
+                developed: Box::new(move |shot| developed.send(shot).expect("heard")),
+            },
+            Vec::new,
+            None,
+            Some(&mut engine),
+        );
+        assert_eq!(engine.browser_windows, ["1"]);
+        assert!(heard.try_recv().is_err(), "no shot before a frame");
+
+        // Viz letterboxes the page into the frame; only `content` is it.
+        let mut letterboxed = painted((3, 2), &[0, 1, 2, 0, 3, 4]);
+        letterboxed.content = (1, 0, 2, 2);
+        streams.captured(
+            BROWSER_WINDOW,
+            1,
+            Ok(letterboxed),
+            None,
+            &mut engine,
+            Instant::now(),
+        );
+
+        let shot = heard.try_recv().expect("developed").expect("shot");
+        assert_eq!((shot.width, shot.height), (2, 2));
+        let blue: Vec<u8> = shot.bgra.chunks(4).map(|pixel| pixel[0]).collect();
+        assert_eq!(blue, [1, 2, 3, 4]);
+        assert_eq!(engine.stopped, [BROWSER_WINDOW]);
+    }
+
+    #[test]
+    fn a_browser_window_shot_fails_when_the_engine_stops_its_capture() {
+        let (mut streams, mut engine) = (streams(), Engine::default());
+        let (developed, heard) = mpsc::channel();
+        streams.request(
+            Request::ShootBrowserWindow {
+                id: "1".into(),
+                developed: Box::new(move |shot| developed.send(shot).expect("heard")),
+            },
+            Vec::new,
+            None,
+            Some(&mut engine),
+        );
+
+        streams.capture_ended(BROWSER_WINDOW, Some(&mut engine));
+
+        assert!(heard.try_recv().expect("developed").is_err());
     }
 
     #[test]

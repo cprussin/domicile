@@ -54,6 +54,8 @@ source_set("domicile") {
     "//chrome/browser/ui/browser_window",
     "//chrome/browser/web_applications",
     "//components/domicile:app_roots",
+    # Finds a browser window's page for a capture of it alone.
+    "//components/domicile:browser_window_capture_target",
     "//components/domicile:command_protocol",
     "//components/domicile:common",
     "//components/domicile:pointer_warp",

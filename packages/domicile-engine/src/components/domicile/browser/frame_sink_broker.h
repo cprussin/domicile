@@ -15,6 +15,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/unguessable_token.h"
 #include "components/domicile/browser/brokered_frame_sink.h"
+#include "components/domicile/browser/browser_window_capture_target.h"
 #include "components/domicile/browser/display_capture.h"
 #include "components/domicile/mojom/external_surface.mojom.h"
 #include "components/domicile/mojom/frame_sink_broker.mojom.h"
@@ -70,6 +71,10 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   // refused.
   using DisplayCaptureTargetGetter =
       base::RepeatingCallback<std::optional<viz::FrameSinkId>(int64_t)>;
+  // Browser window `window_id`'s page, for a capture of it alone. Injected
+  // because the windows are //chrome's. Empty when the embedder has no
+  // browser windows; every such capture is then refused.
+  using BrowserWindowCaptureTargetGetter = BrowserWindowCaptureTargetFinder;
 
   // `get_shared_image_interface` gives imported dmabufs a GPU. Injected because
   // this target does not depend on //ui/aura. It returns null when headless.
@@ -81,7 +86,9 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       DisplayLayoutSetter set_display_layout = DisplayLayoutSetter(),
       ClipboardSetter set_clipboard = ClipboardSetter(),
       DisplayCaptureTargetGetter get_display_capture_target =
-          DisplayCaptureTargetGetter());
+          DisplayCaptureTargetGetter(),
+      BrowserWindowCaptureTargetGetter get_browser_window_capture_target =
+          BrowserWindowCaptureTargetGetter());
 
   FrameSinkBroker(const FrameSinkBroker&) = delete;
   FrameSinkBroker& operator=(const FrameSinkBroker&) = delete;
@@ -179,6 +186,12 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       mojo::PendingReceiver<mojom::DisplayCapture> capture,
       mojo::PendingRemote<mojom::DisplayCaptureObserver> observer,
       CaptureDisplayCallback callback) override;
+  void CaptureBrowserWindow(
+      const std::string& window_id,
+      uint32_t max_fps,
+      mojo::PendingReceiver<mojom::DisplayCapture> capture,
+      mojo::PendingRemote<mojom::DisplayCaptureObserver> observer,
+      CaptureBrowserWindowCallback callback) override;
 
  private:
   // A page's embed request waiting for its producer.
@@ -231,6 +244,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   const ClipboardSetter set_clipboard_;
   // See DisplayCaptureTargetGetter.
   const DisplayCaptureTargetGetter get_display_capture_target_;
+  // See BrowserWindowCaptureTargetGetter.
+  const BrowserWindowCaptureTargetGetter get_browser_window_capture_target_;
 
   mojo::ReceiverSet<mojom::FrameSinkBroker> receivers_;
 
@@ -257,7 +272,15 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
 
   mojo::RemoteSet<mojom::ClipboardObserver> clipboard_observers_;
 
-  // Running display captures, each until its producer closes it.
+  // Runs a capture of `target` at `size` until its producer closes it.
+  void StartCapture(
+      const viz::FrameSinkId& target,
+      const gfx::Size& size,
+      uint32_t max_fps,
+      mojo::PendingReceiver<mojom::DisplayCapture> capture,
+      mojo::PendingRemote<mojom::DisplayCaptureObserver> observer);
+
+  // Running captures, each until its producer closes it.
   base::flat_map<uint64_t, std::unique_ptr<DisplayCapture>> captures_;
   uint64_t next_capture_ = 1;
 

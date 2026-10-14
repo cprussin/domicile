@@ -48,6 +48,11 @@ impl Capturer for TestPattern {
         Ok(self.next_capture)
     }
 
+    // Without an engine there are no browser windows.
+    fn start_browser_window(&mut self, window: &str, _: u32) -> Result<CaptureId, String> {
+        Err(format!("no engine draws browser window {window}"))
+    }
+
     fn resize(&mut self, capture: CaptureId, size: (u32, u32)) {
         self.running.insert(capture, size);
     }

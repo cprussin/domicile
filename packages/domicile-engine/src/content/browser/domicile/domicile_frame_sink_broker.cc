@@ -18,6 +18,7 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/process/process_handle.h"
 #include "base/task/thread_pool.h"
+#include "components/domicile/browser/browser_window_capture_target.h"
 #include "components/domicile/browser/display_capture_target.h"
 #include "components/domicile/browser/display_list.h"
 #include "components/domicile/browser/external_surface_provider.h"
@@ -236,7 +237,8 @@ class DomicileBrowserService {
                 base::BindRepeating(&GetSharedImageInterface),
                 base::BindRepeating(&SetDisplayLayout),
                 base::BindRepeating(&SetClipboard),
-                base::BindRepeating(&DisplayCaptureTarget)),
+                base::BindRepeating(&DisplayCaptureTarget),
+                base::BindRepeating(&domicile::FindBrowserWindowCaptureTarget)),
         provider_(&broker_) {
     // Registered on every platform so copies made in a page reach the producer.
     // `SetClipboard` handles copies made outside. Unretained is safe: this is a

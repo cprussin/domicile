@@ -133,6 +133,7 @@ fn results(answer: PortalAnswer, activation_token: Option<String>) -> HashMap<St
         | PortalAnswer::GlobalShortcuts { .. }
         | PortalAnswer::Screenshot { .. }
         | PortalAnswer::ScreenshotWindow { .. }
+        | PortalAnswer::ScreenshotBrowserWindow { .. }
         | PortalAnswer::PickColor { .. }
         | PortalAnswer::Pressed
         | PortalAnswer::Released
