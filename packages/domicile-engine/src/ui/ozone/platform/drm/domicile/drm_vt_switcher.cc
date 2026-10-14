@@ -171,11 +171,31 @@ VtStep StepVtSwitch(VtState state, VtEvent event, bool succeeded) {
   return step;
 }
 
+DrmConsoleChordSink::DrmConsoleChordSink(PlatformEventSource* events)
+    : events_(events) {
+  events_->AddPlatformEventDispatcher(this);
+}
+
+DrmConsoleChordSink::~DrmConsoleChordSink() {
+  events_->RemovePlatformEventDispatcher(this);
+}
+
+bool DrmConsoleChordSink::CanDispatchEvent(const PlatformEvent& event) {
+  return event->IsKeyEvent() && VtForChord(*event->AsKeyEvent()).has_value();
+}
+
+uint32_t DrmConsoleChordSink::DispatchEvent(const PlatformEvent&) {
+  return POST_DISPATCH_STOP_PROPAGATION;
+}
+
 DrmVtSwitcher::DrmVtSwitcher(
     std::unique_ptr<display::NativeDisplayDelegate> delegate,
     PlatformEventSource* events,
     DrmModeset* modeset)
-    : delegate_(std::move(delegate)), events_(events), modeset_(modeset) {
+    : delegate_(std::move(delegate)),
+      events_(events),
+      chord_sink_(events),
+      modeset_(modeset) {
   dbus::Bus::Options options;
   options.bus_type = dbus::Bus::SYSTEM;
   options.connection_type = dbus::Bus::PRIVATE;
