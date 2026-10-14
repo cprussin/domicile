@@ -20,6 +20,9 @@ In a browser window (`WebViewGuest`):
   the chosen action back with `event.run()`.
 - `inspect` opens DevTools in a browser window at DevTools' address.
   `chrome/browser/domicile/domicile_devtools.h` attaches it.
+- DevTools draws its own context menus in HTML (its soft menu), since the
+  engine has no native menus. The shell gets no `domicile-context-menu` from
+  it. Copy actions write the frame's clipboard, as a page's copy does.
 - A chord the page does not handle goes to the shell.
 - Ctrl+wheel goes to the shell as a zoom request.
 
