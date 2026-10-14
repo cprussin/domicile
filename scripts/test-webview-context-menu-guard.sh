@@ -2,7 +2,7 @@
 # Which end the context-menu guard blames, and which answers it calls a pass.
 #
 # The unit is the verdict block in `guard-webview-context-menu.sh`: the `if`
-# chain that turns seven readings and the run's mode into a pass or one
+# chain that turns ten readings and the run's mode into a pass or one
 # sentence naming an end. The readings depend on each other -- a menu means
 # nothing before a press reached the page, DevTools attaching nothing before
 # its window was asked for -- so the chain is ordered, and the wrong arm
@@ -48,6 +48,9 @@ run_block() { # $1 NEGATIVE, then NAME=value overrides
     SAW_MENU=1
     SAW_ASKED=1
     SAW_ATTACHED=1
+    SAW_CLOSING=1
+    SAW_CLOSED=1
+    ALIVE=1
     NEGATIVE="$1"
     shift
     for override in "$@"; do
@@ -80,7 +83,8 @@ blames() { # $1 word, then the args verdict takes
 
 # The control's own shape: the page cancels its menu, so nothing follows it.
 control() {
-  verdict 1 SAW_MENU=0 SAW_ASKED=0 SAW_ATTACHED=0 "$@"
+  verdict 1 SAW_MENU=0 SAW_ASKED=0 SAW_ATTACHED=0 SAW_CLOSING=0 SAW_CLOSED=0 \
+    "$@"
 }
 
 echo "a run that never got as far as measuring anything"
@@ -112,6 +116,16 @@ expect "a window nothing attached to is a failure" "fail" \
   "$(verdict 0 SAW_ATTACHED=0)"
 expect "a window nothing attached to blames the watcher" "yes" \
   "$(blames "DevToolsFrontendWatcher" 0 SAW_ATTACHED=0)"
+expect "a closing press the shell never heard blames the harness" "yes" \
+  "$(blames "harness" 0 SAW_CLOSING=0 SAW_CLOSED=0)"
+expect "an engine that died closing the inspected window is a failure" "fail" \
+  "$(verdict 0 ALIVE=0 SAW_CLOSED=0)"
+expect "an engine that died closing the inspected window blames Reap" "yes" \
+  "$(blames "DeskWindows::Reap" 0 ALIVE=0 SAW_CLOSED=0)"
+expect "DevTools' window left open is a failure" "fail" \
+  "$(verdict 0 SAW_CLOSED=0)"
+expect "DevTools' window left open blames InspectedContentsClosing" "yes" \
+  "$(blames "InspectedContentsClosing" 0 SAW_CLOSED=0)"
 
 echo
 echo "the control run -- the page cancels its own menu"

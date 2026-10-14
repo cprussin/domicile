@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Checks a right click in a browser window: the shell gets the menu, and its
-# "inspect" opens DevTools in a new window.
+# "inspect" opens DevTools in a new window. Closing the inspected window then
+# closes DevTools' too, and the engine survives it.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-context-menu.sh /build/chromium/src
@@ -21,6 +22,9 @@
 # - the shell got the menu, with the link and picture under the click
 # - "inspect" opened a browser window at devtools://
 # - the browser logged DevTools attached in the new window
+# - closing the inspected window closed both, and the engine is still running.
+#   DevTools closes its window from inside the inspected page's destruction,
+#   which is DeskWindows::Reap.
 #
 # Control (NEGATIVE=1): the page cancels its own `contextmenu`, as a site with
 # its own menu does. The page must hear the press and the shell nothing.
@@ -133,7 +137,8 @@ SRC="$SITE/page"
   --window-size="$WIDTH,$HEIGHT" \
   --enable-logging=stderr --log-level=0 \
   --domicile-broker-socket="$BROKER" >"$ENGINE_LOG" 2>&1 &
-STARTED+=($!)
+ENGINE=$!
+STARTED+=("$ENGINE")
 
 TRIES=$((FOR_SECONDS * 4))
 wait_for_line "$TRIES" "GUARD shell-loaded" "$ENGINE_LOG" || {
@@ -175,6 +180,19 @@ saw() { # $1 pattern
   grep -qF "$1" "$ENGINE_LOG" && echo 1 || echo 0
 }
 
+# 6. A second press on the strip closes the inspected window, once DevTools is
+#    attached to it.
+if [ "$(saw "domicile: DevTools is attached in a <webview>.")" = "1" ]; then
+  python3 "$SCRIPTS/guard-webview-click-mouse.py" \
+    --port "$DEBUG_PORT" --x "$CHROME_X" --y "$CHROME_Y" \
+    >>"$CLICK_LOG" 2>&1 ||
+    echo "the closing click could not be driven; see $CLICK_LOG" >&2
+  wait_for_line 40 "GUARD windows-closed" "$ENGINE_LOG" ||
+    echo "the windows never both closed" >&2
+  # The windows leave the list before DeskWindows::Reap destroys them.
+  sleep 2
+fi
+
 SAW_SHELL=$(saw "GUARD shell-loaded")
 SAW_CHROME=$(saw "GUARD chrome-mousedown")
 SAW_PAGE=$(saw "GUARD page-loaded")
@@ -185,12 +203,17 @@ SAW_MENU=$(saw "GUARD context-menu link=$SITE/opened src=$SITE/picture.png media
 SAW_ASKED=$(saw "GUARD new-window url=devtools://devtools/bundled/devtools_app.html")
 # The browser's own line, from domicile_devtools.cc: a page could not write it.
 SAW_ATTACHED=$(saw "domicile: DevTools is attached in a <webview>.")
+SAW_CLOSING=$(saw "GUARD closing-inspected")
+SAW_CLOSED=$(saw "GUARD windows-closed")
+ALIVE=0
+kill -0 "$ENGINE" 2>/dev/null && ALIVE=1
 
 echo
 echo "shell=$SAW_SHELL page=$SAW_PAGE"
 echo "the shell's document saw: press=$SAW_CHROME menu=$SAW_MENU asked=$SAW_ASKED"
 echo "the page in the window saw: contextmenu=$SAW_PRESS"
 echo "the browser process said: attached=$SAW_ATTACHED"
+echo "closing the inspected window: asked=$SAW_CLOSING closed=$SAW_CLOSED engine-alive=$ALIVE"
 echo
 
 # Decided here, in a block `scripts/test-webview-context-menu-guard.sh` runs
@@ -234,10 +257,22 @@ elif [ "$SAW_ATTACHED" != "1" ]; then
 window loaded devtools:// and the browser never bound it to the page. \
 That is DevToolsFrontendWatcher in domicile_devtools.cc -- the front end \
 never committed in the guest, or DevToolsUI made no bindings for it"
+elif [ "$SAW_CLOSING" != "1" ]; then
+  FAILURE="the press that closes the inspected window never reached the \
+shell's document. This is the harness"
+elif [ "$ALIVE" != "1" ]; then
+  FAILURE="the engine died closing a window with DevTools attached. DevTools \
+closes its own window while the inspected page is destroyed, inside \
+DeskWindows::Reap; the engine log has the crash"
+elif [ "$SAW_CLOSED" != "1" ]; then
+  FAILURE="closing the inspected window left a window listed: DevTools' \
+window stays open after its page, so WebViewDevToolsDelegate::\
+InspectedContentsClosing or DeskWindows::Close"
 else
   PASSED="a right click in a browser window handed the shell a menu with the \
 link and the picture under it, and its \"inspect\" opened DevTools for the \
-page in a window the shell drew"
+page in a window the shell drew. Closing that page closed DevTools too, and \
+the engine survived it"
 fi
 
 if [ -n "$PASSED" ]; then
