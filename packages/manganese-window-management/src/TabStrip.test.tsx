@@ -28,6 +28,7 @@ const stripProps = {
   fullscreen: false,
   group: { node: { id: "a", up: 1 }, windows: ["a", "b"] },
   motion: "resting",
+  nested: false,
   onAim: nothing,
   onDrop: nothing,
   onDropOn: nothing,
@@ -105,6 +106,20 @@ describe("TabStrip", () => {
     expect(
       stripOf(render(<TabStrip {...stripProps} />).container).className,
     ).not.toContain(lit);
+  });
+
+  it("draws its edge stronger inside another group's well", () => {
+    const strong = css({
+      "--strip-edge":
+        "color-mix(in oklab, {colors.foreground} 40%, {colors.background})",
+    });
+
+    expect(
+      stripOf(render(<TabStrip {...stripProps} nested />).container).className,
+    ).toContain(strong);
+    expect(
+      stripOf(render(<TabStrip {...stripProps} />).container).className,
+    ).not.toContain(strong);
   });
 
   describe("moving with its group", () => {

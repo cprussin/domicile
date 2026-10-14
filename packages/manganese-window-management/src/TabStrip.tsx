@@ -48,6 +48,10 @@ type Props = {
   group: StripGroup;
   /** The motion of the group's open window, which the strip plays too. */
   motion: WindowMotion;
+  /**
+   * Whether the strip sits in another group's well. See `StripPlace.nested`.
+   */
+  nested: boolean;
   /** Where the group would land if dropped now. See `StripEnd`. */
   onAim: (aim: Aim | undefined) => void;
   onDrop: () => void;
@@ -94,6 +98,7 @@ export const TabStrip = ({
   fullscreen,
   group,
   motion,
+  nested,
   onAim,
   onDrop,
   onDropOn,
@@ -123,7 +128,7 @@ export const TabStrip = ({
   return (
     <div
       className={cx(
-        stripStyles({ selected }),
+        stripStyles({ nested, selected }),
         movingStyles({ motion: playing }),
         leaving && clickThroughStyles,
         settlingStyles({ lowered }),
@@ -234,17 +239,41 @@ const stripStyles = cva({
     borderStartStartRadius: "lg",
     borderStyle: "solid",
   },
+  // The edge follows both variants, so each pair sets it once. A selected
+  // strip keeps the accent edge, nested or not.
+  compoundVariants: [
+    {
+      css: { "--strip-edge": "{colors.borderStrong}" },
+      nested: false,
+      selected: false,
+    },
+    {
+      // On a well, as light as the open tab, the usual edge fades into it.
+      // See `GroupWell`.
+      css: {
+        "--strip-edge":
+          "color-mix(in oklab, {colors.foreground} 40%, {colors.background})",
+      },
+      nested: true,
+      selected: false,
+    },
+    {
+      css: {
+        "--strip-edge":
+          "color-mix(in oklab, {colors.accent} 70%, {colors.background})",
+      },
+      selected: true,
+    },
+  ],
   variants: {
+    nested: { false: {}, true: {} },
     // A selected group lights its strip. Its tabs keep their own states.
     selected: {
       false: {
-        "--strip-edge": "{colors.borderStrong}",
         backgroundColor:
           "color-mix(in oklab, {colors.card} 45%, {colors.background})",
       },
       true: {
-        "--strip-edge":
-          "color-mix(in oklab, {colors.accent} 70%, {colors.background})",
         backgroundColor:
           "color-mix(in oklab, {colors.accent} 30%, {colors.background})",
       },

@@ -317,6 +317,7 @@ describe("framesOf", () => {
             divided: false,
             end: { height: TITLE_BAR, width: 760, x: 240, y: 0 },
             group: groupOf(1),
+            nested: false,
             open: true,
             tabs: 1,
           },
@@ -332,6 +333,7 @@ describe("framesOf", () => {
             divided: false,
             end: { height: TITLE_BAR, width: 520, x: 480, y: 0 },
             group: groupOf(2),
+            nested: false,
             open: true,
             tabs: 2,
           },
@@ -345,6 +347,7 @@ describe("framesOf", () => {
             divided: false,
             end: { height: TITLE_BAR, width: 520, x: 480, y: 0 },
             group: groupOf(2),
+            nested: false,
             open: false,
             tabs: 2,
           },
@@ -367,6 +370,7 @@ describe("framesOf", () => {
         divided: true,
         end: { height: TITLE_BAR, width: 72, x: 928, y: 0 },
         group: groupOf(8),
+        nested: false,
         open: false,
         tabs: 8,
       });
@@ -381,6 +385,7 @@ describe("framesOf", () => {
             divided: false,
             end: undefined,
             group: groupOf(2),
+            nested: false,
             open: true,
             tabs: 2,
           },
@@ -394,6 +399,7 @@ describe("framesOf", () => {
             divided: true,
             end: undefined,
             group: groupOf(2),
+            nested: false,
             open: false,
             tabs: 2,
           },
@@ -457,6 +463,7 @@ describe("framesOf", () => {
           divided: false,
           end: { height: TITLE_BAR, width: 520, x: 480, y: 0 },
           group: { node: { id: "a", up: 2 }, windows: ["a", "b", "c"] },
+          nested: false,
           open: true,
           tabs: 2,
         },
@@ -522,6 +529,29 @@ describe("framesOf", () => {
     expect(areaOf(root, [0], AREA, 0)).toEqual(inset);
   });
 
+  it("marks a strip inside a well as nested, and one outside as not", () => {
+    const tiled = framesOf(
+      {
+        depth: 1,
+        root: LayoutNode.Container(Layout.Tabbed, [
+          LayoutNode.Container(Layout.SplitH, [
+            LayoutNode.Container(Layout.Tabbed, [
+              LayoutNode.Window("a"),
+              LayoutNode.Window("b"),
+            ]),
+            LayoutNode.Window("c"),
+          ]),
+        ]),
+      },
+      AREA,
+      0,
+    );
+
+    expect(tiled.tabs.map(({ strip }) => strip.nested)).toEqual([false]);
+    expect(frameFor(tiled, "a").strip?.nested).toBe(true);
+    expect(frameFor(tiled, "c").strip).toBeUndefined();
+  });
+
   it("gives a container no size in a well narrower than its margins", () => {
     const root = LayoutNode.Container(Layout.Tabbed, [
       LayoutNode.Container(Layout.SplitV, [LayoutNode.Window("a")]),
@@ -570,6 +600,7 @@ describe("framesOf", () => {
           divided: false,
           end: { height: TITLE_BAR, width: 520, x: 480, y: 0 },
           group: { node: { id: "c", up: 1 }, windows: ["a", "b", "c"] },
+          nested: false,
           open: false,
           tabs: 2,
         },

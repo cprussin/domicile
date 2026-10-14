@@ -19,6 +19,7 @@ const wellProps = {
   depth: 0,
   dragging: false,
   motion: "resting",
+  nested: false,
   rect: RECT,
 } as const;
 
@@ -65,6 +66,20 @@ describe("GroupWell", () => {
     expect(
       well(render(<GroupWell {...wellProps} />).container).className,
     ).not.toContain(shadow);
+  });
+
+  it("draws its edge stronger inside another group's well", () => {
+    const strong = css({
+      borderColor:
+        "color-mix(in oklab, {colors.foreground} 40%, {colors.background})",
+    });
+
+    expect(
+      well(render(<GroupWell {...wellProps} nested />).container).className,
+    ).toContain(strong);
+    expect(
+      well(render(<GroupWell {...wellProps} />).container).className,
+    ).not.toContain(strong);
   });
 
   it("takes no pointer from the windows in it", () => {

@@ -261,6 +261,8 @@ announces a window only then, so its title, app id and limits are known.
   icon for its layout and its window count.
 - A shown nested container sits in a well under its tab, in the open tab's
   color, with a 10px margin around its windows (`GroupWell.tsx`).
+- A tab strip inside a well, its open tab and its own well draw a stronger
+  edge, so they stand out on the well.
 - A bar has four states, set as `data-focus` (`title-focus.ts`): sway's
   `focused`, `focused_inactive` and `unfocused`, plus `leaf` for the focused
   window inside a selected group.

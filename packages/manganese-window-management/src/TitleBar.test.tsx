@@ -71,6 +71,7 @@ const MIDDLE_TAB = {
   divided: false,
   end: { height: 30, width: 280, x: 720, y: 0 },
   group: { node: { id: "a", up: 1 }, windows: ["a", "b", "c"] },
+  nested: false,
   open: false,
   tabs: 3,
 };
@@ -380,6 +381,22 @@ describe("TitleBar", () => {
           }).container,
         ).className,
       ).not.toContain(covers);
+    });
+
+    it("edges the open tab stronger in a strip inside another group's well", () => {
+      const strong = css({
+        borderColor:
+          "color-mix(in oklab, {colors.foreground} 40%, {colors.background})",
+      });
+
+      expect(
+        face(
+          tab({ strip: { ...MIDDLE_TAB, nested: true, open: true } }).container,
+        ).className,
+      ).toContain(strong);
+      expect(
+        face(tab({ strip: { ...MIDDLE_TAB, open: true } }).container).className,
+      ).not.toContain(strong);
     });
 
     it("raises the open tab to match the address bar it meets", () => {

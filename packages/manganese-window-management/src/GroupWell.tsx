@@ -15,7 +15,7 @@ import {
 } from "./window-styles";
 
 type Props = {
-  /** The depth of the windows in it. */
+  /** Its `z-index`, under the windows in it. See `wellDepthOf`. */
   depth: number;
   /** Whether its group is being dragged, so it follows the pointer. */
   dragging: boolean;
@@ -26,6 +26,11 @@ type Props = {
   castsShadow: boolean;
   /** The motion of its tab, which it plays too. */
   motion: WindowMotion;
+  /**
+   * Whether it is inside another group's well, which draws its edge stronger.
+   * See `StripPlace.nested`.
+   */
+  nested: boolean;
   /** The box under the strip. See `Tab.well`. */
   rect: Rect;
 };
@@ -34,13 +39,15 @@ type Props = {
  * The backdrop of a group shown in a tab: the open tab's color, hanging from
  * it, with a margin around the group's windows. See `Tab.well`.
  *
- * Drawn before every window and glow at the windows' depth, so they cover it.
+ * Drawn before every window and glow, at or under their depth, so they cover
+ * it.
  */
 export const GroupWell = ({
   castsShadow,
   depth,
   dragging,
   motion,
+  nested,
   rect,
 }: Props) => {
   const element = useRef<HTMLDivElement>(null);
@@ -54,7 +61,7 @@ export const GroupWell = ({
   return (
     <div
       className={cx(
-        wellStyles({ castsShadow }),
+        wellStyles({ castsShadow, nested }),
         movingStyles({ motion }),
         settlingStyles({ lowered }),
       )}
@@ -79,7 +86,6 @@ const wellStyles = cva({
     // Longhands, as for `edgeStyles`.
     borderBlockEndWidth: "1px",
     borderBlockStartWidth: 0,
-    borderColor: "borderStrong",
     borderEndEndRadius: "lg",
     borderEndStartRadius: "lg",
     borderInlineWidth: "1px",
@@ -88,5 +94,13 @@ const wellStyles = cva({
   },
   variants: {
     castsShadow: { false: {}, true: { boxShadow: "lifted" } },
+    // As its strip's open tab draws it. See `TabStrip`.
+    nested: {
+      false: { borderColor: "borderStrong" },
+      true: {
+        borderColor:
+          "color-mix(in oklab, {colors.foreground} 40%, {colors.background})",
+      },
+    },
   },
 });
