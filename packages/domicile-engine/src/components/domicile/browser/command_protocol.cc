@@ -45,6 +45,11 @@ constexpr char kVisits[] = "visits";
 constexpr char kDeleteHistory[] = "delete_history";
 constexpr char kClearBrowsingData[] = "clear_browsing_data";
 
+// Matched whole by domicile-launch (`NO_SHELL_WINDOW` in command.rs), which
+// asks again on it.
+constexpr char kNoShellWindow[] =
+    "this engine has no shell window to load a shell into";
+
 std::string Line(base::DictValue reply) {
   std::string line;
   // Replies hold only strings, finite numbers, booleans, lists and objects,
@@ -60,8 +65,9 @@ std::string Done(std::string_view type) {
   return Line(std::move(reply));
 }
 
-std::string AnswerLoadShell(const base::DictValue& request,
-                            LoadShell load_shell);
+void AnswerLoadShell(const base::DictValue& request,
+                     LoadShell load_shell,
+                     CommandReply reply);
 std::string AnswerRunApp(const base::DictValue& request, RunApp run_app);
 std::string AnswerOpenUrl(const base::DictValue& request, OpenUrl open_url);
 std::string AnswerSitePermissions(ListSitePermissions list_site_permissions);
@@ -163,7 +169,7 @@ void AnswerCommand(std::string_view line,
     return;
   }
   if (*type == kLoadShell) {
-    std::move(reply).Run(AnswerLoadShell(*request, actions.load_shell));
+    AnswerLoadShell(*request, actions.load_shell, std::move(reply));
     return;
   }
   if (*type == kRunApp) {
@@ -246,40 +252,46 @@ void AnswerCommand(std::string_view line,
 
 namespace {
 
-std::string AnswerLoadShell(const base::DictValue& request,
-                            LoadShell load_shell) {
+void AnswerLoadShell(const base::DictValue& request,
+                     LoadShell load_shell,
+                     CommandReply reply) {
   // Requires both `root` and `module`: changing only one would serve a 404 or
   // the wrong shell.
   const std::string* root = request.FindString("root");
   if (root == nullptr || root->empty()) {
-    return RefusedCommand(
+    std::move(reply).Run(RefusedCommand(
         "load_shell needs a \"root\": the directory the shell is served out "
-        "of");
+        "of"));
+    return;
   }
   const base::FilePath shell_root = base::FilePath::FromUTF8Unsafe(*root);
   if (!shell_root.IsAbsolute()) {
-    return RefusedCommand(base::StrCat(
+    std::move(reply).Run(RefusedCommand(base::StrCat(
         {"\"", *root,
          "\" is not an absolute path. The root is resolved in the engine's "
          "process, whose working directory the sender does not know -- a "
-         "relative one would serve some other directory without saying so."}));
+         "relative one would serve some other directory without saying so."})));
+    return;
   }
 
   const std::string* module = request.FindString("module");
   if (module == nullptr || module->empty()) {
-    return RefusedCommand(
+    std::move(reply).Run(RefusedCommand(
         "load_shell needs a \"module\": the one JavaScript file a shell is, "
-        "as a name under \"root\"");
+        "as a name under \"root\""));
+    return;
   }
 
   // The root and module are not checked here. `domicile load-shell` validates
   // the path first (`shell_path` in domicile-launch), and the shell document
   // shows an error if the module fails to load.
-  if (!load_shell(shell_root, *module)) {
-    return RefusedCommand(
-        "this engine has no shell window to load a shell into");
-  }
-  return Done("loaded");
+  load_shell(shell_root, *module,
+             base::BindOnce(
+                 [](CommandReply reply, bool loaded) {
+                   std::move(reply).Run(loaded ? Done("loaded")
+                                               : RefusedCommand(kNoShellWindow));
+                 },
+                 std::move(reply)));
 }
 
 std::string AnswerRunApp(const base::DictValue& request, RunApp run_app) {

@@ -303,6 +303,19 @@ source_set("command_protocol") {
   deps = [ ":site_permissions" ]
 }
 
+# Waits for the shell window's first page before `load_shell` loads into it.
+#
+# Its own target so the waiting is tested without a window: the command socket
+# says how far the window is, and this needs only //base.
+source_set("shell_window_wait") {
+  sources = [
+    "browser/shell_window_wait.cc",
+    "browser/shell_window_wait.h",
+  ]
+
+  public_deps = [ "//base" ]
+}
+
 # The chords the shell claimed for the desktop, and who to tell when one fires.
 #
 # Its own target between :control_channel and :web_view_guest because it is the
@@ -796,6 +809,7 @@ source_set("unit_tests") {
     "browser/shell_url_loader_factory_unittest.cc",
     "browser/shell_fetch_unittest.cc",
     "browser/shell_origin_unittest.cc",
+    "browser/shell_window_wait_unittest.cc",
     "browser/shell_windows_unittest.cc",
     "browser/shortcut_registry_unittest.cc",
     "browser/site_permissions_unittest.cc",
@@ -853,6 +867,7 @@ source_set("unit_tests") {
     ":shell_origin",
     ":shell_scheme",
     ":shell_source",
+    ":shell_window_wait",
     ":shell_windows",
     ":shortcut_registry",
     ":site_permissions",
