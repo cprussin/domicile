@@ -58,6 +58,7 @@ const sameBox = (
   b: PlacedFocusBox | undefined,
 ): boolean =>
   a?.depth === b?.depth &&
+  a?.tabbed === b?.tabbed &&
   a?.rect.x === b?.rect.x &&
   a?.rect.y === b?.rect.y &&
   a?.rect.width === b?.rect.width &&
