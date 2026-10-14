@@ -13,6 +13,8 @@ Close the lid, then open it.
   `DrmSleep` is not subscribed.
 - `the machine is awake` with no `configuring N display(s)` after it: the
   relight ran and the modeset did not.
+- The desktop shows unlocked on waking: look for `this desktop is locked; the
+  machine can sleep` before the sleep.
 
 ## Console switch
 

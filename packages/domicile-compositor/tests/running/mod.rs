@@ -10,6 +10,8 @@
 // it, so the rest is dead code in that binary.
 #![allow(dead_code)]
 
+pub mod bus;
+
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -73,6 +75,11 @@ impl Compositor {
         Compositor::started_with_env(config, None, &[("DBUS_SESSION_BUS_ADDRESS", address)])
     }
 
+    /// The same, with the system bus at `address`, for logind.
+    pub fn started_on_a_system_bus(config: &str, address: &str) -> Compositor {
+        Compositor::started_with_env(config, None, &[("DBUS_SYSTEM_BUS_ADDRESS", address)])
+    }
+
     /// The same, with `env` set, such as a session bus for the portals.
     pub fn started_with_env(
         config: &str,
@@ -134,6 +141,14 @@ impl Compositor {
             // Debug, because some decisions (such as a refused density)
             // leave no trace on the socket, only in the log.
             .env("RUST_LOG", "info,domicile_compositor=debug")
+            // No system bus, so a run never reaches the runner's logind.
+            .env(
+                "DBUS_SYSTEM_BUS_ADDRESS",
+                format!(
+                    "unix:path={}",
+                    directory.path().join("no-system-bus").display()
+                ),
+            )
             .envs(env.iter().copied())
             // Both into one buffer: logs go to stdout and panics to stderr.
             .stdout(Stdio::piped())

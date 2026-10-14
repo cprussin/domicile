@@ -84,6 +84,8 @@ drop also applies to the GPU process's copy.
 ## Suspend
 
 `DrmSleep` follows logind's `PrepareForSleep` and relights the screens on wake.
+The compositor locks the desktop before the sleep
+([LOCK.md](LOCK.md#sleep-and-logind)).
 logind does not pause devices or drop master for a sleep, so only the GPU state
 is lost.
 

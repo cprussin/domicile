@@ -99,6 +99,7 @@ mod latency;
 mod latency_run;
 mod lock;
 mod locking;
+mod logind;
 mod modifiers;
 mod notifications;
 mod once_per_window;
@@ -564,6 +565,9 @@ struct DomicileCompositor {
     /// ([`rekey_the_lock`](DomicileCompositor::rekey_the_lock)). Rebuilding it
     /// would unlock the desktop.
     lock: Lock,
+    /// logind's delay inhibitor on sleep, closed once the desktop has locked
+    /// for it. See [`crate::logind`].
+    sleep_inhibitor: Option<std::os::fd::OwnedFd>,
     /// Where PAM services are read from: [`pam::SERVICES`] unless the command
     /// line names another. Kept for the verifier a reload builds.
     pam_confdir: PathBuf,
@@ -1181,6 +1185,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         idle_clock: None,
         // Starts unlocked. Built once, never on reload; see the field.
         lock,
+        // Taken by `logind::listen`, below.
+        sleep_inhibitor: None,
         pam_confdir,
         turnover: None,
         turnover_deadline: None,
@@ -1338,6 +1344,19 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             data.state.heard_the_verdict(verdict);
         }
     })?;
+
+    // Sleep and logind's session lock, which lock the desktop where its lock
+    // lives.
+    let (logind, heard_logind) = channel::<logind::Logind>();
+    handle.insert_source(heard_logind, |event, _, data: &mut CalloopData| {
+        if let ChannelEvent::Msg(heard) = event {
+            data.state.heard_from_logind(heard);
+        }
+    })?;
+    logind::listen(move |heard| {
+        // Fails only once the loop has stopped.
+        let _ = logind.send(heard);
+    });
 
     // How long the config must stay unchanged before a reload applies. Covers a
     // save's own writes while feeling immediate.

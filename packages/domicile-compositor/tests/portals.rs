@@ -8,11 +8,10 @@
 mod running;
 
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{Read, Write};
 use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
-use std::process::{Child, Command, Stdio};
-use std::time::{Duration, Instant};
+use std::process::Stdio;
 
 use domicile_protocol::{
     ChromeMessage, Devices, HostMessage, PortalAnswer, PortalKind, RemoteDesktopDialog,
@@ -23,6 +22,7 @@ use zbus::blocking::{Connection, MessageIterator};
 use zbus::zvariant::{ObjectPath, OwnedValue, Value};
 use zbus::MatchRule;
 
+use crate::running::bus::Bus;
 use crate::running::Compositor;
 
 const ONE_DISPLAY: &str = r#"
@@ -35,86 +35,8 @@ const REMOTE_DESKTOP: &str = "org.freedesktop.impl.portal.RemoteDesktop";
 const CLIPBOARD: &str = "org.freedesktop.impl.portal.Clipboard";
 const SESSION: &str = "/org/freedesktop/portal/desktop/session/1_9/remote";
 const TEXT: &str = "text/plain;charset=utf-8";
-const PATIENCE: Duration = Duration::from_secs(20);
 
 type Options = HashMap<String, OwnedValue>;
-
-/// A private session bus. Stopped on drop.
-struct Bus {
-    daemon: Child,
-    address: String,
-    _directory: tempfile::TempDir,
-}
-
-impl Bus {
-    /// A bus with its own config, since a distribution's `session.conf`
-    /// may be missing or name things this machine lacks.
-    fn started() -> Bus {
-        let directory = tempfile::tempdir().expect("a directory");
-        let config = directory.path().join("bus.conf");
-        std::fs::write(
-            &config,
-            format!(
-                r#"<busconfig>
-  <type>session</type>
-  <listen>unix:path={}</listen>
-  <policy context="default">
-    <allow send_destination="*" eavesdrop="true"/>
-    <allow eavesdrop="true"/>
-    <allow own="*"/>
-  </policy>
-</busconfig>"#,
-                directory.path().join("bus").display()
-            ),
-        )
-        .expect("the config is written");
-        let mut daemon = Command::new("dbus-daemon")
-            .arg("--nofork")
-            .arg("--print-address")
-            .arg(format!("--config-file={}", config.display()))
-            .stdout(Stdio::piped())
-            .spawn()
-            .expect("dbus-daemon starts; it is in `nix develop .#full`");
-        let mut address = String::new();
-        BufReader::new(daemon.stdout.take().expect("stdout was piped"))
-            .read_line(&mut address)
-            .expect("dbus-daemon prints its address");
-        assert!(!address.trim().is_empty(), "dbus-daemon gave no address");
-        Bus {
-            daemon,
-            address: address.trim().to_string(),
-            _directory: directory,
-        }
-    }
-
-    /// A client on the bus, once the compositor has taken the backend's name.
-    fn client(&self) -> Connection {
-        let connection = zbus::blocking::connection::Builder::address(self.address.as_str())
-            .expect("an address")
-            .build()
-            .expect("the bus takes a client");
-        let bus = zbus::blocking::fdo::DBusProxy::new(&connection).expect("the bus");
-        let until = Instant::now() + PATIENCE;
-        while !bus
-            .name_has_owner(BACKEND.try_into().expect("a name"))
-            .expect("the bus answers")
-        {
-            assert!(
-                Instant::now() < until,
-                "the compositor never took {BACKEND}"
-            );
-            std::thread::sleep(Duration::from_millis(20));
-        }
-        connection
-    }
-}
-
-impl Drop for Bus {
-    fn drop(&mut self) {
-        let _ = self.daemon.kill();
-        let _ = self.daemon.wait();
-    }
-}
 
 fn call<B>(
     connection: &Connection,
@@ -297,7 +219,7 @@ fn a_remote_desktop_session_types_into_the_focused_window() {
     let mut chrome = compositor.chrome();
     let mut typed_into = compositor.client("typed into");
     focus(&mut chrome, "typed into");
-    let connection = bus.client();
+    let connection = bus.client_once(BACKEND);
     granted(&connection, &mut chrome);
 
     let socket = fd(call(
@@ -321,7 +243,7 @@ fn a_remote_desktop_session_shares_the_clipboard_both_ways() {
     let bus = Bus::started();
     let compositor = Compositor::started_on_a_bus(ONE_DISPLAY, &bus.address);
     let mut chrome = compositor.chrome();
-    let connection = bus.client();
+    let connection = bus.client_once(BACKEND);
     granted(&connection, &mut chrome);
 
     // The application's copy, pasted by `wl-paste`.
@@ -350,7 +272,7 @@ fn a_remote_desktop_session_shares_the_clipboard_both_ways() {
     {
         // Its own connection, dropped after: a connection keeps a copy of
         // every fd it is sent, and `wl-paste` reads until the pipe closes.
-        let writing = bus.client();
+        let writing = bus.client_once(BACKEND);
         let pipe = fd(call(
             &writing,
             CLIPBOARD,
