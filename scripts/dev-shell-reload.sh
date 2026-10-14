@@ -33,7 +33,7 @@ SOCKET_FILE="${3:-}"
 TICK=0.1
 # One build writes the file many times, so reload only once writes stop.
 # SETTLE is the quiet ticks that mean the build finished. BURST caps the wait
-# for a bundle that never goes quiet. Both match `coalesce.rs`.
+# for a bundle that never goes quiet.
 SETTLE="${4:-3}"
 BURST="${5:-20}"
 

@@ -834,8 +834,12 @@ impl ConfigStore {
     }
 }
 
+/// How long a config file must go unchanged before a watcher reloads it.
+const SETTLE: Duration = Duration::from_millis(100);
+
 /// Watches a config file and sends a parsed [`Config`] or [`ConfigError`] on
-/// `rx` after each change. Pass the results to [`ConfigStore::apply_watch`].
+/// `rx` after each burst of changes, once the file has settled. Pass the
+/// results to [`ConfigStore::apply_watch`].
 ///
 /// One save is several changes. A save that truncates before writing can send
 /// the empty file's parse error before the saved config, so apply the last
@@ -864,14 +868,37 @@ pub fn watch(path: impl AsRef<Path>) -> Result<ConfigWatcher, ConfigError> {
         .unwrap_or_else(|| PathBuf::from("."));
 
     let (tx, rx) = std::sync::mpsc::channel();
+    let (changed, heard) = std::sync::mpsc::channel();
     let reload_path = path.clone();
+    let name = path.file_name().map(ToOwned::to_owned);
+    // Ends when the OS watcher drops `changed` or the caller drops `rx`.
+    std::thread::spawn(move || {
+        while heard.recv().is_ok() {
+            // A save truncates, then writes. Reloading between the two reads an
+            // empty file, so wait for the file to settle.
+            while heard.recv_timeout(SETTLE).is_ok() {}
+            if tx.send(Config::load(&reload_path)).is_err() {
+                return;
+            }
+        }
+    });
     // Changes only: a reload's own read is an access event, which would set off
     // the next reload and spin forever.
     let changes = notify::Config::default().with_event_kinds(notify::EventKindMask::CORE);
     let mut watcher = notify::RecommendedWatcher::new(
         move |res: notify::Result<notify::Event>| {
-            if res.is_ok() {
-                let _ = tx.send(Config::load(&reload_path));
+            // The directory holds other files, whose writes would hold off a
+            // reload until they stop.
+            let config_changed = res.is_ok_and(|event| {
+                event
+                    .paths
+                    .iter()
+                    .any(|touched| touched.file_name() == name.as_deref())
+            });
+            if config_changed {
+                // Fails only once the caller has dropped `rx`, when there is
+                // no one left to reload for.
+                let _ = changed.send(());
             }
         },
         changes,

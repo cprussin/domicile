@@ -38,9 +38,8 @@ const LONG_ENOUGH_TO_HAVE_ARRIVED: Duration = Duration::from_secs(2);
 
 /// How long to wait for a message that should come.
 ///
-/// The config watcher coalesces events for up to two seconds, and the run
-/// directory is never quiet, so a reload takes about two seconds. This must
-/// be well above that; it only costs time when the test fails.
+/// Well above the config watcher's settle time, for a loaded runner. It only
+/// costs time when the test fails.
 const AS_LONG_AS_THE_COMPOSITOR_TAKES: Duration = Duration::from_secs(20);
 
 /// A chrome whose version was refused gets a `welcome` but no broadcasts.
@@ -131,7 +130,7 @@ fn a_chrome_that_says_hello_twice_is_only_in_the_list_once() {
 
     // Wait for the first description rather than timing it: this test has no
     // accepted chrome to wait on, and the short read timeout would race the
-    // config watcher's two-second coalescing.
+    // reload on a loaded runner.
     twice.await_message(|message| matches!(message, HostMessage::Displays { .. }));
 
     // A duplicate would be sent in the same broadcast as the first, so a

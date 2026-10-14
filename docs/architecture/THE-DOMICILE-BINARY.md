@@ -206,8 +206,8 @@ domicile load-shell ./my-desktop/dist/shell.js
   only after the supervisor reports the desktop is up. Earlier calls are
   refused because the socket exists before the engine does.
 - `scripts/dev-shell-reload.sh` waits for the bundle to stop changing (a quiet
-  period plus a cap, as in `coalesce.rs`). `vite build --watch` writes one
-  build in several steps, and reloading mid-write would load a broken shell.
+  period plus a cap). `vite build --watch` writes one build in several steps,
+  and reloading mid-write would load a broken shell.
 - If the engine refuses a shell, the script prints the engine's `why` and
   waits for the next build. The desktop keeps the previous shell.
 
