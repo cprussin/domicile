@@ -1231,12 +1231,11 @@ describe("Shell", () => {
         });
       };
 
-      it("keeps a window's title bar with it", async () => {
+      it("leaves a window's title bar out", async () => {
         const { container } = renderShell();
         clientAppears("one");
         clientAppears("two");
         press("w");
-        const bar = boxOf(barFor(container, "app:two"));
         const contents = boxOf(appElement(container, "two"));
         asked();
 
@@ -1245,19 +1244,15 @@ describe("Shell", () => {
         );
         await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
-        // From the top of its tab down to the bottom of its contents.
-        const top = Number.parseFloat(bar.y);
-        const bottom =
-          Number.parseFloat(contents.y) + Number.parseFloat(contents.height);
         expect(domicile.calls).toContainEqual([
           "answerPortalRequest",
           3,
           JSON.stringify({
             area: {
-              height: bottom - top,
+              height: Number.parseFloat(contents.height),
               width: Number.parseFloat(contents.width),
               x: Number.parseFloat(contents.x),
-              y: top,
+              y: Number.parseFloat(contents.y),
             },
             copy: false,
             kind: "screenshot",
@@ -1265,10 +1260,10 @@ describe("Shell", () => {
         ]);
       });
 
-      it("keeps a browser window's address bar with it", async () => {
+      it("keeps a browser window's address bar but not its title bar", async () => {
         const { container } = renderShell();
         domicile.engineOpens("https://example.com");
-        const bar = boxOf(barFor(container, "browser:1"));
+        const contents = boxOf(browserWindow(container));
         asked();
 
         await userEvent.click(
@@ -1285,8 +1280,10 @@ describe("Shell", () => {
         ).toMatchObject([
           {
             area: {
-              x: Number.parseFloat(bar.x),
-              y: Number.parseFloat(bar.y),
+              height: Number.parseFloat(contents.height),
+              width: Number.parseFloat(contents.width),
+              x: Number.parseFloat(contents.x),
+              y: Number.parseFloat(contents.y),
             },
             kind: "screenshot",
           },

@@ -8,8 +8,8 @@ export enum ShownWindowKind {
 }
 
 /**
- * A window the shell draws on screen, and its whole frame there: title bar,
- * address bar or tab strip included. The screenshot dialog crops a shown
+ * A window the shell draws on screen, and its contents' box there: the
+ * shell's title bar or tab left out. The screenshot dialog crops a shown
  * window from the frozen desk by this box.
  */
 export const ShownWindow = {
@@ -33,8 +33,8 @@ export type ShownWindow = ReturnType<
 
 /**
  * The windows `page` draws: each `<app>` and each `<webview window>` with a
- * box. Their boxes leave out the shell's frame, and a window hidden under
- * another still has one; a shell that knows better passes its own list.
+ * box. A window hidden under another still has one; a shell that knows
+ * better passes its own list.
  */
 export const drawnWindows = (page: ParentNode): ShownWindow[] => [
   ...[...page.querySelectorAll("app[app-id]")].flatMap((app) =>
