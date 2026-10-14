@@ -57,6 +57,29 @@ describe("Volume", () => {
       expect(new Set([icon(0), icon(0.3), icon(0.8)]).size).toBe(3);
     });
 
+    it("mutes and unmutes the default output with a middle click", () => {
+      const sound = heldSound();
+      shown(sound);
+
+      fireEvent(
+        screen.getByRole("button", { name: "Volume 50%" }),
+        new MouseEvent("auxclick", { bubbles: true, button: 1 }),
+      );
+      sound.report({
+        ...laptop,
+        outputs: [device({ default: true, muted: true })],
+      });
+      fireEvent(
+        screen.getByRole("button", { name: "Volume muted" }),
+        new MouseEvent("auxclick", { bubbles: true, button: 1 }),
+      );
+
+      expect(sound.asked).toEqual([
+        ["setMuted", "output:speakers", true],
+        ["setMuted", "output:speakers", false],
+      ]);
+    });
+
     it("turns the default output with the wheel", () => {
       const sound = heldSound();
       shown(sound);

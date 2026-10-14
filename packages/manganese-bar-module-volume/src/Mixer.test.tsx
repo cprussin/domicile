@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { css } from "../styled-system/css";
 import { device, heldSound, laptop } from "./fixture";
 import { Mixer } from "./Mixer";
 
@@ -41,7 +42,7 @@ describe("Mixer", () => {
       ).toHaveAttribute("aria-valuenow", "0");
     });
 
-    it("marks a muted device's meter", () => {
+    it("grays a muted device's row and marks its meter", () => {
       const sound = heldSound();
       mixer(sound, {
         ...laptop,
@@ -61,6 +62,14 @@ describe("Mixer", () => {
       expect(
         screen.getByRole("meter", { name: "Microphone level" }),
       ).toHaveAttribute("data-muted");
+      expect(
+        screen.getByRole("button", { name: "Mute Volume" }).parentElement
+          ?.className,
+      ).not.toContain(css({ color: "muted" }));
+      expect(
+        screen.getByRole("button", { name: "Unmute Microphone" }).parentElement
+          ?.className,
+      ).toContain(css({ color: "muted" }));
     });
 
     it("has the first microphone when the server's default input is a monitor", () => {
