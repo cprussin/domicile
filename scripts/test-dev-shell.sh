@@ -244,9 +244,8 @@ stop_watching
 expect "and the next build is still handed over" "3" "$(handed_over rebuilt)"
 
 # `vite build --watch` writes the bundle several times per build, and a reload
-# of a half-written file shows a broken shell. The loop coalesces writes like
-# `packages/domicile-compositor/src/coalesce.rs`. The quiet window is longer
-# than the burst's gaps.
+# of a half-written file shows a broken shell. The loop reloads once writes go
+# quiet. The quiet window is longer than the burst's gaps.
 watching burst 15 300
 now_watching burst
 for _ in 1 2 3 4 5 6 7 8 9 10; do
@@ -260,8 +259,8 @@ sleep 2
 stop_watching
 expect "a burst of writes is one reload rather than ten" "1" "$(handed_over burst)"
 
-# The burst bound, as in `last_of_burst`: without it, a bundle that never goes
-# quiet would never be handed over.
+# The burst bound: without it, a bundle that never goes quiet would never be
+# handed over.
 watching relentless 50 6
 now_watching relentless
 for _ in $(seq 1 30); do

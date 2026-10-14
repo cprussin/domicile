@@ -928,6 +928,40 @@ fn a_save_reloads_and_then_the_watcher_goes_quiet() {
     );
 }
 
+#[test]
+fn a_save_that_truncates_before_it_writes_reloads_only_the_written_file() {
+    // Editors and `std::fs::write` truncate, then write. A reload in between
+    // reads an empty file and reports a parse error the user never saved.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("domicile.json");
+    std::fs::write(&path, "{}").unwrap();
+    let watcher = domicile_config::watch(&path).unwrap();
+
+    let mut file = std::fs::File::create(&path).unwrap();
+    std::thread::sleep(Duration::from_millis(20));
+    std::io::Write::write_all(&mut file, br#"{ "output": { "max_scale": 3 } }"#).unwrap();
+
+    let reloaded = watcher.rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    assert_eq!(reloaded.unwrap().output.max_scale, 3);
+}
+
+#[test]
+fn a_write_to_another_file_beside_the_config_does_not_reload() {
+    // The directory also holds the chrome socket and session document. Their
+    // writes would hold off a reload until they stop.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("domicile.json");
+    std::fs::write(&path, "{}").unwrap();
+    let watcher = domicile_config::watch(&path).unwrap();
+
+    std::fs::write(dir.path().join("session.json"), "{}").unwrap();
+
+    assert!(
+        watcher.rx.recv_timeout(Duration::from_millis(500)).is_err(),
+        "reloaded for another file"
+    );
+}
+
 // ---- output ---------------------------------------------------------------
 
 #[test]

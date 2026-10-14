@@ -70,7 +70,6 @@ mod client_damage;
 mod client_requests;
 mod clients;
 mod clipboard;
-mod coalesce;
 mod compositor_casts;
 mod config_adoption;
 mod configure_answers;
@@ -148,7 +147,6 @@ use crate::chrome_connection::{bind_chrome_socket, serve_chrome};
 use crate::chrome_hub::{serve_outbound, ChromeHub};
 use crate::client_requests::ClientRequest;
 use crate::clients::{accept_app_client, sees_privileged_globals, ClientState};
-use crate::coalesce::last_of_burst;
 use crate::config_adoption::{hand_over_the_extensions, hand_over_the_keys, theme_on_the_wire};
 use crate::configure_answers::ConfigureAnswers;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
@@ -1358,16 +1356,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         let _ = logind.send(heard);
     });
 
-    // How long the config must stay unchanged before a reload applies. Covers a
-    // save's own writes while feeling immediate.
-    const SETTLE: Duration = Duration::from_millis(150);
-    // The longest a burst is coalesced. Without it, a directory written faster
-    // than `SETTLE` would never reload.
-    const BURST: Duration = Duration::from_secs(2);
-
     // Watch the config file for reloads.
     //
-    // `domicile_config::watch` delivers on a std `mpsc` channel from the notify
+    // `domicile_config::watch` delivers on a std `mpsc` channel from its own
     // thread; a forwarding thread moves results onto a calloop channel, since
     // the desktop can only change on this thread.
     //
@@ -1386,21 +1377,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     // `tests/desktop.rs` and `tests/outputs.rs`, among others.
                     let watcher = watcher;
                     // Ends when the watcher is dropped or the event loop is
-                    // gone.
-                    while let Ok(first) = watcher.rx.recv() {
-                        // One save is several events, and mid-save the file may
-                        // be truncated. A truncated config still parses (no
-                        // displays means "follow the window"), so every client
-                        // would see its monitor vanish and return. Take only
-                        // the last parse of a burst.
-                        //
-                        // Bounded by a deadline on the whole burst:
-                        // `recv_timeout(SETTLE)` alone restarts on every event,
-                        // and the watch is on the config's directory (to catch
-                        // atomic renames), which also holds the chrome socket
-                        // and session document.
-                        let latest = last_of_burst(&watcher.rx, first, SETTLE, BURST);
-                        if reload_tx.send(latest).is_err() {
+                    // gone. `watch` sends one result per settled save, so each
+                    // is forwarded as it comes.
+                    while let Ok(parsed) = watcher.rx.recv() {
+                        if reload_tx.send(parsed).is_err() {
                             return;
                         }
                     }
