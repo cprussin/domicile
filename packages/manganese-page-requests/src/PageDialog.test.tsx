@@ -65,6 +65,19 @@ describe("PageDialog", () => {
       expect(screen.queryByRole("textbox")).toBeNull();
     });
 
+    it("asks before a page with beforeunload leaves, as Chrome does", () => {
+      render(<PageDialog request={requestFor("beforeunload", [])} />);
+
+      const dialog = screen.getByRole("alertdialog", { name: "Leave site?" });
+      expect(dialog).toHaveAccessibleDescription(
+        "Changes you made may not be saved.",
+      );
+      expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual([
+        "Cancel",
+        "Leave",
+      ]);
+    });
+
     it("gives a prompt a field holding its initial text", () => {
       render(<PageDialog request={requestFor("prompt", [])} />);
 
@@ -115,6 +128,15 @@ describe("PageDialog", () => {
       render(<PageDialog request={requestFor("confirm", answers)} />);
 
       await userEvent.click(button("OK"));
+
+      expect(answers).toStrictEqual(["accept "]);
+    });
+
+    it("accepts on Leave", async () => {
+      const answers: string[] = [];
+      render(<PageDialog request={requestFor("beforeunload", answers)} />);
+
+      await userEvent.click(button("Leave"));
 
       expect(answers).toStrictEqual(["accept "]);
     });

@@ -126,7 +126,6 @@ Understood and not scheduled.
 
 ### Browser windows
 
-- **`beforeunload` asks nothing.** The page leaves.
 - **Some permission requests are refused,** including `getDisplayMedia`.
 - **Some file dialogs are refused:** from the shell's own page, and a
   directory dropped on a page.

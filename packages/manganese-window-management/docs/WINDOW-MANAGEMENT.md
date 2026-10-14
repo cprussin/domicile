@@ -73,7 +73,8 @@ Workspaces belong to the desktop, and screens show them, as in sway:
   `focus_requested`. Manganese switches to that window's workspace, shows its
   tab, focuses it and warps the pointer to it. A browser window whose page or
   extension asks to come forward (`domicile-focus-request`) is treated the
-  same. The compositor drops requests made before the keyboard last moved, so a
+  same, as is one whose page asks to stay as it closes (a `beforeunload`
+  dialog). The compositor drops requests made before the keyboard last moved, so a
   window cannot take focus back after the user moved on.
 
 ### Pointer warping

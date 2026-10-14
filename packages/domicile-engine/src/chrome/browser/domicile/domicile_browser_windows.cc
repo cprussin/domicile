@@ -209,6 +209,18 @@ class DeskWindows final : public base::SupportsUserData::Data,
     Changed();
   }
 
+  // Closes window `id` once its page agrees; see WebViewGuest::AskToClose. An
+  // unknown id is a close that raced another.
+  void AskToClose(const std::string& id) {
+    WebViewGuest* guest = Find(id);
+    if (guest == nullptr) {
+      LOG(WARNING) << "domicile: asked to close browser window " << id
+                   << ", which is not open.";
+      return;
+    }
+    guest->AskToClose();
+  }
+
   WebViewGuest* Find(const std::string& id) {
     auto found = std::ranges::find(windows_, id, &Window::id);
     return found == windows_.end() ? nullptr : found->guest.get();
@@ -463,7 +475,7 @@ class BrowserWindowsService final
     windows_->Open(url, private_browsing);
   }
 
-  void Close(const std::string& id) override { windows_->Close(id); }
+  void Close(const std::string& id) override { windows_->AskToClose(id); }
 
   // DeskWindows::Observer:
   void OnWindowsChanged() override {

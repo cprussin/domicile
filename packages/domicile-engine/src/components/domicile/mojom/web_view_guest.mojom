@@ -167,7 +167,7 @@ struct WebViewSitePermission {
 };
 
 // The kind of dialog a page in a <webview> opened with `alert()`, `confirm()`
-// or `prompt()`.
+// or `prompt()`, or with a `beforeunload` handler that asks to stay.
 enum WebViewDialogType {
   // A message with one button. The answer is ignored.
   kAlert,
@@ -175,6 +175,9 @@ enum WebViewDialogType {
   kConfirm,
   // A message, a text field and OK and Cancel.
   kPrompt,
+  // Whether to leave the page, which is closing, navigating or reloading.
+  // There is no message. OK leaves; Cancel stays.
+  kBeforeUnload,
 };
 
 // A device a page in a <webview> may be given, as the shell lists it.
@@ -430,13 +433,14 @@ interface WebViewGuestClient {
   // page navigated. Its answer, if one is sent, is ignored.
   DeviceRequestWithdrawn();
 
-  // The page called `alert()`, `confirm()` or `prompt()`, so the shell must
-  // show a dialog. The page is paused until the answer. `origin` is the
-  // calling frame's site. `default_prompt` is `prompt()`'s initial text, and
-  // empty for the others.
+  // The page called `alert()`, `confirm()` or `prompt()`, or its
+  // `beforeunload` handler asked to stay, so the shell must show a dialog. The
+  // page is paused until the answer. `origin` is the calling frame's site.
+  // `default_prompt` is `prompt()`'s initial text, and empty for the others.
   //
   // `accepted` is OK; false is Cancel, as are an unhandled event and a closed
-  // pipe. `user_input` is the prompt's text, and ignored unless `accepted`.
+  // pipe, except for kBeforeUnload, where those leave. `user_input` is the
+  // prompt's text, and ignored unless `accepted`.
   // One at a time: a page that opens another while one is open gets the
   // second dismissed at once.
   DialogRequested(url.mojom.Url origin,

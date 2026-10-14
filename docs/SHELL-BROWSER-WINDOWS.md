@@ -43,7 +43,8 @@ plus.addEventListener("click", () => {
   ([SHELL-EXTENSIONS.md](SHELL-EXTENSIONS.md)).
 - **`openBrowserWindow(url)` and `closeBrowserWindow(id)`** are for your own
   UI. The result arrives in the next list. Other windows open without you
-  ([New windows](#new-windows)).
+  ([New windows](#new-windows)). A page may ask to stay before it closes
+  ([Close requests](#close-requests)).
 - **Set `window` before the view enters the document.** The engine reads it
   once, when the view connects. A window shows in one view at a time: a second
   view naming it stays empty, so never remount the view drawing it.
@@ -241,6 +242,15 @@ Manganese fills the screen with the window while its page is fullscreen
 `chrome.tabs.remove`, closes the window. It leaves the next `browserwindowschanged`.
 `window.close()` works only when the page's history has a single entry.
 
+`closeBrowserWindow(id)` runs the page's `beforeunload` first, as closing a
+Chrome tab does:
+
+- A page with no `beforeunload` handler closes at once.
+- A handler that asks to stay fires a `beforeunload` dialog
+  ([Dialogs](#dialogs)). Leave (`accept()`) closes the window; Cancel
+  (`dismiss()`) keeps it, and it stays in the list.
+- Chrome lets a page ask only after the user has interacted with it.
+
 In a view of your own (a `<webview src>` with no `window`), the element fires
 `domicile-close` and nothing closes until you remove it:
 
@@ -372,8 +382,9 @@ and above an extension's popup.
 
 ## Dialogs
 
-The browser draws no dialog. A page's `alert()`, `confirm()` or `prompt()`
-pauses it and fires `domicile-dialog`:
+The browser draws no dialog. A page's `alert()`, `confirm()` or `prompt()`,
+or a `beforeunload` handler that asks to stay, pauses it and fires
+`domicile-dialog`:
 
 ```ts
 import { WEBVIEW_DIALOG_EVENT } from "@domicile-desktop/sdk/webview-element";
@@ -388,15 +399,19 @@ frame.addEventListener(WEBVIEW_DIALOG_EVENT, (event) => {
 ```
 
 - **`preventDefault()`:** claims it. Unclaimed dialogs are dismissed:
-  `confirm()` returns false and `prompt()` null.
-- **`dialogType`:** `alert`, `confirm` or `prompt` (`WEBVIEW_DIALOG_TYPES`).
+  `confirm()` returns false and `prompt()` null. An unclaimed `beforeunload`
+  leaves.
+- **`dialogType`:** `alert`, `confirm`, `prompt` or `beforeunload`
+  (`WEBVIEW_DIALOG_TYPES`).
 - **`origin`:** the calling frame's site, or `null` for one with none.
 - **Answers:** `accept(value)` is OK, and `value` is what `prompt()` returns.
   `dismiss()` is Cancel.
+- **`beforeunload`:** the page is closing, navigating or reloading, and asked
+  to stay. `message` is empty: draw Chrome's "Leave site?". `accept()` leaves;
+  `dismiss()` stays. See [Close requests](#close-requests).
 - **One at a time.** A second dialog while one is open is dismissed.
 - **`domicile-dialog-withdrawn`:** the browser dropped the dialog, for example
   on navigation. Stop showing it.
-- **`beforeunload`** asks nothing; the page leaves.
 
 Manganese draws it over the page it pauses
 (`window-management/browser/PageDialog.tsx`), and over an extension's popup.

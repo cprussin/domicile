@@ -351,14 +351,16 @@ export const WEBVIEW_DEVICE_REQUEST_WITHDRAWN_EVENT =
   "domicile-device-request-withdrawn";
 
 /**
- * Fired when the page calls `alert()`, `confirm()` or `prompt()`. The page is
- * paused until it is answered. Bubbles.
+ * Fired when the page calls `alert()`, `confirm()` or `prompt()`, or its
+ * `beforeunload` handler asks to stay. The page is paused until it is
+ * answered. Bubbles.
  *
  * The browser draws no dialog. Call `preventDefault()` to handle it, then
  * answer with {@link DomicileDialogEvent.accept} or
  * {@link DomicileDialogEvent.dismiss}. If no listener calls `preventDefault()`,
- * the dialog is dismissed: `confirm()` returns false and `prompt()` null. One
- * dialog is open at a time.
+ * the dialog is dismissed: `confirm()` returns false and `prompt()` null. An
+ * unclaimed `beforeunload` is accepted, so the page leaves. One dialog is open
+ * at a time.
  */
 export const WEBVIEW_DIALOG_EVENT = "domicile-dialog";
 
@@ -370,7 +372,12 @@ export const WEBVIEW_DIALOG_EVENT = "domicile-dialog";
 export const WEBVIEW_DIALOG_WITHDRAWN_EVENT = "domicile-dialog-withdrawn";
 
 /** The dialogs a page can open, as {@link DomicileDialogEvent.dialogType}. */
-export const WEBVIEW_DIALOG_TYPES = ["alert", "confirm", "prompt"] as const;
+export const WEBVIEW_DIALOG_TYPES = [
+  "alert",
+  "confirm",
+  "prompt",
+  "beforeunload",
+] as const;
 
 export type WebViewDialogType = (typeof WEBVIEW_DIALOG_TYPES)[number];
 
@@ -720,17 +727,20 @@ declare global {
      * one with no site.
      */
     readonly origin: string;
-    /** The text the page passed. */
+    /** The text the page passed. Empty for `beforeunload`. */
     readonly message: string;
     /** `prompt()`'s initial text. Empty for the others. */
     readonly defaultValue: string;
     /**
-     * OK. `value` is what `prompt()` returns; the others ignore it. Answering
-     * twice, or after {@link WEBVIEW_DIALOG_WITHDRAWN_EVENT}, throws an
-     * `InvalidStateError`.
+     * OK, or Leave for `beforeunload`. `value` is what `prompt()` returns; the
+     * others ignore it. Answering twice, or after
+     * {@link WEBVIEW_DIALOG_WITHDRAWN_EVENT}, throws an `InvalidStateError`.
      */
     accept(value?: string): void;
-    /** Cancel. An alert has only OK; either closes it. */
+    /**
+     * Cancel, or Stay for `beforeunload`. An alert has only OK; either closes
+     * it.
+     */
     dismiss(): void;
   }
 
