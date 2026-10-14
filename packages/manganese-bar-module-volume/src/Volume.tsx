@@ -29,7 +29,8 @@ type Props = {
 
 /**
  * Top bar volume item: a speaker icon that opens the {@link Mixer}. The wheel
- * over the icon changes the default output's volume.
+ * over the icon changes the default output's volume; a middle click mutes or
+ * unmutes it.
  *
  * Dims while the default output is muted. Renders nothing until the server
  * reports, so it stays hidden without a sound server. The mixer meters only while open, because metering a
@@ -54,6 +55,11 @@ export const Volume = ({ audio: watch, locked = false, server }: Props) => {
           <button
             aria-label={triggerLabel(output)}
             className={triggerStyles({ muted: output?.muted === true })}
+            onAuxClick={(event) => {
+              if (event.button === 1 && output !== undefined) {
+                ask(server.setMuted(output.id, !output.muted));
+              }
+            }}
             onWheel={(event) => {
               if (output !== undefined) {
                 ask(server.setVolume(output.id, stepped(output, event)));

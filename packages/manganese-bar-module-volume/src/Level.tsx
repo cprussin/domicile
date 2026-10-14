@@ -5,7 +5,7 @@ import { SpeakerHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerHigh";
 import { SpeakerXIcon } from "@phosphor-icons/react/dist/ssr/SpeakerX";
 import { useState } from "react";
 
-import { css } from "../styled-system/css";
+import { css, cva } from "../styled-system/css";
 import { hstack } from "../styled-system/patterns";
 
 /** The sound's direction, which picks the mute button's icon. */
@@ -29,7 +29,7 @@ type Held = { level: number; over: number };
 
 /**
  * One volume control: mute button, slider with meter, and percentage, for a
- * device or a stream.
+ * device or a stream. Gray while muted.
  *
  * Like brightness, it follows the compositor rather than the drag. The dragged
  * value is held during and after the drag until a new value arrives, because
@@ -55,7 +55,7 @@ export const Level = ({
       : level;
   const percent = Math.round(shown * 100);
   return (
-    <span className={rowStyles}>
+    <span className={rowStyles({ muted })}>
       <button
         aria-label={`${muted ? "Unmute" : "Mute"} ${label}`}
         aria-pressed={muted}
@@ -108,9 +108,17 @@ const MuteIcon = ({
   }
 };
 
-const rowStyles = hstack({
-  gap: 2,
-  inlineSize: "100%",
+const rowStyles = cva({
+  base: hstack.raw({
+    gap: 2,
+    inlineSize: "100%",
+  }),
+  variants: {
+    muted: {
+      false: {},
+      true: { color: "muted" },
+    },
+  },
 });
 
 // The bar's button style, not the library's, as in brightness: it uses

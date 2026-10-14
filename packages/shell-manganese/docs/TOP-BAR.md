@@ -188,14 +188,15 @@ Every bar and the lock screen share one watch per system readout. See
 
 - A speaker icon with zero, one (under 50%) or two waves, or a cross when
   muted. Dims while muted. Hidden with no sound server.
-- Scroll over it to step the output by 5%. Click for the mixer:
-  - Default output and default input, each with mute, slider, level meter (gray
-    while muted) and
+- Scroll over it to step the output by 5%. Middle-click to mute or unmute it.
+  Click for the mixer:
+  - Default output and default input, each with mute, slider, level meter and
     port, a quiet `Select` after its name. These are the server's defaults;
     with no default, the first output and the first input that isn't a
     monitor.
   - Drawers, shown when non-empty: **More outputs**, **More inputs**, **Apps**
     (per-app streams) and **Cards** (profiles).
+  - A muted device's or stream's row is gray.
   - Names wrap instead of truncating. `Select` lists stay over the panel.
   - A PipeWire filter's own stream (e.g. laptop speaker correction) isn't
     listed under Apps.
