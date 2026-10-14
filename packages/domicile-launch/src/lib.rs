@@ -5,7 +5,7 @@
 //!   [`profile_claim`]), platform ([`platform`]) and components
 //!   ([`components`]), then start ([`spawn`]), order ([`supervise`]) and
 //!   restart ([`restart`]) them. A slow first build of the shell runs behind
-//!   the [`splash`].
+//!   the [`splash`]. The engine loads each shell through [`serving`].
 //! - `domicile which-shell`: query a running desktop ([`control`],
 //!   [`control_socket`]).
 //! - `domicile load-shell` and `domicile open-url`: forwarded to the engine
@@ -60,6 +60,7 @@ pub mod power;
 pub mod profile_claim;
 pub mod profile_path;
 pub mod restart;
+pub mod serving;
 pub mod session;
 pub mod shell_path;
 pub mod shell_source;
