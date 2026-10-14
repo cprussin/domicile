@@ -837,6 +837,10 @@ impl ConfigStore {
 /// Watches a config file and sends a parsed [`Config`] or [`ConfigError`] on
 /// `rx` after each change. Pass the results to [`ConfigStore::apply_watch`].
 ///
+/// One save is several changes. A save that truncates before writing can send
+/// the empty file's parse error before the saved config, so apply the last
+/// result of a burst.
+///
 /// Keep the whole struct alive while reading `rx`. The OS watcher owns the
 /// sender, so dropping it closes the channel and `recv` returns `Err` with no
 /// other sign. In edition 2021 a `move` closure that names `watcher.rx`

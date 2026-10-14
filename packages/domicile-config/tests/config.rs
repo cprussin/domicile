@@ -3,6 +3,7 @@
 //! The key requirement is hot-reload safety: a bad config file keeps the last
 //! good config active and reports the error.
 
+use std::io::Write;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -902,15 +903,23 @@ fn a_save_reloads_and_then_the_watcher_goes_quiet() {
     std::fs::write(&path, "{}").unwrap();
     let watcher = domicile_config::watch(&path).unwrap();
 
-    std::fs::write(&path, r#"{ "output": { "max_scale": 3 } }"#).unwrap();
-    let reloaded = watcher.rx.recv_timeout(Duration::from_secs(5)).unwrap();
-    assert_eq!(reloaded.unwrap().output.max_scale, 3);
-    // The save's own trailing events. Bounded, since a spinning watcher never
-    // stops sending.
+    // Save the way `std::fs::write` and many editors do: truncate, then write.
+    // The pause lets the watcher read the empty file in between.
+    let mut file = std::fs::File::create(&path).unwrap();
+    std::thread::sleep(Duration::from_millis(100));
+    file.write_all(br#"{ "output": { "max_scale": 3 } }"#)
+        .unwrap();
+    // Each event in the save sends a result, the empty read's error among
+    // them, so read to the end of the burst like the compositor does. Bounded,
+    // since a spinning watcher never stops sending.
+    let mut reloaded = watcher.rx.recv_timeout(Duration::from_secs(5)).unwrap();
     let save_settles_by = std::time::Instant::now() + Duration::from_secs(2);
-    while std::time::Instant::now() < save_settles_by
-        && watcher.rx.recv_timeout(Duration::from_millis(200)).is_ok()
-    {}
+    while let Some(left) = save_settles_by.checked_duration_since(std::time::Instant::now()) {
+        if let Ok(next) = watcher.rx.recv_timeout(left) {
+            reloaded = next;
+        }
+    }
+    assert_eq!(reloaded.unwrap().output.max_scale, 3);
 
     let quiet_for = Duration::from_millis(500);
     assert!(
