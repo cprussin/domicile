@@ -101,6 +101,14 @@ const appDesktopIdSchema = z.looseObject({
   type: z.literal("app_desktop_id"),
 });
 
+// Whether the window holds a `zwp_keyboard_shortcuts_inhibitor_v1`. Sent after
+// `app_appeared` when it does, then on each change.
+const appInhibitsShortcutsSchema = z.looseObject({
+  app_id: z.string(),
+  inhibits: z.boolean(),
+  type: z.literal("app_inhibits_shortcuts"),
+});
+
 const appResizedSchema = z.looseObject({
   app_id: z.string(),
   size: sizeSchema,
@@ -529,6 +537,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   appAppearedSchema,
   appTitledSchema,
   appDesktopIdSchema,
+  appInhibitsShortcutsSchema,
   appResizedSchema,
   popupPlacedSchema,
   appMinSizeSchema,
@@ -566,6 +575,9 @@ export type WelcomeMessage = z.infer<typeof welcomeSchema>;
 export type AppAppearedMessage = z.infer<typeof appAppearedSchema>;
 export type AppTitledMessage = z.infer<typeof appTitledSchema>;
 export type AppDesktopIdMessage = z.infer<typeof appDesktopIdSchema>;
+export type AppInhibitsShortcutsMessage = z.infer<
+  typeof appInhibitsShortcutsSchema
+>;
 export type AppResizedMessage = z.infer<typeof appResizedSchema>;
 export type PopupPlacedMessage = z.infer<typeof popupPlacedSchema>;
 export type AppMinSizeMessage = z.infer<typeof appMinSizeSchema>;

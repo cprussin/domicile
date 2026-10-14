@@ -146,7 +146,8 @@ by_id = {w["appId"]: w for w in windows}
 
 def default(**fields):
     window = {"clientFrame": False, "cursor": "default", "desktopId": "", "dialog": False,
-              "gid": None, "grab": False, "height": None, "maxHeight": None,
+              "gid": None, "grab": False, "height": None, "inhibitsShortcuts": False,
+              "maxHeight": None,
               "maxWidth": None, "minHeight": None, "minWidth": None, "parent": None,
               "pid": None, "pidfdInode": None, "sandboxAppId": None, "sandboxed": None,
               "sandboxEngine": None, "sandboxInstanceId": None, "title": "", "uid": None,
@@ -161,7 +162,8 @@ wanted = [
             sandboxInstanceId="3"),
     default(appId="second", title="Second", desktopId="org.example.Second", width=640,
             height=480, cursor="grab", dialog=True, clientFrame=True, pid=4242,
-            uid=4294967294, gid=100, pidfdInode=5021, sandboxed=False),
+            uid=4294967294, gid=100, pidfdInode=5021, sandboxed=False,
+            inhibitsShortcuts=True),
     default(appId="menu", parent="second", x=10, y=20, width=120, height=90, grab=True),
 ]
 

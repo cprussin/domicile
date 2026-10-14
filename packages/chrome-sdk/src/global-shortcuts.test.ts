@@ -55,7 +55,7 @@ describe("fireGlobalShortcuts", () => {
     ]);
   });
 
-  it("reports nothing for a chord no longer bound", () => {
+  it("gives back a chord no longer bound, and reports nothing for it", () => {
     const fake = new FakeDomicileHost();
     fireGlobalShortcuts(fake.host);
     bind(fake, [TALK]);
@@ -64,9 +64,10 @@ describe("fireGlobalShortcuts", () => {
     press(fake, "Ctrl+Alt+t");
 
     expect(recorded(fake, "answerPortalRequest")).toEqual([]);
+    expect(recorded(fake, "ungrabShortcut")).toEqual([["Ctrl+Alt+t"]]);
   });
 
-  it("stops when the returned function is called", () => {
+  it("stops, and gives back its chords, when the returned function is called", () => {
     const fake = new FakeDomicileHost();
     const stop = fireGlobalShortcuts(fake.host);
     bind(fake, [TALK]);
@@ -76,5 +77,6 @@ describe("fireGlobalShortcuts", () => {
     release(fake, "Ctrl+Alt+t");
 
     expect(recorded(fake, "answerPortalRequest")).toEqual([]);
+    expect(recorded(fake, "ungrabShortcut")).toEqual([["Ctrl+Alt+t"]]);
   });
 });

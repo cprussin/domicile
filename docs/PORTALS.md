@@ -120,6 +120,7 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   compositor lists each bound chord in the `PortalRequests` push
   (`shortcuts`); `<PortalDialogs />` grabs it with `grabShortcut` and answers
   `pressed` under its id on `shortcut`, and `released` on `shortcutrelease`.
+  It gives a chord back with `ungrabShortcut` once no app holds it.
   The compositor signals `Activated` and `Deactivated` for them. A locked desk
   refuses both answers.
   - The review dialog spells each chord as `bindKeys` does and flags one the

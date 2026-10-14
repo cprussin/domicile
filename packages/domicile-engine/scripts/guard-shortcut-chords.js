@@ -3,12 +3,16 @@
 // reports:
 //
 //   GUARD listening                   the channel is bound
-//   GUARD chords bad=<error> missing=<error> page=<…> heard=<chords> released=<chords>
+//   GUARD chords bad=<error> missing=<error> page=<…> heard=<chords> released=<chords> inhibited=<…> ungrabbed=<…>
 //
 // `page` is, for Meta+Shift+l, the same held as a repeat, and Meta+k, whether
 // the engine took each from the page; `heard` is every `shortcut`'s chord and
 // `released` every `shortcutrelease`'s. The page lets go of k, which releases
-// nothing, then Shift, which releases Meta+Shift+l.
+// nothing, then Shift, which releases Meta+Shift+l. `inhibited` is whether
+// the engine took Meta+Return while `viewer`, which holds a shortcuts
+// inhibitor, had the keyboard, then once the page took it back. `ungrabbed` is whether
+// the engine took Meta+Shift+l after the first of two grabs was given back,
+// then after both were.
 
 const thrown = (grab) => {
   try {
@@ -43,9 +47,24 @@ const grabAndPress = (host, heard, released) => {
   ].join(",");
   key("keyup", "KeyK", { metaKey: true, shiftKey: true });
   key("keyup", "ShiftLeft", { metaKey: true });
+  host.grabShortcut("Meta+Return");
+  host.focusApp("viewer");
+  const inhibited = [press("Enter", { metaKey: true })];
+  host.focusChrome();
+  inhibited.push(press("Enter", { metaKey: true }));
+  // Grabbed twice now, so the first ungrab leaves it the desktop's. A repeat
+  // is taken without firing, so it asks that without a second `shortcut`.
+  host.grabShortcut("Meta+Shift+l");
+  host.ungrabShortcut("Meta+Shift+l");
+  const once = press("KeyL", { metaKey: true, repeat: true, shiftKey: true });
+  host.ungrabShortcut("Meta+Shift+l");
+  const ungrabbed = [
+    once,
+    press("KeyL", { metaKey: true, shiftKey: true }),
+  ].join(",");
   setTimeout(() => {
     console.log(
-      `GUARD chords bad=${bad} missing=${missing} page=${page} heard=${heard.join(",")} released=${released.join(",")}`,
+      `GUARD chords bad=${bad} missing=${missing} page=${page} heard=${heard.join(",")} released=${released.join(",")} inhibited=${inhibited.join(",")} ungrabbed=${ungrabbed}`,
     );
   }, 3500);
 };

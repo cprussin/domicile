@@ -28,6 +28,9 @@ use wayland_protocols::wp::fractional_scale::v1::client::{
 use wayland_protocols::wp::idle_inhibit::zv1::client::{
     zwp_idle_inhibit_manager_v1, zwp_idle_inhibitor_v1,
 };
+use wayland_protocols::wp::keyboard_shortcuts_inhibit::zv1::client::{
+    zwp_keyboard_shortcuts_inhibit_manager_v1, zwp_keyboard_shortcuts_inhibitor_v1,
+};
 use wayland_protocols::wp::primary_selection::zv1::client::{
     zwp_primary_selection_device_manager_v1, zwp_primary_selection_device_v1,
     zwp_primary_selection_offer_v1, zwp_primary_selection_source_v1,
@@ -46,7 +49,7 @@ use wayland_protocols_misc::server_decoration::client::{
     org_kde_kwin_server_decoration, org_kde_kwin_server_decoration_manager,
 };
 
-use crate::arguments::{Arguments, AskForFocus, AskTo, HoldTheScreensOn};
+use crate::arguments::{Arguments, AskForFocus, AskTo, HoldTheScreensOn, TakeTheShortcuts};
 
 /// Why the client stopped.
 #[derive(Debug, thiserror::Error)]
@@ -245,6 +248,8 @@ struct Client {
     entered_at: Option<u32>,
     /// See [`crate::arguments::Arguments::hold_the_screens_on`].
     hold_the_screens_on: Option<HoldTheScreensOn>,
+    /// See [`crate::arguments::Arguments::inhibit_shortcuts`].
+    inhibit_shortcuts: Option<TakeTheShortcuts>,
     /// See [`crate::arguments::Arguments::outlive_its_window`].
     outlive_its_window: bool,
     /// Whether the toplevel was destroyed under `--outlive-its-window`.
@@ -407,6 +412,9 @@ struct Globals {
     activation: Option<xdg_activation_v1::XdgActivationV1>,
     /// For `--hold-the-screens-on`.
     inhibit: Option<zwp_idle_inhibit_manager_v1::ZwpIdleInhibitManagerV1>,
+    /// For `--inhibit-shortcuts`.
+    shortcuts_inhibit:
+        Option<zwp_keyboard_shortcuts_inhibit_manager_v1::ZwpKeyboardShortcutsInhibitManagerV1>,
     /// Kept because the selection devices are created from the seat.
     seat: Option<wl_seat::WlSeat>,
     clipboard: Option<wl_data_device_manager::WlDataDeviceManager>,
@@ -449,6 +457,7 @@ impl Client {
             xdg_wm_base_v1: asked.xdg_wm_base_v1,
             entered_at: None,
             hold_the_screens_on: asked.hold_the_screens_on,
+            inhibit_shortcuts: asked.inhibit_shortcuts,
             outlive_its_window: asked.outlive_its_window,
             window_is_gone: false,
             copy: asked.copy.clone(),
@@ -501,6 +510,10 @@ impl Client {
                 }
                 "zwp_idle_inhibit_manager_v1" => {
                     self.globals.inhibit = Some(registry.bind(name, version.min(1), handle, ()));
+                }
+                "zwp_keyboard_shortcuts_inhibit_manager_v1" => {
+                    self.globals.shortcuts_inhibit =
+                        Some(registry.bind(name, version.min(1), handle, ()));
                 }
                 // Binding the seat lets the compositor send input. It is
                 // kept to create the selection devices.
@@ -575,6 +588,9 @@ impl Client {
         if self.hold_the_screens_on == Some(HoldTheScreensOn::BeforeItHasAWindow) {
             self.take_an_inhibitor(&surface, handle)?;
         }
+        if self.inhibit_shortcuts == Some(TakeTheShortcuts::BeforeItHasAWindow) {
+            self.take_the_shortcuts(&surface, handle)?;
+        }
         let xdg = wm_base.get_xdg_surface(&surface, handle, ());
         let toplevel = xdg.get_toplevel(handle, ());
         toplevel.set_title(self.title.clone());
@@ -628,6 +644,9 @@ impl Client {
         if self.hold_the_screens_on == Some(HoldTheScreensOn::OnItsWindow) {
             self.take_an_inhibitor(&surface, handle)?;
         }
+        if self.inhibit_shortcuts == Some(TakeTheShortcuts::OnItsWindow) {
+            self.take_the_shortcuts(&surface, handle)?;
+        }
         self.window = Some(Window {
             surface,
             xdg,
@@ -652,6 +671,30 @@ impl Client {
         })?;
         let inhibitor = inhibit.create_inhibitor(surface, handle, ());
         crate::say!(inhibitor.id(), "create_inhibitor({})", surface.id());
+        Ok(())
+    }
+
+    /// Create a keyboard shortcuts inhibitor on `surface`, never destroyed, as
+    /// [`Client::take_an_inhibitor`] is.
+    fn take_the_shortcuts(
+        &self,
+        surface: &wl_surface::WlSurface,
+        handle: &QueueHandle<Client>,
+    ) -> Result<(), ClientError> {
+        let manager = self
+            .globals
+            .shortcuts_inhibit
+            .as_ref()
+            .ok_or(ClientError::Missing {
+                global: "zwp_keyboard_shortcuts_inhibit_manager_v1",
+            })?;
+        let seat = self
+            .globals
+            .seat
+            .as_ref()
+            .ok_or(ClientError::Missing { global: "wl_seat" })?;
+        let inhibitor = manager.inhibit_shortcuts(surface, seat, handle, ());
+        crate::say!(inhibitor.id(), "inhibit_shortcuts({})", surface.id());
         Ok(())
     }
 
@@ -1892,6 +1935,29 @@ impl Dispatch<org_kde_kwin_server_decoration::OrgKdeKwinServerDecoration, ()> fo
 }
 delegate_noop!(Client: ignore zwp_idle_inhibit_manager_v1::ZwpIdleInhibitManagerV1);
 delegate_noop!(Client: ignore zwp_idle_inhibitor_v1::ZwpIdleInhibitorV1);
+delegate_noop!(Client: ignore zwp_keyboard_shortcuts_inhibit_manager_v1::ZwpKeyboardShortcutsInhibitManagerV1);
+
+/// Traces whether the compositor honors the shortcuts inhibitor.
+impl Dispatch<zwp_keyboard_shortcuts_inhibitor_v1::ZwpKeyboardShortcutsInhibitorV1, ()> for Client {
+    fn event(
+        _: &mut Client,
+        inhibitor: &zwp_keyboard_shortcuts_inhibitor_v1::ZwpKeyboardShortcutsInhibitorV1,
+        event: zwp_keyboard_shortcuts_inhibitor_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+        match event {
+            zwp_keyboard_shortcuts_inhibitor_v1::Event::Active => {
+                crate::say!(inhibitor.id(), "active");
+            }
+            zwp_keyboard_shortcuts_inhibitor_v1::Event::Inactive => {
+                crate::say!(inhibitor.id(), "inactive");
+            }
+            _ => {}
+        }
+    }
+}
 delegate_noop!(Client: ignore wl_data_device_manager::WlDataDeviceManager);
 delegate_noop!(Client: ignore wl_data_offer::WlDataOffer);
 delegate_noop!(Client: ignore zwp_primary_selection_device_manager_v1::ZwpPrimarySelectionDeviceManagerV1);

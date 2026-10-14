@@ -173,6 +173,9 @@ class MODULES_EXPORT DomicileHost final
   // The chord, `Meta+Shift+l`, resolved here against the keys the compositor
   // says the keyboard has, and again whenever it says so anew.
   void grabShortcut(ScriptState*, const String& chord, ExceptionState&);
+  // Answers one grabShortcut of that name. The last one gives the chord back,
+  // and its key too unless another name grabbed is on it.
+  void ungrabShortcut(ScriptState*, const String& chord, ExceptionState&);
   void activateExtension(ScriptState*, const String& id, ExceptionState&);
 
   // Blink's DEFINE_ATTRIBUTE_EVENT_LISTENER, keyed on the fork's own names
@@ -250,6 +253,7 @@ class MODULES_EXPORT DomicileHost final
   // domicile::mojom::blink::ControlChannelClient:
   void AppTitled(const String& app_id, const String& title) override;
   void AppDesktopId(const String& app_id, const String& desktop_id) override;
+  void AppInhibitsShortcuts(const String& app_id, bool inhibits) override;
   void AppAppeared(const String& app_id,
                    const String& title,
                    const String& desktop_id,
@@ -368,6 +372,12 @@ class MODULES_EXPORT DomicileHost final
   void ResolveChords();
   // The chord grabbed by name that `press` is, or empty.
   String ChordFor(const DomicilePress& press) const;
+  // Gives `press` back to the browser process unless a chord grabbed by name
+  // is still on it.
+  void UngrabUnclaimed(const DomicilePress& press);
+  // Whether the window with the keyboard holds a shortcuts inhibitor, so the
+  // desktop's chords are its keys.
+  bool KeyboardWindowInhibitsShortcuts() const;
   // A key went down on the page. One that is a chord grabbed by name is the
   // desktop's: taken from the page and dispatched as `shortcut`, the same as
   // the browser process does for one pressed in a `<webview>`.
@@ -480,11 +490,13 @@ class MODULES_EXPORT DomicileHost final
   // on the first fetch, since nothing arrives on it unasked.
   HeapMojoRemote<domicile::mojom::blink::ShellFetch> shell_fetch_;
 
-  // A chord grabbed by name, and the press it is on the last keyboard heard.
+  // A chord grabbed by name, the press it is on the last keyboard heard, and
+  // how many grabShortcut calls no ungrabShortcut has answered yet.
   struct GrabbedChord {
     String written;
     DomicileWrittenChord chord;
     std::optional<DomicilePress> press;
+    uint32_t holds = 1;
   };
   Vector<GrabbedChord> chords_;
   // Every keysym the keyboard types and the evdev key it is on, from the last

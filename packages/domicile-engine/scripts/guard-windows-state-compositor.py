@@ -79,6 +79,7 @@ SEQUENCE = [
     {"type": "app_desktop_id", "app_id": "first", "desktop_id": "org.example.First"},
     {"type": "app_resized", "app_id": "first", "size": [800, 600]},
     {"type": "app_min_size", "app_id": "first", "size": [100, 50]},
+    {"type": "app_inhibits_shortcuts", "app_id": "second", "inhibits": True},
     {"type": "app_cursor", "app_id": "second", "cursor": "grab"},
     {"type": "app_cursor", "app_id": "second", "cursor": "pointr"},
     {"type": "app_cursor", "app_id": "first", "cursor": "zoom-out"},

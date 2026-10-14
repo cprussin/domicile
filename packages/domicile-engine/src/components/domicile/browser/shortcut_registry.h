@@ -64,9 +64,10 @@ struct Page {
 // `base::BindPostTask`: they run on whichever sequence a press arrives on, and
 // never under the lock.
 //
-// Claims are process-wide, but a press is delivered only to the page that
-// heard it. Every page claims the same chords, so telling every page would run
-// the shortcut once per monitor.
+// Each page claims for itself, and a chord is the desktop's while any page
+// claims it. A press is delivered only to the page that heard it. Every page
+// claims the same chords, so telling every page would run the shortcut once
+// per monitor.
 class ShortcutRegistry {
  public:
   using ShortcutCallback = base::RepeatingCallback<void(Chord)>;
@@ -92,13 +93,18 @@ class ShortcutRegistry {
                        ShortcutCallback on_release,
                        ModifiersCallback on_modifiers);
 
-  // Stops delivering to `channel`. Its claims stay, so a reloading page leaves
-  // no gap in which a chord reaches the focused window.
+  // Stops delivering to `channel`. Its claims stay, left over, so a reloading
+  // page leaves no gap in which a chord reaches the focused window.
   void RemoveChannel(ChannelId channel);
 
-  // Claims `chord` for the desktop. Idempotent, so the shell can re-run its
-  // claims.
-  void Grab(const Chord& chord);
+  // Claims `chord` for the desktop on behalf of `channel`. Idempotent, so the
+  // shell can re-run its claims.
+  void Grab(ChannelId channel, const Chord& chord);
+
+  // Drops `channel`'s claim on `chord`, and any claim on it a closed page left
+  // over: a page letting go is the shell letting go. Another open page's claim
+  // stays. Idempotent.
+  void Ungrab(ChannelId channel, const Chord& chord);
 
   // Handles a key press in a `<webview>` of `page`. If `chord` is claimed,
   // notifies that page's channels and returns true; the caller must then
@@ -123,6 +129,15 @@ class ShortcutRegistry {
   // Whether a claimed chord is on `keycode`.
   bool IsGrabbedKey(uint32_t keycode) const EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
+  // A page's claim on `chord`; `channel` is kLeftOver once its page is gone.
+  struct Claim {
+    Chord chord;
+    ChannelId channel;
+
+    friend bool operator==(const Claim&, const Claim&) = default;
+  };
+  static constexpr ChannelId kLeftOver = 0;
+
   struct Channel {
     ChannelId id;
     Page page;
@@ -132,7 +147,7 @@ class ShortcutRegistry {
   };
 
   base::Lock lock_;
-  std::vector<Chord> grabbed_ GUARDED_BY(lock_);
+  std::vector<Claim> grabbed_ GUARDED_BY(lock_);
   std::vector<Channel> channels_ GUARDED_BY(lock_);
   std::optional<Modifiers> reported_ GUARDED_BY(lock_);
   ChannelId next_id_ GUARDED_BY(lock_) = 1;

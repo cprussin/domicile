@@ -377,6 +377,14 @@ pub enum HostMessage {
     /// to the app's element.
     AppCursor { app_id: String, cursor: CursorShape },
 
+    /// Whether a window holds an active `zwp_keyboard_shortcuts_inhibitor_v1`.
+    ///
+    /// While it has the keyboard, the desktop's shortcuts are its keys: the
+    /// engine lets grabbed chords through to it, and a shell's own listeners
+    /// should too. Sent after [`HostMessage::AppAppeared`] when the window
+    /// holds one, then on each change.
+    AppInhibitsShortcuts { app_id: String, inhibits: bool },
+
     /// The desktop's displays, as regions of the single chrome page.
     ///
     /// Sent after `welcome` and whenever the layout changes. Latest wins; a

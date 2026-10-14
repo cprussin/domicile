@@ -50,6 +50,10 @@
   readonly attribute boolean dialog;
   // The client asked to draw its own frame (client-side decorations).
   readonly attribute boolean clientFrame;
+  // The client holds a zwp_keyboard_shortcuts_inhibitor_v1. While the window
+  // has the keyboard, the desktop's shortcuts are its keys: grabbed chords
+  // reach it, and a shell's own key listeners should let keys through.
+  readonly attribute boolean inhibitsShortcuts;
 
   readonly attribute DomicileCursorShape cursor;
 

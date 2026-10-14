@@ -677,8 +677,9 @@ void DomicileHost::grabShortcut(ScriptState*,
   if (!Ready(exception_state)) {
     return;
   }
-  for (const GrabbedChord& grabbed : chords_) {
+  for (GrabbedChord& grabbed : chords_) {
     if (grabbed.written == written) {
+      ++grabbed.holds;
       return;
     }
   }
@@ -695,13 +696,46 @@ void DomicileHost::grabShortcut(ScriptState*,
   ResolveChords();
 }
 
-// A claim is never given back -- the channel has no way to release one -- so a
-// chord whose key moved is grabbed on its new key and the old one stays the
-// desktop's, answering nothing, until the page reloads.
+void DomicileHost::ungrabShortcut(ScriptState*,
+                                  const String& written,
+                                  ExceptionState& exception_state) {
+  String error;
+  if (!ParseDomicileChord(written, &error)) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kSyntaxError, error);
+    return;
+  }
+  if (!Ready(exception_state)) {
+    return;
+  }
+  for (wtf_size_t i = 0; i < chords_.size(); ++i) {
+    if (chords_[i].written == written) {
+      if (--chords_[i].holds > 0) {
+        return;
+      }
+      const std::optional<DomicilePress> press = chords_[i].press;
+      chords_.EraseAt(i);
+      if (press) {
+        UngrabUnclaimed(*press);
+      }
+      return;
+    }
+  }
+}
+
+void DomicileHost::UngrabUnclaimed(const DomicilePress& press) {
+  if (ChordFor(press).IsNull()) {
+    channel_->UngrabShortcut(domicile::mojom::blink::Shortcut::New(
+        press.keycode, press.alt, press.ctrl, press.shift, press.meta));
+  }
+}
+
+// A chord whose key moved is grabbed on its new key, and the old one is given
+// back once no chord is on it.
 void DomicileHost::ResolveChords() {
   if (!keys_ || !channel_.is_bound()) {
     return;
   }
+  Vector<DomicilePress> moved_off;
   for (GrabbedChord& grabbed : chords_) {
     const std::optional<DomicilePress> press =
         ResolveDomicileChord(grabbed.chord, *keys_);
@@ -717,8 +751,26 @@ void DomicileHost::ResolveChords() {
       channel_->GrabShortcut(domicile::mojom::blink::Shortcut::New(
           press->keycode, press->alt, press->ctrl, press->shift, press->meta));
     }
+    if (grabbed.press && press != grabbed.press) {
+      moved_off.push_back(*grabbed.press);
+    }
     grabbed.press = press;
   }
+  for (const DomicilePress& press : moved_off) {
+    UngrabUnclaimed(press);
+  }
+}
+
+bool DomicileHost::KeyboardWindowInhibitsShortcuts() const {
+  if (keyboard_app_.IsNull()) {
+    return false;
+  }
+  for (const DomicileWindowState& state : window_states_) {
+    if (state.app_id == keyboard_app_) {
+      return state.inhibits_shortcuts;
+    }
+  }
+  return false;
 }
 
 String DomicileHost::ChordFor(const DomicilePress& press) const {
@@ -742,7 +794,9 @@ void DomicileHost::PageKeyDown(Event* event) {
   const DomicilePress press{static_cast<uint32_t>(evdev), key->altKey(),
                             key->ctrlKey(), key->shiftKey(), key->metaKey()};
   const String chord = ChordFor(press);
-  if (chord.IsNull()) {
+  // A window holding a shortcuts inhibitor gets the chord as a key. The
+  // console switch is the DRM platform's, below the page, so it still works.
+  if (chord.IsNull() || KeyboardWindowInhibitsShortcuts()) {
     return;
   }
   // Taken from the page whether or not it fires: the chord is the desktop's
@@ -1585,6 +1639,11 @@ void DomicileHost::AppTitled(const String& app_id, const String& title) {
 void DomicileHost::AppDesktopId(const String& app_id,
                                 const String& desktop_id) {
   WindowNamed(app_id).desktop_id = desktop_id;
+  WindowsChanged();
+}
+
+void DomicileHost::AppInhibitsShortcuts(const String& app_id, bool inhibits) {
+  WindowNamed(app_id).inhibits_shortcuts = inhibits;
   WindowsChanged();
 }
 
