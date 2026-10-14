@@ -55,6 +55,45 @@ export type AppFocusReleaseRequest = {
 };
 
 /**
+ * Fired on an `<app>` when its window reaches the screen: viz showed the
+ * window's first frame, or the first frame its client drew after its box
+ * changed size.
+ *
+ * Fired once for each. A move, and a hidden window shown again, fire nothing.
+ * A `CustomEvent` with an {@link AppWindowChange} detail. It bubbles and is not
+ * cancelable.
+ */
+export const APP_PRESENTED_EVENT = "domicile-presented";
+
+/**
+ * Fired on an `<app>` when the compositor marks its window `suspended`: the
+ * page reported it hidden (`setAppBounds` with no area) and no cast shows it.
+ * The client draws about once a second until {@link APP_RESUMED_EVENT}.
+ *
+ * A `CustomEvent` with an {@link AppWindowChange} detail. It bubbles and is not
+ * cancelable.
+ */
+export const APP_SUSPENDED_EVENT = "domicile-suspended";
+
+/**
+ * Fired on an `<app>` when the compositor clears its window's `suspended`
+ * state: the page gave it a box, a cast shows it, or a new page connected.
+ *
+ * A `CustomEvent` with an {@link AppWindowChange} detail. It bubbles and is not
+ * cancelable.
+ */
+export const APP_RESUMED_EVENT = "domicile-resumed";
+
+/**
+ * The detail of an {@link APP_PRESENTED_EVENT}, {@link APP_SUSPENDED_EVENT}
+ * or {@link APP_RESUMED_EVENT}.
+ */
+export type AppWindowChange = {
+  /** The host's id for the window. */
+  appId: string;
+};
+
+/**
  * The engine's `<app>` element type.
  *
  * Declared globally because React types a `ref` from `HTMLElementTagNameMap`;

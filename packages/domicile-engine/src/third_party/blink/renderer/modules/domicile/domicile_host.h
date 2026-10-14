@@ -271,6 +271,8 @@ class MODULES_EXPORT DomicileHost final
   void AppClosed(const String& app_id) override;
   void AppCursor(const String& app_id,
                  domicile::mojom::blink::CursorShape cursor) override;
+  void AppPresented(const String& app_id) override;
+  void AppSuspended(const String& app_id, bool suspended) override;
   void ShortcutPressed(domicile::mojom::blink::ShortcutPtr shortcut) override;
   void ShortcutReleased(domicile::mojom::blink::ShortcutPtr shortcut) override;
   void Modifiers(bool alt, bool ctrl, bool shift, bool meta) override;
@@ -412,6 +414,9 @@ class MODULES_EXPORT DomicileHost final
            const char* type,
            const String& app_id,
            std::optional<Element*> pressed);
+  // Dispatch the bubbling `type` on the <app> showing `app_id`, if there is
+  // one, with `{appId}` as its detail.
+  void Tell(const String& app_id, const char* type);
 
   bool Ready(ExceptionState&);
 

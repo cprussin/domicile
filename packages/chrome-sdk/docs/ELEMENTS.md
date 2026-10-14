@@ -26,6 +26,16 @@ Event names and full types are in `src/app-element.ts` and
   the page does not draw. The client gets a frame callback once a second and
   is `suspended` until the next box with an area, unless a cast shows it. It
   keeps its monitor and scale.
+- **Window events** (bubbling `CustomEvent`s, not cancelable, with
+  `detail.appId`; the compositor sends them):
+  - `domicile-presented`: the window reached the screen. Fired once for its
+    first frame, and once for the first frame its client draws after its box
+    changes size. A move, a box at the same size and a hidden window shown
+    again fire nothing.
+  - `domicile-suspended`: the compositor marked the window `suspended`.
+  - `domicile-resumed`: the compositor cleared `suspended`. A new page's
+    `hello` clears it on every window.
+  - An `<app>` not in the page when one is sent misses it.
 - **Pointer:** the element sends pointer and wheel events over it to the
   client, in the client's surface coordinates, through its layout box and
   every transform above it (`zoom` and perspective included). A
