@@ -186,7 +186,7 @@ Every bar and the lock screen share one watch per system readout. See
 
 ## Volume
 
-- A speaker icon with zero, one (under 50%) or two waves, or a cross when
+- A speaker icon with zero, one (under 50%) or two waves, or slashed when
   muted. Dims while muted. Hidden with no sound server.
 - Scroll over it to step the output by 5%. Middle-click to mute or unmute it.
   Click for the mixer:

@@ -129,12 +129,12 @@ describe("Bluetooth", () => {
     bluetooth.report(reading(false, []));
     expect(
       screen.getByRole("button", { name: "Bluetooth off" }).className,
-    ).toContain(css({ opacity: "disabled" }));
+    ).toContain(css({ opacity: "inactive" }));
 
     bluetooth.report(reading(true, []));
     expect(
       screen.getByRole("button", { name: "Bluetooth on" }).className,
-    ).not.toContain(css({ opacity: "disabled" }));
+    ).not.toContain(css({ opacity: "inactive" }));
 
     bluetooth.report(reading(true, ["WH-1000XM4", "MX Master 3"]));
     expect(
@@ -187,7 +187,7 @@ describe("Bluetooth", () => {
     bluetooth.report(reading(false, []));
     expect(
       screen.getByRole("img", { name: "Bluetooth off" }).className,
-    ).toContain(css({ opacity: "disabled" }));
+    ).toContain(css({ opacity: "inactive" }));
   });
 
   it("opens its panel on a click", async () => {

@@ -152,7 +152,7 @@ const triggerStyles = cva({
   },
   variants: {
     linked: {
-      false: { opacity: "disabled" },
+      false: { opacity: "inactive" },
       true: {},
     },
     online: {

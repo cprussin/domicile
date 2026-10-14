@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import { SpeakerSlashIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSlash";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-
 import { css } from "../styled-system/css";
 import { device, heldSound, laptop } from "./fixture";
 import { Volume } from "./Volume";
@@ -31,7 +31,7 @@ describe("Volume", () => {
       shown(sound);
       expect(
         screen.getByRole("button", { name: "Volume 50%" }).className,
-      ).not.toContain(css({ opacity: "disabled" }));
+      ).not.toContain(css({ opacity: "inactive" }));
 
       sound.report({
         ...laptop,
@@ -40,7 +40,7 @@ describe("Volume", () => {
 
       expect(
         screen.getByRole("button", { name: "Volume muted" }).className,
-      ).toContain(css({ opacity: "disabled" }));
+      ).toContain(css({ opacity: "inactive" }));
     });
 
     it("draws more waves the louder the default output", () => {
@@ -55,6 +55,22 @@ describe("Volume", () => {
       };
 
       expect(new Set([icon(0), icon(0.3), icon(0.8)]).size).toBe(3);
+    });
+
+    it("slashes the speaker while muted", () => {
+      const sound = heldSound();
+      shown(sound);
+      sound.report({
+        ...laptop,
+        outputs: [device({ default: true, muted: true })],
+      });
+      const muted = screen.getByRole("button").innerHTML;
+
+      const { container } = render(
+        <SpeakerSlashIcon size={15} weight="bold" />,
+      );
+
+      expect(muted).toBe(container.innerHTML);
     });
 
     it("mutes and unmutes the default output with a middle click", () => {

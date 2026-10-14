@@ -147,7 +147,7 @@ const triggerStyles = cva({
   },
   variants: {
     on: {
-      false: { opacity: "disabled" },
+      false: { opacity: "inactive" },
       true: {},
     },
   },
@@ -165,7 +165,7 @@ const statusStyles = cva({
   },
   variants: {
     on: {
-      false: { opacity: "disabled" },
+      false: { opacity: "inactive" },
       true: {},
     },
   },

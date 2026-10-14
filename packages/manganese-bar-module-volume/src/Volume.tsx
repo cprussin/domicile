@@ -6,7 +6,6 @@ import { SpeakerHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerHigh";
 import { SpeakerLowIcon } from "@phosphor-icons/react/dist/ssr/SpeakerLow";
 import { SpeakerNoneIcon } from "@phosphor-icons/react/dist/ssr/SpeakerNone";
 import { SpeakerSlashIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSlash";
-import { SpeakerXIcon } from "@phosphor-icons/react/dist/ssr/SpeakerX";
 import type { WheelEvent } from "react";
 import { css, cva } from "../styled-system/css";
 import { ask } from "./ask";
@@ -119,12 +118,13 @@ const triggerLabel = (output: AudioDevice | undefined) => {
   }
 };
 
-/** A speaker icon whose waves show the default output's rough volume. */
+/**
+ * A speaker icon whose waves show the default output's rough volume, slashed
+ * while muted or with no output.
+ */
 const Speaker = ({ output }: { output: AudioDevice | undefined }) => {
-  if (output === undefined) {
+  if (output === undefined || output.muted) {
     return <SpeakerSlashIcon size={15} weight="bold" />;
-  } else if (output.muted) {
-    return <SpeakerXIcon size={15} weight="bold" />;
   } else if (output.volume === 0) {
     return <SpeakerNoneIcon size={15} weight="bold" />;
   } else if (output.volume < 0.5) {
@@ -165,7 +165,7 @@ const triggerStyles = cva({
   variants: {
     muted: {
       false: {},
-      true: { opacity: "disabled" },
+      true: { opacity: "inactive" },
     },
   },
 });

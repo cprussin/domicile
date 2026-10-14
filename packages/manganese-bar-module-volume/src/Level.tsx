@@ -2,7 +2,7 @@ import { Slider } from "@domicile-desktop/component-library/Slider";
 import { MicrophoneIcon } from "@phosphor-icons/react/dist/ssr/Microphone";
 import { MicrophoneSlashIcon } from "@phosphor-icons/react/dist/ssr/MicrophoneSlash";
 import { SpeakerHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerHigh";
-import { SpeakerXIcon } from "@phosphor-icons/react/dist/ssr/SpeakerX";
+import { SpeakerSlashIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSlash";
 import { useState } from "react";
 
 import { css, cva } from "../styled-system/css";
@@ -98,7 +98,11 @@ const MuteIcon = ({
 }) => {
   switch (direction) {
     case "output":
-      return muted ? <SpeakerXIcon size={14} /> : <SpeakerHighIcon size={14} />;
+      return muted ? (
+        <SpeakerSlashIcon size={14} />
+      ) : (
+        <SpeakerHighIcon size={14} />
+      );
     case "input":
       return muted ? (
         <MicrophoneSlashIcon size={14} />
