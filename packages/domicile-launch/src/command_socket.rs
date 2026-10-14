@@ -16,6 +16,7 @@ use crate::command::{
     history_line, load_shell_line, load_unpacked_line, media_devices_line, open_app_line,
     open_url_line, reply, run_app_line, set_extension_enabled_line, set_media_device_line,
     set_site_permission_line, site_permissions_line, uninstall_extension_line, visits_line, Reply,
+    NO_SHELL_WINDOW,
 };
 use crate::extensions::InstalledExtension;
 use crate::history::{BrowsingData, HistoryItem, HistoryQuery};
@@ -50,6 +51,12 @@ pub enum CommandError {
 
     #[error("the engine refused: {why}")]
     Refused { why: String },
+
+    #[error(
+        "the engine refused: {NO_SHELL_WINDOW}. An engine that is starting \
+         has none until its first page commits."
+    )]
+    NoShellWindow,
 
     #[error("could not reach the engine at {path}: {kind:?}")]
     Failed {
@@ -272,6 +279,7 @@ fn carry_out(
 fn answered(socket: &Path, line: &str, patience: Duration) -> Result<Reply, CommandError> {
     let said = exchange(socket, line, patience)?;
     match reply(said.trim()) {
+        Ok(Reply::Refused { why }) if why == NO_SHELL_WINDOW => Err(CommandError::NoShellWindow),
         Ok(Reply::Refused { why }) => Err(CommandError::Refused { why }),
         Ok(answered) => Ok(answered),
         Err(_) => Err(CommandError::Unreadable {
