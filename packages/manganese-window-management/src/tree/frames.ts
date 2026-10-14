@@ -112,6 +112,14 @@ export type Tab = {
   windows: number;
 };
 
+/**
+ * The key a container's tab is drawn under. A shown group's own shown group
+ * can be named after the same window, so the depth of its strip tells the two
+ * apart.
+ */
+export const tabKeyOf = ({ id, strip }: Tab): string =>
+  `${id}-${strip.group.node.up.toString()}`;
+
 /** The frames and tabs a workspace's tiling puts on screen. */
 export type Tiled = {
   frames: readonly Frame[];
