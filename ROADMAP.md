@@ -24,8 +24,6 @@ item when it ships.
      No guard covers that re-embed.
    - No `disconnected` callback in `domicile_engine.h`. The compositor spots a
      new engine by `SO_PEERCRED` (`which_engine.rs`).
-   - Engine-restart recovery is untested against a real engine and GPU
-     ([Dead engine with windows open](docs/HARDWARE-CHECKS.md#dead-engine-with-windows-open)).
 
    [THE-DOMICILE-BINARY.md](docs/architecture/THE-DOMICILE-BINARY.md).
 
@@ -33,18 +31,15 @@ item when it ships.
    - Chrome's notification bridge looks for the server once at startup, so a
      slow bus leaves it showing its own popups.
 
-4. **Native density on every monitor: test on hardware.**
-   [ONE-PAGE-FOR-THE-DESK.md](docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
-
-5. **Settings app.** [SETTINGS.md](docs/SETTINGS.md).
+4. **Settings app.** [SETTINGS.md](docs/SETTINGS.md).
    - Shell options ([SHELL-OPTIONS.md](docs/architecture/SHELL-OPTIONS.md)).
    - A list of sites with stored data. History clears cookies by time range
      or by site ([HISTORY.md](docs/HISTORY.md)).
 
-6. **Web apps.** [WEB-APPS.md](docs/architecture/WEB-APPS.md).
+5. **Web apps.** [WEB-APPS.md](docs/architecture/WEB-APPS.md).
    - `DomicileHost.openAppWindow(url)`, for a shell's own launcher.
 
-7. **Distribution packages.**
+6. **Distribution packages.**
    [RUNNING-A-DESKTOP.md](docs/RUNNING-A-DESKTOP.md#other-distributions).
    - Released on GitHub only. APT and RPM repositories, package signing, an
      AUR package and COPR wait until users ask for them; until then upgrades
@@ -52,7 +47,7 @@ item when it ships.
    - Checked by installing in containers; no packaged session has run on
      hardware.
 
-8. **Revisit the docs for users.** Start with the README.
+7. **Revisit the docs for users.** Start with the README.
    - A clearer reading path through the docs.
    - Screenshots and videos of manganese.
    - A short getting started guide: installing and setup.
