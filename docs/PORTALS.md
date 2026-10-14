@@ -264,7 +264,10 @@ client that connects through that listener is sandboxed.
   which ask the shell.
 - **Unsandboxed clients** see every global.
 - **The shell** reads each window's sandbox from `DomicileWindow`
-  ([WRITING-A-SHELL.md](WRITING-A-SHELL.md#windows)).
+  ([WRITING-A-SHELL.md](WRITING-A-SHELL.md#windows)). The engine, app id and
+  instance id are claims by whichever client created the context, and any
+  unsandboxed client can create one. Verify them with the window's `pid`,
+  `uid` and `gid` before a security decision.
 - New privileged globals filter on `sees_privileged_globals` in
   `packages/domicile-compositor/src/clients.rs`.
 
