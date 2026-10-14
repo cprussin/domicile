@@ -31,7 +31,7 @@ use smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer;
 use smithay::utils::Transform;
 use tracing::{debug, warn};
 
-use crate::buffer_transform::{upright_size, Sampled};
+use crate::buffer_transform::Sampled;
 use crate::casting::captured;
 use crate::casting::captures::{Capturer, Captures, Frame};
 use crate::casting::cursor::{arrow, embed, plan, CursorMode, Plan, Sprite};
@@ -47,7 +47,6 @@ use crate::casting::shots::{
 };
 use crate::casting::{Candidate, Event, Listener, Region, Request, Source, StreamId};
 use crate::engine::{CaptureId, CapturedFrame};
-use crate::outputs::as_wl_transform;
 
 /// A window's frame, as its commit brought it.
 pub struct Committed<'a> {
@@ -554,7 +553,7 @@ impl Streams {
                     .screens
                     .iter()
                     .find(|screen| screen.display == piece.display)?;
-                Some((piece.display, panel_mode(screen)))
+                Some((piece.display, capture_size(screen)))
             })
             .collect()
     }
@@ -786,12 +785,12 @@ impl Streams {
         self.captures
             .keep(capture, id, Frame { snapshot, content }, kept, capturer);
         self.develop(renderer.as_deref_mut(), capturer);
-        let turned = self
+        let Some(logical) = self
             .screens
             .iter()
             .find(|screen| screen.display == display)
-            .map(|screen| ((screen.desk.2, screen.desk.3), screen.transform));
-        let Some((logical, transform)) = turned else {
+            .map(|screen| (screen.desk.2, screen.desk.3))
+        else {
             return self.next_due();
         };
         for stream in self.captures.streams_of(display) {
@@ -803,7 +802,7 @@ impl Streams {
                 .pieces
                 .iter()
                 .filter(|piece| piece.display == display)
-                .filter_map(|piece| damage_in_stream(piece, logical, transform, content, damage))
+                .filter_map(|piece| damage_in_stream(piece, logical, content, damage))
                 .collect();
             if !damage.is_empty() {
                 self.offer(stream, damage, renderer.as_deref_mut(), now);
@@ -1049,14 +1048,11 @@ fn named(open: Vec<Candidate>) -> (Vec<ShotWindow>, HashMap<String, String>) {
     (windows, descriptions)
 }
 
-/// A screen's mode: its logical size at its density, as its panel lies.
-fn panel_mode(screen: &Screen) -> (u32, u32) {
-    upright_size(
-        (
-            (f64::from(screen.desk.2) * screen.scale).round() as u32,
-            (f64::from(screen.desk.3) * screen.scale).round() as u32,
-        ),
-        as_wl_transform(screen.transform),
+/// The size of a screen's capture: its logical size at its density, upright.
+fn capture_size(screen: &Screen) -> (u32, u32) {
+    (
+        (f64::from(screen.desk.2) * screen.scale).round() as u32,
+        (f64::from(screen.desk.3) * screen.scale).round() as u32,
     )
 }
 
@@ -1129,14 +1125,9 @@ fn view<'a>(
                         .find(|screen| screen.display == piece.display)?;
                     Some(Layer {
                         snapshot: &frame.snapshot,
-                        from: in_frame(
-                            piece.from,
-                            (screen.desk.2, screen.desk.3),
-                            screen.transform,
-                            frame.content,
-                        ),
+                        from: in_frame(piece.from, (screen.desk.2, screen.desk.3), frame.content),
                         to: piece.to,
-                        transform: as_wl_transform(screen.transform),
+                        transform: Transform::Normal,
                     })
                 })
                 .collect::<Option<Vec<_>>>()?;
@@ -1293,14 +1284,12 @@ mod tests {
                 display: 1,
                 desk: (0, 0, 1, 1),
                 scale: 1.0,
-                transform: domicile_config::Transform::Normal,
             },
             Screen {
                 name: "drm-2".into(),
                 display: 2,
                 desk: (1, 0, 1, 1),
                 scale: 2.0,
-                transform: domicile_config::Transform::Normal,
             },
         ]
     }
@@ -1449,7 +1438,7 @@ mod tests {
     }
 
     #[test]
-    fn a_rotated_monitors_shot_is_captured_as_its_panel_and_turned_upright() {
+    fn a_rotated_monitors_shot_is_captured_upright() {
         let mut streams = Streams::new(channel().0, None);
         streams.screens(
             vec![Screen {
@@ -1457,7 +1446,6 @@ mod tests {
                 display: 1,
                 desk: (0, 0, 1, 2),
                 scale: 1.0,
-                transform: domicile_config::Transform::Rotate90,
             }],
             None,
         );
@@ -1475,21 +1463,22 @@ mod tests {
             None,
             Some(&mut engine),
         );
-        assert_eq!(engine.sizes, [(2, 1)], "the panel lies on its side");
+        // viz renders a turned window upright and turns it on the way to the
+        // panel, so its capture is the upright frame.
+        assert_eq!(engine.sizes, [(1, 2)]);
         streams.captured(
             1,
             1,
-            Ok(painted((2, 1), &[10, 20])),
+            Ok(painted((1, 2), &[10, 20])),
             None,
             &mut engine,
             Instant::now(),
         );
 
-        // A quarter turn puts the panel's right edge at the monitor's top.
         let desk: Desk = heard.try_recv().expect("developed").expect("a desk");
         let blue: Vec<u8> = desk.shot.bgra.chunks(4).map(|pixel| pixel[0]).collect();
         assert_eq!((desk.shot.width, desk.shot.height), (1, 2));
-        assert_eq!(blue, [20, 10]);
+        assert_eq!(blue, [10, 20]);
     }
 
     #[test]
