@@ -353,7 +353,7 @@
         pname = "domicile-shell-workspace";
         version = "0.0.0";
         src = self;
-        nativeBuildInputs = [ pkgs.bun pkgs.nodejs_24 ];
+        nativeBuildInputs = [ pkgs.bun pkgs.nodejs_24 pkgs.jq ];
         configurePhase = sharedShellConfigure;
         buildPhase = ''
           runHook preBuild
@@ -366,6 +366,8 @@
           cp -a ${shellModules} "$out"
           chmod -R u+w "$out"
           bash ${./distro/shell-workspace.sh} files ${pkgs.bun}/bin/bun "$PWD" "$out"
+          bash scripts/stamp-version.sh ${self.rev or self.dirtyRev} \
+            "$out"/packages/*/package.json
           runHook postInstall
         '';
       };
@@ -687,7 +689,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-2dWHnd8U2TnwMUF4ZMiNGi9Z+W9pkLl9Hmdf05Qt9Ws=";
+        outputHash = "sha256-BaRH90oM8L/m1S56E9iiuhPbSekhlKGeqbcQzXgk5V8=";
       };
 
 

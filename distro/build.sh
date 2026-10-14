@@ -54,6 +54,8 @@ UNZIP="$(store_path 'nixpkgs#unzip^out')/bin/unzip"
 # `zstd` for `distro/arch-optdepends.sh` too.
 ZSTD_BIN="$(store_path 'nixpkgs#zstd^bin')/bin"
 PATH="$ZSTD_BIN:$PATH"
+# `jq` for `scripts/stamp-version.sh`.
+PATH="$(store_path 'nixpkgs#jq^bin')/bin:$PATH"
 READELF="$(store_path 'nixpkgs#binutils-unwrapped^out')/bin/readelf"
 ENGINE_TARBALL="$(store_path .#engine.src)"
 BUN_ZIP="$(store_path .#bun.src)"
@@ -80,7 +82,7 @@ ENGINE="$(echo "$WORK"/engine/*/)"
 "$UNZIP" -q -j "$BUN_ZIP" '*/bun' -d "$WORK/bun"
 
 echo "== the tree =="
-distro/stage.sh "$BINARIES" "$ENGINE" "$WORK/bun/bun" "$ROOT" "$WORK/stage"
+distro/stage.sh "$BINARIES" "$ENGINE" "$WORK/bun/bun" "$ROOT" "$(git rev-parse HEAD)" "$WORK/stage"
 
 # Each format names the glibc the binaries need: the newest symbol version any
 # staged ELF file uses.

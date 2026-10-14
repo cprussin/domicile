@@ -36,6 +36,17 @@ shipped "a module's readme" -path './node_modules/*' -iname 'README*'
 shipped "a musl native module" -path './node_modules/.bun/*-musl@*'
 shipped "a package the builder does not link" -path ./packages/test-support/src
 
+# `-dirty` when the flake is built from a dirty tree.
+commit="0.0.0-alpha-$(git rev-parse --short=12 HEAD)"
+versions="$(jq -r .version "$workspace"/packages/*/package.json | sort -u)"
+case "$versions" in
+  "$commit" | "$commit-dirty") ;;
+  *)
+    echo "  FAIL  the packages are not at $commit: $versions" >&2
+    FAILED=$((FAILED + 1))
+    ;;
+esac
+
 # As `domicile` builds a config's shell.
 desk="$(mktemp -d)"
 trap 'rm -rf "$desk"' EXIT

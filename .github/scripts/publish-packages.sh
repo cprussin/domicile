@@ -5,8 +5,7 @@
 # - `bun pm pack`: bun rewrites `workspace:*` and `catalog:` to real ranges.
 # - `npm publish`: npm supports trusted publishing (GitHub's OIDC token, no
 #   secret) and provenance.
-# - `alpha-<sha>`, not `alpha.<sha>`: semver reads an all-digit identifier as
-#   numeric, and one with a leading zero is not a valid version.
+# - The version is `scripts/stamp-version.sh`'s.
 #
 # DOMICILE_PUBLISH_DRY_RUN=<dir> packs into <dir> and publishes nothing, for
 # scripts/test-publish-packages.sh.
@@ -16,7 +15,6 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
 mapfile -t PACKAGES < <(grep -v '^\(#\|$\)' .github/scripts/published-packages)
-VERSION="0.0.0-alpha-$(git rev-parse --short=12 HEAD)"
 OUT="${DOMICILE_PUBLISH_DRY_RUN:-$(mktemp -d)}"
 
 # Versions go into the manifests and `bun.lock`, where `bun pm pack` reads a
@@ -36,11 +34,11 @@ done
 cp bun.lock "$SAVED/bun.lock"
 trap restore EXIT
 
+MANIFESTS=()
 for package in "${PACKAGES[@]}"; do
-  manifest="packages/$package/package.json"
-  jq --arg version "$VERSION" '.version = $version' "$manifest" >"$manifest.next"
-  mv "$manifest.next" "$manifest"
+  MANIFESTS+=("packages/$package/package.json")
 done
+VERSION="$(scripts/stamp-version.sh "$(git rev-parse HEAD)" "${MANIFESTS[@]}")"
 bun install --ignore-scripts
 
 # What the tarballs hold that git does not: each library's `dist/` and the

@@ -69,7 +69,7 @@
     },
     "packages/chrome-sdk": {
       "name": "@domicile-desktop/sdk",
-      "version": "0.0.0-alpha-a89d6ae41ff7",
+      "version": "0.0.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "zod": "catalog:",
@@ -83,7 +83,7 @@
     },
     "packages/component-library": {
       "name": "@domicile-desktop/component-library",
-      "version": "0.0.0-alpha-a89d6ae41ff7",
+      "version": "0.0.0",
       "dependencies": {
         "@base-ui/react": "catalog:",
         "@cprussin/option-result": "catalog:",
@@ -775,7 +775,7 @@
     },
     "packages/shell-manganese": {
       "name": "@domicile-desktop/manganese",
-      "version": "0.0.0-alpha-a89d6ae41ff7",
+      "version": "0.0.0",
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/manganese-bar": "workspace:*",
@@ -872,7 +872,7 @@
     },
     "packages/system-apps": {
       "name": "@domicile-desktop/system-apps",
-      "version": "0.0.0-alpha-a89d6ae41ff7",
+      "version": "0.0.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/sdk": "workspace:*",
@@ -887,7 +887,7 @@
     },
     "packages/system-audio": {
       "name": "@domicile-desktop/system-audio",
-      "version": "0.0.0-alpha-a89d6ae41ff7",
+      "version": "0.0.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/sdk": "workspace:*",
@@ -902,7 +902,7 @@
     },
     "packages/system-backlight": {
       "name": "@domicile-desktop/system-backlight",
-      "version": "0.0.0-alpha-a89d6ae41ff7",
+      "version": "0.0.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/sdk": "workspace:*",
@@ -917,7 +917,7 @@
     },
     "packages/system-battery": {
       "name": "@domicile-desktop/system-battery",
-      "version": "0.0.0-alpha-a89d6ae41ff7",
+      "version": "0.0.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/sdk": "workspace:*",
@@ -932,7 +932,7 @@
     },
     "packages/system-bluetooth": {
       "name": "@domicile-desktop/system-bluetooth",
-      "version": "0.0.0-alpha-a89d6ae41ff7",
+      "version": "0.0.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/sdk": "workspace:*",
@@ -947,7 +947,7 @@
     },
     "packages/system-network": {
       "name": "@domicile-desktop/system-network",
-      "version": "0.0.0-alpha-a89d6ae41ff7",
+      "version": "0.0.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/sdk": "workspace:*",

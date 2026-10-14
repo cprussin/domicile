@@ -123,8 +123,9 @@ put "$WORKSPACE/packages/domicile-launch/Cargo.toml" ''
 # ---- a complete stage ------------------------------------------------------
 
 STAGE="$WORK/stage"
+REV=0123456789abcdef0123456789abcdef01234567
 echo "a stage from complete inputs"
-if out="$("$STAGE_SH" "$BINARIES" "$ENGINE" "$BUN" "$WORKSPACE" "$STAGE" 2>&1)"; then
+if out="$("$STAGE_SH" "$BINARIES" "$ENGINE" "$BUN" "$WORKSPACE" "$REV" "$STAGE" 2>&1)"; then
   ok "stage.sh succeeds"
 else
   fail "stage.sh succeeds" "$out"
@@ -185,6 +186,8 @@ absent "without the shells' builds" shell-manganese/.vite
 absent "without the crates" domicile-launch
 expect "without source maps or readmes" "" \
   "$(find "$LIBEXEC/workspace" -name '*.map' -o -name 'README*')"
+expect "every package carries the commit's version" "0.0.0-alpha-0123456789ab" \
+  "$(jq -r .version "$SHIPPED"/*/package.json | sort -u)"
 
 echo "the session and what it starts"
 SESSION="$USR/share/wayland-sessions/domicile.desktop"
@@ -253,12 +256,12 @@ refused() { # what, needle, stage.sh arguments...
 
 mv "$BINARIES/domicile-app-host" "$WORK/held"
 refused "a missing binary is named" domicile-app-host \
-  "$BINARIES" "$ENGINE" "$BUN" "$WORKSPACE"
+  "$BINARIES" "$ENGINE" "$BUN" "$WORKSPACE" "$REV"
 mv "$WORK/held" "$BINARIES/domicile-app-host"
 
 rm "$ENGINE/libdomicile_engine.so"
 refused "an engine without its library is named" libdomicile_engine.so \
-  "$BINARIES" "$ENGINE" "$BUN" "$WORKSPACE"
+  "$BINARIES" "$ENGINE" "$BUN" "$WORKSPACE" "$REV"
 
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
