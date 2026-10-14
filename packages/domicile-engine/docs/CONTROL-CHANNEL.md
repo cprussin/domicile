@@ -66,6 +66,10 @@ The engine has two channels to the rest of Domicile:
   compositor compiled from `input.keyboard`, and it feeds Chromium's
   `KeyboardLayoutEngine`. Without it, off ChromeOS, every printable key decodes
   to `DomKey::UNIDENTIFIED`. See `components/domicile/browser/keyboard_layout.h`.
+- **`appearance`**'s `cursor` stops in the browser process. It is the
+  desk's XCursor theme and size, which the DRM platform draws the pointer
+  from. See `ui/base/cursor/domicile/desk_cursor_theme.h` and
+  `ui/ozone/platform/drm/domicile/drm_cursor_factory.h`.
 - **`extensions`** stops in the browser process. It is the desk's
   `[extensions]` list, installed into the profile by
   `chrome/browser/domicile/domicile_extension_installer.h`. See

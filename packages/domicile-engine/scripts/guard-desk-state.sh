@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The desk's state attributes on the desktop -- idle, lock, both themes,
 # clipboard, tray, modifiers -- say what the compositor said, to a shell that
-# reads them without listening for their events.
+# reads them without listening for their events. Also that the pointer theme
+# on `appearance` reaches the browser process.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-desk-state.sh /build/chromium/src
@@ -110,6 +111,13 @@ STATE=$(grep -oE '"GUARD state .*"' "$ENGINE_LOG" | tail -1)
 
 echo "page: $STATE"
 
+# The pointer theme stops in the browser process, which logs it. A headless
+# engine has no DRM cursor factory to load it, so this checks the crossing.
+POINTER='the desk'"'"'s pointer theme is "domicile-guard" at 48 px'
+if [ -z "$FAILURE" ] && ! wait_for_line "$TRIES" "$POINTER" "$ENGINE_LOG"; then
+  FAILURE="the browser never logged the pointer theme the compositor sent"
+fi
+
 if [ -n "$FAILURE" ]; then
   annotate_from "guard-desk-state: $FAILURE" "$ENGINE_LOG"
   echo "guard-desk-state: $FAILURE" >&2
@@ -119,4 +127,4 @@ if [ -n "$FAILURE" ]; then
   tail -40 "$ENGINE_LOG" >&2
   exit 1
 fi
-echo "PASS: a shell that reads without listening reads the desk's state"
+echo "PASS: a shell that reads without listening reads the desk's state, and the browser takes the pointer theme"

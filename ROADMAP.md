@@ -101,9 +101,6 @@ Understood and not scheduled.
 - **Browser window context menus have only Chrome's core items.** No spelling
   suggestions, page or extension items.
 - **Client-drawn cursor surfaces show a plain arrow.**
-- **Unknown: whether the engine's pointer follows `theme.cursor_theme` and
-  `cursor_size`.** Applications get them through the settings portal; the
-  engine is given neither.
 - **Unknown: whether viz hit testing must agree with Domicile's.**
   [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#open-questions).
 

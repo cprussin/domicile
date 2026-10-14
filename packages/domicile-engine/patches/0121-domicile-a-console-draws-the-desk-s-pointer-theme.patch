@@ -1,0 +1,165 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 14 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a console draws the desk's pointer theme
+
+On a tty every pointer was Chromium's art: DrmCursorFactory answered every
+type with null (patch 0026), so wm::CursorLoader loaded its assets, and
+nothing in the DRM platform reads an XCursor theme. The config's
+theme.cursor_theme and theme.cursor_size never reached the engine.
+
+- The compositor sends the theme as `cursor` on `appearance`. The control
+  channel hands it to ui::DeskCursorThemeSource on the UI thread
+  (chrome_browser_interface_binders.cc).
+- DrmCursorFactory loads the theme's cursors from the XCursor search path
+  on the thread pool, per size in pixels, and answers from them. A type
+  the theme lacks, or no theme, is still Chromium's art.
+- When a theme loads or changes, the factory tells its observers.
+  DesktopNativeCursorManager now observes it too and sets the cursor on
+  screen again, as it does on a recolor (patch 0061). Without that the old
+  pointer stays until the cursor's type changes.
+- The DRM platform links //ui/base/cursor/domicile.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ .../chrome_browser_interface_binders.cc       |  8 +++++++
+ ui/ozone/platform/drm/BUILD.gn                |  9 ++++++++
+ .../desktop_native_cursor_manager.cc          |  9 ++++++++
+ .../desktop_native_cursor_manager.h           | 22 ++++++++++++++++++-
+ 4 files changed, 47 insertions(+), 1 deletion(-)
+
+diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
+index 536cfc7..5790450 100644
+--- a/chrome/browser/chrome_browser_interface_binders.cc
++++ b/chrome/browser/chrome_browser_interface_binders.cc
+@@ -21,6 +21,7 @@
+ #include "content/public/browser/browser_thread.h"
+ #include "mojo/public/cpp/bindings/message.h"
+ #include "components/domicile/common/domicile_scheme.h"
++#include "ui/base/cursor/domicile/desk_cursor_theme.h"
+ 
+ #include <utility>
+ 
+@@ -555,6 +556,13 @@ void PopulateChromeFrameBinders(
+                         &domicile::InstallExtensionsInto,
+                         Profile::FromBrowserContext(frame->GetBrowserContext())
+                             ->GetWeakPtr())),
++                // AND WHICH THEME THE POINTER IS DRAWN FROM. On a tty this
++                // process draws the pointer, from the desk's XCursor theme.
++                // Bound here for the keymap's reason above: the cursor
++                // factory belongs to the UI thread.
++                base::BindPostTask(
++                    content::GetUIThreadTaskRunner({}),
++                    base::BindRepeating(&ui::SetDeskCursorTheme)),
+                 // AND WHICH PAGE THIS IS, which is what a chord pressed in one
+                 // of its <webview>s is told to, and no other page.
+                 domicile::Page{frame->GetGlobalId().child_id.value(),
+diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
+index 88ae8ac..8a77f14 100644
+--- a/ui/ozone/platform/drm/BUILD.gn
++++ b/ui/ozone/platform/drm/BUILD.gn
+@@ -179,6 +179,11 @@ source_set("gbm") {
+     "//third_party/minigbm",
+     "//ui/base",
+     "//ui/base/cursor",
++
++    # The desk's XCursor theme, which `DrmCursorFactory` draws the pointer
++    # from.
++    "//ui/base/cursor/domicile:desk_cursor_theme",
++    "//ui/base/cursor/domicile:xcursor_theme",
+     "//ui/base/cursor/mojom:cursor_type",
+     "//ui/base/ime",
+     "//ui/display",
+@@ -340,6 +345,10 @@ source_set("gbm_unittests") {
+     "//ui/gfx/linux:test_support",
+     "//ui/ozone:platform",
+     "//ui/ozone/common",
++
++    # `DrmCursorFactoryThemeTest` gives the factory its own theme and loader.
++    "//ui/base/cursor/domicile:desk_cursor_theme",
++    "//ui/base/cursor/domicile:xcursor_theme",
+   ]
+ }
+ 
+diff --git a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc
+index f1880f9..53a39eb 100644
+--- a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc
++++ b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc
+@@ -23,6 +23,7 @@ DesktopNativeCursorManager::DesktopNativeCursorManager() {
+       ui::NativeTheme::GetInstanceForNativeUi(),
+       base::BindRepeating(&DesktopNativeCursorManager::SetCursorColors,
+                           base::Unretained(this)));
++  cursor_factory_observation_.Observe(ui::CursorFactory::GetInstance());
+ }
+ 
+ DesktopNativeCursorManager::~DesktopNativeCursorManager() {
+@@ -124,6 +125,14 @@ void DesktopNativeCursorManager::SetCursorColor(
+ void DesktopNativeCursorManager::SetCursorColors(const CursorColors& colors) {
+   cursor_loader_.SetColor(colors.fill);
+   cursor_loader_.SetOutlineColor(colors.outline);
++  Redraw();
++}
++
++void DesktopNativeCursorManager::OnThemeLoaded() {
++  Redraw();
++}
++
++void DesktopNativeCursorManager::Redraw() {
+   // The first colors arrive from the constructor, before any cursor has been
+   // set and so before there is anything on screen to redraw.
+   if (delegate_) {
+diff --git a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h
+index 11c0425..2108b89 100644
+--- a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h
++++ b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h
+@@ -9,6 +9,8 @@
+ #include <set>
+ 
+ #include "base/memory/raw_ptr.h"
++#include "base/scoped_observation.h"
++#include "ui/base/cursor/cursor_factory.h"
+ #include "ui/views/views_export.h"
+ #include "ui/wm/core/cursor_loader.h"
+ #include "ui/wm/core/native_cursor_manager.h"
+@@ -29,7 +31,9 @@ struct CursorColors;
+ // A NativeCursorManager that performs the desktop-specific setting of cursor
+ // state. Similar to NativeCursorManagerAsh, it also communicates these changes
+ // to all root windows.
+-class VIEWS_EXPORT DesktopNativeCursorManager : public wm::NativeCursorManager {
++class VIEWS_EXPORT DesktopNativeCursorManager
++    : public wm::NativeCursorManager,
++      public ui::CursorFactoryObserver {
+  public:
+   DesktopNativeCursorManager();
+ 
+@@ -77,6 +81,17 @@ class VIEWS_EXPORT DesktopNativeCursorManager : public wm::NativeCursorManager {
+   // it. See `domicile/cursor_color_scheme.h`.
+   void SetCursorColors(const CursorColors& colors);
+ 
++  // Domicile: the factory's theme loaded or changed, as it does on a tty when
++  // the desk's pointer theme does. `cursor_loader_` observes the factory too
++  // and, added first, has dropped its cursors; this sets the one on screen
++  // again from the new theme. See
++  // `ui/ozone/platform/drm/domicile/drm_cursor_factory.h`.
++  void OnThemeLoaded() override;
++
++  // Domicile: sets the cursor on screen again, through the delegate it was
++  // last set through.
++  void Redraw();
++
+   wm::CursorLoader cursor_loader_;
+ 
+   // The delegate the last cursor was set through, which is what a recolor
+@@ -87,6 +102,11 @@ class VIEWS_EXPORT DesktopNativeCursorManager : public wm::NativeCursorManager {
+   // After `cursor_loader_` and `delegate_`, because it colors the one and
+   // reads the other before its constructor returns.
+   std::unique_ptr<CursorColorScheme> cursor_color_scheme_;
++
++  // Domicile: after `cursor_loader_`, which observes the same factory and
++  // must hear first. See `OnThemeLoaded`.
++  base::ScopedObservation<ui::CursorFactory, ui::CursorFactoryObserver>
++      cursor_factory_observation_{this};
+ };
+ 
+ }  // namespace views

@@ -24,6 +24,7 @@
 {"type":"windows_theme","theme":"light"}
 {"type":"appearance","accent_color":"#3584e4","high_contrast":true,"reduced_motion":false}
 {"type":"appearance","high_contrast":false,"reduced_motion":false}
+{"type":"appearance","high_contrast":false,"reduced_motion":false,"cursor":{"name":"Bibata-Modern-Amber-Right","size":64}}
 {"type":"clipboard","entries":[{"id":3,"preview":"ssh-rsa AAAAB3NzaC1yc2E"},{"id":1,"preview":"the first thing copied"}]}
 {"type":"idle","idle":true}
 {"type":"locked","locked":true}
