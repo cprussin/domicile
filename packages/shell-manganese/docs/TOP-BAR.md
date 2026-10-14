@@ -115,10 +115,11 @@ Every bar and the lock screen share one watch per system readout. See
   is on the system bus first in that order
   ([`@domicile-desktop/system-network`](../../system-network/README.md)).
   iwd and wpa_supplicant report Wi-Fi only.
-- Wi-Fi: a signal icon graded strong, fair or weak by thirds, and the SSID.
-  Wired: a network icon and `Wired`. Any other kind, such as a VPN: a network
-  icon and its name. No connection: a crossed-out Wi-Fi icon and `Offline`.
-- One fixed width. A long name is cut short with an ellipsis.
+- An icon only. Wi-Fi: a signal icon graded strong, fair or weak by thirds.
+  Wired, or any other kind such as a VPN: a network icon. No connection: a
+  crossed-out Wi-Fi icon.
+- Hover for the kind and the SSID or VPN name, e.g.
+  `Wi-Fi, strong signal: Home`.
 - Turns `warning` when NetworkManager reports limited connectivity or a
   captive portal.
 - Hidden without any of the three.
@@ -153,8 +154,9 @@ Every bar and the lock screen share one watch per system readout. See
 
 ## Battery
 
-- A bolt when on AC, a meter filled to the level, and the percentage.
-- Always as wide as a charging `100%`, centered in that width.
+- A meter filled to the level, with a bolt in it when on AC, and the
+  percentage.
+- Always as wide as `100%`.
 - At 10% or less it turns `danger`. At 5% or less it also flashes
   (`chargeFlashing`). Both thresholds use the displayed percentage. Neither
   applies on AC.

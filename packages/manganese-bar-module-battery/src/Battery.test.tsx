@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { css } from "../styled-system/css";
 import { Battery } from "./Battery";
 import { heldBattery } from "./held-battery";
@@ -55,7 +55,11 @@ describe("Battery", () => {
 
     battery.report({ charge: 0.5, charging: true });
 
-    expect(screen.getByRole("img", { name: "Charging" })).toBeVisible();
+    expect(
+      within(screen.getByRole("meter", { name: "Battery" })).getByRole("img", {
+        name: "Charging",
+      }),
+    ).toBeVisible();
 
     battery.report({ charge: 0.5, charging: false });
 
@@ -64,8 +68,8 @@ describe("Battery", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps room for its widest readout", () => {
-    // A charging `100%` is the widest, so the item never grows past it.
+  it("keeps room for its widest percentage", () => {
+    // `100%` is the widest, so the item never grows past it.
     const battery = heldBattery();
     render(<Battery battery={battery.battery} />);
 

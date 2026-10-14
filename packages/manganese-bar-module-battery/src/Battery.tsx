@@ -3,7 +3,7 @@ import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch"
 import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
 import type { Battery as BatteryReading } from "@domicile-desktop/system-battery/battery";
 import { LightningIcon } from "@phosphor-icons/react/dist/ssr/Lightning";
-import { css, cva } from "../styled-system/css";
+import { css, cva, cx } from "../styled-system/css";
 import { hstack } from "../styled-system/patterns";
 
 /** At or below this percentage the readout turns red. */
@@ -18,14 +18,13 @@ type Props = {
 };
 
 /**
- * The battery readout at the end of the top bar: a bolt while on AC, a meter,
- * and the percentage.
+ * The battery readout at the end of the top bar: a meter with a bolt in it
+ * while on AC, and the percentage.
  *
  * The bolt matters because a full battery and a machine on AC look the same on
  * the meter.
  *
- * Holds the width of its widest readout, a charging `100%`, so the items
- * beside it never move.
+ * Holds the width of `100%`, so the items beside it never move.
  *
  * Draws nothing until UPower reports a battery, so a machine without one shows
  * no false empty meter.
@@ -43,33 +42,39 @@ const Meter = ({ reading }: { reading: BatteryReading }) => {
     <div
       className={rootStyles({ charge: chargeOf(percent, reading.charging) })}
     >
-      <div aria-hidden className={sizerStyles}>
-        <LightningIcon size={10} weight="fill" />
-        <div className={caseStyles} />
-        <span className={percentStyles}>100%</span>
-      </div>
-      <div className={readoutStyles}>
-        {reading.charging && (
-          <LightningIcon
-            aria-label="Charging"
-            role="img"
-            size={10}
-            weight="fill"
-          />
-        )}
+      <div
+        aria-label="Battery"
+        aria-valuemax={100}
+        aria-valuemin={0}
+        aria-valuenow={percent}
+        className={caseStyles}
+        role="meter"
+      >
+        {/* Not tokens: the clips follow the charge itself. */}
         <div
-          aria-label="Battery"
-          aria-valuemax={100}
-          aria-valuemin={0}
-          aria-valuenow={percent}
-          className={caseStyles}
-          role="meter"
-        >
-          {/* Not a token: the fill width is the charge itself. */}
-          <div className={fillStyles} style={{ inlineSize: `${percent}%` }} />
-        </div>
-        <span className={percentStyles}>{percent}%</span>
+          className={fillStyles({ charging: reading.charging })}
+          style={{ clipPath: `inset(0 ${100 - percent}% 0 0)` }}
+        />
+        {reading.charging && (
+          <div
+            className={boltStyles}
+            style={{ clipPath: `inset(0 0 0 ${percent}%)` }}
+          >
+            <LightningIcon
+              aria-label="Charging"
+              role="img"
+              size={8}
+              weight="fill"
+            />
+          </div>
+        )}
       </div>
+      <span className={percentSlotStyles}>
+        <span aria-hidden className={percentSizerStyles}>
+          100%
+        </span>
+        <span className={percentStyles}>{percent}%</span>
+      </span>
     </div>
   );
 };
@@ -79,13 +84,7 @@ const Meter = ({ reading }: { reading: BatteryReading }) => {
  * it all red, and one animation flashes it all.
  */
 const rootStyles = cva({
-  // The sizer and the readout share one cell, so the sizer sets the width and
-  // the readout centers in it.
-  base: {
-    alignItems: "center",
-    display: "grid",
-    justifyItems: "center",
-  },
+  base: hstack.raw({ gap: 1 }),
   variants: {
     charge: {
       // The whole readout turns red, not just the meter.
@@ -102,11 +101,6 @@ const rootStyles = cva({
   },
 });
 
-// An invisible charging `100%`, which is as wide as the readout gets.
-const sizerStyles = hstack({ gap: 1, gridArea: "1 / 1", visibility: "hidden" });
-
-const readoutStyles = hstack({ gap: 1, gridArea: "1 / 1" });
-
 // Drawn in `currentcolor` so it follows the readout's color.
 const caseStyles = css({
   // The terminal nub.
@@ -122,28 +116,66 @@ const caseStyles = css({
     position: "absolute",
     transform: "translateY(-50%)",
   },
-  blockSize: 2.5,
+  // Tall enough to hold the bolt.
+  blockSize: 3,
   border: "1px solid currentcolor",
   borderRadius: "xs",
-  inlineSize: 5.5,
+  inlineSize: 6,
   // Leaves room for the nub, which sits outside the box.
   marginInlineEnd: 0.5,
   padding: 0.25,
   position: "relative",
 });
 
-const fillStyles = css({
-  backgroundColor: "currentcolor",
-  blockSize: "100%",
+// Full width, clipped to the charge, so the bolt's hole stays centered.
+const fillStyles = cva({
+  base: {
+    backgroundColor: "currentcolor",
+    blockSize: "100%",
+  },
+  variants: {
+    charging: {
+      false: {},
+      // Cuts the bolt out of the fill, so it shows where the fill is. The path
+      // is Phosphor's filled Lightning, and a mask's colors only set opacity,
+      // so neither is a token.
+      true: {
+        maskComposite: "exclude",
+        maskImage:
+          "url(\"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'><path d='M213.85,125.46l-112,120a8,8,0,0,1-13.69-7l14.66-73.33L45.19,143.49a8,8,0,0,1-3-13l112-120a8,8,0,0,1,13.69,7L153.18,90.9l57.63,21.61a8,8,0,0,1,3,12.95Z'/></svg>\"), linear-gradient(black, black)",
+        maskPosition: "center",
+        maskRepeat: "no-repeat",
+        maskSize: "auto 100%, 100% 100%",
+      },
+    },
+  },
+});
+
+// Over the case's inside, clipped to where the fill is not.
+const boltStyles = css({
+  alignItems: "center",
+  display: "flex",
+  inset: 0.25,
+  justifyContent: "center",
+  position: "absolute",
+});
+
+// A hidden `100%` sets the width; the figure ends where it does.
+const percentSlotStyles = css({
+  display: "grid",
+  justifyItems: "end",
 });
 
 const percentStyles = css({
   // 10px to match the bar; the font-size scale jumps from 8px to 12px.
   fontSize: "0.625rem",
-  // Fixed-width digits, so the readout does not shift as the charge changes.
+  // Fixed-width digits, so the figure does not shift as the charge changes.
   fontVariantNumeric: "tabular-nums",
+  gridArea: "1 / 1",
   whiteSpace: "nowrap",
 });
+
+const percentSizerStyles = cx(percentStyles, css({ visibility: "hidden" }));
 
 /**
  * The readout's state.
