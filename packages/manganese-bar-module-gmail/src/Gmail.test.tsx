@@ -94,7 +94,7 @@ describe("Gmail", () => {
       );
       expect(url.searchParams.get("Email")).toBe(EMAIL);
       expect(url.searchParams.get("continue")).toBe(
-        "https://mail.google.com/mail/u/me@example.com/",
+        "https://mail.google.com/mail/?authuser=me%40example.com",
       );
     });
   });
@@ -132,7 +132,7 @@ describe("Gmail", () => {
           Inbox.Counted(12, 3),
           "Work: 3 unread of 12 conversations",
         ),
-      ).toBe("https://mail.google.com/mail/u/me@example.com/");
+      ).toBe("https://mail.google.com/mail/?authuser=me%40example.com");
     });
   });
 

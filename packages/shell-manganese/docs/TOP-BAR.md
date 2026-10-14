@@ -164,12 +164,12 @@ Every bar and the lock screen share one watch per system readout. See
 
 ## Idle inhibitor
 
-- A coffee cup. Click to keep the screens from blanking or locking on idle;
-  click again to let them. While on, the cup is filled on a lit circle.
+- An eye: closed while the screens blank and lock on idle, open on a lit
+  circle while they are kept on. Click to toggle.
 - Every bar shows the same inhibitor. It is disabled until the portal answers.
 - Held through the Inhibit portal's idle flag, since the shell has no Wayland
   surface ([IDLE.md](../../../docs/IDLE.md#idle-inhibitors)).
-- A shell reload lets go of it, and the cup starts outlined.
+- A shell reload lets go of it, and the eye starts closed.
 - Not on the lock screen.
 
 ## Brightness
@@ -243,7 +243,7 @@ read with the Google sign-in of the browser windows' profile. Not in
 - Read every minute, and not while the desktop is locked. Counts are
   conversations, as Gmail's inbox counts them.
 - How it reads:
-  - The Atom feed (`/mail/u/<email>/feed/atom`) says whether the profile is
+  - The Atom feed (`/mail/feed/atom?authuser=<email>`) says whether the profile is
     signed in to the address, and the unread count.
   - The Gmail API's INBOX label, through `clients6.google.com` with Google's
     cookie authentication (`SAPISIDHASH`), gives the total. This is
