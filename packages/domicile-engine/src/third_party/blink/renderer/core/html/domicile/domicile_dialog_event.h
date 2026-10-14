@@ -17,14 +17,16 @@ class ExceptionState;
 class HTMLWebViewElement;
 
 // Asks the shell to show the `alert()`, `confirm()` or `prompt()` the page
-// inside a <webview> opened.
+// inside a <webview> opened, or whether to leave a page whose `beforeunload`
+// asked to stay.
 //
 // - Carries the browser's reply callback, as DomicilePermissionRequestEvent
 //   does. The browser expects one answer, so a second throws
 //   InvalidStateError.
-// - A shell claims it with `preventDefault()`. The element dismisses an
-//   unclaimed one after dispatch, so a shell that does not listen leaves the
-//   page running as if Cancel were pressed.
+// - A shell claims it with `preventDefault()`. The element answers an
+//   unclaimed one after dispatch (AnswerUnclaimed), so a shell that does not
+//   listen leaves the page running as if Cancel were pressed, and leaves a
+//   page that asked to stay as if there were no dialog manager.
 // - The element holds it until answered or withdrawn. Garbage collection
 //   would otherwise drop the callback unrun.
 class CORE_EXPORT DomicileDialogEvent final : public Event {
@@ -51,9 +53,13 @@ class CORE_EXPORT DomicileDialogEvent final : public Event {
   void accept(const String& value, ExceptionState&);
   void dismiss(ExceptionState&);
 
-  // Called by the element: for an event no shell claimed, and when the browser
-  // withdraws the dialog. Answers Cancel.
+  // Called by the element when the browser withdraws the dialog, and for a
+  // stale one. Answers Cancel.
   void DismissIfUnanswered();
+
+  // Called by the element for an event no shell claimed: Cancel, or Leave for
+  // a `beforeunload`, so a shell that draws no dialog never traps a page.
+  void AnswerUnclaimed();
 
   const AtomicString& InterfaceName() const override;
 

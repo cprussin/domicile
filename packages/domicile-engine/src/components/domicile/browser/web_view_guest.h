@@ -374,6 +374,12 @@ class WebViewGuest : public mojom::WebViewGuest,
   void RequestClose();
   void RequestWindow(const GURL& url);
 
+  // The shell's closeBrowserWindow: closes this browser window once its page
+  // agrees. Runs the page's `beforeunload`, which may ask the shell (see
+  // RunBeforeUnloadDialog); BeforeUnloadFired closes on its answer. A page
+  // with no `beforeunload` handler closes at once.
+  void AskToClose();
+
   // chrome.windows.create for popup window `window_id`: opens a browser window
   // as its one tab. `width` and `height` are 0 when the extension set none.
   void RequestPopupWindow(int window_id,
@@ -534,7 +540,10 @@ class WebViewGuest : public mojom::WebViewGuest,
                            const std::u16string& default_prompt_text,
                            DialogClosedCallback callback,
                            bool* did_suppress_message) override;
-  // Leaves the page without asking, as content does with no dialog manager.
+  // Sends a `beforeunload` that asks to stay to the element as a
+  // DialogRequested of type kBeforeUnload; accepting leaves. One at a time
+  // with the others: one asked while a dialog is open leaves, as content does
+  // with no dialog manager.
   void RunBeforeUnloadDialog(content::WebContents* web_contents,
                              content::RenderFrameHost* render_frame_host,
                              bool is_reload,
@@ -602,6 +611,15 @@ class WebViewGuest : public mojom::WebViewGuest,
   void RunFileChooser(content::RenderFrameHost* render_frame_host,
                       scoped_refptr<content::FileSelectListener> listener,
                       const blink::mojom::FileChooserParams& params) override;
+
+  // Closes the window when the page agreed to AskToClose. A page that stayed
+  // keeps its window, and a beforeunload AskToClose did not start, such as a
+  // discard's, closes nothing. WebContentsObserver's one-argument
+  // BeforeUnloadFired stays visible beside it.
+  using content::WebContentsObserver::BeforeUnloadFired;
+  void BeforeUnloadFired(content::WebContents* tab,
+                         bool proceed,
+                         bool* proceed_to_fire_unload) override;
 
   // Handles window.close(); content's default does nothing, which leaves
   // extension popups open. A browser window closes here. A shell's own page
@@ -887,6 +905,8 @@ class WebViewGuest : public mojom::WebViewGuest,
 
   // The page's open dialog. See RunJavaScriptDialog.
   GuestDialogs dialogs_;
+  // Whether AskToClose is waiting on the page's beforeunload.
+  bool asked_to_close_ = false;
 
   // The current find's text, or empty. Decides whether a Find is the next
   // match or a new search.

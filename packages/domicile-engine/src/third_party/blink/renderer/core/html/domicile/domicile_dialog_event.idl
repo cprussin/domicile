@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 // Dispatched by a <webview> when its page calls `alert()`, `confirm()` or
-// `prompt()`. The page is paused until the shell answers on the event.
+// `prompt()`, or its `beforeunload` handler asks to stay. The page is paused
+// until the shell answers on the event.
 //
 // Domicile-only, not a web standard. No constructor: only the browser creates
 // one.
@@ -10,22 +11,23 @@
     RuntimeEnabled=DomicileExternalSurface,
     Exposed=Window
 ] interface DomicileDialogEvent : Event {
-  // "alert", "confirm" or "prompt". A DOMString, not an IDL enum, as for
-  // HTMLWebViewElement's `security`.
+  // "alert", "confirm", "prompt" or "beforeunload". A DOMString, not an IDL
+  // enum, as for HTMLWebViewElement's `security`.
   readonly attribute DOMString dialogType;
 
   // The calling frame's site, e.g. "https://example.com", or "null" for one
   // with no site, such as a data: URL.
   readonly attribute USVString origin;
 
-  // The text the page passed.
+  // The text the page passed. Empty for "beforeunload": Chrome shows none.
   readonly attribute DOMString message;
 
   // `prompt()`'s initial text. Empty for the others.
   readonly attribute DOMString defaultValue;
 
   // Answers: OK, with a prompt's text, or Cancel. An alert has only OK; either
-  // closes it. Each throws InvalidStateError if already answered or withdrawn.
+  // closes it. For "beforeunload", OK leaves the page and Cancel stays. Each
+  // throws InvalidStateError if already answered or withdrawn.
   [RaisesException] undefined accept(optional DOMString value = "");
   [RaisesException] undefined dismiss();
 };

@@ -75,7 +75,13 @@ Patch `0110`:
   is dismissed at once.
 - A navigation or close cancels the open dialog and withdraws it from the
   shell.
-- `beforeunload` asks nothing: the page leaves, as with no manager.
+- A `beforeunload` that asks to stay asks the shell too, as a dialog of type
+  `beforeunload` (`RunBeforeUnloadDialog`). Unanswered, it leaves, as with no
+  manager, so a shell that draws no dialog never traps a page.
+- The shell's `closeBrowserWindow` runs the page's `beforeunload`
+  (`WebViewGuest::AskToClose`, `DispatchBeforeUnload`) and closes in
+  `BeforeUnloadFired` if the page agrees. A page with no handler closes at
+  once. `window.close()` and `chrome.tabs.remove` close without asking.
 - Patch `0114` only lists the event's files for the build.
 
 ## Host shortcuts when nested
@@ -101,4 +107,5 @@ gets its Meta chords.
 - `guard-webview-context-menu.sh`: the context menu and DevTools.
 - `guard-webview-permissions.sh`: permission requests and site settings.
 - `guard-webview-device-request.sh`: device requests.
+- `guard-webview-dialog.sh` and `guard-webview-beforeunload.sh`: dialogs.
 - No guard reads the browser's offers.

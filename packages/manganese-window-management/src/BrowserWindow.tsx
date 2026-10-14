@@ -10,6 +10,7 @@ import { usePermissionRequest } from "@domicile-desktop/manganese-page-requests/
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { system } from "@domicile-desktop/sdk/system";
 import {
+  WEBVIEW_DIALOG_EVENT,
   WEBVIEW_FOCUS_REQUEST_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_GUEST_KEYDOWN_EVENT,
@@ -282,8 +283,8 @@ export const BrowserWindow = ({
   // The device the page asked for. The engine draws no chooser; this window
   // asks over the page, address bar or not.
   const deviceRequest = useDeviceRequest(view);
-  // The `alert()`, `confirm()` or `prompt()` the page is paused on, and the
-  // element in it to focus. The engine draws no dialog.
+  // The `alert()`, `confirm()`, `prompt()` or `beforeunload` the page is
+  // paused on, and the element in it to focus. The engine draws no dialog.
   const dialogRequest = useDialogRequest(view);
   const [dialogBox, setDialogBox] = useState<HTMLElement | null>(null);
 
@@ -325,6 +326,24 @@ export const BrowserWindow = ({
       view.addEventListener(WEBVIEW_FOCUS_REQUEST_EVENT, onFocusRequest);
       return () => {
         view.removeEventListener(WEBVIEW_FOCUS_REQUEST_EVENT, onFocusRequest);
+      };
+    }
+  }, [onFocusRequest, view]);
+
+  // A page asking to stay is closing, perhaps behind a tab. Raise it so the
+  // user sees the question, as Chrome switches to the tab.
+  useEffect(() => {
+    if (view === null) {
+      return undefined;
+    } else {
+      const asked = ({ dialogType }: DomicileDialogEvent) => {
+        if (dialogType === "beforeunload") {
+          onFocusRequest();
+        }
+      };
+      view.addEventListener(WEBVIEW_DIALOG_EVENT, asked);
+      return () => {
+        view.removeEventListener(WEBVIEW_DIALOG_EVENT, asked);
       };
     }
   }, [onFocusRequest, view]);
