@@ -38,14 +38,17 @@ Usual causes:
     Not scanning out a <format> buffer (<size>, modifier <n>) allocated or imported without GBM_BO_USE_SCANOUT
 
 - The buffer has no framebuffer, so patch `0112` queues no plane for it. For
-  the primary plane, the screen keeps its last frame. Logged once per buffer.
+  the primary plane, the screen keeps its last frame. A warning, logged once
+  per process for each format, size and modifier.
 - The usual cause: the scanout allocation for the window's buffers failed, and
   `OzoneImageBackingFactory` retried it, without a log, as a buffer for
   sampling only.
 - Find out why the scanout allocation failed with
   `--vmodule=gbm_wrapper=1,drm_framebuffer=4`. `drm_framebuffer` logs a failed
   `AddFramebuffer2` only at level 4.
-- Reported on virtio-gpu with virgl
+- On virtio-gpu, the kernel takes only XR24 and AR24 framebuffers.
+  `drm_screen.cc` draws in BGRA_8888 when no plane takes XB24, so a
+  `DRM_FORMAT_ABGR8888` buffer here means that check did not apply
   ([A tty desktop in a virtio-gpu VM](HARDWARE-CHECKS.md#a-tty-desktop-in-a-virtio-gpu-vm)).
 
 ## Scanout and render cards can differ

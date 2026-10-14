@@ -5,6 +5,7 @@
 #include <gbm.h>
 
 #include <string>
+#include <vector>
 
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
@@ -19,49 +20,66 @@
 namespace ui {
 namespace {
 
-constexpr gfx::Size kSize{64, 64};
+int g_warnings = 0;
 
-int g_errors = 0;
-
-bool CountErrors(int severity,
-                 const char* file,
-                 int line,
-                 size_t message_start,
-                 const std::string& message) {
-  if (severity == logging::LOGGING_ERROR) {
-    ++g_errors;
+bool CountWarnings(int severity,
+                   const char* file,
+                   int line,
+                   size_t message_start,
+                   const std::string& message) {
+  if (severity >= logging::LOGGING_WARNING) {
+    ++g_warnings;
   }
   return true;
 }
 
-// Schedules `flags`' buffer twice and returns the errors logged. The pixmap has
-// no surface factory and no framebuffer, as `DrmThread` makes for a buffer
-// without `GBM_BO_USE_SCANOUT`, so queuing a plane would crash.
-int ErrorsSchedulingTwice(uint32_t flags) {
+// Schedules a `flags` buffer of each size twice and returns the warnings and
+// errors logged. The pixmaps have no surface factory and no framebuffer, as
+// `DrmThread` makes for a buffer without `GBM_BO_USE_SCANOUT`, so queuing a
+// plane would crash.
+//
+// The skip is logged once per process, so each test uses its own sizes.
+int WarningsSchedulingTwice(uint32_t flags,
+                            const std::vector<gfx::Size>& sizes) {
   MockGbmDevice device;
-  auto pixmap = base::MakeRefCounted<GbmPixmap>(
-      /*surface_manager=*/nullptr,
-      device.CreateBuffer(DRM_FORMAT_ARGB8888, kSize, flags),
-      /*framebuffer=*/nullptr);
-  g_errors = 0;
+  std::vector<scoped_refptr<GbmPixmap>> pixmaps;
+  for (const gfx::Size& size : sizes) {
+    pixmaps.push_back(base::MakeRefCounted<GbmPixmap>(
+        /*surface_manager=*/nullptr,
+        device.CreateBuffer(DRM_FORMAT_ARGB8888, size, flags),
+        /*framebuffer=*/nullptr));
+  }
+  g_warnings = 0;
   const logging::LogMessageHandlerFunction previous =
       logging::GetLogMessageHandler();
-  logging::SetLogMessageHandler(&CountErrors);
-  for (int frame = 0; frame < 2; ++frame) {
-    EXPECT_TRUE(pixmap->ScheduleOverlayPlane(gfx::kNullAcceleratedWidget,
-                                             gfx::OverlayPlaneData(),
-                                             gfx::GpuFenceHandle()));
+  logging::SetLogMessageHandler(&CountWarnings);
+  for (const scoped_refptr<GbmPixmap>& pixmap : pixmaps) {
+    for (int frame = 0; frame < 2; ++frame) {
+      EXPECT_TRUE(pixmap->ScheduleOverlayPlane(gfx::kNullAcceleratedWidget,
+                                               gfx::OverlayPlaneData(),
+                                               gfx::GpuFenceHandle()));
+    }
   }
   logging::SetLogMessageHandler(previous);
-  return g_errors;
+  return g_warnings;
 }
 
-TEST(GbmPixmapScanoutTest, ABufferDisplayCannotReadIsSkippedAndLoggedOnce) {
-  EXPECT_EQ(ErrorsSchedulingTwice(GBM_BO_USE_RENDERING), 1);
+// A buffer queue holds several alike buffers, so one warning covers them all.
+TEST(GbmPixmapScanoutTest, AlikeBuffersAreSkippedAndLoggedOnce) {
+  EXPECT_EQ(WarningsSchedulingTwice(GBM_BO_USE_RENDERING,
+                                    {gfx::Size(64, 64), gfx::Size(64, 64)}),
+            1);
+}
+
+TEST(GbmPixmapScanoutTest, ABufferOfAnotherSizeIsLoggedAgain) {
+  EXPECT_EQ(WarningsSchedulingTwice(GBM_BO_USE_RENDERING,
+                                    {gfx::Size(32, 32), gfx::Size(48, 48)}),
+            2);
 }
 
 TEST(GbmPixmapScanoutTest, AScanoutBufferLogsNothing) {
-  EXPECT_EQ(ErrorsSchedulingTwice(GBM_BO_USE_SCANOUT), 0);
+  EXPECT_EQ(WarningsSchedulingTwice(GBM_BO_USE_SCANOUT, {gfx::Size(16, 16)}),
+            0);
 }
 
 }  // namespace

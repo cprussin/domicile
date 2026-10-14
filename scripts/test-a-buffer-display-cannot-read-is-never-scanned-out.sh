@@ -10,8 +10,8 @@
 #
 # `OzoneImageBackingFactory` makes one when a scanout allocation fails, and
 # patch 0005 when it imports a client's buffer for sampling only. So
-# `ScheduleOverlayPlane` logs it once and returns true without queuing a
-# plane. Returning false would fail every frame and can loop GPU-process
+# `ScheduleOverlayPlane` warns once per format, size and modifier and returns
+# true without queuing a plane. Returning false would fail every frame and can loop GPU-process
 # restarts.
 #
 # Reads `src/` and the patches, not a Chromium tree, so it runs in the shell
@@ -28,14 +28,16 @@ FAILED=0
 ok()   { printf '  ok    %s\n' "$1"; }
 fail() { printf '  FAIL  %s\n    %s\n' "$1" "$2"; FAILED=$((FAILED + 1)); }
 
-# In `gbm_pixmap.cc`, the DCHECK goes, and an added `if` on the same flag logs
-# once (`LOG_IF` on a per-pixmap flag) and returns true.
+# In `gbm_pixmap.cc`, the DCHECK goes, and an added `if` on the same flag warns
+# once per kind of buffer (`FirstSkipOfItsKind`) and returns true.
 if awk '
   /^diff --git a\// { in_file = ($0 ~ /gpu\/gbm_pixmap\.cc$/); guarded = 0; next }
   !in_file { next }
   /^- *DCHECK\(buffer_->GetFlags\(\) & GBM_BO_USE_SCANOUT\);$/ { dropped = 1; next }
   /^\+ *if \(!\(buffer_->GetFlags\(\) & GBM_BO_USE_SCANOUT\)\) \{$/ { guarded = 1; next }
-  guarded && /^\+ *LOG_IF\(ERROR, !reported_no_scanout_\)$/ { logged = 1 }
+  guarded && /^\+ *if \(FirstSkipOfItsKind\(\*buffer_\)\) \{$/ { once = 1; next }
+  once && /^\+ *LOG\(WARNING\) << "Not scanning out a "$/ { logged = 1 }
+  once && /^\+    \}$/ { once = 0; next }
   guarded && /^\+ *return false;$/ { failed = 1 }
   guarded && /^\+ *return true;$/ { skipped = 1 }
   /^\+  \}$/ { guarded = 0 }

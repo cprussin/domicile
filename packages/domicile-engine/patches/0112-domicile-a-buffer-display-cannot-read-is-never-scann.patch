@@ -33,22 +33,22 @@ The commit then has no planes, and `HardwareDisplayController` ACKs
 without a page flip: the screen keeps the modeset buffer and the log is
 clean.
 
-So `ScheduleOverlayPlane` keeps that behavior without the DCHECK, and logs
-such a buffer's format, size and modifier once. It does not fail the frame:
-SWAP_FAILED loses the context on every frame, which can loop GPU-process
-restarts.
+So `ScheduleOverlayPlane` keeps that behavior without the DCHECK, and
+warns once per process for each format, size and modifier it skips. A
+buffer queue holds several alike buffers, so a warning per pixmap repeated
+one cause. It does not fail the frame: SWAP_FAILED loses the context on
+every frame, which can loop GPU-process restarts.
 
-This does not make virgl draw. Why its SCANOUT allocation fails needs a
-log from the machine: `--vmodule=gbm_wrapper=1,drm_framebuffer=4` shows a
-failed `gbm_bo_create` or `AddFramebuffer2`.
+On virtio-gpu the SCANOUT allocation fails at `AddFramebuffer2`: the
+kernel takes only XR24 and AR24 framebuffers, and Linux frames are AB24.
+`drm_screen.cc` picks a format the planes take; this patch only makes the
+skip visible.
 
-Not reproduced; nothing here runs virgl. `GbmPixmapScanoutTest` covers the
-skip and the single log.
+`GbmPixmapScanoutTest` covers the skip and the warning per kind.
 ---
  ui/ozone/platform/drm/BUILD.gn          |  1 +
- ui/ozone/platform/drm/gpu/gbm_pixmap.cc | 19 +++++++++++++++++--
- ui/ozone/platform/drm/gpu/gbm_pixmap.h  |  4 ++++
- 3 files changed, 22 insertions(+), 2 deletions(-)
+ ui/ozone/platform/drm/gpu/gbm_pixmap.cc | 42 ++++++++++++++++++++++++++++++++++++++++--
+ 2 files changed, 41 insertions(+), 2 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
 index b7897f32..db4abf9f 100644
@@ -63,21 +63,50 @@ index b7897f32..db4abf9f 100644
      # evdev's, not this platform's: `//ui/events/ozone/evdev:unittests` is
      # linked only into `events_unittests`, which no job here builds, and the
 diff --git a/ui/ozone/platform/drm/gpu/gbm_pixmap.cc b/ui/ozone/platform/drm/gpu/gbm_pixmap.cc
-index 3afd12cb..5dca5402 100644
+index 3afd12cb..999a840d 100644
 --- a/ui/ozone/platform/drm/gpu/gbm_pixmap.cc
 +++ b/ui/ozone/platform/drm/gpu/gbm_pixmap.cc
-@@ -8,8 +8,9 @@
+@@ -6,16 +6,38 @@
+ 
+ #include <gbm.h>
  #include <memory>
++#include <set>
++#include <tuple>
  #include <utility>
  
 -#include "base/check.h"
 +#include "base/logging.h"
++#include "base/no_destructor.h"
++#include "base/synchronization/lock.h"
  #include "ui/gfx/gpu_fence.h"
 +#include "ui/gfx/linux/drm_util_linux.h"
  #include "ui/gfx/native_pixmap_handle.h"
  #include "ui/ozone/platform/drm/gpu/drm_overlay_plane.h"
  #include "ui/ozone/platform/drm/gpu/gbm_surface_factory.h"
-@@ -76,7 +77,21 @@
+ #include "ui/ozone/platform/drm/gpu/gbm_surfaceless.h"
+ 
+ namespace ui {
++
++namespace {
++
++// DOMICILE: returns true the first time this process skips a buffer of
++// `buffer`'s format, size and modifier.
++bool FirstSkipOfItsKind(const GbmBuffer& buffer) {
++  static base::NoDestructor<base::Lock> lock;
++  static base::NoDestructor<std::set<std::tuple<uint32_t, int, int, uint64_t>>>
++      skipped;
++  base::AutoLock hold(*lock);
++  return skipped
++      ->emplace(buffer.GetFormat(), buffer.GetSize().width(),
++                buffer.GetSize().height(), buffer.GetFormatModifier())
++      .second;
++}
++
++}  // namespace
+ 
+ GbmPixmap::GbmPixmap(GbmSurfaceFactory* surface_manager,
+                      std::unique_ptr<GbmBuffer> buffer,
+@@ -76,7 +98,23 @@
      gfx::AcceleratedWidget widget,
      const gfx::OverlayPlaneData& overlay_plane_data,
      gfx::GpuFenceHandle acquire_fence) {
@@ -86,32 +115,19 @@ index 3afd12cb..5dca5402 100644
 +  // no framebuffer, so display cannot read it. `OzoneImageBackingFactory`
 +  // makes one for the primary plane when a scanout allocation fails, and
 +  // patch 0005 imports a client's buffer for sampling only. Queue no plane and
-+  // say so once. Failing the frame instead loses the context every frame,
-+  // which can loop GPU-process restarts.
++  // warn once per format, size and modifier: a buffer queue holds several
++  // alike. Failing the frame instead loses the context every frame, which can
++  // loop GPU-process restarts.
 +  if (!(buffer_->GetFlags() & GBM_BO_USE_SCANOUT)) {
-+    LOG_IF(ERROR, !reported_no_scanout_)
-+        << "Not scanning out a " << DrmFormatToString(buffer_->GetFormat())
-+        << " buffer (" << buffer_->GetSize().ToString() << ", modifier "
-+        << buffer_->GetFormatModifier()
-+        << ") allocated or imported without GBM_BO_USE_SCANOUT";
-+    reported_no_scanout_ = true;
++    if (FirstSkipOfItsKind(*buffer_)) {
++      LOG(WARNING) << "Not scanning out a "
++                   << DrmFormatToString(buffer_->GetFormat()) << " buffer ("
++                   << buffer_->GetSize().ToString() << ", modifier "
++                   << buffer_->GetFormatModifier()
++                   << ") allocated or imported without GBM_BO_USE_SCANOUT";
++    }
 +    return true;
 +  }
    // |framebuffer_id| might be 0 if AddFramebuffer2 failed, in that case we
    // already logged the error in GbmBuffer ctor. We avoid logging the error
    // here since this method might be called every pageflip.
-diff --git a/ui/ozone/platform/drm/gpu/gbm_pixmap.h b/ui/ozone/platform/drm/gpu/gbm_pixmap.h
-index 5abd0332..7e606f1e 100644
---- a/ui/ozone/platform/drm/gpu/gbm_pixmap.h
-+++ b/ui/ozone/platform/drm/gpu/gbm_pixmap.h
-@@ -56,6 +56,10 @@
-   const raw_ptr<GbmSurfaceFactory> surface_manager_;
-   const std::unique_ptr<GbmBuffer> buffer_;
-   const scoped_refptr<DrmFramebuffer> framebuffer_;
-+
-+  // DOMICILE: whether `ScheduleOverlayPlane` has logged that this buffer has
-+  // no GBM_BO_USE_SCANOUT.
-+  bool reported_no_scanout_ = false;
- };
- 
- }  // namespace ui

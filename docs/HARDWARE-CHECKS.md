@@ -232,6 +232,9 @@ from a page, such as a wallet extension's "connect Ledger".
 QEMU/KVM with virtio-gpu and virgl, on a VT. Run with
 `--vmodule=gbm_wrapper=1,drm_framebuffer=4`.
 
+- DRM needs a 3D-capable GPU; in a VM, that is virtio-gpu with virgl. On 2D
+  virtio-gpu the GPU process exits with `Software rendering mode is not
+  supported with GBM platform` and restarts.
 - The desktop draws: the primary plane got a scanout buffer.
 - `Not scanning out a … buffer … without GBM_BO_USE_SCANOUT`: it did not.
   The lines above it say why
