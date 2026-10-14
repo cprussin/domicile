@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "base/files/file_path.h"
@@ -32,6 +33,11 @@ using mojom::WebViewPermissionSetting;
 //
 // Most tests assert that a refused request triggered none.
 struct Told {
+  // Set to hold `load_shell`'s answer in `held_load` instead of giving it.
+  bool hold_load = false;
+  ShellLoaded held_load;
+  // The last reply, which a held command gives after Answer returns.
+  std::string reply;
   bool asked = false;
   base::FilePath root;
   std::string module;
@@ -123,11 +129,16 @@ std::string Answer(std::string_view line,
                    Told* told,
                    bool has_window = true) {
   auto load_shell = [told, has_window](const base::FilePath& root,
-                                       const std::string& module) {
+                                       const std::string& module,
+                                       ShellLoaded loaded) {
     told->asked = true;
     told->root = root;
     told->module = module;
-    return has_window;
+    if (told->hold_load) {
+      told->held_load = std::move(loaded);
+      return;
+    }
+    std::move(loaded).Run(has_window);
   };
   auto run_app = [told, has_window](const base::FilePath& root,
                                     const std::string& module) {
@@ -255,7 +266,7 @@ std::string Answer(std::string_view line,
     }
     std::move(done).Run(base::ok());
   };
-  std::string reply;
+  told->reply.clear();
   AnswerCommand(line,
                 {.load_shell = load_shell,
                  .run_app = run_app,
@@ -275,8 +286,8 @@ std::string Answer(std::string_view line,
                  .clear_browsing_data = clear_browsing_data},
                 base::BindOnce([](std::string* out,
                                   std::string line) { *out = std::move(line); },
-                               &reply));
-  return reply;
+                               &told->reply));
+  return told->reply;
 }
 
 // Returns the reply's `type`, or "" if the reply is not a JSON object with
@@ -431,7 +442,20 @@ TEST(CommandProtocolTest, RefusesWhenThereIsNoShellWindowToLoadInto) {
   Told told;
   const std::string reply = Answer(kLoadOther, &told, /*has_window=*/false);
   EXPECT_EQ(TypeOf(reply), "refused");
-  EXPECT_THAT(WhyOf(reply), HasSubstr("window"));
+  // domicile-launch matches this text whole and asks again on it.
+  EXPECT_EQ(WhyOf(reply),
+            "this engine has no shell window to load a shell into");
+}
+
+TEST(CommandProtocolTest, AnswersALoadOnceTheShellWindowCanTakeIt) {
+  // The shell window's first page can still be loading when a load arrives,
+  // so the engine answers once it is in.
+  Told told;
+  told.hold_load = true;
+  EXPECT_EQ(Answer(kLoadOther, &told), "");
+
+  std::move(told.held_load).Run(true);
+  EXPECT_EQ(TypeOf(told.reply), "loaded");
 }
 
 TEST(CommandProtocolTest, IgnoresFieldsItDoesNotKnow) {

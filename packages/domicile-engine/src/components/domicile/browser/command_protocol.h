@@ -118,11 +118,16 @@ namespace domicile {
 // refuses the request and names both versions.
 inline constexpr int kCommandVersion = 1;
 
-// Carries out `load_shell`: serves this shell and shows it. Returns false if
-// there is no shell window to load it into.
-using LoadShell =
-    base::FunctionRef<bool(const base::FilePath& root,
-                           const std::string& module)>;
+// Runs once with whether `load_shell` loaded the shell: false if there is no
+// shell window to load it into.
+using ShellLoaded = base::OnceCallback<void(bool loaded)>;
+
+// Carries out `load_shell`: serves this shell and shows it. Runs `loaded`
+// once, possibly after returning, as the shell window's first page may still
+// be loading.
+using LoadShell = base::FunctionRef<void(const base::FilePath& root,
+                                         const std::string& module,
+                                         ShellLoaded loaded)>;
 
 // Carries out `run_app`: serves the app module `module` under `root` and opens
 // an app window on it. Returns false if there is no shell to own the window.
@@ -360,7 +365,7 @@ struct CommandActions {
 using CommandReply = base::OnceCallback<void(std::string)>;
 
 // Answers one request line (without its newline). `reply` runs once: before
-// this returns, except for `load_unpacked`, `history`, `visits`,
+// this returns, except for `load_shell`, `load_unpacked`, `history`, `visits`,
 // `delete_history` and `clear_browsing_data`, which answer once their action
 // is done.
 void AnswerCommand(std::string_view line,

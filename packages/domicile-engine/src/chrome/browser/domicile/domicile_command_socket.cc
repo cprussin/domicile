@@ -38,6 +38,7 @@
 #include "components/domicile/browser/app_roots.h"
 #include "components/domicile/browser/command_protocol.h"
 #include "components/domicile/browser/shell_source.h"
+#include "components/domicile/browser/shell_window_wait.h"
 #include "components/domicile/browser/site_permissions.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
 #include "components/permissions/permissions_client.h"
@@ -98,7 +99,40 @@ content::WebContents* FindShellContents() {
   return shell;
 }
 
-// Serves the shell at `root`/`module` and loads it into the shell window.
+// Whether a window is opening a domicile:// address it has not committed yet,
+// as the shell's window is until its first page commits. The startup
+// navigation is browser-initiated, so its address is the visible one.
+bool AWindowIsOpeningTheShell() {
+  bool opening = false;
+  GlobalBrowserCollection::GetInstance()->ForEach(
+      [&opening](BrowserWindowInterface* browser) {
+        tabs::TabInterface* tab = browser->GetActiveTabInterface();
+        if (tab != nullptr &&
+            tab->GetContents()->GetVisibleURL().SchemeIs(kDomicileScheme)) {
+          opening = true;
+          return false;
+        }
+        return true;
+      },
+      BrowserCollection::Order::kCreation);
+  return opening;
+}
+
+ShellWindowState LookForTheShellWindow() {
+  if (FindShellContents() != nullptr) {
+    return ShellWindowState::kShowingAPage;
+  }
+  return AWindowIsOpeningTheShell() ? ShellWindowState::kOpening
+                                    : ShellWindowState::kAbsent;
+}
+
+// How long `load_shell` waits for the shell window's first page. Under the
+// supervisor's wait for a reply (`PATIENCE` in domicile-launch's
+// control_socket.rs), so the supervisor hears the refusal and asks again.
+constexpr base::TimeDelta kFirstPagePatience = base::Seconds(3);
+
+// Serves the shell at `root`/`module` and loads it into the shell window's
+// page, or refuses when there is none.
 //
 // The source is set before the navigation because the navigation reads it.
 //
@@ -107,14 +141,19 @@ content::WebContents* FindShellContents() {
 // shell document's `@view-transition` crossfades the splash into the built
 // shell. Shell files are served `no-store` (ShellURLLoaderFactory), so a
 // rebuilt shell with the same URLs is read fresh.
-bool LoadShellIntoTheShellWindow(const base::FilePath& root,
-                                 const std::string& module) {
+void LoadShellIntoAPage(const base::FilePath& root,
+                        const std::string& module,
+                        ShellLoaded loaded,
+                        bool has_a_page) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  content::WebContents* shell = FindShellContents();
-  if (shell == nullptr) {
-    return false;
+  if (!has_a_page) {
+    std::move(loaded).Run(false);
+    return;
   }
+
+  // WhenTheShellWindowHasAPage found it in this same task.
+  content::WebContents* shell = FindShellContents();
+  CHECK(shell);
 
   ShellSource::Get().Set(root, module);
   content::RenderFrameHost* page = shell->GetPrimaryMainFrame();
@@ -127,7 +166,22 @@ bool LoadShellIntoTheShellWindow(const base::FilePath& root,
   params.source_site_instance = page->GetSiteInstance();
   shell->GetController().LoadURLWithParams(params);
   LOG(INFO) << "domicile: now serving " << module << " out of " << root;
-  return true;
+  std::move(loaded).Run(true);
+}
+
+// Serves the shell at `root`/`module` and loads it into the shell window, once
+// that window shows a page.
+//
+// The socket binds before the shell window's first page commits, so a shell
+// built quickly can arrive while that page is loading. The load navigates from
+// the committed page, so this waits for it rather than refusing.
+void LoadShellIntoTheShellWindow(const base::FilePath& root,
+                                 const std::string& module,
+                                 ShellLoaded loaded) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  WhenTheShellWindowHasAPage(
+      base::BindRepeating(&LookForTheShellWindow), kFirstPagePatience,
+      base::BindOnce(&LoadShellIntoAPage, root, module, std::move(loaded)));
 }
 
 // Serves the app module `module` under `root` and opens an app window pinned
@@ -352,8 +406,8 @@ void ClearShellBrowsingData(const BrowsingDataClearing& clearing,
 //
 // Runs on the UI thread because `ShellSource` is unlocked and UI-thread only,
 // and loading a shell navigates a window. `reply` is bound to the IO thread,
-// so it may be called from any thread, and later for `load_unpacked` and the
-// History app's commands.
+// so it may be called from any thread, and later for `load_shell`,
+// `load_unpacked` and the History app's commands.
 void AnswerOnUIThread(const std::string& line, CommandReply reply) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   AnswerCommand(line,
