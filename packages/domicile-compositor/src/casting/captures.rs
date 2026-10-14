@@ -18,6 +18,10 @@ use crate::engine::CaptureId;
 pub trait Capturer {
     /// Starts capturing `display` at `size`, at most `max_fps` a second.
     fn start(&mut self, display: i64, size: (u32, u32), max_fps: u32) -> Result<CaptureId, String>;
+    /// Starts capturing browser window `window`'s page alone, at its own
+    /// size, at most `max_fps` a second. Its frames, resize, stop and release
+    /// are a display capture's.
+    fn start_browser_window(&mut self, window: &str, max_fps: u32) -> Result<CaptureId, String>;
     fn resize(&mut self, capture: CaptureId, size: (u32, u32));
     /// Stops a capture. The engine releases its held frames.
     fn stop(&mut self, capture: CaptureId);
@@ -215,6 +219,9 @@ mod tests {
             }
             self.next += 1;
             Ok(self.next)
+        }
+        fn start_browser_window(&mut self, _: &str, _: u32) -> Result<CaptureId, String> {
+            unreachable!("display captures start no browser window")
         }
         fn resize(&mut self, capture: CaptureId, size: (u32, u32)) {
             self.asked.push(Asked::Resize(capture, size));

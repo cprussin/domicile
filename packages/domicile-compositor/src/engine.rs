@@ -66,6 +66,11 @@ pub enum EngineError {
     #[error("the browser shows display {display} in no window, so it cannot be captured")]
     NoCapture { display: i64 },
 
+    #[error(
+        "the browser has no page drawn for browser window {window:?}, so it cannot be captured"
+    )]
+    NoBrowserWindowCapture { window: String },
+
     #[error("a path the engine has to be told contains a nul byte: {0}")]
     Path(#[from] NulError),
 }
@@ -1158,6 +1163,35 @@ impl Engine {
         let capture = unsafe { f(self.handle, display, size.0, size.1, max_fps) };
         match capture {
             0 => Err(EngineError::NoCapture { display }),
+            capture => Ok(capture),
+        }
+    }
+
+    /// Captures what browser window `window` shows, alone, at its own size,
+    /// at most `max_fps` frames a second, for a screenshot. Frames arrive as
+    /// [`Event::Captured`]; resize, stop and release it as a display capture.
+    ///
+    /// `window` is the id the shell's browser window list gives. An engine
+    /// older than browser window capture has no symbol for it.
+    pub fn start_browser_window_capture(
+        &self,
+        window: &str,
+        max_fps: u32,
+    ) -> Result<CaptureId, EngineError> {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, *const c_char, u32) -> CaptureId> = self
+            .symbol(
+                b"domicile_browser_window_capture_start\0",
+                "domicile_browser_window_capture_start",
+            )?;
+        let no_capture = || EngineError::NoBrowserWindowCapture {
+            window: window.into(),
+        };
+        // No window's id holds a nul.
+        let id = CString::new(window).map_err(|_| no_capture())?;
+        // SAFETY: the handle is live for the life of self, and `id` outlives
+        // the call; the engine copies it.
+        match unsafe { f(self.handle, id.as_ptr(), max_fps) } {
+            0 => Err(no_capture()),
             capture => Ok(capture),
         }
     }

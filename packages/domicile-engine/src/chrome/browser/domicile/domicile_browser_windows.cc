@@ -32,6 +32,7 @@
 #include "chrome/browser/ui/browser_window/public/browser_collection.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+#include "components/domicile/browser/browser_window_capture_target.h"
 #include "components/domicile/browser/private_pages.h"
 #include "components/domicile/browser/web_view_guest.h"
 #include "components/domicile/common/domicile_scheme.h"
@@ -42,6 +43,8 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_widget_host.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -489,11 +492,36 @@ class BrowserWindowsService final
   mojo::Remote<mojom::BrowserWindowsClient> client_;
 };
 
+// Browser window `id`'s page in the shell's profile, for a capture of it
+// alone. nullopt when there is no shell, no such window, or no page drawn.
+std::optional<BrowserWindowCaptureTarget> CaptureTargetOf(
+    const std::string& id) {
+  content::WebContents* shell = ShellContentsIn(nullptr);
+  if (shell == nullptr) {
+    return std::nullopt;
+  }
+  WebViewGuest* guest =
+      DeskWindows::For(Profile::FromBrowserContext(shell->GetBrowserContext()))
+          .Find(id);
+  if (guest == nullptr) {
+    return std::nullopt;
+  }
+  content::RenderWidgetHostView* view =
+      guest->contents().GetRenderWidgetHostView();
+  if (view == nullptr) {
+    return std::nullopt;
+  }
+  return BrowserWindowCaptureTargetOf(
+      view->GetRenderWidgetHost()->GetFrameSinkId(),
+      view->GetViewBounds().size(), view->GetDeviceScaleFactor());
+}
+
 }  // namespace
 
 void StartBrowserWindows() {
   static base::NoDestructor<Host> host;
   WebViewGuest::SetBrowserWindowHost(host.get());
+  SetBrowserWindowCaptureTargetFinder(base::BindRepeating(&CaptureTargetOf));
 }
 
 bool OpenBrowserWindow(const GURL& url, bool app) {

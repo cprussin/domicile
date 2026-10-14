@@ -46,13 +46,16 @@ FrameSinkBroker::FrameSinkBroker(
     SharedImageInterfaceGetter get_shared_image_interface,
     DisplayLayoutSetter set_display_layout,
     ClipboardSetter set_clipboard,
-    DisplayCaptureTargetGetter get_display_capture_target)
+    DisplayCaptureTargetGetter get_display_capture_target,
+    BrowserWindowCaptureTargetGetter get_browser_window_capture_target)
     : host_frame_sink_manager_(host_frame_sink_manager),
       allocate_frame_sink_id_(std::move(allocate_frame_sink_id)),
       get_shared_image_interface_(std::move(get_shared_image_interface)),
       set_display_layout_(std::move(set_display_layout)),
       set_clipboard_(std::move(set_clipboard)),
-      get_display_capture_target_(std::move(get_display_capture_target)) {
+      get_display_capture_target_(std::move(get_display_capture_target)),
+      get_browser_window_capture_target_(
+          std::move(get_browser_window_capture_target)) {
   CHECK(host_frame_sink_manager);
   CHECK(allocate_frame_sink_id_);
   receivers_.set_disconnect_handler(base::BindRepeating(
@@ -296,6 +299,42 @@ void FrameSinkBroker::CaptureDisplay(
     std::move(callback).Run(false);
     return;
   }
+  StartCapture(*target, size, max_fps, std::move(capture), std::move(observer));
+  std::move(callback).Run(true);
+}
+
+void FrameSinkBroker::CaptureBrowserWindow(
+    const std::string& window_id,
+    uint32_t max_fps,
+    mojo::PendingReceiver<mojom::DisplayCapture> capture,
+    mojo::PendingRemote<mojom::DisplayCaptureObserver> observer,
+    CaptureBrowserWindowCallback callback) {
+  if (max_fps == 0) {
+    receivers_.ReportBadMessage("A browser window capture needs a rate");
+    std::move(callback).Run(false);
+    return;
+  }
+  const std::optional<BrowserWindowCaptureTarget> target =
+      get_browser_window_capture_target_
+          ? get_browser_window_capture_target_.Run(window_id)
+          : std::nullopt;
+  if (!target.has_value()) {
+    // Not a bad message: the window may have closed since the producer heard
+    // of it.
+    std::move(callback).Run(false);
+    return;
+  }
+  StartCapture(target->frame_sink_id, target->size_in_pixels, max_fps,
+               std::move(capture), std::move(observer));
+  std::move(callback).Run(true);
+}
+
+void FrameSinkBroker::StartCapture(
+    const viz::FrameSinkId& target,
+    const gfx::Size& size,
+    uint32_t max_fps,
+    mojo::PendingReceiver<mojom::DisplayCapture> capture,
+    mojo::PendingRemote<mojom::DisplayCaptureObserver> observer) {
   const bool gpu = get_shared_image_interface_ &&
                    get_shared_image_interface_.Run() != nullptr;
   const uint64_t id = next_capture_++;
@@ -308,13 +347,12 @@ void FrameSinkBroker::CaptureDisplay(
             manager->CreateVideoCapturer(std::move(receiver));
           },
           base::Unretained(host_frame_sink_manager_.get())),
-      *target, size, max_fps, gpu, std::move(capture), std::move(observer),
+      target, size, max_fps, gpu, std::move(capture), std::move(observer),
       base::BindOnce(
           [](FrameSinkBroker* broker, uint64_t id) {
             broker->captures_.erase(id);
           },
           base::Unretained(this), id));
-  std::move(callback).Run(true);
 }
 
 BrokeredFrameSink* FrameSinkBroker::SinkForApp(const std::string& app_id) {

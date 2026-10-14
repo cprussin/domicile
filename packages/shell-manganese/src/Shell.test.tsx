@@ -1231,39 +1231,9 @@ describe("Shell", () => {
         });
       };
 
-      it("leaves a window's title bar out", async () => {
-        const { container } = renderShell();
-        clientAppears("one");
-        clientAppears("two");
-        press("w");
-        const contents = boxOf(appElement(container, "two"));
-        asked();
-
-        await userEvent.click(
-          await screen.findByRole("button", { name: "two" }),
-        );
-        await userEvent.click(screen.getByRole("button", { name: "Save" }));
-
-        expect(domicile.calls).toContainEqual([
-          "answerPortalRequest",
-          3,
-          JSON.stringify({
-            area: {
-              height: Number.parseFloat(contents.height),
-              width: Number.parseFloat(contents.width),
-              x: Number.parseFloat(contents.x),
-              y: Number.parseFloat(contents.y),
-            },
-            copy: false,
-            kind: "screenshot",
-          }),
-        ]);
-      });
-
-      it("keeps a browser window's address bar but not its title bar", async () => {
-        const { container } = renderShell();
+      it("saves a browser window from its page alone", async () => {
+        renderShell();
         domicile.engineOpens("https://example.com");
-        const contents = boxOf(browserWindow(container));
         asked();
 
         await userEvent.click(
@@ -1277,17 +1247,7 @@ describe("Shell", () => {
           domicile.calls
             .filter(([call]) => call === "answerPortalRequest")
             .map(([, , answer]) => JSON.parse(String(answer))),
-        ).toMatchObject([
-          {
-            area: {
-              height: Number.parseFloat(contents.height),
-              width: Number.parseFloat(contents.width),
-              x: Number.parseFloat(contents.x),
-              y: Number.parseFloat(contents.y),
-            },
-            kind: "screenshot",
-          },
-        ]);
+        ).toMatchObject([{ copy: false, kind: "screenshot_browser_window" }]);
       });
 
       it("saves a hidden tab from its own frame", async () => {

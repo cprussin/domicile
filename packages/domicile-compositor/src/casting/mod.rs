@@ -139,6 +139,11 @@ pub enum Request {
         app_id: String,
         developed: DevelopedWindow,
     },
+    /// The next frame browser window `id` draws, alone.
+    ShootBrowserWindow {
+        id: String,
+        developed: DevelopedWindow,
+    },
 }
 
 /// Starts and stops streams. Cheap to clone, and usable from any thread.
@@ -213,6 +218,12 @@ impl Casting {
     /// why there is none.
     pub fn shoot_window(&self, app_id: String, developed: DevelopedWindow) {
         self.send(Request::ShootWindow { app_id, developed });
+    }
+
+    /// Takes the next frame browser window `id` draws, without what the shell
+    /// draws over it. `developed` hears it, or why there is none.
+    pub fn shoot_browser_window(&self, id: String, developed: DevelopedWindow) {
+        self.send(Request::ShootBrowserWindow { id, developed });
     }
 
     fn send(&self, request: Request) {

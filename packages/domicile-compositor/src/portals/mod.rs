@@ -477,6 +477,7 @@ pub fn serve(
     let shots = Shots {
         shoot: screenshot::shooting(casting.casting.clone()),
         shoot_window: screenshot::shooting_windows(casting.casting.clone()),
+        shoot_browser_window: screenshot::shooting_browser_windows(casting.casting.clone()),
         save: screenshot::in_pictures(),
         copy: {
             let backends = backends.clone();
