@@ -12,11 +12,13 @@
 //! [`Screens::reloaded_into`] and [`Screens::replugged_into`] pick the source.
 //! See `docs/DISPLAYS.md`. Kept free of Smithay so it can be unit tested.
 
-use domicile_config::{ConfigError, Connected, Desktop, Layout, OutputConfig, Transform};
+use domicile_config::{
+    ConfigError, Connected, Desktop, InputConfig, Layout, OutputConfig, Transform,
+};
 use domicile_protocol::{DisplayInfo, DisplayTransform};
 use domicile_scene::{Bounds, Point};
 
-use crate::engine::{Connector, Display};
+use crate::engine::{Connector, Display, Pointer};
 use crate::pnp_ids::Vendors;
 
 /// The `wl_output` physical size for an output with no known size.
@@ -518,18 +520,7 @@ impl Screens {
         if output.desktop().is_some() {
             Ok(None)
         } else {
-            let connected: Vec<Connected> = displays
-                .iter()
-                .map(|display| Connected {
-                    name: name_of(display),
-                    description: display.description.clone(),
-                    spelled_out: vendors
-                        .spelled_out(&display.description)
-                        .unwrap_or_default(),
-                    mode: display.size,
-                })
-                .collect();
-            Ok(match output.layout(&connected)? {
+            Ok(match output.layout(&connected(displays, vendors))? {
                 Some(layout) => Some(Screens::from_the_layout(&layout, displays, vendors)),
                 None => {
                     let read = Screens::from_the_engine(displays, vendors);
@@ -664,13 +655,45 @@ fn name_of(display: &Display) -> String {
     }
 }
 
+/// The engine's displays under the names a config matches.
+fn connected(displays: &[Display], vendors: &Vendors) -> Vec<Connected> {
+    displays
+        .iter()
+        .map(|display| Connected {
+            name: name_of(display),
+            description: display.description.clone(),
+            spelled_out: vendors
+                .spelled_out(&display.description)
+                .unwrap_or_default(),
+            mode: display.size,
+        })
+        .collect()
+}
+
+/// Each bound tablet or touchscreen whose display the engine reported, with
+/// that display's engine id.
+pub fn pointer_targets(
+    displays: &[Display],
+    input: &InputConfig,
+    vendors: &Vendors,
+) -> Vec<Pointer> {
+    input
+        .pointer_targets(&connected(displays, vendors))
+        .into_iter()
+        .map(|target| Pointer {
+            display: id_of(&target.display, displays),
+            device: target.device,
+        })
+        .collect()
+}
+
 /// The engine's id for the display named `name`. The inverse of [`name_of`],
 /// looked up in `displays` rather than parsed.
 fn id_of(name: &str, displays: &[Display]) -> i64 {
     displays
         .iter()
         .find(|display| name_of(display) == name)
-        .expect("a layout only places displays the engine reported")
+        .expect("a name is only looked up for a display the engine reported")
         .id
 }
 
@@ -1358,6 +1381,34 @@ mod tests {
     /// The output settings `text` configures.
     fn output(text: &str) -> OutputConfig {
         Config::parse(text).expect("the config should parse").output
+    }
+
+    #[test]
+    fn a_pointer_covers_the_display_its_config_names_by_engine_id() {
+        let input = Config::parse(&format!(
+            r#"
+{{ "input": {{ "pointers": [
+  {{ "device": "tablet-0", "display": "{PROJECTOR_CONNECTOR}" }},
+  {{ "device": "tablet-1", "display": "{LAPTOP_PANEL}" }}
+] }} }}
+"#
+        ))
+        .expect("the config should parse")
+        .input;
+
+        assert_eq!(
+            pointer_targets(&panel_and_projector(), &input, &unspelled()),
+            vec![
+                Pointer {
+                    device: "tablet-0".into(),
+                    display: 2,
+                },
+                Pointer {
+                    device: "tablet-1".into(),
+                    display: 1,
+                },
+            ]
+        );
     }
 
     /// A config with no described desktop and no profiles, so the engine's

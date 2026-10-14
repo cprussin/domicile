@@ -239,3 +239,7 @@ QEMU/KVM with virtio-gpu and virgl, on a VT. Run with
 - `Not scanning out a … buffer … without GBM_BO_USE_SCANOUT`: it did not.
   The lines above it say why
   ([A primary plane display cannot read](TTY-DEBUGGING.md#a-primary-plane-display-cannot-read)).
+- With two heads (`max_outputs=2`) and a `usb-tablet` per head, bind each by
+  `phys` in `input.pointers`
+  ([Tablets and touchscreens](DISPLAYS.md#tablets-and-touchscreens)). A click
+  in either head's window lands under the host's cursor on that head.

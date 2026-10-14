@@ -18,6 +18,7 @@ describe(readSettings, () => {
             xkb_rules: "",
             xkb_variant: "",
           },
+          pointers: [],
         },
         lock: {},
         lockdown: {
@@ -73,6 +74,13 @@ describe(readSettings, () => {
     expect(settings.map((read) => read.idle)).toEqual(
       Ok({ blank_after_seconds: 600, warn_before_seconds: 30 }),
     );
+  });
+
+  it("reads bound pointers, which Settings does not edit", () => {
+    const pointers = [{ device: "QEMU QEMU USB Tablet", display: "Virtual-1" }];
+    expect(
+      readSettings({ input: { pointers } }).map((read) => read.input.pointers),
+    ).toEqual(Ok(pointers));
   });
 
   it("reads a cursor and fonts, which Settings does not edit", () => {
