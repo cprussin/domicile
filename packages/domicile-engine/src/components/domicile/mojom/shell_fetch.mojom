@@ -5,7 +5,7 @@ module domicile.mojom;
 
 import "url/mojom/url.mojom";
 
-// GET requests the browser makes for the shell with the default profile's
+// GET and POST requests the browser makes for the shell with the default profile's
 // cookies, the ones its browser windows use. For a bar item that reads a
 // signed-in site, such as a mail count.
 //
@@ -14,8 +14,9 @@ import "url/mojom/url.mojom";
 //
 // Access control is the binder's, as for BrowserWindows: the browser binds
 // this only for a document with the shell's origin. The rest is
-// components/domicile/browser/shell_fetch.h: https only, no `Cookie` header,
-// and nothing while the desk is locked.
+// components/domicile/browser/shell_fetch.h: https only, no `Cookie` or
+// `Origin` header, and nothing while the desk is locked. A POST is a
+// same-origin CORS request from the address's own origin.
 //
 // See "The browser's cookies" in the Domicile repository's
 // docs/SHELL-SYSTEM-ACCESS.md.
@@ -38,18 +39,21 @@ struct ShellFetchResponse {
 
 // Renderer -> browser, bound per document.
 interface ShellFetch {
-  // GETs `url` with the profile's cookies and `headers`. With
+  // Sends `method`, "GET" or "POST", to `url` with the profile's cookies,
+  // `headers` and, for a POST, `body`. A POST follows no redirect. With
   // `sapisid_hash_origin`, an https origin such as "https://mail.google.com",
   // also sends `Authorization: SAPISIDHASH <time>_<sha1>` from the SAPISID
   // cookie the request carries, and follows no redirect.
   //
-  // An unhashed request follows redirects on https only, and drops `headers`
+  // An unhashed GET follows redirects on https only, and drops `headers`
   // on one that leaves the first address's origin.
   //
   // Answers with a response, or with no response and why: refused, the
   // network error, or a desk that locked while the request was in flight.
   Fetch(url.mojom.Url url,
+        string method,
         array<ShellFetchHeader> headers,
+        string? body,
         string? sapisid_hash_origin)
       => (ShellFetchResponse? response, string error);
 };

@@ -609,13 +609,16 @@ export type DomicileHost = {
    */
   closeBrowserWindow(id: string): void;
   /**
-   * GETs `url` from the browser process with the cookies of the profile the
-   * ordinary browser windows use, so a bar item can read a site the user is
-   * signed in to. Resolves with the response, whatever its status. Rejects
-   * with a NetworkError for a network failure or a refusal: an address that
-   * is not https, a `Cookie` header or one the browser sets itself, or a
-   * locked desk. Redirects are followed on https only; one that leaves the
-   * origin drops `headers`.
+   * Sends `method`, "GET" or "POST", to `url` from the browser process with
+   * the cookies of the profile the ordinary browser windows use, so a bar
+   * item can read a site the user is signed in to. A POST sends `body`, as a
+   * same-origin CORS request from `url`'s own origin.
+   * Resolves with the response, whatever its status. Rejects with a
+   * NetworkError for a network failure or a refusal: an address that is not
+   * https, another method, a GET with a body, a `Cookie` or `Origin` header
+   * or one the browser sets itself, or a locked desk. A GET follows redirects on https
+   * only, and one that leaves the origin drops `headers`; a POST follows
+   * none.
    *
    * With `sapisidHashOrigin`, an https origin such as
    * "https://mail.google.com", the browser also sends the `Authorization:
@@ -627,7 +630,9 @@ export type DomicileHost = {
    */
   fetchWithCookies(
     url: string,
+    method: string,
     headers: readonly DomicileFetchHeader[],
+    body: string | null,
     sapisidHashOrigin: string | null,
   ): Promise<DomicileFetchResponse>;
   /**

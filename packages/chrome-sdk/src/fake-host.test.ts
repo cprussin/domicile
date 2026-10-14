@@ -148,11 +148,17 @@ describe("FakeDomicileHost", () => {
   it("records an ask and hands back a promise", () => {
     const fake = new FakeDomicileHost();
 
-    const fetched = fake.host.fetchWithCookies("https://example.com", [], null);
+    const fetched = fake.host.fetchWithCookies(
+      "https://example.com",
+      "GET",
+      [],
+      null,
+      null,
+    );
 
     expect(fetched).toBeInstanceOf(Promise);
     expect(fake.calls).toStrictEqual([
-      ["fetchWithCookies", "https://example.com", [], null],
+      ["fetchWithCookies", "https://example.com", "GET", [], null, null],
     ]);
   });
 
