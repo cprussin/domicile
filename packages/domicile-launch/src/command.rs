@@ -80,6 +80,13 @@ use crate::site_permissions::{Permission, Setting, SitePermission, SiteSettings}
 /// would misread.
 const VERSION: u32 = 1;
 
+/// The engine's refusal of `load_shell` while it has no window showing a
+/// `domicile://` page, as its first page has not committed yet.
+///
+/// Matched whole: the protocol carries no refusal codes, and the engine's text
+/// is fixed by `command_protocol.cc`.
+pub(crate) const NO_SHELL_WINDOW: &str = "this engine has no shell window to load a shell into";
+
 /// The engine's reply.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]

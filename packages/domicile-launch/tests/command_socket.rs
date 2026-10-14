@@ -64,7 +64,7 @@ fn an_engine_that_refused_is_carried_back_in_its_own_words() {
     let (_scratch, path) = scratch();
     let heard = an_engine(
         &path,
-        Some("{\"type\":\"refused\",\"why\":\"no shell window to load a shell into\"}\n"),
+        Some("{\"type\":\"refused\",\"why\":\"load_shell needs a module\"}\n"),
     );
 
     let why = load_shell(
@@ -78,11 +78,40 @@ fn an_engine_that_refused_is_carried_back_in_its_own_words() {
     assert_eq!(
         why,
         CommandError::Refused {
-            why: "no shell window to load a shell into".to_string()
+            why: "load_shell needs a module".to_string()
         }
     );
     assert!(
-        why.to_string().contains("no shell window"),
+        why.to_string().contains("load_shell needs a module"),
+        "the sentence a person reads dropped the engine's own: {why}"
+    );
+    heard.join().expect("the engine was listening");
+}
+
+#[test]
+fn an_engine_whose_shell_page_has_not_committed_says_it_has_no_shell_window() {
+    // The engine binds its socket before its first page commits, and refuses
+    // `load_shell` with these exact bytes until it does.
+    let (_scratch, path) = scratch();
+    let heard = an_engine(
+        &path,
+        Some(
+            "{\"type\":\"refused\",\"why\":\"this engine has no shell window to load a shell into\"}\n",
+        ),
+    );
+
+    let why = load_shell(
+        &path,
+        Path::new("/desktops/other"),
+        Path::new("shell.js"),
+        BRIEFLY,
+    )
+    .expect_err("the engine refused it");
+
+    assert_eq!(why, CommandError::NoShellWindow);
+    assert!(
+        why.to_string()
+            .contains("this engine has no shell window to load a shell into"),
         "the sentence a person reads dropped the engine's own: {why}"
     );
     heard.join().expect("the engine was listening");

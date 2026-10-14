@@ -74,8 +74,9 @@ pub fn tell(splash: &Path, progress: &Progress) -> io::Result<()> {
 
 /// Calls `load` until the engine answers it.
 ///
-/// The build can finish before the engine binds its command socket, or while
-/// a dead engine is being replaced, so [`CommandError::NoEngine`] is asked
+/// The build can finish before the engine binds its command socket, before
+/// its first page commits, or while a dead engine is being replaced, so
+/// [`CommandError::NoEngine`] and [`CommandError::NoShellWindow`] are asked
 /// again after `wait` until `given_up`. Any other answer is final.
 pub fn when_the_engine_answers(
     load: &mut dyn FnMut() -> Result<(), CommandError>,
@@ -84,7 +85,9 @@ pub fn when_the_engine_answers(
 ) -> Result<(), CommandError> {
     loop {
         match load() {
-            Err(CommandError::NoEngine { .. }) if !given_up() => wait(),
+            Err(CommandError::NoEngine { .. } | CommandError::NoShellWindow) if !given_up() => {
+                wait()
+            }
             answered => return answered,
         }
     }
@@ -135,6 +138,23 @@ mod tests {
             &mut || waits.set(waits.get() + 1),
         );
         assert_eq!((loaded, answers.get(), waits.get()), (Ok(()), 3, 2));
+    }
+
+    #[test]
+    fn an_engine_whose_shell_page_has_not_committed_is_asked_again() {
+        let answers = Cell::new(0);
+        let loaded = when_the_engine_answers(
+            &mut || {
+                answers.set(answers.get() + 1);
+                match answers.get() {
+                    2 => Ok(()),
+                    _ => Err(CommandError::NoShellWindow),
+                }
+            },
+            &|| false,
+            &mut || {},
+        );
+        assert_eq!((loaded, answers.get()), (Ok(()), 2));
     }
 
     #[test]
