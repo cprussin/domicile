@@ -204,11 +204,12 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 
 - Without the switch, the engine binds nothing. Every desktop `domicile`
   starts passes one under the run's directory.
-- `load_shell` that arrives while the shell window's first page is loading
-  waits up to 3 seconds for it to commit, then refuses with "this engine has
-  no shell window to load a shell into". With no shell window at all, it
-  refuses at once. The 3 seconds is under the supervisor's 5-second wait for a
-  reply, and the supervisor asks again on that refusal.
+- `load_shell`, `run_app` and `open_url` that arrive while the shell window's
+  first page is loading wait up to 3 seconds for it to commit, then refuse.
+  With no shell window at all, they refuse at once. The 3 seconds is under the
+  supervisor's 5-second wait for a reply. The supervisor asks again on
+  `load_shell`'s refusal, "this engine has no shell window to load a shell
+  into".
 - `domicile load-shell <path>` sends `load_shell`. `domicile open-url <url>`
   sends `open_url`, and `domicile open-app <url>` sends it with `"app":true`.
   `domicile screenshot <file>` goes to the compositor.
@@ -281,7 +282,7 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 | `components/domicile/browser/command_protocol.{h,cc}` | parses a line and returns a reply; unit tested |
 | `chrome/browser/domicile/domicile_command_socket.{h,cc}` | the socket and the shell's window; in `//chrome` because reloading needs `GlobalBrowserCollection` |
 | `components/domicile/browser/shell_source.{h,cc}` | the shell being served; set from the two switches, replaced by `load_shell` |
-| `components/domicile/browser/shell_window_wait.{h,cc}` | holds `load_shell` until the shell window's first page commits; unit tested |
+| `components/domicile/browser/shell_window_wait.{h,cc}` | holds `load_shell`, `run_app` and `open_url` until the shell window's first page commits; unit tested |
 | `chrome/browser/domicile/domicile_browser_windows.{h,cc}` | the desk's browser windows; `open_url` opens one |
 | `components/domicile/browser/site_permissions.{h,cc}` | permission and setting names; unit tested |
 | `chrome/browser/domicile/domicile_extension_installer.{h,cc}` | loads, uninstalls and lists extensions for the extension commands |
