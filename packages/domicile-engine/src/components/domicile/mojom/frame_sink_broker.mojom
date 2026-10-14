@@ -172,7 +172,7 @@ struct CapturedFrame {
 // which may then draw the next frame into it.
 interface CapturedFrameHold {};
 
-// Hears one display capture's frames.
+// Hears one capture's frames: of a display, or of a browser window.
 interface DisplayCaptureObserver {
   // A frame, sent when the display changed and no sooner than the frame
   // rate cap allows. Read it, then close `hold`. Viz keeps a few buffers, so
@@ -180,10 +180,11 @@ interface DisplayCaptureObserver {
   OnFrameCaptured(CapturedFrame frame, pending_remote<CapturedFrameHold> hold);
 };
 
-// Controls one display capture. Closing it stops the capture.
+// Controls one capture: of a display, or of a browser window. Closing it stops
+// the capture.
 interface DisplayCapture {
   // Captures at `size` from the next frame on, letterboxed to keep the
-  // display's aspect.
+  // source's aspect.
   Resize(gfx.mojom.Size size);
 };
 
@@ -328,5 +329,21 @@ interface FrameSinkBroker {
                  uint32 max_fps,
                  pending_receiver<DisplayCapture> capture,
                  pending_remote<DisplayCaptureObserver> observer)
+      => (bool started);
+
+  // Captures what one browser window's page shows, alone: viz runs the
+  // capturer on the page's own frame sink, so nothing the shell draws over the
+  // window is in it.
+  //
+  // `window_id` is a `BrowserWindow.id` (browser_windows.mojom). Frames are
+  // the page's size in pixels until `DisplayCapture.Resize`, and otherwise as
+  // for `CaptureDisplay`.
+  //
+  // Replies false, and closes both pipes, when no such window has a page with
+  // a size, as a closed window or one never shown does not.
+  CaptureBrowserWindow(string window_id,
+                       uint32 max_fps,
+                       pending_receiver<DisplayCapture> capture,
+                       pending_remote<DisplayCaptureObserver> observer)
       => (bool started);
 };

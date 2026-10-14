@@ -13,6 +13,7 @@ under `src/`. Design: [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md).
 | `components/domicile/browser/brokered_frame_sink.{h,cc}` | one registered `FrameSinkId`; also code ported from `exo::Buffer` that turns a dmabuf into a `SharedImage` and `TransferableResource` |
 | `components/domicile/browser/display_capture.{h,cc}` | one display capture: a viz `FrameSinkVideoCapturer` whose frames go to the producer |
 | `components/domicile/browser/display_capture_target.{h,cc}` | which browser window's root frame sink shows a display |
+| `components/domicile/browser/browser_window_capture_target.{h,cc}` | a browser window's own frame sink and size, for capturing it alone; //chrome sets the finder |
 | `components/domicile/browser/external_surface_provider.{h,cc}` | the renderer-facing wrapper over the broker; refuses a parent frame sink outside the calling renderer |
 | `components/domicile/browser/shell_origin.{h,cc}` | whether an origin is the shell's; only the shell's frames are bound to the provider |
 | `content/browser/domicile/domicile_frame_sink_broker.{h,cc}` | the browser's single broker, the socket a producer connects to, and the frame binder that refuses every frame but the shell |
@@ -54,7 +55,8 @@ Test-only. `spike.sh` runs it, and `guard-css-and-resize.sh` runs `spike.sh`.
 
 - Unit tests: `frame_sink_broker_unittest.cc` (the broker and its provider,
   against a real `HostFrameSinkManager` and a `TestSharedImageInterface`), `display_capture_unittest.cc` (against a fake viz
-  capturer), `display_capture_target_unittest.cc`, `window_diff_unittest.cc`,
+  capturer), `display_capture_target_unittest.cc`,
+  `browser_window_capture_target_unittest.cc`, `window_diff_unittest.cc`,
   `engine_event_queue_unittest.cc`, `surface_frames_unittest.cc`,
   `surface_submits_unittest.cc`.
 - The Blink side and the probe have no unit tests. They need a display

@@ -13,12 +13,16 @@ use smithay::backend::allocator::Buffer as _;
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::backend::renderer::ImportDma as _;
 
+use smithay::utils::Transform;
+
 use crate::buffer_transform::Sampled;
+use crate::casting::captured;
 use crate::casting::gpu::{FillError, Layer, Snapshot};
 use crate::casting::negotiation::Pixel;
 use crate::casting::pacing::Rect;
 use crate::casting::paint::paint;
 use crate::casting::region::{intersection, Screen};
+use crate::engine::CapturedFrame;
 
 /// A frame of the whole desk, and where its monitors and windows are in it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,6 +101,28 @@ pub fn window(shown: &Shown, renderer: Option<&mut GlesRenderer>) -> Result<Shot
         sampled.upright_size(),
         &[Layer::upright(&snapshot, sampled)],
         Some(renderer),
+    )
+    .map_err(|why| why.to_string())
+}
+
+/// The page in a browser window capture's `frame`, read back through
+/// `renderer` when the frame is a dmabuf.
+pub fn browser_window(
+    frame: &CapturedFrame,
+    mut renderer: Option<&mut GlesRenderer>,
+) -> Result<Shot, String> {
+    let (snapshot, _) =
+        captured::snapshot(frame, renderer.as_deref_mut()).map_err(|why| why.to_string())?;
+    let (_, _, width, height) = frame.content;
+    compose(
+        (width as u32, height as u32),
+        &[Layer {
+            snapshot: &snapshot,
+            from: frame.content,
+            to: (0, 0, width, height),
+            transform: Transform::Normal,
+        }],
+        renderer,
     )
     .map_err(|why| why.to_string())
 }

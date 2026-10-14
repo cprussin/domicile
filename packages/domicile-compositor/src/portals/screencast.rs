@@ -801,7 +801,10 @@ mod tests {
                     ) => {
                         developed(Err("no desk here".into()));
                     }
-                    Heard::Msg(Request::ShootWindow { developed, .. }) => {
+                    Heard::Msg(
+                        Request::ShootWindow { developed, .. }
+                        | Request::ShootBrowserWindow { developed, .. },
+                    ) => {
                         developed(Err("no windows here".into()));
                     }
                     Heard::Closed => *open = false,

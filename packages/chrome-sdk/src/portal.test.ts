@@ -943,6 +943,11 @@ describe("answerPortalRequest", () => {
     );
     answerPortalRequest(host, 11, PortalAnswer.PickColor({ x: 5, y: 6 }));
     answerPortalRequest(host, 12, PortalAnswer.ScreenshotWindow("app-3", true));
+    answerPortalRequest(
+      host,
+      13,
+      PortalAnswer.ScreenshotBrowserWindow("1", false),
+    );
 
     expect(host.answers).toEqual([
       [1, { kind: "access" }],
@@ -986,6 +991,7 @@ describe("answerPortalRequest", () => {
       ],
       [11, { kind: "pick_color", x: 5, y: 6 }],
       [12, { copy: true, id: "app-3", kind: "screenshot_window" }],
+      [13, { copy: false, id: "1", kind: "screenshot_browser_window" }],
     ]);
   });
 

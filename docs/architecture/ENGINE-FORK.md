@@ -232,6 +232,7 @@ Calls (compositor → engine):
 | `domicile_displays_configure(layout, count)` | output configuration |
 | `domicile_clipboard_set_items(clipboard, items, count)` | `wl_data_offer.receive`. The compositor sends the selection it already read: its text and its image, each a `DomicileClipboardItem`. `domicile_clipboard_set(clipboard, text, length)` is the text-only form an older compositor calls. |
 | `domicile_display_capture_start(engine, display, width, height, max_fps)`, `_resize`, `_stop` | none: a screen cast of a monitor (see [Display capture](#display-capture)) |
+| `domicile_browser_window_capture_start(engine, window_id, max_fps)` | none: a screenshot of one browser window alone; resized, stopped and released as a display capture |
 | `domicile_captured_frame_release(engine, capture, frame)` | none: the compositor is done reading a captured frame |
 | `domicile_engine_reports_frames()` | none: says the engine calls `frame_done` and `presented`, so the compositor waits for them |
 
@@ -310,6 +311,12 @@ it from frames the browser captures ([PORTALS.md](../PORTALS.md)).
 
 The capture is the window's root frame sink, so a hardware cursor plane is not
 in it. The compositor draws the pointer from its own state.
+
+A browser window is captured the same way, on its page's own frame sink
+instead of a root one. `domicile_browser_window_capture_start` asks the broker
+(`CaptureBrowserWindow`) by the shell's window id. //chrome finds the page and
+its size in pixels (`browser_window_capture_target.h`). Nothing the shell draws
+over the window is in the frames.
 
 ## Key decisions
 
