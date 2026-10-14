@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, setDefaultTimeout } from "bun:test";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -11,6 +11,11 @@ import type { InstalledExtension, SettingsFiles } from "./host";
 const CONFIG_PATH = "/home/me/.config/domicile/domicile.json";
 const SHELL_PATH = "/home/me/.config/domicile/shell.ts";
 const UBLOCK = "ddkjiahejlhfcafbddmgiahcphecmpfh";
+
+// Each test drives the whole app through user-event. CI runs every turbo task
+// at once, and under that load the first test, which pays the warm-up, and the
+// Select tests pass bun's 5s default.
+setDefaultTimeout(15_000);
 
 const files = (
   config: Record<string, unknown>,
