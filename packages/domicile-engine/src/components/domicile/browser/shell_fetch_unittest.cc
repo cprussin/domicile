@@ -32,8 +32,7 @@ std::vector<mojom::ShellFetchHeaderPtr> Headers(
 // What the Gmail bar item sends.
 TEST(ShellFetchTest, AnHttpsGetWithItsOwnHeadersIsAllowed) {
   EXPECT_EQ(ShellFetchRefusal(GURL(kInbox),
-                              Headers({{"Origin", kMail},
-                                       {"X-Origin", kMail},
+                              Headers({{"X-Origin", kMail},
                                        {"X-Goog-AuthUser", "me@example.com"}}),
                               kMail, /*desk_locked=*/false),
             std::nullopt);
@@ -58,6 +57,16 @@ TEST(ShellFetchTest, OnlyAnHttpsAddressIsFetched) {
 TEST(ShellFetchTest, APageSendsNoCookieHeader) {
   for (const char* name : {"Cookie", "cookie"}) {
     EXPECT_TRUE(ShellFetchRefusal(GURL(kInbox), Headers({{name, "SID=x"}}),
+                                  std::nullopt, /*desk_locked=*/false))
+        << name;
+  }
+}
+
+// The browser sends a POST's `Origin` as the address's own, and a GET's
+// none, so a page cannot claim another.
+TEST(ShellFetchTest, APageSendsNoOriginHeader) {
+  for (const char* name : {"Origin", "origin"}) {
+    EXPECT_TRUE(ShellFetchRefusal(GURL(kInbox), Headers({{name, kMail}}),
                                   std::nullopt, /*desk_locked=*/false))
         << name;
   }
@@ -115,6 +124,36 @@ TEST(ShellFetchTest, TheSapisidIsTheFirstPartyCookieElseTheSecureOne) {
   EXPECT_EQ(SapisidAmong({{"SID", "a"}, {"__Secure-3PAPISID", "secure"}}),
             "secure");
   EXPECT_EQ(SapisidAmong({{"SID", "a"}}), std::nullopt);
+}
+
+// What the Gmail bar item sends: a GET of its page and a POST to its sync.
+TEST(ShellFetchTest, AGetOrAPostIsSent) {
+  EXPECT_EQ(ShellFetchMethodRefusal("GET", std::nullopt), std::nullopt);
+  EXPECT_EQ(ShellFetchMethodRefusal("POST", "[null,null,1]"), std::nullopt);
+  EXPECT_EQ(ShellFetchMethodRefusal("POST", std::nullopt), std::nullopt);
+}
+
+TEST(ShellFetchTest, NoOtherMethodIsSent) {
+  for (const char* method : {"PUT", "DELETE", "HEAD", "get", ""}) {
+    EXPECT_TRUE(ShellFetchMethodRefusal(method, std::nullopt)) << method;
+  }
+}
+
+TEST(ShellFetchTest, AGetSendsNoBody) {
+  EXPECT_TRUE(ShellFetchMethodRefusal("GET", ""));
+}
+
+TEST(ShellFetchTest, ABodyIsNoLargerThanAResponse) {
+  EXPECT_TRUE(ShellFetchMethodRefusal(
+      "POST", std::string(kShellFetchMaxBody + 1, 'x')));
+}
+
+// A POST's body would be sent again to wherever a redirect points, and a hash
+// is for its own origin. Only a plain GET moves.
+TEST(ShellFetchTest, OnlyAPlainGetFollowsRedirects) {
+  EXPECT_TRUE(ShellFetchFollowsRedirects("GET", /*hashed=*/false));
+  EXPECT_FALSE(ShellFetchFollowsRedirects("POST", /*hashed=*/false));
+  EXPECT_FALSE(ShellFetchFollowsRedirects("GET", /*hashed=*/true));
 }
 
 // A redirect may move the request, never off https: the first address's

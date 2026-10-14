@@ -104,11 +104,13 @@ The engine has two channels to the rest of Domicile:
   `chrome/browser/domicile/domicile_extension_tray.h`.
 - **Fetches with the profile's cookies:** `fetchWithCookies()` uses
   `components/domicile/mojom/shell_fetch.mojom`, a browser-side pipe bound
-  only for the shell's origin (patch 0119). The browser GETs from the shell
-  profile's default storage partition and computes `SAPISIDHASH` from the
-  SAPISID cookie itself.
-  - Refusals and the hash: `components/domicile/browser/shell_fetch.h`,
-    unit tested.
+  only for the shell's origin (patch 0119). The browser sends a GET or a POST
+  from the shell profile's default storage partition, and computes
+  `SAPISIDHASH` from the SAPISID cookie itself. A GET has no initiator; a POST
+  is a same-origin CORS request from its address's own origin, so it gets
+  that `Origin` and `Sec-Fetch-Site: same-origin`.
+  - Refusals, redirects and the hash:
+    `components/domicile/browser/shell_fetch.h`, unit tested.
   - The request: `chrome/browser/domicile/domicile_shell_fetch.h`.
   - Shell side: [SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md#the-browsers-cookies).
 - **Tabs:** to `chrome.tabs` and `chrome.windows`, every `<webview>` is a tab

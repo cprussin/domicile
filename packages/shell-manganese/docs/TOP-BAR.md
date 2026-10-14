@@ -241,17 +241,19 @@ read with the Google sign-in of the browser windows' profile. Not in
   account chooser for that address in a browser window.
 - **Empty inbox:** nothing.
 - **Nothing unread:** an envelope, the nickname and the conversation count.
-- **Unread:** the same with `unread / total`, bold in `accent`.
+- **Unread:** the same with `unread / total`, the count semibold, on the lit
+  pill the idle inhibitor shows when on.
 - Click opens the inbox in a browser window.
 - Read every minute, and not while the desktop is locked. Counts are
   conversations, as Gmail's inbox counts them.
-- How it reads:
-  - The Atom feed (`/mail/feed/atom?authuser=<email>`) says whether the profile is
-    signed in to the address, and the unread count.
-  - The Gmail API's INBOX label, through `clients6.google.com` with Google's
-    cookie authentication (`SAPISIDHASH`), gives the total. This is
-    undocumented. When it fails, the item shows the feed's unread count
-    alone, and nothing with none unread.
+- How it reads, with Gmail's own undocumented protocol:
+  - The page (`/mail/?authuser=<email>`) says whether the profile is signed
+    in to the address: a redirect to sign in, or a page that does not name
+    it, is signed out. Its address gives the account's index, and its
+    script the token and build values the sync needs.
+  - Gmail's sync (`POST /sync/u/<index>/i/s`) answers the labels' counts;
+    the inbox's row is `["^i", unread, total]`.
+  - The page is read once, then again after an hour or when a sync fails.
   - Both go through `fetchWithCookies`
     ([SHELL-SYSTEM-ACCESS.md](../../../docs/SHELL-SYSTEM-ACCESS.md#the-browsers-cookies)).
 
