@@ -496,7 +496,7 @@ fn read_chrome_messages(
         // [`Host::focus_change`] reports each change once. Drop the guard
         // before broadcasting; the Wayland thread needs the lock.
         let moved = hub.host.lock().unwrap().focus_change();
-        if let Some(message) = moved {
+        for message in moved {
             hub.broadcast(message);
         }
         if !write_responses(hub, writer, responses) {

@@ -141,6 +141,26 @@ impl XdgShellHandler for DomicileCompositor {
         self.the_running_apps_changed();
     }
 
+    /// A client set or cleared the window its toplevel is a dialog for.
+    fn parent_changed(&mut self, surface: ToplevelSurface) {
+        // `None` for the chrome's own window, which is never announced.
+        let Some(app_id) = self.app_id_of(surface.wl_surface()) else {
+            return;
+        };
+        let parent = surface.parent().and_then(|parent| self.app_id_of(&parent));
+        // Separate `let` so the host guard drops before the broadcast, as in
+        // `title_changed`.
+        let parented = self
+            .hub
+            .host
+            .lock()
+            .unwrap()
+            .app_transient_for(&app_id, parent);
+        if let Some(parented) = parented {
+            self.hub.broadcast(parented);
+        }
+    }
+
     fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
         if self
             .chrome_toplevel
@@ -293,8 +313,9 @@ impl XdgActivationHandler for DomicileCompositor {
     ///
     /// A token made before the keyboard last moved, or a stale one the
     /// compositor minted, is dropped (see [`activation::granted`]): the window
-    /// is asking on its own, not for the user. The rest are broadcast as
-    /// `focus_requested`; a shell grants one with `focus_app`.
+    /// is asking on its own, not for the user, and is marked urgent instead
+    /// (`app_urgent`). The rest are broadcast as `focus_requested`; a shell
+    /// grants one with `focus_app`.
     fn request_activation(
         &mut self,
         token: XdgActivationToken,
@@ -305,15 +326,25 @@ impl XdgActivationHandler for DomicileCompositor {
         // could grow it without bound.
         self.xdg_activation_state.remove_token(&token);
         let last_enter = self.seat.get_keyboard().unwrap().last_enter();
+        // `None` for the chrome's own surface, which is never announced.
+        let app_id = self.app_id_of(&surface);
         if !activation::granted(&token_data, last_enter) {
             let asked = token_data.serial.map(|(serial, _)| serial);
             debug!(
+                ?app_id,
                 ?asked,
                 ?last_enter,
                 "{} -> dropped",
                 grepped::FOCUS_REQUEST_DROPPED
             );
-        } else if let Some(app_id) = self.app_id_of(&surface) {
+            // Separate `let` so the host guard drops before the broadcast, as
+            // in `title_changed`.
+            let urgent =
+                app_id.and_then(|app_id| self.hub.host.lock().unwrap().app_urgent(&app_id));
+            if let Some(urgent) = urgent {
+                self.hub.broadcast(urgent);
+            }
+        } else if let Some(app_id) = app_id {
             broadcast_focus_request(&self.hub, &app_id);
         }
     }

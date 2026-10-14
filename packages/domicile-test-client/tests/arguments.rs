@@ -309,6 +309,12 @@ fn a_client_can_be_asked_to_open_sliding_menus_on_presses() {
 }
 
 #[test]
+fn a_client_can_be_asked_to_open_a_dialog_for_its_window() {
+    assert!(given(&["--dialog"]).expect("a client with a dialog").dialog);
+    assert!(!given(&[]).unwrap().dialog);
+}
+
+#[test]
 fn a_client_can_be_given_limits_on_its_size() {
     // Limits an Electron app with a minimum window size sends (these are
     // Bitwarden's).

@@ -184,6 +184,22 @@ describe("parseHostMessage", () => {
     ).toStrictEqual({ app_id: undefined, type: "focus_changed" });
   });
 
+  it("decodes a dialog with no parent as undefined", () => {
+    expect(
+      parseHostMessage(
+        JSON.stringify({
+          app_id: "app-4",
+          transient_for: null,
+          type: "app_transient_for",
+        }),
+      ),
+    ).toStrictEqual({
+      app_id: "app-4",
+      transient_for: undefined,
+      type: "app_transient_for",
+    });
+  });
+
   it("decodes whether anybody is at the desk, both ways round", () => {
     // Sent as a state, not an edge, so a reloaded page learns the current
     // value. Both values must decode.

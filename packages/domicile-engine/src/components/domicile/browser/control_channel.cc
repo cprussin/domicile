@@ -793,6 +793,27 @@ void ControlChannel::DispatchLine(const std::string& line) {
     return;
   }
 
+  if (*type == "app_transient_for") {
+    const std::string* app_id = message.FindString("app_id");
+    if (!app_id) {
+      return;
+    }
+    // Null is a window that is no dialog, as `title` is one with no name.
+    const std::string* transient_for = message.FindString("transient_for");
+    client_->AppTransientFor(*app_id,
+                             transient_for ? *transient_for : std::string());
+    return;
+  }
+
+  if (*type == "app_urgent") {
+    const std::string* app_id = message.FindString("app_id");
+    const std::optional<bool> urgent = message.FindBool("urgent");
+    if (app_id && urgent) {
+      client_->AppUrgent(*app_id, *urgent);
+    }
+    return;
+  }
+
   if (*type == "app_closed") {
     if (const std::string* app_id = message.FindString("app_id")) {
       client_->AppClosed(*app_id);
