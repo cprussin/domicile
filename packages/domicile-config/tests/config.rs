@@ -893,6 +893,32 @@ fn store_reload_from_path_keeps_last_good_on_bad_file() {
     assert_eq!(store.current().output.max_scale, 3);
 }
 
+#[test]
+fn a_save_reloads_and_then_the_watcher_goes_quiet() {
+    // Reading the config must not count as a change, or each reload sets off
+    // the next and the watcher spins forever.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("domicile.json");
+    std::fs::write(&path, "{}").unwrap();
+    let watcher = domicile_config::watch(&path).unwrap();
+
+    std::fs::write(&path, r#"{ "output": { "max_scale": 3 } }"#).unwrap();
+    let reloaded = watcher.rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    assert_eq!(reloaded.unwrap().output.max_scale, 3);
+    // The save's own trailing events. Bounded, since a spinning watcher never
+    // stops sending.
+    let save_settles_by = std::time::Instant::now() + Duration::from_secs(2);
+    while std::time::Instant::now() < save_settles_by
+        && watcher.rx.recv_timeout(Duration::from_millis(200)).is_ok()
+    {}
+
+    let quiet_for = Duration::from_millis(500);
+    assert!(
+        watcher.rx.recv_timeout(quiet_for).is_err(),
+        "reloaded with nothing written"
+    );
+}
+
 // ---- output ---------------------------------------------------------------
 
 #[test]
