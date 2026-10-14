@@ -61,6 +61,16 @@ rate the screen shows it.
   answered anyway and its feedback discarded, so no client waits for good.
 - **Older engines** lack `domicile_engine_reports_frames`. The compositor
   answers at commit and discards feedback.
+- **The page hears it too:** the compositor sends `app_presented` for the
+  first `presented` frame of a new window or popup, and for the first one a
+  client drew for a box of a new size (`presentations.rs`). The engine fires
+  `domicile-presented` on the `<app>`.
+  - The compositor owns this: it alone knows which commit answers which
+    configure (`configure_answers.rs`).
+  - A move or a hidden window shown again sends nothing: the client may not
+    draw, so no frame of it is `presented`.
+  - Unverified end to end: the compositor's tests run without an engine, and
+    no check reads a lit CRTC.
 
 ## Hidden windows
 
@@ -68,7 +78,9 @@ A window the page does not draw (another workspace, a background tab) draws
 about once a second, unless a cast shows it.
 
 - **The page:** reports it with an empty box, `setAppBounds(appId, 0, 0, 0,
-  0)`. The engine never says whether an `<app>` is composited.
+  0)`.
+- **Suspension reaches the page:** each change sends `app_suspended`, and the
+  engine fires `domicile-suspended` or `domicile-resumed` on the `<app>`.
 - **The compositor:** holds the `wl_surface.frame` callbacks of the window,
   its popups and its bubbles (`held_frames.rs`), and sets `xdg_toplevel`'s
   `suspended` state. A box with an area clears `suspended` and sends the held

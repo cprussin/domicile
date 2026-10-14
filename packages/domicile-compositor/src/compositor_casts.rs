@@ -16,7 +16,6 @@ use tracing::{debug, info};
 use crate::buffer_transform::Sampled;
 use crate::client_damage::Region;
 use crate::engine_session::EngineSession;
-use crate::frame_pacing::suspend;
 use crate::surface_commit::committed_buffer;
 use crate::{casting, engine};
 use crate::{CalloopData, DomicileCompositor, Gpu};
@@ -82,12 +81,12 @@ impl DomicileCompositor {
         let recast = self.held_frames.cast(self.casting.windows());
         for (app_id, held) in recast.released {
             debug!(%app_id, held = held.len(), "hidden but cast: frames released");
-            suspend(&self.hidden_toplevel(&app_id), false);
+            self.suspend(&app_id, &self.hidden_toplevel(&app_id), false);
             self.send_frames(held);
         }
         for app_id in recast.held {
             debug!(%app_id, "hidden and no longer cast: frames held");
-            suspend(&self.hidden_toplevel(&app_id), true);
+            self.suspend(&app_id, &self.hidden_toplevel(&app_id), true);
         }
         if self.held_frames.start_trickling() {
             self.start_trickling();

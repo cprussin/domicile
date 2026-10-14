@@ -827,6 +827,22 @@ void ControlChannel::DispatchLine(const std::string& line) {
     return;
   }
 
+  if (*type == "app_presented") {
+    if (const std::string* app_id = message.FindString("app_id")) {
+      client_->AppPresented(*app_id);
+    }
+    return;
+  }
+
+  if (*type == "app_suspended") {
+    const std::string* app_id = message.FindString("app_id");
+    const std::optional<bool> suspended = message.FindBool("suspended");
+    if (app_id && suspended) {
+      client_->AppSuspended(*app_id, *suspended);
+    }
+    return;
+  }
+
   // `logo` is what Wayland calls the key the web calls Meta.
   if (*type == "modifiers") {
     DeliverModifiers(Modifiers{message.FindBool("alt").value_or(false),

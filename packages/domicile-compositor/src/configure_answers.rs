@@ -85,14 +85,17 @@ impl<S: PartialOrd + Copy> ConfigureAnswers<S> {
         }
     }
 
-    /// The configure with `serial` carried `resize`.
-    pub fn sent(&mut self, serial: S, resize: Resize, now: Instant) {
+    /// The configure with `serial` carried `resize`. True when it changed the
+    /// size.
+    pub fn sent(&mut self, serial: S, resize: Resize, now: Instant) -> bool {
         self.sent
             .push_back((serial, resize.number, resize.device_size));
-        if self.size != Some(resize.size) {
+        let changed = self.size != Some(resize.size);
+        if changed {
             self.size = Some(resize.size);
             self.unanswered = Some((serial, now));
         }
+        changed
     }
 
     /// The client committed after acking `acked`. The resize to send now, if
@@ -235,6 +238,15 @@ mod tests {
             answers.resize(resize(4, (700, 480)), start),
             Resized::Send(resize(4, (700, 480)))
         );
+    }
+
+    #[test]
+    fn a_configure_says_whether_it_changed_the_size() {
+        let start = Instant::now();
+        let mut answers = ConfigureAnswers::new();
+        assert!(answers.sent(10_u32, resize(1, (640, 480)), start));
+        assert!(!answers.sent(11, resize(2, (640, 480)), start));
+        assert!(answers.sent(12, resize(3, (700, 480)), start));
     }
 
     #[test]

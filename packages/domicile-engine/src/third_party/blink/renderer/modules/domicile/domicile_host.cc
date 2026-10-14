@@ -86,6 +86,11 @@ int EvdevOf(const KeyboardEvent& key) {
 constexpr char kFocusRequested[] = "domicile-focus-requested";
 constexpr char kFocusReleaseRequested[] = "domicile-focus-release-requested";
 
+// The events an <app> dispatches to tell the shell about its window.
+constexpr char kPresented[] = "domicile-presented";
+constexpr char kSuspended[] = "domicile-suspended";
+constexpr char kResumed[] = "domicile-resumed";
+
 // Something happened on the page: a key went down or up, a press, a blur.
 class PageHeard final : public NativeEventListener {
  public:
@@ -1090,6 +1095,27 @@ bool DomicileHost::Ask(Element& target,
   return target.DispatchEvent(*event) == DispatchEventResult::kNotCanceled;
 }
 
+// A CustomEvent like Ask's, so a shell reads `detail.appId` off every event an
+// <app> dispatches. An <app> not in the page, or a document with no script,
+// has no shell to tell.
+void DomicileHost::Tell(const String& app_id, const char* type) {
+  HTMLAppElement* app = AppElement(app_id);
+  LocalFrame* frame = window_ ? window_->GetFrame() : nullptr;
+  ScriptState* script_state =
+      frame ? ToScriptStateForMainWorld(frame) : nullptr;
+  if (!app || !script_state) {
+    return;
+  }
+  ScriptState::Scope scope(script_state);
+  V8ObjectBuilder detail(script_state);
+  detail.AddString("appId", app_id);
+  CustomEvent* event = CustomEvent::Create();
+  event->initCustomEvent(
+      script_state, AtomicString(type), /*bubbles=*/true, /*cancelable=*/false,
+      ScriptValue(script_state->GetIsolate(), detail.V8Object()));
+  app->DispatchEvent(*event);
+}
+
 void DomicileHost::AppAppeared(const String& app_id,
                                const String& title,
                                const String& desktop_id,
@@ -1192,6 +1218,14 @@ void DomicileHost::AppCursor(const String& app_id,
       << "', so domicile_cursor_shape.idl and cursor_shape.h disagree";
   WindowNamed(app_id).cursor = *shape;
   WindowsChanged();
+}
+
+void DomicileHost::AppPresented(const String& app_id) {
+  Tell(app_id, kPresented);
+}
+
+void DomicileHost::AppSuspended(const String& app_id, bool suspended) {
+  Tell(app_id, suspended ? kSuspended : kResumed);
 }
 
 void DomicileHost::ShortcutPressed(

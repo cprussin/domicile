@@ -96,6 +96,7 @@ impl DomicileCompositor {
         size: (f64, f64),
     ) {
         self.unannounced.remove(app_id);
+        self.presentations.appeared(app_id);
         let mapped = domicile_host::Mapped {
             size,
             has_parent: toplevel.parent().is_some(),
@@ -162,10 +163,16 @@ impl DomicileCompositor {
             state.size = Some((resize.size.0 as i32, resize.size.1 as i32).into());
         });
         let serial = toplevel.send_configure();
-        self.configure_answers
+        let changed = self
+            .configure_answers
             .get_mut(app_id)
             .expect("a resize comes from the window's configure answers")
             .sent(serial, resize, Instant::now());
+        // A client may not redraw at the size it has, so only a new size
+        // waits to be presented.
+        if changed {
+            self.presentations.resized(app_id, resize.number);
+        }
     }
 
     /// Send `app_id`'s waiting resize at `until` if its client has not
@@ -214,6 +221,8 @@ impl DomicileCompositor {
         self.unannounced.remove(app_id);
         self.app_bounds.remove(app_id);
         self.held_frames.forget(app_id);
+        self.suspended.remove(app_id);
+        self.presentations.forget(app_id);
         let unreported = self.frame_callbacks.forget(app_id);
         self.answer_unreported(unreported);
         self.casting.window_gone(app_id);

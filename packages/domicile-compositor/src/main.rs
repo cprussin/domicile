@@ -109,6 +109,7 @@ mod peer_process;
 mod pnp_ids;
 mod popups;
 mod portals;
+mod presentations;
 mod reply;
 mod restatement;
 mod scale;
@@ -140,6 +141,7 @@ use crate::frame_callbacks::FrameCallbacks;
 use crate::gbm::Gbm;
 use crate::held_frames::HeldFrames;
 use crate::latency::Latency;
+use crate::presentations::Presentations;
 use crate::shm_upload::render_modifiers;
 use crate::uploads::Uploads;
 
@@ -389,6 +391,11 @@ struct DomicileCompositor {
     /// Frame callbacks of the windows the page hides. See
     /// [`crate::held_frames`].
     held_frames: HeldFrames<WlCallback>,
+    /// The windows marked `suspended`, so the chromes hear only changes.
+    suspended: HashSet<String>,
+    /// Which frame of each window the chromes hear was presented. See
+    /// [`crate::presentations`].
+    presentations: Presentations,
     /// Frame callbacks and presentation feedback waiting for the engine to
     /// report their frame. See [`crate::frame_callbacks`].
     frame_callbacks: FrameCallbacks<WlCallback, PresentationFeedbackCallback>,
@@ -1134,6 +1141,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         toplevels: Vec::new(),
         app_bounds: HashMap::new(),
         held_frames: HeldFrames::new(),
+        suspended: HashSet::new(),
+        presentations: Presentations::new(),
         frame_callbacks: FrameCallbacks::new(),
         frame_deadline_armed: false,
         clock: Clock::new(),

@@ -95,6 +95,12 @@ class FakeClient : public mojom::ControlChannelClient {
                    bool) override {}
   void AppClosed(const std::string&) override {}
   void AppCursor(const std::string&, mojom::CursorShape) override {}
+  void AppPresented(const std::string& app_id) override {
+    heard_.push_back("presented " + app_id);
+  }
+  void AppSuspended(const std::string& app_id, bool suspended) override {
+    heard_.push_back((suspended ? "suspended " : "resumed ") + app_id);
+  }
   void ShortcutPressed(mojom::ShortcutPtr) override {}
   void ShortcutReleased(mojom::ShortcutPtr) override {}
   void Modifiers(bool, bool, bool, bool) override {}
@@ -211,6 +217,24 @@ TEST_F(ControlChannelTest, AWindowReachesThePageWithItsSizeAndHints) {
             (std::vector<std::string>{
                 "appeared app-1 pinentry  400x300 dialog client_frame",
                 "locked false"}));
+}
+
+// The page hears when a window reaches the screen and when the compositor
+// suspends it. A line missing a field is dropped.
+TEST_F(ControlChannelTest, AWindowsPresentationAndSuspensionReachThePage) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  Say("{\"type\":\"app_presented\",\"app_id\":\"app-1\"}\n"
+      "{\"type\":\"app_presented\"}\n"
+      "{\"type\":\"app_suspended\",\"app_id\":\"app-1\",\"suspended\":true}\n"
+      "{\"type\":\"app_suspended\",\"app_id\":\"app-1\"}\n"
+      "{\"type\":\"app_suspended\",\"app_id\":\"app-1\",\"suspended\":false}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_,
+            (std::vector<std::string>{"presented app-1", "suspended app-1",
+                                      "resumed app-1", "locked false"}));
 }
 
 TEST_F(ControlChannelTest, AWindowReachesThePageWithItsOwner) {

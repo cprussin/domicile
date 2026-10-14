@@ -209,6 +209,20 @@ const appCursorSchema = z.looseObject({
   type: z.literal("app_cursor"),
 });
 
+// A window or popup reached the screen: its first frame, or the first frame
+// drawn after a configure changed its size.
+const appPresentedSchema = z.looseObject({
+  app_id: z.string(),
+  type: z.literal("app_presented"),
+});
+
+// The compositor marked a window `suspended`, or cleared it.
+const appSuspendedSchema = z.looseObject({
+  app_id: z.string(),
+  suspended: z.boolean(),
+  type: z.literal("app_suspended"),
+});
+
 // The compositor's XKB keymap, in `XKB_KEYMAP_FORMAT_TEXT_V1`. The browser
 // process uses it for its `KeyboardLayoutEngine`; pages do not read it.
 // Non-empty, since an empty keymap types nothing.
@@ -535,6 +549,8 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   appMaxSizeSchema,
   appClosedSchema,
   appCursorSchema,
+  appPresentedSchema,
+  appSuspendedSchema,
   displaysSchema,
   keymapSchema,
   extensionsSchema,
