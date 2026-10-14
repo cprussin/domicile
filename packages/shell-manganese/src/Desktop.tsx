@@ -687,6 +687,9 @@ const stageActionsOf = (
   onGrab: (id: string) => {
     act(WindowAction.WindowGrabbed(id));
   },
+  onGroupClose: (group: NodeRef) => {
+    act(WindowAction.GroupClosed(group));
+  },
   onGroupDropOn: (group: NodeRef, aim: Aim) => {
     switch (aim.kind) {
       case AimKind.Group: {

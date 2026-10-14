@@ -88,6 +88,8 @@ type Props = {
   /** Toggles fullscreen from a window's title bar. */
   onFullscreen: (id: string) => void;
   onGrab: (id: string) => void;
+  /** Closes every window in a group, from the tab that holds it. */
+  onGroupClose: (group: NodeRef) => void;
   /** A tiled group dropped where it was aimed, on any screen. */
   onGroupDropOn: (group: NodeRef, aim: Aim) => void;
   /** Toggles floating from a tab group's strip. */
@@ -159,6 +161,7 @@ export const Stage = memo(
     onFocusRequest,
     onFullscreen,
     onGrab,
+    onGroupClose,
     onGroupDropOn,
     onGroupFloat,
     onGroupFullscreen,
@@ -648,7 +651,7 @@ export const Stage = memo(
                 key={tabKeyOf(tab)}
                 motion={motion}
                 on={screenNamed(desk, screen)}
-                onClose={onClose}
+                onClose={onGroupClose}
                 onFloat={onFloat}
                 onFullscreen={onFullscreen}
                 onPlayedOut={onPlayedOut}
@@ -1019,7 +1022,8 @@ type ContainerTabProps = {
   icon: string | undefined;
   motion: WindowMotion;
   on: StageScreen | undefined;
-  onClose: (id: string) => void;
+  /** Closes the tab's group, every window in it. */
+  onClose: (group: NodeRef) => void;
   onFloat: (id: string) => void;
   onFullscreen: (id: string) => void;
   onPlayedOut: WindowMotions["onPlayedOut"];
@@ -1049,10 +1053,10 @@ const ContainerTab = memo(
     tab,
     title,
   }: ContainerTabProps) => {
-    const { id } = tab;
+    const { id, node } = tab;
     const closed = useCallback(() => {
-      onClose(id);
-    }, [id, onClose]);
+      onClose(node);
+    }, [node, onClose]);
     const floated = useCallback(() => {
       onFloat(id);
     }, [id, onFloat]);

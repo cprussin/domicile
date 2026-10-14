@@ -17,7 +17,7 @@ const command = (...words: readonly string[]) => KeyAction.SendShell(words);
 
 /** Run `argv` directly, without a shell. */
 export const exec = (...argv: readonly string[]) => command("exec", ...argv);
-/** Close the focused window. */
+/** Close the focused window, or every window in a `focus parent` selection. */
 export const kill = () => command("kill");
 /** Lock the desk. */
 export const lock = () => command("lock");

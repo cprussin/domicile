@@ -49,7 +49,7 @@ Build commands with the exported helpers (`focus`, `move`, `workspace`,
 
 | Command | Action |
 |---|---|
-| `kill` | Close the window. |
+| `kill` | Close the window, or every window in the group `focus parent` selected. |
 | `focus left/right/up/down` | Move focus. |
 | `focus parent` / `focus child` | Select the enclosing container, or go back to the window. |
 | `focus mode_toggle` | Switch between floating and tiled windows. |
