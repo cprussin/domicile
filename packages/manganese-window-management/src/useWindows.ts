@@ -25,9 +25,11 @@ import type { WindowAction, WindowState } from "./window-state";
 import {
   WindowAction as Action,
   activeIdOf,
+  killedIdsOf,
   NO_WINDOWS,
   reduceWindows,
   WindowActionKind,
+  windowsInGroup,
 } from "./window-state";
 
 export type Windows = WindowState & {
@@ -113,22 +115,15 @@ export const useWindows = (
           domicile.openBrowserWindow(action.src);
         }
       }
-      if (
-        action.kind === WindowActionKind.WindowKilled ||
-        action.kind === WindowActionKind.WindowClosed
-      ) {
-        const id =
-          action.kind === WindowActionKind.WindowClosed
-            ? action.id
-            : activeIdOf(drawn.current);
-        const appId = id === undefined ? undefined : appIdOf(id);
-        if (appId !== undefined) {
-          domicile.closeApp(appId);
-        }
-        const browser = id === undefined ? undefined : browserIdOf(id);
-        if (browser !== undefined) {
-          domicile.closeBrowserWindow(browser);
-        }
+      if (action.kind === WindowActionKind.WindowClosed) {
+        closeWindows(domicile, [action.id]);
+      }
+      // A `focus parent` selection closes whole, as in sway.
+      if (action.kind === WindowActionKind.WindowKilled) {
+        closeWindows(domicile, killedIdsOf(drawn.current));
+      }
+      if (action.kind === WindowActionKind.GroupClosed) {
+        closeWindows(domicile, windowsInGroup(drawn.current, action.group));
       }
     },
     [domicile, files, openFile],
@@ -266,4 +261,18 @@ const takeScreenshot = (domicile: DomicileHost) => {
 const clipboardUrl = (domicile: DomicileHost): string | undefined => {
   const newest = domicile.clipboard?.[0];
   return newest === undefined ? undefined : typedAddress(newest.preview)?.url;
+};
+
+/** Asks the compositor or the engine to close each window in `ids`. */
+const closeWindows = (domicile: DomicileHost, ids: readonly string[]) => {
+  for (const id of ids) {
+    const appId = appIdOf(id);
+    if (appId !== undefined) {
+      domicile.closeApp(appId);
+    }
+    const browser = browserIdOf(id);
+    if (browser !== undefined) {
+      domicile.closeBrowserWindow(browser);
+    }
+  }
 };

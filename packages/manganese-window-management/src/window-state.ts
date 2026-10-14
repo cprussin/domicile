@@ -32,6 +32,7 @@ import type { Workspace } from "./workspace";
 import {
   childFocused,
   closed,
+  commandedWindowsOn,
   containerLaidOut,
   containerSplit,
   emptyWorkspace,
@@ -71,6 +72,7 @@ import {
   windowGrown,
   windowMoved,
   windowsOn,
+  windowsUnder,
 } from "./workspace";
 
 /**
@@ -294,6 +296,23 @@ export const screenOfApp = (
 export const activeIdOf = (state: WindowState): string | undefined =>
   focusedOn(workspaceHere(state));
 
+/** The windows `kill` closes: every window in the node commands target. */
+export const killedIdsOf = (state: WindowState): readonly string[] =>
+  commandedWindowsOn(workspaceHere(state));
+
+/** Every window in the group `group` names. Throws for one no workspace holds. */
+export const windowsInGroup = (
+  state: WindowState,
+  group: NodeRef,
+): readonly string[] => {
+  const workspace = workspaceHolding(state, group.id);
+  if (workspace === undefined) {
+    throw new Error(`windows: no workspace holds group ${group.id}`);
+  } else {
+    return windowsUnder(workspace, group);
+  }
+};
+
 /** The window `id`, or `undefined` for one that has closed. */
 export const windowOf = (
   state: WindowState,
@@ -333,6 +352,7 @@ export enum WindowActionKind {
   FocusRequested,
   FocusStepped,
   FullscreenToggled,
+  GroupClosed,
   GroupDroppedOn,
   GroupDroppedOnScreen,
   GroupFloated,
@@ -589,6 +609,15 @@ export const WindowAction = {
   FullscreenToggled: (global: boolean) => ({
     global,
     kind: WindowActionKind.FullscreenToggled as const,
+  }),
+
+  /**
+   * The user closed group `group` from its tab, which closes every window in
+   * it. A request only, as {@link WindowAction.WindowClosed} is.
+   */
+  GroupClosed: (group: NodeRef) => ({
+    group,
+    kind: WindowActionKind.GroupClosed as const,
   }),
 
   /**
@@ -1045,6 +1074,10 @@ const reduceAction = (
       return onCurrent(state, (workspace) =>
         fullscreenToggled(workspace, action.global),
       );
+    }
+    // A request only; see `WindowClosed`.
+    case WindowActionKind.GroupClosed: {
+      return state;
     }
     case WindowActionKind.GroupDroppedOn: {
       return dropNode(state, action.group, action.target, action.edge);

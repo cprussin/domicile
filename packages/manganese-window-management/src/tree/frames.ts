@@ -96,6 +96,8 @@ export type Tab = {
   group: Layout;
   /** The container's last-focused window, which names the tab. */
   id: string;
+  /** The nested container. */
+  node: NodeRef;
   rect: Rect;
   /** Whether it is inside the container `focus parent` selected. */
   selected: boolean;
@@ -379,6 +381,10 @@ const titled = (
             active: showing,
             group: child.layout,
             id: focusedWindowIn(child),
+            node: {
+              id: focusedWindowIn(child),
+              up: focusChainOf(child).length,
+            },
             rect: bar,
             selected,
             strip,

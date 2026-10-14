@@ -110,6 +110,21 @@ export const holds = (workspace: Workspace, id: string): boolean =>
 export const focusedOn = (workspace: Workspace): string | undefined =>
   workspace.floatFocus ?? focusedIdOf(workspace.tiling);
 
+/** Every window in the node commands target, as `kill` closes them. */
+export const commandedWindowsOn = (workspace: Workspace): readonly string[] => {
+  const node = commandedOn(workspace);
+  return node === undefined ? [] : windowsUnder(workspace, node);
+};
+
+/** Every window in the node `ref` names, tiled or floating. */
+export const windowsUnder = (
+  workspace: Workspace,
+  ref: NodeRef,
+): readonly string[] => {
+  const root = rootHolding(workspace, ref.id);
+  return windowsIn(nodeAt(root, pathToRef(root, ref)));
+};
+
 /** The box the floating window `id` sits in, or `undefined` when it is tiled. */
 export const floatOn = (workspace: Workspace, id: string): Float | undefined =>
   workspace.floats.find((float) => floatHolds(float, id));

@@ -449,6 +449,7 @@ describe("framesOf", () => {
         active: true,
         group: Layout.SplitH,
         id: "a",
+        node: { id: "a", up: 1 },
         rect: { height: TITLE_BAR, width: 240, x: 0, y: 0 },
         selected: false,
         strip: {
@@ -538,6 +539,7 @@ describe("framesOf", () => {
         active: false,
         group: Layout.SplitH,
         id: "a",
+        node: { id: "a", up: 1 },
         rect: { height: TITLE_BAR, width: 240, x: 0, y: 0 },
         selected: false,
         strip: {

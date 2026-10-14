@@ -313,6 +313,43 @@ describe("a command", () => {
     ).toEqual(["foot"]);
   });
 
+  it("kills every window in the group `focus parent` selected", () => {
+    const { host, result } = desktop([LEFT, RIGHT]);
+    host.announces("kitty");
+    host.announces("foot");
+
+    act(() => {
+      result.current.act(WindowAction.ParentFocused());
+    });
+    act(() => {
+      result.current.act(WindowAction.WindowKilled());
+    });
+
+    expect(
+      host.fake.calls
+        .filter(([name]) => name === "closeApp")
+        .map(([, appId]) => appId),
+    ).toEqual(["kitty", "foot"]);
+  });
+
+  it("closes every window in a group closed from its tab", () => {
+    const { host, result } = desktop([LEFT, RIGHT]);
+    host.announces("kitty");
+    host.announces("foot");
+
+    act(() => {
+      result.current.act(
+        WindowAction.GroupClosed({ id: appWindowId("foot"), up: 1 }),
+      );
+    });
+
+    expect(
+      host.fake.calls
+        .filter(([name]) => name === "closeApp")
+        .map(([, appId]) => appId),
+    ).toEqual(["kitty", "foot"]);
+  });
+
   it("takes what only the compositor can do with it", () => {
     // An `exec` is a process the compositor starts.
     const { host, result } = desktop([LEFT, RIGHT]);
