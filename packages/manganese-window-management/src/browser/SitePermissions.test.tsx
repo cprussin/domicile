@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, setDefaultTimeout } from "bun:test";
 import type { SitePermission } from "@domicile-desktop/manganese-page-requests/site-permissions";
 import type { PermissionRequest } from "@domicile-desktop/manganese-page-requests/usePermissionRequest";
 import { render, screen } from "@testing-library/react";
@@ -12,6 +12,11 @@ const SITE: readonly SitePermission[] = [
 ];
 
 const NO_SET = () => undefined;
+
+// Each test drives the popover and its Selects through user-event. CI runs
+// every turbo task at once, and under that load the first test, which pays the
+// warm-up, passes bun's 5s default.
+setDefaultTimeout(15_000);
 
 const button = (): HTMLElement =>
   screen.getByRole("button", { name: "Site permissions" });
