@@ -28,6 +28,7 @@
 #include "net/socket/unix_domain_server_socket_posix.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/cursor/domicile/desk_cursor_theme.h"
 
 namespace domicile {
 namespace {
@@ -139,7 +140,7 @@ class ControlChannelTest : public testing::Test {
     new ControlChannel(path, control_.BindNewPipeAndPassReceiver(),
                        keymap_.GetRepeatingCallback<const std::string&>(),
                        base::DoNothing(), base::DoNothing(), base::DoNothing(),
-                       Page{});
+                       cursor_theme_.GetRepeatingCallback(), Page{});
 
     base::test::TestFuture<int> accepted;
     ASSERT_EQ(
@@ -173,6 +174,7 @@ class ControlChannelTest : public testing::Test {
   std::unique_ptr<net::StreamSocket> compositor_;
   mojo::Remote<mojom::ControlChannel> control_;
   base::test::TestFuture<std::string> keymap_;
+  base::test::TestFuture<std::optional<ui::DeskCursorTheme>> cursor_theme_;
   FakeClient client_;
 };
 
@@ -233,6 +235,31 @@ TEST_F(ControlChannelTest, AWindowReachesThePageWithItsOwner) {
                 "appeared app-2 b  400x300 owner 7/1000/1000/none sandbox "
                 "org.flatpak/-/3",
                 "locked false"}));
+}
+
+// The browser process draws the pointer on a tty, so the theme stops there.
+TEST_F(ControlChannelTest, TheDesksPointerThemeReachesTheBrowser) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+
+  Say("{\"type\":\"appearance\",\"high_contrast\":false,"
+      "\"reduced_motion\":false,\"cursor\":{\"name\":\"Amber\",\"size\":64}}"
+      "\n");
+  EXPECT_EQ(cursor_theme_.Take(),
+            (ui::DeskCursorTheme{.name = "Amber", .size = 64}));
+
+  // A theme with no size is refused, not drawn at some size.
+  Say("{\"type\":\"appearance\",\"high_contrast\":false,"
+      "\"reduced_motion\":false,\"cursor\":{\"name\":\"Amber\"}}\n"
+      "{\"type\":\"appearance\",\"high_contrast\":false,"
+      "\"reduced_motion\":false,\"cursor\":{\"name\":\"Base\",\"size\":24}}"
+      "\n");
+  EXPECT_EQ(cursor_theme_.Take(),
+            (ui::DeskCursorTheme{.name = "Base", .size = 24}));
+
+  Say("{\"type\":\"appearance\",\"high_contrast\":false,"
+      "\"reduced_motion\":false}\n");
+  EXPECT_EQ(cursor_theme_.Take(), std::nullopt);
 }
 
 }  // namespace

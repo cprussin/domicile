@@ -367,7 +367,7 @@
         },
         "cursor_size": {
           "default": null,
-          "description": "The cursor size in logical pixels. Unset leaves clients their own.\nZero is refused.",
+          "description": "The cursor size in logical pixels, for clients and the engine's\npointer. Unset leaves clients their own. Zero is refused.",
           "format": "uint16",
           "maximum": 65535,
           "minimum": 0,
@@ -375,7 +375,7 @@
         },
         "cursor_theme": {
           "default": null,
-          "description": "The XCursor theme's directory name, such as `Adwaita`. Unset leaves\nclients their own.",
+          "description": "The XCursor theme's directory name, such as `Adwaita`, for clients\nand the engine's pointer. Unset leaves clients their own.",
           "type": ["string", "null"]
         },
         "font_name": {

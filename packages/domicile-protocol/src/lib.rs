@@ -496,8 +496,8 @@ pub enum HostMessage {
     WindowsTheme { theme: Theme },
 
     /// The config's accent color, contrast and reduced motion, for the shell
-    /// to follow as the Settings portal's clients do. Sent on connect and when
-    /// a reload changes it.
+    /// to follow as the Settings portal's clients do, and its pointer theme,
+    /// for the browser process. Sent on connect and when a reload changes it.
     Appearance(Appearance),
 
     /// Every system tray icon, in registration order.
@@ -586,6 +586,19 @@ pub struct Appearance {
     pub accent_color: Option<String>,
     pub high_contrast: bool,
     pub reduced_motion: bool,
+    /// The XCursor theme the browser process draws the pointer from, or
+    /// absent for Chromium's own art. The page never sees it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<CursorTheme>,
+}
+
+/// An XCursor theme at a size.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CursorTheme {
+    /// The theme's directory name, such as `Adwaita`.
+    pub name: String,
+    /// In logical pixels.
+    pub size: u16,
 }
 
 /// A dialog an application asked for through a portal.

@@ -20,6 +20,21 @@ Close the lid, then open it.
 
 Press `Ctrl+Alt+F<n>` and switch back. Expect `configuring N display(s)`.
 
+## Pointer theme
+
+On a tty, set `theme.cursor_theme` to an installed theme with a distinct arrow
+(`"Bibata-Modern-Amber-Right"`) and `theme.cursor_size = 64`. Expect:
+
+- `the desk's pointer theme is "Bibata-Modern-Amber-Right" at 64 px`, then
+  `loaded <n> cursors from "Bibata-Modern-Amber-Right"`, and that arrow on
+  screen without moving the pointer.
+- The same over a native window and in a text field (an I-beam from the
+  theme).
+- After removing both keys, the line `the desk names no pointer theme` and
+  Chromium's arrow again.
+- `no cursor theme "<theme>" on the XCursor path`: the theme is not under any
+  directory [SHELL-CONFIG.md](SHELL-CONFIG.md#theme) lists.
+
 ## Dead GPU process
 
 ```sh

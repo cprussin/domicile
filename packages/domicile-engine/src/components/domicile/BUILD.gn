@@ -772,6 +772,10 @@ source_set("control_channel") {
     "//components/domicile/mojom",
     "//mojo/public/cpp/bindings",
     "//net",
+
+    # The pointer theme the `appearance` message carries, in the shape the
+    # DRM platform's cursor factory reads.
+    "//ui/base/cursor/domicile:desk_cursor_theme",
   ]
 }
 
@@ -920,6 +924,10 @@ source_set("unit_tests") {
     # Where a pointer on another monitor goes: aura, and its tests are with
     # the fork's like the pointer's colors above.
     "//ui/aura/domicile:unit_tests",
+    # The pointer theme and the XCursor reader the DRM platform draws it with,
+    # beside //ui/base/cursor for the same reason.
+    "//ui/base/cursor/domicile:desk_cursor_theme",
+    "//ui/base/cursor/domicile:unit_tests",
   ]
 }
 
