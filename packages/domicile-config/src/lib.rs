@@ -861,11 +861,17 @@ pub fn watch(path: impl AsRef<Path>) -> Result<ConfigWatcher, ConfigError> {
 
     let (tx, rx) = std::sync::mpsc::channel();
     let reload_path = path.clone();
-    let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-        if res.is_ok() {
-            let _ = tx.send(Config::load(&reload_path));
-        }
-    })
+    // Changes only: a reload's own read is an access event, which would set off
+    // the next reload and spin forever.
+    let changes = notify::Config::default().with_event_kinds(notify::EventKindMask::CORE);
+    let mut watcher = notify::RecommendedWatcher::new(
+        move |res: notify::Result<notify::Event>| {
+            if res.is_ok() {
+                let _ = tx.send(Config::load(&reload_path));
+            }
+        },
+        changes,
+    )
     .map_err(|e| ConfigError::Io {
         path: path.display().to_string(),
         message: e.to_string(),
