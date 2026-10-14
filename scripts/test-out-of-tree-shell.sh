@@ -85,7 +85,8 @@ rm -rf "$SHELL_DIR/node_modules" "$SHELL_DIR/.vite"
 
 # Point the copy at the tarball. Edit the manifest instead of `bun add`, which
 # first resolves existing dependencies and 404s on an unreleased SDK version.
-# The example keeps the real range because a shell author writes that.
+# The example keeps its npm version because a shell author writes that;
+# .github/scripts/example-shell-from-npm.sh installs it as written.
 python3 - "$SHELL_DIR/package.json" "$SDK" <<'PYTHON'
 import json, sys
 

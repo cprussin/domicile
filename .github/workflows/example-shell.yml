@@ -1,0 +1,36 @@
+name: Example shell
+
+# Install `examples/minimal-shell` from npm as committed, type-check and build
+# it. See .github/scripts/example-shell-from-npm.sh. Not in `check.sh`, since
+# it needs npm.
+on:
+  pull_request:
+    paths:
+      - examples/minimal-shell/**
+      - .github/scripts/example-shell-from-npm.sh
+      - .github/workflows/example-shell.yml
+  push:
+    branches: [main]
+    paths:
+      - examples/minimal-shell/**
+      - .github/scripts/example-shell-from-npm.sh
+      - .github/workflows/example-shell.yml
+  workflow_dispatch:
+
+concurrency:
+  group: example-shell-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  from-npm:
+    runs-on: ubuntu-latest
+    steps:
+      # The whole history, so the SDK's commit can be checked against stable.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+      - run: .github/scripts/example-shell-from-npm.sh
