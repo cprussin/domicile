@@ -17,6 +17,10 @@ How the compositor arranges the monitors the engine scans out on. Overview:
 - A hotplug rearranges outputs instead of recreating them.
   `Screens::rearranged_into` matches by `wl_output` name, so clients stay on
   their output.
+- An engine reading whose displays overlap is skipped when no profile matches
+  and none was in force. `DrmScreen` updates its display list one display at a
+  time and the engine reports after each step, so mid-update lists can stack a
+  new monitor on another. The last report of each update is laid out.
 - A config reload re-matches profiles against the last engine reading
   (`engine_displays`, `Screens::reloaded_into`). This lets a profile take effect
   as soon as it is saved.

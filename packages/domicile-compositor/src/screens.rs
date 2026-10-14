@@ -458,8 +458,8 @@ impl Screens {
     ) -> Result<Option<Screens>, ConfigError> {
         match output.desktop() {
             Some(desktop) => Ok(Some(Screens::described(&desktop))),
-            // Not described, so the profile match decides; this never returns
-            // `None`.
+            // Not described, so the profile match or the engine's reading
+            // decides.
             None if !displays.is_empty() => self.replugged_into(displays, output, vendors),
             None if self.follows_the_window() => Ok(None),
             None => Ok(Some(Screens::nested())),
@@ -502,7 +502,11 @@ impl Screens {
     ///   mode differs from the profile's. The caller keeps the current desktop
     ///   and reports the error, as `ConfigStore` does for a config that fails
     ///   to parse.
-    /// - `Ok(None)`: the config describes the desktop.
+    /// - `Ok(None)`: keep this desktop. Either the config describes it, or no
+    ///   profile matches and the engine is mid-update: its displays overlap,
+    ///   and with no profile in force it reports again once laid out. Leaving a
+    ///   profile is always taken, since only that sends the engine the empty
+    ///   layout.
     /// - `Ok(Some(_))`: the first matching profile's layout, or the engine's
     ///   reading when none matches.
     pub fn replugged_into(
@@ -525,11 +529,26 @@ impl Screens {
                     mode: display.size,
                 })
                 .collect();
-            Ok(Some(match output.layout(&connected)? {
-                Some(layout) => Screens::from_the_layout(&layout, displays, vendors),
-                None => Screens::from_the_engine(displays, vendors),
-            }))
+            Ok(match output.layout(&connected)? {
+                Some(layout) => Some(Screens::from_the_layout(&layout, displays, vendors)),
+                None => {
+                    let read = Screens::from_the_engine(displays, vendors);
+                    (!self.scanout.is_empty() || read.is_laid_out()).then_some(read)
+                }
+            })
         }
+    }
+
+    /// Whether no two outputs overlap.
+    ///
+    /// An engine laying out its own row never overlaps displays in a finished
+    /// update. See "Where the display list comes from" in `docs/DISPLAYS.md`.
+    fn is_laid_out(&self) -> bool {
+        self.outputs.iter().enumerate().all(|(index, output)| {
+            self.outputs[..index]
+                .iter()
+                .all(|earlier| !earlier.bounds().overlaps(&output.bounds()))
+        })
     }
 
     /// Which outputs a window with these bounds is on, in [`outputs`] order.
@@ -1382,6 +1401,45 @@ mod tests {
             .expect("nothing here can fail to be applied")
             .expect("a desktop the engine defined is still the engine's");
         assert_eq!(both.size(), (4800, 1920));
+    }
+
+    /// `panel_and_projector`, with the projector where ozone puts a connector
+    /// it has not placed yet: on top of the panel.
+    fn projector_not_yet_placed() -> Vec<Display> {
+        let mut displays = panel_and_projector();
+        displays[1].position = (0, 0);
+        displays
+    }
+
+    #[test]
+    fn a_reading_the_engine_has_not_laid_out_keeps_the_desktop() {
+        // The engine lays out its own row, so its finished reading follows.
+        let one_monitor = Screens::from_the_engine(&plugged_in(), &unspelled());
+        assert_eq!(
+            one_monitor
+                .replugged_into(&projector_not_yet_placed(), &unconfigured(), &unspelled())
+                .expect("nothing here can fail to be applied"),
+            None
+        );
+    }
+
+    #[test]
+    fn a_reading_not_laid_out_is_taken_to_drop_a_profile() {
+        // The engine lays out by the profile's connectors until it hears the
+        // empty list, so keeping the profile's desktop would never send it.
+        let placed = Screens::nested()
+            .replugged_into(&two_plugged_in(), &output(HOME_OFFICE), &unspelled())
+            .expect("the profile should be applicable")
+            .expect("a matched profile defines the desktop");
+        let unplaced = placed
+            .replugged_into(
+                &projector_not_yet_placed(),
+                &output(HOME_OFFICE),
+                &unspelled(),
+            )
+            .expect("nothing here can fail to be applied")
+            .expect("leaving a profile is always taken");
+        assert!(unplaced.scanout().is_empty());
     }
 
     #[test]
