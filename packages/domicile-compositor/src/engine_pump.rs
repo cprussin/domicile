@@ -223,9 +223,9 @@ impl DomicileCompositor {
                         &self.config.current().output,
                         &self.vendors,
                     ) {
-                        // The config describes the desktop and DRM does not
-                        // override it. A monitor that arrives while the screens
-                        // are dark comes up lit, so darken it again.
+                        // The desktop stays: the config describes it, or the
+                        // engine is mid-update. A monitor that arrives while the
+                        // screens are dark comes up lit, so darken it again.
                         Ok(None) => self.keep_the_screens_dark(),
                         // `adopt_the_desktop` sets every connector's power,
                         // dark ones included.
