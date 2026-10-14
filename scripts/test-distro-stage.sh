@@ -212,7 +212,7 @@ holds_line "and is the default for https" \
   "x-scheme-handler/https=domicile-open-url.desktop"
 
 echo "the launcher's entries"
-for entry in history settings screenshot shutdown reboot; do
+for entry in history settings screenshot shutdown reboot logout; do
   file="$USR/share/applications/domicile-$entry.desktop"
   icon="$(sed -n 's/^Icon=//p' "$file" 2>/dev/null)"
   preview="$(sed -n 's/^X-Domicile-Preview=//p' "$file" 2>/dev/null)"
@@ -229,6 +229,8 @@ holds_line "Shutdown runs domicile power-off" \
   "$USR/share/applications/domicile-shutdown.desktop" "Exec=/usr/bin/domicile power-off"
 holds_line "Reboot runs domicile reboot" \
   "$USR/share/applications/domicile-reboot.desktop" "Exec=/usr/bin/domicile reboot"
+holds_line "Logout runs domicile log-out" \
+  "$USR/share/applications/domicile-logout.desktop" "Exec=/usr/bin/domicile log-out"
 
 left="$(grep -rlE '@[a-z]+@' "$USR/share" 2>/dev/null)"
 expect "no placeholder is left unfilled" "" "$left"

@@ -396,8 +396,8 @@
       #                               Domicile's own app modules, which
       #                               `domicile-<name>` runs
       #   share/applications/         launcher entries for History,
-      #                               Settings, Screenshot, Shutdown and
-      #                               Reboot
+      #                               Settings, Screenshot, Shutdown,
+      #                               Reboot and Logout
       #
       # The binaries are copied, not symlinked. `domicile` finds its siblings
       # from `current_exe`, which resolves symlinks, so a symlink would point
@@ -471,6 +471,11 @@
           id = "reboot";
           icon = ./nix/launcher/reboot.svg;
           preview = ./nix/launcher/reboot-preview.svg;
+        }}
+        ${launcherFile {
+          id = "logout";
+          icon = ./nix/launcher/logout.svg;
+          preview = ./nix/launcher/logout-preview.svg;
         }}
         # Tells `xdg-desktop-portal` which interfaces Domicile implements. The
         # compositor owns the D-Bus name and sets the matching

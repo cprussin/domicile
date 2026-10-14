@@ -1,6 +1,7 @@
-//! `domicile power-off` and `domicile reboot`: the launcher's Shutdown and
-//! Reboot. Each asks in the desktop's Access dialog, which the shell draws
-//! (`docs/PORTALS.md`), then runs `systemctl`.
+//! `domicile power-off`, `domicile reboot` and `domicile log-out`: the
+//! launcher's Shutdown, Reboot and Logout. Each asks in the desktop's Access
+//! dialog, which the shell draws (`docs/PORTALS.md`), then runs `systemctl` or
+//! `loginctl`.
 
 use std::collections::HashMap;
 
@@ -12,20 +13,30 @@ const BACKEND: &str = "org.freedesktop.impl.portal.desktop.domicile";
 const BACKEND_PATH: &str = "/org/freedesktop/portal/desktop";
 const ACCESS: &str = "org.freedesktop.impl.portal.Access";
 
-/// What to do to the computer.
+/// What to do to the computer or the login session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Power {
     Off,
     Reboot,
+    LogOut,
 }
 
 impl Power {
-    /// The `systemctl` arguments that do it. `-i` because the user just said
-    /// yes, so an inhibitor should not refuse it.
-    pub fn systemctl(self) -> [&'static str; 2] {
+    /// The program and arguments that do it.
+    ///
+    /// - Power off and reboot pass `-i` to `systemctl`: the user just said
+    ///   yes, so an inhibitor should not refuse it.
+    /// - Log out terminates `session` (`XDG_SESSION_ID`), which returns to the
+    ///   login manager. It is an error outside a login session.
+    pub fn command(self, session: Option<&str>) -> Result<(&'static str, Vec<String>), String> {
+        let args = |args: &[&str]| args.iter().map(|arg| arg.to_string()).collect();
         match self {
-            Power::Off => ["poweroff", "-i"],
-            Power::Reboot => ["reboot", "-i"],
+            Power::Off => Ok(("systemctl", args(&["poweroff", "-i"]))),
+            Power::Reboot => Ok(("systemctl", args(&["reboot", "-i"]))),
+            Power::LogOut => match session {
+                Some(session) => Ok(("loginctl", args(&["terminate-session", session]))),
+                None => Err("XDG_SESSION_ID is not set: no login session to log out of".into()),
+            },
         }
     }
 
@@ -34,6 +45,7 @@ impl Power {
         match self {
             Power::Off => "shutdown",
             Power::Reboot => "reboot",
+            Power::LogOut => "logout",
         }
     }
 
@@ -49,6 +61,11 @@ impl Power {
                 "Reboot?",
                 "Are you sure you want to reboot? Unsaved work is lost.",
                 "Reboot",
+            ),
+            Power::LogOut => (
+                "Log out?",
+                "Are you sure you want to log out? Unsaved work is lost.",
+                "Log out",
             ),
         }
     }

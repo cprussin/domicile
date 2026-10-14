@@ -1,0 +1,9 @@
+# Asks in Domicile's Access dialog, then runs `loginctl terminate-session`.
+[Desktop Entry]
+Type=Application
+Name=Logout
+Comment=End the session and return to the login screen
+Exec=@bin@/domicile log-out
+Icon=@icon@
+X-Domicile-Preview=@preview@
+Terminal=false

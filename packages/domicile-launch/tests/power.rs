@@ -1,4 +1,4 @@
-//! Tests for asking before powering off or rebooting.
+//! Tests for asking before powering off, rebooting or logging out.
 
 use std::collections::HashMap;
 use std::os::unix::net::UnixStream;
@@ -125,6 +125,20 @@ fn reboot_asks_its_own_question() {
 }
 
 #[test]
+fn log_out_asks_its_own_question() {
+    let (_server, client, asked) = a_portal(0);
+    assert_eq!(confirmed(&client, Power::LogOut), Ok(true));
+    let asked = asked.lock().unwrap();
+    assert!(asked[0].handle.contains("/launcher/logout_"));
+    assert_eq!(asked[0].title, "Log out?");
+    assert_eq!(
+        asked[0].subtitle,
+        "Are you sure you want to log out? Unsaved work is lost."
+    );
+    assert_eq!(asked[0].grant, "Log out");
+}
+
+#[test]
 fn a_canceled_or_unanswered_dialog_is_a_no() {
     // 2 is the portal's "ended some other way", such as no shell to ask.
     for response in [1, 2] {
@@ -140,7 +154,29 @@ fn an_unknown_answer_is_an_error() {
 }
 
 #[test]
-fn each_runs_systemctl_ignoring_inhibitors() {
-    assert_eq!(Power::Off.systemctl(), ["poweroff", "-i"]);
-    assert_eq!(Power::Reboot.systemctl(), ["reboot", "-i"]);
+fn power_runs_systemctl_ignoring_inhibitors() {
+    assert_eq!(
+        Power::Off.command(None),
+        Ok(("systemctl", vec!["poweroff".to_string(), "-i".to_string()]))
+    );
+    assert_eq!(
+        Power::Reboot.command(None),
+        Ok(("systemctl", vec!["reboot".to_string(), "-i".to_string()]))
+    );
+}
+
+#[test]
+fn log_out_terminates_this_login_session() {
+    assert_eq!(
+        Power::LogOut.command(Some("4")),
+        Ok((
+            "loginctl",
+            vec!["terminate-session".to_string(), "4".to_string()]
+        ))
+    );
+}
+
+#[test]
+fn log_out_outside_a_login_session_is_an_error() {
+    assert!(Power::LogOut.command(None).is_err());
 }
