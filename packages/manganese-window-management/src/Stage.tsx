@@ -24,7 +24,7 @@ import type {
   Placement,
   Screenful,
 } from "./placement";
-import { contentsOf, TILED } from "./placement";
+import { contentsOf, TILED, wellDepthOf } from "./placement";
 import type { Spot } from "./pointer-warp";
 import type { Popup } from "./popup";
 import { popupsOver } from "./popup";
@@ -266,9 +266,10 @@ export const Stage = memo(
                     !desk.fullscreen.has(tab.id) &&
                     castsFloatShadow(desk.floats.get(tab.id), tab, tabsShown)
                   }
-                  depth={tab.depth}
+                  depth={wellDepthOf(tab.depth)}
                   dragging={stretching || held.has(tab.id)}
                   motion={motion}
+                  nested={tab.strip.nested}
                   rect={tab.well}
                 />
               </Sliding>
@@ -1251,6 +1252,7 @@ const GroupStrip = memo(
           fullscreen={fullscreen}
           group={strip.group}
           motion={motion}
+          nested={strip.nested}
           onAim={onAim}
           onDrop={onDrop}
           onDropOn={droppedOn}

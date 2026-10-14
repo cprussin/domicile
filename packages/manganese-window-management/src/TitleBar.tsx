@@ -251,6 +251,7 @@ export const TitleBar = ({
             : tabStyles({
                 focus,
                 joined: !hidden && tabbed === Layout.Tabbed,
+                nested: strip.nested,
                 open: !hidden,
               }),
           settlingStyles(),
@@ -481,6 +482,21 @@ const tabStyles = cva({
       focus: ["focused", "leaf", "resting", "selected"],
       open: false,
     },
+    // The open tab's edge follows its strip's: stronger on a well. See
+    // `TabStrip`.
+    {
+      css: { borderColor: "borderStrong" },
+      nested: false,
+      open: true,
+    },
+    {
+      css: {
+        borderColor:
+          "color-mix(in oklab, {colors.foreground} 40%, {colors.background})",
+      },
+      nested: true,
+      open: true,
+    },
   ],
   variants: {
     // Weight as well as color, for users who cannot tell the colors apart.
@@ -492,11 +508,11 @@ const tabStyles = cva({
     },
     // Over the strip's bottom row, which draws the window's top edge.
     joined: { false: {}, true: { marginBlockEnd: "-1px" } },
+    nested: { false: {}, true: {} },
     open: {
       // A press opens a hidden tab.
       false: { borderColor: "transparent", color: "muted", cursor: "pointer" },
       true: {
-        borderColor: "borderStrong",
         color: "foreground",
       },
     },

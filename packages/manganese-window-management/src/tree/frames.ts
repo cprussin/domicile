@@ -70,6 +70,11 @@ export type StripPlace = {
   /** The container the strip belongs to. */
   group: StripGroup;
   /**
+   * Whether the strip sits in another group's well (see `Tab.well`), which
+   * draws its edges stronger to stand out on the well.
+   */
+  nested: boolean;
+  /**
    * Whether its container shows it: the open tab, raised to join its window.
    * Hidden tabs lie flat on the strip.
    */
@@ -129,7 +134,7 @@ export const framesOf = (tiling: Tiling, area: Rect, gap: number): Tiled => {
   const { root } = tiling;
   return root === undefined
     ? NOTHING
-    : placed(root, area, gap, focusPathOf(root, tiling.depth), false);
+    : placed(root, area, gap, focusPathOf(root, tiling.depth), false, false);
 };
 
 /**
@@ -194,7 +199,7 @@ export const focusBoxOf = (
  *
  * `pointed` is the rest of the focus path below this node, or `undefined` if
  * the focus is not inside it. `selected` is whether the node is inside the
- * container `focus parent` selected.
+ * container `focus parent` selected. `nested` is whether it is inside a well.
  */
 const placed = (
   node: LayoutNode,
@@ -202,6 +207,7 @@ const placed = (
   gap: number,
   pointed: Path | undefined,
   selected: boolean,
+  nested: boolean,
 ): Tiled => {
   switch (node.kind) {
     case NodeKind.Window: {
@@ -235,13 +241,14 @@ const placed = (
                 gap,
                 within(pointed, at),
                 inside,
+                nested,
               ),
             ),
           );
         }
         case Layout.Stacking:
         case Layout.Tabbed: {
-          return titled(node, node.layout, area, gap, pointed, inside);
+          return titled(node, node.layout, area, gap, pointed, inside, nested);
         }
       }
     }
@@ -347,13 +354,14 @@ const titled = (
   gap: number,
   pointed: Path | undefined,
   selected: boolean,
+  nested: boolean,
 ): Tiled => {
   const contents = contentsOf(container, area);
   return joined(
     container.children.map((child, at) => {
       const bar = titleOf(container, area, at);
       const showing = at === container.focused;
-      const strip = stripPlaceOf(container, area, at);
+      const strip = stripPlaceOf(container, area, at, nested);
       switch (child.kind) {
         case NodeKind.Window: {
           // A window's surface tucks under the bars, as in `surfaceOf`.
@@ -393,6 +401,7 @@ const titled = (
                 gap,
                 within(pointed, at),
                 selected,
+                true,
               )
             : NOTHING;
           return {
@@ -433,6 +442,7 @@ const stripPlaceOf = (
   container: Container,
   area: Rect,
   at: number,
+  nested: boolean,
 ): StripPlace => {
   const count = container.children.length;
   return {
@@ -450,6 +460,7 @@ const stripPlaceOf = (
       },
       windows: windowsIn(container),
     },
+    nested,
     open: at === container.focused,
     tabs: count,
   };

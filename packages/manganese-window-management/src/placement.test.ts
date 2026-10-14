@@ -2,7 +2,14 @@ import { describe, expect, it } from "bun:test";
 
 import { Axis } from "./direction";
 import type { Geometry } from "./placement";
-import { contentsOf, LEAVING, placementsOf, raised, TILED } from "./placement";
+import {
+  contentsOf,
+  LEAVING,
+  placementsOf,
+  raised,
+  TILED,
+  wellDepthOf,
+} from "./placement";
 import { SURFACE_TUCK, TITLE_BAR } from "./rect";
 import { Layout } from "./tree/node";
 import { appWindowId } from "./window";
@@ -84,6 +91,7 @@ describe("placementsOf", () => {
           node: { id: appWindowId("kitty"), up: 1 },
           windows: [appWindowId("kitty")],
         },
+        nested: false,
         open: true,
         tabs: 1,
       },
@@ -539,5 +547,17 @@ describe("the focus box", () => {
     );
 
     expect(focusBoxOf(state)).toBeUndefined();
+  });
+});
+
+describe("wellDepthOf", () => {
+  // A tab switch inside the well draws the tab it hides just under the tiled
+  // windows; the well must stay under that.
+  it("puts a tiled well under a tab being hidden in it", () => {
+    expect(wellDepthOf(TILED)).toBeLessThan(TILED - 1);
+  });
+
+  it("keeps a float's well at its float's depth", () => {
+    expect(wellDepthOf(4)).toBe(4);
   });
 });

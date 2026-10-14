@@ -98,9 +98,9 @@ export type Screenful = {
  * The depth a tab switch draws the tab it hides at, under every tiled window.
  * See {@link Placement.behind}.
  *
- * The wallpaper shares this depth but comes first in the document, so it stays
- * underneath. `windowConcealing` then holds the tab at -1 while the new one
- * fades in.
+ * The wallpaper and tiled wells share this depth but come first in the
+ * document, so they stay underneath. `windowConcealing` then holds the tab at
+ * -1 while the new one fades in.
  */
 const COVERED = -2;
 
@@ -112,6 +112,15 @@ export const TILED = 0;
  * Floats are two apart, leaving each one's {@link raised} depth free.
  */
 const FLOATING = 2;
+
+/**
+ * The depth a group's well is drawn at, under the windows at `depth`. A tiled
+ * well sits at {@link COVERED}, under the tab a switch inside it hides, which
+ * would otherwise vanish under the well instead of fading out. See
+ * `GroupWell`.
+ */
+export const wellDepthOf = (depth: number): number =>
+  depth === TILED ? COVERED : depth;
 
 /**
  * The depth of a window's open tab and popups: over the window, under the next
