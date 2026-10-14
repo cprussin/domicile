@@ -47,7 +47,11 @@ item when it ships.
    - Checked by installing in containers; no packaged session has run on
      hardware.
 
-7. **Revisit the docs for users.** Start with the README.
+7. **Popups and bubbles move with their window's frame.** The engine shows
+   synced frames; the compositor, protocol and manganese do not use them yet.
+   [FRAME-SYNCED-SURFACES.md](docs/architecture/FRAME-SYNCED-SURFACES.md#plan).
+
+8. **Revisit the docs for users.** Start with the README.
    - A clearer reading path through the docs.
    - Screenshots and videos of manganese.
    - A short getting started guide: installing and setup.
