@@ -207,12 +207,15 @@ class MODULES_EXPORT DomicileHost final
                                 const String& url,
                                 ExceptionState&);
   void closeBrowserWindow(ScriptState*, const String& id, ExceptionState&);
-  // GETs `url` with the profile's cookies, through the browser's own pipe.
+  // Sends `method` to `url` with the profile's cookies, through the browser's
+  // own pipe.
   // The browser refuses what the page may not send; see the IDL.
   ScriptPromise<DomicileFetchResponse> fetchWithCookies(
       ScriptState*,
       const String& url,
+      const String& method,
       const HeapVector<Member<DomicileFetchHeader>>& headers,
+      const String& body,
       const String& sapisid_hash_origin,
       ExceptionState&);
   // Every client window, in the order they appeared. Not const: reading it

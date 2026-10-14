@@ -22,8 +22,10 @@ describe("deskInbox", () => {
     expect(fake.calls).toStrictEqual([
       [
         "fetchWithCookies",
-        "https://mail.google.com/mail/feed/atom?authuser=me%40example.com",
+        "https://mail.google.com/mail/?authuser=me%40example.com",
+        "GET",
         [],
+        null,
         null,
       ],
     ]);

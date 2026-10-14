@@ -30,18 +30,28 @@ inline constexpr size_t kShellFetchMaxBody = 1024 * 1024;
 // How long a request may take, under the minute a bar item polls on.
 inline constexpr base::TimeDelta kShellFetchTimeout = base::Seconds(30);
 
-// Why the shell may not GET `url` with `headers`, hashed for
+// Why the shell may not send to `url` with `headers`, hashed for
 // `sapisid_hash_origin` if it is given, or nothing when it may.
 //
 // Refused: anything while the desk is locked, an address that is not https, a
-// malformed header, a `Cookie` header or one the network stack sets itself, a
-// hash origin that is not an https origin, and an `Authorization` header
-// beside a hash, which is one.
+// malformed header, a `Cookie` or `Origin` header or one the network stack
+// sets itself, a hash origin that is not an https origin, and an
+// `Authorization` header beside a hash, which is one.
 std::optional<std::string> ShellFetchRefusal(
     const GURL& url,
     const std::vector<mojom::ShellFetchHeaderPtr>& headers,
     const std::optional<std::string>& sapisid_hash_origin,
     bool desk_locked);
+
+// Why the shell may not send `method` with `body`, or nothing when it may.
+// GET with no body, or POST with a body no larger than kShellFetchMaxBody.
+std::optional<std::string> ShellFetchMethodRefusal(
+    std::string_view method,
+    const std::optional<std::string>& body);
+
+// Whether a request follows redirects: only a GET without a SAPISIDHASH. A
+// POST's body and a hash are for the address the page named.
+bool ShellFetchFollowsRedirects(std::string_view method, bool hashed);
 
 // Why the shell's request may not follow a redirect to `to`, or nothing when
 // it may. Every address it reaches must be https, as the first must.

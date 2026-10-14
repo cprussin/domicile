@@ -22,13 +22,13 @@ const notPaused = () => false;
 
 const noAnswerLeft = () => Promise.reject(new Error("test: no answer left"));
 
-/** A read that counts how often it ran and answers `unread` that many. */
+/** A read that counts how often it ran and answers a total that many. */
 const counting = () => {
   const reads = { count: 0 };
   return {
     read: () => {
       reads.count += 1;
-      return Promise.resolve(Inbox.Unread(reads.count));
+      return Promise.resolve(Inbox.Counted(reads.count, 0));
     },
     reads,
   };
@@ -58,7 +58,7 @@ describe("watchInbox", () => {
     await settle();
     stop();
 
-    expect(seen).toStrictEqual([Inbox.Unread(1), Inbox.Unread(2)]);
+    expect(seen).toStrictEqual([Inbox.Counted(1, 0), Inbox.Counted(2, 0)]);
   });
 
   it("reads nothing while paused", async () => {
