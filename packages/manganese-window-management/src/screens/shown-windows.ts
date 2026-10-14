@@ -3,27 +3,28 @@ import { appIdOf, browserIdOf } from "../window";
 import type { StageScreen } from "./stage-screens";
 
 /**
- * The windows on screen, each with its whole frame: its bar and contents. A
- * hidden tab shows only its bar, so it is left out.
+ * The windows on screen, each cropped to its contents: a screenshot of one
+ * leaves out its title bar or tab. A hidden tab has no contents on screen, so
+ * it is left out.
  */
 export const shownWindowsOf = (
   screens: readonly StageScreen[],
 ): ShownWindow[] =>
   screens.flatMap(({ screenful }) =>
-    screenful.placements.flatMap(({ frame, id, surface }) =>
-      surface === undefined ? [] : [shownWindow(id, frame)],
+    screenful.placements.flatMap(({ id, surface }) =>
+      surface === undefined ? [] : [shownWindow(id, surface)],
     ),
   );
 
-/** Window `id` shown in `frame`. */
-const shownWindow = (id: string, frame: ShownWindow["box"]): ShownWindow => {
+/** Window `id` shown in `box`. */
+const shownWindow = (id: string, box: ShownWindow["box"]): ShownWindow => {
   const appId = appIdOf(id);
   const browser = browserIdOf(id);
   if (appId !== undefined) {
-    return ShownWindow.App(appId, frame);
+    return ShownWindow.App(appId, box);
   } else if (browser === undefined) {
     throw new Error(`shell: window ${id} is neither a client's nor a browser`);
   } else {
-    return ShownWindow.Browser(browser, frame);
+    return ShownWindow.Browser(browser, box);
   }
 };

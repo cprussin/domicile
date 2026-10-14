@@ -147,10 +147,10 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   - The picker lists screens and windows apart. A screen is named by its
     make and model, a window by its application's desktop entry and its
     title.
-  - A window the shell shows is its whole frame on the desk (title bar,
-    address bar or tab strip included), so it shows what is over it. The
-    shell passes its frames as `shownWindows`; without them the picker reads
-    the page's `<app>` and `<webview window>` boxes. A box is placed with the
+  - A window the shell shows is its box on the desk, so it shows what is
+    over it. The box leaves out the shell's title bar or tab. The shell
+    passes its boxes as `shownWindows`; without them the picker reads the
+    page's `<app>` and `<webview window>` boxes. A box is placed with the
     frozen desk's `desk` rectangle: the page's CSS pixels are the desk's
     logical pixels.
   - A window the shell does not show (a hidden tab, another workspace) is
