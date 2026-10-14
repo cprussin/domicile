@@ -284,6 +284,10 @@ Each entry in `domicile.windows` describes one client window.
 - **Client frames:** `clientFrame` is `true` when the client asked to draw its
   own frame. `shell-manganese` leaves its title bar off such a window while it
   floats.
+- **Shortcut inhibitors:** `inhibitsShortcuts` is `true` while the client
+  holds `zwp_keyboard_shortcuts_inhibitor_v1`, as a VM or remote desktop
+  viewer does. A change fires `windowschanged`. See
+  [Keybindings](#keybindings).
 - **Limits:** `minWidth`, `minHeight`, `maxWidth` and `maxHeight` give the
   client's limits (`null` for none). Outside them, the client's frame is cut
   off or stretched. `shell-manganese` keeps floating windows within them.
@@ -509,9 +513,12 @@ bindKeys(
 - Command meanings are yours. Document them in your README, as
   [manganese does](/packages/shell-manganese/README.md). Manganese takes keys
   from `runManganese({ keybindings })`, defaulting to sway's.
-- Grabs are never released, so a key bound in any mode is taken from every
-  client for the session. Design:
-  [KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md).
+- While bound, a key bound in any mode is taken from every client. `unbind`
+  gives the chords back (`domicile.ungrabShortcut`). Each `grabShortcut` needs
+  its own `ungrabShortcut`.
+- A window with `inhibitsShortcuts` gets grabbed chords as keys while it has
+  the keyboard; no `shortcut` fires. Let keys through in your own listeners
+  too. Design: [KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md).
 
 ## The configuration
 

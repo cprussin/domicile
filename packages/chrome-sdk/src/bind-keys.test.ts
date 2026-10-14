@@ -26,10 +26,15 @@ const DESK: ShellKeybindings = {
  */
 class FakeHost extends EventTarget {
   readonly grabbed: string[] = [];
+  readonly ungrabbed: string[] = [];
   readonly calls: [id: number, request: unknown][] = [];
 
   grabShortcut(chord: string): void {
     this.grabbed.push(chord);
+  }
+
+  ungrabShortcut(chord: string): void {
+    this.ungrabbed.push(chord);
   }
 
   callSystem(id: number, request: string): void {
@@ -126,6 +131,20 @@ describe("bindKeys", () => {
     host.pressed("Ctrl+q");
 
     expect(heard).toStrictEqual([]);
+  });
+
+  it("gives back every chord it grabbed once unbound, and only once", () => {
+    const { host } = bound({
+      keybindings: {
+        "Meta+Return": KeyAction.Mode("x"),
+      },
+      modes: { x: { "Meta+Escape": KeyAction.Mode("default") } },
+    });
+
+    unbind();
+    unbind();
+
+    expect(host.ungrabbed).toStrictEqual(["Meta+Return", "Meta+Escape"]);
   });
 
   it("stops listening once unbound", () => {

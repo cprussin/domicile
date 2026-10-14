@@ -41,6 +41,7 @@ struct DomicileWindowState {
   // Null for no parent.
   String transient_for;
   bool urgent = false;
+  bool inhibits_shortcuts = false;
   V8DomicileCursorShape cursor =
       V8DomicileCursorShape(V8DomicileCursorShape::Enum::kDefault);
   // Null for a toplevel.
@@ -80,6 +81,7 @@ class MODULES_EXPORT DomicileWindow final : public ScriptWrappable {
   bool clientFrame() const { return state_.client_frame; }
   const String& transientFor() const { return state_.transient_for; }
   bool urgent() const { return state_.urgent; }
+  bool inhibitsShortcuts() const { return state_.inhibits_shortcuts; }
   V8DomicileCursorShape cursor() const { return state_.cursor; }
   const String& parent() const { return state_.parent; }
   std::optional<double> x() const { return state_.x; }

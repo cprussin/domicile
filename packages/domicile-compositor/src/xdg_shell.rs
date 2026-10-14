@@ -54,6 +54,7 @@ impl XdgShellHandler for DomicileCompositor {
         // Register a new window with `Host`, which assigns an app id. The
         // chromes hear of it when it first draws, in `announce_a_new_window`,
         // by when its client has said what it is.
+        let wl_surface = surface.wl_surface().clone();
         {
             let mut host = self.hub.host.lock().unwrap();
             let app_id = host.app_created(owner_of(surface.wl_surface()));
@@ -75,6 +76,7 @@ impl XdgShellHandler for DomicileCompositor {
         // An inhibitor taken before the window mapped starts holding now (see
         // `crate::idle::holds`), which may wake a dark desktop.
         self.the_windows_changed("a window appeared under an inhibitor");
+        self.a_window_may_have_taken_the_shortcuts(&wl_surface);
     }
 
     /// A client set or changed its window title.

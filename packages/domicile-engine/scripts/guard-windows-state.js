@@ -110,6 +110,7 @@ export const Shell = (_root, desktop) => {
       gid: window.gid,
       grab: window.grab,
       height: window.height,
+      inhibitsShortcuts: window.inhibitsShortcuts,
       maxHeight: window.maxHeight,
       maxWidth: window.maxWidth,
       minHeight: window.minHeight,

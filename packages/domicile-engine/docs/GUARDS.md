@@ -55,7 +55,7 @@ Under `under-wayland.sh` unless marked headless.
 | `guard-desk-state.sh` | the desk's state attributes (idle, lock, themes, clipboard, tray with each icon's bus, menu and `itemIsMenu`, modifiers) say what the compositor said, to a shell that reads without listening; the pointer theme on `appearance` reaches the browser process. Headless |
 | `guard-held-moments.sh` | a `focusrequested` sent before the shell listens reaches its first listener, once. Headless |
 | `guard-asks-promise.sh` | `searchFiles()` resolves with its answer, and a newer search rejects the older with an `AbortError`. Headless |
-| `guard-shortcut-chords.sh` | a chord grabbed by name is resolved against the compositor's keyboard, taken from the page and released by name; a bad or untypable chord throws. Headless |
+| `guard-shortcut-chords.sh` | a chord grabbed by name is resolved against the compositor's keyboard, taken from the page and released by name, and given back once every grab is ungrabbed; a bad or untypable chord throws. Headless |
 | `guard-desktop-geometry.sh` | the engine reports desktop size and density to the compositor without the page's help, and the page has the whole window (patch 0095). Headless |
 | `guard-shortcuts-inhibitor.sh` | a nested engine sends `inhibit_shortcuts` to the host (patch 0038) |
 | `guard-shortcuts-inhibitor-chord.sh` | sway honors it: `Mod4+y` reaches the page, not sway. Needs a reachable sway |

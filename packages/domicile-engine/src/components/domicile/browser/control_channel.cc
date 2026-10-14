@@ -477,9 +477,15 @@ void ControlChannel::GrabShortcut(mojom::ShortcutPtr shortcut) {
   // compositor. This process is the only layer above a focused guest, so the
   // set lives here and `WebViewGuest::PreHandleKeyboardEvent` matches against
   // it.
-  ShortcutRegistry::Get().Grab(Chord{shortcut->keycode, shortcut->alt,
-                                     shortcut->ctrl, shortcut->shift,
-                                     shortcut->meta});
+  ShortcutRegistry::Get().Grab(
+      channel_, Chord{shortcut->keycode, shortcut->alt, shortcut->ctrl,
+                      shortcut->shift, shortcut->meta});
+}
+
+void ControlChannel::UngrabShortcut(mojom::ShortcutPtr shortcut) {
+  ShortcutRegistry::Get().Ungrab(
+      channel_, Chord{shortcut->keycode, shortcut->alt, shortcut->ctrl,
+                      shortcut->shift, shortcut->meta});
 }
 
 void ControlChannel::Key(const std::string& app_id,
@@ -732,6 +738,15 @@ void ControlChannel::DispatchLine(const std::string& line) {
     const std::string* desktop_id = message.FindString("desktop_id");
     if (app_id && desktop_id) {
       client_->AppDesktopId(*app_id, *desktop_id);
+    }
+    return;
+  }
+
+  if (*type == "app_inhibits_shortcuts") {
+    const std::string* app_id = message.FindString("app_id");
+    const std::optional<bool> inhibits = message.FindBool("inhibits");
+    if (app_id && inhibits) {
+      client_->AppInhibitsShortcuts(*app_id, *inhibits);
     }
     return;
   }

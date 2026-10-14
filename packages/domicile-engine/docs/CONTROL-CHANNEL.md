@@ -30,12 +30,13 @@ The engine has two channels to the rest of Domicile:
 - **Inbound:** `welcome`, `app_appeared`, `app_titled`, `app_desktop_id`,
   `app_resized`, `app_min_size`, `app_max_size`, `popup_placed`, `app_closed`,
   `app_cursor`, `app_presented`, `app_suspended`, `app_transient_for`,
-  `app_urgent`, `modifiers`, `found_files`, `clipboard`, `theme`,
+  `app_urgent`, `app_inhibits_shortcuts`, `modifiers`, `found_files`,
+  `clipboard`, `theme`,
   `windows_theme`, `appearance`, `focus_changed`, `focus_requested`,
   `displays`, `keymap`, `extensions`, `tray`, `notifications`, `shell_config`,
   `idle`, `locked`, `system`, `portal_requests`.
 - **Handled in the browser, never sent to the compositor:** `grab_shortcut`,
-  `warp_pointer`.
+  `ungrab_shortcut`, `warp_pointer`.
 - **Not from the compositor:** `browserwindowschanged`, the desk's browser
   windows, which the browser owns
   (`components/domicile/mojom/browser_windows.mojom`).
@@ -82,6 +83,14 @@ The engine has two channels to the rest of Domicile:
   back as `ShortcutReleased`, which the page pairs with the press as
   `shortcutrelease`. Chromium drops key-ups after a key-down the delegate
   took, so patch `0100` prehandles every key-up. See `components/domicile/browser/shortcut_registry.h`.
+- **`ungrab_shortcut`**: the page's `ungrabShortcut` answers one
+  `grabShortcut` by name; the last one sends it. Claims are per page, and a
+  closed page's are dropped when an open page lets go of the chord.
+- **`app_inhibits_shortcuts`**: a window holds a
+  `zwp_keyboard_shortcuts_inhibitor_v1`. It sets
+  `DomicileWindow.inhibitsShortcuts`, and while that window has the keyboard
+  the page's grabbed chords are its keys. See
+  [KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md).
 - **`warp_pointer`**: the browser owns the pointer (a DRM cursor plane on a
   tty, the host's pointer when nested), so the compositor cannot move it.
   - Use: focus-follows-mouse desktops. After a keyboard focus change, the

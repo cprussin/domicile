@@ -14,31 +14,37 @@ export type GlobalShortcutsHost = Pick<
   | "answerPortalRequest"
   | "grabShortcut"
   | "removeEventListener"
+  | "ungrabShortcut"
 >;
 
 /**
  * Grab every chord applications hold, and report each press and release.
  * Returns a function that stops reporting.
  *
- * Grabs are never released (see `bindKeys`), so a chord an application let go
- * of stays grabbed and reports nothing. A keysym the layout cannot type is
- * logged, so the other chords still work.
+ * A chord no application holds any more is given back, and so is every chord
+ * on stop. A keysym the layout cannot type is logged once, so the other chords
+ * still work.
  */
 export const fireGlobalShortcuts = (
   host: GlobalShortcutsHost,
 ): (() => void) => {
-  const grabbed = new Set<string>();
+  // Each chord tried, and whether the engine took it: only a chord it took is
+  // given back, so another grab of the same chord is left alone.
+  const grabbed = new Map<string, boolean>();
   let byChord = new Map<string, readonly number[]>();
 
   const stopWatching = watchBoundShortcuts(host, (shortcuts) => {
-    for (const { chord } of shortcuts) {
+    const held = new Set(shortcuts.map(({ chord }) => chord));
+    for (const chord of held) {
       if (!grabbed.has(chord)) {
-        grabbed.add(chord);
-        try {
-          host.grabShortcut(chord);
-        } catch (error) {
-          // biome-ignore lint/suspicious/noConsole: the user fixes a chord the layout cannot type, so the shell reports it
-          console.error(error);
+        grabbed.set(chord, grab(host, chord));
+      }
+    }
+    for (const [chord, took] of grabbed) {
+      if (!held.has(chord)) {
+        grabbed.delete(chord);
+        if (took) {
+          host.ungrabShortcut(chord);
         }
       }
     }
@@ -63,5 +69,23 @@ export const fireGlobalShortcuts = (
     stopWatching();
     host.removeEventListener("shortcut", onShortcut);
     host.removeEventListener("shortcutrelease", onRelease);
+    for (const [chord, took] of grabbed) {
+      if (took) {
+        host.ungrabShortcut(chord);
+      }
+    }
+    grabbed.clear();
   };
+};
+
+/** Grab `chord`, and say whether the engine took it. */
+const grab = (host: GlobalShortcutsHost, chord: string): boolean => {
+  try {
+    host.grabShortcut(chord);
+    return true;
+  } catch (error) {
+    // biome-ignore lint/suspicious/noConsole: the user fixes a chord the layout cannot type, so the shell reports it
+    console.error(error);
+    return false;
+  }
 };

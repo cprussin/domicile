@@ -38,13 +38,31 @@ void ShortcutRegistry::RemoveChannel(ChannelId channel) {
   std::erase_if(channels_, [channel](const Channel& registered) {
     return registered.id == channel;
   });
+  std::vector<Claim> kept;
+  for (const Claim& claim : grabbed_) {
+    const Claim left_over{claim.chord,
+                          claim.channel == channel ? kLeftOver : claim.channel};
+    if (std::ranges::find(kept, left_over) == kept.end()) {
+      kept.push_back(left_over);
+    }
+  }
+  grabbed_ = std::move(kept);
 }
 
-void ShortcutRegistry::Grab(const Chord& chord) {
+void ShortcutRegistry::Grab(ChannelId channel, const Chord& chord) {
   base::AutoLock held(lock_);
-  if (!IsGrabbed(chord)) {
-    grabbed_.push_back(chord);
+  const Claim claim{chord, channel};
+  if (std::ranges::find(grabbed_, claim) == grabbed_.end()) {
+    grabbed_.push_back(claim);
   }
+}
+
+void ShortcutRegistry::Ungrab(ChannelId channel, const Chord& chord) {
+  base::AutoLock held(lock_);
+  std::erase_if(grabbed_, [channel, &chord](const Claim& claim) {
+    return claim.chord == chord &&
+           (claim.channel == channel || claim.channel == kLeftOver);
+  });
 }
 
 bool ShortcutRegistry::Press(const Chord& chord, const Page& page) {
@@ -96,12 +114,13 @@ void ShortcutRegistry::Release(const Chord& chord,
 }
 
 bool ShortcutRegistry::IsGrabbed(const Chord& chord) const {
-  return std::ranges::find(grabbed_, chord) != grabbed_.end();
+  return std::ranges::any_of(
+      grabbed_, [&chord](const Claim& claim) { return claim.chord == chord; });
 }
 
 bool ShortcutRegistry::IsGrabbedKey(uint32_t keycode) const {
-  return std::ranges::any_of(grabbed_, [keycode](const Chord& chord) {
-    return chord.keycode == keycode;
+  return std::ranges::any_of(grabbed_, [keycode](const Claim& claim) {
+    return claim.chord.keycode == keycode;
   });
 }
 

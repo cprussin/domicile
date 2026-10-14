@@ -86,6 +86,7 @@ export const describedWindow = (
   gid: null,
   grab: false,
   height: null,
+  inhibitsShortcuts: false,
   maxHeight: null,
   maxWidth: null,
   minHeight: null,
