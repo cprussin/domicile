@@ -440,6 +440,20 @@ mod tests {
     }
 
     #[test]
+    fn an_application_declined_before_binds_nothing_without_a_review() {
+        let mut shortcuts = open();
+        shortcuts
+            .bind(SESSION, &[asked("talk", None)], &[chose("talk", None)])
+            .expect("open");
+
+        assert_eq!(
+            shortcuts.restore(SESSION, &[asked("talk", Some("Ctrl+t"))]),
+            Ok(Some(vec![listed("talk", None)]))
+        );
+        assert_eq!(shortcuts.bound(), []);
+    }
+
+    #[test]
     fn a_new_shortcut_is_reviewed_with_the_saved_ones_proposed_as_chosen() {
         let mut shortcuts = open();
         shortcuts
