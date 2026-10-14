@@ -16,11 +16,20 @@ It is the worked example from [WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md).
 ```sh
 bun install
 bun run build
-nix run github:cprussin/domicile/stable -- ./.vite/renderer/main_window/shell.js
+nix run github:cprussin/domicile/782471d9d4b45947bee1fbf09f7249f11bdac33d -- ./.vite/renderer/main_window/shell.js
 ```
 
-The build emits one file, `.vite/renderer/main_window/shell.js`. Domicile
-serves its directory, then starts the compositor and the engine on it.
+- The build emits one file, `.vite/renderer/main_window/shell.js`. Domicile
+  serves its directory, then starts the compositor and the engine on it.
+- The SDK version, `0.0.0-alpha-782471d9d4b4`, is published from that commit,
+  a `stable` release. Run the shell on the commit its SDK names. To move
+  forward, change both to a newer `stable` commit.
+
+To load a rebuilt shell, run this in a terminal inside the desktop:
+
+```sh
+domicile load-shell ./.vite/renderer/main_window/shell.js
+```
 
 ## Why it lives outside `packages/`
 
@@ -36,3 +45,12 @@ builds. It runs in `./scripts/check.sh shell`. It catches:
 - an `exports` entry pointing at a file `files` doesn't ship;
 - a type that won't emit to `.d.ts`;
 - a `catalog:` left in a published manifest.
+
+Two more checks cover this manifest as written:
+
+- [`/scripts/test-the-example-shell-names-one-release.sh`](/scripts/test-the-example-shell-names-one-release.sh)
+  (`./scripts/check.sh shell`): the SDK is an exact published version, and the
+  commands above name its commit and the built file.
+- [`/.github/scripts/example-shell-from-npm.sh`](/.github/scripts/example-shell-from-npm.sh)
+  (`example-shell.yml`): installs from npm, type-checks and builds a copy
+  outside the repo, and checks the commit is on `stable`.

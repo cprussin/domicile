@@ -6,9 +6,12 @@ wallpaper. It is a built web page. Domicile ships two shells (`manganese` and
 repository.
 
 - [`examples/minimal-shell`](/examples/minimal-shell) is the worked example.
+  It pins the SDK published from a `stable` commit and runs on that commit.
   [`scripts/test-out-of-tree-shell.sh`](/scripts/test-out-of-tree-shell.sh)
-  builds it against the published SDK on every `./scripts/check.sh shell`. If
-  this guide and the example disagree, the example is right.
+  builds it against the packed SDK on every `./scripts/check.sh shell`;
+  [`example-shell-from-npm.sh`](/.github/scripts/example-shell-from-npm.sh)
+  builds it from npm. If this guide and the example disagree, the example is
+  right.
 - To contribute to Domicile itself, see [`/AGENTS.md`](/AGENTS.md).
 
 More:
@@ -125,6 +128,10 @@ throw, because they are bugs in the page.
 - `bindKeys`
 - `FakeDomicileHost` (`./fake-host`), a desktop for your tests
 - types and event names for `<app>` and `<webview>`
+
+Versions are `0.0.0-alpha-<sha>`, one per `main` commit; there is no semver
+yet. Depend on the exact version whose `<sha>` matches the Domicile commit
+you run, as the example does.
 
 The desktop `Shell` is handed is the API; the SDK is its types plus helpers.
 The IDL is in
