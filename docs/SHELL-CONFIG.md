@@ -141,8 +141,9 @@ An edit applies to the running desktop, and windows stay open:
 
 - A config module is watched with its directory, except `node_modules` and
   dot directories. An edit re-evaluates it and, if it is the shell, rebuilds
-  and reloads the shell. A failure is logged, posted as a notification, and
-  leaves the desktop as it was.
+  and reloads the shell. A reload during an engine restart waits for the
+  engine. A failure is logged, posted as a notification, and leaves the
+  desktop as it was.
 - `startup` is read only at startup. Rerunning it would duplicate its
   commands.
 - A file that fails to parse is rejected and logged. The last good config

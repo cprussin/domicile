@@ -52,11 +52,12 @@ use domicile_launch::restart::{
     clear_the_last_engine, clear_the_last_one, keep_a_desktop_up, keep_the_engine_up,
     restarts_the_engine, Attempt, Ending, Policy, CLEANLY,
 };
+use domicile_launch::serving::serve;
 use domicile_launch::session::Session;
 use domicile_launch::shell_path::Shell;
 use domicile_launch::shell_source::{shell_source, ShellSource};
 use domicile_launch::spawn::{compositor, engine, Runtime};
-use domicile_launch::splash::{lay_out, tell, when_the_engine_answers, Progress};
+use domicile_launch::splash::{lay_out, tell, Progress};
 use domicile_launch::supervise::{catch_interrupts, interrupted, Running, ASK_EVERY};
 use domicile_launch::uninstall_app::uninstall_app;
 
@@ -914,7 +915,15 @@ fn answer_a_command(
             &ControlDesktop {
                 module: &page.root.join(&page.module),
                 files,
-                load: &|root, module| load_the_shell(engine, root, module, serving),
+                // Asked once: the client stops waiting after `ANSWER_WITHIN`,
+                // so a retry could load a shell after it reported a failure.
+                load: &|root, module| {
+                    let page = Shell {
+                        module: module.to_path_buf(),
+                        root: root.to_path_buf(),
+                    };
+                    load_the_shell(engine, &page, serving, &|| true)
+                },
                 open: &|url| open_url(engine, url, ANSWER_WITHIN).map_err(|why| why.to_string()),
                 open_app: &|url| {
                     open_app(engine, url, ANSWER_WITHIN).map_err(|why| why.to_string())
@@ -996,7 +1005,8 @@ fn watching_the_config(
                     &mut |_| {},
                 )
                 .and_then(as_shell)
-                .and_then(|page| load_the_shell(engine, &page.root, &page.module, serving))
+                // A reload can land while the engine restarts after a crash.
+                .and_then(|page| load_the_shell(engine, &page, serving, &while_the_engine_starts()))
             })
         });
         match reloaded {
@@ -1044,27 +1054,30 @@ fn served(serving: &Mutex<Shell>) -> Shell {
         .clone()
 }
 
-/// Sends `load_shell` to the engine and records the new shell.
-///
-/// `serving` is updated only after the engine accepts, since a refused load
-/// leaves the old shell in place. Its lock is held across the call, so loads
-/// from concurrent commands and the config watcher record the shell the
-/// engine took last.
+/// Sends `load_shell` to the engine until `given_up` and records the new
+/// shell; see [`serve`].
 fn load_the_shell(
     engine: &Path,
-    root: &Path,
-    module: &Path,
+    page: &Shell,
     serving: &Mutex<Shell>,
+    given_up: &dyn Fn() -> bool,
 ) -> Result<(), String> {
-    let mut served = serving
-        .lock()
-        .expect("nothing panics holding which shell is served");
-    load_shell(engine, root, module, ANSWER_WITHIN).map_err(|why| why.to_string())?;
-    *served = Shell {
-        module: module.to_path_buf(),
-        root: root.to_path_buf(),
-    };
-    Ok(())
+    serve(
+        page,
+        serving,
+        &|page| load_shell(engine, &page.root, &page.module, ANSWER_WITHIN),
+        given_up,
+        &mut || std::thread::sleep(ASK_EVERY),
+    )
+    .map_err(|why| why.to_string())
+}
+
+/// Gives up on the engine after twice [`PATIENCE`] from now, or on a stop
+/// request. The engine has [`PATIENCE`] to start, so this outlasts a start or
+/// restart.
+fn while_the_engine_starts() -> impl Fn() -> bool {
+    let asked = Instant::now();
+    move || interrupted() || asked.elapsed() > 2 * PATIENCE
 }
 
 /// A built shell, or why it did not build.
@@ -1127,22 +1140,8 @@ fn replacing_the_splash(
                     eprintln!("domicile: the splash missed its ending: {why}");
                 }
                 std::thread::sleep(SPLASH_ENDING);
-                let asked = Instant::now();
-                when_the_engine_answers(
-                    &mut || {
-                        let mut served = serving
-                            .lock()
-                            .expect("nothing panics holding which shell is served");
-                        load_shell(&engine, &page.root, &page.module, ANSWER_WITHIN)?;
-                        *served = page.clone();
-                        Ok(())
-                    },
-                    // The engine has its own milestone to start within.
-                    &|| interrupted() || asked.elapsed() > 2 * PATIENCE,
-                    &mut || std::thread::sleep(ASK_EVERY),
-                )
-                .map(|()| page.root.join(&page.module))
-                .map_err(|why| why.to_string())
+                load_the_shell(&engine, &page, &serving, &while_the_engine_starts())
+                    .map(|()| page.root.join(&page.module))
             });
         match loaded {
             Ok(module) => println!("the splash gave way to {}", module.display()),

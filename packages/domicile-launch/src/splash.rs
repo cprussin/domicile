@@ -14,7 +14,6 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 
 use crate::build_progress::Step;
-use crate::command_socket::CommandError;
 use crate::shell_path::Shell;
 
 /// The file the page polls, in the splash's root.
@@ -72,27 +71,6 @@ pub fn tell(splash: &Path, progress: &Progress) -> io::Result<()> {
     std::fs::rename(&staged, splash.join(PROGRESS))
 }
 
-/// Calls `load` until the engine answers it.
-///
-/// The build can finish before the engine binds its command socket, before
-/// its first page commits, or while a dead engine is being replaced, so
-/// [`CommandError::NoEngine`] and [`CommandError::NoShellWindow`] are asked
-/// again after `wait` until `given_up`. Any other answer is final.
-pub fn when_the_engine_answers(
-    load: &mut dyn FnMut() -> Result<(), CommandError>,
-    given_up: &dyn Fn() -> bool,
-    wait: &mut dyn FnMut(),
-) -> Result<(), CommandError> {
-    loop {
-        match load() {
-            Err(CommandError::NoEngine { .. } | CommandError::NoShellWindow) if !given_up() => {
-                wait()
-            }
-            answered => return answered,
-        }
-    }
-}
-
 /// Copies the files under `from` to `to`.
 fn copy_tree(from: &Path, to: &Path) -> io::Result<()> {
     std::fs::create_dir_all(to)?;
@@ -113,68 +91,6 @@ fn copy_tree(from: &Path, to: &Path) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use std::cell::Cell;
-
-    fn starting() -> CommandError {
-        CommandError::NoEngine {
-            path: "command.sock".to_string(),
-        }
-    }
-
-    #[test]
-    fn an_engine_still_starting_is_asked_again() {
-        let answers = Cell::new(0);
-        let waits = Cell::new(0);
-        let loaded = when_the_engine_answers(
-            &mut || {
-                answers.set(answers.get() + 1);
-                match answers.get() {
-                    3 => Ok(()),
-                    _ => Err(starting()),
-                }
-            },
-            &|| false,
-            &mut || waits.set(waits.get() + 1),
-        );
-        assert_eq!((loaded, answers.get(), waits.get()), (Ok(()), 3, 2));
-    }
-
-    #[test]
-    fn an_engine_whose_shell_page_has_not_committed_is_asked_again() {
-        let answers = Cell::new(0);
-        let loaded = when_the_engine_answers(
-            &mut || {
-                answers.set(answers.get() + 1);
-                match answers.get() {
-                    2 => Ok(()),
-                    _ => Err(CommandError::NoShellWindow),
-                }
-            },
-            &|| false,
-            &mut || {},
-        );
-        assert_eq!((loaded, answers.get()), (Ok(()), 2));
-    }
-
-    #[test]
-    fn a_refusal_is_final() {
-        let refused = CommandError::Refused {
-            why: "no Shell export".to_string(),
-        };
-        let loaded = when_the_engine_answers(&mut || Err(refused.clone()), &|| false, &mut || {
-            panic!("a refusal is not asked again")
-        });
-        assert_eq!(loaded, Err(refused));
-    }
-
-    #[test]
-    fn an_engine_that_never_starts_is_given_up_on() {
-        let loaded = when_the_engine_answers(&mut || Err(starting()), &|| true, &mut || {
-            panic!("given up on, so not waited for")
-        });
-        assert_eq!(loaded, Err(starting()));
-    }
 
     use crate::build_progress::Step;
 
