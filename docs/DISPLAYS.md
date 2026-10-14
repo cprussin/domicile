@@ -139,9 +139,15 @@ closes the last window, since that would exit the browser.
 
 ## Monitor names
 
+A monitor's `wl_output` name is:
+
+- `drm-<id>` when its EDID gives a make, model or serial;
+- its connector otherwise, as the kernel and sway name it: `DP-1`,
+  `HDMI-A-1`, `eDP-1`.
+
 A profile's `display` matches any of:
 
-- the `wl_output` name, `drm-<id>`;
+- the `wl_output` name;
 - the description, `"<MAKE> <MODEL> <SERIAL>"`, as kanshi and sway use;
 - the description with the maker's full name.
 
@@ -151,6 +157,12 @@ code and the compositor logs one line at startup.
 
 - The label travels as `display::Display::label` → the mojom `Display` →
   `const char*` on `DomicileDisplay`.
+- The GPU process names the connector
+  (`ui/ozone/platform/drm/domicile/connector_name.cc`). It travels as
+  `display::DisplaySnapshot::domicile_connector` → `DrmScreen::connectors()`
+  → `OzonePlatform::GetDomicileConnectors` → the mojom `Display` →
+  `DomicileConnectedDisplay::connector`. `display::Display` has no field for
+  it.
 - `ui/ozone/platform/drm/domicile/edid_name.cc` reads the serial from the EDID.
   `display::EdidParser` keeps only a hash, and the serial is what tells
   identical monitors apart. The file uses no Chromium types, so it is tested
@@ -159,7 +171,8 @@ code and the compositor logs one line at startup.
   hwdata's `pnp.ids`, read at startup from `DOMICILE_PNP_IDS` (set by the
   flake's wrapper) or the distribution's path. It is read at run time because
   the table is GPL-2+ and this repo is MIT OR Apache-2.0.
-- A monitor with no make, model or serial can only be named `drm-<id>`.
+- An engine without `connected_displays` reports no connector, so the
+  compositor names every monitor `drm-<id>`.
 
 ## Physical size and refresh
 

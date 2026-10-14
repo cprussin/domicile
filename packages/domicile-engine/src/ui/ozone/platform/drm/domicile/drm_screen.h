@@ -5,10 +5,12 @@
 #define UI_OZONE_PLATFORM_DRM_DOMICILE_DRM_SCREEN_H_
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include <string>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "ui/display/display.h"
@@ -121,6 +123,13 @@ class DrmScreen : public PlatformScreen {
         snapshots,
       const std::vector<DomicileDisplayLayout>& layout);
 
+  // The kernel's name for each display's connector ("HDMI-A-1"), by display
+  // id. `display::Display` has no field for it. Current by the time observers
+  // hear of a hotplug.
+  const base::flat_map<int64_t, std::string>& connectors() const {
+    return connectors_;
+  }
+
   // PlatformScreen:
   const std::vector<display::Display>& GetAllDisplays() const override;
   display::Display GetPrimaryDisplay() const override;
@@ -142,6 +151,7 @@ class DrmScreen : public PlatformScreen {
   const raw_ptr<DrmWindowHostManager> window_manager_;
   const raw_ptr<DrmCursor> cursor_;
   display::DisplayList display_list_;
+  base::flat_map<int64_t, std::string> connectors_;
 };
 
 }  // namespace ui

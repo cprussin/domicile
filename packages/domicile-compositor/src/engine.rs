@@ -187,16 +187,21 @@ impl PartialEq for SharedFd {
 /// `docs/DISPLAYS.md`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Display {
-    /// The engine's id, which the `wl_output` is named after. Derived from the
-    /// EDID, so it is stable across hotplugs (`Screens::rearranged_into`).
+    /// The engine's id. A monitor with a description is named `drm-<id>`.
+    /// Derived from the EDID, so it is stable across hotplugs
+    /// (`Screens::rearranged_into`).
     pub id: i64,
     /// `"<MAKE> <MODEL> <SERIAL>"` from the EDID, or empty if it has none.
     ///
     /// `output.profiles` entries match on this. MAKE is the EDID's
     /// three-letter PNP id (`DEL`); `Screens` expands it with
-    /// `crate::pnp_ids`. Becomes the `wl_output` description; the name stays
-    /// `drm-<id>`. See `docs/DISPLAYS.md#monitor-names`.
+    /// `crate::pnp_ids`. Becomes the `wl_output` description. See
+    /// `docs/DISPLAYS.md#monitor-names`.
     pub description: String,
+    /// The kernel's name for its connector (`DP-1`, `HDMI-A-1`, `eDP-1`), or
+    /// empty from an engine without `connected_displays`. Names a monitor with
+    /// no description.
+    pub connector: String,
     /// Its top-left corner, in the desktop the engine laid out.
     pub position: (i32, i32),
     /// Its native mode, in physical pixels.
@@ -365,6 +370,7 @@ struct Callbacks {
     frame_done: Option<extern "C" fn(*mut c_void, SurfaceId, u64)>,
     presented: Option<extern "C" fn(*mut c_void, SurfaceId, u64, i64, i64, u32)>,
     imported: Option<extern "C" fn(*mut c_void, SurfaceId, Request, BufferId)>,
+    connected_displays: Option<extern "C" fn(*mut c_void, *const RawConnectedDisplay, u32)>,
 }
 
 /// `DomicileClipboardItem`, laid out as in the C header: one type a copy can be
@@ -493,6 +499,17 @@ struct RawDisplay {
     physical_width_mm: i32,
     physical_height_mm: i32,
     refresh_mhz: i32,
+}
+
+/// `DomicileConnectedDisplay`, laid out as in the C header. 56 bytes, no
+/// padding.
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+struct RawConnectedDisplay {
+    display: RawDisplay,
+    /// The connector's name, borrowed for the callback. Never null; checked
+    /// in [`connected_displays_from`].
+    connector: *const std::ffi::c_char,
 }
 
 /// `DomicileDisplayLayout`, laid out as in the C header. 48 bytes, no
@@ -1307,6 +1324,7 @@ fn join(
         frame_done: Some(on_frame_done),
         presented: Some(on_presented),
         imported: Some(on_imported),
+        connected_displays: Some(on_connected_displays),
     };
     let socket_c = CString::new(socket.as_os_str().as_encoded_bytes())?;
     let connect: Symbol<unsafe extern "C" fn(*const c_char, Callbacks) -> *mut Handle> = symbol(
@@ -1414,7 +1432,7 @@ extern "C" fn on_released(user_data: *mut c_void, surface: SurfaceId, buffer: Bu
     push(user_data, Event::Released { surface, buffer });
 }
 
-/// Queues the display list.
+/// Queues the display list, from an engine that reports no connectors.
 ///
 /// An empty list is queued, not dropped: the engine never sends one, so
 /// `Screens::from_the_engine` reports it as an error.
@@ -1423,6 +1441,19 @@ extern "C" fn on_displays(user_data: *mut c_void, displays: *const RawDisplay, c
     // this call. `displays_from` copies them.
     let records = unsafe { std::slice::from_raw_parts(displays, count as usize) };
     push(user_data, Event::Displays(displays_from(records)));
+}
+
+/// Queues the display list with each display's connector. Called instead of
+/// [`on_displays`] by an engine that reports connectors.
+extern "C" fn on_connected_displays(
+    user_data: *mut c_void,
+    displays: *const RawConnectedDisplay,
+    count: u32,
+) {
+    // SAFETY: the ABI says `displays` points at `count` records, valid for
+    // this call. `connected_displays_from` copies them.
+    let records = unsafe { std::slice::from_raw_parts(displays, count as usize) };
+    push(user_data, Event::Displays(connected_displays_from(records)));
 }
 
 /// Queues a copy made in the browser, from an engine that predates
@@ -1599,17 +1630,40 @@ fn shown_from(time_ns: i64, refresh_ns: i64, flags: u32) -> Option<Shown> {
     })
 }
 
-/// Converts the ABI's display records.
+/// Converts the ABI's display records, from an engine that reports no
+/// connectors.
 fn displays_from(records: &[RawDisplay]) -> Vec<Display> {
+    records.iter().map(display_from).collect()
+}
+
+/// Converts one display record, with no connector.
+fn display_from(record: &RawDisplay) -> Display {
+    Display {
+        id: record.id,
+        description: description_of(record),
+        connector: String::new(),
+        position: (record.x, record.y),
+        size: (as_extent(record.width), as_extent(record.height)),
+        physical_mm: (record.physical_width_mm, record.physical_height_mm),
+        refresh_mhz: record.refresh_mhz,
+    }
+}
+
+/// Converts the ABI's connected display records.
+fn connected_displays_from(records: &[RawConnectedDisplay]) -> Vec<Display> {
     records
         .iter()
-        .map(|record| Display {
-            id: record.id,
-            description: description_of(record),
-            position: (record.x, record.y),
-            size: (as_extent(record.width), as_extent(record.height)),
-            physical_mm: (record.physical_width_mm, record.physical_height_mm),
-            refresh_mhz: record.refresh_mhz,
+        .map(|record| {
+            assert!(
+                !record.connector.is_null(),
+                "the engine names every display's connector"
+            );
+            Display {
+                // SAFETY: non-null per the assertion; the ABI guarantees a
+                // nul-terminated string valid for this callback.
+                connector: unsafe { copied(record.connector) },
+                ..display_from(&record.display)
+            }
         })
         .collect()
 }
@@ -1661,17 +1715,27 @@ fn logical(size: u32) -> i32 {
 
 /// Copies the panel's name out of the record.
 ///
-/// Panics on null, which the C header forbids, instead of reading it. Lossy
-/// because the engine already limits names to printable ASCII, and bad
-/// firmware should not crash the desktop.
+/// Panics on null, which the C header forbids, instead of reading it.
 fn description_of(record: &RawDisplay) -> String {
     assert!(
         !record.name.is_null(),
         "the engine names every display, even if it names it nothing"
     );
     // SAFETY: non-null per the assertion; the ABI guarantees a nul-terminated
-    // string valid for this callback, and this copies it.
-    unsafe { std::ffi::CStr::from_ptr(record.name) }
+    // string valid for this callback.
+    unsafe { copied(record.name) }
+}
+
+/// Copies a string the engine lends for a callback. Lossy because the engine
+/// already limits names to printable ASCII, and bad firmware should not crash
+/// the desktop.
+///
+/// # Safety
+///
+/// `borrowed` is a non-null, nul-terminated string valid for this call.
+unsafe fn copied(borrowed: *const c_char) -> String {
+    // SAFETY: the caller's obligation.
+    unsafe { std::ffi::CStr::from_ptr(borrowed) }
         .to_string_lossy()
         .into_owned()
 }
@@ -1707,15 +1771,16 @@ mod tests {
     }
 
     #[test]
-    fn the_callbacks_are_the_user_data_and_twelve_pointers_the_c_header_declares() {
-        // `released` follows `configure`, and `imported` is last, as in the
-        // header.
-        assert_eq!(std::mem::size_of::<Callbacks>(), 13 * 8);
+    fn the_callbacks_are_the_user_data_and_thirteen_pointers_the_c_header_declares() {
+        // `released` follows `configure`, and `connected_displays` is last, as
+        // in the header.
+        assert_eq!(std::mem::size_of::<Callbacks>(), 14 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, released), 2 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, copied_items), 9 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, frame_done), 10 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, presented), 11 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, imported), 12 * 8);
+        assert_eq!(std::mem::offset_of!(Callbacks, connected_displays), 13 * 8);
     }
 
     #[test]
@@ -1949,6 +2014,12 @@ mod tests {
     }
 
     #[test]
+    fn a_connected_display_is_a_display_and_a_pointer() {
+        // 48 (`DomicileDisplay`) + 8 (connector). No padding.
+        assert_eq!(std::mem::size_of::<RawConnectedDisplay>(), 56);
+    }
+
+    #[test]
     fn a_connector_is_the_int64_four_int32s_double_and_desk_the_c_header_declares() {
         // 8 (id) + 16 (three `int32_t`, one `uint32_t`) + 8 (`double`) + 16
         // (desk). No padding: the `double` is already aligned.
@@ -2141,6 +2212,47 @@ mod tests {
     }
 
     #[test]
+    fn a_connected_display_crosses_with_its_connector() {
+        let (display, _name) = named(
+            RawDisplay {
+                id: 9,
+                width: 1920,
+                height: 1080,
+                ..RawDisplay::default()
+            },
+            "",
+        );
+        let connector = std::ffi::CString::new("HDMI-A-1").expect("no nul in it");
+
+        assert_eq!(
+            connected_displays_from(&[RawConnectedDisplay {
+                display,
+                connector: connector.as_ptr(),
+            }]),
+            vec![Display {
+                id: 9,
+                description: String::new(),
+                connector: "HDMI-A-1".into(),
+                position: (0, 0),
+                size: (1920, 1080),
+                physical_mm: (0, 0),
+                refresh_mhz: 0,
+            }]
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "the engine names every display's connector")]
+    fn a_null_connector_is_refused_rather_than_read() {
+        let (display, _name) = named(RawDisplay::default(), "");
+
+        let _ = connected_displays_from(&[RawConnectedDisplay {
+            display,
+            connector: std::ptr::null(),
+        }]);
+    }
+
+    #[test]
     fn a_display_list_crosses_the_abi_as_the_compositor_counts_them() {
         // The projector reports no size or rate; zeros pass through as
         // zeros, which is what `wl_output` expects.
@@ -2178,6 +2290,7 @@ mod tests {
                 Display {
                     id: 7,
                     description: "BOE NE135A1M-NY1".into(),
+                    connector: String::new(),
                     position: (0, 0),
                     size: (2880, 1920),
                     physical_mm: (597, 336),
@@ -2186,6 +2299,7 @@ mod tests {
                 Display {
                     id: 9,
                     description: String::new(),
+                    connector: String::new(),
                     position: (2880, 0),
                     size: (1920, 1080),
                     physical_mm: (0, 0),

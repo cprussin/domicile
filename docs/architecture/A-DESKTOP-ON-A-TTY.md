@@ -152,8 +152,9 @@ Pause, resume and the console switch: [TTY-SESSION.md](../TTY-SESSION.md#input-f
 
 ## Outputs
 
-- The engine reports displays to the compositor in the `displays` event on the
-  engine C ABI (`DomicileDisplay`). A nested run never sends it.
+- The engine reports displays to the compositor in the `connected_displays`
+  event on the engine C ABI (`DomicileConnectedDisplay`). A nested run never
+  sends it.
 - `output.profiles` arranges displays, and the compositor tells the engine
   which connectors to light and where.
 - Details: [DISPLAYS.md](../DISPLAYS.md).

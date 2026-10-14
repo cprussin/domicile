@@ -77,8 +77,9 @@ export type DisplayPlacement = {
   /**
    * The connected display this entry places, matched by exact name.
    *
-   * On a tty the output name is `drm-<id>`. Ozone derives the id from the
-   * EDID, so it survives a replug. A panel name also matches.
+   * On a tty the output name is `drm-<id>`, or the connector (`HDMI-A-1`)
+   * for a monitor with no EDID name. Ozone derives the id from the EDID, so
+   * it survives a replug. A panel name also matches.
    */
   display: string;
   /**

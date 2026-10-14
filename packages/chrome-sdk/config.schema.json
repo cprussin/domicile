@@ -69,7 +69,7 @@
       "description": "One display of a profile: which monitor, and what to do with it.\n\nEvery field but `display` defaults to leaving the monitor as it is.",
       "properties": {
         "display": {
-          "description": "The connected display this entry places, matched by exact name.\n\nOn a tty the output name is `drm-<id>`. Ozone derives the id from the\nEDID, so it survives a replug. A panel name also matches.",
+          "description": "The connected display this entry places, matched by exact name.\n\nOn a tty the output name is `drm-<id>`, or the connector (`HDMI-A-1`)\nfor a monitor with no EDID name. Ozone derives the id from the EDID, so\nit survives a replug. A panel name also matches.",
           "type": "string"
         },
         "enabled": {

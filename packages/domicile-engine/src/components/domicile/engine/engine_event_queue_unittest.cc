@@ -97,9 +97,14 @@ TEST(EngineEventQueueTest, ADisplayListArrivesWholeAcrossTheQueue) {
                                           .height = 1920,
                                           .physical_width_mm = 597,
                                           .physical_height_mm = 336,
-                                          .refresh_mhz = 59997});
-  pushed.displays.push_back(EngineDisplay{
-      .id = 9, .x = 2880, .y = 0, .width = 1920, .height = 1080});
+                                          .refresh_mhz = 59997,
+                                          .connector = "eDP-1"});
+  pushed.displays.push_back(EngineDisplay{.id = 9,
+                                          .x = 2880,
+                                          .y = 0,
+                                          .width = 1920,
+                                          .height = 1080,
+                                          .connector = "HDMI-A-1"});
   queue.Push(pushed);
 
   const std::vector<EngineEvent> drained = queue.Drain();
@@ -114,6 +119,8 @@ TEST(EngineEventQueueTest, ADisplayListArrivesWholeAcrossTheQueue) {
   // The C ABI points into this string, so the queue must keep it.
   EXPECT_EQ(drained[0].displays[0].name, "DEL DELL U3219Q 2ZLS413");
   EXPECT_EQ(drained[0].displays[1].name, "");
+  EXPECT_EQ(drained[0].displays[0].connector, "eDP-1");
+  EXPECT_EQ(drained[0].displays[1].connector, "HDMI-A-1");
   EXPECT_EQ(drained[0].displays[1].id, 9);
   EXPECT_EQ(drained[0].displays[1].x, 2880);
 }

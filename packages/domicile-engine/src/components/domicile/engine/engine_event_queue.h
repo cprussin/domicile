@@ -18,8 +18,8 @@ namespace domicile {
 
 // One display the browser scans out to.
 //
-// Mirrors DomicileDisplay in domicile_engine.h, except `name`: the queue owns
-// the string, and the C ABI borrows a `const char*` into it.
+// Mirrors DomicileConnectedDisplay in domicile_engine.h, except the strings:
+// the queue owns them, and the C ABI borrows a `const char*` into each.
 struct EngineDisplay {
   int64_t id = 0;
   // "<MAKE> <MODEL> <SERIAL>" from the EDID, or empty if it has none. A
@@ -34,6 +34,8 @@ struct EngineDisplay {
   int32_t physical_width_mm = 0;
   int32_t physical_height_mm = 0;
   int32_t refresh_mhz = 0;
+  // The kernel's name for its connector ("HDMI-A-1"), or empty.
+  std::string connector;
 };
 
 // One frame of a display capture.

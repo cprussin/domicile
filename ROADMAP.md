@@ -116,7 +116,6 @@ Understood and not scheduled.
 
 - **A monitor profile can require a mode but not set it.** Same for refresh
   rate. [A-DESKTOP-ON-A-TTY.md](docs/architecture/A-DESKTOP-ON-A-TTY.md).
-- **A monitor with no make, model or serial is named `drm-<id>`.**
 - **Engine popups are kept inside their window, not their CRTC.**
 - **Filter quality on lower-density displays is unmeasured.**
 - **The desk rasters what no monitor shows.**
