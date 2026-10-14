@@ -12,7 +12,8 @@
 # (docs/architecture/WEB-APPS.md, docs/HISTORY.md).
 #
 # The guard sends that line for the subject page, then an ordinary `open_url`
-# for a sentinel page. An extension reports the history after each visit.
+# for a sentinel page. An extension reports the history after each visit and
+# when its worker starts, since the worker can start after both visits.
 # Visits are recorded in order, so once the sentinel is in the history the
 # subject would be too, had it been recorded.
 #
@@ -225,8 +226,8 @@ nothing proves the history is read. The answer is printed above"
 elif [ "$SAW_SENTINEL" != "1" ]; then
   FAILURE="the sentinel, an ordinary window, never showed up in the history, \
 so the subject's absence means nothing. Check AttachTabHelpers gives an \
-ordinary window a HistoryTabHelper, and that the extension loaded and heard \
-chrome.history.onVisited"
+ordinary window a HistoryTabHelper, and that the extension's worker started \
+and reported to the page server"
 elif [ "$SUBJECT_RECORDED" != "$WANT_RECORDED" ] && [ "$NEGATIVE" = "1" ]; then
   FAILURE="the subject, opened as an ordinary window, is not in the history \
 while the sentinel is, so the run's absence proves nothing. That is \
