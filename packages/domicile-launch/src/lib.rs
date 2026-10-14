@@ -14,8 +14,8 @@
 //!   engine like `load-shell`.
 //! - `domicile screenshot`: forwarded to the compositor
 //!   ([`compositor_socket`]).
-//! - `domicile power-off` and `domicile reboot`: asked in the desktop's
-//!   Access dialog ([`power`]).
+//! - `domicile power-off`, `domicile reboot` and `domicile log-out`: asked in
+//!   the desktop's Access dialog ([`power`]).
 //! - `domicile install-app`: reads a site's web app manifest ([`web_app`],
 //!   [`web_address`]) and writes a desktop entry ([`desktop_entry`],
 //!   [`install_app`]).

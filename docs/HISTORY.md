@@ -62,6 +62,7 @@ Times are milliseconds since the epoch, fractional, on every hop.
 | `domicile-screenshot.desktop` | `domicile screenshot` |
 | `domicile-shutdown.desktop` | `domicile power-off`: `systemctl poweroff` after a yes in Domicile's Access dialog |
 | `domicile-reboot.desktop` | `domicile reboot`: `systemctl reboot` after the same |
+| `domicile-logout.desktop` | `domicile log-out`: `loginctl terminate-session` after the same |
 
 Each names an SVG icon and an `X-Domicile-Preview` picture
 ([LAUNCHER.md](LAUNCHER.md)).

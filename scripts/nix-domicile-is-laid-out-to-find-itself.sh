@@ -50,7 +50,7 @@ done
 
 # Each launcher entry's program, icon and preview, which a launcher finds by
 # path.
-for entry in history settings screenshot shutdown reboot; do
+for entry in history settings screenshot shutdown reboot logout; do
   file="$out/share/applications/domicile-$entry.desktop"
   [ -f "$file" ] || {
     echo "no launcher entry domicile-$entry.desktop" >&2

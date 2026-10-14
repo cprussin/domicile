@@ -257,6 +257,23 @@ fn power_off_and_reboot_are_verbs_that_take_nothing() {
 }
 
 #[test]
+fn log_out_is_a_verb_that_takes_nothing() {
+    assert_eq!(
+        run(&["log-out"]),
+        Ok(Invocation::Power {
+            power: Power::LogOut
+        })
+    );
+    assert_eq!(
+        run(&["log-out", "now"]),
+        Err(CliError::Extra {
+            verb: "log-out".to_string(),
+            extra: "now".to_string()
+        })
+    );
+}
+
+#[test]
 fn send_shell_sends_every_word_after_it_as_the_command() {
     assert_eq!(
         run(&["send-shell", "focus", "right"]),

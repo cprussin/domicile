@@ -340,8 +340,8 @@ The package installs what [the NixOS module](#the-machines-half) provides:
   make user namespaces. Without it the engine does not start. The
   `noapparmor` package has none: Debian 12 and Ubuntu 22.04 do not restrict
   user namespaces, and their AppArmor predates the profile's `userns` rule.
-- **Shutdown and Reboot** launcher entries, which ask in Domicile's dialog
-  first.
+- **Shutdown, Reboot and Logout** launcher entries, which ask in Domicile's
+  dialog first.
 - **Recommended** (optional on Arch): UPower (the battery readout), hwdata
   (monitor makers), `pactl` (the volume readout), curl, `xdg-desktop-portal`.
 

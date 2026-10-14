@@ -137,17 +137,20 @@ fn run() -> Result<ExitCode, String> {
     }
 }
 
-/// Runs `systemctl` for `power` once the user says yes in the desktop's
+/// Runs the command for `power` once the user says yes in the desktop's
 /// Access dialog.
 ///
-/// The session bus has no call timeout: the dialog waits on the user.
+/// - The command is resolved first, so one that cannot run never asks.
+/// - The session bus has no call timeout: the dialog waits on the user.
 fn powered(power: Power) -> Result<ExitCode, String> {
+    let session = std::env::var("XDG_SESSION_ID").ok();
+    let (program, args) = power.command(session.as_deref())?;
     let bus = zbus::blocking::Connection::session()
         .map_err(|why| format!("cannot reach the session bus: {why}"))?;
     match confirmed(&bus, power)? {
         true => Err(format!(
-            "cannot run systemctl: {}",
-            Command::new("systemctl").args(power.systemctl()).exec()
+            "cannot run {program}: {}",
+            Command::new(program).args(args).exec()
         )),
         false => Ok(ExitCode::SUCCESS),
     }

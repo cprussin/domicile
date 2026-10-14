@@ -26,6 +26,7 @@ pub enum CliError {
          send-shell <command>…. Or \
          check-config <file> to check a config without running it, or \
          power-off or reboot to turn the computer off or restart it, or \
+         log-out to end the login session, or \
          install-app <url> to add a site to your applications, or \
          uninstall-app <url> to remove one.\n"
     )]
@@ -176,8 +177,8 @@ pub enum Invocation {
     Screenshot { file: Option<String> },
     /// Check that the compositor takes this config, without running a desktop.
     Check { config: PathBuf },
-    /// Power off or reboot the computer, after a yes in the desktop's Access
-    /// dialog.
+    /// Power off or reboot the computer, or log out, after a yes in the
+    /// desktop's Access dialog.
     Power { power: Power },
 }
 
@@ -316,7 +317,7 @@ enum Verb {
     Sending,
     /// `check-config`, which takes a config file.
     Checking,
-    /// `power-off` or `reboot`, which take no arguments.
+    /// `power-off`, `reboot` or `log-out`, which take no arguments.
     Powering(Power),
 }
 
@@ -337,6 +338,7 @@ fn verb(word: &str) -> Option<Verb> {
         "check-config" => Some(Verb::Checking),
         "power-off" => Some(Verb::Powering(Power::Off)),
         "reboot" => Some(Verb::Powering(Power::Reboot)),
+        "log-out" => Some(Verb::Powering(Power::LogOut)),
         _ => None,
     }
 }

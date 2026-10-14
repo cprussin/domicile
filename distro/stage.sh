@@ -118,6 +118,7 @@ launcher settings "$WORKSPACE/packages/app-settings/icons"
 launcher screenshot "$ROOT/nix/launcher"
 launcher shutdown "$ROOT/nix/launcher"
 launcher reboot "$ROOT/nix/launcher"
+launcher logout "$ROOT/nix/launcher"
 
 install -D -m 644 "$ROOT/nix/domicile.portal" \
   "$USR/share/xdg-desktop-portal/portals/domicile.portal"
