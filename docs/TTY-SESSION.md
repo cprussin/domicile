@@ -67,6 +67,8 @@ drop also applies to the GPU process's copy.
   console.
 - The chord is read in `PlatformEventObserver::WillProcessEvent` on
   `EventFactoryEvdev`. The browser is the only process with a keyboard fd.
+- `DrmConsoleChordSink`, a dispatcher added ahead of every window, stops the
+  chord there, so no page or client sees it.
 - The switch is `Seat.SwitchTo(n)` on the seat named by the session's `Seat`
   property, an `(so)` of id and path. `/org/freedesktop/login1/seat/self` does
   not work: logind resolves `self` from the caller's credentials and returns
