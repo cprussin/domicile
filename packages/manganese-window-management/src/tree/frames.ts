@@ -177,6 +177,11 @@ export const areaOf = (
 /** The box focus lights in a tiling, and the windows inside it. */
 export type FocusBox = {
   rect: Rect;
+  /**
+   * Whether it is a tab's page, under its strip. The strip covers its top
+   * edge, and no ring is drawn between it and the open tab. See `FocusGlow`.
+   */
+  tabbed: boolean;
   windows: readonly string[];
 };
 
@@ -184,8 +189,10 @@ export type FocusBox = {
  * The box of the node commands target, laid out as {@link framesOf} does, or
  * `undefined` on an empty tiling.
  *
- * A window or group shown as a tab gives the box of its tab group instead,
- * since the tabs belong to the group.
+ * A window or group shown as a tab gives its page: everything under the strip,
+ * well included. A tab group's own box takes in its strip, so a selected tab
+ * and a selected group look apart. A sole tab is all its group shows, and a
+ * stack's open bar can sit away from its page, so both give the group's box.
  */
 export const focusBoxOf = (
   tiling: Tiling,
@@ -196,11 +203,25 @@ export const focusBoxOf = (
   if (root === undefined) {
     return undefined;
   } else {
-    const path = tabGroupAround(root, focusPathOf(root, tiling.depth));
-    return {
-      rect: areaOf(root, path, area, gap),
-      windows: windowsIn(nodeAt(root, path)),
-    };
+    const path = focusPathOf(root, tiling.depth);
+    const parentPath = path.slice(0, -1);
+    const group = tabGroupAround(root, path);
+    const windows = windowsIn(nodeAt(root, path));
+    if (group === undefined) {
+      return { rect: areaOf(root, path, area, gap), tabbed: false, windows };
+    } else if (
+      group.children.length === 1 ||
+      group.layout === Layout.Stacking
+    ) {
+      return {
+        rect: areaOf(root, parentPath, area, gap),
+        tabbed: false,
+        windows: windowsIn(group),
+      };
+    } else {
+      const groupArea = areaOf(root, parentPath, area, gap);
+      return { rect: contentsOf(group, groupArea), tabbed: true, windows };
+    }
   }
 };
 
@@ -507,20 +528,22 @@ const insetOf = (well: Rect): Rect => ({
   y: well.y + WELL_MARGIN,
 });
 
-/** How many bars tall a strip is: one for tabbed, one per child for stacking. */
-const barsOf = (container: Container): number =>
-  container.layout === Layout.Stacking ? container.children.length : 1;
-
-/** `path`, or its parent's path when the parent shows it as a tab. */
-const tabGroupAround = (root: LayoutNode, path: Path): Path => {
-  const parentPath = path.slice(0, -1);
-  const parent = nodeAt(root, parentPath);
+/** The tab group showing the node at `path` as a tab, or `undefined`. */
+const tabGroupAround = (
+  root: LayoutNode,
+  path: Path,
+): Container | undefined => {
+  const parent = nodeAt(root, path.slice(0, -1));
   return path.length > 0 &&
     parent.kind === NodeKind.Container &&
     showsOneChild(parent.layout)
-    ? parentPath
-    : path;
+    ? parent
+    : undefined;
 };
+
+/** How many bars tall a strip is: one for tabbed, one per child for stacking. */
+const barsOf = (container: Container): number =>
+  container.layout === Layout.Stacking ? container.children.length : 1;
 
 const joined = (placements: readonly Tiled[]): Tiled => ({
   frames: placements.flatMap(({ frames }) => frames),

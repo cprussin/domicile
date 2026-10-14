@@ -308,6 +308,7 @@ export const Stage = memo(
                   }}
                   rect={box.rect}
                   restack={following?.restack}
+                  tabbed={box.tabbed}
                   windows={box.windows}
                 />
               </Sliding>
