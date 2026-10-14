@@ -956,11 +956,28 @@ describe("PortalDialogs", () => {
       ]);
     });
 
+    it("clears every chord when declined, so the choice is kept", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([shortcuts(5)]);
+      await userEvent.click(screen.getByRole("button", { name: "Decline" }));
+
+      expect(host.answers).toEqual([
+        [
+          5,
+          {
+            kind: "global_shortcuts",
+            triggers: [{ id: "talk" }, { id: "mute" }, { id: "deafen" }],
+          },
+        ],
+      ]);
+    });
+
     it("binds nothing when dismissed", async () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} />);
       host.push([shortcuts(5)]);
-      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      await userEvent.keyboard("{Escape}");
 
       expect(host.answers).toEqual([[5, { kind: "canceled" }]]);
     });

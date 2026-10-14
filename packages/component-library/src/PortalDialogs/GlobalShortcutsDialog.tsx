@@ -29,8 +29,9 @@ type Props = {
 
 /**
  * A review of the chords an application asks to hold. Each can be accepted,
- * changed or cleared; one another holds is flagged. Dismissing it binds
- * nothing.
+ * changed or cleared; one another holds is flagged. Declining clears them
+ * all, so the application binds them unbound later without asking again.
+ * Dismissing it binds nothing and keeps no choice.
  */
 export const GlobalShortcutsDialog = ({
   answer,
@@ -59,11 +60,20 @@ export const GlobalShortcutsDialog = ({
         <>
           <Button
             onClick={() => {
-              answer(Answer.Canceled());
+              answer(
+                Answer.GlobalShortcuts(
+                  rows.map(
+                    ({ shortcut }): ChosenTrigger => ({
+                      id: shortcut.id,
+                      trigger: undefined,
+                    }),
+                  ),
+                ),
+              );
             }}
             variant="outline"
           >
-            Cancel
+            Decline
           </Button>
           <Button
             disabled={rows.some(

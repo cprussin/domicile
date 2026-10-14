@@ -126,6 +126,9 @@ One request channel carries all dialogs. Each interface's backend builds on it.
     shell or another app holds.
   - Choices are kept per app id in `global-shortcuts.json`. A `BindShortcuts`
     whose every id has a choice binds without a dialog.
+  - **Decline** clears every chord, so the app is not asked again; it can
+    still ask with `ConfigureShortcuts`. Dismissing the dialog keeps no
+    choice.
   - A chord is released when its key or one of its modifiers comes up,
     wherever the keyboard is. The page pairs each release with its press
     (`components/domicile/common/held_chords.h`). A key that comes up in a
