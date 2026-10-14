@@ -55,6 +55,16 @@ describe("useDialogRequest", () => {
     });
   });
 
+  it("takes a page's beforeunload", () => {
+    const view = document.createElement("webview");
+    const { result } = renderHook(() => useDialogRequest(view));
+
+    const event = opens(view, "beforeunload", []);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(result.current?.type).toBe("beforeunload");
+  });
+
   it("answers it once, and has no dialog left", () => {
     const view = document.createElement("webview");
     const answers: string[] = [];

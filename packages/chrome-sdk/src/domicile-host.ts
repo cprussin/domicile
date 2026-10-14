@@ -603,8 +603,9 @@ export type DomicileHost = {
    */
   openPrivateBrowserWindow(url: string): void;
   /**
-   * Closes window `id`; it leaves the next `browserwindowschanged`. An unknown
-   * id does nothing.
+   * Closes window `id`; it leaves the next `browserwindowschanged`. A page
+   * with a `beforeunload` handler may first ask to stay, as a `domicile-dialog`
+   * on its <webview>; Cancel keeps the window. An unknown id does nothing.
    */
   closeBrowserWindow(id: string): void;
   /**

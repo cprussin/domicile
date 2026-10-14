@@ -1922,7 +1922,7 @@ describe("BrowserWindow", () => {
     });
   });
 
-  // The engine draws no dialog for alert, confirm or prompt.
+  // The engine draws no dialog for alert, confirm, prompt or beforeunload.
   describe("a dialog its page opens", () => {
     it("answers it over the page", async () => {
       const answers: string[] = [];
@@ -1974,6 +1974,49 @@ describe("BrowserWindow", () => {
 
       expect(answers).toStrictEqual(["accept"]);
       expect(screen.queryByRole("alertdialog")).toBeNull();
+    });
+
+    // Closing a background tab asks there, as Chrome switches to the tab.
+    it("raises its window for a beforeunload", async () => {
+      await new Promise<void>((resolve) => {
+        const { container } = render(
+          <BrowserWindow
+            behindPanel={false}
+            clickThrough={false}
+            covered={false}
+            depth={0}
+            domicile={silentDomicile}
+            dragging={false}
+            focused={false}
+            frame={FRAME}
+            fullscreen={false}
+            motion="resting"
+            onFocusRequest={resolve}
+            onIcon={noIcon}
+            onMotionEnded={nothingEnded}
+            onPageFullscreen={noFullscreen}
+            onReach={() => undefined}
+            rect={ON_SCREEN}
+            url="https://example.com"
+            window="1"
+          />,
+        );
+        fireEvent(
+          view(container),
+          Object.assign(new Event(WEBVIEW_DIALOG_EVENT, { cancelable: true }), {
+            accept: () => undefined,
+            defaultValue: "",
+            dialogType: "beforeunload",
+            dismiss: () => undefined,
+            message: "",
+            origin: "https://example.com",
+          }),
+        );
+      });
+
+      expect(
+        await screen.findByRole("alertdialog", { name: "Leave site?" }),
+      ).toBeInTheDocument();
     });
   });
 

@@ -69,8 +69,10 @@ interface BrowserWindows {
   // `private_browsing` puts its page in the off-the-record profile.
   Open(url.mojom.Url url, bool private_browsing);
 
-  // Closes window `id` and destroys its page; it leaves the next list. An
-  // unknown id is a close that raced another, and does nothing.
+  // Closes window `id` and destroys its page once the page agrees; it leaves
+  // the next list. A page with a `beforeunload` handler may ask the shell
+  // first, and stays open if the shell answers Cancel. An unknown id is a
+  // close that raced another, and does nothing.
   Close(string id);
 };
 

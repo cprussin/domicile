@@ -16,6 +16,7 @@
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -1818,7 +1819,34 @@ void WebViewGuest::RunBeforeUnloadDialog(
     content::RenderFrameHost* render_frame_host,
     bool is_reload,
     DialogClosedCallback callback) {
-  std::move(callback).Run(true, std::u16string());
+  const GURL origin = render_frame_host->GetLastCommittedOrigin().GetURL();
+  // Split so a refused one can still leave: GuestDialogs drops what it
+  // refuses, and content waits for an answer.
+  auto [asked, refused] = base::SplitOnceCallback(std::move(callback));
+  const bool opened = dialogs_.Open(
+      std::move(asked),
+      base::BindOnce(
+          [](mojom::WebViewGuestClient* client, const GURL& origin,
+             GuestDialogs::Closed answer) {
+            // Chrome shows no text from the page. A pipe closing unanswered
+            // leaves, as an unclaimed event does.
+            client->DialogRequested(
+                origin, mojom::WebViewDialogType::kBeforeUnload,
+                std::string(), std::string(),
+                mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+                    base::BindOnce(&DialogAnswered, std::move(answer)), true,
+                    std::string()));
+          },
+          client_.get(), origin));
+  // The beforeunload guard greps for these.
+  if (opened) {
+    LOG(INFO) << "domicile: a <webview>'s page asked to stay; asking the "
+                 "shell.";
+  } else {
+    LOG(WARNING) << "domicile: a <webview>'s page asked to stay while a "
+                    "dialog was open; it leaves.";
+    std::move(refused).Run(true, std::u16string());
+  }
 }
 
 void WebViewGuest::CancelDialogs(content::WebContents* web_contents,
@@ -1955,6 +1983,31 @@ void WebViewGuest::ReportNewWindow(const GURL& target_url) {
 void WebViewGuest::CloseContents(content::WebContents* source) {
   LOG(INFO) << "domicile: a <webview>'s page asked to close.";
   Close();
+}
+
+void WebViewGuest::AskToClose() {
+  if (guest_contents_->NeedToFireBeforeUnload()) {
+    // The beforeunload guard greps for this.
+    LOG(INFO) << "domicile: asked a <webview>'s page whether it may close.";
+    asked_to_close_ = true;
+    guest_contents_->DispatchBeforeUnload(/*auto_cancel=*/false);
+  } else {
+    Close();
+  }
+}
+
+void WebViewGuest::BeforeUnloadFired(content::WebContents* tab,
+                                     bool proceed,
+                                     bool* proceed_to_fire_unload) {
+  *proceed_to_fire_unload = proceed;
+  if (!std::exchange(asked_to_close_, false)) {
+    return;
+  }
+  if (proceed) {
+    Close();
+  } else {
+    LOG(INFO) << "domicile: a <webview>'s page stayed open.";
+  }
 }
 
 void WebViewGuest::Close() {
