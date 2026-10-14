@@ -3,16 +3,20 @@
 
 #include "ui/ozone/platform/drm/domicile/drm_screen.h"
 
+#include <drm_fourcc.h>
+
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
+#include "components/viz/common/resources/shared_image_format.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/display_observer.h"
 #include "ui/display/types/display_mode.h"
 #include "ui/display/types/display_snapshot.h"
+#include "ui/gfx/display_color_spaces.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -71,6 +75,15 @@ class SnapshotBuilder {
     return *this;
   }
 
+  // The formats the device's planes scan out.
+  SnapshotBuilder& PlaneFormats(const std::vector<uint32_t>& formats) {
+    plane_formats_.clear();
+    for (const uint32_t format : formats) {
+      plane_formats_.emplace(format, std::vector<uint64_t>());
+    }
+    return *this;
+  }
+
   std::unique_ptr<display::DisplaySnapshot> Build() {
     display::DisplaySnapshot::DisplayModeList modes;
     const display::DisplayMode* native = nullptr;
@@ -90,8 +103,7 @@ class SnapshotBuilder {
         display::PanelOrientation::kNormal, edid_,
         /*current_mode=*/native, native, product_code_,
         /*year_of_manufacture=*/0, gfx::Size(),
-        display::VariableRefreshRateState::kVrrNotCapable,
-        display::DrmFormatsAndModifiers());
+        display::VariableRefreshRateState::kVrrNotCapable, plane_formats_);
     snapshot->set_domicile_connector(connector_);
     return snapshot;
   }
@@ -106,6 +118,7 @@ class SnapshotBuilder {
   int64_t product_code_ = display::DisplaySnapshot::kInvalidProductCode;
   std::vector<uint8_t> edid_;
   std::string connector_ = "DP-1";
+  display::DrmFormatsAndModifiers plane_formats_;
 };
 
 // Returns an EDID with `serial` in its first display descriptor.
@@ -277,6 +290,32 @@ TEST(DrmScreenTest, ASnapshotWithNoNativeModeStillProducesAUsableDisplay) {
 
 // A tty with nothing connected is normal (all of `crux`'s connectors read
 // disconnected). `PlatformScreen` must still have a primary display.
+// Returns the format viz draws `display`'s opaque frames in.
+viz::SharedImageFormat OpaqueFrameFormat(const display::Display& display) {
+  return display.GetColorSpaces().GetOutputFormat(
+      gfx::ContentColorUsage::kSRGB, /*needs_alpha=*/false);
+}
+
+// virtio-gpu's planes take only XR24 and AR24. A frame in the default AB24
+// gets no framebuffer, so the screen stays black.
+TEST(DrmScreenTest, ADisplayWhosePlanesTakeOnlyXrgbDrawsInBgra) {
+  auto snapshot = SnapshotBuilder()
+                      .PlaneFormats({DRM_FORMAT_XRGB8888, DRM_FORMAT_ARGB8888})
+                      .Build();
+
+  EXPECT_EQ(OpaqueFrameFormat(DisplayFromSnapshot(*snapshot, gfx::Point())),
+            viz::SinglePlaneFormat::kBGRA_8888);
+}
+
+TEST(DrmScreenTest, ADisplayWhosePlanesTakeXbgrKeepsTheDefaultFormat) {
+  auto snapshot = SnapshotBuilder()
+                      .PlaneFormats({DRM_FORMAT_XRGB8888, DRM_FORMAT_XBGR8888})
+                      .Build();
+
+  EXPECT_EQ(OpaqueFrameFormat(DisplayFromSnapshot(*snapshot, gfx::Point())),
+            OpaqueFrameFormat(display::Display()));
+}
+
 TEST(DrmScreenTest, NoSnapshotsAtAllStillYieldsOnePrimaryDisplay) {
   // `raw_ptr<T>` and `raw_ptr<T, VectorExperimental>` are distinct types, and
   // vectors of them do not convert.

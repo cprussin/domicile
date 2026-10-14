@@ -31,7 +31,7 @@ case "$WHOLE_SUITE" in
 esac
 
 SUITES=(
-  DrmScreenTest:34
+  DrmScreenTest:36
   DrmModesetTest:22
   DrmVtSwitcherTest:20
   DrmSleepTest:2
@@ -45,7 +45,7 @@ SUITES=(
   DrmEdidSerialTest:18
   DrmConnectorNameTest:6
   DrmPointerCrossingTest:20
-  GbmPixmapScanoutTest:2
+  GbmPixmapScanoutTest:3
   ScrollAcceleratorTest:7
   WheelTicksTest:3
   WaylandKeyboardWithoutKeymapTest:1
