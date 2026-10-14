@@ -55,7 +55,6 @@ describe(readSettings, () => {
               {
                 display: "drm-1",
                 enabled: true,
-                position: [0, 0],
                 scale: 1,
                 transform: "normal",
               },

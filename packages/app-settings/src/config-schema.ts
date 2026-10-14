@@ -53,7 +53,7 @@ const placementSchema = z.strictObject({
   display: z.string(),
   enabled: z.boolean().default(true),
   mode: size.optional(),
-  position: point.default([0, 0]),
+  position: point.optional(),
   scale: z.number().positive().default(1),
   transform: z.enum(TRANSFORMS).default("normal"),
 });

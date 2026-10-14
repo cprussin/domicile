@@ -570,7 +570,7 @@ fn a_gap_between_two_placed_displays_is_part_of_the_desktop() {
       {
         "name": "apart",
         "displays": [
-          { "display": "drm-1", "scale": 1.5 },
+          { "display": "drm-1", "position": [0, 0], "scale": 1.5 },
           { "display": "drm-3", "position": [4000, 0], "scale": 1.2 }
         ]
       }
@@ -581,6 +581,105 @@ fn a_gap_between_two_placed_displays_is_part_of_the_desktop() {
         &[connected(LAPTOP, PANEL_MODE), connected(CENTER, DESK_MODE)],
     );
     assert_eq!(layout.size(), (7200, 1800));
+}
+
+#[test]
+fn a_display_without_a_position_goes_right_of_the_positioned_ones() {
+    // An entry can set only its scale. Each one without a position starts at
+    // the right edge of everything placed so far, in profile order, level
+    // with the top of the positioned displays. Widths are logical, after
+    // scale and rotation.
+    let layout = layout(
+        r#"
+{
+  "output": {
+    "profiles": [
+      {
+        "name": "scaled-only",
+        "displays": [
+          { "display": "drm-1", "scale": 1.5 },
+          { "display": "drm-3", "position": [0, -500], "scale": 1.2 },
+          { "display": "drm-4", "scale": 1.2, "transform": "rotate-270" }
+        ]
+      }
+    ]
+  }
+}
+"#,
+        &[
+            connected(LAPTOP, PANEL_MODE),
+            connected(CENTER, DESK_MODE),
+            connected(RIGHT, DESK_MODE),
+        ],
+    );
+    assert_eq!(
+        layout
+            .placed()
+            .map(|p| (p.name.as_str(), p.position))
+            .collect::<Vec<_>>(),
+        vec![(LAPTOP, (3200, 0)), (CENTER, (0, 0)), (RIGHT, (5120, 0))]
+    );
+    // 3200 + 1920 + 1800 across; the rotated monitor is 3200 tall.
+    assert_eq!(layout.size(), (6920, 3200));
+}
+
+#[test]
+fn displays_without_positions_make_a_row_from_the_origin() {
+    // With nothing positioned there is no edge to start from.
+    let layout = layout(
+        r#"
+{
+  "output": {
+    "profiles": [
+      {
+        "name": "unplaced",
+        "displays": [
+          { "display": "drm-1", "scale": 1.5 },
+          { "display": "drm-3", "scale": 1.2 }
+        ]
+      }
+    ]
+  }
+}
+"#,
+        &[connected(LAPTOP, PANEL_MODE), connected(CENTER, DESK_MODE)],
+    );
+    assert_eq!(
+        layout.placed().map(|p| p.position).collect::<Vec<_>>(),
+        vec![(0, 0), (1920, 0)]
+    );
+}
+
+#[test]
+fn a_display_with_no_room_right_of_the_positioned_ones_is_refused() {
+    // The positioned display ends past the last coordinate, so the next one
+    // has nowhere to start.
+    let refused = Config::parse(
+        r#"
+{
+  "output": {
+    "profiles": [
+      {
+        "name": "crowded",
+        "displays": [
+          { "display": "drm-3", "position": [2147483000, 0] },
+          { "display": "drm-1" }
+        ]
+      }
+    ]
+  }
+}
+"#,
+    )
+    .expect("the config should parse")
+    .output
+    .layout(&[connected(LAPTOP, PANEL_MODE), connected(CENTER, DESK_MODE)])
+    .expect_err("a display that cannot start anywhere is refused");
+    let said = refused.to_string();
+    assert!(
+        said.contains("crowded") && said.contains("drm-1"),
+        "the complaint should name the profile and the display: {said}"
+    );
 }
 
 #[test]
@@ -595,7 +694,7 @@ fn a_layout_that_does_not_fit_the_coordinate_space_is_refused_rather_than_wrappe
       {
         "name": "unreachable",
         "displays": [
-          { "display": "drm-1" },
+          { "display": "drm-1", "position": [0, 0] },
           { "display": "drm-3", "position": [2147483647, 0] }
         ]
       }

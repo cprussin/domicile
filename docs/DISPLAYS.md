@@ -44,6 +44,11 @@ all plugged in wins. This is kanshi's model.
 ```
 
 - Matching and placement are in `domicile-config`'s `profile.rs`.
+- An entry without `position` goes in a row right of the positioned entries,
+  in profile order, level with their top. With none positioned the row starts
+  at the origin. The row uses each display's logical size and is recomputed
+  with every layout, so it follows mode changes. This matches how the engine
+  places unnamed connectors (`OriginsForLayout`).
 - `scale` is fractional. `wl_output` sends it rounded up, and `xdg_output`
   reports the real logical size.
 - `mode = [W, H]` asserts the monitor's mode. Positions add up mode sizes, so a
