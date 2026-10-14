@@ -201,6 +201,13 @@
       "properties": {
         "keyboard": {
           "$ref": "#/$defs/KeyboardConfig"
+        },
+        "pointers": {
+          "description": "Tablets and touchscreens, each bound to the display it covers.\n\nRead on a tty only, on every hotplug. An unbound one covers no\ndisplay. See `docs/DISPLAYS.md#tablets-and-touchscreens`.",
+          "items": {
+            "$ref": "#/$defs/PointerConfig"
+          },
+          "type": "array"
         }
       },
       "type": "object"
@@ -308,6 +315,22 @@
           "type": "array"
         }
       },
+      "type": "object"
+    },
+    "PointerConfig": {
+      "additionalProperties": false,
+      "description": "A tablet or touchscreen, and the display it covers.",
+      "properties": {
+        "device": {
+          "description": "The device's evdev name or `phys`, matched exactly.\n\nA name every device of a kind shares, such as `QEMU QEMU USB Tablet`,\nbinds all of them; `phys` (`usb-0000:00:04.0-1/input0`) tells them\napart. `udevadm info /dev/input/eventN` prints both.",
+          "type": "string"
+        },
+        "display": {
+          "description": "The display the device covers, named as a profile's `display` is.",
+          "type": "string"
+        }
+      },
+      "required": ["device", "display"],
       "type": "object"
     },
     "Profile": {

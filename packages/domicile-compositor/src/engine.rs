@@ -238,6 +238,16 @@ pub struct Connector {
     pub desk: Option<Desk>,
 }
 
+/// A tablet or touchscreen and the display it covers: the config's
+/// `input.pointers`, for the engine.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Pointer {
+    /// The device's evdev name or `phys`.
+    pub device: String,
+    /// The display, by [`Display::id`].
+    pub display: i64,
+}
+
 /// Names the box the engine showed last, in [`Engine::submit`].
 pub const LAST_SHOWN_BOX: u64 = 0;
 /// Names the page's newest box, in [`Engine::submit`].
@@ -535,6 +545,14 @@ struct RawLayout {
     desk_y: i32,
     desk_width: i32,
     desk_height: i32,
+}
+
+/// `DomicilePointerTarget`, laid out as in the C header. 16 bytes, no padding.
+#[repr(C)]
+struct RawPointer {
+    /// The device's name, borrowed for the call.
+    device: *const c_char,
+    display_id: i64,
 }
 
 /// `DomicileCapturedFrame`, laid out as in the C header. The fds are lent for
@@ -1128,6 +1146,39 @@ impl Engine {
         };
         let raw = layouts_from(connectors);
         // SAFETY: as above, and `raw` outlives the call; the engine copies it.
+        unsafe { f(self.handle, raw.as_ptr(), raw.len() as u32) };
+    }
+
+    /// Tells the browser which display each tablet or touchscreen covers.
+    ///
+    /// The list replaces the last one. A device it does not name covers no
+    /// display.
+    pub fn configure_pointers(&self, pointers: &[Pointer]) {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, *const RawPointer, u32)> = match self
+            .symbol(
+                b"domicile_pointers_configure\0",
+                "domicile_pointers_configure",
+            ) {
+            Ok(symbol) => symbol,
+            Err(_) => return,
+        };
+        let devices: Vec<CString> = pointers
+            .iter()
+            .map(|pointer| {
+                CString::new(pointer.device.as_str())
+                    .expect("input.pointers refuses a device with a nul")
+            })
+            .collect();
+        let raw: Vec<RawPointer> = devices
+            .iter()
+            .zip(pointers)
+            .map(|(device, pointer)| RawPointer {
+                device: device.as_ptr(),
+                display_id: pointer.display,
+            })
+            .collect();
+        // SAFETY: as above, and `devices` and `raw` outlive the call; the
+        // engine copies them.
         unsafe { f(self.handle, raw.as_ptr(), raw.len() as u32) };
     }
 
@@ -2058,6 +2109,12 @@ mod tests {
         // 8 (id) + 16 (three `int32_t`, one `uint32_t`) + 8 (`double`) + 16
         // (desk). No padding: the `double` is already aligned.
         assert_eq!(std::mem::size_of::<RawLayout>(), 48);
+    }
+
+    #[test]
+    fn a_pointer_target_is_the_pointer_and_int64_the_c_header_declares() {
+        // 8 (device) + 8 (display id). No padding.
+        assert_eq!(std::mem::size_of::<RawPointer>(), 16);
     }
 
     #[test]

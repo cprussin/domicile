@@ -113,6 +113,16 @@ struct DisplayLayout {
   gfx.mojom.Rect desk;
 };
 
+// A tablet or touchscreen and the display it covers, from the producer's
+// config. See docs/DISPLAYS.md, "Tablets and touchscreens".
+struct PointerTarget {
+  // The evdev device's name or `phys`, matched exactly.
+  string device;
+
+  // A `Display.id` the browser sent.
+  int64 display_id;
+};
+
 // Tells a producer what the displays are.
 //
 // No Wayland request matches this, because a Wayland compositor normally
@@ -287,6 +297,11 @@ interface FrameSinkBroker {
   // No reply, because the modeset completes later on the DRM thread. The
   // modeset triggers the next `OnDisplaysChanged` instead.
   ConfigureDisplays(array<DisplayLayout> layout);
+
+  // Says which display each tablet or touchscreen covers, replacing the last
+  // list. A device it does not name covers no display. Sent after each
+  // `OnDisplaysChanged`, since the targets are display ids.
+  ConfigurePointers(array<PointerTarget> targets);
 
   // Sets the contents of one of the desktop's clipboards.
   //

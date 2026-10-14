@@ -151,16 +151,12 @@ impl DisplayPlacement {
     /// Any of the display's names match, as in kanshi: the output name is
     /// always present, and the panel name is what a person can read off a
     /// running desktop. The vendor may be spelled as in the EDID or as in
-    /// hwdata; see [`Connected::spelled_out`].
-    ///
-    /// An empty name never matches: every monitor with no EDID name shares the
-    /// empty description. `validate` also refuses an empty `display`.
+    /// hwdata; see [`Connected::spelled_out`]. `validate` refuses an empty
+    /// `display`, which [`Connected::is_named`] never matches.
     fn connected_in<'a>(&self, connected: &'a [Connected]) -> Option<&'a Connected> {
-        connected.iter().find(|display| {
-            [&display.name, &display.description, &display.spelled_out]
-                .into_iter()
-                .any(|name| !name.is_empty() && name == &self.display)
-        })
+        connected
+            .iter()
+            .find(|display| display.is_named(&self.display))
     }
 
     fn validate(
@@ -268,6 +264,18 @@ pub struct Connected {
     pub spelled_out: String,
     /// The mode the connector is scanning out, in physical pixels.
     pub mode: (u32, u32),
+}
+
+impl Connected {
+    /// Whether any of this display's names is `name`.
+    ///
+    /// An empty name never matches: every monitor with no EDID name shares
+    /// the empty description.
+    pub(crate) fn is_named(&self, name: &str) -> bool {
+        [&self.name, &self.description, &self.spelled_out]
+            .into_iter()
+            .any(|own| !own.is_empty() && own == name)
+    }
 }
 
 /// A profile applied to the connected monitors.

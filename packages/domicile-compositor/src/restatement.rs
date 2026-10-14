@@ -11,6 +11,7 @@
 //! | field | on a reload |
 //! |---|---|
 //! | `input.keyboard.*` | recompiled and sent to the seat and chrome (`retype_the_desktop`) |
+//! | `input.pointers` | sent to the engine, resolved against the monitors it last reported (`bind_the_pointers`) |
 //! | `output.max_scale` | applied to the running desktop (`cap_the_scale_at`) |
 //! | `output.displays` | applied (`Screens::reloaded_into`, `adopt_the_desktop`) |
 //! | `output.profiles` | re-matched against the connected monitors, same path |
@@ -80,6 +81,8 @@ pub struct Restatement {
     /// Whether to resend the key config to the chromes, because keysyms
     /// depend on the layout.
     pub shell_config: bool,
+    /// Whether to tell the engine again which display each tablet covers.
+    pub pointers: bool,
 }
 
 impl Restatement {
@@ -102,6 +105,7 @@ impl Restatement {
             lockdown: (was.lockdown != now.lockdown).then(|| now.lockdown.clone()),
             lock: (was.lock != now.lock).then(|| now.lock.clone()),
             shell_config: was.input.keyboard != now.input.keyboard,
+            pointers: was.input.pointers != now.input.pointers,
         }
     }
 }
@@ -251,6 +255,12 @@ mod tests {
     }
 
     #[test]
+    fn pointers_that_moved_are_restated() {
+        let was = parsed(A_DVORAK_DESK);
+        assert!(Restatement::between(&was, &parsed(A_DESK_WITH_A_TABLET)).pointers);
+    }
+
+    #[test]
     fn a_cap_on_the_scale_that_moved_is_restated() {
         let was = parsed(A_DVORAK_DESK);
         let now = parsed(A_CAPPED_DESK);
@@ -387,6 +397,17 @@ mod tests {
       { "name": "two", "position": [1024, 0], "size": [1024, 768] }
     ]
   }
+}
+"#;
+
+    /// The Dvorak desk, with a tablet bound to its first display.
+    const A_DESK_WITH_A_TABLET: &str = r#"
+{
+  "input": {
+    "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:swapescape"] },
+    "pointers": [{ "device": "QEMU QEMU USB Tablet", "display": "one" }]
+  },
+  "output": { "displays": [{ "name": "one", "size": [1024, 768] }] }
 }
 "#;
 

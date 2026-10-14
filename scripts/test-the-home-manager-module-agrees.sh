@@ -19,8 +19,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MODULE="$ROOT/nix/home-manager.nix"
 LIB="$ROOT/packages/domicile-config/src/lib.rs"
 PROFILE="$ROOT/packages/domicile-config/src/profile.rs"
+POINTERS="$ROOT/packages/domicile-config/src/pointers.rs"
 
-for f in "$MODULE" "$LIB" "$PROFILE"; do
+for f in "$MODULE" "$LIB" "$PROFILE" "$POINTERS"; do
   [ -f "$f" ] || { echo "no $f" >&2; exit 1; }
 done
 
@@ -104,6 +105,7 @@ compare "idle" "$LIB" IdleConfig '^          idle = \{$' '            '
 compare "lock" "$LIB" LockConfig '^          lock = \{$' '            '
 compare "lockdown" "$LIB" LockdownConfig '^          lockdown = \{$' '            '
 compare "input.keyboard" "$LIB" KeyboardConfig '^          input\.keyboard = \{$' '            '
+compare "input.pointers[]" "$POINTERS" PointerConfig '^  pointer = lib\.types\.submodule \{$' '      '
 compare "output" "$LIB" OutputConfig '^          output = \{$' '            '
 compare "output.displays[]" "$LIB" DisplayConfig '^  display = lib\.types\.submodule \{$' '      '
 compare "output.profiles[]" "$PROFILE" Profile '^  profile = lib\.types\.submodule \{$' '      '
