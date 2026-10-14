@@ -4,8 +4,8 @@
 //! pinned because the JS client hard-codes them.
 
 use domicile_protocol::{
-    negotiate, ChromeMessage, ClipboardEntry, CursorShape, DisplayInfo, DisplayTransform,
-    HostMessage, Owner, Passphrase, PROTOCOL_VERSION,
+    negotiate, Appearance, ChromeMessage, ClipboardEntry, CursorShape, CursorTheme, DisplayInfo,
+    DisplayTransform, HostMessage, Owner, Passphrase, PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -392,6 +392,27 @@ fn wire_shape_is_pinned() {
     .unwrap();
     assert_eq!(v["type"], "app_cursor");
     assert_eq!(v["cursor"], "pointer");
+}
+
+/// The browser process reads `cursor` off `appearance` by these names.
+#[test]
+fn the_pointer_theme_rides_on_the_appearance() {
+    let themed = HostMessage::Appearance(Appearance {
+        cursor: Some(CursorTheme {
+            name: "Bibata-Modern-Amber-Right".into(),
+            size: 64,
+        }),
+        ..Appearance::default()
+    });
+    host_round_trip(&themed);
+    let v = serde_json::to_value(themed).unwrap();
+    assert_eq!(
+        v["cursor"],
+        serde_json::json!({ "name": "Bibata-Modern-Amber-Right", "size": 64 })
+    );
+
+    let v = serde_json::to_value(HostMessage::Appearance(Appearance::default())).unwrap();
+    assert!(v.get("cursor").is_none(), "{v}");
 }
 
 #[test]

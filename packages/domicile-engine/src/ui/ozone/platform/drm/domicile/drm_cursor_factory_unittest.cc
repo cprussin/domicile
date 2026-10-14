@@ -3,10 +3,21 @@
 
 #include "ui/ozone/platform/drm/domicile/drm_cursor_factory.h"
 
+#include <optional>
+#include <utility>
+
+#include "base/containers/flat_map.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/run_loop.h"
+#include "base/test/task_environment.h"
+#include "base/time/time.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/cursor/cursor_factory.h"
+#include "ui/base/cursor/domicile/desk_cursor_theme.h"
+#include "ui/base/cursor/domicile/xcursor_theme.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/ozone/common/bitmap_cursor.h"
@@ -48,17 +59,12 @@ TEST(DrmCursorFactoryTest, TheInvisibleCursorIsStillAnObjectWithAType) {
 TEST(DrmCursorFactoryTest, TheScaledOverloadAnswersTheSameWay) {
   DrmCursorFactory concrete;
 
-  // Held as the base and called with a scale, as `CursorLoader` does. This
-  // relies on the base forwarding to the one-argument override.
+  // Held as the base and called with a scale, as `CursorLoader` does.
   CursorFactory& factory = concrete;
 
   EXPECT_EQ(factory.GetDefaultCursor(mojom::CursorType::kPointer, 2.0f),
             nullptr);
   EXPECT_NE(factory.GetDefaultCursor(mojom::CursorType::kNone, 2.0f), nullptr);
-
-  // Through the derived type, this compiles only with the header's `using`.
-  EXPECT_EQ(concrete.GetDefaultCursor(mojom::CursorType::kPointer, 2.0f),
-            nullptr);
 }
 
 TEST(DrmCursorFactoryTest, AnImageCursorIsStillMade) {
@@ -75,6 +81,111 @@ TEST(DrmCursorFactoryTest, AnImageCursorIsStillMade) {
 
   ASSERT_NE(image, nullptr);
   EXPECT_FALSE(BitmapCursor::FromPlatformCursor(image)->bitmaps().empty());
+}
+
+SkBitmap Square(int size, SkColor color) {
+  SkBitmap bitmap;
+  bitmap.allocN32Pixels(size, size);
+  bitmap.eraseColor(color);
+  return bitmap;
+}
+
+// A theme whose arrow is a square as wide as the pixels it was loaded at. Only
+// the theme named "Hands" has a hand.
+base::flat_map<mojom::CursorType, XCursorImages> FakeTheme(
+    const DeskCursorTheme& theme,
+    int size) {
+  base::flat_map<mojom::CursorType, XCursorImages> cursors;
+  cursors[mojom::CursorType::kPointer] = {
+      .frames = {Square(size, SK_ColorRED)}, .hotspot = gfx::Point(3, 4)};
+  cursors[mojom::CursorType::kWait] = {
+      .frames = {Square(size, SK_ColorRED), Square(size, SK_ColorBLUE)},
+      .frame_delay = base::Milliseconds(40)};
+  if (theme.name == "Hands") {
+    cursors[mojom::CursorType::kHand] = {.frames = {Square(size, SK_ColorRED)}};
+  }
+  return cursors;
+}
+
+class DrmCursorFactoryThemeTest : public testing::Test,
+                                  public CursorFactoryObserver {
+ protected:
+  void SetUp() override { factory_.AddObserver(this); }
+  void TearDown() override { factory_.RemoveObserver(this); }
+
+  // CursorFactoryObserver:
+  void OnThemeLoaded() override {
+    ++told_;
+    if (quit_) {
+      std::move(quit_).Run();
+    }
+  }
+
+  // Waits for the factory to say cursors loaded.
+  void WaitForCursors() {
+    base::RunLoop loop;
+    quit_ = loop.QuitClosure();
+    loop.Run();
+  }
+
+  base::test::TaskEnvironment task_environment_;
+  DeskCursorThemeSource source_;
+  DrmCursorFactory factory_{source_, base::BindRepeating(&FakeTheme)};
+  int told_ = 0;
+  base::OnceClosure quit_;
+};
+
+// Loading reads the disk, so the first answer is Chromium's art. The loader
+// redraws when the factory says the theme loaded.
+TEST_F(DrmCursorFactoryThemeTest, TheDesksThemeIsDrawnOnceItLoads) {
+  source_.Set(DeskCursorTheme{.name = "Amber", .size = 24});
+
+  EXPECT_EQ(factory_.GetDefaultCursor(mojom::CursorType::kPointer, 2.0f),
+            nullptr);
+  WaitForCursors();
+
+  const scoped_refptr<BitmapCursor> arrow = BitmapCursor::FromPlatformCursor(
+      factory_.GetDefaultCursor(mojom::CursorType::kPointer, 2.0f));
+  ASSERT_NE(arrow, nullptr);
+  ASSERT_EQ(arrow->bitmaps().size(), 1u);
+  // 24 logical pixels at twice the density.
+  EXPECT_EQ(arrow->bitmaps()[0].width(), 48);
+  EXPECT_EQ(arrow->hotspot(), gfx::Point(3, 4));
+
+  const scoped_refptr<BitmapCursor> wait = BitmapCursor::FromPlatformCursor(
+      factory_.GetDefaultCursor(mojom::CursorType::kWait, 2.0f));
+  ASSERT_NE(wait, nullptr);
+  EXPECT_EQ(wait->bitmaps().size(), 2u);
+  EXPECT_EQ(wait->frame_delay(), base::Milliseconds(40));
+}
+
+TEST_F(DrmCursorFactoryThemeTest, ACursorTheThemeLacksIsChromiumsArt) {
+  source_.Set(DeskCursorTheme{.name = "Amber", .size = 24});
+  factory_.GetDefaultCursor(mojom::CursorType::kPointer);
+  WaitForCursors();
+
+  EXPECT_EQ(factory_.GetDefaultCursor(mojom::CursorType::kHand), nullptr);
+  EXPECT_NE(factory_.GetDefaultCursor(mojom::CursorType::kNone), nullptr);
+}
+
+// A reload that names another theme drops the cursors loaded from the old
+// one, and says so, so the loader asks again and redraws.
+TEST_F(DrmCursorFactoryThemeTest, AnotherThemeReplacesTheCursorsOfTheLast) {
+  source_.Set(DeskCursorTheme{.name = "Amber", .size = 24});
+  factory_.GetDefaultCursor(mojom::CursorType::kPointer);
+  WaitForCursors();
+  const int told_of_amber = told_;
+
+  source_.Set(DeskCursorTheme{.name = "Hands", .size = 24});
+
+  EXPECT_EQ(told_, told_of_amber + 1);
+  EXPECT_EQ(factory_.GetDefaultCursor(mojom::CursorType::kHand), nullptr);
+  WaitForCursors();
+  EXPECT_NE(factory_.GetDefaultCursor(mojom::CursorType::kHand), nullptr);
+
+  source_.Set(std::nullopt);
+
+  EXPECT_EQ(factory_.GetDefaultCursor(mojom::CursorType::kHand), nullptr);
 }
 
 }  // namespace

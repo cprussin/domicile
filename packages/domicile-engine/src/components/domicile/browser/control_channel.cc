@@ -43,12 +43,14 @@ ControlChannel::ControlChannel(
     PointerWarpSink warp_sink,
     ThemeSink theme_sink,
     ExtensionsSink extensions_sink,
+    CursorThemeSink cursor_theme_sink,
     const Page& page)
     : socket_path_(socket_path),
       keymap_sink_(std::move(keymap_sink)),
       warp_sink_(std::move(warp_sink)),
       theme_sink_(std::move(theme_sink)),
       extensions_sink_(std::move(extensions_sink)),
+      cursor_theme_sink_(std::move(cursor_theme_sink)),
       receiver_(this, std::move(receiver)),
       read_buffer_(base::MakeRefCounted<net::IOBufferWithSize>(
           kReadBufferSize)) {
@@ -954,6 +956,18 @@ void ControlChannel::DispatchLine(const std::string& line) {
     if (!high_contrast || !reduced_motion) {
       return;
     }
+    // The pointer's theme stops in this process, which draws the pointer on a
+    // tty. Absent is Chromium's own art; a theme without its size is refused.
+    std::optional<ui::DeskCursorTheme> cursor_theme;
+    if (const base::DictValue* cursor = message.FindDict("cursor")) {
+      const std::string* name = cursor->FindString("name");
+      const std::optional<int> size = cursor->FindInt("size");
+      if (!name || !size || *size < 1) {
+        return;
+      }
+      cursor_theme = ui::DeskCursorTheme{.name = *name, .size = *size};
+    }
+    cursor_theme_sink_.Run(std::move(cursor_theme));
     const std::string* accent_color = message.FindString("accent_color");
     client_->AppearanceChanged(
         accent_color ? std::make_optional(*accent_color) : std::nullopt,
@@ -1168,6 +1182,7 @@ void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
                         PointerWarpSink warp_sink,
                         ThemeSink theme_sink,
                         ExtensionsSink extensions_sink,
+                        CursorThemeSink cursor_theme_sink,
                         const Page& page) {
   const std::string socket_path =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
@@ -1185,7 +1200,8 @@ void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
   // declared unreachable.
   new ControlChannel(socket_path, std::move(receiver), std::move(keymap_sink),
                      std::move(warp_sink), std::move(theme_sink),
-                     std::move(extensions_sink), page);
+                     std::move(extensions_sink), std::move(cursor_theme_sink),
+                     page);
 }
 
 }  // namespace domicile

@@ -24,6 +24,14 @@ describe("parseHostMessage", () => {
     });
   });
 
+  it("throws on an appearance whose pointer theme has no size", () => {
+    expect(() =>
+      parseHostMessage(
+        '{"type":"appearance","high_contrast":false,"reduced_motion":false,"cursor":{"name":"Adwaita"}}',
+      ),
+    ).toThrow();
+  });
+
   it("decodes what a search found", () => {
     expect(
       parseHostMessage(

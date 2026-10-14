@@ -5,6 +5,7 @@
 #define COMPONENTS_DOMICILE_BROWSER_CONTROL_CHANNEL_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/io_buffer.h"
 #include "net/socket/unix_domain_client_socket_posix.h"
+#include "ui/base/cursor/domicile/desk_cursor_theme.h"
 
 namespace domicile {
 
@@ -60,6 +62,13 @@ using ThemeSink = base::RepeatingCallback<void(mojom::Theme)>;
 // components/domicile/browser/extension_installer.h.
 using ExtensionsSink = base::RepeatingCallback<void(const ExtensionList&)>;
 
+// How the desk's pointer theme reaches the cursor factory that draws from it,
+// or nullopt for Chromium's own art. A callback for KeymapSink's reason: the
+// cursor belongs to the UI thread. See
+// ui/base/cursor/domicile/desk_cursor_theme.h.
+using CursorThemeSink =
+    base::RepeatingCallback<void(std::optional<ui::DeskCursorTheme>)>;
+
 // The shell's control channel, in the browser process.
 //
 // Speaks newline-delimited JSON over the compositor's unix control socket --
@@ -84,6 +93,7 @@ class ControlChannel : public mojom::ControlChannel {
                  PointerWarpSink warp_sink,
                  ThemeSink theme_sink,
                  ExtensionsSink extensions_sink,
+                 CursorThemeSink cursor_theme_sink,
                  const Page& page);
 
   ControlChannel(const ControlChannel&) = delete;
@@ -181,6 +191,7 @@ class ControlChannel : public mojom::ControlChannel {
   const PointerWarpSink warp_sink_;
   const ThemeSink theme_sink_;
   const ExtensionsSink extensions_sink_;
+  const CursorThemeSink cursor_theme_sink_;
   mojo::Receiver<mojom::ControlChannel> receiver_;
   mojo::Remote<mojom::ControlChannelClient> client_;
 
@@ -226,6 +237,7 @@ void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
                         PointerWarpSink warp_sink,
                         ThemeSink theme_sink,
                         ExtensionsSink extensions_sink,
+                        CursorThemeSink cursor_theme_sink,
                         const Page& page);
 
 }  // namespace domicile

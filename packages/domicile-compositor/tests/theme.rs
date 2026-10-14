@@ -10,7 +10,7 @@ mod running;
 
 use std::time::{Duration, Instant};
 
-use domicile_protocol::{Appearance, ChromeMessage, HostMessage, Theme};
+use domicile_protocol::{Appearance, ChromeMessage, CursorTheme, HostMessage, Theme};
 
 use crate::running::Compositor;
 
@@ -123,6 +123,7 @@ fn the_shell_follows_the_configs_look_and_its_reloads() {
             accent_color: Some("#3584e4".into()),
             high_contrast: true,
             reduced_motion: false,
+            cursor: None,
         }))
         .expect("the handshake carries the config's look");
 
@@ -138,8 +139,35 @@ fn the_shell_follows_the_configs_look_and_its_reloads() {
             accent_color: None,
             high_contrast: false,
             reduced_motion: true,
+            cursor: None,
         }))
         .expect("a connected chrome is told the look the edit names");
+}
+
+#[test]
+fn the_browser_draws_the_configs_pointer_and_follows_its_reloads() {
+    let compositor = Compositor::started_with(
+        r#"{
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
+  "theme": { "cursor_theme": "Bibata-Modern-Amber-Right", "cursor_size": 64 }
+}"#,
+    );
+    let mut chrome = compositor.chrome();
+    chrome
+        .wait_for(appearance(Appearance {
+            cursor: Some(CursorTheme {
+                name: "Bibata-Modern-Amber-Right".into(),
+                size: 64,
+            }),
+            ..Appearance::default()
+        }))
+        .expect("the handshake carries the config's pointer");
+
+    compositor.reconfigure(ONE_DISPLAY);
+
+    chrome
+        .wait_for(appearance(Appearance::default()))
+        .expect("an edit that drops the pointer theme says so");
 }
 
 fn appearance(wanted: Appearance) -> impl Fn(&HostMessage) -> bool {

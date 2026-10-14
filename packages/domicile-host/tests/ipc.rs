@@ -572,6 +572,7 @@ fn the_configs_appearance_rides_with_the_handshake() {
         accent_color: Some("#3584e4".into()),
         high_contrast: true,
         reduced_motion: false,
+        ..Appearance::default()
     };
 
     assert_eq!(
