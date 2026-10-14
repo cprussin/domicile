@@ -3,7 +3,7 @@ import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch"
 import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 
 import type { Inbox } from "./inbox";
-import { readInbox } from "./read-inbox";
+import { inboxReader } from "./read-inbox";
 import { watchInbox } from "./watch-inbox";
 
 /**
@@ -17,7 +17,7 @@ export const deskInbox = perHost((domicile) => {
     if (known === undefined) {
       const watch = sharedWatch((onInbox: (inbox: Inbox) => void) =>
         watchInbox(
-          () => readInbox(domicile, email),
+          inboxReader(domicile, email),
           onInbox,
           () => domicile.locked === true,
         ),

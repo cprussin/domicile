@@ -1492,7 +1492,9 @@ void Fetched(ScriptPromiseResolver<DomicileFetchResponse>* resolver,
 ScriptPromise<DomicileFetchResponse> DomicileHost::fetchWithCookies(
     ScriptState* script_state,
     const String& url,
+    const String& method,
     const HeapVector<Member<DomicileFetchHeader>>& headers,
+    const String& body,
     const String& sapisid_hash_origin,
     ExceptionState& exception_state) {
   const KURL resolved = window_->CompleteURL(url);
@@ -1521,7 +1523,9 @@ ScriptPromise<DomicileFetchResponse> DomicileHost::fetchWithCookies(
       MakeGarbageCollected<ScriptPromiseResolver<DomicileFetchResponse>>(
           script_state, exception_state.GetContext());
   auto promise = resolver->Promise();
-  shell_fetch_->Fetch(resolved, std::move(sent), sapisid_hash_origin,
+  // The browser checks the method and the body: see shell_fetch.h.
+  shell_fetch_->Fetch(resolved, method, std::move(sent), body,
+                      sapisid_hash_origin,
                       BindOnce(&Fetched, WrapPersistent(resolver)));
   return promise;
 }

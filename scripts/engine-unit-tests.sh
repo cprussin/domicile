@@ -32,9 +32,10 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # ControlChannel 3, DeviceChoices 9, SurfaceFrames 6,
 # GuestDialogs 6, DownloadTally 6, SurfaceSubmits 4,
 # PrivatePages 3, ShellOrigin 2, AppRoots 4, AppChannel 2, AppDocument 3,
-# WebViewUrl 5, ShellFetch 15, BrowserWindowCaptureTarget 3.
+# WebViewUrl 5, ShellFetch 21, BrowserWindowCaptureTarget 3.
 #
-# 355, and it was 350 — capturing a browser window alone is three
+# 361, and it was 355 — a POST from the shell is six more ShellFetch
+# cases. Before that 355, and it was 350 — capturing a browser window alone is three
 # BrowserWindowCaptureTarget cases and two FrameSinkBroker ones. Before that
 # 350, and it was 348 — each display's connector is two DomicileDisplayList
 # cases. Before that 348, and it was 333 — the shell's fetches with the profile's cookies are 15
@@ -122,7 +123,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=355
+FLOOR=361
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

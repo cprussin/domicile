@@ -10,6 +10,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "net/http/http_request_headers.h"
 #include "net/http/http_util.h"
 #include "services/network/public/cpp/header_util.h"
 #include "url/gurl.h"
@@ -30,6 +31,10 @@ std::optional<std::string> HeaderRefusal(const mojom::ShellFetchHeader& header,
   // The profile's cookies are the point; a page's own would be mixed in.
   if (base::EqualsCaseInsensitiveASCII(header.name, "Cookie")) {
     return "the browser sends the profile's cookies; a page sends none";
+  }
+  // The browser sends a POST from the address's own origin, and says so.
+  if (base::EqualsCaseInsensitiveASCII(header.name, "Origin")) {
+    return "the browser sends the Origin header";
   }
   if (!network::IsRequestHeaderSafe(header.name, header.value)) {
     return base::StrCat({"the header ", header.name, " is the browser's"});
@@ -73,6 +78,28 @@ std::optional<std::string> ShellFetchRefusal(
     }
   }
   return std::nullopt;
+}
+
+std::optional<std::string> ShellFetchMethodRefusal(
+    std::string_view method,
+    const std::optional<std::string>& body) {
+  if (method == net::HttpRequestHeaders::kGetMethod) {
+    if (body.has_value()) {
+      return "a GET sends no body";
+    }
+    return std::nullopt;
+  }
+  if (method == net::HttpRequestHeaders::kPostMethod) {
+    if (body.has_value() && body->size() > kShellFetchMaxBody) {
+      return "the body is too large";
+    }
+    return std::nullopt;
+  }
+  return "only GET and POST may be sent";
+}
+
+bool ShellFetchFollowsRedirects(std::string_view method, bool hashed) {
+  return method == net::HttpRequestHeaders::kGetMethod && !hashed;
 }
 
 std::optional<std::string> ShellFetchRedirectRefusal(const GURL& to) {

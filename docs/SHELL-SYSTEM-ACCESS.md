@@ -47,28 +47,35 @@ export const Shell = async (root, domicile) => {
 
 ## The browser's cookies
 
-`fetchWithCookies(url, headers, sapisidHashOrigin)` GETs an https address
-from the engine's browser process with the cookies of the profile the
-ordinary browser windows use. A bar item reads a site the user signed in to
+`fetchWithCookies(url, method, headers, body, sapisidHashOrigin)` sends a
+GET or a POST to an https address from the engine's browser process with the
+cookies of the profile the ordinary browser windows use. A bar item reads a site the user signed in to
 in a browser window, with no sign-in of its own.
 
 ```ts
 const inbox = await domicile.fetchWithCookies(
-  "https://mail.google.com/mail/feed/atom?authuser=me%40gmail.com",
+  "https://mail.google.com/mail/?authuser=me%40gmail.com",
+  "GET",
   [],
   null,
+  null,
 );
-// { status: 200, url: "https://mail.google.com/…", body: "<?xml…" }
+// { status: 200, url: "https://mail.google.com/mail/u/0/", body: "<!doctype…" }
 ```
 
 - Resolves with `status`, the final `url` after redirects, and the `body` as
   text, whatever the status. Rejects with a `NetworkError` for a network
   failure or a refusal.
-- Refused: an address that is not https, a `Cookie` header, a header the
-  network stack sets itself (`Host`, `Content-Length`, …), and every request
+- `method` is `"GET"` or `"POST"`. A GET sends no body, and comes from no
+  origin (`Sec-Fetch-Site: none`). A POST sends `body` with the page's
+  `Content-Type`, as a same-origin CORS request from the address's own
+  origin: that `Origin`, `Sec-Fetch-Site: same-origin`, `Sec-Fetch-Mode:
+  cors`.
+- Refused: an address that is not https, another method, a GET with a body,
+  a `Cookie` or `Origin` header, a header the network stack sets itself (`Host`, `Content-Length`, …), and every request
   while the desk is locked, or that it locked during.
-- Redirects are followed on https only. One to another origin drops the
-  page's headers.
+- A GET follows redirects on https only, and one to another origin drops
+  the page's headers. A POST follows none.
 - `sapisidHashOrigin`, such as `"https://mail.google.com"`, adds the
   `Authorization: SAPISIDHASH …` header Google's first-party APIs take. The
   engine computes it from the SAPISID cookie the request carries, so the
