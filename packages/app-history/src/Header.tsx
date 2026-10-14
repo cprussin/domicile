@@ -5,6 +5,7 @@ import { BroomIcon } from "@phosphor-icons/react/dist/ssr/Broom";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
 import { useEffect, useRef } from "react";
 
+import mark from "../icons/history.svg";
 import { css } from "../styled-system/css";
 import { flex, hstack } from "../styled-system/patterns";
 
@@ -39,7 +40,7 @@ export const Header = ({ onClearData, onSearch, scrolled, search }: Props) => {
     <header className={headerStyles} data-scrolled={scrolled ? "" : undefined}>
       <div className={innerStyles}>
         <div className={titleRowStyles}>
-          <img alt="" className={markStyles} src="./history.svg" />
+          <img alt="" className={markStyles} src={mark} />
           <h1 className={titleStyles}>History</h1>
           <span className={spacerStyles} />
           <Button
