@@ -318,7 +318,14 @@ class DeskWindows final : public base::SupportsUserData::Data,
   }
 
   // Destroys closed windows' pages once none of their frames are on the stack.
-  void Reap() { closing_.clear(); }
+  //
+  // Takes the list first: destroying a page can close another window, as
+  // DevTools closes its own with the page it inspects, and that Close adds to
+  // `closing_` and posts its own Reap.
+  void Reap() {
+    std::vector<std::unique_ptr<WebViewGuest>> reaping;
+    reaping.swap(closing_);
+  }
 
   // Ends private browsing once the last private page closes: its cookies,
   // cache and storage go with the off-the-record profile.
