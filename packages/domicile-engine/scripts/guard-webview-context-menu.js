@@ -9,6 +9,9 @@
 //   "inspect" on it.
 // - new-window: the DevTools window "inspect" opens, from the desk's list.
 //   Drawn as a shell would.
+// - closing-inspected: a press on the strip once DevTools' window is open
+//   closes the window DevTools inspects.
+// - windows-closed: both windows left the desk's list.
 //
 // The document Domicile writes calls `Shell` once the module loads.
 
@@ -45,8 +48,16 @@ export const Shell = (_root, desktop) => {
   view.style.blockSize = `calc(100% - ${stripHeight})`;
   view.style.border = "0";
 
+  // The inspected window's id, and DevTools' once it opens.
+  let inspected;
+  let tools;
+
   document.addEventListener("mousedown", (event) => {
     say(`chrome-mousedown target=${event.target.localName}`);
+    if (tools !== undefined) {
+      say("closing-inspected");
+      desktop.closeBrowserWindow(inspected);
+    }
   });
 
   view.addEventListener("domicile-context-menu", (event) => {
@@ -56,8 +67,9 @@ export const Shell = (_root, desktop) => {
     event.run("inspect");
   });
 
-  // DevTools' window, which the desk opens and the shell draws. Behind the
-  // first, so the press point stays on the page.
+  // The page is a browser window, so closing it destroys its page in the
+  // desk's DeskWindows::Reap, with DevTools attached. DevTools' window is the
+  // second, drawn behind the first so the press point stays on the page.
   const host = desktop;
   if (host === null || host === undefined) {
     throw new Error(
@@ -65,28 +77,32 @@ export const Shell = (_root, desktop) => {
         " document is not a shell the engine serves",
     );
   }
-  const drawn = new Set();
   host.addEventListener("browserwindowschanged", () => {
-    for (const window of host.browserWindows ?? []) {
-      if (!drawn.has(window.id)) {
-        drawn.add(window.id);
-        say(`new-window url=${window.url}`);
-        const tools = document.createElement("webview");
-        tools.style.position = "absolute";
-        tools.style.inset = "0";
-        tools.style.inlineSize = "100%";
-        tools.style.blockSize = "100%";
-        tools.style.zIndex = "-1";
-        tools.setAttribute("window", window.id);
-        document.body.append(tools);
-      }
+    const windows = host.browserWindows ?? [];
+    if (inspected === undefined && windows.length > 0) {
+      inspected = windows[0].id;
+      view.setAttribute("window", inspected);
+      document.body.append(view);
+    } else if (tools === undefined && windows.length > 1) {
+      const window = windows[1];
+      tools = window.id;
+      say(`new-window url=${window.url}`);
+      const drawn = document.createElement("webview");
+      drawn.style.position = "absolute";
+      drawn.style.inset = "0";
+      drawn.style.inlineSize = "100%";
+      drawn.style.blockSize = "100%";
+      drawn.style.zIndex = "-1";
+      drawn.setAttribute("window", tools);
+      document.body.append(drawn);
+    } else if (tools !== undefined && windows.length === 0) {
+      say("windows-closed");
     }
   });
 
   document.body.style.margin = "0";
   document.body.append(strip);
-  document.body.append(view);
-  view.setAttribute("src", required(parameters, "src"));
+  host.openBrowserWindow(required(parameters, "src"));
 
   say("shell-loaded");
 };
