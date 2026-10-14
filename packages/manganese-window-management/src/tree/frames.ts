@@ -4,6 +4,7 @@
 // Windows are positioned boxes, so the whole layout is computed here
 // instead of by document flow.
 
+import { WELL_MARGIN } from "../gaps";
 import type { Rect } from "../rect";
 import { barOf, surfaceOf, TITLE_BAR, tuckedUnderBar } from "../rect";
 import type { Container, LayoutNode } from "./node";
@@ -102,6 +103,11 @@ export type Tab = {
   strip: StripPlace;
   /** The layout of the container whose tab this is. */
   tabbed: TabLayout;
+  /**
+   * The box under the strip that the shown container sits in, with
+   * {@link WELL_MARGIN} around it. `undefined` for a hidden tab.
+   */
+  well: Rect | undefined;
   /** How many windows the nested container holds. */
   windows: number;
 };
@@ -148,7 +154,7 @@ export const areaOf = (
     if (child === undefined) {
       throw new Error(`layout tree: path ${path.join(".")} leaves the tree`);
     } else {
-      return areaOf(child, rest, childArea(root, area, gap, index), gap);
+      return areaOf(child, rest, childArea(root, child, area, gap, index), gap);
     }
   }
 };
@@ -242,9 +248,10 @@ const placed = (
   }
 };
 
-/** The box the child at `at` of `container` is laid out in. */
+/** The box `child`, at `at` in `container`, is laid out in. */
 const childArea = (
   container: Container,
+  child: LayoutNode,
   area: Rect,
   gap: number,
   at: number,
@@ -256,7 +263,9 @@ const childArea = (
     }
     case Layout.Stacking:
     case Layout.Tabbed: {
-      return contentsOf(container, area);
+      return child.kind === NodeKind.Container
+        ? insetOf(contentsOf(container, area))
+        : contentsOf(container, area);
     }
   }
 };
@@ -374,10 +383,17 @@ const titled = (
             selected,
             strip,
             tabbed: layout,
+            well: showing ? contents : undefined,
             windows: windowsIn(child).length,
           };
           const inside = showing
-            ? placed(child, contents, gap, within(pointed, at), selected)
+            ? placed(
+                child,
+                insetOf(contents),
+                gap,
+                within(pointed, at),
+                selected,
+              )
             : NOTHING;
           return {
             frames: inside.frames,
@@ -457,6 +473,14 @@ const contentsOf = (container: Container, area: Rect): Rect => {
     y: area.y + TITLE_BAR * bars,
   };
 };
+
+/** A tab's well, less its margin: the box its container is laid out in. */
+const insetOf = (well: Rect): Rect => ({
+  height: Math.max(0, well.height - 2 * WELL_MARGIN),
+  width: Math.max(0, well.width - 2 * WELL_MARGIN),
+  x: well.x + WELL_MARGIN,
+  y: well.y + WELL_MARGIN,
+});
 
 /** How many bars tall a strip is: one for tabbed, one per child for stacking. */
 const barsOf = (container: Container): number =>

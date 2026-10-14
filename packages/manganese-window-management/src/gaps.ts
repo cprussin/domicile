@@ -8,6 +8,12 @@ import { windowsOf } from "./tree/tiling";
 /** `gaps.inner` from the config, around tiled windows and between them. */
 export const INNER_GAP = 20;
 
+/**
+ * The margin around a group shown in a tab, between its windows and the edges
+ * of the well it sits in. See `GroupWell`.
+ */
+export const WELL_MARGIN = 10;
+
 /** The gap inside a floating group, narrower since the group shares one box. */
 const FLOATING_GAP = 10;
 

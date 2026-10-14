@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
+import { WELL_MARGIN } from "../gaps";
 import { SURFACE_TUCK, TITLE_BAR } from "../rect";
-import { framesOf } from "./frames";
+import { areaOf, framesOf } from "./frames";
 import { Layout, LayoutNode } from "./node";
 import { NOTHING_TILED } from "./tiling";
 
@@ -460,11 +461,55 @@ describe("framesOf", () => {
           tabs: 2,
         },
         tabbed: Layout.Tabbed,
+        well: { height: 1000 - TITLE_BAR, width: 1000, x: 0, y: TITLE_BAR },
         windows: 2,
       },
     ]);
-    // Its windows are laid out under the tabs, with their own title bars.
-    expect(frameFor(tiled, "a").bar).toMatchObject({ y: TITLE_BAR });
+    // Its windows are laid out in the well, with their own title bars.
+    expect(frameFor(tiled, "a").bar).toMatchObject({
+      x: WELL_MARGIN,
+      y: TITLE_BAR + WELL_MARGIN,
+    });
+  });
+
+  it("lays a container out in its well, inset from the well's edges", () => {
+    const root = LayoutNode.Container(Layout.Tabbed, [
+      LayoutNode.Container(Layout.SplitV, [
+        LayoutNode.Window("a"),
+        LayoutNode.Window("b"),
+      ]),
+    ]);
+    const tiled = framesOf({ depth: 1, root }, AREA, 0);
+    const inset = {
+      height: 1000 - TITLE_BAR - 2 * WELL_MARGIN,
+      width: 1000 - 2 * WELL_MARGIN,
+      x: WELL_MARGIN,
+      y: TITLE_BAR + WELL_MARGIN,
+    };
+
+    expect(frameFor(tiled, "a").bar).toEqual({
+      ...inset,
+      height: TITLE_BAR,
+    });
+    expect(frameFor(tiled, "b").surface).toMatchObject({
+      y: inset.y + inset.height / 2 + TITLE_BAR - SURFACE_TUCK,
+    });
+    // Edge drags measure the same box.
+    expect(areaOf(root, [0], AREA, 0)).toEqual(inset);
+  });
+
+  it("gives a container no size in a well narrower than its margins", () => {
+    const root = LayoutNode.Container(Layout.Tabbed, [
+      LayoutNode.Container(Layout.SplitV, [LayoutNode.Window("a")]),
+    ]);
+    const narrow = {
+      height: TITLE_BAR + WELL_MARGIN,
+      width: WELL_MARGIN,
+      x: 0,
+      y: 0,
+    };
+
+    expect(areaOf(root, [0], narrow, 0)).toMatchObject({ height: 0, width: 0 });
   });
 
   it("leaves the windows behind an unfocused tab off the screen entirely", () => {
@@ -505,6 +550,7 @@ describe("framesOf", () => {
           tabs: 2,
         },
         tabbed: Layout.Tabbed,
+        well: undefined,
         windows: 2,
       },
     ]);
