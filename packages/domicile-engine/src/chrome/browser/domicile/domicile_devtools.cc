@@ -13,6 +13,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
+#include "base/values.h"
 #include "chrome/browser/devtools/devtools_ui_bindings.h"
 #include "components/domicile/browser/web_view_guest.h"
 #include "content/public/browser/devtools_agent_host.h"
@@ -78,9 +79,11 @@ WebViewGuest& GuestOf(content::WebContents* contents) {
 // DevToolsWindow implements the same interface on a Browser.
 class WebViewDevToolsDelegate : public DevToolsUIBindings::Delegate {
  public:
-  WebViewDevToolsDelegate(content::WebContents& frontend,
+  WebViewDevToolsDelegate(DevToolsUIBindings& bindings,
+                          content::WebContents& frontend,
                           content::WebContents* inspected)
-      : frontend_(&frontend),
+      : bindings_(&bindings),
+        frontend_(&frontend),
         inspected_(inspected == nullptr ? nullptr : inspected->GetWeakPtr()) {}
 
   content::WebContents* GetInspectedWebContents() override {
@@ -110,7 +113,15 @@ class WebViewDevToolsDelegate : public DevToolsUIBindings::Delegate {
   void SetEyeDropperActive(bool active) override {}
   void OpenNodeFrontend() override {}
   void OnLoadCompleted() override {}
-  void ReadyForTest() override {}
+  // The engine draws no native menus, so DevTools draws its own HTML menu, as
+  // Chrome on Android does. Sent here because the front end sends
+  // readyForTest on every load after ContextMenu.initialize(), which drops an
+  // earlier setUseSoftMenu. OnLoadCompleted runs at the document's onload,
+  // before that.
+  void ReadyForTest() override {
+    bindings_->CallClientMethod("DevToolsAPI", "setUseSoftMenu",
+                                base::Value(true));
+  }
   void ConnectionReady() override {}
   void SetOpenNewWindowForPopups(bool value) override {}
   infobars::ContentInfoBarManager* GetInfoBarManager() override {
@@ -124,6 +135,7 @@ class WebViewDevToolsDelegate : public DevToolsUIBindings::Delegate {
 
  private:
   // The bindings own this, and the front end's page owns the bindings.
+  const raw_ptr<DevToolsUIBindings> bindings_;
   const raw_ptr<content::WebContents> frontend_;
   const base::WeakPtr<content::WebContents> inspected_;
 };
@@ -157,8 +169,8 @@ class DevToolsFrontendWatcher
     scoped_refptr<content::DevToolsAgentHost> agent = Waiting().front();
     Waiting().erase(Waiting().begin());
 
-    bindings->SetDelegate(
-        new WebViewDevToolsDelegate(*web_contents(), agent->GetWebContents()));
+    bindings->SetDelegate(new WebViewDevToolsDelegate(
+        *bindings, *web_contents(), agent->GetWebContents()));
     bindings->AttachTo(agent);
     Frontends().push_back(web_contents()->GetWeakPtr());
     // The line the context menu guard greps for.
