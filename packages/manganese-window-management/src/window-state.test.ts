@@ -1924,6 +1924,7 @@ describe("a client's limits on its size", () => {
 describe("a client's popups", () => {
   const MENU = {
     appId: "menu",
+    frame: 0,
     parent: "term",
     position: [12, 30],
     size: [180, 240],

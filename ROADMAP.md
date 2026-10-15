@@ -47,8 +47,9 @@ item when it ships.
    - Checked by installing in containers; no packaged session has run on
      hardware.
 
-7. **Popups and bubbles move with their window's frame.** The engine shows
-   synced frames; the compositor, protocol and manganese do not use them yet.
+7. **Popups and bubbles move with their window's frame.** A bubble's move
+   names its window's synced frames, and manganese shows them. Left: the
+   `crux` pixel guard.
    [FRAME-SYNCED-SURFACES.md](docs/architecture/FRAME-SYNCED-SURFACES.md#plan).
 
 8. **Revisit the docs for users.** Start with the README.

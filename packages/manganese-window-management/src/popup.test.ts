@@ -30,6 +30,7 @@ describe("where a popup goes", () => {
       [
         {
           appId: "menu",
+          frame: 0,
           parent: "term",
           position: [12, 30],
           size: [180, 240],
@@ -41,6 +42,7 @@ describe("where a popup goes", () => {
     expect(menu).toStrictEqual({
       appId: "menu",
       depth: raised(3),
+      frame: 0,
       rect: { height: 240, width: 180, x: 112, y: 80 },
     });
   });
@@ -48,8 +50,20 @@ describe("where a popup goes", () => {
   it("adds up a submenu's offsets down to the window", () => {
     const popups = popupsOver(
       [
-        { appId: "menu", parent: "term", position: [12, 30], size: [180, 240] },
-        { appId: "sub", parent: "menu", position: [180, 20], size: [100, 50] },
+        {
+          appId: "menu",
+          frame: 0,
+          parent: "term",
+          position: [12, 30],
+          size: [180, 240],
+        },
+        {
+          appId: "sub",
+          frame: 0,
+          parent: "menu",
+          position: [180, 20],
+          size: [100, 50],
+        },
       ],
       [placed("app:term", { height: 600, width: 800, x: 100, y: 50 })],
     );
@@ -65,7 +79,15 @@ describe("where a popup goes", () => {
     // popups.
     expect(
       popupsOver(
-        [{ appId: "menu", parent: "term", position: [0, 0], size: [1, 1] }],
+        [
+          {
+            appId: "menu",
+            frame: 0,
+            parent: "term",
+            position: [0, 0],
+            size: [1, 1],
+          },
+        ],
         [placed("app:other", { height: 1, width: 1, x: 0, y: 0 })],
       ),
     ).toEqual([]);

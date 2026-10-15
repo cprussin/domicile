@@ -833,6 +833,29 @@ impl Engine {
         };
     }
 
+    /// Whether the engine has `domicile_surface_sync`. An older one shows
+    /// each submit at once, so the compositor cannot sync a move with it.
+    pub fn syncs_frames(&self) -> bool {
+        self.surface_sync().is_ok()
+    }
+
+    /// Makes `surface`'s next submit, and each after it, go up at synced
+    /// `frame`. Only for an engine that [`Engine::syncs_frames`], with a
+    /// `frame` above the last. See `docs/architecture/FRAME-SYNCED-SURFACES.md`.
+    pub fn sync(&self, surface: SurfaceId, frame: u32) {
+        let f = self
+            .surface_sync()
+            .expect("the caller checked syncs_frames");
+        // SAFETY: the handle is live for the life of self.
+        unsafe { f(self.handle, surface, frame) };
+    }
+
+    fn surface_sync(
+        &self,
+    ) -> Result<Symbol<'_, unsafe extern "C" fn(*mut Handle, SurfaceId, u32)>, EngineError> {
+        self.symbol(b"domicile_surface_sync\0", "domicile_surface_sync")
+    }
+
     /// Whether the engine has `domicile_surface_submit_fenced`. An older one
     /// reads a buffer as soon as it is submitted, so the compositor must wait
     /// for its own draw into one first.

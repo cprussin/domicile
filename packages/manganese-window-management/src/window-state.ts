@@ -332,6 +332,7 @@ export enum WindowActionKind {
   AppClosed,
   AppCursorChanged,
   AppDesktopIdChanged,
+  AppFrameSynced,
   AppMaxSize,
   AppMinSize,
   AppTitled,
@@ -441,6 +442,16 @@ export const WindowAction = {
     appId,
     desktopId,
     kind: WindowActionKind.AppDesktopIdChanged as const,
+  }),
+
+  /**
+   * The compositor synced a frame of the client's window, which its `<app>`
+   * shows from the same render.
+   */
+  AppFrameSynced: (appId: string, frame: number) => ({
+    appId,
+    frame,
+    kind: WindowActionKind.AppFrameSynced as const,
   }),
 
   /**
@@ -974,6 +985,12 @@ const reduceAction = (
       return reshapeApp(state, action.appId, (window) => ({
         ...window,
         cursor: action.cursor,
+      }));
+    }
+    case WindowActionKind.AppFrameSynced: {
+      return reshapeApp(state, action.appId, (window) => ({
+        ...window,
+        syncedFrame: action.frame,
       }));
     }
     case WindowActionKind.AppDesktopIdChanged: {

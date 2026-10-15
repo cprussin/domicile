@@ -83,6 +83,7 @@ export const describedWindow = (
   cursor: "default",
   desktopId: "",
   dialog: false,
+  frame: 0,
   gid: null,
   grab: false,
   height: null,

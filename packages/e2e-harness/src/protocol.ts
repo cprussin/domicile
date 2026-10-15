@@ -68,6 +68,14 @@ const welcomeSchema = z.looseObject({
 // Can repeat for a known window: the host replays all windows to every chrome
 // whenever any chrome connects. Key windows by app id.
 // Sent when the window first draws, with what the client said before.
+// A surface's synced frame. See docs/architecture/FRAME-SYNCED-SURFACES.md.
+const frameSchema = z.number().int().nonnegative();
+
+const appFrameSchema = z.looseObject({
+  app_id: z.string(),
+  frame: frameSchema,
+});
+
 const appAppearedSchema = z.looseObject({
   app_id: z.string(),
   // The client asked to draw its own frame.
@@ -79,6 +87,9 @@ const appAppearedSchema = z.looseObject({
     .transform((desktopId) => desktopId ?? undefined),
   // The client has a parent window or a fixed size.
   dialog: z.boolean(),
+  // The synced frame to show; absent is 0. Above 0 only for a window that
+  // appeared before this page did.
+  frame: frameSchema.optional(),
   // The process that connected the window's client, from `SO_PEERCRED`.
   owner: ownerSchema,
   // The size of the first frame.
@@ -119,6 +130,8 @@ const appResizedSchema = z.looseObject({
 // it moves; closed with `app_closed`.
 const popupPlacedSchema = z.looseObject({
   app_id: z.string(),
+  // The synced frame of each surface the move goes with.
+  frames: z.array(appFrameSchema).optional(),
   grab: z.boolean(),
   parent: z.string(),
   position: sizeSchema,

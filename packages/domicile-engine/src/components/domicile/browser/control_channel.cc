@@ -235,6 +235,35 @@ mojom::WindowOwnerPtr OwnerOf(const base::DictValue* owner) {
                                  SandboxOf(owner->FindDict("sandbox")));
 }
 
+// A message's synced `frame`, 0 when absent. A whole number from base::Value
+// is a signed int, which a frame counted at 60 a second fills in a year.
+uint32_t FrameOf(const base::DictValue& message) {
+  return static_cast<uint32_t>(
+      std::max(message.FindInt("frame").value_or(0), 0));
+}
+
+// The synced frames a move shows with. An entry with no app or a negative
+// frame is dropped: the page keeps the frame it shows.
+std::vector<mojom::AppFramePtr> FramesOf(const base::ListValue* frames) {
+  std::vector<mojom::AppFramePtr> told;
+  if (!frames) {
+    return told;
+  }
+  for (const base::Value& entry : *frames) {
+    const base::DictValue* frame = entry.GetIfDict();
+    if (!frame) {
+      continue;
+    }
+    const std::string* app_id = frame->FindString("app_id");
+    const std::optional<int> number = frame->FindInt("frame");
+    if (app_id && number && *number >= 0) {
+      told.push_back(
+          mojom::AppFrame::New(*app_id, static_cast<uint32_t>(*number)));
+    }
+  }
+  return told;
+}
+
 // A string the sandbox engine may leave unset.
 std::optional<std::string> Unset(const std::string* value) {
   return value ? std::make_optional(*value) : std::nullopt;
@@ -389,6 +418,10 @@ void ControlChannel::ReplyToNotification(uint32_t id,
 
 void ControlChannel::FocusChrome() {
   SendMessage(Typed("focus_chrome"));
+}
+
+void ControlChannel::SyncFrames() {
+  SendMessage(Typed("sync_frames"));
 }
 
 // NOTHING IS SENT, AND THAT IS THE MEMBER RATHER THAN AN OMISSION. The pointer
@@ -766,7 +799,8 @@ void ControlChannel::DispatchLine(const std::string& line) {
       client_->AppAppeared(*app_id, title ? *title : std::string(),
                            desktop_id ? *desktop_id : std::string(),
                            Number((*size)[0]), Number((*size)[1]), *dialog,
-                           *client_frame, OwnerOf(message.FindDict("owner")));
+                           *client_frame, OwnerOf(message.FindDict("owner")),
+                           FrameOf(message));
     }
     return;
   }
@@ -794,7 +828,8 @@ void ControlChannel::DispatchLine(const std::string& line) {
         size->size() == 2u && grab) {
       client_->PopupPlaced(*app_id, *parent, Number((*position)[0]),
                            Number((*position)[1]), Number((*size)[0]),
-                           Number((*size)[1]), *grab);
+                           Number((*size)[1]), *grab,
+                           FramesOf(message.FindList("frames")));
     }
     return;
   }

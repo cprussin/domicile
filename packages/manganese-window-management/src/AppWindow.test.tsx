@@ -78,6 +78,7 @@ const windowProps = {
   onMotionEnded: nothingEnded,
   rect: ON_SCREEN,
   resizing: false,
+  syncedFrame: 0,
 } as const;
 
 // Loads the real stylesheet so computed styles reflect the emitted CSS.
@@ -100,6 +101,14 @@ beforeEach(() => {
 });
 
 describe("AppWindow", () => {
+  it("shows the synced frame it is given", () => {
+    const { container } = render(
+      <AppWindow {...windowProps} focused syncedFrame={4} />,
+    );
+
+    expect(portal(container).getAttribute("frame")).toBe("4");
+  });
+
   it("leaves its frame the resting color even while it is focused", () => {
     // Focus is shown by a glow around the window (see `FocusGlow`), not a
     // border.

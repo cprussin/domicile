@@ -170,6 +170,13 @@ struct WindowSandbox {
   string? instance_id;
 };
 
+// A surface's synced frame: `<app frame>` for window or popup `app_id`. See
+// docs/architecture/FRAME-SYNCED-SURFACES.md in the Domicile repository.
+struct AppFrame {
+  string app_id;
+  uint32 frame;
+};
+
 // One thing that was copied, as a row of the clipboard's history.
 //
 // A preview and an id rather than the text. The compositor keeps the bytes and
@@ -317,6 +324,11 @@ interface ControlChannel {
   FocusApp(string app_id);
   FocusChrome();
 
+  // The page renders `<app frame>`, so the compositor may sync frames until
+  // the page starts again. Without it, a page that sets `frame` some other
+  // way, such as always 0, would show a synced window's old frame.
+  SyncFrames();
+
   // Ask a client to close. Not a kill: the client decides, which is why a
   // window can refuse and show a save dialog instead.
   CloseApp(string app_id);
@@ -420,10 +432,11 @@ interface ControlChannelClient {
   // A window drew its first frame, at `width` x `height`. `desktop_id` is
   // empty when the client set none. `dialog`: the client gave it a parent or
   // a fixed size. `client_frame`: the client asked to draw its own frame.
-  // `owner` is null when the compositor named none.
+  // `owner` is null when the compositor named none. `frame` is the window's
+  // synced frame, above 0 only for a window that appeared before this page.
   AppAppeared(string app_id, string title, string desktop_id, double width,
               double height, bool dialog, bool client_frame,
-              WindowOwner? owner);
+              WindowOwner? owner, uint32 frame);
 
   AppResized(string app_id, double width, double height);
 
@@ -434,9 +447,11 @@ interface ControlChannelClient {
 
   // A popup over the window or popup `parent_app_id`: its box is `width` by
   // `height` at (`x`, `y`) from that one's, in logical units. Sent again when
-  // the client moves it; it goes with AppClosed.
+  // the client moves it; it goes with AppClosed. `frames` are the synced
+  // frames the move shows with, to set in the same update.
   PopupPlaced(string app_id, string parent_app_id, double x, double y,
-              double width, double height, bool grab);
+              double width, double height, bool grab,
+              array<AppFrame> frames);
   AppClosed(string app_id);
 
   // The cursor a client asked for over its own surface.

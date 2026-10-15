@@ -491,6 +491,14 @@ export type DomicileHost = {
   focusApp(appId: string): void;
   focusChrome(): void;
   /**
+   * Say this page renders each window's `frame` as its `<app frame>`, until it
+   * loads again. Only then does the compositor sync a window's content with
+   * the moves of its popups. A page that sets `frame` some other way, such as
+   * always 0, would show a synced window's old frame. An <app> with no `frame`
+   * shows the newest.
+   */
+  syncFrames(): void;
+  /**
    * Put the pointer at a place in this page, in the page's own coordinates --
    * the ones a PointerEvent reports as clientX/clientY.
    *
@@ -911,6 +919,12 @@ export type DomicileWindow = {
   readonly dialog: boolean;
   /** The client asked to draw its own frame (client-side decorations). */
   readonly clientFrame: boolean;
+  /**
+   * The synced frame to set as its `<app frame>`, in the same update as the
+   * move that came with it. 0 until the compositor syncs a frame. Moves name
+   * frames only for a page that called syncFrames().
+   */
+  readonly frame: number;
   /**
    * The window this one is a dialog for (xdg_toplevel.set_parent), following
    * every change; null for none, and for a popup. When the parent closes, this

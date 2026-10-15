@@ -2,7 +2,7 @@ import type { DetailedHTMLProps, HTMLAttributes } from "react";
 
 // JSX types for the engine fork's `<app>` element, which React does not know.
 //
-// Only `app-id` and `resizing` are declared. `<app>` has no hyphen, so React treats it as a
+// Only `app-id`, `frame` and `resizing` are declared. `<app>` has no hyphen, so React treats it as a
 // plain HTML element and will not set unknown properties or bind its custom
 // event; `AppWindow` uses `addEventListener` instead.
 //
@@ -27,10 +27,12 @@ declare module "react" {
     interface IntrinsicElements {
       /**
        * A Wayland client's window. `app-id` is the host's ID for it.
+       * `frame` is the synced frame it shows (`DomicileWindow.frame`).
        * `resizing`, by its presence, marks an interactive resize.
        */
       app: DetailedHTMLProps<HTMLAttributes<HTMLAppElement>, HTMLAppElement> & {
         "app-id": string;
+        frame?: string | undefined;
         resizing?: string | undefined;
       };
     }
