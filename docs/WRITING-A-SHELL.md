@@ -284,6 +284,13 @@ Each entry in `domicile.windows` describes one client window.
 - **Client frames:** `clientFrame` is `true` when the client asked to draw its
   own frame. `shell-manganese` leaves its title bar off such a window while it
   floats.
+- **Synced frames:** `frame` is the frame to set as the window's
+  `<app frame>`, in the same render as the change that came with it, such as
+  a popup's move. Call `domicile.syncFrames()` once a page renders it: only
+  then does the compositor sync frames. It lasts until the page loads again.
+  An `<app>` with no `frame` shows the newest, so a shell that ignores frames
+  needs neither. See
+  [FRAME-SYNCED-SURFACES.md](architecture/FRAME-SYNCED-SURFACES.md).
 - **Shortcut inhibitors:** `inhibitsShortcuts` is `true` while the client
   holds `zwp_keyboard_shortcuts_inhibitor_v1`, as a VM or remote desktop
   viewer does. A change fires `windowschanged`. See

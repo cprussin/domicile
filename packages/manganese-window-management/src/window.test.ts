@@ -22,6 +22,7 @@ describe("ShellWindow", () => {
         kind: WindowKind.App,
         maxSize: [undefined, undefined],
         minSize: [undefined, undefined],
+        syncedFrame: 0,
         title: "Terminal",
       });
     });

@@ -50,6 +50,10 @@
   readonly attribute boolean dialog;
   // The client asked to draw its own frame (client-side decorations).
   readonly attribute boolean clientFrame;
+  // The synced frame to set as its `<app frame>`, in the same update as the
+  // move that came with it. 0 until the compositor syncs a frame. Moves name
+  // frames only for a page that called syncFrames().
+  readonly attribute unsigned long frame;
   // The window this one is a dialog for (xdg_toplevel.set_parent), following
   // every change; null for none, and for a popup. When the parent closes, this
   // names the parent's own parent.

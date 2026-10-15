@@ -120,6 +120,11 @@ type Props = {
   restack?: Restack | undefined;
   /** Eases the window into a new box; see `useSettling`. */
   settler?: Settler | undefined;
+  /**
+   * The synced frame its `<app frame>` shows, set in the same render as the
+   * moves of its popups. See `DomicileWindow.frame`.
+   */
+  syncedFrame: number;
 };
 
 /**
@@ -152,6 +157,7 @@ export const AppWindow = ({
   resizing,
   restack,
   settler,
+  syncedFrame,
 }: Props) => {
   // A closed window that is still animating out.
   const leaving = isLeaving(motion);
@@ -294,6 +300,7 @@ export const AppWindow = ({
       )}
       // Exposes the motion on the element for tests and debugging.
       data-motion={motion}
+      frame={String(syncedFrame)}
       hidden={rect === undefined}
       // A leaving window is unreachable by keyboard.
       inert={leaving}

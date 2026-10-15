@@ -38,6 +38,9 @@ struct DomicileWindowState {
   std::optional<double> max_height;
   bool dialog = false;
   bool client_frame = false;
+  // The synced frame `<app frame>` shows. See
+  // docs/architecture/FRAME-SYNCED-SURFACES.md in the Domicile repository.
+  uint32_t frame = 0;
   // Null for no parent.
   String transient_for;
   bool urgent = false;
@@ -79,6 +82,7 @@ class MODULES_EXPORT DomicileWindow final : public ScriptWrappable {
   std::optional<double> maxHeight() const { return state_.max_height; }
   bool dialog() const { return state_.dialog; }
   bool clientFrame() const { return state_.client_frame; }
+  uint32_t frame() const { return state_.frame; }
   const String& transientFor() const { return state_.transient_for; }
   bool urgent() const { return state_.urgent; }
   bool inhibitsShortcuts() const { return state_.inhibits_shortcuts; }

@@ -141,6 +141,7 @@ class MODULES_EXPORT DomicileHost final
                            ExceptionState&);
   void focusApp(ScriptState*, const String& app_id, ExceptionState&);
   void focusChrome(ScriptState*, ExceptionState&);
+  void syncFrames(ScriptState*, ExceptionState&);
   void warpPointer(ScriptState*, double x, double y, ExceptionState&);
   void closeApp(ScriptState*, const String& app_id, ExceptionState&);
   void setAppBounds(ScriptState*,
@@ -261,7 +262,8 @@ class MODULES_EXPORT DomicileHost final
                    double height,
                    bool dialog,
                    bool client_frame,
-                   domicile::mojom::blink::WindowOwnerPtr owner) override;
+                   domicile::mojom::blink::WindowOwnerPtr owner,
+                   uint32_t frame) override;
   void AppResized(const String& app_id, double width, double height) override;
   void AppMinSize(const String& app_id, double width, double height) override;
   void AppMaxSize(const String& app_id, double width, double height) override;
@@ -271,7 +273,8 @@ class MODULES_EXPORT DomicileHost final
                    double y,
                    double width,
                    double height,
-                   bool grab) override;
+                   bool grab,
+                   Vector<domicile::mojom::blink::AppFramePtr> frames) override;
   void AppClosed(const String& app_id) override;
   void AppCursor(const String& app_id,
                  domicile::mojom::blink::CursorShape cursor) override;
@@ -420,6 +423,9 @@ class MODULES_EXPORT DomicileHost final
   String WindowOf(const String& app_id) const;
   // The <app> showing `app_id`, or null.
   HTMLAppElement* AppElement(const String& app_id) const;
+  // Tell this page's <app>s that the control channel named synced frame
+  // `frame` for `app_id`. See HTMLAppElement::FrameHeard.
+  void FrameHeard(const String& app_id, uint32_t frame);
   // Dispatch the cancelable, bubbling `type` on `target` with `{appId}` as its
   // detail -- `{appId, pressed}` where `pressed` is given, `undefined` for a
   // null one -- and say whether nothing canceled it.

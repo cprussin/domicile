@@ -15,6 +15,37 @@ const base::UnguessableToken& Token() {
   return token;
 }
 
+// A page that never sets `frame` shows the newest frame heard, so a surface
+// synced before it connected is not stuck at an old one.
+TEST(SyncedFrameTest, AnAppWithNoFrameSetShowsTheNewestHeard) {
+  KnownFrames known;
+  EXPECT_EQ(known.Shown("app-2", std::nullopt), 0u);
+
+  known.Heard("app-2", 4);
+  known.Heard("app-2", 3);
+
+  EXPECT_EQ(known.Shown("app-2", std::nullopt), 4u);
+  EXPECT_EQ(known.Shown("app-3", std::nullopt), 0u);
+}
+
+// A page that sets `frame` holds its frame until the move that names it.
+TEST(SyncedFrameTest, AnAppWithAFrameSetShowsThatFrame) {
+  KnownFrames known;
+  known.Heard("app-2", 4);
+
+  EXPECT_EQ(known.Shown("app-2", 3u), 3u);
+  EXPECT_EQ(known.Shown("app-2", 0u), 0u);
+}
+
+TEST(SyncedFrameTest, AClosedWindowIsForgotten) {
+  KnownFrames known;
+  known.Heard("app-2", 4);
+  known.Forget("app-2");
+  known.Forget("app-9");
+
+  EXPECT_EQ(known.Shown("app-2", std::nullopt), 0u);
+}
+
 TEST(SyncedFrameTest, FrameZeroIsTheAllocatedId) {
   const viz::LocalSurfaceId allocated(3, Token());
   EXPECT_EQ(AtSyncedFrame(allocated, 0), allocated);

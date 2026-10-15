@@ -94,6 +94,8 @@ export const Shell = (_root, desktop) => {
   // a call and must not reach the compositor at all.
   host.callSystem(1, JSON.stringify({ call: "stat", path: "/" }));
   host.callSystem(2, "not a call");
+  // Must reach the compositor as `sync_frames`.
+  host.syncFrames();
 
   // Late: everything the stand-in sends lands well inside this.
   setTimeout(() => {
@@ -107,6 +109,7 @@ export const Shell = (_root, desktop) => {
       cursor: window.cursor,
       desktopId: window.desktopId,
       dialog: window.dialog,
+      frame: window.frame,
       gid: window.gid,
       grab: window.grab,
       height: window.height,

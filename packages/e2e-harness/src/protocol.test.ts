@@ -184,6 +184,35 @@ describe("parseHostMessage", () => {
     ).toStrictEqual({ app_id: undefined, type: "focus_changed" });
   });
 
+  it("decodes the synced frames a move goes with", () => {
+    expect(
+      parseHostMessage(
+        '{"type":"popup_placed","app_id":"app-3","parent":"app-2","position":[12,48],"size":[180,240],"grab":false,"frames":[{"app_id":"app-2","frame":4}]}',
+      ),
+    ).toStrictEqual({
+      app_id: "app-3",
+      frames: [{ app_id: "app-2", frame: 4 }],
+      grab: false,
+      parent: "app-2",
+      position: [12, 48],
+      size: [180, 240],
+      type: "popup_placed",
+    });
+  });
+
+  it("throws on a synced frame that is no frame number", () => {
+    expect(() =>
+      parseHostMessage(
+        '{"type":"popup_placed","app_id":"app-3","parent":"app-2","position":[12,48],"size":[180,240],"grab":false,"frames":[{"app_id":"app-2","frame":-1}]}',
+      ),
+    ).toThrow();
+    expect(() =>
+      parseHostMessage(
+        '{"type":"app_appeared","app_id":"term","title":null,"desktop_id":null,"size":[640,480],"dialog":false,"client_frame":false,"owner":{"pid":7,"uid":1000,"gid":1000,"pidfd_inode":null,"sandbox":null},"frame":1.5}',
+      ),
+    ).toThrow();
+  });
+
   it("decodes a dialog with no parent as undefined", () => {
     expect(
       parseHostMessage(

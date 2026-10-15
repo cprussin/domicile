@@ -3,6 +3,7 @@
 
 #include "third_party/blink/renderer/modules/domicile/domicile_host.h"
 
+#include <algorithm>
 #include <cmath>
 #include <optional>
 #include <string_view>
@@ -504,6 +505,12 @@ void DomicileHost::copyClipboardEntry(ScriptState*,
 void DomicileHost::focusChrome(ScriptState*, ExceptionState& exception_state) {
   if (Ready(exception_state)) {
     FocusChromeKeyboard();
+  }
+}
+
+void DomicileHost::syncFrames(ScriptState*, ExceptionState& exception_state) {
+  if (Ready(exception_state)) {
+    channel_->SyncFrames();
   }
 }
 
@@ -1107,6 +1114,14 @@ String DomicileHost::WindowOf(const String& app_id) const {
   return app_id;
 }
 
+void DomicileHost::FrameHeard(const String& app_id, uint32_t frame) {
+  // An <app> that sets no `frame` shows the newest, so a shell that never
+  // called syncFrames() is not left on a frame the compositor moved past.
+  if (Document* document = window_ ? window_->document() : nullptr) {
+    HTMLAppElement::FrameHeard(*document, app_id, frame);
+  }
+}
+
 HTMLAppElement* DomicileHost::AppElement(const String& app_id) const {
   Document* document = window_ ? window_->document() : nullptr;
   if (!document) {
@@ -1177,8 +1192,12 @@ void DomicileHost::AppAppeared(const String& app_id,
                                double height,
                                bool dialog,
                                bool client_frame,
-                               domicile::mojom::blink::WindowOwnerPtr owner) {
+                               domicile::mojom::blink::WindowOwnerPtr owner,
+                               uint32_t frame) {
   DomicileWindowState& state = WindowNamed(app_id);
+  // A reload's catch-up can be older than a move this page already heard.
+  state.frame = std::max(state.frame, frame);
+  FrameHeard(app_id, frame);
   if (owner) {
     state.pid = owner->pid;
     state.uid = owner->uid;
@@ -1224,13 +1243,15 @@ void DomicileHost::AppMaxSize(const String& app_id, double width,
   WindowsChanged();
 }
 
-void DomicileHost::PopupPlaced(const String& app_id,
-                               const String& parent_app_id,
-                               double x,
-                               double y,
-                               double width,
-                               double height,
-                               bool grab) {
+void DomicileHost::PopupPlaced(
+    const String& app_id,
+    const String& parent_app_id,
+    double x,
+    double y,
+    double width,
+    double height,
+    bool grab,
+    Vector<domicile::mojom::blink::AppFramePtr> frames) {
   DomicileWindowState& state = WindowNamed(app_id);
   state.parent = parent_app_id;
   state.x = x;
@@ -1238,10 +1259,21 @@ void DomicileHost::PopupPlaced(const String& app_id,
   state.width = width;
   state.height = height;
   state.grab = grab;
+  // In the same change as the move, so a shell sets both in one render. A
+  // frame for a window this page has not heard of is dropped.
+  for (const auto& synced : frames) {
+    for (DomicileWindowState& shown : window_states_) {
+      if (shown.app_id == synced->app_id) {
+        shown.frame = std::max(shown.frame, synced->frame);
+      }
+    }
+    FrameHeard(synced->app_id, synced->frame);
+  }
   WindowsChanged();
 }
 
 void DomicileHost::AppClosed(const String& app_id) {
+  HTMLAppElement::FramesForgotten(app_id);
   EraseIf(window_states_, [&](const DomicileWindowState& state) {
     return state.app_id == app_id;
   });
