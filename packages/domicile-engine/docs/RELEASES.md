@@ -36,6 +36,14 @@ build:           checked (is_official_build = false, dcheck_always_on = true)
 `engine-release-package.sh` stops if `args.gn` is missing, matches neither
 build, or disagrees with `DOMICILE_ENGINE_BUILD`.
 
+## What a tarball leaves out
+
+- **Symbol tables.** Every ELF is stripped with Chromium's `llvm-objcopy`;
+  `chrome`'s alone is 248.5 MB. Dynamic symbols stay.
+- **`locales/*.pak.info`.** Build metadata (70.9 MB); only the `.pak`s run.
+
+Both stay in the build directory on `crux` (`$CHROMIUM/out/Release`).
+
 ## A fork change is one pull request
 
 On a pull request that changes the series, `engine.yml`:
