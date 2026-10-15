@@ -184,7 +184,7 @@ How to use, configure and debug Domicile. No authority level.
 | [/docs/SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md) | Files, processes and D-Bus for shell authors: the page API, the system libraries, the wire and the security rules. |
 | [/docs/SHELL-IDLE-AND-LOCK.md](/docs/SHELL-IDLE-AND-LOCK.md) | Idle and lock for shell authors: the idle message, what is blocked while locked, drawing a lock screen. |
 | [/docs/SHELL-PACKAGING.md](/docs/SHELL-PACKAGING.md) | Packaging a shell: required Vite settings, inlined CSS, avoiding a theme flash, distributing, building with `domicile`. |
-| [/docs/DISPLAYS.md](/docs/DISPLAYS.md) | Displays on a tty: display-list sources, profiles, which connectors light, pointer crossing, rotation, shell windows per CRTC, monitor names. |
+| [/docs/DISPLAYS.md](/docs/DISPLAYS.md) | Displays on a tty: display-list sources, profiles, which connectors light, pointer crossing, tablets, rotation, shell windows per CRTC, monitor names. |
 | [/docs/IDLE.md](/docs/IDLE.md) | Idle blanking, `HostMessage::Idle`, idle inhibitors, and log lines to check on hardware. |
 | [/docs/LOCK.md](/docs/LOCK.md) | The screen lock: where it is enforced, request categories, ordering, verifiers, passphrase checks, fail-closed PAM, log lines. |
 | [/docs/TTY-SESSION.md](/docs/TTY-SESSION.md) | DRM master, console switching through logind, suspend, and input from logind. |

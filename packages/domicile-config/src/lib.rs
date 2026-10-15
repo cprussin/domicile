@@ -14,11 +14,13 @@
 
 mod desktop;
 mod files;
+mod pointers;
 mod profile;
 mod startup;
 
 pub use desktop::{Desktop, Display};
 pub use files::{FilesConfig, Omit};
+pub use pointers::{PointerConfig, PointerTarget};
 pub use profile::{Connected, Desk, DisplayPlacement, Layout, Placed, Profile, Scanout, Transform};
 pub use startup::StartupConfig;
 
@@ -109,6 +111,24 @@ impl KeyboardConfig {
 #[serde(default, deny_unknown_fields)]
 pub struct InputConfig {
     pub keyboard: KeyboardConfig,
+    /// Tablets and touchscreens, each bound to the display it covers.
+    ///
+    /// Read on a tty only, on every hotplug. An unbound one covers no
+    /// display. See `docs/DISPLAYS.md#tablets-and-touchscreens`.
+    pub pointers: Vec<PointerConfig>,
+}
+
+impl InputConfig {
+    /// Each pointer whose display is in `connected`, with that display's
+    /// output name.
+    pub fn pointer_targets(&self, connected: &[Connected]) -> Vec<PointerTarget> {
+        pointers::targets(&self.pointers, connected)
+    }
+
+    fn validate(&self) -> Result<(), ConfigError> {
+        self.keyboard.validate()?;
+        pointers::validate(&self.pointers)
+    }
 }
 
 /// One display, described in the config rather than discovered.
@@ -765,7 +785,7 @@ impl Config {
     fn validate(&self) -> Result<(), ConfigError> {
         self.extensions.validate()?;
         self.idle.validate()?;
-        self.input.keyboard.validate()?;
+        self.input.validate()?;
         self.lock.validate()?;
         self.startup.validate()?;
         self.theme.validate()?;

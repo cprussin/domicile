@@ -45,6 +45,7 @@ SUITES=(
   DrmEdidSerialTest:18
   DrmConnectorNameTest:6
   DrmPointerCrossingTest:20
+  DrmPointerTargetsTest:4
   GbmPixmapScanoutTest:3
   ScrollAcceleratorTest:7
   WheelTicksTest:3

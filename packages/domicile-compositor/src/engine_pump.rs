@@ -226,6 +226,7 @@ impl DomicileCompositor {
                     // monitors. Always the full list; anything absent is
                     // unplugged.
                     self.engine_displays = displays.clone();
+                    self.bind_the_pointers();
                     match self.screens.replugged_into(
                         &displays,
                         &self.config.current().output,
