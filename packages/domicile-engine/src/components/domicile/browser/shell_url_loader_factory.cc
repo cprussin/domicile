@@ -177,6 +177,14 @@ bool ShellURLLoaderFactory::MayReadHome(
          initiator->host() == kDomicileShellHost;
 }
 
+// static
+bool ShellURLLoaderFactory::MayReadFiles(
+    network::mojom::RequestMode mode,
+    const std::optional<url::Origin>& initiator,
+    const GURL& url) {
+  return mode == network::mojom::RequestMode::kNavigate ||
+         (initiator.has_value() && initiator->IsSameOriginWith(url));
+}
 
 // static
 std::string ShellURLLoaderFactory::ShellDocument(const std::string& module) {
@@ -363,6 +371,16 @@ void ShellURLLoaderFactory::CreateLoaderAndStart(
     mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
   const std::string host(request.url.host());
+  const bool home = host == kDomicileHomeHost;
+  // Home has its own rule, MayReadHome, below.
+  if (!home && !MayReadFiles(request.mode, request.request_initiator,
+                             request.url)) {
+    mojo::Remote<network::mojom::URLLoaderClient>(std::move(client))
+        ->OnComplete(
+            network::URLLoaderCompletionStatus(net::ERR_ACCESS_DENIED));
+    return;
+  }
+
   // The bare root is the generated document; only the module and its imports
   // come from disk.
   const bool bare = request.url.path() == "/" || request.url.path().empty();
@@ -371,7 +389,6 @@ void ShellURLLoaderFactory::CreateLoaderAndStart(
     return;
   }
 
-  const bool home = host == kDomicileHomeHost;
   if (!home && bare) {
     ServeShellDocument(std::move(client));
     return;

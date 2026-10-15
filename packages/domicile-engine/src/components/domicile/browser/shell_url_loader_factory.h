@@ -15,6 +15,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/http/http_response_headers.h"
 #include "services/network/public/cpp/self_deleting_url_loader_factory.h"
+#include "services/network/public/mojom/fetch_api.mojom-shared.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -28,8 +29,9 @@ namespace domicile {
 // content::AboutURLLoaderFactory; file reading reuses
 // content::CreateFileURLLoaderBypassingSecurityChecks.
 //
-// A request is served only if it names a known host and resolves inside that
-// host's root. The scheme is not web-safe, so web content cannot reach it.
+// A request is served only if it names a known host, resolves inside that
+// host's root and comes from an origin that may read it. The scheme is not
+// web-safe, so web content cannot navigate to it.
 class ShellURLLoaderFactory : public network::SelfDeletingURLLoaderFactory {
  public:
   // A self-owned factory serving `shell_root`. Deletes itself once every
@@ -88,6 +90,14 @@ class ShellURLLoaderFactory : public network::SelfDeletingURLLoaderFactory {
   // exist from load errors.
   static bool MayReadHome(const std::optional<url::Origin>& initiator,
                           bool desk_locked);
+
+  // Whether a request may read the shell's or an app's files: a navigation,
+  // which the navigation's own checks gate, or a request from that same
+  // origin. The scheme supports the Fetch API and every frame uses this
+  // factory, so without this any page could read them.
+  static bool MayReadFiles(network::mojom::RequestMode mode,
+                           const std::optional<url::Origin>& initiator,
+                           const GURL& url);
 
  private:
   ~ShellURLLoaderFactory() override;
