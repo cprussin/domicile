@@ -7,8 +7,9 @@
 #
 # `domicile_launch::splash` covers the progress file and the retry. This
 # covers the supervisor around them: the engine starts on the splash, each
-# builder step reaches `progress.json`, and the built shell is loaded. A fast
-# build never shows the splash; `test-a-config-module-reloads.sh` runs one.
+# builder step reaches `progress.json`, and the built shell is loaded once the
+# splash writes `ended`. A fast build never shows the splash;
+# `test-a-config-module-reloads.sh` runs one.
 #
 # The builder, engine and compositor are stubs; `packages/shell-splash` has
 # its own tests.
@@ -170,6 +171,25 @@ else
   echo "FAIL: the splash was told $(cat "$SPLASH/progress.json" 2>/dev/null)"
   FAILED=1
 fi
+
+echo "== the built shell waits for the splash to end =="
+WAITED=0
+until grep -q '"built"' "$SPLASH/progress.json" 2>/dev/null || [ "$WAITED" -ge 100 ]; do
+  sleep 0.1
+  WAITED=$((WAITED + 1))
+done
+ENDED="$(sed -n 's/.*"ended":"\([^"]*\)".*/\1/p' "$SPLASH/progress.json" 2>/dev/null)"
+# Long enough for a supervisor that does not wait to have loaded the shell.
+sleep 1
+if [ "$ENDED" = "$SPLASH/ended" ] && ! grep -q load_shell "$WORK/engine-heard" 2>/dev/null; then
+  echo "PASS: the splash was told to end in $ENDED, and the engine heard nothing"
+else
+  echo "FAIL: the splash was told $(cat "$SPLASH/progress.json" 2>/dev/null), and the engine heard:"
+  sed 's/^/    /' "$WORK/engine-heard" 2>/dev/null
+  FAILED=1
+fi
+# What the page writes once it has shown "Ready".
+: >"$SPLASH/ended"
 
 echo "== the built shell replaces the splash =="
 WANT="{\"type\":\"load_shell\",\"version\":1,\"root\":\"$WORK/cache/domicile/shells/built\",\"module\":\"shell.js\"}"

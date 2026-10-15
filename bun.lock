@@ -856,6 +856,7 @@
         "zod": "catalog:",
       },
       "devDependencies": {
+        "@cprussin/option-result": "catalog:",
         "@cprussin/tsconfig": "catalog:",
         "@domicile-desktop/test-support": "workspace:*",
         "@pandacss/dev": "catalog:",

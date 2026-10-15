@@ -57,7 +57,7 @@ use domicile_launch::session::Session;
 use domicile_launch::shell_path::Shell;
 use domicile_launch::shell_source::{shell_source, ShellSource};
 use domicile_launch::spawn::{compositor, engine, Runtime};
-use domicile_launch::splash::{lay_out, tell, Progress};
+use domicile_launch::splash::{lay_out, tell, the_page_ends, Progress, ENDED};
 use domicile_launch::supervise::{catch_interrupts, interrupted, Running, ASK_EVERY};
 use domicile_launch::uninstall_app::uninstall_app;
 
@@ -77,10 +77,6 @@ const SEND_WITHIN: Duration = Duration::from_secs(2);
 /// How long a first build may take before the splash shows. A cached build
 /// answers well within it, so the desk starts on its shell.
 const SPLASH_AFTER: Duration = Duration::from_millis(500);
-
-/// How long the splash shows "Ready" before the built shell crossfades in.
-/// Matches the `ending` duration in `packages/shell-splash`.
-const SPLASH_ENDING: Duration = Duration::from_millis(900);
 
 /// Seconds `install-app` gives each fetch.
 const FETCH_WITHIN: &str = "30";
@@ -1126,8 +1122,9 @@ fn first_build(
 
 /// Loads the shell `building` makes in place of the splash, on a thread.
 ///
-/// The splash plays its ending first. A failed build or load stays on the
-/// splash, which shows why and logs out on a key.
+/// The splash plays its ending first, which it says by writing [`ENDED`]. A
+/// failed build or load stays on the splash, which shows why and logs out on a
+/// key.
 fn replacing_the_splash(
     building: Building,
     splash: PathBuf,
@@ -1139,10 +1136,15 @@ fn replacing_the_splash(
             .recv()
             .unwrap_or_else(|_| Err("the shell builder's thread ended without an answer".into()))
             .and_then(|page| {
-                if let Err(why) = tell(&splash, &Progress::Built) {
+                let ended = splash.join(ENDED);
+                if let Err(why) = tell(&splash, &Progress::Built { ended: &ended }) {
                     eprintln!("domicile: the splash missed its ending: {why}");
                 }
-                std::thread::sleep(SPLASH_ENDING);
+                // The engine has `PATIENCE` to start, and the splash cannot
+                // end before it draws.
+                if !the_page_ends(&ended, PATIENCE) {
+                    eprintln!("domicile: the splash did not end, so the shell loads over it");
+                }
                 load_the_shell(&engine, &page, &serving, &while_the_engine_starts())
                     .map(|()| page.root.join(&page.module))
             });

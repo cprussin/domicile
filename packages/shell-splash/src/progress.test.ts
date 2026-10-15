@@ -10,7 +10,7 @@ describe("progressSchema", () => {
         { state: "resolving" },
         { packages: ["react", "zod"], state: "installing" },
         { state: "bundling" },
-        { state: "built" },
+        { ended: "/run/splash/ended", state: "built" },
         { state: "failed", supervisor: 42, why: "no Shell export" },
       ].map((wire) => progressSchema.parse(wire)),
     ).toEqual([
@@ -18,7 +18,7 @@ describe("progressSchema", () => {
       Progress.Resolving(),
       Progress.Installing(["react", "zod"]),
       Progress.Bundling(),
-      Progress.Built(),
+      Progress.Built("/run/splash/ended"),
       Progress.Failed(42, "no Shell export"),
     ]);
   });

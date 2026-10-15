@@ -9,8 +9,11 @@ The page a desktop shows while `domicile` builds its shell on first start.
   the prebuilt page into the run's directory and writes `progress.json` beside
   it; the page polls that file. `domicile load-shell` and config reloads never
   show it. See `domicile_launch::splash`.
-- On `built` it shows "Ready" for 900 ms, then `domicile` loads the shell,
-  which crossfades in over it (the shell document's `@view-transition`).
+- On `built` it shows "Ready" for 900 ms, and for at least the mark's 1.6 s
+  draw once on screen, then writes the `ended` file `progress.json` names.
+  `domicile` waits for that file, then loads the shell, which crossfades in
+  over it (the shell document's `@view-transition`). A shell built before the
+  splash draws still shows the splash.
 - On `failed` it shows the builder's error. Any key stops `domicile`
   (`kill -TERM`), which logs out.
 
@@ -22,6 +25,7 @@ The page a desktop shows while `domicile` builds its shell on first start.
 | `src/Splash.tsx` | The page. |
 | `src/progress.ts` | Parses `progress.json`. |
 | `src/follow-progress.ts` | Polls it. |
+| `src/write-ended.ts` | Writes the `ended` file. |
 | `src/host-displays.ts` | The host's displays for `<Screen>`. |
 | `panda.config.ts` | Keyframes, durations and the aurora's registered colors. |
 

@@ -46,7 +46,7 @@ describe(followProgress, () => {
         },
         answering(
           () => Promise.reject(new Error("mid-rename")),
-          () => Promise.resolve({ state: "built" }),
+          () => Promise.resolve({ ended: "/run/splash/ended", state: "built" }),
         ),
         0,
         () => {
@@ -54,6 +54,6 @@ describe(followProgress, () => {
         },
       );
     });
-    expect(heard).toEqual(Progress.Built());
+    expect(heard).toEqual(Progress.Built("/run/splash/ended"));
   });
 });
