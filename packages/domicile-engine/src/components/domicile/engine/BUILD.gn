@@ -175,6 +175,7 @@ shared_library("domicile_engine") {
     ":surface_submits",
     ":surface_transform",
     "//base",
+    "//components/domicile:synced_frame",
     "//components/domicile/mojom",
     "//components/domicile/spike/mojom",
     "//components/viz/common",

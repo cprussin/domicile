@@ -9,6 +9,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/notreached.h"
 #include "cc/layers/deadline_policy.h"
+#include "components/domicile/common/synced_frame.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
@@ -110,6 +111,19 @@ void HTMLAppElement::ParseAttribute(
     Embed();
     return;
   }
+  if (params.name == html_names::kFrameAttr) {
+    // Viz holds the page's frame until the window's synced frame is there, so
+    // whatever this update moved shows with it. `allocated_` is that window's
+    // only once its surface is shown: a new app-id embeds afresh.
+    if (!embedded_app_id_.IsNull() &&
+        embedded_app_id_ == FastGetAttribute(html_names::kAppIdAttr)) {
+      surface_layer_bridge_->EmbedSurface(
+          viz::SurfaceId(surface_layer_bridge_->GetSurfaceId().frame_sink_id(),
+                         AtFrame(allocated_)),
+          cc::DeadlinePolicy::UseDefaultDeadline());
+    }
+    return;
+  }
   if (params.name == html_names::kResizingAttr) {
     // The last box of a resize may show before the client drew at it. Embed
     // it again with the default deadline, so the box and the window settle in
@@ -194,21 +208,18 @@ void HTMLAppElement::Embed() {
   }
   embed_in_flight_ = true;
   embed_stale_ = false;
-  const viz::LocalSurfaceId local_surface_id =
-      external_surface_embedder_->Embed(
-          app_id,
-          frame->GetPage()->GetChromeClient().GetFrameSinkId(frame),
-          configured_size_,
-          // The box is in device pixels and the client is configured in logical
-          // ones. Each monitor's page has its own scale, so the page sends it.
-          frame->LayoutZoomFactor(),
-          reconfiguring ? ExternalSurfaceEmbedder::Allocation::kReconfigure
-                        : ExternalSurfaceEmbedder::Allocation::kAdopt,
-          // WrapWeakPersistent: the embedder owns this callback too. A strong
-          // one would keep a removed element, and its pipe, alive while the
-          // browser holds the embed.
-          BindOnce(&HTMLAppElement::OnEmbedded, WrapWeakPersistent(this),
-                   app_id));
+  allocated_ = external_surface_embedder_->Embed(
+      app_id, frame->GetPage()->GetChromeClient().GetFrameSinkId(frame),
+      configured_size_,
+      // The box is in device pixels and the client is configured in logical
+      // ones. Each monitor's page has its own scale, so the page sends it.
+      frame->LayoutZoomFactor(),
+      reconfiguring ? ExternalSurfaceEmbedder::Allocation::kReconfigure
+                    : ExternalSurfaceEmbedder::Allocation::kAdopt,
+      // WrapWeakPersistent: the embedder owns this callback too. A strong
+      // one would keep a removed element, and its pipe, alive while the
+      // browser holds the embed.
+      BindOnce(&HTMLAppElement::OnEmbedded, WrapWeakPersistent(this), app_id));
 
   // A shown window resized: its frame sink is known, so embed the surface for
   // the new box in the frame whose layout changed it. Viz holds that frame
@@ -222,7 +233,7 @@ void HTMLAppElement::Embed() {
     embedded_without_waiting_ = FastHasAttribute(html_names::kResizingAttr);
     surface_layer_bridge_->EmbedSurface(
         viz::SurfaceId(surface_layer_bridge_->GetSurfaceId().frame_sink_id(),
-                       local_surface_id),
+                       AtFrame(allocated_)),
         embedded_without_waiting_
             ? cc::DeadlinePolicy::UseSpecifiedDeadline(0u)
             : cc::DeadlinePolicy::UseDefaultDeadline());
@@ -233,18 +244,29 @@ void HTMLAppElement::OnEmbedded(
     const AtomicString& app_id,
     const std::optional<viz::SurfaceId>& surface_id) {
   embed_in_flight_ = false;
+  const std::optional<viz::SurfaceId> shown =
+      surface_id ? std::make_optional(viz::SurfaceId(
+                       surface_id->frame_sink_id(),
+                       AtFrame(surface_id->local_surface_id())))
+                 : std::nullopt;
   // Embedding the id Embed() already did would drop its deadline.
-  if (surface_id && surface_layer_bridge_ &&
-      *surface_id != surface_layer_bridge_->GetSurfaceId()) {
+  if (shown && surface_layer_bridge_ &&
+      *shown != surface_layer_bridge_->GetSurfaceId()) {
     // SurfaceLayerBridge accepts any SurfaceId, so the window becomes an
     // ordinary layer.
-    surface_layer_bridge_->EmbedSurface(*surface_id);
+    surface_layer_bridge_->EmbedSurface(*shown);
   }
   embedded_app_id_ = surface_id ? app_id : g_null_atom;
   if (embed_stale_) {
     // app-id or the box changed while the request was in flight.
     Embed();
   }
+}
+
+viz::LocalSurfaceId HTMLAppElement::AtFrame(
+    const viz::LocalSurfaceId& allocated) const {
+  return domicile::AtSyncedFrame(
+      allocated, GetUnsignedIntegralAttribute(html_names::kFrameAttr));
 }
 
 // A restarted compositor brokers the app a new frame sink. Ask again: the
