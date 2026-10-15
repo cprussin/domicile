@@ -121,6 +121,41 @@ expect "any window report is the control's failure" "fail" \
   "$(control SAW_ANY=1)"
 
 echo
+echo "the wait before the verdict"
+# The positive run's wait, from the real guard. The shell lists the window
+# when `browserwindowschanged` reaches it, which can be after the opener hears
+# from the window; a verdict read before then blames AddNewContents for nothing.
+WAIT_FOR="$(awk '/^wait_for_line\(\) \{/,/^\}$/' "$GUARD")"
+PRESS="$(awk '/^# 5\. /,/^fi$/' "$GUARD")"
+[ -n "$WAIT_FOR" ] && [ -n "$PRESS" ] || {
+  echo "no wait or press block in $GUARD — its markers moved. Fix this test with it." >&2
+  exit 1
+}
+listed_after_wait() { # $1 seconds until the shell lists the window
+  (
+    WORK="$(mktemp -d)"
+    trap 'rm -rf "$WORK"' EXIT
+    ENGINE_LOG="$WORK/engine.log"
+    INPUT_LOG="$WORK/input.log"
+    SITE="http://127.0.0.1:1"
+    NEGATIVE=0 TRIES=40 WINDOW_X=0 BUTTON_Y=0
+    click() { :; }
+    echo '"GUARD page-message hello"' >"$ENGINE_LOG"
+    (sleep "$1" && echo "\"GUARD new-window url=$SITE/child\"" >>"$ENGINE_LOG") &
+    eval "$WAIT_FOR"
+    eval "$PRESS" 2>/dev/null
+    if grep -qF "GUARD new-window url=$SITE/child" "$ENGINE_LOG"; then
+      echo listed
+    else
+      echo unlisted
+    fi
+    wait
+  )
+}
+expect "the guard waits for the shell to list the window" "listed" \
+  "$(listed_after_wait 1)"
+
+echo
 if [ "$FAILED" -eq 0 ]; then
   echo "the window.open guard's verdict names the right end in every case"
   exit 0

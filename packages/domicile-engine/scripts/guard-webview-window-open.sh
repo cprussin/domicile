@@ -197,6 +197,10 @@ if [ "$NEGATIVE" = "1" ]; then
 else
   click "$WINDOW_X" "$BUTTON_Y" ||
     echo "the press on the button could not be driven; see $INPUT_LOG" >&2
+  # The shell lists the window when `browserwindowschanged` reaches it, which
+  # can come after the opener hears from the window.
+  wait_for_line "$TRIES" "GUARD new-window url=$SITE/child" "$ENGINE_LOG" ||
+    echo "the shell never listed the window" >&2
   wait_for_line "$TRIES" "GUARD page-message" "$ENGINE_LOG" ||
     echo "the opened window never posted back" >&2
 fi

@@ -25,7 +25,8 @@ The config's `appearance` must reach the page's `accentColor`, `highContrast`
 and `reducedMotion`.
 
 A `system_reply` ends the sequence: the engine relays it to the page whole, and
-the page's `system_request` comes back as a `said:` line. See
+the page's `system_request` comes back as a `said:` line. The page reads the
+desk when the reply arrives, so it stays last. See
 docs/SHELL-SYSTEM-ACCESS.md.
 """
 
