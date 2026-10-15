@@ -127,6 +127,7 @@ An edit applies to the running desktop, and windows stay open:
 | Section | Effect of an edit |
 |---|---|
 | `input.keyboard` | New layout; moves the keys a shell bound ([Keybindings](WRITING-A-SHELL.md#keybindings)) |
+| `input.pointers` | Tablets and touchscreens rebound |
 | `output.max_scale` | Re-advertised to clients |
 | `output.displays`, `output.profiles` | Displays rearranged |
 | `idle.blank_after_seconds`, `idle.warn_before_seconds` | Idle timer restarts. Dark screens relight |
@@ -170,6 +171,29 @@ An edit applies to the running desktop, and windows stay open:
 `input.keyboard` takes sway's `xkb_*` fields: `xkb_layout`, `xkb_variant`,
 `xkb_options` and the rest. The default is plain `us`, no variant, no options.
 A shell for users of other layouts must set them here; nothing else does.
+
+## Tablets and touchscreens
+
+On a tty, `input.pointers` binds each tablet or touchscreen to the display it
+covers. An unbound one covers no display.
+
+```json
+{
+  "input": {
+    "pointers": [
+      { "device": "usb-0000:00:04.0-1/input0", "display": "Virtual-1" },
+      { "device": "usb-0000:00:04.0-2/input0", "display": "Virtual-2" }
+    ]
+  }
+}
+```
+
+- `device` is the evdev name or `phys`, matched exactly. A name binds every
+  device that has it, so tell identical tablets apart by `phys`.
+  `udevadm info /dev/input/eventN` prints both.
+- `display` names a display as a profile does
+  ([Naming a display](#naming-a-display)).
+- Details: [DISPLAYS.md](DISPLAYS.md#tablets-and-touchscreens).
 
 ## Idle
 

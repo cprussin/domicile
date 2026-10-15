@@ -196,6 +196,13 @@ export type IdleConfig = {
 /** Input-device settings. */
 export type InputConfig = {
   keyboard?: KeyboardConfig;
+  /**
+   * Tablets and touchscreens, each bound to the display it covers.
+   *
+   * Read on a tty only, on every hotplug. An unbound one covers no
+   * display. See `docs/DISPLAYS.md#tablets-and-touchscreens`.
+   */
+  pointers?: PointerConfig[];
 };
 
 /**
@@ -269,6 +276,20 @@ export type OutputConfig = {
    * placed them. See `docs/DISPLAYS.md#profiles`.
    */
   profiles?: Profile[];
+};
+
+/** A tablet or touchscreen, and the display it covers. */
+export type PointerConfig = {
+  /**
+   * The device's evdev name or `phys`, matched exactly.
+   *
+   * A name every device of a kind shares, such as `QEMU QEMU USB Tablet`,
+   * binds all of them; `phys` (`usb-0000:00:04.0-1/input0`) tells them
+   * apart. `udevadm info /dev/input/eventN` prints both.
+   */
+  device: string;
+  /** The display the device covers, named as a profile's `display` is. */
+  display: string;
 };
 
 /**

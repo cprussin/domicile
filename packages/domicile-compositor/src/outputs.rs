@@ -15,7 +15,7 @@ use tracing::{debug, info};
 use domicile_config::Config;
 
 use crate::eis::barriers::Zone;
-use crate::screens::{Advertised, Screens, Slot};
+use crate::screens::{pointer_targets, Advertised, Screens, Slot};
 use crate::{grepped, DomicileCompositor};
 
 /// The desktop a config describes, at startup.
@@ -246,6 +246,21 @@ impl DomicileCompositor {
         self.hub
             .portals
             .displays(self.screens.outputs().map(Zone::from).collect());
+    }
+
+    /// Tell the engine which display each tablet or touchscreen covers.
+    ///
+    /// Sent on every display report and reload, because the targets are the
+    /// engine's display ids. Nested, the engine ignores it.
+    pub fn bind_the_pointers(&self) {
+        let Some(session) = self.engine.as_ref() else {
+            return;
+        };
+        session.configure_pointers(&pointer_targets(
+            &self.engine_displays,
+            &self.config.current().input,
+            &self.vendors,
+        ));
     }
 
     /// Apply a desktop the config now describes, keeping displays that stayed.

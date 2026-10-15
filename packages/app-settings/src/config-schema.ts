@@ -91,6 +91,9 @@ const settingsSchema = z.strictObject({
           xkb_variant: z.string().default(""),
         })
         .prefault({}),
+      pointers: z
+        .array(z.strictObject({ device: z.string(), display: z.string() }))
+        .default([]),
     })
     .prefault({}),
   lock: z

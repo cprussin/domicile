@@ -58,6 +58,11 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   // embedder has no CRTC (anything but a tty); the layout is then dropped.
   using DisplayLayoutSetter =
       base::RepeatingCallback<void(std::vector<mojom::DisplayLayoutPtr>)>;
+  // Binds the producer's tablets and touchscreens to displays. Injected for
+  // the same reason. Empty when the embedder has no CRTC; the targets are then
+  // dropped.
+  using PointerTargetsSetter =
+      base::RepeatingCallback<void(std::vector<mojom::PointerTargetPtr>)>;
   // Writes the producer's clipboard into `ui::OzonePlatform`'s clipboard.
   // Injected for the same reason. Empty when the embedder runs inside another
   // session; the contents are then dropped.
@@ -88,7 +93,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       DisplayCaptureTargetGetter get_display_capture_target =
           DisplayCaptureTargetGetter(),
       BrowserWindowCaptureTargetGetter get_browser_window_capture_target =
-          BrowserWindowCaptureTargetGetter());
+          BrowserWindowCaptureTargetGetter(),
+      PointerTargetsSetter set_pointer_targets = PointerTargetsSetter());
 
   FrameSinkBroker(const FrameSinkBroker&) = delete;
   FrameSinkBroker& operator=(const FrameSinkBroker&) = delete;
@@ -173,6 +179,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
                      uint64_t buffer_id) override;
   void ConfigureDisplays(
       std::vector<mojom::DisplayLayoutPtr> layout) override;
+  void ConfigurePointers(
+      std::vector<mojom::PointerTargetPtr> targets) override;
   void SetClipboard(mojom::Clipboard clipboard,
                     const ClipboardContents& contents) override;
   void ObserveClipboard(
@@ -246,6 +254,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   const DisplayCaptureTargetGetter get_display_capture_target_;
   // See BrowserWindowCaptureTargetGetter.
   const BrowserWindowCaptureTargetGetter get_browser_window_capture_target_;
+  // See PointerTargetsSetter.
+  const PointerTargetsSetter set_pointer_targets_;
 
   mojo::ReceiverSet<mojom::FrameSinkBroker> receivers_;
 

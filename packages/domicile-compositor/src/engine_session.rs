@@ -16,7 +16,7 @@ use smithay::reexports::wayland_server::protocol::wl_buffer;
 use smithay::reexports::wayland_server::Resource as _;
 
 use crate::engine::{
-    BufferId, Capture, Clipboard, Connector, Dmabuf, Engine, EngineError, Event, Request,
+    BufferId, Capture, Clipboard, Connector, Dmabuf, Engine, EngineError, Event, Pointer, Request,
     SurfaceId, LIBRARY, NEWEST_BOX,
 };
 use crate::engine_buffers::{HeldBuffers, Returned};
@@ -290,6 +290,13 @@ impl EngineSession {
     /// empty list means.
     pub fn configure_displays(&self, connectors: &[Connector]) {
         self.engine.configure_displays(connectors);
+    }
+
+    /// Tells the browser which display each tablet or touchscreen covers.
+    ///
+    /// See [`crate::engine::Engine::configure_pointers`].
+    pub fn configure_pointers(&self, pointers: &[Pointer]) {
+        self.engine.configure_pointers(pointers);
     }
 
     /// Tells the browser what is on one of the desktop's two clipboards.

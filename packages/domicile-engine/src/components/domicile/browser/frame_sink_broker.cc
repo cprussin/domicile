@@ -47,7 +47,8 @@ FrameSinkBroker::FrameSinkBroker(
     DisplayLayoutSetter set_display_layout,
     ClipboardSetter set_clipboard,
     DisplayCaptureTargetGetter get_display_capture_target,
-    BrowserWindowCaptureTargetGetter get_browser_window_capture_target)
+    BrowserWindowCaptureTargetGetter get_browser_window_capture_target,
+    PointerTargetsSetter set_pointer_targets)
     : host_frame_sink_manager_(host_frame_sink_manager),
       allocate_frame_sink_id_(std::move(allocate_frame_sink_id)),
       get_shared_image_interface_(std::move(get_shared_image_interface)),
@@ -55,7 +56,8 @@ FrameSinkBroker::FrameSinkBroker(
       set_clipboard_(std::move(set_clipboard)),
       get_display_capture_target_(std::move(get_display_capture_target)),
       get_browser_window_capture_target_(
-          std::move(get_browser_window_capture_target)) {
+          std::move(get_browser_window_capture_target)),
+      set_pointer_targets_(std::move(set_pointer_targets)) {
   CHECK(host_frame_sink_manager);
   CHECK(allocate_frame_sink_id_);
   receivers_.set_disconnect_handler(base::BindRepeating(
@@ -235,6 +237,15 @@ void FrameSinkBroker::ConfigureDisplays(
     return;
   }
   set_display_layout_.Run(std::move(layout));
+}
+
+void FrameSinkBroker::ConfigurePointers(
+    std::vector<mojom::PointerTargetPtr> targets) {
+  if (!set_pointer_targets_) {
+    // No CRTC outside a tty, as for ConfigureDisplays.
+    return;
+  }
+  set_pointer_targets_.Run(std::move(targets));
 }
 
 void FrameSinkBroker::SetClipboard(mojom::Clipboard clipboard,

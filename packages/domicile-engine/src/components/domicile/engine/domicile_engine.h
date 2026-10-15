@@ -214,6 +214,15 @@ typedef struct DomicileDisplayLayout {
   int32_t desk_height;
 } DomicileDisplayLayout;
 
+// A tablet or touchscreen and the display it covers, for
+// `domicile_pointers_configure`.
+typedef struct DomicilePointerTarget {
+  // The evdev device's name or `phys`, matched exactly. Borrowed for the call.
+  const char* device;
+  // DomicileDisplay::id, as the browser sent it.
+  int64_t display_id;
+} DomicilePointerTarget;
+
 // How a frame reached the screen, for `presented`. The values are
 // wp_presentation_feedback.kind's.
 typedef uint32_t DomicilePresentedFlags;
@@ -525,6 +534,16 @@ DOMICILE_ENGINE_EXPORT void domicile_surface_sync(DomicileEngine* engine,
 DOMICILE_ENGINE_EXPORT void domicile_displays_configure(
     DomicileEngine* engine,
     const DomicileDisplayLayout* layout,
+    uint32_t count);
+
+// Tells the browser which display each tablet or touchscreen covers.
+//
+// The list replaces the last one. A device it names maps onto that display's
+// rectangle; a device it does not name covers no display. Ignored off a tty.
+// The records and strings are borrowed for the call.
+DOMICILE_ENGINE_EXPORT void domicile_pointers_configure(
+    DomicileEngine* engine,
+    const DomicilePointerTarget* targets,
     uint32_t count);
 
 // Sets the contents of one of the desktop's clipboards.

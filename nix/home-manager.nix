@@ -126,6 +126,24 @@
     };
   };
 
+  # A tablet or touchscreen and the monitor it covers.
+  pointer = lib.types.submodule {
+    options = {
+      device = lib.mkOption {
+        description = ''
+          The device's evdev name or `phys`, matched exactly. A shared name
+          (`QEMU QEMU USB Tablet`) binds every device that has it; `phys`
+          (`usb-0000:00:04.0-1/input0`) tells them apart.
+        '';
+        type = lib.types.str;
+      };
+      display = lib.mkOption {
+        description = "The monitor the device covers, named as a profile's `display` is.";
+        type = lib.types.str;
+      };
+    };
+  };
+
   # A monitor arrangement, chosen by which monitors are connected. The first
   # profile whose exact set is connected wins, rechecked on every hotplug.
   profile = lib.types.submodule {
@@ -588,6 +606,21 @@ in {
               default = [];
               example = ["caps:escape"];
             };
+          };
+
+          input.pointers = lib.mkOption {
+            description = ''
+              Tablets and touchscreens on a tty, each bound to the monitor it
+              covers. An unbound one covers no monitor.
+            '';
+            type = lib.types.listOf pointer;
+            default = [];
+            example = [
+              {
+                device = "usb-0000:00:04.0-1/input0";
+                display = "Virtual-1";
+              }
+            ];
           };
 
           output = {
