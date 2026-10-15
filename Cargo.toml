@@ -60,3 +60,10 @@ schemars = "1"
 [profile.release]
 lto = "thin"
 codegen-units = 1
+
+# Smithay 0.7.0 with Smithay/smithay#2217 backported: `wl_keyboard.keymap` is
+# sent read-only, so SELinux lets confined clients such as wezterm receive it.
+# Branch `domicile-0.7` of the fork. Drop this once a Smithay release contains
+# #2217; `a_client_is_handed_a_read_only_keymap` checks the release.
+[patch.crates-io]
+smithay = { git = "https://github.com/cprussin/smithay", rev = "fb981077def1405300e69a5993e9789768e772aa" }

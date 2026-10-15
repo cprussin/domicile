@@ -559,7 +559,12 @@
             ([ ./Cargo.toml ./Cargo.lock ./ROADMAP.md ./scripts ]
               ++ map (name: ./packages + "/${name}") rustCrates);
         };
-        cargoLock.lockFile = ./Cargo.lock;
+        cargoLock = {
+          lockFile = ./Cargo.lock;
+          # The Smithay fork `[patch.crates-io]` in `Cargo.toml` names. Update
+          # with its `rev`, and drop with it.
+          outputHashes."smithay-0.7.0" = "sha256-hWXiFYCSzXoUxQtF9mA1T+GH9pjAWlTcS1t2uG1gJy8=";
+        };
 
         nativeBuildInputs = [
           pkgs.pkg-config

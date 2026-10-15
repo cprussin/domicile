@@ -60,6 +60,10 @@ item when it ships.
      - Writing a desktop from scratch
        ([WRITING-A-SHELL.md](docs/WRITING-A-SHELL.md)).
 
+7. **Smithay from a fork.** `Cargo.toml` patches Smithay 0.7.0 with
+   Smithay/smithay#2217, which sends keymaps as read-only fds. Drop the patch
+   and `flake.nix`'s `outputHashes` once a Smithay release contains it.
+
 ## In the engine fork (the agent on `crux`)
 
 1. **Measure presentation.** Nothing reads a lit CRTC, so overlay promotion,

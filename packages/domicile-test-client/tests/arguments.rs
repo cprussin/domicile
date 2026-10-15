@@ -460,3 +460,12 @@ fn a_client_can_be_asked_to_bind_the_first_xdg_wm_base() {
         "and binds the newest it knows unless told"
     );
 }
+
+#[test]
+fn a_client_can_be_asked_to_bind_wl_seat_7() {
+    assert!(given(&["--wl-seat-v7"]).unwrap().wl_seat_v7);
+    assert!(
+        !given(&[]).unwrap().wl_seat_v7,
+        "and binds version 5 unless told"
+    );
+}
