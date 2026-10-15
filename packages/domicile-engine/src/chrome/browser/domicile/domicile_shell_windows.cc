@@ -399,7 +399,7 @@ class ShellWindows : public display::DisplayObserver {
     if (host == nullptr) {
       ui::OzonePlatform::GetInstance()->SetDomicileDeskHost(
           gfx::kNullAcceleratedWidget);
-      presenters_.Present(nullptr, {});
+      presenters_.Present(nullptr, gfx::Rect(), {});
       return;
     }
     const auto on_host =
@@ -439,7 +439,7 @@ class ShellWindows : public display::DisplayObserver {
                     .pixels = found->bounds(),
                     .page = PageBoundsOn(place, desk->geometry.box)});
     }
-    presenters_.Present(contents, presented);
+    presenters_.Present(contents, page, presented);
   }
 
   // Opens a copy of the existing shell window (same profile and URL) on

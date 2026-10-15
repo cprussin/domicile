@@ -57,6 +57,10 @@ enters a gap, because pointer crossing follows `desk`.
   - `SurfaceAggregator::EmitSurfaceContent` scales a child frame by
     `parent_dsf / frame_dsf`. So a presenter at 1.2 draws the page's frame at
     1.2/S.
+  - It also mirrors the page's popups (a `<select>`'s list, a date picker, a
+    tooltip). The host's root holds them as windows of their own (patches
+    `0051`, `0076`), so the page's mirror lacks them. Each sits where the page
+    has it (`PopupBoundsOn`).
   - The window handles rotation.
 - The page's `ScreenInfos` list every display. `current()` is the desk box at
   S (`WidgetBase::UpdateSurfaceAndScreenInfo`).

@@ -202,6 +202,8 @@ A nested run still uses the host's clipboard; `ROADMAP.md` tracks it.
   (patch `0051`), as on ash.
 - Tooltips do too (patch `0076`). A top-level tooltip asks for software
   compositing, which ozone/drm refuses.
+- On a monitor other than the host's, a presenter mirrors them
+  ([One page for the desk](ONE-PAGE-FOR-THE-DESK.md#browser-one-page-n-presenters)).
 
 ## Key decisions
 

@@ -57,6 +57,15 @@ std::optional<DeskGeometry> DeskGeometryOf(const std::vector<DeskPlace>& lit);
 // The page's bounds in `place`'s logical pixels, which its window's layers use.
 gfx::Rect PageBoundsOn(const DeskPlace& place, const gfx::Rect& box);
 
+// Where a popup the host's window holds goes on another display's window.
+//
+// `popup` and `page_on_host` are in the host window's logical pixels and
+// `page_on_display` in the other display's (`PageBoundsOn`). A popup keeps its
+// place on the page, so a <select>'s list opens beside the <select>.
+gfx::Rect PopupBoundsOn(const gfx::Rect& popup,
+                        const gfx::Rect& page_on_host,
+                        const gfx::Rect& page_on_display);
+
 // The screens reported to the page. The first is one upright screen the size
 // of the desk at the desk's scale, with other fields copied from `like`.
 //
