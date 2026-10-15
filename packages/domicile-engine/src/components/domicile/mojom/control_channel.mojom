@@ -171,7 +171,8 @@ struct WindowSandbox {
 };
 
 // A surface's synced frame: `<app frame>` for window or popup `app_id`. See
-// docs/architecture/FRAME-SYNCED-SURFACES.md in the Domicile repository.
+// docs/architecture/WINDOW-COMPOSITING.md#synced-frames in the Domicile
+// repository.
 struct AppFrame {
   string app_id;
   uint32 frame;
