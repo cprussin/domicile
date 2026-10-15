@@ -4,6 +4,11 @@
 //! sends its logical size through `set_destination`. Both destination and
 //! source must be honored: ignoring `set_source` would draw a whole atlas
 //! where the client asked for one tile.
+//!
+//! Without a destination the surface is the source's size, so a source alone
+//! crops without scaling.
+
+use smithay::wayland::viewporter::ViewportCachedState;
 
 /// A surface's `wp_viewport` state, or the default where it has none.
 ///
@@ -11,24 +16,32 @@
 /// committed with it.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Viewport {
-    /// The surface's logical size, overriding the buffer's.
-    pub destination: Option<(i32, i32)>,
+    /// The surface's logical size, overriding the buffer's: the destination,
+    /// or else the source's size.
+    pub size: Option<(i32, i32)>,
     /// The part of the buffer shown, as `(x, y, width, height)` in buffer
     /// logical units.
     pub source: Option<(f64, f64, f64, f64)>,
 }
 
+impl From<&ViewportCachedState> for Viewport {
+    fn from(state: &ViewportCachedState) -> Self {
+        Viewport {
+            size: state.size().map(|size| (size.w, size.h)),
+            source: state
+                .src
+                .map(|rect| (rect.loc.x, rect.loc.y, rect.size.w, rect.size.h)),
+        }
+    }
+}
+
 /// The logical size of a surface with a `buffer`-pixel buffer at
-/// `buffer_scale` and an optional viewport `destination`.
+/// `buffer_scale` and an optional viewport `size` (see [`Viewport::size`]).
 ///
-/// A destination is already logical, so it is not divided by the scale. A
-/// non-positive destination is ignored, since later code divides by it.
-pub fn surface_size(
-    buffer: (u32, u32),
-    buffer_scale: i32,
-    destination: Option<(i32, i32)>,
-) -> (u32, u32) {
-    if let Some((width, height)) = destination {
+/// A viewport size is already logical, so it is not divided by the scale. A
+/// non-positive one is ignored, since later code divides by it.
+pub fn surface_size(buffer: (u32, u32), buffer_scale: i32, size: Option<(i32, i32)>) -> (u32, u32) {
+    if let Some((width, height)) = size {
         if let (Ok(width), Ok(height)) = (u32::try_from(width), u32::try_from(height)) {
             if width > 0 && height > 0 {
                 return (width, height);
@@ -59,7 +72,32 @@ pub fn source_pixels(
 
 #[cfg(test)]
 mod tests {
-    use super::{source_pixels, surface_size};
+    use smithay::utils::Rectangle;
+    use smithay::wayland::viewporter::ViewportCachedState;
+
+    use super::{source_pixels, surface_size, Viewport};
+
+    #[test]
+    fn a_source_without_a_destination_sizes_the_surface() {
+        // The protocol makes a source-only surface the source's size. A
+        // 1536-pixel buffer cropped to 636 must not be squeezed into 636.
+        let viewport = Viewport::from(&ViewportCachedState {
+            src: Some(Rectangle::new((0.0, 0.0).into(), (636.0, 754.0).into())),
+            dst: None,
+        });
+
+        assert_eq!(surface_size((1536, 754), 1, viewport.size), (636, 754));
+    }
+
+    #[test]
+    fn a_destination_sizes_the_surface_over_its_source() {
+        let viewport = Viewport::from(&ViewportCachedState {
+            src: Some(Rectangle::new((16.0, 8.0).into(), (800.0, 600.0).into())),
+            dst: Some((400, 300).into()),
+        });
+
+        assert_eq!(surface_size((1536, 1024), 2, viewport.size), (400, 300));
+    }
 
     #[test]
     fn a_surface_with_no_viewport_is_its_buffer_over_its_scale() {

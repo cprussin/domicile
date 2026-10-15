@@ -135,6 +135,11 @@ impl<K: Clone + Eq + Hash, F> Imports<K, F> {
         }
     }
 
+    /// The frame waiting for an import on `surface`, to change in place.
+    pub fn waiting_mut(&mut self, surface: SurfaceId) -> Option<&mut F> {
+        self.waiting.get_mut(&surface).map(|(_, frame)| frame)
+    }
+
     /// Records the engine's answer to `request`: the buffer's id, or `None` if
     /// it refused the buffer.
     pub fn finished(&mut self, request: Request, buffer: Option<BufferId>) -> Finished<F> {
@@ -253,6 +258,27 @@ mod tests {
             Route::Wait { start, .. } => start,
             Route::Submit { .. } => panic!("frame {frame} went up without its import"),
         }
+    }
+
+    #[test]
+    fn a_frame_waiting_for_its_import_can_be_changed_in_place() {
+        let mut imports = Under::default();
+        let request = waits(&mut imports, SURFACE, 'a', 1);
+
+        *imports.waiting_mut(SURFACE).expect("it waits") = 2;
+
+        assert_eq!(imports.waiting_mut(OTHER), None, "another surface has none");
+        assert_eq!(
+            imports
+                .finished(request.expect("an import started"), Some(10))
+                .then,
+            Some(Then::Submit {
+                surface: SURFACE,
+                id: 10,
+                frame: 2
+            }),
+            "the changed frame goes up, on the import it waited for"
+        );
     }
 
     #[test]

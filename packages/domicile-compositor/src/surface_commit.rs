@@ -50,11 +50,67 @@ struct SurfaceTexture {
     from_dmabuf: bool,
     /// Whether the buffer is flipped, as GL clients flag on the dmabuf.
     y_inverted: bool,
-    /// The surface's own logical size, or its `wp_viewport` destination if set.
+    /// The surface's own logical size, or its `wp_viewport` size if set.
     ///
     /// Not the output's: a client that has not answered a configure is still
     /// its old size, and stretching it would hide that.
     logical_size: (f64, f64),
+}
+
+/// The committed state that maps a surface's buffer: double-buffered, so a
+/// commit with no buffer can change it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Mapping {
+    pub buffer_scale: i32,
+    pub buffer_transform: Transform,
+    pub viewport: Viewport,
+    /// See [`window_geometry`].
+    pub geometry: Option<(i32, i32, i32, i32)>,
+}
+
+impl Mapping {
+    /// What the engine samples of a `buffer`-pixel buffer, for a commit that
+    /// answers a configure of `configured` size.
+    ///
+    /// Measured on the upright buffer, then mapped back into the buffer's own
+    /// pixels.
+    pub fn sampled(&self, buffer: (u32, u32), configured: Option<(i32, i32)>) -> Sampled {
+        let size = upright_size(buffer, self.buffer_transform);
+        let crop = crop_in_buffer(
+            crate::window_geometry::crop(
+                self.geometry,
+                configured,
+                surface_size(size, self.buffer_scale, self.viewport.size),
+                size,
+                source_pixels(size, self.buffer_scale, self.viewport.source),
+            ),
+            size,
+            self.buffer_transform,
+        );
+        Sampled {
+            crop,
+            transform: self.buffer_transform,
+        }
+    }
+}
+
+/// What a commit answers. See [`crate::configure_answers`].
+struct Answered {
+    /// The size of the configure, which bounds the crop.
+    configured: Option<(i32, i32)>,
+    /// The engine's box at that size.
+    at_box: u64,
+    /// That box's size in device pixels, if known.
+    box_size: Option<(u32, u32)>,
+}
+
+/// A window's last buffer, for a commit that attaches none.
+#[derive(Clone, Copy, Debug)]
+pub struct LastBuffer {
+    /// In pixels.
+    size: (u32, u32),
+    /// The state it was last shown with.
+    mapping: Mapping,
 }
 
 /// The role a surface committed in, for the steps of a commit that differ.
@@ -176,13 +232,7 @@ impl DomicileCompositor {
                 // applies to this commit.
                 let viewport = {
                     let mut cached = states.cached_state.get::<ViewportCachedState>();
-                    let state = cached.current();
-                    Viewport {
-                        destination: state.dst.map(|size| (size.w, size.h)),
-                        source: state
-                            .src
-                            .map(|rect| (rect.loc.x, rect.loc.y, rect.size.w, rect.size.h)),
-                    }
+                    Viewport::from(&*cached.current())
                 };
                 let mut guard = states.cached_state.get::<SurfaceAttributes>();
                 let attrs = guard.current();
@@ -213,14 +263,48 @@ impl DomicileCompositor {
             });
         // Whether the client took its buffer away, unmapping the window.
         let (attached, unmapped) = attached;
-        if let (Some(buffer), Committer::App(app_id), Role::Toplevel(toplevel)) =
-            (&attached, &committer, &role)
+        let mapping = Mapping {
+            buffer_scale,
+            buffer_transform,
+            viewport,
+            geometry,
+        };
+        // A window's commit with no buffer that changes its mapping shows its
+        // last buffer mapped anew: a resize through its viewport, scale,
+        // transform or geometry.
+        let remaps = match (&attached, &committer) {
+            (None, Committer::App(app_id)) if !unmapped => self
+                .last_buffers
+                .get(app_id)
+                .filter(|last| last.mapping != mapping)
+                .map(|last| last.size),
+            _ => None,
+        };
+        // The buffer's size in pixels, if this commit shows one.
+        let buffer_size = match &attached {
+            Some(buffer) => committed_buffer(buffer).map(|committed| committed.size()),
+            None => remaps,
+        };
+        // A buffer of no known kind cannot be shown again.
+        if let (Committer::App(app_id), true) = (
+            &committer,
+            attached.is_some() || remaps.is_some() || unmapped,
+        ) {
+            match buffer_size {
+                Some(size) => self
+                    .last_buffers
+                    .insert(app_id.clone(), LastBuffer { size, mapping }),
+                None => self.last_buffers.remove(app_id),
+            };
+        }
+        if let (true, Committer::App(app_id), Role::Toplevel(toplevel)) =
+            (attached.is_some() || remaps.is_some(), &committer, &role)
         {
-            let drawn = committed_buffer(buffer).map(|committed| {
+            let drawn = buffer_size.map(|size| {
                 surface_size(
-                    upright_size(committed.size(), buffer_transform),
+                    upright_size(size, buffer_transform),
                     buffer_scale,
-                    viewport.destination,
+                    viewport.size,
                 )
             });
             // A buffer of no known kind is not shown, so it has no size.
@@ -265,6 +349,16 @@ impl DomicileCompositor {
             }
         }
 
+        let remapped = match (remaps, &committer) {
+            (Some(_), Committer::App(app_id)) => {
+                let Answered {
+                    configured, at_box, ..
+                } = self.answered_box(surface, app_id, &role);
+                self.remap_frame(app_id, &mapping, configured, at_box)
+            }
+            _ => None,
+        };
+
         let shown = attached.and_then(|buffer| {
             // The gap since the last commit is time spent waiting on clients or
             // the throttle.
@@ -279,61 +373,19 @@ impl DomicileCompositor {
                 .map(|keyed| started.duration_since(keyed));
             let (engine_holds, shown) = match &committer {
                 Committer::App(app_id) => {
-                    // The size this commit was drawn for, and the engine's box
-                    // at that size. See `crop` and `crate::configure_answers`.
-                    let (configured, (at_box, box_size)) = match &role {
-                        Role::Toplevel(toplevel) => {
-                            let acked = with_states(surface, |states| {
-                                states
-                                    .data_map
-                                    .get::<XdgToplevelSurfaceData>()
-                                    .unwrap()
-                                    .lock()
-                                    .unwrap()
-                                    .current_serial
-                            });
-                            (
-                                toplevel.current_state().size.map(|size| (size.w, size.h)),
-                                self.configure_answers.get_mut(app_id).map_or(
-                                    (crate::engine::LAST_SHOWN_BOX, None),
-                                    |answers| {
-                                        let at_box = answers.answered(acked);
-                                        (at_box, answers.box_size(at_box))
-                                    },
-                                ),
-                            )
-                        }
-                        // The positioner's size, which the shell places.
-                        Role::Popup(popup) => (
-                            popup.with_pending_state(|state| {
-                                Some((state.geometry.size.w, state.geometry.size.h))
-                            }),
-                            (NEWEST_BOX, None),
-                        ),
-                        // Sized by its own buffer.
-                        Role::Bubble => (None, (NEWEST_BOX, None)),
-                    };
-                    // Measured on the upright buffer, then mapped back into
-                    // the buffer the engine samples.
-                    let buffer_size = committed_buffer(&buffer).map(|committed| committed.size());
-                    let crop = buffer_size.map_or((0, 0, 0, 0), |buffer_size| {
-                        let size = upright_size(buffer_size, buffer_transform);
-                        crop_in_buffer(
-                            crate::window_geometry::crop(
-                                geometry,
-                                configured,
-                                surface_size(size, buffer_scale, viewport.destination),
-                                size,
-                                source_pixels(size, buffer_scale, viewport.source),
-                            ),
-                            size,
-                            buffer_transform,
-                        )
-                    });
-                    let sampled = Sampled {
-                        crop,
-                        transform: buffer_transform,
-                    };
+                    let Answered {
+                        configured,
+                        at_box,
+                        box_size,
+                    } = self.answered_box(surface, app_id, &role);
+                    let sampled = buffer_size.map_or(
+                        Sampled {
+                            crop: (0, 0, 0, 0),
+                            transform: buffer_transform,
+                        },
+                        |size| mapping.sampled(size, configured),
+                    );
+                    let crop = sampled.crop;
                     self.cast_frame(app_id, &buffer, sampled, buffer_scale, damage);
                     // Surface damage maps to buffer pixels by the scale alone
                     // only when nothing turns or scales the buffer.
@@ -437,7 +489,54 @@ impl DomicileCompositor {
             self.last_commit = Some(done);
             shown
         });
+        let shown = shown.or(remapped);
         self.answer_when_shown(shown, callbacks, feedback);
+    }
+}
+
+impl DomicileCompositor {
+    /// The size `role`'s commit was drawn for, the engine's box at that size,
+    /// and the box's size. See `crop` and `crate::configure_answers`.
+    fn answered_box(&mut self, surface: &WlSurface, app_id: &str, role: &Role) -> Answered {
+        match role {
+            Role::Toplevel(toplevel) => {
+                let acked = with_states(surface, |states| {
+                    states
+                        .data_map
+                        .get::<XdgToplevelSurfaceData>()
+                        .unwrap()
+                        .lock()
+                        .unwrap()
+                        .current_serial
+                });
+                let (at_box, box_size) = self.configure_answers.get_mut(app_id).map_or(
+                    (crate::engine::LAST_SHOWN_BOX, None),
+                    |answers| {
+                        let at_box = answers.answered(acked);
+                        (at_box, answers.box_size(at_box))
+                    },
+                );
+                Answered {
+                    configured: toplevel.current_state().size.map(|size| (size.w, size.h)),
+                    at_box,
+                    box_size,
+                }
+            }
+            // The positioner's size, which the shell places.
+            Role::Popup(popup) => Answered {
+                configured: popup.with_pending_state(|state| {
+                    Some((state.geometry.size.w, state.geometry.size.h))
+                }),
+                at_box: NEWEST_BOX,
+                box_size: None,
+            },
+            // Sized by its own buffer.
+            Role::Bubble => Answered {
+                configured: None,
+                at_box: NEWEST_BOX,
+                box_size: None,
+            },
+        }
     }
 }
 
@@ -561,12 +660,12 @@ impl DomicileCompositor {
     ) -> Option<SurfaceTexture> {
         let (width, height) = committed.size();
         // The buffer's logical size, which a viewport source rectangle is
-        // relative to. Not the surface size, which a viewport destination
+        // relative to. Not the surface size, which a viewport size
         // replaces.
         let (buffer_width, buffer_height) = logical_size((width, height), buffer_scale);
         let _buffer_logical = (f64::from(buffer_width), f64::from(buffer_height));
         let (logical_width, logical_height) =
-            surface_size((width, height), buffer_scale, viewport.destination);
+            surface_size((width, height), buffer_scale, viewport.size);
         let logical_size = (f64::from(logical_width), f64::from(logical_height));
         match committed {
             CommittedBuffer::Gpu(dmabuf) => Some(SurfaceTexture {
@@ -629,7 +728,39 @@ pub fn window_geometry(states: &SurfaceData) -> Option<(i32, i32, i32, i32)> {
 
 #[cfg(test)]
 mod tests {
-    use super::{answers_keystroke, Committer};
+    use smithay::utils::{Rectangle, Transform};
+    use smithay::wayland::viewporter::ViewportCachedState;
+
+    use super::{answers_keystroke, Committer, Mapping};
+    use crate::viewport::Viewport;
+
+    #[test]
+    fn a_source_only_viewport_is_sampled_unscaled_at_any_buffer_scale() {
+        // A 1536-wide buffer cropped to 636 must fill a 636-wide box 1:1.
+        let mapping = |buffer_scale, source: (f64, f64)| Mapping {
+            buffer_scale,
+            buffer_transform: Transform::Normal,
+            viewport: Viewport::from(&ViewportCachedState {
+                src: Some(Rectangle::new(source.into(), (636.0, 754.0).into())),
+                dst: None,
+            }),
+            geometry: None,
+        };
+
+        assert_eq!(
+            mapping(1, (0.0, 0.0))
+                .sampled((1536, 754), Some((636, 754)))
+                .crop,
+            (0, 0, 636, 754)
+        );
+        assert_eq!(
+            mapping(2, (8.0, 4.0))
+                .sampled((1536, 1536), Some((636, 754)))
+                .crop,
+            (16, 8, 1272, 1508),
+            "a source is in logical units, so scale 2 doubles it"
+        );
+    }
 
     #[test]
     fn a_window_can_be_the_answer_to_a_keystroke() {

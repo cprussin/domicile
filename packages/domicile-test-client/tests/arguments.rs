@@ -376,6 +376,21 @@ fn a_client_can_resize_itself_after_its_first_frame() {
 }
 
 #[test]
+fn a_client_can_crop_its_buffer_and_later_scale_it_with_a_viewport() {
+    let asked = given(&["--viewport-source", "200x150", "--viewport-to", "400x300"])
+        .expect("a client that sizes its window with wp_viewport");
+
+    assert_eq!(asked.viewport_source, Some((200, 150)));
+    assert_eq!(asked.viewport_to, Some((400, 300)));
+    let plain = given(&[]).unwrap();
+    assert_eq!(
+        (plain.viewport_source, plain.viewport_to),
+        (None, None),
+        "and sets no viewport unless asked"
+    );
+}
+
+#[test]
 fn a_size_that_is_not_two_numbers_is_refused() {
     assert_eq!(
         given(&["--min-size", "680"]),

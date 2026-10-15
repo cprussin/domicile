@@ -218,6 +218,7 @@ impl DomicileCompositor {
         self.configure_answers.remove(app_id);
         self.shown.missed(app_id);
         self.size_limits.remove(app_id);
+        self.last_buffers.remove(app_id);
         self.unannounced.remove(app_id);
         self.app_bounds.remove(app_id);
         self.held_frames.forget(app_id);
