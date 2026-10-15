@@ -210,6 +210,7 @@ class MODULES_EXPORT DomicileHost final
   void openPrivateBrowserWindow(ScriptState*,
                                 const String& url,
                                 ExceptionState&);
+  void openAppWindow(ScriptState*, const String& url, ExceptionState&);
   void closeBrowserWindow(ScriptState*, const String& id, ExceptionState&);
   // Sends `method` to `url` with the profile's cookies, through the browser's
   // own pipe.
@@ -439,10 +440,9 @@ class MODULES_EXPORT DomicileHost final
 
   bool Ready(ExceptionState&);
 
-  // openBrowserWindow and openPrivateBrowserWindow.
-  void OpenBrowserWindow(const String& url,
-                         bool private_browsing,
-                         ExceptionState&);
+  // What openBrowserWindow, openPrivateBrowserWindow and openAppWindow open.
+  enum class WindowKind { kBrowser, kPrivate, kApp };
+  void OpenBrowserWindow(const String& url, WindowKind, ExceptionState&);
   bool ReadyForApp(const String& app_id, ExceptionState&);
 
   Member<LocalDOMWindow> window_;

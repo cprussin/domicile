@@ -15,6 +15,10 @@ Exec=domicile open-app <url>
   ─▶ manganese    <BrowserWindow isApp>: no address bar on the app's origin
 ```
 
+A shell's own launcher calls `domicile.openAppWindow(url)` instead, which
+opens the same window over the shell's `BrowserWindows` pipe
+([SHELL-BROWSER-WINDOWS.md](/docs/SHELL-BROWSER-WINDOWS.md)).
+
 - **An app window** is a browser window with `isApp` set. It shares the
   profile, extensions and site permissions of every other window. Its visits
   stay out of the history ([HISTORY.md](/docs/HISTORY.md)).
@@ -106,7 +110,7 @@ runs `domicile run-app <entry.js>`.
   `~/.local/share/applications`
 - [x] home-manager `webApps.<name> = { url; icon; }`, which writes desktop
   entries
-- [ ] `DomicileHost.openAppWindow(url)`, for a shell's own launcher
+- [x] `DomicileHost.openAppWindow(url)`, for a shell's own launcher
 
 ## Open questions
 

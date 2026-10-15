@@ -52,8 +52,9 @@ struct BrowserWindow {
   // Whether the page is in the profile's off-the-record profile. A private
   // window's new windows are private too.
   bool private_browsing;
-  // Whether this is an app window (`domicile open-app`), which the shell draws
-  // without an address bar. Its page's new windows are browser windows.
+  // Whether this is an app window (`domicile open-app`, OpenApp), which the
+  // shell draws without an address bar. Its page's new windows are browser
+  // windows.
   bool app;
 };
 
@@ -68,6 +69,11 @@ interface BrowserWindows {
   // domicile:// address shows about:blank#blocked, as in a <webview>.
   // `private_browsing` puts its page in the off-the-record profile.
   Open(url.mojom.Url url, bool private_browsing);
+
+  // Opens an app window at `url`, as `domicile open-app` does; it appears in
+  // the next list with `app` set. A domicile:// address shows
+  // about:blank#blocked, as Open's does.
+  OpenApp(url.mojom.Url url);
 
   // Closes window `id` and destroys its page once the page agrees; it leaves
   // the next list. A page with a `beforeunload` handler may ask the shell

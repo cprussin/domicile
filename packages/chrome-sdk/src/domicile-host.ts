@@ -622,6 +622,12 @@ export type DomicileHost = {
    */
   openPrivateBrowserWindow(url: string): void;
   /**
+   * Opens an app window at `url`, as `domicile open-app` does, for a shell's
+   * own launcher. It appears in the next `browserwindowschanged` with `isApp`
+   * set. A domicile:// address shows blocked, as in a <webview>.
+   */
+  openAppWindow(url: string): void;
+  /**
    * Closes window `id`; it leaves the next `browserwindowschanged`. A page
    * with a `beforeunload` handler may first ask to stay, as a `domicile-dialog`
    * on its <webview>; Cancel keeps the window. An unknown id does nothing.

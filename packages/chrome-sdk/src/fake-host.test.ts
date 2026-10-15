@@ -145,6 +145,19 @@ describe("FakeDomicileHost", () => {
     ]);
   });
 
+  it("opens app windows as the engine does", () => {
+    const fake = new FakeDomicileHost();
+
+    fake.host.openAppWindow("https://music.example");
+
+    expect(fake.host.browserWindows).toMatchObject([
+      { id: "1", isApp: true, url: "https://music.example" },
+    ]);
+    expect(fake.calls).toStrictEqual([
+      ["openAppWindow", "https://music.example"],
+    ]);
+  });
+
   it("records an ask and hands back a promise", () => {
     const fake = new FakeDomicileHost();
 
