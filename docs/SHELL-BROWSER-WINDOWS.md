@@ -109,6 +109,7 @@ stale state.
 | `findMatches`, `findActiveMatch` | `domicile-find-change` | Find-in-page results |
 | `contentWidth`, `contentHeight` | `domicile-content-size-change` | Page content size (for popups) |
 | `pageFullscreen` | `domicile-page-fullscreen-change` | Whether the page is fullscreen; see [Fullscreen](#fullscreen) |
+| `renderProcessGone`, `renderProcessExitCode` | `domicile-render-process-change` | Why the page's renderer went away, or `""`; see [Crashed pages](#crashed-pages) |
 
 ```ts
 import { WEBVIEW_HISTORY_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-element";
@@ -240,6 +241,36 @@ fullscreen at once:
 
 Manganese fills the screen with the window while its page is fullscreen
 (`usePageFullscreen`).
+
+## Crashed pages
+
+A page whose renderer dies (a crash, a kill, out of memory) stays in its view
+until you reload it:
+
+```ts
+import { WEBVIEW_RENDER_PROCESS_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-element";
+
+const showCard = () => {
+  card.hidden = view.renderProcessGone === "";
+  reason.textContent = view.renderProcessGone;
+};
+showCard();
+view.addEventListener(WEBVIEW_RENDER_PROCESS_CHANGE_EVENT, showCard);
+retry.addEventListener("click", () => view.reload());
+```
+
+- **`renderProcessGone`** is `crashed`, `killed`, `oom`, `abnormal-exit`,
+  `clean-exit`, `launch-failed` or `memory-eviction`
+  (`WEBVIEW_RENDER_PROCESS_GONE_REASONS`), and `""` while the page runs.
+- **`renderProcessExitCode`** is Chromium's code for the process: its wait
+  status, or the browser's own code when it ended the process. 0 while it
+  runs. Log it; branch on `renderProcessGone`.
+- **The view draws nothing** while the page is gone, so your card can sit over
+  it or under it. Chromium's sad frame is not drawn.
+- **`reload()` or a new `src`** starts a new renderer. The property returns to
+  `""` and the event fires again.
+- A browser window keeps its state across `domicile load-shell`, so a new
+  shell reads `renderProcessGone` on mount.
 
 ## Close requests
 

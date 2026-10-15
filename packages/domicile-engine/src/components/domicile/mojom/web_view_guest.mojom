@@ -35,6 +35,29 @@ enum WebViewSecurity {
   kDangerous,
 };
 
+// Whether the guest's page has a renderer, and if not, why it went away.
+// Named after Electron's `render-process-gone` reasons.
+//
+// A separate enum from base::TerminationStatus so a new Chromium status fails
+// to compile in RenderProcessOf (components/domicile/browser/render_process.h).
+enum WebViewRenderProcess {
+  kRunning,
+  // It exited with status 0.
+  kCleanExit,
+  // It exited with a nonzero status.
+  kAbnormalExit,
+  // A signal such as SIGKILL or SIGTERM ended it.
+  kKilled,
+  // A signal such as SIGSEGV or SIGABRT ended it.
+  kCrashed,
+  // It ran out of memory.
+  kOom,
+  // It never started.
+  kLaunchFailed,
+  // The browser ended it to free memory.
+  kMemoryEviction,
+};
+
 // What a page in a <webview> needs picked.
 //
 // Blink's five modes reduced to four: folder upload and folder open look the
@@ -471,6 +494,14 @@ interface WebViewGuestClient {
   // Sent when the page's site or a setting changes. A fresh guest sends
   // nothing until its first commit.
   SitePermissionsChanged(array<WebViewSitePermission> permissions);
+
+  // The page's renderer went away, or a new one replaced it, as after a
+  // reload. `exit_code` is Chromium's code for the process: its wait status,
+  // or the browser's own code when the browser ended it. 0 while running.
+  //
+  // From WebContents' crashed status. Sent only when it changes; a fresh guest
+  // sends nothing.
+  RenderProcessChanged(WebViewRenderProcess state, int32 exit_code);
 };
 
 // One guest, for the life of the element that requested it.

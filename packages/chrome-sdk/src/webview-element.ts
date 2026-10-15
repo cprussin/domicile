@@ -194,6 +194,39 @@ export const WEBVIEW_PAGE_FULLSCREEN_CHANGE_EVENT =
   "domicile-page-fullscreen-change";
 
 /**
+ * Fired when {@link HTMLWebViewElement.renderProcessGone} or
+ * {@link HTMLWebViewElement.renderProcessExitCode} changes: the page's
+ * renderer went away, or a new one replaced it. Carries no payload. Bubbles.
+ */
+export const WEBVIEW_RENDER_PROCESS_CHANGE_EVENT =
+  "domicile-render-process-change";
+
+/**
+ * Why a `<webview>`'s renderer went away, as Electron's
+ * `render-process-gone` names it.
+ *
+ * - `clean-exit`: it exited with status 0.
+ * - `abnormal-exit`: it exited with a nonzero status.
+ * - `killed`: a signal such as SIGKILL or SIGTERM ended it.
+ * - `crashed`: a signal such as SIGSEGV or SIGABRT ended it.
+ * - `oom`: it ran out of memory.
+ * - `launch-failed`: it never started.
+ * - `memory-eviction`: the browser ended it to free memory.
+ */
+export const WEBVIEW_RENDER_PROCESS_GONE_REASONS = [
+  "clean-exit",
+  "abnormal-exit",
+  "killed",
+  "crashed",
+  "oom",
+  "launch-failed",
+  "memory-eviction",
+] as const;
+
+export type WebViewRenderProcessGone =
+  (typeof WEBVIEW_RENDER_PROCESS_GONE_REASONS)[number];
+
+/**
  * Fired when the page needs a file picked: an `<input type="file">` or a
  * download. Bubbles.
  *
@@ -520,6 +553,19 @@ declare global {
     readonly pageFullscreen: boolean;
     /** Take the page out of fullscreen, as Escape does. */
     exitPageFullscreen(): void;
+    /**
+     * Why the page's renderer went away, or `""` while it runs. The view then
+     * draws nothing, so the shell can show its own message over or under it.
+     * {@link HTMLWebViewElement.reload} or a new `src` starts a new renderer.
+     * Changes fire {@link WEBVIEW_RENDER_PROCESS_CHANGE_EVENT}.
+     */
+    readonly renderProcessGone: WebViewRenderProcessGone | "";
+    /**
+     * Chromium's code for the renderer that went away: its wait status, or
+     * the browser's own code when the browser ended it. 0 while it runs. For
+     * logs; branch on {@link HTMLWebViewElement.renderProcessGone}.
+     */
+    readonly renderProcessExitCode: number;
     /**
      * Open DevTools for the page in a new browser window. If DevTools is
      * already open, the view showing it fires

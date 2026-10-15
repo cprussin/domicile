@@ -223,6 +223,7 @@ domicile load-shell ./my-desktop/dist/shell.js
 |---|---|---|
 | engine | the engine | every window, with its last frame |
 | compositor | the compositor | the shell and browser windows |
+| the shell's renderer | the engine, which ends itself | as for the engine |
 
 ```
 the engine exited (signal: 9 (SIGKILL))
@@ -280,6 +281,26 @@ Detecting a new engine:
   (`packages/domicile-compositor/src/which_engine.rs`).
 - `load-shell` binds a new channel from the same browser, so the pid matches
   and no reconnect happens.
+
+The shell's renderer:
+
+- It dies only through a bug in Domicile, so the engine dies with it rather
+  than cover for it with Chromium's sad tab. `SadTabHelper` (patch 0124)
+  calls `domicile::DieIfTheShellDied`
+  (`components/domicile/browser/shell_death.h`), which `LOG(FATAL)`s:
+
+  ```
+  FATAL:shell_death.cc] domicile: the Domicile shell's renderer died (crashed, exit code 139) at domicile://shell/. This is a bug in Domicile; please report it with this log at https://github.com/cprussin/domicile/issues.
+  ```
+
+- The supervisor then restarts the engine as for any engine failure. A shell
+  that kills its renderer on every start hits the restart limit and the
+  desktop stops, saying why.
+- Script errors are not this: a shell catches its own with `try`/`catch`,
+  `window.onerror` and `unhandledrejection`.
+- A `<webview>` page that dies is normal. It reports `renderProcessGone` and
+  draws nothing
+  ([SHELL-BROWSER-WINDOWS.md](/docs/SHELL-BROWSER-WINDOWS.md#crashed-pages)).
 
 ### Components are found beside the binary
 

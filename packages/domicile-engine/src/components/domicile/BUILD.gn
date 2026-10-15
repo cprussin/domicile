@@ -250,6 +250,41 @@ source_set("shell_scheme") {
   ]
 }
 
+# Why a page's renderer went away, for a <webview> and the engine's report
+# of a dead shell. Its own target because it needs no browser, which is where
+# its tests are.
+source_set("render_process") {
+  sources = [
+    "browser/render_process.cc",
+    "browser/render_process.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//components/domicile/mojom",
+  ]
+}
+
+# Ends the engine when the shell's page loses its renderer, which only a bug
+# in Domicile does. Chrome's SadTabHelper calls it (patch 0124). Needs no
+# //content, so its tests need no browser.
+source_set("shell_death") {
+  sources = [
+    "browser/shell_death.cc",
+    "browser/shell_death.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//url",
+  ]
+
+  deps = [
+    ":common",
+    ":render_process",
+  ]
+}
+
 # Which shell the browser is serving, for the life of the process.
 #
 # Its own target beside :shell_scheme rather than part of it, because it is the
@@ -445,6 +480,7 @@ source_set("web_view_guest") {
     ":file_choice",
     ":guest_dialogs",
     ":placeholder_stage",
+    ":render_process",
     ":shortcut_registry",
     ":site_permissions",
     ":web_view_url",
@@ -822,10 +858,12 @@ source_set("unit_tests") {
     "browser/pointer_warp_unittest.cc",
     "browser/portal_request_unittest.cc",
     "browser/private_pages_unittest.cc",
+    "browser/render_process_unittest.cc",
     "browser/shell_source_unittest.cc",
     "browser/shell_url_loader_factory_unittest.cc",
     "browser/shell_fetch_unittest.cc",
     "browser/shell_origin_unittest.cc",
+    "browser/shell_death_unittest.cc",
     "browser/shell_window_wait_unittest.cc",
     "browser/shell_windows_unittest.cc",
     "browser/shortcut_registry_unittest.cc",
@@ -881,8 +919,10 @@ source_set("unit_tests") {
     ":pointer_warp",
     ":portal_request",
     ":private_pages",
+    ":render_process",
     ":shell_fetch",
     ":shell_origin",
+    ":shell_death",
     ":shell_scheme",
     ":shell_source",
     ":shell_window_wait",
