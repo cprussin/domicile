@@ -667,6 +667,12 @@ interface ControlChannelClient {
   // `system_end` line, as the compositor wrote it. The page parses it.
   System(string message);
 
+  // The compositor exited and a new one took the channel. By now the page has
+  // heard every window of the old one close and every system call it had end
+  // with `compositor_gone`; the new one pushes the desk's state as on any
+  // connect. See "A compositor restart" in docs/architecture/ENGINE-FORK.md.
+  CompositorReplaced();
+
   // Every unanswered portal request: the `portal_requests` line, as the
   // compositor wrote it. Pushed whole on every change and on connect. The page
   // parses it.

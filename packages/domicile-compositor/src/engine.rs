@@ -323,6 +323,10 @@ pub enum Event {
         request: Request,
         buffer: Option<BufferId>,
     },
+
+    /// The browser went away. Nothing follows from this engine; the next
+    /// page's hello comes from a new one. See [`crate::which_engine`].
+    Disconnected,
 }
 
 /// When and how a frame reached the screen.
@@ -386,6 +390,7 @@ struct Callbacks {
     presented: Option<extern "C" fn(*mut c_void, SurfaceId, u64, i64, i64, u32)>,
     imported: Option<extern "C" fn(*mut c_void, SurfaceId, Request, BufferId)>,
     connected_displays: Option<extern "C" fn(*mut c_void, *const RawConnectedDisplay, u32)>,
+    disconnected: Option<extern "C" fn(*mut c_void)>,
 }
 
 /// `DomicileClipboardItem`, laid out as in the C header: one type a copy can be
@@ -1434,6 +1439,7 @@ fn join(
         presented: Some(on_presented),
         imported: Some(on_imported),
         connected_displays: Some(on_connected_displays),
+        disconnected: Some(on_disconnected),
     };
     let socket_c = CString::new(socket.as_os_str().as_encoded_bytes())?;
     let connect: Symbol<unsafe extern "C" fn(*const c_char, Callbacks) -> *mut Handle> = symbol(
@@ -1704,6 +1710,10 @@ extern "C" fn on_capture_ended(user_data: *mut c_void, capture: CaptureId) {
     push(user_data, Event::CaptureEnded { capture });
 }
 
+extern "C" fn on_disconnected(user_data: *mut c_void) {
+    push(user_data, Event::Disconnected);
+}
+
 extern "C" fn on_frame_done(user_data: *mut c_void, surface: SurfaceId, frame: u64) {
     push(user_data, Event::FrameDone { surface, frame });
 }
@@ -1880,16 +1890,17 @@ mod tests {
     }
 
     #[test]
-    fn the_callbacks_are_the_user_data_and_thirteen_pointers_the_c_header_declares() {
-        // `released` follows `configure`, and `connected_displays` is last, as
-        // in the header.
-        assert_eq!(std::mem::size_of::<Callbacks>(), 14 * 8);
+    fn the_callbacks_are_the_user_data_and_fourteen_pointers_the_c_header_declares() {
+        // `released` follows `configure`, and `disconnected` is last, as in
+        // the header.
+        assert_eq!(std::mem::size_of::<Callbacks>(), 15 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, released), 2 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, copied_items), 9 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, frame_done), 10 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, presented), 11 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, imported), 12 * 8);
         assert_eq!(std::mem::offset_of!(Callbacks, connected_displays), 13 * 8);
+        assert_eq!(std::mem::offset_of!(Callbacks, disconnected), 14 * 8);
     }
 
     #[test]

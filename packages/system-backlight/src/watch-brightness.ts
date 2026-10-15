@@ -45,6 +45,9 @@ export type BrightnessWatch = {
  *   and comes back is reported again.
  * - Runs `udevadm` from the compositor's `PATH`. Works while the desktop is
  *   locked.
+ * - Runs `udevadm` again under the next compositor when the compositor exits,
+ *   and reads then. See "A compositor restart" in
+ *   docs/architecture/ENGINE-FORK.md.
  */
 export const watchBrightness = async (
   host: WatchHost,
@@ -57,19 +60,18 @@ export const watchBrightness = async (
       reading: Promise.resolve(),
       shown: undefined,
       stopped: false,
+      udevadm,
     };
     const reread = () => {
-      watch.reading = watch.reading.then(() =>
-        readOnce(host, watch, udevadm, onLevel),
-      );
+      watch.reading = watch.reading.then(() => readOnce(host, watch, onLevel));
     };
     reread();
     const stopClock = every(BACKSTOP_MS, reread);
     return {
-      ended: ended(udevadm, watch, reread, stopClock),
+      ended: ended(host, watch, reread, stopClock),
       stop: () => {
         watch.stopped = true;
-        udevadm.kill();
+        watch.udevadm.kill();
       },
     };
   });
@@ -89,20 +91,24 @@ type Watching = {
   reading: Promise<void>;
   stopped: boolean;
   failure: SystemError | undefined;
+  /** The one running: a new one under each new compositor. */
+  udevadm: Subprocess;
 };
 
 const readOnce = async (
   host: SysfsHost,
   watch: Watching,
-  udevadm: Subprocess,
   onLevel: (level: number) => void,
 ): Promise<void> => {
   const read = await readBacklight(host);
   if (!watch.stopped && watch.failure === undefined) {
     read.match({
+      // udevadm ends with it, and the read after the next one starts stands in.
       Err: (error) => {
-        watch.failure = error;
-        udevadm.kill();
+        if (error.kind !== SystemErrorKind.CompositorGone) {
+          watch.failure = error;
+          watch.udevadm.kill();
+        }
       },
       Ok: (backlight) => {
         const level = backlight.map(levelOf);
@@ -119,19 +125,46 @@ const readOnce = async (
   }
 };
 
-/** Reads `udevadm`'s lines until it exits, then says why it did. */
+/**
+ * Reads `udevadm`'s lines until it exits, then says why it did. One the
+ * compositor took with it is started again.
+ */
 const ended = async (
-  udevadm: Subprocess,
+  host: WatchHost,
   watch: Watching,
   reread: () => void,
   stopClock: () => void,
 ): Promise<Result<"stopped", SystemError>> => {
-  await eachLine(udevadm.stdout, (line) => {
-    if (line.startsWith("KERNEL[")) {
-      reread();
+  let exit: Result<Exit, SystemError>;
+  for (;;) {
+    await eachLine(watch.udevadm.stdout, (line) => {
+      if (line.startsWith("KERNEL[")) {
+        reread();
+      }
+    });
+    exit = await watch.udevadm.exited;
+    if (watch.stopped || watch.failure !== undefined || !isGone(exit)) {
+      break;
     }
-  });
-  const exit = await udevadm.exited;
+    const next = await respawn(host);
+    const running = next.match({
+      Err: (error) => {
+        exit = Err(error);
+        return false;
+      },
+      Ok: (udevadm) => {
+        watch.udevadm = udevadm;
+        if (watch.stopped) {
+          udevadm.kill();
+        }
+        reread();
+        return true;
+      },
+    });
+    if (!running) {
+      break;
+    }
+  }
   stopClock();
   await watch.reading;
   if (watch.failure !== undefined) {
@@ -164,6 +197,26 @@ const eachLine = async (
     }
   }
 };
+
+/** udevadm under the next compositor, past any that exits before it starts. */
+const respawn = async (
+  host: WatchHost,
+): Promise<Result<Subprocess, SystemError>> => {
+  for (;;) {
+    const next = await host.spawn(UDEVADM);
+    if (!isGone(next)) {
+      return next;
+    }
+  }
+};
+
+const isGone = <T extends NonNullable<unknown>>(
+  answer: Result<T, SystemError>,
+): boolean =>
+  answer.match({
+    Err: (error) => error.kind === SystemErrorKind.CompositorGone,
+    Ok: () => false,
+  });
 
 const unexpectedExit = ({ code, signal }: Exit): SystemError => ({
   kind: SystemErrorKind.Other,

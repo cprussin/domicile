@@ -47,6 +47,7 @@ const EVENT_NAMES = [
   "shelloptionschanged",
   "system",
   "portalrequests",
+  "compositorreplaced",
 ];
 
 // Under guard-windows-state.sh's 60-second wait for this page's last line.

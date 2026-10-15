@@ -37,11 +37,12 @@
   X(lockedchanged, Lockedchanged)                 \
   X(themechanged, Themechanged)                   \
   X(windowsthemechanged, Windowsthemechanged)     \
-  X(modifierschanged, Modifierschanged)         \
-  X(appearancechanged, Appearancechanged)       \
-  X(shelloptionschanged, Shelloptionschanged)   \
+  X(modifierschanged, Modifierschanged)           \
+  X(appearancechanged, Appearancechanged)         \
+  X(shelloptionschanged, Shelloptionschanged)     \
   X(system, System)                               \
-  X(portalrequests, Portalrequests)
+  X(portalrequests, Portalrequests)               \
+  X(compositorreplaced, Compositorreplaced)
 
 namespace blink::domicile_event_names {
 

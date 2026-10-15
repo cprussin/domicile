@@ -44,6 +44,7 @@ Under `under-wayland.sh` unless marked headless.
 | `guard-buffer-transform.sh` | a `wl_shm` buffer drawn with `wl_surface.set_buffer_transform` is shown upright |
 | `guard-scrolling-bubble.sh` | each frame of a monitor cast shows a sync bubble at the content its window scrolls, on a page that syncs frames. Control: the page places each move a step late, and the bubble is off its content |
 | `guard-app-survives-load-shell.sh` | a client's frames still reach the page after `load_shell`, when the new shell's `<app>` is a different size |
+| `guard-app-survives-compositor-restart.sh` | after a compositor restart under the same engine, the shell hears its window close and its watch end, watches again, hears `compositorreplaced`, and its kept `<app>` shows the next compositor's window |
 | `guard-shell.sh` | a real shell, built with vite and the SDK, showing a client's window on a desktop `domicile` started |
 | `guard-shell-handover.sh` | the engine calls `Shell` with the body and a working desktop, and no `navigator.domicile` or `window.domicile` exists (patch 0094) |
 | `guard-css-and-resize.sh` | CSS parity of `<app>` against `<div>`, with and without `backdrop-filter`, plus resize and latency. Headless; `GPU=1` uses the GPU |

@@ -100,6 +100,8 @@ struct EngineEvent {
     kPresented,
     // The answer to domicile_surface_import_async.
     kImported,
+    // The broker hung up: the browser is gone.
+    kDisconnected,
   };
 
   Type type = Type::kConfigure;
