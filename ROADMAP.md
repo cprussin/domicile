@@ -36,10 +36,7 @@ item when it ships.
    - A list of sites with stored data. History clears cookies by time range
      or by site ([HISTORY.md](docs/HISTORY.md)).
 
-5. **Web apps.** [WEB-APPS.md](docs/architecture/WEB-APPS.md).
-   - `DomicileHost.openAppWindow(url)`, for a shell's own launcher.
-
-6. **Distribution packages.**
+5. **Distribution packages.**
    [RUNNING-A-DESKTOP.md](docs/RUNNING-A-DESKTOP.md#other-distributions).
    - Released on GitHub only. APT and RPM repositories, package signing, an
      AUR package and COPR wait until users ask for them; until then upgrades
@@ -47,12 +44,12 @@ item when it ships.
    - Checked by installing in containers; no packaged session has run on
      hardware.
 
-7. **Popups and bubbles move with their window's frame.** A bubble's move
+6. **Popups and bubbles move with their window's frame.** A bubble's move
    names its window's synced frames, and manganese shows them. Left: the
    `crux` pixel guard.
    [FRAME-SYNCED-SURFACES.md](docs/architecture/FRAME-SYNCED-SURFACES.md#plan).
 
-8. **Revisit the docs for users.** Start with the README.
+7. **Revisit the docs for users.** Start with the README.
    - A clearer reading path through the docs.
    - Screenshots and videos of manganese.
    - A short getting started guide: installing and setup.
@@ -61,7 +58,7 @@ item when it ships.
      - The built-in browser.
      - Chrome extensions.
      - The launcher.
-     - Web apps (the Web apps item).
+     - Web apps ([WEB-APPS.md](docs/architecture/WEB-APPS.md)).
      - Top bar, system tray, notifications, clipboard history, wallpaper,
        screen lock, several monitors, and the Settings and History apps.
    - A short guide to customizing:

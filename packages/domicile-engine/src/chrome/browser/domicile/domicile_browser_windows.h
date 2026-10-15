@@ -26,7 +26,8 @@ namespace domicile {
 // - Shown: by a <webview window="id">, which attaches the page. Content
 //   detaches it when the element's frame goes.
 // - Opened by: `domicile open-url`, a page's new window, an extension's
-//   tabs.create or windows.create, or the shell (mojom::BrowserWindows.Open).
+//   tabs.create or windows.create, or the shell (mojom::BrowserWindows.Open
+//   and OpenApp).
 // - Closed by: its page's window.close(), an extension's tabs.remove, or the
 //   shell (mojom::BrowserWindows.Close).
 //

@@ -5,6 +5,8 @@
                  control). Reports `loaded as=subject`.
   /sentinel      the page opened as an ordinary window after it. Reports
                  `loaded as=sentinel`.
+  /launched      the page the shell opens itself with openAppWindow. Reports
+                 `loaded as=launched`.
   /report?line=  prints `GUARD <line>` to stdout, which the guard reads. The
                  guard's extension reports the history here too.
 
@@ -17,7 +19,7 @@ import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-PAGES = ("/subject", "/sentinel")
+PAGES = ("/subject", "/sentinel", "/launched")
 REPORT = "/report"
 
 PAGE = """<!doctype html>
@@ -47,7 +49,7 @@ class Pages(BaseHTTPRequestHandler):
         elif url.path in PAGES:
             body = PAGE % {"name": url.path[1:]}
         else:
-            self.send_error(404, "this server has three paths and that is none of them")
+            self.send_error(404, "this server has four paths and that is none of them")
             return
 
         encoded = body.encode("utf-8")
