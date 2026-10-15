@@ -20,7 +20,8 @@ namespace domicile {
 //
 // The producer submits at it and the <app> whose `frame` is `frame` embeds
 // it, so a commit and the page's move of its popup show in one frame. See
-// docs/architecture/FRAME-SYNCED-SURFACES.md in the Domicile repository.
+// docs/architecture/WINDOW-COMPOSITING.md#synced-frames in the Domicile
+// repository.
 //
 // `allocated` comes from a ParentLocalSurfaceIdAllocator that never takes a
 // child's id, so its child sequence number is the initial one.

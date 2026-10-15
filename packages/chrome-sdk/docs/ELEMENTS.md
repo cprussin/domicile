@@ -25,7 +25,7 @@ Event names and full types are in `src/app-element.ts` and
   a page that ignores frames never shows a stale one.
   Set it from `DomicileWindow.frame`, in the same render as a popup's move.
   The compositor syncs frames only for a page that called `syncFrames()`; see
-  [FRAME-SYNCED-SURFACES.md](/docs/architecture/FRAME-SYNCED-SURFACES.md).
+  [Synced frames](/docs/architecture/WINDOW-COMPOSITING.md#synced-frames).
 - **Scale:** call `domicile.setAppBounds(appId, x, y, width, height)` with
   the element's box in page pixels whenever it moves or resizes. The client
   draws at the scale of the monitor holding most of the box. An unreported

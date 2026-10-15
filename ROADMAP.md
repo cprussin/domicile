@@ -47,12 +47,7 @@ item when it ships.
    - Checked by installing in containers; no packaged session has run on
      hardware.
 
-7. **Popups and bubbles move with their window's frame.** A bubble's move
-   names its window's synced frames, and manganese shows them. Left: the
-   `crux` pixel guard.
-   [FRAME-SYNCED-SURFACES.md](docs/architecture/FRAME-SYNCED-SURFACES.md#plan).
-
-8. **Revisit the docs for users.** Start with the README.
+7. **Revisit the docs for users.** Start with the README.
    - A clearer reading path through the docs.
    - Screenshots and videos of manganese.
    - A short getting started guide: installing and setup.
@@ -110,8 +105,10 @@ item when it ships.
    `LocalSurfaceId`, so a client's frame and the page's layout change in the
    same frame
    ([What each side knows](docs/architecture/WINDOW-COMPOSITING.md#what-each-side-knows)).
-   - Phase 1 (planned): Domicile's own subsurfaces and popups, so
-     `wl_subsurface` sync holds.
+   - Phase 1: Domicile's own subsurfaces and popups, so `wl_subsurface` sync
+     holds. Bubbles sync
+     ([Synced frames](docs/architecture/WINDOW-COMPOSITING.md#synced-frames));
+     xdg popups do not.
    - Phase 2: a protocol for clients to anchor to page layout.
 
 ## Known gaps

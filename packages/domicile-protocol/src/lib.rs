@@ -204,7 +204,7 @@ pub enum ChromeMessage {
     ///
     /// Without it, a page that sets `frame` some other way, such as always 0,
     /// would show a synced window's old frame. See
-    /// `docs/architecture/FRAME-SYNCED-SURFACES.md`.
+    /// `docs/architecture/WINDOW-COMPOSITING.md#synced-frames`.
     SyncFrames,
 
     /// A click on a system tray icon.
@@ -341,7 +341,7 @@ pub enum HostMessage {
         owner: Owner,
         /// The window's synced frame, for a page that renders `<app frame>`.
         /// Above 0 only for a window that appeared before this page did. See
-        /// `docs/architecture/FRAME-SYNCED-SURFACES.md`.
+        /// `docs/architecture/WINDOW-COMPOSITING.md#synced-frames`.
         #[serde(default, skip_serializing_if = "is_frame_zero")]
         frame: u32,
     },
@@ -381,7 +381,7 @@ pub enum HostMessage {
     ///
     /// `frames` names the synced frame of each surface the move goes with: a
     /// page that renders `<app frame>` sets them in the same update as the
-    /// move. See `docs/architecture/FRAME-SYNCED-SURFACES.md`.
+    /// move. See `docs/architecture/WINDOW-COMPOSITING.md#synced-frames`.
     PopupPlaced {
         app_id: String,
         parent: String,
