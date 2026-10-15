@@ -841,6 +841,20 @@ describe("Shell", () => {
       ).toBeNull();
     });
 
+    it("tells the time as the shell's clock options say", () => {
+      const { container } = renderShell();
+
+      act(() => {
+        domicile.fake.set({
+          shellOptions: '{"clock":{"format":"12h","seconds":false}}',
+        });
+      });
+
+      expect(container.querySelector("header time")?.textContent).toMatch(
+        / \d\d:\d\d [AP]M$/,
+      );
+    });
+
     it("lays out every item of manganese's when it is given none", () => {
       renderShell();
 

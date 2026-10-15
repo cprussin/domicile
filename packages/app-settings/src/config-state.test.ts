@@ -6,6 +6,7 @@ import type { SettingsFiles } from "./host";
 const json = (text: string, writable = true): SettingsFiles => ({
   config: { path: "/home/me/.config/domicile/domicile.json", text, writable },
   evaluated: undefined,
+  options: undefined,
   shell: undefined,
 });
 
@@ -33,6 +34,7 @@ describe(configState, () => {
         writable: true,
       },
       evaluated: '{"idle":{"blank_after_seconds":60}}',
+      options: undefined,
       shell: undefined,
     });
     expect(state.kind).toBe(ConfigKind.Module);
@@ -46,6 +48,7 @@ describe(configState, () => {
     const state = configState({
       config: undefined,
       evaluated: undefined,
+      options: undefined,
       shell: undefined,
     });
     expect(state.settings?.output.max_scale).toBe(2);

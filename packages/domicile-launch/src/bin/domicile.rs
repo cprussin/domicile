@@ -513,7 +513,8 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     let runtime = tempdir().map_err(|why| format!("no runtime directory: {why}"))?;
 
     // What the Settings app edits. A module config is evaluated to
-    // `config.json` in the runtime directory, below.
+    // `config.json` in the runtime directory, below. The shell's options are
+    // beside the module served when the app asks.
     let files = SettingsFiles {
         config: config.path().map(Path::to_path_buf),
         evaluated: config
@@ -521,6 +522,7 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
             .is_some_and(is_module)
             .then(|| runtime.join("config.json")),
         shell: wanted.source(),
+        options: None,
     };
 
     // A shell that builds quickly is built before anything starts, so a broken

@@ -39,6 +39,7 @@
   X(windowsthemechanged, Windowsthemechanged)     \
   X(modifierschanged, Modifierschanged)         \
   X(appearancechanged, Appearancechanged)       \
+  X(shelloptionschanged, Shelloptionschanged)   \
   X(system, System)                               \
   X(portalrequests, Portalrequests)
 

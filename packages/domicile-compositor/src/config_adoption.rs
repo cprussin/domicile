@@ -47,10 +47,10 @@ pub fn hand_over_the_extensions(host: &mut Host, extensions: &ExtensionsConfig) 
     );
 }
 
-/// Give the host the resolved shell keybindings, for chromes that connect
-/// later.
-pub fn hand_over_the_keys(host: &mut Host, keys: BTreeMap<String, u32>) {
-    host.set_shell_config(keys);
+/// Give the host the resolved shell keybindings and the shell's options, for
+/// chromes that connect later.
+pub fn hand_over_the_shell_config(host: &mut Host, keys: BTreeMap<String, u32>, options: String) {
+    host.set_shell_config(keys, options);
 }
 
 impl DomicileCompositor {
@@ -169,8 +169,8 @@ impl DomicileCompositor {
         }
     }
 
-    /// Resolve the reloaded config's keybindings and send them and the shell
-    /// settings to every chrome.
+    /// Resolve the reloaded config's keybindings and send them and the shell's
+    /// options to every chrome.
     ///
     /// A keysym the keymap cannot type is refused and logged, not fatal, as in
     /// [`retype_the_desktop`]. The host keeps the last good keys for new
@@ -184,7 +184,11 @@ impl DomicileCompositor {
                 // Store then broadcast, as in `retype_the_desktop`.
                 let told = {
                     let mut host = self.hub.host.lock().unwrap();
-                    hand_over_the_keys(&mut host, resolved);
+                    hand_over_the_shell_config(
+                        &mut host,
+                        resolved,
+                        shell_config::options(self.config.current()),
+                    );
                     host.describe_shell_config()
                 };
                 self.hub.broadcast(

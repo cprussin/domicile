@@ -35,6 +35,7 @@ const readState = (host) => ({
   ctrlKey: host.ctrlKey,
   idle: host.idle,
   locked: host.locked,
+  shellOptions: host.shellOptions,
   shiftKey: host.shiftKey,
   theme: host.theme,
   tray: host.tray?.map(({ bus, id, itemIsMenu, menu, title }) => ({

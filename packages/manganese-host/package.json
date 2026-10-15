@@ -32,6 +32,7 @@
     "./use-provided": "./src/use-provided.ts",
     "./useRequests": "./src/useRequests.ts",
     "./useSharedWatch": "./src/useSharedWatch.ts",
+    "./useShellOptions": "./src/useShellOptions.ts",
     "./watch-host": "./src/watch-host.ts"
   },
   "files": [

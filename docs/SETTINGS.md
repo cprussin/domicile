@@ -6,7 +6,7 @@ launcher, opens it in an app window. It is an app module
 not in the Extensions page or any extension list.
 
 - **Config pages:** Appearance, Keyboard, Displays, Power & lock, Privacy,
-  Launcher and Startup cover every key of the config
+  Launcher, Startup and Shell cover every key of the config
   ([SHELL-CONFIG.md](SHELL-CONFIG.md)). A change is written to the file as soon
   as it is made, and the desktop reloads it.
 - **Extensions:** switch an extension on or off and open its options through
@@ -43,6 +43,10 @@ not in the Extensions page or any extension list.
   compositor's reason. The file is not written.
 - An edit made elsewhere shows at once: the host watches both files.
 - `startup` is read only at startup.
+- **Shell:** a control for each option the shell declares
+  ([WRITING-A-SHELL.md](WRITING-A-SHELL.md#options)), a card per group. The
+  host refuses a `shell_options` value the declaration refuses, naming it. A
+  value already bad in the file does not block other edits.
 
 ## How it works
 
@@ -66,6 +70,7 @@ Settings page ─ spawn, stdio ─▶ domicile-app-host ─ DOMICILE_SOCK ─▶
 | Finding the host | `domicile` links it into the apps' `PATH` (the runtime's `bin`, beside `xdg-open`). |
 | Which files | The host asks the desktop (`settings_files` on the control socket) on every request. The page never names a path. |
 | Writable | `access(W_OK)` on the file, following links. |
+| Shell options | `settings_files` names the shell's `options.json`, beside its module. The host reads it with the config and checks `shell_options` writes against it. |
 | Extensions | The engine's `extensions`, `set_extension_enabled`, `load_unpacked`, `uninstall_extension` and `config_extensions` commands. |
 | Picking a folder | The host calls the `FileChooser` portal's `OpenFile` with `directory`, which the shell draws ([PORTALS.md](PORTALS.md)). A page cannot learn the path of a folder from `<input type="file">`. |
 | Site permissions | The engine's `site_permissions` and `set_site_permission` commands ([CONTROL-CHANNEL.md](/packages/domicile-engine/docs/CONTROL-CHANNEL.md#command-socket)). They read and write the shell profile's content settings as the address bar's panel does. |
@@ -90,9 +95,3 @@ Settings page ─ spawn, stdio ─▶ domicile-app-host ─ DOMICILE_SOCK ─▶
 - **Writing the config is trusting the page.** The config can run commands at
   startup. Any app can spawn the host, as it can any program; only the shell
   and the config, which the user already trusts, are written.
-
-## Shell options
-
-The shell is code, so the form cannot edit its options. A design for options a
-shell declares and the form edits is in
-[SHELL-OPTIONS.md](architecture/SHELL-OPTIONS.md).

@@ -16,7 +16,10 @@ export const Shell = runManganese({
 });
 ```
 
-It takes no props. It reads no context. See
+It takes no props. It reads its format from `ClockOptionsContext`
+(`@domicile-desktop/manganese-bar-module-clock/clock-options`): a 24-hour clock
+to the second unless told otherwise. manganese provides its `clock` shell
+options there. See
 [TOP-BAR.md](../shell-manganese/docs/TOP-BAR.md).
 
 ## Test

@@ -91,7 +91,7 @@ impl eis::Compositor for CalloopData {
     fn keycode(&self, keysym: u32) -> Option<u32> {
         let name = smithay::input::keyboard::xkb::keysym_get_name(keysym.into());
         match self.state.hub.host.lock().unwrap().describe_shell_config() {
-            Some(HostMessage::ShellConfig { keys }) => keys.get(&name).copied(),
+            Some(HostMessage::ShellConfig { keys, .. }) => keys.get(&name).copied(),
             _ => None,
         }
     }

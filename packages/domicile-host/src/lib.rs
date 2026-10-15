@@ -153,9 +153,10 @@ pub struct Host {
     /// `None` until set. The browser uninstalls extensions missing from the
     /// list, so a host without a config must not send an empty one.
     extensions: Option<(Vec<String>, Vec<String>)>,
-    /// The config's bound keysyms resolved against the keymap, for
-    /// [`HostMessage::ShellConfig`]. `None` until set, as for `keymap`.
-    shell_config: Option<BTreeMap<String, u32>>,
+    /// The keysyms the keymap types, with their keys, and the config's shell
+    /// options as JSON text, for [`HostMessage::ShellConfig`]. `None` until
+    /// set, as for `keymap`.
+    shell_config: Option<(BTreeMap<String, u32>, String)>,
     /// The chromes' theme.
     ///
     /// Not an `Option`: a page always paints in some theme. The default
@@ -241,16 +242,17 @@ impl Host {
             })
     }
 
-    /// Replace the keysym-to-keycode map, for chromes that connect later.
-    pub fn set_shell_config(&mut self, keys: BTreeMap<String, u32>) {
-        self.shell_config = Some(keys);
+    /// Replace the keysym-to-keycode map and the shell's options, for
+    /// chromes that connect later.
+    pub fn set_shell_config(&mut self, keys: BTreeMap<String, u32>, options: String) {
+        self.shell_config = Some((keys, options));
     }
 
     /// The shell config message, or `None` if none was set.
     pub fn describe_shell_config(&self) -> Option<HostMessage> {
         self.shell_config
             .clone()
-            .map(|keys| HostMessage::ShellConfig { keys })
+            .map(|(keys, options)| HostMessage::ShellConfig { keys, options })
     }
 
     /// Set the theme and return the message to broadcast to every chrome, or

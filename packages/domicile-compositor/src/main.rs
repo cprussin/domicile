@@ -152,7 +152,9 @@ use crate::chrome_connection::{bind_chrome_socket, serve_chrome};
 use crate::chrome_hub::{serve_outbound, ChromeHub};
 use crate::client_requests::ClientRequest;
 use crate::clients::{accept_app_client, sees_privileged_globals, ClientState};
-use crate::config_adoption::{hand_over_the_extensions, hand_over_the_keys, theme_on_the_wire};
+use crate::config_adoption::{
+    hand_over_the_extensions, hand_over_the_shell_config, theme_on_the_wire,
+};
 use crate::configure_answers::ConfigureAnswers;
 use crate::dmabuf_import::{headless_renderer, DmabufImporter};
 use crate::eis::barriers::Zone;
@@ -881,8 +883,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         // The keymap, for the browser process to decode keys. Outside ChromeOS
         // nothing else gives Chromium's layout engine one. See `keymap`.
         host.set_keymap(keymap);
-        // Keybindings, so a reloaded page gets them again.
-        hand_over_the_keys(&mut host, keys);
+        // Keybindings and the shell's options, so a reloaded page gets them
+        // again.
+        hand_over_the_shell_config(&mut host, keys, shell_config::options(&config));
         // Extensions, which the browser process installs. See
         // `docs/architecture/EXTENSIONS.md`.
         hand_over_the_extensions(&mut host, &config.extensions);

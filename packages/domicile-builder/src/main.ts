@@ -27,6 +27,9 @@ import { cacheKey, missingPackages, parseManifest, projectOf } from "./project";
 /** The built module's file name in its output directory. */
 const MODULE = "shell.js";
 
+/** The shell's declared options, beside the module, for the Settings app. */
+const OPTIONS = "options.json";
+
 const say = (step: Step): void => {
   process.stdout.write(`${line(step)}\n`);
 };
@@ -105,6 +108,8 @@ const build = async (
     // cached build needs neither.
     const { bundle } = await import("./bundle");
     await bundle(entry, root, domicile, [...read.graph.files.keys()]);
+    const { extractOptions } = await import("./evaluate");
+    await extractOptions(entry, path.join(root, OPTIONS), domicile);
     say(Step.Built(root, MODULE, false));
   } else {
     say(Step.Built(root, MODULE, true));

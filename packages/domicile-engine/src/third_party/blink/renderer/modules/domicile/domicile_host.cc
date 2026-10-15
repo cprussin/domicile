@@ -1512,12 +1512,22 @@ void DomicileHost::Locked(bool locked) {
   DispatchEvent(*Event::Create(domicile_event_names::Lockedchanged()));
 }
 
-// Pushed like ThemeChanged. Only its keys are read, for the chords grabbed by
-// name; nothing of it reaches the page. See ControlChannelClient::ShellConfig.
+// Pushed like ThemeChanged. Its keys resolve the chords grabbed by name and
+// do not reach the page; its options do, as the text they came as. See
+// ControlChannelClient::ShellConfig.
 void DomicileHost::ShellConfig(const String& config) {
-  // The keys, for the chords grabbed by name. A line without them leaves the
-  // last keyboard heard in place: the browser forwards only what parsed.
   if (std::unique_ptr<JSONObject> parsed = JSONObject::From(ParseJSON(config))) {
+    // The options, dispatched when they change. A line without them leaves
+    // the last ones heard, as for the keys below.
+    String options;
+    if (parsed->GetString("options", &options) && options != shell_options_) {
+      shell_options_ = options;
+      DispatchEvent(
+          *Event::Create(domicile_event_names::Shelloptionschanged()));
+    }
+    // The keys, for the chords grabbed by name. A line without them leaves
+    // the last keyboard heard in place: the browser forwards only what
+    // parsed.
     if (JSONObject* keys = parsed->GetJSONObject("keys")) {
       HashMap<String, uint32_t> read;
       for (wtf_size_t at = 0; at < keys->size(); ++at) {

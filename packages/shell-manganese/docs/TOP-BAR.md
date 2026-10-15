@@ -106,6 +106,9 @@ Every bar and the lock screen share one watch per system readout. See
 ## Clock
 
 - Reads like `Wednesday 2026-09-16 20:53:40` and ticks every second.
+- The shell options `clock.format` (`24h` or `12h`) and `clock.seconds` change
+  that, e.g. `Wednesday 2026-09-16 08:53 PM`. See the
+  [README](../README.md#configure).
 - Centered on the bar, so it does not shift as other items change.
 - A fixed English day and ISO date keep the width stable.
 
