@@ -23,7 +23,6 @@ const glowProps = {
   motion: "resting",
   onFaded: () => undefined,
   rect: RECT,
-  tabbed: false,
   windows: ["app:term", "app:editor"],
 } as const;
 
@@ -52,24 +51,6 @@ describe("FocusGlow", () => {
           "0 0 0 1px color-mix(in oklab, {colors.accent} 70%, transparent), 0 0 {spacing.9} color-mix(in oklab, {colors.accent} 45%, transparent), {shadows.lifted}",
       }),
     );
-  });
-
-  // The strip over a tab's page covers its top edge; light past the strip
-  // would show over the gap above it.
-  it("lights no edge above a tab's page", () => {
-    const clipped = css({
-      borderStartEndRadius: 0,
-      borderStartStartRadius: 0,
-      clipPath:
-        "inset(0 calc(-1 * {spacing.16}) calc(-1 * {spacing.16}) calc(-1 * {spacing.16}))",
-    });
-
-    expect(
-      glow(render(<FocusGlow {...glowProps} tabbed />).container).className,
-    ).toContain(clipped);
-    expect(
-      glow(render(<FocusGlow {...glowProps} />).container).className,
-    ).not.toContain(clipped);
   });
 
   it("names the windows it lights", () => {

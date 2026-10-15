@@ -2441,7 +2441,7 @@ describe("Shell", () => {
       expect(barFor(container, "app:two").dataset.focus).toBe("focused");
     });
 
-    it("lights a selected tab group's strip, leaving its tabs as they were", () => {
+    it("marks every tab of a selected tab group, leaving their states", () => {
       // The tabs keep showing which one is open and has the keyboard. A
       // sibling window keeps the tabs from filling the screen.
       const { container } = renderShell();

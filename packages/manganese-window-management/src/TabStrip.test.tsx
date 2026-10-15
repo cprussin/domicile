@@ -37,7 +37,6 @@ const stripProps = {
   onGrab: nothing,
   onMove: nothing,
   onNewTab: nothing,
-  selected: false,
   targets: { floats: [], screens: [], tabs: [], windows: [] },
 } as const;
 
@@ -91,21 +90,6 @@ describe("TabStrip", () => {
     expect(stripOf(container).className).toContain(
       css({ borderBlockEndWidth: "1px" }),
     );
-  });
-
-  it("lights its group when the group is selected", () => {
-    const lit = css({
-      backgroundColor:
-        "color-mix(in oklab, {colors.accent} 30%, {colors.background})",
-    });
-
-    expect(
-      stripOf(render(<TabStrip {...stripProps} selected />).container)
-        .className,
-    ).toContain(lit);
-    expect(
-      stripOf(render(<TabStrip {...stripProps} />).container).className,
-    ).not.toContain(lit);
   });
 
   it("draws its edge stronger inside another group's well", () => {

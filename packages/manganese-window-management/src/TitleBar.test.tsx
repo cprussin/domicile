@@ -408,6 +408,21 @@ describe("TitleBar", () => {
       expect(face(tab({}).container).className).not.toContain(raised);
     });
 
+    // The glow lights the whole group either way, so this alone tells a
+    // selected group from its focused tab. Open or hidden, each tab is marked.
+    it("lines the top of every tab in a selected group with the accent", () => {
+      const lined = css({
+        boxShadow: "inset 0 {spacing.0.5} 0 {colors.accent}",
+      });
+
+      for (const strip of [MIDDLE_TAB, { ...MIDDLE_TAB, open: true }]) {
+        expect(
+          face(tab({ groupSelected: true, strip }).container).className,
+        ).toContain(lined);
+        expect(face(tab({ strip }).container).className).not.toContain(lined);
+      }
+    });
+
     // Swapped tabs slide past each other. The open tab slides over its
     // neighbors, whose pieces of the strip would otherwise cover it.
     it("draws the open tab over the rest of its strip", () => {

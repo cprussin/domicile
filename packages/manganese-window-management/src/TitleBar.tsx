@@ -66,9 +66,9 @@ type Props = {
    */
   group?: { layout: Layout; windows: number } | undefined;
   /**
-   * Whether the tab group this tab is in is inside the `focus parent`
-   * selection. Lights the tab strip rather than the tabs, which keep showing
-   * where the keyboard is.
+   * Whether the window is inside the `focus parent` selection. A tab gets an
+   * accent line along its top, which tells a selected tab group from its
+   * focused tab: the glow lights the whole group for both.
    */
   groupSelected?: boolean;
   /**
@@ -251,6 +251,7 @@ export const TitleBar = ({
             : tabStyles({
                 focus,
                 joined: !hidden && tabbed === Layout.Tabbed,
+                marked: groupSelected,
                 nested: strip.nested,
                 open: !hidden,
               }),
@@ -508,6 +509,12 @@ const tabStyles = cva({
     },
     // Over the strip's bottom row, which draws the window's top edge.
     joined: { false: {}, true: { marginBlockEnd: "-1px" } },
+    // In the `focus parent` selection. A shape as well as a color, and it
+    // leaves a hidden tab flat, so it does not look open.
+    marked: {
+      false: {},
+      true: { boxShadow: "inset 0 {spacing.0.5} 0 {colors.accent}" },
+    },
     nested: { false: {}, true: {} },
     open: {
       // A press opens a hidden tab.

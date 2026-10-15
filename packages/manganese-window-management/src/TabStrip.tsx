@@ -69,8 +69,6 @@ type Props = {
   onNewTab: () => void;
   /** The open window's restack animation, which the strip plays too. */
   restack?: Restack | undefined;
-  /** Whether the group is in the `focus parent` selection, which lights it. */
-  selected: boolean;
   /** Eases the strip into a new box; see `useSettling`. */
   settler?: Settler | undefined;
   /** What a tiled group can be dropped on, on every screen. */
@@ -108,7 +106,6 @@ export const TabStrip = ({
   onMove,
   onNewTab,
   restack,
-  selected,
   settler,
   targets,
 }: Props) => {
@@ -128,7 +125,7 @@ export const TabStrip = ({
   return (
     <div
       className={cx(
-        stripStyles({ nested, selected }),
+        stripStyles({ nested }),
         movingStyles({ motion: playing }),
         leaving && clickThroughStyles,
         settlingStyles({ lowered }),
@@ -230,6 +227,8 @@ const CORNER = { x: 0, y: 0 };
  */
 const stripStyles = cva({
   base: {
+    backgroundColor:
+      "color-mix(in oklab, {colors.card} 45%, {colors.background})",
     // Longhands, as for `edgeStyles`.
     borderBlockEndWidth: "1px",
     borderBlockStartWidth: "1px",
@@ -239,43 +238,14 @@ const stripStyles = cva({
     borderStartStartRadius: "lg",
     borderStyle: "solid",
   },
-  // The edge follows both variants, so each pair sets it once. A selected
-  // strip keeps the accent edge, nested or not.
-  compoundVariants: [
-    {
-      css: { "--strip-edge": "{colors.borderStrong}" },
-      nested: false,
-      selected: false,
-    },
-    {
+  variants: {
+    nested: {
+      false: { "--strip-edge": "{colors.borderStrong}" },
       // On a well, as light as the open tab, the usual edge fades into it.
       // See `GroupWell`.
-      css: {
+      true: {
         "--strip-edge":
           "color-mix(in oklab, {colors.foreground} 40%, {colors.background})",
-      },
-      nested: true,
-      selected: false,
-    },
-    {
-      css: {
-        "--strip-edge":
-          "color-mix(in oklab, {colors.accent} 70%, {colors.background})",
-      },
-      selected: true,
-    },
-  ],
-  variants: {
-    nested: { false: {}, true: {} },
-    // A selected group lights its strip. Its tabs keep their own states.
-    selected: {
-      false: {
-        backgroundColor:
-          "color-mix(in oklab, {colors.card} 45%, {colors.background})",
-      },
-      true: {
-        backgroundColor:
-          "color-mix(in oklab, {colors.accent} 30%, {colors.background})",
       },
     },
   },
