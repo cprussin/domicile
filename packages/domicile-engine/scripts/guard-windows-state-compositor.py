@@ -3,8 +3,9 @@
 `DomicileHost.windows` and `focusedWindow` say what the compositor said.
 
 It answers `hello` with a `welcome`, then describes three windows, retitles,
-renames the desktop entry of and resizes one, focuses one, closes one and places
-a popup -- and prints every line
+renames the desktop entry of and resizes one, makes each the other's dialog in
+turn, marks one urgent, focuses one, closes one and places a popup -- and prints
+every line
 the browser writes. The page reads only after all of it, which is the case the
 attributes exist for: a shell that listens late misses nothing.
 
@@ -82,6 +83,10 @@ SEQUENCE = [
     {"type": "app_cursor", "app_id": "second", "cursor": "grab"},
     {"type": "app_cursor", "app_id": "second", "cursor": "pointr"},
     {"type": "app_cursor", "app_id": "first", "cursor": "zoom-out"},
+    {"type": "app_transient_for", "app_id": "first", "transient_for": "second"},
+    {"type": "app_transient_for", "app_id": "first", "transient_for": None},
+    {"type": "app_transient_for", "app_id": "second", "transient_for": "first"},
+    {"type": "app_urgent", "app_id": "first", "urgent": True},
     {"type": "focus_changed", "app_id": "second"},
     {"type": "app_closed", "app_id": "gone"},
     {

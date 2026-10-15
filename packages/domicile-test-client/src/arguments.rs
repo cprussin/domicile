@@ -82,6 +82,12 @@ pub struct Arguments {
     ///
     /// See [`crate::window::BUBBLE`] for its placement.
     pub bubble: bool,
+
+    /// Whether to open a second toplevel once the window is up, and make it
+    /// the window's dialog (`xdg_toplevel.set_parent`) after it first draws.
+    ///
+    /// See [`crate::window::POPUP`] for its size and color.
+    pub dialog: bool,
     /// Size limits for `xdg_toplevel.set_min_size` and `set_max_size`, in
     /// surface pixels. `0` on an axis means no limit.
     pub min_size: Option<(i32, i32)>,
@@ -181,6 +187,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut popup_grab = None;
     let mut sliding_menu = None;
     let mut bubble = None;
+    let mut dialog = None;
     let mut min_size = None;
     let mut max_size = None;
     let mut resize_to = None;
@@ -251,6 +258,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--bubble" => {
                 take(&mut bubble, &flag, true)?;
             }
+            "--dialog" => {
+                take(&mut dialog, &flag, true)?;
+            }
             "--min-size" => {
                 take(&mut min_size, &flag, size(&mut args, &flag)?)?;
             }
@@ -288,6 +298,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         popup_grab: popup_grab.unwrap_or(false),
         sliding_menu: sliding_menu.unwrap_or(false),
         bubble: bubble.unwrap_or(false),
+        dialog: dialog.unwrap_or(false),
         min_size,
         max_size,
         resize_to,

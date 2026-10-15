@@ -88,6 +88,11 @@ pub struct App {
     pub owner: Owner,
     /// Content size of the latest committed buffer; `None` before the first.
     pub size: Option<(f64, f64)>,
+    /// The window this one is a dialog for (`xdg_toplevel.set_parent`).
+    pub transient_for: Option<AppId>,
+    /// The compositor dropped an activation request for the window, and it
+    /// has not had the keyboard since.
+    pub urgent: bool,
     /// Size limits in logical units. `0` on an axis means no limit.
     pub min_size: (f64, f64),
     pub max_size: (f64, f64),
@@ -395,6 +400,8 @@ impl Host {
                 desktop_id: None,
                 owner,
                 size: None,
+                transient_for: None,
+                urgent: false,
                 min_size: NO_LIMIT,
                 max_size: NO_LIMIT,
             },
@@ -468,18 +475,28 @@ impl Host {
             })
     }
 
-    /// The focus message to broadcast, or `None` if focus has not moved since
+    /// The focus messages to broadcast, or none if focus has not moved since
     /// the last call.
     ///
     /// Callers check this after anything that may move focus: a chrome
     /// message, a routed click or a closed client.
-    pub fn focus_change(&mut self) -> Option<HostMessage> {
+    pub fn focus_change(&mut self) -> Vec<HostMessage> {
         let holder = self.focus_holder();
         if holder == self.told_focus {
-            return None;
+            return Vec::new();
         }
         self.told_focus = holder.clone();
-        Some(HostMessage::FocusChanged { app_id: holder })
+        let attended = holder
+            .as_deref()
+            .and_then(|app_id| self.apps.get_mut(app_id))
+            .filter(|app| app.urgent)
+            .and_then(|app| {
+                app.urgent = false;
+                reported(app, urgency(app))
+            });
+        std::iter::once(HostMessage::FocusChanged { app_id: holder })
+            .chain(attended)
+            .collect()
     }
 
     /// Whether the chromes have heard of the window `app_id`.
@@ -583,6 +600,38 @@ impl Host {
         }
     }
 
+    /// Mark a window as wanting attention, for an activation request the
+    /// compositor dropped. Returns the chrome notification, or `None` if the
+    /// app is unknown, already wants it or holds the keyboard.
+    pub fn app_urgent(&mut self, app_id: &str) -> Option<HostMessage> {
+        if self.focus_holder().as_deref() == Some(app_id) {
+            return None;
+        }
+        let app = self.apps.get_mut(app_id)?;
+        if app.urgent {
+            None
+        } else {
+            app.urgent = true;
+            reported(app, urgency(app))
+        }
+    }
+
+    /// Record the window a toplevel is a dialog for. Returns the chrome
+    /// notification, or `None` if the app is unknown or nothing changed.
+    pub fn app_transient_for(
+        &mut self,
+        app_id: &str,
+        transient_for: Option<AppId>,
+    ) -> Option<HostMessage> {
+        let app = self.apps.get_mut(app_id)?;
+        if app.transient_for == transient_for {
+            None
+        } else {
+            app.transient_for = transient_for;
+            reported(app, parentage(app))
+        }
+    }
+
     /// A popup opened over `parent`, a window or another popup. Returns its
     /// new id and the chrome notification, or `None` if `parent` is unknown.
     pub fn popup_placed(
@@ -625,18 +674,41 @@ impl Host {
     }
 
     /// Tear down a client: forget it and remove any portal. Returns the chrome
-    /// notification, or `None` if the app was already gone or never
+    /// notifications, or none if the app was already gone or never
     /// announced.
-    pub fn app_closed(&mut self, app_id: &str) -> Option<HostMessage> {
-        let announced = self.popups.remove(app_id).is_some() || {
-            let app = self.apps.remove(app_id)?;
-            self.scene.window_gone(app_id);
-            self.exports.app_closed(app_id);
-            app.mapped.is_some()
-        };
-        announced.then(|| HostMessage::AppClosed {
+    ///
+    /// A closed window's dialogs take its own parent, as xdg-shell says, and
+    /// their notifications follow the close.
+    pub fn app_closed(&mut self, app_id: &str) -> Vec<HostMessage> {
+        let closed = HostMessage::AppClosed {
             app_id: app_id.to_string(),
-        })
+        };
+        if self.popups.remove(app_id).is_some() {
+            return vec![closed];
+        }
+        let Some(app) = self.apps.remove(app_id) else {
+            return Vec::new();
+        };
+        self.scene.window_gone(app_id);
+        self.exports.app_closed(app_id);
+        let mut adopted: Vec<&mut App> = self
+            .apps
+            .values_mut()
+            .filter(|child| child.transient_for.as_deref() == Some(app_id))
+            .collect();
+        adopted.sort_by_key(|child| child.arrival);
+        let adopted: Vec<HostMessage> = adopted
+            .into_iter()
+            .filter_map(|child| {
+                child.transient_for = app.transient_for.clone();
+                reported(child, parentage(child))
+            })
+            .collect();
+        app.mapped
+            .map(|_| closed)
+            .into_iter()
+            .chain(adopted)
+            .collect()
     }
 
     /// Apply a message received from the chrome.
@@ -726,8 +798,8 @@ fn placed(popup: &Popup) -> HostMessage {
     }
 }
 
-/// Messages announcing a window, then its size limits. Limits come second
-/// because a chrome needs the window first.
+/// Messages announcing a window, then its size limits, parent and urgency.
+/// Those come second because a chrome needs the window first.
 fn announced(app: &App, mapped: Mapped) -> Vec<HostMessage> {
     let appeared = HostMessage::AppAppeared {
         app_id: app.app_id.clone(),
@@ -746,7 +818,30 @@ fn announced(app: &App, mapped: Mapped) -> Vec<HostMessage> {
         app_id: app.app_id.clone(),
         size: wire_size(app.max_size),
     });
-    std::iter::once(appeared).chain(min).chain(max).collect()
+    let parent = app.transient_for.is_some().then(|| parentage(app));
+    let urgent = app.urgent.then(|| urgency(app));
+    std::iter::once(appeared)
+        .chain(min)
+        .chain(max)
+        .chain(parent)
+        .chain(urgent)
+        .collect()
+}
+
+/// The chrome message for the window `app` is a dialog for.
+fn parentage(app: &App) -> HostMessage {
+    HostMessage::AppTransientFor {
+        app_id: app.app_id.clone(),
+        transient_for: app.transient_for.clone(),
+    }
+}
+
+/// The chrome message for whether `app` wants attention.
+fn urgency(app: &App) -> HostMessage {
+    HostMessage::AppUrgent {
+        app_id: app.app_id.clone(),
+        urgent: app.urgent,
+    }
 }
 
 /// `message` if the chromes have heard of `app`, else `None`: its

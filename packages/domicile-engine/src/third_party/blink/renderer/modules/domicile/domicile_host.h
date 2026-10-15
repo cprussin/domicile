@@ -273,6 +273,9 @@ class MODULES_EXPORT DomicileHost final
                  domicile::mojom::blink::CursorShape cursor) override;
   void AppPresented(const String& app_id) override;
   void AppSuspended(const String& app_id, bool suspended) override;
+  void AppTransientFor(const String& app_id,
+                       const String& transient_for) override;
+  void AppUrgent(const String& app_id, bool urgent) override;
   void ShortcutPressed(domicile::mojom::blink::ShortcutPtr shortcut) override;
   void ShortcutReleased(domicile::mojom::blink::ShortcutPtr shortcut) override;
   void Modifiers(bool alt, bool ctrl, bool shift, bool meta) override;
