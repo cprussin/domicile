@@ -10,15 +10,27 @@
 
 namespace domicile {
 
-std::vector<DeskPlace> DeskPlacesKept(const std::vector<DeskPlace>& lit,
-                                      const std::vector<DeskPlace>& before,
-                                      const std::vector<int64_t>& plugged_in) {
-  if (!lit.empty()) {
-    return lit;
+std::vector<DeskPlace> DeskPlacesKept(
+    const std::optional<std::vector<DeskPlace>>& lit,
+    const std::vector<DeskPlace>& before,
+    const std::vector<display::Display>& displays) {
+  if (!lit.has_value()) {
+    std::vector<DeskPlace> placed;
+    placed.reserve(displays.size());
+    for (const display::Display& display : displays) {
+      placed.push_back(DeskPlace{.id = display.id(),
+                                 .desk = display.bounds(),
+                                 .scale = 1.0f,
+                                 .refresh_hz = display.display_frequency()});
+    }
+    return placed;
+  }
+  if (!lit->empty()) {
+    return *lit;
   }
   std::vector<DeskPlace> kept = before;
-  std::erase_if(kept, [&plugged_in](const DeskPlace& place) {
-    return !std::ranges::contains(plugged_in, place.id);
+  std::erase_if(kept, [&displays](const DeskPlace& place) {
+    return !std::ranges::contains(displays, place.id, &display::Display::id);
   });
   return kept;
 }

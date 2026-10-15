@@ -3,11 +3,14 @@
 
 #include "components/domicile/browser/desk_geometry.h"
 
+#include <stdint.h>
+
 #include <optional>
 #include <vector>
 
 #include "cc/domicile/display_regions.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/display/display.h"
 #include "ui/display/screen_info.h"
 #include "ui/display/screen_infos.h"
 #include "ui/gfx/geometry/point.h"
@@ -30,6 +33,15 @@ constexpr DeskPlace kRight{.id = 3,
                            .desk = gfx::Rect(3720, 0, 1800, 3200),
                            .scale = 1.2f,
                            .refresh_hz = 60.0f};
+
+// Displays with these ids, at no particular place.
+std::vector<display::Display> PluggedIn(const std::vector<int64_t>& ids) {
+  std::vector<display::Display> displays;
+  for (const int64_t id : ids) {
+    displays.emplace_back(id);
+  }
+  return displays;
+}
 
 TEST(DeskGeometryTest, ThePageIsTheBoxAroundEveryDisplay) {
   EXPECT_EQ(DeskGeometryOf({kLaptop, kCenter, kRight})->box,
@@ -63,28 +75,49 @@ TEST(DeskGeometryTest, NoDisplaysIsNoDesk) {
 }
 
 TEST(DeskGeometryTest, ALayoutThatLightsDisplaysIsTheDesk) {
-  EXPECT_EQ(DeskPlacesKept({kLaptop, kRight}, {kLaptop, kCenter, kRight},
-                           {kLaptop.id, kCenter.id, kRight.id}),
+  EXPECT_EQ(DeskPlacesKept(std::vector<DeskPlace>({kLaptop, kRight}),
+                           {kLaptop, kCenter, kRight},
+                           PluggedIn({kLaptop.id, kCenter.id, kRight.id})),
             std::vector<DeskPlace>({kLaptop, kRight}));
+}
+
+TEST(DeskGeometryTest, AnEmptyLayoutPutsTheDeskWhereTheHardwarePutTheDisplays) {
+  // No profile: the compositor advertises each display at its CRTC
+  // rectangle, unscaled. A profile's desk from before does not stay.
+  display::Display left(1, gfx::Rect(0, 0, 1280, 800));
+  left.set_display_frequency(74.99385f);
+  display::Display right(2, gfx::Rect(1280, 0, 1440, 900));
+  right.set_display_frequency(74.99458f);
+  EXPECT_EQ(DeskPlacesKept(std::nullopt, {kLaptop, kCenter}, {left, right}),
+            std::vector<DeskPlace>({{.id = 1,
+                                     .desk = gfx::Rect(0, 0, 1280, 800),
+                                     .scale = 1.0f,
+                                     .refresh_hz = 74.99385f},
+                                    {.id = 2,
+                                     .desk = gfx::Rect(1280, 0, 1440, 900),
+                                     .scale = 1.0f,
+                                     .refresh_hz = 74.99458f}}));
 }
 
 TEST(DeskGeometryTest, ABlankKeepsTheDeskItTurnedOff) {
   // Laying the desk out again on the primary would move the page to a new
   // window and drop every presenter, then do it all again on waking.
-  EXPECT_EQ(DeskPlacesKept({}, {kLaptop, kCenter, kRight},
-                           {kLaptop.id, kCenter.id, kRight.id}),
+  EXPECT_EQ(DeskPlacesKept(std::vector<DeskPlace>(), {kLaptop, kCenter, kRight},
+                           PluggedIn({kLaptop.id, kCenter.id, kRight.id})),
             std::vector<DeskPlace>({kLaptop, kCenter, kRight}));
 }
 
 TEST(DeskGeometryTest, AMonitorUnpluggedDuringABlankLeavesTheDesk) {
   // Its window would sit on a display that is gone.
-  EXPECT_EQ(
-      DeskPlacesKept({}, {kLaptop, kCenter, kRight}, {kLaptop.id, kRight.id}),
-      std::vector<DeskPlace>({kLaptop, kRight}));
+  EXPECT_EQ(DeskPlacesKept(std::vector<DeskPlace>(), {kLaptop, kCenter, kRight},
+                           PluggedIn({kLaptop.id, kRight.id})),
+            std::vector<DeskPlace>({kLaptop, kRight}));
 }
 
 TEST(DeskGeometryTest, BeforeAnyLayoutThereIsNoDesk) {
-  EXPECT_TRUE(DeskPlacesKept({}, {}, {kLaptop.id}).empty());
+  EXPECT_TRUE(
+      DeskPlacesKept(std::vector<DeskPlace>(), {}, PluggedIn({kLaptop.id}))
+          .empty());
 }
 
 TEST(DeskGeometryTest, EachDisplayShowsThePageFromItsOwnCorner) {
