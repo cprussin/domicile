@@ -32,11 +32,12 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # ControlChannel 8, DeviceChoices 9, SurfaceFrames 6,
 # GuestDialogs 6, DownloadTally 6, SurfaceSubmits 4,
 # PrivatePages 3, ShellOrigin 2, AppRoots 4, AppChannel 2, AppDocument 3,
-# WebViewUrl 5, ShellFetch 21, BrowserWindowCaptureTarget 3, ShellWindowWait 4,
+# WebViewUrl 5, ShellFetch 22, BrowserWindowCaptureTarget 3, ShellWindowWait 4,
 # DeskCursorThemeSource 2, XCursorTheme 5, XCursorThemeDirectory 4,
 # SyncedFrame 7.
 #
-# 399, and it was 395 — the synced frames a move shows with reaching the page
+# 400, and it was 399 — the answer a shell fetch holds is one ShellFetch case.
+# Before that 399, and it was 395 — the synced frames a move shows with reaching the page
 # is one ControlChannel case, and an <app> with no frame set showing the
 # newest heard is three SyncedFrame cases. Before that 395, and it was 394 —
 # which display each tablet covers is one FrameSinkBroker case. Before that
@@ -142,7 +143,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=399
+FLOOR=400
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.
