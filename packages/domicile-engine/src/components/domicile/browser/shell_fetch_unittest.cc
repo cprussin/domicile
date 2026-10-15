@@ -143,9 +143,14 @@ TEST(ShellFetchTest, AGetSendsNoBody) {
   EXPECT_TRUE(ShellFetchMethodRefusal("GET", ""));
 }
 
-TEST(ShellFetchTest, ABodyIsNoLargerThanAResponse) {
+TEST(ShellFetchTest, ABodyIsBounded) {
   EXPECT_TRUE(ShellFetchMethodRefusal(
       "POST", std::string(kShellFetchMaxBody + 1, 'x')));
+}
+
+// Gmail's inbox page, which the Gmail bar item reads, is over a megabyte.
+TEST(ShellFetchTest, AnAnswerHoldsGmailsPage) {
+  EXPECT_GE(kShellFetchMaxAnswer, size_t{8} * 1024 * 1024);
 }
 
 // A POST's body would be sent again to wherever a redirect points, and a hash
