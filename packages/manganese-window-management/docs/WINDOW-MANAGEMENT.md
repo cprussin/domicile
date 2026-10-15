@@ -287,7 +287,10 @@ announces a window only then, so its title, app id and limits are known.
 - Workspace switch: the new workspace slides in; the old one slides out.
   Each window is clipped to its screen meanwhile, so it never shows on the
   next one.
-- Tab switch: crossfade.
+- Tab switch: crossfade. On a workspace sliding in, the tab switched to
+  slides with it instead. Parts first drawn partway through (a hidden tab's
+  contents, the strip it opens) start where the slide has got to
+  (`DrawnWindow.shownRewound`).
 
 Rules:
 
