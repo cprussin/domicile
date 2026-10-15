@@ -4,7 +4,9 @@
 #
 # The run opens the subject as an app window and the control as an ordinary
 # one, so the run passes when the subject is unrecorded and listed `isApp`,
-# and the control when it is recorded and not. Runs the verdict block from the
+# and the control when it is recorded and not. The shell's own window, from
+# `openAppWindow` in the run and `openBrowserWindow` in the control, is listed
+# `isApp` in the run only. Runs the verdict block from the
 # real guard, so moving it fails here.
 set -u
 
@@ -42,12 +44,15 @@ readings() { # $1 NEGATIVE, then NAME=value overrides
   SAW_SUBJECT=1
   OPENED_SENTINEL=1
   SAW_SENTINEL=1
+  SAW_LAUNCHED=1
   if [ "$NEGATIVE" = "1" ]; then
     WINDOW_APP=0
     SUBJECT_RECORDED=1
+    LAUNCHED_APP=0
   else
     WINDOW_APP=1
     SUBJECT_RECORDED=0
+    LAUNCHED_APP=1
   fi
   shift
   for override in "$@"; do
@@ -109,11 +114,21 @@ expect "a recorded visit is a failure" "fail" \
   "$(verdict 0 SUBJECT_RECORDED=1)"
 expect "and names AttachAppTabHelpers" "yes" \
   "$(blames "AttachAppTabHelpers" 0 SUBJECT_RECORDED=1)"
+expect "an unlisted shell window is a failure" "fail" \
+  "$(verdict 0 SAW_LAUNCHED=0)"
+expect "and names openAppWindow" "yes" \
+  "$(blames "openAppWindow" 0 SAW_LAUNCHED=0)"
+expect "a shell window not listed isApp is a failure" "fail" \
+  "$(verdict 0 LAUNCHED_APP=0)"
+expect "and names BrowserWindowsService::OpenApp" "yes" \
+  "$(blames "BrowserWindowsService::OpenApp" 0 LAUNCHED_APP=0)"
 
 echo
 echo "the control — the subject opened as an ordinary window"
 expect "not listed isApp and recorded: pass" "pass" "$(verdict 1)"
 expect "listed isApp is a failure" "fail" "$(verdict 1 WINDOW_APP=1)"
+expect "a shell window listed isApp is a failure" "fail" \
+  "$(verdict 1 LAUNCHED_APP=1)"
 expect "an unrecorded visit is a failure" "fail" \
   "$(verdict 1 SUBJECT_RECORDED=0)"
 

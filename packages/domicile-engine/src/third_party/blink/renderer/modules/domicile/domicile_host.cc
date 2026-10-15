@@ -1563,17 +1563,23 @@ void DomicileHost::FocusRequested(const String& app_id) {
 void DomicileHost::openBrowserWindow(ScriptState*,
                                      const String& url,
                                      ExceptionState& exception_state) {
-  OpenBrowserWindow(url, /*private_browsing=*/false, exception_state);
+  OpenBrowserWindow(url, WindowKind::kBrowser, exception_state);
 }
 
 void DomicileHost::openPrivateBrowserWindow(ScriptState*,
                                             const String& url,
                                             ExceptionState& exception_state) {
-  OpenBrowserWindow(url, /*private_browsing=*/true, exception_state);
+  OpenBrowserWindow(url, WindowKind::kPrivate, exception_state);
+}
+
+void DomicileHost::openAppWindow(ScriptState*,
+                                 const String& url,
+                                 ExceptionState& exception_state) {
+  OpenBrowserWindow(url, WindowKind::kApp, exception_state);
 }
 
 void DomicileHost::OpenBrowserWindow(const String& url,
-                                     bool private_browsing,
+                                     WindowKind kind,
                                      ExceptionState& exception_state) {
   // Resolved against this document, as a <webview src> is. An unresolvable
   // address is a shell bug, so it throws a TypeError instead of opening an
@@ -1584,7 +1590,17 @@ void DomicileHost::OpenBrowserWindow(const String& url,
     return;
   }
   if (Ready(exception_state)) {
-    windows_->Open(resolved, private_browsing);
+    switch (kind) {
+      case WindowKind::kBrowser:
+        windows_->Open(resolved, /*private_browsing=*/false);
+        break;
+      case WindowKind::kPrivate:
+        windows_->Open(resolved, /*private_browsing=*/true);
+        break;
+      case WindowKind::kApp:
+        windows_->OpenApp(resolved);
+        break;
+    }
   }
 }
 

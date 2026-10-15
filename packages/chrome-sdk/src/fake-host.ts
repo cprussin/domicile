@@ -143,6 +143,11 @@ export class FakeDomicileHost {
             calls.push([name, url]);
             this.openBrowser(url, { isPrivate: true });
           };
+        } else if (name === "openAppWindow") {
+          return (url: string) => {
+            calls.push([name, url]);
+            this.openBrowser(url, { isApp: true });
+          };
         } else if (name === "closeBrowserWindow") {
           return (id: string) => {
             calls.push([name, id]);
@@ -205,7 +210,8 @@ export class FakeDomicileHost {
    * The engine opened a browser window at `url`, as for `domicile open-url`,
    * `target="_blank"`, with `popupWindow` an extension's popup window, or with
    * `isApp` `domicile open-app`. `openBrowserWindow` calls this too, and
-   * `openPrivateBrowserWindow` with `isPrivate`. Ids count up from `"1"`; the
+   * `openPrivateBrowserWindow` with `isPrivate`, and `openAppWindow` with
+   * `isApp`. Ids count up from `"1"`; the
    * asked-for size is 0.
    */
   openBrowser(

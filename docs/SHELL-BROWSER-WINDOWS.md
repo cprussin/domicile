@@ -45,6 +45,9 @@ plus.addEventListener("click", () => {
   UI. The result arrives in the next list. Other windows open without you
   ([New windows](#new-windows)). A page may ask to stay before it closes
   ([Close requests](#close-requests)).
+- **`openAppWindow(url)`** opens an app window, as `domicile open-app` does,
+  for your own launcher. It is listed with `isApp: true`
+  ([New windows](#new-windows)).
 - **Set `window` before the view enters the document.** The engine reads it
   once, when the view connects. A window shows in one view at a time: a second
   view naming it stays empty, so never remount the view drawing it.

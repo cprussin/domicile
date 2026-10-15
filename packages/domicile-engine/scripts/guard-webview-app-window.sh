@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Checks an app window is listed with `isApp` and records no visits.
+# Checks an app window is listed with `isApp` and records no visits, and that
+# a shell's `openAppWindow` opens one.
 #
 #   nix develop .#full --command \
 #     ./packages/domicile-engine/scripts/guard-webview-app-window.sh /build/chromium/src
@@ -15,7 +16,9 @@
 # for a sentinel page. An extension reports the history after each visit and
 # when its worker starts, since the worker can start after both visits.
 # Visits are recorded in order, so once the sentinel is in the history the
-# subject would be too, had it been recorded.
+# subject would be too, had it been recorded. The shell also opens a page of
+# its own with `openAppWindow`, which BrowserWindowsService::OpenApp opens as
+# `open_url` does.
 #
 # Asserts, in order (each only meaningful if the previous holds):
 #
@@ -27,10 +30,13 @@
 #   the sentinel is in the history      history is recorded and read, so the
 #                                       subject's absence means something
 #   the subject is not                  the claim
+#   the shell's window is listed        the shell's call reached the browser
+#   it is listed `isApp`                the claim for openAppWindow
 #
-# NEGATIVE=1 opens the subject as an ordinary window. It must be recorded and
-# not listed `isApp`, so a run where nothing is recorded, or every window says
-# app, cannot pass.
+# NEGATIVE=1 opens the subject as an ordinary window, and the shell's with
+# `openBrowserWindow`. The subject must be recorded and neither listed
+# `isApp`, so a run where nothing is recorded, or every window says app,
+# cannot pass.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -142,7 +148,7 @@ rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
   --disable-gpu \
-  --app="domicile://shell/?site=$SITE" \
+  --app="domicile://shell/?site=$SITE&app=$APP" \
   --domicile-shell-root="$SCRIPTS" \
   --domicile-shell-module="guard-webview-app-window.js" \
   --domicile-command-socket="$COMMAND" \
@@ -180,11 +186,14 @@ OPENED_SENTINEL=0
 [ "$SENTINEL_ANSWER" = "$OPENED" ] && OPENED_SENTINEL=1
 SAW_SENTINEL=$(saw "sentinel=1" "$HTTP_LOG")
 SUBJECT_RECORDED=$(saw "subject=1" "$HTTP_LOG")
+SAW_LAUNCHED=$(saw " url=$SITE/launched" "$ENGINE_LOG")
+LAUNCHED_APP=$(saw "app=true url=$SITE/launched" "$ENGINE_LOG")
 
 echo
 echo "shell=$SAW_SHELL crash=$SAW_CRASH"
 echo "subject: opened=$OPENED_SUBJECT listed=$SAW_WINDOW app=$WINDOW_APP loaded=$SAW_SUBJECT recorded=$SUBJECT_RECORDED"
 echo "sentinel: opened=$OPENED_SENTINEL recorded=$SAW_SENTINEL"
+echo "launched: listed=$SAW_LAUNCHED app=$LAUNCHED_APP"
 echo
 
 # The verdict. `scripts/test-webview-app-window-guard.sh` runs this block
@@ -236,12 +245,21 @@ elif [ "$SUBJECT_RECORDED" != "$WANT_RECORDED" ]; then
   FAILURE="THE APP WINDOW RECORDED A VISIT: its page is in the history. Check \
 DeskWindows opens an app window with AttachAppTabHelpers, which leaves out \
 the HistoryTabHelper (domicile_browser_windows.cc)"
+elif [ "$SAW_LAUNCHED" != "1" ]; then
+  FAILURE="the window the shell opened itself (openAppWindow, or \
+openBrowserWindow in the control) never reached its list. That is \
+DomicileHost::openAppWindow or the shell's call, whose console is in the \
+engine log"
+elif [ "$LAUNCHED_APP" != "$WANT_APP" ]; then
+  FAILURE="the window the shell opened itself has the wrong isApp (wanted \
+$WANT_APP), so a shell's launcher would open apps as browser windows or the \
+reverse. That is BrowserWindowsService::OpenApp"
 elif [ "$NEGATIVE" = "1" ]; then
   PASSED="the control is sharp: the subject opened as an ordinary window is \
-recorded and not listed as an app"
+recorded and not listed as an app, and so is the shell's openBrowserWindow"
 else
   PASSED="an app window is listed with isApp and records no visit, while an \
-ordinary window opened after it does"
+ordinary window opened after it does; the shell's openAppWindow opens one too"
 fi
 
 if [ -n "$PASSED" ]; then

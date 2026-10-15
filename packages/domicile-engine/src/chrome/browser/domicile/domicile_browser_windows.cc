@@ -485,6 +485,8 @@ class BrowserWindowsService final
     windows_->Open(url, private_browsing);
   }
 
+  void OpenApp(const GURL& url) override { windows_->OpenApp(url); }
+
   void Close(const std::string& id) override { windows_->AskToClose(id); }
 
   // DeskWindows::Observer:

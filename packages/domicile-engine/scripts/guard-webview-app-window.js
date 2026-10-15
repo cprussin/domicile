@@ -1,7 +1,9 @@
 // The shell module guard-webview-app-window.sh loads. It draws every browser
 // window the desk lists in a `<webview window>`, and logs each window's
-// address and `isApp` as they change. The guard opens the windows itself,
-// through the engine's command socket, as `domicile open-app` does.
+// address and `isApp` as they change. The guard opens the subject and the
+// sentinel through the engine's command socket, as `domicile open-app` does.
+// This module opens `<site>/launched` itself, with `openAppWindow` when the
+// address's `app` is `true` and `openBrowserWindow` otherwise (the control).
 //
 // It must be a domicile:// document: the browser binds WebViewGuestHost only
 // for the shell's origin.
@@ -47,4 +49,12 @@ export const Shell = (_root, desktop) => {
   });
 
   say("shell-loaded");
+
+  const query = new URLSearchParams(location.search);
+  const launched = `${query.get("site")}/launched`;
+  if (query.get("app") === "true") {
+    desktop.openAppWindow(launched);
+  } else {
+    desktop.openBrowserWindow(launched);
+  }
 };
