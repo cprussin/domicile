@@ -18,6 +18,9 @@
 #                                  has no `spawn`, not the shell's DomicileHost
 #   the compositor heard app_hello the app's channel said it is an app
 #   the answer reached the app     the call crossed both ways
+#   the app fetched its own file   fetch() reads the app's origin (patch 0126)
+#   and not the shell's            ShellURLLoaderFactory::MayReadFiles refuses
+#                                  another origin
 #
 # Control: NEGATIVE=1 also opens the app's address with `open_url`, in a
 # window no app was opened in. That window must not run the app: an app's
@@ -143,6 +146,8 @@ RUN="$(command_line "{\"type\":\"run_app\",\"version\":1,\"root\":\"$APP_ROOT\",
 echo "run_app was answered: $RUN"
 wait_for_line "$TRIES" "GUARD app-answered" "$ENGINE_LOG" ||
   echo "the app's call was never answered; the verdict below says what that means" >&2
+wait_for_line "$TRIES" "GUARD app-fetch" "$ENGINE_LOG" ||
+  echo "the app never said what it fetched; the verdict below says what that means" >&2
 
 ANSWERED=0
 [ "$RUN" = '{"type":"opened"}' ] && ANSWERED=1
@@ -165,24 +170,26 @@ HELLO=0
 grep -qx "app-hello" "$SOCKET_LOG" && HELLO=1
 REPLIED=0
 grep -qE '"GUARD app-answered data=\{"type": ?"system_reply"' "$ENGINE_LOG" && REPLIED=1
+FETCHED=0
+grep -qE '"GUARD app-fetch own=read shell=(empty|refused)"' "$ENGINE_LOG" && FETCHED=1
 
-MEASURED="$MODE $ANSWERED $MAINS $NARROW $HELLO $REPLIED"
+MEASURED="$MODE $ANSWERED $MAINS $NARROW $HELLO $REPLIED $FETCHED"
 echo
 echo "measured: $MEASURED"
-echo "  (mode answered mains narrow app-hello replied)"
+echo "  (mode answered mains narrow app-hello replied fetched)"
 
 # Which end to blame. `scripts/test-app-module-guard.sh` runs this block
 # directly. MEASURED is "<mode> <answered> <mains> <narrow> <hello>
-# <replied>".
+# <replied> <fetched>".
 FAILURE=""
 PASSED=""
 case "$MEASURED" in
-"pinned 1 1 1 1 1")
+"pinned 1 1 1 1 1 1")
   PASSED="an app module ran: run_app opened its window, its main was handed \
 a DomicileAppHost, and its system call crossed to the compositor as an app's \
 and back"
   ;;
-"unpinned 1 1 1 1 1")
+"unpinned 1 1 1 1 1 1")
   PASSED="the control is sharp: the app's address in a window no app was \
 opened in ran nothing, so only the pinned window runs the app"
   ;;
@@ -210,9 +217,15 @@ DomicileHost instead of a DomicileAppHost"
 bound (the AppChannel binder refused it, or the window was not pinned), or it \
 said hello as a shell"
   ;;
-"pinned 1 1 1 1 0" | "unpinned 1 1 1 1 0")
+"pinned 1 1 1 1 0 "* | "unpinned 1 1 1 1 0 "*)
   FAILURE="the app's call was not answered: AppChannel dropped the \
 system_reply, or DomicileAppHost did not dispatch it"
+  ;;
+"pinned 1 1 1 1 1 0" | "unpinned 1 1 1 1 1 0")
+  FAILURE="the app did not fetch its own file, or read the shell's -- its \
+app-fetch line is in the engine log. Blink refuses fetch() on a scheme not \
+registered as supporting the Fetch API (patch 0126); \
+ShellURLLoaderFactory::MayReadFiles serves a file only to its own origin"
   ;;
 *)
   FAILURE="there is no measurement here this guard can place ($MEASURED)"
