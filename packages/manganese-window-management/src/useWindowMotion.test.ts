@@ -55,6 +55,21 @@ const showingDesk = (desk: Readonly<Record<string, Shown>>) =>
     initialProps: desk,
   });
 
+/** Like {@link showing}, with a clock the test sets. */
+const clocked = (shown: Shown) => {
+  const clock = { now: 0 };
+  const hook = renderHook(
+    (next: Shown) => useWindowMotion({ [SCREEN]: next }, () => clock.now),
+    { initialProps: shown },
+  );
+  return { ...hook, clock };
+};
+
+const drawnOf = (
+  result: { current: ReturnType<typeof useWindowMotion> },
+  id: string,
+) => result.current.drawn.find((drawn) => drawn.window.id === id);
+
 const motionOf = (
   result: { current: ReturnType<typeof useWindowMotion> },
   id: string,
@@ -311,20 +326,6 @@ describe("useWindowMotion", () => {
     // the one it cuts short had got to.
     describe("a slide cut short by the other", () => {
       const SLIDE = Number.parseFloat(token("durations.slow"));
-
-      const clocked = (shown: Shown) => {
-        const clock = { now: 0 };
-        const hook = renderHook(
-          (next: Shown) => useWindowMotion({ [SCREEN]: next }, () => clock.now),
-          { initialProps: shown },
-        );
-        return { ...hook, clock };
-      };
-
-      const drawnOf = (
-        result: { current: ReturnType<typeof useWindowMotion> },
-        id: string,
-      ) => result.current.drawn.find((drawn) => drawn.window.id === id);
 
       it("slides a window hidden partway down back up from where it is", () => {
         const { clock, rerender, result } = clocked(stowed);
@@ -839,6 +840,130 @@ describe("useWindowMotion", () => {
         result.current.onPlayedOut(
           EDITOR.id,
           "arriving-from-end",
+          SCREEN,
+          "contents",
+        );
+      });
+
+      expect(motionOf(result, EDITOR.id)).toBe("resting");
+      expect(motionOf(result, TERMINAL.id)).toBe("resting");
+    });
+  });
+
+  // The tab shown changes on the workspace sliding in, or on the one just
+  // left: two key presses in quick succession.
+  describe("a tab switch on a switching workspace", () => {
+    const LOGS = ShellWindow.App("less", "logs");
+    const ALL = [TERMINAL, EDITOR, LOGS];
+
+    /** Workspace `current` showing tab `on` over the hidden tab `off`. */
+    const tabbedOn = (
+      current: string,
+      on: ShellWindow,
+      off: ShellWindow,
+    ): Shown => ({
+      ...desktop(current, ALL, []),
+      activeId: on.id,
+      placements: [
+        placementOf(on.id),
+        {
+          ...placementOf(off.id),
+          behind: placementOf(off.id).surface,
+          surface: undefined,
+        },
+      ],
+    });
+
+    // Its bar has slid since the switch began; its contents were hidden, so
+    // the browser starts their slide when they are drawn.
+    it("slides a tab's contents in from where the switch has got to", () => {
+      const { clock, rerender, result } = clocked(
+        desktop("1", ALL, [TERMINAL]),
+      );
+      act(() => {
+        rerender(tabbedOn("2", EDITOR, LOGS));
+      });
+      clock.now = 100;
+
+      act(() => {
+        rerender(tabbedOn("2", LOGS, EDITOR));
+      });
+
+      expect(drawnOf(result, LOGS.id)).toMatchObject({
+        motion: "arriving-from-end",
+        rewound: 0,
+        shownRewound: 100,
+      });
+    });
+
+    it("slides a window placed partway in from where the switch has got to", () => {
+      const { clock, rerender, result } = clocked(
+        desktop("1", ALL, [TERMINAL]),
+      );
+      act(() => {
+        rerender(desktop("2", ALL, [EDITOR]));
+      });
+      clock.now = 100;
+
+      act(() => {
+        rerender(desktop("2", ALL, [EDITOR, LOGS]));
+      });
+
+      expect(drawnOf(result, LOGS.id)).toMatchObject({
+        motion: "arriving-from-end",
+        rewound: 100,
+        shownRewound: 100,
+      });
+    });
+
+    // The tab switched to has slid in with the rest.
+    it("does not crossfade the tabs once the switch is over", () => {
+      const { rerender, result } = showing(desktop("1", ALL, [TERMINAL]));
+      act(() => {
+        rerender(tabbedOn("2", EDITOR, LOGS));
+      });
+      act(() => {
+        rerender(tabbedOn("2", LOGS, EDITOR));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(
+          TERMINAL.id,
+          "leaving-to-start",
+          SCREEN,
+          "contents",
+        );
+      });
+
+      expect(motionOf(result, LOGS.id)).toBe("resting");
+      expect(motionOf(result, EDITOR.id)).toBe("resting");
+    });
+
+    // A crossfade cut off by the switch never reports its end.
+    it("leaves no crossfade to play on coming back", () => {
+      const { rerender, result } = showing(tabbedOn("1", TERMINAL, EDITOR));
+      act(() => {
+        rerender(tabbedOn("1", EDITOR, TERMINAL));
+      });
+      act(() => {
+        rerender(desktop("2", ALL, [LOGS]));
+      });
+      act(() => {
+        result.current.onPlayedOut(
+          LOGS.id,
+          "arriving-from-end",
+          SCREEN,
+          "contents",
+        );
+      });
+      act(() => {
+        rerender(tabbedOn("1", EDITOR, TERMINAL));
+      });
+
+      act(() => {
+        result.current.onPlayedOut(
+          EDITOR.id,
+          "arriving-from-start",
           SCREEN,
           "contents",
         );

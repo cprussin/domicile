@@ -319,8 +319,8 @@ export const Stage = memo(
               motion,
               placement,
               restack,
-              rewound,
               screen,
+              shownRewound,
               window,
             }) => (
               <WindowContents
@@ -355,7 +355,7 @@ export const Stage = memo(
                 // both sides of it. A window whose box stays put is unaffected.
                 resizing={stretching}
                 restack={restack}
-                rewound={rewound}
+                rewound={shownRewound}
                 screen={screen}
                 screenBox={screenNamed(desk, screen)?.geometry.screen}
                 window={window}
@@ -368,7 +368,7 @@ export const Stage = memo(
           and the tabs lie on it by document order. See `TabStrip`.
         */}
           {motions.drawn.map(
-            ({ motion, placement, restack, rewound, screen, window }) =>
+            ({ motion, placement, restack, screen, shownRewound, window }) =>
               placement?.strip?.open === true &&
               placement.tabbed !== undefined &&
               !leavesStrip(motion) ? (
@@ -395,7 +395,7 @@ export const Stage = memo(
                   onMove={onMove}
                   onNewTab={onNewTab}
                   restack={restack}
-                  rewound={rewound}
+                  rewound={shownRewound}
                   strip={placement.strip}
                   targets={targets}
                 />

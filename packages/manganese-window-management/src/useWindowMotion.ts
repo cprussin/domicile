@@ -32,12 +32,20 @@ export type DrawnWindow = {
   restack: Restack | undefined;
   /**
    * How far into its motion the window starts, in milliseconds. A scratchpad
-   * slide that cuts the other short starts where that one had got to; every
-   * other motion starts at 0.
+   * slide that cuts the other short starts where that one had got to, and a
+   * window placed partway through a workspace switch starts where the switch
+   * has got to. Every other motion starts at 0.
    */
   rewound: number;
   /** The screen the window is drawn on, or `undefined` for none. */
   screen: string | undefined;
+  /**
+   * {@link DrawnWindow.rewound} for the parts drawn only while the window is
+   * shown: its contents and the strip of the group it opens. A tab shown
+   * partway through a workspace switch starts them where the switch has got
+   * to, since its bar has been sliding all along.
+   */
+  shownRewound: number;
   window: ShellWindow;
 };
 
@@ -92,6 +100,20 @@ type SendingOn = Leaving &
     screen: string;
   };
 
+/**
+ * A workspace switch playing on a screen: when it began, and the windows on the
+ * arriving workspace whose parts were first drawn after that.
+ */
+type Switching = WorkspaceSwitch & { at: number; late: readonly Late[] };
+
+/**
+ * How far into a workspace switch a window's parts were first drawn, in
+ * milliseconds: `placed` for the parts every placed window draws, `shown` for
+ * those drawn only while it is shown. A part not drawn starts no animation, so
+ * its slide must start where the others have got to.
+ */
+type Late = { id: string; placed: number; shown: number };
+
 /** Animations still playing. */
 type Playing = {
   closing: readonly ClosingOn[];
@@ -109,7 +131,7 @@ type Playing = {
    */
   shuffled: readonly { id: string; motion: Shuffle }[];
   /** The workspace each screen is switching away from, by screen. */
-  switching: Readonly<Record<string, WorkspaceSwitch>>;
+  switching: Readonly<Record<string, Switching>>;
   /** The windows in a tab switch crossfade. */
   tabbing: readonly { id: string; motion: TabFade }[];
 };
@@ -245,6 +267,18 @@ const advanced = (
     ),
   ];
   const fading = new Set(fades.map(({ id }) => id));
+  const switching = Object.fromEntries(
+    screens.flatMap(({ name, now, was }) => {
+      const next = switchingAfter(playing.switching[name], was, now, time);
+      return next === undefined ? [] : [[name, next]];
+    }),
+  );
+  // Windows on screens not switching workspace, the only ones that crossfade.
+  const settled = new Set(
+    Object.entries(shown).flatMap(([name, { placements }]) =>
+      switching[name] === undefined ? placements.map(({ id }) => id) : [],
+    ),
+  );
   return {
     closing: [
       ...playing.closing,
@@ -319,20 +353,62 @@ const advanced = (
       ),
       ...shuffles.map(({ motion, restack }) => ({ id: restack.id, motion })),
     ],
-    switching: Object.fromEntries(
-      screens.flatMap(({ name, now, was }) => {
-        const switching = switchedTo(was, now) ?? playing.switching[name];
-        return switching === undefined ? [] : [[name, switching]];
-      }),
-    ),
+    switching,
     // A window switched back mid-fade plays the latest half, which always
-    // differs from the current one, so the browser restarts it.
+    // differs from the current one, so the browser restarts it. A workspace
+    // switch slides the tabs switched on the workspace arriving, and cuts
+    // short the fades on the one leaving, which never report their end.
     tabbing: [
-      ...playing.tabbing.filter(({ id }) => open.has(id) && !fading.has(id)),
+      ...playing.tabbing.filter(({ id }) => !fading.has(id)),
       ...fades,
-    ],
+    ].filter(({ id }) => settled.has(id)),
   };
 };
+
+/**
+ * The workspace switch playing on a screen after it changes from `was` to
+ * `now` at `time`: a new one, `playing` with the windows drawn since it began,
+ * or `undefined` for none.
+ */
+const switchingAfter = (
+  playing: Switching | undefined,
+  was: Shown,
+  now: Shown,
+  time: number,
+): Switching | undefined => {
+  const started = switchedTo(was, now);
+  if (started !== undefined) {
+    return { ...started, at: time, late: [] };
+  } else if (playing === undefined) {
+    return undefined;
+  } else {
+    return { ...playing, late: lateIn(playing, was, now, time) };
+  }
+};
+
+/**
+ * The windows on `now` whose parts were first drawn after the switch
+ * `playing` began, at `time` or earlier. Parts drawn again restart, so their
+ * slide starts anew from where the switch has got to.
+ */
+const lateIn = (
+  playing: Switching,
+  was: Shown,
+  now: Shown,
+  time: number,
+): readonly Late[] =>
+  now.placements.flatMap((placement) => {
+    const { id } = placement;
+    const then = was.placements.find((before) => before.id === id);
+    const kept = playing.late.find((late) => late.id === id);
+    const into = time - playing.at;
+    const placed = then === undefined ? into : (kept?.placed ?? 0);
+    const shown =
+      placement.surface !== undefined && then?.surface === undefined
+        ? into
+        : (kept?.shown ?? 0);
+    return placed === 0 && shown === 0 ? [] : [{ id, placed, shown }];
+  });
 
 /**
  * How long a scratchpad slide takes, in milliseconds. Matches `dropping` and
@@ -564,6 +640,7 @@ const drawnWindow = (
       restack: undefined,
       rewound: 0,
       screen: closing.screen,
+      shownRewound: 0,
       window,
     };
   } else if (placed === undefined) {
@@ -577,6 +654,7 @@ const drawnWindow = (
           restack: undefined,
           rewound: sending.rewound,
           screen: sending.screen,
+          shownRewound: sending.rewound,
           window,
         };
   } else {
@@ -589,13 +667,33 @@ const drawnWindow = (
         (shuffle) =>
           shuffle.restack.id === window.id && shuffle.motion === motion,
       )?.restack,
-      // Only a slide reads it, so a drop outranked by another motion can keep
-      // it. One not dropping starts at the beginning.
-      rewound:
-        playing.dropping.find(({ id }) => id === window.id)?.rewound ?? 0,
+      ...rewoundIn(playing, placed.screen, window.id),
       screen: placed.screen,
       window,
     };
+  }
+};
+
+/**
+ * How far into its motion each part of window `id` on `screen` starts.
+ *
+ * A workspace switch outranks a drop (see {@link arriving}), so it takes the
+ * switch's. Only a slide reads it, so a drop outranked by another motion can
+ * keep it. One not dropping starts at the beginning.
+ */
+const rewoundIn = (
+  playing: Playing,
+  screen: string,
+  id: string,
+): Pick<DrawnWindow, "rewound" | "shownRewound"> => {
+  const switching = playing.switching[screen];
+  if (switching === undefined) {
+    const rewound =
+      playing.dropping.find((dropping) => dropping.id === id)?.rewound ?? 0;
+    return { rewound, shownRewound: rewound };
+  } else {
+    const late = switching.late.find((window) => window.id === id);
+    return { rewound: late?.placed ?? 0, shownRewound: late?.shown ?? 0 };
   }
 };
 
@@ -643,6 +741,7 @@ const leavingWindow = (index: Index, window: ShellWindow): DrawnWindow => {
       restack: undefined,
       rewound: 0,
       screen: undefined,
+      shownRewound: 0,
       window,
     };
   } else {
@@ -653,6 +752,7 @@ const leavingWindow = (index: Index, window: ShellWindow): DrawnWindow => {
       restack: undefined,
       rewound: 0,
       screen: leaving.screen,
+      shownRewound: 0,
       window,
     };
   }

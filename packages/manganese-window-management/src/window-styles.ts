@@ -255,13 +255,15 @@ export const movingStyles = cva({
     motion: {
       // Both workspaces share timing so they stay side by side. `emphasized`,
       // not `outQuart`: a full-screen slide that starts at full speed jumps.
+      // A part first drawn partway through starts where the others have got
+      // to (`--motion-delay`, see `DrawnWindow.shownRewound`).
       "arriving-from-end": {
         animation:
-          "windowArrivingFromEnd {durations.slower} {easings.emphasized}",
+          "windowArrivingFromEnd {durations.slower} {easings.emphasized} var(--motion-delay, 0ms)",
       },
       "arriving-from-start": {
         animation:
-          "windowArrivingFromStart {durations.slower} {easings.emphasized}",
+          "windowArrivingFromStart {durations.slower} {easings.emphasized} var(--motion-delay, 0ms)",
       },
       closing: {
         animation: "windowClosing {durations.fast} {easings.outQuart} forwards",
