@@ -70,6 +70,7 @@
     "./ThemeProvider": "./src/ThemeSwitch/ThemeProvider.tsx",
     "./ThemeSwitch": "./src/ThemeSwitch/ThemeSwitch.tsx",
     "./Toaster": "./src/Toaster/Toaster.tsx",
+    "./Tooltip": "./src/Tooltip/Tooltip.tsx",
     "./theme-core": "./src/ThemeSwitch/theme-core.ts",
     "./theme-source": "./src/ThemeSwitch/theme-source.ts",
     "./useApps": "./src/useApps/useApps.ts",

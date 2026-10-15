@@ -212,6 +212,7 @@ describe("a report that changes nothing", () => {
       WindowAction.AppDesktopIdChanged("kitty", "kitty"),
       WindowAction.BrowserWindowsListed([listed("1", "https://docs.rs/")]),
       WindowAction.BrowserIconChanged("1", "https://docs.rs/icon.svg"),
+      WindowAction.BrowserDescribed("1", "Rust documentation"),
     );
 
     expect(
@@ -221,6 +222,7 @@ describe("a report that changes nothing", () => {
         WindowAction.AppCursorChanged("kitty", "text"),
         WindowAction.AppDesktopIdChanged("kitty", "kitty"),
         WindowAction.BrowserIconChanged("1", "https://docs.rs/icon.svg"),
+        WindowAction.BrowserDescribed("1", "Rust documentation"),
       ),
     ).toBe(state);
   });
@@ -303,6 +305,30 @@ describe("the browser windows the engine lists", () => {
     );
 
     expect(state.windows[0]).toMatchObject({ icon: undefined });
+  });
+
+  it("describes a window with its page's description, through later lists", () => {
+    const state = reduce(
+      desktop(),
+      WindowAction.BrowserWindowsListed([listed("1", "https://docs.rs/")]),
+      WindowAction.BrowserDescribed("1", "Rust documentation"),
+      WindowAction.BrowserWindowsListed([listed("1", "https://docs.rs/std")]),
+    );
+
+    expect(state.windows[0]).toMatchObject({
+      description: "Rust documentation",
+    });
+  });
+
+  it("takes the description away from a page that has none", () => {
+    const state = reduce(
+      desktop(),
+      WindowAction.BrowserWindowsListed([listed("1", "https://docs.rs/")]),
+      WindowAction.BrowserDescribed("1", "Rust documentation"),
+      WindowAction.BrowserDescribed("1", ""),
+    );
+
+    expect(state.windows[0]).toMatchObject({ description: undefined });
   });
 
   it("names a window after its page's title once the page has one", () => {

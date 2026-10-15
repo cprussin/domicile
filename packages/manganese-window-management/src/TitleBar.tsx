@@ -1,4 +1,5 @@
 import { Button } from "@domicile-desktop/component-library/Button";
+import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import { BrowsersIcon } from "@phosphor-icons/react/dist/ssr/Browsers";
 import { CornersInIcon } from "@phosphor-icons/react/dist/ssr/CornersIn";
@@ -9,11 +10,11 @@ import { SquareSplitVerticalIcon } from "@phosphor-icons/react/dist/ssr/SquareSp
 import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour";
 import { TabsIcon } from "@phosphor-icons/react/dist/ssr/Tabs";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import type { ReactElement, PointerEvent as ReactPointerEvent } from "react";
 import { useRef, useState } from "react";
 
 import { css, cva, cx } from "../styled-system/css";
-import { hstack } from "../styled-system/patterns";
+import { hstack, vstack } from "../styled-system/patterns";
 import { grabCursorStyles } from "./grab-cursor-styles";
 import { raised } from "./placement";
 import type { Rect } from "./rect";
@@ -53,6 +54,11 @@ const GROUP_NAMES: Record<Layout, string> = {
 type Props = {
   /** The stacking depth of the window it names. */
   depth: number;
+  /**
+   * The page's description, which a tab's tooltip shows under its title, or
+   * `undefined` for none.
+   */
+  description?: string | undefined;
   /**
    * Whether the window is being dragged. Disables easing so the bar keeps up
    * with the pointer and its contents.
@@ -147,6 +153,7 @@ type Props = {
  */
 export const TitleBar = ({
   depth,
+  description,
   dragging,
   floating,
   focus,
@@ -240,84 +247,122 @@ export const TitleBar = ({
         ...collapsedAlong(tabbed),
       }}
     >
-      <div
-        className={cx(
-          strip === undefined
-            ? cx(
-                barStyles({ focus }),
-                !fullscreen && edgeStyles,
-                !fullscreen && !hanging && topCornerStyles,
-              )
-            : tabStyles({
-                focus,
-                joined: !hidden && tabbed === Layout.Tabbed,
-                marked: groupSelected,
-                nested: strip.nested,
-                open: !hidden,
-              }),
-          settlingStyles(),
-        )}
-        data-face
+      <TabTooltip
+        description={description}
+        tab={strip !== undefined}
+        title={title}
       >
-        <span className={leadStyles} {...{ [UPRIGHT]: "" }}>
-          {group !== undefined && (
-            <GroupMark layout={group.layout} windows={group.windows} />
+        <div
+          className={cx(
+            strip === undefined
+              ? cx(
+                  barStyles({ focus }),
+                  !fullscreen && edgeStyles,
+                  !fullscreen && !hanging && topCornerStyles,
+                )
+              : tabStyles({
+                  focus,
+                  joined: !hidden && tabbed === Layout.Tabbed,
+                  marked: groupSelected,
+                  nested: strip.nested,
+                  open: !hidden,
+                }),
+            settlingStyles(),
           )}
-          {/* Keyed so a new icon gets another try after one fails to load. */}
-          <WindowIcon icon={icon} key={icon} />
-          <span className={titleStyles}>{title}</span>
-        </span>
-        {/*
+          data-face
+        >
+          <span className={leadStyles} {...{ [UPRIGHT]: "" }}>
+            {group !== undefined && (
+              <GroupMark layout={group.layout} windows={group.windows} />
+            )}
+            {/* Keyed so a new icon gets another try after one fails to load. */}
+            <WindowIcon icon={icon} key={icon} />
+            <span className={titleStyles}>{title}</span>
+          </span>
+          {/*
         A press on a button must not start a drag: drag pointer capture would
         retarget the click to the bar.
       */}
-        <span
-          className={controlStyles}
-          onPointerDown={(event) => {
-            event.stopPropagation();
-          }}
-          {...{ [UPRIGHT]: "" }}
-        >
-          {/*
+          <span
+            className={controlStyles}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+            }}
+            {...{ [UPRIGHT]: "" }}
+          >
+            {/*
             A hidden tab only offers to close, as in a browser, so its title
             keeps the room. A narrow bar drops these too.
           */}
-          {!hidden && (
-            <span className={extraControlStyles}>
-              <Button
-                label={floating ? "Tile" : "Float"}
-                onClick={onFloat}
-                size="sm"
-                variant="ghost"
-              >
-                {floating ? (
-                  <SquaresFourIcon size={14} />
-                ) : (
-                  <BrowsersIcon size={14} />
-                )}
-              </Button>
-              <Button
-                label={fullscreen ? "Restore" : "Maximize"}
-                onClick={onFullscreen}
-                size="sm"
-                variant="ghost"
-              >
-                {fullscreen ? (
-                  <CornersInIcon size={14} />
-                ) : (
-                  <CornersOutIcon size={14} />
-                )}
-              </Button>
-            </span>
-          )}
-          <Button label="Close" onClick={onClose} size="sm" variant="ghost">
-            <XIcon size={14} />
-          </Button>
-        </span>
-      </div>
+            {!hidden && (
+              <span className={extraControlStyles}>
+                <Button
+                  label={floating ? "Tile" : "Float"}
+                  onClick={onFloat}
+                  size="sm"
+                  variant="ghost"
+                >
+                  {floating ? (
+                    <SquaresFourIcon size={14} />
+                  ) : (
+                    <BrowsersIcon size={14} />
+                  )}
+                </Button>
+                <Button
+                  label={fullscreen ? "Restore" : "Maximize"}
+                  onClick={onFullscreen}
+                  size="sm"
+                  variant="ghost"
+                >
+                  {fullscreen ? (
+                    <CornersInIcon size={14} />
+                  ) : (
+                    <CornersOutIcon size={14} />
+                  )}
+                </Button>
+              </span>
+            )}
+            <Button label="Close" onClick={onClose} size="sm" variant="ghost">
+              <XIcon size={14} />
+            </Button>
+          </span>
+        </div>
+      </TabTooltip>
     </div>
   );
 };
+
+/**
+ * Shows a tab's whole title and its page's description while the pointer
+ * rests on it, since a tab is cut to its slot. A window's own bar spans the
+ * window, so it shows `children` alone.
+ */
+const TabTooltip = ({
+  children,
+  description,
+  tab,
+  title,
+}: {
+  children: ReactElement;
+  description: string | undefined;
+  tab: boolean;
+  title: string;
+}) =>
+  tab ? (
+    <Tooltip
+      content={
+        <span className={summaryStyles}>
+          <span className={summaryTitleStyles}>{title}</span>
+          {description !== undefined && (
+            <span className={summaryDescriptionStyles}>{description}</span>
+          )}
+        </span>
+      }
+      trigger={children}
+    />
+  ) : (
+    children
+  );
 
 /** Whether a tab plays `motion` along its strip, opening or leaving it. */
 const alongStrip = (motion: WindowMotion): boolean =>
@@ -653,3 +698,12 @@ const titleStyles = css({
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
 });
+
+const summaryStyles = vstack({ alignItems: "stretch", gap: 0.5 });
+
+const summaryTitleStyles = css({
+  fontWeight: "medium",
+  overflowWrap: "anywhere",
+});
+
+const summaryDescriptionStyles = css({ color: "muted" });

@@ -71,6 +71,7 @@ constexpr char kZoomOutRequestEvent[] = "domicile-zoom-out-request";
 
 // More state changes.
 constexpr char kFaviconChangeEvent[] = "domicile-favicon-change";
+constexpr char kDescriptionChangeEvent[] = "domicile-description-change";
 constexpr char kTargetUrlChangeEvent[] = "domicile-target-url-change";
 
 namespace {
@@ -675,6 +676,12 @@ void HTMLWebViewElement::FaviconChanged(const KURL& icon) {
   favicon_ = icon.IsValid() ? icon.GetString() : String("");
 
   DispatchEvent(*Event::CreateBubble(AtomicString(kFaviconChangeEvent)));
+}
+
+void HTMLWebViewElement::DescriptionChanged(const String& description) {
+  description_ = description;
+
+  DispatchEvent(*Event::CreateBubble(AtomicString(kDescriptionChangeEvent)));
 }
 
 void HTMLWebViewElement::TargetUrlChanged(const KURL& url) {

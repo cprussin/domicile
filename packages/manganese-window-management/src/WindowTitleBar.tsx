@@ -21,6 +21,8 @@ const PRIMARY_BUTTON = 0;
 type Props = {
   /** The stacking depth of the window it names. */
   depth: number;
+  /** The page's description. See {@link TitleBar}. */
+  description?: string | undefined;
   /** Whether this window is being dragged. See {@link TitleBar}. */
   dragging: boolean;
   /** The window's float, or `undefined` while it is tiled. */
@@ -80,6 +82,7 @@ type Props = {
  */
 export const WindowTitleBar = ({
   depth,
+  description,
   dragging,
   float,
   focus,
@@ -133,6 +136,7 @@ export const WindowTitleBar = ({
   return (
     <TitleBar
       depth={depth}
+      description={description}
       dragging={dragging}
       floating={float !== undefined}
       focus={focus}

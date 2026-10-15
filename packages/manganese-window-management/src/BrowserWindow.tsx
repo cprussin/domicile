@@ -41,6 +41,7 @@ import { useHistoryAvailability } from "./useHistoryAvailability";
 import { useLoading } from "./useLoading";
 import { useLoadProgress } from "./useLoadProgress";
 import { useLowered } from "./useLowered";
+import { usePageDescription } from "./usePageDescription";
 import { usePageFullscreen } from "./usePageFullscreen";
 import { usePageIcon } from "./usePageIcon";
 import { useReclaimFocus } from "./useReclaimFocus";
@@ -114,6 +115,11 @@ type Props = {
    * removed. Uses the animation event so the duration lives only in CSS.
    */
   onMotionEnded: () => void;
+  /**
+   * The page's description, `""` for none, with {@link Props.window}. See
+   * `usePageDescription`.
+   */
+  onDescription: (window: string, description: string) => void;
   /**
    * The page's icon URL, `""` for none, with {@link Props.window}. See
    * `usePageIcon`.
@@ -197,6 +203,7 @@ export const BrowserWindow = ({
   isPrivate = false,
   listDirectory = defaultListDirectory,
   motion,
+  onDescription,
   onFocusRequest,
   onIcon,
   onMotionEnded,
@@ -243,6 +250,7 @@ export const BrowserWindow = ({
   const shown = useShownPage(view);
   const address = addressOf(shown.url, sent);
   usePageIcon(view, window, onIcon);
+  usePageDescription(view, window, onDescription);
   const { canGoBack, canGoForward } = useHistoryAvailability(view);
   const loading = useLoading(view);
   const loadProgress = useLoadProgress(view);

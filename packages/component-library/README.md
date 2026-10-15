@@ -46,6 +46,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `TabRail` | Vertical tab rail with brand slot, footer and collapse. |
 | `Textarea` | Auto-sizing textarea with a resize handle. |
 | `Toaster` | Stack of toasts in a corner. The caller renders each card. |
+| `Tooltip` | Short label shown while the pointer rests on its trigger. |
 | `ThemeProvider` | Light/dark theme state. Sets `data-theme` on `<html>`. |
 | `ThemeSwitch` | Button that flips the theme. |
 | `useApps` | Hook: names and icons of applications by app id, from their desktop entries. |
