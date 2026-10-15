@@ -338,6 +338,7 @@ if wanted engine; then
       scripts/engine-guard-shell-script-src.sh \
       scripts/engine-guard-shell-crash.sh \
       scripts/engine-guard-app-only-in-shell.sh \
+      scripts/engine-guard-domicile-fetch.sh \
       scripts/engine-guard-app-module.sh \
       scripts/engine-guard-video-codecs.sh
     ! engine_stop; } &&
