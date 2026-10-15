@@ -43,6 +43,7 @@ use smithay::wayland::{
     dmabuf::{DmabufFeedbackBuilder, DmabufGlobal, DmabufState},
     fractional_scale::FractionalScaleManagerState,
     idle_inhibit::IdleInhibitManagerState,
+    keyboard_shortcuts_inhibit::KeyboardShortcutsInhibitState,
     output::OutputManagerState,
     security_context::SecurityContextState,
     selection::data_device::DataDeviceState,
@@ -119,6 +120,7 @@ mod seat;
 mod selections;
 mod shell_config;
 mod shm_upload;
+mod shortcuts_inhibit;
 mod spawning;
 mod spike_probes;
 mod surface_commit;
@@ -261,6 +263,8 @@ struct DomicileCompositor {
     // `crate::decorations`.
     _xdg_decoration_state: XdgDecorationState,
     kde_decoration_state: KdeDecorationState,
+    // Every client's inhibitor is honored; see `crate::shortcuts_inhibit`.
+    keyboard_shortcuts_inhibit_state: KeyboardShortcutsInhibitState,
     shm_state: ShmState,
     seat_state: SeatState<DomicileCompositor>,
     seat: Seat<DomicileCompositor>,
@@ -1113,6 +1117,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         kde_decoration_state: KdeDecorationState::new::<DomicileCompositor>(
             &dh,
             KdeDefaultMode::Server,
+        ),
+        keyboard_shortcuts_inhibit_state: KeyboardShortcutsInhibitState::new::<DomicileCompositor>(
+            &dh,
         ),
         shm_state: ShmState::new::<DomicileCompositor>(&dh, vec![]),
         seat_state,

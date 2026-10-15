@@ -96,6 +96,8 @@ pub struct App {
     /// Size limits in logical units. `0` on an axis means no limit.
     pub min_size: (f64, f64),
     pub max_size: (f64, f64),
+    /// The client holds an active `zwp_keyboard_shortcuts_inhibitor_v1`.
+    pub inhibits_shortcuts: bool,
 }
 
 /// What a client says about its window by its first frame.
@@ -404,6 +406,7 @@ impl Host {
                 urgent: false,
                 min_size: NO_LIMIT,
                 max_size: NO_LIMIT,
+                inhibits_shortcuts: false,
             },
         );
         app_id
@@ -632,6 +635,24 @@ impl Host {
         }
     }
 
+    /// Record whether a window holds a shortcuts inhibitor. Returns the chrome
+    /// notification, or `None` if the app is unknown or nothing changed.
+    pub fn app_inhibits_shortcuts(&mut self, app_id: &str, inhibits: bool) -> Option<HostMessage> {
+        let app = self.apps.get_mut(app_id)?;
+        if app.inhibits_shortcuts == inhibits {
+            None
+        } else {
+            app.inhibits_shortcuts = inhibits;
+            reported(
+                app,
+                HostMessage::AppInhibitsShortcuts {
+                    app_id: app_id.to_string(),
+                    inhibits,
+                },
+            )
+        }
+    }
+
     /// A popup opened over `parent`, a window or another popup. Returns its
     /// new id and the chrome notification, or `None` if `parent` is unknown.
     pub fn popup_placed(
@@ -798,8 +819,9 @@ fn placed(popup: &Popup) -> HostMessage {
     }
 }
 
-/// Messages announcing a window, then its size limits, parent and urgency.
-/// Those come second because a chrome needs the window first.
+/// Messages announcing a window, then its size limits, parent, urgency and
+/// any shortcuts inhibitor. Those come second because a chrome needs the
+/// window first.
 fn announced(app: &App, mapped: Mapped) -> Vec<HostMessage> {
     let appeared = HostMessage::AppAppeared {
         app_id: app.app_id.clone(),
@@ -820,11 +842,18 @@ fn announced(app: &App, mapped: Mapped) -> Vec<HostMessage> {
     });
     let parent = app.transient_for.is_some().then(|| parentage(app));
     let urgent = app.urgent.then(|| urgency(app));
+    let inhibits = app
+        .inhibits_shortcuts
+        .then(|| HostMessage::AppInhibitsShortcuts {
+            app_id: app.app_id.clone(),
+            inhibits: true,
+        });
     std::iter::once(appeared)
         .chain(min)
         .chain(max)
         .chain(parent)
         .chain(urgent)
+        .chain(inhibits)
         .collect()
 }
 
