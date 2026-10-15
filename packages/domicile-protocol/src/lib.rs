@@ -392,6 +392,25 @@ pub enum HostMessage {
     /// Sent on each change.
     AppSuspended { app_id: String, suspended: bool },
 
+    /// The window a toplevel is a dialog for (`xdg_toplevel.set_parent`), or
+    /// `None` for none, sent whenever it changes.
+    ///
+    /// Sent right after [`HostMessage::AppAppeared`] when set before the first
+    /// frame. When the parent closes, its children take its own parent, as
+    /// xdg-shell says.
+    AppTransientFor {
+        app_id: String,
+        transient_for: Option<String>,
+    },
+
+    /// Whether a window wants attention, sent whenever that changes.
+    ///
+    /// Set when the compositor drops the window's `xdg-activation` request
+    /// (see [`HostMessage::FocusRequested`]), unless it holds the keyboard.
+    /// Cleared when it gets the keyboard. Sent right after
+    /// [`HostMessage::AppAppeared`] when set.
+    AppUrgent { app_id: String, urgent: bool },
+
     /// The desktop's displays, as regions of the single chrome page.
     ///
     /// Sent after `welcome` and whenever the layout changes. Latest wins; a

@@ -219,6 +219,10 @@ struct Client {
     /// [`crate::arguments::Arguments::bubble`].
     wants_bubble: bool,
     bubble: Option<Bubble>,
+    /// Whether to open a dialog once the window is up. See
+    /// [`crate::arguments::Arguments::dialog`].
+    wants_dialog: bool,
+    dialog: Option<Dialog>,
     /// The surface the pointer is over, so a press can be told apart.
     pointer_over: Option<wl_surface::WlSurface>,
     /// See [`crate::arguments::Arguments::min_size`].
@@ -347,11 +351,24 @@ struct Bubble {
     drawn: Vec<(wl_buffer::WlBuffer, std::fs::File)>,
 }
 
+/// User data for a dialog's objects. See [`PopupRole`].
+struct DialogRole;
+
+/// An open `--dialog`: a second toplevel drawn once in [`POPUP_COLOR`].
+struct Dialog {
+    surface: wl_surface::WlSurface,
+    toplevel: xdg_toplevel::XdgToplevel,
+    /// Its buffer and backing file, created at its first configure.
+    drawn: Option<(wl_buffer::WlBuffer, std::fs::File)>,
+}
+
 /// The window's surface and its buffers.
 struct Window {
     surface: wl_surface::WlSurface,
     /// The parent for a popup.
     xdg: xdg_surface::XdgSurface,
+    /// The parent for a dialog.
+    toplevel: xdg_toplevel::XdgToplevel,
     pixels: Pixels,
     /// The surface size, in surface-local pixels.
     ///
@@ -437,6 +454,8 @@ impl Client {
             popups: Vec::new(),
             wants_bubble: asked.bubble,
             bubble: None,
+            wants_dialog: asked.dialog,
+            dialog: None,
             pointer_over: None,
             min_size: asked.min_size,
             max_size: asked.max_size,
@@ -631,6 +650,7 @@ impl Client {
         self.window = Some(Window {
             surface,
             xdg,
+            toplevel,
             pixels,
             size: SIZE,
             scale: 1,
@@ -1160,6 +1180,63 @@ where
     (buffer, file)
 }
 
+/// Open the `--dialog`, once, with a first commit carrying no buffer.
+fn open_dialog(client: &mut Client, handle: &QueueHandle<Client>) {
+    if !client.wants_dialog {
+        return;
+    }
+    client.wants_dialog = false;
+    let (Some(compositor), Some(wm_base)) = (
+        client.globals.compositor.as_ref(),
+        client.globals.wm_base.as_ref(),
+    ) else {
+        unreachable!("open() refuses a compositor without these");
+    };
+    let surface = compositor.create_surface(handle, DialogRole);
+    let xdg = wm_base.get_xdg_surface(&surface, handle, DialogRole);
+    let toplevel = xdg.get_toplevel(handle, DialogRole);
+    toplevel.set_title(format!("{} dialog", client.title));
+    crate::say!(toplevel.id(), "opened({})", surface.id());
+    surface.commit();
+    client.dialog = Some(Dialog {
+        surface,
+        toplevel,
+        drawn: None,
+    });
+}
+
+/// Draw the `--dialog`'s single frame, then make it the window's dialog, or
+/// exit with the error.
+///
+/// The parent follows the frame so the compositor hears of it after it has
+/// announced the dialog.
+fn draw_dialog_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
+    let shm = client
+        .globals
+        .shm
+        .as_ref()
+        .expect("open() refuses a compositor without wl_shm");
+    let window = client
+        .window
+        .as_ref()
+        .expect("a dialog opens once the window is mapped");
+    let dialog = client
+        .dialog
+        .as_mut()
+        .expect("only a dialog this client opened is configured");
+    if dialog.drawn.is_some() {
+        return;
+    }
+    let (_, _, width, height) = POPUP;
+    let (buffer, file) = solid_or_stop(shm, handle, (width, height), DialogRole);
+    dialog.surface.attach(Some(&buffer), 0, 0);
+    dialog.surface.damage(0, 0, width, height);
+    dialog.surface.commit();
+    dialog.drawn = Some((buffer, file));
+    dialog.toplevel.set_parent(Some(&window.toplevel));
+    crate::say!(dialog.toplevel.id(), "set_parent({})", window.toplevel.id());
+}
+
 /// Open the `--bubble` over the window, once.
 ///
 /// As Chromium does: a desync subsurface of the window, positioned, then
@@ -1376,6 +1453,7 @@ impl Dispatch<xdg_surface::XdgSurface, ()> for Client {
                 // A popup needs a mapped parent.
                 open_popup(client, handle);
                 open_bubble(client, handle);
+                open_dialog(client, handle);
             }
         }
     }
@@ -1394,6 +1472,60 @@ impl Dispatch<xdg_surface::XdgSurface, PopupRole> for Client {
             xdg.ack_configure(serial);
             draw_popup_or_stop(client, handle, xdg);
         }
+    }
+}
+
+impl Dispatch<xdg_surface::XdgSurface, DialogRole> for Client {
+    fn event(
+        client: &mut Client,
+        xdg: &xdg_surface::XdgSurface,
+        event: xdg_surface::Event,
+        _: &DialogRole,
+        _: &Connection,
+        handle: &QueueHandle<Client>,
+    ) {
+        if let xdg_surface::Event::Configure { serial } = event {
+            xdg.ack_configure(serial);
+            draw_dialog_or_stop(client, handle);
+        }
+    }
+}
+
+// The dialog keeps its size and is never closed by a check.
+impl Dispatch<xdg_toplevel::XdgToplevel, DialogRole> for Client {
+    fn event(
+        _: &mut Client,
+        _: &xdg_toplevel::XdgToplevel,
+        _: xdg_toplevel::Event,
+        _: &DialogRole,
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+    }
+}
+
+// Dialog surface and buffer events are ignored, as a popup's are.
+impl Dispatch<wl_surface::WlSurface, DialogRole> for Client {
+    fn event(
+        _: &mut Client,
+        _: &wl_surface::WlSurface,
+        _: wl_surface::Event,
+        _: &DialogRole,
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
+    }
+}
+
+impl Dispatch<wl_buffer::WlBuffer, DialogRole> for Client {
+    fn event(
+        _: &mut Client,
+        _: &wl_buffer::WlBuffer,
+        _: wl_buffer::Event,
+        _: &DialogRole,
+        _: &Connection,
+        _: &QueueHandle<Client>,
+    ) {
     }
 }
 

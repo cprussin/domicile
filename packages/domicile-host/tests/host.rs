@@ -191,6 +191,82 @@ fn a_window_with_a_parent_or_a_fixed_size_is_a_dialog() {
 }
 
 #[test]
+fn a_dialog_says_whose_it_is_whenever_that_changes() {
+    let mut host = Host::new();
+    let parent = drawn(&mut host);
+    let dialog = drawn(&mut host);
+
+    assert_eq!(
+        host.app_transient_for(&dialog, Some(parent.clone())),
+        Some(HostMessage::AppTransientFor {
+            app_id: dialog.clone(),
+            transient_for: Some(parent.clone()),
+        })
+    );
+    assert_eq!(host.app_transient_for(&dialog, Some(parent)), None);
+    assert_eq!(
+        host.app_transient_for(&dialog, None),
+        Some(HostMessage::AppTransientFor {
+            app_id: dialog,
+            transient_for: None,
+        })
+    );
+}
+
+#[test]
+fn a_dialog_whose_parent_closes_belongs_to_its_grandparent() {
+    // xdg-shell: the children of an unmapped parent take its parent.
+    let mut host = Host::new();
+    let grandparent = drawn(&mut host);
+    let parent = drawn(&mut host);
+    let dialog = drawn(&mut host);
+    host.app_transient_for(&parent, Some(grandparent.clone()));
+    host.app_transient_for(&dialog, Some(parent.clone()));
+
+    assert_eq!(
+        host.app_closed(&parent),
+        vec![
+            HostMessage::AppClosed { app_id: parent },
+            HostMessage::AppTransientFor {
+                app_id: dialog,
+                transient_for: Some(grandparent),
+            },
+        ]
+    );
+}
+
+#[test]
+fn what_a_window_said_before_drawing_follows_its_announcement() {
+    // Also the replay a chrome that arrives late hears.
+    let mut host = Host::new();
+    let parent = drawn(&mut host);
+    let dialog = host.app_created(OWNER);
+    assert_eq!(host.app_transient_for(&dialog, Some(parent.clone())), None);
+    assert_eq!(host.app_urgent(&dialog), None);
+
+    let announced = host.app_mapped(&dialog, mapped());
+
+    assert_eq!(
+        announced[1..],
+        [
+            HostMessage::AppTransientFor {
+                app_id: dialog.clone(),
+                transient_for: Some(parent),
+            },
+            HostMessage::AppUrgent {
+                app_id: dialog,
+                urgent: true,
+            },
+        ]
+    );
+    assert!(host.open_apps().ends_with(&[
+        announced[1].clone(),
+        announced[2].clone(),
+        HostMessage::FocusChanged { app_id: None },
+    ]));
+}
+
+#[test]
 fn a_window_that_has_not_drawn_is_never_mentioned_to_the_chromes() {
     // The chromes have not heard of it.
     let mut host = Host::new();
@@ -198,7 +274,7 @@ fn a_window_that_has_not_drawn_is_never_mentioned_to_the_chromes() {
 
     assert_eq!(host.focus_requested(&app), None);
     assert_eq!(host.popup_placed(&app, (0.0, 0.0), (1.0, 1.0), false), None);
-    assert_eq!(host.app_closed(&app), None, "nor hear that it closed");
+    assert_eq!(host.app_closed(&app), vec![], "nor hear that it closed");
     assert_eq!(host.app_mapped(&app, mapped()), vec![], "it is gone");
 }
 
@@ -272,11 +348,11 @@ fn focus_is_reported_when_it_moves_and_not_when_it_does_not() {
 
     assert_eq!(
         host.focus_change(),
-        Some(HostMessage::FocusChanged {
+        vec![HostMessage::FocusChanged {
             app_id: Some(app.clone())
-        })
+        }]
     );
-    assert_eq!(host.focus_change(), None, "nothing moved the second time");
+    assert_eq!(host.focus_change(), vec![], "nothing moved the second time");
 }
 
 #[test]
@@ -295,7 +371,7 @@ fn the_keyboard_coming_back_to_the_chrome_is_reported_too() {
 
     assert_eq!(
         host.focus_change(),
-        Some(HostMessage::FocusChanged { app_id: None })
+        vec![HostMessage::FocusChanged { app_id: None }]
     );
 }
 
@@ -326,9 +402,54 @@ fn a_client_asking_for_the_keyboard_is_a_question_rather_than_a_move() {
     );
     assert_eq!(
         host.focus_change(),
-        None,
+        vec![],
         "and the chromes are told nothing"
     );
+}
+
+#[test]
+fn a_window_refused_the_keyboard_wants_attention_until_it_gets_it() {
+    let mut host = Host::new();
+    let asking = drawn(&mut host);
+
+    assert_eq!(
+        host.app_urgent(&asking),
+        Some(HostMessage::AppUrgent {
+            app_id: asking.clone(),
+            urgent: true,
+        })
+    );
+    assert_eq!(host.app_urgent(&asking), None, "it already does");
+
+    host.handle_chrome_message(ChromeMessage::FocusApp {
+        app_id: asking.clone(),
+    })
+    .unwrap();
+    assert_eq!(
+        host.focus_change(),
+        vec![
+            HostMessage::FocusChanged {
+                app_id: Some(asking.clone())
+            },
+            HostMessage::AppUrgent {
+                app_id: asking,
+                urgent: false,
+            },
+        ]
+    );
+}
+
+#[test]
+fn a_window_holding_the_keyboard_never_wants_attention() {
+    let mut host = Host::new();
+    let typing = drawn(&mut host);
+    host.handle_chrome_message(ChromeMessage::FocusApp {
+        app_id: typing.clone(),
+    })
+    .unwrap();
+    host.focus_change();
+
+    assert_eq!(host.app_urgent(&typing), None);
 }
 
 #[test]
@@ -356,7 +477,7 @@ fn a_focused_window_closing_hands_the_keyboard_back_and_says_so() {
 
     assert_eq!(
         host.focus_change(),
-        Some(HostMessage::FocusChanged { app_id: None })
+        vec![HostMessage::FocusChanged { app_id: None }]
     );
 }
 
@@ -382,7 +503,7 @@ fn a_chrome_that_arrives_late_is_told_who_has_the_keyboard() {
     // The replay must not consume the change still owed to other chromes.
     assert_eq!(
         host.focus_change(),
-        Some(HostMessage::FocusChanged { app_id: Some(app) }),
+        vec![HostMessage::FocusChanged { app_id: Some(app) }],
         "the delta the other chromes are still owed is untouched"
     );
 }
@@ -448,9 +569,9 @@ fn a_popup_moved_is_placed_again_and_closed_like_a_window() {
 
     assert_eq!(
         host.app_closed(&popup),
-        Some(HostMessage::AppClosed {
+        vec![HostMessage::AppClosed {
             app_id: popup.clone()
-        })
+        }]
     );
     assert_eq!(host.popup_moved(&popup, (0.0, 0.0), (1.0, 1.0)), None);
 }
@@ -569,11 +690,11 @@ fn resizing_and_closing_report_to_chrome() {
     assert_eq!(host.app_resized(&id, (200.0, 150.0)), None);
     assert!(host.app_resized("ghost", (1.0, 1.0)).is_none());
 
-    match host.app_closed(&id) {
-        Some(HostMessage::AppClosed { app_id }) => assert_eq!(app_id, id),
-        other => panic!("expected AppClosed, got {other:?}"),
-    }
-    assert!(host.app_closed(&id).is_none(), "closing twice is a no-op");
+    assert_eq!(
+        host.app_closed(&id),
+        vec![HostMessage::AppClosed { app_id: id.clone() }]
+    );
+    assert!(host.app_closed(&id).is_empty(), "closing twice is a no-op");
 }
 
 // ---- focus ----------------------------------------------------------------

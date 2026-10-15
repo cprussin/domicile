@@ -29,7 +29,8 @@ The engine has two channels to the rest of Domicile:
   The browser also sends `hello` on connect.
 - **Inbound:** `welcome`, `app_appeared`, `app_titled`, `app_desktop_id`,
   `app_resized`, `app_min_size`, `app_max_size`, `popup_placed`, `app_closed`,
-  `app_cursor`, `app_presented`, `app_suspended`, `modifiers`, `found_files`, `clipboard`, `theme`,
+  `app_cursor`, `app_presented`, `app_suspended`, `app_transient_for`,
+  `app_urgent`, `modifiers`, `found_files`, `clipboard`, `theme`,
   `windows_theme`, `appearance`, `focus_changed`, `focus_requested`,
   `displays`, `keymap`, `extensions`, `tray`, `notifications`, `shell_config`,
   `idle`, `locked`, `system`, `portal_requests`.

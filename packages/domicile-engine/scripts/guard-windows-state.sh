@@ -10,7 +10,8 @@
 # listens. This
 # guard's page reads only after the stand-in has said everything -- three
 # windows appearing, one retitled, given a desktop id, resized, limited and
-# given a cursor, one focused, one closed, a popup placed -- and the attributes
+# given a cursor, each made the other's dialog in turn, one marked urgent, one
+# focused, one closed, a popup placed -- and the attributes
 # must hold all of it.
 # See packages/chrome-sdk/README.md.
 #
@@ -149,8 +150,9 @@ def default(**fields):
               "gid": None, "grab": False, "height": None, "maxHeight": None,
               "maxWidth": None, "minHeight": None, "minWidth": None, "parent": None,
               "pid": None, "pidfdInode": None, "sandboxAppId": None, "sandboxed": None,
-              "sandboxEngine": None, "sandboxInstanceId": None, "title": "", "uid": None,
-              "width": None, "x": None, "y": None}
+              "sandboxEngine": None, "sandboxInstanceId": None, "title": "",
+              "transientFor": None, "uid": None, "urgent": False, "width": None,
+              "x": None, "y": None}
     window.update(fields)
     return window
 
@@ -158,10 +160,11 @@ wanted = [
     default(appId="first", title="Retitled", desktopId="org.example.First", width=800,
             height=600, minWidth=100, minHeight=50, cursor="zoom-out", pid=4141,
             uid=1000, gid=1000, sandboxed=True, sandboxEngine="org.flatpak",
-            sandboxInstanceId="3"),
+            sandboxInstanceId="3", urgent=True),
     default(appId="second", title="Second", desktopId="org.example.Second", width=640,
             height=480, cursor="grab", dialog=True, clientFrame=True, pid=4242,
-            uid=4294967294, gid=100, pidfdInode=5021, sandboxed=False),
+            uid=4294967294, gid=100, pidfdInode=5021, sandboxed=False,
+            transientFor="first"),
     default(appId="menu", parent="second", x=10, y=20, width=120, height=90, grab=True),
 ]
 
