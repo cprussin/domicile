@@ -9,6 +9,7 @@
 #include <optional>
 #include <vector>
 
+#include "ui/display/display.h"
 #include "ui/display/screen_info.h"
 #include "ui/display/screen_infos.h"
 #include "ui/gfx/geometry/point.h"
@@ -16,13 +17,15 @@
 
 namespace domicile {
 
-// One lit display and its position on the desk, from the display profile.
+// One lit display and its position on the desk, from the display profile or
+// the hardware.
 //
 // On a tty the shell is one page spanning every display. See
 // docs/architecture/ONE-PAGE-FOR-THE-DESK.md.
 struct DeskPlace {
   int64_t id = 0;
-  // The profile's `desk` rectangle, in desk logical pixels.
+  // The profile's `desk` rectangle, or the CRTC's rectangle with no profile,
+  // in desk logical pixels.
   gfx::Rect desk;
   float scale = 1.0f;
   float refresh_hz = 0.0f;
@@ -41,15 +44,19 @@ struct DeskGeometry {
   int64_t host = 0;
 };
 
-// The places to lay the desk out on: `lit`, the compositor's layout now.
+// The places to lay the desk out on, among `displays`.
 //
-// A layout that lights no display is a blank: every screen is off. The desk
-// stays at `before`, the places it was last laid out on, less any display not
-// in `plugged_in`. Its windows and presenters then outlive the blank, and each
-// monitor shows the page's current frame when it lights again.
-std::vector<DeskPlace> DeskPlacesKept(const std::vector<DeskPlace>& lit,
-                                      const std::vector<DeskPlace>& before,
-                                      const std::vector<int64_t>& plugged_in);
+// - `lit` is the places the compositor's layout lights, or `std::nullopt` for
+//   an empty layout. An empty layout leaves each display where the hardware
+//   put it: at its CRTC rectangle, unscaled, as the compositor advertises it.
+// - A layout that lights no display is a blank: every screen is off. The desk
+//   stays at `before`, the places it was last laid out on, less any display
+//   not in `displays`. Its windows and presenters then outlive the blank, and
+//   each monitor shows the page's current frame when it lights again.
+std::vector<DeskPlace> DeskPlacesKept(
+    const std::optional<std::vector<DeskPlace>>& lit,
+    const std::vector<DeskPlace>& before,
+    const std::vector<display::Display>& displays);
 
 // The desk page's geometry, or `std::nullopt` if no display is lit.
 std::optional<DeskGeometry> DeskGeometryOf(const std::vector<DeskPlace>& lit);

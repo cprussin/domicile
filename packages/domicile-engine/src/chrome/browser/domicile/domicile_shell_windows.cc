@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -75,11 +76,17 @@ struct Desk {
   std::vector<DeskPlace> places;
 };
 
-// The places the compositor's last layout lights among the current displays.
-std::vector<DeskPlace> LitPlacesOf(
+// The places the compositor's last layout lights among the current displays,
+// or `std::nullopt` for an empty layout. See `DeskPlacesKept`.
+std::optional<std::vector<DeskPlace>> LitPlacesOf(
     const std::vector<display::Display>& displays) {
+  const std::optional<std::vector<content::DomicileDeskDisplay>> laid_out =
+      content::GetDomicileDesk();
+  if (!laid_out.has_value()) {
+    return std::nullopt;
+  }
   std::vector<DeskPlace> places;
-  for (const content::DomicileDeskDisplay& lit : content::GetDomicileDesk()) {
+  for (const content::DomicileDeskDisplay& lit : *laid_out) {
     const auto found =
         std::ranges::find(displays, lit.id, &display::Display::id);
     if (found == displays.end()) {
@@ -100,15 +107,6 @@ std::optional<Desk> DeskOf(std::vector<DeskPlace> places) {
     return std::nullopt;
   }
   return Desk{.geometry = *geometry, .places = std::move(places)};
-}
-
-std::vector<int64_t> IdsOf(const std::vector<display::Display>& displays) {
-  std::vector<int64_t> ids;
-  ids.reserve(displays.size());
-  for (const display::Display& display : displays) {
-    ids.push_back(display.id());
-  }
-  return ids;
 }
 
 // A shell window and the display nearest its current rectangle.
@@ -328,9 +326,10 @@ class ShellWindows : public display::DisplayObserver {
     const std::vector<display::Display> all =
         display::Screen::Get()->GetAllDisplays();
     // Only the host display gets a shell window; the others get presenters.
-    // Until the compositor sends a layout, the primary display hosts. A blank
-    // keeps the desk it turned off; see `DeskPlacesKept`.
-    places_kept_ = DeskPlacesKept(LitPlacesOf(all), places_kept_, IdsOf(all));
+    // Until the compositor sends a layout, the primary display hosts. An empty
+    // layout lays the desk out where the hardware put each display, and a
+    // blank keeps the desk it turned off; see `DeskPlacesKept`.
+    places_kept_ = DeskPlacesKept(LitPlacesOf(all), places_kept_, all);
     const std::optional<Desk> desk = DeskOf(places_kept_);
     std::vector<display::Display> displays = all;
     if (!all.empty()) {
@@ -510,9 +509,8 @@ class ShellWindows : public display::DisplayObserver {
                  << "; it stays dark until something asks again";
       return;
     }
-    // Record the display before loading the page, which triggers
-    // reconciliation. Don't infer it from bounds, which a hotplug could
-    // invalidate first.
+    // Record the display before reconciling. Don't infer it from bounds,
+    // which a hotplug could invalidate first.
     places_.Place(Identity(window), id);
     // Fit to the display's current bounds: a new monitor can move while its
     // window is being created, and `OnDisplayMetricsChanged` missed this
@@ -528,6 +526,10 @@ class ShellWindows : public display::DisplayObserver {
       FitTo(window, now->bounds());
     }
     window->OpenGURL(url, WindowOpenDisposition::CURRENT_TAB);
+    // The last reconciliation ran before this window existed, so nothing
+    // watches its page. The next one watches it, or presents it if it
+    // already committed.
+    ReconcileSoon();
   }
 
   void Close(int64_t id,

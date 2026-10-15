@@ -187,6 +187,10 @@ Then check:
 - Moving the pointer to another monitor moves keyboard focus with it.
 - Windows keep drawing through all of the above.
 
+With no profile, and with two monitors at different refresh rates, start cold.
+Both panels should draw with no resize or reload, and the log should show
+`presenting the desk on display`.
+
 Also plug three identical monitors into one MST hub, together and one at a
 time. Each should light with one window and no crash. This tests two
 behaviors not yet seen on real monitors: a connector no layout names is placed
