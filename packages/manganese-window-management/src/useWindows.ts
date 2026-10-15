@@ -162,6 +162,8 @@ export const useWindows = (
     windowsChanged();
     focusChanged();
     browserWindowsChanged();
+    // `AppWindow` and `AppPopup` render each window's `frame`.
+    domicile.syncFrames();
     domicile.addEventListener("windowschanged", windowsChanged);
     domicile.addEventListener("focusedwindowchanged", focusChanged);
     domicile.addEventListener("focusrequested", focusRequested);

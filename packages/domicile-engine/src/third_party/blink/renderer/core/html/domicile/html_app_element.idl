@@ -22,6 +22,7 @@
 
   // The synced frame of the window to show. Reflects the `frame` attribute.
   // Set it in the same update that applies the move the frame goes with; see
-  // docs/architecture/FRAME-SYNCED-SURFACES.md.
+  // docs/architecture/FRAME-SYNCED-SURFACES.md. With no attribute, the element
+  // shows the newest frame the control channel named for the window.
   [CEReactions, Reflect] attribute unsigned long frame;
 };

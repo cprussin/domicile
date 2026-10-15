@@ -661,6 +661,22 @@ impl EngineSession {
         self.engine.takes_fences()
     }
 
+    /// See [`crate::engine::Engine::syncs_frames`].
+    pub fn syncs_frames(&self) -> bool {
+        self.engine.syncs_frames()
+    }
+
+    /// Makes `app_id`'s next submit go up at synced `frame`. See
+    /// [`crate::engine::Engine::sync`]. Returns false if the browser refused
+    /// the surface.
+    pub fn sync(&mut self, app_id: &str, frame: u32) -> bool {
+        let Some(surface) = self.surface_for(app_id) else {
+            return false;
+        };
+        self.engine.sync(surface, frame);
+        true
+    }
+
     /// Which app a surface belongs to, for an event that names only the
     /// surface.
     pub fn app_for(&self, surface: SurfaceId) -> Option<&str> {

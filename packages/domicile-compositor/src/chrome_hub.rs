@@ -28,6 +28,9 @@ use crate::{eis, notifications, tray};
 /// One connected chrome: where to write to it.
 pub struct Chrome {
     pub writer: Arc<Mutex<UnixStream>>,
+    /// The page sent `sync_frames` since its last `hello`. See
+    /// [`ChromeHub::syncs_frames`].
+    pub syncs_frames: bool,
 }
 
 /// State shared by the Wayland thread and the chrome connection threads.
@@ -161,6 +164,26 @@ impl ChromeHub {
     /// Forward an input event to the Wayland thread.
     pub fn send_request(&self, event: ClientRequest) {
         let _ = self.request_tx.lock().unwrap().send(event);
+    }
+
+    /// Whether the compositor may sync frames: some chrome is connected, and
+    /// every one renders `<app frame>`. See
+    /// `docs/architecture/FRAME-SYNCED-SURFACES.md`.
+    ///
+    /// Every one, because a move is broadcast. A page that sets `frame` some
+    /// other way, such as always 0, would show a synced window's old frame.
+    pub fn syncs_frames(&self) -> bool {
+        let chromes = self.chromes.lock().unwrap();
+        !chromes.is_empty() && chromes.iter().all(|chrome| chrome.syncs_frames)
+    }
+
+    /// Record whether the chrome on `writer` renders `<app frame>`.
+    pub fn chrome_syncs_frames(&self, writer: &Arc<Mutex<UnixStream>>, syncs: bool) {
+        for chrome in self.chromes.lock().unwrap().iter_mut() {
+            if Arc::ptr_eq(&chrome.writer, writer) {
+                chrome.syncs_frames = syncs;
+            }
+        }
     }
 
     /// Queue a host message for every connected chrome.

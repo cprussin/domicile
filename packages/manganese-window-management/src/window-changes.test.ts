@@ -113,10 +113,20 @@ describe("windowChanges", () => {
       ).toStrictEqual([
         WindowAction.PopupPlaced({
           appId: "menu",
+          frame: 0,
           parent: "term",
           position: [10, 20],
           size: [100, 200],
         }),
+      ]);
+    });
+
+    it("says the synced frame it is at, for one that appeared before the page", () => {
+      expect(
+        windowChanges(NO_RULES, [], [{ ...TERM, frame: 3 }]),
+      ).toStrictEqual([
+        WindowAction.AppAppeared("term", "Terminal"),
+        WindowAction.AppFrameSynced("term", 3),
       ]);
     });
   });
@@ -178,8 +188,41 @@ describe("windowChanges", () => {
       ).toStrictEqual([
         WindowAction.PopupPlaced({
           appId: "menu",
+          frame: 0,
           parent: "term",
           position: [30, 20],
+          size: [100, 200],
+        }),
+      ]);
+    });
+
+    it("says the synced frames a move shows with, in the same changes", () => {
+      // The compositor names them in the move's message, so a page that sets
+      // them in one render shows the window's content and its bubble together.
+      const menu = describedWindow("menu", {
+        height: 200,
+        parent: "term",
+        width: 100,
+        x: 10,
+        y: 20,
+      });
+
+      expect(
+        windowChanges(
+          NO_RULES,
+          [TERM, menu],
+          [
+            { ...TERM, frame: 4 },
+            { ...menu, frame: 1, y: 40 },
+          ],
+        ),
+      ).toStrictEqual([
+        WindowAction.AppFrameSynced("term", 4),
+        WindowAction.PopupPlaced({
+          appId: "menu",
+          frame: 1,
+          parent: "term",
+          position: [10, 40],
           size: [100, 200],
         }),
       ]);

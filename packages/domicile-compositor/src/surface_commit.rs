@@ -99,6 +99,28 @@ impl CompositorHandler for DomicileCompositor {
     }
 
     fn commit(&mut self, surface: &WlSurface) {
+        self.apply_the_commit(surface);
+        self.tell_the_held_moves(surface);
+    }
+
+    /// A destroyed bubble goes at once: no commit will come to notice it.
+    fn destroyed(&mut self, surface: &WlSurface) {
+        if let Some(at) = self
+            .bubbles
+            .iter()
+            .position(|bubble| bubble.surface == *surface)
+        {
+            let bubble = self.bubbles.remove(at);
+            self.by_surface.remove(&bubble.surface);
+            debug!(app_id = %bubble.app_id, "bubble destroyed -> Host::app_closed");
+            self.forget(&bubble.app_id);
+        }
+    }
+}
+
+impl DomicileCompositor {
+    /// One surface's part of a commit transaction.
+    fn apply_the_commit(&mut self, surface: &WlSurface) {
         self.announce_a_new_popup(surface);
         self.place_the_bubbles(surface);
         let Some((committer, role)) = self.committer(surface) else {
@@ -338,6 +360,7 @@ impl CompositorHandler for DomicileCompositor {
                         .as_ref()
                         .and_then(|session| session.frame_of(app_id));
                     self.presentations.committed(app_id, at_box, last);
+                    self.sync_with_the_moves(app_id);
                     let published = self.publish_frame(app_id, &commit);
                     match published {
                         Published::Held | Published::Copied { .. } => self.shown.shown(
@@ -415,20 +438,6 @@ impl CompositorHandler for DomicileCompositor {
             shown
         });
         self.answer_when_shown(shown, callbacks, feedback);
-    }
-
-    /// A destroyed bubble goes at once: no commit will come to notice it.
-    fn destroyed(&mut self, surface: &WlSurface) {
-        if let Some(at) = self
-            .bubbles
-            .iter()
-            .position(|bubble| bubble.surface == *surface)
-        {
-            let bubble = self.bubbles.remove(at);
-            self.by_surface.remove(&bubble.surface);
-            debug!(app_id = %bubble.app_id, "bubble destroyed -> Host::app_closed");
-            self.forget(&bubble.app_id);
-        }
     }
 }
 

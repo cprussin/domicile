@@ -117,6 +117,7 @@ class ControlChannel : public mojom::ControlChannel {
   void ReplyToNotification(uint32_t id, const std::string& text) override;
   void FocusApp(const std::string& app_id) override;
   void FocusChrome() override;
+  void SyncFrames() override;
   void WarpPointer(double x, double y) override;
   void CloseApp(const std::string& app_id) override;
   void SetAppBounds(const std::string& app_id,

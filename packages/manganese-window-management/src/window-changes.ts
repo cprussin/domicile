@@ -69,6 +69,9 @@ const toplevelChanges = (
     ...(before.desktopId === window.desktopId
       ? []
       : [WindowAction.AppDesktopIdChanged(appId, window.desktopId)]),
+    ...(before.frame === window.frame
+      ? []
+      : [WindowAction.AppFrameSynced(appId, window.frame)]),
   ];
 };
 
@@ -82,7 +85,8 @@ const popupChanges = (
   was.x === window.x &&
   was.y === window.y &&
   was.width === window.width &&
-  was.height === window.height
+  was.height === window.height &&
+  was.frame === window.frame
     ? []
     : [WindowAction.PopupPlaced(popupOf(window, parent))];
 
@@ -90,6 +94,7 @@ const popupChanges = (
 const UNSAID = {
   cursor: "default",
   desktopId: "",
+  frame: 0,
   maxHeight: null,
   maxWidth: null,
   minHeight: null,
@@ -121,6 +126,7 @@ const popupOf = (window: DomicileWindow, parent: string): Popup => {
   } else {
     return {
       appId: window.appId,
+      frame: window.frame,
       parent,
       position: [x, y],
       size: [width, height],

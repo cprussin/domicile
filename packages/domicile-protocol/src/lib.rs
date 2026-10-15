@@ -199,6 +199,14 @@ pub enum ChromeMessage {
     /// verifier configured this only logs.
     Lock,
 
+    /// The page renders `<app frame>`, so the compositor may sync frames
+    /// ([`HostMessage::PopupPlaced`]'s `frames`) until the next `Hello`.
+    ///
+    /// Without it, a page that sets `frame` some other way, such as always 0,
+    /// would show a synced window's old frame. See
+    /// `docs/architecture/FRAME-SYNCED-SURFACES.md`.
+    SyncFrames,
+
     /// A click on a system tray icon.
     ///
     /// `id` is a [`TrayItem::id`]. No reply: the application decides what the
@@ -274,6 +282,19 @@ pub struct Sandbox {
     pub instance_id: Option<String>,
 }
 
+/// A surface's synced frame: the page shows `app_id` at `frame` once its
+/// `<app frame>` says so.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AppFrame {
+    pub app_id: String,
+    pub frame: u32,
+}
+
+/// Frame 0 is every surface's first, so the wire leaves it out.
+fn is_frame_zero(frame: &u32) -> bool {
+    *frame == 0
+}
+
 /// Messages sent from the host to the chrome (in-page client).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -318,6 +339,11 @@ pub enum HostMessage {
         client_frame: bool,
         /// The process that connected the window's client.
         owner: Owner,
+        /// The window's synced frame, for a page that renders `<app frame>`.
+        /// Above 0 only for a window that appeared before this page did. See
+        /// `docs/architecture/FRAME-SYNCED-SURFACES.md`.
+        #[serde(default, skip_serializing_if = "is_frame_zero")]
+        frame: u32,
     },
 
     /// A window's title, sent whenever it changes.
@@ -352,12 +378,18 @@ pub enum HostMessage {
     /// with [`HostMessage::AppClosed`]. Shells must not treat a popup as a
     /// window: it has no title, focus or tiling. `grab` marks a menu that
     /// should close when a press lands elsewhere.
+    ///
+    /// `frames` names the synced frame of each surface the move goes with: a
+    /// page that renders `<app frame>` sets them in the same update as the
+    /// move. See `docs/architecture/FRAME-SYNCED-SURFACES.md`.
     PopupPlaced {
         app_id: String,
         parent: String,
         position: [f64; 2],
         size: [f64; 2],
         grab: bool,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        frames: Vec<AppFrame>,
     },
     /// A window's minimum size in logical units (`xdg_toplevel.set_min_size`).
     ///

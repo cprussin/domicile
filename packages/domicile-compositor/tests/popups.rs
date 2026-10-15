@@ -63,6 +63,7 @@ fn a_clients_popup_is_announced_over_its_window() {
         position,
         size,
         grab,
+        ..
     } = popup_of(&mut chrome)
     else {
         unreachable!("the wait matched on this variant")
@@ -264,6 +265,7 @@ fn a_subsurface_bubble_is_announced_over_its_window_and_follows_its_growth() {
         position,
         size,
         grab,
+        frames,
     } = popup_of(&mut chrome)
     else {
         unreachable!("the wait matched on this variant")
@@ -271,6 +273,8 @@ fn a_subsurface_bubble_is_announced_over_its_window_and_follows_its_growth() {
     assert_eq!(parent, window);
     assert_eq!((position, size), placement(BUBBLE));
     assert!(!grab, "a bubble never grabs");
+    // Frames sync only with an engine that syncs them and a page that asks.
+    assert_eq!(frames, vec![], "nothing asked for synced frames");
 
     let (position, size) = placement(BUBBLE_GROWN);
     let grown = chrome.wait_for(|message| {
@@ -281,6 +285,7 @@ fn a_subsurface_bubble_is_announced_over_its_window_and_follows_its_growth() {
                 position,
                 size,
                 grab: false,
+                frames: vec![],
             }
     });
     assert!(grown.is_ok(), "the grown bubble was placed again");

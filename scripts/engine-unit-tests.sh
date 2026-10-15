@@ -29,16 +29,19 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # DomicileDisplayRegions 27, DomicileDeskTargeter 4, PlaceholderStage 3,
 # SystemCall 4, PortalRequest 3, FileChoice 13, DisplayCapture 7,
 # CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, SitePermissions 11,
-# ControlChannel 7, DeviceChoices 9, SurfaceFrames 6,
+# ControlChannel 8, DeviceChoices 9, SurfaceFrames 6,
 # GuestDialogs 6, DownloadTally 6, SurfaceSubmits 4,
 # PrivatePages 3, ShellOrigin 2, AppRoots 4, AppChannel 2, AppDocument 3,
 # WebViewUrl 5, ShellFetch 21, BrowserWindowCaptureTarget 3, ShellWindowWait 4,
 # DeskCursorThemeSource 2, XCursorTheme 5, XCursorThemeDirectory 4,
-# SyncedFrame 4.
+# SyncedFrame 7.
 #
-# 395, and it was 394 — which display each tablet covers is one FrameSinkBroker
-# case. Before that 394, and it was 390 — a synced frame's surface id is four
-# SyncedFrame cases. Before that 390, and it was 386 — giving back a chord, a page's own claims and a closed
+# 399, and it was 395 — the synced frames a move shows with reaching the page
+# is one ControlChannel case, and an <app> with no frame set showing the
+# newest heard is three SyncedFrame cases. Before that 395, and it was 394 —
+# which display each tablet covers is one FrameSinkBroker case. Before that
+# 394, and it was 390 — a synced frame's surface id is four SyncedFrame cases.
+# Before that 390, and it was 386 — giving back a chord, a page's own claims and a closed
 # page's leftovers are three ShortcutRegistry cases, and a window inhibiting
 # shortcuts reaching the page is one ControlChannel case. Before that
 # 386, and it was 385 — a window's parent and urgency reaching the page is
@@ -139,7 +142,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=395
+FLOOR=399
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

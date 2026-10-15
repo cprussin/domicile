@@ -7,10 +7,12 @@
 #include <optional>
 
 #include "base/functional/callback_helpers.h"
+#include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "cc/layers/deadline_policy.h"
 #include "components/domicile/common/synced_frame.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
 #include "third_party/blink/renderer/core/events/pointer_event.h"
@@ -112,16 +114,7 @@ void HTMLAppElement::ParseAttribute(
     return;
   }
   if (params.name == html_names::kFrameAttr) {
-    // Viz holds the page's frame until the window's synced frame is there, so
-    // whatever this update moved shows with it. `allocated_` is that window's
-    // only once its surface is shown: a new app-id embeds afresh.
-    if (!embedded_app_id_.IsNull() &&
-        embedded_app_id_ == FastGetAttribute(html_names::kAppIdAttr)) {
-      surface_layer_bridge_->EmbedSurface(
-          viz::SurfaceId(surface_layer_bridge_->GetSurfaceId().frame_sink_id(),
-                         AtFrame(allocated_)),
-          cc::DeadlinePolicy::UseDefaultDeadline());
-    }
+    ShowFrame();
     return;
   }
   if (params.name == html_names::kResizingAttr) {
@@ -263,10 +256,59 @@ void HTMLAppElement::OnEmbedded(
   }
 }
 
+namespace {
+
+// Every window's newest synced frame, for the whole renderer: a frame names a
+// surface of the compositor's, the same for every page that embeds it.
+domicile::KnownFrames& Known() {
+  static base::NoDestructor<domicile::KnownFrames> known;
+  return *known;
+}
+
+}  // namespace
+
+// static
+void HTMLAppElement::FrameHeard(Document& document,
+                                const String& app_id,
+                                uint32_t frame) {
+  Known().Heard(app_id.Utf8(), frame);
+  for (HTMLAppElement& app :
+       Traversal<HTMLAppElement>::DescendantsOf(document)) {
+    if (!app.FastHasAttribute(html_names::kFrameAttr) &&
+        app.FastGetAttribute(html_names::kAppIdAttr) == app_id) {
+      app.ShowFrame();
+    }
+  }
+}
+
+// static
+void HTMLAppElement::FramesForgotten(const String& app_id) {
+  Known().Forget(app_id.Utf8());
+}
+
 viz::LocalSurfaceId HTMLAppElement::AtFrame(
     const viz::LocalSurfaceId& allocated) const {
+  const std::optional<uint32_t> set =
+      FastHasAttribute(html_names::kFrameAttr)
+          ? std::make_optional(
+                GetUnsignedIntegralAttribute(html_names::kFrameAttr))
+          : std::nullopt;
   return domicile::AtSyncedFrame(
-      allocated, GetUnsignedIntegralAttribute(html_names::kFrameAttr));
+      allocated,
+      Known().Shown(FastGetAttribute(html_names::kAppIdAttr).Utf8(), set));
+}
+
+void HTMLAppElement::ShowFrame() {
+  // Viz holds the page's frame until the window's synced frame is there, so
+  // whatever this update moved shows with it. `allocated_` is that window's
+  // only once its surface is shown: a new app-id embeds afresh.
+  if (!embedded_app_id_.IsNull() &&
+      embedded_app_id_ == FastGetAttribute(html_names::kAppIdAttr)) {
+    surface_layer_bridge_->EmbedSurface(
+        viz::SurfaceId(surface_layer_bridge_->GetSurfaceId().frame_sink_id(),
+                       AtFrame(allocated_)),
+        cc::DeadlinePolicy::UseDefaultDeadline());
+  }
 }
 
 // A restarted compositor brokers the app a new frame sink. Ask again: the

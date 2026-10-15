@@ -15,6 +15,6 @@ type Props = {
  * because `<app>` has no children, so it does not follow the window's motion.
  * That is fine because a menu is open only while its window is at rest.
  */
-export const AppPopup = ({ popup: { appId, depth, rect } }: Props) => (
-  <app app-id={appId} style={placedAt(rect, depth)} />
+export const AppPopup = ({ popup: { appId, depth, frame, rect } }: Props) => (
+  <app app-id={appId} frame={String(frame)} style={placedAt(rect, depth)} />
 );

@@ -20,8 +20,11 @@ Event names and full types are in `src/app-element.ts` and
   at once, without waiting. Removing it waits once for the final size.
 - **Synced frames:** the `frame` attribute (or `element.frame`) names the
   synced frame of the window to show. Setting it holds the page's frame until
-  the window has that frame, up to viz's default deadline. Unset is frame 0.
-  The compositor names no synced frames yet; see
+  the window has that frame, up to viz's default deadline. Unset, the
+  element shows the newest frame the control channel named for the window, so
+  a page that ignores frames never shows a stale one.
+  Set it from `DomicileWindow.frame`, in the same render as a popup's move.
+  The compositor syncs frames only for a page that called `syncFrames()`; see
   [FRAME-SYNCED-SURFACES.md](/docs/architecture/FRAME-SYNCED-SURFACES.md).
 - **Scale:** call `domicile.setAppBounds(appId, x, y, width, height)` with
   the element's box in page pixels whenever it moves or resizes. The client

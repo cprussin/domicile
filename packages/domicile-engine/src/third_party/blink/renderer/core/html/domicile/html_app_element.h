@@ -112,6 +112,16 @@ class CORE_EXPORT HTMLAppElement final : public HTMLElement,
   // <app> the layout box *is* the xdg_toplevel.configure.
   void SurfaceBoxChanged(const gfx::Size& size);
 
+  // The control channel named synced frame `frame` for window `app_id`. Each
+  // <app> for it in `document` that sets no `frame` shows the newest one
+  // heard, so a page that ignores frames never shows a stale one. See
+  // domicile::KnownFrames.
+  static void FrameHeard(Document& document,
+                         const String& app_id,
+                         uint32_t frame);
+  // Window `app_id` closed.
+  static void FramesForgotten(const String& app_id);
+
   // The pointer, the wheel and the secondary button's menu over this element
   // are its client's: see the .cc. Every other event is an HTMLElement's.
   void DefaultEventHandler(Event&) override;
@@ -141,8 +151,12 @@ class CORE_EXPORT HTMLAppElement final : public HTMLElement,
 
   bool CreateLayer();
 
-  // `allocated` at the synced frame the `frame` attribute names.
+  // `allocated` at the synced frame this element shows: the `frame`
+  // attribute, or the newest heard when it has none.
   viz::LocalSurfaceId AtFrame(const viz::LocalSurfaceId& allocated) const;
+
+  // Embed the frame AtFrame() names now, holding the page's frame for it.
+  void ShowFrame();
 
   // Send `event` to the client `app_id` names, through `client`.
   void ForwardInput(AppInputClient& client,
