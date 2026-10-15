@@ -290,7 +290,7 @@ Each entry in `domicile.windows` describes one client window.
   then does the compositor sync frames. It lasts until the page loads again.
   An `<app>` with no `frame` shows the newest, so a shell that ignores frames
   needs neither. See
-  [FRAME-SYNCED-SURFACES.md](architecture/FRAME-SYNCED-SURFACES.md).
+  [Synced frames](architecture/WINDOW-COMPOSITING.md#synced-frames).
 - **Shortcut inhibitors:** `inhibitsShortcuts` is `true` while the client
   holds `zwp_keyboard_shortcuts_inhibitor_v1`, as a VM or remote desktop
   viewer does. A change fires `windowschanged`. See

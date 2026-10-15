@@ -170,7 +170,8 @@ impl DomicileCompositor {
     }
 
     /// Tell the chromes a bubble moved: at once, or, if frames sync, once its
-    /// commit transaction is applied. See `docs/architecture/FRAME-SYNCED-SURFACES.md`.
+    /// commit transaction is applied. See
+    /// `docs/architecture/WINDOW-COMPOSITING.md#synced-frames`.
     fn tell_the_move(&mut self, moved: HostMessage) {
         if self.syncs_frames() {
             self.synced_moves.hold(moved);

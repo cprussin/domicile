@@ -37,6 +37,74 @@ The page and the compositor share only a `viz::SurfaceId`.
 - **The Wayland connection belongs to the engine.** Shell JavaScript cannot add
   requests to it. Messages from the page about a frame are not synchronized
   with that frame's commit.
+- **Control-channel messages reach the page later than frames reach viz.** A
+  bubble's move is a message, so a page shows it a frame or more after the
+  content it moved with, unless the page renders synced frames
+  ([Synced frames](#synced-frames)).
+
+## Synced frames
+
+A commit that moves a bubble shows in the same display frame as the window
+content it moved with. The commit goes to viz under a `LocalSurfaceId` the
+compositor names, and the page embeds that id in the same render as the move.
+
+```
+ one commit transaction (parent + its bubble)
+   ├─ domicile_surface_sync(parent, n); submit ──▶ viz: parent at (p, 1+n)
+   ├─ domicile_surface_sync(bubble, m); submit ──▶ viz: bubble at (q, 1+m)
+   │                                               (page still shows n-1, m-1)
+   └─ PopupPlaced { position, frames: {parent: n, bubble: m} } ──▶ page
+                                                                   │
+        one render:  <app app-id=parent frame=n>                 ◀─┤
+                     <app app-id=bubble frame=m style="left: …"> ◀─┘
+```
+
+- **Synced frame:** a number per surface, from 1. Frame `n` is the
+  `LocalSurfaceId` the page allocated with child sequence number
+  `kInitialChildSequenceNumber + n` (`components/domicile/common/synced_frame.h`).
+  Frame 0 is the id the page allocated.
+- **Producer:** `domicile_surface_sync(engine, surface, n)` makes that submit
+  and every later one go up at frame `n` of the newest box. Viz accepts a
+  child-sequence bump as monotonic, as for an OOPIF.
+- **Embedder:** `<app frame="n">` embeds frame `n` of its allocated id, with
+  the default deadline. Viz holds the page's frame until frame `n` activates.
+  Until the page embeds it, viz draws the newest active surface not newer than
+  the embedded id (`FindLatestActiveSurfaceInRange`).
+- **The number rides the control channel,** not the embed pipe, since the
+  page needs it in the same render as the move. The default deadline covers a
+  message that beats its frame to viz.
+- **A commit transaction is the unit.** For a sync subsurface, Smithay calls
+  `CompositorHandler::commit` for each surface of the parent's transaction,
+  children first. A parent's commit places its bubbles, and a move is held
+  (`synced_moves.rs`). Each app submit after it in the transaction is synced,
+  and the transaction's last commit broadcasts the move with `frames`.
+- **The compositor names a frame only after submitting it,** so a stuck client
+  never holds the page. A dropped submit keeps its frame for the next one, so
+  the page waits at most one deadline.
+- **A stuck page holds synced client frames.** Viz acks a frame only when it
+  is drawn or replaced, so the client's `wl_surface.frame` waits for the page
+  or the 250 ms deadline ([Frame pacing](#frame-pacing)).
+- **Resizes compose.** A resize allocates `(p+1, 1)`; the producer and the page
+  both apply `n` to the allocated id. The page never calls `UpdateFromChild`.
+- **Eviction:** viz garbage-collects only surfaces marked for destruction, and
+  a sink's newest surface is not marked, so an unembedded frame lives until a
+  newer one activates.
+- **Opt-in:** `ChromeMessage::SyncFrames` (`domicile.syncFrames()`), reset by
+  the page's next `hello`. The compositor syncs only while every connected
+  chrome has asked (`ChromeHub::syncs_frames`) and the engine has
+  `domicile_surface_sync`. Unsynced commits go up at the newest frame.
+- **A page that ignores frames:** an `<app>` with no `frame` attribute embeds
+  the newest frame the control channel named for it (`domicile::KnownFrames`,
+  fed by `AppAppeared.frame` and `PopupPlaced.frames`).
+- **Reload:** `Host` keeps each surface's last frame, and `AppAppeared.frame`
+  and a catch-up `PopupPlaced` tell a new page where each one is.
+- **xdg popups** are not synced. Their moves are not sent, and no parent
+  content shares their transaction.
+- **Check:** `guard-scrolling-bubble.sh` scrolls a window under a sync bubble
+  on `crux` and reads a monitor cast: each frame shows the bubble at the
+  window's content. Its control places each move a step late and shows the
+  bubble off it. A page that ignores frames is no control: it embeds the
+  frames each move names, so it does not lag either.
 
 ## Frame pacing
 
@@ -135,6 +203,11 @@ A client may draw its buffer turned to match a rotated monitor and say so with
   turned dmabuf, because none has a render node.
 
 ## What is open
+
+### A sibling submitted before a move
+
+A sibling surface submitted before a bubble's move in the same commit
+transaction goes up unsynced, so it shows a frame early.
 
 ### `backdrop-filter` over a window
 

@@ -87,6 +87,13 @@ pub struct Arguments {
     /// See [`crate::window::BUBBLE`] for its placement.
     pub bubble: bool,
 
+    /// Whether to scroll a stripe down the window, a step each frame, with a
+    /// sync `wl_subsurface` bubble moved onto it in the same commit, as a page
+    /// scrolls under an anchored popup.
+    ///
+    /// See [`crate::window::SCROLLING_BUBBLE`] for its geometry.
+    pub scrolling_bubble: bool,
+
     /// Whether to open a second toplevel once the window is up, and make it
     /// the window's dialog (`xdg_toplevel.set_parent`) after it first draws.
     ///
@@ -201,6 +208,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut popup_grab = None;
     let mut sliding_menu = None;
     let mut bubble = None;
+    let mut scrolling_bubble = None;
     let mut dialog = None;
     let mut min_size = None;
     let mut max_size = None;
@@ -282,6 +290,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--bubble" => {
                 take(&mut bubble, &flag, true)?;
             }
+            "--scrolling-bubble" => {
+                take(&mut scrolling_bubble, &flag, true)?;
+            }
             "--dialog" => {
                 take(&mut dialog, &flag, true)?;
             }
@@ -323,6 +334,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         popup_grab: popup_grab.unwrap_or(false),
         sliding_menu: sliding_menu.unwrap_or(false),
         bubble: bubble.unwrap_or(false),
+        scrolling_bubble: scrolling_bubble.unwrap_or(false),
         dialog: dialog.unwrap_or(false),
         min_size,
         max_size,

@@ -142,7 +142,6 @@ not rules, and carry no authority level. Read the one for the area you work in.
 |---|---|
 | [/docs/architecture/ARCHITECTURE.md](/docs/architecture/ARCHITECTURE.md) | What Domicile is (a Wayland compositor whose renderer is a web engine), the decisions that follow, and what each crate and package is for. Start here. |
 | [/docs/architecture/WINDOW-COMPOSITING.md](/docs/architecture/WINDOW-COMPOSITING.md) | How a client's window reaches the screen: its dmabuf becomes a viz surface that the page's `<app>` embeds as a `cc::SurfaceLayer`. Open items at the bottom. |
-| [/docs/architecture/FRAME-SYNCED-SURFACES.md](/docs/architecture/FRAME-SYNCED-SURFACES.md) | Moving a popup or bubble in the same display frame as its window's content: synced frames, `domicile_surface_sync` and `<app frame>`. |
 | [/docs/architecture/STACKING-PARITY.md](/docs/architecture/STACKING-PARITY.md) | Routes to stacking windows among page elements without a fork, and the evidence that ruled each out. |
 | [/docs/architecture/ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md) | The fork: `<app>` as a `SurfaceLayer`, the frame sink broker, the C ABI, buffer import, key decisions and the plan. |
 | [/docs/architecture/ENGINE-FORK-MEASUREMENTS.md](/docs/architecture/ENGINE-FORK-MEASUREMENTS.md) | Evidence for the fork: spike pixel proofs, CSS parity tables, `<app>` vs OOPIF, producer latency, keystroke to pixel, client window guard, dmabuf import, shortcut-inhibitor guards. |

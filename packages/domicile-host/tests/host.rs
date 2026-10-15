@@ -660,7 +660,7 @@ fn a_reloaded_chrome_is_told_each_popup_after_what_it_is_over() {
 #[test]
 fn each_synced_submit_of_a_surface_gets_the_next_frame() {
     // Frame 0 is the id the page allocated, so a surface's first synced
-    // frame is 1. See docs/architecture/FRAME-SYNCED-SURFACES.md.
+    // frame is 1. See docs/architecture/WINDOW-COMPOSITING.md#synced-frames.
     let mut host = Host::new();
     let window = drawn(&mut host);
     let (popup, _) = host

@@ -86,6 +86,42 @@ pub const BUBBLE: (i32, i32, i32, i32) = (40, 30, 100, 60);
 /// extension popup does once its page has laid out.
 pub const BUBBLE_GROWN: (i32, i32, i32, i32) = (30, 25, 150, 90);
 
+/// The `--scrolling-bubble` bubble as `(x, width, height)` in window surface
+/// pixels. Its `y` is the stripe's, [`scrolled_to`] the frame.
+pub const SCROLLING_BUBBLE: (i32, i32, i32) = (200, 80, 40);
+
+/// The stripe a `--scrolling-bubble` window scrolls: the window's width, the
+/// bubble's height. Public because `guard-scrolling-bubble.sh` finds it.
+pub const STRIPE_COLOR: u32 = 0x00_33_99_66;
+
+/// How far the stripe moves each frame, in surface pixels. More than a
+/// captured frame's rounding, so a bubble a frame behind is seen.
+const SCROLL_STEP: i32 = 8;
+
+/// The top of a `--scrolling-bubble` window's stripe in `frame`, in surface
+/// pixels: a [`SCROLL_STEP`] down each frame, back to the top once the
+/// stripe reaches the window's bottom.
+pub fn scrolled_to(frame: u32) -> i32 {
+    let (_, _, height) = SCROLLING_BUBBLE;
+    let steps = (SIZE.1 as i32 - height) / SCROLL_STEP;
+    (frame % steps as u32) as i32 * SCROLL_STEP
+}
+
+/// A `width` by `height` buffer's bytes: [`COLORS`]`[0]`, with `rows` in
+/// [`STRIPE_COLOR`].
+fn striped(width: u32, height: u32, rows: std::ops::Range<u32>) -> Vec<u8> {
+    (0..height)
+        .flat_map(|row| {
+            let color = if rows.contains(&row) {
+                STRIPE_COLOR
+            } else {
+                COLORS[0]
+            };
+            color.to_ne_bytes().repeat(width as usize)
+        })
+        .collect()
+}
+
 /// The popup's fill color, distinct from [`COLORS`] so checks can tell the
 /// popup from the window.
 pub const POPUP_COLOR: u32 = 0x00_c0_40_20;
@@ -222,6 +258,8 @@ struct Client {
     /// [`crate::arguments::Arguments::bubble`].
     wants_bubble: bool,
     bubble: Option<Bubble>,
+    /// See [`crate::arguments::Arguments::scrolling_bubble`].
+    scrolls: bool,
     /// Whether to open a dialog once the window is up. See
     /// [`crate::arguments::Arguments::dialog`].
     wants_dialog: bool,
@@ -394,6 +432,9 @@ enum Paint {
     Translucent,
     /// [`halves`], for a `--buffer-transform` window. Opaque.
     Halves,
+    /// [`striped`] at [`scrolled_to`] the frame, drawn anew each frame, for a
+    /// `--scrolling-bubble` window. Opaque.
+    Scrolled,
 }
 
 /// Two buffers in one shared file, used alternately.
@@ -460,8 +501,9 @@ impl Client {
             popup_grab: asked.popup_grab,
             sliding_menu: asked.sliding_menu,
             popups: Vec::new(),
-            wants_bubble: asked.bubble,
+            wants_bubble: asked.bubble || asked.scrolling_bubble,
             bubble: None,
+            scrolls: asked.scrolling_bubble,
             wants_dialog: asked.dialog,
             dialog: None,
             pointer_over: None,
@@ -931,16 +973,19 @@ impl Client {
 
     /// What the window's buffers hold.
     fn paint(&self) -> Paint {
-        match (self.buffer_transform, self.translucent) {
-            (Some(_), _) => Paint::Halves,
-            (None, true) => Paint::Translucent,
-            (None, false) => Paint::Opaque,
+        match (self.scrolls, self.buffer_transform, self.translucent) {
+            (true, _, _) => Paint::Scrolled,
+            (false, Some(_), _) => Paint::Halves,
+            (false, None, true) => Paint::Translucent,
+            (false, None, false) => Paint::Opaque,
         }
     }
 
     /// Draw one frame and ask to be woken for the next.
     fn draw(&mut self, handle: &QueueHandle<Client>) -> Result<(), ClientError> {
         let color = (self.frame % 2) as usize;
+        let paint = self.paint();
+        let top = scrolled_to(self.frame);
         let window = self
             .window
             .as_mut()
@@ -955,7 +1000,28 @@ impl Client {
         // this loop spin; this one releases a buffer every frame.
         let drew = match window.pixels.free() {
             Some(index) => {
-                window.pixels.fill(index, color)?;
+                match paint {
+                    Paint::Scrolled => {
+                        let scale = window.scale as u32;
+                        let (_, _, stripe) = SCROLLING_BUBBLE;
+                        let rows = top as u32 * scale..(top + stripe) as u32 * scale;
+                        window
+                            .pixels
+                            .write(index, &striped(width * scale, height * scale, rows))?;
+                        // A sync subsurface's move applies on this commit,
+                        // with the content it sits on.
+                        let subsurface = self
+                            .bubble
+                            .as_ref()
+                            .and_then(|bubble| bubble.subsurface.as_ref());
+                        if let Some(subsurface) = subsurface {
+                            subsurface.set_position(SCROLLING_BUBBLE.0, top);
+                        }
+                    }
+                    Paint::Opaque | Paint::Translucent | Paint::Halves => {
+                        window.pixels.fill(index, color)?;
+                    }
+                }
                 window
                     .surface
                     .attach(Some(&window.pixels.buffers[index]), 0, 0);
@@ -1015,6 +1081,8 @@ impl Pixels {
             Paint::Opaque => flat(COLORS),
             Paint::Translucent => flat(TRANSLUCENT_COLORS),
             Paint::Halves => [halves(width, height), halves(width, height)],
+            // Drawn anew each frame by `write`.
+            Paint::Scrolled => [Vec::new(), Vec::new()],
         };
         Ok(Pixels {
             file,
@@ -1032,8 +1100,14 @@ impl Pixels {
 
     /// Fill one buffer with one of the two flat colors.
     fn fill(&self, index: usize, color: usize) -> Result<(), ClientError> {
+        self.write(index, &self.colors[color])
+    }
+
+    /// Write a whole buffer's `bytes` into one buffer.
+    fn write(&self, index: usize, bytes: &[u8]) -> Result<(), ClientError> {
+        assert_eq!(bytes.len(), self.each, "a frame fills its whole buffer");
         self.file
-            .write_all_at(&self.colors[color], (index * self.each) as u64)
+            .write_all_at(bytes, (index * self.each) as u64)
             .map_err(|err| ClientError::NoBuffer(format!("could not fill the buffer: {err}")))
     }
 }
@@ -1280,10 +1354,13 @@ fn draw_dialog_or_stop(client: &mut Client, handle: &QueueHandle<Client>) {
     crate::say!(dialog.toplevel.id(), "set_parent({})", window.toplevel.id());
 }
 
-/// Open the `--bubble` over the window, once.
+/// Open the `--bubble` or `--scrolling-bubble` over the window, once.
 ///
-/// As Chromium does: a desync subsurface of the window, positioned, then
-/// drawn. It grows on its first frame; see [`grow_bubble`].
+/// A `--bubble` is as Chromium draws one: a desync subsurface of the window,
+/// positioned, then drawn. It grows on its first frame; see [`grow_bubble`].
+///
+/// A `--scrolling-bubble` is sync, so its content shows with the window's
+/// next commit, which moves it to that frame's stripe.
 fn open_bubble(client: &mut Client, handle: &QueueHandle<Client>) {
     if !client.wants_bubble {
         return;
@@ -1301,7 +1378,11 @@ fn open_bubble(client: &mut Client, handle: &QueueHandle<Client>) {
         .expect("--bubble needs a compositor that advertises wl_subcompositor");
     let surface = compositor.create_surface(handle, BubbleRole);
     let subsurface = subcompositor.get_subsurface(&surface, &window.surface, handle, ());
-    subsurface.set_desync();
+    if client.scrolls {
+        subsurface.set_sync();
+    } else {
+        subsurface.set_desync();
+    }
     // Traced with its surface, which input events name.
     crate::say!(subsurface.id(), "opened({})", surface.id());
     client.bubble = Some(Bubble {
@@ -1309,16 +1390,23 @@ fn open_bubble(client: &mut Client, handle: &QueueHandle<Client>) {
         subsurface: Some(subsurface),
         drawn: Vec::new(),
     });
-    draw_bubble(client, handle, BUBBLE);
+    let placed = if client.scrolls {
+        let (x, width, height) = SCROLLING_BUBBLE;
+        (x, scrolled_to(client.frame), width, height)
+    } else {
+        BUBBLE
+    };
+    draw_bubble(client, handle, placed);
 }
 
-/// Grow the bubble after its first frame, once.
+/// Grow a `--bubble` after its first frame, once. A `--scrolling-bubble`
+/// keeps its size.
 fn grow_bubble(client: &mut Client, handle: &QueueHandle<Client>) {
     let grown_already = client
         .bubble
         .as_ref()
         .is_some_and(|bubble| bubble.drawn.len() > 1);
-    if !grown_already {
+    if !grown_already && !client.scrolls {
         draw_bubble(client, handle, BUBBLE_GROWN);
     }
 }
@@ -2485,9 +2573,50 @@ mod tests {
     use wayland_client::protocol::wl_shm;
 
     use super::{
-        buffer_size, first_group_name, halves, shm_format, COLORS, TRANSLUCENT_ALPHA,
-        TRANSLUCENT_COLORS, TURNED_COLORS,
+        buffer_size, first_group_name, halves, scrolled_to, shm_format, striped, COLORS,
+        SCROLLING_BUBBLE, SCROLL_STEP, SIZE, STRIPE_COLOR, TRANSLUCENT_ALPHA, TRANSLUCENT_COLORS,
+        TURNED_COLORS,
     };
+
+    #[test]
+    fn the_stripe_steps_down_the_window_and_starts_again_at_the_top() {
+        let (_, _, height) = SCROLLING_BUBBLE;
+        let tops: Vec<i32> = (0..60).map(scrolled_to).collect();
+        assert_eq!(tops[..3], [0, SCROLL_STEP, 2 * SCROLL_STEP]);
+        for (frame, pair) in tops.windows(2).enumerate() {
+            assert!(
+                pair[1] == pair[0] + SCROLL_STEP || pair[1] == 0,
+                "frame {frame} to the next: {pair:?}"
+            );
+        }
+        assert!(tops[1..].contains(&0), "it starts again at the top");
+        assert!(
+            tops.iter().all(|top| top + height <= SIZE.1 as i32),
+            "the stripe stays inside the window: {tops:?}"
+        );
+    }
+
+    #[test]
+    fn a_striped_buffer_is_the_window_color_with_its_rows_in_the_stripe_color() {
+        let pixel = |bytes: &[u8], at: usize| {
+            u32::from_ne_bytes(bytes[at * 4..at * 4 + 4].try_into().unwrap())
+        };
+        let drawn = striped(2, 4, 1..3);
+        assert_eq!(drawn.len(), 2 * 4 * 4);
+        assert_eq!(
+            (0..8).map(|at| pixel(&drawn, at)).collect::<Vec<_>>(),
+            [
+                COLORS[0],
+                COLORS[0],
+                STRIPE_COLOR,
+                STRIPE_COLOR,
+                STRIPE_COLOR,
+                STRIPE_COLOR,
+                COLORS[0],
+                COLORS[0],
+            ]
+        );
+    }
 
     #[test]
     fn a_group_name_is_read_however_its_group_is_written() {

@@ -337,6 +337,14 @@ fn a_client_can_be_asked_to_open_sliding_menus_on_presses() {
 }
 
 #[test]
+fn a_client_can_be_asked_to_scroll_its_window_under_a_bubble() {
+    let asked = given(&["--scrolling-bubble"]).expect("a client whose bubble scrolls");
+    assert!(asked.scrolling_bubble);
+    assert!(!asked.bubble, "the bubble that grows is another flag");
+    assert!(!given(&[]).unwrap().scrolling_bubble);
+}
+
+#[test]
 fn a_client_can_be_asked_to_open_a_dialog_for_its_window() {
     assert!(given(&["--dialog"]).expect("a client with a dialog").dialog);
     assert!(!given(&[]).unwrap().dialog);

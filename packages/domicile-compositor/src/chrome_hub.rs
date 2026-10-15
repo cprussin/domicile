@@ -168,7 +168,7 @@ impl ChromeHub {
 
     /// Whether the compositor may sync frames: some chrome is connected, and
     /// every one renders `<app frame>`. See
-    /// `docs/architecture/FRAME-SYNCED-SURFACES.md`.
+    /// `docs/architecture/WINDOW-COMPOSITING.md#synced-frames`.
     ///
     /// Every one, because a move is broadcast. A page that sets `frame` some
     /// other way, such as always 0, would show a synced window's old frame.

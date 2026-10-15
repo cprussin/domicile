@@ -68,7 +68,8 @@ const welcomeSchema = z.looseObject({
 // Can repeat for a known window: the host replays all windows to every chrome
 // whenever any chrome connects. Key windows by app id.
 // Sent when the window first draws, with what the client said before.
-// A surface's synced frame. See docs/architecture/FRAME-SYNCED-SURFACES.md.
+// A surface's synced frame. See
+// docs/architecture/WINDOW-COMPOSITING.md#synced-frames.
 const frameSchema = z.number().int().nonnegative();
 
 const appFrameSchema = z.looseObject({
