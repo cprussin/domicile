@@ -40,8 +40,11 @@ struct DomicileDeskDisplay {
 };
 
 // Returns the lit displays from the compositor's last layout. Empty before
-// the first layout, and on platforms other than DRM.
-CONTENT_EXPORT std::vector<DomicileDeskDisplay> GetDomicileDesk();
+// the first layout and on a blank. `std::nullopt` after an empty layout, which
+// leaves every display where the hardware puts it (see docs/DISPLAYS.md).
+// Nested runs send an empty layout too.
+CONTENT_EXPORT std::optional<std::vector<DomicileDeskDisplay>>
+GetDomicileDesk();
 
 // Runs `changed` on the UI thread whenever the compositor's layout changes.
 CONTENT_EXPORT base::CallbackListSubscription AddDomicileDeskObserver(

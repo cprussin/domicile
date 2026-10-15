@@ -3,7 +3,9 @@
 
 #include "content/browser/domicile/domicile_desk.h"
 
+#include <optional>
 #include <utility>
+#include <vector>
 
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
@@ -30,7 +32,9 @@ DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(display::ScreenInfos,
 DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(gfx::Rect, kDomicileDeskPageBoundsKey)
 
 struct Desk {
-  std::vector<DomicileDeskDisplay> lit;
+  // Empty before the first layout. See `GetDomicileDesk`.
+  std::optional<std::vector<DomicileDeskDisplay>> lit =
+      std::vector<DomicileDeskDisplay>();
   base::RepeatingClosureList observers;
 };
 
@@ -75,7 +79,7 @@ std::unique_ptr<DomicileDeskMirror> MirrorDomicileDeskPage(WebContents* page) {
   return std::make_unique<Mirror>(view);
 }
 
-std::vector<DomicileDeskDisplay> GetDomicileDesk() {
+std::optional<std::vector<DomicileDeskDisplay>> GetDomicileDesk() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return TheDesk().lit;
 }
@@ -86,7 +90,7 @@ base::CallbackListSubscription AddDomicileDeskObserver(
   return TheDesk().observers.Add(std::move(changed));
 }
 
-void DomicileDeskLaidOut(std::vector<DomicileDeskDisplay> lit) {
+void DomicileDeskLaidOut(std::optional<std::vector<DomicileDeskDisplay>> lit) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (TheDesk().lit == lit) {
     return;

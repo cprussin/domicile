@@ -188,6 +188,12 @@ void SetDisplayLayout(std::vector<domicile::mojom::DisplayLayoutPtr> layout) {
   ui::OzonePlatform::GetInstance()->SetDomicileDisplayLayout(wanted);
   // Update the desk after requesting the modeset, so a page moved onto a
   // display finds it lit.
+  if (wanted.empty()) {
+    // The hardware places every display. A blank is a list of disabled
+    // displays, never an empty one.
+    DomicileDeskLaidOut(std::nullopt);
+    return;
+  }
   std::vector<DomicileDeskDisplay> lit;
   for (const ui::DomicileDisplayLayout& display : wanted) {
     if (display.enabled) {

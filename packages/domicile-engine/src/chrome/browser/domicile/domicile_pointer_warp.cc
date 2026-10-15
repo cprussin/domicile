@@ -32,10 +32,17 @@ namespace {
 void DrawForWhereItLanded(aura::Window* root, const gfx::Point& at) {
   const display::Screen* screen = display::Screen::Get();
   const std::vector<display::Display>& displays = screen->GetAllDisplays();
+  const std::optional<std::vector<content::DomicileDeskDisplay>> laid_out =
+      content::GetDomicileDesk();
+  // An empty layout leaves every display unscaled and upright, so the cursor
+  // the host drew fits wherever it landed.
+  if (!laid_out.has_value()) {
+    return;
+  }
   // Skip displays the screen does not know yet; the layout can be ahead of it
   // during hotplug.
   std::vector<DeskPlace> lit;
-  for (const content::DomicileDeskDisplay& place : content::GetDomicileDesk()) {
+  for (const content::DomicileDeskDisplay& place : *laid_out) {
     if (std::ranges::find(displays, place.id, &display::Display::id) !=
         displays.end()) {
       lit.push_back(
