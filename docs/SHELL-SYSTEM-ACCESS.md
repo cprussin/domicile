@@ -70,7 +70,7 @@ const inbox = await domicile.fetchWithCookies(
 
 - Resolves with `status`, the final `url` after redirects, and the `body` as
   text, whatever the status. Rejects with a `NetworkError` for a network
-  failure or a refusal.
+  failure, a refusal, or an answer over 8 MiB.
 - `method` is `"GET"` or `"POST"`. A GET sends no body, and comes from no
   origin (`Sec-Fetch-Site: none`). A POST sends `body` with the page's
   `Content-Type`, as a same-origin CORS request from the address's own

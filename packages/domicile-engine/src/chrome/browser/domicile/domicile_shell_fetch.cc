@@ -126,7 +126,7 @@ class PendingFetch {
     fetch->loader_->DownloadToString(
         &factory,
         base::BindOnce(&PendingFetch::Downloaded, base::Unretained(fetch)),
-        kShellFetchMaxBody);
+        kShellFetchMaxAnswer);
   }
 
  private:
