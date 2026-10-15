@@ -37,6 +37,8 @@ A `.ts`, `.tsx`, `.js` or `.mjs` config is evaluated to JSON.
 - The `Shell` export is the shell to run when none is given.
 - In a JSON config, name the shell with `"shell"`, relative to the config
   file: `{ "shell": "@domicile-desktop/manganese" }`.
+- An `options` export is the shell's declared options
+  ([WRITING-A-SHELL.md](WRITING-A-SHELL.md#options)), not a section.
 - Every other export is a top-level section of the schema. Keybindings are
   shell props, so a `keybindings` or `modes` export is an unknown section and is
   rejected.
@@ -158,6 +160,9 @@ An edit applies to the running desktop, and windows stay open:
 
 ## Other sections
 
+- `shell_options`: values for the options the shell declares, by key. The
+  compositor passes them to the shell without reading them. See
+  [WRITING-A-SHELL.md](WRITING-A-SHELL.md#options).
 - `startup.commands`: commands run once when the compositor starts. Each is an
   argv: `[["emacs", "--daemon"], ["sh", "-c", "…"]]`.
 - `files`: what the launcher's file index leaves out. See

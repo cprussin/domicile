@@ -25,6 +25,12 @@ export type Config = {
    * `domicile load-shell` takes. The compositor ignores it.
    */
   shell?: string | null;
+  /**
+   * The values of the options the shell declares, by key. The compositor
+   * sends them to the shell without reading them. See
+   * `docs/WRITING-A-SHELL.md#options`.
+   */
+  shell_options?: Record<string, unknown>;
   startup?: StartupConfig;
   theme?: ThemeConfig;
 };

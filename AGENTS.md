@@ -157,7 +157,6 @@ not rules, and carry no authority level. Read the one for the area you work in.
 | [/docs/architecture/SYSTEM-TRAY.md](/docs/architecture/SYSTEM-TRAY.md) | The compositor as StatusNotifierItem host; the shell draws the icons and their dbusmenu menus. |
 | [/docs/architecture/NOTIFICATIONS.md](/docs/architecture/NOTIFICATIONS.md) | The compositor as the `org.freedesktop.Notifications` server for apps and sites; the shell toasts them and keeps a drawer. |
 | [/docs/architecture/KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md) | A shell's keybindings as props: sway-style chords resolved against the compositor's keyboard layout and dispatched by the SDK. |
-| [/docs/architecture/SHELL-OPTIONS.md](/docs/architecture/SHELL-OPTIONS.md) | Options a shell declares, kept as JSON in the config and edited in the Settings app. |
 | [/docs/architecture/WEB-APPS.md](/docs/architecture/WEB-APPS.md) | Web apps as desktop entries: `domicile open-app`, app windows without an address bar, and the plan for installing sites as apps. |
 | [/docs/architecture/APP-MODULES.md](/docs/architecture/APP-MODULES.md) | Apps as modules: `domicile run-app <entry.js>` calls `main(root, host)` on `domicile://app-<id>/`; History and Settings as app modules instead of extensions. |
 

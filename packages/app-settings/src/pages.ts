@@ -8,6 +8,7 @@ export enum PageId {
   Privacy,
   Launcher,
   Startup,
+  Shell,
   Extensions,
   Permissions,
   Code,
@@ -50,6 +51,11 @@ export const PAGES = [
     description: "Commands run once when the desktop starts.",
     id: PageId.Startup,
     title: "Startup",
+  },
+  {
+    description: "The options the shell declares.",
+    id: PageId.Shell,
+    title: "Shell",
   },
   {
     description: "Chrome extensions in browser windows.",

@@ -50,7 +50,14 @@ A config module exports `Shell = runManganese(options)` (see
   `@domicile-desktop/manganese-window-management/keyboard/commands`, sway's
   keys on Meta. See [KEYS.md](../manganese-window-management/docs/KEYS.md).
 
-It also exports `DEFAULT_BAR`, and `Shell`, which is `runManganese()` and is
+Its options, set under `shell_options` in the config or on the Settings app's
+Shell page ([WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md#options)), declared
+in `src/options.ts`:
+
+- **`clock.format`**: `24h` (the default) or `12h`.
+- **`clock.seconds`**: whether the clock shows seconds. Default `true`.
+
+It also exports `DEFAULT_BAR`, `options`, and `Shell`, which is `runManganese()` and is
 what `"shell": "@domicile-desktop/manganese"` loads. Bar items and the
 commands bindings use (`focus`, `workspace`, `mode`, …) come from their own
 packages.

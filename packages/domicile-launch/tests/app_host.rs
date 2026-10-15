@@ -57,7 +57,65 @@ fn reading_gives_each_file_with_whether_it_can_be_written() {
                 "text": "export const Shell = runManganese();",
                 "writable": false,
             },
+            "options": DECLARED,
         })
+    );
+}
+
+#[test]
+fn a_shell_that_declares_no_options_has_none_to_read() {
+    let host = a_host(SettingsFiles {
+        options: Some(PathBuf::from("/nix/store/x-plain/options.json")),
+        ..FILES.clone()
+    });
+    assert_eq!(
+        host.answer(&json!({"id": 1, "type": "read"}))["options"],
+        Value::Null
+    );
+}
+
+#[test]
+fn a_config_with_options_the_shell_declares_is_written() {
+    let host = a_host(FILES.clone());
+    let text = r#"{"shell_options":{"clock":{"format":"12h"}}}"#;
+    assert_eq!(
+        host.answer(&json!({"id": 2, "type": "write", "file": "config", "text": text})),
+        json!({"id": 2, "type": "written"})
+    );
+}
+
+#[test]
+fn a_config_with_options_the_shell_refuses_is_not_written() {
+    // The shell would drop them and run its defaults; say why here instead.
+    let host = a_host(FILES.clone());
+    let reply = host.answer(&json!({
+        "id": 3,
+        "type": "write",
+        "file": "config",
+        "text": r#"{"shell_options":{"clock":{"format":"13h"},"shape":"round"}}"#,
+    }));
+    assert_eq!(reply["type"], json!("refused"));
+    assert_eq!(
+        reply["why"],
+        json!(
+            r#"the shell would drop these options: clock.format: "13h" is not one of 24h, 12h; shape: no such option"#
+        )
+    );
+    assert!(host.written.take().is_empty());
+}
+
+#[test]
+fn an_option_the_file_already_had_wrong_does_not_stop_another_change() {
+    // A shell that drops an option leaves it in the file. Refusing every
+    // write for it would leave the form unable to change anything.
+    let host = a_host(SettingsFiles {
+        config: Some(PathBuf::from(STALE)),
+        ..FILES.clone()
+    });
+    let text = r#"{"shell_options":{"shape":"round"},"theme":{"mode":"light"}}"#;
+    assert_eq!(
+        host.answer(&json!({"id": 4, "type": "write", "file": "config", "text": text}))["type"],
+        json!("written")
     );
 }
 
@@ -69,6 +127,7 @@ fn a_module_config_comes_with_the_json_it_evaluated_to() {
         config: Some(PathBuf::from("/home/me/.config/domicile/domicile.ts")),
         evaluated: Some(PathBuf::from("/run/d/config.json")),
         shell: None,
+        options: None,
     });
     let reply = host.answer(&json!({"id": 1, "type": "read"}));
     assert_eq!(reply["evaluated"], json!("{\"idle\":{}}"));
@@ -404,6 +463,7 @@ fn the_host_watches_the_directory_of_each_file_once() {
             config: Some(PathBuf::from("/home/me/.config/domicile/domicile.json")),
             evaluated: None,
             shell: Some(PathBuf::from("/home/me/.config/domicile/shell.ts")),
+            options: None,
         }),
         vec![PathBuf::from("/home/me/.config/domicile")]
     );
@@ -416,7 +476,14 @@ static FILES: std::sync::LazyLock<SettingsFiles> = std::sync::LazyLock::new(|| S
     config: Some(PathBuf::from("/home/me/.config/domicile/domicile.json")),
     evaluated: None,
     shell: Some(PathBuf::from("/nix/store/x-shell.ts")),
+    options: Some(PathBuf::from("/nix/store/x-manganese/options.json")),
 });
+
+/// What `FILES`' shell declares.
+const DECLARED: &str = r#"{"clock":{"kind":"group","options":{"format":{"kind":"choice","label":"Clock format","choices":["24h","12h"],"default":"24h"}}}}"#;
+
+/// A writable config holding an option `DECLARED` does not have.
+const STALE: &str = "/home/me/stale/domicile.json";
 
 /// A desktop and a file system in memory.
 struct Fake {
@@ -518,6 +585,8 @@ impl Fake {
                         Ok("export const idle = {};".to_string())
                     }
                     Some("/run/d/config.json") => Ok("{\"idle\":{}}".to_string()),
+                    Some("/nix/store/x-manganese/options.json") => Ok(DECLARED.to_string()),
+                    Some(STALE) => Ok(r#"{"shell_options":{"shape":"round"}}"#.to_string()),
                     Some("/nix/store/x-shell.ts") => {
                         Ok("export const Shell = runManganese();".to_string())
                     }

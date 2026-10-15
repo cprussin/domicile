@@ -384,6 +384,7 @@ export type DomicileHostEventMap = {
   windowsthemechanged: Event;
   modifierschanged: Event;
   appearancechanged: Event;
+  shelloptionschanged: Event;
   /**
    * Fires when a window opens, closes, navigates or changes title. Read
    * `browserWindows` for the current list.
@@ -718,6 +719,13 @@ export type DomicileHost = {
   readonly accentColor: string | null;
   readonly highContrast: boolean | null;
   readonly reducedMotion: boolean | null;
+  /**
+   * The config's `shell_options` as JSON text: the values of the options the
+   * shell declares. Null until the compositor says. Text rather than an
+   * object, so the page parses it against its own declaration; see the SDK's
+   * `watchShellOptions`.
+   */
+  readonly shellOptions: string | null;
   /**
    * The desk's browser windows, oldest first. Null until the browser lists
    * them, which it does as soon as this page listens. The browser holds each

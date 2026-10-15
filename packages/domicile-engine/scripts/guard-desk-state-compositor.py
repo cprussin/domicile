@@ -3,7 +3,8 @@
 the desk's state attributes on `DomicileHost` say what the compositor said.
 
 It answers `hello` with a `welcome`, then says idle, lock, both themes, the
-clipboard, the tray, the modifiers and the pointer theme -- and prints every
+clipboard, the tray, the modifiers, the pointer theme and the shell's options
+-- and prints every
 line the browser writes, then `sent the sequence`. The guard judges the page's
 reading after that line.
 """
@@ -33,6 +34,8 @@ SEQUENCE = [
     # Stops in the browser process, which logs the theme it was given.
     {"type": "appearance", "high_contrast": False, "reduced_motion": False,
      "cursor": {"name": "domicile-guard", "size": 48}},
+    # The page reads the options as the JSON text they came as.
+    {"type": "shell_config", "keys": {}, "options": "{\"gaps\":4}"},
 ]
 
 

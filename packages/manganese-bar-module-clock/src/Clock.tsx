@@ -1,4 +1,7 @@
+import { use } from "react";
+
 import { css } from "../styled-system/css";
+import { ClockOptionsContext } from "./clock-options";
 import { reading } from "./reading";
 import type { wallClock } from "./useNow";
 import { useNow } from "./useNow";
@@ -7,13 +10,17 @@ type Props = {
   now?: typeof wallClock | undefined;
 };
 
-/** The live clock, centered in the top bar or alone on a screen without one. */
+/**
+ * The live clock, centered in the top bar or alone on a screen without one,
+ * told as {@link ClockOptionsContext} says.
+ */
 export const Clock = ({ now }: Props) => {
   const time = useNow(now);
+  const options = use(ClockOptionsContext);
 
   return (
     <time className={clockStyles} dateTime={time.toISOString()}>
-      {reading(time)}
+      {reading(time, options)}
     </time>
   );
 };
