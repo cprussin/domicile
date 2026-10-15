@@ -105,12 +105,28 @@ for file in "${OPTIONAL[@]}"; do
 done
 
 # Required: without locales the browser shows no text. A directory, so not in
-# REQUIRED.
+# REQUIRED. Only the `.pak`s: the build's `.pak.info` beside them are build
+# metadata (70.9 MB).
 [ -d "$BUILD/locales" ] || {
   echo "::error::the build produced no locales/; the browser would start with no text" >&2
   exit 1
 }
-cp -a "$BUILD/locales" "$STAGE/$NAME/"
+mkdir "$STAGE/$NAME/locales"
+cp -a "$BUILD"/locales/*.pak "$STAGE/$NAME/locales/"
+
+# Strip every ELF: `chrome`'s symbol table alone is 248.5 MB. The dynamic
+# symbols that `dlsym` reads stay. The build directory keeps its symbols, for
+# the measurements in docs/architecture/ENGINE-FORK-MEASUREMENTS.md.
+OBJCOPY="$CHROMIUM/third_party/llvm-build/Release+Asserts/bin/llvm-objcopy"
+[ -x "$OBJCOPY" ] || {
+  echo "::error::no $OBJCOPY to strip the engine with" >&2
+  exit 1
+}
+for file in "$STAGE/$NAME"/*; do
+  if [ "$(head -c 4 "$file")" = $'\x7fELF' ]; then
+    "$OBJCOPY" --strip-all "$file"
+  fi
+done
 
 # Record provenance inside the tarball.
 cat > "$STAGE/$NAME/PROVENANCE" <<PROV

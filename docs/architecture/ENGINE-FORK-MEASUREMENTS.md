@@ -318,5 +318,7 @@ The whole for scale:
   targets in their `BUILD.gn`. PDFium is not counted; its repository was
   unreachable. Settings has 698 WebUI `.ts`, `.html` and `.css` files under
   one `build_webui` target, so its target count understates it.
-- **Outside the five:** the tarball ships the build's `locales/*.pak.info`
+- **Outside the five:** this tarball shipped the build's `locales/*.pak.info`
   (70.9 MB) and an unstripped `chrome` (248.5 MB of `.symtab` and `.strtab`).
+  Packaging leaves both out, which makes the install 417.6 MB. Measure from
+  the build directory on `crux` (`$CHROMIUM/out/Release`), which keeps them.
