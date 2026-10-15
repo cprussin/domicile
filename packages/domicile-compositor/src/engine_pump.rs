@@ -3,6 +3,7 @@
 
 use std::time::Instant;
 
+use domicile_protocol::HostMessage;
 use smithay::reexports::{
     calloop::{
         generic::Generic,
@@ -160,6 +161,13 @@ impl DomicileCompositor {
                         .as_ref()
                         .and_then(|session| session.app_for(surface))
                         .map(str::to_owned);
+                    if let Some(app_id) = &app_id {
+                        if self.presentations.presented(app_id, frame, shown.is_some()) {
+                            self.hub.broadcast(HostMessage::AppPresented {
+                                app_id: app_id.clone(),
+                            });
+                        }
+                    }
                     let presented = app_id.as_deref().and_then(|app_id| {
                         self.frame_callbacks
                             .presented(app_id, frame)
@@ -385,6 +393,7 @@ impl DomicileCompositor {
                 // the old one's frames.
                 self.configure_answers.clear();
                 self.shown.clear();
+                self.presentations.clear();
                 // The new engine does not know the profile, and
                 // `Screens::replugged_into` ignores an unchanged list, so
                 // restate the connectors or disabled ones come back lit.

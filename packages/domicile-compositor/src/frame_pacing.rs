@@ -4,6 +4,7 @@
 
 use std::time::Duration;
 
+use domicile_protocol::HostMessage;
 use smithay::reexports::{
     calloop::timer::{TimeoutAction, Timer},
     wayland_protocols::wp::presentation_time::server::wp_presentation_feedback::Kind as PresentedKind,
@@ -180,7 +181,7 @@ impl DomicileCompositor {
     pub fn hide(&mut self, app_id: &str, toplevel: &ToplevelSurface) {
         if self.held_frames.hide(app_id) {
             debug!(%app_id, "hidden: frames held");
-            suspend(toplevel, true);
+            self.suspend(app_id, toplevel, true);
             if self.held_frames.start_trickling() {
                 self.start_trickling();
             }
@@ -192,7 +193,7 @@ impl DomicileCompositor {
     pub fn show(&mut self, app_id: &str, toplevel: &ToplevelSurface) {
         if let Some(held) = self.held_frames.show(app_id) {
             debug!(%app_id, held = held.len(), "shown: frames released");
-            suspend(toplevel, false);
+            self.suspend(app_id, toplevel, false);
             self.send_frames(held);
         }
     }
@@ -228,15 +229,32 @@ impl DomicileCompositor {
     /// never.
     pub fn show_every_window(&mut self) {
         for (app_id, held) in self.held_frames.show_all() {
-            suspend(&self.hidden_toplevel(&app_id), false);
+            self.suspend(&app_id, &self.hidden_toplevel(&app_id), false);
             self.send_frames(held);
+        }
+    }
+
+    /// Set or clear `app_id`'s `suspended` state, and tell the chromes when
+    /// that changes it.
+    pub fn suspend(&mut self, app_id: &str, toplevel: &ToplevelSurface, suspended: bool) {
+        set_suspended(toplevel, suspended);
+        let changed = if suspended {
+            self.suspended.insert(app_id.to_string())
+        } else {
+            self.suspended.remove(app_id)
+        };
+        if changed {
+            self.hub.broadcast(HostMessage::AppSuspended {
+                app_id: app_id.to_string(),
+                suspended,
+            });
         }
     }
 }
 
 /// Set or clear `xdg_toplevel`'s `suspended` state. Smithay leaves it out for
 /// clients older than version 6.
-pub fn suspend(toplevel: &ToplevelSurface, suspended: bool) {
+fn set_suspended(toplevel: &ToplevelSurface, suspended: bool) {
     toplevel.with_pending_state(|state| {
         if suspended {
             state.states.set(xdg_toplevel::State::Suspended);

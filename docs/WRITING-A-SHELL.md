@@ -260,6 +260,11 @@ Each entry in `domicile.windows` describes one client window.
   sends it to the client. Resize a window by styling its element. Set
   `resizing` on the element while the user drags an edge; see
   [ELEMENTS.md](/packages/chrome-sdk/docs/ELEMENTS.md).
+- **On screen:** listed means drawn, not shown. Wait for
+  `domicile-presented` on the `<app>` before revealing a window, for example
+  to start an open animation. `domicile-suspended` and `domicile-resumed` say
+  when its client stops and starts drawing. See
+  [ELEMENTS.md](/packages/chrome-sdk/docs/ELEMENTS.md).
 - **Listed when drawn:** a window joins `windows` with its first frame, so
   its title, `desktopId`, limits and hints are already set.
 - **Drawn size:** `width` and `height` are the size the client drew at. The

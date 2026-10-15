@@ -439,6 +439,13 @@ interface ControlChannelClient {
   // The cursor a client asked for over its own surface.
   AppCursor(string app_id, CursorShape cursor);
 
+  // A window or popup reached the screen: its first frame, or the first frame
+  // its client drew after a configure changed its size.
+  AppPresented(string app_id);
+
+  // The compositor marked a window `suspended`, or cleared it.
+  AppSuspended(string app_id, bool suspended);
+
   // A grabbed shortcut fired. Named for the event rather than the struct,
   // which would shadow the type inside the generated class.
   //

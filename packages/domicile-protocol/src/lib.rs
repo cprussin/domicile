@@ -377,6 +377,21 @@ pub enum HostMessage {
     /// to the app's element.
     AppCursor { app_id: String, cursor: CursorShape },
 
+    /// A window or popup reached the screen: viz showed its first frame, or
+    /// the first frame its client drew after a configure changed its size.
+    ///
+    /// Sent once for each. A move, a configure at the same size and a hidden
+    /// window shown again send nothing.
+    AppPresented { app_id: String },
+
+    /// The compositor marked a window `suspended` (`xdg_toplevel`), or cleared
+    /// it.
+    ///
+    /// A window is suspended while the page reports it hidden
+    /// ([`ChromeMessage::SetAppBounds`] with no area) and no cast shows it.
+    /// Sent on each change.
+    AppSuspended { app_id: String, suspended: bool },
+
     /// The desktop's displays, as regions of the single chrome page.
     ///
     /// Sent after `welcome` and whenever the layout changes. Latest wins; a

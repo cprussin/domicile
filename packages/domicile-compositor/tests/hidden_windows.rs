@@ -47,6 +47,7 @@ fn a_hidden_window_draws_once_a_second_until_it_is_shown() {
         "a hidden window was never told it is suspended; it traced:\n{}",
         client.trace()
     );
+    suspended(&mut chrome, &app_id, true);
     // A frame already asked for before the hide may still land.
     std::thread::sleep(Duration::from_millis(200));
     let before = frames(&client);
@@ -68,6 +69,7 @@ fn a_hidden_window_draws_once_a_second_until_it_is_shown() {
         "a window shown again is still suspended; it traced:\n{}",
         client.trace()
     );
+    suspended(&mut chrome, &app_id, false);
     assert!(
         client.wait_for_trace(".release()", held + 3),
         "a window shown again never drew; it traced:\n{}",
@@ -133,6 +135,7 @@ fn a_new_page_shows_every_hidden_window() {
         "a window hidden by the old page is still suspended; it traced:\n{}",
         client.trace()
     );
+    suspended(&mut chrome, &app_id, false);
 }
 
 /// A theme change does not wait for a hidden window to repaint, which it
@@ -228,6 +231,17 @@ fn appeared(chrome: &mut domicile_test_chrome::Chrome) -> String {
         unreachable!("the wait matched on this variant")
     };
     app_id
+}
+
+/// The chrome hears that `app_id` was suspended, or no longer is.
+fn suspended(chrome: &mut domicile_test_chrome::Chrome, app_id: &str, suspended: bool) {
+    let told = HostMessage::AppSuspended {
+        app_id: app_id.to_string(),
+        suspended,
+    };
+    chrome
+        .wait_for(|message| *message == told)
+        .expect("the chrome is told when a window's suspension changes");
 }
 
 /// The page put `app_id`'s window at the origin with `size`.

@@ -332,6 +332,12 @@ impl CompositorHandler for DomicileCompositor {
                             )
                         }),
                     };
+                    // Before the submit, which numbers this commit's frame.
+                    let last = self
+                        .engine
+                        .as_ref()
+                        .and_then(|session| session.frame_of(app_id));
+                    self.presentations.committed(app_id, at_box, last);
                     let published = self.publish_frame(app_id, &commit);
                     match published {
                         Published::Held | Published::Copied { .. } => self.shown.shown(

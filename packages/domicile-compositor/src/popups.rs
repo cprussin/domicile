@@ -72,6 +72,7 @@ impl DomicileCompositor {
         );
         if let Some((app_id, message)) = placed {
             debug!(%app_id, %parent, "popup mapped -> Host::popup_placed");
+            self.presentations.appeared(&app_id);
             self.by_surface.insert(
                 surface.clone(),
                 (app_id.clone(), Role::Popup(popup.clone())),
