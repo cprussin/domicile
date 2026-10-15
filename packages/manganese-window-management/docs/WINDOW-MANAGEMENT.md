@@ -254,6 +254,8 @@ announces a window only then, so its title, app id and limits are known.
 - The group's open tab draws the strip, and its tabs lie on it, each drawn by
   its own window. A tab switch hands the strip to the next open tab.
 - Tabs are at most 240px wide, so the strip always runs on past the last one.
+- Resting the pointer on a tab shows its whole name in a tooltip, with a
+  browser window's page description (`<meta name="description">`) under it.
 - A "+" past a tabbed strip's last tab focuses the strip's open tab and opens
   the launcher, so the launched window opens as a tab beside it.
 - Two buttons at the far end of a tabbed strip float/tile and fullscreen the

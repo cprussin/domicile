@@ -102,6 +102,11 @@ export const ShellWindow = {
     isApp: boolean,
   ) => ({
     /**
+     * The page's description, or `undefined` for none. The view reports it,
+     * as it does the icon.
+     */
+    description: undefined as string | undefined,
+    /**
      * The page's icon URL, or `undefined` for none. The view reports it, not
      * the engine's list; see `BrowserIconChanged` in `window-state.ts`.
      */
