@@ -79,7 +79,11 @@ Layout::scanout  →  Screens::scanout  →  domicile_displays_configure
 Rules:
 
 - **Empty layout:** the hardware decides. Every connector lights, in one row in
-  connector order. This also undoes a profile that turned a panel off.
+  connector order. This also undoes a profile that turned a panel off. The
+  desk spans the row, each display at its CRTC rectangle and scale 1, as
+  `Screens::from_the_engine` advertises it.
+- **Blank:** every connector listed with `enabled: false`. The desk stays as it
+  was ([IDLE.md](IDLE.md)).
 - **Non-empty layout:** a connector the layout does not name stays dark. This
   happens only to a monitor plugged in after the compositor built the layout.
   The next layout lights it.
@@ -173,7 +177,9 @@ window so each can rotate and scale on its own.
 Each display gets its own browser window, and one shell page spans them all:
 [ONE-PAGE-FOR-THE-DESK.md](architecture/ONE-PAGE-FOR-THE-DESK.md). On a
 hotplug, `ShellWindows` opens new windows before closing old ones and never
-closes the last window, since that would exit the browser.
+closes the last window, since that would exit the browser. A new host's window
+is created asynchronously, so `ShellWindows` reconciles again once it exists
+to watch its page.
 
 ## Monitor names
 

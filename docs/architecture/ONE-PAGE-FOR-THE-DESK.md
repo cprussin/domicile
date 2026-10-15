@@ -36,7 +36,7 @@ On a tty, the shell is one page that spans every monitor.
 | | |
 |---|---|
 | `innerWidth`×`innerHeight` | the desk's bounding box |
-| `domicile.displays[i].{x,y,width,height}` | rects in that box, from the profile's `desk` rectangles |
+| `domicile.displays[i].{x,y,width,height}` | rects in that box, from the profile's `desk` rectangles, or each CRTC's rectangle with no profile |
 | `devicePixelRatio` | `S`, the largest scale on the desk |
 | pages | 1 |
 

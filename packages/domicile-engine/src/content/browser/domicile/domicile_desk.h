@@ -13,9 +13,10 @@
 
 namespace content {
 
-// Records the compositor's layout. Called from `SetDisplayLayout` in
+// Records the compositor's layout: the displays it lights, or `std::nullopt`
+// for an empty layout. Called from `SetDisplayLayout` in
 // domicile_frame_sink_broker.cc.
-void DomicileDeskLaidOut(std::vector<DomicileDeskDisplay> lit);
+void DomicileDeskLaidOut(std::optional<std::vector<DomicileDeskDisplay>> lit);
 
 // The screen infos `SetDomicileDeskScreenInfos` set for the contents holding
 // `view`, offset to the contents' window position on screen. Read by
