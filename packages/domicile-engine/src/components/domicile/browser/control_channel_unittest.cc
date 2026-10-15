@@ -110,6 +110,10 @@ class FakeClient : public mojom::ControlChannelClient {
     heard_.push_back(base::StringPrintf("urgent %s %s", app_id.c_str(),
                                         urgent ? "true" : "false"));
   }
+  void AppInhibitsShortcuts(const std::string& app_id, bool inhibits) override {
+    heard_.push_back(base::StringPrintf("inhibits %s %s", app_id.c_str(),
+                                        inhibits ? "true" : "false"));
+  }
   void ShortcutPressed(mojom::ShortcutPtr) override {}
   void ShortcutReleased(mojom::ShortcutPtr) override {}
   void Modifiers(bool, bool, bool, bool) override {}
@@ -286,6 +290,23 @@ TEST_F(ControlChannelTest, AWindowsParentAndUrgencyReachThePage) {
             (std::vector<std::string>{"transient app-4 for app-2",
                                       "transient app-4 for ",
                                       "urgent app-2 true", "locked false"}));
+}
+
+// A window taking and giving back a shortcuts inhibitor reaches the page,
+// which lets the desktop's chords through to it meanwhile.
+TEST_F(ControlChannelTest, AWindowInhibitingShortcutsReachesThePage) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  Say("{\"type\":\"app_inhibits_shortcuts\",\"app_id\":\"app-1\","
+      "\"inhibits\":true}\n"
+      "{\"type\":\"app_inhibits_shortcuts\",\"app_id\":\"app-1\","
+      "\"inhibits\":false}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_,
+            (std::vector<std::string>{"inhibits app-1 true",
+                                      "inhibits app-1 false", "locked false"}));
 }
 
 // The browser process draws the pointer on a tty, so the theme stops there.

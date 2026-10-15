@@ -115,6 +115,55 @@ fn a_window_says_which_desktop_entry_it_is_when_the_client_says_it() {
 }
 
 #[test]
+fn a_window_says_when_it_takes_and_gives_back_the_desktops_shortcuts() {
+    // A remote desktop viewer or a VM takes every key while it has focus, and
+    // the shell must know to let its chords through.
+    let mut host = Host::new();
+    let app = drawn(&mut host);
+
+    assert_eq!(
+        host.app_inhibits_shortcuts(&app, true),
+        Some(HostMessage::AppInhibitsShortcuts {
+            app_id: app.clone(),
+            inhibits: true,
+        })
+    );
+    // An unchanged state sends nothing.
+    assert_eq!(host.app_inhibits_shortcuts(&app, true), None);
+    assert_eq!(
+        host.app_inhibits_shortcuts(&app, false),
+        Some(HostMessage::AppInhibitsShortcuts {
+            app_id: app.clone(),
+            inhibits: false,
+        })
+    );
+    // An unknown app sends nothing.
+    assert_eq!(host.app_inhibits_shortcuts("app-nowhere", true), None);
+}
+
+#[test]
+fn a_window_that_inhibits_before_it_draws_says_so_right_after_it_appears() {
+    // A client may take its inhibitor before its first frame. The replay for a
+    // reloading chrome says so too.
+    let mut host = Host::new();
+    let app = host.app_created(OWNER);
+    assert_eq!(host.app_inhibits_shortcuts(&app, true), None);
+
+    let announced = host.app_mapped(&app, mapped());
+
+    let inhibits = HostMessage::AppInhibitsShortcuts {
+        app_id: app.clone(),
+        inhibits: true,
+    };
+    assert!(
+        matches!(announced.first(), Some(HostMessage::AppAppeared { .. })),
+        "{announced:?}"
+    );
+    assert_eq!(announced.last(), Some(&inhibits));
+    assert!(host.open_apps().contains(&inhibits));
+}
+
+#[test]
 fn a_window_is_announced_when_it_first_draws_with_what_its_client_said_before() {
     // A client sets its title, app id and limits before its first frame. The
     // shell places a window once, so it needs them in the announcement.

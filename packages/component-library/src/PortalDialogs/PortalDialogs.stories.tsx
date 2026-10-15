@@ -36,6 +36,7 @@ const pushing = (
     removeEventListener: (type, listener) => {
       fake.host.removeEventListener(type, listener);
     },
+    ungrabShortcut: () => undefined,
   };
   return { ...host, browserWindows: null, callSystem: () => undefined };
 };

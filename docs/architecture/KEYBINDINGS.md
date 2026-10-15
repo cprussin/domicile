@@ -41,7 +41,7 @@ compositor: keymap.rs ─▶ shell_config { keys } ─▶ engine ─────
 | Wire | `HostMessage::ShellConfig { keys }`, `packages/e2e-harness/src/protocol.ts` | Sends the table on connect and when a reload changes the keyboard |
 | Chords | engine `modules/domicile/domicile_chord.*`, `DomicileHost.grabShortcut` | Parses chords and resolves them against the table, again when it changes. Throws `SyntaxError` on a bad chord and `NotFoundError` on a keysym the layout cannot type. A press arrives as `shortcut` with its `chord`, its release as `shortcutrelease` |
 | Modes | `@domicile-desktop/sdk/own-keybindings` | Gives each chord one spelling and files the bindings by mode |
-| Dispatch | `@domicile-desktop/sdk/bind-keys` | Grabs every chord, matches `shortcut.chord` in the current mode, runs `Mode`, passes `SendShell` to `onCommand` |
+| Dispatch | `@domicile-desktop/sdk/bind-keys` | Grabs every chord, matches `shortcut.chord` in the current mode, runs `Mode`, passes `SendShell` to `onCommand`, gives the chords back on `unbind` |
 
 **Chord syntax:** `+`-separated modifiers, then one xkb keysym name.
 
@@ -89,6 +89,20 @@ domicile send-shell ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor �
 - **A locked desktop refuses `send_shell` but allows `shell_commands`.** A
   page reloaded while locked still hears commands after unlock. See
   [LOCK.md](../LOCK.md).
-- **Grabs are permanent.** The engine's `ShortcutRegistry` has no release. If
-  a layout change moves a keysym to another key, the old key stays grabbed
-  until restart.
+- **Grabs are counted.** `ungrabShortcut(chord)` answers one
+  `grabShortcut(chord)`; the last one gives the key back. So `bindKeys` and
+  `<PortalDialogs />` can grab one chord and each let go. `bindKeys` gives
+  back its chords on `unbind`.
+- **Each page claims for itself.** `ShortcutRegistry` keeps a chord while any
+  page claims it. A reloading page's claims stay until its successor lets go
+  of that chord, so a reload leaves no gap.
+- **A layout change moves the grab.** The old key is given back once no chord
+  is on it.
+- **A window's shortcuts inhibitor wins.** A client holding
+  `zwp_keyboard_shortcuts_inhibitor_v1` (a VM, a remote desktop viewer) gets
+  grabbed chords as keys while it has the keyboard. The compositor activates
+  every inhibitor and sends `app_inhibits_shortcuts`; the engine skips the
+  grab in `DomicileHost::PageKeyDown`; shells read
+  `DomicileWindow.inhibitsShortcuts`. `Ctrl+Alt+F<n>` still switches consoles:
+  the engine's DRM platform takes it below the page. A `<webview>` has no
+  inhibitor, so chords pressed in one are always the shell's.
