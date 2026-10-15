@@ -522,6 +522,30 @@ TEST_F(FrameSinkBrokerTest, DroppingTheConnectionDestroysEverySink) {
   EXPECT_FALSE(VizHasFrameSink(frame_sink_id));
 }
 
+// A producer that disconnects is said to have gone, after its sinks are, so the
+// embedder can listen for the next one. See "A compositor restart" in
+// docs/architecture/ENGINE-FORK.md.
+TEST_F(FrameSinkBrokerTest, AProducerThatDisconnectsIsSaidToHaveGone) {
+  base::test::TestFuture<void> gone;
+  broker()->SetProducerGoneCallback(gone.GetRepeatingCallback());
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  base::test::TestFuture<const viz::FrameSinkId&> future;
+  remote->CreateFrameSink(sink_client.BindInterfaceRemote(),
+                          sink.BindNewPipeAndPassReceiver(), mojo::NullRemote(),
+                          "test-app", future.GetCallback());
+  const viz::FrameSinkId frame_sink_id = future.Get();
+  RunUntilIdle();
+  EXPECT_FALSE(gone.IsReady());
+
+  remote.reset();
+
+  EXPECT_TRUE(gone.Wait());
+  EXPECT_FALSE(VizHasFrameSink(frame_sink_id));
+}
+
 // The page supplies the LocalSurfaceId and gets back the FrameSinkId, as with
 // RemoteFrame.
 TEST_F(FrameSinkBrokerTest, EmbedAnswersWithTheBrokeredFrameSinkId) {

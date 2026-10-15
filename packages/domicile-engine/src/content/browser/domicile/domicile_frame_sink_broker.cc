@@ -271,7 +271,15 @@ class DomicileBrowserService {
     if (!command_line.HasSwitch(kSocketSwitch)) {
       return;
     }
-    Listen(command_line.GetSwitchValueASCII(kSocketSwitch));
+    const std::string socket_path =
+        command_line.GetSwitchValueASCII(kSocketSwitch);
+    // An invitation is accepted once, so a compositor restarted under this
+    // browser needs a new one. Binding again replaces the dead compositor's
+    // socket file. See "A compositor restart" in
+    // docs/architecture/ENGINE-FORK.md. Unretained for Copied's reason.
+    broker_.SetProducerGoneCallback(base::BindRepeating(
+        &DomicileBrowserService::Listen, base::Unretained(this), socket_path));
+    Listen(socket_path);
   }
 
   DomicileBrowserService(const DomicileBrowserService&) = delete;
