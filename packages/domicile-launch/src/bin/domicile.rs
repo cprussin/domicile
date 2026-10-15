@@ -49,8 +49,8 @@ use domicile_launch::power::{confirmed, Power};
 use domicile_launch::profile_claim::claim;
 use domicile_launch::profile_path::profile_directory;
 use domicile_launch::restart::{
-    clear_the_last_engine, clear_the_last_one, keep_a_desktop_up, keep_the_engine_up,
-    restarts_the_engine, Attempt, Ending, Policy, CLEANLY,
+    clear_the_last_compositor, clear_the_last_engine, clear_the_last_one, keep_a_desktop_up,
+    keep_the_parts_up, restarts, Attempt, Ending, PartAttempt, Policy, Started, CLEANLY,
 };
 use domicile_launch::serving::serve;
 use domicile_launch::session::Session;
@@ -628,8 +628,9 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     catch_interrupts();
 
     // Everything above runs once, since retrying would give the same result.
-    // Below, the engine restarts while the compositor lives, and the whole
-    // desktop restarts otherwise. See `domicile_launch::restart`.
+    // Below, the engine or the compositor restarts while the other lives, and
+    // the whole desktop restarts when one keeps failing. See
+    // `domicile_launch::restart`.
     let policy = Policy::default();
     // Held for the whole run. Dropping it ends the graphical session.
     let said = SaidSession::new(&platform);
@@ -678,7 +679,7 @@ struct Desktop<'a> {
     env: &'a dyn Fn(&str) -> Option<String>,
     places: &'a Runtime,
     platform: &'a str,
-    /// The restart policy, shared by the engine and desktop loops. Each loop
+    /// The restart policy, shared by the engine, compositor and desktop. Each
     /// counts its own failures.
     policy: &'a Policy,
     /// The graphical session registration, renewed by each desktop.
@@ -687,11 +688,10 @@ struct Desktop<'a> {
     serving: &'a Mutex<Shell>,
 }
 
-/// Runs one desktop until its compositor exits.
+/// Runs one desktop until it ends or one of its parts keeps failing.
 ///
-/// Engine restarts happen inside [`up`]. Returning drops the [`Running`],
-/// which stops every process group. See `domicile_launch::restart` for why the
-/// compositor cannot be replaced on its own.
+/// Engine and compositor restarts happen inside [`up`]. Returning drops the
+/// [`Running`], which stops every process group.
 fn one_desktop(desktop: &Desktop, said: &mut Option<String>) -> Attempt {
     // One per desktop, so the tail holds only this compositor's output.
     let heard = Arc::new(Mutex::new(Heard::new(WORTH_REPEATING)));
@@ -714,8 +714,8 @@ fn one_desktop(desktop: &Desktop, said: &mut Option<String>) -> Attempt {
     attempt
 }
 
-/// Starts the engine, then the compositor, and restarts the engine until the
-/// compositor exits.
+/// Starts the engine, then the compositor, and restarts either one that dies
+/// under the other.
 fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), String> {
     // Remove the last desktop's files. A stale session document would make
     // the wait below succeed too early.
@@ -723,8 +723,111 @@ fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), String> {
 
     let mut running = Running::new();
     start_an_engine(desktop, &mut running)?;
+    start_a_compositor(desktop, &mut running, heard)?;
 
-    // Capture only the compositor's stderr; see `domicile_launch::heard`.
+    println!();
+    println!("domicile is up. Apps connect to the WAYLAND_DISPLAY the compositor names above.");
+    println!("Ctrl-C to stop.");
+
+    // Restart each part that dies; see `domicile_launch::restart`. `over`
+    // records the exit that ended the desktop, because the loop's own result
+    // describes the parts.
+    let mut over = None;
+    let mut replacing = None;
+    let ending = keep_the_parts_up(
+        desktop.policy,
+        &mut || one_part(desktop, &mut running, heard, &mut replacing, &mut over),
+        &interrupted,
+        &mut wait_or_notice_a_stop,
+        &mut |next| eprintln!("domicile: {next}"),
+    );
+    match ending {
+        Ending::Over => over.expect("the parts' loop ends on an exit it recorded"),
+        Ending::Stopped => Err("a stop was asked for".to_string()),
+        // The caller restarts the whole desktop.
+        Ending::GaveUp { started, failures } => Err(format!(
+            "{failures} {started}s in a row have failed in this desktop, so the desktop goes \
+             with them"
+        )),
+    }
+}
+
+/// Runs the desktop's parts until one exits.
+///
+/// `replacing` names the part that died last time, which starts here after
+/// the backoff, under the part still serving. A part's death returns
+/// [`PartAttempt::Failed`] and leaves it in `replacing`. An exit that ends the
+/// desktop returns [`PartAttempt::Ended`] and stores the result in `over` for
+/// [`up`].
+fn one_part(
+    desktop: &Desktop,
+    running: &mut Running,
+    heard: &Arc<Mutex<Heard>>,
+    replacing: &mut Option<Started>,
+    over: &mut Option<Result<(), String>>,
+) -> PartAttempt {
+    let started = Instant::now();
+    if let Some(part) = replacing.take() {
+        // Clear only the dead part's files; the other is still live. See
+        // `clear_the_last_engine` and `clear_the_last_compositor`.
+        let replaced = match part {
+            Started::Engine => clear_the_last_engine(desktop.places)
+                .map_err(|leftover| leftover.to_string())
+                .and_then(|()| start_an_engine(desktop, running)),
+            Started::Compositor => clear_the_last_compositor(desktop.places)
+                .map_err(|leftover| leftover.to_string())
+                .and_then(|()| start_a_compositor(desktop, running, heard)),
+            Started::Desktop => unreachable!("`restarts` names a part, never the desktop"),
+        };
+        if let Err(why) = replaced {
+            eprintln!("domicile: {why}");
+            *replacing = Some(part);
+            return PartAttempt::Failed {
+                part,
+                lived: started.elapsed(),
+            };
+        }
+    }
+    let exit = running.until_one_exits();
+    match restarts(&exit, desktop.platform) {
+        // The other part keeps serving. A compositor rejoins the next engine
+        // (`rejoin_the_engine` in the compositor), and a shell's control
+        // channel dials the next compositor (ENGINE-FORK.md, "A compositor
+        // restart").
+        Some(part) => {
+            // Print here: no caller reports a part's exit while the desktop is
+            // still up.
+            eprintln!("domicile: {exit}");
+            running.let_go_of(exit.what);
+            *replacing = Some(part);
+            PartAttempt::Failed {
+                part,
+                lived: started.elapsed(),
+            }
+        }
+        None => {
+            *over = Some(match exit.how == CLEANLY {
+                // Said here, since ending the run cleanly prints nothing else.
+                true => {
+                    eprintln!("domicile: {exit}");
+                    Ok(())
+                }
+                false => Err(exit.to_string()),
+            });
+            PartAttempt::Ended
+        }
+    }
+}
+
+/// Starts a compositor under the running engine and waits for its session
+/// document, then tells the user manager about it.
+///
+/// Only the compositor's stderr is captured; see `domicile_launch::heard`.
+fn start_a_compositor(
+    desktop: &Desktop,
+    running: &mut Running,
+    heard: &Arc<Mutex<Heard>>,
+) -> Result<(), String> {
     running
         .start_overheard(
             "compositor",
@@ -744,89 +847,10 @@ fn up(desktop: &Desktop, heard: &Arc<Mutex<Heard>>) -> Result<(), String> {
     wait_for(
         &session(&desktop.places.session),
         &desktop.places.session,
-        &mut running,
+        running,
     )?;
     desktop.said.say(desktop.places);
-
-    println!();
-    println!("domicile is up. Apps connect to the WAYLAND_DISPLAY the compositor names above.");
-    println!("Ctrl-C to stop.");
-
-    // Restart the engine until the compositor exits; see
-    // `domicile_launch::restart`. `over` records how the compositor exited,
-    // because the loop's own result describes the engine.
-    let mut over = None;
-    let mut first = true;
-    let ending = keep_the_engine_up(
-        desktop.policy,
-        &mut || one_engine(desktop, &mut running, &mut first, &mut over),
-        &interrupted,
-        &mut wait_or_notice_a_stop,
-        &mut |next| eprintln!("domicile: {next}"),
-    );
-    match ending {
-        Ending::Over => over.expect("the engine's loop ends on an exit it recorded"),
-        Ending::Stopped => Err("a stop was asked for".to_string()),
-        // The caller restarts the whole desktop.
-        Ending::GaveUp { failures } => Err(format!(
-            "{failures} engines in a row have failed under this compositor, so the desktop \
-             goes with them"
-        )),
-    }
-}
-
-/// Runs one engine until a component exits.
-///
-/// `first` is true when [`up`] already started this engine, since the
-/// compositor needs its broker socket. Later engines start here, after the
-/// backoff. A compositor exit returns [`Attempt::Ended`] and stores the result
-/// in `over` for [`up`].
-fn one_engine(
-    desktop: &Desktop,
-    running: &mut Running,
-    first: &mut bool,
-    over: &mut Option<Result<(), String>>,
-) -> Attempt {
-    let started = Instant::now();
-    if !*first {
-        // Clear only the engine's files; the compositor is still live. See
-        // `clear_the_last_engine`.
-        let cleared = clear_the_last_engine(desktop.places)
-            .map_err(|leftover| leftover.to_string())
-            .and_then(|()| start_an_engine(desktop, running));
-        if let Err(why) = cleared {
-            eprintln!("domicile: {why}");
-            return Attempt::Failed {
-                lived: started.elapsed(),
-            };
-        }
-    }
-    *first = false;
-    let exit = running.until_one_exits();
-    match restarts_the_engine(&exit, desktop.platform) {
-        // The compositor keeps serving and reconnects to the next engine; see
-        // `engine_restart` in the compositor.
-        true => {
-            // Print here: no caller reports an engine exit while the desktop
-            // is still up.
-            eprintln!("domicile: {exit}");
-            running.let_go_of("engine");
-            Attempt::Failed {
-                lived: started.elapsed(),
-            }
-        }
-        false => {
-            *over = Some(match exit.how == CLEANLY {
-                // Said here, since ending the run cleanly prints nothing else.
-                true => {
-                    eprintln!("domicile: {exit}");
-                    Ok(())
-                }
-                false => Err(exit.to_string()),
-            });
-            Attempt::Ended
-        }
-    }
+    Ok(())
 }
 
 /// Starts an engine and waits for its broker socket.

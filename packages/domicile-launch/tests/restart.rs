@@ -1,4 +1,5 @@
-//! Restart policy for a desktop or engine that dies: backoff, give-up and stop.
+//! Restart policy for a desktop, engine or compositor that dies: backoff,
+//! give-up and stop.
 //!
 //! A desktop is a closure that reports how it ended, so the policy runs without
 //! processes. Only clearing leftovers touches the filesystem, in a temp
@@ -8,8 +9,8 @@ use std::cell::Cell;
 use std::time::Duration;
 
 use domicile_launch::restart::{
-    clear_the_last_engine, clear_the_last_one, keep_a_desktop_up, keep_the_engine_up,
-    restarts_the_engine, Attempt, Ending, Policy, CLEANLY,
+    clear_the_last_compositor, clear_the_last_engine, clear_the_last_one, keep_a_desktop_up,
+    keep_the_parts_up, restarts, Attempt, Ending, PartAttempt, Policy, Started, CLEANLY,
 };
 use domicile_launch::spawn::Runtime;
 use domicile_launch::supervise::Exit;
@@ -74,6 +75,7 @@ fn a_desktop_that_dies_is_started_again_until_it_is_given_up_on() {
     assert_eq!(
         ending,
         Ending::GaveUp {
+            started: Started::Desktop,
             failures: policy.give_up_after,
         }
     );
@@ -273,11 +275,12 @@ fn an_engine_that_dies_is_started_again_under_the_compositor_that_did_not() {
     let mut waited: Vec<Duration> = Vec::new();
     let mut said: Vec<String> = Vec::new();
 
-    let ending = keep_the_engine_up(
+    let ending = keep_the_parts_up(
         &policy,
         &mut || {
             attempts.set(attempts.get() + 1);
-            Attempt::Failed {
+            PartAttempt::Failed {
+                part: Started::Engine,
                 lived: Duration::from_millis(3),
             }
         },
@@ -306,22 +309,82 @@ fn an_engine_that_dies_is_started_again_under_the_compositor_that_did_not() {
     assert_eq!(
         ending,
         Ending::GaveUp {
+            started: Started::Engine,
             failures: policy.give_up_after,
         }
     );
 }
 
 #[test]
-fn a_compositor_that_outlives_its_engines_ends_the_run_rather_than_the_engine() {
-    // `Attempt::Ended` on the engine's loop means the compositor exited, so the
-    // desktop is over.
+fn a_compositor_that_dies_is_started_again_under_the_engine_that_did_not() {
+    // The engine keeps every browser window, and the shell reloads to meet the
+    // next compositor.
+    let mut said: Vec<String> = Vec::new();
+
+    keep_the_parts_up(
+        &Policy::default(),
+        &mut || PartAttempt::Failed {
+            part: Started::Compositor,
+            lived: Duration::ZERO,
+        },
+        &|| false,
+        &mut |_| {},
+        &mut |next| said.push(next.to_string()),
+    );
+
+    assert!(
+        said[0].contains("starting the compositor again in 1s"),
+        "{}",
+        said[0]
+    );
+}
+
+#[test]
+fn the_engine_and_the_compositor_count_their_failures_apart() {
+    // A compositor that fails between two engine failures does not move the
+    // engine's count, so its wait does not double.
+    let parts = [Started::Engine, Started::Compositor, Started::Engine];
+    let attempts = Cell::new(0);
+    let mut waited: Vec<Duration> = Vec::new();
+
+    keep_the_parts_up(
+        &Policy::default(),
+        &mut || {
+            let attempt = attempts.get();
+            attempts.set(attempt + 1);
+            match parts.get(attempt) {
+                Some(part) => PartAttempt::Failed {
+                    part: *part,
+                    lived: Duration::ZERO,
+                },
+                None => PartAttempt::Ended,
+            }
+        },
+        &|| false,
+        &mut |wait| waited.push(wait),
+        &mut |_| {},
+    );
+
+    assert_eq!(
+        waited,
+        vec![
+            Duration::from_secs(1),
+            Duration::from_secs(1),
+            Duration::from_secs(2),
+        ]
+    );
+}
+
+#[test]
+fn a_desktop_whose_part_ends_cleanly_is_over() {
+    // `PartAttempt::Ended` means a part exited cleanly, so the desktop is over.
     let attempts = Cell::new(0);
 
-    let ending = keep_the_engine_up(
+    let ending = keep_the_parts_up(
         &Policy::default(),
         &mut || {
             attempts.set(attempts.get() + 1);
-            Attempt::Ended
+            PartAttempt::Ended
         },
         &|| false,
         &mut |_| panic!("nothing failed, so nothing is waited for"),
@@ -337,7 +400,7 @@ fn an_engine_on_a_tty_that_exits_0_is_started_again() {
     // Chromium exits 0 on `SIGTERM`, and a TTY engine has no window to close.
     let exit = exited("engine", CLEANLY);
 
-    assert!(restarts_the_engine(&exit, "drm"));
+    assert_eq!(restarts(&exit, "drm"), Some(Started::Engine));
 }
 
 #[test]
@@ -345,25 +408,33 @@ fn a_nested_engine_that_exits_0_ends_the_run() {
     // Closing the window exits 0, and that is how a nested desktop is closed.
     let exit = exited("engine", CLEANLY);
 
-    assert!(!restarts_the_engine(&exit, "wayland"));
-    assert!(!restarts_the_engine(&exit, "headless"));
+    assert_eq!(restarts(&exit, "wayland"), None);
+    assert_eq!(restarts(&exit, "headless"), None);
 }
 
 #[test]
 fn an_engine_that_fails_is_started_again_on_any_platform() {
     let exit = exited("engine", "exit status: 3");
 
-    assert!(restarts_the_engine(&exit, "drm"));
-    assert!(restarts_the_engine(&exit, "wayland"));
+    assert_eq!(restarts(&exit, "drm"), Some(Started::Engine));
+    assert_eq!(restarts(&exit, "wayland"), Some(Started::Engine));
 }
 
 #[test]
-fn a_compositor_exit_never_restarts_the_engine() {
-    assert!(!restarts_the_engine(&exited("compositor", CLEANLY), "drm"));
-    assert!(!restarts_the_engine(
-        &exited("compositor", "exit status: 4"),
-        "drm"
-    ));
+fn a_compositor_that_fails_is_started_again_alone() {
+    assert_eq!(
+        restarts(&exited("compositor", "signal: 11 (SIGSEGV)"), "drm"),
+        Some(Started::Compositor)
+    );
+    assert_eq!(
+        restarts(&exited("compositor", "exit status: 4"), "wayland"),
+        Some(Started::Compositor)
+    );
+}
+
+#[test]
+fn a_compositor_that_exits_0_ends_the_run() {
+    assert_eq!(restarts(&exited("compositor", CLEANLY), "drm"), None);
 }
 
 #[test]
@@ -402,6 +473,42 @@ fn what_the_last_engine_left_goes_and_what_the_compositor_bound_stays() {
     assert!(
         runtime.session.exists(),
         "the compositor is still serving and this took away the document that says so"
+    );
+}
+
+#[test]
+fn what_the_last_compositor_left_goes_and_what_the_engine_bound_stays() {
+    // The compositor restarts under an engine that is still serving. Its
+    // socket and session document go, so the next compositor binds the socket
+    // and the launcher waits for its own document. The engine's stay live.
+    let directory = tempfile::tempdir().expect("a temp directory");
+    let runtime = runtime(directory.path());
+    for path in [
+        &runtime.broker,
+        &runtime.chrome_socket,
+        &runtime.command,
+        &runtime.session,
+    ] {
+        std::fs::write(path, "the desktop's").expect("it is written");
+    }
+
+    clear_the_last_compositor(&runtime).expect("it clears");
+
+    assert!(
+        !runtime.chrome_socket.exists(),
+        "the chrome socket is still there"
+    );
+    assert!(
+        !runtime.session.exists(),
+        "the session document is still there"
+    );
+    assert!(
+        runtime.broker.exists(),
+        "the engine is still brokering frame sinks and this took its socket away"
+    );
+    assert!(
+        runtime.command.exists(),
+        "the engine is still taking commands and this took its socket away"
     );
 }
 

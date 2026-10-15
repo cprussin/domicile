@@ -182,6 +182,11 @@ impl DomicileCompositor {
                     frame,
                     captured,
                 } => self.cast_captured(capture, frame, captured),
+                // Acted on at the next hello, which is the new engine's.
+                engine::Event::Disconnected => {
+                    warn!("the engine this desktop was drawing through went away");
+                    self.engine_disconnected = true;
+                }
                 engine::Event::CaptureEnded { capture } => {
                     let capturer = capturer(&mut self.engine, &mut self.cast_test_pattern);
                     self.casting.capture_ended(capture, capturer);
@@ -352,7 +357,8 @@ impl DomicileCompositor {
     /// If the dial fails, it is logged and the session is kept. Held buffers
     /// are returned either way, and the next page hello retries.
     pub fn rejoin_the_engine(&mut self, served_by: Option<i32>) {
-        let replaced = another_engine(self.engine_process, served_by);
+        let replaced = another_engine(self.engine_process, served_by, self.engine_disconnected);
+        self.engine_disconnected = false;
         // Record the serving process for later hellos. Keep the old one if the
         // kernel gave no credential.
         self.engine_process = served_by.or(self.engine_process);

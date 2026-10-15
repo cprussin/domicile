@@ -15,17 +15,16 @@ item when it ships.
    probe still won't measure presentation.
    [ENGINE-FORK-MEASUREMENTS.md](docs/architecture/ENGINE-FORK-MEASUREMENTS.md#keystroke-to-pixel).
 
-2. **A compositor crash loses every window.**
-   - The page's control channel only retries at startup (`kReachFor`).
-     Reconnecting to a new compositor needs a change in `control_channel.cc`.
-     Embeds are ready: each `<app>` embeds again when the old compositor
-     disconnects
-     ([ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#a-compositor-restart)).
-     No guard covers that re-embed.
-   - No `disconnected` callback in `domicile_engine.h`. The compositor spots a
-     new engine by `SO_PEERCRED` (`which_engine.rs`).
+2. **A compositor crash loses its Wayland clients.** The compositor restarts
+   under the running engine; the shell and browser windows stay, and the
+   shell's control channel dials the new compositor
+   ([ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#a-compositor-restart)).
+   - Wayland clients lose their display and exit. Nothing starts them again.
+   - An app module's channel (`app_channel.cc`) does not dial the new
+     compositor.
+   - A change during the gap is missed: a watch hears only later ones.
 
-   [THE-DOMICILE-BINARY.md](docs/architecture/THE-DOMICILE-BINARY.md).
+   [THE-DOMICILE-BINARY.md](docs/architecture/THE-DOMICILE-BINARY.md#crashes-are-recovered).
 
 3. **Notifications.** [NOTIFICATIONS.md](docs/architecture/NOTIFICATIONS.md).
    - Chrome's notification bridge looks for the server once at startup, so a

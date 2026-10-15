@@ -217,12 +217,12 @@ domicile load-shell ./my-desktop/dist/shell.js
 - If the engine refuses a shell, the script prints the engine's `why` and
   waits for the next build. The desktop keeps the previous shell.
 
-### Engine crashes are recovered; compositor crashes restart the desktop
+### Crashes are recovered
 
 | Exits | Restarted | Survives |
 |---|---|---|
 | engine | the engine | every window, with its last frame |
-| compositor | the whole desktop | nothing |
+| compositor | the compositor | the shell and browser windows |
 
 ```
 the engine exited (signal: 9 (SIGKILL))
@@ -232,7 +232,7 @@ starting the engine again in 1s — that is failure 1 of 5 in a row.
 Engine restart:
 
 - An engine that fails restarts. One that exits 0 restarts only on `drm`
-  (`restart::restarts_the_engine`): there is no window to close there, and
+  (`restart::restarts`): there is no window to close there, and
   Chromium exits 0 on `SIGTERM`, so `pkill` reads as a clean exit. A nested
   engine exits 0 when its window closes, which ends the run with
   `the engine exited (exit status: 0)`.
@@ -250,26 +250,33 @@ Compositor restart:
 
 - A compositor that exits 0 ends the run, with
   `the compositor exited (exit status: 0)`. Any other exit restarts the
-  desktop.
-- The page's control channel closes when either end exits
-  (`components/domicile/browser/control_channel.h`). It only retries at
-  startup, so a page cannot reconnect to a new compositor. Fixing that needs
-  a C++ change in the fork.
-- So the engine is stopped too, and a new desktop starts after everything the
-  old one bound or published is removed. Apps exit.
+  compositor under the running engine (`restart::restarts`).
+- The launcher removes the dead compositor's chrome socket and session file
+  (`clear_the_last_compositor`). The new compositor binds the socket at the
+  same path and joins the engine's broker.
+- The engine listens on the broker socket again once the old compositor
+  disconnects. Each shell page's control channel dials the new compositor.
+  The page hears the old compositor's windows close, its system calls end with
+  `compositor_gone`, then `compositorreplaced`. See
+  [ENGINE-FORK.md](ENGINE-FORK.md#a-compositor-restart).
+- The shell and browser windows stay open. Wayland clients lose their display
+  and exit.
 
 Backoff:
 
 - 1s, 2s, 4s, 8s; give up after five failures in a row.
-- Each component has its own failure counter. After five engine failures in
-  a row, the launcher counts one desktop failure and starts a new desktop.
+- Each component has its own failure counter. After five engine or
+  compositor failures in a row, the launcher counts one desktop failure and
+  starts a new desktop.
 - A component that ran for a minute resets its counter.
 
 Detecting a new engine:
 
-- The C ABI (`domicile_engine.h`) has four callbacks and no disconnect.
-- The browser process dials the control channel, so `SO_PEERCRED` gives the
-  browser's pid. A `hello` from a new pid means a new engine
+- The engine calls the C ABI's `disconnected` (`domicile_engine.h`) when its
+  browser goes away. The next `hello` is then a new engine.
+- An older engine has no `disconnected`. The browser process dials the control
+  channel, so `SO_PEERCRED` gives the browser's pid, and a `hello` from a new
+  pid also means a new engine
   (`packages/domicile-compositor/src/which_engine.rs`).
 - `load-shell` binds a new channel from the same browser, so the pid matches
   and no reconnect happens.

@@ -103,6 +103,12 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
 
   void Bind(mojo::PendingReceiver<mojom::FrameSinkBroker> receiver);
 
+  // Run each time a producer disconnects, once its sinks are gone. The
+  // embedder listens for the next producer from it: a compositor restarted
+  // under this browser connects again. See "A compositor restart" in
+  // docs/architecture/ENGINE-FORK.md.
+  void SetProducerGoneCallback(base::RepeatingClosure callback);
+
   // A new id for a page that sends Embed, so its waiting embeds can be dropped
   // with DropEmbeds. Never reused.
   uint64_t NewEmbedRequester();
@@ -258,6 +264,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   const PointerTargetsSetter set_pointer_targets_;
 
   mojo::ReceiverSet<mojom::FrameSinkBroker> receivers_;
+  base::RepeatingClosure producer_gone_;
 
   base::flat_map<viz::FrameSinkId, std::unique_ptr<BrokeredFrameSink>>
       frame_sink_map_;
