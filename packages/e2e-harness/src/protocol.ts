@@ -465,6 +465,7 @@ const systemErrorSchema = z.looseObject({
     "locked",
     "dbus",
     "canceled",
+    "compositor_gone",
     "other",
   ]),
   message: z.string(),

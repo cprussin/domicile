@@ -354,6 +354,12 @@ typedef struct DomicileEngineCallbacks {
   void (*connected_displays)(void* user_data,
                              const DomicileConnectedDisplay* displays,
                              uint32_t count);
+  // The browser went away: it exited, or closed the broker. No callback
+  // follows; the compositor joins the next browser to say hello. An older
+  // engine never calls it, so a compositor also compares the pid that dials
+  // its chrome socket. See "Crashes are recovered" in
+  // docs/architecture/THE-DOMICILE-BINARY.md.
+  void (*disconnected)(void* user_data);
 } DomicileEngineCallbacks;
 
 // Returns nonzero. Exists so a compositor can tell an engine that calls

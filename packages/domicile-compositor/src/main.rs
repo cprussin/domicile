@@ -552,6 +552,9 @@ struct DomicileCompositor {
     /// `None` until the first hello, which is always the engine dialed at
     /// startup. See [`crate::which_engine`].
     engine_process: Option<i32>,
+    /// The engine said its browser went away, so the next hello is a new one.
+    /// See [`crate::which_engine`].
+    engine_disconnected: bool,
     /// Idle tracking, for a desktop that blanks.
     ///
     /// `None` if the config sets no idle timeout. Replaced by
@@ -1197,6 +1200,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         engine_source: None,
         // Set by the first page hello.
         engine_process: None,
+        engine_disconnected: false,
         idle: Idle::after(&config.idle, Instant::now()),
         // Started below, after the event loop's sources.
         index: None,

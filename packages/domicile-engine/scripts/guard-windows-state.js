@@ -46,6 +46,7 @@ const EVENT_NAMES = [
   "appearancechanged",
   "system",
   "portalrequests",
+  "compositorreplaced",
 ];
 
 export const Shell = (_root, desktop) => {

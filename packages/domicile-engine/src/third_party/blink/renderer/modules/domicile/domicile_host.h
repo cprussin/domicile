@@ -308,6 +308,7 @@ class MODULES_EXPORT DomicileHost final
   void FocusRequested(const String& app_id) override;
   void System(const String& message) override;
   void PortalRequests(const String& message) override;
+  void CompositorReplaced() override;
   void Displays(
       Vector<domicile::mojom::blink::DisplayInfoPtr> displays) override;
 

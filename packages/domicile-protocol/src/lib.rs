@@ -1822,6 +1822,11 @@ pub enum SystemErrorKind {
     Dbus,
     /// The user dismissed the dialog the call put up.
     Canceled,
+    /// The compositor exited with the call open. Sent only by the browser,
+    /// which ends the page's calls when its compositor hangs up; the SDK
+    /// resubscribes a watch that ends this way. See "A compositor restart" in
+    /// `docs/architecture/ENGINE-FORK.md`.
+    CompositorGone,
     Other,
 }
 

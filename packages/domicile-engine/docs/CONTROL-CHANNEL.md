@@ -39,7 +39,8 @@ The engine has two channels to the rest of Domicile:
   `ungrab_shortcut`, `warp_pointer`.
 - **Not from the compositor:** `browserwindowschanged`, the desk's browser
   windows, which the browser owns
-  (`components/domicile/mojom/browser_windows.mojom`).
+  (`components/domicile/mojom/browser_windows.mojom`), and
+  `compositorreplaced` (below).
 
 ### Members with special handling
 
@@ -99,6 +100,16 @@ The engine has two channels to the rest of Domicile:
     are clamped.
   - Logic and tests: `components/domicile/browser/pointer_warp.h`. Execution:
     `chrome/browser/domicile/domicile_pointer_warp.cc`.
+- **A compositor that hangs up** is replaced, not fatal. The browser:
+  - answers each of the page's open system calls with a failed
+    `system_reply` or `system_end` of kind `compositor_gone`, and closes each
+    window the old compositor had with `app_closed`;
+  - drops queued `system_request` lines and keeps the page's other lines for
+    the next compositor;
+  - dials again for `kReachFor`, sends `hello`, then fires
+    `compositorreplaced`.
+  The SDK's watches listen again on `compositor_gone`. See
+  [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md#a-compositor-restart).
 - **`displays`** is an attribute, `domicile.displays`, with a
   `displayschanged` event. A component that mounts late can read it.
   - `null`: the compositor has not described a desktop yet.

@@ -54,6 +54,12 @@ class FakeHost implements SystemHost {
   }
 }
 
+/** How the browser ends a call whose compositor exited. */
+const gone = {
+  error: { kind: "compositor_gone", message: "the compositor exited" },
+  kind: "failed",
+};
+
 const base64 = (text: string): string =>
   btoa(String.fromCharCode(...new TextEncoder().encode(text)));
 
@@ -292,6 +298,105 @@ describe("watches", () => {
 
     expect(await watch.ended).toStrictEqual(
       Err({ kind: SystemErrorKind.Other, message: "the watch broke" }),
+    );
+  });
+  // See "A compositor restart" in docs/architecture/ENGINE-FORK.md.
+  it("watches again under the next compositor when the last one exits", async () => {
+    const host = new FakeHost();
+    const watching = system(host).watch("/tmp");
+    host.reply(1, { kind: "started" });
+    const watch = started(await watching);
+    host.event(1, { kind: "changed", path: "/tmp/a" });
+    host.end(1, gone);
+    host.reply(2, { kind: "started" });
+    host.event(2, { kind: "changed", path: "/tmp/b" });
+    watch.stop();
+    host.end(2, { kind: "stopped" });
+
+    expect(host.calls).toStrictEqual([
+      [1, { call: "watch", path: "/tmp" }],
+      [2, { call: "watch", path: "/tmp" }],
+      [2, { call: "unwatch" }],
+    ]);
+    expect(await Array.fromAsync(watch.items)).toStrictEqual([
+      "/tmp/a",
+      "/tmp/b",
+    ]);
+    expect(await watch.ended).toStrictEqual(Ok("stopped"));
+  });
+
+  it("asks again when the compositor exits before it answers", async () => {
+    const host = new FakeHost();
+    const watching = system(host).watch("/tmp");
+    host.reply(1, gone);
+    host.reply(2, { kind: "started" });
+
+    started(await watching);
+    expect(host.calls).toStrictEqual([
+      [1, { call: "watch", path: "/tmp" }],
+      [2, { call: "watch", path: "/tmp" }],
+    ]);
+  });
+
+  it("says why the next compositor would not watch", async () => {
+    const host = new FakeHost();
+    const watching = system(host).watch("/tmp");
+    host.reply(1, { kind: "started" });
+    const watch = started(await watching);
+    host.end(1, gone);
+    host.reply(2, {
+      error: { kind: "locked", message: "the desktop is locked" },
+      kind: "failed",
+    });
+
+    expect(await Array.fromAsync(watch.items)).toStrictEqual([]);
+    expect(await watch.ended).toStrictEqual(
+      Err({ kind: SystemErrorKind.Locked, message: "the desktop is locked" }),
+    );
+  });
+
+  it("stays stopped when the compositor exits after a stop", async () => {
+    const host = new FakeHost();
+    const watching = system(host).watch("/tmp");
+    host.reply(1, { kind: "started" });
+    const watch = started(await watching);
+    watch.stop();
+    host.end(1, gone);
+
+    expect(host.calls).toStrictEqual([
+      [1, { call: "watch", path: "/tmp" }],
+      [1, { call: "unwatch" }],
+    ]);
+    expect(await watch.ended).toStrictEqual(Ok("stopped"));
+  });
+});
+
+describe("a compositor that exits", () => {
+  it("fails a call it had not answered", async () => {
+    const host = new FakeHost();
+    const reading = system(host).stat("/tmp");
+    host.reply(1, gone);
+
+    expect(await reading).toStrictEqual(
+      Err({
+        kind: SystemErrorKind.CompositorGone,
+        message: "the compositor exited",
+      }),
+    );
+  });
+
+  it("ends a process it was running", async () => {
+    const host = new FakeHost();
+    const spawning = system(host).spawn(["sleep", "9"]);
+    host.reply(1, { kind: "started" });
+    const process = started(await spawning);
+    host.end(1, gone);
+
+    expect(await process.exited).toStrictEqual(
+      Err({
+        kind: SystemErrorKind.CompositorGone,
+        message: "the compositor exited",
+      }),
     );
   });
 });

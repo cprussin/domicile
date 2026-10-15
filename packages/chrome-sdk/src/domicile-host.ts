@@ -401,6 +401,15 @@ export type DomicileHostEventMap = {
    * sees pending dialogs.
    */
   portalrequests: MessageEvent<string>;
+  /**
+   * The compositor exited and a new one took over. Fired after every window
+   * of the old one has closed and every system call it had has ended with
+   * `compositor_gone`; the new one's windows and desk state follow. The page's
+   * size and density go to the new one on their own, and the SDK's watches
+   * listen again. Wayland clients do not survive a compositor: their windows
+   * open again only if something starts them.
+   */
+  compositorreplaced: Event;
 };
 
 /**

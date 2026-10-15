@@ -49,10 +49,17 @@ Expect the screen back within seconds and no `failed to take DRM master` line.
 pkill domicile-compositor
 ```
 
-- Expect a new desktop within a second.
-- Expect `starting the desktop again in 1s — that is failure 1 of 5 in a row.`
-- The windows do not come back. This is expected; see
-  [ROADMAP item 2](../ROADMAP.md#in-this-repository).
+Start a desktop with a browser window and a client open first. Expect:
+
+1. `the compositor exited (signal: 15 (SIGTERM))`
+2. `starting the compositor again in 1s — that is failure 1 of 5 in a row.`
+3. From the engine: `the compositor on <socket> hung up; waiting 30s for the
+   next one.`
+4. The shell never goes away, and the browser window keeps its page. The
+   client's tab closes.
+
+The client does not come back; see
+[ROADMAP item 2](../ROADMAP.md#in-this-repository).
 
 ## Dead engine with windows open
 

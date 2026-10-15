@@ -168,8 +168,18 @@ two frame sinks, so the page needs a new token for it.
 - An embed sent before the page heard of the disconnect carries the old token.
   The broker answers it null at once instead of passing it to the new
   producer, and `<app>` retries with the new token.
-- The page still cannot reconnect its control channel to a new compositor
+- The engine listens on the broker socket again when the producer
+  disconnects (`FrameSinkBroker::SetProducerGoneCallback`), since an
+  invitation is accepted once.
+- The page's control channel dials the new compositor
+  (`control_channel.cc`). Before it does, the page hears every window of the
+  old one close and every open system call end with `compositor_gone`. Then
+  `DomicileHost` sends the page's size and density again and fires
+  `compositorreplaced`, and the new compositor's state follows. The SDK sends each watch and D-Bus match again.
+- Wayland clients lose their display and exit
   ([ROADMAP.md](/ROADMAP.md), item 2).
+- `guard-app-survives-compositor-restart.sh` covers the re-embed and the
+  watch.
 
 ### Embed deadlines
 
@@ -250,6 +260,7 @@ Callbacks (engine → compositor):
 | `captured(capture, frame, record)`, `capture_ended(capture)` | none: a monitor's frame for a screen cast, and the browser ending the capture |
 | `frame_done(surface, frame)` | `wl_surface.frame`'s `done`: viz acked the frame |
 | `presented(surface, frame, time_ns, refresh_ns, flags)` | `wp_presentation_feedback`: from the frame's `FrameTimingDetails`, or discarded |
+| `disconnected()` | none: the browser went away, so the next page's `hello` is a new engine ([THE-DOMICILE-BINARY.md](THE-DOMICILE-BINARY.md#crashes-are-recovered)) |
 
 - Only `crop` fills the `<app>` box, so client-side shadows are not drawn. An
   empty rectangle means the whole buffer or surface. `domicile_surface_submit`
