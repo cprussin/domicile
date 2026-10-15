@@ -1,6 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
 import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { css } from "../styled-system/css";
 import { raised } from "./placement";
 import { recordedSettles } from "./recorded-settles";
@@ -22,6 +23,9 @@ const ON_SCREEN = { height: 30, width: 1200, x: 0, y: 32 };
 
 /** The window's whole box, which the bar scales about. */
 const FRAME = { height: 830, width: 1200, x: 0, y: 32 };
+
+/** Longer than base-ui's tooltip delay, 600 ms. */
+const TOOLTIP_WAIT_MS = 800;
 
 const nothingEnded = () => {
   // No case here plays an animation to its end.
@@ -462,6 +466,29 @@ describe("TitleBar", () => {
       expect(open.queryByRole("button", { name: "Float" })).not.toBeNull();
     });
 
+    it("shows its whole title and its page's description while the pointer rests on it", async () => {
+      const { getByText } = tab({
+        description: "The Rust standard library",
+        title: "std - Rust",
+      });
+
+      await userEvent.hover(getByText("std - Rust"));
+
+      const tooltip = await screen.findByRole("tooltip");
+      expect(tooltip).toHaveTextContent("std - Rust");
+      expect(tooltip).toHaveTextContent("The Rust standard library");
+    });
+
+    it("shows only its whole title for a page with no description", async () => {
+      const { getByText } = tab({ title: "std - Rust" });
+
+      await userEvent.hover(getByText("std - Rust"));
+
+      expect(await screen.findByRole("tooltip")).toHaveTextContent(
+        /^std - Rust$/,
+      );
+    });
+
     it("shows the layout and size of a group it stands for", () => {
       const { getByRole } = tab({
         group: { layout: Layout.SplitV, windows: 3 },
@@ -469,6 +496,19 @@ describe("TitleBar", () => {
 
       expect(getByRole("img", { name: "Column of 3" }).textContent).toBe("3");
     });
+  });
+
+  // The bar spans its window, so its title has room; only tabs are cut.
+  it("shows nothing while the pointer rests on a window's own bar", async () => {
+    const { getByText } = render(
+      <TitleBar {...barProps} description="A terminal" />,
+    );
+
+    await userEvent.hover(getByText("kitty"));
+    // Longer than a tab takes to show its tooltip.
+    await new Promise((resolve) => setTimeout(resolve, TOOLTIP_WAIT_MS));
+
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 
   it("rounds its top corners, and squares them and drops its edge while its window fills the screen", () => {

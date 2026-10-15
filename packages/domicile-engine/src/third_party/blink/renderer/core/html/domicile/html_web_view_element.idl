@@ -73,6 +73,10 @@
   // `domicile-favicon-change` signals a change.
   readonly attribute USVString favicon;
 
+  // The page's `<meta name="description">`, trimmed. Empty if none.
+  // `domicile-description-change` signals a change.
+  readonly attribute DOMString description;
+
   // The address of the link under the pointer, for a status bubble. Empty
   // over no link. `domicile-target-url-change` signals a change.
   readonly attribute USVString targetUrl;

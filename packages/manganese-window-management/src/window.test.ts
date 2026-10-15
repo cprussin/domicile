@@ -84,7 +84,8 @@ describe("ShellWindow", () => {
           false,
         ),
       ).toEqual({
-        // The view reports it later.
+        // The view reports these later.
+        description: undefined,
         icon: undefined,
         id: browserWindowId("2"),
         isApp: false,

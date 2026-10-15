@@ -108,6 +108,8 @@ type Props = {
    * `BrowserWindow`.
    */
   onFocusRequest: (id: string) => void;
+  /** A browser window's page description. See `BrowserWindow`. */
+  onDescription: (window: string, description: string) => void;
   /** A browser window's page icon. See `BrowserWindow`. */
   onIcon: (window: string, icon: string) => void;
   onMove: (id: string, x: number, y: number) => void;
@@ -154,6 +156,7 @@ export const Stage = memo(
     focusedId,
     modifiers: { meta, shift },
     onClose,
+    onDescription,
     onDismiss,
     onDrop,
     onDropOn,
@@ -344,6 +347,7 @@ export const Stage = memo(
                 hasKeyboard={window.id === focusedId}
                 key={window.id}
                 motion={motion}
+                onDescription={onDescription}
                 onFocusRequest={onFocusRequest}
                 onHover={onHover}
                 onIcon={onIcon}
@@ -448,6 +452,7 @@ export const Stage = memo(
             }) =>
               placement === undefined || placement.bare ? undefined : (
                 <WindowBar
+                  description={descriptionOf(window)}
                   dragging={stretching || held.has(window.id)}
                   float={desk.floats.get(window.id)}
                   focused={focused}
@@ -639,6 +644,7 @@ export const Stage = memo(
             const tabbed = windowNamed(named, tab.id);
             return (
               <ContainerTab
+                description={descriptionOf(tabbed)}
                 dragging={stretching || held.has(tab.id)}
                 floating={desk.floats.has(tab.id)}
                 focused={focused}
@@ -739,6 +745,7 @@ type WindowContentsProps = {
   fullscreen: boolean;
   hasKeyboard: boolean;
   motion: WindowMotion;
+  onDescription: (window: string, description: string) => void;
   onFocusRequest: (id: string) => void;
   onHover: (id: string, at: Spot) => void;
   onIcon: (window: string, icon: string) => void;
@@ -772,6 +779,7 @@ const WindowContents = memo(
     fullscreen,
     hasKeyboard,
     motion,
+    onDescription,
     onFocusRequest,
     onHover,
     onIcon,
@@ -853,6 +861,7 @@ const WindowContents = memo(
             isApp={window.isApp}
             isPrivate={window.isPrivate}
             motion={motion}
+            onDescription={onDescription}
             onFocusRequest={asked}
             onIcon={onIcon}
             onMotionEnded={ended}
@@ -871,6 +880,7 @@ const WindowContents = memo(
 );
 
 type WindowBarProps = {
+  description: string | undefined;
   dragging: boolean;
   float: Float | undefined;
   focused: boolean;
@@ -902,6 +912,7 @@ type WindowBarProps = {
 /** One window's title bar, memoized as {@link WindowContents} is. */
 const WindowBar = memo(
   ({
+    description,
     dragging,
     float,
     focused,
@@ -975,6 +986,7 @@ const WindowBar = memo(
       >
         <WindowTitleBar
           depth={placement.depth}
+          description={description}
           dragging={dragging}
           float={float}
           // A hidden tab is not highlighted with its `focus parent` group, or
@@ -1014,6 +1026,8 @@ const WindowBar = memo(
 );
 
 type ContainerTabProps = {
+  /** The page description of the window the tab is named after. */
+  description: string | undefined;
   dragging: boolean;
   floating: boolean;
   focused: boolean;
@@ -1036,6 +1050,7 @@ type ContainerTabProps = {
 /** A container's tab, memoized as {@link WindowContents} is. */
 const ContainerTab = memo(
   ({
+    description,
     dragging,
     floating,
     focused,
@@ -1072,6 +1087,7 @@ const ContainerTab = memo(
       <Sliding frame={undefined} motion={motion} on={on} rewound={0}>
         <TitleBar
           depth={tab.depth}
+          description={description}
           dragging={dragging}
           floating={floating}
           // The shown tab of an unfocused container must not use the accent,
@@ -1395,6 +1411,10 @@ const iconOf = (
   window.kind === WindowKind.App
     ? clientIcons.get(window.desktopId)
     : window.icon;
+
+/** A browser window's page description; a client's window has none. */
+const descriptionOf = (window: ShellWindow): string | undefined =>
+  window.kind === WindowKind.App ? undefined : window.description;
 
 /**
  * Returns the engine's id behind a browser window's window id. Every browser
