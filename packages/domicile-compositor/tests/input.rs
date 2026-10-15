@@ -419,6 +419,31 @@ fn a_keyboard_edited_on_disk_reaches_the_client_and_the_chrome() {
     );
 }
 
+/// A client is handed its keymap as a read-only fd, on either path Smithay
+/// sends it by: a sealed memfd from `wl_seat` 7, a temporary file below.
+///
+/// SELinux refuses a confined client a writable fd it may not write, and
+/// wezterm exits without a keymap.
+#[test]
+fn a_client_is_handed_a_read_only_keymap() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut sealed = compositor.client_with("sealed", &["--wl-seat-v7"]);
+    let mut unsealed = compositor.client("unsealed");
+
+    for (client, path) in [(&mut sealed, "wl_seat 7"), (&mut unsealed, "wl_seat 5")] {
+        assert!(
+            client.wait_for_trace("keymap(", 1),
+            "a client binds a keyboard and is handed a keymap:\n{}",
+            client.trace()
+        );
+        assert!(
+            client.trace().contains(", read-only)"),
+            "the keymap fd on {path} is read-only:\n{}",
+            client.trace()
+        );
+    }
+}
+
 /// A reloaded keymap that fails to compile is logged and ignored.
 ///
 /// At startup the same failure is fatal. On reload, exiting would close every

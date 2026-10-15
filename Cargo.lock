@@ -1517,8 +1517,7 @@ checksum = "ba467056f1b547ed52077911161fc86985becbc60e8e1857c8a144dab0def891"
 [[package]]
 name = "smithay"
 version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "740cea6927892bc182d5bf70c8f79806c8bc9f68f2fb96e55a30be171b63af98"
+source = "git+https://github.com/cprussin/smithay?rev=fb981077def1405300e69a5993e9789768e772aa#fb981077def1405300e69a5993e9789768e772aa"
 dependencies = [
  "appendlist",
  "atomic_float",

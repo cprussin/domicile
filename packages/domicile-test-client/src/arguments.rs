@@ -121,6 +121,12 @@ pub struct Arguments {
     /// Whether to bind `xdg_wm_base` at version 1, as a client too old for
     /// tiled states does.
     pub xdg_wm_base_v1: bool,
+
+    /// Whether to bind `wl_seat` at version 7 rather than 5.
+    ///
+    /// Smithay sends the keymap as a sealed memfd from version 7 and as a
+    /// temporary file below it.
+    pub wl_seat_v7: bool,
 }
 
 /// An `xdg_toplevel` request about the window's state.
@@ -216,6 +222,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut buffer_transform = None;
     let mut ask_to = None;
     let mut xdg_wm_base_v1 = None;
+    let mut wl_seat_v7 = None;
 
     let mut args = args.into_iter();
     while let Some(argument) = args.next() {
@@ -314,6 +321,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--xdg-wm-base-v1" => {
                 take(&mut xdg_wm_base_v1, &flag, true)?;
             }
+            "--wl-seat-v7" => {
+                take(&mut wl_seat_v7, &flag, true)?;
+            }
             _ => return Err(ArgumentError::Unknown { argument: flag }),
         }
     }
@@ -342,6 +352,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         buffer_transform,
         ask_to,
         xdg_wm_base_v1: xdg_wm_base_v1.unwrap_or(false),
+        wl_seat_v7: wl_seat_v7.unwrap_or(false),
     })
 }
 

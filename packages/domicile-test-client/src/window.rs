@@ -5,7 +5,7 @@
 //! so checks can observe a live window.
 
 use std::io::{Read as _, Write as _};
-use std::os::fd::{AsFd as _, BorrowedFd, OwnedFd};
+use std::os::fd::{AsFd as _, AsRawFd as _, BorrowedFd, OwnedFd};
 use std::os::unix::fs::FileExt as _;
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
@@ -285,6 +285,8 @@ struct Client {
     ask_to: Option<AskTo>,
     /// See [`crate::arguments::Arguments::xdg_wm_base_v1`].
     xdg_wm_base_v1: bool,
+    /// See [`crate::arguments::Arguments::wl_seat_v7`].
+    wl_seat_v7: bool,
     /// The serial of the keyboard's last `enter`, for
     /// [`AskForFocus::WhenLeft`].
     entered_at: Option<u32>,
@@ -516,6 +518,7 @@ impl Client {
             ask_for_focus: asked.ask_for_focus,
             ask_to: asked.ask_to,
             xdg_wm_base_v1: asked.xdg_wm_base_v1,
+            wl_seat_v7: asked.wl_seat_v7,
             entered_at: None,
             hold_the_screens_on: asked.hold_the_screens_on,
             inhibit_shortcuts: asked.inhibit_shortcuts,
@@ -579,7 +582,8 @@ impl Client {
                 // Binding the seat lets the compositor send input. It is
                 // kept to create the selection devices.
                 "wl_seat" => {
-                    self.globals.seat = Some(registry.bind(name, version.min(5), handle, ()));
+                    let newest = if self.wl_seat_v7 { 7 } else { 5 };
+                    self.globals.seat = Some(registry.bind(name, version.min(newest), handle, ()));
                 }
                 "wl_data_device_manager" => {
                     self.globals.clipboard = Some(registry.bind(name, version.min(3), handle, ()));
@@ -2366,8 +2370,9 @@ impl Dispatch<wl_output::WlOutput, ()> for Client {
 /// Traces keyboard events.
 ///
 /// `modifiers` lets checks spot a lost key release that leaves a modifier
-/// held. `keymap` is traced on each change so checks can see a reloaded
-/// layout.
+/// held. `keymap` is traced on each change, with how its fd was opened, so
+/// checks can see a reloaded layout and a keymap a confined client could not
+/// receive.
 impl Dispatch<wl_keyboard::WlKeyboard, ()> for Client {
     fn event(
         client: &mut Client,
@@ -2408,7 +2413,13 @@ impl Dispatch<wl_keyboard::WlKeyboard, ()> for Client {
                 );
             }
             wl_keyboard::Event::Keymap { fd, size, .. } => {
-                crate::say!(keyboard.id(), "keymap({})", layout_named_by(fd, size));
+                let access = access_mode(fd.as_fd());
+                crate::say!(
+                    keyboard.id(),
+                    "keymap({}, {})",
+                    layout_named_by(fd, size),
+                    access
+                );
             }
             wl_keyboard::Event::Modifiers {
                 serial,
@@ -2545,6 +2556,30 @@ fn layout_named_by(fd: std::os::fd::OwnedFd, size: u32) -> String {
     first_group_name(&text).to_string()
 }
 
+/// How `fd` was opened: `read-only`, `write-only` or `read-write`, or why that
+/// is unknown.
+///
+/// Read from `/proc/self/fdinfo`, whose `flags` are `F_GETFL`'s in octal.
+/// SELinux refuses a confined client an fd opened for writing that it may not
+/// write.
+fn access_mode(fd: BorrowedFd) -> String {
+    let info = match std::fs::read_to_string(format!("/proc/self/fdinfo/{}", fd.as_raw_fd())) {
+        Ok(info) => info,
+        Err(why) => return format!("unknown: {why}"),
+    };
+    let flags = info
+        .lines()
+        .find_map(|line| line.strip_prefix("flags:"))
+        .and_then(|flags| u32::from_str_radix(flags.trim(), 8).ok());
+    match flags.map(|flags| flags & 0o3) {
+        None => "unknown: no flags in fdinfo".to_string(),
+        Some(0) => "read-only".to_string(),
+        Some(1) => "write-only".to_string(),
+        Some(2) => "read-write".to_string(),
+        Some(other) => format!("unknown: access mode {other}"),
+    }
+}
+
 /// The first group name in a keymap's text, or why there is none.
 ///
 /// The first `name[...]` in `xkb_symbols`. libxkbcommon 1.12 writes the group
@@ -2572,10 +2607,12 @@ mod tests {
     use wayland_client::protocol::wl_output::Transform;
     use wayland_client::protocol::wl_shm;
 
+    use std::os::fd::AsFd as _;
+
     use super::{
-        buffer_size, first_group_name, halves, scrolled_to, shm_format, striped, COLORS,
-        SCROLLING_BUBBLE, SCROLL_STEP, SIZE, STRIPE_COLOR, TRANSLUCENT_ALPHA, TRANSLUCENT_COLORS,
-        TURNED_COLORS,
+        access_mode, buffer_size, first_group_name, halves, scrolled_to, shm_format, striped,
+        COLORS, SCROLLING_BUBBLE, SCROLL_STEP, SIZE, STRIPE_COLOR, TRANSLUCENT_ALPHA,
+        TRANSLUCENT_COLORS, TURNED_COLORS,
     };
 
     #[test]
@@ -2616,6 +2653,15 @@ mod tests {
                 COLORS[0],
             ]
         );
+    }
+
+    #[test]
+    fn an_fd_is_named_by_how_it_was_opened() {
+        let read_only = std::fs::File::open(env!("CARGO_MANIFEST_DIR").to_string() + "/Cargo.toml")
+            .expect("the manifest is there to open");
+        assert_eq!(access_mode(read_only.as_fd()), "read-only");
+        let (socket, _) = std::os::unix::net::UnixStream::pair().expect("a socket pair");
+        assert_eq!(access_mode(socket.as_fd()), "read-write");
     }
 
     #[test]
