@@ -47,6 +47,12 @@ gfx::Rect PageBoundsOn(const DeskPlace& place, const gfx::Rect& box) {
   return gfx::Rect(box.origin() - place.desk.OffsetFromOrigin(), box.size());
 }
 
+gfx::Rect PopupBoundsOn(const gfx::Rect& popup,
+                        const gfx::Rect& page_on_host,
+                        const gfx::Rect& page_on_display) {
+  return popup + (page_on_display.origin() - page_on_host.origin());
+}
+
 display::ScreenInfos DeskScreenInfos(const DeskGeometry& desk,
                                      const std::vector<DeskPlace>& lit,
                                      const display::ScreenInfo& like) {

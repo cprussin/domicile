@@ -129,7 +129,8 @@ Understood and not scheduled.
 
 - **A monitor profile can require a mode but not set it.** Same for refresh
   rate. [A-DESKTOP-ON-A-TTY.md](docs/architecture/A-DESKTOP-ON-A-TTY.md).
-- **Engine popups are kept inside their window, not their CRTC.**
+- **Engine popups are kept inside the desk, not their monitor.** A `<select>`
+  near a monitor's edge can open across the seam.
 - **Filter quality on lower-density displays is unmeasured.**
 - **The desk rasters what no monitor shows.**
   [DISPLAY-TILINGS.md](docs/architecture/DISPLAY-TILINGS.md#cost).
