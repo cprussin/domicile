@@ -30,7 +30,7 @@ fn shell_config(message: &HostMessage) -> bool {
 
 /// The key `keysym` is on, from a `shell_config`.
 fn key(message: &HostMessage, keysym: &str) -> Option<u32> {
-    let HostMessage::ShellConfig { keys } = message else {
+    let HostMessage::ShellConfig { keys, .. } = message else {
         unreachable!("the wait matched on the variant");
     };
     keys.get(keysym).copied()

@@ -78,8 +78,8 @@ pub struct Restatement {
     pub lockdown: Option<LockdownConfig>,
     /// What opens the lock, or `None` if unchanged.
     pub lock: Option<LockConfig>,
-    /// Whether to resend the key config to the chromes, because keysyms
-    /// depend on the layout.
+    /// Whether to resend the shell config to the chromes: keysyms depend on
+    /// the layout, and the shell's options may have changed.
     pub shell_config: bool,
     /// Whether to tell the engine again which display each tablet covers.
     pub pointers: bool,
@@ -104,7 +104,8 @@ impl Restatement {
             extensions: (was.extensions != now.extensions).then(|| now.extensions.clone()),
             lockdown: (was.lockdown != now.lockdown).then(|| now.lockdown.clone()),
             lock: (was.lock != now.lock).then(|| now.lock.clone()),
-            shell_config: was.input.keyboard != now.input.keyboard,
+            shell_config: was.input.keyboard != now.input.keyboard
+                || was.shell_options != now.shell_options,
             pointers: was.input.pointers != now.input.pointers,
         }
     }
@@ -255,6 +256,17 @@ mod tests {
     }
 
     #[test]
+    fn the_shell_config_is_restated_when_the_shell_s_options_moved() {
+        let was = parsed(A_DVORAK_DESK);
+        let restated = Restatement::between(&was, &parsed(A_DVORAK_DESK_WITH_A_12_HOUR_CLOCK));
+        assert!(restated.shell_config);
+        assert_eq!(
+            restated.keyboard, None,
+            "the options are the shell's, so the keymap is not resent"
+        );
+    }
+
+    #[test]
     fn pointers_that_moved_are_restated() {
         let was = parsed(A_DVORAK_DESK);
         assert!(Restatement::between(&was, &parsed(A_DESK_WITH_A_TABLET)).pointers);
@@ -336,6 +348,17 @@ mod tests {
 "#;
 
     /// The same desk with the default US QWERTY layout.
+    /// The same desk, with an option set for its shell.
+    const A_DVORAK_DESK_WITH_A_12_HOUR_CLOCK: &str = r#"
+{
+  "input": {
+    "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:swapescape"] }
+  },
+  "output": { "displays": [{ "name": "one", "size": [1024, 768] }] },
+  "shell_options": { "clock": { "format": "12h" } }
+}
+"#;
+
     const A_PLAIN_DESK: &str = r#"
 { "output": { "displays": [{ "name": "one", "size": [1024, 768] }] } }
 "#;

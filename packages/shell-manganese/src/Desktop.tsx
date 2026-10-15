@@ -7,6 +7,8 @@ import { usePortalWallpaper } from "@domicile-desktop/component-library/usePorta
 import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
 import { deskBacklight } from "@domicile-desktop/manganese-bar-module-brightness/desk-backlight";
 import { useBrightnessKeys } from "@domicile-desktop/manganese-bar-module-brightness/useBrightnessKeys";
+import type { ClockOptions } from "@domicile-desktop/manganese-bar-module-clock/clock-options";
+import { ClockOptionsContext } from "@domicile-desktop/manganese-bar-module-clock/clock-options";
 import { popupShown } from "@domicile-desktop/manganese-bar-module-tray/extensions/shown";
 import { useExtensions } from "@domicile-desktop/manganese-bar-module-tray/extensions/useExtensions";
 import type { TrayState } from "@domicile-desktop/manganese-bar-module-tray/tray-context";
@@ -20,6 +22,7 @@ import { Clipboard } from "@domicile-desktop/manganese-clipboard/Clipboard";
 import { useClipboard } from "@domicile-desktop/manganese-clipboard/useClipboard";
 import { DomicileContext } from "@domicile-desktop/manganese-host/domicile-context";
 import { sharedIconTheme } from "@domicile-desktop/manganese-host/followed-icon-theme";
+import { useShellOptions } from "@domicile-desktop/manganese-host/useShellOptions";
 import { appSearch } from "@domicile-desktop/manganese-launcher/app-search";
 import type { ApplicationsConfig } from "@domicile-desktop/manganese-launcher/applications-config";
 import { Launcher } from "@domicile-desktop/manganese-launcher/Launcher";
@@ -80,6 +83,7 @@ import type { ReactNode } from "react";
 import { useCallback, useMemo, useState } from "react";
 import { LOCK_BAR } from "./default-bars";
 import { pressMediaKey } from "./media-keys";
+import { options } from "./options";
 import { Monitor } from "./screens/Monitor";
 import { NoScreens } from "./screens/NoScreens";
 import { showsSharing } from "./shows-sharing";
@@ -112,6 +116,8 @@ export const Desktop = ({
   keybindings,
 }: Props) => {
   const displays = useDisplays();
+  // What the config sets under `shell_options`.
+  const shellOptions = useShellOptions(domicile, options);
   // The wallpaper advances only this theme's rotation, and holds it while
   // the theme wipe plays.
   const { flipping, theme } = useTheme();
@@ -391,6 +397,7 @@ export const Desktop = ({
 
   return (
     <BarProviders
+      clock={shellOptions.clock}
       domicile={domicile}
       drawer={drawer}
       launcher={launcherControl}
@@ -540,6 +547,7 @@ const lockBar = (screen: string) => (
 /** Everything the bars' items read, desktop-wide. */
 const BarProviders = ({
   children,
+  clock,
   domicile,
   drawer,
   launcher,
@@ -547,6 +555,7 @@ const BarProviders = ({
   workspaces,
 }: {
   children: ReactNode;
+  clock: ClockOptions;
   domicile: DomicileHost;
   drawer: NotificationsDrawer;
   launcher: LauncherControl;
@@ -557,7 +566,9 @@ const BarProviders = ({
     <WorkspacesContext value={workspaces}>
       <LauncherContext value={launcher}>
         <NotificationsContext value={drawer}>
-          <TrayContext value={tray}>{children}</TrayContext>
+          <TrayContext value={tray}>
+            <ClockOptionsContext value={clock}>{children}</ClockOptionsContext>
+          </TrayContext>
         </NotificationsContext>
       </LauncherContext>
     </WorkspacesContext>

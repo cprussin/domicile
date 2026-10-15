@@ -261,21 +261,28 @@ fn a_compositor_that_did_not_send_the_command_is_quoted() {
 
 #[test]
 fn a_desktop_says_which_files_the_settings_app_edits() {
+    // The shell's declared options are beside the module it serves now, which
+    // `load-shell` can change.
     let files = SettingsFiles {
         config: Some(PathBuf::from("/home/me/.config/domicile/domicile.json")),
         evaluated: None,
         shell: Some(PathBuf::from("/home/me/.config/domicile/shell.ts")),
+        options: None,
     };
     assert_eq!(
         reply_to(
             "{\"type\":\"settings_files\"}",
             &Desktop {
                 files: &files,
+                module: Path::new("/home/me/.cache/domicile/abc/shell.js"),
                 ..nothing_dialed()
             }
         ),
         Response::SettingsFiles {
-            files: files.clone()
+            files: SettingsFiles {
+                options: Some(PathBuf::from("/home/me/.cache/domicile/abc/options.json")),
+                ..files.clone()
+            }
         }
     );
 }
@@ -644,6 +651,7 @@ static NO_FILES: SettingsFiles = SettingsFiles {
     config: None,
     evaluated: None,
     shell: None,
+    options: None,
 };
 
 /// Sends one request line and parses the one reply line.

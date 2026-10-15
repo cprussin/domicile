@@ -78,6 +78,10 @@
       "types": "./dist/notification.d.ts",
       "default": "./dist/notification.js"
     },
+    "./options": {
+      "types": "./dist/options.d.ts",
+      "default": "./dist/options.js"
+    },
     "./own-keybindings": {
       "types": "./dist/own-keybindings.d.ts",
       "default": "./dist/own-keybindings.js"

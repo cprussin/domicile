@@ -533,7 +533,64 @@ The user describes the desktop (displays, keyboard, idle, lock, theme,
 extensions) in one config file. The compositor reloads it on every change. See
 [SHELL-CONFIG.md](SHELL-CONFIG.md).
 
+- Settings of your own shell go in `shell_options`; see [Options](#options).
 - The shell owns any other user-facing settings: its own location, schema and
   names.
 - `@domicile-desktop/sdk` does not parse the config. Its schema is the
   `domicile-config` crate's, and there is no TypeScript parser for it.
+
+## Options
+
+Options are settings a user changes without editing the shell's code. Declare
+them, and the user sets them under `shell_options` in the config or on the
+Settings app's **Shell** page ([SETTINGS.md](SETTINGS.md)).
+
+```ts
+import { defineOptions, option } from "@domicile-desktop/sdk/options";
+
+export const options = defineOptions({
+  clock: {
+    format: option.choice("Clock format", ["24h", "12h"], "24h"),
+    seconds: option.toggle("Show seconds", true),
+  },
+  gaps: option.number("Gap between windows", 8, { max: 64, min: 0 }),
+});
+```
+
+```json
+{ "shell_options": { "clock": { "format": "12h" }, "gaps": 4 } }
+```
+
+- Kinds: `toggle`, `choice`, `number` (with an optional `min` and `max`),
+  `text` and `list` (of text). A plain object is a group. Each option has a
+  label and a default. `defineOptions` throws on a default that its own
+  choices or limits refuse.
+- Export it from the shell's entry as `options`. The builder writes it to
+  `options.json` beside `shell.js`. A prebuilt shell passes it to `shellBuild`
+  (`@domicile-desktop/component-library/vite-shell`). A shell with no
+  `options` export has no options.
+- `watchShellOptions(domicile, options, listener)` calls `listener` with the
+  values now and on every change. A change needs no rebuild or reload.
+  manganese's React hook is `useShellOptions`
+  (`@domicile-desktop/manganese-host/useShellOptions`).
+- An option the config leaves out takes its default. An unknown key or a bad
+  value is dropped and logged, so the shell starts whatever the file says.
+- The Settings app refuses to write a value the declaration refuses. A config
+  module that computes `shell_options` is read-only in the form, like its other
+  settings.
+- Arguments in code win over options. Say in your docs which arguments
+  shadow which options; the form cannot see them.
+- On the wire: the compositor sends the JSON text in `shell_config`, and the
+  engine exposes it as `domicile.shellOptions` with a `shelloptionschanged`
+  event ([CONTROL-CHANNEL.md](/packages/domicile-engine/docs/CONTROL-CHANNEL.md)).
+
+Key decisions:
+
+- **Values in JSON over rewriting code.** A JSON key can be written safely; a
+  call's arguments cannot.
+- **A declaration over reading prop types.** Types are gone at run time, and a
+  form needs labels, defaults and limits.
+- **One opaque key over a section per shell.** The compositor's schema stays
+  closed and does not change when a shell adds an option.
+- **Drop bad values in the shell; refuse them in the host.** The shell must
+  start whatever the file says; the app should never write a bad value.

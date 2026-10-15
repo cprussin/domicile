@@ -13,6 +13,7 @@ Helpers every part of Domicile's manganese desktop shares: the desktop as React 
 - `@domicile-desktop/manganese-host/use-provided`
 - `@domicile-desktop/manganese-host/useRequests`
 - `@domicile-desktop/manganese-host/useSharedWatch`
+- `@domicile-desktop/manganese-host/useShellOptions`
 - `@domicile-desktop/manganese-host/watch-host`
 
 ## Test

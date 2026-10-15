@@ -22,6 +22,8 @@ export type TypeName = z.infer<typeof typeNameSchema>;
 /** A schema, reduced to what decides its TypeScript type. */
 export type JsonSchema = {
   readonly $ref?: string | undefined;
+  /** `true` for an object open to any key, which then names none. */
+  readonly additionalProperties?: true | undefined;
   readonly anyOf?: readonly JsonSchema[] | undefined;
   readonly const?: string | undefined;
   readonly description?: string | undefined;
@@ -44,10 +46,22 @@ export type RootSchema = JsonSchema & {
 export const parseRootSchema = (value: unknown): RootSchema =>
   rootSchemaSchema.parse(value);
 
+/**
+ * An object open to other keys beside the ones it names would need an index
+ * signature that types them all.
+ */
+const namesKeysOrIsOpen = (schema: {
+  additionalProperties?: boolean | undefined;
+  properties?: unknown;
+}): boolean =>
+  schema.additionalProperties !== true || schema.properties === undefined;
+
+const OPEN_AND_NAMED = {
+  message: "additionalProperties: an object open to any key names none",
+};
+
 /** Keywords that constrain a value without changing its TypeScript type. */
 const constraints = {
-  // `false` only: an object open to other keys would need an index signature.
-  additionalProperties: z.literal(false).optional(),
   default: z.unknown().optional(),
   format: z.string().optional(),
   maxItems: z.number().optional(),
@@ -60,6 +74,8 @@ const constraints = {
 /** The keywords that decide a type. A function, since they recurse. */
 const typing = () => ({
   $ref: z.string().optional(),
+  // `false` says only what `properties` does, so it is dropped below.
+  additionalProperties: z.boolean().optional(),
   anyOf: z.array(jsonSchemaSchema).optional(),
   const: z.string().optional(),
   description: z.string().optional(),
@@ -73,9 +89,11 @@ const typing = () => ({
 });
 
 const withoutConstraints = <
-  T extends Partial<Record<keyof typeof constraints, unknown>>,
+  T extends Partial<Record<keyof typeof constraints, unknown>> & {
+    additionalProperties?: boolean | undefined;
+  },
 >({
-  additionalProperties: _additionalProperties,
+  additionalProperties,
   default: _default,
   format: _format,
   maxItems: _maxItems,
@@ -84,10 +102,16 @@ const withoutConstraints = <
   minItems: _minItems,
   pattern: _pattern,
   ...typed
-}: T): Omit<T, keyof typeof constraints> => typed;
+}: T): Omit<T, keyof typeof constraints | "additionalProperties"> & {
+  additionalProperties?: true;
+} =>
+  additionalProperties === true ? { ...typed, additionalProperties } : typed;
 
 const jsonSchemaSchema: z.ZodType<JsonSchema> = z.lazy(() =>
-  z.strictObject({ ...typing(), ...constraints }).transform(withoutConstraints),
+  z
+    .strictObject({ ...typing(), ...constraints })
+    .refine(namesKeysOrIsOpen, OPEN_AND_NAMED)
+    .transform(withoutConstraints),
 );
 
 const rootSchemaSchema: z.ZodType<RootSchema> = z
@@ -98,4 +122,5 @@ const rootSchemaSchema: z.ZodType<RootSchema> = z
     $schema: z.literal("https://json-schema.org/draft/2020-12/schema"),
     title: z.string(),
   })
+  .refine(namesKeysOrIsOpen, OPEN_AND_NAMED)
   .transform(({ $schema: _, ...root }) => withoutConstraints(root));

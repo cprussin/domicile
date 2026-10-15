@@ -143,6 +143,8 @@ paths() { # records file, struct, prefix, structs above
         case "$inner" in
           \(*[A-Z]*\)) echo "  $path: type $inner holds a type this check does not walk" >>"$WORK/unreadable" ;;
           String | PathBuf | bool | [iuf][0-9]* | usize | isize | \(*\)) ;;
+          # Opaque JSON: its keys are not `domicile-config`'s to remove.
+          serde_json::Map\<*\> | serde_json::Value) ;;
           *) echo "  $path: type $inner is not one this check can read" >>"$WORK/unreadable" ;;
         esac
         ;;

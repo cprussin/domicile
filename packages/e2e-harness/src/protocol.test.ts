@@ -470,18 +470,42 @@ describe("parseHostMessage", () => {
     ).toThrow();
   });
 
-  it("decodes the keyboard: every keysym and the key it is on", () => {
+  it("decodes every keysym's key and the shell's options as JSON text", () => {
     expect(
       parseHostMessage(
-        JSON.stringify({ keys: { l: 38, Return: 28 }, type: "shell_config" }),
+        JSON.stringify({
+          keys: { l: 38, Return: 28 },
+          options: '{"gaps":4}',
+          type: "shell_config",
+        }),
       ),
-    ).toStrictEqual({ keys: { l: 38, Return: 28 }, type: "shell_config" });
+    ).toStrictEqual({
+      keys: { l: 38, Return: 28 },
+      options: '{"gaps":4}',
+      type: "shell_config",
+    });
   });
 
   it("throws on a key that is not a key number", () => {
     expect(() =>
       parseHostMessage(
-        JSON.stringify({ keys: { Return: -1 }, type: "shell_config" }),
+        JSON.stringify({
+          keys: { Return: -1 },
+          options: "{}",
+          type: "shell_config",
+        }),
+      ),
+    ).toThrow();
+  });
+
+  it("throws on options that are not JSON text", () => {
+    expect(() =>
+      parseHostMessage(
+        JSON.stringify({
+          keys: {},
+          options: { gaps: 4 },
+          type: "shell_config",
+        }),
       ),
     ).toThrow();
   });

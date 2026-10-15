@@ -1,4 +1,6 @@
 import { describe, expect, it, setDefaultTimeout } from "bun:test";
+import type { Options } from "@domicile-desktop/sdk/options";
+import { defineOptions, option } from "@domicile-desktop/sdk/options";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -20,6 +22,7 @@ setDefaultTimeout(15_000);
 const files = (
   config: Record<string, unknown>,
   writable = true,
+  options: Options | undefined = undefined,
 ): SettingsFiles => ({
   config: {
     path: CONFIG_PATH,
@@ -27,6 +30,7 @@ const files = (
     writable,
   },
   evaluated: undefined,
+  options: options === undefined ? undefined : JSON.stringify(options),
   shell: {
     path: SHELL_PATH,
     text: "export const Shell = runManganese();\n",
@@ -89,6 +93,7 @@ const renderApp = async (
     chosen = "/home/me/src/my-extension",
     config = {},
     configExtensions = [],
+    options,
     refuse,
     writable = true,
   }: {
@@ -96,6 +101,8 @@ const renderApp = async (
     chosen?: string | null;
     config?: Record<string, unknown>;
     configExtensions?: string[];
+    /** What the shell declares; none by default. */
+    options?: Options;
     refuse?: string;
     writable?: boolean;
   } = {},
@@ -103,7 +110,7 @@ const renderApp = async (
   const host = fakeHost({
     chosen: chosen ?? undefined,
     configExtensions,
-    files: files(config, writable),
+    files: files(config, writable, options),
     installed: structuredClone(INSTALLED),
     media: structuredClone(MEDIA),
     refuse,
@@ -371,6 +378,64 @@ describe(App, () => {
           { displays: [{ display: "drm-1" }], name: "laptop" },
         ]);
       });
+    });
+  });
+
+  describe("the shell's options", () => {
+    const OPTIONS = defineOptions({
+      clock: {
+        format: option.choice("Clock format", ["24h", "12h"], "24h"),
+        seconds: option.toggle("Show seconds", true),
+      },
+      wallpaper: {
+        minutes: option.number("Minutes per photo", 1, { max: 60, min: 1 }),
+      },
+    });
+
+    it("shows each option the shell declares and writes a change under shell_options", async () => {
+      const { host, user } = await renderApp("Shell", {
+        config: { shell_options: { wallpaper: { minutes: 5 } } },
+        options: OPTIONS,
+      });
+      expect(
+        screen.getByRole("textbox", { name: "Minutes per photo" }),
+      ).toHaveValue("5");
+      await choose(user, "Clock format", "12h");
+      await waitFor(() => {
+        expect(written(host.writes).shell_options).toEqual({
+          clock: { format: "12h" },
+          wallpaper: { minutes: 5 },
+        });
+      });
+    });
+
+    it("removes an option set back to its default", async () => {
+      const { host, user } = await renderApp("Shell", {
+        config: { shell_options: { clock: { seconds: false } } },
+        options: OPTIONS,
+      });
+      await user.click(screen.getByRole("switch", { name: "Show seconds" }));
+      await waitFor(() => {
+        expect(written(host.writes)).toEqual({});
+      });
+    });
+
+    it("refuses a number outside the option's limits", async () => {
+      const { host, user } = await renderApp("Shell", { options: OPTIONS });
+      const minutes = screen.getByRole("textbox", {
+        name: "Minutes per photo",
+      });
+      await user.clear(minutes);
+      await user.type(minutes, "90");
+      await user.tab();
+      expect(await screen.findByText("90 is above 60")).toBeVisible();
+      expect(minutes).toHaveValue("1");
+      expect(host.writes).toEqual([]);
+    });
+
+    it("says when the shell declares no options", async () => {
+      await renderApp("Shell");
+      expect(screen.getByText("This shell declares no options.")).toBeVisible();
     });
   });
 

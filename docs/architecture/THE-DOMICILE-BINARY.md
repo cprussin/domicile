@@ -69,6 +69,7 @@ temp directory. The modules that spawn processes or bind sockets stay thin.
 | `cli` | yes | arguments, and the error for each bad one |
 | `components` | yes | finds the engine and compositor from the binary's path or the environment; the builder, bundled shells and app modules when needed |
 | `app_host` | yes | `domicile-app-host`: what Domicile's apps spawn to read and write the files the desktop names and reach the engine's history, extensions and site settings |
+| `shell_options` | yes | the values in a config's `shell_options` that the shell's `options.json` refuses, for the app host |
 | `site_permissions` | yes | a site's permission and setting, as the engine, the control socket and the app host carry it |
 | `shell_path` | yes | name or path → module to load and the directory it is served from |
 | `shell_source` | yes | classifies a shell argument: module, entry to build, bundled shell, or package |
@@ -112,13 +113,17 @@ becomes JSON before the compositor sees it:
 1. `domicile` runs the builder with `--evaluate`. It bundles the config for
    Bun, with `@domicile-desktop/*` and React from the install and stylesheets
    stubbed.
-2. The builder imports it and writes every export but `Shell` to
+2. The builder imports it and writes every export but `Shell` and `options` to
    `$XDG_CACHE_HOME/domicile/shells/configs/<key>.json`.
 3. `domicile` copies that file to `<runtime>/config.json` and gives the
    compositor that path, which it watches.
 
 The compositor only parses JSON (`domicile-config`). It never runs
 JavaScript. `config_watch` re-runs these steps on an edit.
+
+A shell build imports the entry the same way and writes its `options` export
+to `options.json` beside `shell.js`. `settings_files` reports it
+([WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md#options)).
 
 ### Home Manager module
 

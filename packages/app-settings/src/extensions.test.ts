@@ -26,7 +26,12 @@ const withInstalled = (installed: InstalledExtension[]) =>
   fakeHost({
     chosen: undefined,
     configExtensions: [],
-    files: { config: undefined, evaluated: undefined, shell: undefined },
+    files: {
+      config: undefined,
+      evaluated: undefined,
+      options: undefined,
+      shell: undefined,
+    },
     installed,
     media: { cameras: [], microphones: [] },
     sites: {
