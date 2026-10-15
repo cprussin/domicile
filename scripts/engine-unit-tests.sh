@@ -25,7 +25,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # 12, ShellDocument 14, ShellSource 3, CursorShape 3, CommandProtocol 43,
 # DomicileDisplayList 8, DomicileKeyboardLayout 3, ShellWindows 8,
 # ShellWindowPlaces 7, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
-# SurfaceTransform 3, SurfaceAlpha 2, ExtensionInstaller 3, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 17,
+# SurfaceTransform 3, SurfaceAlpha 2, ExtensionInstaller 3, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 19,
 # DomicileDisplayRegions 27, DomicileDeskTargeter 4, PlaceholderStage 3,
 # SystemCall 4, PortalRequest 3, FileChoice 13, DisplayCapture 7,
 # CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, SitePermissions 11,
@@ -36,8 +36,9 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # DeskCursorThemeSource 2, XCursorTheme 5, XCursorThemeDirectory 4,
 # SyncedFrame 7.
 #
-# 403, and it was 402 — the answer a shell fetch holds is one ShellFetch case.
-# Before that 402, and it was 399 — a compositor that hangs up being ended for the page
+# 405, and it was 403 — where a page's popup goes on another monitor is two
+# DeskGeometry cases. Before that 403, and it was 402 — the answer a shell
+# fetch holds is one ShellFetch case. Before that 402, and it was 399 — a compositor that hangs up being ended for the page
 # and replaced is two ControlChannel cases, and the producer said to have gone
 # is one FrameSinkBroker case. Before that 399, and it was 395 — the synced frames a move shows with reaching the page
 # is one ControlChannel case, and an <app> with no frame set showing the
@@ -145,7 +146,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=403
+FLOOR=405
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

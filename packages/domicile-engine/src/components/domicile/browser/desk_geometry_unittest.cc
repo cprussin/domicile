@@ -95,6 +95,24 @@ TEST(DeskGeometryTest, EachDisplayShowsThePageFromItsOwnCorner) {
   EXPECT_EQ(PageBoundsOn(kRight, box), gfx::Rect(-3720, 0, 5520, 3200));
 }
 
+TEST(DeskGeometryTest, APopupIsShownWhereItsPageIsOnAnotherMonitor) {
+  // A <select> at desk (300, 2000), on the laptop, opens its list in the
+  // center monitor's window, which hosts the page.
+  const gfx::Rect box(0, 0, 5520, 3200);
+  const gfx::Rect page_on_host = PageBoundsOn(kCenter, box);
+  EXPECT_EQ(PopupBoundsOn(gfx::Rect(-1620, 2000, 200, 300), page_on_host,
+                          PageBoundsOn(kLaptop, box)),
+            gfx::Rect(300, 80, 200, 300));
+}
+
+TEST(DeskGeometryTest, APopupOnTheHostIsOffEveryOtherMonitor) {
+  const gfx::Rect box(0, 0, 5520, 3200);
+  const gfx::Rect page_on_host = PageBoundsOn(kCenter, box);
+  EXPECT_FALSE(PopupBoundsOn(gfx::Rect(100, 100, 200, 300), page_on_host,
+                             PageBoundsOn(kRight, box))
+                   .Intersects(gfx::Rect(kRight.desk.size())));
+}
+
 TEST(DeskGeometryTest, ThePageIsToldOneScreenTheSizeOfTheDesk) {
   display::ScreenInfo like;
   like.depth = 30;
