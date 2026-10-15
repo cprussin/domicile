@@ -421,7 +421,7 @@ impl Host {
     /// compositor syncs. Returns `None` for an unknown app.
     ///
     /// Frame 0 is the id the page allocated, so the first is 1. See
-    /// `docs/architecture/FRAME-SYNCED-SURFACES.md`.
+    /// `docs/architecture/WINDOW-COMPOSITING.md#synced-frames`.
     pub fn sync_frame(&mut self, app_id: &str) -> Option<u32> {
         let frame = match self.apps.get_mut(app_id) {
             Some(app) => &mut app.frame,

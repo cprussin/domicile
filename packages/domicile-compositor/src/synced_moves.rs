@@ -1,6 +1,6 @@
 //! Bubble moves held to the end of their commit transaction, so each names
 //! the synced frames it shows with. See
-//! `docs/architecture/FRAME-SYNCED-SURFACES.md`.
+//! `docs/architecture/WINDOW-COMPOSITING.md#synced-frames`.
 
 use domicile_protocol::{AppFrame, HostMessage};
 

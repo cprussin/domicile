@@ -229,7 +229,7 @@ Calls (compositor → engine):
 | `domicile_surface_import_async(surface, dmabuf, request)`, answered by `imported` | `zwp_linux_dmabuf_v1`. `domicile_surface_import` is the blocking form an older compositor calls. |
 | `domicile_surface_submit_transformed(surface, buffer, crop, damage, box, transform)` | `wl_surface.commit` with `xdg_surface.set_window_geometry` and `wl_surface.set_buffer_transform`, shown at the box of the acked configure |
 | `domicile_surface_submit_fenced(…, transform, acquire_fence)` | the same, read once `acquire_fence` signals, like `zwp_linux_surface_synchronization_v1`'s acquire fence. The compositor's shm copies use it ([WINDOW-COMPOSITING.md](WINDOW-COMPOSITING.md#wl_shm-clients-on-a-gpu)). |
-| `domicile_surface_sync(engine, surface, frame)` | a commit whose popup or bubble the page moves: later submits go up at synced frame `frame` ([FRAME-SYNCED-SURFACES.md](FRAME-SYNCED-SURFACES.md)) |
+| `domicile_surface_sync(engine, surface, frame)` | a commit whose popup or bubble the page moves: later submits go up at synced frame `frame` ([Synced frames](WINDOW-COMPOSITING.md#synced-frames)) |
 | `domicile_displays_configure(layout, count)` | output configuration |
 | `domicile_pointers_configure(targets, count)` | input-to-output mapping, as sway's `map_to_output` ([DISPLAYS.md](../DISPLAYS.md#tablets-and-touchscreens)) |
 | `domicile_clipboard_set_items(clipboard, items, count)` | `wl_data_offer.receive`. The compositor sends the selection it already read: its text and its image, each a `DomicileClipboardItem`. `domicile_clipboard_set(clipboard, text, length)` is the text-only form an older compositor calls. |

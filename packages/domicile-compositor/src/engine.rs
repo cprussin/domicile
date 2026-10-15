@@ -841,7 +841,8 @@ impl Engine {
 
     /// Makes `surface`'s next submit, and each after it, go up at synced
     /// `frame`. Only for an engine that [`Engine::syncs_frames`], with a
-    /// `frame` above the last. See `docs/architecture/FRAME-SYNCED-SURFACES.md`.
+    /// `frame` above the last. See
+    /// `docs/architecture/WINDOW-COMPOSITING.md#synced-frames`.
     pub fn sync(&self, surface: SurfaceId, frame: u32) {
         let f = self
             .surface_sync()

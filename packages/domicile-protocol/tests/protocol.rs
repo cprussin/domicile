@@ -488,7 +488,8 @@ fn a_shortcut_the_host_never_sent_is_not_a_message() {
 }
 
 /// A move names the synced frame of each surface it goes with, so the page
-/// shows them together. See `docs/architecture/FRAME-SYNCED-SURFACES.md`.
+/// shows them together. See
+/// `docs/architecture/WINDOW-COMPOSITING.md#synced-frames`.
 #[test]
 fn a_move_names_the_frames_it_shows_with() {
     let v = serde_json::to_value(HostMessage::PopupPlaced {

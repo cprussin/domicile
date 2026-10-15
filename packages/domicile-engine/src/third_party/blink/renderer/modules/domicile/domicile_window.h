@@ -39,7 +39,8 @@ struct DomicileWindowState {
   bool dialog = false;
   bool client_frame = false;
   // The synced frame `<app frame>` shows. See
-  // docs/architecture/FRAME-SYNCED-SURFACES.md in the Domicile repository.
+  // docs/architecture/WINDOW-COMPOSITING.md#synced-frames in the Domicile
+  // repository.
   uint32_t frame = 0;
   // Null for no parent.
   String transient_for;
