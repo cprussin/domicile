@@ -245,6 +245,7 @@ class MODULES_EXPORT DomicileHost final
   std::optional<bool> shiftKey() const;
   std::optional<bool> metaKey() const;
   const String& accentColor() const { return accent_color_; }
+  const String& shellOptions() const { return shell_options_; }
   std::optional<bool> highContrast() const;
   std::optional<bool> reducedMotion() const;
 
@@ -479,6 +480,9 @@ class MODULES_EXPORT DomicileHost final
   std::optional<bool> shift_key_;
   std::optional<bool> meta_key_;
   String accent_color_;
+  // The config's `shell_options` as the JSON text `shell_config` carried;
+  // null until the first.
+  String shell_options_;
   std::optional<bool> high_contrast_;
   std::optional<bool> reduced_motion_;
   // Replaced wholesale, like `displays_`, and for its reason.

@@ -142,6 +142,7 @@ const FILES = {
     writable: true,
   },
   evaluated: null,
+  options: '{"gaps":{"kind":"number","label":"Gaps","default":8}}',
   shell: null,
 };
 
@@ -154,6 +155,7 @@ describe(spawnedHost, () => {
       expect(await asked).toEqual({
         config: FILES.config,
         evaluated: undefined,
+        options: FILES.options,
         shell: undefined,
       });
     });

@@ -19,6 +19,7 @@ WANTED = {
     "ctrlKey": False,
     "idle": True,
     "locked": False,
+    "shellOptions": '{"gaps":4}',
     "shiftKey": True,
     "theme": "light",
     "tray": [

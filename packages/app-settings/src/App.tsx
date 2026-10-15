@@ -2,7 +2,7 @@ import {
   createToastManager,
   Toaster,
 } from "@domicile-desktop/component-library/Toaster";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { useCallback, useMemo, useState } from "react";
 
 import { css } from "../styled-system/css";
@@ -25,6 +25,7 @@ import { LauncherPage } from "./pages/LauncherPage";
 import { PermissionsPage } from "./pages/PermissionsPage";
 import { PowerPage } from "./pages/PowerPage";
 import { PrivacyPage } from "./pages/PrivacyPage";
+import { ShellPage } from "./pages/ShellPage";
 import { StartupPage } from "./pages/StartupPage";
 import { Sidebar } from "./Sidebar";
 import { useSettingsFiles } from "./useSettingsFiles";
@@ -142,15 +143,17 @@ const PageContent = ({
 }: PageContentProps) => {
   const named = { description, title };
   // A page of config settings, or its notice when the config can't be read.
-  const configPage = (Content: ComponentType<ConfigPageProps>) =>
+  const configPageOf = (content: (editor: ConfigEditor) => ReactNode) =>
     editor === undefined ? (
       <Page
         {...named}
         readOnly={state === undefined ? undefined : whyReadOnly(state)}
       />
     ) : (
-      <Content {...named} editor={editor} />
+      content(editor)
     );
+  const configPage = (Content: ComponentType<ConfigPageProps>) =>
+    configPageOf((ready) => <Content {...named} editor={ready} />);
   switch (page) {
     case PageId.Extensions:
       return (
@@ -192,6 +195,10 @@ const PageContent = ({
       return configPage(LauncherPage);
     case PageId.Startup:
       return configPage(StartupPage);
+    case PageId.Shell:
+      return configPageOf((ready) => (
+        <ShellPage {...named} declared={files?.options} editor={ready} />
+      ));
   }
 };
 

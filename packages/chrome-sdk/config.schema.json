@@ -503,6 +503,12 @@
       "description": "The shell `domicile` runs when given none: a path or a package, as\n`domicile load-shell` takes. The compositor ignores it.",
       "type": ["string", "null"]
     },
+    "shell_options": {
+      "additionalProperties": true,
+      "default": {},
+      "description": "The values of the options the shell declares, by key. The compositor\nsends them to the shell without reading them. See\n`docs/WRITING-A-SHELL.md#options`.",
+      "type": "object"
+    },
     "startup": {
       "$ref": "#/$defs/StartupConfig"
     },

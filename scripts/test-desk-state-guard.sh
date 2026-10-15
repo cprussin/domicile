@@ -12,8 +12,8 @@ VERDICT="$ROOT/packages/domicile-engine/scripts/guard-desk-state-verdict.py"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-PARTIAL='{"altKey":null,"clipboard":null,"ctrlKey":null,"idle":true,"locked":false,"shiftKey":null,"theme":"light","tray":null,"windowsTheme":"dark"}'
-COMPLETE='{"altKey":true,"clipboard":[{"id":7,"preview":"hello"}],"ctrlKey":false,"idle":true,"locked":false,"shiftKey":true,"theme":"light","tray":[{"bus":":1.42","id":"nm","itemIsMenu":false,"menu":"/MenuBar","title":"Network"},{"bus":"org.kde.StatusNotifierItem-7-1","id":"sync","itemIsMenu":true,"menu":"","title":"Sync"}],"windowsTheme":"dark"}'
+PARTIAL='{"altKey":null,"clipboard":null,"ctrlKey":null,"idle":true,"locked":false,"shellOptions":null,"shiftKey":null,"theme":"light","tray":null,"windowsTheme":"dark"}'
+COMPLETE='{"altKey":true,"clipboard":[{"id":7,"preview":"hello"}],"ctrlKey":false,"idle":true,"locked":false,"shellOptions":"{\"gaps\":4}","shiftKey":true,"theme":"light","tray":[{"bus":":1.42","id":"nm","itemIsMenu":false,"menu":"/MenuBar","title":"Network"},{"bus":"org.kde.StatusNotifierItem-7-1","id":"sync","itemIsMenu":true,"menu":"","title":"Sync"}],"windowsTheme":"dark"}'
 
 FAILED=0
 expect() { # what, want, got
@@ -55,10 +55,10 @@ expect "a reading that says what the compositor said passes" \
 expect "the latest reading is judged, not the first" \
   "" "$(python3 "$VERDICT" "$(log late "$PARTIAL" "$COMPLETE")" 2>&1)"
 
-names "a reading missing the last three messages" \
+names "a reading missing the last messages" \
   "$(python3 "$VERDICT" "$(log partial "$PARTIAL")")" \
   "altKey is null, wanted true" "clipboard is null" "tray is null" \
-  "shiftKey is null, wanted true"
+  "shiftKey is null, wanted true" "shellOptions is null"
 
 names "a log with no reading" \
   "$(python3 "$VERDICT" "$(log none)")" \

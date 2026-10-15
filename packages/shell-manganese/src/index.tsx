@@ -15,6 +15,8 @@ import { mountManganese } from "./mount-manganese";
 import "./global.css";
 
 export { DEFAULT_BAR } from "./default-bars";
+/** Read by the builder into `options.json`, for the Settings app. */
+export { options } from "./options";
 
 /** Options for `runManganese`. */
 export type ManganeseOptions = {

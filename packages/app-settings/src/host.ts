@@ -103,12 +103,14 @@ export type MediaKind = "camera" | "microphone";
 
 /**
  * The files the desktop runs: its config (none when it runs the defaults),
- * the JSON a module config evaluated to, and the shell's source (none for a
- * package).
+ * the JSON a module config evaluated to, the shell's source (none for a
+ * package) and the options it declares (none when it declares none).
  */
 export type SettingsFiles = {
   config: HostFile | undefined;
   evaluated: string | undefined;
+  /** The shell's `options.json`, as text. */
+  options: string | undefined;
   shell: HostFile | undefined;
 };
 
@@ -268,6 +270,7 @@ export const spawnedHost = (system: Pick<System, "spawn">): SettingsHost => {
         return {
           config: reply.config ?? undefined,
           evaluated: reply.evaluated ?? undefined,
+          options: reply.options ?? undefined,
           shell: reply.shell ?? undefined,
         };
       } else {
@@ -330,6 +333,7 @@ const replySchema = z.discriminatedUnion("type", [
     config: fileSchema.nullable(),
     evaluated: z.string().nullable(),
     id: z.number(),
+    options: z.string().nullable(),
     shell: fileSchema.nullable(),
     type: z.literal("files"),
   }),

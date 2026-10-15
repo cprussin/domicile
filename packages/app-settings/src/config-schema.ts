@@ -120,6 +120,7 @@ const settingsSchema = z.strictObject({
     })
     .prefault({}),
   shell: z.string().optional(),
+  shell_options: z.record(z.string(), z.unknown()).default({}),
   startup: z
     .strictObject({ commands: z.array(z.array(z.string())).default([]) })
     .prefault({}),

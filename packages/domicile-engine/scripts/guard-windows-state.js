@@ -44,6 +44,7 @@ const EVENT_NAMES = [
   "windowsthemechanged",
   "modifierschanged",
   "appearancechanged",
+  "shelloptionschanged",
   "system",
   "portalrequests",
 ];

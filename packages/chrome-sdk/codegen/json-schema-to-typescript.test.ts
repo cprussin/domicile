@@ -124,6 +124,11 @@ export type Size = number;
         { properties: { name: { type: "string" } }, type: "object" },
         "{\n    name?: string;\n  }",
       ],
+      [
+        "an object open to any key",
+        { additionalProperties: true, type: "object" },
+        "Record<string, unknown>",
+      ],
     ])("emits %s", (_, schema, typescript) => {
       expect(typeOf(schema)).toBe(typescript);
     });

@@ -3,7 +3,8 @@
 //! An app spawns this host and the two exchange messages over the host's
 //! stdin and stdout, each a 4-byte length and UTF-8 JSON. For Settings, the
 //! host asks the running desktop which files to edit
-//! ([`Request::SettingsFiles`]) rather than taking a path from the page, and
+//! ([`Request::SettingsFiles`]) rather than taking a path from the page,
+//! refuses a config whose `shell_options` the shell's declaration refuses, and
 //! forwards site permissions, extensions, media devices and addresses to open
 //! to the engine through the desktop. For History, it forwards history
 //! searches, deletions and clearing browsing data. See `docs/SETTINGS.md` and
@@ -11,7 +12,7 @@
 //!
 //! ```text
 //! {"id":1,"type":"read"}
-//!   {"id":1,"type":"files","config":{"path":…,"text":…,"writable":true},"evaluated":null,"shell":null}
+//!   {"id":1,"type":"files","config":{"path":…,"text":…,"writable":true},"evaluated":null,"shell":null,"options":"{…}"}   (options null if the shell declares none)
 //! {"id":2,"type":"write","file":"config","text":"{…}"}
 //!   {"id":2,"type":"written"}
 //! {"id":3,"type":"site_permissions"}
@@ -61,6 +62,7 @@ use crate::config_path::is_module;
 use crate::control::{Request, Response, SettingsFiles};
 use crate::history::{BrowsingData, HistoryQuery};
 use crate::media_devices::MediaKind;
+use crate::shell_options::problems;
 use crate::site_permissions::SitePermission;
 
 /// The largest message the host reads or writes. A page's file, or a page of
@@ -177,6 +179,12 @@ fn carry_out(request: AppRequest, host: &Host) -> Result<Value, String> {
                     .map(|path| read(path, host))
                     .transpose()?,
                 "shell": file(files.shell.as_deref(), host)?,
+                "options": files
+                    .options
+                    .as_deref()
+                    .map(|path| read_if_there(path, host))
+                    .transpose()?
+                    .flatten(),
             }))
         }
         AppRequest::Write { file, text } => {
@@ -189,7 +197,8 @@ fn carry_out(request: AppRequest, host: &Host) -> Result<Value, String> {
                 Target::Config => "this desktop runs without a config file".to_string(),
                 Target::Shell => "this desktop's shell is a package, not a file".to_string(),
             })?;
-            write(&path, file, &text, host).map(|()| json!({"type": "written"}))
+            write(&path, file, &text, files.options.as_deref(), host)
+                .map(|()| json!({"type": "written"}))
         }
         AppRequest::SitePermissions => match (host.ask)(&Request::SitePermissions)? {
             Response::SitePermissions(settings) => Ok(json!({
@@ -328,16 +337,73 @@ fn read(path: &Path, host: &Host) -> Result<String, String> {
     (host.read)(path).map_err(|why| format!("cannot read {}: {why}", path.display()))
 }
 
-/// Writes `text` to `path`, refusing a read-only file and a JSON config the
-/// compositor would refuse.
-fn write(path: &Path, target: Target, text: &str, host: &Host) -> Result<(), String> {
+/// [`read`], or `None` when there is no file.
+fn read_if_there(path: &Path, host: &Host) -> Result<Option<String>, String> {
+    match (host.read)(path) {
+        Ok(text) => Ok(Some(text)),
+        Err(why) if why.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(why) => Err(format!("cannot read {}: {why}", path.display())),
+    }
+}
+
+/// Writes `text` to `path`, refusing a read-only file, a JSON config the
+/// compositor would refuse, and one whose `shell_options` the declaration at
+/// `options` refuses.
+fn write(
+    path: &Path,
+    target: Target,
+    text: &str,
+    options: Option<&Path>,
+    host: &Host,
+) -> Result<(), String> {
     if !(host.writable)(path) {
         return Err(format!("{} is read-only", path.display()));
     }
     if matches!(target, Target::Config) && !is_module(path) {
-        Config::parse(text).map_err(|why| format!("the compositor would refuse this: {why}"))?;
+        let config = Config::parse(text)
+            .map_err(|why| format!("the compositor would refuse this: {why}"))?;
+        if let Some(declared) = options
+            .map(|options| read_if_there(options, host))
+            .transpose()?
+        {
+            check_shell_options(&config, path, declared.as_deref(), host)?;
+        }
     }
     (host.write)(path, text).map_err(|why| format!("cannot write {}: {why}", path.display()))
+}
+
+/// Refuses `config` when it gives the shell's options values the declaration
+/// `declared` refuses, except ones the file at `path` already gave: a shell
+/// that drops an option leaves it in the file, and refusing every write for it
+/// would leave the form unable to change anything.
+fn check_shell_options(
+    config: &Config,
+    path: &Path,
+    declared: Option<&str>,
+    host: &Host,
+) -> Result<(), String> {
+    let Some(declared) = declared else {
+        return Ok(());
+    };
+    // A file that does not read or parse gave no options.
+    let before = match (host.read)(path)
+        .ok()
+        .and_then(|text| Config::parse(&text).ok())
+    {
+        Some(before) => problems(declared, &before.shell_options)?,
+        None => Vec::new(),
+    };
+    let added: Vec<String> = problems(declared, &config.shell_options)?
+        .into_iter()
+        .filter(|problem| !before.contains(problem))
+        .collect();
+    match added.is_empty() {
+        true => Ok(()),
+        false => Err(format!(
+            "the shell would drop these options: {}",
+            added.join("; ")
+        )),
+    }
 }
 
 /// The desktop's own refusal, or a note that it answered another question.
