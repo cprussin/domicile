@@ -9,6 +9,7 @@ import { PaletteIcon } from "@phosphor-icons/react/dist/ssr/Palette";
 import { PuzzlePieceIcon } from "@phosphor-icons/react/dist/ssr/PuzzlePiece";
 import { RocketLaunchIcon } from "@phosphor-icons/react/dist/ssr/RocketLaunch";
 import { ShieldCheckIcon } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
+import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/ssr/SlidersHorizontal";
 
 import { css } from "../styled-system/css";
 import { flex, hstack } from "../styled-system/patterns";
@@ -64,6 +65,8 @@ const PageIcon = ({ page }: { page: PageId }) => {
       return <MagnifyingGlassIcon size={18} />;
     case PageId.Startup:
       return <RocketLaunchIcon size={18} />;
+    case PageId.Shell:
+      return <SlidersHorizontalIcon size={18} />;
     case PageId.Extensions:
       return <PuzzlePieceIcon size={18} />;
     case PageId.Permissions:

@@ -590,12 +590,18 @@ pub enum HostMessage {
     /// connect. The shell works out which are new.
     Notifications { items: Vec<Notification> },
 
-    /// The evdev key for each keysym name the keyboard can type.
+    /// What the config says to the shell: the evdev key for each keysym name
+    /// the keyboard can type, and the values of the shell's options.
     ///
     /// Shells bind chords by keysym, but presses arrive as keys, and only the
-    /// compositor has the keymap. See the SDK's `bindKeys`. Sent on connect
-    /// and when a reload changes the keyboard.
-    ShellConfig { keys: BTreeMap<String, u32> },
+    /// compositor has the keymap. See the SDK's `bindKeys`. `options` is the
+    /// config's `shell_options` as JSON text, which the compositor does not
+    /// read; see the SDK's `watchShellOptions`. Sent on connect and when a
+    /// reload changes either.
+    ShellConfig {
+        keys: BTreeMap<String, u32>,
+        options: String,
+    },
 
     /// The answer to a [`ChromeMessage::SystemRequest`]. Every call that
     /// starts something gets exactly one.

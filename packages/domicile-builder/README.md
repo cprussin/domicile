@@ -17,7 +17,7 @@ domicile-builder (--entry <file> | --package <spec> | --evaluate <config>) \
   under the cache. Use the module its `package.json` names in
   `"domicile": { "shell": "…" }`, or build its entry.
 - **`--evaluate`**: run a config module and write every export except `Shell`
-  as the compositor's JSON config.
+  and `options` as the compositor's JSON config.
 - **`--domicile`**: Domicile's install, laid out like this repo:
   `packages/shell-manganese` with its `node_modules` and `styled-system`.
 
@@ -43,6 +43,7 @@ On failure it prints `{"step":"failed","why":"…"}` and exits non-zero.
 | Find the project (nearest `package.json` above the entry, else the entry's directory). `bun add --ignore-scripts` imports it doesn't list | `src/project.ts`, `src/main.ts` |
 | Key the cache on the files, lockfile and Domicile install. A cache hit takes under a second | `src/project.ts` |
 | Bundle with vite, CSS included. `@domicile-desktop/*` and React resolve from Domicile's install. Panda uses manganese's config | `src/bundle.ts` |
+| Write the entry's `options` export to `options.json` beside `shell.js`, for the Settings app | `src/evaluate.ts` |
 
 ## Test
 

@@ -1,4 +1,5 @@
-//! The keysym-to-key map a shell resolves its keybindings against.
+//! What the config says to the shell: the keysym-to-key map it resolves its
+//! keybindings against, and the values of its options.
 //!
 //! A shell binds chords by keysym, but presses arrive as keys. The compositor
 //! compiles the keymap, so it sends the map. See
@@ -18,6 +19,12 @@ use crate::keymap::{Keyboard, UnknownLayout};
 /// compiles to the same keymap.
 pub fn keys(config: &Config) -> Result<BTreeMap<String, u32>, UnknownLayout> {
     Keyboard::compiled(&config.input.keyboard).map(|keyboard| keyboard.keys())
+}
+
+/// The config's `shell_options` as JSON text. The compositor does not read
+/// them; the shell does.
+pub fn options(config: &Config) -> String {
+    serde_json::to_string(&config.shell_options).expect("a JSON object serializes")
 }
 
 #[cfg(test)]
@@ -40,6 +47,17 @@ mod tests {
         .expect("the layout compiles");
         assert_eq!(keys.get("l"), Some(&KEY_P));
         assert_eq!(keys.get("Escape"), Some(&KEY_ESC));
+    }
+
+    #[test]
+    fn the_shell_s_options_go_out_as_the_config_wrote_them() {
+        assert_eq!(
+            options(&parsed(
+                r#"{ "shell_options": { "clock": { "format": "12h" } } }"#
+            )),
+            r#"{"clock":{"format":"12h"}}"#
+        );
+        assert_eq!(options(&parsed("{}")), "{}");
     }
 
     #[test]

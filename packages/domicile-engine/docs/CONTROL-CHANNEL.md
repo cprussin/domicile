@@ -62,8 +62,9 @@ The engine has two channels to the rest of Domicile:
   `menu` path, so a shell drives the menu with `call_system`. See
   [SYSTEM-TRAY.md](/docs/architecture/SYSTEM-TRAY.md).
 - **`shell_config`** stops in the renderer. `DomicileHost` reads its keys to
-  resolve the chords `grabShortcut` is given by name; none of it reaches the
-  page.
+  resolve the chords `grabShortcut` is given by name; they do not reach the
+  page. Its `options`, the config's `shell_options` as JSON text, become
+  `shellOptions`, with a `shelloptionschanged` event when they change.
 - **`keymap`** stops in the browser process. It is the xkb keymap the
   compositor compiled from `input.keyboard`, and it feeds Chromium's
   `KeyboardLayoutEngine`. Without it, off ChromeOS, every printable key decodes

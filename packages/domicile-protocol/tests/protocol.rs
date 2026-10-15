@@ -112,6 +112,7 @@ fn spawn_wire_shape_is_pinned() {
 fn host_messages_round_trip() {
     host_round_trip(&HostMessage::ShellConfig {
         keys: [("Return".to_string(), 28), ("l".to_string(), 25)].into(),
+        options: r#"{"clock":{"format":"12h"}}"#.to_string(),
     });
 }
 

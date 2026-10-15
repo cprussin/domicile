@@ -279,14 +279,15 @@ fn the_extensions_the_config_names_ride_with_the_handshake() {
 }
 
 #[test]
-fn the_keyboard_rides_with_the_handshake() {
-    // A reloaded page has no resolved keys, so the handshake resends them.
-    // They follow the keymap they were resolved against.
+fn the_keyboard_and_the_shell_s_options_ride_with_the_handshake() {
+    // A reloaded page has no resolved keys or options, so the handshake
+    // resends them. The keys follow the keymap they were resolved against.
     let mut session = Session::new();
     session.host_mut().set_keymap(KEYMAP.into());
-    session
-        .host_mut()
-        .set_shell_config([("Return".to_string(), 28)].into());
+    session.host_mut().set_shell_config(
+        [("Return".to_string(), 28)].into(),
+        "{\"gaps\":4}".to_string(),
+    );
 
     let out = session.ingest(&to_line(&ChromeMessage::Hello {
         protocol_version: PROTOCOL_VERSION,
@@ -300,6 +301,7 @@ fn the_keyboard_rides_with_the_handshake() {
         out.get(keymap_at + 1),
         Some(&HostMessage::ShellConfig {
             keys: [("Return".to_string(), 28)].into(),
+            options: "{\"gaps\":4}".to_string(),
         })
     );
 }

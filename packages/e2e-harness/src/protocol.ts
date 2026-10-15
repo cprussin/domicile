@@ -452,6 +452,8 @@ const appearanceSchema = z.looseObject({
 // Sent after the handshake and when the layout changes.
 export const shellConfigSchema = z.looseObject({
   keys: z.record(z.string(), z.number().int().nonnegative()),
+  /** The config's `shell_options`, as JSON text. */
+  options: z.string(),
   type: z.literal("shell_config"),
 });
 
