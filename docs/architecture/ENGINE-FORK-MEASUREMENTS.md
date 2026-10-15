@@ -2,8 +2,9 @@
 
 The evidence behind [ENGINE-FORK.md](ENGINE-FORK.md) and the host shortcut
 inhibitor in [ENGINE-BROWSER-BEHAVIOR.md](ENGINE-BROWSER-BEHAVIOR.md). All runs are on `crux`
-(GTX 970, proprietary NVIDIA driver, no display connected). Scripts live in
-`packages/domicile-engine/scripts/` unless noted.
+(GTX 970, proprietary NVIDIA driver, no display connected), except
+[Engine size by subsystem](#engine-size-by-subsystem), which reads a published
+release. Scripts live in `packages/domicile-engine/scripts/` unless noted.
 
 Every pixel here is read back from a `CopyOutputRequest`, which forces the draw
 it reads. Nothing measures presentation on a lit screen yet.
@@ -20,6 +21,7 @@ it reads. Nothing measures presentation on a lit screen yet.
 | A real Wayland client's window is on the page | yes, exact color | `guard-client-window.sh` |
 | A dmabuf is imported and released | yes | `spike-dmabuf.sh` |
 | The host honors the shortcut inhibitor | yes, on sway | `guard-shortcuts-inhibitor-chord.sh` |
+| Tab strip, NTP, settings, sign-in and sync are large | 19.6 MB of a 737 MB install; 5.4 MB of code | [below](#engine-size-by-subsystem) |
 
 ## Getting a surface on screen
 
@@ -259,3 +261,62 @@ A host may send modifiers before a keymap. sway does when the seat's last
 keyboard has gone, and upstream then crashes in `xkb_state_update_mask`. Patch
 `0108` ignores them; `WaylandKeyboardWithoutKeymapTest` in `ozone_unittests`
 covers it.
+
+## Engine size by subsystem
+
+What the [strip item](/ROADMAP.md#in-the-engine-fork-the-agent-on-crux) would
+remove, measured on the official release `engine-official-s59435c440ec2`
+(Chromium `d02281c376e4`, PGO and ThinLTO).
+
+| Subsystem | Code and data in `chrome` | `resources.pak` | Locale strings, 220 paks | Total | C++ files | Lines | GN targets |
+|---|---|---|---|---|---|---|---|
+| Tab strip | 1.19 MB (1.45) | 0.11 MB | 0.85 MB | 2.16 MB | 251 | 82.0k | 161 |
+| New Tab page | 0.52 MB (0.62) | 0.98 MB | 1.59 MB | 3.09 MB | 85 | 22.8k | 73 |
+| Settings | 0.43 MB (0.47) | 0.83 MB | 7.89 MB | 9.15 MB | 62 | 26.1k | 7 |
+| Sign-in | 1.01 MB (1.21) | 0.04 MB | 0.95 MB | 2.00 MB | 250 | 66.9k | 82 |
+| Sync | 2.21 MB (2.49) | 0.03 MB | 1.00 MB | 3.24 MB | 298 | 71.8k | 56 |
+| All five | 5.36 MB (6.23) | 2.00 MB | 12.29 MB | 19.64 MB | 946 | 269.5k | 379 |
+| PDFium, kept | 2.96 MB (3.04) | 0.17 MB | 0.24 MB | 3.37 MB | n/a | n/a | n/a |
+
+The whole for scale:
+
+| | Size |
+|---|---|
+| Install (unpacked tarball) | 737.0 MB |
+| `chrome` file | 551.5 MB |
+| `chrome` loaded sections | 305.6 MB, 255.4 MB of it in sized symbols |
+| `resources.pak` | 24.8 MB |
+| `locales/*.pak` | 51.4 MB |
+
+- The five are 2.7% of the install and 1.8% of `chrome`'s loaded bytes.
+  Settings is the largest, and 86% of it is translated strings.
+- **Code and data** sums `llvm-nm --print-size --demangle chrome` by symbol
+  name. The binary has a symbol table but no DWARF, so names stand in for
+  source paths. Aliases folded onto one address split its bytes.
+  - The first number matches the name with template arguments removed, so
+    `std::vector<TabGroup>` is not counted. The bracketed number matches
+    template arguments too. The true value lies between them.
+  - Not attributable: string literals (13.2 MB of `.rodata`), relocations
+    (27.3 MB of `.rela.dyn`) and top-level anonymous-namespace symbols (3.6 MB
+    across the whole binary).
+  - Sync includes the `sync_pb` protobufs, which other features also link.
+  - Settings includes the `autofillPrivate`, `passwordsPrivate` and
+    `settingsPrivate` extension API schemas.
+  - Tab strip includes tab groups, saved tab groups and tab search.
+- **`resources.pak`** maps each pak id to the generated WebUI table
+  (`kSettingsResources`, `kNewTabPageResources` and so on) whose `{path, id}`
+  entries are compiled into `chrome`. NTP includes the Customize Chrome side
+  panel and its V8 code cache (0.39 MB). 7.3 MB of ids are in no table; the 60
+  largest of those belong to none of the five.
+- **Locale strings** sums every `locales/*.pak` by string id, named through
+  `locales/en-US.pak.info`. Settings is `settings_strings.grdp`, its siblings
+  and `IDS_SETTINGS_*`. The others are by id prefix (`IDS_NTP_`, `IDS_TAB_`,
+  `SYNC`, `SIGNIN`).
+- **Build cost** has no per-target timing: `crux` keeps no `.ninja_log` for
+  it. The columns count each subsystem's Chromium directories at the pin:
+  non-test `.cc` files built on Linux (one compile each), their lines, and
+  targets in their `BUILD.gn`. PDFium is not counted; its repository was
+  unreachable. Settings has 698 WebUI `.ts`, `.html` and `.css` files under
+  one `build_webui` target, so its target count understates it.
+- **Outside the five:** the tarball ships the build's `locales/*.pak.info`
+  (70.9 MB) and an unstripped `chrome` (248.5 MB of `.symtab` and `.strtab`).
