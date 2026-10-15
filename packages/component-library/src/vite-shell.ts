@@ -7,7 +7,8 @@
 // render but module scripts are deferred, so the page would paint before the
 // shell applies its theme.
 
-import type { Plugin } from "vite";
+import type { Options } from "@domicile-desktop/sdk/options";
+import type { Plugin, Rollup } from "vite";
 
 /**
  * Moves the CSS assets vite extracted into the entry chunk as a `<style>`.
@@ -58,13 +59,23 @@ export type ShellBuild = {
   readonly entry: string;
   /** The module's file name; `shell.js` by default. An app names its own. */
   readonly fileName?: string;
+  /**
+   * The shell's `options` export, written to `options.json` beside the module
+   * for the Settings app, as the builder does for a config's shell. See
+   * `docs/WRITING-A-SHELL.md#options`.
+   */
+  readonly options?: Options;
 };
 
 /**
  * The `build` and `plugins` a shell's vite config needs. Spread it into the
  * shell's own config.
  */
-export const shellBuild = ({ entry, fileName = "shell.js" }: ShellBuild) => ({
+export const shellBuild = ({
+  entry,
+  fileName = "shell.js",
+  options,
+}: ShellBuild) => ({
   build: {
     // No content hash, so configs and packages can name the module path.
     //
@@ -77,5 +88,23 @@ export const shellBuild = ({ entry, fileName = "shell.js" }: ShellBuild) => ({
     },
     sourcemap: true,
   },
-  plugins: [cssInTheModule()],
+  plugins: [
+    cssInTheModule(),
+    ...(options === undefined ? [] : [shellOptions(options)]),
+  ],
+});
+
+/** `options.json`, as the builder writes it beside a shell's module. */
+export const optionsAsset = (options: Options): Rollup.EmittedAsset => ({
+  fileName: "options.json",
+  source: `${JSON.stringify(options)}\n`,
+  type: "asset",
+});
+
+/** Writes `options` to `options.json` beside the module. */
+const shellOptions = (options: Options): Plugin => ({
+  generateBundle() {
+    this.emitFile(optionsAsset(options));
+  },
+  name: "domicile:shell-options",
 });

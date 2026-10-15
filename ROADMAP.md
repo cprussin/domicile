@@ -32,7 +32,6 @@ item when it ships.
      slow bus leaves it showing its own popups.
 
 4. **Settings app.** [SETTINGS.md](docs/SETTINGS.md).
-   - Shell options ([SHELL-OPTIONS.md](docs/architecture/SHELL-OPTIONS.md)).
    - A list of sites with stored data. History clears cookies by time range
      or by site ([HISTORY.md](docs/HISTORY.md)).
 

@@ -476,6 +476,17 @@ in {
             disable_sound_output = lockdownSwitch "Asks applications not to play sound.";
           };
 
+          shell_options = lib.mkOption {
+            description = ''
+              Values for the options the shell declares, by key. The shell
+              reads them live; the Settings app's Shell page lists them.
+              Applied on reload.
+            '';
+            type = lib.types.attrsOf json.type;
+            default = {};
+            example = {clock.format = "12h";};
+          };
+
           startup.commands = lib.mkOption {
             description = ''
               Commands the desk runs once at startup, each an argv with no

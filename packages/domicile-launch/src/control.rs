@@ -15,6 +15,10 @@ use crate::history::{BrowsingData, HistoryItem, HistoryQuery};
 use crate::media_devices::{MediaDevices, MediaKind};
 use crate::site_permissions::{SitePermission, SiteSettings};
 
+/// The file a built shell's declared options are written to, beside its
+/// module. See `docs/WRITING-A-SHELL.md#options`.
+pub const OPTIONS: &str = "options.json";
+
 /// A request to a running desktop.
 ///
 /// Each variant needs a matching CLI verb in [`crate::cli`].
@@ -90,6 +94,9 @@ pub struct SettingsFiles {
     /// The shell's source file: an entry the desktop builds, or a module it
     /// serves as is. None for a package, which has no file to edit.
     pub shell: Option<PathBuf>,
+    /// Where the served shell's declared options are: `options.json` beside
+    /// its module. The file is missing for a shell that declares none.
+    pub options: Option<PathBuf>,
 }
 
 /// A desktop's response.
@@ -355,7 +362,10 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Err(why) => Response::Refused { why },
         }),
         Ok(Request::SettingsFiles) => to_line(&Response::SettingsFiles {
-            files: desktop.files.clone(),
+            files: SettingsFiles {
+                options: Some(desktop.module.with_file_name(OPTIONS)),
+                ..desktop.files.clone()
+            },
         }),
         Ok(Request::SitePermissions) => to_line(&match (desktop.permissions)() {
             Ok(settings) => Response::SitePermissions(settings),

@@ -1583,6 +1583,25 @@ fn a_config_may_name_the_shell_domicile_runs() {
 }
 
 #[test]
+fn a_config_holds_its_shell_s_options_as_it_wrote_them() {
+    // The shell declares and reads them; the compositor only carries them.
+    let config =
+        Config::parse(r#"{ "shell_options": { "clock": { "format": "12h" }, "gaps": 4 } }"#)
+            .unwrap();
+    assert_eq!(
+        serde_json::Value::Object(config.shell_options),
+        serde_json::json!({ "clock": { "format": "12h" }, "gaps": 4 })
+    );
+    assert!(Config::default().shell_options.is_empty());
+}
+
+#[test]
+fn shell_options_that_are_not_an_object_are_refused() {
+    let err = Config::parse(r#"{ "shell_options": [4] }"#).unwrap_err();
+    assert!(matches!(err, ConfigError::Parse(_)), "{err:?}");
+}
+
+#[test]
 fn keys_are_a_shell_s_now_and_the_tables_are_refused() {
     // A shell binds its own keys. The `keybindings`, `modes` and `shells`
     // tables are refused.

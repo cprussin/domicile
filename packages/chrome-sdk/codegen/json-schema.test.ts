@@ -40,9 +40,22 @@ describe("parseRootSchema", () => {
     ).toThrow("patternProperties");
   });
 
-  it("throws on an object open to other keys", () => {
+  it("keeps an object open to any key", () => {
+    expect(
+      parseRootSchema({
+        ...ROOT,
+        properties: { options: { additionalProperties: true, type: "object" } },
+      }).properties,
+    ).toEqual({ options: { additionalProperties: true, type: "object" } });
+  });
+
+  it("throws on an object open to other keys beside the ones it names", () => {
     expect(() =>
-      parseRootSchema({ ...ROOT, additionalProperties: true }),
+      parseRootSchema({
+        ...ROOT,
+        additionalProperties: true,
+        properties: { name: { type: "string" } },
+      }),
     ).toThrow("additionalProperties");
   });
 });

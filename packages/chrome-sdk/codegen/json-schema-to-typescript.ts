@@ -101,7 +101,12 @@ const arrayOf = (schema: JsonSchema, indent: string): string => {
   }
 };
 
-const objectOf = (schema: JsonSchema, indent: string): string => {
+const objectOf = (schema: JsonSchema, indent: string): string =>
+  schema.additionalProperties === true
+    ? "Record<string, unknown>"
+    : closedObjectOf(schema, indent);
+
+const closedObjectOf = (schema: JsonSchema, indent: string): string => {
   const inner = `${indent}  `;
   const required = new Set(schema.required);
   const properties = Object.entries(schema.properties ?? {}).map(

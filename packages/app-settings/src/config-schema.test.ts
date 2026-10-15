@@ -31,6 +31,7 @@ describe(readSettings, () => {
           disable_sound_output: false,
         },
         output: { displays: [], max_scale: 2, profiles: [] },
+        shell_options: {},
         startup: { commands: [] },
         theme: { contrast: "normal", mode: "dark", reduced_motion: false },
       }),

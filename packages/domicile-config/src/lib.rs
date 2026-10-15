@@ -736,6 +736,10 @@ pub struct Config {
     /// The shell `domicile` runs when given none: a path or a package, as
     /// `domicile load-shell` takes. The compositor ignores it.
     pub shell: Option<String>,
+    /// The values of the options the shell declares, by key. The compositor
+    /// sends them to the shell without reading them. See
+    /// `docs/WRITING-A-SHELL.md#options`.
+    pub shell_options: serde_json::Map<String, serde_json::Value>,
     /// Where editors find this file's JSON Schema. Domicile ignores it.
     #[serde(rename = "$schema")]
     pub schema: Option<String>,
