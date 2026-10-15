@@ -33,6 +33,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
+#include "components/domicile/common/synced_frame.h"
 #include "components/domicile/engine/engine_event_queue.h"
 #include "components/domicile/engine/domicile_engine_spike.h"
 #include "components/domicile/engine/surface_alpha.h"
@@ -173,11 +174,22 @@ class Surface : public mojom::SurfaceObserver,
   }
 
   // Sends `submit` to viz, unless an earlier submit waits for its fence.
-  void Submit(const SurfaceSubmit& submit) { Send(submits_.Push(submit)); }
+  void Submit(const SurfaceSubmit& submit) {
+    Send(submits_.Push(AtFrame(submit)));
+  }
 
   // Holds `submit` until the browser puts its buffer's acquire fence in
   // place. Returns the ticket for Fenced.
-  uint64_t Hold(const SurfaceSubmit& submit) { return submits_.Hold(submit); }
+  uint64_t Hold(const SurfaceSubmit& submit) {
+    return submits_.Hold(AtFrame(submit));
+  }
+
+  // Later submits go up at synced frame `frame`. Frames only grow, because
+  // viz refuses a surface id older than the last.
+  void Sync(uint32_t frame) {
+    CHECK_GT(frame, frame_) << "domicile: synced frames must grow";
+    frame_ = frame;
+  }
 
   // The browser put `ticket`'s fence in place behind `sync_token`, or refused
   // it when `sync_token` is nullopt.
@@ -187,6 +199,14 @@ class Surface : public mojom::SurfaceObserver,
   }
 
  private:
+  // Stamped when queued, not when sent, so a submit held behind a fence keeps
+  // the frame it was made in.
+  SurfaceSubmit AtFrame(const SurfaceSubmit& submit) const {
+    SurfaceSubmit stamped = submit;
+    stamped.frame = frame_;
+    return stamped;
+  }
+
   void Send(const std::vector<SurfaceSubmit>& ready) {
     for (const SurfaceSubmit& submit : ready) {
       SubmitNow(submit);
@@ -277,8 +297,9 @@ class Surface : public mojom::SurfaceObserver,
     frame.resource_list.push_back(resource);
     frame.render_pass_list.push_back(std::move(pass));
 
-    sink_->SubmitCompositorFrame(shown.local_surface_id, std::move(frame),
-                                 std::nullopt, 0);
+    sink_->SubmitCompositorFrame(
+        AtSyncedFrame(shown.local_surface_id, submit.frame), std::move(frame),
+        std::nullopt, 0);
   }
 
   void OnCreated(base::OnceCallback<void(bool)> done,
@@ -405,6 +426,8 @@ class Surface : public mojom::SurfaceObserver,
   // The box shown last, then every newer one, oldest first.
   base::circular_deque<Box> boxes_;
   uint64_t last_box_ = 0;
+  // The synced frame submits go up at.
+  uint32_t frame_ = 0;
   base::flat_map<uint64_t, Adopted> buffers_;
   base::flat_map<viz::ResourceId, uint64_t> resource_to_buffer_;
   viz::ResourceId next_resource_id_{1};
@@ -899,6 +922,13 @@ struct DomicileEngine {
                        std::move(fence)));
   }
 
+  // Posted like the submits, so it applies between the ones around it.
+  void SyncSurface(DomicileSurfaceId surface, uint32_t frame) {
+    thread_.task_runner()->PostTask(
+        FROM_HERE, base::BindOnce(&DomicileEngine::SyncSurfaceOnThread,
+                                  base::Unretained(this), surface, frame));
+  }
+
   // Throwaway; see domicile_engine_spike.h.
   bool SampleWindowCenter(uint32_t* argb) {
     bool sampled = false;
@@ -1302,6 +1332,13 @@ struct DomicileEngine {
     }
   }
 
+  void SyncSurfaceOnThread(DomicileSurfaceId surface, uint32_t frame) {
+    auto iter = surfaces_.find(surface);
+    if (iter != surfaces_.end()) {
+      iter->second->Sync(frame);
+    }
+  }
+
   // Holds the submit until the browser has put the fence in place, so the
   // compositor need not wait for its draw.
   //
@@ -1639,6 +1676,14 @@ void domicile_surface_submit_fenced(DomicileEngine* engine,
                            damage_x, damage_y, damage_width, damage_height,
                            box, transform),
         acquire_fence);
+  }
+}
+
+void domicile_surface_sync(DomicileEngine* engine,
+                           DomicileSurfaceId surface,
+                           uint32_t frame) {
+  if (engine) {
+    engine->SyncSurface(surface, frame);
   }
 }
 

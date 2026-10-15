@@ -191,6 +191,19 @@ source_set("theme") {
   public_deps = [ "//base" ]
 }
 
+# Which LocalSurfaceId shows a synced frame. Wanted by the engine library,
+# which submits at it, and Blink's <app>, which embeds it.
+source_set("synced_frame") {
+  sources = [
+    "common/synced_frame.cc",
+    "common/synced_frame.h",
+  ]
+
+  public_deps = [ "//components/viz/common" ]
+
+  deps = [ "//base" ]
+}
+
 # The grabbed chords the keyboard holds, each paired with its release. Header
 # only and templated over the press, so Blink keeps its own type and the tests
 # need no Blink.
@@ -822,6 +835,7 @@ source_set("unit_tests") {
     "common/cursor_shape_unittest.cc",
     "common/display_transform_unittest.cc",
     "common/held_chords_unittest.cc",
+    "common/synced_frame_unittest.cc",
     "common/theme_unittest.cc",
     "spike/window_diff_unittest.cc",
   ]
@@ -875,6 +889,7 @@ source_set("unit_tests") {
     ":shell_windows",
     ":shortcut_registry",
     ":site_permissions",
+    ":synced_frame",
     ":system_call",
     ":theme",
     ":web_view_url",
