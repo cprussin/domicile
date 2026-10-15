@@ -6,7 +6,7 @@
 use std::ffi::OsString;
 
 use domicile_test_client::arguments::{
-    arguments, ArgumentError, Arguments, AskForFocus, AskTo, HoldTheScreensOn,
+    arguments, ArgumentError, Arguments, AskForFocus, AskTo, HoldTheScreensOn, TakeTheShortcuts,
 };
 use wayland_client::protocol::wl_output::Transform;
 
@@ -54,6 +54,10 @@ fn a_client_told_nothing_still_opens_a_window() {
         !asked.outlive_its_window,
         "a client is done when its window is closed, unless a check needs it there after",
     );
+    assert_eq!(
+        asked.inhibit_shortcuts, None,
+        "a client leaves the desktop its shortcuts unless a check asks it to take them",
+    );
 }
 
 #[test]
@@ -94,6 +98,30 @@ fn a_client_cannot_take_its_inhibitor_at_both_moments() {
         Err(ArgumentError::Repeated {
             flag: "--hold-the-screens-on-before-it-has-a-window".to_string()
         })
+    );
+}
+
+#[test]
+fn a_client_can_be_asked_to_take_the_desktops_shortcuts() {
+    let asked = given(&["--inhibit-shortcuts"]).expect("a client that wants every key");
+
+    assert_eq!(asked.inhibit_shortcuts, Some(TakeTheShortcuts::OnItsWindow));
+    assert!(
+        asked.hold_the_screens_on.is_none(),
+        "and nothing else came on with it"
+    );
+}
+
+#[test]
+fn a_client_can_take_the_shortcuts_before_it_has_a_window() {
+    // The surface has no role yet, so the compositor has no window to say it
+    // of until it becomes one.
+    let asked = given(&["--inhibit-shortcuts-before-it-has-a-window"])
+        .expect("a client that asks before it shows anything");
+
+    assert_eq!(
+        asked.inhibit_shortcuts,
+        Some(TakeTheShortcuts::BeforeItHasAWindow)
     );
 }
 

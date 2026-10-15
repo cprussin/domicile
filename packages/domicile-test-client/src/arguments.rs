@@ -49,6 +49,10 @@ pub struct Arguments {
     /// if at all.
     pub hold_the_screens_on: Option<HoldTheScreensOn>,
 
+    /// When to take a `zwp_keyboard_shortcuts_inhibitor_v1` on its surface,
+    /// as a remote desktop viewer does, if at all.
+    pub inhibit_shortcuts: Option<TakeTheShortcuts>,
+
     /// Whether to stay connected after its window is closed.
     ///
     /// On, the client destroys the `xdg_toplevel` but keeps the connection, so
@@ -127,6 +131,15 @@ pub enum HoldTheScreensOn {
     BeforeItHasAWindow,
 }
 
+/// When the client takes its keyboard shortcuts inhibitor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TakeTheShortcuts {
+    /// After the surface becomes a window.
+    OnItsWindow,
+    /// Before the surface has a role.
+    BeforeItHasAWindow,
+}
+
 /// When the client asks for the keyboard, and with which serial.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AskForFocus {
@@ -173,6 +186,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut follow_configure = None;
     let mut ask_for_focus = None;
     let mut hold_the_screens_on = None;
+    let mut inhibit_shortcuts = None;
     let mut outlive_its_window = None;
     let mut copy = None;
     let mut copy_primary = None;
@@ -225,6 +239,16 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
                     &mut hold_the_screens_on,
                     &flag,
                     HoldTheScreensOn::BeforeItHasAWindow,
+                )?;
+            }
+            "--inhibit-shortcuts" => {
+                take(&mut inhibit_shortcuts, &flag, TakeTheShortcuts::OnItsWindow)?;
+            }
+            "--inhibit-shortcuts-before-it-has-a-window" => {
+                take(
+                    &mut inhibit_shortcuts,
+                    &flag,
+                    TakeTheShortcuts::BeforeItHasAWindow,
                 )?;
             }
             "--outlive-its-window" => {
@@ -280,6 +304,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         translucent: translucent.unwrap_or(false),
         ask_for_focus,
         hold_the_screens_on,
+        inhibit_shortcuts,
         outlive_its_window: outlive_its_window.unwrap_or(false),
         copy,
         copy_primary,

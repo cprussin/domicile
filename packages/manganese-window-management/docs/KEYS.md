@@ -36,8 +36,8 @@ There is no terminal key. Bind one with `exec`.
 
 - Meta+H/J/K/L (or arrows) grows the window that way. Meta+Return or
   Meta+Escape leaves.
-- The keys need Meta, unlike sway. `grabShortcut` claims are never released,
-  so a bare `h` in a mode would be taken from every client for the session.
+- The keys need Meta, unlike sway. `bindKeys` grabs every mode's chords while
+  bound, so a bare `h` in a mode would be taken from every client.
 - A tiled window grows by 1/50 of its container per press. A floating window
   grows by 10 px.
 

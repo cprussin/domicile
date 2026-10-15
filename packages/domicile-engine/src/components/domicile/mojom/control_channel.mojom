@@ -384,6 +384,9 @@ interface ControlChannel {
   // `WebViewGuest::PreHandleKeyboardEvent` matches a guest's keys against.
   GrabShortcut(Shortcut shortcut);
 
+  // This page no longer wants `shortcut`. See ShortcutRegistry::Ungrab.
+  UngrabShortcut(Shortcut shortcut);
+
   // Put the cursor where the page says, in the page's own coordinates.
   //
   // THE ONE MESSAGE ABOUT INPUT THAT GOES THE OTHER WAY, and it stops in the
@@ -438,6 +441,10 @@ interface ControlChannelClient {
 
   // The cursor a client asked for over its own surface.
   AppCursor(string app_id, CursorShape cursor);
+
+  // Whether a window holds an active zwp_keyboard_shortcuts_inhibitor_v1:
+  // while it has the keyboard, the desktop's shortcuts are its keys.
+  AppInhibitsShortcuts(string app_id, bool inhibits);
 
   // A grabbed shortcut fired. Named for the event rather than the struct,
   // which would shadow the type inside the generated class.

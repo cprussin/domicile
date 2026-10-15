@@ -36,21 +36,25 @@ export type KeyHandlers = {
 export type KeyBinding = {
   /** Switch to binding mode `name`; see {@link bindKeys}. */
   setMode: (name: string) => void;
-  /** Stop handling keys. Grabs are not released. */
+  /** Stop handling keys, and give back every chord grabbed. */
   unbind: () => void;
 };
 
 /** The part of the desktop that `bindKeys` uses. */
 export type KeyHost = Pick<
   DomicileHost,
-  "addEventListener" | "callSystem" | "grabShortcut" | "removeEventListener"
+  | "addEventListener"
+  | "callSystem"
+  | "grabShortcut"
+  | "removeEventListener"
+  | "ungrabShortcut"
 >;
 
 /**
  * Handle the keybindings `own` for a shell.
  *
- * - Every chord in every mode is grabbed once. Grabs are never released, so a
- *   key bound in any mode is grabbed from all clients for the whole session.
+ * - Every chord in every mode is grabbed once, until `unbind`. A key bound in
+ *   any mode is grabbed from all clients while bound.
  * - `setMode` syncs the mode across pages without calling `onModeChanged`. An
  *   unknown mode falls back to `default` and is reported.
  *
@@ -90,16 +94,10 @@ export const bindKeys = (
     }
   };
 
-  for (const chord of new Set(
-    [...bindings.values()].flatMap((byChord) => [...byChord.keys()]),
-  )) {
-    try {
-      domicile.grabShortcut(chord);
-    } catch (error) {
-      // biome-ignore lint/suspicious/noConsole: the user fixes a keysym the layout cannot type, so the shell reports it
-      console.error(error);
-    }
-  }
+  const grabbed = grabEach(
+    domicile,
+    new Set([...bindings.values()].flatMap((byChord) => [...byChord.keys()])),
+  );
   domicile.addEventListener("shortcut", onShortcut);
   const commands = hearCommands(domicile, onCommand, report);
   return {
@@ -113,9 +111,29 @@ export const bindKeys = (
     unbind: () => {
       domicile.removeEventListener("shortcut", onShortcut);
       commands.stop();
+      // Emptied, so a second unbind does not answer somebody else's grab.
+      for (const chord of grabbed.splice(0)) {
+        domicile.ungrabShortcut(chord);
+      }
     },
   };
 };
+
+/**
+ * Grab each of `chords`, and return those the engine took. A keysym the
+ * layout cannot type is logged.
+ */
+const grabEach = (domicile: KeyHost, chords: Iterable<string>): string[] =>
+  [...chords].filter((chord) => {
+    try {
+      domicile.grabShortcut(chord);
+      return true;
+    } catch (error) {
+      // biome-ignore lint/suspicious/noConsole: the user fixes a keysym the layout cannot type, so the shell reports it
+      console.error(error);
+      return false;
+    }
+  });
 
 /** Log that `domicile send-shell` cannot reach this page. */
 const reportToConsole = (error: SystemError): void => {

@@ -38,6 +38,7 @@ struct DomicileWindowState {
   std::optional<double> max_height;
   bool dialog = false;
   bool client_frame = false;
+  bool inhibits_shortcuts = false;
   V8DomicileCursorShape cursor =
       V8DomicileCursorShape(V8DomicileCursorShape::Enum::kDefault);
   // Null for a toplevel.
@@ -75,6 +76,7 @@ class MODULES_EXPORT DomicileWindow final : public ScriptWrappable {
   std::optional<double> maxHeight() const { return state_.max_height; }
   bool dialog() const { return state_.dialog; }
   bool clientFrame() const { return state_.client_frame; }
+  bool inhibitsShortcuts() const { return state_.inhibits_shortcuts; }
   V8DomicileCursorShape cursor() const { return state_.cursor; }
   const String& parent() const { return state_.parent; }
   std::optional<double> x() const { return state_.x; }

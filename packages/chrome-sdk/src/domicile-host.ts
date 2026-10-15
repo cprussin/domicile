@@ -578,6 +578,17 @@ export type DomicileHost = {
    */
   grabShortcut(chord: string): void;
   /**
+   * Answer one grabShortcut() of that name. Once every grab of it is
+   * answered, its key reaches the focused client or site again, so two parts
+   * of a shell can grab one chord and each give it back. A chord not grabbed
+   * is a no-op. Throws a SyntaxError for a chord written wrong.
+   *
+   * While the window with the keyboard holds a shortcuts inhibitor
+   * (`DomicileWindow.inhibitsShortcuts`), a grabbed chord pressed on this
+   * page is its key, not a `shortcut`.
+   */
+  ungrabShortcut(chord: string): void;
+  /**
    * Click an extension's action, popup or not: the extension is granted
    * activeTab on the active tab, as a toolbar click grants it in Chrome. Then
    * an action with no popup has its `action.onClicked` dispatched; one with a
@@ -900,6 +911,12 @@ export type DomicileWindow = {
   readonly dialog: boolean;
   /** The client asked to draw its own frame (client-side decorations). */
   readonly clientFrame: boolean;
+  /**
+   * The client holds a zwp_keyboard_shortcuts_inhibitor_v1. While the window
+   * has the keyboard, the desktop's shortcuts are its keys: grabbed chords
+   * reach it, and a shell's own key listeners should let keys through.
+   */
+  readonly inhibitsShortcuts: boolean;
   readonly cursor: DomicileCursorShape;
   /**
    * A popup's parent window and its place relative to it, and whether it

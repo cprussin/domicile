@@ -6,8 +6,8 @@
 # go untaken and the untypable chord does not throw. A fixed wait loses that
 # race on a busy machine.
 #
-# - The stand-in sends `idle` after `shell_config`, on the same socket, so
-#   `idle` reaching the page means the keyboard has.
+# - The stand-in sends `idle` last, after `shell_config` and the inhibiting
+#   window, on the same socket, so `idle` reaching the page means both have.
 # - The page, against a fake host whose `idle` turns true later than any fixed
 #   wait would allow, grabs nothing until it does.
 set -u
@@ -77,7 +77,7 @@ except socket.timeout:
 print(",".join(types))
 EOF
 )"
-expect "the stand-in says idle after the keyboard" "welcome,shell_config,idle" "$SAID"
+expect "the stand-in says idle after the keyboard and the window" "welcome,shell_config,app_appeared,app_inhibits_shortcuts,idle" "$SAID"
 
 # The page against a fake host. Prints when the first grab came, relative to
 # the keyboard reaching the page.

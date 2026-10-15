@@ -100,6 +100,14 @@ gets its Meta chords.
   on the Wayland platform only, so a guard running `--ozone-platform=wayland`
   does not swallow the session's keymap.
 
+## Clients' shortcut inhibitors
+
+Domicile's compositor serves `zwp_keyboard_shortcuts_inhibit_manager_v1` to
+its own clients. A window holding an inhibitor gets the shell's grabbed chords
+while it has the keyboard. See
+[KEYBINDINGS.md](KEYBINDINGS.md#key-decisions). This is the other direction
+from patch `0038`, which is the engine asking a host compositor.
+
 ## Guards
 
 - `guard-shell-shortcuts.sh`: keyboard.

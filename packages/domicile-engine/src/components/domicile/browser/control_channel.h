@@ -131,6 +131,7 @@ class ControlChannel : public mojom::ControlChannel {
   void Lock() override;
   void ThemeCaptured(mojom::Theme theme) override;
   void GrabShortcut(mojom::ShortcutPtr shortcut) override;
+  void UngrabShortcut(mojom::ShortcutPtr shortcut) override;
   void Key(const std::string& app_id, uint32_t keycode, bool pressed) override;
   void PointerMotion(const std::string& app_id, double x, double y) override;
   void PointerLeave(const std::string& app_id) override;

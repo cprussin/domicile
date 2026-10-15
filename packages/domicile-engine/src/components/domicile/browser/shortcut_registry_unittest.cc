@@ -3,6 +3,7 @@
 
 #include "components/domicile/browser/shortcut_registry.h"
 
+#include <memory>
 #include <vector>
 
 #include "base/functional/bind.h"
@@ -68,7 +69,7 @@ TEST(ShortcutRegistryTest, AKeyNobodyClaimedIsNotTheDesktops) {
 TEST(ShortcutRegistryTest, AClaimedChordFiresOnTheChannelThatClaimedIt) {
   ShortcutRegistry registry;
   RecordingChannel channel(registry);
-  registry.Grab(AltTab());
+  registry.Grab(channel.id(), AltTab());
 
   EXPECT_TRUE(registry.Press(AltTab(), kLeft));
   ASSERT_EQ(1u, channel.presses().size());
@@ -80,7 +81,7 @@ TEST(ShortcutRegistryTest, AClaimedChordFiresOnTheChannelThatClaimedIt) {
 TEST(ShortcutRegistryTest, AChordIsEveryModifierAndNotJustTheKey) {
   ShortcutRegistry registry;
   RecordingChannel channel(registry);
-  registry.Grab(AltTab());
+  registry.Grab(channel.id(), AltTab());
 
   EXPECT_FALSE(registry.Press(
       Chord{kTab, /*alt=*/false, /*ctrl=*/false, /*shift=*/false,
@@ -102,8 +103,8 @@ TEST(ShortcutRegistryTest, AChordIsEveryModifierAndNotJustTheKey) {
 TEST(ShortcutRegistryTest, ClaimingOneChordTwiceIsOneClaim) {
   ShortcutRegistry registry;
   RecordingChannel channel(registry);
-  registry.Grab(AltTab());
-  registry.Grab(AltTab());
+  registry.Grab(channel.id(), AltTab());
+  registry.Grab(channel.id(), AltTab());
 
   EXPECT_TRUE(registry.Press(AltTab(), kLeft));
   EXPECT_EQ(1u, channel.presses().size());
@@ -113,7 +114,7 @@ TEST(ShortcutRegistryTest, ClaimingOneChordTwiceIsOneClaim) {
 TEST(ShortcutRegistryTest, AChannelThatLeftIsToldNothing) {
   ShortcutRegistry registry;
   RecordingChannel channel(registry);
-  registry.Grab(AltTab());
+  registry.Grab(channel.id(), AltTab());
   registry.RemoveChannel(channel.id());
 
   // The claim outlives the channel, so a reload does not hand chords back to
@@ -128,7 +129,7 @@ TEST(ShortcutRegistryTest, AChordIsToldOnlyToThePageThatHeardIt) {
   ShortcutRegistry registry;
   RecordingChannel left(registry, kLeft);
   RecordingChannel right(registry, kRight);
-  registry.Grab(AltTab());
+  registry.Grab(left.id(), AltTab());
 
   EXPECT_TRUE(registry.Press(AltTab(), kRight));
   EXPECT_TRUE(left.presses().empty());
@@ -141,7 +142,7 @@ TEST(ShortcutRegistryTest, AClaimedKeyOrAModifierComingUpIsToldToItsPage) {
   ShortcutRegistry registry;
   RecordingChannel left(registry, kLeft);
   RecordingChannel right(registry, kRight);
-  registry.Grab(AltTab());
+  registry.Grab(left.id(), AltTab());
   const Chord tab_up{kTab, /*alt=*/true, /*ctrl=*/false, /*shift=*/false,
                      /*meta=*/false};
   const Chord alt_up{kLeftAlt, /*alt=*/false, /*ctrl=*/false,
@@ -159,7 +160,7 @@ TEST(ShortcutRegistryTest, AClaimedKeyOrAModifierComingUpIsToldToItsPage) {
 TEST(ShortcutRegistryTest, AKeyTheLayoutMakesAModifierComingUpIsTold) {
   ShortcutRegistry registry;
   RecordingChannel channel(registry);
-  registry.Grab(AltTab());
+  registry.Grab(channel.id(), AltTab());
   const Chord caps_up{kCapsLock, /*alt=*/false, /*ctrl=*/false,
                       /*shift=*/false, /*meta=*/false};
 
@@ -168,11 +169,55 @@ TEST(ShortcutRegistryTest, AKeyTheLayoutMakesAModifierComingUpIsTold) {
   EXPECT_EQ(channel.releases(), (std::vector{caps_up}));
 }
 
+// A shell lets go of a chord it no longer binds, and the key reaches the site
+// again.
+TEST(ShortcutRegistryTest, AnUngrabbedChordIsTheSitesAgain) {
+  ShortcutRegistry registry;
+  RecordingChannel channel(registry);
+  registry.Grab(channel.id(), AltTab());
+
+  registry.Ungrab(channel.id(), AltTab());
+
+  EXPECT_FALSE(registry.Press(AltTab(), kLeft));
+  EXPECT_TRUE(channel.presses().empty());
+}
+
+// Each monitor's page claims for itself, so one letting go leaves the other's
+// claim, and its `<webview>`s still give the chord up.
+TEST(ShortcutRegistryTest, AChordStaysClaimedWhileAnotherPageClaimsIt) {
+  ShortcutRegistry registry;
+  RecordingChannel left(registry, kLeft);
+  RecordingChannel right(registry, kRight);
+  registry.Grab(left.id(), AltTab());
+  registry.Grab(right.id(), AltTab());
+
+  registry.Ungrab(left.id(), AltTab());
+
+  EXPECT_TRUE(registry.Press(AltTab(), kRight));
+  EXPECT_EQ(1u, right.presses().size());
+}
+
+// A page that reloaded left its claims behind. Its successor letting go of the
+// chord is the shell letting go, so the left-over claim goes too.
+TEST(ShortcutRegistryTest, LettingGoAlsoReleasesWhatAClosedPageLeft) {
+  ShortcutRegistry registry;
+  auto reloaded = std::make_unique<RecordingChannel>(registry);
+  registry.Grab(reloaded->id(), AltTab());
+  registry.RemoveChannel(reloaded->id());
+  reloaded.reset();
+  RecordingChannel channel(registry);
+  registry.Grab(channel.id(), AltTab());
+
+  registry.Ungrab(channel.id(), AltTab());
+
+  EXPECT_FALSE(registry.Press(AltTab(), kLeft));
+}
+
 // Every key typed into a site would otherwise cross to the shell.
 TEST(ShortcutRegistryTest, AnyOtherKeyComingUpIsNotTold) {
   ShortcutRegistry registry;
   RecordingChannel channel(registry);
-  registry.Grab(AltTab());
+  registry.Grab(channel.id(), AltTab());
 
   registry.Release(Chord{kA, /*alt=*/true, /*ctrl=*/false, /*shift=*/false,
                          /*meta=*/false},
