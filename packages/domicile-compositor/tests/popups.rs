@@ -9,7 +9,7 @@ mod running;
 
 use domicile_protocol::{ChromeMessage, HostMessage};
 use domicile_test_chrome::Chrome;
-use domicile_test_client::{BUBBLE, BUBBLE_GROWN, POPUP};
+use domicile_test_client::{scrolled_to, BUBBLE, BUBBLE_GROWN, POPUP, SCROLLING_BUBBLE};
 
 use crate::running::Compositor;
 
@@ -289,6 +289,44 @@ fn a_subsurface_bubble_is_announced_over_its_window_and_follows_its_growth() {
             }
     });
     assert!(grown.is_ok(), "the grown bubble was placed again");
+}
+
+/// A page scrolling under an anchored popup: each frame, the window's content
+/// and its sync bubble's move come in one commit. The bubble is placed again
+/// at each frame's stripe.
+#[test]
+fn a_sync_bubble_is_placed_again_at_each_scroll_of_its_window() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let _client = compositor.client_with(
+        "a window that scrolls under a bubble",
+        &["--scrolling-bubble"],
+    );
+
+    let window = window_of(&mut chrome);
+    let (x, width, height) = SCROLLING_BUBBLE;
+    let mut tops: Vec<f64> = Vec::new();
+    while tops.len() < 3 {
+        let HostMessage::PopupPlaced {
+            parent,
+            position,
+            size,
+            ..
+        } = popup_of(&mut chrome)
+        else {
+            unreachable!("the wait matched on this variant")
+        };
+        assert_eq!(parent, window);
+        assert_eq!(size, [f64::from(width), f64::from(height)]);
+        assert_eq!(position[0], f64::from(x));
+        assert!(
+            (0..100).any(|frame| f64::from(scrolled_to(frame)) == position[1]),
+            "the bubble is at {position:?}, which is no frame's stripe"
+        );
+        if !tops.contains(&position[1]) {
+            tops.push(position[1]);
+        }
+    }
 }
 
 /// A pointer over a bubble's `<app>` is over the bubble's surface. Chromium

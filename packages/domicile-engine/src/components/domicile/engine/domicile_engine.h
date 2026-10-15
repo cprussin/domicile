@@ -516,7 +516,8 @@ DOMICILE_ENGINE_EXPORT void domicile_surface_submit_fenced(
 //
 // Frames count from 1 per surface; 0 is the frame a surface starts at. A
 // `frame` not above the last aborts. See
-// docs/architecture/FRAME-SYNCED-SURFACES.md in the Domicile repository.
+// docs/architecture/WINDOW-COMPOSITING.md#synced-frames in the Domicile
+// repository.
 DOMICILE_ENGINE_EXPORT void domicile_surface_sync(DomicileEngine* engine,
                                                   DomicileSurfaceId surface,
                                                   uint32_t frame);
