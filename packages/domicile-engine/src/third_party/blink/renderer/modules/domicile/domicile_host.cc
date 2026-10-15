@@ -1720,6 +1720,16 @@ void DomicileHost::System(const String& message) {
   DispatchEvent(*event);
 }
 
+// The page has heard the old compositor's windows close and its calls end by
+// now. The new compositor knows nothing of this page, so its size and density
+// go again, as on load. See "A compositor restart" in
+// docs/architecture/ENGINE-FORK.md.
+void DomicileHost::CompositorReplaced() {
+  ReportDevicePixelRatio();
+  ReportDesktopSize();
+  DispatchEvent(*Event::Create(domicile_event_names::Compositorreplaced()));
+}
+
 void DomicileHost::PortalRequests(const String& message) {
   portal_requests_ = message;
   DispatchPortalRequests();

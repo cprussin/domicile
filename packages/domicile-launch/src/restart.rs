@@ -1,19 +1,23 @@
 //! Restarts failed components with backoff.
 //!
 //! - An engine that dies is restarted under the running compositor
-//!   ([`keep_the_engine_up`]). Wayland clients keep their windows. On a TTY
+//!   ([`keep_the_parts_up`]). Wayland clients keep their windows. On a TTY
 //!   the screen is dark between engines.
-//! - A compositor that dies takes the engine with it, since the engine's
-//!   control channel cannot reconnect, and a new desktop starts
-//!   ([`keep_a_desktop_up`]). Apps lose their Wayland display.
+//! - A compositor that dies is restarted under the running engine
+//!   ([`keep_the_parts_up`]). Apps lose their Wayland display; browser
+//!   windows and the shell stay, and the shell's control channel dials the
+//!   new compositor.
+//! - A part that keeps failing ends its desktop, and a new desktop starts
+//!   ([`keep_a_desktop_up`]).
 //!
-//! Both loops share [`Policy`] but count failures separately, so a crashing
-//! engine does not use up the desktop's restarts. Startup checks in
-//! `bin/domicile.rs` are not retried; they give the same answer each time.
+//! The engine, the compositor and the desktop share [`Policy`] but count
+//! failures separately, so a crashing engine does not use up the compositor's
+//! or the desktop's restarts. Startup checks in `bin/domicile.rs` are not
+//! retried; they give the same answer each time.
 //!
-//! See "Engine crashes are recovered; compositor crashes restart the desktop"
-//! in `docs/architecture/THE-DOMICILE-BINARY.md`.
+//! See "Crashes are recovered" in `docs/architecture/THE-DOMICILE-BINARY.md`.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::time::Duration;
 
@@ -56,22 +60,28 @@ impl Default for Policy {
 /// signals apart from exit codes.
 pub const CLEANLY: &str = "exit status: 0";
 
-/// Whether an exit restarts the engine under the compositor still serving.
+/// Which part an exit restarts under the part still serving, or `None` when
+/// it ends the desktop.
 ///
-/// - A compositor exit never does; the desktop goes with it.
-/// - An engine that fails always does.
-/// - An engine that exits 0 does only on `drm`. There is no window to close
-///   there, so any exit is a death, and Chromium exits 0 on `SIGTERM`.
+/// - An engine or compositor that fails is restarted.
+/// - A compositor that exits 0 ends the run.
+/// - An engine that exits 0 is restarted only on `drm`. There is no window to
+///   close there, so any exit is a death, and Chromium exits 0 on `SIGTERM`.
 ///   Elsewhere a clean exit is the window being closed, which ends the run.
-pub fn restarts_the_engine(exit: &Exit, platform: &str) -> bool {
-    exit.what == "engine" && (exit.how != CLEANLY || platform == "drm")
+pub fn restarts(exit: &Exit, platform: &str) -> Option<Started> {
+    match exit.what {
+        "engine" if exit.how != CLEANLY || platform == "drm" => Some(Started::Engine),
+        "compositor" if exit.how != CLEANLY => Some(Started::Compositor),
+        _ => None,
+    }
 }
 
 /// What is being restarted, for the message the user sees.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Started {
     Desktop,
     Engine,
+    Compositor,
 }
 
 impl std::fmt::Display for Started {
@@ -79,6 +89,7 @@ impl std::fmt::Display for Started {
         out.write_str(match self {
             Started::Desktop => "desktop",
             Started::Engine => "engine",
+            Started::Compositor => "compositor",
         })
     }
 }
@@ -114,6 +125,15 @@ pub enum Attempt {
     Failed { lived: Duration },
 }
 
+/// The outcome of a desktop's parts running until one exits.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PartAttempt {
+    /// A part exited in a way that ends the desktop.
+    Ended,
+    /// `part` stopped unexpectedly after running for `lived`.
+    Failed { part: Started, lived: Duration },
+}
+
 /// How a run of desktops finished.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ending {
@@ -121,8 +141,8 @@ pub enum Ending {
     Over,
     /// A stop was asked for.
     Stopped,
-    /// Enough failed in a row.
-    GaveUp { failures: u32 },
+    /// Enough of `started` failed in a row.
+    GaveUp { started: Started, failures: u32 },
 }
 
 /// A file from the last desktop that could not be removed.
@@ -152,55 +172,55 @@ pub fn keep_a_desktop_up(
     wait: &mut dyn FnMut(Duration),
     say: &mut dyn FnMut(&Next),
 ) -> Ending {
-    keep_it_up(policy, Started::Desktop, attempt, stopped, wait, say)
+    keep_the_parts_up(
+        policy,
+        &mut || match attempt() {
+            Attempt::Ended => PartAttempt::Ended,
+            Attempt::Failed { lived } => PartAttempt::Failed {
+                part: Started::Desktop,
+                lived,
+            },
+        },
+        stopped,
+        wait,
+        say,
+    )
 }
 
-/// Runs engines under a live compositor, restarting each one that dies.
+/// Runs a desktop's parts, restarting each one that dies under the one still
+/// serving.
 ///
-/// Failures are counted separately from desktop failures, since the
-/// compositor is still working.
-///
-/// [`Attempt::Ended`] means the compositor exited, so there is nothing to run
-/// an engine under. On [`Ending::GaveUp`] the caller tears down the desktop and
+/// Each part counts its own failures. [`PartAttempt::Ended`] ends the
+/// desktop. On [`Ending::GaveUp`] the caller tears down the desktop and
 /// [`keep_a_desktop_up`] starts a new one.
-pub fn keep_the_engine_up(
+pub fn keep_the_parts_up(
     policy: &Policy,
-    attempt: &mut dyn FnMut() -> Attempt,
+    attempt: &mut dyn FnMut() -> PartAttempt,
     stopped: &dyn Fn() -> bool,
     wait: &mut dyn FnMut(Duration),
     say: &mut dyn FnMut(&Next),
 ) -> Ending {
-    keep_it_up(policy, Started::Engine, attempt, stopped, wait, say)
-}
-
-/// The restart loop shared by [`keep_a_desktop_up`] and
-/// [`keep_the_engine_up`].
-fn keep_it_up(
-    policy: &Policy,
-    started: Started,
-    attempt: &mut dyn FnMut() -> Attempt,
-    stopped: &dyn Fn() -> bool,
-    wait: &mut dyn FnMut(Duration),
-    say: &mut dyn FnMut(&Next),
-) -> Ending {
-    let mut failures = 0;
+    let mut failures: HashMap<Started, u32> = HashMap::new();
     loop {
         match attempt() {
-            Attempt::Ended => return Ending::Over,
-            Attempt::Failed { lived } => {
+            PartAttempt::Ended => return Ending::Over,
+            PartAttempt::Failed { part, lived } => {
                 if stopped() {
                     return Ending::Stopped;
                 }
-                let next = next(policy, started, failures, lived);
+                let failed = failures.entry(part).or_insert(0);
+                let next = next(policy, part, *failed, lived);
                 say(&next);
                 match next {
-                    Next::GiveUp { failures, .. } => return Ending::GaveUp { failures },
+                    Next::GiveUp { started, failures } => {
+                        return Ending::GaveUp { started, failures }
+                    }
                     Next::Again {
                         after,
                         failures: again,
                         ..
                     } => {
-                        failures = again;
+                        *failed = again;
                         wait(after);
                         if stopped() {
                             return Ending::Stopped;
@@ -244,12 +264,20 @@ fn next(policy: &Policy, started: Started, failures: u32, lived: Duration) -> Ne
 ///
 /// A missing path is success. Any other error is returned.
 pub fn clear_the_last_one(runtime: &Runtime) -> Result<(), Leftover> {
+    clear_the_last_compositor(runtime)?;
+    clear_the_last_engine(runtime)
+}
+
+/// Removes the last compositor's chrome socket and session file.
+///
+/// Leaves the broker and command sockets, which belong to the engine that is
+/// still running.
+pub fn clear_the_last_compositor(runtime: &Runtime) -> Result<(), Leftover> {
     gone(
         &runtime.chrome_socket,
         std::fs::remove_file(&runtime.chrome_socket),
     )?;
-    gone(&runtime.session, std::fs::remove_file(&runtime.session))?;
-    clear_the_last_engine(runtime)
+    gone(&runtime.session, std::fs::remove_file(&runtime.session))
 }
 
 /// Removes the last engine's broker and command sockets.

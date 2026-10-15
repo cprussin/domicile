@@ -307,17 +307,30 @@ fi
 #
 # Unlike the cases above, this desktop reached "domicile is up" first.
 
-echo "== a desktop that comes up and dies is stood back up =="
+echo "== a compositor that dies after the desktop is up takes only itself =="
 AGAIN="$WORK/up-then-dead.log"
-run_domicile 60 "$AGAIN" DOMICILE_FAKE_COMPOSITOR_DIES_AFTER_UP=1
-UPS="$(grep -c "domicile is up" "$AGAIN")"
-if [ "$UPS" -ge 2 ] &&
+ENGINES="$WORK/engine-starts-under-compositors"
+COMPOSITORS="$WORK/compositors-under-one-engine"
+: >"$ENGINES"
+: >"$COMPOSITORS"
+# 25s covers five compositors (backoffs 1s, 2s, 4s, 8s), the desktop's own 1s
+# backoff and the second desktop coming up. It is still up at the timeout.
+run_domicile 25 "$AGAIN" \
+  DOMICILE_FAKE_COMPOSITOR_DIES_AFTER_UP=1 \
+  DOMICILE_FAKE_STARTS="$ENGINES" \
+  DOMICILE_FAKE_COMPOSITOR_STARTS="$COMPOSITORS"
+ENGINE_STARTS="$(wc -c <"$ENGINES" | tr -d ' ')"
+COMPOSITOR_STARTS="$(wc -c <"$COMPOSITORS" | tr -d ' ')"
+if [ "$ENGINE_STARTS" = 2 ] && [ "$COMPOSITOR_STARTS" -ge 6 ] &&
    grep -q "the compositor exited (exit status: 6)" "$AGAIN" &&
-   [ "$STATUS" = 1 ]; then
-  echo "PASS: the desktop came up $UPS times, each after the last one died"
+   grep -q "starting the compositor again in 1s" "$AGAIN" &&
+   grep -q "starting the desktop again in 1s" "$AGAIN" &&
+   [ "$STATUS" = 124 ]; then
+  echo "PASS: $COMPOSITOR_STARTS compositors under $ENGINE_STARTS engines: five under the first, then a new desktop"
 else
-  echo "FAIL: a desktop that died after coming up was not stood back up; it"
-  echo "      came up $UPS times and exited $STATUS. What it said:"
+  echo "FAIL: a compositor that died after coming up was not restarted under"
+  echo "      its engine, then its desktop: $ENGINE_STARTS engines,"
+  echo "      $COMPOSITOR_STARTS compositors, exit $STATUS. What it said:"
   sed 's/^/    /' "$AGAIN"
   FAILED=1
 fi

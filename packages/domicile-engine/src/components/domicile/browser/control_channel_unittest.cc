@@ -19,6 +19,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
+#include "components/domicile/browser/line_framer.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -103,7 +104,9 @@ class FakeClient : public mojom::ControlChannelClient {
     }
     heard_.push_back(heard);
   }
-  void AppClosed(const std::string&) override {}
+  void AppClosed(const std::string& app_id) override {
+    heard_.push_back("closed " + app_id);
+  }
   void AppCursor(const std::string&, mojom::CursorShape) override {}
   void AppPresented(const std::string& app_id) override {
     heard_.push_back("presented " + app_id);
@@ -143,11 +146,18 @@ class FakeClient : public mojom::ControlChannelClient {
   void ShellConfig(const std::string&) override {}
   void FocusChanged(const std::string&) override {}
   void FocusRequested(const std::string&) override {}
-  void System(const std::string&) override {}
+  void System(const std::string& message) override {
+    heard_.push_back("system " + message);
+  }
+  void CompositorReplaced() override {
+    heard_.push_back("replaced");
+    replaced_.SetValue();
+  }
   void PortalRequests(const std::string&) override {}
 
   std::vector<std::string> heard_;
   base::test::TestFuture<void> locked_;
+  base::test::TestFuture<void> replaced_;
 
  private:
   mojo::Receiver<mojom::ControlChannelClient> receiver_{this};
@@ -193,6 +203,37 @@ class ControlChannelTest : public testing::Test {
               buffer->size());
   }
 
+  // Takes the next compositor's connection, as a compositor started after the
+  // last one exited.
+  void AcceptTheNextCompositor() {
+    base::test::TestFuture<int> accepted;
+    ASSERT_EQ(
+        Settle(server_.Accept(&compositor_, accepted.GetCallback()), accepted),
+        net::OK);
+  }
+
+  // The next line the channel wrote, as the compositor reads it.
+  std::string Heard() {
+    while (lines_.empty()) {
+      auto buffer = base::MakeRefCounted<net::IOBufferWithSize>(4096);
+      base::test::TestFuture<int> read;
+      const int got = Settle(
+          compositor_->Read(buffer.get(), buffer->size(), read.GetCallback()),
+          read);
+      EXPECT_GT(got, 0);
+      if (got <= 0) {
+        return "";
+      }
+      for (std::string& line : framer_.Take(
+               std::string_view(buffer->data(), static_cast<size_t>(got)))) {
+        lines_.push_back(std::move(line));
+      }
+    }
+    std::string line = std::move(lines_.front());
+    lines_.erase(lines_.begin());
+    return line;
+  }
+
   base::test::SingleThreadTaskEnvironment task_environment_{
       base::test::TaskEnvironment::MainThreadType::IO};
   base::ScopedTempDir dir_;
@@ -205,6 +246,8 @@ class ControlChannelTest : public testing::Test {
   base::test::TestFuture<std::string> keymap_;
   base::test::TestFuture<std::optional<ui::DeskCursorTheme>> cursor_theme_;
   FakeClient client_;
+  LineFramer framer_;
+  std::vector<std::string> lines_;
 };
 
 // The compositor answers `hello` with the desk's state, and that answer can
@@ -369,6 +412,66 @@ TEST_F(ControlChannelTest, TheDesksPointerThemeReachesTheBrowser) {
   Say("{\"type\":\"appearance\",\"high_contrast\":false,"
       "\"reduced_motion\":false}\n");
   EXPECT_EQ(cursor_theme_.Take(), std::nullopt);
+}
+
+// A compositor that exits takes its windows and the page's system calls with
+// it. The page hears each window close and each call end, then dials the next
+// compositor and hears that it changed. See "A compositor restart" in
+// docs/architecture/ENGINE-FORK.md.
+TEST_F(ControlChannelTest, ACompositorThatHangsUpEndsWhatItHadAndIsReplaced) {
+  control_->SetClient(client_.BindRemote());
+  control_->CallSystem(3, R"({"call":"watch","path":"/tmp"})");
+  control_->CallSystem(4, R"({"call":"stat","path":"/tmp"})");
+  control_->CallSystem(5, R"({"call":"stat","path":"/"})");
+  // Driving call 3 is not a new call.
+  control_->CallSystem(3, R"({"call":"unwatch"})");
+  control_.FlushForTesting();
+  Say("{\"type\":\"app_appeared\",\"app_id\":\"app-1\",\"title\":"
+      "\"a\",\"desktop_id\":null,\"size\":[400.0,300.0],"
+      "\"dialog\":false,\"client_frame\":false}\n"
+      "{\"type\":\"app_appeared\",\"app_id\":\"app-2\",\"title\":"
+      "\"b\",\"desktop_id\":null,\"size\":[400.0,300.0],"
+      "\"dialog\":false,\"client_frame\":false}\n"
+      "{\"type\":\"app_closed\",\"app_id\":\"app-2\"}\n"
+      "{\"type\":\"system_reply\",\"id\":3,\"reply\":"
+      "{\"kind\":\"started\"}}\n"
+      "{\"type\":\"system_reply\",\"id\":5,\"reply\":{\"kind\":"
+      "\"stat\",\"file_type\":\"directory\",\"size\":0}}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+  client_.heard_.clear();
+
+  compositor_.reset();
+  AcceptTheNextCompositor();
+
+  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_TRUE(client_.replaced_.Wait());
+  EXPECT_EQ(
+      client_.heard_,
+      (std::vector<std::string>{
+          "system "
+          R"({"end":{"error":{"kind":"compositor_gone","message":"the )"
+          R"(compositor exited"},"kind":"failed"},"id":3,"type":"system_end"})",
+          "system "
+          R"({"id":4,"reply":{"error":{"kind":"compositor_gone","message":)"
+          R"("the compositor exited"},"kind":"failed"},"type":"system_reply"})",
+          "closed app-1", "replaced"}));
+}
+
+// What the page says while no compositor is up reaches the next one, after
+// its hello.
+TEST_F(ControlChannelTest, APageLineWithNoCompositorUpReachesTheNextOne) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+
+  compositor_.reset();
+  control_->FocusChrome();
+  control_.FlushForTesting();
+  AcceptTheNextCompositor();
+
+  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), R"({"type":"focus_chrome"})");
 }
 
 }  // namespace

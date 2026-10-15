@@ -395,6 +395,24 @@ fn a_screenshot_is_answered_with_where_it_was_saved() {
     );
 }
 
+/// The browser ends a call whose compositor exited in these words. See
+/// "A compositor restart" in docs/architecture/ENGINE-FORK.md.
+#[test]
+fn a_call_whose_compositor_exited_ends_with_compositor_gone() {
+    assert_eq!(
+        host(&HostMessage::SystemEnd {
+            id: 3,
+            end: SystemEnd::Failed {
+                error: SystemError {
+                    kind: SystemErrorKind::CompositorGone,
+                    message: "the compositor exited".into(),
+                },
+            },
+        }),
+        r#"{"type":"system_end","id":3,"end":{"kind":"failed","error":{"kind":"compositor_gone","message":"the compositor exited"}}}"#
+    );
+}
+
 /// `domicile send-shell` sends a command to every page listening for one.
 #[test]
 fn a_shell_command_goes_to_each_page_that_listens_for_one() {

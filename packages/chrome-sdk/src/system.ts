@@ -34,6 +34,12 @@ export enum SystemErrorKind {
   Dbus,
   /** The user dismissed the dialog the call put up. */
   Canceled,
+  /**
+   * The compositor exited with the call open. A watch or other {@link
+   * Listening} never ends this way: it listens again under the next
+   * compositor. See "A compositor restart" in docs/architecture/ENGINE-FORK.md.
+   */
+  CompositorGone,
   Other,
 }
 
@@ -609,7 +615,10 @@ const spawn = (
 
 /**
  * A call that streams `item`s from its events until `unwatch` stops it: a
- * watch or a D-Bus match.
+ * watch or a D-Bus match. One the browser ends because the compositor exited
+ * is sent again, under a new id: the browser holds it for the next compositor.
+ * What changed in between is not heard. See "A compositor restart" in
+ * docs/architecture/ENGINE-FORK.md.
  */
 const listening = <T>(
   calls: Calls,
@@ -619,37 +628,70 @@ const listening = <T>(
   new Promise((resolve) => {
     const items = streamed<T>();
     const ended = settled<Result<"stopped", SystemError>>();
-    const id = call(calls, request, {
-      end: (end) => {
-        items.close();
-        ended.settle(stopOf(end));
-      },
-      event: (event) => {
-        items.push(item(event));
-      },
-      reply: (reply) => {
-        if (reply.kind === "failed") {
-          calls.running.delete(id);
-          resolve(Err(systemError(reply.error)));
-        } else {
-          resolve(
-            reply.kind === "started"
-              ? Ok({
-                  ended: ended.promise,
-                  items: items.stream,
-                  stop: () => {
-                    calls.host.callSystem(
-                      id,
-                      JSON.stringify({ call: "unwatch" }),
-                    );
-                  },
-                })
-              : unexpected(reply),
-          );
-        }
-      },
-    });
+    let current = 0;
+    let answered = false;
+    let stopped = false;
+    const end = (result: Result<"stopped", SystemError>) => {
+      items.close();
+      ended.settle(result);
+    };
+    const subscribe = (): void => {
+      const id = call(calls, request, {
+        end: (wire) => {
+          if (isGone(wire)) {
+            again();
+          } else {
+            end(stopOf(wire));
+          }
+        },
+        event: (event) => {
+          items.push(item(event));
+        },
+        reply: (reply) => {
+          if (reply.kind === "failed") {
+            calls.running.delete(id);
+            if (isGone(reply)) {
+              again();
+            } else if (answered) {
+              end(Err(systemError(reply.error)));
+            } else {
+              resolve(Err(systemError(reply.error)));
+            }
+          } else if (reply.kind !== "started") {
+            unexpected(reply);
+          } else if (!answered) {
+            answered = true;
+            resolve(
+              Ok({
+                ended: ended.promise,
+                items: items.stream,
+                stop: () => {
+                  stopped = true;
+                  calls.host.callSystem(
+                    current,
+                    JSON.stringify({ call: "unwatch" }),
+                  );
+                },
+              }),
+            );
+          }
+        },
+      });
+      current = id;
+    };
+    const again = (): void => {
+      if (stopped) {
+        end(Ok("stopped"));
+      } else {
+        subscribe();
+      }
+    };
+    subscribe();
   });
+
+/** Whether the browser ended a call because its compositor exited. */
+const isGone = (answer: Reply | End): boolean =>
+  answer.kind === "failed" && answer.error.kind === "compositor_gone";
 
 /** A stream fed from outside, for answers that arrive as events. */
 const streamed = <T>() => {
@@ -782,6 +824,9 @@ const errorKind = (kind: WireError["kind"]): SystemErrorKind => {
     }
     case "canceled": {
       return SystemErrorKind.Canceled;
+    }
+    case "compositor_gone": {
+      return SystemErrorKind.CompositorGone;
     }
     case "other": {
       return SystemErrorKind.Other;

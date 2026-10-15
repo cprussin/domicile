@@ -44,6 +44,11 @@ export const Shell = async (root, domicile) => {
   appends `pactl`, `parec` and `curl`, so a user's own copies win.
 - A reload starts every library from nothing: each reads its state again, so a
   readout is empty until its first reply.
+- A compositor restart keeps the page. A call it had open fails
+  `compositor_gone`, except a watch, D-Bus match or other stream: the SDK
+  sends it again for the next compositor, and changes in between are missed.
+  `system-backlight` starts `udevadm` again; `system-audio` already resubscribes.
+  See [ENGINE-FORK.md](architecture/ENGINE-FORK.md#a-compositor-restart).
 
 ## The browser's cookies
 
@@ -130,7 +135,8 @@ recorded output.
   `domicile_host::system`, one per chrome connection, on the connection's
   thread.
 - The engine relays both as opaque strings: `callSystem(id, request)` and the
-  `system` event, a `MessageEvent` whose `data` is the line. A new request
+  `system` event, a `MessageEvent` whose `data` is the line. Only the engine
+  writes `compositor_gone`, for the calls of a compositor that hung up. A new request
   type changes `domicile-protocol`, the compositor and the SDK, not the
   engine.
 - Large files for display (`<img>`, `<video>`) use

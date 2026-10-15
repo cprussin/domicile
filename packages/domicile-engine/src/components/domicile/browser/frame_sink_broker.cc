@@ -71,6 +71,10 @@ void FrameSinkBroker::Bind(
   receivers_.Add(this, std::move(receiver));
 }
 
+void FrameSinkBroker::SetProducerGoneCallback(base::RepeatingClosure callback) {
+  producer_gone_ = std::move(callback);
+}
+
 uint64_t FrameSinkBroker::NewEmbedRequester() {
   return next_embed_requester_++;
 }
@@ -391,6 +395,9 @@ void FrameSinkBroker::OnProducerDisconnected() {
   for (const viz::FrameSinkId& id : owned) {
     EraseFrameSink(frame_sink_map_.find(id),
                    mojom::FrameSinkEnd::kProducerGone);
+  }
+  if (producer_gone_) {
+    producer_gone_.Run();
   }
 }
 

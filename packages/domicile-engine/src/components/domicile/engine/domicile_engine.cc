@@ -860,6 +860,11 @@ struct DomicileEngine {
                                 event.request, event.buffer);
           }
           break;
+        case domicile::EngineEvent::Type::kDisconnected:
+          if (callbacks_.disconnected) {
+            callbacks_.disconnected(callbacks_.user_data);
+          }
+          break;
       }
     }
   }
@@ -1225,6 +1230,13 @@ struct DomicileEngine {
     probe_.Bind(mojo::PendingRemote<domicile::mojom::SpikeProbe>(
         invitation.ExtractMessagePipe(domicile::kProbePipeName), 0));
     if (broker_.is_bound()) {
+      // Said rather than left to the next hello's pid, which a reused pid or a
+      // missing credential gets wrong. Unretained: `this` owns `broker_`.
+      broker_.set_disconnect_handler(base::BindOnce(
+          [](domicile::EngineEventQueue* queue) {
+            queue->Push({.type = domicile::EngineEvent::Type::kDisconnected});
+          },
+          base::Unretained(&queue_)));
       // Observe displays on connect, since a desktop needs its screens before
       // any window. The browser answers once it has read them.
       broker_->ObserveDisplays(displays_.BindRemote());

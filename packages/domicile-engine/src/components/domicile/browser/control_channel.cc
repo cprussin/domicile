@@ -4,7 +4,10 @@
 #include "components/domicile/browser/control_channel.h"
 
 #include <algorithm>
+#include <map>
+#include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -33,6 +36,24 @@ namespace {
 // them rather than for the largest one, because the remainder is carried across
 // reads anyway.
 constexpr int kReadBufferSize = 16 * 1024;
+
+// Why a call the last compositor had is over. The SDK resubscribes a watch
+// that ends this way. See docs/SHELL-SYSTEM-ACCESS.md.
+base::DictValue CompositorGone() {
+  base::DictValue error;
+  error.Set("kind", "compositor_gone");
+  error.Set("message", "the compositor exited");
+  base::DictValue failed;
+  failed.Set("kind", "failed");
+  failed.Set("error", std::move(error));
+  return failed;
+}
+
+std::string Line(const base::DictValue& message) {
+  std::string line;
+  base::JSONWriter::Write(message, &line);
+  return line;
+}
 
 }  // namespace
 
@@ -95,6 +116,8 @@ void ControlChannel::OnConnect(int result) {
   }
 
   connected_ = true;
+  const bool replacing = ever_connected_;
+  ever_connected_ = true;
 
   // The handshake, which the page used to send and the browser now owns. A
   // compositor that disagrees about the version says so in `welcome`, and that
@@ -107,8 +130,65 @@ void ControlChannel::OnConnect(int result) {
     pending_.insert(pending_.begin(), line);
   }
 
+  // Before anything the new compositor says, so the page resubscribes against
+  // the desk state that follows. A page with no client yet has nothing to
+  // resubscribe.
+  if (replacing && client_) {
+    client_->CompositorReplaced();
+  }
+
   ReadLoop();
   FlushQueue();
+}
+
+void ControlChannel::OnHungUp() {
+  connected_ = false;
+  if (writing_) {
+    RequeueTheLineInFlight();
+  }
+  socket_.reset();
+  framer_ = std::make_unique<LineFramer>();
+
+  // A queued call is ended below, so the next compositor must not answer it
+  // too. Everything else the page said still goes: a line about a window the
+  // next compositor never had is one it ignores.
+  std::erase_if(pending_, [](const std::string& line) {
+    std::optional<base::DictValue> message =
+        base::JSONReader::ReadDict(line, base::JSON_PARSE_RFC);
+    const std::string* type = message ? message->FindString("type") : nullptr;
+    return type && *type == "system_request";
+  });
+
+  // A call still waiting for its reply fails in the reply, which is what the
+  // SDK awaits; one that `started` ends.
+  std::map<uint32_t, bool> calls;
+  calls.swap(calls_);
+  for (const auto& [id, started] : calls) {
+    base::DictValue answer;
+    answer.Set("id", static_cast<int>(id));
+    if (started) {
+      answer.Set("type", "system_end");
+      answer.Set("end", CompositorGone());
+    } else {
+      answer.Set("type", "system_reply");
+      answer.Set("reply", CompositorGone());
+    }
+    DispatchLine(Line(answer), /*from_compositor=*/false);
+  }
+  std::set<std::string> apps;
+  apps.swap(open_apps_);
+  for (const std::string& app_id : apps) {
+    base::DictValue closed;
+    closed.Set("type", "app_closed");
+    closed.Set("app_id", app_id);
+    DispatchLine(Line(closed), /*from_compositor=*/false);
+  }
+
+  LOG(WARNING) << "domicile: the compositor on " << socket_path_
+               << " hung up; waiting " << kReachFor.InSeconds()
+               << "s for the next one.";
+  give_up_at_ = base::TimeTicks::Now() + kReachFor;
+  Connect();
 }
 
 void ControlChannel::OnConnectFailed() {
@@ -141,7 +221,7 @@ void ControlChannel::SetClient(
   std::vector<std::string> held;
   held.swap(held_);
   for (const std::string& line : held) {
-    DispatchLine(line);
+    DispatchLine(line, /*from_compositor=*/false);
   }
 }
 
@@ -342,6 +422,9 @@ void ControlChannel::CallSystem(uint32_t id, const std::string& request) {
                  << " is not a JSON object with a `call`; it was dropped.";
     return;
   }
+  // Only a new id is a new call: a page drives a running one -- `unwatch`,
+  // `stdin` -- under the id it started it with.
+  calls_.emplace(id, false);
   Send(*line);
 }
 
@@ -593,9 +676,11 @@ void ControlChannel::WriteNext() {
 
 void ControlChannel::OnWrite(int result) {
   if (result < 0) {
-    LOG(ERROR) << "domicile: control channel write failed: "
-               << net::ErrorToString(result);
-    writing_ = false;
+    // The compositor is gone, and its hang-up is read next. The line goes to
+    // the next one whole -- see OnHungUp.
+    LOG(WARNING) << "domicile: control channel write failed: "
+                 << net::ErrorToString(result);
+    RequeueTheLineInFlight();
     return;
   }
   write_offset_ += static_cast<size_t>(result);
@@ -613,6 +698,14 @@ void ControlChannel::OnWrite(int result) {
   if (written != net::ERR_IO_PENDING) {
     OnWrite(written);
   }
+}
+
+// A line the old compositor never finished reading goes to the next one whole:
+// none of it reached that one. Without its newline, which WriteNext adds.
+void ControlChannel::RequeueTheLineInFlight() {
+  pending_.insert(pending_.begin(),
+                  write_buffer_.substr(0, write_buffer_.size() - 1));
+  writing_ = false;
 }
 
 void ControlChannel::DeliverShortcut(Chord chord) {
@@ -648,22 +741,54 @@ void ControlChannel::ReadLoop() {
 void ControlChannel::OnRead(int result) {
   if (result <= 0) {
     // Zero is the compositor closing the socket, which on this desktop means
-    // it went away. Either way there is nothing more to read and nothing to
-    // send it.
-    connected_ = false;
-    client_.reset();
+    // it went away. Either way there is nothing more to read from this one.
+    OnHungUp();
     return;
   }
 
-  for (const std::string& line : framer_.Take(std::string_view(
+  for (const std::string& line : framer_->Take(std::string_view(
            read_buffer_->data(), static_cast<size_t>(result)))) {
-    DispatchLine(line);
+    DispatchLine(line, /*from_compositor=*/true);
   }
 
   ReadLoop();
 }
 
-void ControlChannel::DispatchLine(const std::string& line) {
+void ControlChannel::Track(const base::DictValue& message) {
+  const std::string& type = *message.FindString("type");
+  if (type == "app_appeared" || type == "popup_placed" ||
+      type == "app_closed") {
+    if (const std::string* app_id = message.FindString("app_id")) {
+      if (type == "app_closed") {
+        open_apps_.erase(*app_id);
+      } else {
+        open_apps_.insert(*app_id);
+      }
+    }
+    return;
+  }
+  if (type != "system_reply" && type != "system_end") {
+    return;
+  }
+  const std::optional<int> id = message.FindInt("id");
+  if (!id || *id < 0) {
+    return;
+  }
+  auto call = calls_.find(static_cast<uint32_t>(*id));
+  if (call == calls_.end()) {
+    return;
+  }
+  const base::DictValue* reply = message.FindDict("reply");
+  const std::string* kind = reply ? reply->FindString("kind") : nullptr;
+  if (type == "system_reply" && kind && *kind == "started") {
+    call->second = true;
+  } else {
+    calls_.erase(call);
+  }
+}
+
+void ControlChannel::DispatchLine(const std::string& line,
+                                  bool from_compositor) {
   if (line.empty()) {
     return;
   }
@@ -679,6 +804,9 @@ void ControlChannel::DispatchLine(const std::string& line) {
   const std::string* type = message.FindString("type");
   if (!type) {
     return;
+  }
+  if (from_compositor) {
+    Track(message);
   }
 
   // THE ONE MESSAGE ON THIS SOCKET THAT IS NOT THE PAGE'S, and the one that is

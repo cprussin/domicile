@@ -282,6 +282,7 @@ if wanted engine; then
     scripts/engine-guard-scrolling-bubble.sh \
     scripts/engine-guard-webview-permissions.sh \
     scripts/engine-guard-app-survives-load-shell.sh \
+    scripts/engine-guard-app-survives-compositor-restart.sh \
     scripts/engine-guard-shell.sh \
     scripts/engine-guard-shell-manganese.sh \
     scripts/engine-guard-shell-shortcuts.sh &&

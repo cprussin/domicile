@@ -4,8 +4,10 @@
 #ifndef COMPONENTS_DOMICILE_BROWSER_CONTROL_CHANNEL_H_
 #define COMPONENTS_DOMICILE_BROWSER_CONTROL_CHANNEL_H_
 
+#include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -80,11 +82,12 @@ class ControlChannel : public mojom::ControlChannel {
  public:
   // `socket_path` is the compositor's --chrome-socket. `client` is how
   // messages coming the other way reach the page.
-  // Owns its own receiver and deletes itself when either end goes away. The
-  // page's end is closed if the compositor never turns up, which is the only
-  // way a shell can tell: resetting just the client remote silences the inbound
-  // direction and leaves the page holding a channel that looks alive and
-  // swallows everything written to it.
+  // Owns its own receiver and deletes itself when the page goes away, or when
+  // no compositor answers for kReachFor -- at the start or after one hangs up.
+  // The page's end is closed then, which is the only way a shell can tell:
+  // resetting just the client remote silences the inbound direction and leaves
+  // the page holding a channel that looks alive and swallows everything
+  // written to it.
   // `page` is the frame the channel was bound for, which is what a chord
   // pressed in one of its `<webview>`s is delivered by -- see ShortcutRegistry.
   ControlChannel(const std::string& socket_path,
@@ -165,6 +168,11 @@ class ControlChannel : public mojom::ControlChannel {
   void Connect();
   void OnConnect(int result);
   void OnConnectFailed();
+  // The compositor hung up. Ends for the page what that compositor had --
+  // every call with `compositor_gone`, every window with `app_closed` -- and
+  // dials the next one, for kReachFor like the first. See "A compositor
+  // restart" in docs/architecture/ENGINE-FORK.md.
+  void OnHungUp();
 
   // Serialize a dict and queue it. Every outbound member funnels through here,
   // so the framing and the queueing exist once rather than seventeen times.
@@ -173,6 +181,8 @@ class ControlChannel : public mojom::ControlChannel {
   void FlushQueue();
   void WriteNext();
   void OnWrite(int result);
+  // Puts the line being written back at the front of the queue.
+  void RequeueTheLineInFlight();
 
   // The registry's three deliveries, on this channel's own sequence. All are
   // registered wrapped in base::BindPostTask, because a press is matched on the
@@ -186,7 +196,11 @@ class ControlChannel : public mojom::ControlChannel {
   // One complete line off the socket. Anything unparseable is dropped with a
   // log rather than closing the channel: a message this build does not know
   // about is a compositor newer than it, not a broken stream.
-  void DispatchLine(const std::string& line);
+  // `from_compositor` is false for a line this channel made or held, which
+  // Track has already seen or must not.
+  void DispatchLine(const std::string& line, bool from_compositor);
+  // What `line` says of a window or a call, kept for OnHungUp.
+  void Track(const base::DictValue& message);
 
   const std::string socket_path_;
   const KeymapSink keymap_sink_;
@@ -205,13 +219,21 @@ class ControlChannel : public mojom::ControlChannel {
 
   std::unique_ptr<net::UnixDomainClientSocket> socket_;
   bool connected_ = false;
+  // Whether a compositor has ever answered, so the next one is a replacement.
+  bool ever_connected_ = false;
+
+  // What OnHungUp ends: the compositor's windows the page has heard of, and
+  // the page's system calls, by id, with whether each has `started`.
+  std::set<std::string> open_apps_;
+  std::map<uint32_t, bool> calls_;
 
   base::TimeTicks give_up_at_;
   base::OneShotTimer retry_timer_;
 
-  // What the page said before the socket existed, in order. The deleted bridge
-  // queued these too, and dropping them instead would lose exactly the messages
-  // a shell sends at startup.
+  // What the page said while no compositor was connected, in order: before the
+  // first, or between one hanging up and the next. The deleted bridge queued
+  // these too, and dropping them instead would lose exactly the messages a
+  // shell sends at startup.
   std::vector<std::string> pending_;
   bool writing_ = false;
   std::string write_buffer_;
@@ -222,7 +244,9 @@ class ControlChannel : public mojom::ControlChannel {
   std::vector<std::string> held_;
 
   scoped_refptr<net::IOBuffer> read_buffer_;
-  LineFramer framer_;
+  // One per compositor: a line the last one left half-written is not the
+  // next one's.
+  std::unique_ptr<LineFramer> framer_ = std::make_unique<LineFramer>();
 
   base::WeakPtrFactory<ControlChannel> weak_factory_{this};
 };

@@ -25,6 +25,11 @@ const LOCKED: SystemError = {
   message: "the desktop is locked",
 };
 
+const GONE: SystemError = {
+  kind: SystemErrorKind.CompositorGone,
+  message: "the compositor exited",
+};
+
 /** A panel out of 10000, fine enough to move by less than a percent. */
 const fine = (brightness: number): Devices => ({
   panel: {
@@ -41,30 +46,35 @@ const machine = (devices: Devices | undefined) => {
   const listings: (() => void)[] = [];
   let listed = 0;
   const encoder = new TextEncoder();
+  // The udevadm last spawned, which `say` and `exit` speak for.
   let stdout: ReadableStreamDefaultController<Uint8Array> | undefined;
-  const exited = Promise.withResolvers<Result<Exit, SystemError>>();
+  let exited = Promise.withResolvers<Result<Exit, SystemError>>();
   const killed: Signal[] = [];
   const firstKill = Promise.withResolvers<void>();
   const spawned: (readonly string[])[] = [];
   const timers: { ms: number; tick: () => void; cleared: boolean }[] = [];
-  const process: Subprocess = {
-    closeStdin: () => {
-      throw new Error("the watch has no stdin");
-    },
-    exited: exited.promise,
-    kill: (signal = Signal.Term) => {
-      killed.push(signal);
-      firstKill.resolve();
-    },
-    stderr: new ReadableStream(),
-    stdout: new ReadableStream({
-      start: (controller) => {
-        stdout = controller;
+  const respawned: (() => void)[] = [];
+  const udevadm = (): Subprocess => {
+    exited = Promise.withResolvers<Result<Exit, SystemError>>();
+    return {
+      closeStdin: () => {
+        throw new Error("the watch has no stdin");
       },
-    }),
-    write: () => {
-      throw new Error("the watch has no stdin");
-    },
+      exited: exited.promise,
+      kill: (signal = Signal.Term) => {
+        killed.push(signal);
+        firstKill.resolve();
+      },
+      stderr: new ReadableStream(),
+      stdout: new ReadableStream({
+        start: (controller) => {
+          stdout = controller;
+        },
+      }),
+      write: () => {
+        throw new Error("the watch has no stdin");
+      },
+    };
   };
   const levels: number[] = [];
   const heard: (() => void)[] = [];
@@ -92,6 +102,10 @@ const machine = (devices: Devices | undefined) => {
       },
       spawn: (argv: readonly string[], _options?: SpawnOptions) => {
         spawned.push(argv);
+        const process = udevadm();
+        for (const waiting of respawned.splice(0)) {
+          waiting();
+        }
         return Promise.resolve(Ok<Subprocess, SystemError>(process));
       },
     },
@@ -118,6 +132,14 @@ const machine = (devices: Devices | undefined) => {
     },
     set: sysfs.set,
     spawned,
+    /** Resolves once udevadm has been spawned `count` times. */
+    spawns: async (count: number) => {
+      while (spawned.length < count) {
+        await new Promise<void>((resolve) => {
+          respawned.push(resolve);
+        });
+      }
+    },
     timers,
     /** Resolves once `count` levels have been reported. */
     until: (count: number) =>
@@ -259,6 +281,51 @@ describe("watchBrightness", () => {
       }),
     );
     expect(desk.timers.map(({ cleared }) => cleared)).toStrictEqual([true]);
+  });
+
+  // See "A compositor restart" in docs/architecture/ENGINE-FORK.md.
+  it("starts udevadm again under the next compositor", async () => {
+    const desk = machine(fine(4200));
+    const watch = await watching(desk);
+    await desk.until(1);
+
+    desk.set(fine(7000));
+    desk.exit(Err(GONE));
+    await desk.spawns(2);
+    await desk.until(2);
+    desk.set(fine(3000));
+    desk.say(CHANGE);
+    await desk.until(3);
+    watch.stop();
+    desk.exit(Ok({ code: undefined, signal: 15 }));
+
+    expect(desk.levels).toStrictEqual([0.42, 0.7, 0.3]);
+    expect(await watch.ended).toStrictEqual(Ok("stopped"));
+    expect(desk.timers.map(({ cleared }) => cleared)).toStrictEqual([true]);
+  });
+
+  it("takes a read the compositor exited during for no failure", async () => {
+    const desk = machine(fine(4200));
+    let reads = 0;
+    const watch = await watching(desk, {
+      ...desk.host,
+      readDir: async (path) => {
+        reads += 1;
+        return reads === 2 ? Err(GONE) : await desk.host.readDir(path);
+      },
+    });
+    await desk.until(1);
+
+    desk.say(CHANGE);
+    desk.exit(Err(GONE));
+    await desk.spawns(2);
+    desk.set(fine(7000));
+    desk.say(CHANGE);
+    await desk.until(2);
+
+    expect(desk.levels).toStrictEqual([0.42, 0.7]);
+    expect(desk.killed).toStrictEqual([]);
+    watch.stop();
   });
 
   it("stops with the error when /sys cannot be read", async () => {
