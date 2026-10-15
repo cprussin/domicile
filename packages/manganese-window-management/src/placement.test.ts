@@ -478,7 +478,6 @@ describe("the focus box", () => {
     expect(focusBoxOf(state)).toMatchObject({
       depth: TILED,
       rect: placementFor(state, "editor")?.frame ?? {},
-      tabbed: false,
       windows: [appWindowId("editor")],
     });
   });
@@ -496,69 +495,21 @@ describe("the focus box", () => {
     });
   });
 
-  /** Kitty beside a tab group of the editor and mail, with mail focused. */
-  const besideTabs = reduce(
-    desktop("kitty", "editor"),
-    WindowAction.LayoutSet(Layout.SplitH),
-    WindowAction.ContainerSplit(Axis.Vertical),
-    WindowAction.AppAppeared("mail", "mail"),
-    WindowAction.LayoutSet(Layout.Tabbed),
-  );
-  // The right half of the split, which the tab group fills.
-  const GROUP = { height: 1008, width: 930, x: 970, y: 52 };
-  const PAGE = {
-    ...GROUP,
-    height: GROUP.height - TITLE_BAR,
-    y: GROUP.y + TITLE_BAR,
-  };
-
-  // The strip covers the box's top edge, so the open tab joins its page.
-  it("is a tab's page under its strip, not its whole group", () => {
-    expect(focusBoxOf(besideTabs)).toEqual({
-      depth: TILED,
-      rect: PAGE,
-      tabbed: true,
-      windows: [appWindowId("mail")],
-    });
-  });
-
-  // A stack's open bar can sit above other bars, away from its page.
-  it("spans a stack around its focused window, bars and all", () => {
-    const stacked = reduce(besideTabs, WindowAction.LayoutSet(Layout.Stacking));
-
-    expect(focusBoxOf(stacked)).toEqual({
-      depth: TILED,
-      rect: GROUP,
-      tabbed: false,
-      windows: [appWindowId("editor"), appWindowId("mail")],
-    });
-  });
-
-  it("spans a tab group `focus parent` selects, strip and all", () => {
-    expect(
-      focusBoxOf(reduce(besideTabs, WindowAction.ParentFocused())),
-    ).toEqual({
-      depth: TILED,
-      rect: GROUP,
-      tabbed: false,
-      windows: [appWindowId("editor"), appWindowId("mail")],
-    });
-  });
-
-  it("is the page of a tab holding the group `focus parent` selects", () => {
-    // Mail and a new window split inside the open tab.
+  // The tabs belong to the group, so the box takes them in.
+  it("spans a tab group around its focused window, tabs and all", () => {
+    // The right half of a split holds the tab group.
     const state = reduce(
-      besideTabs,
-      WindowAction.ContainerSplit(Axis.Horizontal),
-      WindowAction.AppAppeared("notes", "notes"),
-      WindowAction.ParentFocused(),
+      desktop("kitty", "editor"),
+      WindowAction.LayoutSet(Layout.SplitH),
+      WindowAction.ContainerSplit(Axis.Vertical),
+      WindowAction.AppAppeared("mail", "mail"),
+      WindowAction.LayoutSet(Layout.Tabbed),
     );
 
     expect(focusBoxOf(state)).toEqual({
       depth: TILED,
-      rect: PAGE,
-      tabbed: true,
-      windows: [appWindowId("mail"), appWindowId("notes")],
+      rect: { height: 1008, width: 930, x: 970, y: 52 },
+      windows: [appWindowId("editor"), appWindowId("mail")],
     });
   });
 
@@ -572,7 +523,6 @@ describe("the focus box", () => {
     expect(focusBoxOf(state)).toMatchObject({
       depth: editor?.depth ?? -1,
       rect: editor?.frame ?? {},
-      tabbed: false,
       windows: [appWindowId("editor")],
     });
   });

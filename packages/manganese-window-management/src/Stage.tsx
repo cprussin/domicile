@@ -308,7 +308,6 @@ export const Stage = memo(
                   }}
                   rect={box.rect}
                   restack={following?.restack}
-                  tabbed={box.tabbed}
                   windows={box.windows}
                 />
               </Sliding>
@@ -397,7 +396,6 @@ export const Stage = memo(
                   onNewTab={onNewTab}
                   restack={restack}
                   rewound={rewound}
-                  selected={placement.selected}
                   strip={placement.strip}
                   targets={targets}
                 />
@@ -426,7 +424,6 @@ export const Stage = memo(
                 onNewTab={onNewTab}
                 restack={undefined}
                 rewound={0}
-                selected={tab.selected}
                 strip={tab.strip}
                 targets={targets}
               />
@@ -1180,7 +1177,6 @@ type GroupStripProps = {
   onNewTab: (id: string) => void;
   restack: Restack | undefined;
   rewound: number;
-  selected: boolean;
   strip: StripPlace;
   targets: DropTargets;
 };
@@ -1210,7 +1206,6 @@ const GroupStrip = memo(
     onNewTab,
     restack,
     rewound,
-    selected,
     strip,
     targets,
   }: GroupStripProps) => {
@@ -1267,7 +1262,6 @@ const GroupStrip = memo(
           onMove={moved}
           onNewTab={tabbed}
           restack={restack}
-          selected={selected}
           targets={targets}
         />
       </Sliding>

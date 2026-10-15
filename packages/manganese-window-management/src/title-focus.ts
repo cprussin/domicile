@@ -7,7 +7,8 @@
 // - `resting` (sway `unfocused`): everything else.
 // - `leaf`: the focused window inside a `focus parent` selection (not in sway).
 //
-// A tab ignores the selection: its tab strip shows it instead (`TitleBar`).
+// A tab ignores the selection: an accent line along its top shows it instead
+// (`TitleBar`).
 //
 // A string union, not an enum, because these are Panda `cva` variant keys.
 

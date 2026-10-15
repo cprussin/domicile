@@ -59,18 +59,15 @@ Workspaces belong to the desktop, and screens show them, as in sway:
 - **The chrome does not take focus.** The bar, wallpaper and title bars leave
   the keyboard where it was.
 - **The focused window stands out.** An accent ring and glow surround it
-  (`FocusGlow.tsx`), lighting the gaps around it. A window shown as a tab
-  lights its page under the strip, with no ring between the page and its
-  open tab. A window in a stack or a sole tab lights its whole group. Its
-  title bar is raised with bold text. The glow fades out and in where it is,
-  rather than moving to the next window, so pointer-driven focus changes
-  don't flash or slide. A glow that has faded out leaves the page
-  (`useFocusGlows`).
-- **Meta+A selects a group.** Commands then act on the whole container. The
-  glow surrounds what is selected; the focused window's bar gets the accent
-  color. A selected group shown as a tab lights its page, as a tab's window
-  does. A selected tab group lights its whole box, strip included, and its
-  strip turns the accent color; its tabs keep their usual states.
+  (`FocusGlow.tsx`), lighting the gaps around it. A window in a tab group
+  lights the whole group, tabs included. Its title bar is raised with bold
+  text. The glow fades out and in where it is, rather than moving to the next
+  window, so pointer-driven focus changes don't flash or slide. A glow that
+  has faded out leaves the page (`useFocusGlows`).
+- **Meta+A selects a group.** Commands then act on the whole container. One
+  glow surrounds the group; the focused window's bar gets the accent color.
+  Its tabs keep their usual states, and each gets an accent line along its
+  top, since the glow lights the whole tab group for a focused tab too.
   Meta+Shift+A, focusing a floating window, or clicking another window ends
   the selection.
 - **`xdg-activation` requests are granted.** The compositor forwards them as

@@ -7,14 +7,12 @@ import { useFocusGlows } from "./useFocusGlows";
 const LEFT: PlacedFocusBox = {
   depth: 0,
   rect: { height: 1008, width: 930, x: 20, y: 52 },
-  tabbed: false,
   windows: ["app:term"],
 };
 
 const RIGHT: PlacedFocusBox = {
   depth: 0,
   rect: { height: 1008, width: 930, x: 970, y: 52 },
-  tabbed: false,
   windows: ["app:editor"],
 };
 
@@ -49,18 +47,6 @@ describe("useFocusGlows", () => {
     rerender({ box: RIGHT });
     expect(result.current.glows).toEqual([
       { box: narrower, leaving: true },
-      { box: RIGHT, leaving: false },
-    ]);
-  });
-
-  it("fades a box out with the shape it last had", () => {
-    const { rerender, result } = glowsFor(LEFT);
-    const page = { ...LEFT, tabbed: true };
-
-    rerender({ box: page });
-    rerender({ box: RIGHT });
-    expect(result.current.glows).toEqual([
-      { box: page, leaving: true },
       { box: RIGHT, leaving: false },
     ]);
   });

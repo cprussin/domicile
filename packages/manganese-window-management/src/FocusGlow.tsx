@@ -31,17 +31,12 @@ type Props = {
   motion: WindowMotion;
   /** Called when a fade in or out ends. */
   onFaded: () => void;
-  /** The box: the focused window's frame, its group's, or its tab's page. */
+  /** The box: the focused window's frame, or its group's. */
   rect: Rect;
   /** The focused window's restack shuffle, if any. */
   restack?: Restack | undefined;
   /** Eases the glow into a new box with its windows; see `useSettling`. */
   settler?: Settler | undefined;
-  /**
-   * Whether the box is a tab's page, whose strip covers its top edge. See
-   * `FocusBox.tabbed`.
-   */
-  tabbed: boolean;
   /** The windows inside the box. */
   windows: readonly string[];
 };
@@ -67,7 +62,6 @@ export const FocusGlow = ({
   rect,
   restack,
   settler,
-  tabbed,
   windows,
 }: Props) => {
   const element = useRef<HTMLDivElement>(null);
@@ -83,7 +77,6 @@ export const FocusGlow = ({
     <div
       className={cx(
         glowStyles,
-        tabbed && tabbedStyles,
         fadeStyles({ leaving }),
         movingStyles({ motion }),
         settlingStyles({ lowered }),
@@ -111,18 +104,6 @@ const glowStyles = css({
   boxShadow:
     "0 0 0 1px color-mix(in oklab, {colors.accent} 70%, transparent), 0 0 {spacing.9} color-mix(in oklab, {colors.accent} 45%, transparent), {shadows.lifted}",
   pointerEvents: "none",
-});
-
-/**
- * Square on top and cut off above the box, so the open tab over it joins the
- * lit page. Light past the strip would show above it. The other sides keep
- * room for the glow's blur and shadow.
- */
-const tabbedStyles = css({
-  borderStartEndRadius: 0,
-  borderStartStartRadius: 0,
-  clipPath:
-    "inset(0 calc(-1 * {spacing.16}) calc(-1 * {spacing.16}) calc(-1 * {spacing.16}))",
 });
 
 /** Eased by `settlingStyles`, which carries the `opacity` transition. */
