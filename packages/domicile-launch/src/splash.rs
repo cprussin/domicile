@@ -2,14 +2,16 @@
 //! start.
 //!
 //! The splash is a prebuilt shell, copied into the run's directory so that
-//! `progress.json` can sit beside it. The page polls that file. See
-//! `packages/shell-splash`.
+//! `progress.json` can sit beside it. The page polls that file. Once the shell
+//! is built, the page writes [`ENDED`] when it has been on screen long enough
+//! to give way. See `packages/shell-splash`.
 //!
 //! The file is a contract with the page, which ships in the same install, so
 //! it carries no version.
 
 use std::io;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
@@ -18,6 +20,12 @@ use crate::shell_path::Shell;
 
 /// The file the page polls, in the splash's root.
 pub const PROGRESS: &str = "progress.json";
+
+/// The file the page writes when it is ready to give way, in the splash's root.
+pub const ENDED: &str = "ended";
+
+/// How often [`the_page_ends`] looks for [`ENDED`].
+const LOOK_EVERY: Duration = Duration::from_millis(50);
 
 /// What the page shows.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -30,8 +38,10 @@ pub enum Progress<'a> {
         packages: &'a [String],
     },
     Bundling,
-    /// The shell is built and about to replace the splash.
-    Built,
+    /// The shell is built. The page writes `ended` once it has shown that.
+    Built {
+        ended: &'a Path,
+    },
     /// The build failed. `supervisor` is the pid the page stops to log out.
     Failed {
         supervisor: u32,
@@ -69,6 +79,15 @@ pub fn tell(splash: &Path, progress: &Progress) -> io::Result<()> {
     let staged = splash.join(format!("{PROGRESS}.next"));
     std::fs::write(&staged, serde_json::to_vec(progress)?)?;
     std::fs::rename(&staged, splash.join(PROGRESS))
+}
+
+/// Waits up to `within` for the page to write `ended`. Returns whether it did.
+pub fn the_page_ends(ended: &Path, within: Duration) -> bool {
+    let asked = Instant::now();
+    while !ended.exists() && asked.elapsed() < within {
+        std::thread::sleep(LOOK_EVERY);
+    }
+    ended.exists()
 }
 
 /// Copies the files under `from` to `to`.
@@ -137,13 +156,44 @@ mod tests {
     fn telling_replaces_the_file_whole() {
         let splash = tempfile::tempdir().expect("a temp dir");
         tell(splash.path(), &Progress::Bundling).expect("told");
-        tell(splash.path(), &Progress::Built).expect("told");
-        assert_eq!(told(splash.path()), serde_json::json!({ "state": "built" }));
+        tell(
+            splash.path(),
+            &Progress::Built {
+                ended: Path::new("/run/splash/ended"),
+            },
+        )
+        .expect("told");
+        assert_eq!(
+            told(splash.path()),
+            serde_json::json!({ "state": "built", "ended": "/run/splash/ended" })
+        );
         let names: Vec<_> = std::fs::read_dir(splash.path())
             .expect("readable")
             .map(|entry| entry.expect("an entry").file_name())
             .collect();
         assert_eq!(names, vec![std::ffi::OsString::from(PROGRESS)]);
+    }
+
+    #[test]
+    fn the_ending_is_heard_once_the_page_writes_it() {
+        let splash = tempfile::tempdir().expect("a temp dir");
+        let ended = splash.path().join(ENDED);
+        let writing = ended.clone();
+        let page = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(50));
+            std::fs::write(writing, "").expect("written");
+        });
+        assert!(the_page_ends(&ended, Duration::from_secs(5)));
+        page.join().expect("the page wrote");
+    }
+
+    #[test]
+    fn a_page_that_never_ends_is_given_up_on() {
+        let splash = tempfile::tempdir().expect("a temp dir");
+        assert!(!the_page_ends(
+            &splash.path().join(ENDED),
+            Duration::from_millis(100)
+        ));
     }
 
     #[test]

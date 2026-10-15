@@ -15,7 +15,8 @@ export enum Stage {
 }
 
 export const Progress = {
-  Built: () => ({ stage: Stage.Built as const }),
+  /** `ended` is the file the page writes when it is ready to give way. */
+  Built: (ended: string) => ({ ended, stage: Stage.Built as const }),
   Bundling: () => ({ stage: Stage.Bundling as const }),
   /** `supervisor` is the pid that logs out when stopped. */
   Failed: (supervisor: number, why: string) => ({
@@ -38,7 +39,7 @@ const wireSchema = z.discriminatedUnion("state", [
   z.object({ state: z.literal("resolving") }),
   z.object({ packages: z.array(z.string()), state: z.literal("installing") }),
   z.object({ state: z.literal("bundling") }),
-  z.object({ state: z.literal("built") }),
+  z.object({ ended: z.string(), state: z.literal("built") }),
   z.object({
     state: z.literal("failed"),
     supervisor: z.number().int(),
@@ -58,7 +59,7 @@ export const progressSchema = wireSchema.transform((wire): Progress => {
     case "bundling":
       return Progress.Bundling();
     case "built":
-      return Progress.Built();
+      return Progress.Built(wire.ended);
     case "failed":
       return Progress.Failed(wire.supervisor, wire.why);
   }

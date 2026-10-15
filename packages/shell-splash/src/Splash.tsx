@@ -5,40 +5,72 @@ import { DisplayProvider } from "@domicile-desktop/component-library/DisplayProv
 import { Screen } from "@domicile-desktop/component-library/Screen";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { CSSProperties } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { css } from "../styled-system/css";
 import { center, hstack, vstack } from "../styled-system/patterns";
 import { followProgress } from "./follow-progress";
 import { hostDisplays } from "./host-displays";
 import { Progress, Stage } from "./progress";
+import { writeEnded } from "./write-ended";
 
 const WORDMARK = "domicile";
 
 /** The build's steps, as the meter's legend names them. */
 const STEPS = ["Read", "Install", "Bundle"] as const;
 
+/** How long the mark takes to draw: the `draw` duration in `panda.config.ts`. */
+const DRAW_MS = 1600;
+
+/** How long "Ready" shows: the `ending` duration in `panda.config.ts`. */
+const ENDING_MS = 900;
+
 type Props = {
   readonly domicile: DomicileHost;
+  /** Says the splash is ready to give way; see `writeEnded`. */
+  readonly end?: typeof writeEnded;
   /** Delivers the build's progress; see `followProgress`. */
   readonly follow?: typeof followProgress;
 };
 
-export const Splash = ({ domicile, follow = followProgress }: Props) => {
+export const Splash = ({
+  domicile,
+  end = writeEnded,
+  follow = followProgress,
+}: Props) => {
   const displays = useMemo(() => hostDisplays(domicile), [domicile]);
   const [progress, setProgress] = useState<Progress>(Progress.Starting());
+  // When the splash first drew. The shell can be built before that.
+  const [shownAt, setShownAt] = useState<number | undefined>(undefined);
+  const shown = useCallback(() => {
+    setShownAt((at) => at ?? Date.now());
+  }, []);
+  // Each poll parses a new `progress`, so the ending keys on the path.
+  const ended = progress.stage === Stage.Built ? progress.ended : undefined;
 
   useEffect(() => follow(setProgress), [follow]);
 
   useEffect(() => loggingOutOnAKey(domicile, progress), [domicile, progress]);
 
+  useEffect(
+    () => givingWay(domicile, ended, shownAt, end),
+    [domicile, ended, shownAt, end],
+  );
+
   return (
     <DisplayProvider source={displays}>
       <Screen everywhere>
+        <Shown onShown={shown} />
         <Scene progress={progress} />
       </Screen>
     </DisplayProvider>
   );
+};
+
+/** Calls `onShown` once it has rendered, which is once a display is known. */
+const Shown = ({ onShown }: { readonly onShown: () => void }) => {
+  useEffect(onShown, [onShown]);
+  return undefined;
 };
 
 /** Everything one display shows. */
@@ -178,6 +210,35 @@ const stoppingOnAKey = (
   window.addEventListener("keydown", stop);
   return () => {
     window.removeEventListener("keydown", stop);
+  };
+};
+
+/**
+ * Once the shell is built and the splash has drawn, writes `ended` after the
+ * mark has drawn and "Ready" has shown. Returns the timer's teardown, or
+ * `undefined` while there is nothing to end.
+ */
+const givingWay = (
+  domicile: DomicileHost,
+  ended: string | undefined,
+  shownAt: number | undefined,
+  end: typeof writeEnded,
+): (() => void) | undefined =>
+  ended === undefined || shownAt === undefined
+    ? undefined
+    : endingAfter(Math.max(ENDING_MS, shownAt + DRAW_MS - Date.now()), () =>
+        end(domicile, ended),
+      );
+
+const endingAfter = (delay: number, end: () => Promise<void>): (() => void) => {
+  const timer = setTimeout(() => {
+    end().catch((error: unknown) => {
+      // biome-ignore lint/suspicious/noConsole: `domicile` loads the shell over the splash after its own wait, so the log is all that can say why
+      console.error("could not say the splash ended", error);
+    });
+  }, delay);
+  return () => {
+    clearTimeout(timer);
   };
 };
 
