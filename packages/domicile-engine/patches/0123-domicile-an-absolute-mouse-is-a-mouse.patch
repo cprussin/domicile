@@ -1,0 +1,326 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Thu, 15 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: an absolute mouse is a mouse
+
+evdev read QEMU's USB tablet as a touchscreen. It has absolute X and Y,
+five mouse buttons and a wheel, and no `BTN_TOUCH`, and
+`ProbeLegacyAbsoluteDevice` calls any such device with `BTN_LEFT` a
+touchscreen. A click was a tap, the wheel and the right and middle
+buttons were dropped, and nothing hovered.
+
+- `EventDeviceInfo::HasAbsoluteMouse`: the legacy probe's `BTN_LEFT`
+  branch is a mouse when there is also a `BTN_RIGHT`. A touchscreen that
+  clicks with `BTN_LEFT` alone (the Elo 2700) stays a touchscreen; pens,
+  `BTN_TOUCH` touchscreens and the denylisted ILITEK are untouched.
+- `CreateConverter` gives it `AbsoluteMouseEventConverterEvdev`
+  (`ui/events/ozone/evdev/domicile/`): position moves the pointer, every
+  mouse button and both wheels (high-resolution where the device has
+  it) are a mouse's.
+- `CursorDelegateEvdev::GetDomicileAbsoluteArea`: where a device's range
+  goes. `DrmCursor` answers the display `input.pointers` binds it to
+  (`SetDomicileAbsoluteAreas`, fed by `DrmPointerTargets`), otherwise
+  the confined bounds, as the pen tablet uses. The default is out of
+  line in the new `cursor_delegate_evdev.cc`, as the style plugin wants.
+- `DrmCursor::MoveCursorTo` from the evdev thread moves onto the window
+  under the location, so a device bound to another display reaches it.
+- `ozone_unittests` builds the converter's test, which reads devices
+  from captured capabilities; evdev's `event_device_info` targets let it.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ ui/events/ozone/evdev/BUILD.gn                |  9 +++++++
+ ui/events/ozone/evdev/cursor_delegate_evdev.h |  5 ++++
+ ui/events/ozone/evdev/event_device_info.cc    | 18 +++++++++++--
+ ui/events/ozone/evdev/event_device_info.h     |  6 +++++
+ .../ozone/evdev/input_device_opener_evdev.cc  |  8 ++++++
+ ui/ozone/platform/drm/BUILD.gn                |  6 +++++
+ ui/ozone/platform/drm/host/drm_cursor.cc      | 27 +++++++++++++++++--
+ ui/ozone/platform/drm/host/drm_cursor.h       |  7 +++++
+ ui/ozone/platform/drm/ozone_platform_drm.cc   |  5 +++-
+ 9 files changed, 86 insertions(+), 5 deletions(-)
+
+diff --git a/ui/events/ozone/evdev/BUILD.gn b/ui/events/ozone/evdev/BUILD.gn
+index 1cd9816..d1d1569 100644
+--- a/ui/events/ozone/evdev/BUILD.gn
++++ b/ui/events/ozone/evdev/BUILD.gn
+@@ -47,8 +47,11 @@ component("evdev") {
+   output_name = "events_ozone_evdev"
+ 
+   sources = [
++    "cursor_delegate_evdev.cc",
+     "device_event_dispatcher_evdev.cc",
+     "device_event_dispatcher_evdev.h",
++    "domicile/absolute_mouse_event_converter_evdev.cc",
++    "domicile/absolute_mouse_event_converter_evdev.h",
+     "domicile/scroll_accelerator.cc",
+     "domicile/scroll_accelerator.h",
+     "domicile/wheel_ticks.cc",
+@@ -271,6 +274,9 @@ source_set("event_device_info") {
+     "//chromeos/ash/services/cros_healthd/*",
+     "//ui/chromeos/*",
+     "//ui/events/ash/*",
++
++    # DOMICILE: `AbsoluteMouseDeviceTest`. See `gbm_unittests`.
++    "//ui/ozone/platform/drm:gbm_unittests",
+   ]
+ }
+ 
+@@ -293,6 +299,9 @@ source_set("event_device_info_test_utils") {
+     "//chrome/browser/ash:unit_tests",
+     "//chrome/browser/ash/system_logs:unit_tests",
+     "//ui/events/ash:unit_tests",
++
++    # DOMICILE: `AbsoluteMouseDeviceTest`. See `gbm_unittests`.
++    "//ui/ozone/platform/drm:gbm_unittests",
+   ]
+ }
+ 
+diff --git a/ui/events/ozone/evdev/cursor_delegate_evdev.h b/ui/events/ozone/evdev/cursor_delegate_evdev.h
+index 48157a6..85de2a9 100644
+--- a/ui/events/ozone/evdev/cursor_delegate_evdev.h
++++ b/ui/events/ozone/evdev/cursor_delegate_evdev.h
+@@ -37,6 +37,11 @@ class COMPONENT_EXPORT(EVDEV) CursorDelegateEvdev {
+   // The bounds that the cursor is confined to. Either thread, IPC-free.
+   virtual gfx::Rect GetCursorConfinedBounds() = 0;
+ 
++  // DOMICILE: the rectangle in screen that absolute mouse `device_id`'s range
++  // covers: its display if one is bound to it, otherwise the confined bounds.
++  // Either thread, IPC-free.
++  virtual gfx::Rect GetDomicileAbsoluteArea(int device_id);
++
+   // Any necessary initialization from Evdev thread.
+   virtual void InitializeOnEvdev() = 0;
+ };
+diff --git a/ui/events/ozone/evdev/event_device_info.cc b/ui/events/ozone/evdev/event_device_info.cc
+index c7ba170..96c62fc 100644
+--- a/ui/events/ozone/evdev/event_device_info.cc
++++ b/ui/events/ozone/evdev/event_device_info.cc
+@@ -740,6 +740,7 @@ bool EventDeviceInfo::HasDirect() const {
+ 
+     case LegacyAbsoluteDeviceType::TABLET:
+     case LegacyAbsoluteDeviceType::TOUCHPAD:
++    case LegacyAbsoluteDeviceType::MOUSE:
+     case LegacyAbsoluteDeviceType::NONE:
+       return false;
+   }
+@@ -759,6 +760,7 @@ bool EventDeviceInfo::HasPointer() const {
+       return true;
+ 
+     case LegacyAbsoluteDeviceType::TOUCHSCREEN:
++    case LegacyAbsoluteDeviceType::MOUSE:
+     case LegacyAbsoluteDeviceType::NONE:
+       return false;
+   }
+@@ -890,6 +892,11 @@ bool EventDeviceInfo::HasPointingStick() const {
+   return HasRelXY() && HasProp(INPUT_PROP_POINTING_STICK);
+ }
+ 
++bool EventDeviceInfo::HasAbsoluteMouse() const {
++  return !HasProp(INPUT_PROP_DIRECT) && !HasProp(INPUT_PROP_POINTER) &&
++         ProbeLegacyAbsoluteDevice() == LegacyAbsoluteDeviceType::MOUSE;
++}
++
+ bool EventDeviceInfo::HasTouchpad() const {
+   return HasAbsXY() && HasPointer() && !HasStylus();
+ }
+@@ -1043,8 +1050,15 @@ EventDeviceInfo::ProbeLegacyAbsoluteDevice() const {
+ 
+   // ABS_Z mitigation for extra device on some Elo devices.
+   if (HasKeyEvent(BTN_LEFT) && !HasAbsEvent(ABS_Z) &&
+-      !IsDenylistedAbsoluteMouseDevice(input_id_))
+-    return LegacyAbsoluteDeviceType::TOUCHSCREEN;
++      !IsDenylistedAbsoluteMouseDevice(input_id_)) {
++    // DOMICILE: a second button is a mouse's; a touch is one button. As a
++    // touchscreen, QEMU's USB tablet clicks as a tap and has no wheel, right
++    // or middle button, or hover. udev's `input_id` reads it as a mouse too.
++    // A touchscreen that clicks with `BTN_LEFT` alone, like the Elo, stays
++    // one.
++    return HasKeyEvent(BTN_RIGHT) ? LegacyAbsoluteDeviceType::MOUSE
++                                  : LegacyAbsoluteDeviceType::TOUCHSCREEN;
++  }
+ 
+   return LegacyAbsoluteDeviceType::NONE;
+ }
+diff --git a/ui/events/ozone/evdev/event_device_info.h b/ui/events/ozone/evdev/event_device_info.h
+index e4131d0..5d14b20 100644
+--- a/ui/events/ozone/evdev/event_device_info.h
++++ b/ui/events/ozone/evdev/event_device_info.h
+@@ -164,6 +164,10 @@ class COMPONENT_EXPORT(EVDEV) EventDeviceInfo {
+   // device.
+   bool HasPointingStick() const;
+ 
++  // DOMICILE: whether this is a mouse with absolute X and Y, such as QEMU's USB
++  // tablet. `HasMouse` is a relative one.
++  bool HasAbsoluteMouse() const;
++
+   // Determine whether there's a touchpad on this device.
+   bool HasTouchpad() const;
+ 
+@@ -227,6 +231,8 @@ class COMPONENT_EXPORT(EVDEV) EventDeviceInfo {
+     TOUCHPAD,
+     TOUCHSCREEN,
+     TABLET,
++    // DOMICILE: see `HasAbsoluteMouse`.
++    MOUSE,
+     NONE,
+   };
+ 
+diff --git a/ui/events/ozone/evdev/input_device_opener_evdev.cc b/ui/events/ozone/evdev/input_device_opener_evdev.cc
+index 93c5dd1..a2f5076 100644
+--- a/ui/events/ozone/evdev/input_device_opener_evdev.cc
++++ b/ui/events/ozone/evdev/input_device_opener_evdev.cc
+@@ -17,6 +17,7 @@
+ #include "base/memory/ptr_util.h"
+ #include "base/trace_event/trace_event.h"
+ #include "ui/events/event_switches.h"
++#include "ui/events/ozone/evdev/domicile/absolute_mouse_event_converter_evdev.h"
+ #include "ui/events/ozone/evdev/event_converter_evdev_impl.h"
+ #include "ui/events/ozone/evdev/gamepad_event_converter_evdev.h"
+ #include "ui/events/ozone/evdev/microphone_mute_switch_event_converter_evdev.h"
+@@ -73,6 +74,13 @@ std::unique_ptr<EventConverterEvdev> CreateConverter(
+   }
+ #endif
+ 
++  // DOMICILE: a mouse with absolute X and Y, such as QEMU's USB tablet.
++  if (devinfo.HasAbsoluteMouse()) {
++    return std::make_unique<AbsoluteMouseEventConverterEvdev>(
++        std::move(fd), params.path, params.id, params.cursor, devinfo,
++        params.dispatcher);
++  }
++
+   // Touchscreen: use TouchEventConverterEvdev.
+   if (devinfo.HasTouchscreen()) {
+     return TouchEventConverterEvdev::Create(
+diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
+index 0b5787a..00501c9 100644
+--- a/ui/ozone/platform/drm/BUILD.gn
++++ b/ui/ozone/platform/drm/BUILD.gn
+@@ -288,6 +288,7 @@ source_set("gbm_unittests") {
+     # evdev's, not this platform's: `//ui/events/ozone/evdev:unittests` is
+     # linked only into `events_unittests`, which no job here builds, and the
+     # console is the one platform whose touchpad goes through libinput.
++    "//ui/events/ozone/evdev/domicile/absolute_mouse_event_converter_evdev_unittest.cc",
+     "//ui/events/ozone/evdev/domicile/scroll_accelerator_unittest.cc",
+     "//ui/events/ozone/evdev/domicile/wheel_ticks_unittest.cc",
+   ]
+@@ -341,6 +342,11 @@ source_set("gbm_unittests") {
+     # platform's evdev thread reports to, and the stub layout its keyboard
+     # needs, so it names both directly.
+     "//ui/events/ozone/evdev",
++
++    # `AbsoluteMouseDeviceTest` reads devices from their captured
++    # capabilities, as evdev's own tests do.
++    "//ui/events/ozone/evdev:event_device_info",
++    "//ui/events/ozone/evdev:event_device_info_test_utils",
+     "//ui/events/ozone/layout",
+     "//ui/gfx",
+     "//ui/gfx/linux:drm",
+diff --git a/ui/ozone/platform/drm/host/drm_cursor.cc b/ui/ozone/platform/drm/host/drm_cursor.cc
+index 2e49417..411e68a 100644
+--- a/ui/ozone/platform/drm/host/drm_cursor.cc
++++ b/ui/ozone/platform/drm/host/drm_cursor.cc
+@@ -204,6 +204,13 @@ std::optional<PointerHeard> DrmCursor::Heard() {
+                         GetLocationWithoutLock());
+ }
+ 
++void DrmCursor::SetDomicileAbsoluteAreas(
++    base::flat_map<int, gfx::Rect> areas) {
++  DCHECK_CALLED_ON_VALID_THREAD(ui_thread_checker_);
++  base::AutoLock lock(lock_);
++  absolute_areas_ = std::move(areas);
++}
++
+ void DrmCursor::MoveCursorTo(gfx::AcceleratedWidget window,
+                              const gfx::PointF& location) {
+   TRACE_EVENT0("drmcursor", "DrmCursor::MoveCursorTo (window)");
+@@ -271,8 +278,16 @@ void DrmCursor::MoveCursorToOnEvdevThread(const gfx::PointF& screen_location) {
+ 
+   base::AutoLock lock(lock_);
+ 
+-  // TODO(spang): Moving between windows doesn't work here, but
+-  // is not needed for current uses.
++  // DOMICILE: onto the window under `screen_location`. An absolute mouse bound
++  // to another display moves the pointer there, and clamped into this window
++  // it would stop at the edge.
++  const std::optional<PointerHeard> under = PointerHeardAt(
++      screens_, layout_, gfx::kNullAcceleratedWidget, screen_location);
++  if (under.has_value() && under->window != window_) {
++    CrossLocked({under->window, under->location});
++    return;
++  }
++
+   SetCursorLocationLocked(screen_location -
+                           display_bounds_in_screen_.OffsetFromOrigin());
+ 
+@@ -328,6 +343,14 @@ gfx::Rect DrmCursor::GetCursorConfinedBounds() {
+   return confined_bounds_ + display_bounds_in_screen_.OffsetFromOrigin();
+ }
+ 
++gfx::Rect DrmCursor::GetDomicileAbsoluteArea(int device_id) {
++  base::AutoLock lock(lock_);
++  const auto area = absolute_areas_.find(device_id);
++  return area != absolute_areas_.end()
++             ? area->second
++             : confined_bounds_ + display_bounds_in_screen_.OffsetFromOrigin();
++}
++
+ void DrmCursor::InitializeOnEvdev() {
+   DCHECK_CALLED_ON_VALID_THREAD(evdev_thread_checker_);
+   base::AutoLock lock(lock_);
+diff --git a/ui/ozone/platform/drm/host/drm_cursor.h b/ui/ozone/platform/drm/host/drm_cursor.h
+index 246cace..390a9f6 100644
+--- a/ui/ozone/platform/drm/host/drm_cursor.h
++++ b/ui/ozone/platform/drm/host/drm_cursor.h
+@@ -8,6 +8,7 @@
+ #include <memory>
+ #include <vector>
+ 
++#include "base/containers/flat_map.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/scoped_refptr.h"
+ #include "base/synchronization/lock.h"
+@@ -103,6 +104,10 @@ class DrmCursor : public CursorDelegateEvdev {
+   // `PointerHeardAt`.
+   std::optional<PointerHeard> Heard();
+ 
++  // DOMICILE: the display each absolute mouse is bound to, by device id, in
++  // screen. See `AbsoluteAreasFor`.
++  void SetDomicileAbsoluteAreas(base::flat_map<int, gfx::Rect> areas);
++
+   // CursorDelegateEvdev:
+   void MoveCursorTo(gfx::AcceleratedWidget window,
+                     const gfx::PointF& location) override;
+@@ -111,6 +116,7 @@ class DrmCursor : public CursorDelegateEvdev {
+   bool IsCursorVisible() override;
+   gfx::PointF GetLocation() override;
+   gfx::Rect GetCursorConfinedBounds() override;
++  gfx::Rect GetDomicileAbsoluteArea(int device_id) override;
+   void InitializeOnEvdev() override;
+ 
+  private:
+@@ -167,6 +173,7 @@ class DrmCursor : public CursorDelegateEvdev {
+   std::vector<DomicileDisplayLayout> layout_ GUARDED_BY(lock_);
+   gfx::AcceleratedWidget desk_host_ GUARDED_BY(lock_) =
+       gfx::kNullAcceleratedWidget;
++  base::flat_map<int, gfx::Rect> absolute_areas_ GUARDED_BY(lock_);
+ 
+   const raw_ptr<DrmWindowHostManager> window_manager_
+       GUARDED_BY_CONTEXT(ui_thread_checker_);  // Not owned.
+diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
+index 3343075..10beb1a 100644
+--- a/ui/ozone/platform/drm/ozone_platform_drm.cc
++++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
+@@ -192,7 +192,10 @@ class OzonePlatformDrm : public OzonePlatform {
+       pointer_targets_ = std::make_unique<DrmPointerTargets>(
+           base::BindRepeating(
+               [](const DrmScreen* screen) { return screen->GetAllDisplays(); },
+-              base::Unretained(screen_.get())));
++              base::Unretained(screen_.get())),
++          // Unretained: `cursor_` is declared first, so outlives this.
++          base::BindRepeating(&DrmCursor::SetDomicileAbsoluteAreas,
++                              base::Unretained(cursor_.get())));
+     }
+     pointer_targets_->Set(std::move(targets));
+   }

@@ -49,6 +49,7 @@ Details live in separate docs:
 | A light cursor on a dark theme | Unit tests (`CursorColorSchemeTest`). Patch `0061` |
 | Fast scrolls go further than slow ones | Unit tests (`ScrollAcceleratorTest`). Patch `0049` |
 | Mouse acceleration and wheel | Unit tests (`WheelTicksTest`). Patch `0059` |
+| An absolute mouse hovers, clicks with every button and scrolls | Unit tests (`AbsoluteMouseConverterTest`). Patch `0123` |
 | A stop during startup stops | Unit tests (`domicile-launch` milestones) |
 
 ## Building ozone/drm off ChromeOS
