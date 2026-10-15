@@ -23,9 +23,12 @@ namespace domicile {
 // cookies (components/domicile/mojom/shell_fetch.mojom). Making the request is
 // chrome/browser/domicile/domicile_shell_fetch.h.
 
-// The largest body the shell is handed. A bar item reads a count, not a
-// mailbox.
+// The largest body the shell sends.
 inline constexpr size_t kShellFetchMaxBody = 1024 * 1024;
+
+// The largest answer the shell is handed. Gmail's inbox page, which the Gmail
+// bar item reads for its sync's session, is over a megabyte.
+inline constexpr size_t kShellFetchMaxAnswer = 8 * 1024 * 1024;
 
 // How long a request may take, under the minute a bar item polls on.
 inline constexpr base::TimeDelta kShellFetchTimeout = base::Seconds(30);
