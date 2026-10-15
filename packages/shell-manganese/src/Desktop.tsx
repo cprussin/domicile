@@ -663,6 +663,9 @@ const stageActionsOf = (
   onClose: (id: string) => {
     act(WindowAction.WindowClosed(id));
   },
+  onDescription: (window: string, description: string) => {
+    act(WindowAction.BrowserDescribed(window, description));
+  },
   onDismiss: (id: string) => {
     act(WindowAction.ScratchpadDismissed(id));
   },

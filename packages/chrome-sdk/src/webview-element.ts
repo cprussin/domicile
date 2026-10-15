@@ -148,6 +148,12 @@ export const WEBVIEW_ZOOM_CHANGE_EVENT = "domicile-zoom-change";
 export const WEBVIEW_FAVICON_CHANGE_EVENT = "domicile-favicon-change";
 
 /**
+ * Fired when {@link HTMLWebViewElement.description} changes. Carries no
+ * payload. Bubbles.
+ */
+export const WEBVIEW_DESCRIPTION_CHANGE_EVENT = "domicile-description-change";
+
+/**
  * Fired when {@link HTMLWebViewElement.targetUrl} changes. Carries no payload.
  * Bubbles.
  */
@@ -474,6 +480,11 @@ declare global {
      * URL, or `""` if none. Changes fire {@link WEBVIEW_FAVICON_CHANGE_EVENT}.
      */
     readonly favicon: string;
+    /**
+     * The page's `<meta name="description">`, trimmed, or `""` if none.
+     * Changes fire {@link WEBVIEW_DESCRIPTION_CHANGE_EVENT}.
+     */
+    readonly description: string;
     /**
      * The address of the link under the pointer, or `""` if none, for a status
      * bubble like Chrome's. Changes fire {@link WEBVIEW_TARGET_URL_CHANGE_EVENT}.

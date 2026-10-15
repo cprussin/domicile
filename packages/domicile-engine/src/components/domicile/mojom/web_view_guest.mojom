@@ -330,6 +330,13 @@ interface WebViewGuestClient {
   // the compositor's anonymous fetch cannot see. Sent only when it changes.
   FaviconChanged(url.mojom.Url icon);
 
+  // The page's `<meta name="description">`, trimmed. Empty when it has none,
+  // and sent empty on each commit.
+  //
+  // Read on DOMContentLoaded and on each title change, since a single-page app
+  // changes both together. Sent only when it changes.
+  DescriptionChanged(string description);
+
   // The address of the link under the pointer, for a status bubble like
   // Chrome's. Empty when the pointer leaves the link or the page, or the page
   // navigates. Sent only when it changes.
