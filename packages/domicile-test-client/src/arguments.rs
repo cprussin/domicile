@@ -108,6 +108,16 @@ pub struct Arguments {
     /// client that picks its own size does.
     pub resize_to: Option<(u32, u32)>,
 
+    /// The `wp_viewport.set_source` to draw with, if any: the buffer's
+    /// top-left `WIDTHxHEIGHT`, in surface pixels, with no destination.
+    pub viewport_source: Option<(u32, u32)>,
+
+    /// The `wp_viewport.set_destination` to set after the first frame, if any.
+    ///
+    /// The client commits it without attaching a buffer, and then stops
+    /// drawing, so only the viewport says the window changed size.
+    pub viewport_to: Option<(u32, u32)>,
+
     /// The `wl_surface.set_buffer_transform` to draw with, if any.
     ///
     /// The buffer is drawn turned, half [`crate::window::TURNED_COLORS`]`[0]`
@@ -219,6 +229,8 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut min_size = None;
     let mut max_size = None;
     let mut resize_to = None;
+    let mut viewport_source = None;
+    let mut viewport_to = None;
     let mut buffer_transform = None;
     let mut ask_to = None;
     let mut xdg_wm_base_v1 = None;
@@ -312,6 +324,12 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--resize-to" => {
                 take(&mut resize_to, &flag, size(&mut args, &flag)?)?;
             }
+            "--viewport-source" => {
+                take(&mut viewport_source, &flag, size(&mut args, &flag)?)?;
+            }
+            "--viewport-to" => {
+                take(&mut viewport_to, &flag, size(&mut args, &flag)?)?;
+            }
             "--buffer-transform" => {
                 take(&mut buffer_transform, &flag, turn(&mut args, &flag)?)?;
             }
@@ -349,6 +367,8 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         min_size,
         max_size,
         resize_to,
+        viewport_source,
+        viewport_to,
         buffer_transform,
         ask_to,
         xdg_wm_base_v1: xdg_wm_base_v1.unwrap_or(false),

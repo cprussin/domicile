@@ -4,17 +4,21 @@
 use std::os::fd::OwnedFd;
 use std::time::Instant;
 
+use smithay::backend::allocator::dmabuf::Dmabuf;
+use smithay::backend::allocator::Buffer as _;
 use smithay::reexports::wayland_server::protocol::{wl_buffer, wl_surface::WlSurface};
 use smithay::wayland::compositor::with_states;
+use smithay::wayland::dmabuf::get_dmabuf;
 use tracing::warn;
 
 use crate::buffer_transform::Sampled;
 use crate::dmabuf_descriptor::descriptor_from;
 use crate::dmabuf_descriptor::DmabufDescriptor;
-use crate::engine_session::{EngineSession, Submission, Submitted};
+use crate::engine_session::{EngineSession, Remapped, Submission, Submitted};
+use crate::frame_pacing::Paced;
 use crate::shm_upload::{render_modifiers, shm_shape, CopyError};
-use crate::surface_commit::{committed_buffer, CommittedBuffer};
-use crate::uploads::UploadId;
+use crate::surface_commit::{committed_buffer, CommittedBuffer, Mapping};
+use crate::uploads::{UploadId, Uploads};
 use crate::DomicileCompositor;
 use crate::{casting, engine_damage, gbm, shm_upload};
 
@@ -138,6 +142,44 @@ impl DomicileCompositor {
             self.frame_shown(app_id);
         }
         published
+    }
+
+    /// Show `app_id`'s frame again as `mapping` maps its buffer, at the box
+    /// `at_box` names, for a commit that attached no buffer and answers a
+    /// configure of `configured` size. See [`EngineSession::remap`].
+    ///
+    /// Returns the frame the engine will report, or `None` if the engine shows
+    /// nothing new.
+    pub fn remap_frame(
+        &mut self,
+        app_id: &str,
+        mapping: &Mapping,
+        configured: Option<(i32, i32)>,
+        at_box: u64,
+    ) -> Option<Paced> {
+        let session = self.engine.as_mut()?;
+        let uploads = &self.uploads;
+        let sample = |buffer: &Submitted| {
+            dmabuf_of(buffer, uploads)
+                .map(|dmabuf| mapping.sampled((dmabuf.width(), dmabuf.height()), configured))
+        };
+        // Before the submit, which numbers this commit's frame.
+        let last = session.frame_of(app_id);
+        let (buffer, paced) = match session.remap(app_id, &sample, at_box, Instant::now()) {
+            Remapped::Taken { buffer, frame } => {
+                (buffer, Paced::Submitted(app_id.to_owned(), frame))
+            }
+            Remapped::Waiting { buffer } => (buffer, Paced::Held(app_id.to_owned())),
+            Remapped::Unchanged => return None,
+        };
+        self.presentations.committed(app_id, at_box, last);
+        // The client's next damage is relative to a frame mapped otherwise.
+        self.shown.missed(app_id);
+        let dmabuf = dmabuf_of(&buffer, &self.uploads).expect("the engine holds what it shows");
+        let sampled = mapping.sampled((dmabuf.width(), dmabuf.height()), configured);
+        self.casting
+            .shown(app_id, casting::Shown { dmabuf, sampled });
+        Some(paced)
     }
 
     /// Submit `submitted` as `app_id`'s frame, damaging `damage` (see
@@ -293,5 +335,14 @@ impl DomicileCompositor {
                 Err(ShmRefused::Copy(err))
             }
         }
+    }
+}
+
+/// The dmabuf behind a submitted buffer: the client's, or the compositor's
+/// copy of its shm frame.
+fn dmabuf_of(buffer: &Submitted, uploads: &Uploads<Dmabuf>) -> Option<Dmabuf> {
+    match buffer {
+        Submitted::Client(buffer) => get_dmabuf(buffer).ok().cloned(),
+        Submitted::Upload(id) => uploads.get(*id).cloned(),
     }
 }

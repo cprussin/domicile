@@ -123,8 +123,8 @@ rate the screen shows it.
   by window, and take the number the frame goes up with. A newer frame answers
   them and discards the feedback.
 - **Frames viz never sees** answer at once and discard their feedback: an shm
-  frame the compositor could not copy, a commit with no new buffer, the
-  chrome's own window.
+  frame the compositor could not copy, a commit with no new buffer that
+  leaves the window as shown, the chrome's own window.
 - **The deadline:** a frame the engine does not report within 250 ms is
   answered anyway and its feedback discarded, so no client waits for good.
 - **Older engines** lack `domicile_engine_reports_frames`. The compositor
@@ -139,6 +139,27 @@ rate the screen shows it.
     draw, so no frame of it is `presented`.
   - Unverified end to end: the compositor's tests run without an engine, and
     no check reads a lit CRTC.
+
+## Commits without a buffer
+
+A commit that attaches no buffer but changes the window's viewport, buffer
+scale, buffer transform or geometry shows the buffer on screen again, mapped
+anew (`EngineSession::remap`).
+
+- **Size:** the chrome hears the new size (`app_resized`).
+- **On screen:** the engine's held buffer, a client dmabuf or the
+  compositor's shm copy, goes up again at the commit's box with the whole box
+  damaged. The client's `wl_shm` buffer is not read again, and the hold stays
+  one hold, so the client gets one release per attach.
+- **Waiting:** a frame waiting for an embed or an import takes the new crop
+  and box in place, and keeps its fence.
+- **Not remapped:** a commit that only acks a new configure. The window keeps
+  its old frame at its old box rather than stretching it.
+- **Unsynced:** a remap goes up at the newest frame, as an unsynced commit.
+- **Casts:** a window shot takes the new crop; a live window cast keeps the
+  old one until the client attaches a buffer.
+- **Checks:** `tests/apps.rs` checks the size the chrome hears. The resubmit
+  is unchecked: the compositor's tests run without an engine.
 
 ## Hidden windows
 

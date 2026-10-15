@@ -172,7 +172,7 @@ use crate::portals::{shell_appearance, Selection};
 use crate::restatement::Restatement;
 use crate::screens::{Advertised, Screens};
 use crate::spawning::{chrome_display, home_directory, spawn_client};
-use crate::surface_commit::Role;
+use crate::surface_commit::{LastBuffer, Role};
 use crate::windows::SizeLimits;
 use domicile_config::{Config, ConfigError, ConfigStore};
 use domicile_host::clipboard::{Contents, History};
@@ -479,6 +479,9 @@ struct DomicileCompositor {
     /// The size limits each window's chromes were last told, so a commit
     /// that keeps them does not lock the host.
     size_limits: HashMap<String, SizeLimits>,
+    /// Each window's last buffer, for a commit that attaches none but changes
+    /// how it maps. See `surface_commit`.
+    last_buffers: HashMap<String, LastBuffer>,
     /// Windows that have not drawn yet, which the chromes have not heard of.
     /// See `announce_a_new_window`.
     unannounced: HashSet<String>,
@@ -1181,6 +1184,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         configure_answers: HashMap::new(),
         shown: engine_damage::Shown::default(),
         size_limits: HashMap::new(),
+        last_buffers: HashMap::new(),
         unannounced: HashSet::new(),
         by_surface: HashMap::new(),
         first_frame_logged: OncePerWindow::default(),

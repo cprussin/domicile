@@ -98,6 +98,8 @@ fills monitor and region casts with one color instead
 - **Honor every advertised global.** Example: `wp_viewporter` must apply the
   destination size. Ignoring it draws surfaces at 2x and offsets portal and
   pointer coordinates above 1x scale. Headless tests run at 1x and miss it.
+- **A viewport source with no destination sizes the surface.** Sizing it by
+  the whole buffer squeezes the crop into a box the buffer's width.
 
 ## Smithay
 

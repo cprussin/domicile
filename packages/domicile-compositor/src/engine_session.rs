@@ -66,6 +66,25 @@ pub enum Submission {
     Refused,
 }
 
+/// What became of a frame handed to [`EngineSession::remap`].
+#[derive(Debug, PartialEq)]
+pub enum Remapped {
+    /// Viz shows `buffer` mapped anew, as the engine's `frame`.
+    Taken { buffer: Submitted, frame: u64 },
+    /// The window's newest frame, of `buffer`, waits for an embed or an
+    /// import, and goes up mapped anew.
+    Waiting { buffer: Submitted },
+    /// The engine has no frame of the window's, or maps it so already.
+    Unchanged,
+}
+
+/// How a frame's buffer is shown: the part sampled and the box it fills.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Mapping {
+    sampled: Sampled,
+    at_box: u64,
+}
+
 /// A frame waiting to be submitted.
 #[derive(Debug)]
 struct Frame {
@@ -76,6 +95,21 @@ struct Frame {
     /// Signals when the compositor's draw into the buffer lands. `None` for a
     /// buffer already drawn.
     fence: Option<OwnedFd>,
+}
+
+impl Frame {
+    fn mapping(&self) -> Mapping {
+        Mapping {
+            sampled: self.sampled,
+            at_box: self.at_box,
+        }
+    }
+
+    /// What [`EngineSession::show`] puts up.
+    fn into_parts(self) -> (Submitted, Mapping, Option<OwnedFd>) {
+        let mapping = self.mapping();
+        (self.buffer, mapping, self.fence)
+    }
 }
 
 /// What became of a frame handed to [`EngineSession::put_up`].
@@ -146,9 +180,9 @@ pub struct EngineSession {
     /// importing per commit would send new fds every frame.
     imports: Imports<ImportKey, Frame>,
     held: HeldBuffers<Submitted>,
-    /// Each app's last crop and transform, reused when a reconnect
-    /// resubmits its frame.
-    sampled: HashMap<String, Sampled>,
+    /// How each app's last frame went up. A reconnect reuses its crop and
+    /// transform, and a remap skips a mapping already shown.
+    mapped: HashMap<String, Mapping>,
     /// The frame each surface committed before a page embedded it. See
     /// `engine_waiting`.
     waiting: Waiting<Frame>,
@@ -166,7 +200,7 @@ impl EngineSession {
             surfaces: Surfaces::default(),
             imports: Imports::default(),
             held: HeldBuffers::default(),
-            sampled: HashMap::new(),
+            mapped: HashMap::new(),
             waiting: Waiting::default(),
         })
     }
@@ -265,7 +299,11 @@ impl EngineSession {
         let Some(descriptor) = describe(buffer) else {
             return Submission::Refused;
         };
-        let sampled = self.sampled.get(app_id).copied().unwrap_or_default();
+        let sampled = self
+            .mapped
+            .get(app_id)
+            .map(|mapped| mapped.sampled)
+            .unwrap_or_default();
         // A new engine numbers its boxes afresh.
         self.submit(
             app_id,
@@ -433,7 +471,7 @@ impl EngineSession {
                 frame,
                 replaced,
             } => PutUp::Taken {
-                frame: self.show(app_id, surface, id, frame, damage, now),
+                frame: self.show(app_id, surface, id, frame.into_parts(), damage, now),
                 replaced: replaced.map(|frame| frame.buffer),
             },
             Route::Wait { replaced, start } => {
@@ -458,24 +496,83 @@ impl EngineSession {
         app_id: &str,
         surface: SurfaceId,
         id: BufferId,
-        frame: Frame,
+        (buffer, mapping, fence): (Submitted, Mapping, Option<OwnedFd>),
         damage: (i32, i32, i32, i32),
         now: Instant,
     ) -> u64 {
         self.engine.submit(
             surface,
             id,
-            frame.sampled,
+            mapping.sampled,
             damage,
-            frame.at_box,
-            frame.fence.as_ref().map(OwnedFd::as_fd),
+            mapping.at_box,
+            fence.as_ref().map(OwnedFd::as_fd),
         );
-        self.sampled.insert(app_id.to_owned(), frame.sampled);
+        self.mapped.insert(app_id.to_owned(), mapping);
         // A replaced hold is the same buffer, since `imports` is keyed on the
         // surface and the object. Drop it without releasing: viz holds it
         // again.
-        drop(self.held.hold(surface, id, frame.buffer, now));
+        drop(self.held.hold(surface, id, buffer, now));
         self.surfaces.submitted(surface)
+    }
+
+    /// Maps `app_id`'s newest frame anew, for a commit that changed how its
+    /// buffer maps but attached none.
+    ///
+    /// `sample` gives the crop and turn for the frame's buffer, and the frame
+    /// fills the box `at_box` names. A frame on screen goes up again with the
+    /// whole box damaged. A waiting frame keeps its fence and its place.
+    /// Either way the buffer stays held as it was: the client attached it
+    /// once and is owed one release.
+    pub fn remap(
+        &mut self,
+        app_id: &str,
+        sample: &dyn Fn(&Submitted) -> Option<Sampled>,
+        at_box: u64,
+        now: Instant,
+    ) -> Remapped {
+        let Some(surface) = self.surfaces.get(app_id) else {
+            return Remapped::Unchanged;
+        };
+        let waiting = match self.waiting.get_mut(surface) {
+            Some(frame) => Some(frame),
+            None => self.imports.waiting_mut(surface),
+        };
+        if let Some(frame) = waiting {
+            let Some(sampled) = sample(&frame.buffer) else {
+                return Remapped::Unchanged;
+            };
+            let mapping = Mapping { sampled, at_box };
+            if mapping == frame.mapping() {
+                return Remapped::Unchanged;
+            }
+            frame.sampled = sampled;
+            frame.at_box = at_box;
+            return Remapped::Waiting {
+                buffer: frame.buffer.clone(),
+            };
+        }
+        let Some((id, buffer)) = self.held.on_screen(surface) else {
+            return Remapped::Unchanged;
+        };
+        let buffer = buffer.clone();
+        let Some(sampled) = sample(&buffer) else {
+            return Remapped::Unchanged;
+        };
+        let mapping = Mapping { sampled, at_box };
+        if self.mapped.get(app_id) == Some(&mapping) {
+            return Remapped::Unchanged;
+        }
+        // Held only once embedded, so this frame reaches viz.
+        let frame = self.show(
+            app_id,
+            surface,
+            id,
+            (buffer.clone(), mapping, None),
+            (0, 0, 0, 0),
+            now,
+        );
+        Remapped::Taken { buffer, frame }
     }
 
     /// Runs the engine's pending work, and puts up the frames whose imports
@@ -537,7 +634,8 @@ impl EngineSession {
                         .app_for(surface)
                         .expect("`window_gone` takes the frames of the surfaces it forgets")
                         .to_owned();
-                    let frame = self.show(&app_id, surface, id, frame, (0, 0, 0, 0), now);
+                    let frame =
+                        self.show(&app_id, surface, id, frame.into_parts(), (0, 0, 0, 0), now);
                     dispatched.shown.push((app_id, frame));
                 }
                 Then::Refused { surface, frame } => {
@@ -565,7 +663,7 @@ impl EngineSession {
     /// Destroys the app's surface and returns its buffers at once, since no
     /// release will arrive for them.
     pub fn window_gone(&mut self, app_id: &str) -> Vec<Release> {
-        self.sampled.remove(app_id);
+        self.mapped.remove(app_id);
         let Some(surface) = self.surfaces.forget(app_id) else {
             return Vec::new();
         };

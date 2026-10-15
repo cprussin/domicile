@@ -113,6 +113,16 @@ impl<B> HeldBuffers<B> {
             .map(|previous| previous.buffer)
     }
 
+    /// The frame on screen for `surface`: its newest hold, if viz has not
+    /// released it.
+    pub fn on_screen(&self, surface: SurfaceId) -> Option<(BufferId, &B)> {
+        self.held
+            .get(&surface)?
+            .iter()
+            .find(|(_, held)| held.superseded.is_none())
+            .map(|(id, held)| (*id, &held.buffer))
+    }
+
     /// Viz released `id` on `surface`.
     pub fn release(&mut self, surface: SurfaceId, id: BufferId) -> Option<B> {
         let holds = self.held.get_mut(&surface)?;
@@ -316,6 +326,26 @@ mod tests {
              on screen rather than something viz forgot"
         );
         assert_eq!(held.release(SURFACE, 7), Some("second"));
+    }
+
+    // A commit that maps the window anew shows the buffer on screen again.
+    #[test]
+    fn the_frame_on_screen_is_the_newest_hold() {
+        let now = Instant::now();
+        let mut held = HeldBuffers::default();
+        assert_eq!(held.on_screen(SURFACE), None);
+
+        held.hold(SURFACE, 1, "superseded", now);
+        held.hold(SURFACE, 2, "on screen", now);
+        held.hold(SURFACE + 1, 3, "the other window", now);
+
+        assert_eq!(held.on_screen(SURFACE), Some((2, &"on screen")));
+        held.release(SURFACE, 2);
+        assert_eq!(
+            held.on_screen(SURFACE),
+            None,
+            "a superseded frame is not on screen"
+        );
     }
 
     // No release arrives for a lost surface, so its buffers return at once.

@@ -16,7 +16,7 @@ use tracing::debug;
 
 use crate::buffer_transform::upright_size;
 use crate::surface_commit::{committed_buffer, window_geometry, Role};
-use crate::viewport::surface_size;
+use crate::viewport::{surface_size, Viewport};
 use crate::DomicileCompositor;
 
 /// An announced bubble. See `DomicileCompositor::bubbles`.
@@ -305,12 +305,7 @@ impl DomicileCompositor {
 /// commits none.
 fn drawn_size(surface: &WlSurface) -> Option<(f64, f64)> {
     with_states(surface, |states| {
-        let destination = states
-            .cached_state
-            .get::<ViewportCachedState>()
-            .current()
-            .dst
-            .map(|size| (size.w, size.h));
+        let viewport = Viewport::from(&*states.cached_state.get::<ViewportCachedState>().current());
         let mut attributes = states.cached_state.get::<SurfaceAttributes>();
         let attributes = attributes.current();
         let Some(BufferAssignment::NewBuffer(buffer)) = &attributes.buffer else {
@@ -322,7 +317,7 @@ fn drawn_size(surface: &WlSurface) -> Option<(f64, f64)> {
                 Transform::from(attributes.buffer_transform),
             ),
             attributes.buffer_scale,
-            destination,
+            viewport.size,
         );
         Some((f64::from(width), f64::from(height)))
     })

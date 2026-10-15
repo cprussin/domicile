@@ -35,6 +35,7 @@ use wayland_protocols::wp::primary_selection::zv1::client::{
     zwp_primary_selection_device_manager_v1, zwp_primary_selection_device_v1,
     zwp_primary_selection_offer_v1, zwp_primary_selection_source_v1,
 };
+use wayland_protocols::wp::viewporter::client::{wp_viewport, wp_viewporter};
 use wayland_protocols::xdg::activation::v1::client::{xdg_activation_token_v1, xdg_activation_v1};
 use wayland_protocols::xdg::decoration::zv1::client::{
     zxdg_decoration_manager_v1, zxdg_toplevel_decoration_v1,
@@ -279,6 +280,12 @@ struct Client {
     follow_configure: bool,
     /// See [`crate::arguments::Arguments::resize_to`]. Taken when applied.
     resize_to: Option<(u32, u32)>,
+    /// See [`crate::arguments::Arguments::viewport_source`].
+    viewport_source: Option<(u32, u32)>,
+    /// See [`crate::arguments::Arguments::viewport_to`]. Taken when applied.
+    viewport_to: Option<(u32, u32)>,
+    /// The window's `wp_viewport`, made only when a viewport flag asks.
+    viewport: Option<wp_viewport::WpViewport>,
     /// See [`crate::arguments::Arguments::ask_for_focus`].
     ask_for_focus: Option<AskForFocus>,
     /// See [`crate::arguments::Arguments::ask_to`]. Taken once asked.
@@ -492,6 +499,8 @@ struct Globals {
     /// The scale the compositor prefers for the window, as kitty and GTK 4
     /// read it on a fractional display.
     fractional_scale: Option<wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1>,
+    /// For `--viewport-source` and `--viewport-to`.
+    viewporter: Option<wp_viewporter::WpViewporter>,
     named: Vec<(u32, String, u32)>,
 }
 
@@ -515,6 +524,9 @@ impl Client {
             buffer_transform: asked.buffer_transform,
             follow_configure: asked.follow_configure,
             resize_to: asked.resize_to,
+            viewport_source: asked.viewport_source,
+            viewport_to: asked.viewport_to,
+            viewport: None,
             ask_for_focus: asked.ask_for_focus,
             ask_to: asked.ask_to,
             xdg_wm_base_v1: asked.xdg_wm_base_v1,
@@ -610,6 +622,9 @@ impl Client {
                     self.globals.fractional_scale =
                         Some(registry.bind(name, version.min(1), handle, ()));
                 }
+                "wp_viewporter" => {
+                    self.globals.viewporter = Some(registry.bind(name, version.min(1), handle, ()));
+                }
                 _ => {}
             }
         }
@@ -690,6 +705,21 @@ impl Client {
         // Only traced: the window keeps drawing at its integer scale.
         if let Some(manager) = &self.globals.fractional_scale {
             manager.get_fractional_scale(&surface, handle, ());
+        }
+        if self.viewport_source.is_some() || self.viewport_to.is_some() {
+            let viewporter = self
+                .globals
+                .viewporter
+                .as_ref()
+                .ok_or(ClientError::Missing {
+                    global: "wp_viewporter",
+                })?;
+            let viewport = viewporter.get_viewport(&surface, handle, ());
+            if let Some((width, height)) = self.viewport_source {
+                viewport.set_source(0.0, 0.0, f64::from(width), f64::from(height));
+                crate::say!(viewport.id(), "set_source(0, 0, {}, {})", width, height);
+            }
+            self.viewport = Some(viewport);
         }
         // Scale 1: the surface has entered no output until it maps. `follow`
         // rescales on `wl_surface.enter`.
@@ -1819,7 +1849,23 @@ impl Dispatch<wl_callback::WlCallback, ()> for Client {
         handle: &QueueHandle<Client>,
     ) {
         if let wl_callback::Event::Done { .. } = event {
-            // The first frame is up, so `--resize-to` changes a shown window.
+            // The first frame is up. `--viewport-to` resizes it without a
+            // buffer, and drawing stops so no later buffer resizes it instead.
+            if let Some((width, height)) = client.viewport_to.take() {
+                let window = client
+                    .window
+                    .as_ref()
+                    .expect("open() runs before anything that could draw");
+                let viewport = client
+                    .viewport
+                    .as_ref()
+                    .expect("open() makes a viewport for --viewport-to");
+                viewport.set_destination(width as i32, height as i32);
+                crate::say!(viewport.id(), "set_destination({}, {})", width, height);
+                window.surface.commit();
+                return;
+            }
+            // `--resize-to` changes a shown window.
             if let Some(size) = client.resize_to.take() {
                 client.configured_size = Some(size);
                 resize_or_stop(client, handle);
@@ -2076,6 +2122,8 @@ delegate_noop!(Client: ignore xdg_activation_v1::XdgActivationV1);
 delegate_noop!(Client: ignore zxdg_decoration_manager_v1::ZxdgDecorationManagerV1);
 delegate_noop!(Client: ignore org_kde_kwin_server_decoration_manager::OrgKdeKwinServerDecorationManager);
 delegate_noop!(Client: ignore wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1);
+delegate_noop!(Client: ignore wp_viewporter::WpViewporter);
+delegate_noop!(Client: ignore wp_viewport::WpViewport);
 delegate_noop!(Client: ignore zxdg_exporter_v1::ZxdgExporterV1);
 delegate_noop!(Client: ignore zxdg_exporter_v2::ZxdgExporterV2);
 

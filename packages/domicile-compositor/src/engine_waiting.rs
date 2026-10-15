@@ -32,6 +32,11 @@ impl<F> Waiting<F> {
         self.frames.insert(surface, frame)
     }
 
+    /// The frame waiting for `surface`, to change in place.
+    pub fn get_mut(&mut self, surface: SurfaceId) -> Option<&mut F> {
+        self.frames.get_mut(&surface)
+    }
+
     /// Removes the frame waiting for `surface`.
     pub fn take(&mut self, surface: SurfaceId) -> Option<F> {
         self.frames.remove(&surface)
@@ -68,6 +73,21 @@ mod tests {
         assert_eq!(waiting.take(SURFACE + 1), None, "another surface has none");
         assert_eq!(waiting.take(SURFACE), Some(frame(1)));
         assert_eq!(waiting.take(SURFACE), None, "and it is gone once taken");
+    }
+
+    #[test]
+    fn a_waiting_frame_can_be_changed_in_place() {
+        let mut waiting = Waiting::default();
+        waiting.wait(SURFACE, frame(1));
+
+        *waiting.get_mut(SURFACE).expect("it waits") = frame(2);
+
+        assert_eq!(
+            waiting.get_mut(SURFACE + 1),
+            None,
+            "another surface has none"
+        );
+        assert_eq!(waiting.take(SURFACE), Some(frame(2)));
     }
 
     #[test]

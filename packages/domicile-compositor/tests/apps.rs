@@ -381,3 +381,44 @@ fn a_window_that_draws_at_a_new_size_has_the_chrome_told() {
     };
     assert_eq!(size, [400.0, 300.0]);
 }
+
+/// A window cropped by a viewport source with no destination is the source's
+/// size, as `wp_viewporter` defines it.
+///
+/// Sized by the whole buffer, the engine would squeeze the crop into a box the
+/// buffer's width, and the window would be drawn narrower than the client
+/// drew it.
+#[test]
+fn a_window_cropped_by_its_viewport_is_the_crops_size() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let _client = compositor.client_with("a cropped window", &["--viewport-source", "200x150"]);
+
+    let appeared = chrome
+        .wait_for(|message| matches!(message, HostMessage::AppAppeared { .. }))
+        .expect("a cropped window appears");
+    let HostMessage::AppAppeared { size, .. } = appeared else {
+        unreachable!("the wait matched on this variant")
+    };
+    assert_eq!(size, [200.0, 150.0], "the crop's size, not the buffer's");
+}
+
+/// A window resized by its viewport alone, with no new buffer, has the chrome
+/// told.
+///
+/// The commit changes how the buffer on screen maps, which is a new frame even
+/// though no buffer came with it.
+#[test]
+fn a_window_resized_by_its_viewport_alone_has_the_chrome_told() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let _client = compositor.client_with("a rescaled window", &["--viewport-to", "400x300"]);
+
+    let resized = chrome
+        .wait_for(|message| matches!(message, HostMessage::AppResized { .. }))
+        .expect("a window resized by its viewport has the chrome told");
+    let HostMessage::AppResized { size, .. } = resized else {
+        unreachable!("the wait matched on this variant")
+    };
+    assert_eq!(size, [400.0, 300.0]);
+}
