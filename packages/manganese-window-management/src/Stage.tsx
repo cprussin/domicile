@@ -840,6 +840,7 @@ const WindowContents = memo(
             rect={contents?.rect}
             resizing={resizing}
             restack={restack}
+            syncedFrame={window.syncedFrame}
           />
         ) : (
           <BrowserWindow

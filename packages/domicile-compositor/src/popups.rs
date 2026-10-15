@@ -1,13 +1,14 @@
 //! Popups and bubbles: announcing and placing them over their windows, keeping
 //! menus on screen, and dismissing them.
 
+use domicile_protocol::HostMessage;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle, Transform};
 use smithay::wayland::viewporter::ViewportCachedState;
 use smithay::wayland::{
     compositor::{
-        get_children, get_parent, get_role, with_states, BufferAssignment, SubsurfaceCachedState,
-        SurfaceAttributes,
+        get_children, get_parent, get_role, is_sync_subsurface, with_states, BufferAssignment,
+        SubsurfaceCachedState, SurfaceAttributes,
     },
     shell::xdg::{PopupSurface, PositionerState, XDG_POPUP_ROLE},
 };
@@ -137,7 +138,7 @@ impl DomicileCompositor {
                         .unwrap()
                         .popup_moved(&bubble.app_id, placed.0, placed.1);
                 if let Some(message) = moved {
-                    self.hub.broadcast(message);
+                    self.tell_the_move(message);
                 }
             }
             (None, Some((parent, parent_id))) => {
@@ -161,10 +162,55 @@ impl DomicileCompositor {
                         parent,
                         placed: (position, size),
                     });
-                    self.hub.broadcast(message);
+                    self.tell_the_move(message);
                 }
             }
             (None, None) => {}
+        }
+    }
+
+    /// Tell the chromes a bubble moved: at once, or, if frames sync, once its
+    /// commit transaction is applied. See `docs/architecture/FRAME-SYNCED-SURFACES.md`.
+    fn tell_the_move(&mut self, moved: HostMessage) {
+        if self.syncs_frames() {
+            self.synced_moves.hold(moved);
+        } else {
+            self.hub.broadcast(moved);
+        }
+    }
+
+    /// Whether the engine and every chrome sync frames.
+    fn syncs_frames(&self) -> bool {
+        self.engine
+            .as_ref()
+            .is_some_and(|session| session.syncs_frames())
+            && self.hub.syncs_frames()
+    }
+
+    /// Sync `app_id`'s next submit if it goes with a held move. Called just
+    /// before the submit, so the frame is named only once it is submitted.
+    pub fn sync_with_the_moves(&mut self, app_id: &str) {
+        if !self.synced_moves.awaited() {
+            return;
+        }
+        let Some(frame) = self.hub.host.lock().unwrap().sync_frame(app_id) else {
+            return;
+        };
+        let session = self.engine.as_mut().expect("a held move needs an engine");
+        if session.sync(app_id, frame) {
+            self.synced_moves.synced(app_id, frame);
+        }
+    }
+
+    /// Tell the chromes the moves a commit transaction held, once its last
+    /// commit is applied. Smithay applies a sync subsurface's commit before
+    /// its parent's (`Transaction::apply`).
+    pub fn tell_the_held_moves(&mut self, surface: &WlSurface) {
+        if is_sync_subsurface(surface) {
+            return;
+        }
+        for moved in self.synced_moves.release() {
+            self.hub.broadcast(moved);
         }
     }
 

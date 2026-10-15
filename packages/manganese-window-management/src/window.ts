@@ -46,6 +46,8 @@ export type ClientWindow = {
   maxSize: SizeLimit;
   /** The smallest the client will draw its window. */
   minSize: SizeLimit;
+  /** The synced frame its `<app>` shows. See `DomicileWindow.frame`. */
+  syncedFrame: number;
   title: string;
 };
 
@@ -74,6 +76,7 @@ export const ShellWindow = {
     kind: WindowKind.App,
     maxSize: UNLIMITED,
     minSize: UNLIMITED,
+    syncedFrame: 0,
     title,
   }),
 

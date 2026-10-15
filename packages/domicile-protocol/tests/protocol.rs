@@ -4,8 +4,8 @@
 //! pinned because the JS client hard-codes them.
 
 use domicile_protocol::{
-    negotiate, Appearance, ChromeMessage, ClipboardEntry, CursorShape, CursorTheme, DisplayInfo,
-    DisplayTransform, HostMessage, Owner, Passphrase, PROTOCOL_VERSION,
+    negotiate, AppFrame, Appearance, ChromeMessage, ClipboardEntry, CursorShape, CursorTheme,
+    DisplayInfo, DisplayTransform, HostMessage, Owner, Passphrase, PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -379,6 +379,7 @@ fn wire_shape_is_pinned() {
             pidfd_inode: None,
             sandbox: None,
         },
+        frame: 0,
     })
     .unwrap();
     assert_eq!(v["size"], serde_json::json!([640.0, 480.0]));
@@ -484,4 +485,61 @@ fn a_shortcut_the_host_never_sent_is_not_a_message() {
         serde_json::from_str::<HostMessage>(line).is_err(),
         "the chrome still reads a shortcut the host never sends"
     );
+}
+
+/// A move names the synced frame of each surface it goes with, so the page
+/// shows them together. See `docs/architecture/FRAME-SYNCED-SURFACES.md`.
+#[test]
+fn a_move_names_the_frames_it_shows_with() {
+    let v = serde_json::to_value(HostMessage::PopupPlaced {
+        app_id: "app-3".into(),
+        parent: "app-2".into(),
+        position: [12.0, 30.0],
+        size: [180.0, 240.0],
+        grab: false,
+        frames: vec![AppFrame {
+            app_id: "app-2".into(),
+            frame: 4,
+        }],
+    })
+    .unwrap();
+    assert_eq!(
+        v["frames"],
+        serde_json::json!([{"app_id": "app-2", "frame": 4}])
+    );
+}
+
+/// A window can be past frame 0 when a page first hears of it, as after a
+/// reload, so its announcement names the frame to show.
+#[test]
+fn a_window_appears_at_its_synced_frame() {
+    let at = |frame| {
+        serde_json::to_value(HostMessage::AppAppeared {
+            app_id: "app-1".into(),
+            title: None,
+            desktop_id: None,
+            size: [400.0, 300.0],
+            dialog: false,
+            client_frame: false,
+            owner: Owner {
+                pid: 1,
+                uid: 1000,
+                gid: 1000,
+                pidfd_inode: None,
+                sandbox: None,
+            },
+            frame,
+        })
+        .unwrap()
+    };
+    assert_eq!(at(0).get("frame"), None);
+    assert_eq!(at(7)["frame"], 7);
+}
+
+/// A page that renders `<app frame>` asks for synced frames with the tag
+/// alone.
+#[test]
+fn asking_for_synced_frames_is_the_tag_and_nothing_else() {
+    let v = serde_json::to_value(ChromeMessage::SyncFrames).unwrap();
+    assert_eq!(v, serde_json::json!({"type": "sync_frames"}));
 }

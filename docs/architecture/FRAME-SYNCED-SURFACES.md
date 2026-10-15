@@ -80,22 +80,42 @@ message.
 - [x] `synced_frame.h`: frame `n` of an allocated id, unit tested
 - [x] engine library: `domicile_surface_sync`
 - [x] `<app frame>`: embed frame `n` with the default deadline
-- [ ] compositor: call `domicile_surface_sync` for each surface of a commit
-      transaction that moves a bubble or popup, then broadcast the message
-- [ ] protocol: `frames` on `PopupPlaced` (Rust and `e2e-harness`)
-- [ ] SDK and manganese: keep each app's frame; render `frame` on the window
+- [x] compositor: call `domicile_surface_sync` for each surface of a commit
+      transaction that moves a bubble, then broadcast the message
+- [x] protocol: `frames` on `PopupPlaced` (Rust and `e2e-harness`)
+- [x] SDK and manganese: keep each app's frame; render `frame` on the window
       and popup `<app>`s in the same render as the move
-- [ ] opt-in: sync only for a page that says it renders `frame`
+- [x] opt-in: sync only for a page that says it renders `frame`
 - [ ] guard on `crux`: a parent with a sync bubble scrolls; each captured
       frame shows the bubble at the parent's content
 - [ ] update [WINDOW-COMPOSITING.md](WINDOW-COMPOSITING.md#what-each-side-knows)
       and delete this doc
 
+## How it is wired
+
+- **Opt-in:** `ChromeMessage::SyncFrames` (`domicile.syncFrames()`), reset by
+  the page's next `hello`. Not a `Hello` field: the browser sends `hello` when
+  the socket connects, before the shell's script runs. The compositor syncs
+  only while every connected chrome has asked (`ChromeHub::syncs_frames`) and
+  the engine has `domicile_surface_sync`.
+- **Which submits:** a bubble's move is held (`synced_moves.rs`). Each app
+  submit after it in the same transaction is synced, the bubble's own and
+  then its parent's, since Smithay applies children first. The transaction's
+  last commit, a surface that is not a sync subsurface, broadcasts it with
+  `frames`.
+- **Reload:** `Host` keeps each surface's last frame. `AppAppeared.frame` and a
+  catch-up `PopupPlaced`'s own frame tell a new page where each one is.
+- **A page that ignores frames:** once a surface is synced, its unsynced
+  submits go up at its newest frame. An `<app>` with no `frame` attribute
+  embeds the newest frame the control channel named for it
+  (`domicile::KnownFrames`, fed by `AppAppeared.frame` and
+  `PopupPlaced.frames`). So a shell that connects later and never asks still
+  tracks the window. A frame is the same for every page, so one map serves
+  the renderer.
+- **xdg popups** are not synced. Their moves are not sent, and no parent
+  content shares their transaction.
+
 ## Open questions
 
-- **Opt-in.** A page that never sets `frame` shows frame 0 forever once the
-  compositor syncs. Recommendation: a `Hello` field the SDK sends when the
-  shell renders `frame`; the compositor syncs only then.
-- **A bubble's own content.** In sync mode the bubble's buffer also applies on
-  the parent's commit. Recommendation: sync it in the same transaction, as the
-  diagram shows, rather than position only.
+- **A sibling submitted before the move** in the same transaction goes up
+  unsynced, so it shows a frame early.

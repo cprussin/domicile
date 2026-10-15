@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use std::collections::BTreeMap;
 
 use domicile_protocol::{
-    Appearance, BoundShortcut, Capturing, ChromeMessage, DisplayInfo, HostMessage, Notification,
-    Owner, PortalRequest, PortalWallpaper, Theme, TrayItem,
+    AppFrame, Appearance, BoundShortcut, Capturing, ChromeMessage, DisplayInfo, HostMessage,
+    Notification, Owner, PortalRequest, PortalWallpaper, Theme, TrayItem,
 };
 
 pub mod autostart;
@@ -98,6 +98,8 @@ pub struct App {
     pub max_size: (f64, f64),
     /// The client holds an active `zwp_keyboard_shortcuts_inhibitor_v1`.
     pub inhibits_shortcuts: bool,
+    /// The window's latest synced frame. See [`Host::sync_frame`].
+    pub frame: u32,
 }
 
 /// What a client says about its window by its first frame.
@@ -122,6 +124,8 @@ pub struct Popup {
     pub position: (f64, f64),
     pub size: (f64, f64),
     pub grab: bool,
+    /// The popup's latest synced frame. See [`Host::sync_frame`].
+    pub frame: u32,
 }
 
 /// The compositor's orchestration state.
@@ -407,9 +411,24 @@ impl Host {
                 min_size: NO_LIMIT,
                 max_size: NO_LIMIT,
                 inhibits_shortcuts: false,
+                frame: 0,
             },
         );
         app_id
+    }
+
+    /// The next synced frame of a window or popup, for a submit the
+    /// compositor syncs. Returns `None` for an unknown app.
+    ///
+    /// Frame 0 is the id the page allocated, so the first is 1. See
+    /// `docs/architecture/FRAME-SYNCED-SURFACES.md`.
+    pub fn sync_frame(&mut self, app_id: &str) -> Option<u32> {
+        let frame = match self.apps.get_mut(app_id) {
+            Some(app) => &mut app.frame,
+            None => &mut self.popups.get_mut(app_id)?.frame,
+        };
+        *frame += 1;
+        Some(*frame)
     }
 
     /// A window drew its first frame. Returns the messages that announce it,
@@ -673,6 +692,7 @@ impl Host {
             position,
             size,
             grab,
+            frame: 0,
         };
         let message = placed(&popup);
         let app_id = popup.app_id.clone();
@@ -776,6 +796,7 @@ impl Host {
             | ChromeMessage::Key { .. }
             | ChromeMessage::Unlock { .. }
             | ChromeMessage::Lock
+            | ChromeMessage::SyncFrames
             | ChromeMessage::SystemRequest { .. }
             | ChromeMessage::AnswerPortalRequest { .. } => {
                 // The compositor intercepts these side effects so this type
@@ -787,6 +808,9 @@ impl Host {
                 //
                 // `Lock` and `Unlock` belong to the seat. Only the compositor's
                 // `lock` module holds lock state.
+                //
+                // `SyncFrames` is a page's, and the compositor holds it per
+                // chrome.
             }
         }
         Ok(())
@@ -808,7 +832,8 @@ impl Host {
     }
 }
 
-/// The chrome message for a popup.
+/// The chrome message for a popup, with its own frame once it has synced one.
+/// The compositor adds the frames a move goes with.
 fn placed(popup: &Popup) -> HostMessage {
     HostMessage::PopupPlaced {
         app_id: popup.app_id.clone(),
@@ -816,6 +841,13 @@ fn placed(popup: &Popup) -> HostMessage {
         position: wire_size(popup.position),
         size: wire_size(popup.size),
         grab: popup.grab,
+        frames: (popup.frame > 0)
+            .then(|| AppFrame {
+                app_id: popup.app_id.clone(),
+                frame: popup.frame,
+            })
+            .into_iter()
+            .collect(),
     }
 }
 
@@ -831,6 +863,7 @@ fn announced(app: &App, mapped: Mapped) -> Vec<HostMessage> {
         dialog: mapped.has_parent || is_fixed(app.min_size, app.max_size),
         client_frame: mapped.client_frame,
         owner: app.owner.clone(),
+        frame: app.frame,
     };
     let min = (app.min_size != NO_LIMIT).then(|| HostMessage::AppMinSize {
         app_id: app.app_id.clone(),

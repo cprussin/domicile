@@ -57,11 +57,13 @@ class FakeClient : public mojom::ControlChannelClient {
                    double height,
                    bool dialog,
                    bool client_frame,
-                   mojom::WindowOwnerPtr owner) override {
+                   mojom::WindowOwnerPtr owner,
+                   uint32_t frame) override {
     heard_.push_back(base::StringPrintf(
-        "appeared %s %s %s %gx%g%s%s%s", app_id.c_str(), title.c_str(),
+        "appeared %s %s %s %gx%g%s%s%s%s", app_id.c_str(), title.c_str(),
         desktop_id.c_str(), width, height, dialog ? " dialog" : "",
-        client_frame ? " client_frame" : "", Owned(owner).c_str()));
+        client_frame ? " client_frame" : "", Owned(owner).c_str(),
+        frame ? base::StringPrintf(" frame %u", frame).c_str() : ""));
   }
 
   // The owner as " owner pid/uid/gid/inode", then its sandbox as
@@ -86,13 +88,21 @@ class FakeClient : public mojom::ControlChannelClient {
   void AppResized(const std::string&, double, double) override {}
   void AppMinSize(const std::string&, double, double) override {}
   void AppMaxSize(const std::string&, double, double) override {}
-  void PopupPlaced(const std::string&,
-                   const std::string&,
+  void PopupPlaced(const std::string& app_id,
+                   const std::string& parent,
                    double,
                    double,
                    double,
                    double,
-                   bool) override {}
+                   bool,
+                   std::vector<mojom::AppFramePtr> frames) override {
+    std::string heard = "placed " + app_id + " over " + parent;
+    for (const mojom::AppFramePtr& frame : frames) {
+      heard +=
+          base::StringPrintf(" %s@%u", frame->app_id.c_str(), frame->frame);
+    }
+    heard_.push_back(heard);
+  }
   void AppClosed(const std::string&) override {}
   void AppCursor(const std::string&, mojom::CursorShape) override {}
   void AppPresented(const std::string& app_id) override {
@@ -272,6 +282,33 @@ TEST_F(ControlChannelTest, AWindowReachesThePageWithItsOwner) {
                 "appeared app-2 b  400x300 owner 7/1000/1000/none sandbox "
                 "org.flatpak/-/3",
                 "locked false"}));
+}
+
+// A move names the synced frames it shows with, and a window that appeared
+// before the page names its own. A malformed frame is dropped, not shown as
+// frame 0.
+TEST_F(ControlChannelTest, TheFramesAMoveShowsWithReachThePage) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  Say("{\"type\":\"app_appeared\",\"app_id\":\"app-2\",\"title\":"
+      "\"a\",\"desktop_id\":null,\"size\":[400.0,300.0],"
+      "\"dialog\":false,\"client_frame\":false,\"frame\":3}\n"
+      "{\"type\":\"popup_placed\",\"app_id\":\"app-3\",\"parent\":"
+      "\"app-2\",\"position\":[12.0,48.0],\"size\":[180.0,240.0],"
+      "\"grab\":false,\"frames\":[{\"app_id\":\"app-2\",\"frame\":4},"
+      "{\"app_id\":\"app-3\",\"frame\":1},{\"app_id\":\"app-9\"},"
+      "{\"app_id\":\"app-9\",\"frame\":-1}]}\n"
+      "{\"type\":\"popup_placed\",\"app_id\":\"app-3\",\"parent\":"
+      "\"app-2\",\"position\":[12.0,48.0],\"size\":[180.0,240.0],"
+      "\"grab\":false}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_,
+            (std::vector<std::string>{
+                "appeared app-2 a  400x300 frame 3",
+                "placed app-3 over app-2 app-2@4 app-3@1",
+                "placed app-3 over app-2", "locked false"}));
 }
 
 // A null parent is a dialog no longer, not a malformed line.

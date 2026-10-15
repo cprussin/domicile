@@ -6,7 +6,7 @@
 use domicile_host::ipc::apply_chrome_message;
 use domicile_host::{AppId, Host, Mapped};
 use domicile_protocol::{
-    Appearance, ChromeMessage, DisplayInfo, DisplayTransform, HostMessage, Owner, Theme,
+    AppFrame, Appearance, ChromeMessage, DisplayInfo, DisplayTransform, HostMessage, Owner, Theme,
     PROTOCOL_VERSION,
 };
 use domicile_scene::KeyboardTarget;
@@ -70,6 +70,7 @@ fn a_window_says_what_it_is_called_when_the_client_says_it() {
             dialog: false,
             client_frame: false,
             owner: OWNER,
+            frame: 0,
         })
     );
     // An unchanged title sends nothing.
@@ -103,6 +104,7 @@ fn a_window_says_which_desktop_entry_it_is_when_the_client_says_it() {
             dialog: false,
             client_frame: false,
             owner: OWNER,
+            frame: 0,
         })
     );
     // An unchanged id sends nothing.
@@ -189,6 +191,7 @@ fn a_window_is_announced_when_it_first_draws_with_what_its_client_said_before() 
             dialog: false,
             client_frame: true,
             owner: OWNER,
+            frame: 0,
         },
         HostMessage::AppMinSize {
             app_id: app.clone(),
@@ -353,6 +356,7 @@ fn a_chrome_that_arrives_late_is_told_about_every_window_already_open() {
             dialog: false,
             client_frame: false,
             owner: OWNER,
+            frame: 0,
         },
         HostMessage::AppAppeared {
             app_id: second,
@@ -362,6 +366,7 @@ fn a_chrome_that_arrives_late_is_told_about_every_window_already_open() {
             dialog: false,
             client_frame: false,
             owner: OWNER,
+            frame: 0,
         },
     ]
     .into_iter()
@@ -373,6 +378,7 @@ fn a_chrome_that_arrives_late_is_told_about_every_window_already_open() {
         dialog: false,
         client_frame: false,
         owner: OWNER,
+        frame: 0,
     }))
     // Then the focus holder: the chrome, since no app has focus.
     .chain(std::iter::once(HostMessage::FocusChanged { app_id: None }))
@@ -584,6 +590,7 @@ fn a_popup_is_announced_as_its_own_app_over_its_window() {
             position: [12.0, 30.0],
             size: [180.0, 240.0],
             grab: true,
+            frames: vec![],
         }
     );
     // A popup over a popup is a submenu.
@@ -612,6 +619,7 @@ fn a_popup_moved_is_placed_again_and_closed_like_a_window() {
             position: [40.0, 30.0],
             size: [180.0, 200.0],
             grab: false,
+            frames: vec![],
         })
     );
     assert_eq!(host.popup_moved(&window, (0.0, 0.0), (1.0, 1.0)), None);
@@ -647,6 +655,55 @@ fn a_reloaded_chrome_is_told_each_popup_after_what_it_is_over() {
             .collect();
 
     assert_eq!(told, vec![window, menu, submenu]);
+}
+
+#[test]
+fn each_synced_submit_of_a_surface_gets_the_next_frame() {
+    // Frame 0 is the id the page allocated, so a surface's first synced
+    // frame is 1. See docs/architecture/FRAME-SYNCED-SURFACES.md.
+    let mut host = Host::new();
+    let window = drawn(&mut host);
+    let (popup, _) = host
+        .popup_placed(&window, (12.0, 30.0), (180.0, 240.0), false)
+        .unwrap();
+
+    assert_eq!(host.sync_frame(&window), Some(1));
+    assert_eq!(host.sync_frame(&window), Some(2));
+    // Each surface counts its own.
+    assert_eq!(host.sync_frame(&popup), Some(1));
+    assert_eq!(host.sync_frame("app-nowhere"), None);
+}
+
+#[test]
+fn a_reloaded_chrome_is_told_the_frame_each_surface_is_at() {
+    // A page that reloads allocates no new ids, so frame 0 would show a
+    // stale frame until the next move.
+    let mut host = Host::new();
+    let window = drawn(&mut host);
+    let (popup, _) = host
+        .popup_placed(&window, (12.0, 30.0), (180.0, 240.0), false)
+        .unwrap();
+    host.sync_frame(&window);
+    host.sync_frame(&window);
+    host.sync_frame(&popup);
+
+    let told = host.open_apps();
+
+    assert!(
+        matches!(
+            told.first(),
+            Some(HostMessage::AppAppeared { frame: 2, .. })
+        ),
+        "{told:?}"
+    );
+    assert!(
+        told.iter().any(|message| matches!(
+            message,
+            HostMessage::PopupPlaced { frames, .. }
+                if *frames == vec![AppFrame { app_id: popup.clone(), frame: 1 }]
+        )),
+        "{told:?}"
+    );
 }
 
 #[test]

@@ -267,10 +267,14 @@ fn read_chrome_messages(
                     if !joined {
                         hub.chromes.lock().unwrap().push(Chrome {
                             writer: writer.clone(),
+                            syncs_frames: false,
                         });
                         joined = true;
                         debug!("chrome agreed the protocol; it now gets the desktop");
                     }
+                    // A page that started again may run a shell that does not
+                    // render `<app frame>`.
+                    hub.chrome_syncs_frames(writer, false);
                     // Announce after joining. The Wayland thread announces open
                     // windows by broadcast, so a chrome not yet in the list
                     // would miss them. Tested by
@@ -469,6 +473,12 @@ fn read_chrome_messages(
             // window once it goes away.
             Ok(ChromeMessage::CloseApp { app_id }) => {
                 hub.send_request(ClientRequest::CloseApp { app_id });
+                Vec::new()
+            }
+            // Held per connection, since every chrome hears each move. See
+            // `ChromeHub::syncs_frames`.
+            Ok(ChromeMessage::SyncFrames) => {
+                hub.chrome_syncs_frames(writer, true);
                 Vec::new()
             }
             Ok(ChromeMessage::FocusChrome) => {
@@ -670,6 +680,7 @@ mod tests {
         ));
         hub.chromes.lock().unwrap().push(Chrome {
             writer: writer.clone(),
+            syncs_frames: false,
         });
 
         let serving = {
@@ -973,6 +984,7 @@ mod tests {
         ));
         hub.chromes.lock().unwrap().push(Chrome {
             writer: writer.clone(),
+            syncs_frames: false,
         });
         let serving = {
             let hub = hub.clone();
@@ -1005,6 +1017,56 @@ mod tests {
             }),
             "every chrome is told the window took the keyboard: {seen:?}"
         );
+    }
+
+    #[test]
+    fn frames_sync_once_the_page_asks_until_it_starts_again() {
+        // A page that sets `<app frame>` some other way, such as always 0,
+        // would show a synced window's old frame, so the compositor syncs only
+        // for a page that asks. A reload may run a shell that does not.
+        let (request_tx, _requests) = channel::<ClientRequest>();
+        let (hub, _outbound) = ChromeHub::new(
+            request_tx,
+            1,
+            OsString::from("wayland-1"),
+            0,
+            Portals::to_nobody(),
+        );
+        assert!(!hub.syncs_frames(), "no page, no sync");
+        let (page, compositor) = UnixStream::pair().expect("a socket pair");
+        let writer = Arc::new(Mutex::new(
+            compositor.try_clone().expect("the stream clones"),
+        ));
+        let serving = {
+            let hub = hub.clone();
+            thread::spawn(move || {
+                chrome_connection(hub, compositor, writer, Arc::new(Handshake::new()))
+            })
+        };
+        let say = |message: &str| {
+            use std::io::Write as _;
+            let mut writing = &page;
+            writeln!(writing, "{message}").expect("the page can write");
+        };
+        let hello = format!(
+            "{{\"type\":\"hello\",\"protocol_version\":{}}}",
+            domicile_protocol::PROTOCOL_VERSION
+        );
+        // Poll, since the connection thread reads these.
+        let becomes = |syncs: bool| {
+            (0..200).any(|_| {
+                sleep(Duration::from_millis(10));
+                hub.syncs_frames() == syncs
+            })
+        };
+
+        say(&hello);
+        say("{\"type\":\"sync_frames\"}");
+        assert!(becomes(true), "a page that asked is synced for");
+        say(&hello);
+        assert!(becomes(false), "a page that started again has not asked");
+        drop(page);
+        serving.join().expect("the connection thread ends at EOF");
     }
 
     #[test]

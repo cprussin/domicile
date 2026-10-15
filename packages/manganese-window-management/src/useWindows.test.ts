@@ -82,6 +82,23 @@ const desktop = (
 };
 
 describe("the desktop", () => {
+  it("asks the compositor to sync frames, since its windows render them", () => {
+    const { host } = desktop([LEFT]);
+
+    expect(host.fake.calls).toContainEqual(["syncFrames"]);
+  });
+
+  it("shows each window at the synced frame the host lists", () => {
+    const { host, result } = desktop([LEFT]);
+    host.announces("kitty");
+
+    act(() => {
+      host.fake.change("kitty", { frame: 2 });
+    });
+
+    expect(result.current.windows).toMatchObject([{ syncedFrame: 2 }]);
+  });
+
   it("is reduced from the compositor's events", () => {
     const { host, result } = desktop([LEFT, RIGHT]);
 

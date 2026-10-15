@@ -4,8 +4,8 @@
 
 It answers `hello` with a `welcome`, then describes three windows, retitles,
 renames the desktop entry of and resizes one, makes each the other's dialog in
-turn, marks one urgent, focuses one, closes one and places a popup -- and prints
-every line
+turn, marks one urgent, focuses one, closes one and places a popup with the
+synced frames it shows with -- and prints every line
 the browser writes. The page reads only after all of it, which is the case the
 attributes exist for: a shell that listens late misses nothing.
 
@@ -67,6 +67,7 @@ SEQUENCE = [
             "pidfd_inode": 5021,
             "sandbox": None,
         },
+        "frame": 2,
     },
     {
         "type": "app_appeared",
@@ -97,6 +98,7 @@ SEQUENCE = [
         "position": [10, 20],
         "size": [120, 90],
         "grab": True,
+        "frames": [{"app_id": "second", "frame": 5}, {"app_id": "menu", "frame": 1}],
     },
     {"type": "appearance", "accent_color": "#3584e4", "high_contrast": True, "reduced_motion": False},
     {"type": "system_reply", "id": 1, "reply": {"kind": "written"}},

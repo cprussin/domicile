@@ -23,7 +23,7 @@ The engine has two channels to the rest of Domicile:
   `answer_portal_request`, `copy_clipboard_entry`, `activate_tray_item`,
   `dismiss_notifications`, `invoke_notification_action`,
   `reply_to_notification`, `focus_app`,
-  `focus_chrome`, `close_app`, `set_app_bounds`, `set_desktop_size`,
+  `focus_chrome`, `sync_frames`, `close_app`, `set_app_bounds`, `set_desktop_size`,
   `set_device_pixel_ratio`, `set_theme`, `theme_captured`, `unlock`, `lock`,
   `key`, `pointer_motion`, `pointer_leave`, `pointer_button`, `pointer_axis`.
   The browser also sends `hello` on connect.

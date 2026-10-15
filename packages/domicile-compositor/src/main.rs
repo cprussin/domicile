@@ -124,6 +124,7 @@ mod shortcuts_inhibit;
 mod spawning;
 mod spike_probes;
 mod surface_commit;
+mod synced_moves;
 mod theme_turnover;
 mod thread_priority;
 mod timing_window;
@@ -424,6 +425,9 @@ struct DomicileCompositor {
     /// Chromium draws its bubbles this way, extension popups among them.
     /// Announced once it has a buffer; see `place_the_bubbles`.
     bubbles: Vec<Bubble>,
+    /// Bubble moves of the commit transaction being applied, held so each
+    /// names the frames it shows with. See `surface_commit`.
+    synced_moves: crate::synced_moves::SyncedMoves,
     /// The app the pointer is currently over, so a `set_cursor` request can be
     /// attributed to the element the chrome should restyle.
     pointer_app: Option<String>,
@@ -1156,6 +1160,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         popups: Vec::new(),
         grabbing: Vec::new(),
         bubbles: Vec::new(),
+        synced_moves: Default::default(),
         pointer_app: None,
         held_buttons: Vec::new(),
         captures: None,
