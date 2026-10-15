@@ -48,6 +48,9 @@ const EVENT_NAMES = [
   "portalrequests",
 ];
 
+// Under guard-windows-state.sh's 60-second wait for this page's last line.
+const READ_DEADLINE_MS = 30_000;
+
 export const Shell = (_root, desktop) => {
   const host = desktop;
   if (host === null || host === undefined) {
@@ -79,12 +82,18 @@ export const Shell = (_root, desktop) => {
   );
 
   // A system call's answer, as the stand-in wrote it. The names check above
-  // fired an untrusted `system`, which is not an answer.
+  // fired an untrusted `system`, which is not an answer. The stand-in sends it
+  // last, on the same socket as every window message, so it is when to read.
+  // READ_DEADLINE_MS reads anyway when it never comes: a channel that stopped
+  // partway still gets a reading the verdict can name the cause from.
+  const read = once(() => report(host));
   host.addEventListener("system", (event) => {
     if (event.isTrusted) {
       console.log(`GUARD system data=${event.data}`);
+      read();
     }
   });
+  setTimeout(read, READ_DEADLINE_MS);
 
   // Reading binds the channel, which is what has the compositor announce.
   void host.windows;
@@ -96,50 +105,60 @@ export const Shell = (_root, desktop) => {
   host.callSystem(2, "not a call");
   // Must reach the compositor as `sync_frames`.
   host.syncFrames();
+};
 
-  // Late: everything the stand-in sends lands well inside this.
+// Reads the attributes once, as a shell that listens late would.
+const report = (host) => {
+  let changed = 0;
+  host.addEventListener("windowschanged", () => {
+    changed += 1;
+  });
+  const windows = host.windows.map((window) => ({
+    appId: window.appId,
+    clientFrame: window.clientFrame,
+    cursor: window.cursor,
+    desktopId: window.desktopId,
+    dialog: window.dialog,
+    frame: window.frame,
+    gid: window.gid,
+    grab: window.grab,
+    height: window.height,
+    inhibitsShortcuts: window.inhibitsShortcuts,
+    maxHeight: window.maxHeight,
+    maxWidth: window.maxWidth,
+    minHeight: window.minHeight,
+    minWidth: window.minWidth,
+    parent: window.parent,
+    pid: window.pid,
+    pidfdInode: window.pidfdInode,
+    sandboxAppId: window.sandboxAppId,
+    sandboxEngine: window.sandboxEngine,
+    sandboxed: window.sandboxed,
+    sandboxInstanceId: window.sandboxInstanceId,
+    title: window.title,
+    transientFor: window.transientFor,
+    uid: window.uid,
+    urgent: window.urgent,
+    width: window.width,
+    x: window.x,
+    y: window.y,
+  }));
+  console.log(`GUARD windows ${JSON.stringify(windows)}`);
+  console.log(`GUARD focused ${host.focusedWindow}`);
+  console.log(
+    `GUARD appearance ${host.accentColor} ${host.highContrast} ${host.reducedMotion}`,
+  );
   setTimeout(() => {
-    let changed = 0;
-    host.addEventListener("windowschanged", () => {
-      changed += 1;
-    });
-    const windows = host.windows.map((window) => ({
-      appId: window.appId,
-      clientFrame: window.clientFrame,
-      cursor: window.cursor,
-      desktopId: window.desktopId,
-      dialog: window.dialog,
-      frame: window.frame,
-      gid: window.gid,
-      grab: window.grab,
-      height: window.height,
-      inhibitsShortcuts: window.inhibitsShortcuts,
-      maxHeight: window.maxHeight,
-      maxWidth: window.maxWidth,
-      minHeight: window.minHeight,
-      minWidth: window.minWidth,
-      parent: window.parent,
-      pid: window.pid,
-      pidfdInode: window.pidfdInode,
-      sandboxAppId: window.sandboxAppId,
-      sandboxEngine: window.sandboxEngine,
-      sandboxed: window.sandboxed,
-      sandboxInstanceId: window.sandboxInstanceId,
-      title: window.title,
-      transientFor: window.transientFor,
-      uid: window.uid,
-      urgent: window.urgent,
-      width: window.width,
-      x: window.x,
-      y: window.y,
-    }));
-    console.log(`GUARD windows ${JSON.stringify(windows)}`);
-    console.log(`GUARD focused ${host.focusedWindow}`);
-    console.log(
-      `GUARD appearance ${host.accentColor} ${host.highContrast} ${host.reducedMotion}`,
-    );
-    setTimeout(() => {
-      console.log(`GUARD changed n=${changed}`);
-    }, 500);
-  }, 3000);
+    console.log(`GUARD changed n=${changed}`);
+  }, 500);
+};
+
+const once = (fn) => {
+  let done = false;
+  return () => {
+    if (!done) {
+      done = true;
+      fn();
+    }
+  };
 };
