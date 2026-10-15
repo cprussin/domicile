@@ -337,6 +337,7 @@ export enum WindowActionKind {
   AppMinSize,
   AppTitled,
   AppLaunched,
+  BrowserDescribed,
   BrowserIconChanged,
   BrowserOpened,
   BrowserWindowsListed,
@@ -487,6 +488,16 @@ export const WindowAction = {
     appId,
     kind: WindowActionKind.AppTitled as const,
     title,
+  }),
+
+  /**
+   * The view of the engine's browser window `windowId` reported its page's
+   * description, `""` for none.
+   */
+  BrowserDescribed: (windowId: string, description: string) => ({
+    description,
+    kind: WindowActionKind.BrowserDescribed as const,
+    windowId,
   }),
 
   /**
@@ -1019,6 +1030,13 @@ const reduceAction = (
         action.title ?? action.appId,
       );
     }
+    case WindowActionKind.BrowserDescribed: {
+      return describeBrowser(
+        state,
+        browserWindowId(action.windowId),
+        action.description === "" ? undefined : action.description,
+      );
+    }
     case WindowActionKind.BrowserIconChanged: {
       return markBrowser(
         state,
@@ -1448,7 +1466,7 @@ const browserOf = ({
   Window.Browser(id, url, title, popupWindow ?? undefined, isPrivate, isApp);
 
 // Updates each browser window the shell has to its listed address and title,
-// keeping the icon its view reported.
+// keeping the icon and description its view reported.
 const pagesShown = (
   state: WindowState,
   listed: ReadonlyMap<string, BrowserRecord>,
@@ -1457,7 +1475,7 @@ const pagesShown = (
     const now = listed.get(drawn.id);
     return now === undefined || drawn.kind !== WindowKind.Browser
       ? drawn
-      : { ...now, icon: drawn.icon };
+      : { ...now, description: drawn.description, icon: drawn.icon };
   });
 
 // Extension popups float at their requested size, as sway floats dialogs; a
@@ -1641,6 +1659,18 @@ const markBrowser = (
   windowsChanged(state, (window) =>
     window.id === id && window.kind === WindowKind.Browser
       ? { ...window, icon }
+      : window,
+  );
+
+/** Sets browser window `id`'s description. */
+const describeBrowser = (
+  state: WindowState,
+  id: string,
+  description: string | undefined,
+): WindowState =>
+  windowsChanged(state, (window) =>
+    window.id === id && window.kind === WindowKind.Browser
+      ? { ...window, description }
       : window,
   );
 

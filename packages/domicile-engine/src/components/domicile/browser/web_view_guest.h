@@ -19,6 +19,7 @@
 #include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
 #include "base/types/expected.h"
+#include "base/values.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/domicile/browser/download_tally.h"
@@ -37,6 +38,7 @@
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/media_stream_request.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/weak_document_ptr.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -692,9 +694,19 @@ class WebViewGuest : public mojom::WebViewGuest,
       const std::vector<blink::mojom::FaviconURLPtr>& candidates,
       blink::mojom::FaviconUpdateReason reason) override;
 
-  // On a new page: clears the previous favicon (a page without one reports
-  // nothing), ends any find as Chrome does, asks the new renderer to report
-  // its content size, and reports the new site's permissions.
+  // Reads the page's description once its head is parsed. See
+  // DescriptionChanged in the mojom.
+  void DOMContentLoaded(content::RenderFrameHost* render_frame_host) override;
+
+  // Reads the page's description again: a single-page app changes it with the
+  // title.
+  void TitleWasSetForMainFrame(
+      content::RenderFrameHost* render_frame_host) override;
+
+  // On a new page: clears the previous favicon and description (a page
+  // without them reports nothing), ends any find as Chrome does, asks the new
+  // renderer to report its content size, and reports the new site's
+  // permissions.
   void PrimaryPageChanged(content::Page& page) override;
 
   // content_settings::Observer:
@@ -774,6 +786,19 @@ class WebViewGuest : public mojom::WebViewGuest,
 
   // Sends the link under the pointer to the element if it changed.
   void ReportTargetUrl(const GURL& url);
+
+  // Reads the description of `frame`, the guest's main frame, in an isolated
+  // world, so the page's own scripts cannot see or change the read.
+  void ReadDescription(content::RenderFrameHost& frame);
+
+  // Reports the description read from `document`, unless a new page
+  // replaced it while it was read. A reply that is not a string, as from a
+  // frame that could not run the read, reports no description.
+  void DescriptionRead(content::WeakDocumentPtr document,
+                       base::Value description);
+
+  // Sends the page's description to the element if it changed.
+  void ReportDescription(const std::string& description);
 
   // Sets page fullscreen and tells the renderer and the element, if it
   // changed. The renderer reads it from the widget's visual properties.
@@ -895,6 +920,7 @@ class WebViewGuest : public mojom::WebViewGuest,
       mojom::WebViewSecurity::kNeutral;
   double reported_zoom_ = 1.0;
   GURL reported_favicon_;
+  std::string reported_description_;
   GURL reported_target_url_;
   // The renderer's last link, which stays set while the pointer is outside the
   // page. See PreHandleMouseEvent.

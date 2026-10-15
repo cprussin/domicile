@@ -54,6 +54,7 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/unowned_inner_web_contents_client.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "content/public/common/isolated_world_ids.h"
 #include "content/public/common/javascript_dialog_type.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/stop_find_action.h"
@@ -796,6 +797,9 @@ void WebViewGuest::ReportEverything() {
   }
   if (!reported_favicon_.is_empty()) {
     client_->FaviconChanged(reported_favicon_);
+  }
+  if (!reported_description_.empty()) {
+    client_->DescriptionChanged(reported_description_);
   }
   if (content_size_.has_value()) {
     client_->ContentSizeChanged(content_size_->width(),
@@ -1614,6 +1618,20 @@ void WebViewGuest::DidUpdateFaviconURL(
   }
 }
 
+void WebViewGuest::DOMContentLoaded(
+    content::RenderFrameHost* render_frame_host) {
+  if (render_frame_host == guest_contents_->GetPrimaryMainFrame()) {
+    ReadDescription(*render_frame_host);
+  }
+}
+
+void WebViewGuest::TitleWasSetForMainFrame(
+    content::RenderFrameHost* render_frame_host) {
+  if (render_frame_host == guest_contents_->GetPrimaryMainFrame()) {
+    ReadDescription(*render_frame_host);
+  }
+}
+
 void WebViewGuest::PrimaryPageChanged(content::Page& page) {
   EnablePreferredSize();
   EndFind();
@@ -1621,7 +1639,48 @@ void WebViewGuest::PrimaryPageChanged(content::Page& page) {
     reported_favicon_ = GURL();
     client_->FaviconChanged(reported_favicon_);
   }
+  ReportDescription(std::string());
   ReportSitePermissions();
+}
+
+namespace {
+
+// Chrome's ISOLATED_WORLD_ID_CHROME_INTERNAL, the world for Chrome's own reads
+// of a page, which //components cannot include. The read leaves nothing in
+// it.
+constexpr int32_t kChromeInternalWorld =
+    content::ISOLATED_WORLD_ID_CONTENT_END + 3;
+
+// A page's description: its first `<meta name="description">`, with the name
+// matched without case.
+constexpr char16_t kReadDescription[] =
+    u"document.querySelector('meta[name=\"description\" i]')"
+    u"?.content.trim() ?? ''";
+
+}  // namespace
+
+void WebViewGuest::ReadDescription(content::RenderFrameHost& frame) {
+  frame.ExecuteJavaScriptInIsolatedWorld(
+      kReadDescription,
+      base::BindOnce(&WebViewGuest::DescriptionRead,
+                     weak_factory_.GetWeakPtr(), frame.GetWeakDocumentPtr()),
+      kChromeInternalWorld);
+}
+
+void WebViewGuest::DescriptionRead(content::WeakDocumentPtr document,
+                                   base::Value description) {
+  if (document.AsRenderFrameHostIfValid() ==
+      guest_contents_->GetPrimaryMainFrame()) {
+    ReportDescription(description.is_string() ? description.GetString()
+                                              : std::string());
+  }
+}
+
+void WebViewGuest::ReportDescription(const std::string& description) {
+  if (description != reported_description_) {
+    reported_description_ = description;
+    client_->DescriptionChanged(description);
+  }
 }
 
 void WebViewGuest::OnContentSettingChanged(

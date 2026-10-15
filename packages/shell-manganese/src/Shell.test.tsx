@@ -36,6 +36,7 @@ import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { KeyAction } from "@domicile-desktop/sdk/key-action";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import {
+  WEBVIEW_DESCRIPTION_CHANGE_EVENT,
   WEBVIEW_FAVICON_CHANGE_EVENT,
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_PAGE_FULLSCREEN_CHANGE_EVENT,
@@ -2136,6 +2137,34 @@ describe("Shell", () => {
       expect(
         titleBars(container)[0]?.querySelector("img")?.getAttribute("src"),
       ).toBe("https://example.com/icon.svg");
+    });
+
+    it("shows a browser tab's whole title and its page's description on hover", async () => {
+      const { container } = renderShell();
+      press("space");
+      const user = userEvent.setup();
+      await user.type(screen.getByRole("combobox"), "example.com{Enter}");
+      await launched();
+      const view = container.querySelector("webview");
+      if (view === null) {
+        throw new Error("test: no browser window");
+      }
+      press("w");
+
+      // `defineProperty` because `description` is readonly on the real
+      // element.
+      Object.defineProperty(view, "description", {
+        configurable: true,
+        value: "An example page",
+      });
+      act(() => {
+        view.dispatchEvent(new Event(WEBVIEW_DESCRIPTION_CHANGE_EVENT));
+      });
+      await user.hover(screen.getByText("example.com", { selector: "span" }));
+
+      const tooltip = await screen.findByRole("tooltip");
+      expect(tooltip).toHaveTextContent("example.com");
+      expect(tooltip).toHaveTextContent("An example page");
     });
 
     // A video's fullscreen button: the page fills its window, and the window

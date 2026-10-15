@@ -109,6 +109,10 @@ class CORE_EXPORT HTMLWebViewElement final
   // components/domicile/mojom/web_view_guest.mojom.
   const String& favicon() const { return favicon_; }
 
+  // The page's description, or empty. See DescriptionChanged in
+  // components/domicile/mojom/web_view_guest.mojom.
+  const String& description() const { return description_; }
+
   // The link under the pointer, or empty. See TargetUrlChanged in
   // components/domicile/mojom/web_view_guest.mojom.
   const String& targetUrl() const { return target_url_; }
@@ -272,6 +276,8 @@ class CORE_EXPORT HTMLWebViewElement final
 
   void FaviconChanged(const KURL& icon) override;
 
+  void DescriptionChanged(const String& description) override;
+
   void TargetUrlChanged(const KURL& url) override;
 
   // Sent only on change, like HistoryChanged.
@@ -378,6 +384,7 @@ class CORE_EXPORT HTMLWebViewElement final
   String security_;
   double zoom_ = 1.0;
   String favicon_;
+  String description_;
   String target_url_;
   // On the document's `mousemove` while `target_url_` is set. See
   // PointerMoved.
