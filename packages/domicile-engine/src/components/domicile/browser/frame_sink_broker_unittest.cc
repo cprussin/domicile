@@ -339,7 +339,9 @@ class FrameSinkBrokerTest : public testing::Test {
         base::BindRepeating(&FrameSinkBrokerTest::RecordClipboard,
                             base::Unretained(this)),
         base::BindRepeating(&FrameSinkBrokerTest::CaptureTarget),
-        base::BindRepeating(&FrameSinkBrokerTest::BrowserWindowTarget));
+        base::BindRepeating(&FrameSinkBrokerTest::BrowserWindowTarget),
+        base::BindRepeating(&FrameSinkBrokerTest::RecordPointers,
+                            base::Unretained(this)));
     page_ = broker_->NewEmbedRequester();
   }
 
@@ -370,6 +372,11 @@ class FrameSinkBrokerTest : public testing::Test {
     layouts_.push_back(std::move(layout));
   }
 
+  // Fake for the ozone platform that owns the input devices.
+  void RecordPointers(std::vector<mojom::PointerTargetPtr> targets) {
+    pointers_.push_back(std::move(targets));
+  }
+
   // Fake for the ozone platform that owns the clipboard.
   void RecordClipboard(mojom::Clipboard clipboard,
                        const FrameSinkBroker::ClipboardContents& contents) {
@@ -391,6 +398,9 @@ class FrameSinkBrokerTest : public testing::Test {
 
   // Every layout the producer sent, in order.
   std::vector<std::vector<mojom::DisplayLayoutPtr>> layouts_;
+
+  // Every list of pointer targets the producer sent, in order.
+  std::vector<std::vector<mojom::PointerTargetPtr>> pointers_;
 
   // Every clipboard the producer sent, in order.
   std::vector<std::pair<mojom::Clipboard, FrameSinkBroker::ClipboardContents>>
@@ -1047,6 +1057,22 @@ TEST_F(FrameSinkBrokerTest, AnEmbedderWithNoCrtcDropsTheLayout) {
   RunUntilIdle();
 
   EXPECT_TRUE(layouts_.empty()) << "the fixture's own broker heard nothing";
+}
+
+TEST_F(FrameSinkBrokerTest, AProducerSaysWhichDisplayEachTabletCovers) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+
+  std::vector<mojom::PointerTargetPtr> targets;
+  targets.push_back(
+      mojom::PointerTarget::New("usb-0000:00:04.0-1/input0", 7));
+  remote->ConfigurePointers(std::move(targets));
+  RunUntilIdle();
+
+  ASSERT_EQ(pointers_.size(), 1u);
+  ASSERT_EQ(pointers_[0].size(), 1u);
+  EXPECT_EQ(pointers_[0][0]->device, "usb-0000:00:04.0-1/input0");
+  EXPECT_EQ(pointers_[0][0]->display_id, 7);
 }
 
 TEST_F(FrameSinkBrokerTest, AProducerSaysWhatIsOnEachClipboard) {

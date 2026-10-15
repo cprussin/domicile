@@ -958,6 +958,26 @@ struct DomicileEngine {
                        base::Unretained(this), std::move(wanted)));
   }
 
+  // Copies the records before posting, as ConfigureDisplays does.
+  void ConfigurePointers(const DomicilePointerTarget* targets, uint32_t count) {
+    std::vector<domicile::mojom::PointerTargetPtr> wanted;
+    wanted.reserve(count);
+    // SAFETY: the ABI says `targets` points at `count` records valid for this
+    // call, and `domicile_pointers_configure` has refused a null pointer with
+    // a nonzero count.
+    const auto records =
+        UNSAFE_BUFFERS(base::span(targets, static_cast<size_t>(count)));
+    for (const DomicilePointerTarget& target : records) {
+      CHECK(target.device) << "domicile: a pointer target names no device";
+      wanted.push_back(domicile::mojom::PointerTarget::New(target.device,
+                                                           target.display_id));
+    }
+    thread_.task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&DomicileEngine::ConfigurePointersOnThread,
+                       base::Unretained(this), std::move(wanted)));
+  }
+
   // Blocks for the browser's answer, like CreateSurface.
   DomicileCaptureId StartCapture(int64_t display_id,
                                  const gfx::Size& size,
@@ -1138,6 +1158,13 @@ struct DomicileEngine {
       std::vector<domicile::mojom::DisplayLayoutPtr> wanted) {
     if (broker_) {
       broker_->ConfigureDisplays(std::move(wanted));
+    }
+  }
+
+  void ConfigurePointersOnThread(
+      std::vector<domicile::mojom::PointerTargetPtr> wanted) {
+    if (broker_) {
+      broker_->ConfigurePointers(std::move(wanted));
     }
   }
 
@@ -1649,6 +1676,16 @@ void domicile_displays_configure(DomicileEngine* engine,
   // count means "no preference".
   if (engine && (layout || count == 0)) {
     engine->ConfigureDisplays(layout, count);
+  }
+}
+
+void domicile_pointers_configure(DomicileEngine* engine,
+                                 const DomicilePointerTarget* targets,
+                                 uint32_t count) {
+  // A null array with a nonzero count is a caller bug. A null array with zero
+  // count binds no device.
+  if (engine && (targets || count == 0)) {
+    engine->ConfigurePointers(targets, count);
   }
 }
 

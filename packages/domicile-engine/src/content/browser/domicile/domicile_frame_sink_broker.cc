@@ -199,6 +199,19 @@ void SetDisplayLayout(std::vector<domicile::mojom::DisplayLayoutPtr> layout) {
   DomicileDeskLaidOut(std::move(lit));
 }
 
+// Binds the producer's tablets and touchscreens to displays. Lives here for
+// SetDisplayLayout's reason; every platform but DRM ignores it.
+void SetPointerTargets(std::vector<domicile::mojom::PointerTargetPtr> targets) {
+  std::vector<ui::DomicilePointerTarget> wanted;
+  wanted.reserve(targets.size());
+  for (const domicile::mojom::PointerTargetPtr& target : targets) {
+    wanted.push_back(
+        {.device = target->device, .display_id = target->display_id});
+  }
+  ui::OzonePlatform::GetInstance()->SetDomicilePointerTargets(
+      std::move(wanted));
+}
+
 // Sets the clipboard this process pastes from.
 //
 // Lives here because //components/domicile/browser cannot depend on //ui/ozone.
@@ -238,7 +251,8 @@ class DomicileBrowserService {
                 base::BindRepeating(&SetDisplayLayout),
                 base::BindRepeating(&SetClipboard),
                 base::BindRepeating(&DisplayCaptureTarget),
-                base::BindRepeating(&domicile::FindBrowserWindowCaptureTarget)),
+                base::BindRepeating(&domicile::FindBrowserWindowCaptureTarget),
+                base::BindRepeating(&SetPointerTargets)),
         provider_(&broker_) {
     // Registered on every platform so copies made in a page reach the producer.
     // `SetClipboard` handles copies made outside. Unretained is safe: this is a

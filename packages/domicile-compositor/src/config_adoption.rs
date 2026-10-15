@@ -68,6 +68,9 @@ impl DomicileCompositor {
         if restated.shell_config {
             self.rebind_the_keys();
         }
+        if restated.pointers {
+            self.bind_the_pointers();
+        }
         if let Some(max_scale) = restated.max_scale {
             self.cap_the_scale_at(max_scale);
         }
