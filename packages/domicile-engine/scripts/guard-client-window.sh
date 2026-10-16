@@ -31,6 +31,8 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS/lib-control-budget.sh"
 # shellcheck source=packages/domicile-engine/scripts/lib-profile.sh
 . "$SCRIPTS/lib-profile.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-broker.sh
+. "$SCRIPTS/lib-broker.sh"
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
@@ -108,7 +110,8 @@ else
   exit 77
 fi
 
-rm -f "$BROKER"; rm -rf "$PROFILE"; mkdir -p "$PROFILE"
+fresh_broker
+rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 
 # Wayland with GPU: headless Ozone has no CreateNativePixmapFromHandle, and a
 # dmabuf import needs a GPU.

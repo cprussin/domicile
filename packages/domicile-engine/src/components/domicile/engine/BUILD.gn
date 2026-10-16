@@ -146,6 +146,29 @@ source_set("surface_submits_unit_tests") {
   ]
 }
 
+# Bounds the spike probes' wait for the browser's answer.
+source_set("probe_wait") {
+  sources = [
+    "probe_wait.cc",
+    "probe_wait.h",
+  ]
+
+  public_deps = [ "//base" ]
+}
+
+source_set("probe_wait_unit_tests") {
+  testonly = true
+
+  sources = [ "probe_wait_unittest.cc" ]
+
+  deps = [
+    ":probe_wait",
+    "//base",
+    "//base/test:test_support",
+    "//testing/gtest",
+  ]
+}
+
 source_set("event_queue_unit_tests") {
   testonly = true
 
@@ -169,6 +192,7 @@ shared_library("domicile_engine") {
 
   deps = [
     ":event_queue",
+    ":probe_wait",
     ":surface_alpha",
     ":surface_crop",
     ":surface_frames",

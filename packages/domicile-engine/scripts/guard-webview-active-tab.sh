@@ -44,6 +44,8 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS/lib-control-budget.sh"
 # shellcheck source=packages/domicile-engine/scripts/lib-profile.sh
 . "$SCRIPTS/lib-profile.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-broker.sh
+. "$SCRIPTS/lib-broker.sh"
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
@@ -113,7 +115,8 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
   return 1
 }
 
-rm -f "$BROKER" "$CONTROL"
+fresh_broker
+rm -f "$CONTROL"
 rm -rf "$PROFILE"
 mkdir -p "$PROFILE"
 

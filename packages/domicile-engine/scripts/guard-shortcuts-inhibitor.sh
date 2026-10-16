@@ -56,6 +56,8 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS/lib-compositor-cleanup.sh"
 # shellcheck source=packages/domicile-engine/scripts/lib-profile.sh
 . "$SCRIPTS/lib-profile.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-broker.sh
+. "$SCRIPTS/lib-broker.sh"
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
@@ -150,7 +152,7 @@ else
   WTYPE=()
 fi
 
-rm -f "$BROKER"
+fresh_broker
 rm -rf "$PROFILE"
 mkdir -p "$PROFILE"
 
