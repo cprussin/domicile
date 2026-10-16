@@ -43,6 +43,8 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS/lib-last-words.sh"
 # shellcheck source=packages/domicile-engine/scripts/lib-profile.sh
 . "$SCRIPTS/lib-profile.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-broker.sh
+. "$SCRIPTS/lib-broker.sh"
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
@@ -123,7 +125,8 @@ cp "$SCRIPTS/guard-app-survives-load-shell.js" "$STAGE/load-2.js"
 
 export XDG_RUNTIME_DIR="$RUNTIME"
 COMP_SOCK="$RUNTIME/domicile-app-survives-load-shell.sock"
-rm -f "$BROKER" "$COMMAND" "$COMP_SOCK" "$COMP_SOCK.session" "$ENGINE_LOG" "$COMP_LOG" "$CLI_LOG"
+fresh_broker
+rm -f "$COMMAND" "$COMP_SOCK" "$COMP_SOCK.session" "$ENGINE_LOG" "$COMP_LOG" "$CLI_LOG"
 rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 
 wait_for_line() { # $1 tries, $2 pattern, $3 file
