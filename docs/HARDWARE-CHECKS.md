@@ -253,4 +253,5 @@ QEMU/KVM with virtio-gpu and virgl, on a VT. Run with
 - With two heads (`max_outputs=2`) and a `usb-tablet` per head, bind each by
   `phys` in `input.pointers`
   ([Tablets and touchscreens](DISPLAYS.md#tablets-and-touchscreens)). A click
-  in either head's window lands under the host's cursor on that head.
+  in either head's window lands under the host's cursor on that head. Hover,
+  the right and middle buttons and the wheel work there as a mouse's.
