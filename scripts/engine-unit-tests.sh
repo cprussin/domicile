@@ -22,7 +22,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 
 # Every suite in the filter, counted rather than estimated: FrameSinkBroker 41,
 # WindowDiff 7, EngineEventQueue 7, ShortcutRegistry 14, ShellURLLoaderFactory
-# 12, ShellDocument 14, ShellSource 3, CursorShape 3, CommandProtocol 43,
+# 16, ShellDocument 14, ShellSource 3, CursorShape 3, CommandProtocol 43,
 # DomicileDisplayList 8, DomicileKeyboardLayout 3, ShellWindows 8,
 # ShellWindowPlaces 7, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
 # SurfaceTransform 3, SurfaceAlpha 2, ExtensionInstaller 3, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 20,
@@ -36,7 +36,9 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # DeskCursorThemeSource 2, XCursorTheme 5, XCursorThemeDirectory 4,
 # SyncedFrame 7.
 #
-# 406, and it was 405 — the desk an empty layout leaves where the hardware
+# 410, and it was 406 — serving the shell's and an app's files only to their
+# own origin is four ShellURLLoaderFactory cases. Before that 406, and it was
+# 405 — the desk an empty layout leaves where the hardware
 # put each display is one DeskGeometry case. Before that 405, and it was 403 —
 # where a page's popup goes on another monitor is two
 # DeskGeometry cases. Before that 403, and it was 402 — the answer a shell
@@ -148,7 +150,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=406
+FLOOR=410
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

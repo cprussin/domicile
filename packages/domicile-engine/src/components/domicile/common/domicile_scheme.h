@@ -12,7 +12,9 @@ namespace domicile {
 // could reach. See docs/architecture/DOMICILE-SCHEME.md.
 //
 // Registered as a standard scheme so it has an origin, but neither web-safe
-// nor CORS-enabled, so web content can neither navigate to it nor fetch it.
+// nor CORS-enabled, so web content cannot navigate to it. Registered as
+// supporting the Fetch API, so a document can fetch() its own files;
+// ShellURLLoaderFactory serves them only to their own origin.
 inline constexpr char kDomicileScheme[] = "domicile";
 
 // The shell's host. The bare root `domicile://shell/` is a page that
