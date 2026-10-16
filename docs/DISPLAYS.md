@@ -118,15 +118,15 @@ Patches `0050` and `0052` move the pointer between monitors in
 
 ## Tablets and touchscreens
 
-`input.pointers` binds each tablet or touchscreen to one display. Config:
-[SHELL-CONFIG.md](SHELL-CONFIG.md#tablets-and-touchscreens).
+`input.pointers` binds each tablet, touchscreen or absolute mouse to one
+display. Config: [SHELL-CONFIG.md](SHELL-CONFIG.md#tablets-and-touchscreens).
 
-- evdev reads a device with absolute X and Y and no pen as a touchscreen
-  (`EventDeviceInfo::HasTouchscreen`). QEMU's USB tablet is one, and QEMU
-  gives each head its own.
-- Upstream sends a touch only to the window of the display
-  `DeviceDataManager` binds its device to. Only ash binds one, so an unbound
-  device's touches are dropped.
+- **Absolute mouse:** absolute X and Y, `BTN_LEFT` and `BTN_RIGHT`, and no
+  `BTN_TOUCH`, pen or input property (`EventDeviceInfo::HasAbsoluteMouse`,
+  patch `0123`). QEMU's USB tablet is one, and QEMU gives each head its own.
+- **Touchscreen:** any other device with absolute X and Y and no pen
+  (`EventDeviceInfo::HasTouchscreen`), including one that clicks with
+  `BTN_LEFT` alone.
 - The compositor resolves each entry's `display` against the engine's last
   display report (`pointer_targets`) and sends device-to-display-id targets
   on every report and reload:
@@ -134,15 +134,36 @@ Patches `0050` and `0052` move the pointer between monitors in
 ```
 bind_the_pointers  →  domicile_pointers_configure  →  FrameSinkBroker.ConfigurePointers
   → OzonePlatform::SetDomicilePointerTargets  →  DrmPointerTargets
-  → DeviceDataManager::ConfigureTouchDevices
+  → DeviceDataManager::ConfigureTouchDevices     (touchscreens)
+  → DrmCursor::SetDomicileAbsoluteAreas          (absolute mice)
 ```
 
-- `TouchTransformsFor` (`ui/ozone/platform/drm/domicile/drm_pointer_targets.h`,
-  with tests) maps the device's range onto its display's CRTC rectangle,
-  unrotated. A touchscreen hotplug reapplies the targets.
+- `ui/ozone/platform/drm/domicile/drm_pointer_targets.h` has the mapping,
+  with tests. A touchscreen or mouse hotplug reapplies the targets.
+- A display's CRTC rectangle, unrotated, is what a device's range covers.
+
+### Absolute mice
+
+`AbsoluteMouseEventConverterEvdev` (`ui/events/ozone/evdev/domicile/`, with
+tests) reads one as a mouse:
+
+- A position moves the pointer onto the bound display, crossing windows. A
+  move with no button held hovers.
+- Every mouse button is a mouse button, remappable like any mouse's.
+- The wheels scroll in 120ths of a notch, from `REL_WHEEL_HI_RES` and
+  `REL_HWHEEL_HI_RES` where the device sends them.
+- An unbound one covers the display the pointer is on, as a pen tablet does.
+
+### Touchscreens
+
+- Upstream sends a touch only to the window of the display
+  `DeviceDataManager` binds its device to. Only ash binds one, so an unbound
+  device's touches are dropped.
+- `TouchTransformsFor` gives each bound touchscreen a transform onto its
+  display.
 - `DrmWindowHost` sends a bound touch to the desk's host, placed with
   `PointerInWindow` as the pointer is (patch `0122`).
-- Touches move no pointer. A tablet's button down and up are a tap.
+- Touches move no pointer. A touchscreen's button down and up are a tap.
 
 ## Rotation
 
