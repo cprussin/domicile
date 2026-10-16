@@ -93,6 +93,7 @@ constexpr char kFindChangeEvent[] = "domicile-find-change";
 constexpr char kContentSizeChangeEvent[] = "domicile-content-size-change";
 constexpr char kPageFullscreenChangeEvent[] =
     "domicile-page-fullscreen-change";
+constexpr char kRenderProcessChangeEvent[] = "domicile-render-process-change";
 
 // A request the shell answers on the event. See
 // domicile_file_chooser_event.h.
@@ -214,6 +215,31 @@ const char* SecurityName(domicile::mojom::blink::WebViewSecurity security) {
       return kSecurityWarning;
     case domicile::mojom::blink::WebViewSecurity::kDangerous:
       return kSecurityDangerous;
+  }
+}
+
+// Maps why the page's renderer went away to `renderProcessGone`. No default,
+// so a new mojom value breaks the build. The names must match the browser's
+// and the SDK's; scripts/test-render-process-reasons-agree.sh checks this.
+const char* RenderProcessName(
+    domicile::mojom::blink::WebViewRenderProcess state) {
+  switch (state) {
+    case domicile::mojom::blink::WebViewRenderProcess::kRunning:
+      return "";
+    case domicile::mojom::blink::WebViewRenderProcess::kCleanExit:
+      return "clean-exit";
+    case domicile::mojom::blink::WebViewRenderProcess::kAbnormalExit:
+      return "abnormal-exit";
+    case domicile::mojom::blink::WebViewRenderProcess::kKilled:
+      return "killed";
+    case domicile::mojom::blink::WebViewRenderProcess::kCrashed:
+      return "crashed";
+    case domicile::mojom::blink::WebViewRenderProcess::kOom:
+      return "oom";
+    case domicile::mojom::blink::WebViewRenderProcess::kLaunchFailed:
+      return "launch-failed";
+    case domicile::mojom::blink::WebViewRenderProcess::kMemoryEviction:
+      return "memory-eviction";
   }
 }
 
@@ -733,6 +759,16 @@ void HTMLWebViewElement::PageFullscreenChanged(bool fullscreen) {
 
   DispatchEvent(
       *Event::CreateBubble(AtomicString(kPageFullscreenChangeEvent)));
+}
+
+void HTMLWebViewElement::RenderProcessChanged(
+    domicile::mojom::blink::WebViewRenderProcess state,
+    int32_t exit_code) {
+  // Set both before dispatching, so a handler reads a matching pair.
+  render_process_gone_ = String(RenderProcessName(state));
+  render_process_exit_code_ = exit_code;
+
+  DispatchEvent(*Event::CreateBubble(AtomicString(kRenderProcessChangeEvent)));
 }
 
 void HTMLWebViewElement::ZoomRequested(bool zoom_in) {

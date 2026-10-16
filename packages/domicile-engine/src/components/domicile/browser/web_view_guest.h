@@ -502,9 +502,10 @@ class WebViewGuest : public mojom::WebViewGuest,
                          const content::ContextMenuParams& params) override;
 
   // Reports back/forward availability to the renderer, as Chrome's own
-  // buttons do. Every history mutation arrives here.
+  // buttons do. Every history mutation arrives here, and so does a change to
+  // the page's crashed status.
   //
-  // The flags are ignored: they only mean "some UI is stale". ReportHistory
+  // The flags are ignored: they only mean "some UI is stale". Each Report*
   // compares against the last report instead.
   void NavigationStateChanged(content::WebContents* source,
                               content::InvalidateTypes changed_flags) override;
@@ -826,6 +827,10 @@ class WebViewGuest : public mojom::WebViewGuest,
   // page with no site reports none.
   void ReportSitePermissions();
 
+  // Reports whether the page has a renderer, and why it went away, to the
+  // element if either changed. See RenderProcessChanged in the mojom.
+  void ReportRenderProcess();
+
   // Reports loading state to the element if it changed. LoadingStateChanged
   // also fires when nothing changed.
   void ReportLoading(bool should_show_loading_ui);
@@ -922,6 +927,9 @@ class WebViewGuest : public mojom::WebViewGuest,
   GURL reported_favicon_;
   std::string reported_description_;
   GURL reported_target_url_;
+  mojom::WebViewRenderProcess reported_render_process_ =
+      mojom::WebViewRenderProcess::kRunning;
+  int reported_exit_code_ = 0;
   // The renderer's last link, which stays set while the pointer is outside the
   // page. See PreHandleMouseEvent.
   GURL renderer_target_url_;

@@ -140,6 +140,12 @@ class CORE_EXPORT HTMLWebViewElement final
   bool pageFullscreen() const { return page_fullscreen_; }
   void exitPageFullscreen();
 
+  // Why the page's renderer went away, or empty while it runs, and its exit
+  // code. See RenderProcessChanged in
+  // components/domicile/mojom/web_view_guest.mojom.
+  const String& renderProcessGone() const { return render_process_gone_; }
+  int32_t renderProcessExitCode() const { return render_process_exit_code_; }
+
   // Runs `action` for `menu`. Throws InvalidStateError if a newer menu has
   // replaced it. See domicile_context_menu_event.h.
   void RunContextMenuAction(
@@ -284,6 +290,8 @@ class CORE_EXPORT HTMLWebViewElement final
   void FindChanged(int32_t matches, int32_t active_match) override;
   void ContentSizeChanged(int32_t width, int32_t height) override;
   void PageFullscreenChanged(bool fullscreen) override;
+  void RenderProcessChanged(domicile::mojom::blink::WebViewRenderProcess state,
+                            int32_t exit_code) override;
 
   // Dispatches `domicile-file-chooser` for the shell to answer. If no listener
   // calls `preventDefault()`, the chooser is canceled after dispatch. See
@@ -394,6 +402,8 @@ class CORE_EXPORT HTMLWebViewElement final
   int32_t content_width_ = 0;
   int32_t content_height_ = 0;
   bool page_fullscreen_ = false;
+  String render_process_gone_;
+  int32_t render_process_exit_code_ = 0;
 
   // The newest context menu dispatched; the browser acts only on it. 0 before
   // the first.

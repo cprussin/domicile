@@ -33,6 +33,7 @@
 #include "components/domicile/browser/download_tally.h"
 #include "components/domicile/browser/file_choice.h"
 #include "components/domicile/browser/placeholder_stage.h"
+#include "components/domicile/browser/render_process.h"
 #include "components/domicile/browser/shortcut_registry.h"
 #include "components/domicile/browser/site_permissions.h"
 #include "components/permissions/permissions_client.h"
@@ -810,6 +811,9 @@ void WebViewGuest::ReportEverything() {
   }
   reported_site_permissions_.clear();
   ReportSitePermissions();
+  reported_render_process_ = mojom::WebViewRenderProcess::kRunning;
+  reported_exit_code_ = 0;
+  ReportRenderProcess();
 }
 
 WebViewGuest::WebViewGuest(
@@ -1447,6 +1451,7 @@ void WebViewGuest::NavigationStateChanged(
   ReportPage();
   // Zoom is per site, so navigation can change it.
   ReportZoom();
+  ReportRenderProcess();
 }
 
 void WebViewGuest::DidChangeVisibleSecurityState() {
@@ -1716,6 +1721,23 @@ void WebViewGuest::ReportSitePermissions() {
     report.push_back(mojom::WebViewSitePermission::New(permission, setting));
   }
   client_->SitePermissionsChanged(std::move(report));
+}
+
+void WebViewGuest::ReportRenderProcess() {
+  CHECK(guest_contents_);
+  // WebContents sets the status, then calls NavigationStateChanged, both when
+  // the renderer goes away and when a new one is up.
+  const mojom::WebViewRenderProcess state =
+      RenderProcessOf(guest_contents_->GetCrashedStatus());
+  const int exit_code = state == mojom::WebViewRenderProcess::kRunning
+                            ? 0
+                            : guest_contents_->GetCrashedErrorCode();
+  if (state == reported_render_process_ && exit_code == reported_exit_code_) {
+    return;
+  }
+  reported_render_process_ = state;
+  reported_exit_code_ = exit_code;
+  client_->RenderProcessChanged(state, exit_code);
 }
 
 void WebViewGuest::RequestMediaAccessPermission(

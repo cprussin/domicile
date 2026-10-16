@@ -126,6 +126,28 @@ wait_for_line() { # $1 tries, $2 pattern, $3 file
   return 1
 }
 
+# The watch the shell holds now: the id it last sent the watch under. Each
+# hang-up fails the watch and the shell sends it again under a new id, and a
+# compositor killed outright can hang up twice: the engine dials straight
+# back, reaches the dying one before its socket closes, and hears it go again.
+# So the touch must reach the last id, whichever that is.
+watching_id() { # $1 the engine log
+  sed -n 's/.*GUARD rewatch id=\([0-9][0-9]*\).*/\1/p' "$1" 2>/dev/null | tail -1
+}
+watch_started() { # $1 the engine log
+  local id
+  id="$(watching_id "$1")"
+  [ -n "$id" ] && grep -aqF "\"id\":$id,\"reply\":{\"kind\":\"started\"}" "$1"
+}
+heard_the_touch() { # $1 the engine log, $2 the touched path
+  local id
+  id="$(watching_id "$1")"
+  [ -n "$id" ] && grep -aqF \
+    "\"type\":\"system_event\",\"id\":$id,\"event\":{\"kind\":\"changed\",\"path\":\"$2\"}" \
+    "$1"
+}
+# The end of the watch readings.
+
 # A compositor on the shared sockets, logging to $1 and searching the page for
 # $2.
 compositor() {
@@ -218,8 +240,11 @@ client "$NEXT_LOG" "$SECOND_COLOR" ||
   echo "the next compositor never named its Wayland display" >&2
 
 # 5. A change the new watch must hear.
-wait_for_line "$TRIES" '"id":2,"reply":{"kind":"started"}' "$ENGINE_LOG" ||
-  echo "the second watch never started" >&2
+for _ in $(seq 1 "$TRIES"); do
+  watch_started "$ENGINE_LOG" && break
+  sleep 0.25
+done
+watch_started "$ENGINE_LOG" || echo "the watch sent again never started" >&2
 touch "$WATCHED/touched"
 
 # 6. Watch for the new color. The control expects an absence, so it waits a
@@ -248,8 +273,7 @@ grep -aqF '"id":1,"type":"system_end"' "$ENGINE_LOG" 2>/dev/null &&
 REPLACED=0
 grep -aqF "GUARD replaced" "$ENGINE_LOG" 2>/dev/null && REPLACED=1
 HEARD=0
-grep -aqF "\"path\":\"$WATCHED/touched\"" "$ENGINE_LOG" 2>/dev/null &&
-  grep -aqF '"type":"system_event","id":2' "$ENGINE_LOG" 2>/dev/null && HEARD=1
+heard_the_touch "$ENGINE_LOG" "$WATCHED/touched" && HEARD=1
 # The second client draws from its first frame, so a find with no miss before
 # it is a look too.
 LOOKED=0
