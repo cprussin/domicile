@@ -59,7 +59,7 @@ export const Shell = (_root, desktop) => {
     view.style.border = "0";
     view.setAttribute("window", id);
     let asked = false;
-    view.addEventListener("domicile-loading-change", () => {
+    const printOnceLoaded = () => {
       if (prints && !asked && !view.loading && view.url.endsWith("/page")) {
         asked = true;
         setTimeout(() => {
@@ -67,7 +67,12 @@ export const Shell = (_root, desktop) => {
           view.print();
         }, settleMs);
       }
-    });
+    };
+    view.addEventListener("domicile-loading-change", printOnceLoaded);
+    // A page that finished loading before the element attached sends no
+    // loading change: `loading` starts false and stays so. Its URL still
+    // arrives, as a page change.
+    view.addEventListener("domicile-page-change", printOnceLoaded);
     document.body.append(view);
   };
 
