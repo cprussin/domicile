@@ -104,6 +104,40 @@ expect "an empty measurement is a failure" "fail" "$(verdict "")"
 expect "and so is a mode nobody runs" "fail" \
   "$(verdict "elephant 1 1 1 1 1 1 1 1")"
 
+echo
+echo "the touch — heard by the watch the shell holds now"
+READINGS="$(awk '/^# The watch the shell holds now/,/^# The end of the watch readings/' "$GUARD")"
+[ -n "$READINGS" ] || {
+  echo "no watch readings in $GUARD — their markers moved. Fix this test with it." >&2
+  exit 1
+}
+LOG="$(mktemp)"
+trap 'rm -f "$LOG"' EXIT
+TOUCHED=/tmp/watched/touched
+heard() { # the engine log's lines, one per argument
+  printf '%s\n' "$@" >"$LOG"
+  (
+    eval "$READINGS"
+    if heard_the_touch "$LOG" "$TOUCHED"; then echo yes; else echo no; fi
+  )
+}
+event() { # $1 id
+  echo "\"GUARD system {\"type\":\"system_event\",\"id\":$1,\"event\":{\"kind\":\"changed\",\"path\":\"$TOUCHED\"}}\""
+}
+expect "the one watch sent again hears the touch" "yes" \
+  "$(heard "GUARD rewatch id=2" "$(event 2)")"
+# CI run 38822858173: the engine reached the dying compositor once more, so a
+# second hang-up failed id 2 and the shell watched again as id 3.
+expect "a watch sent again twice hears it under its last id" "yes" \
+  "$(heard "GUARD rewatch id=2" "GUARD rewatch id=3" "$(event 3)")"
+expect "a touch heard by an older watch is not the one held now" "no" \
+  "$(heard "GUARD rewatch id=2" "GUARD rewatch id=3" "$(event 2)")"
+expect "a watch never sent again hears nothing" "no" \
+  "$(heard "$(event 1)")"
+ELSEWHERE="$(event 2)"
+expect "a change to another path is not the touch" "no" \
+  "$(heard "GUARD rewatch id=2" "${ELSEWHERE/touched/other}")"
+
 if [ "$FAILED" -eq 0 ]; then
   echo "the compositor-restart guard's verdict names the right end in every case"
   exit 0

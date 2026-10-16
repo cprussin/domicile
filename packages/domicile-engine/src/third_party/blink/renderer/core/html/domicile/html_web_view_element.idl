@@ -109,6 +109,14 @@
   // not fullscreen.
   undefined exitPageFullscreen();
 
+  // Why the page's renderer went away: "clean-exit", "abnormal-exit",
+  // "killed", "crashed", "oom", "launch-failed" or "memory-eviction". Empty
+  // while the page has a renderer. reload() or a new `src` starts a new one.
+  // `renderProcessExitCode` is Chromium's code for the process, 0 while it
+  // runs. `domicile-render-process-change` signals a change to either.
+  readonly attribute DOMString renderProcessGone;
+  readonly attribute long renderProcessExitCode;
+
   // Open DevTools for the page in a new browser window. If DevTools is already
   // open, the <webview> showing it dispatches `domicile-focus-request`.
   undefined inspect();

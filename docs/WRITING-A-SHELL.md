@@ -76,6 +76,15 @@ button). To load a rebuilt bundle, run `domicile load-shell ./dist/shell.js`
 in a terminal inside the desktop. Any shell works, and windows stay put
 ([THE-DOMICILE-BINARY.md](/docs/architecture/THE-DOMICILE-BINARY.md)).
 
+**If your page's renderer dies,** the engine ends with a FATAL line saying
+so, and the supervisor starts it again. That is a bug in Domicile, not
+your shell's to handle: report it with the log
+([THE-DOMICILE-BINARY.md](/docs/architecture/THE-DOMICILE-BINARY.md#crashes-are-recovered)).
+Your own script errors are yours: catch them with `try`/`catch`,
+`window.onerror` and `unhandledrejection`. A `<webview>` whose page dies
+tells you instead
+([Crashed pages](SHELL-BROWSER-WINDOWS.md#crashed-pages)).
+
 ## The connection
 
 ```ts

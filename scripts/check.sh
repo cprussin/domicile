@@ -324,6 +324,7 @@ if wanted engine; then
       scripts/engine-guard-webview-passkey-extension.sh \
       scripts/engine-guard-webview-survives-load-shell.sh \
       scripts/engine-guard-webview-hidden.sh \
+      scripts/engine-guard-webview-crash.sh \
       scripts/engine-guard-desktop-geometry.sh \
       scripts/engine-guard-windows-state.sh \
       scripts/engine-guard-desk-state.sh \
@@ -334,6 +335,7 @@ if wanted engine; then
       scripts/engine-guard-app-routes-input.sh \
       scripts/engine-guard-shell-handover.sh \
       scripts/engine-guard-shell-script-src.sh \
+      scripts/engine-guard-shell-crash.sh \
       scripts/engine-guard-app-only-in-shell.sh \
       scripts/engine-guard-app-module.sh \
       scripts/engine-guard-video-codecs.sh

@@ -89,6 +89,9 @@ once, when the view connects. The SDK provides types only.
     part of an item.
   - `domicile-content-size-change`: `contentWidth` / `contentHeight` changed.
     Use it to size extension popups.
+  - `domicile-render-process-change`: the page's renderer died or came back.
+    `renderProcessGone` says why, or is `""`; `reload()` recovers it. See
+    [Crashed pages](/docs/SHELL-BROWSER-WINDOWS.md#crashed-pages).
 - **Browser windows:** `domicile.browserWindows` is the desk's whole list;
   `browserwindowschanged` reports changes. `openBrowserWindow(url)` and `closeBrowserWindow(id)` are
   for the shell's own UI. A link with `target="_blank"`, `domicile open-url`
