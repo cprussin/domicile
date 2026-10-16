@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Runs the DRM platform's gtest cases in ozone_unittests, plus the two evdev
-# suites linked there (`ScrollAcceleratorTest` and `WheelTicksTest`; see
+# Runs the DRM platform's gtest cases in ozone_unittests, plus the evdev suites
+# linked there (`ScrollAcceleratorTest` and `WheelTicksTest`; see
 # scripts/test-a-fast-scroll-goes-further.sh and
-# scripts/test-a-mouse-goes-through-libinput.sh), and one Wayland suite,
+# scripts/test-a-mouse-goes-through-libinput.sh; and the `AbsoluteMouse*`
+# suites of patch 0123), and one Wayland suite,
 # `WaylandKeyboardWithoutKeymapTest` (see
 # scripts/test-modifiers-wait-for-a-keymap.sh).
 #
@@ -45,10 +46,12 @@ SUITES=(
   DrmEdidSerialTest:18
   DrmConnectorNameTest:6
   DrmPointerCrossingTest:20
-  DrmPointerTargetsTest:4
+  DrmPointerTargetsTest:5
   GbmPixmapScanoutTest:3
   ScrollAcceleratorTest:7
   WheelTicksTest:3
+  AbsoluteMouseDeviceTest:2
+  AbsoluteMouseConverterTest:7
   WaylandKeyboardWithoutKeymapTest:1
 )
 

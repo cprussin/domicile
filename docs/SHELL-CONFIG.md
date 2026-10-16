@@ -129,7 +129,7 @@ An edit applies to the running desktop, and windows stay open:
 | Section | Effect of an edit |
 |---|---|
 | `input.keyboard` | New layout; moves the keys a shell bound ([Keybindings](WRITING-A-SHELL.md#keybindings)) |
-| `input.pointers` | Tablets and touchscreens rebound |
+| `input.pointers` | Tablets, touchscreens and absolute mice rebound |
 | `output.max_scale` | Re-advertised to clients |
 | `output.displays`, `output.profiles` | Displays rearranged |
 | `idle.blank_after_seconds`, `idle.warn_before_seconds` | Idle timer restarts. Dark screens relight |
@@ -179,8 +179,10 @@ A shell for users of other layouts must set them here; nothing else does.
 
 ## Tablets and touchscreens
 
-On a tty, `input.pointers` binds each tablet or touchscreen to the display it
-covers. An unbound one covers no display.
+On a tty, `input.pointers` binds each tablet, touchscreen or absolute mouse
+(such as QEMU's USB tablet) to the display it covers. An unbound touchscreen
+covers no display. An unbound absolute mouse covers the display the pointer is
+on.
 
 ```json
 {

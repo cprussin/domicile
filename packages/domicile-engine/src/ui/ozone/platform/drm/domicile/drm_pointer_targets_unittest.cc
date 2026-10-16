@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/display.h"
@@ -36,12 +37,15 @@ std::vector<display::Display> Heads() {
           display::Display(kRight, gfx::Rect(1920, 0, 1280, 800))};
 }
 
+InputDevice Device(int id, const std::string& phys) {
+  return InputDevice(id, INPUT_DEVICE_USB, kTablet, phys, base::FilePath(),
+                     /*vendor=*/0x0627, /*product=*/0x0001, /*version=*/0);
+}
+
 // A tablet whose `ABS_X` and `ABS_Y` run 0..32767, as QEMU's do.
 TouchscreenDevice Tablet(int id, const std::string& phys) {
-  return TouchscreenDevice(
-      InputDevice(id, INPUT_DEVICE_USB, kTablet, phys, base::FilePath(),
-                  /*vendor=*/0x0627, /*product=*/0x0001, /*version=*/0),
-      gfx::Size(32768, 32768), /*touch_points=*/1);
+  return TouchscreenDevice(Device(id, phys), gfx::Size(32768, 32768),
+                           /*touch_points=*/1);
 }
 
 std::vector<TouchscreenDevice> BothTablets() {
@@ -90,6 +94,19 @@ TEST(DrmPointerTargetsTest, AnUnboundTabletOrAnUnpluggedDisplayBindsNothing) {
                                  {{.device = kTablet, .display_id = 9}},
                                  Heads())
                   .empty());
+}
+
+// QEMU's tablet read as an absolute mouse moves the pointer itself, so it
+// takes its display's rectangle rather than a touch transform.
+TEST(DrmPointerTargetsTest, AnAbsoluteMouseCoversTheDisplayItIsBoundTo) {
+  const std::vector<InputDevice> mice = {Device(kFirst, kFirstPhys),
+                                         Device(kSecond, kSecondPhys)};
+
+  EXPECT_EQ(AbsoluteAreasFor(mice,
+                             {{.device = kSecondPhys, .display_id = kRight}},
+                             Heads()),
+            (base::flat_map<int, gfx::Rect>{
+                {kSecond, gfx::Rect(1920, 0, 1280, 800)}}));
 }
 
 }  // namespace
