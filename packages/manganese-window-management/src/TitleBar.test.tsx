@@ -387,6 +387,14 @@ describe("TitleBar", () => {
       ).not.toContain(covers);
     });
 
+    // The cover makes the open tab a row taller than a hidden one. Padding
+    // that row keeps its title level, so a tab does not drop when opened.
+    it("keeps the open tab's title level with a hidden tab's", () => {
+      expect(
+        face(tab({ strip: { ...MIDDLE_TAB, open: true } }).container).className,
+      ).toContain(css({ paddingBlockEnd: "1px" }));
+    });
+
     it("edges the open tab stronger in a strip inside another group's well", () => {
       const strong = css({
         borderColor:

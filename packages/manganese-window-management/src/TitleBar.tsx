@@ -552,8 +552,12 @@ const tabStyles = cva({
       resting: { fontWeight: "normal" },
       selected: { fontWeight: "normal" },
     },
-    // Over the strip's bottom row, which draws the window's top edge.
-    joined: { false: {}, true: { marginBlockEnd: "-1px" } },
+    // Over the strip's bottom row, which draws the window's top edge. The
+    // padding fills that row, so the title stays level with a hidden tab's.
+    joined: {
+      false: {},
+      true: { marginBlockEnd: "-1px", paddingBlockEnd: "1px" },
+    },
     // In the `focus parent` selection. A shape as well as a color, and it
     // leaves a hidden tab flat, so it does not look open.
     marked: {
