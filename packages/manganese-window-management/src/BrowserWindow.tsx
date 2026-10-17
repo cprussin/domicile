@@ -391,6 +391,10 @@ export const BrowserWindow = ({
             view.inspect();
             break;
           }
+          case BrowserCommand.Print: {
+            view.print();
+            break;
+          }
           case BrowserCommand.Reload: {
             view.reload();
             break;
