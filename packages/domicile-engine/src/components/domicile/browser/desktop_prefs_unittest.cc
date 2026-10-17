@@ -28,6 +28,10 @@ class DesktopPrefsTest : public testing::Test {
       autofill::prefs::kAutofillProfileEnabled,
       autofill::prefs::kAutofillCreditCardEnabled,
       translate::prefs::kOfferTranslateEnabled,
+      // chrome/common/pref_names.h, which a component cannot include.
+      "https_only_mode_enabled",
+      "https_first_balanced_mode_enabled",
+      "https_first_mode_incognito_enabled",
   };
 
   TestingPrefServiceSimple prefs_;

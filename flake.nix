@@ -599,7 +599,8 @@
         # - `PATH`, after the user's own: PulseAudio's `pactl` and `parec`,
         #   which the shell's mixer spawns (PipeWire systems may have none),
         #   and `curl`, which shells spawn to fetch bookmark icons
-        #   (`@domicile-desktop/system-apps/curl`).
+        #   (`@domicile-desktop/system-apps/curl`) and check for a captive
+        #   portal (`@domicile-desktop/system-network/portal`).
         #
         # `--set-default` and `--suffix` so a user's own value wins.
         postFixup = ''
@@ -694,7 +695,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-iCR3rtqacuPwoKyWCZhC+4f3UNG/pcaPFxfzr7518GU=";
+        outputHash = "sha256-pjXUk4PKi666iDjxlsEM/5p7ov0dES+oYgxsjT38Nes=";
       };
 
 
