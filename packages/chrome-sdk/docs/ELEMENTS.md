@@ -76,7 +76,7 @@ once, when the view connects. The SDK provides types only.
 
 - **Properties:** `src`, `goBack()`, `goForward()`, `stop()`, `reload()`,
   `canGoBack`, `canGoForward`, `loading`, `focus()`, `inspect()` (opens
-  DevTools as a new window).
+  DevTools as a new window), `print()` (the desktop's print dialog).
 - **Events** (selected; see `src/webview-element.ts` for all):
   - `domicile-close`: the page in a shell's own view (no `window`) called
     `window.close()`. The shell removes the view. A browser window closes in

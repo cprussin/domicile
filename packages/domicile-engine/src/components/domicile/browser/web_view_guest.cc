@@ -122,6 +122,12 @@ InspectCallback& InspectSlot() {
   return *inspect;
 }
 
+// Storage for SetPrint's callback.
+PrintCallback& PrintSlot() {
+  static base::NoDestructor<PrintCallback> print;
+  return *print;
+}
+
 // The guests' camera and microphone. See SetMediaAccess.
 MediaAccess* g_media_access = nullptr;
 
@@ -136,6 +142,13 @@ const InspectCallback& Inspector() {
   // //chrome sets it in StartDesk, with the window host.
   CHECK(!InspectSlot().is_null());
   return InspectSlot();
+}
+
+// Prints. See SetPrint.
+const PrintCallback& Printer() {
+  // //chrome sets it in StartDesk, with the window host.
+  CHECK(!PrintSlot().is_null());
+  return PrintSlot();
 }
 
 // Serves WebViewGuestHost for one document.
@@ -862,6 +875,12 @@ void WebViewGuest::SetInspect(InspectCallback inspect) {
 }
 
 // static
+void WebViewGuest::SetPrint(PrintCallback print) {
+  CHECK(PrintSlot().is_null());
+  PrintSlot() = std::move(print);
+}
+
+// static
 void WebViewGuest::SetMediaAccess(MediaAccess* access) {
   CHECK(!g_media_access);
   g_media_access = access;
@@ -1357,6 +1376,11 @@ void WebViewGuest::ExitPageFullscreen() {
 void WebViewGuest::Inspect() {
   CHECK(guest_contents_);
   Inspector().Run(*guest_contents_->GetPrimaryMainFrame(), std::nullopt);
+}
+
+void WebViewGuest::Print() {
+  CHECK(guest_contents_);
+  Printer().Run(*guest_contents_);
 }
 
 void WebViewGuest::SetSitePermission(
