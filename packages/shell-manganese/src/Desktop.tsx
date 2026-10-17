@@ -9,6 +9,8 @@ import { deskBacklight } from "@domicile-desktop/manganese-bar-module-brightness
 import { useBrightnessKeys } from "@domicile-desktop/manganese-bar-module-brightness/useBrightnessKeys";
 import type { ClockOptions } from "@domicile-desktop/manganese-bar-module-clock/clock-options";
 import { ClockOptionsContext } from "@domicile-desktop/manganese-bar-module-clock/clock-options";
+import { PortalSignIn } from "@domicile-desktop/manganese-bar-module-network/PortalSignIn";
+import { useCaptivePortal } from "@domicile-desktop/manganese-bar-module-network/useCaptivePortal";
 import { popupShown } from "@domicile-desktop/manganese-bar-module-tray/extensions/shown";
 import { useExtensions } from "@domicile-desktop/manganese-bar-module-tray/extensions/useExtensions";
 import type { TrayState } from "@domicile-desktop/manganese-bar-module-tray/tray-context";
@@ -261,6 +263,8 @@ export const Desktop = ({
 
   const volumeKeys = useVolumeKeys(deskSound(domicile));
   const brightnessKeys = useBrightnessKeys(deskBacklight(domicile));
+  // Once for the desk, so a portal's sign-in page opens once, not per bar.
+  const portal = useCaptivePortal(domicile);
 
   // Shift is spent whether or not a window was floated: the user pressed it
   // for the chord, so it should not carry over to the next window. Both the
@@ -428,11 +432,13 @@ export const Desktop = ({
             windows.launcherOpen ||
             windows.clipboardOpen ||
             popupOpen ||
+            portal.url !== undefined ||
             notificationsOpen ||
             lock.locked
           }
           // While a desktop panel is open the page keeps the keyboard; see
-          // `AppWindow`. Extension popups and the lock screen count.
+          // `AppWindow`. Extension popups, a portal's sign-in page and the
+          // lock screen count.
           clientIcons={clientIcons}
           domicile={domicile}
           draggingId={windows.draggingId}
@@ -472,6 +478,12 @@ export const Desktop = ({
           system={files}
         />
       )}
+      {/* Over the windows, on the screen with the keyboard. */}
+      <PortalSignIn
+        onDismiss={portal.dismiss}
+        screen={windows.focused}
+        url={portal.url}
+      />
       {/* Over the whole desktop, like the launcher. */}
       <Clipboard
         entries={clipboard}
