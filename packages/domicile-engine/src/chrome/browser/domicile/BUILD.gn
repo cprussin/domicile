@@ -90,7 +90,8 @@ source_set("domicile") {
     "//ui/gfx/codec",
     "//url",
     # Tab helpers for <webview> guests (SessionTabHelper, HistoryTabHelper,
-    # the favicon driver).
+    # the favicon driver, WebNavigationTabObserver).
+    "//chrome/browser/extensions/api/web_navigation",
     "//chrome/browser/favicon",
     "//chrome/browser/history",
     "//chrome/browser/sessions",

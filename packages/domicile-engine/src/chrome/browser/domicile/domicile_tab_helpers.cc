@@ -7,6 +7,7 @@
 #include "chrome/browser/domicile/domicile_desk.h"
 #include "chrome/browser/domicile/domicile_devtools.h"
 #include "chrome/browser/domicile/domicile_permissions.h"
+#include "chrome/browser/extensions/api/web_navigation/web_navigation_tab_observer.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/history/history_tab_helper.h"
@@ -62,6 +63,10 @@ void Attach(content::WebContents& guest, bool records_history) {
       extensions::mojom::ViewType::kInvalid) {
     extensions::SetViewType(&guest, extensions::mojom::ViewType::kTabContents);
   }
+  // As Chrome's TabFeatures does. Without it no frame has a navigation state,
+  // so webNavigation sends no events and getAllFrames lists nothing, and
+  // extensions that fill through it, such as 1Password, find no page.
+  extensions::WebNavigationTabObserver::CreateForWebContents(&guest);
   extensions::TabHelper::CreateForWebContents(&guest);
 
   // Needs the tab id assigned above.
