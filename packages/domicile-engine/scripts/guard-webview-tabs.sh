@@ -22,10 +22,14 @@
 # it back with `tabs.getZoom`. The two windows are two sites -- 127.0.0.1 and
 # localhost -- because a desk tab's zoom is its site's, as in Chrome.
 #
+# It also lists the tab's frames with `webNavigation.getAllFrames`, which
+# password managers such as 1Password fill through. A guest without Chrome's
+# WebNavigationTabObserver lists none.
+#
 # WHAT IT ASSERTS. That the popup's answer is the address of window `a`, the
 # one the shell focused; that `a`'s element, and not `b`'s, heard the zoom
-# (WebViewGuestClient.ZoomChanged, as `domicile-zoom-change`); and that
-# getZoom read back 1.5.
+# (WebViewGuestClient.ZoomChanged, as `domicile-zoom-change`); that getZoom
+# read back 1.5; and that getAllFrames' top frame is `a`'s address.
 #
 # HOW IT CAN FAIL. NEGATIVE=1 runs the control: the same run, focusing window
 # `b` instead. The answer must be `b`'s and NOT `a`'s, and so must the zoom.
@@ -216,26 +220,32 @@ NAMED_B=$(saw "\"GUARD answer active=$B\"")
 ZOOMED_A=$(saw "\"GUARD zoom name=a factor=$ZOOM\"")
 ZOOMED_B=$(saw "\"GUARD zoom name=b factor=$ZOOM\"")
 READ=$(saw "\"GUARD answer zoom=$ZOOM\"")
+if [ "$FOCUS" = a ]; then
+  FRAMED=$(saw "\"GUARD answer frames=$A\"")
+else
+  FRAMED=$(saw "\"GUARD answer frames=$B\"")
+fi
 
 MEASURED="$LEG $SENT $TRAY $SHOWN $FOCUSED $ANSWERED $NAMED_A $NAMED_B \
-$ZOOMED_A $ZOOMED_B $READ"
+$ZOOMED_A $ZOOMED_B $READ $FRAMED"
 echo
 echo "measured: $MEASURED"
 echo "what the popup answered, and the zoom the windows heard:"
-grep -F -e '"GUARD answer ' -e '"GUARD zoom ' "$ENGINE_LOG" | tail -6 || true
+grep -F -e '"GUARD answer ' -e '"GUARD zoom ' "$ENGINE_LOG" | tail -7 || true
 
 # WHICH END TO BLAME. `scripts/test-webview-tabs-guard.sh` runs this block
 # directly. MEASURED is "<leg> <sent> <tray> <shown> <focused> <answered>
-# <named-a> <named-b> <zoomed-a> <zoomed-b> <read>".
+# <named-a> <named-b> <zoomed-a> <zoomed-b> <read> <framed>".
 FAILURE=""
 PASSED=""
 case "$MEASURED" in
-"tabs 1 1 1 1 1 1 0 1 0 1")
+"tabs 1 1 1 1 1 1 0 1 0 1 1")
   PASSED="the popup's tabs.query({active: true, currentWindow: true}) named \
 the <webview> the shell focused, its tabs.setZoom zoomed that window and no \
-other, and tabs.getZoom read it back"
+other, tabs.getZoom read it back, and webNavigation.getAllFrames listed its \
+page"
   ;;
-"control 1 1 1 1 1 0 1 0 1 1")
+"control 1 1 1 1 1 0 1 0 1 1 1")
   PASSED="the control is sharp: with the other window focused, the same \
 popup named and zoomed that one and not the claim's -- so the claim's answer \
 is focus's, not the first window's or the last's, and its zoom the named tab's"
@@ -279,12 +289,12 @@ is the first made, not the focused one, so the claim's pass was an accident \
 of order"
   ;;
 # The right window named. What is left is the zoom.
-"tabs 1 1 1 1 1 1 0 0 0 0" | "control 1 1 1 1 1 0 1 0 0 0")
+"tabs 1 1 1 1 1 1 0 0 0 0 "* | "control 1 1 1 1 1 0 1 0 0 0 "*)
   FAILURE="the popup named the right window and no window heard a zoom, nor \
 did getZoom read one -- the GUARD answer zoom= line says what: an error is \
 the desk's tabs.setZoom refusing, or Chrome's own still registered over it"
   ;;
-"tabs 1 1 1 1 1 1 0 0 0 1" | "control 1 1 1 1 1 0 1 0 0 1")
+"tabs 1 1 1 1 1 1 0 0 0 1 "* | "control 1 1 1 1 1 0 1 0 0 1 "*)
   FAILURE="getZoom read the zoom back and the named window's element never \
 heard it: the guest set it and did not report it (WebViewGuest::ReportZoom, \
 WebViewGuestClient.ZoomChanged)"
@@ -302,9 +312,16 @@ zoomed a tab other than the one it was given"
 zooms one tab whichever it is asked for, so the claim's zoom was an accident \
 of order"
   ;;
-"tabs 1 1 1 1 1 1 0 1 0 0" | "control 1 1 1 1 1 0 1 0 1 0")
+"tabs 1 1 1 1 1 1 0 1 0 0 "* | "control 1 1 1 1 1 0 1 0 1 0 "*)
   FAILURE="the named window was zoomed and tabs.getZoom did not read it back \
 -- the GUARD answer zoom= line says what it read instead"
+  ;;
+# The zoom is right. What is left is the frames.
+"tabs 1 1 1 1 1 1 0 1 0 1 0" | "control 1 1 1 1 1 0 1 0 1 1 0")
+  FAILURE="webNavigation.getAllFrames did not list the named tab's page -- \
+the GUARD answer frames= line says what it listed: count-0 is a guest with no \
+WebNavigationTabObserver (AttachTabHelpers), so no frame has a navigation \
+state; no-tab is the lookups not finding the tab"
   ;;
 *)
   FAILURE="there is no measurement here of any kind ($MEASURED) -- the run did \

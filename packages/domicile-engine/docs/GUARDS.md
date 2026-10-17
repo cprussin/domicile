@@ -124,7 +124,7 @@ Headless.
 | `guard-webview-content-script.sh` | a `--load-extension` content script runs in a `<webview>` |
 | `guard-extension-installer.sh` | an extension named in the compositor's `extensions` message is installed (patch 0055) |
 | `guard-extension-tray.sh` | the tray event, popup, content size and `window.close()` (patches 0056, 0080 to 0082) |
-| `guard-webview-tabs.sh` | `tabs.query` and `tabs.setZoom` target the focused `<webview>` (patch 0057) |
+| `guard-webview-tabs.sh` | `tabs.query` and `tabs.setZoom` target the focused `<webview>` (patch 0057), and `webNavigation.getAllFrames` lists its page |
 | `guard-webview-active-tab.sh` | a tray click grants `activeTab` to the focused tab |
 | `guard-webview-popup-window.sh` | `windows.create({type: "popup"})` opens a browser window the shell draws at the requested size |
 
