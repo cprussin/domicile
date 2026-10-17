@@ -23,6 +23,10 @@
       "types": "./dist/networkmanager.d.ts",
       "default": "./dist/networkmanager.js"
     },
+    "./portal": {
+      "types": "./dist/portal.d.ts",
+      "default": "./dist/portal.js"
+    },
     "./wifi": {
       "types": "./dist/wifi.d.ts",
       "default": "./dist/wifi.js"

@@ -4,6 +4,6 @@
 upower: the battery readout
 hwdata: monitor makers' names
 libpulse: pactl, for the volume readout
-curl: bookmark icons
+curl: bookmark icons and the captive portal check
 xdg-desktop-portal: portals for apps
 gsettings-desktop-schemas: the engine's GSettings schemas, without which it logs errors

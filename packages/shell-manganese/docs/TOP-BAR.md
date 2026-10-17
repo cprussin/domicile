@@ -125,6 +125,13 @@ Every bar and the lock screen share one watch per system readout. See
   `Wi-Fi, strong signal: Home`.
 - Dims with no connection. Turns `warning` when NetworkManager reports limited
   connectivity or a captive portal.
+- On joining a network, the desk checks for a captive portal and shows its
+  sign-in page in a dialog on the screen with the keyboard. The check asks
+  `curl` for `http://www.gstatic.com/generate_204`, so it works with iwd and
+  wpa_supplicant too. Any answer but `204` is a portal.
+  - While the dialog shows, the check repeats every 3 seconds. The dialog
+    closes once the probe answers `204`, or on leaving the network.
+  - Closing it by hand stops the checks until the next network.
 - Hidden without any of the three.
 - Click for the Wi-Fi panel, from NetworkManager or iwd. With wpa_supplicant
   alone it says there is no Wi-Fi device.
