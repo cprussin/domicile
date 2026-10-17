@@ -23,7 +23,9 @@
     "typescript": "catalog:"
   },
   "exports": {
-    ".": "./src/bar-item.tsx"
+    ".": "./src/bar-item.tsx",
+    "./PortalSignIn": "./src/PortalSignIn.tsx",
+    "./useCaptivePortal": "./src/useCaptivePortal.ts"
   },
   "files": [
     "src/**",
