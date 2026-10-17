@@ -3,7 +3,7 @@
 
 # The fork's browser-side code that needs //chrome: the command socket, the
 # desk, browser windows, extensions, history, file dialogs, permission prompts,
-# device choosers and pointer warps.
+# device choosers, printing and pointer warps.
 #
 # A separate target because //chrome/browser:browser accepts no new sources,
 # and it keeps the fork to one added dependency in a Chromium-owned file.
@@ -39,6 +39,8 @@ source_set("domicile") {
     "domicile_permissions.h",
     "domicile_pointer_warp.cc",
     "domicile_pointer_warp.h",
+    "domicile_printing.cc",
+    "domicile_printing.h",
     "domicile_shell_fetch.cc",
     "domicile_shell_fetch.h",
     "domicile_shell_windows.cc",
@@ -131,6 +133,9 @@ source_set("domicile") {
     "//components/keyed_service/core",
     # DevTools for a guest's page: Chrome's front end and its bindings.
     "//chrome/browser/devtools",
+    # Printing a guest's page: Chrome's PrintViewManager and its system
+    # dialog.
+    "//chrome/browser/printing",
     # Tab zoom factors and range.
     "//third_party/blink/public/common",
     "//ui/base/mojom:ui_base_types",

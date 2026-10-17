@@ -146,7 +146,8 @@ Understood and not scheduled.
 - **Some permission requests are refused,** including `getDisplayMedia`.
 - **Some file dialogs are refused:** from the shell's own page, and a
   directory dropped on a page.
-- **No `chrome://` pages,** so no printing.
+- **No `chrome://` pages,** so no Print Preview: printing goes straight to
+  the desktop's print dialog.
 - **Some extension calls are refused.**
   [EXTENSIONS.md](docs/architecture/EXTENSIONS.md).
 - **A browser window attached while hidden is visible for a moment,** so the

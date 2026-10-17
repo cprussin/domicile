@@ -136,6 +136,9 @@ class CORE_EXPORT HTMLWebViewElement final
   // Opens DevTools on the guest's page. See WebViewGuest.Inspect.
   void inspect();
 
+  // Prints the guest's page. See WebViewGuest.Print.
+  void print();
+
   // Whether the page is fullscreen, from PageFullscreenChanged.
   bool pageFullscreen() const { return page_fullscreen_; }
   void exitPageFullscreen();

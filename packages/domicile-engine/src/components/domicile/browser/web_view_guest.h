@@ -134,6 +134,12 @@ using InspectCallback =
     base::RepeatingCallback<void(content::RenderFrameHost& frame,
                                  std::optional<gfx::Point> root_point)>;
 
+// Prints `guest`'s page through the desktop's print dialog. Provided by
+// //chrome, which owns printing: see
+// //chrome/browser/domicile/domicile_printing.h.
+using PrintCallback =
+    base::RepeatingCallback<void(content::WebContents& guest)>;
+
 // Answers a guest page's camera and microphone requests. Implemented in
 // //chrome (//chrome/browser/domicile/domicile_permissions.h), whose
 // MediaCaptureDevicesDispatcher asks through the guest's permission prompt.
@@ -279,6 +285,10 @@ class WebViewGuest : public mojom::WebViewGuest,
   // Set once by //chrome, before any guest exists. Runs for Inspect and a
   // menu's kInspect. See InspectCallback.
   static void SetInspect(InspectCallback inspect);
+
+  // Set once by //chrome, before any guest exists. Runs for Print. See
+  // PrintCallback.
+  static void SetPrint(PrintCallback print);
 
   // Set once by //chrome, before any guest exists. See MediaAccess.
   static void SetMediaAccess(MediaAccess* access);
@@ -438,6 +448,7 @@ class WebViewGuest : public mojom::WebViewGuest,
   void RunContextMenuAction(int32_t menu,
                             mojom::WebViewContextMenuAction action) override;
   void Inspect() override;
+  void Print() override;
 
   // Clears the link under the pointer. PreHandleMouseEvent reports it again
   // when the pointer is back over the page.

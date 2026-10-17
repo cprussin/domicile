@@ -314,6 +314,7 @@ if wanted engine; then
       scripts/engine-guard-webview-media-devices.sh \
       scripts/engine-guard-webview-dialog.sh \
       scripts/engine-guard-webview-beforeunload.sh \
+      scripts/engine-guard-webview-print.sh \
       scripts/engine-guard-webview-context-menu.sh \
       scripts/engine-guard-webview-upload.sh \
       scripts/engine-guard-webview-download.sh \
