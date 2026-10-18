@@ -580,6 +580,10 @@ interface WebViewGuest {
   // //chrome/browser/domicile/domicile_devtools.h.
   Inspect();
 
+  // Prints the page, or the focused frame's selection, through the desktop's
+  // print dialog. See //chrome/browser/domicile/domicile_printing.h.
+  Print();
+
   // The shell's document saw the pointer move off the element, so the link
   // under it is cleared until the pointer is back over the page. See
   // WebViewGuestClient.TargetUrlChanged.

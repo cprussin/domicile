@@ -2253,6 +2253,45 @@ describe("BrowserWindow", () => {
     });
   });
 
+  describe("printing", () => {
+    it("prints on Ctrl+Shift+P the page left alone", async () => {
+      const { container } = render(
+        <BrowserWindow
+          behindPanel={false}
+          clickThrough={false}
+          covered={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          fullscreen={false}
+          motion="resting"
+          onDescription={noDescription}
+          onFocusRequest={() => undefined}
+          onIcon={noIcon}
+          onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          url="https://example.com"
+          window="1"
+        />,
+      );
+      const printed = await new Promise<boolean>((resolve) => {
+        view(container).print = () => {
+          resolve(true);
+        };
+        guestPresses(view(container), {
+          ctrlKey: true,
+          key: "P",
+          shiftKey: true,
+        });
+      });
+      expect(printed).toBe(true);
+    });
+  });
+
   describe("finding in the page", () => {
     const renderWindow = () =>
       render(

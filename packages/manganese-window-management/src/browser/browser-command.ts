@@ -10,6 +10,7 @@ export enum BrowserCommand {
   Find = "Find",
   Forward = "Forward",
   Inspect = "Inspect",
+  Print = "Print",
   Reload = "Reload",
   ZoomIn = "ZoomIn",
   ZoomOut = "ZoomOut",
@@ -63,6 +64,11 @@ const ctrlCommandFor = (key: string): BrowserCommand | undefined => {
     // shifted letter arrives capital.
     case "I": {
       return BrowserCommand.Inspect;
+    }
+    // Shift too: Ctrl+P alone is Chrome's Print Preview, which the engine
+    // does not have, and a page may want it.
+    case "P": {
+      return BrowserCommand.Print;
     }
     case "r":
     case "R": {

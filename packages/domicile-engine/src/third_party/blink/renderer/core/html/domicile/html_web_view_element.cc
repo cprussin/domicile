@@ -479,6 +479,13 @@ void HTMLWebViewElement::inspect() {
   }
 }
 
+// A no-op with no guest, like inspect().
+void HTMLWebViewElement::print() {
+  if (guest_.is_bound()) {
+    guest_->Print();
+  }
+}
+
 void HTMLWebViewElement::exitPageFullscreen() {
   if (guest_.is_bound()) {
     guest_->ExitPageFullscreen();
