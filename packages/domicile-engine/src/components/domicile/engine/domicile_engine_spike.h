@@ -12,6 +12,9 @@
 //
 // Only the library holds the browser's mojo invitation, which carries the
 // SpikeProbe pipe, so test harnesses query viz through these functions.
+//
+// Each blocks until the browser answers. One the browser does not answer in
+// 30 seconds stops the process with a fatal log naming it; see probe_wait.h.
 
 #ifdef __cplusplus
 extern "C" {

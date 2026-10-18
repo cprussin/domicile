@@ -42,6 +42,8 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS/lib-last-words.sh"
 # shellcheck source=packages/domicile-engine/scripts/lib-profile.sh
 . "$SCRIPTS/lib-profile.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-broker.sh
+. "$SCRIPTS/lib-broker.sh"
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
@@ -114,7 +116,8 @@ cp "$SCRIPTS/guard-app-survives-compositor-restart.js" "$STAGE/restart.js"
 
 export XDG_RUNTIME_DIR="$RUNTIME"
 COMP_SOCK="$RUNTIME/domicile-app-survives-compositor-restart.sock"
-rm -f "$BROKER" "$COMP_SOCK" "$COMP_SOCK.session" "$ENGINE_LOG" "$COMP_LOG" "$NEXT_LOG"
+fresh_broker
+rm -f "$COMP_SOCK" "$COMP_SOCK.session" "$ENGINE_LOG" "$COMP_LOG" "$NEXT_LOG"
 rm -rf "$PROFILE" "$WATCHED"
 mkdir -p "$PROFILE" "$WATCHED"
 

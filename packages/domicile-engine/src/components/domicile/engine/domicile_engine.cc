@@ -9,6 +9,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -36,6 +37,7 @@
 #include "components/domicile/common/synced_frame.h"
 #include "components/domicile/engine/engine_event_queue.h"
 #include "components/domicile/engine/domicile_engine_spike.h"
+#include "components/domicile/engine/probe_wait.h"
 #include "components/domicile/engine/surface_alpha.h"
 #include "components/domicile/engine/surface_crop.h"
 #include "components/domicile/engine/surface_frames.h"
@@ -84,6 +86,9 @@ namespace {
 constexpr uint64_t kBrokerPipeName = 0;
 // Throwaway; see domicile_engine_spike.h.
 constexpr uint64_t kProbePipeName = 1;
+// How long a spike probe waits for the browser: longer than a guard's whole
+// leg, which takes 15 to 40 seconds.
+constexpr base::TimeDelta kProbePatience = base::Seconds(30);
 
 // The type text crosses the broker under. The browser offers it under every
 // text type a reader asks for (see DomicileTextMimeTypes in
@@ -1412,6 +1417,7 @@ struct DomicileEngine {
     if (!probe_) {
       return;
     }
+    const uint64_t request = ++probe_requests_;
     base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
     probe_->SampleWindowCenter(
         base::BindOnce(
@@ -1422,7 +1428,7 @@ struct DomicileEngine {
               loop->Quit();
             },
             &loop, sampled, argb));
-    loop.Run();
+    AwaitProbe(loop, "window center sample", request);
   }
 
   void SamplePixelOnThread(int32_t x,
@@ -1432,6 +1438,7 @@ struct DomicileEngine {
     if (!probe_) {
       return;
     }
+    const uint64_t request = ++probe_requests_;
     base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
     probe_->SamplePixel(
         gfx::Point(x, y),
@@ -1443,7 +1450,7 @@ struct DomicileEngine {
               loop->Quit();
             },
             &loop, sampled, argb));
-    loop.Run();
+    AwaitProbe(loop, "pixel sample", request);
   }
 
   void FindColorOnThread(uint32_t argb,
@@ -1452,6 +1459,7 @@ struct DomicileEngine {
     if (!probe_) {
       return;
     }
+    const uint64_t request = ++probe_requests_;
     base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
     probe_->CaptureWindow(base::BindOnce(
         [](base::RunLoop* loop, uint32_t wanted, int32_t* found,
@@ -1498,7 +1506,19 @@ struct DomicileEngine {
           loop->Quit();
         },
         &loop, argb, found, out));
-    loop.Run();
+    AwaitProbe(loop, "window capture", request);
+  }
+
+  // Waits in `loop` for the browser's answer to probe `request` number
+  // `number`, which arrives on this thread. A capture viz never serves, or a
+  // browser that is gone, would otherwise hold the caller forever.
+  void AwaitProbe(base::RunLoop& loop,
+                  std::string_view request,
+                  uint64_t number) {
+    if (!domicile::RunUntilQuit(loop, domicile::kProbePatience)) {
+      LOG(FATAL) << domicile::NeverAnswered(request, number,
+                                            domicile::kProbePatience);
+    }
   }
 
   void DestroyBufferOnThread(DomicileSurfaceId surface,
@@ -1543,6 +1563,8 @@ struct DomicileEngine {
   mojo::Remote<domicile::mojom::FrameSinkBroker> broker_;
   // Throwaway; see domicile_engine_spike.h.
   mojo::Remote<domicile::mojom::SpikeProbe> probe_;
+  // Counts probe requests, so a fatal log names the one never answered.
+  uint64_t probe_requests_ = 0;
   base::flat_map<DomicileSurfaceId, std::unique_ptr<domicile::Surface>>
       surfaces_;
   DomicileSurfaceId next_surface_id_ = 1;
