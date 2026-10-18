@@ -81,10 +81,10 @@ index 9a9c2c02..175b4902 100644
    };
  
 diff --git a/ui/gfx/linux/gbm_wrapper.cc b/ui/gfx/linux/gbm_wrapper.cc
-index 2aea5aca..9c9fc129 100644
+index 8d944122..2ccdc770 100644
 --- a/ui/gfx/linux/gbm_wrapper.cc
 +++ b/ui/gfx/linux/gbm_wrapper.cc
-@@ -250,8 +250,12 @@ class Buffer final : public ui::GbmBuffer {
+@@ -259,8 +259,12 @@ class Buffer final : public ui::GbmBuffer {
   private:
    static void UnmapGbmBo(void* pixels, void* context) {
      Buffer* buffer = static_cast<Buffer*>(context);

@@ -40,7 +40,7 @@ which are different types and do not convert; upstream's own
  2 files changed, 19 insertions(+), 4 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index e5eaacc8..a589b551 100644
+index 36a752bd..c26c239e 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -120,6 +120,8 @@ source_set("gbm") {
@@ -52,7 +52,7 @@ index e5eaacc8..a589b551 100644
      "domicile/drm_screen.cc",
      "domicile/drm_screen.h",
      "host/drm_window_host_manager.h",
-@@ -232,6 +234,7 @@ source_set("gbm_unittests") {
+@@ -228,6 +230,7 @@ source_set("gbm_unittests") {
      "gpu/mock_drm_modifiers_filter.cc",
      "gpu/mock_drm_modifiers_filter.h",
      "gpu/proxy_helpers_unittest.cc",

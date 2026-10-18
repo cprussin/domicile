@@ -48,7 +48,7 @@ not yet built or run on hardware.
  5 files changed, 60 insertions(+), 2 deletions(-)
 
 diff --git a/ui/views/BUILD.gn b/ui/views/BUILD.gn
-index cb35a268..583844f0 100644
+index c0d1b5ed..7c6dd601 100644
 --- a/ui/views/BUILD.gn
 +++ b/ui/views/BUILD.gn
 @@ -944,6 +944,7 @@ component("views") {

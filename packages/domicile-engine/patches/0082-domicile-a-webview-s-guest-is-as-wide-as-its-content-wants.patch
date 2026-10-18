@@ -25,7 +25,7 @@ engine job.
  4 files changed, 48 insertions(+), 1 deletion(-)
 
 diff --git a/third_party/blink/renderer/core/exported/web_view_impl.cc b/third_party/blink/renderer/core/exported/web_view_impl.cc
-index b6f1383a..a00d439c 100644
+index 4d475a9e..fbb8c8ca 100644
 --- a/third_party/blink/renderer/core/exported/web_view_impl.cc
 +++ b/third_party/blink/renderer/core/exported/web_view_impl.cc
 @@ -3244,6 +3244,34 @@ gfx::Size WebViewImpl::ContentsPreferredMinimumSize() {
@@ -86,7 +86,7 @@ index 69954024..999e6140 100644
    void SetZoomFactorForDeviceScaleFactor(float device_scale_factor,
                                           float text_scale_multiplier) override;
 diff --git a/third_party/blink/renderer/core/layout/layout_view.cc b/third_party/blink/renderer/core/layout/layout_view.cc
-index 245b6bbe..3a2e75a9 100644
+index 9ecb81f8..2309aaab 100644
 --- a/third_party/blink/renderer/core/layout/layout_view.cc
 +++ b/third_party/blink/renderer/core/layout/layout_view.cc
 @@ -232,6 +232,20 @@ LayoutUnit LayoutView::ComputeMinimumWidth() {
@@ -109,7 +109,7 @@ index 245b6bbe..3a2e75a9 100644
 +
  void LayoutView::AddChild(LayoutObject* new_child, LayoutObject* before_child) {
    NOT_DESTROYED();
-   if (new_child->StyleRef().StyleType() == kPseudoIdViewTransition) {
+   if (new_child->Style().StyleType() == kPseudoIdViewTransition) {
 diff --git a/third_party/blink/renderer/core/layout/layout_view.h b/third_party/blink/renderer/core/layout/layout_view.h
 index 15c92d44..112f72d1 100644
 --- a/third_party/blink/renderer/core/layout/layout_view.h

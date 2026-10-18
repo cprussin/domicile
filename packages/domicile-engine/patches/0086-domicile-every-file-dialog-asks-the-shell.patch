@@ -31,7 +31,7 @@ save from a page in a <webview>.
  5 files changed, 26 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
-index 07ad56e7..7dff20e0 100644
+index 49dd2e1d..ce359858 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
 @@ -6,6 +6,7 @@
@@ -42,7 +42,7 @@ index 07ad56e7..7dff20e0 100644
  #include "chrome/browser/domicile/domicile_shell_windows.h"
  #include "components/domicile/browser/desktop_prefs.h"
  #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-@@ -1730,6 +1731,12 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
+@@ -1729,6 +1730,12 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
  
  void ChromeBrowserMainParts::PreBrowserStart() {
    TRACE_EVENT0("startup", "ChromeBrowserMainParts::PreBrowserStart");
@@ -56,7 +56,7 @@ index 07ad56e7..7dff20e0 100644
      chrome_extra_part->PreBrowserStart();
    }
 diff --git a/chrome/browser/ui/select_file_policy/chrome_select_file_policy.cc b/chrome/browser/ui/select_file_policy/chrome_select_file_policy.cc
-index a49a797e..deef1f88 100644
+index d981a088..32fdb1ce 100644
 --- a/chrome/browser/ui/select_file_policy/chrome_select_file_policy.cc
 +++ b/chrome/browser/ui/select_file_policy/chrome_select_file_policy.cc
 @@ -86,6 +86,10 @@ void ChromeSelectFilePolicy::SelectFileDenied() {
@@ -68,7 +68,7 @@ index a49a797e..deef1f88 100644
 +}
 +
  bool ChromeSelectFilePolicy::FileSelectDialogsAllowed() {
-   DCHECK(g_browser_process);
+   CHECK(g_browser_process, base::NotFatalUntil::M162);
  
 diff --git a/chrome/browser/ui/select_file_policy/chrome_select_file_policy.h b/chrome/browser/ui/select_file_policy/chrome_select_file_policy.h
 index 993b89dc..0e1ed519 100644

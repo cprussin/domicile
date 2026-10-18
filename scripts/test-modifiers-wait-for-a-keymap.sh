@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Checks the engine ignores Wayland modifiers until the host sends a keymap.
 #
-# A host that sends `wl_keyboard.modifiers` before `wl_keyboard.keymap` (sway,
-# for a seat whose keyboard has gone) crashes upstream in
-# `xkb_state_update_mask`. A patch returns no modifiers from
-# `XkbKeyboardLayoutEngine::UpdateModifiers` while it has no xkb state, and
-# `WaylandKeyboardWithoutKeymapTest` in ozone_unittests covers it.
+# A host may send `wl_keyboard.modifiers` before `wl_keyboard.keymap` (sway,
+# for a seat whose keyboard has gone). Upstream
+# `XkbKeyboardLayoutEngine::UpdateModifiers` returns early while it has no xkb
+# state; `WaylandKeyboardWithoutKeymapTest` in ozone_unittests, added by a
+# patch, keeps it that way.
 #
 # Reads the patches, not a Chromium tree, so it runs in the shell group.
 set -u
@@ -20,13 +20,6 @@ fail() { printf '  FAIL  %s\n    %s\n' "$1" "$2"; FAILED=$((FAILED + 1)); }
 
 added="$(cat "$PATCHES"/*.patch 2>/dev/null | grep -a '^+' || true)"
 in_patches() { case "$added" in (*"$1"*) return 0 ;; (*) return 1 ;; esac }
-
-if in_patches "if (!xkb_state_) {"; then
-  ok "UpdateModifiers checks for a keymap"
-else
-  fail "UpdateModifiers checks for a keymap" \
-    "no patch adds the xkb state check, so modifiers before a keymap crash the browser"
-fi
 
 if in_patches "TEST_F(WaylandKeyboardWithoutKeymapTest,"; then
   ok "ozone_unittests sends modifiers before a keymap"

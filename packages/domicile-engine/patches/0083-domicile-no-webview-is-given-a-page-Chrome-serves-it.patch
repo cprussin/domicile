@@ -30,10 +30,10 @@ and both blobs are that file's.
  2 files changed, 13 insertions(+)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 9c6e2c67..39ea0f69 100644
+index 62d4dc5a..de06f069 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -1302,6 +1302,11 @@ source_set("core") {
+@@ -1313,6 +1313,11 @@ source_set("core") {
      "//components/device_event_log",
      "//components/dom_distiller/content/browser",
      "//components/dom_distiller/content/common/mojom",
@@ -46,10 +46,10 @@ index 9c6e2c67..39ea0f69 100644
      "//components/embedder_support:content_settings",
      "//components/embedder_support:user_agent",
 diff --git a/chrome/browser/chrome_content_browser_client_navigation_throttles.cc b/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
-index ce3cc119..4fcaa93f 100644
+index 5ac481c5..1168dc58 100644
 --- a/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
 +++ b/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
-@@ -56,6 +56,7 @@
+@@ -57,6 +57,7 @@
  #include "components/dom_distiller/content/browser/distiller_referrer_throttle.h"
  #include "components/dom_distiller/core/url_constants.h"
  #include "components/dom_distiller/core/url_utils.h"
@@ -57,7 +57,7 @@ index ce3cc119..4fcaa93f 100644
  #include "components/error_page/content/browser/net_error_auto_reloader.h"
  #include "components/guest_view/buildflags/buildflags.h"
  #include "components/history/content/browser/visited_link_navigation_throttle.h"
-@@ -310,6 +311,13 @@ void CreateAndAddChromeThrottlesForNavigation(
+@@ -311,6 +312,13 @@ void CreateAndAddChromeThrottlesForNavigation(
  #endif  // BUILDFLAG(IS_ANDROID)
    }
  

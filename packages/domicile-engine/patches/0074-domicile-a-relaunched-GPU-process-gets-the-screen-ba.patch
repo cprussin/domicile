@@ -30,7 +30,7 @@ series for the call before the reopen.
  1 file changed, 8 insertions(+)
 
 diff --git a/ui/ozone/platform/drm/host/drm_display_host_manager.cc b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
-index 13fdfa41..716f83af 100644
+index 1eb5ea62..7854cf92 100644
 --- a/ui/ozone/platform/drm/host/drm_display_host_manager.cc
 +++ b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
 @@ -560,6 +560,14 @@ void DrmDisplayHostManager::OnGpuProcessLaunched() {

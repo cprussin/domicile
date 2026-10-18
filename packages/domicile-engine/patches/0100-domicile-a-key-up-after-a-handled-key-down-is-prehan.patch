@@ -17,7 +17,7 @@ job builds it on `crux`.
  1 file changed, 4 insertions(+), 5 deletions(-)
 
 diff --git a/content/browser/renderer_host/render_widget_host_impl.cc b/content/browser/renderer_host/render_widget_host_impl.cc
-index f0377b9a..60773cb0 100644
+index 54aefe9e..5f2e69da 100644
 --- a/content/browser/renderer_host/render_widget_host_impl.cc
 +++ b/content/browser/renderer_host/render_widget_host_impl.cc
 @@ -1896,13 +1896,12 @@ void RenderWidgetHostImpl::ForwardKeyboardEventWithCommands(

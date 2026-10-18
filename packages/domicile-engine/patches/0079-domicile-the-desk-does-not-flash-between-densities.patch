@@ -32,7 +32,7 @@ scripts/test-the-desk-does-not-flash-between-densities.sh.
  6 files changed, 139 insertions(+), 37 deletions(-)
 
 diff --git a/cc/layers/picture_layer_impl.cc b/cc/layers/picture_layer_impl.cc
-index 68426f1c..67e9300f 100644
+index 5adb9c27..c4270593 100644
 --- a/cc/layers/picture_layer_impl.cc
 +++ b/cc/layers/picture_layer_impl.cc
 @@ -134,7 +134,8 @@ void PictureLayerImpl::CopyPropertiesTo(LayerImpl* base_layer) const {
@@ -149,7 +149,7 @@ index 68426f1c..67e9300f 100644
  }
  
 diff --git a/cc/layers/picture_layer_impl.h b/cc/layers/picture_layer_impl.h
-index ac2a487d..d16dc165 100644
+index b5cda18a..6cd4ba02 100644
 --- a/cc/layers/picture_layer_impl.h
 +++ b/cc/layers/picture_layer_impl.h
 @@ -20,6 +20,7 @@
@@ -160,7 +160,7 @@ index ac2a487d..d16dc165 100644
  #include "cc/layers/layer.h"
  #include "cc/layers/tile_based_layer_impl.h"
  #include "cc/layers/tile_size_calculator.h"
-@@ -241,6 +242,8 @@ class CC_EXPORT PictureLayerImpl
+@@ -240,6 +241,8 @@ class CC_EXPORT PictureLayerImpl
    void CleanUpTilingsOnActiveLayer();
    // DOMICILE: a tiling for each less dense monitor this layer is shown on.
    // See cc/domicile/display_regions.h.

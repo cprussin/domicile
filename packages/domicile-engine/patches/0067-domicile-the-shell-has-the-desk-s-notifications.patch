@@ -16,7 +16,7 @@ name in a generated-bindings list.
  2 files changed, 12 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index 06ccf8a7..3c44bd0a 100644
+index d81f8475..3b263ded 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
 @@ -335,6 +335,8 @@ generated_dictionary_sources_in_modules = [
@@ -28,7 +28,7 @@ index 06ccf8a7..3c44bd0a 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_locked_event_init.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_locked_event_init.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event_init.h",
-@@ -2420,6 +2422,12 @@ generated_interface_sources_in_modules = [
+@@ -2422,6 +2424,12 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_item.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_tray_item.h",
@@ -42,7 +42,7 @@ index 06ccf8a7..3c44bd0a 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_locked_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event.h",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index d9ecf49d..65080be7 100644
+index 3cec358d..4a1552ac 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
 @@ -321,6 +321,10 @@ static_idl_files_in_modules = [

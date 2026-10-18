@@ -18,7 +18,7 @@ serves and the shell draws.
  1 file changed, 12 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
-index c0efb0e2..07ad56e7 100644
+index 76557f64..49dd2e1d 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
 @@ -8,6 +8,10 @@
@@ -32,7 +32,7 @@ index c0efb0e2..07ad56e7 100644
  
  #include <memory>
  #include <string>
-@@ -1623,6 +1627,14 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
+@@ -1622,6 +1626,14 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
    // And every <webview> a tab of one window, to chrome.tabs, before an
    // extension's first call can ask.
    domicile::StartDesk(profile);

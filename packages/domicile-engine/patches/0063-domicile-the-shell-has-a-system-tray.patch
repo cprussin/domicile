@@ -15,7 +15,7 @@ name in a generated-bindings list.
  2 files changed, 12 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index 814401de..06ccf8a7 100644
+index db876a41..d81f8475 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
 @@ -333,6 +333,8 @@ generated_dictionary_sources_in_modules = [
@@ -36,7 +36,7 @@ index 814401de..06ccf8a7 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_effective_connection_type.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_effective_connection_type.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_encoded_audio_chunk_type.cc",
-@@ -2412,6 +2416,10 @@ generated_interface_sources_in_modules = [
+@@ -2414,6 +2418,10 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme_event.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme_event.h",
@@ -48,7 +48,7 @@ index 814401de..06ccf8a7 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_locked_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event.h",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index 42906e6f..d9ecf49d 100644
+index 12a99aa3..3cec358d 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
 @@ -317,6 +317,10 @@ static_idl_files_in_modules = [

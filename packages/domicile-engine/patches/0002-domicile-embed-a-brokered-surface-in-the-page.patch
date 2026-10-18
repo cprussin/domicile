@@ -38,12 +38,12 @@ Edits seven files Chromium owns, five of them Blink's. The design doc's
  .../core/html/canvas/html_canvas_element.cc   | 64 +++++++++++++++++++
  .../core/html/canvas/html_canvas_element.h    | 29 +++++++++
  .../core/html/canvas/html_canvas_element.idl  |  9 +++
- third_party/blink/renderer/platform/BUILD.gn  |  4 +
+ third_party/blink/renderer/platform/BUILD.gn  |  4 ++
  .../platform/runtime_enabled_features.json5   | 10 +++
  7 files changed, 129 insertions(+), 1 deletion(-)
 
 diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
-index bbce70cd..0e54687d 100644
+index 38122578..b990404b 100644
 --- a/content/browser/BUILD.gn
 +++ b/content/browser/BUILD.gn
 @@ -151,8 +151,9 @@ source_set("browser") {
@@ -57,7 +57,7 @@ index bbce70cd..0e54687d 100644
      "//components/download/public/common:public",
      "//components/embedder_support",
      "//components/embedder_support:user_agent",
-@@ -945,6 +946,8 @@ source_set("browser") {
+@@ -951,6 +952,8 @@ source_set("browser") {
      "dom_storage/session_storage_namespace_handle_impl.h",
      "domicile/domicile_frame_sink_broker.cc",
      "domicile/domicile_frame_sink_broker.h",
@@ -94,7 +94,7 @@ index 203edede..eb72f30c 100644
        registry.get(),
        base::BindRepeating(&RenderProcessHostImpl::BindCompositingModeReporter,
 diff --git a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
-index 13c0ced1..6e621338 100644
+index 5252c618..044565a3 100644
 --- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
 +++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
 @@ -27,6 +27,8 @@
@@ -106,7 +106,7 @@ index 13c0ced1..6e621338 100644
  #include <math.h>
  
  #include <limits>
-@@ -2076,6 +2078,68 @@ bool HTMLCanvasElement::CreateLayer() {
+@@ -2082,6 +2084,68 @@ bool HTMLCanvasElement::CreateLayer() {
    return true;
  }
  
@@ -176,7 +176,7 @@ index 13c0ced1..6e621338 100644
    SetNeedsCompositingUpdate();
  }
 diff --git a/third_party/blink/renderer/core/html/canvas/html_canvas_element.h b/third_party/blink/renderer/core/html/canvas/html_canvas_element.h
-index eb65a26a..2b61b7c2 100644
+index ec3b7105..b3514d80 100644
 --- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.h
 +++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.h
 @@ -47,6 +47,7 @@
@@ -187,7 +187,7 @@ index eb65a26a..2b61b7c2 100644
  #include "third_party/blink/renderer/platform/graphics/surface_layer_bridge.h"
  #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
  #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
-@@ -78,6 +79,8 @@ class HTMLCanvasElement;
+@@ -77,6 +78,8 @@ class HTMLCanvasElement;
  class ImageBitmapOptions;
  class StaticBitmapImageToVideoFrameCopier;
  class SharedContextRateLimiter;
@@ -196,7 +196,7 @@ index eb65a26a..2b61b7c2 100644
  class V8UnionElementOrElementImage;
  
  class
-@@ -320,6 +323,22 @@ class CORE_EXPORT HTMLCanvasElement final
+@@ -318,6 +321,22 @@ class CORE_EXPORT HTMLCanvasElement final
    }
    bool CreateLayer();
  
@@ -219,7 +219,7 @@ index eb65a26a..2b61b7c2 100644
    void DetachContext() override { context_ = nullptr; }
  
    ExecutionContext* GetTopExecutionContext() const override {
-@@ -424,6 +443,12 @@ class CORE_EXPORT HTMLCanvasElement final
+@@ -422,6 +441,12 @@ class CORE_EXPORT HTMLCanvasElement final
    static ContextFactoryVector& RenderingContextFactories();
    static CanvasRenderingContextFactory* GetRenderingContextFactory(int);
  
@@ -232,7 +232,7 @@ index eb65a26a..2b61b7c2 100644
    bool ShouldAccelerate() const;
    void ParseAttribute(const AttributeModificationParams&) override;
    void AttributeChanged(const AttributeModificationParams&) override;
-@@ -493,6 +518,10 @@ class CORE_EXPORT HTMLCanvasElement final
+@@ -502,6 +527,10 @@ class CORE_EXPORT HTMLCanvasElement final
    // and for low latency mode.
    std::unique_ptr<::blink::SurfaceLayerBridge> surface_layer_bridge_;
  
@@ -264,7 +264,7 @@ index b6fe4189..632cc5da 100644
  
  // https://html.spec.whatwg.org/C/#blobcallback
 diff --git a/third_party/blink/renderer/platform/BUILD.gn b/third_party/blink/renderer/platform/BUILD.gn
-index 0adcb689..ab29268a 100644
+index 88b1b994..c25e4225 100644
 --- a/third_party/blink/renderer/platform/BUILD.gn
 +++ b/third_party/blink/renderer/platform/BUILD.gn
 @@ -305,6 +305,8 @@ group("blink_platform_public_deps") {
@@ -286,10 +286,10 @@ index 0adcb689..ab29268a 100644
      "graphics/filters/distant_light_source.h",
      "graphics/filters/fe_blend.cc",
 diff --git a/third_party/blink/renderer/platform/runtime_enabled_features.json5 b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-index c62bce54..c0186eb1 100644
+index 8af79940..2a0e8dd8 100644
 --- a/third_party/blink/renderer/platform/runtime_enabled_features.json5
 +++ b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-@@ -2679,6 +2679,16 @@
+@@ -2682,6 +2682,16 @@
        name: "DocumentPolicyJSProfilingMode",
        status: "experimental",
      },
