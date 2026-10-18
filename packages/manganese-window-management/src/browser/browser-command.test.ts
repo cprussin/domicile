@@ -103,4 +103,13 @@ describe("browserCommandFor", () => {
     ).toBe(BrowserCommand.Inspect);
     expect(browserCommandFor(press("i", { ctrlKey: true }))).toBeUndefined();
   });
+
+  // Chrome's "print using the system dialog". Ctrl+P alone is Chrome's Print
+  // Preview, which the engine does not have.
+  it("prints on Ctrl+Shift+P, and not on Ctrl+P", () => {
+    expect(
+      browserCommandFor(press("P", { ctrlKey: true, shiftKey: true })),
+    ).toBe(BrowserCommand.Print);
+    expect(browserCommandFor(press("p", { ctrlKey: true }))).toBeUndefined();
+  });
 });

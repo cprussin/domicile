@@ -573,6 +573,11 @@ declare global {
      */
     inspect(): void;
     /**
+     * Print the page, or the focused frame's selection, through the desktop's
+     * print dialog.
+     */
+    print(): void;
+    /**
      * The page's site's setting for each of {@link WEBVIEW_PERMISSIONS}, or
      * `{}` for a page that is not `http`, `https` or `chrome-extension`.
      * Changes fire {@link WEBVIEW_SITE_PERMISSIONS_CHANGE_EVENT}.
