@@ -12,6 +12,8 @@
 //                              popup's address. This is what the guard checks
 //   GUARD answer zoom=…        what the popup's tabs.getZoom read after its
 //                              tabs.setZoom on that tab
+//   GUARD answer frames=…      the top frame's url in the popup's
+//                              webNavigation.getAllFrames for that tab
 //   GUARD zoom name=… factor=… window `a` or `b`'s element saw its zoom
 //                              change, to two decimal places
 //
@@ -88,6 +90,7 @@ export const Shell = (_root, desktop) => {
           if (active !== null) {
             say(`answer active=${active}`);
             say(`answer zoom=${answered.get("zoom")}`);
+            say(`answer frames=${answered.get("frames")}`);
           }
         });
       }, SETTLE_MS);

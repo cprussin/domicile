@@ -165,6 +165,8 @@ Patch 0056 attaches helpers to every tab guest on creation:
 - `SessionTabHelper`: tab id, read by `declarativeNetRequest` `tabIds` and
   `webRequest`.
 - `extensions::TabHelper`: `activeTab`, `scripting.executeScript`.
+- `WebNavigationTabObserver`: `webNavigation` events and `getAllFrames`,
+  which password managers such as 1Password fill through.
 - `HistoryTabHelper` and the favicon driver: visits for `chrome.history`. See
   [HISTORY.md](/docs/HISTORY.md).
 
