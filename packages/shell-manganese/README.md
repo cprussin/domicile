@@ -45,8 +45,7 @@ A config module exports `Shell = runManganese(options)` (see
 - **`floating`**: rules for client windows that open floating, such as
   `[{ app: "pinentry" }, { app: "^Slack$", title: "^Huddle" }]`. See
   [WINDOW-MANAGEMENT.md](../manganese-window-management/docs/WINDOW-MANAGEMENT.md#opening-floating).
-- **`keybindings`**: the key table. Defaults to `DEFAULT_KEYBINDINGS` and
-  `DEFAULT_MODES` from
+- **`keybindings`**: the key table. Defaults to `DEFAULT_KEYBINDINGS` from
   `@domicile-desktop/manganese-window-management/keyboard/commands`, sway's
   keys on Meta. See [KEYS.md](../manganese-window-management/docs/KEYS.md).
 

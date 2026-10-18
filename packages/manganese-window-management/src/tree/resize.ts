@@ -1,4 +1,4 @@
-// sway's resize mode for tiled windows: moves share between the focused
+// sway's `resize` for tiled windows: moves share between the focused
 // window and its neighbor.
 
 import type { Direction } from "../direction";

@@ -40,7 +40,7 @@ export type ManganeseOptions = {
   readonly floating?: FloatingOptions;
   /**
    * Shell keybindings, below any the config binds. Defaults to
-   * `DEFAULT_KEYBINDINGS` and `DEFAULT_MODES` (sway's, on Meta).
+   * `DEFAULT_KEYBINDINGS` (sway's, on Meta).
    */
   readonly keybindings?: ShellKeybindings;
 };

@@ -5,10 +5,7 @@ import type { ThemeSource } from "@domicile-desktop/component-library/theme-sour
 import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
 import type { ApplicationsConfig } from "@domicile-desktop/manganese-launcher/applications-config";
 import type { FloatingRules } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
-import {
-  DEFAULT_KEYBINDINGS,
-  DEFAULT_MODES,
-} from "@domicile-desktop/manganese-window-management/keyboard/commands";
+import { DEFAULT_KEYBINDINGS } from "@domicile-desktop/manganese-window-management/keyboard/commands";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { Desktop } from "./Desktop";
@@ -73,5 +70,4 @@ const NO_FLOATING_RULES: FloatingRules = [];
 /** Manganese's default keybindings, defined once so the reference is stable. */
 const DEFAULT_SHELL_KEYBINDINGS: ShellKeybindings = {
   keybindings: DEFAULT_KEYBINDINGS,
-  modes: DEFAULT_MODES,
 };

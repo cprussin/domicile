@@ -878,7 +878,7 @@ export const WindowAction = {
     kind: WindowActionKind.WindowGrabbed as const,
   }),
 
-  /** `resize grow` / `resize shrink`, as bound in resize mode. */
+  /** `resize grow` / `resize shrink`. */
   WindowGrown: (direction: Direction) => ({
     direction,
     kind: WindowActionKind.WindowGrown as const,

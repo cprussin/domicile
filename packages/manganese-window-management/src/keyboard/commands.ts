@@ -4,10 +4,7 @@
 // binding in a shell's options is type-checked where it is written.
 
 import { KeyAction } from "@domicile-desktop/sdk/key-action";
-import type {
-  ModeKeybindings,
-  ShellKeybindings,
-} from "@domicile-desktop/sdk/own-keybindings";
+import type { ModeKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 
 /** A direction. */
 export type Way = "left" | "down" | "up" | "right";
@@ -108,7 +105,6 @@ export const DEFAULT_KEYBINDINGS: ModeKeybindings = {
   "Meta+e": layout("toggle split"),
   "Meta+f": fullscreen(),
   "Meta+minus": scratchpad(),
-  "Meta+r": mode("resize"),
   "Meta+Shift+a": focus("child"),
   "Meta+Shift+f": fullscreen(true),
   "Meta+Shift+minus": move("scratchpad"),
@@ -133,13 +129,4 @@ export const DEFAULT_KEYBINDINGS: ModeKeybindings = {
   ...everyWay("Shift+", move),
   ...everyWorkspace("", workspace),
   ...everyWorkspace("Shift+", moveToWorkspace),
-};
-
-/** Default extra modes: `resize`, entered with `Meta+r`. */
-export const DEFAULT_MODES: NonNullable<ShellKeybindings["modes"]> = {
-  resize: {
-    "Meta+Escape": mode("default"),
-    "Meta+Return": mode("default"),
-    ...everyWay("", grow),
-  },
 };

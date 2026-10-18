@@ -36,7 +36,7 @@ export const FloatBorder = ({
 }: Props) => {
   const events = useFloatBorderDrag({ float, grip, ...handlers });
   return (
-    // Hidden from assistive tech: resize mode offers the same from the
+    // Hidden from assistive tech: `resize grow` offers the same from the
     // keyboard.
     <div
       aria-hidden

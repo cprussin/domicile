@@ -16,7 +16,6 @@ package's default export path:
 | `Tray` | `@domicile-desktop/manganese-bar-module-tray` |
 | `WorkspaceSwitcher` | `@domicile-desktop/manganese-bar-module-workspace-switcher` |
 | `Clock` | `@domicile-desktop/manganese-bar-module-clock` |
-| `Mode` | `@domicile-desktop/manganese-bar-module-mode` |
 | `ThemeSwitch` | `@domicile-desktop/manganese-bar-module-theme-switch` |
 | `IdleInhibitor` | `@domicile-desktop/manganese-bar-module-idle-inhibitor` |
 | `Network` | `@domicile-desktop/manganese-bar-module-network` |
@@ -27,10 +26,11 @@ package's default export path:
 | `Notifications` | `@domicile-desktop/manganese-bar-module-notifications` |
 | `Sharing` | `@domicile-desktop/manganese-bar-module-sharing` |
 
-Items no default bar has, which take props:
+Items no default bar has:
 
 | Item | Package |
 |---|---|
+| `Mode` | `@domicile-desktop/manganese-bar-module-mode` |
 | `Gmail` | `@domicile-desktop/manganese-bar-module-gmail` |
 
 ```tsx
@@ -70,9 +70,9 @@ Every bar and the lock screen share one watch per system readout. See
 
 - **left**: launcher button, tray, workspaces
 - **center**: clock
-- **right**: sharing indicator (while recorded), binding mode (when not
-  `default`), theme selector, idle inhibitor, brightness, volume, Bluetooth,
-  network, battery, notification bell
+- **right**: sharing indicator (while recorded), theme selector, idle
+  inhibitor, brightness, volume, Bluetooth, network, battery, notification
+  bell
 
 ## On the lock screen
 
