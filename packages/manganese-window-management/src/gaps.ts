@@ -20,13 +20,14 @@ const FLOATING_GAP = 10;
 /**
  * The part of the workspace `area` that tiled windows are laid out in: inset by
  * {@link INNER_GAP}, even for a lone window, so the focused window's glow has
- * room at the screen's edges.
+ * room at the screen's edges. The top edge has no inset, since the top bar
+ * above it already separates the windows from the screen's edge.
  */
 export const tiledAreaOf = (area: Rect): Rect => ({
-  height: area.height - 2 * INNER_GAP,
+  height: area.height - INNER_GAP,
   width: area.width - 2 * INNER_GAP,
   x: area.x + INNER_GAP,
-  y: area.y + INNER_GAP,
+  y: area.y,
 });
 
 /** The gap between the windows of a floating group: 0 for a lone window. */
