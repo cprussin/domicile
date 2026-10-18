@@ -303,7 +303,7 @@ export const shifted = (float: Float, direction: Direction): Float => {
     : movedTo(float, float.x, float.y + step);
 };
 
-/** The box one step bigger or smaller, for resize mode. */
+/** The box one step bigger or smaller, for `resize grow`. */
 export const grown = (float: Float, direction: Direction): Float => {
   const step = isForward(direction) ? FLOAT_STEP : -FLOAT_STEP;
   return axisOf(direction) === Axis.Horizontal

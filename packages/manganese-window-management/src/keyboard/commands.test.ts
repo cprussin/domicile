@@ -5,7 +5,6 @@ import { parseCommand } from "./command";
 import {
   brightness,
   DEFAULT_KEYBINDINGS,
-  DEFAULT_MODES,
   exec,
   micMute,
   screenshot,
@@ -15,30 +14,17 @@ import {
 
 describe("manganese's default keys", () => {
   // Every default binding must parse, or that key does nothing.
-  it("are every one a command manganese knows, or a mode it has", () => {
-    const tables = [DEFAULT_KEYBINDINGS, ...Object.values(DEFAULT_MODES)];
-    for (const table of tables) {
-      for (const [chord, action] of Object.entries(table)) {
-        switch (action.kind) {
-          case KeyActionKind.SendShell: {
-            expect(
-              parseCommand(action.args).match({
-                Err: () => false,
-                Ok: () => true,
-              }),
-              chord,
-            ).toBe(true);
-            break;
-          }
-          case KeyActionKind.Mode: {
-            expect(
-              action.name === "default" ||
-                Object.hasOwn(DEFAULT_MODES, action.name),
-              chord,
-            ).toBe(true);
-            break;
-          }
-        }
+  it("are every one a command manganese knows", () => {
+    for (const [chord, action] of Object.entries(DEFAULT_KEYBINDINGS)) {
+      expect(action.kind, chord).toBe(KeyActionKind.SendShell);
+      if (action.kind === KeyActionKind.SendShell) {
+        expect(
+          parseCommand(action.args).match({
+            Err: () => false,
+            Ok: () => true,
+          }),
+          chord,
+        ).toBe(true);
       }
     }
   });

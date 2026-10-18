@@ -7,7 +7,6 @@ import { Brightness } from "@domicile-desktop/manganese-bar-module-brightness";
 import { Clock } from "@domicile-desktop/manganese-bar-module-clock";
 import { IdleInhibitor } from "@domicile-desktop/manganese-bar-module-idle-inhibitor";
 import { LauncherButton } from "@domicile-desktop/manganese-bar-module-launcher-button";
-import { Mode } from "@domicile-desktop/manganese-bar-module-mode";
 import { Network } from "@domicile-desktop/manganese-bar-module-network";
 import { Notifications } from "@domicile-desktop/manganese-bar-module-notifications";
 import { Sharing } from "@domicile-desktop/manganese-bar-module-sharing";
@@ -32,7 +31,6 @@ export const DEFAULT_BAR: BarLayout = {
   ],
   right: [
     <Sharing key="sharing" />,
-    <Mode key="mode" />,
     <ThemeSwitch key="theme" />,
     <IdleInhibitor key="idle-inhibitor" />,
     <Brightness key="brightness" />,

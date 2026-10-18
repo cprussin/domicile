@@ -13,10 +13,7 @@ import type { ApplicationsConfig } from "@domicile-desktop/manganese-launcher/ap
 import { answerOpening } from "@domicile-desktop/manganese-launcher/fixture";
 import { useNotificationsDrawer } from "@domicile-desktop/manganese-notifications/notifications-context";
 import { grabCursorStyles } from "@domicile-desktop/manganese-window-management/grab-cursor-styles";
-import {
-  DEFAULT_KEYBINDINGS,
-  DEFAULT_MODES,
-} from "@domicile-desktop/manganese-window-management/keyboard/commands";
+import { DEFAULT_KEYBINDINGS } from "@domicile-desktop/manganese-window-management/keyboard/commands";
 import {
   SURFACE_TUCK,
   TITLE_BAR,
@@ -294,21 +291,16 @@ const arrived = (id: number, summary: string) => ({
 
 /**
  * One binding in the README sample's form: Meta, Shift if `shift`, the
- * keysym, and the action.
+ * keysym, and the `send-shell` action.
  */
 const line = (
   keysym: string,
   shift: boolean,
   action: string,
-): readonly [chord: string, action: KeyAction] => {
-  const [verb = "", ...rest] = action.split(" ");
-  return [
-    `Meta+${shift ? "Shift+" : ""}${keysym}`,
-    verb === "mode"
-      ? KeyAction.Mode(rest.join(" "))
-      : KeyAction.SendShell(rest),
-  ];
-};
+): readonly [chord: string, action: KeyAction] => [
+  `Meta+${shift ? "Shift+" : ""}${keysym}`,
+  KeyAction.SendShell(action.split(" ").slice(1)),
+];
 
 const DIRECTIONS = [
   ["h", "left"],
@@ -365,7 +357,6 @@ const MANGANESE_KEYS: ShellKeybindings = {
     line("Tab", true, "send-shell floating toggle"),
     line("minus", false, "send-shell scratchpad show"),
     line("minus", true, "send-shell move scratchpad"),
-    line("r", false, "mode resize"),
     ...WORKSPACE_KEYS.map((keysym, at) =>
       line(keysym, false, `send-shell workspace ${String(at + 1)}`),
     ),
@@ -377,15 +368,6 @@ const MANGANESE_KEYS: ShellKeybindings = {
       ),
     ),
   ]),
-  modes: {
-    resize: Object.fromEntries([
-      ...DIRECTIONS.map(([keysym, way]) =>
-        line(keysym, false, `send-shell resize grow ${way}`),
-      ),
-      line("Return", false, "mode default"),
-      line("Escape", false, "mode default"),
-    ]),
-  },
 };
 
 /**
@@ -949,15 +931,6 @@ describe("Shell", () => {
       await user.click(screen.getByRole("button", { name: "1" }));
 
       expect(windowsOnScreen(container)).toEqual(["term"]);
-    });
-
-    it("says when the keys are in resize mode", () => {
-      renderShell();
-      clientAppears("term");
-
-      press("r");
-
-      expect(screen.getByText("resize")).toBeInTheDocument();
     });
 
     it("shows the brightness /sys says", async () => {
@@ -2367,7 +2340,6 @@ describe("Shell", () => {
     it("binds sway's keys when it is given none", () => {
       renderingShell([LEFT], undefined, {
         keybindings: DEFAULT_KEYBINDINGS,
-        modes: DEFAULT_MODES,
       });
       clientAppears("term");
 
@@ -2682,22 +2654,6 @@ describe("Shell", () => {
       press("parenright");
 
       expect(windowsOnScreen(container)).toEqual(["term"]);
-    });
-
-    it("resizes the tiling in the mode the config's `mod+r` enters", () => {
-      const { container } = renderShell();
-      clientAppears("one");
-      clientAppears("two");
-
-      press("r");
-      press("l");
-
-      // The focused window grows and its neighbor shrinks.
-      expect(
-        Number.parseFloat(appElement(container, "two").style.inlineSize),
-      ).toBeGreaterThan(950);
-      press("Return");
-      expect(screen.queryByText("resize")).not.toBeInTheDocument();
     });
 
     it("closes the window being worked in", () => {

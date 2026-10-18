@@ -21,7 +21,7 @@ type Props = {
 export const TileBorder = ({ edge, id, rect, ...handlers }: Props) => {
   const events = useBorderDrag({ edge, ...handlers });
   return (
-    // `aria-hidden`: resize mode offers the same from the keyboard.
+    // `aria-hidden`: `resize grow` offers the same from the keyboard.
     <div
       aria-hidden
       className={cx(

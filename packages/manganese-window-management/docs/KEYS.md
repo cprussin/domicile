@@ -1,8 +1,8 @@
 # Keys
 
 Manganese binds sway's keys on Meta (Super, `Mod4`) by default:
-`DEFAULT_KEYBINDINGS` for mode `default` and `DEFAULT_MODES` for the rest.
-`runManganese({ keybindings })` replaces them.
+`DEFAULT_KEYBINDINGS`, in mode `default`. `runManganese({ keybindings })`
+replaces them.
 
 ## Default bindings
 
@@ -28,18 +28,8 @@ Manganese binds sway's keys on Meta (Super, `Mod4`) by default:
 | XF86AudioRaiseVolume / XF86AudioLowerVolume | Raise or lower the default output's volume by 5%, between 0 and 100%. |
 | XF86AudioMute / XF86AudioMicMute | Toggle the mute of the default output / the default microphone. |
 | XF86MonBrightnessUp / XF86MonBrightnessDown | Raise or lower the brightness by 5%. |
-| Meta+R | Enter resize mode. |
 
 There is no terminal key. Bind one with `exec`.
-
-### Resize mode
-
-- Meta+H/J/K/L (or arrows) grows the window that way. Meta+Return or
-  Meta+Escape leaves.
-- The keys need Meta, unlike sway. `bindKeys` grabs every mode's chords while
-  bound, so a bare `h` in a mode would be taken from every client.
-- A tiled window grows by 1/50 of its container per press. A floating window
-  grows by 10 px.
 
 ## Commands
 
@@ -72,13 +62,14 @@ Manganese-only commands:
 | `clipboard` | Toggle the clipboard history. |
 | `screenshot` | Take a screenshot, as Print does. |
 | `search-clipboard` | Open the newest copy in a browser window: as a site if it is a URL, else as a search. Reads the first 160 characters. |
-| `resize grow left/right/up/down` | Grow the window that way. |
+| `resize grow left/right/up/down` | Grow the window that way: a tiled window by 1/50 of its container, a floating one by 10 px. Unbound by default. |
 | `volume up/down/mute` | Step the default output's volume, or toggle its mute. |
 | `mic mute` | Toggle the default microphone's mute. |
 | `brightness up/down` | Step the brightness. |
 
 - `mode(name)` comes from the SDK's `bindKeys`. Each monitor's page keeps its
-  own mode. The bar shows any mode other than `default`.
+  own mode. The `Mode` bar item, in no default bar, shows any mode other
+  than `default`.
 - `domicile send-shell <command>` runs a command from a terminal:
   `domicile send-shell workspace 2`.
 - An unknown command logs to the console and does nothing.
@@ -104,7 +95,6 @@ Programmer's Dvorak number row:
 import { runManganese } from "@domicile-desktop/manganese";
 import {
   DEFAULT_KEYBINDINGS,
-  DEFAULT_MODES,
   exec,
   moveToWorkspace,
   workspace,
@@ -128,7 +118,6 @@ export const Shell = runManganese({
         ]),
       ),
     },
-    modes: DEFAULT_MODES,
   },
 });
 ```
