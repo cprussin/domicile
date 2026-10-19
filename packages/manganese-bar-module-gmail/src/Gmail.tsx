@@ -1,6 +1,7 @@
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimple";
+import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
 import { css } from "../styled-system/css";
 import { hstack } from "../styled-system/patterns";
 import { inboxAddress, signInAddress } from "./addresses";
@@ -23,7 +24,8 @@ type Props = {
  * is unread. A click opens the inbox. While the browser is not signed in to
  * the account, a button opens Google's sign-in instead.
  *
- * Draws nothing until the first reading, and nothing for an empty inbox.
+ * Draws nothing until the first reading, and nothing for an empty inbox. A
+ * failed read draws a warning, with why in its tooltip.
  */
 export const Gmail = ({ email, inbox, nickname, onOpen }: Props) => {
   const reading = useSharedWatch(inbox);
@@ -72,6 +74,22 @@ const Reading = ({ email, inbox, nickname, onOpen }: ReadingProps) => {
           onOpen={onOpen}
           unread={inbox.unread > 0}
         />
+      );
+    case InboxKind.Failed:
+      return (
+        <button
+          aria-label={`${nickname}: could not read the inbox`}
+          className={itemStyles}
+          onClick={() => {
+            onOpen(inboxAddress(email));
+          }}
+          title={`${nickname}: could not read the inbox: ${inbox.reason}`}
+          type="button"
+        >
+          <EnvelopeSimpleIcon aria-hidden size={15} weight="bold" />
+          <span className={textStyles}>{nickname}</span>
+          <WarningCircleIcon aria-hidden size={15} weight="bold" />
+        </button>
       );
   }
 };

@@ -254,6 +254,8 @@ read with the Google sign-in of the browser windows' profile. Not in
 - **Nothing unread:** an envelope, the nickname and the conversation count.
 - **Unread:** the same with `unread / total`, the count semibold, on the lit
   pill the idle inhibitor shows when on.
+- **Failed read:** the envelope, the nickname and a warning. Its tooltip
+  says why.
 - Click opens the inbox in a browser window.
 - Read every minute, and not while the desktop is locked. Counts are
   conversations, as Gmail's inbox counts them.
