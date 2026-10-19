@@ -6,6 +6,7 @@
 
 #include <optional>
 
+#include "components/domicile/common/forwarded_keys.h"
 #include "components/domicile/common/held_chords.h"
 #include "components/domicile/mojom/browser_windows.mojom-blink.h"
 #include "components/domicile/mojom/control_channel.mojom-blink.h"
@@ -26,7 +27,6 @@
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
-#include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/size_f.h"
@@ -534,11 +534,10 @@ class MODULES_EXPORT DomicileHost final
   String keyboard_app_;
   // The window each forwarded press was sent for, until the key comes up. A
   // release is owed for every press wherever the keyboard has moved since: the
-  // seat's state outlives every window, and a lock key left down latches.
-  HashMap<uint32_t, String> held_keys_;
-  // The keys whose press the engine took as a grabbed chord, until they come
+  // seat's state outlives every window, and a lock key left down latches. And
+  // the keys whose press the engine took as a grabbed chord, until they come
   // up: their release is the desktop's too.
-  HashSet<uint32_t> taken_keys_;
+  domicile::ForwardedKeys<String> forwarded_keys_;
   // What RouteInput() listens with.
   HeapVector<Member<NativeEventListener>> input_listeners_;
 };
