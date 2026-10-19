@@ -25,14 +25,19 @@ OUT="$4"
 ROOTS=(domicile-builder shell-manganese)
 
 # Every manifest is copied because the frozen install checks the lockfile
-# against all of them.
+# against all of them. Each workspace package's version is set to 0.0.0, in its
+# manifest and in `bun.lock`, so the tree, a fixed-output derivation in
+# `flake.nix`, does not change with a version bump. `files` copies the real
+# manifests over these.
 modules() {
   mkdir -p "$OUT/packages"
-  cp "$WORKSPACE/package.json" "$WORKSPACE/bun.lock" "$WORKSPACE/bunfig.toml" "$OUT/"
+  cp "$WORKSPACE/package.json" "$WORKSPACE/bunfig.toml" "$OUT/"
+  sed -E '0,/^  "packages": \{/ s/^(      "version": )"[^"]*"/\1"0.0.0"/' \
+    "$WORKSPACE/bun.lock" >"$OUT/bun.lock"
   for manifest in "$WORKSPACE"/packages/*/package.json; do
     package="$(basename "$(dirname "$manifest")")"
     mkdir -p "$OUT/packages/$package"
-    cp "$manifest" "$OUT/packages/$package/"
+    sed -E 's/^(  "version": )"[^"]*"/\1"0.0.0"/' "$manifest" >"$OUT/packages/$package/package.json"
   done
   (cd "$OUT" && "$BUN" install --production --frozen-lockfile --ignore-scripts \
     --no-progress "${ROOTS[@]/#/--filter=./packages/}")
