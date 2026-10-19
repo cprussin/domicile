@@ -50,8 +50,9 @@ Every package that is not `private` (`@domicile-desktop/sdk`,
 `component-library`, `manganese` and the `system-*` libraries) is published to
 npm. Each merge to main publishes `0.0.0-alpha-<sha>` under the `next`
 dist-tag (`publish-packages.yml`) with npm trusted publishing, so there is no
-token and each version has provenance. A release (`DOMICILE_RELEASE=1`)
-publishes each package's own version under `latest`. The published
+token and each version has provenance. A release, `publish-packages.yml`
+dispatched with `release`, publishes each package's own version under
+`latest`. The published
 copies serve editors and third-party shells; a shell `domicile` builds always
 uses the running Domicile's copies.
 
