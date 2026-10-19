@@ -12,11 +12,11 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::command::{
-    clear_browsing_data_line, config_extensions_line, delete_history_line, extensions_line,
-    history_line, load_shell_line, load_unpacked_line, media_devices_line, open_app_line,
-    open_url_line, reply, run_app_line, set_extension_enabled_line, set_media_device_line,
-    set_site_permission_line, site_permissions_line, uninstall_extension_line, visits_line, Reply,
-    NO_SHELL_WINDOW,
+    clear_browsing_data_line, config_extensions_line, delete_history_line,
+    disable_while_typing_line, extensions_line, history_line, load_shell_line, load_unpacked_line,
+    media_devices_line, open_app_line, open_url_line, reply, run_app_line,
+    set_extension_enabled_line, set_media_device_line, set_site_permission_line,
+    site_permissions_line, uninstall_extension_line, visits_line, Reply, NO_SHELL_WINDOW,
 };
 use crate::extensions::InstalledExtension;
 use crate::history::{BrowsingData, HistoryItem, HistoryQuery};
@@ -257,6 +257,19 @@ pub fn clear_browsing_data(
         Reply::Cleared,
         patience,
     )
+}
+
+/// Tells the engine at `socket` whether the touchpads rest while a keyboard
+/// types, or with no `enabled` only asks, and returns whether they do.
+pub fn disable_while_typing(
+    socket: &Path,
+    enabled: Option<bool>,
+    patience: Duration,
+) -> Result<bool, CommandError> {
+    match answered(socket, &disable_while_typing_line(enabled), patience)? {
+        Reply::DisableWhileTyping { enabled } => Ok(enabled),
+        other => Err(unexpected(socket, &other)),
+    }
 }
 
 /// Sends one command and succeeds only if the engine replies `done`.

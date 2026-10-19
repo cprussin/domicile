@@ -100,6 +100,13 @@ namespace domicile {
 //   -> {"type":"cleared"}
 //   -> {"type":"refused","why":"..."}
 //
+//   {"type":"disable_while_typing","version":1}
+//   {"type":"disable_while_typing","version":1,"enabled":false}
+//   -> {"type":"disable_while_typing","enabled":false}
+//   -> {"type":"refused","why":"..."}
+//
+// `disable_while_typing` is `domicile disable-while-typing`: whether the
+// touchpads rest while a keyboard types, set when the request says.
 // The site permissions, extensions and media devices are the Settings app's,
 // relayed by the supervisor (docs/SETTINGS.md). Names are site_permissions.h's.
 // The history and browsing data are the History app's. Times are milliseconds
@@ -347,6 +354,13 @@ using ClearBrowsingData =
     base::FunctionRef<void(const BrowsingDataClearing& clearing,
                            CommandDone done)>;
 
+// Carries out `disable_while_typing`: sets whether the touchpads rest while a
+// keyboard types when `enabled` has a value, and returns whether they do. Says
+// why not where the engine reads no touchpad.
+using DisableWhileTyping =
+    base::FunctionRef<base::expected<bool, std::string>(
+        std::optional<bool> enabled)>;
+
 // What each command does, injected so this file can be tested with strings.
 struct CommandActions {
   LoadShell load_shell;
@@ -365,6 +379,7 @@ struct CommandActions {
   ListVisits list_visits;
   DeleteVisits delete_visits;
   ClearBrowsingData clear_browsing_data;
+  DisableWhileTyping disable_while_typing;
 };
 
 // Receives the reply line, including its trailing newline.

@@ -65,6 +65,8 @@ struct Told {
   std::string visits_of;
   std::optional<std::vector<base::Time>> deleted;
   std::optional<BrowsingDataClearing> clearing;
+  // Whether the recording `disable_while_typing` has the pads rest.
+  bool typing_rests = true;
 };
 
 // The id the recording `load_unpacked` gives what it loads, and the one the
@@ -280,6 +282,16 @@ std::string Answer(std::string_view line,
     }
     std::move(done).Run(base::ok());
   };
+  auto disable_while_typing = [told, has_window](std::optional<bool> enabled)
+      -> base::expected<bool, std::string> {
+    if (!has_window) {
+      return base::unexpected("no touchpad");
+    }
+    if (enabled) {
+      told->typing_rests = *enabled;
+    }
+    return told->typing_rests;
+  };
   told->reply.clear();
   AnswerCommand(line,
                 {.load_shell = load_shell,
@@ -297,7 +309,8 @@ std::string Answer(std::string_view line,
                  .search_history = search_history,
                  .list_visits = list_visits,
                  .delete_visits = delete_visits,
-                 .clear_browsing_data = clear_browsing_data},
+                 .clear_browsing_data = clear_browsing_data,
+                 .disable_while_typing = disable_while_typing},
                 base::BindOnce([](std::string* out,
                                   std::string line) { *out = std::move(line); },
                                &told->reply));
@@ -820,6 +833,45 @@ TEST(CommandProtocolTest, RefusesASwitchWithoutAnIdAndAnEnabled) {
                           &told)),
             "refused");
   EXPECT_FALSE(told.enabled.has_value());
+}
+
+// Returns the reply's `enabled`, or nothing as for TypeOf.
+std::optional<bool> EnabledOf(const std::string& reply) {
+  const std::optional<base::DictValue> parsed =
+      base::JSONReader::ReadDict(reply, base::JSON_PARSE_RFC);
+  if (!parsed) {
+    return std::nullopt;
+  }
+  return parsed->FindBool("enabled");
+}
+
+// `domicile disable-while-typing`. See docs/RUNNING-A-DESKTOP.md.
+TEST(CommandProtocolTest, SaysWhetherTheTouchpadsRestWhileTyping) {
+  Told told;
+  const std::string reply =
+      Answer(R"({"type":"disable_while_typing","version":1})", &told);
+  EXPECT_EQ(TypeOf(reply), "disable_while_typing");
+  EXPECT_EQ(EnabledOf(reply), true);
+}
+
+TEST(CommandProtocolTest, TurnsDisableWhileTypingOff) {
+  Told told;
+  const std::string reply = Answer(
+      R"({"type":"disable_while_typing","version":1,"enabled":false})", &told);
+  EXPECT_EQ(EnabledOf(reply), false);
+  EXPECT_FALSE(told.typing_rests);
+}
+
+TEST(CommandProtocolTest, RefusesDisableWhileTypingItCannotSet) {
+  Told told;
+  EXPECT_EQ(TypeOf(Answer(
+                R"({"type":"disable_while_typing","version":1,"enabled":"no"})",
+                &told)),
+            "refused");
+  EXPECT_TRUE(told.typing_rests);
+  EXPECT_EQ(WhyOf(Answer(R"({"type":"disable_while_typing","version":1})",
+                         &told, /*has_window=*/false)),
+            "no touchpad");
 }
 
 // The History app, which these replace `chrome.history` and
