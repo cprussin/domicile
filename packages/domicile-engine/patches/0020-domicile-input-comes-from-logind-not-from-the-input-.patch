@@ -527,7 +527,7 @@ index 7a89eae7..4afe766c 100644
  
  #endif  // UI_EVENTS_OZONE_EVDEV_INPUT_DEVICE_OPENER_EVDEV_H_
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 5c7234c2..5dd9d68a 100644
+index 7d1e8ce5..f973267b 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -122,6 +122,10 @@ source_set("gbm") {
@@ -554,7 +554,7 @@ index 5c7234c2..5dd9d68a 100644
      "//gpu/vulkan:buildflags",
      "//ipc",
      "//media:media_buildflags",
-@@ -241,6 +251,7 @@ source_set("gbm_unittests") {
+@@ -237,6 +247,7 @@ source_set("gbm_unittests") {
      "gpu/mock_drm_modifiers_filter.h",
      "gpu/proxy_helpers_unittest.cc",
      "domicile/drm_fullscreen_unittest.cc",

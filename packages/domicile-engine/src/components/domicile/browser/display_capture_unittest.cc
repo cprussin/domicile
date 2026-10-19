@@ -161,7 +161,7 @@ class DisplayCaptureTest : public testing::Test {
     info->coded_size = kSize;
     info->visible_rect = gfx::Rect(kSize);
     info->natural_size = kSize;
-    info->metadata.capture_update_rect = update;
+    info->metadata.capture.update_rect = update;
     capturer_.consumer_->OnFrameCaptured(
         media::mojom::VideoBufferHandle::NewReadOnlyShmemRegion(
             std::move(memory.region)),

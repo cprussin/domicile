@@ -47,14 +47,14 @@ skip visible.
 `GbmPixmapScanoutTest` covers the skip and the warning per kind.
 ---
  ui/ozone/platform/drm/BUILD.gn          |  1 +
- ui/ozone/platform/drm/gpu/gbm_pixmap.cc | 42 ++++++++++++++++++++++++++++++++++++++++--
+ ui/ozone/platform/drm/gpu/gbm_pixmap.cc | 42 +++++++++++++++++++++++--
  2 files changed, 41 insertions(+), 2 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index b7897f32..db4abf9f 100644
+index 0085c91e..08da04a9 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
-@@ -272,6 +272,7 @@
+@@ -268,6 +268,7 @@ source_set("gbm_unittests") {
      "domicile/drm_sleep_unittest.cc",
      "domicile/drm_vt_switcher_unittest.cc",
      "domicile/edid_name_unittest.cc",
@@ -66,7 +66,7 @@ diff --git a/ui/ozone/platform/drm/gpu/gbm_pixmap.cc b/ui/ozone/platform/drm/gpu
 index 3afd12cb..999a840d 100644
 --- a/ui/ozone/platform/drm/gpu/gbm_pixmap.cc
 +++ b/ui/ozone/platform/drm/gpu/gbm_pixmap.cc
-@@ -6,16 +6,38 @@
+@@ -6,10 +6,15 @@
  
  #include <gbm.h>
  #include <memory>
@@ -83,10 +83,10 @@ index 3afd12cb..999a840d 100644
  #include "ui/gfx/native_pixmap_handle.h"
  #include "ui/ozone/platform/drm/gpu/drm_overlay_plane.h"
  #include "ui/ozone/platform/drm/gpu/gbm_surface_factory.h"
- #include "ui/ozone/platform/drm/gpu/gbm_surfaceless.h"
+@@ -17,6 +22,23 @@
  
  namespace ui {
-+
+ 
 +namespace {
 +
 +// DOMICILE: returns true the first time this process skips a buffer of
@@ -103,10 +103,11 @@ index 3afd12cb..999a840d 100644
 +}
 +
 +}  // namespace
- 
++
  GbmPixmap::GbmPixmap(GbmSurfaceFactory* surface_manager,
                       std::unique_ptr<GbmBuffer> buffer,
-@@ -76,7 +98,23 @@
+                      scoped_refptr<DrmFramebuffer> framebuffer)
+@@ -76,7 +98,23 @@ bool GbmPixmap::ScheduleOverlayPlane(
      gfx::AcceleratedWidget widget,
      const gfx::OverlayPlaneData& overlay_plane_data,
      gfx::GpuFenceHandle acquire_fence) {

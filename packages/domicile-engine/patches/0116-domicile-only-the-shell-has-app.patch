@@ -34,7 +34,7 @@ job builds it on `crux`.
  6 files changed, 31 insertions(+), 34 deletions(-)
 
 diff --git a/content/browser/browser_interface_binders.cc b/content/browser/browser_interface_binders.cc
-index ca98f58..ce9bc09 100644
+index ec3892a0..00082701 100644
 --- a/content/browser/browser_interface_binders.cc
 +++ b/content/browser/browser_interface_binders.cc
 @@ -33,6 +33,7 @@
@@ -45,7 +45,7 @@ index ca98f58..ce9bc09 100644
  #include "content/browser/eye_dropper_chooser_impl.h"
  #include "content/browser/handwriting/handwriting_recognition_service_factory.h"
  #include "content/browser/haptics/haptics_service_impl.h"
-@@ -1493,6 +1494,11 @@ void PopulateBinderMapWithContext(
+@@ -1537,6 +1538,11 @@ void PopulateBinderMapWithContext(
    map->Add<optimization_guide::mojom::ModelBroker>(
        &EmptyBinderForFrame<optimization_guide::mojom::ModelBroker>);
  
@@ -58,7 +58,7 @@ index ca98f58..ce9bc09 100644
    GetContentClient()->browser()->RegisterBrowserInterfaceBindersForFrame(host,
                                                                           map);
 diff --git a/content/browser/renderer_host/render_process_host_impl_receiver_bindings.cc b/content/browser/renderer_host/render_process_host_impl_receiver_bindings.cc
-index 781d934..203eded 100644
+index 781d9345..203edede 100644
 --- a/content/browser/renderer_host/render_process_host_impl_receiver_bindings.cc
 +++ b/content/browser/renderer_host/render_process_host_impl_receiver_bindings.cc
 @@ -8,7 +8,6 @@
@@ -95,10 +95,10 @@ index 781d934..203eded 100644
        registry.get(),
        base::BindRepeating(&RenderProcessHostImpl::BindCompositingModeReporter,
 diff --git a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
-index 4887e6f..3d0cbda 100644
+index 1726579d..84c58df1 100644
 --- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
 +++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
-@@ -2114,7 +2114,8 @@ ScriptPromise<IDLUndefined> HTMLCanvasElement::embedExternalSurface(
+@@ -2120,7 +2120,8 @@ ScriptPromise<IDLUndefined> HTMLCanvasElement::embedExternalSurface(
  
    const bool reconfiguring = !!external_surface_embedder_;
    if (!reconfiguring) {
@@ -109,7 +109,7 @@ index 4887e6f..3d0cbda 100644
    external_surface_embedder_->Embed(
        app_id,
 diff --git a/third_party/blink/renderer/core/html/html_frame_element_base.h b/third_party/blink/renderer/core/html/html_frame_element_base.h
-index 7beffa3..8616de1 100644
+index 7beffa3a..8616de12 100644
 --- a/third_party/blink/renderer/core/html/html_frame_element_base.h
 +++ b/third_party/blink/renderer/core/html/html_frame_element_base.h
 @@ -112,8 +112,9 @@ struct DowncastTraits<HTMLFrameElementBase> {
@@ -125,7 +125,7 @@ index 7beffa3..8616de1 100644
  };
  
 diff --git a/third_party/blink/renderer/core/html/html_tag_names.json5 b/third_party/blink/renderer/core/html/html_tag_names.json5
-index aee1a73..19dfb38 100644
+index 2769b8a2..fcc9701f 100644
 --- a/third_party/blink/renderer/core/html/html_tag_names.json5
 +++ b/third_party/blink/renderer/core/html/html_tag_names.json5
 @@ -46,6 +46,9 @@
@@ -138,7 +138,7 @@ index aee1a73..19dfb38 100644
      },
      {
        name: "applet",
-@@ -627,6 +630,8 @@
+@@ -637,6 +640,8 @@
        interfaceName: "HTMLWebViewElement",
        interfaceHeaderDir: "third_party/blink/renderer/core/html/domicile",
        runtimeEnabled: "DomicileExternalSurface",
@@ -148,10 +148,10 @@ index aee1a73..19dfb38 100644
      {
        name: "xmp",
 diff --git a/third_party/blink/renderer/platform/runtime_enabled_features.json5 b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-index cf1675d..e8dd353 100644
+index 2087e5cb..5ffbfe56 100644
 --- a/third_party/blink/renderer/platform/runtime_enabled_features.json5
 +++ b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-@@ -2679,33 +2679,29 @@
+@@ -2682,33 +2682,29 @@
        name: "DocumentPolicyJSProfilingMode",
        status: "experimental",
      },

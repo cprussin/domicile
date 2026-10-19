@@ -135,7 +135,7 @@ void DisplayCapture::OnFrameCaptured(
 
   // An absent or empty update rect is a refresh; the producer redraws all.
   const gfx::Rect damage =
-      info->metadata.capture_update_rect.value_or(gfx::Rect());
+      info->metadata.capture.update_rect.value_or(gfx::Rect());
 
   mojo::PendingRemote<mojom::CapturedFrameHold> hold;
   mojo::MakeSelfOwnedReceiver(std::make_unique<FrameHold>(std::move(callbacks)),

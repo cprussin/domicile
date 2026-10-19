@@ -103,10 +103,10 @@ Claude-Session: https://claude.ai/code/session_0121wHJhHTqCKfhKTwP4R2t1
  3 files changed, 33 insertions(+), 30 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 5dd9d68a..48bd4d31 100644
+index f973267b..9ef4b861 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
-@@ -288,6 +288,20 @@ source_set("gbm_unittests") {
+@@ -284,6 +284,20 @@ source_set("gbm_unittests") {
      "//third_party/libdrm",
      "//ui/base/ime",
      "//ui/display:test_support",
@@ -128,7 +128,7 @@ index 5dd9d68a..48bd4d31 100644
      "//ui/gfx/linux:drm",
      "//ui/gfx/linux:gbm",
 diff --git a/ui/ozone/platform/drm/host/drm_display_host_manager.cc b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
-index 72eeffaf..13fdfa41 100644
+index d6ac3f6d..1eb5ea62 100644
 --- a/ui/ozone/platform/drm/host/drm_display_host_manager.cc
 +++ b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
 @@ -715,9 +715,10 @@ void DrmDisplayHostManager::GpuRelinquishedDisplayControl(bool status) {

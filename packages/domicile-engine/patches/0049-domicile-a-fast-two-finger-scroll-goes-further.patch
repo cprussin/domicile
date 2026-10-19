@@ -92,10 +92,10 @@ index 175b4902..54ffd05d 100644
  
  }  // namespace ui
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 10de02a4..e382152b 100644
+index 6b2c736f..92943ab6 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
-@@ -269,6 +269,11 @@ source_set("gbm_unittests") {
+@@ -265,6 +265,11 @@ source_set("gbm_unittests") {
      "domicile/drm_sleep_unittest.cc",
      "domicile/drm_vt_switcher_unittest.cc",
      "domicile/edid_name_unittest.cc",

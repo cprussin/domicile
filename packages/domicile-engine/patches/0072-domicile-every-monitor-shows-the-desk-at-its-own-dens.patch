@@ -38,10 +38,10 @@ See cc/domicile/display_regions.h.
  15 files changed, 283 insertions(+), 35 deletions(-)
 
 diff --git a/cc/BUILD.gn b/cc/BUILD.gn
-index b9226dd2..96511e9c 100644
+index c9b4172e..47b0ac8f 100644
 --- a/cc/BUILD.gn
 +++ b/cc/BUILD.gn
-@@ -510,6 +510,9 @@ cc_component("cc") {
+@@ -512,6 +512,9 @@ cc_component("cc") {
    public_deps = [
      ":layer_selection_bound",
      "//cc/base",
@@ -52,7 +52,7 @@ index b9226dd2..96511e9c 100644
      "//cc/mojom:mojom_layer_trees",
      "//cc/paint",
 diff --git a/cc/layers/picture_layer_impl.cc b/cc/layers/picture_layer_impl.cc
-index e8e5ecca..68426f1c 100644
+index dcca6cf2..5adb9c27 100644
 --- a/cc/layers/picture_layer_impl.cc
 +++ b/cc/layers/picture_layer_impl.cc
 @@ -24,6 +24,7 @@
@@ -178,7 +178,7 @@ index e8e5ecca..68426f1c 100644
      const {
    DCHECK(AffectedByWillChangeTransformHint());
 diff --git a/cc/layers/picture_layer_impl.h b/cc/layers/picture_layer_impl.h
-index c25d6479..ac2a487d 100644
+index 9c271f3c..b5cda18a 100644
 --- a/cc/layers/picture_layer_impl.h
 +++ b/cc/layers/picture_layer_impl.h
 @@ -12,6 +12,7 @@
@@ -189,7 +189,7 @@ index c25d6479..ac2a487d 100644
  #include <vector>
  
  #include "base/containers/flat_set.h"
-@@ -238,6 +239,10 @@ class CC_EXPORT PictureLayerImpl
+@@ -237,6 +238,10 @@ class CC_EXPORT PictureLayerImpl
    // Returns false if raster translation is not applicable.
    bool CalculateRasterTranslation(gfx::Vector2dF& raster_translation) const;
    void CleanUpTilingsOnActiveLayer();
@@ -200,7 +200,7 @@ index c25d6479..ac2a487d 100644
    float MinimumContentsScale() const;
    float MaximumContentsScale() const;
    void UpdateViewportRectForTilePriorityInContentSpace();
-@@ -422,6 +427,9 @@ class CC_EXPORT PictureLayerImpl
+@@ -421,6 +426,9 @@ class CC_EXPORT PictureLayerImpl
        const TilingSetCoverageIterator<PictureLayerTiling>& iter) override;
  
    gfx::Rect GetScaledViewportForTilePriority(float scale) const override;
@@ -600,7 +600,7 @@ index 478cd5e1..3cd88fb7 100644
      DCHECK(IsMainThread());
      return scroll_animation_.in_progress;
 diff --git a/cc/trees/layer_tree_impl.cc b/cc/trees/layer_tree_impl.cc
-index 00b03f55..47ccd51b 100644
+index cb4cd5df..88a63c4b 100644
 --- a/cc/trees/layer_tree_impl.cc
 +++ b/cc/trees/layer_tree_impl.cc
 @@ -911,6 +911,7 @@ void LayerTreeImpl::PullLayerTreePropertiesFrom(CommitState& commit_state) {
