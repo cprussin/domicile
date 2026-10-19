@@ -159,6 +159,32 @@ TEST_F(DrmCursorFactoryThemeTest, TheDesksThemeIsDrawnOnceItLoads) {
   EXPECT_EQ(wait->frame_delay(), base::Milliseconds(40));
 }
 
+// On a turned monitor `CursorLoader` turns the theme's cursor as it turns
+// Chromium's art. Every frame goes through its turn, each with the theme's
+// hotspot.
+TEST_F(DrmCursorFactoryThemeTest, TheThemesCursorIsTurnedForItsMonitor) {
+  source_.Set(DeskCursorTheme{.name = "Amber", .size = 24});
+  factory_.GetDefaultCursor(mojom::CursorType::kWait);
+  WaitForCursors();
+
+  const scoped_refptr<BitmapCursor> wait =
+      BitmapCursor::FromPlatformCursor(factory_.GetTurnedDefaultCursor(
+          mojom::CursorType::kWait, 1.0f,
+          [](SkBitmap& frame, gfx::Point& hotspot) {
+            frame = Square(frame.width() * 2, SK_ColorGREEN);
+            hotspot.Offset(10, 0);
+          }));
+
+  ASSERT_NE(wait, nullptr);
+  ASSERT_EQ(wait->bitmaps().size(), 2u);
+  for (const SkBitmap& frame : wait->bitmaps()) {
+    EXPECT_EQ(frame.width(), 48);
+    EXPECT_EQ(frame.getColor(0, 0), SK_ColorGREEN);
+  }
+  EXPECT_EQ(wait->hotspot(), gfx::Point(10, 0));
+  EXPECT_EQ(wait->frame_delay(), base::Milliseconds(40));
+}
+
 TEST_F(DrmCursorFactoryThemeTest, ACursorTheThemeLacksIsChromiumsArt) {
   source_.Set(DeskCursorTheme{.name = "Amber", .size = 24});
   factory_.GetDefaultCursor(mojom::CursorType::kPointer);

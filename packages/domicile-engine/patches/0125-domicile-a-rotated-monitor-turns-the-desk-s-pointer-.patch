@@ -1,0 +1,111 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 19 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a rotated monitor turns the desk's pointer theme
+
+Since patch 0121 the desk's XCursor theme answers wm::CursorLoader's
+platform query, and CursorLoader returns a platform cursor as it is. Only
+its assets were turned for the panel (LoadCursorFromAsset), so on a
+rotated monitor the themed pointer did not turn with the desk.
+
+- ui::CursorFactory gains GetTurnedDefaultCursor(type, scale, turn): the
+  default cursor with every frame and its hotspot passed through `turn`.
+  The base ignores `turn`, as on X11 and Wayland the host turns the
+  cursor.
+- On a rotated panel CursorLoader asks for that, turning each frame with
+  wm::ScaleAndRotateCursorBitmapAndHotpoint at rotation_, and caches the
+  answer as it caches an asset, so SetDisplay and a theme load drop it.
+- DrmCursorFactory (src/) overrides it from the theme's frames.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ ui/base/cursor/cursor_factory.cc |  7 +++++++
+ ui/base/cursor/cursor_factory.h  | 14 ++++++++++++++
+ ui/wm/core/cursor_loader.cc      | 23 ++++++++++++++++++++---
+ 3 files changed, 41 insertions(+), 3 deletions(-)
+
+diff --git a/ui/base/cursor/cursor_factory.cc b/ui/base/cursor/cursor_factory.cc
+index 70fc265..4dfc308 100644
+--- a/ui/base/cursor/cursor_factory.cc
++++ b/ui/base/cursor/cursor_factory.cc
+@@ -70,6 +70,13 @@ scoped_refptr<PlatformCursor> CursorFactory::GetDefaultCursor(
+   return GetDefaultCursor(type);
+ }
+ 
++scoped_refptr<PlatformCursor> CursorFactory::GetTurnedDefaultCursor(
++    mojom::CursorType type,
++    float scale,
++    CursorTurn turn) {
++  return GetDefaultCursor(type, scale);
++}
++
+ scoped_refptr<PlatformCursor> CursorFactory::CreateImageCursor(
+     mojom::CursorType type,
+     const SkBitmap& bitmap,
+diff --git a/ui/base/cursor/cursor_factory.h b/ui/base/cursor/cursor_factory.h
+index abcc292..55deef3 100644
+--- a/ui/base/cursor/cursor_factory.h
++++ b/ui/base/cursor/cursor_factory.h
+@@ -10,6 +10,7 @@
+ #include <vector>
+ 
+ #include "base/component_export.h"
++#include "base/functional/function_ref.h"
+ #include "base/observer_list.h"
+ #include "build/build_config.h"
+ #include "ui/base/cursor/mojom/cursor_type.mojom-forward.h"
+@@ -63,6 +64,19 @@ class COMPONENT_EXPORT(UI_BASE_CURSOR) CursorFactory {
+   virtual scoped_refptr<PlatformCursor> GetDefaultCursor(mojom::CursorType type,
+                                                          float scale);
+ 
++  // Domicile: what a backend's default cursor is turned with for a rotated
++  // panel. Called once per frame, each with the cursor's hotspot.
++  using CursorTurn =
++      base::FunctionRef<void(SkBitmap& frame, gfx::Point& hotspot)>;
++
++  // Domicile: `GetDefaultCursor(type, scale)` with every frame passed through
++  // `turn`, for a backend that draws its default cursors on a rotated panel
++  // itself. The base ignores `turn`: elsewhere the host turns the cursor.
++  virtual scoped_refptr<PlatformCursor> GetTurnedDefaultCursor(
++      mojom::CursorType type,
++      float scale,
++      CursorTurn turn);
++
+   // Return the {bitmaps, hotspot} for the default cursor of the specified
+   // `type`. If that cursor is not available or the extraction of the data
+   // fails, return `std::nullopt`.
+diff --git a/ui/wm/core/cursor_loader.cc b/ui/wm/core/cursor_loader.cc
+index 3439ce6..0c7fcf0 100644
+--- a/ui/wm/core/cursor_loader.cc
++++ b/ui/wm/core/cursor_loader.cc
+@@ -206,9 +206,26 @@ scoped_refptr<ui::PlatformCursor> CursorLoader::CursorFromType(
+   // into account the different ways of creating an invisible cursor.
+   scoped_refptr<ui::PlatformCursor> cursor;
+   if (use_platform_cursors_ || type == CursorType::kNone) {
+-    cursor = factory_->GetDefaultCursor(type, scale_);
+-    if (cursor)
+-      return cursor;
++    // Domicile: on a rotated panel the platform's cursor is turned as the
++    // assets are (`LoadCursorFromAsset`). On a tty the desk's XCursor theme
++    // answers here and nothing else turns it. Cached like an asset, so
++    // `SetDisplay` and a theme load drop it.
++    if (rotation_ != display::Display::ROTATE_0 &&
++        type != CursorType::kNone) {
++      cursor = factory_->GetTurnedDefaultCursor(
++          type, scale_, [this](SkBitmap& frame, gfx::Point& hotspot) {
++            wm::ScaleAndRotateCursorBitmapAndHotpoint(1.0f, rotation_, &frame,
++                                                      &hotspot);
++          });
++      if (cursor) {
++        image_cursors_[type] = cursor;
++        return cursor;
++      }
++    } else {
++      cursor = factory_->GetDefaultCursor(type, scale_);
++      if (cursor)
++        return cursor;
++    }
+     // The cursor may fail to load if the cursor theme has just been reset.
+     // We will be notified when the theme is loaded, but at this time we have to
+     // fall back to the assets.
