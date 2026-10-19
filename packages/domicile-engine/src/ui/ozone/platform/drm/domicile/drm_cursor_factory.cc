@@ -6,6 +6,7 @@
 #include <memory>
 #include <optional>
 #include <utility>
+#include <vector>
 
 #include "base/environment.h"
 #include "base/files/file_util.h"
@@ -13,8 +14,10 @@
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/task/thread_pool.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/cursor/platform_cursor.h"
+#include "ui/gfx/geometry/point.h"
 
 namespace ui {
 namespace {
@@ -54,6 +57,14 @@ scoped_refptr<PlatformCursor> DrmCursorFactory::GetDefaultCursor(
 scoped_refptr<PlatformCursor> DrmCursorFactory::GetDefaultCursor(
     mojom::CursorType type,
     float scale) {
+  return GetTurnedDefaultCursor(type, scale,
+                                [](SkBitmap&, gfx::Point&) {});
+}
+
+scoped_refptr<PlatformCursor> DrmCursorFactory::GetTurnedDefaultCursor(
+    mojom::CursorType type,
+    float scale,
+    CursorTurn turn) {
   // `kNone` has no art. `DrmCursor` hides the cursor based on its type, so
   // return the base's typed, bitmapless cursor.
   if (type == mojom::CursorType::kNone) {
@@ -83,7 +94,23 @@ scoped_refptr<PlatformCursor> DrmCursorFactory::GetDefaultCursor(
   }
 
   const auto cursor = cursors->second.find(type);
-  return cursor == cursors->second.end() ? nullptr : cursor->second;
+  if (cursor == cursors->second.end()) {
+    return nullptr;
+  }
+
+  // Each frame is turned with its own copy of the theme's hotspot. A theme
+  // gives every frame the same one, so they all turn it the same way.
+  std::vector<SkBitmap> frames = cursor->second.frames;
+  gfx::Point hotspot;
+  for (SkBitmap& frame : frames) {
+    hotspot = cursor->second.hotspot;
+    turn(frame, hotspot);
+  }
+  const float image_scale = static_cast<float>(size) / theme->size;
+  return frames.size() == 1
+             ? CreateImageCursor(type, frames[0], hotspot, image_scale)
+             : CreateAnimatedCursor(type, frames, hotspot, image_scale,
+                                    cursor->second.frame_delay);
 }
 
 void DrmCursorFactory::ObserveThemeChanges() {}
@@ -100,16 +127,8 @@ void DrmCursorFactory::Loaded(
     int size,
     base::flat_map<mojom::CursorType, XCursorImages> images) {
   loading_.erase(size);
-  const float scale = static_cast<float>(size) / theme.size;
-  base::flat_map<mojom::CursorType, scoped_refptr<PlatformCursor>>& cursors =
-      loaded_[size];
-  for (const auto& [type, cursor] : images) {
-    cursors[type] =
-        cursor.frames.size() == 1
-            ? CreateImageCursor(type, cursor.frames[0], cursor.hotspot, scale)
-            : CreateAnimatedCursor(type, cursor.frames, cursor.hotspot, scale,
-                                   cursor.frame_delay);
-  }
+  const base::flat_map<mojom::CursorType, XCursorImages>& cursors =
+      loaded_[size] = std::move(images);
 
   // The lines to look for on hardware when the pointer did not change.
   if (cursors.empty()) {

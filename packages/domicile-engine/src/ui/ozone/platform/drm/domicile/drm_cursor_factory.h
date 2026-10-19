@@ -69,6 +69,12 @@ class DrmCursorFactory : public BitmapCursorFactory,
   scoped_refptr<PlatformCursor> GetDefaultCursor(mojom::CursorType type,
                                                  float scale) override;
 
+  // As `GetDefaultCursor`, with every frame passed through `turn`.
+  scoped_refptr<PlatformCursor> GetTurnedDefaultCursor(
+      mojom::CursorType type,
+      float scale,
+      CursorTurn turn) override;
+
   // No-op: the theme comes from the desk's config, not a toolkit. The base's
   // `NOTIMPLEMENTED()` would log an error on every start.
   void ObserveThemeChanges() override;
@@ -85,9 +91,7 @@ class DrmCursorFactory : public BitmapCursorFactory,
   const ThemeLoader load_;
 
   // The theme's cursors by size in pixels.
-  base::flat_map<int, base::flat_map<mojom::CursorType,
-                                     scoped_refptr<PlatformCursor>>>
-      loaded_;
+  base::flat_map<int, base::flat_map<mojom::CursorType, XCursorImages>> loaded_;
   // Sizes posted to the thread pool and not yet back.
   base::flat_set<int> loading_;
 
