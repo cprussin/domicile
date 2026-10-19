@@ -12,6 +12,9 @@
 //   2  the witness never appeared, so nothing was measured
 //   3  the probe could not run
 //
+// A capture the browser never answers stops the probe with a fatal log naming
+// it; see probe_wait.h.
+//
 // Colors match exactly; a near match would be an edge or a blend.
 
 #include <poll.h>
