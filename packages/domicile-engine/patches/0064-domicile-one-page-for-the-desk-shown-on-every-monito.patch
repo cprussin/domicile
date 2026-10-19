@@ -59,10 +59,10 @@ index a6efac48..9eb00149 100644
  
    // If certain views were not laid out, make sure they're hidden to avoid
 diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
-index 0e54687d..5f042e63 100644
+index b990404b..e5e8eb10 100644
 --- a/content/browser/BUILD.gn
 +++ b/content/browser/BUILD.gn
-@@ -944,6 +944,8 @@ source_set("browser") {
+@@ -950,6 +950,8 @@ source_set("browser") {
      "dom_storage/dom_storage_context_wrapper.h",
      "dom_storage/session_storage_namespace_handle_impl.cc",
      "dom_storage/session_storage_namespace_handle_impl.h",
@@ -72,7 +72,7 @@ index 0e54687d..5f042e63 100644
      "domicile/domicile_frame_sink_broker.h",
      "domicile/domicile_spike_probe.cc",
 diff --git a/content/browser/renderer_host/render_widget_host_view_base.cc b/content/browser/renderer_host/render_widget_host_view_base.cc
-index a705de62..04384d94 100644
+index 7f5780ea..130454df 100644
 --- a/content/browser/renderer_host/render_widget_host_view_base.cc
 +++ b/content/browser/renderer_host/render_widget_host_view_base.cc
 @@ -25,6 +25,7 @@
@@ -83,7 +83,7 @@ index a705de62..04384d94 100644
  #include "content/browser/gpu/gpu_data_manager_impl.h"
  #include "content/browser/renderer_host/delegated_frame_host.h"
  #include "content/browser/renderer_host/frame_tree.h"
-@@ -1018,6 +1019,14 @@ display::ScreenInfos RenderWidgetHostViewBase::GetNewScreenInfosForUpdate() {
+@@ -1019,6 +1020,14 @@ display::ScreenInfos RenderWidgetHostViewBase::GetNewScreenInfosForUpdate() {
  
    display::ScreenInfos screen_infos;
  

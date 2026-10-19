@@ -17,10 +17,10 @@ thread and the control channel is read on the IO thread.
  2 files changed, 13 insertions(+), 3 deletions(-)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 4fc13229..3d27548c 100644
+index f35ee965..be865ed0 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -2587,9 +2587,11 @@ source_set("browser") {
+@@ -2705,9 +2705,11 @@ source_set("browser") {
      "//components/domain_reliability",
  
      # Domicile's engine fork: serving the shell over domicile://, the
@@ -35,7 +35,7 @@ index 4fc13229..3d27548c 100644
      "//components/domicile:keyboard_layout",
      "//components/domicile:shell_scheme",
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 9050cf36..6a1ca6a1 100644
+index bb7e47bd..d142f129 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -6,6 +6,7 @@
@@ -46,7 +46,7 @@ index 9050cf36..6a1ca6a1 100644
  #include "components/domicile/browser/control_channel.h"
  #include "components/domicile/browser/keyboard_layout.h"
  #include "components/domicile/browser/web_view_guest.h"
-@@ -526,7 +527,14 @@ void PopulateChromeFrameBinders(
+@@ -545,7 +546,14 @@ void PopulateChromeFrameBinders(
                  base::BindPostTask(
                      content::GetUIThreadTaskRunner({}),
                      base::BindRepeating(&domicile::WarpPointerIn,

@@ -22,10 +22,10 @@ engine job.
  2 files changed, 35 insertions(+)
 
 diff --git a/third_party/blink/renderer/core/exported/web_view_impl.cc b/third_party/blink/renderer/core/exported/web_view_impl.cc
-index 210e182a..b6f1383a 100644
+index ae5055c9..4d475a9e 100644
 --- a/third_party/blink/renderer/core/exported/web_view_impl.cc
 +++ b/third_party/blink/renderer/core/exported/web_view_impl.cc
-@@ -4098,6 +4098,30 @@ void WebViewImpl::MainFrameLayoutUpdated() {
+@@ -4087,6 +4087,30 @@ void WebViewImpl::MainFrameLayoutUpdated() {
      observer.DidUpdateMainFrameLayout();
    }
    needs_preferred_size_update_ = true;

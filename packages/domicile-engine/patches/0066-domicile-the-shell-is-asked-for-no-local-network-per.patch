@@ -24,10 +24,10 @@ then never more private than itself, and nothing is asked. Pages in a
  1 file changed, 7 insertions(+)
 
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index d12ec9cc..c76b638d 100644
+index 61708df1..45a9a15c 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
-@@ -2297,6 +2297,13 @@ ChromeContentBrowserClient::DetermineAddressSpaceFromURL(const GURL& url) {
+@@ -2299,6 +2299,13 @@ ChromeContentBrowserClient::DetermineAddressSpaceFromURL(const GURL& url) {
      return network::mojom::IPAddressSpace::kLoopback;
    }
  #endif

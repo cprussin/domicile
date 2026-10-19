@@ -10,6 +10,7 @@
 #include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ref.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/no_destructor.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/api/tabs/tabs_constants.h"
@@ -28,6 +29,7 @@
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_event_histogram_value.h"
 #include "extensions/common/constants.h"
+#include "extensions/common/event_args.h"
 #include "extensions/common/mojom/context_type.mojom.h"
 #include "ui/base/mojom/window_show_state.mojom.h"
 #include "ui/gfx/geometry/rect.h"
@@ -293,8 +295,7 @@ void DomicileWindowController::Add(content::WebContents& guest) {
 
   auto event = std::make_unique<extensions::Event>(
       extensions::events::TABS_ON_CREATED,
-      extensions::api::tabs::OnCreated::kEventName, base::ListValue(),
-      profile());
+      extensions::api::tabs::OnCreated::kEventName, nullptr, profile());
   event->will_dispatch_callback =
       base::BindRepeating(&WillDispatchCreated, tab_id);
   Broadcast(profile(), std::move(event));
@@ -413,15 +414,15 @@ void DomicileWindowController::PopupEmptied(int window_id) {
 void DomicileWindowController::BroadcastWindowEvent(
     DomicileWindowController& window,
     bool created) {
-  base::ListValue args;
+  auto args = base::MakeRefCounted<extensions::EventArgs>();
   // Unpopulated, as WindowsEventRouter sends it, so no per-listener
   // scrubbing is needed.
   if (created) {
-    args.Append(window.CreateWindowValueForExtension(
+    args->data.Append(window.CreateWindowValueForExtension(
         nullptr, kDontPopulateTabs,
         extensions::mojom::ContextType::kUnspecified));
   } else {
-    args.Append(window.GetWindowId());
+    args->data.Append(window.GetWindowId());
   }
   auto event = std::make_unique<extensions::Event>(
       created ? extensions::events::WINDOWS_ON_CREATED
@@ -574,8 +575,7 @@ void DomicileWindowController::Updated(int tab_id,
                                        std::set<std::string> changed) {
   auto event = std::make_unique<extensions::Event>(
       extensions::events::TABS_ON_UPDATED,
-      extensions::api::tabs::OnUpdated::kEventName, base::ListValue(),
-      profile());
+      extensions::api::tabs::OnUpdated::kEventName, nullptr, profile());
   event->will_dispatch_callback =
       base::BindRepeating(&WillDispatchUpdated, tab_id, std::move(changed));
   Broadcast(profile(), std::move(event));
@@ -595,7 +595,9 @@ void DomicileWindowController::Zoomed(int tab_id,
             std::make_unique<extensions::Event>(
                 extensions::events::TABS_ON_ZOOM_CHANGE,
                 extensions::api::tabs::OnZoomChange::kEventName,
-                extensions::api::tabs::OnZoomChange::Create(info), profile()));
+                base::MakeRefCounted<extensions::EventArgs>(
+                    extensions::api::tabs::OnZoomChange::Create(info)),
+                profile()));
 }
 
 void DomicileWindowController::Removed(int tab_id) {
@@ -608,9 +610,9 @@ void DomicileWindowController::Removed(int tab_id) {
   // A popup closes with its tab; the desk's window never closes.
   info.Set(extensions::tabs_constants::kIsWindowClosingKey,
            IsPopup() && GetTabCount() == 0);
-  base::ListValue args;
-  args.Append(tab_id);
-  args.Append(std::move(info));
+  auto args = base::MakeRefCounted<extensions::EventArgs>();
+  args->data.Append(tab_id);
+  args->data.Append(std::move(info));
   Broadcast(profile(), std::make_unique<extensions::Event>(
                            extensions::events::TABS_ON_REMOVED,
                            extensions::api::tabs::OnRemoved::kEventName,
@@ -633,8 +635,8 @@ void DomicileWindowController::ActiveMaybeChanged(std::optional<int> before) {
     base::DictValue info;
     info.Set(kTabIdKey, *after);
     info.Set(extensions::tabs_constants::kWindowIdKey, GetWindowId());
-    base::ListValue args;
-    args.Append(std::move(info));
+    auto args = base::MakeRefCounted<extensions::EventArgs>();
+    args->data.Append(std::move(info));
     Broadcast(profile(), std::make_unique<extensions::Event>(
                              extensions::events::TABS_ON_ACTIVATED,
                              extensions::api::tabs::OnActivated::kEventName,

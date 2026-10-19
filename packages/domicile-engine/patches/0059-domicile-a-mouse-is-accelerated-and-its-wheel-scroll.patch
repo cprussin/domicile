@@ -209,10 +209,10 @@ index 8d6865c1..f1567721 100644
  BASE_DECLARE_FEATURE(kEnableFakeKeyboardHeuristic);
  
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 90c3de2d..b7897f32 100644
+index 2a785f86..0085c91e 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
-@@ -277,6 +277,7 @@ source_set("gbm_unittests") {
+@@ -273,6 +273,7 @@ source_set("gbm_unittests") {
      # linked only into `events_unittests`, which no job here builds, and the
      # console is the one platform whose touchpad goes through libinput.
      "//ui/events/ozone/evdev/domicile/scroll_accelerator_unittest.cc",

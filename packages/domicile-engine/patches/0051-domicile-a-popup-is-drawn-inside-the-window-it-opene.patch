@@ -53,7 +53,7 @@ index c5808a07..c7a7a46e 100644
            params.type != views::Widget::InitParams::TYPE_MENU &&
            params.type != views::Widget::InitParams::TYPE_TOOLTIP)
 diff --git a/ui/views/widget/desktop_aura/desktop_native_widget_aura.cc b/ui/views/widget/desktop_aura/desktop_native_widget_aura.cc
-index c79a1ab2..4bb10fd1 100644
+index ecdbbbb6..61864b5f 100644
 --- a/ui/views/widget/desktop_aura/desktop_native_widget_aura.cc
 +++ b/ui/views/widget/desktop_aura/desktop_native_widget_aura.cc
 @@ -88,6 +88,10 @@

@@ -33,7 +33,7 @@ and both blobs are that file's.
  3 files changed, 37 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index fb71a7d6..3d9daaae 100644
+index a57d8e46..10d5a3de 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -6,7 +6,9 @@
@@ -46,7 +46,7 @@ index fb71a7d6..3d9daaae 100644
  #include "components/domicile/browser/color_scheme.h"
  #include "components/domicile/browser/control_channel.h"
  #include "components/domicile/browser/keyboard_layout.h"
-@@ -571,7 +573,32 @@ void PopulateChromeFrameBinders(
+@@ -590,7 +592,32 @@ void PopulateChromeFrameBinders(
                "domicile: only a domicile:// document may ask for a guest.");
            return;
          }
@@ -81,7 +81,7 @@ index fb71a7d6..3d9daaae 100644
  
    map->Add<image_annotation::mojom::Annotator>(&BindImageAnnotator);
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index 867d2b25..de9382f7 100644
+index 0bea6f22..abc8bcdc 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
 @@ -317,6 +317,8 @@ generated_dictionary_sources_in_modules = [
@@ -93,7 +93,7 @@ index 867d2b25..de9382f7 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_preview_event_init.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_preview_event_init.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_files_event_init.cc",
-@@ -2386,6 +2388,10 @@ generated_interface_sources_in_modules = [
+@@ -2388,6 +2390,10 @@ generated_interface_sources_in_modules = [
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_clipboard_entry.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_clipboard_event.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_clipboard_event.h",
@@ -105,7 +105,7 @@ index 867d2b25..de9382f7 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_file_preview_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_files_event.cc",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index 645abe18..f0596b0a 100644
+index 3f00e776..ea7d9466 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
 @@ -296,6 +296,9 @@ static_idl_files_in_modules = [

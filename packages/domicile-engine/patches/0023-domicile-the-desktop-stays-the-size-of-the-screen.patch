@@ -82,7 +82,7 @@ index efdd1ed9..0ae93652 100644
  
  source_set("browser_tests") {
 diff --git a/chrome/browser/ui/views/exclusive_access/exclusive_access_bubble_views.cc b/chrome/browser/ui/views/exclusive_access/exclusive_access_bubble_views.cc
-index 2266d982..6c2b1873 100644
+index 62121052..2d7d3fcd 100644
 --- a/chrome/browser/ui/views/exclusive_access/exclusive_access_bubble_views.cc
 +++ b/chrome/browser/ui/views/exclusive_access/exclusive_access_bubble_views.cc
 @@ -44,6 +44,10 @@
@@ -123,7 +123,7 @@ index 2266d982..6c2b1873 100644
  // Returns whether `type` indicates a tab-initiated fullscreen mode.
  bool IsTabFullscreenType(ExclusiveAccessBubbleType type) {
    return type == EXCLUSIVE_ACCESS_BUBBLE_TYPE_FULLSCREEN_EXIT_INSTRUCTION ||
-@@ -472,7 +496,18 @@ void ExclusiveAccessBubbleViews::Show() {
+@@ -473,7 +497,18 @@ void ExclusiveAccessBubbleViews::Show() {
    // relying on visible exit instructions. Arming the watchdog would make it
    // always fire and spuriously exit fullscreen (e.g. reverting the
    // --start-fullscreen switch shortly after startup).
