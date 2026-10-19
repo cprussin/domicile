@@ -2,7 +2,8 @@
 # Tests that .github/scripts/publish-packages.sh packs each published
 # `@domicile-desktop/*` package at `0.0.0-alpha-<sha>` for the `next`
 # dist-tag, with siblings at the same version, no `workspace:` or `catalog:`
-# ranges, and the working tree unchanged.
+# ranges, and the working tree unchanged. A release packs each package at its
+# committed version for the `latest` dist-tag.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -94,6 +95,31 @@ if [ -n "$battery" ]; then
   tar -tzf "$battery" | grep -q '^package/dist/battery.js$' &&
     ok "system-battery ships its built dist" ||
     fail "system-battery ships its built dist" "$(tar -tzf "$battery" | head)"
+fi
+
+echo "a release"
+RELEASE="$OUT/release"
+mkdir -p "$RELEASE"
+if ! DOMICILE_RELEASE=1 DOMICILE_PUBLISH_DRY_RUN="$RELEASE" "$PUBLISH" >"$OUT/release.log" 2>&1; then
+  fail "the release dry run succeeds" "$(tail -20 "$OUT/release.log")"
+fi
+grep -q "under the latest dist-tag" "$OUT/release.log" &&
+  ok "publishes under latest" ||
+  fail "publishes under latest" "$(tail -3 "$OUT/release.log")"
+committed() { # package directory
+  jq -r .version "$ROOT/packages/$1/package.json"
+}
+for package in sdk:chrome-sdk manganese:shell-manganese; do
+  tarball="$RELEASE/domicile-desktop-${package%%:*}-$(committed "${package#*:}").tgz"
+  [ -f "$tarball" ] &&
+    ok "@domicile-desktop/${package%%:*} is packed at its committed version" ||
+    fail "@domicile-desktop/${package%%:*} is packed at its committed version" "$(ls "$RELEASE")"
+done
+manganese="$RELEASE/domicile-desktop-manganese-$(committed shell-manganese).tgz"
+if [ -f "$manganese" ]; then
+  [ "$(tar -xzOf "$manganese" package/package.json | jq -r '.dependencies["@domicile-desktop/sdk"]')" = "$(committed chrome-sdk)" ] &&
+    ok "manganese depends on the sdk's committed version" ||
+    fail "manganese depends on the sdk's committed version" "$(tar -xzOf "$manganese" package/package.json | jq .dependencies)"
 fi
 
 [ "$(tree)" = "$before" ] &&

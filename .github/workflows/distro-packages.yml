@@ -29,6 +29,10 @@ on:
         description: Publish the packages as a release
         type: boolean
         default: false
+      release:
+        description: Version the packages as changesets did, not by commit time
+        type: boolean
+        default: false
   # To publish again after a failure: the commit stable.yml promoted, and
   # `publish`.
   workflow_dispatch:
@@ -39,6 +43,10 @@ on:
         required: true
       publish:
         description: Publish the packages as a release
+        type: boolean
+        default: false
+      release:
+        description: Version the packages as changesets did, not by commit time
         type: boolean
         default: false
 
@@ -91,6 +99,8 @@ jobs:
           name: binaries
           path: binaries/
       - run: distro/build.sh binaries distro-out
+        env:
+          DOMICILE_RELEASE: ${{ inputs.release && '1' || '' }}
       # Already compressed.
       - uses: actions/upload-artifact@v7
         with:
