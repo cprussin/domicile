@@ -1,62 +1,76 @@
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 
-import type { Session } from "./gmail-session";
-import { readSession } from "./gmail-session";
-import { syncInbox } from "./gmail-sync";
+import type { GoogleClient } from "./consent";
+import { inboxCounts } from "./gmail-api";
+import type { TokenRefusal } from "./google-token";
+import { refreshAccess, TokenRefusalKind } from "./google-token";
 import { Inbox } from "./inbox";
+import { forgetToken, storedToken } from "./stored-token";
 
-/** How long a page's session is used before the page is read again. */
-const SESSION_MS = 60 * 60 * 1000;
-
-type Held = { session: Session; readAt: number };
+type Held = { token: string; expiresAt: number };
 
 /**
- * Reads the account's inbox with the browser profile's Google sign-in, each
- * call one read. Undocumented: Gmail's own page and sync.
+ * Reads the account's inbox through the Gmail API, each call one read.
  *
- * - The page says whether the profile is signed in to `email`, and holds what
- *   the sync needs. It is read once, and again after an hour or when a sync
- *   fails, which a stale token does.
- * - The sync answers the inbox's conversation counts.
+ * - Before the account signs in, or once Google revokes its refresh token
+ *   (which is then forgotten), it is signed out.
+ * - The refresh token gets an access token, kept until it expires or Gmail
+ *   refuses it.
  *
- * A read rejects when the page fails, or when the sync fails on a page just
- * read.
+ * A read rejects when Google gives no access token, or Gmail no counts.
  */
 export const inboxReader = (
   domicile: Pick<DomicileHost, "fetchWithCookies">,
+  client: GoogleClient,
   email: string,
+  storage?: Parameters<typeof storedToken>[1],
   now: () => number = Date.now,
 ): (() => Promise<Inbox>) => {
   const held: { current: Held | undefined } = { current: undefined };
 
-  const readFresh = async (): Promise<Inbox> =>
-    (await readSession(domicile, email)).match({
-      None: () => {
+  const count = async (access: Held): Promise<Inbox> =>
+    (await inboxCounts(domicile, access.token)).match({
+      Err: (why): Inbox => {
         held.current = undefined;
-        return Promise.resolve(Inbox.SignedOut());
+        throw new Error(why);
       },
-      Some: async (session) => {
-        held.current = { readAt: now(), session };
-        return (await syncInbox(domicile, session)).match({
-          Err: (why): Inbox => {
-            held.current = undefined;
-            throw new Error(why);
-          },
-          Ok: ({ total, unread }): Inbox => Inbox.Counted(total, unread),
-        });
-      },
+      Ok: ({ total, unread }) => Inbox.Counted(total, unread),
     });
 
-  return async () => {
-    const known = held.current;
-    if (known === undefined || now() - known.readAt >= SESSION_MS) {
-      return readFresh();
-    } else {
-      return (await syncInbox(domicile, known.session)).match({
-        Err: () => readFresh(),
-        Ok: ({ total, unread }) =>
-          Promise.resolve(Inbox.Counted(total, unread)),
-      });
+  const refused = (refusal: TokenRefusal): Inbox => {
+    switch (refusal.kind) {
+      case TokenRefusalKind.Revoked: {
+        forgetToken(email, storage);
+        return Inbox.SignedOut();
+      }
+      case TokenRefusalKind.Failed: {
+        throw new Error(refusal.reason);
+      }
     }
   };
+
+  const refreshed = async (refreshToken: string): Promise<Inbox> => {
+    const askedAt = now();
+    return (await refreshAccess(domicile, client, refreshToken)).match({
+      Err: (refusal) => Promise.resolve(refused(refusal)),
+      Ok: (access) => {
+        held.current = {
+          expiresAt: askedAt + access.expiresInMs,
+          token: access.token,
+        };
+        return count(held.current);
+      },
+    });
+  };
+
+  return () =>
+    storedToken(email, storage).match({
+      None: () => Promise.resolve(Inbox.SignedOut()),
+      Some: (refreshToken) => {
+        const access = held.current;
+        return access === undefined || now() >= access.expiresAt
+          ? refreshed(refreshToken)
+          : count(access);
+      },
+    });
 };

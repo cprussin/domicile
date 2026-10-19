@@ -43,7 +43,7 @@ describe("watchInbox", () => {
     const { read } = counting();
     const seen: InboxReading[] = [];
 
-    const stop = watchInbox(read, (inbox) => seen.push(inbox), notPaused);
+    const { stop } = watchInbox(read, (inbox) => seen.push(inbox), notPaused);
     await settle();
     jest.advanceTimersByTime(POLL_MS);
     await settle();
@@ -56,7 +56,7 @@ describe("watchInbox", () => {
     const { read, reads } = counting();
     const paused = { now: true };
 
-    const stop = watchInbox(
+    const { stop } = watchInbox(
       read,
       () => undefined,
       () => paused.now,
@@ -77,7 +77,7 @@ describe("watchInbox", () => {
     ];
     const seen: InboxReading[] = [];
 
-    const stop = watchInbox(
+    const { stop } = watchInbox(
       () => (answers.shift() ?? noAnswerLeft)(),
       (inbox) => seen.push(inbox),
       notPaused,
@@ -97,12 +97,33 @@ describe("watchInbox", () => {
     const { read, reads } = counting();
     const seen: InboxReading[] = [];
 
-    const stop = watchInbox(read, (inbox) => seen.push(inbox), notPaused);
+    const { stop } = watchInbox(read, (inbox) => seen.push(inbox), notPaused);
     stop();
     await settle();
     jest.advanceTimersByTime(POLL_MS * 2);
 
     expect(reads.count).toBe(1);
     expect(seen).toStrictEqual([]);
+  });
+
+  it("answers a reading it is handed, failed or not, as it answers a poll", async () => {
+    const seen: InboxReading[] = [];
+
+    const { answer, stop } = watchInbox(
+      () => Promise.resolve(Inbox.SignedOut()),
+      (inbox) => seen.push(inbox),
+      notPaused,
+    );
+    await settle();
+    answer(Promise.resolve(Inbox.Counted(4, 2)));
+    answer(Promise.reject(new Error("refused")));
+    await settle();
+    stop();
+
+    expect(seen).toStrictEqual([
+      Inbox.SignedOut(),
+      Inbox.Counted(4, 2),
+      Inbox.Failed("Error: refused"),
+    ]);
   });
 });

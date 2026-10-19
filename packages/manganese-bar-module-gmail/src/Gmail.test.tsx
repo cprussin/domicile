@@ -27,6 +27,8 @@ const heldInbox = () => {
 
 const ignoreOpen = () => undefined;
 
+const ignoreSignIn = () => undefined;
+
 /** The item for `inbox`, opening nothing. */
 const shown = (reading: InboxReading) => {
   const held = heldInbox();
@@ -36,6 +38,7 @@ const shown = (reading: InboxReading) => {
       inbox={held.inbox}
       nickname="Work"
       onOpen={ignoreOpen}
+      onSignIn={ignoreSignIn}
     />,
   );
   held.report(reading);
@@ -52,6 +55,7 @@ const opened = (reading: InboxReading, name: string) =>
         inbox={held.inbox}
         nickname="Work"
         onOpen={resolve}
+        onSignIn={ignoreSignIn}
       />,
     );
     held.report(reading);
@@ -66,6 +70,7 @@ describe("Gmail", () => {
         inbox={heldInbox().inbox}
         nickname="Work"
         onOpen={ignoreOpen}
+        onSignIn={ignoreSignIn}
       />,
     );
 
@@ -81,18 +86,23 @@ describe("Gmail", () => {
       ).toBeVisible();
     });
 
-    it("opens Google's sign-in for the account", async () => {
-      const url = new URL(
-        await opened(Inbox.SignedOut(), "Sign in to me@example.com"),
-      );
-
-      expect(url.origin + url.pathname).toBe(
-        "https://accounts.google.com/AccountChooser",
-      );
-      expect(url.searchParams.get("Email")).toBe(EMAIL);
-      expect(url.searchParams.get("continue")).toBe(
-        "https://mail.google.com/mail/?authuser=me%40example.com",
-      );
+    it("signs the account in", async () => {
+      await new Promise<void>((resolve) => {
+        const held = heldInbox();
+        render(
+          <Gmail
+            email={EMAIL}
+            inbox={held.inbox}
+            nickname="Work"
+            onOpen={ignoreOpen}
+            onSignIn={resolve}
+          />,
+        );
+        held.report(Inbox.SignedOut());
+        fireEvent.click(
+          screen.getByRole("button", { name: "Sign in to me@example.com" }),
+        );
+      });
     });
   });
 

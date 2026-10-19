@@ -6,7 +6,7 @@ export enum InboxKind {
 
 /** What the bar knows of one account's inbox. Counts are conversations. */
 export const Inbox = {
-  /** From Gmail's sync: every conversation, and the unread ones. */
+  /** Every conversation, and the unread ones. */
   Counted: (total: number, unread: number) => ({
     kind: InboxKind.Counted as const,
     total,
@@ -14,7 +14,7 @@ export const Inbox = {
   }),
   /** The read failed, for `reason`. */
   Failed: (reason: string) => ({ kind: InboxKind.Failed as const, reason }),
-  /** The browser profile is not signed in to the account. */
+  /** The account has not signed in, or Google revoked its sign-in. */
   SignedOut: () => ({ kind: InboxKind.SignedOut as const }),
 };
 

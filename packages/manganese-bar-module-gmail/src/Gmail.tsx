@@ -4,7 +4,7 @@ import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimpl
 import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
 import { css } from "../styled-system/css";
 import { hstack } from "../styled-system/patterns";
-import { inboxAddress, signInAddress } from "./addresses";
+import { inboxAddress } from "./addresses";
 import type { Inbox } from "./inbox";
 import { InboxKind } from "./inbox";
 
@@ -13,21 +13,23 @@ type Props = {
   email: string;
   /** The account's name on the bar. */
   nickname: string;
-  /** The account's inbox, read with the browser's sign-in. */
+  /** The account's inbox. */
   inbox: SharedWatch<Inbox>;
   /** Opens an address in a browser window. */
   onOpen: (url: string) => void;
+  /** Signs the account in. */
+  onSignIn: () => void;
 };
 
 /**
  * One Gmail account on the bar: its conversation count, lit while any
- * is unread. A click opens the inbox. While the browser is not signed in to
- * the account, a button opens Google's sign-in instead.
+ * is unread. A click opens the inbox. Before the account signs in, a button
+ * signs it in instead.
  *
  * Draws nothing until the first reading, and nothing for an empty inbox. A
  * failed read draws a warning, with why in its tooltip.
  */
-export const Gmail = ({ email, inbox, nickname, onOpen }: Props) => {
+export const Gmail = ({ email, inbox, nickname, onOpen, onSignIn }: Props) => {
   const reading = useSharedWatch(inbox);
   return reading === undefined ? undefined : (
     <Reading
@@ -35,23 +37,24 @@ export const Gmail = ({ email, inbox, nickname, onOpen }: Props) => {
       inbox={reading}
       nickname={nickname}
       onOpen={onOpen}
+      onSignIn={onSignIn}
     />
   );
 };
 
 type ReadingProps = Omit<Props, "inbox"> & { inbox: Inbox };
 
-const Reading = ({ email, inbox, nickname, onOpen }: ReadingProps) => {
+const Reading = ({
+  email,
+  inbox,
+  nickname,
+  onOpen,
+  onSignIn,
+}: ReadingProps) => {
   switch (inbox.kind) {
     case InboxKind.SignedOut:
       return (
-        <button
-          className={itemStyles}
-          onClick={() => {
-            onOpen(signInAddress(email));
-          }}
-          type="button"
-        >
+        <button className={itemStyles} onClick={onSignIn} type="button">
           <EnvelopeSimpleIcon aria-hidden size={15} weight="bold" />
           <span className={textStyles}>Sign in to {email}</span>
         </button>
@@ -94,7 +97,7 @@ const Reading = ({ email, inbox, nickname, onOpen }: ReadingProps) => {
   }
 };
 
-type CountProps = Omit<Props, "inbox"> & {
+type CountProps = Omit<Props, "inbox" | "onSignIn"> & {
   /** The count as the bar shows it. */
   figure: string;
   /** The count in words, for the button's name and tooltip. */
