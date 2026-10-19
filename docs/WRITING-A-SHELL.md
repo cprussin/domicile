@@ -40,6 +40,9 @@ A JavaScript module whose `Shell` export is a function.
   also imported under Bun, which has no DOM, so all DOM work goes in `Shell`.
 - If the module fails to load, has no `Shell`, or `Shell` throws, the page
   shows the error.
+- The page draws nothing until `Shell` returns, so draw your first frame
+  before it does. With React, mount with `flushSync`. A shell that draws later
+  fades in from an empty white page.
 - The contract is framework-agnostic. `runManganese` is manganese's React
   adapter.
 - Each Wayland window becomes an `<app>` element in your page. Where you put

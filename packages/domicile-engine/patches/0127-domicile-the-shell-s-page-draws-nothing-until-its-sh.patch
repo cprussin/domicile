@@ -1,0 +1,85 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Mon, 19 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the shell's page draws nothing until its shell has
+ run
+
+`load_shell`'s view transition captures the new shell document's first
+frame. That frame came while the shell's module loaded, so it was an
+empty white page, and the splash faded to white before the shell drew.
+
+RenderBlockingResourceManager gets one more thing that blocks
+rendering: the shell, which DomicileShell holds from the document's
+start until `Shell` returns or its failure is reported.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`, and guard-shell-handover.sh checks the page
+draws nothing while a slow module loads.
+---
+ .../loader/render_blocking_resource_manager.cc    | 15 +++++++++++++++
+ .../loader/render_blocking_resource_manager.h     | 12 +++++++++++-
+ 2 files changed, 26 insertions(+), 1 deletion(-)
+
+diff --git a/third_party/blink/renderer/core/loader/render_blocking_resource_manager.cc b/third_party/blink/renderer/core/loader/render_blocking_resource_manager.cc
+index d34dfe5..4e47f80 100644
+--- a/third_party/blink/renderer/core/loader/render_blocking_resource_manager.cc
++++ b/third_party/blink/renderer/core/loader/render_blocking_resource_manager.cc
+@@ -245,6 +245,21 @@ void RenderBlockingResourceManager::RemovePendingScript(
+   RenderBlockingResourceUnblocked();
+ }
+ 
++void RenderBlockingResourceManager::AddPendingDomicileShell() {
++  if (document_->body()) {
++    return;
++  }
++  pending_domicile_shell_ = true;
++}
++
++void RenderBlockingResourceManager::RemovePendingDomicileShell() {
++  if (!pending_domicile_shell_) {
++    return;
++  }
++  pending_domicile_shell_ = false;
++  RenderBlockingResourceUnblocked();
++}
++
+ void RenderBlockingResourceManager::WillInsertDocumentBody() {
+   if (!HasNonFontRenderBlockingResources() && HasRenderBlockingFonts()) {
+     EnsureStartFontPreloadMaxFCPDelayTimer();
+diff --git a/third_party/blink/renderer/core/loader/render_blocking_resource_manager.h b/third_party/blink/renderer/core/loader/render_blocking_resource_manager.h
+index 53a983c..4ade3c7 100644
+--- a/third_party/blink/renderer/core/loader/render_blocking_resource_manager.h
++++ b/third_party/blink/renderer/core/loader/render_blocking_resource_manager.h
+@@ -41,7 +41,8 @@ class CORE_EXPORT RenderBlockingResourceManager final
+   bool HasNonFontRenderBlockingResources() const {
+     return pending_stylesheet_owner_nodes_.size() || pending_scripts_.size() ||
+            element_render_blocking_links_->HasElement(
+-               RenderBlockingLevel::kBlock);
++               RenderBlockingLevel::kBlock) ||
++           pending_domicile_shell_;
+   }
+   bool HasRenderBlockingFonts() const {
+     return pending_font_preloads_.size() || imperative_font_loading_count_;
+@@ -75,6 +76,12 @@ class CORE_EXPORT RenderBlockingResourceManager final
+   void EnsureStartFontPreloadMaxFCPDelayTimer();
+   void FontPreloadingTimerFired(TimerBase*);
+ 
++  // Domicile: the shell's document draws nothing until its shell has run, so
++  // that `load_shell`'s view transition crossfades into the shell rather than
++  // into an empty page. See DomicileShell.
++  void AddPendingDomicileShell();
++  void RemovePendingDomicileShell();
++
+   void AddPendingParsingElementLink(const AtomicString& id,
+                                     const HTMLLinkElement* element,
+                                     RenderBlockingLevel blocking_level);
+@@ -117,6 +124,9 @@ class CORE_EXPORT RenderBlockingResourceManager final
+ 
+   unsigned imperative_font_loading_count_ = 0;
+ 
++  // Whether the shell's document waits for its shell to run.
++  bool pending_domicile_shell_ = false;
++
+   HeapTaskRunnerTimer<RenderBlockingResourceManager>
+       font_preload_max_blocking_timer_;
+   HeapTaskRunnerTimer<RenderBlockingResourceManager>

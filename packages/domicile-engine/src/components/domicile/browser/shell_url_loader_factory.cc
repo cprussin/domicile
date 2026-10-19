@@ -199,7 +199,9 @@ std::string ShellURLLoaderFactory::ShellDocument(const std::string& module) {
   //     before, such as the splash, into this one. The new side is live, so
   //     the shell draws during the fade. A shell's CSS can restyle it.
   //
-  // The shell's CSS comes from its module, so nothing paints before it runs.
+  // The shell's CSS comes from its module. Blink's DomicileShell holds the
+  // document's first frame until the shell has run, so the fade is into the
+  // shell rather than an empty page.
   //
   // The module is named in a `domicile-shell-module` meta element. Blink's
   // DomicileShell loads it after the body is parsed and calls its `Shell`

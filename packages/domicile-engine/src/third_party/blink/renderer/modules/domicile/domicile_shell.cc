@@ -11,6 +11,7 @@
 #include "components/domicile/common/domicile_scheme.h"
 #include "third_party/blink/public/mojom/origin_trials/origin_trial_feature.mojom-shared.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_evaluation_result.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_function.h"
 #include "third_party/blink/renderer/bindings/core/v8/to_v8_traits.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_script_runner.h"
@@ -19,6 +20,7 @@
 #include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/html/html_meta_element.h"
+#include "third_party/blink/renderer/core/loader/render_blocking_resource_manager.h"
 #include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
 #include "third_party/blink/renderer/core/script/classic_script.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_host.h"
@@ -35,8 +37,13 @@ namespace {
 // ShellURLLoaderFactory::ShellDocument, which writes it.
 constexpr char kModuleMetaName[] = "domicile-shell-module";
 
-// What runs the shell, as JavaScript: a function of the module's URL and the
-// desktop, evaluated without binding it to any name -- see DomicileShell.
+// What runs the shell, as JavaScript: a function of the module's URL, the
+// desktop and `drawn`, evaluated without binding it to any name -- see
+// DomicileShell.
+//
+// It calls `drawn` however it ends: once `Shell` returns, or once it has said
+// why the shell did not run. The document draws nothing until then, and the
+// report has to show.
 //
 // AND IT REPORTS ITS OWN SHELL FAILING. A module that 404s, will not parse,
 // throws on its first line, has no `Shell`, or whose `Shell` throws, would
@@ -50,7 +57,7 @@ constexpr char kModuleMetaName[] = "domicile-shell-module";
 // ONLY UNTIL `Shell` RETURNS. After that the page belongs to the shell, and a
 // report painted over a working desktop would be worse than the blank window
 // this exists to replace.
-constexpr char kRunShell[] = R"js((async (module, desktop) => {
+constexpr char kRunShell[] = R"js((async (module, desktop, drawn) => {
   const say = (what) => {
     console.error("domicile: " + what);
     const said = document.createElement("pre");
@@ -60,25 +67,30 @@ constexpr char kRunShell[] = R"js((async (module, desktop) => {
       "background:#2b0b0b;color:#ffd7d7;z-index:2147483647");
     document.body.append(said);
   };
-  const shell = await import(module).catch((failure) => {
-    say("the shell module at " + module + " did not load: " + failure +
-      ". The engine serves it out of --domicile-shell-root under the name " +
-      "--domicile-shell-module gave; a module that imports a file which is " +
-      "not there, will not parse, or throws while it loads fails here too.");
-  });
-  if (shell === undefined) {
-    return;
-  }
-  if (typeof shell.Shell !== "function") {
-    say("the shell module at " + module + " has no Shell export. A shell is " +
-      "a module whose Shell export is a function, which Domicile calls with " +
-      "the element to draw in and the desktop.");
-    return;
-  }
   try {
-    shell.Shell(document.body, desktop);
-  } catch (failure) {
-    say("the shell's Shell threw: " + failure);
+    const shell = await import(module).catch((failure) => {
+      say("the shell module at " + module + " did not load: " + failure +
+        ". The engine serves it out of --domicile-shell-root under the name " +
+        "--domicile-shell-module gave; a module that imports a file which " +
+        "is not there, will not parse, or throws while it loads fails here " +
+        "too.");
+    });
+    if (shell === undefined) {
+      return;
+    }
+    if (typeof shell.Shell !== "function") {
+      say("the shell module at " + module + " has no Shell export. A shell " +
+        "is a module whose Shell export is a function, which Domicile calls " +
+        "with the element to draw in and the desktop.");
+      return;
+    }
+    try {
+      shell.Shell(document.body, desktop);
+    } catch (failure) {
+      say("the shell's Shell threw: " + failure);
+    }
+  } finally {
+    drawn();
   }
 }))js";
 
@@ -91,6 +103,25 @@ class DocumentParsed final : public NativeEventListener {
 
  private:
   const base::RepeatingClosure run_;
+};
+
+// Lets the shell's document draw: `drawn` in kRunShell.
+class ShellDrawn final : public ScriptFunction {
+ public:
+  explicit ShellDrawn(DomicileShell& shell) : shell_(shell) {}
+
+  ScriptValue Call(ScriptState*, ScriptValue) override {
+    shell_->LetTheDocumentDraw();
+    return ScriptValue();
+  }
+
+  void Trace(Visitor* visitor) const override {
+    visitor->Trace(shell_);
+    ScriptFunction::Trace(visitor);
+  }
+
+ private:
+  const Member<DomicileShell> shell_;
 };
 
 // The module the document names, resolved against it, or an empty URL for a
@@ -132,10 +163,26 @@ void DomicileShell::Install(LocalDOMWindow& window) {
       BindRepeating(&DomicileShell::Run, WrapWeakPersistent(shell)));
   window.document()->addEventListener(event_type_names::kDOMContentLoaded,
                                       shell->parsed_listener_.Get());
+  // Held until the shell has run, so the first frame is the shell's. Drawn
+  // sooner, the page is empty and white while the module loads, and the view
+  // transition from the shell before (the splash) fades into that. The
+  // manager exists for every HTML document, and the engine serves the shell's
+  // as one.
+  RenderBlockingResourceManager* manager =
+      window.document()->GetRenderBlockingResourceManager();
+  CHECK(manager);
+  manager->AddPendingDomicileShell();
 }
 
 DomicileShell::DomicileShell(LocalDOMWindow& window)
     : Supplement<LocalDOMWindow>(window) {}
+
+void DomicileShell::LetTheDocumentDraw() {
+  GetSupplementable()
+      ->document()
+      ->GetRenderBlockingResourceManager()
+      ->RemovePendingDomicileShell();
+}
 
 void DomicileShell::Run() {
   LocalDOMWindow* window = GetSupplementable();
@@ -144,11 +191,13 @@ void DomicileShell::Run() {
                                 parsed_listener_.Get(), /*use_capture=*/false);
   const KURL module = ModuleOf(*document);
   if (!module.IsValid() || !window->GetFrame()) {
+    LetTheDocumentDraw();
     return;
   }
 
   ScriptState* script_state = ToScriptStateForMainWorld(window->GetFrame());
   if (!script_state) {
+    LetTheDocumentDraw();
     return;
   }
   ScriptState::Scope scope(script_state);
@@ -163,6 +212,7 @@ void DomicileShell::Run() {
           ->RunScriptAndReturnValue(window)
           .GetSuccessValueOrEmpty();
   if (run.IsEmpty() || !run->IsFunction()) {
+    LetTheDocumentDraw();
     return;
   }
 
@@ -174,6 +224,7 @@ void DomicileShell::Run() {
   v8::Local<v8::Value> arguments[] = {
       V8String(isolate, module.GetString()),
       ToV8Traits<DomicileHost>::ToV8(script_state, desktop_.Get()),
+      MakeGarbageCollected<ShellDrawn>(*this)->ToV8Function(script_state),
   };
   std::ignore = V8ScriptRunner::CallFunction(
       run.As<v8::Function>(), window, v8::Undefined(isolate),
