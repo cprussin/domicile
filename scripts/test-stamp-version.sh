@@ -59,11 +59,11 @@ for rev in 0123456789ab "" HEAD; do
   fi
 done
 
-echo "the tree holds only the unstamped version"
+echo "the tree holds no stamped version"
 stamped="$(cd "$ROOT" && for manifest in package.json packages/*/package.json; do
   version="$(jq -r '.version // "0.0.0"' "$manifest")"
-  [ "$version" = 0.0.0 ] || echo "$manifest: $version"
+  [[ "$version" != *-alpha-* ]] || echo "$manifest: $version"
 done)"
-expect "every manifest is 0.0.0" "" "$stamped"
+expect "no manifest is an alpha" "" "$stamped"
 
 [ "$FAILED" -eq 0 ]

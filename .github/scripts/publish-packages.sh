@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Publish every public `@domicile-desktop/*` package to npm as
-# `0.0.0-alpha-<sha>` under the `latest` dist-tag. There is no semver yet.
+# `0.0.0-alpha-<sha>` under the `next` dist-tag. `latest` is left to the
+# versions changesets releases.
 #
 # - `bun pm pack`: bun rewrites `workspace:*` and `catalog:` to real ranges.
 # - `npm publish`: npm supports trusted publishing (GitHub's OIDC token, no
@@ -38,6 +39,7 @@ MANIFESTS=()
 for package in "${PACKAGES[@]}"; do
   MANIFESTS+=("packages/$package/package.json")
 done
+TAG=next
 VERSION="$(scripts/stamp-version.sh "$(git rev-parse HEAD)" "${MANIFESTS[@]}")"
 bun install --ignore-scripts
 
@@ -51,7 +53,7 @@ for package in "${PACKAGES[@]}"; do
 done
 
 if [ -n "${DOMICILE_PUBLISH_DRY_RUN:-}" ]; then
-  echo "packed $VERSION into $OUT"
+  echo "packed $VERSION into $OUT, to publish under the $TAG dist-tag"
   exit 0
 fi
 
@@ -63,5 +65,5 @@ for package in "${PACKAGES[@]}"; do
     echo "$name@$VERSION is already on npm"
     continue
   fi
-  npm publish "$tarball" --tag latest --access public --provenance
+  npm publish "$tarball" --tag "$TAG" --access public --provenance
 done

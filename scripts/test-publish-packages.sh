@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Tests that .github/scripts/publish-packages.sh packs each published
-# `@domicile-desktop/*` package at `0.0.0-alpha-<sha>`, with siblings at the
-# same version, no `workspace:` or `catalog:` ranges, and the working tree
-# unchanged.
+# `@domicile-desktop/*` package at `0.0.0-alpha-<sha>` for the `next`
+# dist-tag, with siblings at the same version, no `workspace:` or `catalog:`
+# ranges, and the working tree unchanged.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -33,6 +33,9 @@ listed="$(grep -v '^\(#\|$\)' "$ROOT/.github/scripts/published-packages" | sort)
 if ! DOMICILE_PUBLISH_DRY_RUN="$OUT" "$PUBLISH" >"$OUT/log" 2>&1; then
   fail "the dry run succeeds" "$(tail -20 "$OUT/log")"
 fi
+grep -q "under the next dist-tag" "$OUT/log" &&
+  ok "publishes under next, leaving latest to releases" ||
+  fail "publishes under next, leaving latest to releases" "$(tail -3 "$OUT/log")"
 
 MANGANESE=(
   manganese manganese-host manganese-address manganese-bar manganese-page-requests
