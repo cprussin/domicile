@@ -186,6 +186,11 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   Chromium's `PrintDialogLinuxPortal`, so `view.print()` and a page's
   `window.print()` reach this backend as any application's print does. Print
   Preview is off: it is a `chrome://` page.
+- **Browser windows capture through the portal.** A page's
+  `getDisplayMedia()` opens a ScreenCast session from the engine, as any
+  application does, through webrtc's PipeWire capturer. The page gets the
+  same picker and indicator. See
+  [SHELL-BROWSER-WINDOWS.md](SHELL-BROWSER-WINDOWS.md#permissions).
 - **The shell shows active sharing.** `portal_requests` carries `capturing`:
   each running session (id, app, what it holds). The shell stops one by
   answering its id with `stop`. `<PortalDialogs />` draws the indicator;
