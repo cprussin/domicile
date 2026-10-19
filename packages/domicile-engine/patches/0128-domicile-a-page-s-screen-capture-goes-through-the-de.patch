@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Mon, 19 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a page's screen capture goes through the desktop's
+ portal
+
+The engine is the Wayland desktop, so it runs with no WAYLAND_DISPLAY.
+webrtc's IsRunningUnderWayland() requires it, so no screen capturer was
+made and getDisplayMedia() found no screen.
+
+CreateScreenCapturer makes webrtc's PipeWire capturer whenever PipeWire
+is built in, asking the portal to embed the pointer. It asks the
+desktop's ScreenCast portal when capture starts; the shell draws its
+picker of windows, monitors and regions. Every caller gets it, which in
+the engine is a page's getDisplayMedia().
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ content/public/browser/desktop_capture.cc | 14 ++++++++++++--
+ 1 file changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/content/public/browser/desktop_capture.cc b/content/public/browser/desktop_capture.cc
+index 070c3b8..c07c214 100644
+--- a/content/public/browser/desktop_capture.cc
++++ b/content/public/browser/desktop_capture.cc
+@@ -29,6 +29,7 @@
+ #if defined(WEBRTC_USE_PIPEWIRE)
+ #include "base/environment.h"
+ #include "base/nix/xdg_util.h"
++#include "third_party/webrtc/modules/desktop_capture/linux/wayland/base_capturer_pipewire.h"
+ #endif
+ 
+ #if BUILDFLAG(IS_WIN)
+@@ -89,11 +90,20 @@ std::unique_ptr<webrtc::DesktopCapturer> CreateScreenCapturer(
+   }
+ #endif  // BUILDFLAG(IS_CHROMEOS)
+ 
+-#if BUILDFLAG(IS_ANDROID)
++#if defined(WEBRTC_USE_PIPEWIRE)
++  // Domicile: the engine is the Wayland desktop, so it runs with no
++  // WAYLAND_DISPLAY, which webrtc's IsRunningUnderWayland() requires. Every
++  // screen comes from the desktop's ScreenCast portal, whose picker also
++  // offers windows and regions. The portal draws the pointer into the frames:
++  // webrtc's cursor monitor has the same WAYLAND_DISPLAY check.
++  options.set_prefer_cursor_embedded(true);
++  return std::make_unique<webrtc::BaseCapturerPipeWire>(
++      options, webrtc::CaptureType::kAnyScreenContent);
++#elif BUILDFLAG(IS_ANDROID)
+   return std::make_unique<DesktopCapturerAndroid>(options);
+ #else
+   return webrtc::DesktopCapturer::CreateScreenCapturer(options);
+-#endif  // BUILDFLAG(IS_ANDROID)
++#endif
+ }
+ 
+ std::unique_ptr<webrtc::DesktopCapturer> CreateWindowCapturer(

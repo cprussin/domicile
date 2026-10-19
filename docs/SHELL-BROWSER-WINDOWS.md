@@ -380,7 +380,13 @@ frame.addEventListener(WEBVIEW_PERMISSION_REQUEST_EVENT, (event) => {
   when showing it.
 - **Notifications** default to `ask`, like the rest
   ([NOTIFICATIONS.md](/docs/architecture/NOTIFICATIONS.md)).
-- **Screen capture** (`getDisplayMedia`) is refused.
+- **Screen capture** (`getDisplayMedia`) asks no site permission. The
+  desktop's ScreenCast portal asks when capture starts, in the shell's picker
+  ([PORTALS.md](PORTALS.md)). The page gets the window, monitor or region
+  picked, with the pointer and no audio. A tab of its own is refused.
+  - The promise resolves before the pick. Canceling the picker ends the
+    track; the promise does not reject.
+  - `displaySurface` is always `monitor`, whatever was picked.
 
 Manganese draws both in the address bar's site permissions panel
 (`window-management/browser/SitePermissions.tsx`).

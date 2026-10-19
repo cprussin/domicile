@@ -642,9 +642,11 @@ class WebViewGuest : public mojom::WebViewGuest,
   void CloseContents(content::WebContents* source) override;
 
   // Camera and microphone requests go through MediaAccess, so they ask the
-  // shell like any other permission. Other capture, such as getDisplayMedia,
-  // is refused as content's default does: Chrome's screen picker is a dialog
-  // the shell cannot place.
+  // shell like any other permission. getDisplayMedia is granted at once: the
+  // desktop's ScreenCast portal asks when capture starts, in a picker the
+  // shell draws. Chrome's own screen picker is a dialog the shell cannot
+  // place. Other capture, such as of a tab, is refused as content's default
+  // does.
   void RequestMediaAccessPermission(
       content::WebContents* web_contents,
       const content::MediaStreamRequest& request,

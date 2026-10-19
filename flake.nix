@@ -189,7 +189,8 @@
 
         # Chromium `dlopen`s `libEGL.so.1` at run time, which
         # `autoPatchelfHook` cannot see. Without it on the path the GPU process
-        # exits and the window stays white.
+        # exits and the window stays white. It also `dlopen`s
+        # `libpipewire-0.3.so.0` for a page's screen capture.
         #
         # A wrapper, not an rpath: chrome re-execs itself for its zygote and
         # renderers, and only environment variables reach those children.
@@ -208,6 +209,7 @@
                 pkgs.mesa
                 pkgs.libgbm
                 pkgs.libGL
+                pkgs.pipewire
               ]
             }" \
             --prefix XDG_DATA_DIRS : "${

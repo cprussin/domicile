@@ -34,6 +34,7 @@
 #include "components/domicile/browser/file_choice.h"
 #include "components/domicile/browser/placeholder_stage.h"
 #include "components/domicile/browser/render_process.h"
+#include "components/domicile/browser/screen_capture.h"
 #include "components/domicile/browser/shortcut_registry.h"
 #include "components/domicile/browser/site_permissions.h"
 #include "components/permissions/permissions_client.h"
@@ -1768,9 +1769,15 @@ void WebViewGuest::RequestMediaAccessPermission(
     content::WebContents* web_contents,
     const content::MediaStreamRequest& request,
     content::MediaResponseCallback callback) {
+  if (IsScreenCapture(request.video_type)) {
+    std::move(callback).Run(*PortalScreenCapture(),
+                            blink::mojom::MediaStreamRequestResult::OK,
+                            /*ui=*/nullptr);
+    return;
+  }
   if (!IsDeviceCapture(request.audio_type, request.video_type)) {
     LOG(WARNING) << "domicile: a <webview>'s page asked to capture something "
-                    "other than a camera or microphone; it is refused.";
+                    "other than a camera, microphone or screen; it is refused.";
     content::WebContentsDelegate::RequestMediaAccessPermission(
         web_contents, request, std::move(callback));
     return;
