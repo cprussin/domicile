@@ -1,0 +1,63 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 15 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a domicile:// document fetches its own files
+
+Blink refused fetch() on domicile:// before any loader saw it: the
+scheme was standard and secure but not in the Fetch API set. The
+splash's fetch("progress.json") failed, so it never left "Getting
+ready". XMLHttpRequest and import() were unaffected.
+
+- `ChromeContentRendererClient::RenderThreadStarted` registers the
+  scheme with `RegisterURLSchemeAsSupportingFetchAPI`.
+- `ShellURLLoaderFactory::MayReadFiles` serves the shell's and an app's
+  files only to their own origin. Every frame uses the factory, so a
+  site in a `<webview>` could otherwise read them with fetch() or
+  XMLHttpRequest.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ chrome/renderer/BUILD.gn                          | 1 +
+ chrome/renderer/chrome_content_renderer_client.cc | 9 +++++++++
+ 2 files changed, 10 insertions(+)
+
+diff --git a/chrome/renderer/BUILD.gn b/chrome/renderer/BUILD.gn
+index 8eef9b2..d87c046 100644
+--- a/chrome/renderer/BUILD.gn
++++ b/chrome/renderer/BUILD.gn
+@@ -154,6 +154,7 @@ static_library("renderer") {
+     "//components/country_codes",
+     "//components/crx_file",
+     "//components/dom_distiller/content/renderer",
++    "//components/domicile:common",
+     "//components/facilitated_payments/content/renderer",
+     "//components/facilitated_payments/core/features",
+     "//components/feed:feature_list",
+diff --git a/chrome/renderer/chrome_content_renderer_client.cc b/chrome/renderer/chrome_content_renderer_client.cc
+index f209aa8..9a71149 100644
+--- a/chrome/renderer/chrome_content_renderer_client.cc
++++ b/chrome/renderer/chrome_content_renderer_client.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/renderer/chrome_content_renderer_client.h"
+ 
++#include "components/domicile/common/domicile_scheme.h"
++
+ #include <functional>
+ #include <memory>
+ #include <optional>
+@@ -620,6 +622,13 @@ void ChromeContentRendererClient::RenderThreadStarted() {
+   WebSecurityPolicy::RegisterURLSchemeAsSupportingFetchAPI(
+       WebString::FromAscii(chrome::kChromeExperimentalSiteTokenProviderScheme));
+ 
++  // Domicile's engine fork. A domicile:// document fetch()es its own files,
++  // such as the splash's progress.json; without this Blink refuses the scheme
++  // before any loader sees the request. ShellURLLoaderFactory serves a file
++  // only to its own origin, so no other page can read one.
++  WebSecurityPolicy::RegisterURLSchemeAsSupportingFetchAPI(
++      WebString::FromAscii(domicile::kDomicileScheme));
++
+   // This doesn't work in single-process mode.
+   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+           switches::kSingleProcess)) {

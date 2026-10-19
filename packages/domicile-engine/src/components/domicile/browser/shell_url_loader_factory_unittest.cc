@@ -6,6 +6,7 @@
 #include "base/files/file_path.h"
 #include "components/domicile/common/domicile_scheme.h"
 #include "net/http/http_response_headers.h"
+#include "services/network/public/mojom/fetch_api.mojom-shared.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -304,6 +305,76 @@ TEST(ShellURLLoaderFactoryTest, AnAppServesNothingAtAnotherHost) {
       AppRoot(), kAppHost,
       GURL("domicile://app-00000000000000000000000000000000/notes.js"),
       &path));
+}
+
+// The modes a page's fetch(), XMLHttpRequest, <img> and import() use.
+constexpr network::mojom::RequestMode kPageModes[] = {
+    network::mojom::RequestMode::kCors,
+    network::mojom::RequestMode::kNoCors,
+    network::mojom::RequestMode::kSameOrigin,
+};
+
+TEST(ShellURLLoaderFactoryTest, AnOriginMayReadItsOwnFiles) {
+  // The splash's fetch("progress.json") and an app's fetch of its own data.
+  // Registered as ChromeContentClient does, or every origin here is opaque.
+  url::ScopedSchemeRegistryForTests scheme_registry;
+  url::AddStandardScheme(kDomicileScheme, url::SCHEME_WITH_HOST);
+
+  const GURL app_file(std::string("domicile://") + kAppHost + "/notes.json");
+  for (const network::mojom::RequestMode mode : kPageModes) {
+    EXPECT_TRUE(ShellURLLoaderFactory::MayReadFiles(
+        mode, url::Origin::Create(GURL("domicile://shell/")),
+        GURL("domicile://shell/progress.json")))
+        << mode;
+    EXPECT_TRUE(ShellURLLoaderFactory::MayReadFiles(
+        mode, url::Origin::Create(app_file), app_file))
+        << mode;
+  }
+}
+
+TEST(ShellURLLoaderFactoryTest, NoOtherOriginMayReadTheShellsFiles) {
+  // The scheme supports the Fetch API and every frame uses this factory,
+  // including sites in a <webview>, so this is what keeps the shell's files
+  // from them.
+  url::ScopedSchemeRegistryForTests scheme_registry;
+  url::AddStandardScheme(kDomicileScheme, url::SCHEME_WITH_HOST);
+
+  const std::optional<url::Origin> others[] = {
+      url::Origin::Create(GURL("https://example.com/")),
+      url::Origin::Create(GURL(std::string("domicile://") + kAppHost + "/")),
+      url::Origin::Create(GURL("domicile://home/")),
+      url::Origin(),
+      std::nullopt,
+  };
+  for (const std::optional<url::Origin>& other : others) {
+    for (const network::mojom::RequestMode mode : kPageModes) {
+      EXPECT_FALSE(ShellURLLoaderFactory::MayReadFiles(
+          mode, other, GURL("domicile://shell/progress.json")))
+          << (other ? other->Serialize() : "no initiator") << " " << mode;
+    }
+  }
+}
+
+TEST(ShellURLLoaderFactoryTest, TheShellMayNotReadAnAppsFiles) {
+  url::ScopedSchemeRegistryForTests scheme_registry;
+  url::AddStandardScheme(kDomicileScheme, url::SCHEME_WITH_HOST);
+
+  EXPECT_FALSE(ShellURLLoaderFactory::MayReadFiles(
+      network::mojom::RequestMode::kCors,
+      url::Origin::Create(GURL("domicile://shell/")),
+      GURL(std::string("domicile://") + kAppHost + "/notes.json")));
+}
+
+TEST(ShellURLLoaderFactoryTest, ANavigationIsLeftToTheNavigationsGates) {
+  // `--app=domicile://shell/` has no initiator. A site's navigation to the
+  // scheme is refused before it gets here: the scheme is not web-safe, and
+  // MayShowInWebView keeps it out of a <webview>.
+  url::ScopedSchemeRegistryForTests scheme_registry;
+  url::AddStandardScheme(kDomicileScheme, url::SCHEME_WITH_HOST);
+
+  EXPECT_TRUE(ShellURLLoaderFactory::MayReadFiles(
+      network::mojom::RequestMode::kNavigate, std::nullopt,
+      GURL("domicile://shell/")));
 }
 
 TEST(AppDocumentTest, NamesTheModuleItsAppIsIn) {
