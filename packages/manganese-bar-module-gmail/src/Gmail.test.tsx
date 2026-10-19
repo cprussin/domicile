@@ -132,4 +132,27 @@ describe("Gmail", () => {
       ).toBe("https://mail.google.com/mail/?authuser=me%40example.com");
     });
   });
+
+  describe("failed", () => {
+    it("warns, naming why", () => {
+      shown(Inbox.Failed("Gmail's page answered 500"));
+
+      const button = screen.getByRole("button", {
+        name: "Work: could not read the inbox",
+      });
+      expect(button).toHaveAttribute(
+        "title",
+        "Work: could not read the inbox: Gmail's page answered 500",
+      );
+    });
+
+    it("opens the account's inbox", async () => {
+      expect(
+        await opened(
+          Inbox.Failed("Gmail's page answered 500"),
+          "Work: could not read the inbox",
+        ),
+      ).toBe("https://mail.google.com/mail/?authuser=me%40example.com");
+    });
+  });
 });
