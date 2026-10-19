@@ -23,9 +23,10 @@ use domicile_launch::app_entry::app_entry;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
 use domicile_launch::cli::{invocation, CliError, Invocation};
 use domicile_launch::command_socket::{
-    clear_browsing_data, config_extensions, delete_history, extensions, history, load_shell,
-    load_unpacked, media_devices, open_app, open_url, run_app, set_extension_enabled,
-    set_media_device, set_site_permission, site_permissions, uninstall_extension, visits,
+    clear_browsing_data, config_extensions, delete_history, disable_while_typing, extensions,
+    history, load_shell, load_unpacked, media_devices, open_app, open_url, run_app,
+    set_extension_enabled, set_media_device, set_site_permission, site_permissions,
+    uninstall_extension, visits,
 };
 use domicile_launch::components::{builder, components, our_shell, Components};
 use domicile_launch::compositor_socket::{screenshot, send_shell};
@@ -425,6 +426,10 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
             Ok(ExitCode::SUCCESS)
         }
         Response::Opened | Response::Sent => Ok(ExitCode::SUCCESS),
+        Response::DisableWhileTyping { enabled } => {
+            println!("{}", if enabled { "on" } else { "off" });
+            Ok(ExitCode::SUCCESS)
+        }
         Response::Captured { file } => {
             println!("{}", file.display());
             Ok(ExitCode::SUCCESS)
@@ -1000,6 +1005,10 @@ fn answer_a_command(
                 },
                 clear_browsing_data: &|data| {
                     clear_browsing_data(engine, data, CLEAR_WITHIN).map_err(|why| why.to_string())
+                },
+                disable_while_typing: &|enabled| {
+                    disable_while_typing(engine, enabled, ANSWER_WITHIN)
+                        .map_err(|why| why.to_string())
                 },
             },
         )

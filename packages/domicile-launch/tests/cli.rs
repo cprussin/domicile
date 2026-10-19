@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use domicile_launch::cli::{invocation, CliError, Invocation};
-use domicile_launch::control::Request;
+use domicile_launch::control::{Request, Switch};
 use domicile_launch::power::Power;
 
 fn run(args: &[&str]) -> Result<Invocation, CliError> {
@@ -288,6 +288,45 @@ fn send_shell_sends_every_word_after_it_as_the_command() {
 #[test]
 fn send_shell_with_no_command_is_refused() {
     assert_eq!(run(&["send-shell"]), Err(CliError::NothingToSend));
+}
+
+#[test]
+fn disable_while_typing_takes_on_off_toggle_or_nothing() {
+    let asked = |to| {
+        Ok(Invocation::Ask {
+            request: Request::DisableWhileTyping { to },
+        })
+    };
+    assert_eq!(run(&["disable-while-typing"]), asked(None));
+    assert_eq!(
+        run(&["disable-while-typing", "on"]),
+        asked(Some(Switch::On))
+    );
+    assert_eq!(
+        run(&["disable-while-typing", "off"]),
+        asked(Some(Switch::Off))
+    );
+    assert_eq!(
+        run(&["disable-while-typing", "toggle"]),
+        asked(Some(Switch::Toggle))
+    );
+}
+
+#[test]
+fn disable_while_typing_refuses_anything_else() {
+    assert_eq!(
+        run(&["disable-while-typing", "maybe"]),
+        Err(CliError::NotASwitch {
+            said: "maybe".to_string()
+        })
+    );
+    assert_eq!(
+        run(&["disable-while-typing", "on", "now"]),
+        Err(CliError::Extra {
+            verb: "disable-while-typing on".to_string(),
+            extra: "now".to_string()
+        })
+    );
 }
 
 #[test]

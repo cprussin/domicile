@@ -1,0 +1,405 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Mon, 19 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a touchpad rests while the keyboard types
+
+A palm on the pad while typing moved the pointer and tapped. libinput has
+disable-while-typing, but it pairs a pad with a keyboard only inside one
+libinput context, and evdev opens each device in its own: keyboards go to
+`EventConverterEvdevImpl` and never reach libinput at all.
+
+- `TypingGuard` (`domicile/typing_guard.{h,cc}`) holds the rule, with
+  libinput's timeouts: one key rests the pads 200 ms, typing 500 ms.
+  Modifiers, keys past F1 and Ctrl/Alt/Super shortcuts rest nothing. A
+  release goes the way its press went, and a held button keeps motion
+  passing.
+- `InputDeviceFactoryEvdev` owns one and hands it to every converter
+  (`EventConverterEvdev::SetTypingGuard`). A keyboard reports its keys; a
+  libinput touchpad drops motion, scrolls and buttons it says to.
+- On by default. `InputDeviceSettingsEvdev::domicile_disable_while_typing`
+  carries the switch to the evdev thread, set through
+  `InputControllerEvdev` and `OzonePlatform::SetDomicileDisableWhileTyping`,
+  which the command socket's `disable_while_typing` calls.
+- `typing_guard_unittest.cc` runs in ozone_unittests.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ ui/events/ozone/evdev/BUILD.gn                      |  2 ++
+ ui/events/ozone/evdev/event_converter_evdev.cc      |  2 ++
+ ui/events/ozone/evdev/event_converter_evdev.h       |  7 +++++++
+ ui/events/ozone/evdev/event_converter_evdev_impl.cc |  9 +++++++++
+ ui/events/ozone/evdev/event_converter_evdev_impl.h  |  6 ++++++
+ ui/events/ozone/evdev/input_controller_evdev.cc     |  9 +++++++++
+ ui/events/ozone/evdev/input_controller_evdev.h      |  3 +++
+ ui/events/ozone/evdev/input_device_factory_evdev.cc |  4 ++++
+ ui/events/ozone/evdev/input_device_factory_evdev.h  |  5 +++++
+ ui/events/ozone/evdev/input_device_settings_evdev.h |  3 +++
+ ui/events/ozone/evdev/libinput_event_converter.cc   | 19 +++++++++++++++++++
+ ui/events/ozone/evdev/libinput_event_converter.h    |  8 ++++++++
+ ui/ozone/platform/drm/BUILD.gn                      |  1 +
+ ui/ozone/platform/drm/ozone_platform_drm.cc         | 12 ++++++++++++
+ ui/ozone/public/ozone_platform.cc                   |  4 ++++
+ ui/ozone/public/ozone_platform.h                    |  6 ++++++
+ 16 files changed, 100 insertions(+)
+
+diff --git a/ui/events/ozone/evdev/BUILD.gn b/ui/events/ozone/evdev/BUILD.gn
+index d1d1569..ede8d67 100644
+--- a/ui/events/ozone/evdev/BUILD.gn
++++ b/ui/events/ozone/evdev/BUILD.gn
+@@ -54,6 +54,8 @@ component("evdev") {
+     "domicile/absolute_mouse_event_converter_evdev.h",
+     "domicile/scroll_accelerator.cc",
+     "domicile/scroll_accelerator.h",
++    "domicile/typing_guard.cc",
++    "domicile/typing_guard.h",
+     "domicile/wheel_ticks.cc",
+     "domicile/wheel_ticks.h",
+     "event_converter_evdev.cc",
+diff --git a/ui/events/ozone/evdev/event_converter_evdev.cc b/ui/events/ozone/evdev/event_converter_evdev.cc
+index 53b1739..3f22b78 100644
+--- a/ui/events/ozone/evdev/event_converter_evdev.cc
++++ b/ui/events/ozone/evdev/event_converter_evdev.cc
+@@ -273,6 +273,8 @@ void EventConverterEvdev::SetGetLatestStylusStateCallback(
+ void EventConverterEvdev::SetReceivedValidInputCallback(
+     ReceivedValidInputCallback callback) {}
+ 
++void EventConverterEvdev::SetTypingGuard(TypingGuard* guard) {}
++
+ std::vector<uint64_t> EventConverterEvdev::GetKeyboardKeyBits() const {
+   return std::vector<uint64_t>();
+ }
+diff --git a/ui/events/ozone/evdev/event_converter_evdev.h b/ui/events/ozone/evdev/event_converter_evdev.h
+index 9f7bcc9..347de4d 100644
+--- a/ui/events/ozone/evdev/event_converter_evdev.h
++++ b/ui/events/ozone/evdev/event_converter_evdev.h
+@@ -30,6 +30,7 @@ struct input_event;
+ namespace ui {
+ enum class DomCode : uint32_t;
+ struct InputDeviceSettingsEvdev;
++class TypingGuard;
+ 
+ class COMPONENT_EXPORT(EVDEV) EventConverterEvdev
+     : public base::MessagePumpForUI::FdWatcher {
+@@ -210,6 +211,12 @@ class COMPONENT_EXPORT(EVDEV) EventConverterEvdev
+   virtual void SetReceivedValidInputCallback(
+       ReceivedValidInputCallback callback);
+ 
++  // DOMICILE: the factory's guard that rests touchpads while a keyboard types.
++  // A keyboard reports its keys to it and a touchpad asks it before each
++  // event; other converters ignore it. Outlives the converter. See
++  // ui/events/ozone/evdev/domicile/typing_guard.h.
++  virtual void SetTypingGuard(TypingGuard* guard);
++
+   // Returns supported key bits of the keyboard.
+   virtual std::vector<uint64_t> GetKeyboardKeyBits() const;
+ 
+diff --git a/ui/events/ozone/evdev/event_converter_evdev_impl.cc b/ui/events/ozone/evdev/event_converter_evdev_impl.cc
+index 687a0f2..0ff172d 100644
+--- a/ui/events/ozone/evdev/event_converter_evdev_impl.cc
++++ b/ui/events/ozone/evdev/event_converter_evdev_impl.cc
+@@ -18,6 +18,7 @@
+ #include "ui/events/event_utils.h"
+ #include "ui/events/keycodes/dom/keycode_converter.h"
+ #include "ui/events/ozone/evdev/device_event_dispatcher_evdev.h"
++#include "ui/events/ozone/evdev/domicile/typing_guard.h"
+ #include "ui/events/ozone/evdev/event_device_util.h"
+ #include "ui/events/ozone/evdev/numberpad_metrics.h"
+ #include "ui/events/ozone/features.h"
+@@ -309,6 +310,10 @@ void EventConverterEvdevImpl::OnKeyChange(unsigned int key,
+   // State transition: !(down) -> (down)
+   key_state_.set(key, down);
+ 
++  if (typing_guard_) {
++    typing_guard_->OnKey(key, down, timestamp);
++  }
++
+   const double timestamp_in_seconds = ui::EventTimeStampToSeconds(timestamp);
+ 
+   // Checks for a key press that could only have occurred from a non-imposter
+@@ -393,6 +398,10 @@ void EventConverterEvdevImpl::SetReceivedValidInputCallback(
+   received_valid_input_callback_ = callback;
+ }
+ 
++void EventConverterEvdevImpl::SetTypingGuard(TypingGuard* guard) {
++  typing_guard_ = guard;
++}
++
+ void EventConverterEvdevImpl::FlushEvents(const input_event& input) {
+   if (!cursor_ || (x_offset_ == 0 && y_offset_ == 0))
+     return;
+diff --git a/ui/events/ozone/evdev/event_converter_evdev_impl.h b/ui/events/ozone/evdev/event_converter_evdev_impl.h
+index 227c1d4..c127733 100644
+--- a/ui/events/ozone/evdev/event_converter_evdev_impl.h
++++ b/ui/events/ozone/evdev/event_converter_evdev_impl.h
+@@ -93,6 +93,9 @@ class COMPONENT_EXPORT(EVDEV) EventConverterEvdevImpl
+   void SetReceivedValidInputCallback(
+       ReceivedValidInputCallback callback) override;
+ 
++  // DOMICILE: this keyboard's keys rest the touchpads.
++  void SetTypingGuard(TypingGuard* guard) override;
++
+   // Input device file descriptor.
+   const base::ScopedFD input_device_fd_;
+ 
+@@ -147,6 +150,9 @@ class COMPONENT_EXPORT(EVDEV) EventConverterEvdevImpl
+   // Callback to update keyboard devices when valid input is received.
+   ReceivedValidInputCallback received_valid_input_callback_;
+ 
++  // DOMICILE: told every key change; null until the factory attaches this.
++  raw_ptr<TypingGuard> typing_guard_ = nullptr;
++
+   // Supported keyboard key bits.
+   std::vector<uint64_t> key_bits_;
+ 
+diff --git a/ui/events/ozone/evdev/input_controller_evdev.cc b/ui/events/ozone/evdev/input_controller_evdev.cc
+index f707f73..fc06886 100644
+--- a/ui/events/ozone/evdev/input_controller_evdev.cc
++++ b/ui/events/ozone/evdev/input_controller_evdev.cc
+@@ -240,6 +240,15 @@ bool InputControllerEvdev::IsInternalTouchpadEnabled() const {
+   return input_device_settings_.enable_internal_touchpad;
+ }
+ 
++void InputControllerEvdev::SetDomicileDisableWhileTyping(bool enabled) {
++  input_device_settings_.domicile_disable_while_typing = enabled;
++  ScheduleUpdateDeviceSettings();
++}
++
++bool InputControllerEvdev::IsDomicileDisableWhileTypingEnabled() const {
++  return input_device_settings_.domicile_disable_while_typing;
++}
++
+ void InputControllerEvdev::SetTouchscreensEnabled(bool enabled) {
+   input_device_settings_.enable_touch_screens = enabled;
+   ui::DeviceDataManager::GetInstance()->SetTouchscreensEnabled(enabled);
+diff --git a/ui/events/ozone/evdev/input_controller_evdev.h b/ui/events/ozone/evdev/input_controller_evdev.h
+index 5a58a06..d26aa4c 100644
+--- a/ui/events/ozone/evdev/input_controller_evdev.h
++++ b/ui/events/ozone/evdev/input_controller_evdev.h
+@@ -115,6 +115,9 @@ class COMPONENT_EXPORT(EVDEV) InputControllerEvdev : public InputController {
+   void GetStylusSwitchState(GetStylusSwitchStateReply reply) override;
+   void SetInternalTouchpadEnabled(bool enabled) override;
+   bool IsInternalTouchpadEnabled() const override;
++  // DOMICILE: whether touchpads rest while a keyboard types. On by default.
++  void SetDomicileDisableWhileTyping(bool enabled);
++  bool IsDomicileDisableWhileTypingEnabled() const;
+   void SetTouchscreensEnabled(bool enabled) override;
+   void SetInternalKeyboardFilter(bool enable_filter,
+                                  std::vector<DomCode> allowed_keys) override;
+diff --git a/ui/events/ozone/evdev/input_device_factory_evdev.cc b/ui/events/ozone/evdev/input_device_factory_evdev.cc
+index 7907402..29699ed 100644
+--- a/ui/events/ozone/evdev/input_device_factory_evdev.cc
++++ b/ui/events/ozone/evdev/input_device_factory_evdev.cc
+@@ -214,6 +214,8 @@ void InputDeviceFactoryEvdev::AttachInputDevice(
+           base::Unretained(this)));
+     }
+ 
++    converter->SetTypingGuard(&typing_guard_);
++
+     // Add initialized device to map.
+     converters_[path] = std::move(converter);
+     converters_[path]->Start();
+@@ -440,6 +442,8 @@ void InputDeviceFactoryEvdev::ApplyInputDeviceSettings() {
+ 
+   SetBoolPropertyForOneType(DT_TOUCHPAD, "Tap Paused",
+                             input_device_settings_.tap_to_click_paused);
++  typing_guard_.SetEnabled(
++      input_device_settings_.domicile_disable_while_typing);
+   SetBoolPropertyForOneType(DT_TOUCHPAD, "T5R2 Three Finger Click Enable",
+                             input_device_settings_.three_finger_click_enabled);
+   SetBoolPropertyForOneType(
+diff --git a/ui/events/ozone/evdev/input_device_factory_evdev.h b/ui/events/ozone/evdev/input_device_factory_evdev.h
+index b1a4195..fe69e37 100644
+--- a/ui/events/ozone/evdev/input_device_factory_evdev.h
++++ b/ui/events/ozone/evdev/input_device_factory_evdev.h
+@@ -19,6 +19,7 @@
+ #include "base/time/time.h"
+ #include "mojo/public/cpp/bindings/pending_receiver.h"
+ #include "ui/events/devices/haptic_touchpad_effects.h"
++#include "ui/events/ozone/evdev/domicile/typing_guard.h"
+ #include "ui/events/ozone/evdev/event_converter_evdev.h"
+ #include "ui/events/ozone/evdev/event_device_info.h"
+ #include "ui/events/ozone/evdev/imposter_checker_evdev.h"
+@@ -214,6 +215,10 @@ class COMPONENT_EXPORT(EVDEV) InputDeviceFactoryEvdev {
+   // Device settings. These primarily affect libgestures behavior.
+   InputDeviceSettingsEvdev input_device_settings_;
+ 
++  // DOMICILE: every converter's guard against touchpad input while a keyboard
++  // types. Declared before `converters_`, which point at it.
++  TypingGuard typing_guard_;
++
+   // Checks if a device is mis-identifying as another device.
+   const std::unique_ptr<ImposterCheckerEvdev> imposter_checker_;
+ 
+diff --git a/ui/events/ozone/evdev/input_device_settings_evdev.h b/ui/events/ozone/evdev/input_device_settings_evdev.h
+index 0fd14a7..a242851 100644
+--- a/ui/events/ozone/evdev/input_device_settings_evdev.h
++++ b/ui/events/ozone/evdev/input_device_settings_evdev.h
+@@ -85,6 +85,9 @@ struct COMPONENT_EXPORT(EVDEV) InputDeviceSettingsEvdev {
+   bool touch_event_logging_enabled = false;
+   bool enable_devices = true;  // If false, all input is disabled.
+   bool enable_internal_touchpad = true;
++  // DOMICILE: touchpads rest while a keyboard types. Applies to all touchpad
++  // devices. See ui/events/ozone/evdev/domicile/typing_guard.h.
++  bool domicile_disable_while_typing = true;
+   bool enable_touch_screens = true;
+   bool enable_internal_keyboard_filter = false;
+   std::vector<DomCode> internal_keyboard_allowed_keys;
+diff --git a/ui/events/ozone/evdev/libinput_event_converter.cc b/ui/events/ozone/evdev/libinput_event_converter.cc
+index 4eda7fd..08fef80 100644
+--- a/ui/events/ozone/evdev/libinput_event_converter.cc
++++ b/ui/events/ozone/evdev/libinput_event_converter.cc
+@@ -395,6 +395,12 @@ bool LibInputEventConverter::HasTouchscreen() const {
+   return has_touchscreen_;
+ }
+ 
++void LibInputEventConverter::SetTypingGuard(TypingGuard* guard) {
++  if (has_touchpad_) {
++    typing_guard_ = guard;
++  }
++}
++
+ void LibInputEventConverter::OnFileCanReadWithoutBlocking(int fd) {
+   if (!context_.Dispatch()) {
+     LOG(ERROR) << "LibInputContext::Dispatch failed";
+@@ -432,6 +438,10 @@ void LibInputEventConverter::HandlePointerMotion(const LibInputEvent& evt) {
+   const double dx = libinput_event_pointer_get_dx(event);
+   const double dy = libinput_event_pointer_get_dy(event);
+ 
++  if (typing_guard_ && typing_guard_->DropsMotion(Timestamp(evt))) {
++    return;
++  }
++
+   cursor_->MoveCursor(gfx::Vector2dF(dx, dy));
+ 
+   DVLOG(3) << "Pointer motion: dx=" << dx << ", dy=" << dy;
+@@ -459,6 +469,11 @@ void LibInputEventConverter::HandlePointerButton(const LibInputEvent& evt) {
+ 
+   DVLOG(3) << "Button: " << button << ", pressed: " << down;
+ 
++  if (typing_guard_ &&
++      typing_guard_->DropsButton(button, down, Timestamp(evt))) {
++    return;
++  }
++
+   dispatcher_->DispatchMouseButtonEvent(
+       {input_device_.id, flags, cursor_->GetLocation(), button, down,
+        allow_remap, PointerDetails(EventPointerType::kMouse), Timestamp(evt)});
+@@ -476,6 +491,10 @@ void LibInputEventConverter::HandlePointerAxis(const LibInputEvent& evt) {
+     return;
+   }
+ 
++  if (typing_guard_ && typing_guard_->DropsMotion(Timestamp(evt))) {
++    return;
++  }
++
+   const auto h = GetAxisValue(event, LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL);
+   const auto v = GetAxisValue(event, LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL);
+   // Two fingers on the pad go through the accelerator, which also carries
+diff --git a/ui/events/ozone/evdev/libinput_event_converter.h b/ui/events/ozone/evdev/libinput_event_converter.h
+index 3122771..d5b140d 100644
+--- a/ui/events/ozone/evdev/libinput_event_converter.h
++++ b/ui/events/ozone/evdev/libinput_event_converter.h
+@@ -14,6 +14,7 @@
+ #include "base/files/scoped_file.h"
+ #include "base/memory/raw_ptr.h"
+ #include "ui/events/ozone/evdev/domicile/scroll_accelerator.h"
++#include "ui/events/ozone/evdev/domicile/typing_guard.h"
+ #include "ui/events/ozone/evdev/event_converter_evdev.h"
+ 
+ namespace ui {
+@@ -150,6 +151,10 @@ class LibInputEventConverter : public EventConverterEvdev {
+ 
+   bool HasTouchscreen() const final;
+ 
++  // DOMICILE: a touchpad drops its motion, scrolls, taps and clicks while the
++  // guard says a keyboard is typing. A mouse keeps no guard.
++  void SetTypingGuard(TypingGuard* guard) final;
++
+   std::ostream& DescribeForLog(std::ostream& os) const override;
+ 
+  private:
+@@ -173,6 +178,9 @@ class LibInputEventConverter : public EventConverterEvdev {
+   const std::optional<LibInputDevice> device_;
+ 
+   ScrollAccelerator scroll_accelerator_;
++
++  // DOMICILE: null for a mouse, and until the factory attaches this.
++  raw_ptr<TypingGuard> typing_guard_ = nullptr;
+ };
+ 
+ }  // namespace ui
+diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
+index 592bdd0..3c6ce6e 100644
+--- a/ui/ozone/platform/drm/BUILD.gn
++++ b/ui/ozone/platform/drm/BUILD.gn
+@@ -286,6 +286,7 @@ source_set("gbm_unittests") {
+     # console is the one platform whose touchpad goes through libinput.
+     "//ui/events/ozone/evdev/domicile/absolute_mouse_event_converter_evdev_unittest.cc",
+     "//ui/events/ozone/evdev/domicile/scroll_accelerator_unittest.cc",
++    "//ui/events/ozone/evdev/domicile/typing_guard_unittest.cc",
+     "//ui/events/ozone/evdev/domicile/wheel_ticks_unittest.cc",
+   ]
+ 
+diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
+index 10beb1a..fede902 100644
+--- a/ui/ozone/platform/drm/ozone_platform_drm.cc
++++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
+@@ -228,6 +228,18 @@ class OzonePlatformDrm : public OzonePlatform {
+     return screen_->connectors();
+   }
+ 
++  // DOMICILE: the evdev input controller holds the setting; see
++  // ui/events/ozone/evdev/domicile/typing_guard.h.
++  std::optional<bool> GetDomicileDisableWhileTyping() const override {
++    return event_factory_ozone_->input_controller()
++        ->IsDomicileDisableWhileTypingEnabled();
++  }
++
++  void SetDomicileDisableWhileTyping(bool enabled) override {
++    event_factory_ozone_->input_controller()->SetDomicileDisableWhileTyping(
++        enabled);
++  }
++
+   GpuPlatformSupportHost* GetGpuPlatformSupportHost() override {
+     return drm_device_connector_.get();
+   }
+diff --git a/ui/ozone/public/ozone_platform.cc b/ui/ozone/public/ozone_platform.cc
+index 581d305..c9a2ac5 100644
+--- a/ui/ozone/public/ozone_platform.cc
++++ b/ui/ozone/public/ozone_platform.cc
+@@ -140,6 +140,10 @@ base::flat_map<int64_t, std::string> OzonePlatform::GetDomicileConnectors()
+   return {};
+ }
+ 
++std::optional<bool> OzonePlatform::GetDomicileDisableWhileTyping() const {
++  return std::nullopt;
++}
++
+ PlatformGLEGLUtility* OzonePlatform::GetPlatformGLEGLUtility() {
+   return nullptr;
+ }
+diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
+index b0c4c2c..7059045 100644
+--- a/ui/ozone/public/ozone_platform.h
++++ b/ui/ozone/public/ozone_platform.h
+@@ -8,6 +8,7 @@
+ #include <stdint.h>
+ 
+ #include <memory>
++#include <optional>
+ #include <string>
+ #include <vector>
+ 
+@@ -421,6 +422,11 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
+   // names a monitor with no EDID name after it. Empty on every platform but
+   // DRM, which alone has connectors.
+   virtual base::flat_map<int64_t, std::string> GetDomicileConnectors() const;
++  // DOMICILE: whether touchpads rest while a keyboard types, or nothing on a
++  // platform whose touchpads another compositor reads. DRM only, like the
++  // layout above. See ui/events/ozone/evdev/domicile/typing_guard.h.
++  virtual std::optional<bool> GetDomicileDisableWhileTyping() const;
++  virtual void SetDomicileDisableWhileTyping(bool enabled) {}
+   virtual PlatformClipboard* GetPlatformClipboard();
+   virtual std::unique_ptr<InputMethod> CreateInputMethod(
+       ImeKeyEventDispatcher* ime_key_event_dispatcher,
