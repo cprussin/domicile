@@ -9,8 +9,8 @@ Manganese uses sway's layout model. For the key bindings, see
   children split, tabbed or stacking.
 - Tiled windows have a 20px gap between them and at the screen's sides and
   bottom, which the focus glow lights. A lone window keeps the gap at the
-  edges. The top edge has no gap: the top bar separates windows from the
-  screen's edge.
+  edges. The top edge has half the gap, 10px, since the top bar already
+  separates windows from the screen's edge.
 - A new window or tab opens just after the focused one. Closing a window
   gives its space to the rest.
 - Closing the focused window focuses the one in its group focused most

@@ -71,22 +71,22 @@ describe("placementsOf", () => {
     ).toEqual([true, true]);
   });
 
-  it("insets a lone tiled window by the gap at the screen's sides and bottom, not under the top bar", () => {
+  it("insets a lone tiled window by the gap at the screen's sides and bottom, half of it under the top bar", () => {
     expect(placementFor(desktop("kitty"), "kitty")).toEqual({
       // A tab at most 240 wide, the rest of the strip after it.
-      bar: { height: TITLE_BAR, width: 240, x: 20, y: 32 },
+      bar: { height: TITLE_BAR, width: 240, x: 20, y: 42 },
       bare: false,
       behind: undefined,
       depth: 0,
-      frame: { height: 1028, width: 1880, x: 20, y: 32 },
+      frame: { height: 1018, width: 1880, x: 20, y: 42 },
       id: appWindowId("kitty"),
       selected: false,
       soleTab: true,
       strip: {
         at: 0,
-        box: { height: TITLE_BAR, width: 1880, x: 20, y: 32 },
+        box: { height: TITLE_BAR, width: 1880, x: 20, y: 42 },
         divided: false,
-        end: { height: TITLE_BAR, width: 1640, x: 260, y: 32 },
+        end: { height: TITLE_BAR, width: 1640, x: 260, y: 42 },
         group: {
           node: { id: appWindowId("kitty"), up: 1 },
           windows: [appWindowId("kitty")],
@@ -96,10 +96,10 @@ describe("placementsOf", () => {
         tabs: 1,
       },
       surface: {
-        height: 1028 - TITLE_BAR + SURFACE_TUCK,
+        height: 1018 - TITLE_BAR + SURFACE_TUCK,
         width: 1880,
         x: 20,
-        y: 32 + TITLE_BAR - SURFACE_TUCK,
+        y: 42 + TITLE_BAR - SURFACE_TUCK,
       },
       // The workspace's tab group, holding one tab.
       tabbed: Layout.Tabbed,
@@ -114,16 +114,16 @@ describe("placementsOf", () => {
       WindowAction.LayoutSet(Layout.SplitH),
     );
     expect(placementFor(state, "kitty")?.frame).toEqual({
-      height: 1028,
+      height: 1018,
       width: 930,
       x: 20,
-      y: 32,
+      y: 42,
     });
     expect(placementFor(state, "editor")?.frame).toEqual({
-      height: 1028,
+      height: 1018,
       width: 930,
       x: 970,
-      y: 32,
+      y: 42,
     });
   });
 
@@ -397,15 +397,15 @@ describe("placementsOf", () => {
 
     // A lone window in a tabbed container: its tab is its title bar.
     expect(placementsIn(state, GEOMETRY).tabs).toEqual([]);
-    expect(placementFor(state, "kitty")?.bar).toMatchObject({ y: 32 });
+    expect(placementFor(state, "kitty")?.bar).toMatchObject({ y: 42 });
   });
   // `frame` spans the bar and contents, so both scale about one center.
   it("gives every window the box its bar and its contents span together", () => {
     expect(placementFor(desktop("kitty"), "kitty")?.frame).toEqual({
-      height: 1028,
+      height: 1018,
       width: 1880,
       x: 20,
-      y: 32,
+      y: 42,
     });
   });
 
@@ -490,7 +490,7 @@ describe("the focus box", () => {
     );
 
     expect(focusBoxOf(state)).toMatchObject({
-      rect: { height: 1028, width: 1880, x: 20, y: 32 },
+      rect: { height: 1018, width: 1880, x: 20, y: 42 },
       windows: [appWindowId("kitty"), appWindowId("editor")],
     });
   });
@@ -508,7 +508,7 @@ describe("the focus box", () => {
 
     expect(focusBoxOf(state)).toEqual({
       depth: TILED,
-      rect: { height: 1028, width: 930, x: 970, y: 32 },
+      rect: { height: 1018, width: 930, x: 970, y: 42 },
       windows: [appWindowId("editor"), appWindowId("mail")],
     });
   });
