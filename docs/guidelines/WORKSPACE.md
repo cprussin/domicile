@@ -54,6 +54,10 @@ each version has provenance. There is no semver until a release. The published
 copies serve editors and third-party shells; a shell `domicile` builds always
 uses the running Domicile's copies.
 
+Each package has its own version, bumped by changesets. A change adds a
+changeset naming the packages it changes: `bun changeset`. See
+[/.changeset/README.md](/.changeset/README.md).
+
 A new public package goes in `.github/scripts/published-packages`, after what
 it depends on. npm gives a trusted publisher only to a package it has, so
 before the merge that first publishes it, an owner of the scope publishes a
