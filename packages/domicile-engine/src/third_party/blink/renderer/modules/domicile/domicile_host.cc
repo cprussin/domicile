@@ -8,6 +8,7 @@
 #include <optional>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "base/check.h"
 #include "base/functional/callback.h"
@@ -1009,7 +1010,7 @@ void DomicileHost::ForwardKeyDown(Event* event) {
   // answered it as `shortcut` -- and so does a key the page took. Its release
   // is not the client's either.
   if (event->defaultPrevented()) {
-    taken_keys_.insert(keycode);
+    forwarded_keys_.Take(keycode);
     return;
   }
   if (app_id.IsNull()) {
@@ -1022,7 +1023,7 @@ void DomicileHost::ForwardKeyDown(Event* event) {
   if (key->repeat()) {
     return;
   }
-  held_keys_.Set(keycode, app_id);
+  forwarded_keys_.Forward(keycode, app_id);
   if (EnsureBound()) {
     channel_->Key(app_id, keycode, true);
   }
@@ -1043,34 +1044,32 @@ void DomicileHost::ForwardKeyUp(Event* event) {
     return;
   }
   const uint32_t keycode = static_cast<uint32_t>(evdev);
-  if (taken_keys_.Contains(keycode)) {
-    taken_keys_.erase(keycode);
+  if (forwarded_keys_.TakenUp(keycode)) {
     return;
   }
-  const String held = held_keys_.Take(keycode);
-  if (!held.IsNull()) {
+  const std::optional<String> held = forwarded_keys_.HeldUp(keycode);
+  if (held.has_value()) {
     event->preventDefault();
   }
   // The window the press was sent for where this page sent it, and otherwise
   // the one that has the keyboard. The compositor reads neither -- it injects
   // the key into the seat, whose focus delivers it -- and an empty one is a
   // desk where no window has it.
-  String app_id = held;
-  if (app_id.IsNull()) {
-    app_id = keyboard_app_.IsNull() ? g_empty_string : keyboard_app_;
-  }
+  const String app_id =
+      held.value_or(keyboard_app_.IsNull() ? g_empty_string : keyboard_app_);
   if (EnsureBound()) {
     channel_->Key(app_id, keycode, false);
   }
 }
 
 void DomicileHost::ReleaseHeldKeys(Event*) {
+  const std::vector<std::pair<uint32_t, String>> held =
+      forwarded_keys_.TakeHeld();
   if (EnsureBound()) {
-    for (const auto& held : held_keys_) {
-      channel_->Key(held.value, held.key, false);
+    for (const auto& [keycode, app_id] : held) {
+      channel_->Key(app_id, keycode, false);
     }
   }
-  held_keys_.clear();
 }
 
 // A key released while a <webview>'s guest has the focus comes up on the site

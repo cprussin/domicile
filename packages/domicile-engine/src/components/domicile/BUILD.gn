@@ -204,6 +204,13 @@ source_set("synced_frame") {
   deps = [ "//base" ]
 }
 
+# Where each forwarded key's release goes, and which presses were taken as
+# chords. Header only and templated over the window id, for :held_chords'
+# reason.
+source_set("forwarded_keys") {
+  sources = [ "common/forwarded_keys.h" ]
+}
+
 # The grabbed chords the keyboard holds, each paired with its release. Header
 # only and templated over the press, so Blink keeps its own type and the tests
 # need no Blink.
@@ -872,6 +879,7 @@ source_set("unit_tests") {
     "browser/web_view_url_unittest.cc",
     "common/cursor_shape_unittest.cc",
     "common/display_transform_unittest.cc",
+    "common/forwarded_keys_unittest.cc",
     "common/held_chords_unittest.cc",
     "common/synced_frame_unittest.cc",
     "common/theme_unittest.cc",
@@ -911,6 +919,7 @@ source_set("unit_tests") {
     ":extension_installer",
     ":extension_tray_entry",
     ":file_choice",
+    ":forwarded_keys",
     ":guest_dialogs",
     ":held_chords",
     ":keyboard_layout",
