@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Says whether `stable`, checked out, has something to release.
+#
+#   .github/scripts/release-check.sh
+#
+# Sets the step output `commit` to stable's commit when `release` lacks it.
+# Refuses:
+#
+# - a `release` that is not an ancestor, since someone put it there;
+# - a changeset not yet versioned, which would ship its change at the old
+#   version: merge the "Version packages" pull request first;
+# - a `domicile` at 0.0.0, which no changeset versioned.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "$ROOT"
+
+head="$(git rev-parse HEAD)"
+
+# `--exit-code` answers 2 for no such ref, the first release's case; any other
+# failure is the job's.
+status=0
+git ls-remote -q --exit-code origin refs/heads/release >/dev/null || status=$?
+case "$status" in
+  (0)
+    git fetch -q origin +refs/heads/release:refs/remotes/origin/release
+    release="$(git rev-parse refs/remotes/origin/release)"
+    if git merge-base --is-ancestor "$head" "$release"; then
+      echo "release (${release:0:12}) already has ${head:0:12}; nothing to release"
+      exit 0
+    fi
+    git merge-base --is-ancestor "$release" "$head" || {
+      echo "release (${release:0:12}) is not an ancestor of ${head:0:12}; not overwriting it" >&2
+      exit 1
+    }
+    ;;
+  (2) echo "there is no release yet" ;;
+  (*) exit "$status" ;;
+esac
+
+pending="$(find .changeset -name '*.md' ! -name README.md | sort)"
+[ -z "$pending" ] || {
+  echo "${head:0:12} has changesets not yet versioned; merge the \"Version packages\" pull request first:" >&2
+  echo "$pending" >&2
+  exit 1
+}
+
+version="$(jq -r .version packages/domicile/package.json)"
+[ "$version" != 0.0.0 ] || {
+  echo "domicile is at 0.0.0; no changeset has versioned it" >&2
+  exit 1
+}
+
+echo "releasing ${head:0:12}, domicile $version"
+echo "commit=$head" >>"${GITHUB_OUTPUT:-/dev/null}"

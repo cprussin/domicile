@@ -1,23 +1,42 @@
 name: Publish packages
 
-# Publish every public `@domicile-desktop/*` package to npm as
-# `0.0.0-alpha-<sha>`, or, dispatched with `release`, at the versions
-# changesets gave them. See .github/scripts/publish-packages.sh.
+# Publishes Domicile's packages.
+#
+# - A push to main publishes every public `@domicile-desktop/*` package to npm
+#   as `0.0.0-alpha-<sha>` under `next` (.github/scripts/publish-packages.sh).
+# - Dispatched with `release`, promotes `stable` to `release`. It builds and
+#   installs the distribution packages at the versions changesets gave them,
+#   publishes npm under `latest`, the signed repositories on R2 and the AUR's
+#   `domicile-bin`, then tags each new version and moves `release`. Every step
+#   skips what is already published, so a failed release is rerun as it is.
+#   `dry_run`, on by default, builds and checks everything and publishes
+#   nothing.
+#
+# The release is here, not in its own workflow, because npm's trusted
+# publishing names one workflow file, and checks the top-level one.
 #
 # Uses trusted publishing: npm accepts this workflow's OIDC token for packages
 # whose trusted publisher on npmjs.com names this repository and file, and adds
 # provenance. A package without a trusted publisher refuses the publish. npm
 # attaches one only to an existing package, so a new package is first claimed
 # by hand with a placeholder version and given its trusted publisher there.
+#
+# A release reads the secrets `DOMICILE_SIGNING_KEY`, `R2_ACCESS_KEY_ID`,
+# `R2_SECRET_ACCESS_KEY` and `AUR_SSH_KEY`, and the variables `R2_ACCOUNT_ID`,
+# `DOMICILE_R2_BUCKET` and `DOMICILE_REPO_URL`.
 on:
   push:
     branches: [main]
   workflow_dispatch:
     inputs:
       release:
-        description: Publish the versions changesets gave the packages, under latest
+        description: Promote stable to release and publish it
         type: boolean
         default: false
+      dry_run:
+        description: With release, build and check everything but publish nothing
+        type: boolean
+        default: true
 
 # One at a time and none thrown away: each run publishes its own commit.
 concurrency:
@@ -30,6 +49,7 @@ permissions:
 
 jobs:
   publish:
+    if: ${{ !inputs.release }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -42,5 +62,88 @@ jobs:
       - run: npm install -g npm@latest
       - run: bun install --frozen-lockfile
       - run: .github/scripts/publish-packages.sh
+
+  release-check:
+    if: ${{ inputs.release }}
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.check.outputs.commit }}
+    steps:
+      # The whole history, so release can be checked as an ancestor.
+      - uses: actions/checkout@v7
+        with:
+          ref: stable
+          fetch-depth: 0
+      - id: check
+        run: .github/scripts/release-check.sh
+
+  release-packages:
+    needs: release-check
+    if: needs.release-check.outputs.commit != ''
+    uses: ./.github/workflows/distro-packages.yml
+    with:
+      ref: ${{ needs.release-check.outputs.commit }}
+      release: true
+
+  release:
+    needs: [release-check, release-packages]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      DOMICILE_RELEASE: "1"
+      DOMICILE_RELEASE_DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+    steps:
+      # The tags, so `release-tag.sh` tags only versions not tagged yet.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release-check.outputs.commit }}
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@latest
+      - run: bun install --frozen-lockfile
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - uses: actions/download-artifact@v8
+        with:
+          name: packages
+          path: distro-out/
+
+      - name: npm
+        run: .github/scripts/publish-packages.sh
         env:
-          DOMICILE_RELEASE: ${{ inputs.release && '1' || '' }}
+          DOMICILE_PUBLISH_DRY_RUN: ${{ inputs.dry_run && runner.temp || '' }}
+      - name: The apt, rpm and pacman repositories
+        run: |
+          mapfile -t tools < <(sed -n 's/^\([a-z]\)/nixpkgs#\1/p' distro/repo-tools)
+          nix shell --inputs-from . "${tools[@]}" --command \
+            .github/scripts/release-repos.sh distro-out distro-repo
+        env:
+          DOMICILE_SIGNING_KEY: ${{ secrets.DOMICILE_SIGNING_KEY }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+          DOMICILE_R2_BUCKET: ${{ vars.DOMICILE_R2_BUCKET }}
+      # The Arch package as the repository holds it, whose checksum the
+      # PKGBUILD names.
+      - name: The AUR
+        run: |
+          version="$(jq -r .version packages/domicile/package.json)"
+          nix shell --inputs-from . nixpkgs#libarchive --command .github/scripts/release-aur.sh \
+            "distro-repo/arch/x86_64/domicile-$version-1-x86_64.pkg.tar.zst" "$DOMICILE_REPO_URL"
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+          DOMICILE_REPO_URL: ${{ vars.DOMICILE_REPO_URL }}
+      - name: Tag the versions and move release
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          .github/scripts/release-tag.sh
