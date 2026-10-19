@@ -1,7 +1,8 @@
 name: Distro packages
 
-# Build the Debian, RPM and Arch packages (`distro/build.sh`), install each in
-# its distribution's container (`./scripts/check.sh distro`), and publish them
+# Build the Debian, RPM and Arch packages (`distro/build.sh`) and their signed
+# repositories (`distro/repo.sh`), install each from its repository in its
+# distribution's container (`./scripts/check.sh distro`), and publish them
 # as a release when stable.yml calls this for a commit it promoted.
 #
 # On pull requests, only those that touch the packaging or the pins it reads.
@@ -101,6 +102,18 @@ jobs:
       - run: distro/build.sh binaries distro-out
         env:
           DOMICILE_RELEASE: ${{ inputs.release && '1' || '' }}
+      # The installs check the repositories, signed with a key made here.
+      # Releases sign with the real key.
+      - name: Make the signed repositories
+        run: |
+          mapfile -t tools < <(sed -n 's/^\([a-z]\)/nixpkgs#\1/p' distro/repo-tools)
+          nix shell --inputs-from . "${tools[@]}" --command sh -c \
+            'DOMICILE_SIGNING_KEY="$(distro/repo-test-key.sh)" distro/repo.sh distro-out distro-repo'
+      - uses: actions/upload-artifact@v7
+        with:
+          name: repo
+          path: distro-repo/
+          compression-level: 0
       # Already compressed.
       - uses: actions/upload-artifact@v7
         with:
@@ -125,11 +138,11 @@ jobs:
           ref: ${{ inputs.ref }}
       - uses: actions/download-artifact@v8
         with:
-          name: packages
-          path: distro-out/
+          name: repo
+          path: distro-repo/
       - run: ./scripts/check.sh distro
         env:
-          DOMICILE_DISTRO_PACKAGES: distro-out
+          DOMICILE_DISTRO_REPO: distro-repo
           DOMICILE_DISTROS: ${{ matrix.distro }}
 
   publish:

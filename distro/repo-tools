@@ -1,0 +1,7 @@
+# The nixpkgs packages `distro/repo.sh` runs, one per line. Callers put them on
+# PATH with `nix shell --inputs-from . $(sed -n 's/^\([a-z]\)/nixpkgs#\1/p' distro/repo-tools)`.
+apt
+createrepo_c
+gnupg
+pacman
+rpm
