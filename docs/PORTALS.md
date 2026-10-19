@@ -182,6 +182,10 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   token's choice lives in memory until `Print` takes it.
 - **No printers ends with `2`.** With CUPS unreachable or empty, the dialog
   says there are no printers; closing it is a failure, not a cancel.
+- **Browser windows print through the portal.** The engine's print dialog is
+  Chromium's `PrintDialogLinuxPortal`, so `view.print()` and a page's
+  `window.print()` reach this backend as any application's print does. Print
+  Preview is off: it is a `chrome://` page.
 - **The shell shows active sharing.** `portal_requests` carries `capturing`:
   each running session (id, app, what it holds). The shell stops one by
   answering its id with `stop`. `<PortalDialogs />` draws the indicator;

@@ -184,8 +184,11 @@ Bind browser keys yourself:
 - `view.find(text, backward)` searches; the same text again goes to the next
   match. `view.stopFinding()` ends it. A navigation ends it too. Matches are
   counted across all frames.
+- `view.print()` prints the page through the desktop's print dialog, as
+  Chrome's Ctrl+Shift+P does. A page's `window.print()` uses the same dialog.
+  There is no Print Preview.
 - Manganese's `BrowserWindow.tsx` binds Chrome's default keys, including
-  Ctrl+F and Ctrl+Shift+I.
+  Ctrl+F, Ctrl+Shift+I and Ctrl+Shift+P.
 
 Draw the context menu yourself:
 

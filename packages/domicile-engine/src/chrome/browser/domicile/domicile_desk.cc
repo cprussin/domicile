@@ -15,6 +15,7 @@
 #include "chrome/browser/domicile/domicile_device_chooser.h"
 #include "chrome/browser/domicile/domicile_devtools.h"
 #include "chrome/browser/domicile/domicile_permissions.h"
+#include "chrome/browser/domicile/domicile_printing.h"
 #include "chrome/browser/domicile/domicile_window_controller.h"
 #include "chrome/browser/extensions/domicile_desk_hooks.h"
 #include "chrome/browser/profiles/profile.h"
@@ -97,6 +98,8 @@ void StartDesk(Profile* profile) {
     StartBrowserWindows();
     // DevTools for the context menu's "inspect" and <webview>.inspect().
     WebViewGuest::SetInspect(base::BindRepeating(&OpenDevTools));
+    // The system print dialog for <webview>.print().
+    WebViewGuest::SetPrint(base::BindRepeating(&PrintPage));
     // Camera and microphone requests, asked through the shell's prompt.
     UseChromeForGuestMedia();
     // WebHID, WebUSB and Web Serial choosers, drawn by the shell.
@@ -105,6 +108,7 @@ void StartDesk(Profile* profile) {
   }();
   CHECK(installed);
 
+  PrintWithTheSystemDialog(*profile);
   DomicileWindowController::For(profile);
 }
 
