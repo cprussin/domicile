@@ -51,6 +51,7 @@ source_set("browser") {
     # frames are media's.
     "//media",
     "//media/capture/mojom:video_capture_buffer",
+    "//media/mojo/mojom",
     "//mojo/public/cpp/bindings",
     "//services/viz/privileged/mojom/compositing",
     "//ui/display",
@@ -488,6 +489,7 @@ source_set("web_view_guest") {
     ":guest_dialogs",
     ":placeholder_stage",
     ":render_process",
+    ":screen_capture",
     ":shortcut_registry",
     ":site_permissions",
     ":web_view_url",
@@ -561,6 +563,21 @@ source_set("site_permissions") {
     "//components/permissions",
     "//third_party/blink/public/common",
     "//url",
+  ]
+}
+
+# A <webview>'s answer to `getDisplayMedia()`. Its own target beside
+# :web_view_guest so its tests need no guest.
+source_set("screen_capture") {
+  sources = [
+    "browser/screen_capture.cc",
+    "browser/screen_capture.h",
+  ]
+
+  public_deps = [ "//third_party/blink/public/common" ]
+  deps = [
+    "//content/public/browser",
+    "//media/mojo/mojom",
   ]
 }
 
@@ -866,6 +883,7 @@ source_set("unit_tests") {
     "browser/portal_request_unittest.cc",
     "browser/private_pages_unittest.cc",
     "browser/render_process_unittest.cc",
+    "browser/screen_capture_unittest.cc",
     "browser/shell_source_unittest.cc",
     "browser/shell_url_loader_factory_unittest.cc",
     "browser/shell_fetch_unittest.cc",
@@ -929,6 +947,7 @@ source_set("unit_tests") {
     ":portal_request",
     ":private_pages",
     ":render_process",
+    ":screen_capture",
     ":shell_fetch",
     ":shell_origin",
     ":shell_death",
@@ -968,6 +987,7 @@ source_set("unit_tests") {
     "//mojo/public/cpp/test_support:test_utils",
     "//media",
     "//media/capture/mojom:video_capture_buffer",
+    "//media/mojo/mojom",
     "//services/viz/privileged/mojom/compositing",
     "//skia",
     "//testing/gmock",
