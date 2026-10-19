@@ -13,6 +13,7 @@ import { hostDisplays } from "@domicile-desktop/manganese-window-management/scre
 import { watchAppearance } from "@domicile-desktop/sdk/appearance";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
+import { flushSync } from "react-dom";
 import type { Root } from "react-dom/client";
 import { createRoot } from "react-dom/client";
 import { mountPoint } from "./mount-point";
@@ -51,16 +52,20 @@ export const mountManganese = (
   const theme = hostTheme(domicile);
 
   const reactRoot = createRoot(mountPoint(root));
-  reactRoot.render(
-    <Chrome
-      applications={options.applications}
-      bar={options.bar}
-      displays={displays}
-      domicile={domicile}
-      floating={options.floating}
-      keybindings={options.keybindings}
-      theme={theme}
-    />,
-  );
+  // Synchronously: the page draws nothing until `Shell` returns, and a first
+  // frame without the chrome would fade the splash into an empty page.
+  flushSync(() => {
+    reactRoot.render(
+      <Chrome
+        applications={options.applications}
+        bar={options.bar}
+        displays={displays}
+        domicile={domicile}
+        floating={options.floating}
+        keybindings={options.keybindings}
+        theme={theme}
+      />,
+    );
+  });
   return reactRoot;
 };
