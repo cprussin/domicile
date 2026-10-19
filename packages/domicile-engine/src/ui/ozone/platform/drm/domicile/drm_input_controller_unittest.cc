@@ -89,5 +89,21 @@ TEST_F(DrmInputControllerTest,
   EXPECT_TRUE(factory_runner_->HasPendingTask());
 }
 
+// `domicile disable-while-typing` reads and sets this. The evdev thread's
+// `TypingGuard` gets it with the next settings push.
+TEST_F(DrmInputControllerTest, DisableWhileTypingIsOnUntilTurnedOff) {
+  controller_.SetInputDeviceFactory(&factory_);
+  factory_runner_->ClearPendingTasks();
+  EXPECT_TRUE(controller_.IsDomicileDisableWhileTypingEnabled());
+
+  controller_.SetDomicileDisableWhileTyping(false);
+  task_environment_.RunUntilIdle();
+
+  EXPECT_FALSE(controller_.IsDomicileDisableWhileTypingEnabled());
+  EXPECT_FALSE(controller_.GetInputDeviceSettings()
+                   .domicile_disable_while_typing);
+  EXPECT_TRUE(factory_runner_->HasPendingTask());
+}
+
 }  // namespace
 }  // namespace ui

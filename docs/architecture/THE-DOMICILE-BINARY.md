@@ -36,6 +36,7 @@ domicile uninstall-app <url>      # remove the entry and icon install-app wrote,
 domicile screenshot               # the shell's interactive screenshot (Print in manganese)
 domicile screenshot <file>        # write a PNG of the running desk
 domicile send-shell <word>…       # run a shell command, as a SendShell keybinding does
+domicile disable-while-typing [on|off|toggle]  # the touchpad's disable-while-typing (RUNNING-A-DESKTOP.md)
 domicile check-config <file>      # exit 1 with the reason if the compositor refuses this JSON config
 domicile power-off                # ask in the Access dialog, then `systemctl poweroff`
 domicile reboot                   # ask in the Access dialog, then `systemctl reboot`
@@ -356,6 +357,7 @@ domicile open-app    ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
 domicile run-app     ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
 domicile screenshot  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor
 domicile send-shell  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor ─▶ every page
+domicile disable-while-typing ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
 domicile-app-host    ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine   (settings_files stops at the supervisor)
 ```
 

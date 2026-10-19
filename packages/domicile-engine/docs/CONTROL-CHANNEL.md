@@ -226,6 +226,9 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 
 {"type":"clear_browsing_data","version":1,"since":1700000000000,"types":["cookies","localStorage"],"origins":["https://a.example"]}
 {"type":"cleared"}   |   {"type":"refused","why":"…"}
+
+{"type":"disable_while_typing","version":1,"enabled":false}
+{"type":"disable_while_typing","enabled":false}   |   {"type":"refused","why":"…"}
 ```
 
 - Without the switch, the engine binds nothing. Every desktop `domicile`
@@ -295,6 +298,11 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
     or `passwords`. A site's cookies are those of its registrable domain.
     `webSQL` clears nothing: Chromium no longer has it. An unknown type is
     refused.
+- `disable_while_typing` is `domicile disable-while-typing`
+  ([RUNNING-A-DESKTOP.md](/docs/RUNNING-A-DESKTOP.md#disable-while-typing)).
+  It sets whether the touchpads rest while a keyboard types when `enabled` is
+  given, and replies with whether they do. Off a tty it is refused: the host
+  compositor reads the touchpad.
 - It is its own socket because the compositor has no part in choosing the
   shell. The supervisor also passes it at
   launch as `--domicile-shell-root` and `--domicile-shell-module`. See

@@ -3,7 +3,8 @@
 # linked there (`ScrollAcceleratorTest` and `WheelTicksTest`; see
 # scripts/test-a-fast-scroll-goes-further.sh and
 # scripts/test-a-mouse-goes-through-libinput.sh; and the `AbsoluteMouse*`
-# suites of patch 0123), and one Wayland suite,
+# suites of patch 0123; `TypingGuardTest`, see
+# scripts/test-a-touchpad-rests-while-typing.sh), and one Wayland suite,
 # `WaylandKeyboardWithoutKeymapTest` (see
 # scripts/test-modifiers-wait-for-a-keymap.sh).
 #
@@ -39,7 +40,7 @@ SUITES=(
   DrmFullscreenTest:4
   DrmMasterTest:8
   DrmInputDevicesTest:25
-  DrmInputControllerTest:1
+  DrmInputControllerTest:2
   DrmCursorFactoryTest:4
   DrmCursorFactoryThemeTest:4
   DrmClipboardTest:12
@@ -49,6 +50,7 @@ SUITES=(
   DrmPointerTargetsTest:5
   GbmPixmapScanoutTest:3
   ScrollAcceleratorTest:7
+  TypingGuardTest:8
   WheelTicksTest:3
   AbsoluteMouseDeviceTest:2
   AbsoluteMouseConverterTest:7
