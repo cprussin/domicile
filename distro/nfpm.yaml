@@ -4,7 +4,7 @@
 # - `@stage@`: the staged tree.
 # - `@distro@`: this directory.
 # - `@pam@`: which `pam/` file is `/etc/pam.d/domicile`.
-# - `@version@`: from the commit's time, so a later commit is a newer package.
+# - `@version@`: `distro/version.sh`'s.
 # - `@glibc@`: the newest glibc symbol version any staged binary uses.
 #
 # `distro/nfpm-config.sh` fills them in. Its `--without-apparmor` drops the

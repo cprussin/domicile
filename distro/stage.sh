@@ -9,7 +9,8 @@
 # - <bun>: the bun binary the shell builder runs with. It also installs the
 #   builder's modules.
 # - <workspace>: a checkout after `distro/build.sh`'s workspace build.
-# - <rev>: <workspace>'s commit, whose version the shipped packages carry.
+# - <rev>: <workspace>'s commit, whose version the shipped packages carry,
+#   unless `DOMICILE_RELEASE=1`, when they carry their own.
 # - <stage>: created; `<stage>/usr` is the tree.
 #
 # The layout is `domicilePackage`'s in `flake.nix` with `/usr` as the prefix,
@@ -83,7 +84,10 @@ install -m 755 "$ROOT/distro/builder" "$LIBEXEC/builder"
 # What the builder needs, as in `shellWorkspace` in `flake.nix`.
 "$ROOT/distro/shell-workspace.sh" modules "$BUN" "$WORKSPACE" "$LIBEXEC/workspace"
 "$ROOT/distro/shell-workspace.sh" files "$BUN" "$WORKSPACE" "$LIBEXEC/workspace"
-"$ROOT/scripts/stamp-version.sh" "$REV" "$LIBEXEC"/workspace/packages/*/package.json >/dev/null
+# A release ships the versions changesets gave the packages.
+if [ "${DOMICILE_RELEASE:-}" != 1 ]; then
+  "$ROOT/scripts/stamp-version.sh" "$REV" "$LIBEXEC"/workspace/packages/*/package.json >/dev/null
+fi
 
 for shell in "${SHELLS[@]}"; do
   cp -a "$WORKSPACE/packages/shell-$shell/.vite/renderer/main_window" \

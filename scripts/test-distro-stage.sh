@@ -189,6 +189,14 @@ expect "without source maps or readmes" "" \
 expect "every package carries the commit's version" "0.0.0-alpha-0123456789ab" \
   "$(jq -r .version "$SHIPPED"/*/package.json | sort -u)"
 
+echo "a release ships the versions the workspace holds"
+if out="$(DOMICILE_RELEASE=1 "$STAGE_SH" "$BINARIES" "$ENGINE" "$BUN" "$WORKSPACE" "$REV" "$WORK/release" 2>&1)"; then
+  expect "every package carries its own version" 0.0.0 \
+    "$(jq -r .version "$WORK/release/usr/libexec/domicile/workspace/packages"/*/package.json | sort -u)"
+else
+  fail "stage.sh succeeds for a release" "$out"
+fi
+
 echo "the session and what it starts"
 SESSION="$USR/share/wayland-sessions/domicile.desktop"
 holds_line "the session runs domicile" "$SESSION" "Exec=/usr/bin/domicile"

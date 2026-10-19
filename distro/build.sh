@@ -3,6 +3,9 @@
 #
 #   distro/build.sh <binaries> <out>
 #
+# `DOMICILE_RELEASE=1` builds a release: the packages carry the versions
+# changesets gave them (`distro/version.sh`, `distro/stage.sh`).
+#
 # Writes to <out>:
 #
 #   domicile_<version>_amd64.deb                  Debian 13+, Ubuntu 24.04+
@@ -54,7 +57,7 @@ UNZIP="$(store_path 'nixpkgs#unzip^out')/bin/unzip"
 # `zstd` for `distro/arch-optdepends.sh` too.
 ZSTD_BIN="$(store_path 'nixpkgs#zstd^bin')/bin"
 PATH="$ZSTD_BIN:$PATH"
-# `jq` for `scripts/stamp-version.sh`.
+# `jq` for `scripts/stamp-version.sh` and `distro/version.sh`.
 PATH="$(store_path 'nixpkgs#jq^bin')/bin:$PATH"
 READELF="$(store_path 'nixpkgs#binutils-unwrapped^out')/bin/readelf"
 ENGINE_TARBALL="$(store_path .#engine.src)"
@@ -100,9 +103,7 @@ GLIBC="$(
   exit 1
 }
 
-# Later commits sort later in every format: `0.<date>.<time>` of the commit,
-# in UTC.
-VERSION="0.$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y%m%d.%H%M%S)"
+VERSION="$(distro/version.sh "$ROOT")"
 
 echo "== packages: version $VERSION, glibc $GLIBC =="
 # nfpm's Arch packager holds every file open until it finishes, and the
