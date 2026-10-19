@@ -44,6 +44,15 @@ Passkeys belong to extensions ([EXTENSIONS.md](EXTENSIONS.md)):
   proxies. Patch `0084` holds a conditional `get()` until the site aborts it, so a passkey
   extension's autofill can answer it.
 
+## HTTP pages
+
+- HTTPS-First Mode is off, in every profile and private window:
+  `domicile::TurnOffBrowserOffers` sets its prefs on each start. Chrome warns
+  before an http page with a dialog on the page's tab, and a `<webview>` guest
+  has no tab, so the page stays blank.
+- HTTPS Upgrades stay on. An http address tries https first and falls back to
+  http when https fails. The shell's address bar marks the page not secure.
+
 ## Device choosers
 
 Patch `0110`:
