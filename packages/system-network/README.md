@@ -70,6 +70,21 @@ await connectWifi(host, device, network, "passphrase");
   when a scan runs, so `scanning` is always `false`.
 - iwd does not report addresses, so `connection.ip` is `undefined`.
 
+## Captive portals
+
+```ts
+import { checkPortal } from "@domicile-desktop/system-network/portal";
+
+(await checkPortal(host)).map((portal) => portal.map(openBrowserWindow));
+```
+
+- `checkPortal` asks `curl` for `http://www.gstatic.com/generate_204`
+  without following redirects, as Chrome does. `204` is `None`. Any other
+  answer is `Some` of the sign-in page: the redirect's target, else the probe.
+- It retries a probe with no answer three times, since an address can arrive
+  after the link. An `Err` is a probe that never got an answer.
+- `curl` must be on the compositor's `PATH`.
+
 See [SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md).
 
 ## Test
