@@ -44,6 +44,15 @@ Run **Publish packages** (`publish-packages.yml`) with `release` checked:
 Every step skips what is published already, so a failed release is run again
 as it is.
 
+## Protection
+
+Two repository rulesets keep what a release published from moving:
+
+- **`release` branch:** restrict deletions, block force pushes. The release
+  only fast-forwards it.
+- **Release tags** (`release-*`, `*@*`): restrict updates and deletions. The
+  release only creates them.
+
 ## Secrets
 
 | Name | Kind | What |
