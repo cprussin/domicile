@@ -29,10 +29,10 @@ job builds it on `crux`.
  4 files changed, 22 insertions(+), 7 deletions(-)
 
 diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
-index 7dff20e0..34fe0165 100644
+index ce359858..7801ac38 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
-@@ -1628,14 +1628,12 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
+@@ -1627,14 +1627,12 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
    // And every <webview> a tab of one window, to chrome.tabs, before an
    // extension's first call can ask.
    domicile::StartDesk(profile);
@@ -52,10 +52,10 @@ index 7dff20e0..34fe0165 100644
    for (auto& chrome_extra_part : chrome_extra_parts_) {
      chrome_extra_part->PostProfileInit(profile, is_initial_profile);
 diff --git a/chrome/browser/notifications/BUILD.gn b/chrome/browser/notifications/BUILD.gn
-index a3ae144a..821775a6 100644
+index 0ccb2bdd..2c1988d4 100644
 --- a/chrome/browser/notifications/BUILD.gn
 +++ b/chrome/browser/notifications/BUILD.gn
-@@ -211,6 +211,10 @@ source_set("impl") {
+@@ -209,6 +209,10 @@ source_set("impl") {
      "//chrome/browser/updates/announcement_notification",
      "//components/content_settings/browser",
      "//components/content_settings/core/browser",

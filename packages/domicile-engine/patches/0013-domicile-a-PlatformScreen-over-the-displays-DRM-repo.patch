@@ -51,7 +51,7 @@ none and the screen answers with the displayless display above.
  4 files changed, 30 insertions(+), 2 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 65604f61..e5eaacc8 100644
+index af8b3b44..36a752bd 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -120,6 +120,8 @@ source_set("gbm") {
@@ -63,7 +63,7 @@ index 65604f61..e5eaacc8 100644
      "host/drm_window_host_manager.h",
      "host/gpu_thread_adapter.h",
      "host/gpu_thread_observer.h",
-@@ -230,6 +232,7 @@ source_set("gbm_unittests") {
+@@ -226,6 +228,7 @@ source_set("gbm_unittests") {
      "gpu/mock_drm_modifiers_filter.cc",
      "gpu/mock_drm_modifiers_filter.h",
      "gpu/proxy_helpers_unittest.cc",

@@ -30,7 +30,7 @@ scripts/test-the-desk-tiles-are-sized-for-one-monitor.sh.
  6 files changed, 25 insertions(+), 1 deletion(-)
 
 diff --git a/cc/layers/picture_layer.cc b/cc/layers/picture_layer.cc
-index 9537cc5e..e2575764 100644
+index 7dbbbb71..90e72506 100644
 --- a/cc/layers/picture_layer.cc
 +++ b/cc/layers/picture_layer.cc
 @@ -59,8 +59,12 @@ void PictureLayer::PushDirtyPropertiesTo(LayerImpl* base_layer,

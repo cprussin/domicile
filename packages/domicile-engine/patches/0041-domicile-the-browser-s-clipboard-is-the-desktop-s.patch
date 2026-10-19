@@ -52,7 +52,7 @@ repository.
  4 files changed, 59 insertions(+)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 9cd71bc4..df853888 100644
+index 0d12f224..4452e86a 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -132,6 +132,8 @@ source_set("gbm") {
@@ -64,7 +64,7 @@ index 9cd71bc4..df853888 100644
      "domicile/drm_screen.cc",
      "domicile/drm_screen.h",
      "domicile/drm_sleep.cc",
-@@ -261,6 +263,7 @@ source_set("gbm_unittests") {
+@@ -257,6 +259,7 @@ source_set("gbm_unittests") {
      "domicile/drm_input_devices_unittest.cc",
      "domicile/drm_master_unittest.cc",
      "domicile/drm_modeset_unittest.cc",

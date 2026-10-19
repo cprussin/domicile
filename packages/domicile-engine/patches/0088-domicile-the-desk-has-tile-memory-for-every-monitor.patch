@@ -106,10 +106,10 @@ index 3cd88fb7..b7db51e2 100644
    bool HasCompositorDrivenScrollAnimationForTesting() const {
      DCHECK(IsMainThread());
 diff --git a/cc/trees/layer_tree_host_impl.cc b/cc/trees/layer_tree_host_impl.cc
-index 559beb0e..832ff359 100644
+index a7eee347..58fe3ac2 100644
 --- a/cc/trees/layer_tree_host_impl.cc
 +++ b/cc/trees/layer_tree_host_impl.cc
-@@ -4019,6 +4019,9 @@ void LayerTreeHostImpl::SetNeedsRedraw(bool animation_only,
+@@ -4183,6 +4183,9 @@ void LayerTreeHostImpl::SetNeedsRedraw(bool animation_only,
  
  ManagedMemoryPolicy LayerTreeHostImpl::ActualManagedMemoryPolicy() const {
    ManagedMemoryPolicy actual = cached_managed_memory_policy_;
@@ -119,7 +119,7 @@ index 559beb0e..832ff359 100644
    // The following may lower the cutoff, but should never raise it.
    if (debug_state_.rasterize_only_visible_content) {
      actual.priority_cutoff_when_visible =
-@@ -4032,6 +4035,14 @@ ManagedMemoryPolicy LayerTreeHostImpl::ActualManagedMemoryPolicy() const {
+@@ -4196,6 +4199,14 @@ ManagedMemoryPolicy LayerTreeHostImpl::ActualManagedMemoryPolicy() const {
    return actual;
  }
  
@@ -135,10 +135,10 @@ index 559beb0e..832ff359 100644
    active_tree_->ReleaseResources();
    if (pending_tree_) {
 diff --git a/cc/trees/layer_tree_host_impl.h b/cc/trees/layer_tree_host_impl.h
-index 7fadae4d..00969268 100644
+index 6afe325e..43a7d614 100644
 --- a/cc/trees/layer_tree_host_impl.h
 +++ b/cc/trees/layer_tree_host_impl.h
-@@ -681,6 +681,9 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
+@@ -683,6 +683,9 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
    void SetNeedsRedraw(bool animation_only, bool skip_if_inside_draw) override;
  
    ManagedMemoryPolicy ActualManagedMemoryPolicy() const;
@@ -148,7 +148,7 @@ index 7fadae4d..00969268 100644
  
    const gfx::Transform& DrawTransform() const;
  
-@@ -1162,6 +1165,7 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
+@@ -1164,6 +1167,7 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
    LayerTreeDebugState debug_state_;
    bool visible_ = false;
    ManagedMemoryPolicy cached_managed_memory_policy_;

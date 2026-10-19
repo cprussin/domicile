@@ -156,7 +156,7 @@ paragraph.
  15 files changed, 132 insertions(+), 11 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 88cd95e8..65604f61 100644
+index 9c66eb60..af8b3b44 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -10,8 +10,17 @@ import("//gpu/vulkan/features.gni")
@@ -200,7 +200,7 @@ index 88cd95e8..65604f61 100644
  
    if (!use_static_angle || is_chromeos) {
      data_deps = [
-@@ -198,7 +213,6 @@ source_set("gbm_unittests") {
+@@ -194,7 +209,6 @@ source_set("gbm_unittests") {
    sources = [
      "common/drm_util_unittest.cc",
      "common/hardware_display_controller_info_unittest.cc",
@@ -208,7 +208,7 @@ index 88cd95e8..65604f61 100644
      "gpu/drm_gpu_display_manager_unittest.cc",
      "gpu/drm_gpu_util_unittest.cc",
      "gpu/drm_overlay_manager_unittest.cc",
-@@ -211,15 +225,30 @@ source_set("gbm_unittests") {
+@@ -207,15 +221,30 @@ source_set("gbm_unittests") {
      "gpu/fake_drm_device_generator.h",
      "gpu/gbm_surface_factory_unittest.cc",
      "gpu/hardware_display_controller_unittest.cc",
@@ -296,7 +296,7 @@ index 49ac2928..29791ba9 100644
      ClearHdrOutputMetadata();
    }
 diff --git a/ui/ozone/platform/drm/gpu/drm_overlay_manager.cc b/ui/ozone/platform/drm/gpu/drm_overlay_manager.cc
-index 6089515c..cda70c6a 100644
+index 6590ec2e..11a3c6b3 100644
 --- a/ui/ozone/platform/drm/gpu/drm_overlay_manager.cc
 +++ b/ui/ozone/platform/drm/gpu/drm_overlay_manager.cc
 @@ -9,6 +9,7 @@
@@ -550,7 +550,7 @@ index 3204aebb..88d5688a 100644
    SendCursorMoveLocked();
  }
 diff --git a/ui/ozone/platform/drm/host/drm_display_host_manager.cc b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
-index 27eea5ab..b0fefd25 100644
+index 39cddb2c..d3941b32 100644
 --- a/ui/ozone/platform/drm/host/drm_display_host_manager.cc
 +++ b/ui/ozone/platform/drm/host/drm_display_host_manager.cc
 @@ -17,6 +17,7 @@

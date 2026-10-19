@@ -454,7 +454,7 @@ bool HTMLAppElement::MapToContent(const MouseEvent& event,
   }
   // Layout pixels are the element's CSS pixels times its effective zoom,
   // which is the page's zoom and every CSS `zoom` above it compounded.
-  const float zoom = box->StyleRef().EffectiveZoom();
+  const float zoom = box->Style().EffectiveZoom();
   const gfx::PointF local =
       box->AbsoluteToLocalPoint(event.AbsoluteLocation()) -
       gfx::Vector2dF(content.offset);

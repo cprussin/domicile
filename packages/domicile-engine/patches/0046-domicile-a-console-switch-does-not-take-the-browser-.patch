@@ -144,10 +144,10 @@ index b4c5cb1a..5a58a06e 100644
    base::flat_map<int, std::vector<uint64_t>> gamepad_key_bits_mapping_;
  
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index df853888..10de02a4 100644
+index 4452e86a..6b2c736f 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
-@@ -260,6 +260,7 @@ source_set("gbm_unittests") {
+@@ -256,6 +256,7 @@ source_set("gbm_unittests") {
      "gpu/proxy_helpers_unittest.cc",
      "domicile/drm_cursor_factory_unittest.cc",
      "domicile/drm_fullscreen_unittest.cc",
@@ -155,7 +155,7 @@ index df853888..10de02a4 100644
      "domicile/drm_input_devices_unittest.cc",
      "domicile/drm_master_unittest.cc",
      "domicile/drm_modeset_unittest.cc",
-@@ -314,6 +315,12 @@ source_set("gbm_unittests") {
+@@ -310,6 +311,12 @@ source_set("gbm_unittests") {
      # this target includes a `//ui/events` header directly rather than only
      # through `:gbm`, and `gn check` wants the edge said out loud.
      "//ui/events",

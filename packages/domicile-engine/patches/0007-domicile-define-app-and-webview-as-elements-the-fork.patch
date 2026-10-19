@@ -53,10 +53,10 @@ New files are untracked and live in the series' src/.
  11 files changed, 71 insertions(+), 4 deletions(-)
 
 diff --git a/extensions/renderer/dispatcher.cc b/extensions/renderer/dispatcher.cc
-index b4fd769c..af2e4ee0 100644
+index 5bb4f1d6..6ecdd4da 100644
 --- a/extensions/renderer/dispatcher.cc
 +++ b/extensions/renderer/dispatcher.cc
-@@ -1450,7 +1450,16 @@ void Dispatcher::EnableCustomElementAllowlist() {
+@@ -1464,7 +1464,16 @@ void Dispatcher::EnableCustomElementAllowlist() {
    blink::WebCustomElement::AddEmbedderCustomElementName("appview");
  #endif
    blink::WebCustomElement::AddEmbedderCustomElementName("extensionoptions");
@@ -75,7 +75,7 @@ index b4fd769c..af2e4ee0 100644
      api_provider->EnableCustomElementAllowlist();
    }
 diff --git a/third_party/blink/renderer/bindings/generated_in_core.gni b/third_party/blink/renderer/bindings/generated_in_core.gni
-index 919475f5..7af0f5cb 100644
+index 788f261f..36f1f7fb 100644
 --- a/third_party/blink/renderer/bindings/generated_in_core.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_core.gni
 @@ -1196,6 +1196,10 @@ generated_interface_sources_in_core = [
@@ -90,7 +90,7 @@ index 919475f5..7af0f5cb 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_geolocation_element.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_head_element.cc",
 diff --git a/third_party/blink/renderer/bindings/idl_in_core.gni b/third_party/blink/renderer/bindings/idl_in_core.gni
-index 4f9ce08b..f866afff 100644
+index f8d8e718..8f538ec6 100644
 --- a/third_party/blink/renderer/bindings/idl_in_core.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_core.gni
 @@ -459,6 +459,8 @@ static_idl_files_in_core = [
@@ -103,10 +103,10 @@ index 4f9ce08b..f866afff 100644
    "//third_party/blink/renderer/core/html/html_head_element.idl",
    "//third_party/blink/renderer/core/html/html_heading_element.idl",
 diff --git a/third_party/blink/renderer/core/css/resolver/style_adjuster.cc b/third_party/blink/renderer/core/css/resolver/style_adjuster.cc
-index c8c1fdbc..e9f5448c 100644
+index ce222435..fc578c9f 100644
 --- a/third_party/blink/renderer/core/css/resolver/style_adjuster.cc
 +++ b/third_party/blink/renderer/core/css/resolver/style_adjuster.cc
-@@ -1656,11 +1656,20 @@ StyleAdjuster::ElementTypeForCache StyleAdjuster::GetElementTypeCacheKey(
+@@ -1657,11 +1657,20 @@ StyleAdjuster::ElementTypeForCache StyleAdjuster::GetElementTypeCacheKey(
      case ElementType::kHTMLIFrameElement:
      case ElementType::kHTMLFencedFrameElement:
      case ElementType::kHTMLPersistentWidgetElement:
@@ -128,7 +128,7 @@ index c8c1fdbc..e9f5448c 100644
        // Special handling of position.
        return {element.GetElementType()};
 diff --git a/third_party/blink/renderer/core/html/build.gni b/third_party/blink/renderer/core/html/build.gni
-index 1d7cd61e..df8fce03 100644
+index 29e4efa4..84ad7083 100644
 --- a/third_party/blink/renderer/core/html/build.gni
 +++ b/third_party/blink/renderer/core/html/build.gni
 @@ -94,6 +94,12 @@ blink_core_sources_html = [
@@ -145,7 +145,7 @@ index 1d7cd61e..df8fce03 100644
    "fenced_frame/fence.h",
    "fenced_frame/fenced_frame_config.cc",
 diff --git a/third_party/blink/renderer/core/html/html_attribute_names.json5 b/third_party/blink/renderer/core/html/html_attribute_names.json5
-index a35afba1..cd3fa157 100644
+index 23d12fae..8231e0e9 100644
 --- a/third_party/blink/renderer/core/html/html_attribute_names.json5
 +++ b/third_party/blink/renderer/core/html/html_attribute_names.json5
 @@ -22,6 +22,7 @@
@@ -172,7 +172,7 @@ index b71dd2a0..d143881c 100644
  };
  
 diff --git a/third_party/blink/renderer/core/html/html_tag_names.json5 b/third_party/blink/renderer/core/html/html_tag_names.json5
-index 7baba871..aee1a736 100644
+index ed84a52e..2769b8a2 100644
 --- a/third_party/blink/renderer/core/html/html_tag_names.json5
 +++ b/third_party/blink/renderer/core/html/html_tag_names.json5
 @@ -36,6 +36,17 @@
@@ -193,7 +193,7 @@ index 7baba871..aee1a736 100644
      {
        name: "applet",
        interfaceName: "HTMLUnknownElement",
-@@ -608,6 +619,15 @@
+@@ -618,6 +629,15 @@
        JSInterfaceName: "HTMLElement",
        interfaceName: "HTMLWBRElement",
      },
@@ -210,7 +210,7 @@ index 7baba871..aee1a736 100644
        name: "xmp",
        interfaceName: "HTMLPreElement",
 diff --git a/third_party/blink/renderer/core/html/resources/html.css b/third_party/blink/renderer/core/html/resources/html.css
-index 6e230a48..94058a10 100644
+index fe16804c..c723cebb 100644
 --- a/third_party/blink/renderer/core/html/resources/html.css
 +++ b/third_party/blink/renderer/core/html/resources/html.css
 @@ -177,7 +177,7 @@ video, canvas, img {
