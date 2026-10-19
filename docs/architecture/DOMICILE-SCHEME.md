@@ -3,7 +3,7 @@
 The engine serves the shell page from a custom scheme, `domicile://`, and the
 page reaches the compositor through the desktop handed to its `Shell`. No TCP
 port is open.
-Patches `0008` and `0009`.
+Patches `0008`, `0009` and `0126`.
 
 ## Why
 
@@ -24,8 +24,15 @@ and the binding.
 ## `domicile://shell/`
 
 - A standard scheme that is neither web-safe nor CORS-enabled. It has a real
-  origin, and web content can neither navigate to it nor fetch from it.
-- Registered through `ContentClient::AddAdditionalSchemes`.
+  origin, and web content cannot navigate to it.
+- Registered through `ContentClient::AddAdditionalSchemes`, and in each
+  renderer as supporting the Fetch API, so a document `fetch()`es its own
+  files (the splash reads `progress.json`).
+- Every frame's subresource factory serves the scheme, so the factory checks
+  who asks (`ShellURLLoaderFactory::MayReadFiles`). The shell's files go only
+  to `domicile://shell` and an app's only to its own origin, whether by
+  `fetch()`, `XMLHttpRequest` or `<img>`. Navigations are gated by the scheme
+  not being web-safe and by `MayShowInWebView`.
 - Loaded through `ContentBrowserClient::CreateNonNetworkNavigationURLLoaderFactory`
   (navigation) and `RegisterNonNetworkSubresourceURLLoaderFactories`
   (subresources).
@@ -60,7 +67,7 @@ of a file search found). Beyond the shell root's containment it refuses:
 - any path containing a dotfile (the file index uses the same rule)
 - any request whose initiator is not `domicile://shell`. The subresource
   factory serves every frame, so without this a site in a `<webview>` could
-  probe which files exist.
+  probe which files exist. The shell may `fetch()` from home.
 - every request while the desk is locked
 
 ## `domicile://app-<id>/`

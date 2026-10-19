@@ -22,7 +22,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 
 # Every suite in the filter, counted rather than estimated: FrameSinkBroker 41,
 # WindowDiff 7, EngineEventQueue 7, ShortcutRegistry 14, ShellURLLoaderFactory
-# 12, ShellDocument 14, ShellSource 3, CursorShape 3, CommandProtocol 43,
+# 16, ShellDocument 14, ShellSource 3, CursorShape 3, CommandProtocol 43,
 # DomicileDisplayList 8, DomicileKeyboardLayout 3, ShellWindows 8,
 # ShellWindowPlaces 7, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
 # SurfaceTransform 3, SurfaceAlpha 2, ExtensionInstaller 3, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 20,
@@ -36,7 +36,9 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # DeskCursorThemeSource 2, XCursorTheme 5, XCursorThemeDirectory 4,
 # SyncedFrame 7, RenderProcess 3, ShellDeath 5, ProbeWait 3.
 #
-# 417, and it was 414 — a spike probe the browser never answers is three
+# 421, and it was 417 — serving the shell's and an app's files only to their
+# own origin is four ShellURLLoaderFactory cases. Before that 417, and it was
+# 414 — a spike probe the browser never answers is three
 # ProbeWait cases. Before that 414, and it was 406 — why a page's renderer went away is three
 # RenderProcess cases, and the engine dying with the shell's renderer five
 # ShellDeath ones.
@@ -152,7 +154,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=417
+FLOOR=421
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

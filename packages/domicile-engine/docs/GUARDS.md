@@ -51,7 +51,7 @@ Under `under-wayland.sh` unless marked headless.
 | `guard-css-and-resize.sh` | CSS parity of `<app>` against `<div>`, with and without `backdrop-filter`, plus resize and latency. Headless; `GPU=1` uses the GPU |
 | `guard-latency.sh` | keystroke to pixel with a real client, from the compositor's `latency` lines |
 | `guard-app-only-in-shell.sh` | `<app>`, `HTMLAppElement` and `canvas.embedExternalSurface()` exist in the shell and not in a site in its `<webview>`. Headless |
-| `guard-app-module.sh` | `run_app` runs an app module: its `main` gets a `DomicileAppHost` and its system call reaches the compositor after `app_hello`. Control: the app's address in an unpinned window runs nothing. Headless |
+| `guard-app-module.sh` | `run_app` runs an app module: its `main` gets a `DomicileAppHost` and its system call reaches the compositor after `app_hello`; it `fetch()`es its own file and not the shell's (patch 0126). Control: the app's address in an unpinned window runs nothing. Headless |
 | `guard-app-routes-input.sh` | `<app>` sends the pointer, wheel and keys to its client through its whole CSS transform, with no page script; a `<div>` control gets nothing |
 | `guard-windows-state.sh` | `windows`, `focusedWindow` and the appearance attributes follow the compositor, every event name fires, and every CSS cursor keyword reaches the page; and that a system call and its answer cross the browser. Headless |
 | `guard-portal-requests.sh` | a shell that listens late for `portalrequests` hears them; `answerPortalRequest` reaches the compositor and a malformed answer does not. Headless |
@@ -75,6 +75,7 @@ Headless.
 | `guard-shell-local-network.sh` | the shell loads an image from loopback with no Local Network Access prompt (patch 0066) |
 | `guard-shell-web-apis.sh` | the shell may show notifications and read cross-origin responses (patches 0066, 0105) |
 | `guard-shell-script-src.sh` | an injected inline `<script>` and `onerror` do not run in the shell; a `<script src>` from the shell root does |
+| `guard-domicile-fetch.sh` | the shell `fetch()`es a file beside it and one from `domicile://home/` (patch 0126); a site in its `<webview>` reads neither with `fetch()`, a no-cors `fetch()` or `XMLHttpRequest` |
 | `guard-video-codecs.sh` | the engine plays H.264 and AAC (`src/build/args/domicile_codecs.gn`); VP9 is the control |
 | `guard-display-capture.sh` | a display capture through the C ABI reads back the shell's color, before and after a resize |
 | `guard-shell-crash.sh` | a crashed shell ends the engine with a FATAL line saying the shell's renderer died and that this is a bug in Domicile (patch 0124) |
