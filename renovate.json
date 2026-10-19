@@ -25,6 +25,12 @@
       ],
       "groupName": "all dependencies",
       "groupSlug": "all"
+    },
+    {
+      "description": "Hold the distro binaries' build container on Debian 12. Its glibc (2.36) is the newest the packaged binaries may need; Debian 13 builds need 2.39+ and fail the debian-12 and ubuntu-22.04 installs. Lift when those targets are dropped.",
+      "matchFileNames": [".github/workflows/distro-packages.yml"],
+      "matchDepNames": ["debian"],
+      "allowedVersions": "<13"
     }
   ]
 }
