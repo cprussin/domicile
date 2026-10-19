@@ -44,6 +44,7 @@ constexpr char kHistory[] = "history";
 constexpr char kVisits[] = "visits";
 constexpr char kDeleteHistory[] = "delete_history";
 constexpr char kClearBrowsingData[] = "clear_browsing_data";
+constexpr char kDisableWhileTyping[] = "disable_while_typing";
 
 // Matched whole by domicile-launch (`NO_SHELL_WINDOW` in command.rs), which
 // asks again on it.
@@ -103,6 +104,8 @@ void AnswerDeleteHistory(const base::DictValue& request,
 void AnswerClearBrowsingData(const base::DictValue& request,
                              ClearBrowsingData clear_browsing_data,
                              CommandReply reply);
+std::string AnswerDisableWhileTyping(const base::DictValue& request,
+                                     DisableWhileTyping disable_while_typing);
 
 }  // namespace
 
@@ -243,6 +246,11 @@ void AnswerCommand(std::string_view line,
                             std::move(reply));
     return;
   }
+  if (*type == kDisableWhileTyping) {
+    std::move(reply).Run(
+        AnswerDisableWhileTyping(*request, actions.disable_while_typing));
+    return;
+  }
   std::move(reply).Run(RefusedCommand(base::StrCat(
       {"\"", *type, "\" is not a command this engine knows; it takes \"",
        kLoadShell, "\", \"", kRunApp, "\", \"", kOpenUrl, "\", \"",
@@ -251,8 +259,8 @@ void AnswerCommand(std::string_view line,
        kUninstallExtension, "\", \"", kConfigExtensions, "\", \"",
        kExtensions, "\", \"", kSetExtensionEnabled, "\", \"",
        kMediaDevices, "\", \"", kSetMediaDevice, "\", \"", kHistory, "\", \"",
-       kVisits, "\", \"", kDeleteHistory, "\" and \"", kClearBrowsingData,
-       "\""})));
+       kVisits, "\", \"", kDeleteHistory, "\", \"", kClearBrowsingData,
+       "\" and \"", kDisableWhileTyping, "\""})));
 }
 
 namespace {
@@ -855,6 +863,25 @@ void AnswerClearBrowsingData(const base::DictValue& request,
   }
   clear_browsing_data(clearing.value(),
                       ReplyWhenDone("cleared", std::move(reply)));
+}
+
+std::string AnswerDisableWhileTyping(const base::DictValue& request,
+                                     DisableWhileTyping disable_while_typing) {
+  const std::optional<bool> enabled = request.FindBool("enabled");
+  if (request.Find("enabled") != nullptr && !enabled) {
+    return RefusedCommand(
+        "disable_while_typing's \"enabled\" is true or false, or left out "
+        "to ask");
+  }
+  const base::expected<bool, std::string> rests =
+      disable_while_typing(enabled);
+  if (!rests.has_value()) {
+    return RefusedCommand(rests.error());
+  }
+  base::DictValue reply;
+  reply.Set("type", kDisableWhileTyping);
+  reply.Set("enabled", rests.value());
+  return Line(std::move(reply));
 }
 
 }  // namespace

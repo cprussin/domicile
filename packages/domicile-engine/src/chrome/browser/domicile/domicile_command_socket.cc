@@ -56,6 +56,7 @@
 #include "net/socket/unix_domain_server_socket_posix.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "ui/base/page_transition_types.h"
+#include "ui/ozone/public/ozone_platform.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -434,6 +435,24 @@ void ClearShellBrowsingData(const BrowsingDataClearing& clearing,
   ClearBrowsingDataIn(*profile, clearing, std::move(done));
 }
 
+// Sets whether the touchpads rest while a keyboard types, when asked to, and
+// says whether they do. Only the DRM platform reads touchpads itself: nested,
+// the host compositor does.
+base::expected<bool, std::string> DisableTouchpadsWhileTyping(
+    std::optional<bool> enabled) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  ui::OzonePlatform* platform = ui::OzonePlatform::GetInstance();
+  if (!platform->GetDomicileDisableWhileTyping().has_value()) {
+    return base::unexpected(
+        "this desktop reads no touchpad itself; the compositor it runs inside "
+        "does, and has its own setting");
+  }
+  if (enabled.has_value()) {
+    platform->SetDomicileDisableWhileTyping(*enabled);
+  }
+  return *platform->GetDomicileDisableWhileTyping();
+}
+
 // One request line, answered from the UI thread.
 //
 // Runs on the UI thread because `ShellSource` is unlocked and UI-thread only,
@@ -459,7 +478,8 @@ void AnswerOnUIThread(const std::string& line, CommandReply reply) {
                  .search_history = &SearchShellHistory,
                  .list_visits = &ListShellVisits,
                  .delete_visits = &DeleteShellVisits,
-                 .clear_browsing_data = &ClearShellBrowsingData},
+                 .clear_browsing_data = &ClearShellBrowsingData,
+                 .disable_while_typing = &DisableTouchpadsWhileTyping},
                 std::move(reply));
 }
 
