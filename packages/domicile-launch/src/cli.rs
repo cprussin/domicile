@@ -6,7 +6,7 @@
 
 use std::path::PathBuf;
 
-use crate::control::Request;
+use crate::control::{Request, Switch};
 use crate::power::Power;
 
 /// An invalid `domicile` command line.
@@ -23,7 +23,8 @@ pub enum CliError {
          load-shell <shell>, open-url <url>, open-app <url>, run-app \
          <module>, screenshot \
          [file], or \
-         send-shell <command>…. Or \
+         send-shell <command>…, or \
+         disable-while-typing [on|off|toggle]. Or \
          check-config <file> to check a config without running it, or \
          power-off or reboot to turn the computer off or restart it, or \
          log-out to end the login session, or \
@@ -111,6 +112,11 @@ pub enum CliError {
          domicile send-shell focus right\n"
     )]
     NothingToSend,
+    #[error(
+        "disable-while-typing takes on, off or toggle, or nothing to print \
+         the setting, and was given {said}."
+    )]
+    NotASwitch { said: String },
     #[error(
         "check-config takes the config file to check, and was given \
          nothing:\n\n    \
@@ -250,6 +256,21 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                     }),
                 }
             }
+            Verb::Switching => match (args.next(), args.next()) {
+                (None, _) => Ok(Invocation::Ask {
+                    request: Request::DisableWhileTyping { to: None },
+                }),
+                (Some(said), extra) => match (switch(&said), extra) {
+                    (None, _) => Err(CliError::NotASwitch { said }),
+                    (Some(_), Some(extra)) => Err(CliError::Extra {
+                        verb: format!("{first} {said}"),
+                        extra,
+                    }),
+                    (Some(to), None) => Ok(Invocation::Ask {
+                        request: Request::DisableWhileTyping { to: Some(to) },
+                    }),
+                },
+            },
             Verb::Capturing => match (args.next(), args.next()) {
                 (Some(_), Some(extra)) => Err(CliError::ExtraToSave { extra }),
                 (file, _) => Ok(Invocation::Screenshot { file }),
@@ -317,6 +338,8 @@ enum Verb {
     Sending,
     /// `check-config`, which takes a config file.
     Checking,
+    /// `disable-while-typing`, which takes a [`Switch`] or nothing.
+    Switching,
     /// `power-off`, `reboot` or `log-out`, which take no arguments.
     Powering(Power),
 }
@@ -336,9 +359,20 @@ fn verb(word: &str) -> Option<Verb> {
         "screenshot" => Some(Verb::Capturing),
         "send-shell" => Some(Verb::Sending),
         "check-config" => Some(Verb::Checking),
+        "disable-while-typing" => Some(Verb::Switching),
         "power-off" => Some(Verb::Powering(Power::Off)),
         "reboot" => Some(Verb::Powering(Power::Reboot)),
         "log-out" => Some(Verb::Powering(Power::LogOut)),
+        _ => None,
+    }
+}
+
+/// The [`Switch`] `word` names, if any.
+fn switch(word: &str) -> Option<Switch> {
+    match word {
+        "on" => Some(Switch::On),
+        "off" => Some(Switch::Off),
+        "toggle" => Some(Switch::Toggle),
         _ => None,
     }
 }

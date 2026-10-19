@@ -1,6 +1,6 @@
 //! The protocol the supervisor uses to send `load-shell`, `open-url`, the
-//! Settings app's site permissions, extensions and media devices, and the
-//! History app's history and browsing data to the engine.
+//! Settings app's site permissions, extensions and media devices, the History
+//! app's history and browsing data, and `disable-while-typing` to the engine.
 //!
 //! One JSON line each way per connection:
 //!
@@ -51,11 +51,15 @@
 //!
 //! {"type":"clear_browsing_data","version":1,"since":0,"types":["cookies"],"origins":["https://example.com"]}
 //! {"type":"cleared"}   |   {"type":"refused","why":"…"}
+//!
+//! {"type":"disable_while_typing","version":1,"enabled":false}
+//! {"type":"disable_while_typing","enabled":false}   |   {"type":"refused","why":"…"}
 //! ```
 //!
 //! `options_url` is left out for an extension without an options page, and
 //! `favicon` for a history row without a favicon. `origins` is left out to
-//! clear every origin. Times are milliseconds since the epoch, fractional.
+//! clear every origin. `enabled` is left out of `disable_while_typing` to ask
+//! without setting. Times are milliseconds since the epoch, fractional.
 //!
 //! The engine side is C++ in the fork
 //! (`components/domicile/browser/command_protocol.cc`, tested in
@@ -118,6 +122,8 @@ pub enum Reply {
     Deleted,
     /// The engine cleared the browsing data.
     Cleared,
+    /// Whether the touchpads rest while a keyboard types.
+    DisableWhileTyping { enabled: bool },
     /// The engine refused, with its reason.
     Refused { why: String },
 }
@@ -267,6 +273,15 @@ pub fn clear_browsing_data_line(data: &BrowsingData) -> String {
     })
 }
 
+/// The request to set whether the touchpads rest while a keyboard types, or,
+/// with no `enabled`, to ask.
+pub fn disable_while_typing_line(enabled: Option<bool>) -> String {
+    line(&Command::DisableWhileTyping {
+        version: VERSION,
+        enabled,
+    })
+}
+
 /// Parses one reply line, without its trailing newline.
 ///
 /// An unparseable reply is an error, not a [`Reply::Refused`]: it comes from
@@ -357,6 +372,12 @@ enum Command<'a> {
         // Left out for every origin.
         #[serde(skip_serializing_if = "Option::is_none")]
         origins: Option<&'a [String]>,
+    },
+    DisableWhileTyping {
+        version: u32,
+        // Left out to ask.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        enabled: Option<bool>,
     },
 }
 

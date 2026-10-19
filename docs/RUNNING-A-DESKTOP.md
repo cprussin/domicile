@@ -110,6 +110,27 @@ moves focus right in manganese, like Meta+l.
 - It exits 0 once the pages have the command. The shell does not report
   whether it knew it.
 
+## Disable while typing
+
+On a tty, a touchpad ignores motion, scrolling, taps and clicks while a
+keyboard types, so a palm does not move the pointer. Turn it off for games that
+use the keyboard and the touchpad together:
+
+```sh
+domicile disable-while-typing off     # or on, or toggle
+domicile disable-while-typing         # prints on or off
+```
+
+- Each prints the setting after it.
+- On by default, and back on when the engine restarts.
+- A key rests the touchpad for 200 ms, and typing for 500 ms, as in libinput.
+- Modifiers, F-keys, media and navigation keys rest nothing, nor do keys
+  pressed with Ctrl, Alt or Super held. Shift+letter is typing.
+- Motion while a touchpad button is held is a drag and always passes.
+- Any keyboard counts, built in or not.
+- A nested desktop refuses it: the host compositor reads the touchpad. Use its
+  setting.
+
 ## Host shortcuts in a window
 
 A nested desktop needs the Meta key, which your host compositor also uses.
