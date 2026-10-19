@@ -82,6 +82,9 @@ const TOP_BAR = 32;
 /** `gaps.inner`: around tiled windows, even a lone one. */
 const GAP = 20;
 
+/** The gap between the top bar and the tiled windows under it. */
+const TOP_GAP = GAP / 2;
+
 /** The region a `<Screen>` renders for the display of this name. */
 const screenNamed = (container: HTMLElement, name: string): Element | null =>
   container.querySelector(`[data-screen="${name}"]`);
@@ -1410,15 +1413,15 @@ describe("Shell", () => {
   });
 
   describe("the windows", () => {
-    it("tiles a client's window over the workspace, inset by the gap except under the top bar", () => {
+    it("tiles a client's window over the workspace, inset by the gap, half of it under the top bar", () => {
       const { container } = renderShell();
       clientAppears("term");
 
       expect(boxOf(appElement(container, "term"))).toEqual({
-        height: `${(1080 - TOP_BAR - GAP - TITLE_BAR + SURFACE_TUCK).toString()}px`,
+        height: `${(1080 - TOP_BAR - TOP_GAP - GAP - TITLE_BAR + SURFACE_TUCK).toString()}px`,
         width: `${(1920 - 2 * GAP).toString()}px`,
         x: `${GAP.toString()}px`,
-        y: `${(TOP_BAR + TITLE_BAR - SURFACE_TUCK).toString()}px`,
+        y: `${(TOP_BAR + TOP_GAP + TITLE_BAR - SURFACE_TUCK).toString()}px`,
       });
     });
 
@@ -1430,7 +1433,7 @@ describe("Shell", () => {
       expect(bar).toHaveTextContent("Terminal");
       expect(boxOf(bar)).toMatchObject({
         height: `${TITLE_BAR.toString()}px`,
-        y: `${TOP_BAR.toString()}px`,
+        y: `${(TOP_BAR + TOP_GAP).toString()}px`,
       });
     });
 
@@ -1501,7 +1504,7 @@ describe("Shell", () => {
       for (const id of ["one", "two", "three"]) {
         clientAppears(id);
       }
-      const y = TOP_BAR + TITLE_BAR / 2;
+      const y = TOP_BAR + TOP_GAP + TITLE_BAR / 2;
 
       fireEvent.pointerDown(barFor(container, "app:one"), {
         clientX: GAP + 100,
@@ -1597,7 +1600,7 @@ describe("Shell", () => {
 
       fireEvent.pointerDown(barFor(container, "app:two"), {
         clientX: GAP + 300,
-        clientY: TOP_BAR + TITLE_BAR / 2,
+        clientY: TOP_BAR + TOP_GAP + TITLE_BAR / 2,
       });
       fireEvent.pointerMove(window, { clientX: 1800, clientY: 500 });
       fireEvent.pointerUp(window, { clientX: 1800, clientY: 500 });
@@ -1618,7 +1621,7 @@ describe("Shell", () => {
 
       fireEvent.pointerDown(barFor(container, "app:one"), {
         clientX: 100,
-        clientY: TOP_BAR + TITLE_BAR / 2,
+        clientY: TOP_BAR + TOP_GAP + TITLE_BAR / 2,
       });
       fireEvent.pointerMove(window, { clientX: 1800, clientY: 10 });
 
@@ -1682,7 +1685,7 @@ describe("Shell", () => {
       await user.click(screen.getByRole("button", { name: "Restore" }));
 
       expect(boxOf(appElement(container, "term"))).toMatchObject({
-        y: `${(TOP_BAR + TITLE_BAR - SURFACE_TUCK).toString()}px`,
+        y: `${(TOP_BAR + TOP_GAP + TITLE_BAR - SURFACE_TUCK).toString()}px`,
       });
     });
 
@@ -1718,7 +1721,7 @@ describe("Shell", () => {
       await user.click(screen.getByRole("button", { name: "Restore group" }));
 
       expect(boxOf(appElement(container, "two"))).toMatchObject({
-        y: `${(TOP_BAR + TITLE_BAR - SURFACE_TUCK).toString()}px`,
+        y: `${(TOP_BAR + TOP_GAP + TITLE_BAR - SURFACE_TUCK).toString()}px`,
       });
     });
 
@@ -2409,11 +2412,11 @@ describe("Shell", () => {
       // One column of two full-width windows, not a swap.
       expect(boxOf(appElement(container, "one"))).toMatchObject({
         width: "1880px",
-        y: `${(TOP_BAR + TITLE_BAR - SURFACE_TUCK).toString()}px`,
+        y: `${(TOP_BAR + TOP_GAP + TITLE_BAR - SURFACE_TUCK).toString()}px`,
       });
       expect(boxOf(appElement(container, "two"))).toMatchObject({
         width: "1880px",
-        y: `${(TOP_BAR + 504 + 20 + TITLE_BAR - SURFACE_TUCK).toString()}px`,
+        y: `${(TOP_BAR + TOP_GAP + 499 + 20 + TITLE_BAR - SURFACE_TUCK).toString()}px`,
       });
     });
 
@@ -3307,12 +3310,12 @@ describe("Shell", () => {
 
       clientAppears("two");
 
-      expect(domicile.calls).toContainEqual(["warpPointer", 1435, 561]);
+      expect(domicile.calls).toContainEqual(["warpPointer", 1435, 566]);
       expect(boxOf(appElement(container, "two"))).toMatchObject({
-        height: "999px",
+        height: "989px",
         width: "930px",
         x: "970px",
-        y: "61px",
+        y: "71px",
       });
     });
 
@@ -3329,12 +3332,12 @@ describe("Shell", () => {
       press("h");
 
       expect(domicile.calls).toContainEqual(["focusApp", "one"]);
-      expect(domicile.calls).toContainEqual(["warpPointer", 485, 561]);
+      expect(domicile.calls).toContainEqual(["warpPointer", 485, 566]);
       expect(boxOf(appElement(container, "one"))).toMatchObject({
-        height: "999px",
+        height: "989px",
         width: "930px",
         x: "20px",
-        y: "61px",
+        y: "71px",
       });
     });
 
