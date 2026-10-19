@@ -173,6 +173,9 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                     history: &|_| panic!("a question about this desktop reaches no engine"),
                     visits: &|_| panic!("a question about this desktop reaches no engine"),
                     delete_history: &|_| panic!("a question about this desktop reaches no engine"),
+                    disable_while_typing: &|_| {
+                        panic!("a question about this desktop reaches no engine")
+                    },
                     clear_browsing_data: &|_| {
                         panic!("a question about this desktop reaches no engine")
                     },

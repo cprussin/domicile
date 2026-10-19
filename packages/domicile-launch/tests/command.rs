@@ -4,10 +4,11 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use domicile_launch::command::{
-    clear_browsing_data_line, config_extensions_line, delete_history_line, extensions_line,
-    history_line, load_shell_line, load_unpacked_line, media_devices_line, open_app_line,
-    open_url_line, reply, run_app_line, set_extension_enabled_line, set_media_device_line,
-    set_site_permission_line, site_permissions_line, uninstall_extension_line, visits_line, Reply,
+    clear_browsing_data_line, config_extensions_line, delete_history_line,
+    disable_while_typing_line, extensions_line, history_line, load_shell_line, load_unpacked_line,
+    media_devices_line, open_app_line, open_url_line, reply, run_app_line,
+    set_extension_enabled_line, set_media_device_line, set_site_permission_line,
+    site_permissions_line, uninstall_extension_line, visits_line, Reply,
 };
 use domicile_launch::extensions::InstalledExtension;
 use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
@@ -335,4 +336,20 @@ fn browsing_data_is_cleared_since_a_time_and_for_every_origin_unless_some_are_na
         "{\"type\":\"clear_browsing_data\",\"version\":1,\"since\":1700000000123.5,\"types\":[\"cookies\",\"cache\"],\"origins\":[\"https://a.example\"]}\n"
     );
     assert_eq!(reply("{\"type\":\"cleared\"}").unwrap(), Reply::Cleared);
+}
+
+#[test]
+fn disable_while_typing_is_asked_or_set() {
+    assert_eq!(
+        disable_while_typing_line(None),
+        "{\"type\":\"disable_while_typing\",\"version\":1}\n"
+    );
+    assert_eq!(
+        disable_while_typing_line(Some(false)),
+        "{\"type\":\"disable_while_typing\",\"version\":1,\"enabled\":false}\n"
+    );
+    assert_eq!(
+        reply("{\"type\":\"disable_while_typing\",\"enabled\":true}").unwrap(),
+        Reply::DisableWhileTyping { enabled: true }
+    );
 }

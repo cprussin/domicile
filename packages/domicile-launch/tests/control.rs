@@ -564,6 +564,71 @@ fn a_desktop_told_to_clear_browsing_data_tells_the_engine() {
     assert_eq!(answered, Response::Cleared);
 }
 
+#[test]
+fn a_desktop_asked_about_disable_while_typing_asks_the_engine() {
+    let answered = reply_to(
+        "{\"type\":\"disable_while_typing\"}",
+        &Desktop {
+            disable_while_typing: &|enabled| {
+                assert_eq!(enabled, None, "a question sets nothing");
+                Ok(true)
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(answered, Response::DisableWhileTyping { enabled: true });
+}
+
+#[test]
+fn a_desktop_told_to_turn_disable_while_typing_off_tells_the_engine() {
+    let answered = reply_to(
+        "{\"type\":\"disable_while_typing\",\"to\":\"off\"}",
+        &Desktop {
+            disable_while_typing: &|enabled| Ok(enabled.expect("off sets it")),
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(answered, Response::DisableWhileTyping { enabled: false });
+}
+
+#[test]
+fn a_desktop_told_to_toggle_disable_while_typing_sets_the_opposite() {
+    let told = RefCell::new(Vec::new());
+    let answered = reply_to(
+        "{\"type\":\"disable_while_typing\",\"to\":\"toggle\"}",
+        &Desktop {
+            disable_while_typing: &|enabled| {
+                told.borrow_mut().push(enabled);
+                Ok(enabled.unwrap_or(true))
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(told.take(), vec![None, Some(false)]);
+    assert_eq!(answered, Response::DisableWhileTyping { enabled: false });
+}
+
+#[test]
+fn a_desktop_carries_back_why_the_engine_refused_disable_while_typing() {
+    let answered = reply_to(
+        "{\"type\":\"disable_while_typing\",\"to\":\"toggle\"}",
+        &Desktop {
+            disable_while_typing: &|_| Err("no touchpad".to_string()),
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(
+        answered,
+        Response::Refused {
+            why: "no touchpad".to_string()
+        }
+    );
+}
+
 /// A history row with a favicon.
 fn a_row() -> HistoryItem {
     HistoryItem {
@@ -627,6 +692,7 @@ fn nothing_dialed() -> Desktop<'static> {
         clear_browsing_data: &|_| panic!("only clear_browsing_data clears anything"),
         config_extensions: &|| panic!("only config_extensions lists the config's extensions"),
         delete_history: &|_| panic!("only delete_history deletes visits"),
+        disable_while_typing: &|_| panic!("only disable_while_typing sets it"),
         extensions: &|| panic!("only extensions lists every extension"),
         files: &NO_FILES,
         history: &|_| panic!("only history searches the history"),

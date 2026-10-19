@@ -82,6 +82,21 @@ pub enum Request {
     DeleteHistory { visits: Vec<f64> },
     /// Clear the engine's browsing data.
     ClearBrowsingData(BrowsingData),
+    /// Turn the touchpads' disable-while-typing on, off or over, or with no
+    /// `to`, report it. See `docs/RUNNING-A-DESKTOP.md#disable-while-typing`.
+    DisableWhileTyping {
+        #[serde(default)]
+        to: Option<Switch>,
+    },
+}
+
+/// How [`Request::DisableWhileTyping`] changes the setting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Switch {
+    On,
+    Off,
+    Toggle,
 }
 
 /// The files the Settings app edits, as the desktop found them at startup.
@@ -165,6 +180,9 @@ pub enum Response {
 
     /// The engine cleared the browsing data.
     Cleared,
+
+    /// Whether the touchpads rest while a keyboard types, after the request.
+    DisableWhileTyping { enabled: bool },
 
     /// The request was unknown or could not be carried out.
     ///
@@ -285,6 +303,13 @@ pub type DeleteHistory<'a> = &'a dyn Fn(&[f64]) -> Result<(), String>;
 /// tests.
 pub type ClearBrowsingData<'a> = &'a dyn Fn(&BrowsingData) -> Result<(), String>;
 
+/// Tells the engine whether the touchpads rest while a keyboard types, or with
+/// none only asks, and returns whether they do.
+///
+/// [`crate::command_socket::disable_while_typing`] in a desktop; a closure in
+/// tests.
+pub type DisableWhileTyping<'a> = &'a dyn Fn(Option<bool>) -> Result<bool, String>;
+
 /// What a request can learn about or do to the running desktop.
 ///
 /// The dials reach the engine and the compositor; they are injected so
@@ -312,6 +337,7 @@ pub struct Desktop<'a> {
     pub visits: ListVisits<'a>,
     pub delete_history: DeleteHistory<'a>,
     pub clear_browsing_data: ClearBrowsingData<'a>,
+    pub disable_while_typing: DisableWhileTyping<'a>,
 }
 
 /// How a screenshot the compositor took ended.
@@ -433,12 +459,29 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
                 Err(why) => Response::Refused { why },
             })
         }
+        Ok(Request::DisableWhileTyping { to }) => {
+            to_line(&match switched(to, desktop.disable_while_typing) {
+                Ok(enabled) => Response::DisableWhileTyping { enabled },
+                Err(why) => Response::Refused { why },
+            })
+        }
         Err(why) => to_line(&Response::Refused {
             why: format!(
                 "'{}' is not a request this desktop knows: {why}",
                 line.trim()
             ),
         }),
+    }
+}
+
+/// Carries out `to` with `set`. A toggle asks first, since the engine keeps the
+/// setting.
+fn switched(to: Option<Switch>, set: DisableWhileTyping) -> Result<bool, String> {
+    match to {
+        None => set(None),
+        Some(Switch::On) => set(Some(true)),
+        Some(Switch::Off) => set(Some(false)),
+        Some(Switch::Toggle) => set(Some(!set(None)?)),
     }
 }
 
