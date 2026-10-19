@@ -3,8 +3,11 @@
 # the result with `scripts/lib/distro-installed.sh`.
 #
 #   DOMICILE_DISTRO_PACKAGES=<dir> scripts/distro-packages-install.sh
+#   DOMICILE_DISTRO_REPO=<dir> scripts/distro-packages-install.sh
 #
-# <dir> holds `distro/build.sh`'s output. `DOMICILE_DISTROS` picks
+# <dir> holds `distro/build.sh`'s output, or the repositories `distro/repo.sh`
+# made from it, which each package manager installs from, checking the
+# signatures. `DOMICILE_DISTROS` picks
 # distributions, space separated: debian debian-12 ubuntu ubuntu-22.04 fedora
 # opensuse arch (the default is all). Recommended packages are not installed, so the install
 # proves the hard dependencies are enough. No GPU is needed: nothing draws.
@@ -15,15 +18,19 @@ INSTALLED="$ROOT/scripts/lib/distro-installed.sh"
 [ -f "$INSTALLED" ] || { echo "no $INSTALLED" >&2; exit 1; }
 
 PACKAGES="${DOMICILE_DISTRO_PACKAGES:-}"
-if [ -z "$PACKAGES" ]; then
-  echo "  SKIP: DOMICILE_DISTRO_PACKAGES is unset; make packages with distro/build.sh"
+REPO="${DOMICILE_DISTRO_REPO:-}"
+if [ -z "$PACKAGES$REPO" ]; then
+  echo "  SKIP: DOMICILE_DISTRO_PACKAGES and DOMICILE_DISTRO_REPO are unset; make packages with distro/build.sh"
   exit 77
 fi
 if ! docker info >/dev/null 2>&1; then
   echo "  SKIP: no docker daemon to run the distributions' containers"
   exit 77
 fi
+[ -n "$PACKAGES" ] || PACKAGES="$(mktemp -d)"
 PACKAGES="$(cd "$PACKAGES" && pwd)"
+[ -n "$REPO" ] || REPO="$(mktemp -d)"
+REPO="$(cd "$REPO" && pwd)"
 
 # Each distribution's image, its package, and how it installs a local package
 # (`$1`) without recommended ones.
@@ -48,6 +55,31 @@ package_of() {
     (arch) echo '*.pkg.tar.zst' ;;
   esac
 }
+# How each installs `domicile` from the signed repositories at `/repo`. These
+# are the steps a user takes, with `/repo` as the address.
+install_from_repo_of() {
+  case "$1" in
+    (debian | ubuntu) apt_from_repo current ;;
+    (debian-12 | ubuntu-22.04) apt_from_repo legacy ;;
+    (fedora)
+      echo 'rpm --import /repo/domicile.asc &&
+        printf "[domicile]\nname=Domicile\nbaseurl=file:///repo/rpm/fedora\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=file:///repo/domicile.asc\n" >/etc/yum.repos.d/domicile.repo &&
+        dnf install -y --setopt=install_weak_deps=False domicile' ;;
+    (opensuse)
+      echo 'rpm --import /repo/domicile.asc &&
+        zypper --non-interactive addrepo --gpgcheck file:///repo/rpm/opensuse domicile &&
+        zypper --non-interactive install --no-recommends domicile' ;;
+    (arch)
+      echo 'pacman-key --init && pacman-key --add /repo/domicile.asc &&
+        pacman-key --lsign-key "$(gpg --show-keys --with-colons /repo/domicile.asc | awk -F: "/^fpr/ {print \$10; exit}")" &&
+        printf "[domicile]\nServer = file:///repo/arch/\$arch\n" >>/etc/pacman.conf &&
+        pacman -Syu --noconfirm domicile' ;;
+  esac
+}
+apt_from_repo() { # suite
+  echo 'echo "deb [signed-by=/repo/domicile.asc] file:/repo/apt '"$1"' main" >/etc/apt/sources.list.d/domicile.list &&
+    apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends domicile'
+}
 install_of() {
   case "$1" in
     (debian | debian-12 | ubuntu | ubuntu-22.04)
@@ -64,19 +96,27 @@ for distro in ${DOMICILE_DISTROS:-debian debian-12 ubuntu ubuntu-22.04 fedora op
     echo "no distribution named $distro" >&2
     exit 1
   }
-  set -- $(cd "$PACKAGES" && ls $(package_of "$distro") 2>/dev/null)
-  if [ "$#" -ne 1 ]; then
-    echo "FAIL: $distro: wanted one $(package_of "$distro") in $PACKAGES, found $#"
-    FAILED=$((FAILED + 1))
-    continue
+  if [ -n "${DOMICILE_DISTRO_REPO:-}" ]; then
+    install="$(install_from_repo_of "$distro")"
+    package=/repo
+  else
+    install="$(install_of "$distro")"
+    set -- $(cd "$PACKAGES" && ls $(package_of "$distro") 2>/dev/null)
+    if [ "$#" -ne 1 ]; then
+      echo "FAIL: $distro: wanted one $(package_of "$distro") in $PACKAGES, found $#"
+      FAILED=$((FAILED + 1))
+      continue
+    fi
+    package="/packages/$1"
   fi
-  echo "== $distro ($image): $1 =="
+  echo "== $distro ($image): $package =="
   # One `sh -c`, so the install and the checks share the container.
   if timeout -k 30 1800 docker run --rm \
       -v "$PACKAGES:/packages:ro" \
+      -v "$REPO:/repo:ro" \
       -v "$INSTALLED:/distro-installed.sh:ro" \
-      "$image" sh -c "$(install_of "$distro") && sh /distro-installed.sh" \
-      sh "/packages/$1" 2>&1 | sed "s/^PASS: /PASS: $distro: /"; then
+      "$image" sh -c "$install && sh /distro-installed.sh" \
+      sh "$package" 2>&1 | sed "s/^PASS: /PASS: $distro: /"; then
     echo "$distro: ok"
   else
     echo "FAIL: $distro: the install or a check failed"
