@@ -46,6 +46,8 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS/lib-ports.sh"
 # shellcheck source=packages/domicile-engine/scripts/lib-profile.sh
 . "$SCRIPTS/lib-profile.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-broker.sh
+. "$SCRIPTS/lib-broker.sh"
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
@@ -106,7 +108,8 @@ command -v python3 >/dev/null || {
   exit 77
 }
 
-rm -f "$BROKER"; rm -rf "$PROFILE" "$HOME_DIR"; mkdir -p "$PROFILE"
+fresh_broker
+rm -rf "$PROFILE" "$HOME_DIR"; mkdir -p "$PROFILE"
 mkdir -p "$HOME_DIR/$(dirname "$PICK")"
 
 wait_for_line() { # $1 tries, $2 pattern, $3 file

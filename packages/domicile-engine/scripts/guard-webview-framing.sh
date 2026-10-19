@@ -39,6 +39,8 @@ SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPTS/lib-control-budget.sh"
 # shellcheck source=packages/domicile-engine/scripts/lib-profile.sh
 . "$SCRIPTS/lib-profile.sh"
+# shellcheck source=packages/domicile-engine/scripts/lib-broker.sh
+. "$SCRIPTS/lib-broker.sh"
 
 CHROMIUM="${1:-}"
 if [ -z "$CHROMIUM" ]; then
@@ -102,7 +104,7 @@ measure() { # $1 which run, $2 the URL to open
   local probe_log="/tmp/domicile-webview-framing-$which-probe.log"
   LAST_ENGINE_LOG="$engine_log"
 
-  rm -f "$BROKER"
+  fresh_broker
   rm -rf "$PROFILE"
   mkdir -p "$PROFILE"
 
