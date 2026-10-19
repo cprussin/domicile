@@ -1,50 +1,32 @@
-// Test doubles for Gmail: its page, its sync answer, and a desktop whose
-// fetches answer from a table.
+// Test doubles for Google: a desktop whose fetches answer from a table, and
+// a store for its tokens.
 
 import type {
   DomicileFetchHeader,
   DomicileFetchResponse,
 } from "@domicile-desktop/sdk/domicile-host";
 
-import type { Session } from "./gmail-session";
-
 export const EMAIL = "me@example.com";
 
-export const PAGE = "https://mail.google.com/mail/?authuser=me%40example.com";
-
-export const SYNC = "https://mail.google.com/sync/u/2/i/s?hl=en&c=0&rt=r&pt=ji";
-
-/** What {@link page} holds, as the session reads it. */
-export const SESSION: Session = {
-  build: "gmail.pinto-server_20261008.15_p0",
-  g2: 996_093_519,
-  idKey: "k3y",
-  index: 2,
-  token: "AKwhgQr-9_x:1760400000000",
+export const CLIENT = {
+  id: "client.apps.googleusercontent.com",
+  secret: "s3cret",
 };
 
-/** Gmail's page for `account`, cut to what the session reads. */
-export const page = (account = EMAIL): string =>
-  `<html><head><script>var GM_ID_KEY = 'k3y';var GLOBALS=[null,null,996093519,"gmail.pinto-server_20261008.15_p0","en"];</script></head><body data-token="AKwhgQr-9_x:1760400000000"><div aria-label="Google Account: Me (${account})"></div></body></html>`;
+export const TOKEN = "https://oauth2.googleapis.com/token";
 
-/** Gmail's sync answer with the inbox at `unread` of `total`. */
-export const synced = (unread: number, total: number): string =>
-  JSON.stringify([
-    "s",
-    null,
-    [
-      [
-        ["^all", 1, 40],
-        ["^i", unread, total],
-      ],
-    ],
-  ]);
+export const INBOX =
+  "https://gmail.googleapis.com/gmail/v1/users/me/labels/INBOX";
 
-export const response = (
+/** Google's answer to a token request: `fields` as JSON. */
+export const json = (
   status: number,
-  body: string,
-  url: string,
-): DomicileFetchResponse => ({ body, status, url });
+  fields: object,
+): DomicileFetchResponse => ({
+  body: JSON.stringify(fields),
+  status,
+  url: "",
+});
 
 type Fetched = {
   url: string;
@@ -86,5 +68,19 @@ export const answering = (
       },
     },
     fetched,
+  };
+};
+
+/** An empty store, as `localStorage` is. */
+export const heldStorage = () => {
+  const items = new Map<string, string>();
+  return {
+    getItem: (key: string) => items.get(key) ?? null,
+    removeItem: (key: string) => {
+      items.delete(key);
+    },
+    setItem: (key: string, value: string) => {
+      items.set(key, value);
+    },
   };
 };

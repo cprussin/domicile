@@ -45,7 +45,14 @@ describe("bundle", () => {
          export const Shell = runManganese({
            bar: {
              ...DEFAULT_BAR,
-             right: [<Gmail email="me@gmail.com" key="gmail" nickname="Work" />],
+             right: [
+               <Gmail
+                 client={{ id: "id", secret: "secret" }}
+                 email="me@gmail.com"
+                 key="gmail"
+                 nickname="Work"
+               />,
+             ],
            },
          });`,
     );

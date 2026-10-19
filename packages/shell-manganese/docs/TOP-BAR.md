@@ -244,12 +244,12 @@ Every bar and the lock screen share one watch per system readout. See
 
 ## Gmail
 
-`<Gmail email="me@gmail.com" nickname="Work" />`: one account's inbox,
-read with the Google sign-in of the browser windows' profile. Not in
-`DEFAULT_BAR`.
+`<Gmail client={{ id, secret }} email="me@gmail.com" nickname="Work" />`:
+one account's inbox, read with the Gmail API. Not in `DEFAULT_BAR`.
 
-- **Signed out:** a **Sign in to me@gmail.com** button opens Google's
-  account chooser for that address in a browser window.
+- **Signed out:** a **Sign in to me@gmail.com** button opens Google's consent
+  page in a browser window. Once the user agrees, the window closes and the
+  count shows.
 - **Empty inbox:** nothing.
 - **Nothing unread:** an envelope, the nickname and the conversation count.
 - **Unread:** the same with `unread / total`, the count semibold, on the lit
@@ -259,15 +259,18 @@ read with the Google sign-in of the browser windows' profile. Not in
 - Click opens the inbox in a browser window.
 - Read every minute, and not while the desktop is locked. Counts are
   conversations, as Gmail's inbox counts them.
-- How it reads, with Gmail's own undocumented protocol:
-  - The page (`/mail/?authuser=<email>`) says whether the profile is signed
-    in to the address: a redirect to sign in, or a page that does not name
-    it, is signed out. Its address gives the account's index, and its
-    script the token and build values the sync needs.
-  - Gmail's sync (`POST /sync/u/<index>/i/s`) answers the labels' counts;
-    the inbox's row is `["^i", unread, total]`.
-  - The page is read once, then again after an hour or when a sync fails.
-  - Both go through `fetchWithCookies`
+- How it reads:
+  - `client` is a Google Cloud OAuth client of the Desktop app type, with the
+    Gmail API on and the `gmail.labels` scope. Publish its consent screen:
+    one in Testing expires sign-ins after 7 days.
+  - Sign-in is Google's desktop flow. Consent redirects the window to a
+    loopback address nothing listens on; the item reads the code from the
+    window's address, closes it, and trades the code for a refresh token.
+  - The refresh token is in `localStorage`, per account. One Google revokes
+    signs the account out.
+  - Each read asks `labels.get INBOX` for `threadsTotal` and
+    `threadsUnread`, with an access token kept until it expires.
+  - Requests go through `fetchWithCookies`
     ([SHELL-SYSTEM-ACCESS.md](../../../docs/SHELL-SYSTEM-ACCESS.md#the-browsers-cookies)).
 
 ## Tray
