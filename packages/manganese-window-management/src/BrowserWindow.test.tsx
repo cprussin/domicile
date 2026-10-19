@@ -305,10 +305,18 @@ const asksForAMenu = (
   return ran;
 };
 
-loadEmittedStylesheet(
-  document,
-  new URL("../styled-system/styles.css", import.meta.url),
-);
+/**
+ * Adds the package's stylesheet for the tests of the enclosing `describe`.
+ *
+ * Only tests that read a style take it. With it, role queries and `userEvent`
+ * resolve each element's style against all of it, which is slow.
+ */
+const usesStylesheet = () => {
+  loadEmittedStylesheet(
+    document,
+    new URL("../styled-system/styles.css", import.meta.url),
+  );
+};
 
 /** An arbitrary on-screen box. */
 const ON_SCREEN = { height: 800, width: 1200, x: 0, y: 32 };
@@ -330,68 +338,72 @@ const nothingEnded = () => {
 };
 
 describe("BrowserWindow", () => {
-  it("rounds its bottom corners, and clips the page to them", () => {
-    render(
-      <BrowserWindow
-        behindPanel={false}
-        clickThrough={false}
-        covered={false}
-        depth={0}
-        domicile={silentDomicile}
-        dragging={false}
-        focused
-        frame={FRAME}
-        fullscreen={false}
-        motion="resting"
-        onDescription={noDescription}
-        onFocusRequest={() => undefined}
-        onIcon={noIcon}
-        onMotionEnded={nothingEnded}
-        onPageFullscreen={noFullscreen}
-        onReach={() => undefined}
-        rect={ON_SCREEN}
-        url="https://example.com"
-        window="1"
-      />,
-    );
-    const style = globalThis.getComputedStyle(browser());
+  describe("its corners", () => {
+    usesStylesheet();
 
-    expect(style.borderEndStartRadius).not.toBe("");
-    expect(style.borderEndEndRadius).not.toBe("");
-    // A radius clips the view only if overflow is hidden.
-    expect(style.overflow).toBe("hidden");
-  });
+    it("rounds its bottom corners, and clips the page to them", () => {
+      render(
+        <BrowserWindow
+          behindPanel={false}
+          clickThrough={false}
+          covered={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          fullscreen={false}
+          motion="resting"
+          onDescription={noDescription}
+          onFocusRequest={() => undefined}
+          onIcon={noIcon}
+          onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          url="https://example.com"
+          window="1"
+        />,
+      );
+      const style = globalThis.getComputedStyle(browser());
 
-  it("squares its corners and drops its edge while it fills the screen", () => {
-    render(
-      <BrowserWindow
-        behindPanel={false}
-        clickThrough={false}
-        covered={false}
-        depth={0}
-        domicile={silentDomicile}
-        dragging={false}
-        focused
-        frame={FRAME}
-        fullscreen
-        motion="resting"
-        onDescription={noDescription}
-        onFocusRequest={() => undefined}
-        onIcon={noIcon}
-        onMotionEnded={nothingEnded}
-        onPageFullscreen={noFullscreen}
-        onReach={() => undefined}
-        rect={ON_SCREEN}
-        url="https://example.com"
-        window="1"
-      />,
-    );
-    const style = globalThis.getComputedStyle(browser());
+      expect(style.borderEndStartRadius).not.toBe("");
+      expect(style.borderEndEndRadius).not.toBe("");
+      // A radius clips the view only if overflow is hidden.
+      expect(style.overflow).toBe("hidden");
+    });
 
-    expect(style.borderEndStartRadius).toBe("");
-    expect(style.borderEndEndRadius).toBe("");
-    // No edge at the screen border.
-    expect(style.borderTopWidth).not.toBe("1px");
+    it("squares its corners and drops its edge while it fills the screen", () => {
+      render(
+        <BrowserWindow
+          behindPanel={false}
+          clickThrough={false}
+          covered={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          fullscreen
+          motion="resting"
+          onDescription={noDescription}
+          onFocusRequest={() => undefined}
+          onIcon={noIcon}
+          onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          url="https://example.com"
+          window="1"
+        />,
+      );
+      const style = globalThis.getComputedStyle(browser());
+
+      expect(style.borderEndStartRadius).toBe("");
+      expect(style.borderEndEndRadius).toBe("");
+      // No edge at the screen border.
+      expect(style.borderTopWidth).not.toBe("1px");
+    });
   });
 
   it("leaves its frame the resting color even while it is focused", () => {
@@ -892,6 +904,8 @@ describe("BrowserWindow", () => {
   });
 
   describe("the page", () => {
+    usesStylesheet();
+
     it("takes the whole window under the address bar", () => {
       const { container } = render(
         <BrowserWindow
@@ -2444,6 +2458,8 @@ describe("BrowserWindow", () => {
   });
 
   describe("the way it moves", () => {
+    usesStylesheet();
+
     /** Default props; each test overrides what it checks. */
     const windowProps = {
       behindPanel: false,
