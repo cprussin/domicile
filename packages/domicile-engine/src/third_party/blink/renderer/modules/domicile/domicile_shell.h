@@ -27,6 +27,12 @@ class NativeEventListener;
 // either fails -- because module loading and an exception's message are
 // JavaScript's to do well. It is a function this file owns, evaluated without
 // binding it to any name and called from here, so the page never sees it.
+//
+// The document draws nothing until `Shell` returns, or until the report of why
+// it did not run. `load_shell`'s view transition captures the new document's
+// first frame, so a frame drawn while the module loads crossfades the shell
+// before (the splash) into an empty white page. A shell draws its first frame
+// before `Shell` returns.
 class MODULES_EXPORT DomicileShell final
     : public GarbageCollected<DomicileShell>,
       public Supplement<LocalDOMWindow> {
@@ -42,6 +48,9 @@ class MODULES_EXPORT DomicileShell final
   explicit DomicileShell(LocalDOMWindow&);
 
   void Trace(Visitor*) const override;
+
+  // Lets the document draw. Called once the shell has run or failed to.
+  void LetTheDocumentDraw();
 
  private:
   // The document is parsed: find the module it names and run it.
