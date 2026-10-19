@@ -140,12 +140,20 @@ def send(connection, message):
     connection.sendall(bytes(header) + masked)
 
 
+class Closed(SystemExit):
+    """The engine ended the connection.
+
+    A SystemExit, so a guard that does not expect it stops with the reason, and
+    one that does can catch it.
+    """
+
+
 def read_exactly(connection, count):
     buffer = b""
     while len(buffer) < count:
         chunk = connection.recv(count - len(buffer))
         if not chunk:
-            raise SystemExit("the engine closed the connection mid-frame")
+            raise Closed("the engine closed the connection mid-frame")
         buffer += chunk
     return buffer
 
@@ -158,7 +166,10 @@ def receive(connection):
         length = struct.unpack("!H", read_exactly(connection, 2))[0]
     elif length == 127:
         length = struct.unpack("!Q", read_exactly(connection, 8))[0]
-    return json.loads(read_exactly(connection, length).decode("utf-8"))
+    payload = read_exactly(connection, length)
+    if header[0] & 0x0F == 0x8:
+        raise Closed("the engine closed the WebSocket")
+    return json.loads(payload.decode("utf-8"))
 
 
 def command(connection, identifier, method, params):

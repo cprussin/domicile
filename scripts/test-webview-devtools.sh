@@ -115,6 +115,24 @@ padded = {"id": 8, "result": {"note": "y" * 400}}
 server.sendall(server_frame(json.dumps(padded).encode("utf-8")))
 expect("a server frame over 125 bytes", padded, driver.receive(client))
 
+
+def closed_by(what):
+    """What `receive` raises once the server has sent `what`."""
+    reader, writer = socket.socketpair()
+    writer.sendall(what)
+    writer.close()
+    try:
+        return "read %r" % (driver.receive(reader),)
+    except driver.Closed:
+        return "Closed"
+    finally:
+        reader.close()
+
+
+# The shell-crash driver counts a closed connection as the engine dying.
+expect("a close frame is Closed", "Closed", closed_by(b"\x88\x02\x03\xe8"))
+expect("end of stream is Closed", "Closed", closed_by(b""))
+
 print()
 print("which page the input is dispatched at")
 expect(
