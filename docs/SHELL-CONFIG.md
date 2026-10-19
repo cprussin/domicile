@@ -269,7 +269,7 @@ Applications read the rest through the settings portal
 | `theme.contrast` | `"normal"`, `"high"` | `"normal"` |
 | `theme.reduced_motion` | `true`, `false` | `false` |
 | `theme.icon_theme` | an icon theme's directory name, such as `"Papirus-Dark"` | unset: `hicolor` only |
-| `theme.cursor_theme` | a cursor theme's directory name, such as `"Bibata-Modern-Ice"` | unset: each application's own |
+| `theme.cursor_theme` | a cursor theme's directory name, such as `"Bibata-Modern-Ice"`, or one per mode: `{ "dark": "Bibata-Modern-Ice", "light": "Bibata-Modern-Classic" }` | unset: each application's own |
 | `theme.cursor_size` | logical pixels, at least `1` | unset: each application's own |
 | `theme.font_name` | a Pango font description, such as `"Inter 11"` | unset: each application's own |
 | `theme.monospace_font_name` | a Pango font description, such as `"Iosevka 12"` | unset: each application's own |
@@ -287,6 +287,8 @@ Applications read the rest through the settings portal
 
 `cursor_theme`, `cursor_size`, `font_name`, `monospace_font_name`:
 
+- A per-mode `cursor_theme` switches with `mode`, including on the shell's
+  toggle.
 - Served as `org.gnome.desktop.interface`'s `cursor-theme`, `cursor-size`,
   `font-name` and `monospace-font-name`. Unset leaves each to the next portal
   backend; a reload that unsets one signals the toolkit default: `default`,

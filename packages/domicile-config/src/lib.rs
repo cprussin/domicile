@@ -548,9 +548,9 @@ pub struct ThemeConfig {
     /// The freedesktop icon theme's directory name, such as `Papirus-Dark`.
     /// Unset leaves shells with `hicolor`.
     pub icon_theme: Option<String>,
-    /// The XCursor theme's directory name, such as `Adwaita`, for clients
-    /// and the engine's pointer. Unset leaves clients their own.
-    pub cursor_theme: Option<String>,
+    /// The XCursor theme for clients and the engine's pointer, in both modes
+    /// or one per mode. Unset leaves clients their own.
+    pub cursor_theme: Option<CursorThemeName>,
     /// The cursor size in logical pixels, for clients and the engine's
     /// pointer. Unset leaves clients their own. Zero is refused.
     pub cursor_size: Option<u16>,
@@ -566,16 +566,17 @@ impl ThemeConfig {
     fn validate(&self) -> Result<(), ConfigError> {
         // Icon and cursor themes are each a directory under each `icons`
         // directory.
-        let not_a_directory = [
-            ("icon_theme", &self.icon_theme),
-            ("cursor_theme", &self.cursor_theme),
-        ]
-        .into_iter()
-        .find_map(|(key, name)| {
-            name.as_deref()
-                .filter(|name| matches!(*name, "" | "." | "..") || name.contains('/'))
-                .map(|name| (key, name))
-        });
+        let cursor_themes = self
+            .cursor_theme
+            .iter()
+            .flat_map(|name| [ThemeMode::Dark, ThemeMode::Light].map(|mode| name.in_mode(mode)));
+        let not_a_directory = self
+            .icon_theme
+            .as_deref()
+            .map(|name| ("icon_theme", name))
+            .into_iter()
+            .chain(cursor_themes.map(|name| ("cursor_theme", name)))
+            .find(|(_, name)| matches!(*name, "" | "." | "..") || name.contains('/'));
         match (not_a_directory, self.cursor_size) {
             (Some((key, name)), _) => Err(ConfigError::Validation(format!(
                 "theme.{key} {name:?} is not a theme's directory name"
@@ -585,6 +586,36 @@ impl ThemeConfig {
                     .into(),
             )),
             (None, _) => Ok(()),
+        }
+    }
+}
+
+/// An XCursor theme's directory name, such as `Adwaita`, for both modes or
+/// for each.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum CursorThemeName {
+    /// The same theme in both modes.
+    Both(String),
+    /// A theme for each mode, such as a dark pointer on the light desktop.
+    PerMode(PerModeCursorThemes),
+}
+
+/// A cursor theme's directory name for each mode.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PerModeCursorThemes {
+    pub dark: String,
+    pub light: String,
+}
+
+impl CursorThemeName {
+    /// The theme's directory name in `mode`.
+    pub fn in_mode(&self, mode: ThemeMode) -> &str {
+        match (self, mode) {
+            (CursorThemeName::Both(name), _) => name,
+            (CursorThemeName::PerMode(names), ThemeMode::Dark) => &names.dark,
+            (CursorThemeName::PerMode(names), ThemeMode::Light) => &names.light,
         }
     }
 }

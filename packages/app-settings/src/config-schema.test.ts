@@ -97,6 +97,23 @@ describe(readSettings, () => {
     expect(readSettings({ theme: { cursor_size: 0 } }).isErr()).toBe(true);
   });
 
+  it("reads a cursor theme per mode", () => {
+    const cursor_theme = { dark: "Numix-Cursor", light: "Numix-Cursor-Light" };
+    expect(
+      readSettings({ theme: { cursor_theme } }).map((read) => read.theme),
+    ).toEqual(
+      Ok({
+        contrast: "normal",
+        cursor_theme,
+        mode: "dark",
+        reduced_motion: false,
+      }),
+    );
+    expect(
+      readSettings({ theme: { cursor_theme: { light: "Adwaita" } } }).isErr(),
+    ).toBe(true);
+  });
+
   it("says where a config does not fit", () => {
     expect(readSettings({ theme: { mode: "system" } }).isErr()).toBe(true);
     expect(readSettings({ theme: { tint: "red" } }).isErr()).toBe(true);

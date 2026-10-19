@@ -418,15 +418,18 @@ fn a_desk_that_states_its_cursor_and_fonts_gets_them() {
     )
     .unwrap()
     .theme;
+    let cursor_theme = theme.cursor_theme.as_ref().unwrap();
     assert_eq!(
         (
-            theme.cursor_theme.as_deref(),
+            cursor_theme.in_mode(ThemeMode::Dark),
+            cursor_theme.in_mode(ThemeMode::Light),
             theme.cursor_size,
             theme.font_name.as_deref(),
             theme.monospace_font_name.as_deref()
         ),
         (
-            Some("Bibata-Modern-Ice"),
+            "Bibata-Modern-Ice",
+            "Bibata-Modern-Ice",
             Some(32),
             Some("Inter 11"),
             Some("Iosevka 12")
@@ -435,14 +438,49 @@ fn a_desk_that_states_its_cursor_and_fonts_gets_them() {
 }
 
 #[test]
+fn a_cursor_theme_can_differ_by_mode() {
+    let cursor_theme = Config::parse(
+        r#"
+{ "theme": { "cursor_theme": { "dark": "Bibata-Modern-Ice",
+                               "light": "Bibata-Modern-Classic" } } }
+"#,
+    )
+    .unwrap()
+    .theme
+    .cursor_theme
+    .unwrap();
+    assert_eq!(
+        (
+            cursor_theme.in_mode(ThemeMode::Dark),
+            cursor_theme.in_mode(ThemeMode::Light)
+        ),
+        ("Bibata-Modern-Ice", "Bibata-Modern-Classic")
+    );
+}
+
+#[test]
+fn rejects_a_per_mode_cursor_theme_without_both_modes() {
+    let err =
+        Config::parse(r#"{ "theme": { "cursor_theme": { "light": "Adwaita" } } }"#).unwrap_err();
+    assert!(matches!(err, ConfigError::Parse(_)), "got {err:?}");
+}
+
+#[test]
 fn rejects_an_icon_or_cursor_theme_that_is_not_a_directory_name() {
-    for key in ["icon_theme", "cursor_theme"] {
-        for name in ["", ".", "..", "Papirus/Dark"] {
-            let err =
-                Config::parse(&format!(r#"{{ "theme": {{ "{key}": "{name}" }} }}"#)).unwrap_err();
+    let written = |name: &str| {
+        [
+            format!(r#""icon_theme": "{name}""#),
+            format!(r#""cursor_theme": "{name}""#),
+            format!(r#""cursor_theme": {{ "dark": "{name}", "light": "Adwaita" }}"#),
+            format!(r#""cursor_theme": {{ "dark": "Adwaita", "light": "{name}" }}"#),
+        ]
+    };
+    for name in ["", ".", "..", "Papirus/Dark"] {
+        for key in written(name) {
+            let err = Config::parse(&format!(r#"{{ "theme": {{ {key} }} }}"#)).unwrap_err();
             assert!(
                 matches!(err, ConfigError::Validation(_)),
-                "{key} {name:?}: got {err:?}"
+                "{key}: got {err:?}"
             );
         }
     }

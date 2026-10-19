@@ -10,6 +10,19 @@
       "enum": ["normal", "high"],
       "type": "string"
     },
+    "CursorThemeName": {
+      "anyOf": [
+        {
+          "description": "The same theme in both modes.",
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/PerModeCursorThemes",
+          "description": "A theme for each mode, such as a dark pointer on the light desktop."
+        }
+      ],
+      "description": "An XCursor theme's directory name, such as `Adwaita`, for both modes or\nfor each."
+    },
     "DisplayConfig": {
       "additionalProperties": false,
       "description": "One display, described in the config rather than discovered.\n\nA nested compositor has no monitors to enumerate. Each display becomes a\n`wl_output` and a region of the chrome page, which the shell addresses by\n`name`. `position` and `size` are logical units.",
@@ -317,6 +330,20 @@
       },
       "type": "object"
     },
+    "PerModeCursorThemes": {
+      "additionalProperties": false,
+      "description": "A cursor theme's directory name for each mode.",
+      "properties": {
+        "dark": {
+          "type": "string"
+        },
+        "light": {
+          "type": "string"
+        }
+      },
+      "required": ["dark", "light"],
+      "type": "object"
+    },
     "PointerConfig": {
       "additionalProperties": false,
       "description": "A tablet or touchscreen, and the display it covers.",
@@ -397,9 +424,15 @@
           "type": ["integer", "null"]
         },
         "cursor_theme": {
-          "default": null,
-          "description": "The XCursor theme's directory name, such as `Adwaita`, for clients\nand the engine's pointer. Unset leaves clients their own.",
-          "type": ["string", "null"]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CursorThemeName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The XCursor theme for clients and the engine's pointer, in both modes\nor one per mode. Unset leaves clients their own."
         },
         "font_name": {
           "default": null,

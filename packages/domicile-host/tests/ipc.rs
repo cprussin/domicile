@@ -8,7 +8,7 @@ use std::os::unix::net::UnixStream;
 use std::thread;
 
 use domicile_host::ipc::{apply_chrome_message, parse_chrome, to_line};
-use domicile_host::Host;
+use domicile_host::{Appearances, Host};
 use domicile_protocol::{
     AccessDialog, Appearance, BoundShortcut, Capturing, CapturingKind, ChromeMessage, Devices,
     HostMessage, Notification, Owner, PortalKind, PortalRequest, PortalWallpaper, Theme, TrayItem,
@@ -577,12 +577,17 @@ fn the_configs_appearance_rides_with_the_handshake() {
         ..Appearance::default()
     };
 
+    let appearances = Appearances {
+        dark: appearance.clone(),
+        light: appearance.clone(),
+    };
+
     assert_eq!(
-        session.host_mut().set_appearance(appearance.clone()),
+        session.host_mut().set_appearance(appearances.clone()),
         Some(HostMessage::Appearance(appearance.clone()))
     );
     assert_eq!(
-        session.host_mut().set_appearance(appearance.clone()),
+        session.host_mut().set_appearance(appearances),
         None,
         "an unchanged appearance says nothing"
     );

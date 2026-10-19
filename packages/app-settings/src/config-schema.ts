@@ -132,7 +132,12 @@ const settingsSchema = z.strictObject({
         .optional(),
       contrast: z.enum(CONTRASTS).default("normal"),
       cursor_size: z.number().int().positive().max(65_535).optional(),
-      cursor_theme: z.string().optional(),
+      cursor_theme: z
+        .union([
+          z.string(),
+          z.strictObject({ dark: z.string(), light: z.string() }),
+        ])
+        .optional(),
       font_name: z.string().optional(),
       icon_theme: z.string().optional(),
       mode: z.enum(THEME_MODES).default("dark"),

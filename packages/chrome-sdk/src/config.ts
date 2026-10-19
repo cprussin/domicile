@@ -42,6 +42,12 @@ export type AccentColor = string;
 export type Contrast = "normal" | "high";
 
 /**
+ * An XCursor theme's directory name, such as `Adwaita`, for both modes or
+ * for each.
+ */
+export type CursorThemeName = string | PerModeCursorThemes;
+
+/**
  * One display, described in the config rather than discovered.
  *
  * A nested compositor has no monitors to enumerate. Each display becomes a
@@ -284,6 +290,12 @@ export type OutputConfig = {
   profiles?: Profile[];
 };
 
+/** A cursor theme's directory name for each mode. */
+export type PerModeCursorThemes = {
+  dark: string;
+  light: string;
+};
+
 /** A tablet or touchscreen, and the display it covers. */
 export type PointerConfig = {
   /**
@@ -343,10 +355,10 @@ export type ThemeConfig = {
    */
   cursor_size?: number | null;
   /**
-   * The XCursor theme's directory name, such as `Adwaita`, for clients
-   * and the engine's pointer. Unset leaves clients their own.
+   * The XCursor theme for clients and the engine's pointer, in both modes
+   * or one per mode. Unset leaves clients their own.
    */
-  cursor_theme?: string | null;
+  cursor_theme?: CursorThemeName | null;
   /**
    * The interface font as a Pango description, such as `Inter 11`. Unset
    * leaves clients their own.

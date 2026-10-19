@@ -4,10 +4,10 @@
 //! changes back as `HostMessage`s. These tests need no Wayland or GPU.
 
 use domicile_host::ipc::apply_chrome_message;
-use domicile_host::{AppId, Host, Mapped};
+use domicile_host::{AppId, Appearances, Host, Mapped};
 use domicile_protocol::{
-    AppFrame, Appearance, ChromeMessage, DisplayInfo, DisplayTransform, HostMessage, Owner, Theme,
-    PROTOCOL_VERSION,
+    AppFrame, Appearance, ChromeMessage, CursorTheme, DisplayInfo, DisplayTransform, HostMessage,
+    Owner, Theme, PROTOCOL_VERSION,
 };
 use domicile_scene::KeyboardTarget;
 
@@ -899,9 +899,9 @@ fn a_theme_that_moved_is_what_every_chrome_is_told() {
 
     assert_eq!(
         host.set_theme(Theme::Light),
-        Some(HostMessage::Theme {
+        vec![HostMessage::Theme {
             theme: Theme::Light
-        })
+        }]
     );
     assert_eq!(
         host.describe_theme(),
@@ -919,7 +919,39 @@ fn a_theme_that_did_not_move_is_not_restated() {
     let mut host = Host::new();
     host.set_theme(Theme::Light);
 
-    assert_eq!(host.set_theme(Theme::Light), None);
+    assert_eq!(host.set_theme(Theme::Light), Vec::new());
+}
+
+#[test]
+fn a_theme_with_its_own_appearance_restates_it() {
+    // A cursor theme per mode: the browser redraws the pointer when the theme
+    // flips, and a chrome that connects later is told the current one.
+    let mut host = Host::new();
+    let in_mode = |name: &str| Appearance {
+        cursor: Some(CursorTheme {
+            name: name.into(),
+            size: 24,
+        }),
+        ..Appearance::default()
+    };
+    host.set_appearance(Appearances {
+        dark: in_mode("Numix-Cursor"),
+        light: in_mode("Numix-Cursor-Light"),
+    });
+
+    assert_eq!(
+        host.set_theme(Theme::Light),
+        vec![
+            HostMessage::Theme {
+                theme: Theme::Light
+            },
+            HostMessage::Appearance(in_mode("Numix-Cursor-Light")),
+        ]
+    );
+    assert_eq!(
+        host.describe_appearance(),
+        HostMessage::Appearance(in_mode("Numix-Cursor-Light"))
+    );
 }
 
 #[test]

@@ -426,9 +426,9 @@ pub struct ScreenCasting {
     pub grants: Option<PathBuf>,
 }
 
-/// The config's look besides `mode`, as the shell is told it. The shell
-/// follows it as the settings portal's clients do.
-pub fn shell_appearance(theme: &ThemeConfig) -> domicile_protocol::Appearance {
+/// The config's look besides `mode` in each theme, as the shell is told it.
+/// The shell follows it as the settings portal's clients do.
+pub fn shell_appearance(theme: &ThemeConfig) -> domicile_host::Appearances {
     (&Appearance::from(theme)).into()
 }
 
