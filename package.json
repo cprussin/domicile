@@ -2,6 +2,7 @@
   "catalog": {
     "@base-ui/react": "^1.8.0",
     "@biomejs/biome": "^2.5.12",
+    "@changesets/cli": "^3.0.3",
     "@cprussin/option-result": "^2.0.1",
     "@cprussin/tsconfig": "^5.0.0",
     "@happy-dom/global-registrator": "^20.14.0",
@@ -33,6 +34,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",
+    "@changesets/cli": "catalog:",
     "turbo": "catalog:"
   },
   "engines": {
@@ -40,7 +42,7 @@
     "node": ">=24"
   },
   "license": "MIT",
-  "name": "domicile",
+  "name": "domicile-monorepo",
   "packageManager": "bun@1.4.2",
   "private": true,
   "scripts": {

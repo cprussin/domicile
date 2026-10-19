@@ -1,0 +1,14 @@
+{
+  "dependencies": {
+    "@domicile-desktop/app-history": "workspace:*",
+    "@domicile-desktop/app-settings": "workspace:*",
+    "@domicile-desktop/builder": "workspace:*",
+    "@domicile-desktop/manganese": "workspace:*",
+    "@domicile-desktop/shell-simple": "workspace:*",
+    "@domicile-desktop/shell-splash": "workspace:*"
+  },
+  "license": "MIT",
+  "name": "domicile",
+  "private": true,
+  "version": "0.0.0"
+}
