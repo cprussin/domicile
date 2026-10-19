@@ -21,7 +21,7 @@
       # the version.
       bunOverlay = final: prev: {
         bun = prev.bun.overrideAttrs (finalAttrs: old: {
-          version = "1.4.2";
+          version = "1.4.3";
           # As nixpkgs' own `src`. Restated, or nixpkgs warns that only the
           # version changed.
           src = finalAttrs.passthru.sources.${final.stdenv.hostPlatform.system};
@@ -29,7 +29,7 @@
             sources = old.passthru.sources // {
               x86_64-linux = final.fetchurl {
                 url = "https://github.com/oven-sh/bun/releases/download/bun-v${finalAttrs.version}/bun-linux-x64-baseline.zip";
-                hash = "sha256-xngEDxT+BEDrg503y9DOTAUaMtpygGrJfeamqra/co8=";
+                hash = "sha256-H8LtrIQxApCeOhvh2NmALMYHHPB05n6IIx9P/g+LOXs=";
               };
             };
           };
@@ -695,7 +695,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-kk5plxX9T+Hl6wRVEAhQ3qt72xczrQ8vGQ2xQ1TtcoI=";
+        outputHash = "sha256-v+HSlixmL7gSxcoUGya3qptKuDVmYvW+neO+4aNHuiY=";
       };
 
 
