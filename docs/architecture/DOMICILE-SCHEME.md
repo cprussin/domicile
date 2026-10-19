@@ -58,6 +58,9 @@ The fork writes the shell's HTML document
 - `@view-transition { navigation: auto }`. `load_shell` navigates the shell
   window (a renderer-initiated replacement, not a reload), so the shell before,
   such as the splash, crossfades into the new one over 600 ms
+- no frame until `Shell` returns. Blink's `DomicileShell` holds the document's
+  rendering until then, so the crossfade is into the shell, not an empty white
+  page
 
 ## `domicile://home/`
 

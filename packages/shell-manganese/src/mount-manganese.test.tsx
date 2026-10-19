@@ -57,6 +57,22 @@ describe("mountManganese", () => {
     });
   });
 
+  // The page draws nothing until `Shell` returns, so the chrome must be in it
+  // by then.
+  it("draws the chrome before it returns", () => {
+    const fake = onADesk();
+    const root = document.createElement("div");
+    act(() => {
+      const mounted = mountManganese(root, fake.host, {
+        applications,
+        bar: { center: [], left: [<span key="mail">mail</span>], right: [] },
+        floating,
+      });
+      expect(root).toContainElement(within(root).queryByText("mail"));
+      mounted.unmount();
+    });
+  });
+
   // Custom keybindings replace the defaults.
   it("binds the keys it is given rather than its own", async () => {
     const fake = onADesk();

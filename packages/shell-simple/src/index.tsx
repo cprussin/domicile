@@ -2,6 +2,7 @@
 // Importing this module only installs its stylesheet.
 
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
+import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 
 import { Shell as Desktop } from "./Shell";
@@ -14,5 +15,9 @@ export const Shell: ShellModule = (root, domicile) => {
   // `root`, and a React root there would erase them.
   const mount = document.createElement("div");
   root.append(mount);
-  createRoot(mount).render(<Desktop domicile={domicile} />);
+  const desktop = createRoot(mount);
+  // Synchronously: the page draws nothing until `Shell` returns.
+  flushSync(() => {
+    desktop.render(<Desktop domicile={domicile} />);
+  });
 };

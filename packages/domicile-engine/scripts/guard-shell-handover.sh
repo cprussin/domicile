@@ -12,6 +12,10 @@
 # it was handed answers (its `windows` is a list), and neither
 # `navigator.domicile` nor `window.domicile` exists. See
 # packages/chrome-sdk/README.md.
+#
+# It also checks that the page draws no frame while its module loads, and
+# draws once `Shell` returns. A frame drawn sooner is an empty white page,
+# which `load_shell`'s view transition fades the splash into (patch 0127).
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -93,19 +97,21 @@ STARTED+=($!)
 TRIES=$((FOR_SECONDS * 4))
 # No early exit when it never comes: the verdict below says why, with the
 # engine's log.
-wait_for_line "$TRIES" "GUARD handover " "$ENGINE_LOG"
+wait_for_line "$TRIES" "GUARD handover drawn" "$ENGINE_LOG"
 
 # The closing quote is Chromium's and keeps each match on the message: see
 # guard-windows-state.sh.
-HANDOVER=$(grep -oE '"GUARD handover [^"]*"' "$ENGINE_LOG" | head -1)
-WANTED='"GUARD handover root=body desktop=yes navigator=none window=none"'
+HANDOVER=$(grep -oE '"GUARD handover root[^"]*"' "$ENGINE_LOG" | head -1)
+WANTED='"GUARD handover root=body desktop=yes navigator=none window=none held=yes"'
 
 if [ -z "$HANDOVER" ]; then
   FAILURE="the shell never ran, or ran and never said so: DomicileShell did not find the module the document names, or did not call its Shell"
-elif [ "$HANDOVER" = "$WANTED" ]; then
-  FAILURE=""
+elif [ "$HANDOVER" != "$WANTED" ]; then
+  FAILURE="the shell was handed $HANDOVER where $WANTED was owed: called with the body and a desktop that answers, no global holding one, and no frame drawn while the module loaded"
+elif ! grep -qF '"GUARD handover drawn"' "$ENGINE_LOG"; then
+  FAILURE="the page drew nothing after Shell returned: DomicileShell never let the document draw"
 else
-  FAILURE="the shell was handed $HANDOVER where $WANTED was owed: called with the body and a desktop that answers, and no global holding one"
+  FAILURE=""
 fi
 
 echo "page: $HANDOVER"
@@ -117,4 +123,4 @@ if [ -n "$FAILURE" ]; then
   tail -40 "$ENGINE_LOG" >&2
   exit 1
 fi
-echo "PASS: the shell is handed the desktop, and nothing else finds it"
+echo "PASS: the shell is handed the desktop, nothing else finds it, and its page draws once it has run"
