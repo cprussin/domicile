@@ -137,9 +137,12 @@ impl ChromeHub {
     /// Does nothing if the theme is unchanged, so rewriting the config does not
     /// replay the theme transition. See `Host::set_theme`.
     pub fn take_up_the_theme(&self, theme: Theme) {
+        // The theme, then the new theme's appearance if it has its own.
         let told = self.host.lock().unwrap().set_theme(theme);
-        if let Some(message) = told {
-            self.broadcast(message);
+        if !told.is_empty() {
+            for message in told {
+                self.broadcast(message);
+            }
             // Read after the broadcast. A chrome that joins in between is then
             // waited on for a theme it already got in its handshake, which at
             // worst costs a deadline.

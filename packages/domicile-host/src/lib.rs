@@ -128,6 +128,23 @@ pub struct Popup {
     pub frame: u32,
 }
 
+/// The config's look in each theme. The two differ only where the config
+/// gives a mode its own value, such as the cursor theme.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Appearances {
+    pub dark: Appearance,
+    pub light: Appearance,
+}
+
+impl Appearances {
+    fn in_theme(&self, theme: Theme) -> &Appearance {
+        match theme {
+            Theme::Dark => &self.dark,
+            Theme::Light => &self.light,
+        }
+    }
+}
+
 /// The compositor's orchestration state.
 #[derive(Debug, Default)]
 pub struct Host {
@@ -165,8 +182,8 @@ pub struct Host {
     /// The client windows' theme. Separate from `theme` because windows
     /// switch after the chromes (see [`theme_turnover`]).
     windows_theme: Theme,
-    /// The config's accent color, contrast and reduced motion.
-    appearance: Appearance,
+    /// The config's look in each theme.
+    appearances: Appearances,
     /// The system tray's icons.
     ///
     /// `None` until set. The `domicile` daemon has no session bus, so it
@@ -255,17 +272,28 @@ impl Host {
             .map(|(keys, options)| HostMessage::ShellConfig { keys, options })
     }
 
-    /// Set the theme and return the message to broadcast to every chrome, or
-    /// `None` if it did not change.
+    /// Set the theme and return the messages to broadcast to every chrome:
+    /// none if it did not change, else the theme, then the appearance if the
+    /// new theme's differs.
     ///
     /// The startup config, a reload and [`ChromeMessage::SetTheme`] all call
     /// this. Skipping unchanged themes avoids a theme transition on every
     /// page each time the config file is rewritten.
-    pub fn set_theme(&mut self, theme: Theme) -> Option<HostMessage> {
-        (self.theme != theme).then(|| {
+    pub fn set_theme(&mut self, theme: Theme) -> Vec<HostMessage> {
+        if self.theme == theme {
+            Vec::new()
+        } else {
+            let restyled =
+                self.appearances.in_theme(self.theme) != self.appearances.in_theme(theme);
             self.theme = theme;
-            self.describe_theme()
-        })
+            [
+                Some(self.describe_theme()),
+                restyled.then(|| self.describe_appearance()),
+            ]
+            .into_iter()
+            .flatten()
+            .collect()
+        }
     }
 
     /// The theme message, sent on handshake and broadcast on change.
@@ -289,18 +317,18 @@ impl Host {
         }
     }
 
-    /// Set the config's appearance and return the message to broadcast, or
-    /// `None` if it did not change.
-    pub fn set_appearance(&mut self, appearance: Appearance) -> Option<HostMessage> {
-        (self.appearance != appearance).then(|| {
-            self.appearance = appearance;
-            self.describe_appearance()
-        })
+    /// Set the config's appearances and return the message to broadcast, or
+    /// `None` if the current theme's did not change.
+    pub fn set_appearance(&mut self, appearances: Appearances) -> Option<HostMessage> {
+        let restyled = self.appearances.in_theme(self.theme) != appearances.in_theme(self.theme);
+        self.appearances = appearances;
+        restyled.then(|| self.describe_appearance())
     }
 
-    /// The appearance message, sent on handshake and broadcast on change.
+    /// The current theme's appearance message, sent on handshake and
+    /// broadcast on change.
     pub fn describe_appearance(&self) -> HostMessage {
-        HostMessage::Appearance(self.appearance.clone())
+        HostMessage::Appearance(self.appearances.in_theme(self.theme).clone())
     }
 
     /// Set the tray's icons and return the message to broadcast, or `None` if

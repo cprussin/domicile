@@ -170,6 +170,37 @@ fn the_browser_draws_the_configs_pointer_and_follows_its_reloads() {
         .expect("an edit that drops the pointer theme says so");
 }
 
+#[test]
+fn the_browser_draws_each_modes_pointer_when_the_theme_flips() {
+    let compositor = Compositor::started_with(
+        r#"{
+  "output": { "displays": [{ "name": "left", "size": [1920, 1080] }] },
+  "theme": { "cursor_theme": { "dark": "Numix-Cursor", "light": "Numix-Cursor-Light" } }
+}"#,
+    );
+    let pointer = |name: &str| Appearance {
+        cursor: Some(CursorTheme {
+            name: name.into(),
+            size: 24,
+        }),
+        ..Appearance::default()
+    };
+    let mut chrome = compositor.chrome();
+    chrome
+        .wait_for(appearance(pointer("Numix-Cursor")))
+        .expect("the handshake carries the dark mode's pointer");
+
+    chrome
+        .say(&ChromeMessage::SetTheme {
+            theme: Theme::Light,
+        })
+        .expect("the chrome socket takes a theme");
+
+    chrome
+        .wait_for(appearance(pointer("Numix-Cursor-Light")))
+        .expect("the light mode's pointer follows the toggle");
+}
+
 fn appearance(wanted: Appearance) -> impl Fn(&HostMessage) -> bool {
     move |message| *message == HostMessage::Appearance(wanted.clone())
 }

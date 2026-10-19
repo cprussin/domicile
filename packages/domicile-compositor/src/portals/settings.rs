@@ -12,7 +12,8 @@
 
 use std::collections::HashMap;
 
-use domicile_config::{AccentColor, Contrast, ThemeConfig};
+use domicile_config::{AccentColor, Contrast, CursorThemeName, ThemeConfig, ThemeMode};
+use domicile_host::Appearances;
 use domicile_protocol::{CursorTheme, Theme};
 use zbus::object_server::SignalEmitter;
 use zbus::zvariant::{OwnedValue, Value};
@@ -87,7 +88,7 @@ pub struct Appearance {
     pub contrast: Contrast,
     pub reduced_motion: bool,
     pub icon_theme: Option<String>,
-    pub cursor_theme: Option<String>,
+    pub cursor_theme: Option<CursorThemeName>,
     pub cursor_size: Option<u16>,
     pub font_name: Option<String>,
     pub monospace_font_name: Option<String>,
@@ -108,28 +109,45 @@ impl From<&ThemeConfig> for Appearance {
     }
 }
 
-/// The same keys for the shell, which follows them too. The icon theme
-/// reaches shells through this portal instead.
-impl From<&Appearance> for domicile_protocol::Appearance {
+/// The same keys for the shell in each theme, which follows them too. The
+/// icon theme reaches shells through this portal instead.
+impl From<&Appearance> for Appearances {
     fn from(appearance: &Appearance) -> Self {
-        domicile_protocol::Appearance {
+        let in_theme = |theme| domicile_protocol::Appearance {
             accent_color: appearance
                 .accent_color
                 .map(|AccentColor([r, g, b])| format!("#{r:02x}{g:02x}{b:02x}")),
             high_contrast: appearance.contrast == Contrast::High,
             reduced_motion: appearance.reduced_motion,
-            cursor: cursor_theme(appearance),
+            cursor: cursor_theme(theme, appearance),
+        };
+        Appearances {
+            dark: in_theme(Theme::Dark),
+            light: in_theme(Theme::Light),
         }
     }
 }
 
-/// The pointer theme for the browser process, or `None` for its own art when
-/// the config sets neither key. A key left out is what a client falls back to.
-fn cursor_theme(appearance: &Appearance) -> Option<CursorTheme> {
-    match (&appearance.cursor_theme, appearance.cursor_size) {
+/// The cursor theme's name in `theme`, if the config sets one.
+fn cursor_theme_name(theme: Theme, appearance: &Appearance) -> Option<&str> {
+    let mode = match theme {
+        Theme::Dark => ThemeMode::Dark,
+        Theme::Light => ThemeMode::Light,
+    };
+    appearance
+        .cursor_theme
+        .as_ref()
+        .map(|name| name.in_mode(mode))
+}
+
+/// The pointer theme for the browser process in `theme`, or `None` for its
+/// own art when the config sets neither key. A key left out is what a client
+/// falls back to.
+fn cursor_theme(theme: Theme, appearance: &Appearance) -> Option<CursorTheme> {
+    match (cursor_theme_name(theme, appearance), appearance.cursor_size) {
         (None, None) => None,
         (name, size) => Some(CursorTheme {
-            name: name.as_deref().unwrap_or(DEFAULT_CURSOR_THEME).into(),
+            name: name.unwrap_or(DEFAULT_CURSOR_THEME).into(),
             size: size.unwrap_or(DEFAULT_CURSOR_SIZE),
         }),
     }
@@ -242,7 +260,7 @@ fn values(theme: Theme, appearance: &Appearance) -> Vec<Setting> {
     let mut served = looks(theme, appearance);
     served.extend(gnome_looks(theme, appearance));
     served.extend(
-        named(appearance)
+        named(theme, appearance)
             .into_iter()
             .filter_map(|(key, set, _)| set.map(|value| (INTERFACE, key, value))),
     );
@@ -305,16 +323,23 @@ fn gnome_looks(theme: Theme, appearance: &Appearance) -> [Setting; 2] {
     ]
 }
 
-/// The keys in [`INTERFACE`] named by the config, each with its value when
-/// set and the value signaled when a reload unsets it.
-fn named(appearance: &Appearance) -> [(&'static str, Option<OwnedValue>, OwnedValue); 5] {
+/// The keys in [`INTERFACE`] named by the config in `theme`, each with its
+/// value when set and the value signaled when a reload unsets it.
+fn named(
+    theme: Theme,
+    appearance: &Appearance,
+) -> [(&'static str, Option<OwnedValue>, OwnedValue); 5] {
     let text = |name: &str| {
         OwnedValue::try_from(Value::from(name)).expect("a string holds no file descriptors")
     };
     let text_or = |key, set: &Option<String>, unset| (key, set.as_deref().map(text), text(unset));
     [
         text_or(ICON_THEME, &appearance.icon_theme, HICOLOR),
-        text_or(CURSOR_THEME, &appearance.cursor_theme, DEFAULT_CURSOR_THEME),
+        (
+            CURSOR_THEME,
+            cursor_theme_name(theme, appearance).map(text),
+            text(DEFAULT_CURSOR_THEME),
+        ),
         (
             CURSOR_SIZE,
             appearance
@@ -340,7 +365,7 @@ fn moved(was_theme: Theme, was: &Appearance, theme: Theme, now: &Appearance) -> 
         let mut signaled = looks(theme, appearance);
         signaled.extend(gnome_looks(theme, appearance));
         signaled.extend(
-            named(appearance)
+            named(theme, appearance)
                 .into_iter()
                 .map(|(key, set, unset)| (INTERFACE, key, set.unwrap_or(unset))),
         );
@@ -357,7 +382,7 @@ fn moved(was_theme: Theme, was: &Appearance, theme: Theme, now: &Appearance) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domicile_config::{AccentColor, Contrast};
+    use domicile_config::{AccentColor, Contrast, CursorThemeName, PerModeCursorThemes};
 
     fn string(text: &str) -> OwnedValue {
         OwnedValue::try_from(Value::from(text)).expect("a string")
@@ -390,12 +415,13 @@ mod tests {
 
     #[test]
     fn the_shell_is_told_the_same_look() {
-        let told = domicile_protocol::Appearance::from(&Appearance {
+        let told = Appearances::from(&Appearance {
             accent_color: Some(AccentColor([0xff, 0x33, 0x0a])),
             contrast: Contrast::High,
             reduced_motion: true,
             ..Appearance::default()
-        });
+        })
+        .dark;
 
         assert_eq!(
             told,
@@ -410,32 +436,43 @@ mod tests {
 
     #[test]
     fn the_browser_is_told_the_cursor_theme_and_size() {
-        let told = domicile_protocol::Appearance::from(&Appearance {
-            cursor_theme: Some("Bibata-Modern-Amber-Right".into()),
+        let told = Appearances::from(&Appearance {
+            cursor_theme: Some(CursorThemeName::PerMode(PerModeCursorThemes {
+                dark: "Bibata-Modern-Ice".into(),
+                light: "Bibata-Modern-Classic".into(),
+            })),
             cursor_size: Some(64),
             ..Appearance::default()
         });
 
         assert_eq!(
-            told.cursor,
-            Some(CursorTheme {
-                name: "Bibata-Modern-Amber-Right".into(),
-                size: 64,
-            })
+            (told.dark.cursor, told.light.cursor),
+            (
+                Some(CursorTheme {
+                    name: "Bibata-Modern-Ice".into(),
+                    size: 64,
+                }),
+                Some(CursorTheme {
+                    name: "Bibata-Modern-Classic".into(),
+                    size: 64,
+                })
+            )
         );
     }
 
     /// The browser fills in what the config leaves out as a client does.
     #[test]
     fn a_cursor_key_left_out_is_the_toolkit_default() {
-        let theme_only = domicile_protocol::Appearance::from(&Appearance {
-            cursor_theme: Some("Adwaita".into()),
+        let theme_only = Appearances::from(&Appearance {
+            cursor_theme: Some(CursorThemeName::Both("Adwaita".into())),
             ..Appearance::default()
-        });
-        let size_only = domicile_protocol::Appearance::from(&Appearance {
+        })
+        .dark;
+        let size_only = Appearances::from(&Appearance {
             cursor_size: Some(48),
             ..Appearance::default()
-        });
+        })
+        .dark;
 
         assert_eq!(
             theme_only.cursor,
@@ -543,7 +580,7 @@ mod tests {
         let settings = Settings {
             theme: Theme::Dark,
             appearance: Appearance {
-                cursor_theme: Some("Bibata-Modern-Ice".into()),
+                cursor_theme: Some(CursorThemeName::Both("Bibata-Modern-Ice".into())),
                 cursor_size: Some(32),
                 font_name: Some("Inter 11".into()),
                 monospace_font_name: Some("Iosevka 12".into()),
@@ -571,6 +608,33 @@ mod tests {
     }
 
     #[test]
+    fn a_cursor_theme_per_mode_follows_the_theme() {
+        let appearance = Appearance {
+            cursor_theme: Some(CursorThemeName::PerMode(PerModeCursorThemes {
+                dark: "Numix-Cursor".into(),
+                light: "Numix-Cursor-Light".into(),
+            })),
+            ..Appearance::default()
+        };
+        let settings = Settings {
+            theme: Theme::Light,
+            appearance: appearance.clone(),
+        };
+
+        assert_eq!(
+            settings.read_one(INTERFACE, CURSOR_THEME),
+            Ok(string("Numix-Cursor-Light"))
+        );
+        assert!(
+            moved(Theme::Dark, &appearance, Theme::Light, &appearance).contains(&(
+                INTERFACE,
+                CURSOR_THEME,
+                string("Numix-Cursor-Light")
+            ))
+        );
+    }
+
+    #[test]
     fn no_cursor_or_fonts_are_left_to_the_next_backend() {
         let settings = Settings {
             theme: Theme::Dark,
@@ -585,7 +649,7 @@ mod tests {
     #[test]
     fn a_cursor_and_fonts_unset_by_a_reload_are_the_toolkit_defaults() {
         let was = Appearance {
-            cursor_theme: Some("Bibata-Modern-Ice".into()),
+            cursor_theme: Some(CursorThemeName::Both("Bibata-Modern-Ice".into())),
             cursor_size: Some(32),
             font_name: Some("Inter 11".into()),
             monospace_font_name: Some("Iosevka 12".into()),

@@ -126,6 +126,20 @@
     };
   };
 
+  # A cursor theme for each of `theme.mode`'s modes.
+  perModeCursorThemes = lib.types.submodule {
+    options = {
+      dark = lib.mkOption {
+        description = "The cursor theme in dark mode.";
+        type = lib.types.str;
+      };
+      light = lib.mkOption {
+        description = "The cursor theme in light mode.";
+        type = lib.types.str;
+      };
+    };
+  };
+
   # A tablet or touchscreen and the monitor it covers.
   pointer = lib.types.submodule {
     options = {
@@ -555,13 +569,17 @@ in {
             description = ''
               The cursor theme applications draw their cursors from, by its
               directory name under `share/icons`, through the settings portal,
-              and the engine draws the pointer from on a tty. Install the
-              theme's package too. `null`, the default, leaves each
+              and the engine draws the pointer from on a tty. A string is used
+              in both modes; `{ dark; light; }` names one per mode. Install
+              the theme's package too. `null`, the default, leaves each
               application its own.
             '';
-            type = lib.types.nullOr lib.types.str;
+            type = lib.types.nullOr (lib.types.either lib.types.str perModeCursorThemes);
             default = null;
-            example = "Bibata-Modern-Ice";
+            example = {
+              dark = "Bibata-Modern-Ice";
+              light = "Bibata-Modern-Classic";
+            };
           };
 
           theme.cursor_size = lib.mkOption {
