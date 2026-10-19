@@ -55,31 +55,36 @@ says() { # $1 MEASURED, $2 what the sentence must contain
   esac
 }
 
-# MEASURED is "<mode> <answered> <mains> <narrow> <hello> <replied>".
+# MEASURED is "<mode> <answered> <mains> <narrow> <hello> <replied>
+# <fetched>".
 echo "the claim — run_app"
 expect "an app that ran and was answered is the pass" "pass" \
-  "$(verdict "pinned 1 1 1 1 1")"
+  "$(verdict "pinned 1 1 1 1 1 1")"
 expect "no answer from the engine is a failure" "fail" \
-  "$(verdict "pinned 0 0 0 0 0")"
+  "$(verdict "pinned 0 0 0 0 0 1")"
 expect "and blames the command socket" "yes" \
-  "$(says "pinned 0 0 0 0 0" "command socket")"
+  "$(says "pinned 0 0 0 0 0 1" "command socket")"
 expect "a main that never ran is a failure" "fail" \
-  "$(verdict "pinned 1 0 0 0 0")"
+  "$(verdict "pinned 1 0 0 0 0 1")"
 expect "and blames serving the app" "yes" \
-  "$(says "pinned 1 0 0 0 0" "ServeApp")"
+  "$(says "pinned 1 0 0 0 0 1" "ServeApp")"
 expect "the shell's host handed to an app is a failure" "fail" \
-  "$(verdict "pinned 1 1 0 1 1")"
-expect "and says so" "yes" "$(says "pinned 1 1 0 1 1" "DomicileAppHost")"
-expect "no app_hello is a failure" "fail" "$(verdict "pinned 1 1 1 0 0")"
-expect "and blames the binder" "yes" "$(says "pinned 1 1 1 0 0" "AppChannel binder")"
-expect "an unanswered call is a failure" "fail" "$(verdict "pinned 1 1 1 1 0")"
+  "$(verdict "pinned 1 1 0 1 1 1")"
+expect "and says so" "yes" "$(says "pinned 1 1 0 1 1 1" "DomicileAppHost")"
+expect "no app_hello is a failure" "fail" "$(verdict "pinned 1 1 1 0 0 1")"
+expect "and blames the binder" "yes" "$(says "pinned 1 1 1 0 0 1" "AppChannel binder")"
+expect "an unanswered call is a failure" "fail" "$(verdict "pinned 1 1 1 1 0 1")"
+expect "an app that cannot fetch its own file is a failure" "fail" \
+  "$(verdict "pinned 1 1 1 1 1 0")"
+expect "and names what serves a file to its own origin" "yes" \
+  "$(says "pinned 1 1 1 1 1 0" "MayReadFiles")"
 
 echo
 echo "the control — the app's address in an unpinned window"
-expect "one main is the control's pass" "pass" "$(verdict "unpinned 1 1 1 1 1")"
-expect "a second main is a failure" "fail" "$(verdict "unpinned 1 2 1 1 1")"
-expect "and blames the pin" "yes" "$(says "unpinned 1 2 1 1 1" "MayShowInWebView")"
-expect "a refused open_url is a failure" "fail" "$(verdict "unpinned 0 1 1 1 1")"
+expect "one main is the control's pass" "pass" "$(verdict "unpinned 1 1 1 1 1 1")"
+expect "a second main is a failure" "fail" "$(verdict "unpinned 1 2 1 1 1 1")"
+expect "and blames the pin" "yes" "$(says "unpinned 1 2 1 1 1 1" "MayShowInWebView")"
+expect "a refused open_url is a failure" "fail" "$(verdict "unpinned 0 1 1 1 1 1")"
 
 [ "$FAILED" -eq 0 ] && echo "all ok"
 exit "$FAILED"
