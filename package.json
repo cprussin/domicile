@@ -50,7 +50,8 @@
     "fix:lint": "biome check --max-diagnostics=none --write",
     "test:dependencies": "bun outdated -r",
     "test:lint": "biome check --max-diagnostics=none",
-    "turbo": "[ ! -d node_modules ] && bun install --frozen-lockfile; node_modules/.bin/turbo"
+    "turbo": "[ ! -d node_modules ] && bun install --frozen-lockfile; node_modules/.bin/turbo",
+    "version-packages": "changeset version && bun install --lockfile-only"
   },
   "type": "module",
   "workspaces": [

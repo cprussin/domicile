@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Tests that `changeset version` bumps `domicile`, the distribution package,
-# when a package it bundles changes, and leaves it alone otherwise.
+# Tests that `bun run version-packages` bumps `domicile`, the distribution
+# package, when a package it bundles changes, and leaves it alone otherwise,
+# and records the new versions in `bun.lock`.
 #
 # `packages/domicile/package.json` stands for the distribution package. It
 # depends on the bundled workspace packages, and `.changeset/config.json` bumps
@@ -41,7 +42,12 @@ reset() { # package
     jq '.version = "1.0.0"' "$manifest" >"$WORK/repo/packages/$package/package.json"
   done
   printf -- '---\n"%s": patch\n---\n\nA change.\n' "$1" >"$WORK/repo/.changeset/a-change.md"
+  ln -s "$ROOT/node_modules" "$WORK/repo/node_modules"
   git -C "$WORK/repo" init -q
+}
+
+version_packages() {
+  (cd "$WORK/repo" && bun run version-packages 2>&1)
 }
 
 version_of() { # package directory
@@ -51,8 +57,10 @@ version_of() { # package directory
 for package in @domicile-desktop/shell-simple @domicile-desktop/sdk; do
   echo "a change to $package"
   reset "$package"
-  if out="$(cd "$WORK/repo" && "$CHANGESET" version 2>&1)"; then
+  if out="$(version_packages)"; then
     expect "bumps domicile" 1.0.1 "$(version_of domicile)"
+    expect "records it in bun.lock" 1.0.1 \
+      "$(grep -A2 '"packages/domicile": {' "$WORK/repo/bun.lock" | sed -n 's/.*"version": "\(.*\)".*/\1/p')"
   else
     fail "changeset version runs" "$out"
   fi
@@ -60,7 +68,7 @@ done
 
 echo "a change to a package domicile does not bundle"
 reset @domicile-desktop/e2e-harness
-if out="$(cd "$WORK/repo" && "$CHANGESET" version 2>&1)"; then
+if out="$(version_packages)"; then
   expect "bumps the package" 1.0.1 "$(version_of e2e-harness)"
   expect "leaves domicile alone" 1.0.0 "$(version_of domicile)"
 else

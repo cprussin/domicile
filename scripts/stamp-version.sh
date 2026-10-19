@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Sets each manifest's `version` to commit <rev>'s, `0.0.0-alpha-<sha>`, and
-# prints it. There is no semver yet. npm, the distribution packages and the
-# flake ship manifests stamped by this; the tree's stay `0.0.0`.
+# prints it. npm's `next` dist-tag, the distribution packages and the flake
+# ship manifests stamped by this; the tree's hold the versions changesets sets.
 #
 #   scripts/stamp-version.sh <rev> <package.json>...
 #

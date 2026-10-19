@@ -48,9 +48,9 @@ survived into a published manifest.
 
 Every package that is not `private` (`@domicile-desktop/sdk`,
 `component-library`, `manganese` and the `system-*` libraries) is published to
-npm. Each merge to main publishes `0.0.0-alpha-<sha>` as `latest`
-(`publish-packages.yml`) with npm trusted publishing, so there is no token and
-each version has provenance. There is no semver until a release. The published
+npm. Each merge to main publishes `0.0.0-alpha-<sha>` under the `next`
+dist-tag (`publish-packages.yml`) with npm trusted publishing, so there is no
+token and each version has provenance. `latest` is for released versions. The published
 copies serve editors and third-party shells; a shell `domicile` builds always
 uses the running Domicile's copies.
 

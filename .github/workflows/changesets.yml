@@ -1,0 +1,55 @@
+name: Changesets
+
+# On pull requests, require a changeset for each changed workspace package
+# (.github/scripts/changeset-required.sh). On main, keep a "Version packages"
+# pull request open that applies the pending changesets: merging it bumps the
+# versions and writes the changelogs. See .changeset/README.md.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: changesets-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  required:
+    # The "Version packages" pull request spends the changesets it applies.
+    if: github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main'
+    runs-on: ubuntu-latest
+    steps:
+      # The whole history, so the base branch is there to compare against.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: .github/scripts/changeset-required.sh "origin/$BASE"
+        env:
+          BASE: ${{ github.base_ref }}
+
+  version:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      # The action pushes with its own token; a persisted GITHUB_TOKEN would
+      # take precedence.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      # With DOMICILE_WRITEBACK_TOKEN: a pull request GITHUB_TOKEN opens runs
+      # no checks. See packages/domicile-engine/docs/RELEASES.md.
+      - uses: changesets/action@v1
+        with:
+          version: bun run version-packages
+          title: Version packages
+          commit: Version packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.DOMICILE_WRITEBACK_TOKEN }}

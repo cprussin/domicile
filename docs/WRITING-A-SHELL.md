@@ -141,8 +141,8 @@ throw, because they are bugs in the page.
 - `FakeDomicileHost` (`./fake-host`), a desktop for your tests
 - types and event names for `<app>` and `<webview>`
 
-Versions are `0.0.0-alpha-<sha>`, one per `main` commit; there is no semver
-yet. Depend on the exact version whose `<sha>` matches the Domicile commit
+Versions are `0.0.0-alpha-<sha>`, one per `main` commit, under the `next`
+dist-tag; there is no semver release yet. Depend on the exact version whose `<sha>` matches the Domicile commit
 you run, as the example does.
 
 The desktop `Shell` is handed is the API; the SDK is its types plus helpers.
