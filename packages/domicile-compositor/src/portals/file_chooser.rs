@@ -239,6 +239,7 @@ impl Asked {
             | PortalAnswer::InputCapture
             | PortalAnswer::ScreenCast { .. }
             | PortalAnswer::Print { .. }
+            | PortalAnswer::SaveToPdf { .. }
             | PortalAnswer::Stop
             | PortalAnswer::DynamicLauncher { .. }
             | PortalAnswer::GlobalShortcuts { .. }

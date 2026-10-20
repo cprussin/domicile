@@ -84,6 +84,7 @@ impl Account {
             | PortalAnswer::DynamicLauncher { .. }
             | PortalAnswer::ScreenCast { .. }
             | PortalAnswer::Print { .. }
+            | PortalAnswer::SaveToPdf { .. }
             | PortalAnswer::Screenshot { .. }
             | PortalAnswer::ScreenshotWindow { .. }
             | PortalAnswer::ScreenshotBrowserWindow { .. }

@@ -707,7 +707,7 @@ fn settings(
 /// arrive.
 ///
 /// `data_dirs` are where `FileChooser` finds MIME types, and `home` is the
-/// user's home directory.
+/// user's home directory, where `FileChooser` and Save to PDF start.
 fn export<'a>(
     builder: Builder<'a>,
     theme: Theme,
@@ -750,7 +750,7 @@ fn export<'a>(
             FileChooser {
                 queue: Arc::clone(&backends.queue),
                 data_dirs,
-                home,
+                home: home.clone(),
             },
         )?
         .serve_at(
@@ -830,6 +830,7 @@ fn export<'a>(
             Print {
                 queue: Arc::clone(&backends.queue),
                 cups: starting.cups,
+                home,
                 prepared: Mutex::default(),
             },
         )?
@@ -1995,7 +1996,7 @@ mod tests {
             }]
         ));
         served.queue.answer(1, PortalAnswer::Canceled);
-        assert_eq!(preparing.join().expect("the call returned"), 2);
+        assert_eq!(preparing.join().expect("the call returned"), 1);
     }
 
     #[test]

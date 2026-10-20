@@ -1,4 +1,5 @@
 import type {
+  PageRange,
   PortalAnswer,
   PrintBody,
   Printer,
@@ -11,19 +12,26 @@ import {
   PrintQuality,
   Sides,
 } from "@domicile-desktop/sdk/portal";
+import { FilePdfIcon } from "@phosphor-icons/react/dist/ssr/FilePdf";
+import { PrinterIcon } from "@phosphor-icons/react/dist/ssr/Printer";
 import { useState } from "react";
 import { css } from "../../styled-system/css";
 import { grid } from "../../styled-system/patterns";
+import { focusOnAttach } from "../_control/focusOnAttach";
 import { Button } from "../Button/Button";
+import { Field } from "../Field/Field";
+import { FilePicker } from "../FilePicker/FilePicker";
+import { ChooserMode } from "../FilePicker/file-request";
 import { Input } from "../Input/Input";
 import { ModalDialog } from "../ModalDialog/ModalDialog";
+import { useScreenRegion } from "../Screen/DisplayProvider";
 import { Select } from "../Select/Select";
 import { pageRanges } from "./page-ranges";
 
 const SIDES = {
-  [Sides.OneSided]: "One-sided",
-  [Sides.TwoSidedLongEdge]: "Two-sided, long edge",
-  [Sides.TwoSidedShortEdge]: "Two-sided, short edge",
+  [Sides.OneSided]: "Off",
+  [Sides.TwoSidedLongEdge]: "Long edge",
+  [Sides.TwoSidedShortEdge]: "Short edge",
 } as const;
 
 const COLOR_MODES = {
@@ -34,8 +42,8 @@ const COLOR_MODES = {
 const ORIENTATIONS = {
   [Orientation.Portrait]: "Portrait",
   [Orientation.Landscape]: "Landscape",
-  [Orientation.ReverseLandscape]: "Reverse landscape",
-  [Orientation.ReversePortrait]: "Reverse portrait",
+  [Orientation.ReverseLandscape]: "Landscape, upside down",
+  [Orientation.ReversePortrait]: "Portrait, upside down",
 } as const;
 
 const QUALITIES = {
@@ -44,40 +52,77 @@ const QUALITIES = {
   [PrintQuality.High]: "High",
 } as const;
 
+/** Whether to print every page or the ones typed. */
+enum PageChoice {
+  All,
+  Custom,
+}
+
+const PAGE_CHOICES = [
+  { label: "All", value: PageChoice.All },
+  { label: "Custom", value: PageChoice.Custom },
+] as const;
+
 type Props = {
   answer: (answer: PortalAnswer) => void;
   /** Who asks, as the dialog names them. */
   asker: string;
   body: PrintBody;
+  /** Lists a directory for the PDF's file picker; see `FileRequest.list`. */
+  list: (path: string) => Promise<readonly string[]>;
   screen: string | undefined;
 };
 
 /**
- * A print dialog: a printer and the options it supports, or word that there
- * are no printers. Dismissing it cancels. No preview: the document arrives
- * only after it closes.
+ * A print dialog: a printer or Save to PDF, and the options each supports.
+ * Saving to a PDF picks its file after. Dismissing it cancels. No preview:
+ * the document arrives only after it closes.
  */
-export const PrintDialog = ({ answer, asker, body, screen }: Props) => {
-  const [chosen, setChosen] = useState(() => startingPrinter(body));
-  return (
+export const PrintDialog = ({ answer, asker, body, list, screen }: Props) => {
+  const [chosen, setChosen] = useState(() => startingChoice(body));
+  const [picking, setPicking] = useState(false);
+  const options = readOptions(chosen);
+  const pdf = chosen.printer === body.pdf;
+  return picking && options !== undefined ? (
+    <PdfPicker
+      answer={answer}
+      back={() => {
+        setPicking(false);
+      }}
+      body={body}
+      list={list}
+      options={options}
+      screen={screen}
+    />
+  ) : (
     <ModalDialog
       closeButton={false}
       footer={
-        chosen === undefined ? (
+        <>
           <Button
             onClick={() => {
               answer(Answer.Canceled());
             }}
+            variant="outline"
           >
-            Close
+            Cancel
           </Button>
-        ) : (
-          <PrinterFooter
-            acceptLabel={body.acceptLabel ?? "Print"}
-            answer={answer}
-            chosen={chosen}
-          />
-        )
+          <Button
+            disabled={options === undefined}
+            onClick={() => {
+              if (options !== undefined) {
+                if (pdf) {
+                  setPicking(true);
+                } else {
+                  answer(Answer.Print(chosen.printer.name, options));
+                }
+              }
+            }}
+            variant="accent"
+          >
+            {pdf ? "Save…" : (body.acceptLabel ?? "Print")}
+          </Button>
+        </>
       }
       onOpenChange={(open) => {
         if (!open) {
@@ -89,128 +134,139 @@ export const PrintDialog = ({ answer, asker, body, screen }: Props) => {
       title="Print"
     >
       <p className={askerStyles}>{`${asker} prints “${body.title}”`}</p>
-      {chosen === undefined ? (
-        <p className={textStyles}>No printers are set up.</p>
-      ) : (
-        <Options
-          chosen={chosen}
-          onChange={setChosen}
-          printers={body.printers}
-        />
-      )}
+      <div className={formStyles}>
+        <div className={wideStyles}>
+          <Field
+            hint={
+              body.printers.length === 0 ? "No printers are set up." : undefined
+            }
+            label="Destination"
+          >
+            <Select
+              onValueChange={(picked) => {
+                if (picked !== null) {
+                  setChosen(startOf(picked));
+                }
+              }}
+              options={[...body.printers, body.pdf].map((listed) => ({
+                label: (
+                  <span className={destinationStyles}>
+                    <DestinationIcon pdf={listed === body.pdf} />
+                    {nameOf(listed)}
+                  </span>
+                ),
+                textLabel: nameOf(listed),
+                value: listed,
+              }))}
+              prefixIcon={<DestinationIcon pdf={pdf} />}
+              value={chosen.printer}
+            />
+          </Field>
+        </div>
+        <Options chosen={chosen} onChange={setChosen} />
+      </div>
     </ModalDialog>
   );
 };
+
+const DestinationIcon = ({ pdf }: { pdf: boolean }) =>
+  pdf ? <FilePdfIcon /> : <PrinterIcon />;
 
 /** A printer and the options as the user has set them so far. */
 type Chosen = {
   /** As typed. */
   copies: string;
+  pageChoice: PageChoice;
   /** As typed. */
   pages: string;
   options: PrintOptions;
   printer: Printer;
 };
 
-const PrinterFooter = ({
-  acceptLabel,
-  answer,
-  chosen,
-}: {
-  acceptLabel: string;
-  answer: (answer: PortalAnswer) => void;
-  chosen: Chosen;
-}) => {
-  const options = readOptions(chosen);
-  return (
-    <>
-      <Button
-        onClick={() => {
-          answer(Answer.Canceled());
-        }}
-        variant="outline"
-      >
-        Cancel
-      </Button>
-      <Button
-        disabled={options === undefined}
-        onClick={() => {
-          if (options !== undefined) {
-            answer(Answer.Print(chosen.printer.name, options));
-          }
-        }}
-      >
-        {acceptLabel}
-      </Button>
-    </>
-  );
-};
-
+/** The options `chosen.printer` supports, each in a labeled field. */
 const Options = ({
   chosen,
   onChange,
-  printers,
 }: {
   chosen: Chosen;
   onChange: (chosen: Chosen) => void;
-  printers: readonly Printer[];
 }) => {
   const { options, printer } = chosen;
   const set = (changed: Partial<PrintOptions>) => {
     onChange({ ...chosen, options: { ...options, ...changed } });
   };
+  const custom = chosen.pageChoice === PageChoice.Custom;
   return (
-    <div className={optionsStyles}>
-      <Select
-        aria-label="Printer"
-        onValueChange={(name) => {
-          const picked = printers.find((listed) => listed.name === name);
-          if (picked !== undefined) {
-            onChange(startOf(picked));
-          }
-        }}
-        options={printers.map((listed) => ({
-          label: listed.description ?? listed.name,
-          value: listed.name,
-        }))}
-        value={printer.name}
-      />
-      {printer.media.length > 0 && (
-        <Select
-          aria-label="Paper"
-          onValueChange={(media) => {
-            set({ media: media ?? undefined });
-          }}
-          options={printer.media.map((media) => ({
-            label: media.label,
-            value: media.name,
-          }))}
-          placeholder="Printer default"
-          value={options.media ?? null}
-        />
-      )}
-      <Input
-        aria-label="Copies"
-        max={printer.copiesMax}
-        min={1}
-        onChange={(event) => {
-          onChange({ ...chosen, copies: event.target.value });
-        }}
-        type="number"
-        value={chosen.copies}
-      />
+    <>
       {printer.pageRanges && (
-        <Input
-          aria-label="Pages"
-          onChange={(event) => {
-            onChange({ ...chosen, pages: event.target.value });
-          }}
-          placeholder="All, or 1-3, 5"
-          value={chosen.pages}
-        />
+        <div className={pagesStyles}>
+          <Field label="Pages">
+            <Select
+              onValueChange={(pageChoice) => {
+                if (pageChoice !== null) {
+                  onChange({ ...chosen, pageChoice });
+                }
+              }}
+              options={PAGE_CHOICES}
+              value={chosen.pageChoice}
+            />
+          </Field>
+          {custom && (
+            <Field
+              invalid={chosen.pages !== "" && pagesOf(chosen) === undefined}
+            >
+              <Input
+                aria-label="Page range"
+                autoFocus
+                onChange={(event) => {
+                  onChange({ ...chosen, pages: event.target.value });
+                }}
+                placeholder="e.g. 1-3, 5"
+                value={chosen.pages}
+              />
+            </Field>
+          )}
+        </div>
+      )}
+      {printer.copiesMax > 1 && (
+        <Field label="Copies">
+          <Input
+            max={printer.copiesMax}
+            min={1}
+            onChange={(event) => {
+              onChange({ ...chosen, copies: event.target.value });
+            }}
+            type="number"
+            value={chosen.copies}
+          />
+        </Field>
+      )}
+      {printer.media.length > 0 && (
+        <Field label="Paper">
+          <Select
+            onValueChange={(media) => {
+              set({ media: media ?? undefined });
+            }}
+            options={printer.media.map((media) => ({
+              label: media.label,
+              value: media.name,
+            }))}
+            placeholder="Default"
+            value={options.media ?? null}
+          />
+        </Field>
       )}
       <Choice
-        label="Sides"
+        label="Layout"
+        labels={ORIENTATIONS}
+        offered={printer.orientations}
+        onChange={(orientation) => {
+          set({ orientation });
+        }}
+        value={options.orientation}
+      />
+      <Choice
+        label="Two-sided"
         labels={SIDES}
         offered={printer.sides}
         onChange={(sides) => {
@@ -228,15 +284,6 @@ const Options = ({
         value={options.colorMode}
       />
       <Choice
-        label="Orientation"
-        labels={ORIENTATIONS}
-        offered={printer.orientations}
-        onChange={(orientation) => {
-          set({ orientation });
-        }}
-        value={options.orientation}
-      />
-      <Choice
         label="Quality"
         labels={QUALITIES}
         offered={printer.qualities}
@@ -245,11 +292,11 @@ const Options = ({
         }}
         value={options.quality}
       />
-    </div>
+    </>
   );
 };
 
-/** A select of the values a printer offers for one option; none if it offers none. */
+/** A labeled select of the values a printer offers; none if it offers none. */
 const Choice = <V extends number>({
   label,
   labels,
@@ -264,43 +311,136 @@ const Choice = <V extends number>({
   value: V | undefined;
 }) =>
   offered.length > 0 && (
-    <Select
-      aria-label={label}
-      onValueChange={(picked) => {
-        onChange(picked ?? undefined);
-      }}
-      options={offered.map((offer) => ({ label: labels[offer], value: offer }))}
-      placeholder="Printer default"
-      value={value ?? null}
-    />
+    <Field label={label}>
+      <Select
+        onValueChange={(picked) => {
+          onChange(picked ?? undefined);
+        }}
+        options={offered.map((offer) => ({
+          label: labels[offer],
+          value: offer,
+        }))}
+        placeholder="Default"
+        value={value ?? null}
+      />
+    </Field>
   );
+
+/**
+ * The file picker for a PDF, over `screen`, starting in the home with the
+ * document's title as its name. Canceling goes back to the options.
+ */
+const PdfPicker = ({
+  answer,
+  back,
+  body,
+  list,
+  options,
+  screen,
+}: {
+  answer: (answer: PortalAnswer) => void;
+  back: () => void;
+  body: PrintBody;
+  list: (path: string) => Promise<readonly string[]>;
+  options: PrintOptions;
+  screen: string | undefined;
+}) => {
+  const region = useScreenRegion(screen);
+  return (
+    <div className={regionStyles} style={region}>
+      <FilePicker
+        ref={focusOnAttach}
+        request={{
+          accept: ["pdf"],
+          acceptLabel: "Save",
+          cancel: back,
+          choose: ([path]) => {
+            if (path === undefined) {
+              throw new Error("a save chose no file");
+            } else {
+              answer(Answer.SaveToPdf(path, options));
+            }
+          },
+          home: body.home,
+          list,
+          mode: ChooserMode.Save,
+          suggestedName: pdfName(body.title),
+          title: "Save as PDF",
+        }}
+      />
+    </div>
+  );
+};
 
 const askerStyles = css({ color: "muted", fontSize: "sm", margin: 0 });
 
-const textStyles = css({ color: "foreground", margin: 0 });
+const formStyles = grid({
+  columnGap: 3,
+  columns: 2,
+  marginBlockStart: 4,
+  rowGap: 4,
+});
 
-const optionsStyles = grid({ columns: 2, gap: 2, marginBlockStart: 3 });
+const wideStyles = css({ gridColumn: "1 / -1" });
 
-/** The printer the dialog starts on, if there is any. */
-const startingPrinter = (body: PrintBody): Chosen | undefined => {
-  const printer =
+const destinationStyles = css({
+  alignItems: "center",
+  display: "inline-flex",
+  gap: 2,
+});
+
+const pagesStyles = grid({
+  alignItems: "end",
+  columnGap: 3,
+  columns: 2,
+  gridColumn: "1 / -1",
+});
+
+const regionStyles = css({
+  inset: 0,
+  position: "fixed",
+});
+
+/** `printer` for people. */
+const nameOf = (printer: Printer): string =>
+  printer.description ?? printer.name;
+
+/** Where the dialog starts: the application's printer, else the first, else a PDF. */
+const startingChoice = (body: PrintBody): Chosen =>
+  startOf(
     body.printers.find((listed) => listed.name === body.printer) ??
-    body.printers[0];
-  return printer === undefined ? undefined : startOf(printer);
-};
+      body.printers[0] ??
+      body.pdf,
+  );
 
 /** `printer` with its initial options. */
 const startOf = (printer: Printer): Chosen => ({
   copies: String(printer.initial.copies),
   options: printer.initial,
-  pages: "",
+  pageChoice:
+    printer.initial.pages.length === 0 ? PageChoice.All : PageChoice.Custom,
+  pages: printer.initial.pages
+    .map(({ first, last }) =>
+      first === last ? `${first}` : `${first}-${last}`,
+    )
+    .join(", "),
   printer,
 });
+
+/** The pages chosen, or `undefined` while custom pages name none it reads. */
+const pagesOf = (chosen: Chosen): readonly PageRange[] | undefined => {
+  switch (chosen.pageChoice) {
+    case PageChoice.All:
+      return [];
+    case PageChoice.Custom:
+      return chosen.pages.trim() === "" ? undefined : pageRanges(chosen.pages);
+  }
+};
 
 /** The options to print with, or `undefined` while copies or pages do not read. */
 const readOptions = (chosen: Chosen): PrintOptions | undefined => {
   const copies = Number(chosen.copies);
-  const pages = pageRanges(chosen.pages);
+  const pages = pagesOf(chosen);
   const copiesRead =
     Number.isInteger(copies) &&
     copies >= 1 &&
@@ -309,3 +449,7 @@ const readOptions = (chosen: Chosen): PrintOptions | undefined => {
     ? { ...chosen.options, copies, pages }
     : undefined;
 };
+
+/** A file name for a PDF of `title`: no slashes, and `Document` when blank. */
+const pdfName = (title: string): string =>
+  `${title.trim() === "" ? "Document" : title.replaceAll("/", "-")}.pdf`;

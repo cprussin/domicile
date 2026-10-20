@@ -563,13 +563,47 @@ describe("watchPortalRequests", () => {
     ]);
   });
 
-  it("parses a print dialog's printers and their options", async () => {
+  it("parses a print dialog's printers, their options and Save to PDF", async () => {
+    const pdf = {
+      color_modes: [],
+      copies_max: 1,
+      description: "Save to PDF",
+      initial: { copies: 1, media: "na_letter_8.5x11in", pages: [] },
+      media: [{ label: "Letter (8.5 × 11 in)", name: "na_letter_8.5x11in" }],
+      name: "pdf",
+      orientations: ["portrait", "landscape"],
+      page_ranges: true,
+      qualities: [],
+      sides: [],
+    };
+    const parsedPdf = {
+      colorModes: [],
+      copiesMax: 1,
+      description: "Save to PDF",
+      initial: {
+        colorMode: undefined,
+        copies: 1,
+        media: "na_letter_8.5x11in",
+        orientation: undefined,
+        pages: [],
+        quality: undefined,
+        sides: undefined,
+      },
+      media: [{ label: "Letter (8.5 × 11 in)", name: "na_letter_8.5x11in" }],
+      name: "pdf",
+      orientations: [Orientation.Portrait, Orientation.Landscape],
+      pageRanges: true,
+      qualities: [],
+      sides: [],
+    };
     const host = new FakeHost();
     const requests = watched(host);
     host.push([
       {
         app_id: "org.example.Editor",
         body: {
+          home: "/home/u",
+          pdf,
           printer: "office",
           printers: [
             {
@@ -600,7 +634,7 @@ describe("watchPortalRequests", () => {
       },
       {
         app_id: "",
-        body: { printers: [], title: "Report" },
+        body: { home: "/home/u", pdf, printers: [], title: "Report" },
         id: 2,
         kind: "print",
       },
@@ -611,6 +645,8 @@ describe("watchPortalRequests", () => {
         appId: "org.example.Editor",
         body: {
           acceptLabel: undefined,
+          home: "/home/u",
+          pdf: parsedPdf,
           printer: "office",
           printers: [
             {
@@ -644,6 +680,8 @@ describe("watchPortalRequests", () => {
         appId: "",
         body: {
           acceptLabel: undefined,
+          home: "/home/u",
+          pdf: parsedPdf,
           printer: undefined,
           printers: [],
           title: "Report",
@@ -1111,6 +1149,39 @@ describe("answerPortalRequest for a print dialog", () => {
       [
         2,
         { kind: "print", options: { copies: 1, pages: [] }, printer: "label" },
+      ],
+    ]);
+  });
+
+  it("writes a PDF's path and options", () => {
+    const host = new FakeHost();
+    answerPortalRequest(
+      host,
+      1,
+      PortalAnswer.SaveToPdf("/home/u/Report.pdf", {
+        colorMode: undefined,
+        copies: 1,
+        media: "iso_a4_210x297mm",
+        orientation: Orientation.Landscape,
+        pages: [],
+        quality: undefined,
+        sides: undefined,
+      }),
+    );
+
+    expect(host.answers).toEqual([
+      [
+        1,
+        {
+          kind: "save_to_pdf",
+          options: {
+            copies: 1,
+            media: "iso_a4_210x297mm",
+            orientation: "landscape",
+            pages: [],
+          },
+          path: "/home/u/Report.pdf",
+        },
       ],
     ]);
   });
