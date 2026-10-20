@@ -5,6 +5,7 @@
 #define COMPONENTS_DOMICILE_BROWSER_WEB_VIEW_GUEST_H_
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -24,6 +25,7 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/domicile/browser/download_tally.h"
 #include "components/domicile/browser/guest_dialogs.h"
+#include "components/domicile/browser/screen_choice.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
 #include "components/download/public/common/download_item.h"
 #include "components/input/native_web_keyboard_event.h"
@@ -642,11 +644,11 @@ class WebViewGuest : public mojom::WebViewGuest,
   void CloseContents(content::WebContents* source) override;
 
   // Camera and microphone requests go through MediaAccess, so they ask the
-  // shell like any other permission. getDisplayMedia is granted at once: the
-  // desktop's ScreenCast portal asks when capture starts, in a picker the
-  // shell draws. Chrome's own screen picker is a dialog the shell cannot
-  // place. Other capture, such as of a tab, is refused as content's default
-  // does.
+  // shell like any other permission. getDisplayMedia asks the desktop's
+  // ScreenCast portal, in a picker the shell draws, and is answered once the
+  // user picks or cancels (see ScreenChoice). Chrome's own screen picker is a
+  // dialog the shell cannot place. Other capture, such as of a tab, is refused
+  // as content's default does.
   void RequestMediaAccessPermission(
       content::WebContents* web_contents,
       const content::MediaStreamRequest& request,
@@ -999,6 +1001,11 @@ class WebViewGuest : public mojom::WebViewGuest,
 
   // See AddZoomChangedCallback.
   base::RepeatingCallbackList<void(double, double)> zoom_callbacks_;
+
+  // The page's getDisplayMedia() requests whose picker is open, by a number
+  // of their own. Each leaves when the page is answered.
+  std::map<int, std::unique_ptr<ScreenChoice>> screen_choices_;
+  int next_screen_choice_ = 0;
 
   base::WeakPtrFactory<WebViewGuest> weak_factory_{this};
 };

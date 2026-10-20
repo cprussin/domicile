@@ -566,19 +566,23 @@ source_set("site_permissions") {
   ]
 }
 
-# A <webview>'s answer to `getDisplayMedia()`. Its own target beside
-# :web_view_guest so its tests need no guest.
+# A <webview>'s answer to `getDisplayMedia()`, and the portal picker that
+# chooses it. Its own target beside :web_view_guest so its tests need no guest.
 source_set("screen_capture") {
   sources = [
     "browser/screen_capture.cc",
     "browser/screen_capture.h",
+    "browser/screen_choice.cc",
+    "browser/screen_choice.h",
   ]
 
-  public_deps = [ "//third_party/blink/public/common" ]
-  deps = [
+  public_deps = [
+    "//base",
     "//content/public/browser",
-    "//media/mojo/mojom",
+    "//third_party/blink/public/common",
+    "//third_party/webrtc_overrides:webrtc_component",
   ]
+  deps = [ "//media/mojo/mojom" ]
 }
 
 # Whether an address is a page Chrome serves itself, which no <webview> is
@@ -884,6 +888,7 @@ source_set("unit_tests") {
     "browser/private_pages_unittest.cc",
     "browser/render_process_unittest.cc",
     "browser/screen_capture_unittest.cc",
+    "browser/screen_choice_unittest.cc",
     "browser/shell_source_unittest.cc",
     "browser/shell_url_loader_factory_unittest.cc",
     "browser/shell_fetch_unittest.cc",

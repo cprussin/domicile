@@ -189,7 +189,9 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 - **Browser windows capture through the portal.** A page's
   `getDisplayMedia()` opens a ScreenCast session from the engine, as any
   application does, through webrtc's PipeWire capturer. The page gets the
-  same picker and indicator. See
+  same picker and indicator. The engine asks before it answers the page, so a
+  cancel rejects `getDisplayMedia()`; the capture then restores the pick from
+  the picker session's restore token (`persist_mode` 1). See
   [SHELL-BROWSER-WINDOWS.md](SHELL-BROWSER-WINDOWS.md#permissions).
 - **The shell shows active sharing.** `portal_requests` carries `capturing`:
   each running session (id, app, what it holds). The shell stops one by
