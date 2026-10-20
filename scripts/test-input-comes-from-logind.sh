@@ -32,7 +32,8 @@ in_patches() { case "$added" in (*"$1"*) return 0 ;; (*) return 1 ;; esac }
 # Domicile-owned files live in `src/`, not in a patch.
 for f in drm_input_devices.h drm_input_devices.cc drm_input_devices_unittest.cc \
          drm_input_controller_unittest.cc \
-         drm_logind_input.h drm_logind_input.cc; do
+         drm_logind_input.h drm_logind_input.cc \
+         drm_logind_session.h drm_logind_session.cc; do
   if [ -f "$DOMICILE/$f" ]; then
     ok "domicile/$f exists"
   else
@@ -40,7 +41,8 @@ for f in drm_input_devices.h drm_input_devices.cc drm_input_devices_unittest.cc 
   fi
 done
 
-sources="$(cat "$DOMICILE"/drm_logind_input.cc "$DOMICILE"/drm_input_devices.cc 2>/dev/null || true)"
+sources="$(cat "$DOMICILE"/drm_logind_input.cc "$DOMICILE"/drm_logind_session.cc \
+  "$DOMICILE"/drm_input_devices.cc 2>/dev/null || true)"
 in_sources() { case "$sources" in (*"$1"*) return 0 ;; (*) return 1 ;; esac }
 
 # logind's descriptor-passing calls. logind refuses `TakeDevice` before
@@ -101,10 +103,10 @@ fi
 # logind refuses `TakeDevice` for a device the session already holds, so the
 # reopen must use the descriptor from `ResumeDevice` before asking for
 # another.
-opener_body="$(awk '/^base::ScopedFD DrmLogindInput::OpenDeviceFd/,/^}/' \
+opener_body="$(awk '/^void DrmLogindInput::OpenDeviceFd/,/^}/' \
   "$DOMICILE/drm_logind_input.cc" 2>/dev/null || true)"
 resumed_at="$(printf '%s\n' "$opener_body" | grep -n 'Resumed(' | head -1 | cut -d: -f1)"
-take_at="$(printf '%s\n' "$opener_body" | grep -n 'take_device(' | head -1 | cut -d: -f1)"
+take_at="$(printf '%s\n' "$opener_body" | grep -n 'Take(\*number' | head -1 | cut -d: -f1)"
 if [ -n "$resumed_at" ] && [ -n "$take_at" ] && [ "$resumed_at" -lt "$take_at" ]; then
   ok "a reopen consumes the resumed descriptor instead of taking the device again"
 else
@@ -115,12 +117,31 @@ fi
 # On a seat with VTs, logind sends a "force" pause with descriptors already
 # revoked and no `ResumeDevice` after it. The only way back is `ReleaseDevice`
 # then `TakeDevice`; logind refuses `TakeDevice` for a device still held.
-giveback_at="$(printf '%s\n' "$opener_body" | grep -n 'GiveBack(' | head -1 | cut -d: -f1)"
-if [ -n "$giveback_at" ] && [ -n "$take_at" ] && [ "$giveback_at" -lt "$take_at" ]; then
+take_body="$(awk '/^void DrmLogindInput::Take\(/,/^}/' \
+  "$DOMICILE/drm_logind_input.cc" 2>/dev/null || true)"
+giveback_at="$(printf '%s\n' "$take_body" | grep -n 'GiveBack(' | head -1 | cut -d: -f1)"
+ask_at="$(printf '%s\n' "$take_body" | grep -n 'TakeDevice(' | head -1 | cut -d: -f1)"
+if [ -n "$giveback_at" ] && [ -n "$ask_at" ] && [ "$giveback_at" -lt "$ask_at" ]; then
   ok "a device held from before is given back before it is taken again"
 else
   fail "a device held from before is given back before it is taken again" \
-    "OpenDeviceFd calls TakeDevice without releasing first; logind refuses it"
+    "DrmLogindInput::Take calls TakeDevice without releasing first; logind refuses it"
+fi
+
+# The evdev thread reads every open device. Waiting on logind there stops all
+# input for each round trip, about three per device on a console switch.
+if grep -q 'WaitableEvent\|AndBlock' "$DOMICILE/drm_logind_input.cc" 2>/dev/null; then
+  fail "the evdev thread never waits on logind" \
+    "drm_logind_input.cc blocks; ask DrmLogindSession and answer the opener later"
+else
+  ok "the evdev thread never waits on logind"
+fi
+
+if in_patches 'OpenInputDeviceCallback opened'; then
+  ok "the opener answers when logind does"
+else
+  fail "the opener answers when logind does" \
+    "no patch makes InputDeviceOpener::OpenInputDevice answer with a callback"
 fi
 
 # The `b` in `TakeDevice`'s `hb` reply is true when the session is inactive,
@@ -155,14 +176,14 @@ fi
 
 # `InputDeviceFactoryEvdev` takes an `InputDeviceOpener` as a constructor
 # argument. Check that `ozone_platform_drm.cc` passes the logind one.
-if in_patches 'std::make_unique<DrmLogindInput>()'; then
+if in_patches 'std::make_unique<DrmLogindInput>(logind)'; then
   ok "the DRM platform installs the logind opener"
 else
   fail "the DRM platform installs the logind opener" \
     "no patch constructs DrmLogindInput"
 fi
 
-if in_patches 'virtual base::ScopedFD OpenDeviceFd'; then
+if in_patches 'virtual void OpenDeviceFd('; then
   ok "the descriptor is the one thing the opener overrides"
 else
   fail "the descriptor is the one thing the opener overrides" \
@@ -217,11 +238,11 @@ fi
 # console. `Reclaim` runs only on a `PropertiesChanged` for `Active`, which an
 # already-active session never sends. So check the session's state instead of
 # waiting for a change.
-if in_sources "SessionIsActive()" && [ "$(grep -c 'SessionIsActive()' "$DOMICILE/drm_logind_input.cc")" -ge 3 ]; then
+if [ "$(grep -c 'ReadActive(' "$DOMICILE/drm_logind_input.cc" 2>/dev/null)" -ge 2 ]; then
   ok "an inactive take asks the session rather than waiting for an edge"
 else
   fail "an inactive take asks the session rather than waiting for an edge" \
-    "OpenDeviceFd parks an inactive device and waits for PropertiesChanged, which never comes for a session that was already active"
+    "OnTaken parks an inactive device and waits for PropertiesChanged, which never comes for a session that was already active"
 fi
 
 # Answer `ResumeDevice` from `names_`, not the held table. `GiveBack` removes
@@ -257,14 +278,12 @@ else
 the node going away and the device is forgotten while logind still holds it"
 fi
 
-# Each D-Bus connection needs a dedicated thread. `DrmLogindInput` makes
-# blocking calls, since `OpenInputDevice` must return a descriptor, and no
-# other bus on its thread can read its socket meanwhile. During a console
-# switch it makes about three blocking calls per device. If `DrmVtSwitcher`
-# shared that thread, its `PropertiesChanged` would arrive late, the GPU
-# process would keep committing to a card it no longer owns, and
-# `PageFlipWatchdog` would crash it.
-for bus in drm_logind_input drm_vt_switcher drm_sleep; do
+# Each D-Bus connection needs a dedicated thread. `DrmLogindSession` blocks
+# its bus's thread on each call, and no other bus on that thread can read its
+# socket meanwhile. If `DrmVtSwitcher` shared it, its `PropertiesChanged`
+# would arrive late and the GPU process would keep drawing on a console it
+# left.
+for bus in drm_logind_session drm_vt_switcher drm_sleep; do
   if grep -q 'SingleThreadTaskRunnerThreadMode::DEDICATED' "$DOMICILE/$bus.cc"; then
     ok "$bus's bus has a thread of its own"
   else

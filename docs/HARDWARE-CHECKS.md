@@ -18,7 +18,12 @@ Close the lid, then open it.
 
 ## Console switch
 
-Press `Ctrl+Alt+F<n>` and switch back. Expect `configuring N display(s)`.
+Press `Ctrl+Alt+F<n>`, wait 20 s, and switch back. Expect:
+
+- the other console at once, with no stale frame;
+- `configuring N display(s)` on the way back;
+- no `Crashing GPU process` line;
+- keys and the pointer working again.
 
 ## Pointer theme
 
@@ -41,7 +46,7 @@ On a tty, set `theme.cursor_theme` to an installed theme with a distinct arrow
 pkill -f 'chrome.*--type=gpu-process'
 ```
 
-Expect the screen back within seconds and no `failed to take DRM master` line.
+Expect the screen back within seconds and no `logind refused` line.
 
 ## Dead compositor
 
