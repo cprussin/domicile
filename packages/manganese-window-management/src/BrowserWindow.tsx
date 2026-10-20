@@ -29,6 +29,7 @@ import { FindBar } from "./browser/FindBar";
 import { LinkTarget } from "./browser/LinkTarget";
 import { mediaDeviceChoiceFor } from "./browser/media-devices";
 import { PageMenu } from "./browser/PageMenu";
+import { PageNotices } from "./browser/PageNotices";
 import { choosePageCommand, pageMenuFor } from "./browser/page-menu";
 import { useFileRequest } from "./browser/useFileRequest";
 import { usePageMenu } from "./browser/usePageMenu";
@@ -45,6 +46,7 @@ import { usePageDescription } from "./usePageDescription";
 import { usePageFullscreen } from "./usePageFullscreen";
 import { usePageIcon } from "./usePageIcon";
 import { useReclaimFocus } from "./useReclaimFocus";
+import { useRises } from "./useRises";
 import type { Settler } from "./useSettling";
 import { useSettling } from "./useSettling";
 import { useShownPage } from "./useShownPage";
@@ -255,10 +257,11 @@ export const BrowserWindow = ({
   const loading = useLoading(view);
   const loadProgress = useLoadProgress(view);
   const downloads = useDownloads(view);
+  const downloadsFinished = useRises(downloads.completed);
   const zoom = useZoom(view);
   // A fullscreen page, such as a video, fills the window without its bar.
   const pageFullscreen = usePageFullscreen(view, fullscreen, onPageFullscreen);
-  // Zoom count; each change re-shows the zoom indicator (see `ZoomIndicator`).
+  // Zoom count; each change re-shows the zoom notice (see `PageNotices`).
   const [zoomsAnnounced, setZoomsAnnounced] = useState(0);
   // True while `focusOwn` is calling `focus()`. Focus events fire
   // synchronously inside that call, so this marks them as not user reaches.
@@ -561,8 +564,8 @@ export const BrowserWindow = ({
       hidden={rect === undefined}
       // A leaving window is unreachable by keyboard.
       inert={leaving}
-      // Ignores animations bubbling up from descendants, such as the zoom
-      // indicator.
+      // Ignores animations bubbling up from descendants, such as the page
+      // notices.
       onAnimationEnd={(event) => {
         if (event.target === event.currentTarget) {
           onMotionEnded();
@@ -639,7 +642,6 @@ export const BrowserWindow = ({
           sitePermissions={sitePermissions}
           visited={shown.visited}
           zoom={zoom}
-          zoomsAnnounced={zoomsAnnounced}
         />
       )}
       {isApp && !pageFullscreen && leftOrigin(start, address) && (
@@ -658,6 +660,11 @@ export const BrowserWindow = ({
           window={window}
         />
         <LinkTarget view={view} />
+        <PageNotices
+          downloadsFinished={downloadsFinished}
+          zoom={zoom}
+          zoomsAnnounced={zoomsAnnounced}
+        />
         {finding && (
           <FindBar
             onClose={stopFinding}

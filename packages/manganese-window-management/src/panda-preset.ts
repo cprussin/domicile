@@ -149,25 +149,6 @@ export const windowManagementPreset = definePreset({
           "100%": { opacity: "0", transform: "scale(0.6)" },
         },
         windowStowing: SCRATCHPAD_SLIDE,
-        // The zoom indicator: appears quickly, holds long enough to read, then
-        // fades out on its own.
-        zoomAnnounced: {
-          "0%": {
-            opacity: "0",
-            transform: "translateY(calc(-1 * {spacing.1}))",
-          },
-          "10%": { opacity: "1", transform: "translateY(0)" },
-          "75%": { opacity: "1" },
-          "100%": { opacity: "0" },
-        },
-      },
-      tokens: {
-        durations: {
-          // How long a self-dismissing notice stays up, such as the zoom
-          // indicator. Longer than the preset's durations, which are for
-          // control feedback, not reading.
-          notice: { value: "1.5s" },
-        },
       },
     },
   },

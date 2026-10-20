@@ -708,6 +708,21 @@ describe("BrowserWindow", () => {
         />,
       );
 
+    // An app window has no address bar, so the notices are all it shows.
+    it("says what it zoomed to and when a download finishes", () => {
+      const { container } = renderApp("https://music.example/");
+      zoomable(view(container), 1);
+      hovers(view(container), "");
+
+      guestPresses(view(container), { ctrlKey: true, key: "+" });
+      downloads(view(container), 50, 100);
+      finishesADownload(view(container));
+
+      expect(
+        screen.getAllByRole("status").map((status) => status.textContent),
+      ).toStrictEqual(["110%", "Download finished"]);
+    });
+
     it("draws no address while its page is on the app's origin", () => {
       const { container } = renderApp("https://music.example/");
 
@@ -1691,6 +1706,40 @@ describe("BrowserWindow", () => {
       expect(
         screen.getByRole("progressbar", { name: "Downloading" }),
       ).toHaveAttribute("aria-valuenow", "25");
+    });
+
+    it("says when the page's download finishes", () => {
+      const { container } = render(
+        <BrowserWindow
+          behindPanel={false}
+          clickThrough={false}
+          covered={false}
+          depth={0}
+          domicile={silentDomicile}
+          dragging={false}
+          focused
+          frame={FRAME}
+          fullscreen={false}
+          motion="resting"
+          onDescription={noDescription}
+          onFocusRequest={() => undefined}
+          onIcon={noIcon}
+          onMotionEnded={nothingEnded}
+          onPageFullscreen={noFullscreen}
+          onReach={() => undefined}
+          rect={ON_SCREEN}
+          url="https://example.com"
+          window="1"
+        />,
+      );
+      hovers(view(container), "");
+      downloads(view(container), 50, 100);
+
+      finishesADownload(view(container));
+
+      expect(
+        screen.getAllByRole("status").map((status) => status.textContent),
+      ).toContain("Download finished");
     });
 
     it("clears the page's finished downloads when asked", async () => {

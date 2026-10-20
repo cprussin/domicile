@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { ConnectionSafety } from "@domicile-desktop/manganese-address/connection-safety";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { css } from "../../styled-system/css";
 import { AddressBar } from "./AddressBar";
@@ -29,7 +29,6 @@ const BAR = {
   sitePermissions: [],
   visited: ["https://example.com"],
   zoom: 1,
-  zoomsAnnounced: 0,
 } as const;
 
 const address = (): HTMLInputElement =>
@@ -440,34 +439,6 @@ describe("AddressBar", () => {
 
       rerender(<AddressBar {...BAR} zoom={0.25} />);
       expect(control("Zoom out")).toBeDisabled();
-    });
-  });
-
-  describe("the zoom indicator", () => {
-    it("says nothing until the user zooms", () => {
-      render(<AddressBar {...BAR} zoom={1.5} />);
-
-      expect(screen.queryByRole("status")).toBeNull();
-    });
-
-    it("shows the zoom the user zoomed to", () => {
-      render(<AddressBar {...BAR} zoom={1.5} zoomsAnnounced={1} />);
-
-      expect(screen.getByRole("status")).toHaveTextContent("150%");
-    });
-
-    // Hidden on `animationend`, not a timer, so the duration lives only in
-    // the stylesheet.
-    it("goes away when it has faded out, and comes back for the next zoom", () => {
-      const { rerender } = render(
-        <AddressBar {...BAR} zoom={1.1} zoomsAnnounced={1} />,
-      );
-
-      fireEvent.animationEnd(screen.getByRole("status"));
-      expect(screen.queryByRole("status")).toBeNull();
-
-      rerender(<AddressBar {...BAR} zoom={1.25} zoomsAnnounced={2} />);
-      expect(screen.getByRole("status")).toHaveTextContent("125%");
     });
   });
 });
