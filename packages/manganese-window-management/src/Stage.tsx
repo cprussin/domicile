@@ -24,7 +24,7 @@ import type {
   Placement,
   Screenful,
 } from "./placement";
-import { contentsOf, TILED, wellDepthOf } from "./placement";
+import { contentsOf, raised, TILED, wellDepthOf } from "./placement";
 import type { Spot } from "./pointer-warp";
 import type { Popup } from "./popup";
 import { popupsOver } from "./popup";
@@ -669,8 +669,9 @@ export const Stage = memo(
             );
           })}
           {/*
-          After every window and tab, so it covers the selected container's
-          windows and tabs. It follows the focused window as its glow does.
+          After every window and tab, at the open tab's raised depth, so it
+          covers the selected container's windows and every tab. It follows
+          the focused window as its glow does.
         */}
           {lit?.selection !== undefined && (
             <Sliding
@@ -680,7 +681,7 @@ export const Stage = memo(
               rewound={active?.rewound ?? 0}
             >
               <SelectionTint
-                depth={lit.depth}
+                depth={raised(lit.depth)}
                 dragging={
                   stretching || (activeId !== undefined && held.has(activeId))
                 }
