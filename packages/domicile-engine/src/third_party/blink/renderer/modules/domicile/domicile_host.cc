@@ -926,7 +926,8 @@ void DomicileHost::AppPressed(HTMLAppElement& app, const String& app_id) {
 
 void DomicileHost::AppPointerMotion(const String& app_id,
                                     const gfx::PointF& point,
-                                    const gfx::SizeF& size) {
+                                    const gfx::SizeF& size,
+                                    bool moved) {
   // Into what the client drew, which the compositor said; one that has drawn
   // nothing yet is mapped through its own box, 1:1.
   double x = point.x();
@@ -939,7 +940,7 @@ void DomicileHost::AppPointerMotion(const String& app_id,
     }
   }
   if (EnsureBound()) {
-    channel_->PointerMotion(app_id, x, y);
+    channel_->PointerMotion(app_id, x, y, moved);
   }
 }
 

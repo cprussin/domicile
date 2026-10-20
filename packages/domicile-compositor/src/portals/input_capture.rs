@@ -538,6 +538,7 @@ mod tests {
                 app_id: "2".into(),
                 x: 279.5,
                 y: 100.0,
+                moved: true,
             })
             .expect("the loop listens");
 

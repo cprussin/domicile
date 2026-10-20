@@ -75,11 +75,13 @@ fn drive(chrome: &mut domicile_test_chrome::Chrome, app_id: &str) {
             app_id: app_id.to_string(),
             x: 10.0,
             y: 10.0,
+            moved: true,
         },
         ChromeMessage::PointerMotion {
             app_id: app_id.to_string(),
             x: 20.0,
             y: 20.0,
+            moved: true,
         },
         ChromeMessage::PointerButton {
             app_id: app_id.to_string(),
@@ -286,6 +288,7 @@ fn motion(app_id: &str) -> ChromeMessage {
         app_id: app_id.to_string(),
         x: 10.0,
         y: 10.0,
+        moved: true,
     }
 }
 

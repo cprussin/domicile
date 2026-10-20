@@ -362,13 +362,13 @@ fn holds<S: StillThere + PartialEq>(inhibitor: &S, on_the_desktop: &[S]) -> bool
 /// is exhaustive so each new request gets an explicit decision.
 ///
 /// `PointerLeave` does not count: a window moving under a still pointer sends
-/// it too, and a real hand also sends motion. Requests the shell makes on its
+/// it too, and a real hand also sends motion. Nor does motion that did not
+/// move: see [`ClientRequest::PointerMotion`]'s `moved`. Requests the shell makes on its
 /// own behalf do not count either, or a repainting clock would keep the
 /// screens on.
 pub fn somebody_is_here(request: &ClientRequest) -> bool {
     match request {
         ClientRequest::Key { .. }
-        | ClientRequest::PointerMotion { .. }
         | ClientRequest::PointerButton { .. }
         | ClientRequest::PointerAxis { .. } => true,
         ClientRequest::PointerLeave
@@ -396,6 +396,9 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         // The lock chord landed on the shell, and locking must not light the
         // screens.
         | ClientRequest::Lock => false,
+        // The browser restates a still pointer after a window changes, and
+        // turning the screens off changes them.
+        ClientRequest::PointerMotion { moved, .. } => *moved,
         // The lock screen's own field forwards no `Key`s, so an unlock attempt
         // is the only sign someone is typing. Lighting on any attempt lets the
         // user see a rejection.
@@ -1161,6 +1164,7 @@ mod tests {
                     app_id: "app-1".into(),
                     x: 4.0,
                     y: 8.0,
+                    moved: true,
                 },
             ),
             (
@@ -1188,6 +1192,15 @@ mod tests {
     fn what_the_desktop_does_to_itself_is_not_somebody_here() {
         for (what, request) in [
             ("the pointer leaving a window", ClientRequest::PointerLeave),
+            (
+                "the browser restating a still pointer after a window changed",
+                ClientRequest::PointerMotion {
+                    app_id: "app-1".into(),
+                    x: 4.0,
+                    y: 8.0,
+                    moved: false,
+                },
+            ),
             (
                 "the chrome handing a window the keyboard",
                 ClientRequest::KeyboardFocus {

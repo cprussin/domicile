@@ -367,8 +367,18 @@ fn read_chrome_messages(
             Ok(ChromeMessage::SystemRequest { id, request }) => {
                 call_the_system(hub, &system, id, request)
             }
-            Ok(ChromeMessage::PointerMotion { app_id, x, y }) => {
-                hub.send_request(ClientRequest::PointerMotion { app_id, x, y });
+            Ok(ChromeMessage::PointerMotion {
+                app_id,
+                x,
+                y,
+                moved,
+            }) => {
+                hub.send_request(ClientRequest::PointerMotion {
+                    app_id,
+                    x,
+                    y,
+                    moved,
+                });
                 Vec::new()
             }
             Ok(ChromeMessage::PointerLeave { .. }) => {
