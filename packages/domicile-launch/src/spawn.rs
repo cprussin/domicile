@@ -122,9 +122,11 @@ pub fn engine(
     // bounds, which `--window-size` cannot know in advance. Nested runs skip
     // this so the window stays a normal window.
     //
-    // drm has no software output, so Chromium's fallback after three GPU
-    // process crashes aborts the browser. Without the limit it relaunches the
-    // GPU process and the shell page survives.
+    // Chromium's fallback after three GPU process crashes is software
+    // compositing, which takes windows only in shared memory. The compositor
+    // decided at start to send dmabufs (see `crate::software_compositing`),
+    // so the fallback would blank every window. Without the limit it
+    // relaunches the GPU process instead.
     if platform == SCANOUT_PLATFORM {
         args.push("--start-fullscreen".into());
         args.push("--disable-gpu-process-crash-limit".into());
@@ -149,6 +151,19 @@ pub fn engine(
         env: vec![(VARIABLE.to_string(), runtime.control.clone().into())],
         program: engine.join("chrome"),
     }
+}
+
+/// Makes an [`engine`] on drm composite on the CPU, for a card with no 3D.
+/// See [`crate::software_compositing`].
+pub fn composite_on_the_cpu(engine: &mut Spawn) {
+    engine.args.push("--disable-gpu".into());
+}
+
+/// Makes a [`compositor`] hand the engine windows in shared memory, for an
+/// engine that composites on the CPU. See [`crate::software_compositing`].
+pub fn send_frames_in_memory(compositor: &mut Spawn) {
+    compositor.args.push("--software-compositing".into());
+    compositor.args.push("yes".into());
 }
 
 /// The compositor command line.
