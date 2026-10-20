@@ -23,6 +23,10 @@
     "postcss": "catalog:",
     "typescript": "catalog:"
   },
+  "engines": {
+    "bun": ">=1.4.2",
+    "node": ">=24"
+  },
   "exports": {
     ".": "./src/bar-item.tsx",
     "./desk-sound": "./src/desk-sound.ts",

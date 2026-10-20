@@ -7,6 +7,10 @@
     "@domicile-desktop/shell-simple": "workspace:*",
     "@domicile-desktop/shell-splash": "workspace:*"
   },
+  "engines": {
+    "bun": ">=1.4.2",
+    "node": ">=24"
+  },
   "license": "MIT",
   "name": "domicile",
   "private": true,

@@ -23,6 +23,10 @@
     "postcss": "catalog:",
     "typescript": "catalog:"
   },
+  "engines": {
+    "bun": ">=1.4.2",
+    "node": ">=24"
+  },
   "exports": {
     "./Lock": "./src/Lock.tsx",
     "./LockBar": "./src/LockBar.tsx",

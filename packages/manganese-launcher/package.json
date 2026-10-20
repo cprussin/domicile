@@ -27,6 +27,10 @@
     "react-dom": "catalog:",
     "typescript": "catalog:"
   },
+  "engines": {
+    "bun": ">=1.4.2",
+    "node": ">=24"
+  },
   "exports": {
     "./app-search": "./src/app-search.ts",
     "./applications-config": "./src/applications-config.ts",

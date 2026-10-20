@@ -28,6 +28,10 @@
     "typescript": "catalog:",
     "vite": "catalog:"
   },
+  "engines": {
+    "bun": ">=1.4.2",
+    "node": ">=24"
+  },
   "exports": {
     "./Accordion": "./src/Accordion/Accordion.tsx",
     "./AppChooser": "./src/AppChooser/AppChooser.tsx",
