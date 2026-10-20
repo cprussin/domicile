@@ -266,9 +266,10 @@ const screenCast = (
   multiple = false,
   sources: readonly object[] = WINDOWS,
   region = false,
+  more: { browser_windows?: boolean; desk?: object } = {},
 ) => ({
   app_id: "us.zoom.Zoom",
-  body: { multiple, region, sources },
+  body: { browser_windows: false, multiple, region, sources, ...more },
   id: 5,
   kind: "screen_cast",
 });
@@ -1280,6 +1281,16 @@ describe("PortalDialogs", () => {
           .getAllByRole("button")
           .map((button) => button.textContent),
       ).toEqual(["kitty: ~/src"]);
+      // Each choice on the desk, as the screen cast picker shows it.
+      expect(
+        screen
+          .getByRole("button", { name: "HDMI-A-1" })
+          .querySelector("[data-preview]"),
+      ).toHaveStyle({
+        backgroundImage: "url(data:image/png;base64,AA==)",
+        backgroundPosition: "100% 0%",
+        backgroundSize: "300% 100%",
+      });
     });
 
     it("names each window by its application, with its icon", async () => {
@@ -1428,10 +1439,11 @@ describe("PortalDialogs", () => {
       expect(screen.getByRole("dialog")).not.toHaveTextContent("asks");
     });
 
-    it("saves the whole desk", async () => {
+    it("saves the whole desk, picked again", async () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} />);
       host.push([frozen(1, "screenshot")]);
+      await userEvent.click(screen.getByRole("button", { name: "Whole desk" }));
       await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
       expect(host.answers).toEqual([
@@ -1759,6 +1771,78 @@ describe("screen cast", () => {
     expect(host.answers).toEqual([[5, { kind: "canceled" }]]);
   });
 
+  describe("browser windows", () => {
+    it("offers each browser window's page alone and shares it", async () => {
+      const host = new FakeHost();
+      host.fake.set({ browserWindows: [browserWindow("7", "Meet")] });
+      render(<PortalDialogs host={host.host} />);
+      host.push([screenCast(false, WINDOWS, false, { browser_windows: true })]);
+      await userEvent.click(
+        screen.getByRole("button", { name: "Browser: Meet" }),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Share" }));
+
+      expect(host.answers).toEqual([
+        [
+          5,
+          {
+            kind: "screen_cast",
+            sources: [{ id: "7", title: "Meet", type: "browser_window" }],
+          },
+        ],
+      ]);
+    });
+
+    it("are not offered to an application that cannot take windows", () => {
+      const host = new FakeHost();
+      host.fake.set({ browserWindows: [browserWindow("7", "Meet")] });
+      render(<PortalDialogs host={host.host} />);
+      host.push([screenCast(false, MONITORS)]);
+
+      expect(
+        screen.queryByRole("group", { name: "Browser windows" }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("previews each source the desk shows, and a hidden one by its icon", () => {
+    const host = new FakeHost();
+    host.fake.set({ browserWindows: [browserWindow("7", "Meet")] });
+    render(
+      <PortalDialogs
+        host={host.host}
+        shownWindows={() => [
+          ShownWindow.App("app-3", { height: 10, width: 20, x: 0, y: 5 }),
+          ShownWindow.Browser("7", { height: 10, width: 20, x: 20, y: 5 }),
+        ]}
+      />,
+    );
+    host.push([
+      screenCast(
+        false,
+        [
+          ...WINDOWS,
+          {
+            description: "",
+            name: "HDMI-A-1",
+            size: [100, 50],
+            type: "monitor",
+          },
+        ],
+        false,
+        { browser_windows: true, desk: frozen(1, "screenshot").body },
+      ),
+    ]);
+    const preview = (name: string) =>
+      screen.getByRole("button", { name }).querySelector("[data-preview]");
+    const shot = { backgroundImage: "url(data:image/png;base64,AA==)" };
+
+    expect(preview("firefox: Notes")).toHaveStyle(shot);
+    expect(preview("Untitled window")).not.toHaveStyle(shot);
+    expect(preview("Browser: Meet")).toHaveStyle(shot);
+    expect(preview("HDMI-A-1")).toHaveStyle(shot);
+  });
+
   describe("screens", () => {
     it("lists each screen by name and panel", () => {
       const host = new FakeHost();
@@ -1770,17 +1854,18 @@ describe("screen cast", () => {
         screen.getByRole("button", { name: "drm-1: Dell Inc. DELL U3219Q" }),
       ).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "drm-2" })).toBeInTheDocument();
-      expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("group", { name: "Windows" }),
+      ).not.toBeInTheDocument();
     });
 
-    it("puts windows and screens on tabs and shares from either", async () => {
+    it("offers windows and screens side by side and shares from both", async () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} />);
       host.push([screenCast(true, [...WINDOWS, ...MONITORS])]);
       await userEvent.click(
         screen.getByRole("button", { name: "firefox: Notes" }),
       );
-      await userEvent.click(screen.getByRole("tab", { name: "Screens" }));
       await userEvent.click(screen.getByRole("button", { name: "drm-2" }));
       await userEvent.click(screen.getByRole("button", { name: "Share" }));
 
@@ -1798,14 +1883,13 @@ describe("screen cast", () => {
       ]);
     });
 
-    it("picks one source across the tabs unless the application asks for more", async () => {
+    it("picks one source across the groups unless the application asks for more", async () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} />);
       host.push([screenCast(false, [...WINDOWS, ...MONITORS])]);
       await userEvent.click(
         screen.getByRole("button", { name: "firefox: Notes" }),
       );
-      await userEvent.click(screen.getByRole("tab", { name: "Screens" }));
       await userEvent.click(screen.getByRole("button", { name: "drm-2" }));
       await userEvent.click(screen.getByRole("button", { name: "Share" }));
 

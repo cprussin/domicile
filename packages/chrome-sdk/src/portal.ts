@@ -331,9 +331,20 @@ export enum CastSourceKind {
   Window,
   Monitor,
   Region,
+  BrowserWindow,
 }
 
 export const CastSource = {
+  /**
+   * A browser window's page alone, picked from `DomicileHost.browserWindows`.
+   * The compositor does not list these; see {@link ScreenCastBody}.
+   */
+  BrowserWindow: (window: {
+    /** Its id, as `DomicileHost.browserWindows` lists it. */
+    id: string;
+    /** Its title as the shell named it, for the sharing indicator. */
+    title: string;
+  }) => ({ ...window, kind: CastSourceKind.BrowserWindow as const }),
   Monitor: (monitor: {
     /** Its `wl_output` name, as `DomicileHost.displays` names it. */
     name: string;
@@ -370,15 +381,31 @@ export type ScreenCastBody = {
   sources: readonly CastSource[];
   /** Whether the user may draw a region instead. */
   region: boolean;
+  /**
+   * Whether the user may pick a browser window's page alone, which the
+   * shell offers from `DomicileHost.browserWindows`.
+   */
+  browserWindows: boolean;
+  /**
+   * A frame of the desk to preview the sources on, as a screenshot's.
+   * `undefined` when the desk could not be shot.
+   */
+  desk: FrozenDesk | undefined;
 };
 
 export enum CapturedKind {
   Window,
   Monitor,
   Region,
+  BrowserWindow,
 }
 
 export const Captured = {
+  /** A browser window's page, with its title when it was picked. */
+  BrowserWindow: (window: { id: string; title: string }) => ({
+    ...window,
+    kind: CapturedKind.BrowserWindow as const,
+  }),
   /** A monitor, by `wl_output` name. */
   Monitor: (monitor: { name: string }) => ({
     ...monitor,
@@ -997,15 +1024,14 @@ const castSourceSchema = z
     }
   });
 
-const screenCastSchema = z.object({
-  multiple: z.boolean(),
-  region: z.boolean(),
-  sources: z.array(castSourceSchema),
-});
-
 const capturedSchema = z
   .discriminatedUnion("type", [
     z.object({ id: z.string(), title: z.string(), type: z.literal("window") }),
+    z.object({
+      id: z.string(),
+      title: z.string(),
+      type: z.literal("browser_window"),
+    }),
     z.object({ name: z.string(), type: z.literal("monitor") }),
     z.object({
       position: pairSchema,
@@ -1017,6 +1043,8 @@ const capturedSchema = z
     switch (source.type) {
       case "window":
         return Captured.Window({ id: source.id, title: source.title });
+      case "browser_window":
+        return Captured.BrowserWindow({ id: source.id, title: source.title });
       case "monitor":
         return Captured.Monitor({ name: source.name });
       case "region":
@@ -1140,6 +1168,24 @@ const frozenDeskSchema = z.object({
   width: z.number(),
   windows: z.array(shotWindowSchema),
 });
+
+const screenCastSchema = z
+  .object({
+    browser_windows: z.boolean(),
+    desk: frozenDeskSchema.optional(),
+    multiple: z.boolean(),
+    region: z.boolean(),
+    sources: z.array(castSourceSchema),
+  })
+  .transform(
+    (body): ScreenCastBody => ({
+      browserWindows: body.browser_windows,
+      desk: body.desk,
+      multiple: body.multiple,
+      region: body.region,
+      sources: body.sources,
+    }),
+  );
 
 /** Each wire name and the value it stands for. */
 type Pairs<W extends string, V> = readonly (readonly [W, V])[];
@@ -1486,6 +1532,8 @@ const wireSource = (source: CastSource): object => {
   switch (source.kind) {
     case CastSourceKind.Window:
       return { id: source.id, type: "window" };
+    case CastSourceKind.BrowserWindow:
+      return { id: source.id, title: source.title, type: "browser_window" };
     case CastSourceKind.Monitor:
       return { name: source.name, type: "monitor" };
     case CastSourceKind.Region:

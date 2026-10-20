@@ -59,6 +59,7 @@ const ZOOM = {
     sources: [
       { id: "app-3", title: "Notes", type: "window" },
       { id: "app-4", title: "", type: "window" },
+      { id: "7", title: "Meet", type: "browser_window" },
       { name: "drm-1", type: "monitor" },
       { position: [0, 0], size: [10, 10], type: "region" },
     ],
@@ -117,6 +118,7 @@ describe("Sharing", () => {
       within(screen.getByText("Zoom")).getByRole("presentation"),
     ).toHaveAttribute("src", "data:image/svg+xml;base64,PHN2Zy8+");
     expect(screen.getByText("Untitled window")).toBeInTheDocument();
+    expect(screen.getByText("Browser: Meet")).toBeInTheDocument();
     expect(screen.getByText("Screen drm-1")).toBeInTheDocument();
     expect(screen.getByText("Region")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Stop sharing" }));

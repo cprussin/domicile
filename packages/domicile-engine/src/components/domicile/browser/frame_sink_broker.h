@@ -12,6 +12,7 @@
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/unguessable_token.h"
 #include "components/domicile/browser/brokered_frame_sink.h"
@@ -289,13 +290,15 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
 
   mojo::RemoteSet<mojom::ClipboardObserver> clipboard_observers_;
 
-  // Runs a capture of `target` at `size` until its producer closes it.
+  // Runs a capture of `target` at `size` until its producer closes it, and
+  // holds `held` as long.
   void StartCapture(
       const viz::FrameSinkId& target,
       const gfx::Size& size,
       uint32_t max_fps,
       mojo::PendingReceiver<mojom::DisplayCapture> capture,
-      mojo::PendingRemote<mojom::DisplayCaptureObserver> observer);
+      mojo::PendingRemote<mojom::DisplayCaptureObserver> observer,
+      base::ScopedClosureRunner held = base::ScopedClosureRunner());
 
   // Running captures, each until its producer closes it.
   base::flat_map<uint64_t, std::unique_ptr<DisplayCapture>> captures_;
