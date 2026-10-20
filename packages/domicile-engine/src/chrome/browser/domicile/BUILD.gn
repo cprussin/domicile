@@ -17,6 +17,8 @@ source_set("domicile") {
     "domicile_command_socket.h",
     "domicile_desk.cc",
     "domicile_desk.h",
+    "domicile_desk_activity.cc",
+    "domicile_desk_activity.h",
     "domicile_desk_presenters.cc",
     "domicile_desk_presenters.h",
     "domicile_device_chooser.cc",
@@ -60,6 +62,8 @@ source_set("domicile") {
     "//components/domicile:browser_window_capture_target",
     "//components/domicile:command_protocol",
     "//components/domicile:common",
+    # Somebody at the desk, from ui::UserActivityDetector in //ui/base.
+    "//components/domicile:desk_activity",
     "//components/domicile:pointer_warp",
     "//components/domicile:shell_source",
     "//components/domicile:shell_window_wait",

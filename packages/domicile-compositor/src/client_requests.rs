@@ -51,6 +51,8 @@ pub enum ClientRequest {
         moved: bool,
     },
     PointerLeave,
+    /// Somebody used the desk; see [`ChromeMessage::Activity`](domicile_protocol::ChromeMessage::Activity).
+    Activity,
     PointerButton {
         button: u32,
         pressed: bool,
@@ -367,6 +369,8 @@ impl DomicileCompositor {
             },
             ClientRequest::Unlock { passphrase } => self.offered_the_passphrase(&passphrase),
             ClientRequest::HeldAwakeByThePortal { held } => self.held_awake_by_the_portal(held),
+            // Counted by `keep_the_desktop_awake` above, and for nobody else.
+            ClientRequest::Activity => {}
             ClientRequest::Lock => {
                 self.shut_the_desk("the shell asked for this desktop to be locked")
             }
