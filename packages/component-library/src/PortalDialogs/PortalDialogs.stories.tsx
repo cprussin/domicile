@@ -380,6 +380,7 @@ const browserWindow = (id: string, title: string): DomicileBrowserWindow => ({
   id,
   isApp: false,
   isPrivate: false,
+  partition: "",
   popupWindow: null,
   title,
   url: "https://example.com",

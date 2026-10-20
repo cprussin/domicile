@@ -350,6 +350,10 @@ class CORE_EXPORT HTMLWebViewElement final
   // the shell stops showing it.
   void DialogWithdrawn() override;
 
+  // Dispatches `domicile-will-navigate`; `preventDefault()` cancels. See
+  // domicile_will_navigate_event.h.
+  void WillNavigate(const KURL& url, WillNavigateCallback callback) override;
+
   // Dispatches `domicile-context-menu`. See domicile_context_menu_event.h.
   void ContextMenuRequested(
       domicile::mojom::blink::WebViewContextMenuPtr menu) override;
@@ -365,6 +369,9 @@ class CORE_EXPORT HTMLWebViewElement final
 
   // The `window` attribute for CreateGuest, or a null String if absent.
   String BrowserWindow() const;
+
+  // The `partition` attribute for CreateGuest, or empty if absent.
+  String Partition() const;
 
   // Kept open for the element's life: the browser may hold the request on
   // this pipe until the placeholder frame arrives. See WebViewGuestHost in

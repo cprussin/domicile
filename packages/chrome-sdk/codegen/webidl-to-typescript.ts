@@ -154,7 +154,7 @@ const interfaceType = (
   const members = [
     ...mergeOverloads(definition.operations).map(
       (operation) =>
-        `${jsDoc(operation.doc, "  ")}  ${operation.name}(${operation.arguments.map((argument) => `${argument.name}: ${argument.types.map((type) => typeScriptType(type, names)).join(" | ")}`).join(", ")}): ${returnType(operation.returnType, names)};`,
+        `${jsDoc(operation.doc, "  ")}  ${operation.name}(${operation.arguments.map((argument) => `${argument.name}${argument.optional ? "?" : ""}: ${argument.types.map((type) => typeScriptType(type, names)).join(" | ")}`).join(", ")}): ${returnType(operation.returnType, names)};`,
     ),
     ...definition.attributes.map(
       (attribute) =>
@@ -191,6 +191,7 @@ const listeners = (eventMap: string): readonly string[] => [
 
 type MergedArgument = {
   readonly name: string;
+  readonly optional: boolean;
   readonly types: readonly IdlType[];
 };
 
@@ -214,6 +215,7 @@ const mergeOverloads = (
             ...first,
             arguments: first.arguments.map((argument) => ({
               name: argument.name,
+              optional: argument.optional,
               types: [argument.type],
             })),
           },
@@ -238,6 +240,7 @@ const mergeOverload = (
       ...merged,
       arguments: merged.arguments.map((argument, index) => ({
         name: argument.name,
+        optional: argument.optional,
         types: [...argument.types, ...argumentTypes(overload.arguments, index)],
       })),
       doc: [...merged.doc, "", ...overload.doc],

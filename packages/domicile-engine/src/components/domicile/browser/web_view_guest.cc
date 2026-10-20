@@ -25,6 +25,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/supports_user_data.h"
+#include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
@@ -55,6 +56,9 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
+#include "content/public/browser/site_instance.h"
+#include "content/public/browser/storage_partition.h"
+#include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/unowned_inner_web_contents_client.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/common/isolated_world_ids.h"
@@ -116,6 +120,28 @@ content::BrowserContext* ContextFor(content::BrowserContext& owner,
   // for and shared the user's storage".
   LOG(INFO) << "domicile: made a private guest.";
   return &Host().PrivateContext(owner);
+}
+
+// The params a guest's page is made from: in ContextFor's context, and in
+// `partition` through a guest SiteInstance when there is one. Content keeps a
+// guest SiteInstance's partition across navigations and new windows.
+content::WebContents::CreateParams ParamsFor(
+    content::BrowserContext& owner,
+    bool private_browsing,
+    const std::optional<WebViewPartition>& partition) {
+  content::BrowserContext* context = ContextFor(owner, private_browsing);
+  if (!partition.has_value()) {
+    return content::WebContents::CreateParams(context);
+  }
+  // guard-webview-partition.sh reads this to tell "never asked for" from
+  // "asked for and shared the user's storage".
+  LOG(INFO) << "domicile: made a guest in partition "
+            << WebViewPartitionAttribute(*partition) << ".";
+  return content::WebContents::CreateParams(
+      context, content::SiteInstance::CreateForGuest(
+                   context, content::StoragePartitionConfig::Create(
+                                context, kWebViewPartitionDomain,
+                                partition->name, !partition->persist)));
 }
 
 // Storage for SetInspect's callback.
@@ -185,6 +211,7 @@ class WebViewGuestHost final
     std::optional<std::string> window;
     bool extension_popup;
     bool private_browsing;
+    std::optional<WebViewPartition> partition;
     mojo::ReportBadMessageCallback report_bad_message;
   };
 
@@ -194,7 +221,19 @@ class WebViewGuestHost final
                    mojo::PendingRemote<mojom::WebViewGuestClient> client,
                    const std::optional<std::string>& window,
                    bool extension_popup,
-                   bool private_browsing) override {
+                   bool private_browsing,
+                   const std::string& partition) override {
+    // A shell's markup, not a bad message: the element sends the attribute
+    // as written. The pipes drop, as for an unknown `window`.
+    const base::expected<std::optional<WebViewPartition>, std::string> parsed =
+        ParseWebViewPartition(partition);
+    if (!parsed.has_value()) {
+      LOG(WARNING) << "domicile: a <webview> named partition \"" << partition
+                   << "\", which it may not: " << parsed.error()
+                   << "; it shows nothing.";
+      return;
+    }
+
     content::RenderFrameHost* placeholder = FindPlaceholder(placeholder_frame);
 
     // A document may only claim a guest for its own child frame.
@@ -226,11 +265,12 @@ class WebViewGuestHost final
                                   window,
                                   extension_popup,
                                   private_browsing,
+                                  *parsed,
                                   mojo::GetBadMessageCallback()};
         return;
       case PlaceholderStage::kReady:
         Give(*placeholder, std::move(guest), std::move(client), window,
-             extension_popup, private_browsing);
+             extension_popup, private_browsing, *parsed);
         return;
     }
   }
@@ -302,14 +342,15 @@ class WebViewGuestHost final
       case PlaceholderStage::kReady:
         Give(*placeholder, std::move(request.guest), std::move(request.client),
              request.window, request.extension_popup,
-             request.private_browsing);
+             request.private_browsing, request.partition);
         return;
     }
   }
 
   // Puts a page behind `placeholder`: the browser window `window` names, or a
   // new page owned by this document (an extension's action popup when
-  // `extension_popup` is set, a private page when `private_browsing` is).
+  // `extension_popup` is set, a private page when `private_browsing` is, in
+  // `partition` when there is one).
   //
   // An unknown `window` is expected: it may close before the shell hears. The
   // pipes drop and a warning is logged.
@@ -318,12 +359,13 @@ class WebViewGuestHost final
             mojo::PendingRemote<mojom::WebViewGuestClient> client,
             const std::optional<std::string>& window,
             bool extension_popup,
-            bool private_browsing) {
+            bool private_browsing,
+            const std::optional<WebViewPartition>& partition) {
     if (!window.has_value()) {
       WebViewGuest::CreateAndAttach(render_frame_host(), placeholder,
                                     std::move(guest), std::move(client),
                                     extension_popup, private_browsing,
-                                    created_);
+                                    partition, created_);
       return;
     }
     WebViewGuest* shown =
@@ -561,12 +603,12 @@ void WebViewGuest::CreateAndAttach(
     mojo::PendingRemote<mojom::WebViewGuestClient> client,
     bool extension_popup,
     bool private_browsing,
+    const std::optional<WebViewPartition>& partition,
     const GuestCreatedCallback& created) {
   std::unique_ptr<WebViewGuest> guest = base::WrapUnique(new WebViewGuest(
       owner, std::move(receiver), std::move(client), extension_popup));
   guest->owned_guest_contents_ = guest->MakeContents(
-      content::WebContents::CreateParams(
-          ContextFor(*owner.GetBrowserContext(), private_browsing)),
+      ParamsFor(*owner.GetBrowserContext(), private_browsing, partition),
       created);
 
 
@@ -617,11 +659,12 @@ std::unique_ptr<WebViewGuest> WebViewGuest::MakeWindow(
     const std::string& window_id,
     std::optional<int> popup_window,
     bool private_browsing,
+    const std::optional<WebViewPartition>& partition,
     const GuestCreatedCallback& created) {
   std::unique_ptr<WebViewGuest> guest =
       base::WrapUnique(new WebViewGuest(shell, window_id, popup_window));
-  content::WebContents::CreateParams params(
-      ContextFor(*shell.GetBrowserContext(), private_browsing));
+  content::WebContents::CreateParams params =
+      ParamsFor(*shell.GetBrowserContext(), private_browsing, partition);
   // Hidden (and throttled) like a background tab until AttachWindowTo shows
   // it.
   params.initially_hidden = true;
@@ -671,9 +714,9 @@ std::unique_ptr<content::WebContents> WebViewGuest::MakeContents(
   // `guest_delegate` makes this a guest. Content asks it for the owner during
   // construction, so the owner is set in this object's constructor.
   //
-  // No StoragePartitionConfig: the guest uses the default partition of its
+  // A page with no guest SiteInstance uses the default partition of its
   // context, the user's cookies unless the guest is private. See the class
-  // comment.
+  // comment and ParamsFor.
   content::BrowserContext* context = params.browser_context;
   // The shell is never private, so an off-the-record page is a private one,
   // whether asked for or opened by one.
@@ -969,6 +1012,21 @@ void WebViewGuest::WithdrawDeviceRequest() {
   client_->DeviceRequestWithdrawn();
 }
 
+void WebViewGuest::AskToNavigate(const GURL& url,
+                                 base::OnceCallback<void(bool)> answered) {
+  // Logged before asking; the will-navigate guard greps for it.
+  LOG(INFO) << "domicile: a <webview>'s page asked to navigate to "
+            << url.possibly_invalid_spec() << "; asking the shell.";
+  // Wrapped, as in AskPermission: the navigation waits for an answer. A
+  // browser window with no element has an unread pipe, so it proceeds.
+  //
+  // Posted, because a closed pipe drops the callback inside the call, and the
+  // throttle may only resume once it has deferred.
+  client_->WillNavigate(
+      url, mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+               base::BindPostTaskToCurrentDefault(std::move(answered)), true));
+}
+
 void WebViewGuest::Navigate(const GURL& url) {
   // This object is destroyed with the guest's WebContents, so guest_contents_
   // is never null here.
@@ -988,6 +1046,18 @@ void WebViewGuest::Navigate(const GURL& url) {
       may_show ? url : GURL(content::kBlockedURL));
   params.transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
   guest_contents_->GetController().LoadURLWithParams(params);
+}
+
+std::optional<WebViewPartition> WebViewGuest::partition() const {
+  const content::StoragePartitionConfig& config =
+      guest_contents_->GetPrimaryMainFrame()->GetStoragePartition()->GetConfig();
+  if (config.is_default()) {
+    return std::nullopt;
+  }
+  // ParamsFor makes every other partition a guest has.
+  CHECK_EQ(config.partition_domain(), kWebViewPartitionDomain);
+  return WebViewPartition{.name = config.partition_name(),
+                          .persist = !config.in_memory()};
 }
 
 void WebViewGuest::PinToApp(const std::string& app_host) {
@@ -2106,7 +2176,7 @@ void WebViewGuest::ReportNewWindow(const GURL& target_url) {
   LOG(INFO) << "domicile: opened a browser window at "
             << target_url.possibly_invalid_spec() << " with no opener.";
 
-  Host().Open(*guest_contents_->GetBrowserContext(), target_url);
+  Host().Open(*guest_contents_->GetBrowserContext(), target_url, partition());
 }
 
 void WebViewGuest::CloseContents(content::WebContents* source) {

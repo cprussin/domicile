@@ -72,14 +72,7 @@ item when it ships.
    [A tty desktop in a virtio-gpu VM](docs/HARDWARE-CHECKS.md#a-tty-desktop-in-a-virtio-gpu-vm)).
    - It would let CI run tty end-to-end tests on vkms.
 
-7. **`<webview>` profiles and navigation.**
-   [SHELL-BROWSER-WINDOWS.md](docs/SHELL-BROWSER-WINDOWS.md).
-   - Persistent isolated profiles, for example `partition="persist:x"`.
-     Guests share the default partition, and patch `0115` relies on that
-     ([New windows](docs/architecture/ENGINE-BROWSER-BEHAVIOR.md#new-windows)).
-   - A cancelable navigation event, like Electron's `will-navigate`.
-
-8. **Frame-synchronized `<app>` state.** The child allocates the
+7. **Frame-synchronized `<app>` state.** The child allocates the
    `LocalSurfaceId`, so a client's frame and the page's layout change in the
    same frame
    ([What each side knows](docs/architecture/WINDOW-COMPOSITING.md#what-each-side-knows)).

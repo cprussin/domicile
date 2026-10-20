@@ -28,6 +28,7 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
                         int32_t width,
                         int32_t height,
                         bool is_private,
+                        const String& partition,
                         bool is_app);
   ~DomicileBrowserWindow() override;
 
@@ -38,6 +39,7 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   int32_t width() const { return width_; }
   int32_t height() const { return height_; }
   bool isPrivate() const { return is_private_; }
+  const String& partition() const { return partition_; }
   bool isApp() const { return is_app_; }
 
   void Trace(Visitor*) const override;
@@ -50,6 +52,7 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   int32_t width_ = 0;
   int32_t height_ = 0;
   bool is_private_ = false;
+  String partition_;
   bool is_app_ = false;
 };
 

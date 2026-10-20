@@ -24,6 +24,8 @@ export type IdlType = {
 
 export type IdlArgument = {
   readonly name: string;
+  /** Whether a caller may leave it out. Its default is not read. */
+  readonly optional: boolean;
   readonly type: IdlType;
 };
 
@@ -207,7 +209,7 @@ const parseInterface = (
     switch (first.text) {
       case "constructor": {
         parser.next();
-        parseArguments(parser, true);
+        parseArguments(parser);
         break;
       }
       case "readonly": {
@@ -231,7 +233,7 @@ const parseInterface = (
         const returnType = parseType(parser);
         const operationName = parser.identifier();
         operations.push({
-          arguments: parseArguments(parser, false),
+          arguments: parseArguments(parser),
           doc: memberDocLines,
           name: operationName,
           returnType,
@@ -315,27 +317,17 @@ const parseInheritance = (parser: Parser): string | undefined => {
   }
 };
 
-/**
- * `(type name, ...)`. Only a constructor may take an optional argument, since
- * constructors are not emitted.
- */
-const parseArguments = (
-  parser: Parser,
-  allowOptional: boolean,
-): readonly IdlArgument[] => {
+/** `(type name, optional type name = default, ...)`. */
+const parseArguments = (parser: Parser): readonly IdlArgument[] => {
   const result: IdlArgument[] = [];
   parser.expect("(");
   while (parser.peek().text !== ")") {
-    const first = parser.peek();
-    if (first.text === "optional") {
-      if (allowOptional) {
-        parser.next();
-      } else {
-        throw parser.unexpected(first);
-      }
+    const optional = parser.peek().text === "optional";
+    if (optional) {
+      parser.next();
     }
     const type = parseType(parser);
-    result.push({ name: parser.identifier(), type });
+    result.push({ name: parser.identifier(), optional, type });
     if (parser.peek().text === "=") {
       parser.next();
       parseDefault(parser);

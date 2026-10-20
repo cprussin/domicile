@@ -25,6 +25,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/supports_user_data.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/types/expected.h"
 #include "chrome/browser/domicile/domicile_tab_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_destroyer.h"
@@ -35,6 +36,7 @@
 #include "components/domicile/browser/browser_window_capture_target.h"
 #include "components/domicile/browser/private_pages.h"
 #include "components/domicile/browser/web_view_guest.h"
+#include "components/domicile/browser/web_view_partition.h"
 #include "components/domicile/common/domicile_scheme.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/browser_context.h"
@@ -119,11 +121,13 @@ class DeskWindows final : public base::SupportsUserData::Data,
   ~DeskWindows() override = default;
 
   // Opens a window at `url` as a tab of the desk's own window, or a private
-  // window in the off-the-record profile. Returns false and opens nothing
-  // when the profile has no shell to own it.
-  bool Open(const GURL& url, bool private_browsing) {
+  // window in the off-the-record profile, in `partition` when there is one.
+  // Returns false and opens nothing when the profile has no shell to own it.
+  bool Open(const GURL& url,
+            bool private_browsing,
+            const std::optional<WebViewPartition>& partition) {
     return Make(url, /*popup_window=*/std::nullopt, 0, 0, private_browsing,
-                /*app=*/false);
+                /*app=*/false, partition);
   }
 
   // Opens an app window at `url`: a window of the desk's own window that the
@@ -131,14 +135,16 @@ class DeskWindows final : public base::SupportsUserData::Data,
   // windows, as a link out of a Chrome app opens in the browser.
   bool OpenApp(const GURL& url) {
     return Make(url, /*popup_window=*/std::nullopt, 0, 0,
-                /*private_browsing=*/false, /*app=*/true);
+                /*private_browsing=*/false, /*app=*/true,
+                /*partition=*/std::nullopt);
   }
 
   // Opens an app window at an app module's `url`, pinned to `app_host`. See
   // WebViewGuest::PinToApp.
   bool OpenAppModule(const GURL& url, const std::string& app_host) {
     return Make(url, /*popup_window=*/std::nullopt, 0, 0,
-                /*private_browsing=*/false, /*app=*/true, app_host);
+                /*private_browsing=*/false, /*app=*/true,
+                /*partition=*/std::nullopt, app_host);
   }
 
   // Makes the page of a window a page opened, for content to hold until
@@ -171,7 +177,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
   // Opens a window at `url` as popup window `window_id`'s one tab.
   bool OpenPopupWindow(int window_id, const GURL& url, int width, int height) {
     return Make(url, window_id, width, height, /*private_browsing=*/false,
-                /*app=*/false);
+                /*app=*/false, /*partition=*/std::nullopt);
   }
 
   // The off-the-record profile a new private page lives in, made on first
@@ -240,11 +246,15 @@ class DeskWindows final : public base::SupportsUserData::Data,
       // A page's new window has only its initial entry until its first
       // navigation commits.
       const bool navigated = entry != nullptr && !entry->IsInitialEntry();
+      const std::optional<WebViewPartition> partition =
+          window.guest->partition();
       list.push_back(mojom::BrowserWindow::New(
           window.id, navigated ? entry->GetVirtualURL() : window.opened_at,
           base::UTF16ToUTF8(contents.GetTitle()),
           window.guest->popup_window().value_or(0), window.width,
           window.height, contents.GetBrowserContext()->IsOffTheRecord(),
+          partition.has_value() ? WebViewPartitionAttribute(*partition)
+                                : std::string(),
           window.app));
     }
     return list;
@@ -293,6 +303,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
             int height,
             bool private_browsing,
             bool app,
+            const std::optional<WebViewPartition>& partition,
             const std::string& app_host = std::string()) {
     // The shell owns every guest, browser windows included: content's guest
     // machinery reads the owner's WebContents when making a guest. A desk with
@@ -305,7 +316,7 @@ class DeskWindows final : public base::SupportsUserData::Data,
     }
     const std::string id = base::NumberToString(next_id_++);
     std::unique_ptr<WebViewGuest> guest = WebViewGuest::MakeWindow(
-        *shell, id, popup_window, private_browsing,
+        *shell, id, popup_window, private_browsing, partition,
         base::BindRepeating(app ? &AttachAppTabHelpers : &AttachTabHelpers));
     // `windows_` owns `guest` and the watch from here.
     auto watch = std::make_unique<Watch>(
@@ -401,8 +412,10 @@ class DeskWindows final : public base::SupportsUserData::Data,
 class Host final : public BrowserWindowHost {
  public:
   // A private page's new window is private too.
-  void Open(content::BrowserContext& context, const GURL& url) override {
-    Windows(context).Open(url, context.IsOffTheRecord());
+  void Open(content::BrowserContext& context,
+            const GURL& url,
+            const std::optional<WebViewPartition>& partition) override {
+    Windows(context).Open(url, context.IsOffTheRecord(), partition);
   }
 
   std::unique_ptr<content::WebContents> MakeOpenedWindow(
@@ -482,8 +495,19 @@ class BrowserWindowsService final
     OnWindowsChanged();
   }
 
-  void Open(const GURL& url, bool private_browsing) override {
-    windows_->Open(url, private_browsing);
+  void Open(const GURL& url,
+            bool private_browsing,
+            const std::string& partition) override {
+    // The page throws for "persist:" with no name first.
+    const base::expected<std::optional<WebViewPartition>, std::string> parsed =
+        ParseWebViewPartition(partition);
+    if (!parsed.has_value()) {
+      ReportBadMessageAndDeleteThis(
+          "domicile: a browser window was opened in a partition it may not "
+          "have.");
+      return;
+    }
+    windows_->Open(url, private_browsing, *parsed);
   }
 
   void OpenApp(const GURL& url) override { windows_->OpenApp(url); }
@@ -553,7 +577,8 @@ bool OpenBrowserWindow(const GURL& url, bool app) {
   DeskWindows& windows =
       DeskWindows::For(Profile::FromBrowserContext(shell->GetBrowserContext()));
   return app ? windows.OpenApp(url)
-             : windows.Open(url, /*private_browsing=*/false);
+             : windows.Open(url, /*private_browsing=*/false,
+                            /*partition=*/std::nullopt);
 }
 
 bool OpenAppModuleWindow(const GURL& url, const std::string& app_host) {

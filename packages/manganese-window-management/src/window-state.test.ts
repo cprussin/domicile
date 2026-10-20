@@ -51,6 +51,7 @@ const listed = (
   id,
   isApp: false,
   isPrivate: false,
+  partition: "",
   popupWindow: popup.popupWindow === 0 ? null : popup.popupWindow,
   title: "",
   url,
