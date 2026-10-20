@@ -2081,6 +2081,71 @@ describe("BrowserWindow", () => {
       expect(screen.queryByRole("alertdialog")).toBeNull();
     });
 
+    // A window arriving with a workspace switch is off screen when it takes
+    // focus. Focus that scrolled it into view would scroll the whole desk,
+    // breaking the slide.
+    it("focuses it without scrolling", async () => {
+      const scrolling: boolean[] = [];
+      const focus = HTMLElement.prototype.focus;
+      // `focus` is the platform's, so it is patched rather than injected.
+      Object.defineProperty(HTMLElement.prototype, "focus", {
+        configurable: true,
+        value(this: HTMLElement, options?: FocusOptions) {
+          if (this.closest("[role=alertdialog]") !== null) {
+            scrolling.push(options?.preventScroll !== true);
+          }
+          focus.call(this, options);
+        },
+      });
+      try {
+        const { container } = render(
+          <BrowserWindow
+            behindPanel={false}
+            clickThrough={false}
+            covered={false}
+            depth={0}
+            domicile={silentDomicile}
+            dragging={false}
+            focused
+            frame={FRAME}
+            fullscreen={false}
+            isApp
+            motion="arriving-from-end"
+            onDescription={noDescription}
+            onFocusRequest={() => undefined}
+            onIcon={noIcon}
+            onMotionEnded={nothingEnded}
+            onPageFullscreen={noFullscreen}
+            onReach={() => undefined}
+            rect={ON_SCREEN}
+            url="https://example.com"
+            window="1"
+          />,
+        );
+        fireEvent(
+          view(container),
+          Object.assign(new Event(WEBVIEW_DIALOG_EVENT, { cancelable: true }), {
+            accept: () => undefined,
+            defaultValue: "",
+            dialogType: "alert",
+            dismiss: () => undefined,
+            message: "Hi",
+            origin: "https://example.com",
+          }),
+        );
+
+        const ok = within(
+          await screen.findByRole("alertdialog", { name: "example.com says" }),
+        ).getByRole("button", { name: "OK" });
+        await waitFor(() => {
+          expect(ok).toHaveFocus();
+        });
+        expect(scrolling).toStrictEqual([false]);
+      } finally {
+        HTMLElement.prototype.focus = focus;
+      }
+    });
+
     // Closing a background tab asks there, as Chrome switches to the tab.
     it("raises its window for a beforeunload", async () => {
       await new Promise<void>((resolve) => {

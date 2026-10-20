@@ -301,9 +301,12 @@ export const BrowserWindow = ({
 
   // Focuses an element in this window without reporting it as a user reach.
   // All programmatic focus here must go through this.
+  //
+  // Never scrolls: a window arriving with a workspace switch is off screen,
+  // and scrolling it into view would scroll the whole desk.
   const focusOwn = useCallback((target: HTMLElement) => {
     focusing.current = true;
-    target.focus();
+    target.focus({ preventScroll: true });
     focusing.current = false;
   }, []);
 
