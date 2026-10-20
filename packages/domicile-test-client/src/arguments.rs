@@ -80,6 +80,10 @@ pub struct Arguments {
     /// `popup`.
     pub repositioned_popup: bool,
 
+    /// The page anchor to ask for (`domicile_toplevel_anchor_v1.set_anchor`),
+    /// before the window's first commit.
+    pub anchor: Option<String>,
+
     /// Whether each press opens a menu over what it pressed, the window or a
     /// menu, whose positioner lets it slide on both axes.
     ///
@@ -229,6 +233,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut popup = None;
     let mut popup_grab = None;
     let mut repositioned_popup = None;
+    let mut anchor = None;
     let mut sliding_menu = None;
     let mut bubble = None;
     let mut scrolling_bubble = None;
@@ -313,6 +318,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--repositioned-popup" => {
                 take(&mut repositioned_popup, &flag, true)?;
             }
+            "--anchor" => {
+                take(&mut anchor, &flag, value(&mut args, &flag)?)?;
+            }
             "--sliding-menu" => {
                 take(&mut sliding_menu, &flag, true)?;
             }
@@ -373,6 +381,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             || repositioned_popup.unwrap_or(false),
         popup_grab: popup_grab.unwrap_or(false),
         repositioned_popup: repositioned_popup.unwrap_or(false),
+        anchor,
         sliding_menu: sliding_menu.unwrap_or(false),
         bubble: bubble.unwrap_or(false),
         scrolling_bubble: scrolling_bubble.unwrap_or(false),

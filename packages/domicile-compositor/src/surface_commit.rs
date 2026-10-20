@@ -203,6 +203,9 @@ impl DomicileCompositor {
         if let Committer::App(app_id) = &committer {
             self.tell_the_size_limits(app_id, surface);
         }
+        if let (Committer::App(app_id), Role::Toplevel(_)) = (&committer, &role) {
+            self.tell_the_anchor(app_id, surface);
+        }
         // A commit answers the client's last resize, so the newest one may go
         // out.
         if let (Committer::App(app_id), Role::Toplevel(toplevel)) = (&committer, &role) {

@@ -61,6 +61,7 @@ use smithay::wayland::{
 use tracing::{debug, error, info, warn};
 
 mod activation;
+mod anchors;
 mod app_scope;
 mod blanking;
 mod buffer_transform;
@@ -750,6 +751,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     xdg_foreign::advertise(&dh);
     // Screenshot and recording tools such as `grim` and `wf-recorder`.
     screencopy::advertise(&dh);
+    // Windows laid out at a named place in the page.
+    anchors::advertise(&dh);
 
     let mut seat_state = SeatState::new();
     let data_device_state = DataDeviceState::new::<DomicileCompositor>(&dh);

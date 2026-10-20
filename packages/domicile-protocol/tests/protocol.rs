@@ -547,3 +547,21 @@ fn asking_for_synced_frames_is_the_tag_and_nothing_else() {
     let v = serde_json::to_value(ChromeMessage::SyncFrames).unwrap();
     assert_eq!(v, serde_json::json!({"type": "sync_frames"}));
 }
+
+/// A window laid out at a page anchor names it; one that left its anchor
+/// names none. See `docs/architecture/WINDOW-COMPOSITING.md#anchored-windows`.
+#[test]
+fn an_anchored_window_names_its_anchor_or_null() {
+    let anchored = |anchor: Option<&str>| {
+        serde_json::to_value(HostMessage::AppAnchored {
+            app_id: "app-2".into(),
+            anchor: anchor.map(str::to_string),
+        })
+        .unwrap()
+    };
+    assert_eq!(
+        anchored(Some("bar")),
+        serde_json::json!({"type": "app_anchored", "app_id": "app-2", "anchor": "bar"})
+    );
+    assert_eq!(anchored(None)["anchor"], serde_json::Value::Null);
+}

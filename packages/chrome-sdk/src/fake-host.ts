@@ -80,6 +80,7 @@ export const describedWindow = (
   appId: string,
   fields: Partial<DomicileWindow> = {},
 ): DomicileWindow => ({
+  anchor: null,
   appId,
   clientFrame: false,
   cursor: "default",
