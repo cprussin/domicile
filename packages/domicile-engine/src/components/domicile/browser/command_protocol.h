@@ -100,6 +100,15 @@ namespace domicile {
 //   -> {"type":"cleared"}
 //   -> {"type":"refused","why":"..."}
 //
+//   {"type":"site_data","version":1}
+//   -> {"type":"site_data","sites":[{"host":"mail.example","bytes":20480,
+//       "cookies":3}]}
+//   -> {"type":"refused","why":"..."}
+//
+//   {"type":"clear_site_data","version":1,"host":"mail.example"}
+//   -> {"type":"cleared"}
+//   -> {"type":"refused","why":"..."}
+//
 //   {"type":"disable_while_typing","version":1}
 //   {"type":"disable_while_typing","version":1,"enabled":false}
 //   -> {"type":"disable_while_typing","enabled":false}
@@ -108,7 +117,8 @@ namespace domicile {
 // `disable_while_typing` is `domicile disable-while-typing`: whether the
 // touchpads rest while a keyboard types, set when the request says.
 // The site permissions, extensions and media devices are the Settings app's,
-// relayed by the supervisor (docs/SETTINGS.md). Names are site_permissions.h's.
+// relayed by the supervisor (docs/SETTINGS.md), as is the site data. Names are
+// site_permissions.h's.
 // The history and browsing data are the History app's. Times are milliseconds
 // since the Unix epoch, fractional to the microsecond, as `chrome.history`
 // gives them.
@@ -354,6 +364,27 @@ using ClearBrowsingData =
     base::FunctionRef<void(const BrowsingDataClearing& clearing,
                            CommandDone done)>;
 
+// The data one host stores: cookies, local storage, IndexedDB and the rest.
+struct StoredSiteData {
+  std::string host;
+  // On disk, summed over every kind.
+  uint64_t bytes = 0;
+  uint64_t cookies = 0;
+};
+
+// Runs once with every host that stores data, or why it could not look.
+using SiteDataFound = base::OnceCallback<void(
+    base::expected<std::vector<StoredSiteData>, std::string>)>;
+
+// Carries out `site_data` in the shell's profile. Runs `found` once, possibly
+// after returning.
+using ListSiteData = base::FunctionRef<void(SiteDataFound found)>;
+
+// Carries out `clear_site_data`: removes everything `host` stores in the
+// shell's profile. Runs `done` once, possibly after returning.
+using ClearSiteData =
+    base::FunctionRef<void(const std::string& host, CommandDone done)>;
+
 // Carries out `disable_while_typing`: sets whether the touchpads rest while a
 // keyboard types when `enabled` has a value, and returns whether they do. Says
 // why not where the engine reads no touchpad.
@@ -379,6 +410,8 @@ struct CommandActions {
   ListVisits list_visits;
   DeleteVisits delete_visits;
   ClearBrowsingData clear_browsing_data;
+  ListSiteData list_site_data;
+  ClearSiteData clear_site_data;
   DisableWhileTyping disable_while_typing;
 };
 
@@ -387,8 +420,9 @@ using CommandReply = base::OnceCallback<void(std::string)>;
 
 // Answers one request line (without its newline). `reply` runs once: before
 // this returns, except for `load_shell`, `run_app`, `open_url`,
-// `load_unpacked`, `history`, `visits`, `delete_history` and
-// `clear_browsing_data`, which answer once their action is done.
+// `load_unpacked`, `history`, `visits`, `delete_history`,
+// `clear_browsing_data`, `site_data` and `clear_site_data`, which answer once
+// their action is done.
 void AnswerCommand(std::string_view line,
                    const CommandActions& actions,
                    CommandReply reply);

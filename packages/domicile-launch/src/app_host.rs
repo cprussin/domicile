@@ -5,8 +5,8 @@
 //! host asks the running desktop which files to edit
 //! ([`Request::SettingsFiles`]) rather than taking a path from the page,
 //! refuses a config whose `shell_options` the shell's declaration refuses, and
-//! forwards site permissions, extensions, media devices and addresses to open
-//! to the engine through the desktop. For History, it forwards history
+//! forwards site permissions, site data, extensions, media devices and
+//! addresses to open to the engine through the desktop. For History, it forwards history
 //! searches, deletions and clearing browsing data. See `docs/SETTINGS.md` and
 //! `docs/HISTORY.md`.
 //!
@@ -45,6 +45,10 @@
 //!   {"id":15,"type":"deleted"}
 //! {"id":16,"type":"clear_browsing_data","since":0,"types":["cookies"],"origins":["https://example.com"]}
 //!   {"id":16,"type":"cleared"}   (no origins clears every origin)
+//! {"id":17,"type":"site_data"}
+//!   {"id":17,"type":"site_data","sites":[{"host":"mail.example","bytes":20480.0,"cookies":3}]}
+//! {"id":18,"type":"clear_site_data","host":"mail.example"}
+//!   {"id":18,"type":"cleared"}
 //! any request
 //!   {"id":…,"type":"refused","why":"…"}
 //! pushed when a file changes on disk
@@ -156,6 +160,8 @@ enum AppRequest {
     Visits { url: String },
     DeleteHistory { visits: Vec<f64> },
     ClearBrowsingData(BrowsingData),
+    SiteData,
+    ClearSiteData { host: String },
 }
 
 /// Which file a write replaces.
@@ -287,6 +293,16 @@ fn carry_out(request: AppRequest, host: &Host) -> Result<Value, String> {
         }
         AppRequest::ClearBrowsingData(data) => {
             match (host.ask)(&Request::ClearBrowsingData(data))? {
+                Response::Cleared => Ok(json!({"type": "cleared"})),
+                other => Err(refusal_or_surprise(other)),
+            }
+        }
+        AppRequest::SiteData => match (host.ask)(&Request::SiteData)? {
+            Response::SiteData { sites } => Ok(json!({"type": "site_data", "sites": sites})),
+            other => Err(refusal_or_surprise(other)),
+        },
+        AppRequest::ClearSiteData { host: site } => {
+            match (host.ask)(&Request::ClearSiteData { host: site })? {
                 Response::Cleared => Ok(json!({"type": "cleared"})),
                 other => Err(refusal_or_surprise(other)),
             }

@@ -7,20 +7,22 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use domicile_launch::command::{
-    clear_browsing_data_line, config_extensions_line, delete_history_line,
+    clear_browsing_data_line, clear_site_data_line, config_extensions_line, delete_history_line,
     disable_while_typing_line, extensions_line, history_line, load_shell_line, load_unpacked_line,
     media_devices_line, open_url_line, set_extension_enabled_line, set_media_device_line,
-    set_site_permission_line, site_permissions_line, uninstall_extension_line, visits_line,
+    set_site_permission_line, site_data_line, site_permissions_line, uninstall_extension_line,
+    visits_line,
 };
 use domicile_launch::command_socket::{
-    clear_browsing_data, config_extensions, delete_history, disable_while_typing, extensions,
-    history, load_shell, load_unpacked, media_devices, open_url, set_extension_enabled,
-    set_media_device, set_site_permission, site_permissions, uninstall_extension, visits,
-    CommandError,
+    clear_browsing_data, clear_site_data, config_extensions, delete_history, disable_while_typing,
+    extensions, history, load_shell, load_unpacked, media_devices, open_url, set_extension_enabled,
+    set_media_device, set_site_permission, site_data, site_permissions, uninstall_extension,
+    visits, CommandError,
 };
 use domicile_launch::extensions::InstalledExtension;
 use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
+use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
 /// Reply timeout: long enough for a loaded machine, short enough for a fast
@@ -437,6 +439,40 @@ fn the_engine_is_told_to_clear_browsing_data_and_says_it_cleared_it() {
     assert_eq!(
         heard.join().expect("the engine was listening"),
         clear_browsing_data_line(&data)
+    );
+}
+
+#[test]
+fn the_engine_lists_site_data() {
+    let (_scratch, path) = scratch();
+    let heard = an_engine(
+        &path,
+        Some("{\"type\":\"site_data\",\"sites\":[{\"host\":\"a.example\",\"bytes\":2048.0,\"cookies\":1}]}\n"),
+    );
+
+    assert_eq!(
+        site_data(&path, BRIEFLY).expect("the engine listed them"),
+        vec![SiteData {
+            host: "a.example".to_string(),
+            bytes: 2048.0,
+            cookies: 1,
+        }]
+    );
+    assert_eq!(
+        heard.join().expect("the engine was listening"),
+        site_data_line()
+    );
+}
+
+#[test]
+fn the_engine_is_told_to_clear_a_host_s_site_data_and_says_it_cleared_it() {
+    let (_scratch, path) = scratch();
+    let heard = an_engine(&path, Some("{\"type\":\"cleared\"}\n"));
+
+    clear_site_data(&path, "a.example", BRIEFLY).expect("the engine cleared it");
+    assert_eq!(
+        heard.join().expect("the engine was listening"),
+        clear_site_data_line("a.example")
     );
 }
 

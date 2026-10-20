@@ -1,4 +1,5 @@
 import { CodeIcon } from "@phosphor-icons/react/dist/ssr/Code";
+import { CookieIcon } from "@phosphor-icons/react/dist/ssr/Cookie";
 import { GearSixIcon } from "@phosphor-icons/react/dist/ssr/GearSix";
 import { HandPalmIcon } from "@phosphor-icons/react/dist/ssr/HandPalm";
 import { KeyboardIcon } from "@phosphor-icons/react/dist/ssr/Keyboard";
@@ -71,6 +72,8 @@ const PageIcon = ({ page }: { page: PageId }) => {
       return <PuzzlePieceIcon size={18} />;
     case PageId.Permissions:
       return <HandPalmIcon size={18} />;
+    case PageId.SiteData:
+      return <CookieIcon size={18} />;
     case PageId.Code:
       return <CodeIcon size={18} />;
   }

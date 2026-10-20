@@ -15,11 +15,7 @@ item when it ships.
    probe still won't measure presentation.
    [ENGINE-FORK-MEASUREMENTS.md](docs/architecture/ENGINE-FORK-MEASUREMENTS.md#keystroke-to-pixel).
 
-2. **Settings app.** [SETTINGS.md](docs/SETTINGS.md).
-   - A list of sites with stored data. History clears cookies by time range
-     or by site ([HISTORY.md](docs/HISTORY.md)).
-
-3. **Revisit the docs for users.** Start with the README.
+2. **Revisit the docs for users.** Start with the README.
    - A clearer reading path through the docs.
    - Screenshots and videos of manganese.
    - A short getting started guide: installing and setup.
@@ -37,7 +33,7 @@ item when it ships.
      - Writing a desktop from scratch
        ([WRITING-A-SHELL.md](docs/WRITING-A-SHELL.md)).
 
-4. **Smithay from a fork.** `Cargo.toml` patches Smithay 0.7.0 with
+3. **Smithay from a fork.** `Cargo.toml` patches Smithay 0.7.0 with
    Smithay/smithay#2217, which sends keymaps as read-only fds. Drop the patch
    and `flake.nix`'s `outputHashes` once a Smithay release contains it.
 
