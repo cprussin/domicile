@@ -53,6 +53,8 @@ if [ "${DOMICILE_RELEASE_DRY_RUN:-}" = 1 ]; then
   git -C "$WORK/aur" diff --cached --stat
   exit 0
 fi
-git -C "$WORK/aur" commit -qm "domicile-bin $version"
+# The maintainer `distro/aur.sh` names, as a CI runner has no git identity.
+git -C "$WORK/aur" -c user.name="Connor Prussin" -c user.email=connor@prussin.net \
+  commit -qm "domicile-bin $version"
 git -C "$WORK/aur" push -q origin HEAD:master
 echo "the AUR has domicile-bin $version"
