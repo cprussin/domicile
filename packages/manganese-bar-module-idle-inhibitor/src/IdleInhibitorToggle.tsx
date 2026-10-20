@@ -67,7 +67,8 @@ const toggleStyles = cva({
   },
   variants: {
     held: {
-      false: { opacity: "inactive" },
+      // Dims the icon alone, so the hover background stays as strong.
+      false: { "& > svg": { opacity: "inactive" } },
       true: {},
     },
   },

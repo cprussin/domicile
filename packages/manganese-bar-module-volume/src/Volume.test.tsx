@@ -31,7 +31,7 @@ describe("Volume", () => {
       shown(sound);
       expect(
         screen.getByRole("button", { name: "Volume 50%" }).className,
-      ).not.toContain(css({ opacity: "inactive" }));
+      ).not.toContain(css({ "& > svg": { opacity: "inactive" } }));
 
       sound.report({
         ...laptop,
@@ -40,7 +40,7 @@ describe("Volume", () => {
 
       expect(
         screen.getByRole("button", { name: "Volume muted" }).className,
-      ).toContain(css({ opacity: "inactive" }));
+      ).toContain(css({ "& > svg": { opacity: "inactive" } }));
     });
 
     it("draws more waves the louder the default output", () => {
