@@ -43,6 +43,18 @@ describe("the domicile preset", () => {
     ).toStrictEqual({ animationPlayState: "paused" });
   });
 
+  it("leaves the shell handover's crossfade to the browser", () => {
+    // `load_shell`'s view transition fades the splash into the shell. The
+    // wipe's rules would hold the splash opaque under an additive fade-in,
+    // which saturates to white.
+    const globalCss = at(domicilePreset, "globalCss");
+    expect(at(globalCss, "::view-transition-old(root)")).toBeUndefined();
+    expect(at(globalCss, "::view-transition-new(root)")).toBeUndefined();
+    expect(
+      at(globalCss, "html[data-theme-flip-to]::view-transition-old(root)"),
+    ).toStrictEqual({ animationName: "none" });
+  });
+
   describe("under high contrast", () => {
     it("draws text further from the light ground", () => {
       expect(textContrast("_light", true)).toBeGreaterThan(

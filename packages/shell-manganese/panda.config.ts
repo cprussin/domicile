@@ -13,8 +13,11 @@ export default defineConfig({
   // something off screen would scroll it, and every position taken from
   // `getBoundingClientRect` would be off by that offset. `clip` is not a
   // scroll container.
+  //
+  // `:root` rather than `html`: a selector here replaces the preset's rules for
+  // it, and the preset's `html` rules paint the page's background.
   globalCss: {
-    html: {
+    ":root": {
       overflow: "clip",
       // Shell chrome is not selectable text. Set at the root so new chrome is
       // covered too. Window pages are separate documents and are unaffected.
