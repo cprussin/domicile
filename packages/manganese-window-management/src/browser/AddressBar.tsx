@@ -33,7 +33,6 @@ import { DownloadIndicator } from "./DownloadIndicator";
 import type { Downloads } from "./downloads";
 import type { MediaDeviceChoice } from "./media-devices";
 import { SitePermissions } from "./SitePermissions";
-import { ZoomIndicator } from "./ZoomIndicator";
 import {
   isFullyZoomedIn,
   isFullyZoomedOut,
@@ -91,11 +90,6 @@ type Props = {
   visited: readonly string[];
   /** The page zoom factor; 1 is 100%. */
   zoom: number;
-  /**
-   * How many times the user has zoomed. Each change re-shows the zoom
-   * indicator; 0 shows none.
-   */
-  zoomsAnnounced: number;
 };
 
 /**
@@ -129,7 +123,6 @@ export const AddressBar = ({
   sitePermissions,
   visited,
   zoom,
-  zoomsAnnounced,
 }: Props) => {
   // Typing is discarded when the address changes. Reset during render, not in
   // an effect, to avoid a frame showing stale text over the new page.
@@ -278,9 +271,6 @@ export const AddressBar = ({
           style={filledTo(loadProgress)}
         />
       )}
-      {zoomsAnnounced === 0 ? undefined : (
-        <ZoomIndicator key={zoomsAnnounced} zoom={zoom} />
-      )}
     </form>
   );
 };
@@ -356,7 +346,7 @@ const barStyles = hstack({
   gap: 2,
   paddingBlock: 1.5,
   paddingInline: 2,
-  // Anchors the zoom indicator and the loading bar.
+  // Anchors the loading bar.
   position: "relative",
 });
 
