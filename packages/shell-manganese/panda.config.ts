@@ -9,10 +9,10 @@ import { defineConfig } from "@pandacss/dev";
 export default defineConfig({
   exclude: [],
   // The desktop never scrolls. It spans every display, so it is wider than the
-  // viewport. `overflow: hidden` would still be a scroll container: focusing
-  // something off screen would scroll it, and every position taken from
-  // `getBoundingClientRect` would be off by that offset. `clip` is not a
-  // scroll container.
+  // viewport, and every position taken from `getBoundingClientRect` would be
+  // off by a scroll's offset. The root's `clip` reaches the viewport as
+  // `hidden`, which script can still scroll: focusing something off screen
+  // would. So the shell focuses with `preventScroll`.
   //
   // `:root` rather than `html`: a selector here replaces the preset's rules for
   // it, and the preset's `html` rules paint the page's background.
