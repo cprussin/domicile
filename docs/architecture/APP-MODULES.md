@@ -77,7 +77,9 @@ nothing else. `system(host)` from the SDK takes either host.
 | | every other control channel member: input, focus, windows, lock, theme |
 
 - The engine dials the compositor's socket once per app document and says
-  `app_hello` in place of `hello`.
+  `app_hello` in place of `hello`. After a compositor restart it ends the
+  app's calls with `compositor_gone` and dials the new one
+  ([ENGINE-FORK.md](ENGINE-FORK.md#a-compositor-restart)).
 - The compositor answers an app connection's allowed `system_request`s with a
   `domicile_host::system` executor of its own and fails the rest with
   `permission_denied` (`domicile_host::system::refused_to_an_app`). It drops

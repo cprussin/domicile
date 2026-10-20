@@ -12,6 +12,7 @@
 #include "base/functional/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
+#include "base/test/repeating_test_future.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "components/domicile/browser/line_framer.h"
@@ -34,9 +35,9 @@ class FakeClient : public mojom::AppChannelClient {
     return receiver_.BindNewPipeAndPassRemote();
   }
 
-  void System(const std::string& message) override { heard_.SetValue(message); }
+  void System(const std::string& message) override { heard_.AddValue(message); }
 
-  base::test::TestFuture<std::string> heard_;
+  base::test::RepeatingTestFuture<std::string> heard_;
 
  private:
   mojo::Receiver<mojom::AppChannelClient> receiver_{this};
@@ -57,6 +58,10 @@ class AppChannelTest : public testing::Test {
     // Self-owned: dropping `channel_` deletes it.
     new AppChannel(path, channel_.BindNewPipeAndPassReceiver());
 
+    AcceptTheNextCompositor();
+  }
+
+  void AcceptTheNextCompositor() {
     base::test::TestFuture<int> accepted;
     ASSERT_EQ(
         Settle(server_.Accept(&compositor_, accepted.GetCallback()), accepted),
@@ -133,6 +138,39 @@ TEST_F(AppChannelTest, RelaysACallAndItsAnswer) {
   Say("{\"type\":\"welcome\",\"protocol_version\":1}\n"
       "{\"type\":\"system_end\",\"id\":7}\n");
   EXPECT_EQ(client_.heard_.Take(), "{\"type\":\"system_end\",\"id\":7}");
+}
+
+// A compositor that exits takes the app's calls with it, and the channel dials
+// the next one. The SDK sends a watch ended this way again. See "A compositor
+// restart" in docs/architecture/ENGINE-FORK.md.
+TEST_F(AppChannelTest, ACompositorThatHangsUpEndsItsCallsAndIsReplaced) {
+  channel_->SetClient(client_.BindRemote());
+  channel_->CallSystem(3, R"({"call":"watch","path":"/tmp"})");
+  channel_->CallSystem(4, R"({"call":"stat","path":"/tmp"})");
+  Heard();
+  Heard();
+  Heard();
+  Say("{\"type\":\"system_reply\",\"id\":3,\"reply\":"
+      "{\"kind\":\"started\"}}\n");
+  client_.heard_.Take();
+
+  compositor_.reset();
+
+  EXPECT_EQ(
+      client_.heard_.Take(),
+      R"({"end":{"error":{"kind":"compositor_gone","message":"the )"
+      R"(compositor exited"},"kind":"failed"},"id":3,"type":"system_end"})");
+  EXPECT_EQ(
+      client_.heard_.Take(),
+      R"({"id":4,"reply":{"error":{"kind":"compositor_gone","message":)"
+      R"("the compositor exited"},"kind":"failed"},"type":"system_reply"})");
+
+  AcceptTheNextCompositor();
+  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"app_hello"})");
+  channel_->CallSystem(5, R"({"call":"watch","path":"/tmp"})");
+  EXPECT_EQ(Heard(),
+            R"({"id":5,"request":{"call":"watch","path":"/tmp"},)"
+            R"("type":"system_request"})");
 }
 
 }  // namespace

@@ -44,26 +44,25 @@ std::string AppHello() {
 
 AppChannel::AppChannel(const std::string& socket_path,
                        mojo::PendingReceiver<mojom::AppChannel> receiver)
-    : receiver_(this, std::move(receiver)),
-      pending_({AppHello()}),
+    : socket_path_(socket_path),
+      receiver_(this, std::move(receiver)),
       read_buffer_(base::MakeRefCounted<net::IOBufferWithSize>(
           kReadBufferSize)) {
   receiver_.set_disconnect_handler(base::BindOnce(
       [](AppChannel* self) { delete self; }, base::Unretained(this)));
+  give_up_at_ = base::TimeTicks::Now() + kReachFor;
   // Posted, so a connect that fails at once does not delete this before its
   // constructor returns.
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(&AppChannel::Connect,
-                                weak_factory_.GetWeakPtr(), socket_path));
+      FROM_HERE,
+      base::BindOnce(&AppChannel::Connect, weak_factory_.GetWeakPtr()));
 }
 
 AppChannel::~AppChannel() = default;
 
-void AppChannel::Connect(const std::string& socket_path) {
-  // No retries, unlike the shell's channel: an app runs on a desktop whose
-  // compositor is already up.
+void AppChannel::Connect() {
   socket_ = std::make_unique<net::UnixDomainClientSocket>(
-      socket_path, /*use_abstract_namespace=*/false);
+      socket_path_, /*use_abstract_namespace=*/false);
   const int result = socket_->Connect(
       base::BindOnce(&AppChannel::OnConnect, weak_factory_.GetWeakPtr()));
   if (result != net::ERR_IO_PENDING) {
@@ -73,16 +72,41 @@ void AppChannel::Connect(const std::string& socket_path) {
 
 void AppChannel::OnConnect(int result) {
   if (result != net::OK) {
-    LOG(ERROR) << "domicile: an app's channel could not reach the compositor: "
-               << net::ErrorToString(result)
+    socket_.reset();
+    if (base::TimeTicks::Now() < give_up_at_) {
+      retry_timer_.Start(
+          FROM_HERE, kRetryEvery,
+          base::BindOnce(&AppChannel::Connect, weak_factory_.GetWeakPtr()));
+      return;
+    }
+    LOG(ERROR) << "domicile: an app's channel could not reach the compositor "
+                  "in "
+               << kReachFor.InSeconds() << "s: " << net::ErrorToString(result)
                << ". Its system calls will not be answered.";
     // Closing the page's end is what tells it. Nothing may touch `this` after.
     delete this;
     return;
   }
   connected_ = true;
+  pending_.insert(pending_.begin(), AppHello());
   ReadLoop();
   WriteNext();
+}
+
+void AppChannel::OnHungUp() {
+  connected_ = false;
+  writing_ = false;
+  socket_.reset();
+  framer_ = std::make_unique<LineFramer>();
+  // Only calls are queued, and EndAll ends each of them.
+  pending_.clear();
+  for (const std::string& line : calls_.EndAll()) {
+    Answer(line);
+  }
+  LOG(WARNING) << "domicile: an app's compositor hung up; waiting "
+               << kReachFor.InSeconds() << "s for the next one.";
+  give_up_at_ = base::TimeTicks::Now() + kReachFor;
+  Connect();
 }
 
 void AppChannel::SetClient(
@@ -103,6 +127,7 @@ void AppChannel::CallSystem(uint32_t id, const std::string& request) {
                  << " is not a JSON object with a `call`; it was dropped.";
     return;
   }
+  calls_.Called(id);
   Send(std::move(*line));
 }
 
@@ -157,12 +182,10 @@ void AppChannel::ReadLoop() {
 
 void AppChannel::OnRead(int result) {
   if (result <= 0) {
-    // The compositor went away, which ends the desktop.
-    connected_ = false;
-    client_.reset();
+    OnHungUp();
     return;
   }
-  for (const std::string& line : framer_.Take(std::string_view(
+  for (const std::string& line : framer_->Take(std::string_view(
            read_buffer_->data(), static_cast<size_t>(result)))) {
     DispatchLine(line);
   }
@@ -176,6 +199,11 @@ void AppChannel::DispatchLine(const std::string& line) {
   if (type == nullptr || !IsSystemAnswer(*type)) {
     return;
   }
+  calls_.Heard(*parsed);
+  Answer(line);
+}
+
+void AppChannel::Answer(const std::string& line) {
   if (client_) {
     client_->System(line);
   } else {

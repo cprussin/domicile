@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/json/json_reader.h"
 #include "base/values.h"
@@ -59,6 +60,41 @@ TEST(SystemCallTest, OnlyTheThreeAnswersAreRelayed) {
   EXPECT_TRUE(IsSystemAnswer("system_end"));
   EXPECT_FALSE(IsSystemAnswer("system_request"));
   EXPECT_FALSE(IsSystemAnswer("brightness"));
+}
+
+// A compositor that hangs up ends what it had: a call it started ends, one
+// waiting for its reply is answered, and one it finished is not heard of
+// again.
+TEST(SystemCallTest, OpenCallsEndWithTheCompositor) {
+  OpenCalls calls;
+  calls.Called(1);
+  calls.Called(2);
+  calls.Called(3);
+  calls.Heard(Parsed(
+      R"({"type":"system_reply","id":1,"reply":{"kind":"started"}})"));
+  calls.Heard(
+      Parsed(R"({"type":"system_reply","id":3,"reply":{"kind":"stat"}})"));
+
+  std::vector<std::string> ended = calls.EndAll();
+
+  ASSERT_EQ(ended.size(), 2u);
+  base::DictValue first = Parsed(ended[0]);
+  EXPECT_EQ(*first.FindString("type"), "system_end");
+  EXPECT_EQ(first.FindInt("id"), 1);
+  EXPECT_EQ(*first.FindStringByDottedPath("end.error.kind"), "compositor_gone");
+  base::DictValue second = Parsed(ended[1]);
+  EXPECT_EQ(*second.FindString("type"), "system_reply");
+  EXPECT_EQ(second.FindInt("id"), 2);
+  EXPECT_EQ(*second.FindStringByDottedPath("reply.error.kind"),
+            "compositor_gone");
+  EXPECT_TRUE(calls.EndAll().empty());
+}
+
+TEST(SystemCallTest, OnlyARequestIsARequestLine) {
+  EXPECT_TRUE(IsSystemRequestLine(
+      R"({"type":"system_request","id":1,"request":{"call":"stat"}})"));
+  EXPECT_FALSE(IsSystemRequestLine(R"({"type":"focus_chrome"})"));
+  EXPECT_FALSE(IsSystemRequestLine("not json"));
 }
 
 }  // namespace
