@@ -46,6 +46,20 @@ Run **Publish packages** (`publish-packages.yml`) with `release` checked:
 Every step skips what is published already, so a failed release is run again
 as it is.
 
+## Prereleases
+
+Check `prerelease` too to publish the commit the run is dispatched on (main)
+to the apt, rpm and pacman repositories and the AUR, for testing the installs.
+It skips npm (its alphas publish under `next` on every push), the tags and
+`release`.
+
+A prerelease of `domicile` `<version>` is `<version>~pre.<date>.<time>`, of
+the commit, in UTC (`<version>pre.<date>.<time>` for pacman): every package
+manager sorts it after the prereleases before it and before `<version>`, so
+the release replaces it. The run refuses a `<version>` already released, as
+its prerelease would sort before it; merge the "Version packages" pull request
+first. The repositories keep three versions, prereleases included.
+
 ## Protection
 
 Two repository rulesets keep what a release published from moving:

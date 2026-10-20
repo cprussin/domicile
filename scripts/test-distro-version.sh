@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Tests `distro/version.sh`, the version the distribution packages carry: the
-# commit's time, which sorts later for every later commit, or, for a release,
-# the version of `domicile`, the distribution package's manifest.
+# commit's time, which sorts later for every later commit; for a release, the
+# version of `domicile`, the distribution package's manifest; for a prerelease,
+# that version marked as coming before it, with the commit's time.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -37,5 +38,17 @@ expect "is the commit's time, in UTC" 0.20261019.060910 "$("$VERSION_SH" "$WORK"
 
 echo "a release"
 expect "is domicile's version" 1.2.3 "$(DOMICILE_RELEASE=1 "$VERSION_SH" "$WORK" 2>&1)"
+
+echo "a prerelease"
+expect "comes before domicile's version, by the commit's time" \
+  1.2.3~pre.20261019.060910 "$(DOMICILE_PRERELEASE=1 "$VERSION_SH" "$WORK" 2>&1)"
+expect "is a prerelease even in a release" \
+  1.2.3~pre.20261019.060910 "$(DOMICILE_RELEASE=1 DOMICILE_PRERELEASE=1 "$VERSION_SH" "$WORK" 2>&1)"
+
+echo "for Arch"
+expect "drops the tilde, which pacman sorts after the release" \
+  1.2.3pre.20261019.060910 "$(DOMICILE_PRERELEASE=1 "$VERSION_SH" "$WORK" arch 2>&1)"
+expect "keeps a release's version" 1.2.3 "$(DOMICILE_RELEASE=1 "$VERSION_SH" "$WORK" arch 2>&1)"
+expect "keeps a snapshot's version" 0.20261019.060910 "$("$VERSION_SH" "$WORK" arch 2>&1)"
 
 [ "$FAILED" -eq 0 ]

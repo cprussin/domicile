@@ -11,6 +11,9 @@ name: Publish packages
 #   skips what is already published, so a failed release is rerun as it is.
 #   `dry_run`, on by default, builds and checks everything and publishes
 #   nothing.
+# - With `prerelease` too, publishes main as a prerelease of `domicile`'s
+#   version to the repositories and the AUR, for testing the installs: no npm,
+#   no tags, `release` stays. The release replaces it.
 #
 # The release is here, not in its own workflow, because npm's trusted
 # publishing names one workflow file, and checks the top-level one.
@@ -37,6 +40,10 @@ on:
         description: With release, build and check everything but publish nothing
         type: boolean
         default: true
+      prerelease:
+        description: With release, publish main as a prerelease to the repositories and the AUR only
+        type: boolean
+        default: false
 
 # One at a time and none thrown away: each run publishes its own commit.
 concurrency:
@@ -67,15 +74,27 @@ jobs:
     if: ${{ inputs.release }}
     runs-on: ubuntu-latest
     outputs:
-      commit: ${{ steps.check.outputs.commit }}
+      commit: ${{ steps.check.outputs.commit || steps.precheck.outputs.commit }}
     steps:
       # The whole history, so release can be checked as an ancestor.
       - uses: actions/checkout@v7
         with:
-          ref: stable
+          ref: ${{ inputs.prerelease && github.sha || 'stable' }}
           fetch-depth: 0
       - id: check
+        if: ${{ !inputs.prerelease }}
         run: .github/scripts/release-check.sh
+      # A prerelease sorts before its version, so it comes before that version
+      # is released.
+      - id: precheck
+        if: inputs.prerelease
+        run: |
+          version="$(jq -r .version packages/domicile/package.json)"
+          if git rev-parse -q --verify "refs/tags/domicile@$version" >/dev/null; then
+            echo "domicile $version is released: a prerelease of it would sort before it" >&2
+            exit 1
+          fi
+          echo "commit=$GITHUB_SHA" >>"$GITHUB_OUTPUT"
 
   release-packages:
     needs: release-check
@@ -87,7 +106,8 @@ jobs:
     uses: ./.github/workflows/distro-packages.yml
     with:
       ref: ${{ needs.release-check.outputs.commit }}
-      release: true
+      release: ${{ !inputs.prerelease }}
+      prerelease: ${{ inputs.prerelease }}
 
   release:
     needs: [release-check, release-packages]
@@ -97,7 +117,8 @@ jobs:
       contents: write
       id-token: write
     env:
-      DOMICILE_RELEASE: "1"
+      DOMICILE_RELEASE: ${{ !inputs.prerelease && '1' || '' }}
+      DOMICILE_PRERELEASE: ${{ inputs.prerelease && '1' || '' }}
       DOMICILE_RELEASE_DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
     steps:
       # The tags, so `release-tag.sh` tags only versions not tagged yet.
@@ -122,6 +143,7 @@ jobs:
           path: distro-out/
 
       - name: npm
+        if: ${{ !inputs.prerelease }}
         run: .github/scripts/publish-packages.sh
         env:
           DOMICILE_PUBLISH_DRY_RUN: ${{ inputs.dry_run && runner.temp || '' }}
@@ -140,13 +162,14 @@ jobs:
       # PKGBUILD names.
       - name: The AUR
         run: |
-          version="$(jq -r .version packages/domicile/package.json)"
+          version="$(distro/version.sh . arch)"
           nix shell --inputs-from . nixpkgs#libarchive --command .github/scripts/release-aur.sh \
             "distro-repo/arch/x86_64/domicile-$version-1-x86_64.pkg.tar.zst" "$DOMICILE_REPO_URL"
         env:
           AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
           DOMICILE_REPO_URL: ${{ vars.DOMICILE_REPO_URL }}
       - name: Tag the versions and move release
+        if: ${{ !inputs.prerelease }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

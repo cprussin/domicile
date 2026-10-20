@@ -60,7 +60,9 @@ YAML
   nfpm package --config "$WORK/nfpm.yaml" --packager deb --target "$out/domicile_$1_amd64.noapparmor.deb" >/dev/null
   nfpm package --config "$WORK/nfpm.yaml" --packager rpm --target "$out/domicile-$1-1.fedora.x86_64.rpm" >/dev/null
   nfpm package --config "$WORK/nfpm.yaml" --packager rpm --target "$out/domicile-$1-1.opensuse.x86_64.rpm" >/dev/null
-  nfpm package --config "$WORK/nfpm.yaml" --packager archlinux --target "$out/domicile-$1-1-x86_64.pkg.tar.zst" >/dev/null
+  # pacman's version, as `distro/version.sh ... arch` gives it.
+  sed -i "s/^version: .*/version: \"${1//\~/}\"/" "$WORK/nfpm.yaml"
+  nfpm package --config "$WORK/nfpm.yaml" --packager archlinux --target "$out/domicile-${1//\~/}-1-x86_64.pkg.tar.zst" >/dev/null
   echo "$out"
 }
 
@@ -68,8 +70,9 @@ DOMICILE_SIGNING_KEY="$("$ROOT/distro/repo-test-key.sh")"
 export DOMICILE_SIGNING_KEY
 REPO="$WORK/repo"
 
-echo "four releases into one repository"
-for version in 1.0.0 1.0.1 1.0.2 1.0.3; do
+PRE=1.0.3~pre.20261020.000000
+echo "four releases and a prerelease into one repository"
+for version in 1.0.0 1.0.1 1.0.2 "$PRE" 1.0.3; do
   if out="$("$ROOT/distro/repo.sh" "$(packages "$version" "$version")" "$REPO" 2>&1)"; then
     ok "repo.sh adds $version"
   else
@@ -93,7 +96,7 @@ for suite in current legacy; do
   else
     fail "apt verifies the $suite suite" "$out"
   fi
-  expect "apt lists the three newest versions in $suite" "1.0.3-1 1.0.2-1 1.0.1-1" \
+  expect "apt lists the three newest versions in $suite" "1.0.3-1 $PRE-1 1.0.2-1" \
     "$(apt-cache "${apt_get[@]}" madison domicile 2>&1 | awk '{print $3}' | paste -sd' ')"
 done
 
@@ -117,7 +120,7 @@ for distro in fedora opensuse; do
   else
     fail "$distro's repodata is signed" "$out"
   fi
-  expect "$distro's repodata lists the three newest versions" "1.0.1 1.0.2 1.0.3" \
+  expect "$distro's repodata lists the three newest versions" "1.0.2 $PRE 1.0.3" \
     "$(bsdcat "$REPO/rpm/$distro"/repodata/*-primary.xml.* | grep -o '<version [^>]*ver="[^"]*"' | grep -o 'ver="[^"]*"' | cut -d'"' -f2 | sort -V | paste -sd' ')"
 done
 
@@ -153,11 +156,11 @@ if out="$(as_root pacman --config "$WORK/pacman.conf" -Sw --noconfirm domicile 2
 else
   fail "pacman verifies the package" "$out"
 fi
-expect "pacman picks the newest" "domicile-1.0.3-1-x86_64.pkg.tar.zst" \
+expect "pacman picks the release over its prerelease" "domicile-1.0.3-1-x86_64.pkg.tar.zst" \
   "$(cd "$WORK/pacman-cache" && ls domicile-*.pkg.tar.zst)"
 
 echo "older versions are removed"
-expect "no file of 1.0.0 is left" "" "$(cd "$REPO" && find . -name '*1.0.0*')"
+expect "no file of 1.0.0 or 1.0.1 is left" "" "$(cd "$REPO" && find . -name '*1.0.[01]*')"
 
 echo "a published version is never replaced"
 # A rerun of a release rebuilds its packages, whose bytes differ.

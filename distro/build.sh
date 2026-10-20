@@ -5,6 +5,7 @@
 #
 # `DOMICILE_RELEASE=1` builds a release: the packages carry the versions
 # changesets gave them (`distro/version.sh`, `distro/stage.sh`).
+# `DOMICILE_PRERELEASE=1` builds a prerelease of `domicile`'s version.
 #
 # Writes to <out>:
 #
@@ -12,7 +13,7 @@
 #   domicile_<version>_amd64.noapparmor.deb       Debian 12, Ubuntu 22.04
 #   domicile-<version>-1.fedora.x86_64.rpm        Fedora, RHEL 10+
 #   domicile-<version>-1.opensuse.x86_64.rpm      openSUSE Tumbleweed
-#   domicile-<version>-1-x86_64.pkg.tar.zst       Arch
+#   domicile-<arch version>-1-x86_64.pkg.tar.zst  Arch (`version.sh ... arch`)
 #   SHA256SUMS
 #
 # Nix is the source of the pins: the engine is the one `nix build .#engine`
@@ -104,28 +105,29 @@ GLIBC="$(
 }
 
 VERSION="$(distro/version.sh "$ROOT")"
+ARCH_VERSION="$(distro/version.sh "$ROOT" arch)"
 
 echo "== packages: version $VERSION, glibc $GLIBC =="
 # nfpm's Arch packager holds every file open until it finishes, and the
 # workspace alone is over 20,000 files.
 ulimit -n "$(ulimit -Hn)"
-package() { # nfpm packager, pam file, target, nfpm-config.sh flags...
-  local config="$WORK/nfpm-$3.yaml"
-  distro/nfpm-config.sh "$WORK/stage" "$2" "$VERSION" "$GLIBC" "${@:4}" >"$config"
-  "$NFPM" package --config "$config" --packager "$1" --target "$OUT/$3"
+package() { # nfpm packager, pam file, version, target, nfpm-config.sh flags...
+  local config="$WORK/nfpm-$4.yaml"
+  distro/nfpm-config.sh "$WORK/stage" "$2" "$3" "$GLIBC" "${@:5}" >"$config"
+  "$NFPM" package --config "$config" --packager "$1" --target "$OUT/$4"
 }
 MADE=(
   "domicile_${VERSION}_amd64.deb"
   "domicile_${VERSION}_amd64.noapparmor.deb"
   "domicile-$VERSION-1.fedora.x86_64.rpm"
   "domicile-$VERSION-1.opensuse.x86_64.rpm"
-  "domicile-$VERSION-1-x86_64.pkg.tar.zst"
+  "domicile-$ARCH_VERSION-1-x86_64.pkg.tar.zst"
 )
-package deb debian "${MADE[0]}"
-package deb debian "${MADE[1]}" --without-apparmor
-package rpm fedora "${MADE[2]}"
-package rpm opensuse "${MADE[3]}"
-package archlinux archlinux "${MADE[4]}"
+package deb debian "$VERSION" "${MADE[0]}"
+package deb debian "$VERSION" "${MADE[1]}" --without-apparmor
+package rpm fedora "$VERSION" "${MADE[2]}"
+package rpm opensuse "$VERSION" "${MADE[3]}"
+package archlinux archlinux "$ARCH_VERSION" "${MADE[4]}"
 distro/arch-optdepends.sh "$OUT/${MADE[4]}" distro/arch-optdepends
 
 (cd "$OUT" && sha256sum "${MADE[@]}" >SHA256SUMS)
