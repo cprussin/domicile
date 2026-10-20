@@ -66,6 +66,7 @@ mod shell_options;
 pub mod shell_path;
 pub mod shell_source;
 pub mod site_permissions;
+pub mod software_compositing;
 pub mod spawn;
 pub mod splash;
 pub mod supervise;

@@ -1,0 +1,141 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Tue, 20 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a window in shared memory is a software image
+
+Under software compositing viz reads only software resources and drops
+GPU ones. A window the compositor hands over in shared memory (a memfd
+it fills on the CPU, when the card has no 3D) must become a software
+SharedImage, without a copy.
+
+- `SharedImageInterface::DomicileCreateSharedImageForSoftwareCompositor`
+  takes the region and its stride. `ClientSharedImageInterface` maps the
+  region and creates a CPU-write shared image over it, as
+  `CreateSharedImageForSoftwareCompositor` does over a region it
+  allocates itself.
+- A stride shorter than a row, or a region shorter than the image, is
+  refused and logged rather than read past.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ gpu/command_buffer/client/shared_image_interface.cc |  8 ++++++++
+ gpu/command_buffer/client/shared_image_interface.h  | 10 ++++++++++
+ gpu/ipc/client/client_shared_image_interface.cc     | 40 ++++++++++++++++++++++++++++++++++++++++
+ gpu/ipc/client/client_shared_image_interface.h      |  5 +++++
+ 4 files changed, 63 insertions(+)
+
+diff --git a/gpu/command_buffer/client/shared_image_interface.cc b/gpu/command_buffer/client/shared_image_interface.cc
+index c46f5fd..6d6a9ed 100644
+--- a/gpu/command_buffer/client/shared_image_interface.cc
++++ b/gpu/command_buffer/client/shared_image_interface.cc
+@@ -113,6 +113,14 @@ void SharedImageInterface::CopyToGpuMemoryBuffer(const SyncToken& sync_token,
+   NOTREACHED();
+ }
+ 
++scoped_refptr<ClientSharedImage>
++SharedImageInterface::DomicileCreateSharedImageForSoftwareCompositor(
++    const SharedImageInfo& si_info,
++    base::UnsafeSharedMemoryRegion region,
++    uint32_t stride) {
++  NOTREACHED();
++}
++
+ void SharedImageInterface::CopyToGpuMemoryBufferAsync(
+     std::vector<SyncToken> sync_tokens,
+     const Mailbox& mailbox,
+diff --git a/gpu/command_buffer/client/shared_image_interface.h b/gpu/command_buffer/client/shared_image_interface.h
+index 0481cbe..d6eb187 100644
+--- a/gpu/command_buffer/client/shared_image_interface.h
++++ b/gpu/command_buffer/client/shared_image_interface.h
+@@ -177,6 +177,16 @@ class GPU_COMMAND_BUFFER_CLIENT_EXPORT SharedImageInterface
+   virtual scoped_refptr<ClientSharedImage>
+   CreateSharedImageForSoftwareCompositor(const SharedImageInfo& si_info) = 0;
+ 
++  // DOMICILE: like CreateSharedImageForSoftwareCompositor, over the caller's
++  // `region` with rows `stride` bytes apart, so another process's shared
++  // memory is the image without a copy. Null if `region` is too small or does
++  // not map. Only ClientSharedImageInterface implements it.
++  virtual scoped_refptr<ClientSharedImage>
++  DomicileCreateSharedImageForSoftwareCompositor(
++      const SharedImageInfo& si_info,
++      base::UnsafeSharedMemoryRegion region,
++      uint32_t stride);
++
+   // Updates a shared image after its GpuMemoryBuffer (if any) was modified on
+   // the CPU or through external devices, after |sync_token| has been released.
+   virtual void UpdateSharedImage(const SyncToken& sync_token,
+diff --git a/gpu/ipc/client/client_shared_image_interface.cc b/gpu/ipc/client/client_shared_image_interface.cc
+index 545121c..4c0496b 100644
+--- a/gpu/ipc/client/client_shared_image_interface.cc
++++ b/gpu/ipc/client/client_shared_image_interface.cc
+@@ -4,6 +4,9 @@
+ 
+ #include "gpu/ipc/client/client_shared_image_interface.h"
+ 
++#include <optional>
++
++#include "base/logging.h"
+ #include "build/build_config.h"
+ #include "components/viz/common/resources/shared_image_format_utils.h"
+ #include "gpu/command_buffer/client/client_shared_image.h"
+@@ -231,6 +234,43 @@ ClientSharedImageInterface::CreateSharedImageForSoftwareCompositor(
+                                                  holder_, std::move(mapping));
+ }
+ 
++scoped_refptr<ClientSharedImage>
++ClientSharedImageInterface::DomicileCreateSharedImageForSoftwareCompositor(
++    const SharedImageInfo& si_info,
++    base::UnsafeSharedMemoryRegion region,
++    uint32_t stride) {
++  DCHECK(si_info.usage ==
++         gpu::SharedImageUsageSet(gpu::SHARED_IMAGE_USAGE_CPU_WRITE_ONLY))
++      << si_info.usage.ToString();
++  CHECK(si_info.format.is_single_plane()) << si_info.format.ToString();
++  const std::optional<size_t> row =
++      viz::SharedMemoryRowSizeForSharedImageFormat(
++          si_info.format, /*plane_index=*/0, si_info.size.width());
++  if (!row || stride < *row ||
++      region.GetSize() < static_cast<size_t>(stride) *
++                             static_cast<size_t>(si_info.size.height())) {
++    LOG(ERROR) << "domicile: " << region.GetSize() << " bytes with rows "
++               << stride << " apart cannot hold a "
++               << si_info.size.ToString() << " " << si_info.format.ToString()
++               << " image";
++    return nullptr;
++  }
++  base::WritableSharedMemoryMapping mapping = region.Map();
++  if (!mapping.IsValid()) {
++    LOG(ERROR) << "domicile: could not map a window's shared memory";
++    return nullptr;
++  }
++
++  gfx::GpuMemoryBufferHandle handle(std::move(region));
++  handle.offset = 0;
++  handle.stride = stride;
++  auto mailbox = proxy_->CreateSharedImage(si_info, std::move(handle));
++
++  return base::MakeRefCounted<ClientSharedImage>(AddMailbox(mailbox), si_info,
++                                                 GenUnverifiedSyncToken(),
++                                                 holder_, std::move(mapping));
++}
++
+ void ClientSharedImageInterface::CopyToGpuMemoryBuffer(
+     const SyncToken& sync_token,
+     const Mailbox& mailbox) {
+diff --git a/gpu/ipc/client/client_shared_image_interface.h b/gpu/ipc/client/client_shared_image_interface.h
+index 116c724..017bcd2 100644
+--- a/gpu/ipc/client/client_shared_image_interface.h
++++ b/gpu/ipc/client/client_shared_image_interface.h
+@@ -79,6 +79,11 @@ class GPU_IPC_CLIENT_EXPORT ClientSharedImageInterface
+   // later to get the shared memory mapping.
+   scoped_refptr<ClientSharedImage> CreateSharedImageForSoftwareCompositor(
+       const SharedImageInfo& si_info) override;
++  scoped_refptr<ClientSharedImage>
++  DomicileCreateSharedImageForSoftwareCompositor(
++      const SharedImageInfo& si_info,
++      base::UnsafeSharedMemoryRegion region,
++      uint32_t stride) override;
+   void CopyToGpuMemoryBuffer(const SyncToken& sync_token,
+                              const Mailbox& mailbox) override;
+ #if BUILDFLAG(IS_WIN)

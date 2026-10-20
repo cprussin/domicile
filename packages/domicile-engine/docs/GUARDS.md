@@ -40,7 +40,7 @@ Under `under-wayland.sh` unless marked headless.
 
 | Guard | Checks |
 |---|---|
-| `guard-client-window.sh` | a Wayland client's window appears on the page in the color it drew |
+| `guard-client-window.sh` | a Wayland client's window appears on the page in the color it drew; `SOFTWARE=1` with the engine on the CPU and the window in shared memory (`scripts/engine-guard-client-window-in-memory.sh`) |
 | `guard-two-windows.sh` | two clients' windows on one page, in one aggregation |
 | `guard-buffer-transform.sh` | a `wl_shm` buffer drawn with `wl_surface.set_buffer_transform` is shown upright |
 | `guard-scrolling-bubble.sh` | each frame of a monitor cast shows a sync bubble at the content its window scrolls, on a page that syncs frames. Control: the page places each move a step late, and the bubble is off its content |
