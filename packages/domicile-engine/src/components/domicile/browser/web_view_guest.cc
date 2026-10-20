@@ -42,6 +42,7 @@
 #include "components/security_state/content/content_utils.h"
 #include "components/security_state/core/security_state.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/desktop_capture.h"
 #include "content/public/browser/document_service.h"
 #include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/host_zoom_map.h"
@@ -1770,9 +1771,21 @@ void WebViewGuest::RequestMediaAccessPermission(
     const content::MediaStreamRequest& request,
     content::MediaResponseCallback callback) {
   if (IsScreenCapture(request.video_type)) {
-    std::move(callback).Run(*PortalScreenCapture(),
-                            blink::mojom::MediaStreamRequestResult::OK,
-                            /*ui=*/nullptr);
+    const int choice = next_screen_choice_++;
+    // Unretained: the guest owns the choice, which answers only while alive.
+    screen_choices_[choice] = std::make_unique<ScreenChoice>(
+        content::desktop_capture::CreateScreenCapturer(
+            content::desktop_capture::CreateDesktopCaptureOptions(),
+            /*for_snapshot=*/false),
+        base::BindOnce(
+            [](WebViewGuest* guest, int choice,
+               content::MediaResponseCallback callback,
+               blink::mojom::StreamDevicesSetPtr devices,
+               blink::mojom::MediaStreamRequestResult result) {
+              guest->screen_choices_.erase(choice);
+              std::move(callback).Run(*devices, result, /*ui=*/nullptr);
+            },
+            base::Unretained(this), choice, std::move(callback)));
     return;
   }
   if (!IsDeviceCapture(request.audio_type, request.video_type)) {
