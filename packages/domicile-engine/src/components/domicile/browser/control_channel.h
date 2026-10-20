@@ -17,6 +17,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "base/timer/timer.h"
+#include "components/domicile/browser/desk_activity.h"
 #include "components/domicile/browser/extension_installer.h"
 #include "components/domicile/browser/line_framer.h"
 #include "components/domicile/browser/shortcut_registry.h"
@@ -193,6 +194,9 @@ class ControlChannel : public mojom::ControlChannel {
   void DeliverShortcut(Chord chord);
   void DeliverRelease(Chord chord);
   void DeliverModifiers(Modifiers modifiers);
+  // Somebody used the desk; see DeskActivity. Dropped while no compositor is
+  // connected: the next one starts its idle clock fresh.
+  void SomebodyIsHere();
 
   void ReadLoop();
   void OnRead(int result);
@@ -219,6 +223,9 @@ class ControlChannel : public mojom::ControlChannel {
   // desktop's across a reload, and a gap between the two is a chord delivered
   // to whatever window is focused instead.
   ShortcutRegistry::ChannelId channel_;
+  // This channel's registration with the process's DeskActivity, given back in
+  // the destructor.
+  DeskActivity::ListenerId activity_;
 
   std::unique_ptr<net::UnixDomainClientSocket> socket_;
   bool connected_ = false;

@@ -91,11 +91,15 @@ ControlChannel::ControlChannel(
           &ControlChannel::DeliverRelease, weak_factory_.GetWeakPtr())),
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &ControlChannel::DeliverModifiers, weak_factory_.GetWeakPtr())));
+  activity_ = DeskActivity::Get().AddListener(
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
+          &ControlChannel::SomebodyIsHere, weak_factory_.GetWeakPtr())));
   give_up_at_ = base::TimeTicks::Now() + kReachFor;
   Connect();
 }
 
 ControlChannel::~ControlChannel() {
+  DeskActivity::Get().RemoveListener(activity_);
   ShortcutRegistry::Get().RemoveChannel(channel_);
 }
 
@@ -728,6 +732,12 @@ void ControlChannel::DeliverModifiers(Modifiers modifiers) {
   if (client_) {
     client_->Modifiers(modifiers.alt, modifiers.ctrl, modifiers.shift,
                        modifiers.meta);
+  }
+}
+
+void ControlChannel::SomebodyIsHere() {
+  if (connected_) {
+    SendMessage(Typed("activity"));
   }
 }
 

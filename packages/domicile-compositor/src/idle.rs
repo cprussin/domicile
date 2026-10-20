@@ -369,6 +369,7 @@ fn holds<S: StillThere + PartialEq>(inhibitor: &S, on_the_desktop: &[S]) -> bool
 pub fn somebody_is_here(request: &ClientRequest) -> bool {
     match request {
         ClientRequest::Key { .. }
+        | ClientRequest::Activity
         | ClientRequest::PointerButton { .. }
         | ClientRequest::PointerAxis { .. } => true,
         ClientRequest::PointerLeave
@@ -1174,6 +1175,7 @@ mod tests {
                     pressed: true,
                 },
             ),
+            ("a key typed into a browser window", ClientRequest::Activity),
             (
                 "the wheel",
                 ClientRequest::PointerAxis {

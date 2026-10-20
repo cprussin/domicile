@@ -208,6 +208,13 @@ pub enum ChromeMessage {
     /// verifier configured this only logs.
     Lock,
 
+    /// Somebody used the keyboard, pointer or touchpad, wherever it went.
+    ///
+    /// The browser sends it for its own input, at most every 200 ms. Input to
+    /// a browser window or the shell's page reaches the compositor no other
+    /// way, and the idle clock must hear it.
+    Activity,
+
     /// The page renders `<app frame>`, so the compositor may sync frames
     /// ([`HostMessage::PopupPlaced`]'s `frames`) until the next `Hello`.
     ///
