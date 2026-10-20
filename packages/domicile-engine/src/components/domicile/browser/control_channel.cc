@@ -4,7 +4,6 @@
 #include "components/domicile/browser/control_channel.h"
 
 #include <algorithm>
-#include <map>
 #include <memory>
 #include <optional>
 #include <set>
@@ -36,18 +35,6 @@ namespace {
 // them rather than for the largest one, because the remainder is carried across
 // reads anyway.
 constexpr int kReadBufferSize = 16 * 1024;
-
-// Why a call the last compositor had is over. The SDK resubscribes a watch
-// that ends this way. See docs/SHELL-SYSTEM-ACCESS.md.
-base::DictValue CompositorGone() {
-  base::DictValue error;
-  error.Set("kind", "compositor_gone");
-  error.Set("message", "the compositor exited");
-  base::DictValue failed;
-  failed.Set("kind", "failed");
-  failed.Set("error", std::move(error));
-  return failed;
-}
 
 std::string Line(const base::DictValue& message) {
   std::string line;
@@ -157,27 +144,11 @@ void ControlChannel::OnHungUp() {
   // too. Everything else the page said still goes: a line about a window the
   // next compositor never had is one it ignores.
   std::erase_if(pending_, [](const std::string& line) {
-    std::optional<base::DictValue> message =
-        base::JSONReader::ReadDict(line, base::JSON_PARSE_RFC);
-    const std::string* type = message ? message->FindString("type") : nullptr;
-    return type && *type == "system_request";
+    return IsSystemRequestLine(line);
   });
 
-  // A call still waiting for its reply fails in the reply, which is what the
-  // SDK awaits; one that `started` ends.
-  std::map<uint32_t, bool> calls;
-  calls.swap(calls_);
-  for (const auto& [id, started] : calls) {
-    base::DictValue answer;
-    answer.Set("id", static_cast<int>(id));
-    if (started) {
-      answer.Set("type", "system_end");
-      answer.Set("end", CompositorGone());
-    } else {
-      answer.Set("type", "system_reply");
-      answer.Set("reply", CompositorGone());
-    }
-    DispatchLine(Line(answer), /*from_compositor=*/false);
+  for (const std::string& line : calls_.EndAll()) {
+    DispatchLine(line, /*from_compositor=*/false);
   }
   std::set<std::string> apps;
   apps.swap(open_apps_);
@@ -426,9 +397,7 @@ void ControlChannel::CallSystem(uint32_t id, const std::string& request) {
                  << " is not a JSON object with a `call`; it was dropped.";
     return;
   }
-  // Only a new id is a new call: a page drives a running one -- `unwatch`,
-  // `stdin` -- under the id it started it with.
-  calls_.emplace(id, false);
+  calls_.Called(id);
   Send(*line);
 }
 
@@ -779,24 +748,7 @@ void ControlChannel::Track(const base::DictValue& message) {
     }
     return;
   }
-  if (type != "system_reply" && type != "system_end") {
-    return;
-  }
-  const std::optional<int> id = message.FindInt("id");
-  if (!id || *id < 0) {
-    return;
-  }
-  auto call = calls_.find(static_cast<uint32_t>(*id));
-  if (call == calls_.end()) {
-    return;
-  }
-  const base::DictValue* reply = message.FindDict("reply");
-  const std::string* kind = reply ? reply->FindString("kind") : nullptr;
-  if (type == "system_reply" && kind && *kind == "started") {
-    call->second = true;
-  } else {
-    calls_.erase(call);
-  }
+  calls_.Heard(message);
 }
 
 void ControlChannel::DispatchLine(const std::string& line,
