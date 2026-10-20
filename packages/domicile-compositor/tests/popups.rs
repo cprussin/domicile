@@ -9,7 +9,9 @@ mod running;
 
 use domicile_protocol::{ChromeMessage, HostMessage};
 use domicile_test_chrome::Chrome;
-use domicile_test_client::{scrolled_to, BUBBLE, BUBBLE_GROWN, POPUP, SCROLLING_BUBBLE};
+use domicile_test_client::{
+    scrolled_to, BUBBLE, BUBBLE_GROWN, POPUP, POPUP_MOVED, SCROLLING_BUBBLE,
+};
 
 use crate::running::Compositor;
 
@@ -75,6 +77,34 @@ fn a_clients_popup_is_announced_over_its_window() {
     assert_eq!(position, [f64::from(x), f64::from(y)]);
     assert_eq!(size, [f64::from(width), f64::from(height)]);
     assert!(!grab, "this client never asked for a grab");
+}
+
+/// A menu the client repositions (`xdg_popup.reposition`) is placed again
+/// where it moved, once the client commits the move.
+#[test]
+fn a_repositioned_popup_is_placed_again() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    let _client =
+        compositor.client_with("a window with a menu that moves", &["--repositioned-popup"]);
+    let window = window_of(&mut chrome);
+    let HostMessage::PopupPlaced { app_id, .. } = popup_of(&mut chrome) else {
+        unreachable!("the wait matched on this variant")
+    };
+
+    let (position, size) = placement(POPUP_MOVED);
+    let moved = chrome.wait_for(|message| {
+        *message
+            == HostMessage::PopupPlaced {
+                app_id: app_id.clone(),
+                parent: window.clone(),
+                position,
+                size,
+                grab: false,
+                frames: vec![],
+            }
+    });
+    assert!(moved.is_ok(), "the moved menu was placed again");
 }
 
 /// A chrome closing a popup dismisses it, as a shell does on a press outside
