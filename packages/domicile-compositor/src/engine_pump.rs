@@ -24,6 +24,8 @@ use crate::dmabuf_descriptor::descriptor_from;
 use crate::engine::Clipboard;
 use crate::engine_buffers::Returned;
 use crate::engine_session::{Dispatched, EngineSession, Release, Submitted};
+use crate::frame_descriptor::FrameDescriptor;
+use crate::frame_publishing::Upload;
 use crate::selections::Holder;
 use crate::surface_commit::{committed_buffer, CommittedBuffer};
 use crate::which_engine::another_engine;
@@ -385,10 +387,12 @@ impl DomicileCompositor {
         let rejoined = session.reconnect(
             &|submitted| match submitted {
                 Submitted::Client(buffer) => match committed_buffer(buffer) {
-                    Some(CommittedBuffer::Gpu(dmabuf)) => Some(descriptor_from(&dmabuf)),
+                    Some(CommittedBuffer::Gpu(dmabuf)) => {
+                        Some(FrameDescriptor::Dmabuf(descriptor_from(&dmabuf)))
+                    }
                     Some(CommittedBuffer::Pixels { .. }) | None => None,
                 },
-                Submitted::Upload(id) => uploads.get(*id).map(descriptor_from),
+                Submitted::Upload(id) => uploads.get(*id).map(Upload::describe),
             },
             Instant::now(),
         );

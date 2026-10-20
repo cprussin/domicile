@@ -84,6 +84,10 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
 
   // `get_shared_image_interface` gives imported dmabufs a GPU. Injected because
   // this target does not depend on //ui/aura. It returns null when headless.
+  //
+  // `get_software_shared_image_interface` makes windows in shared memory into
+  // software images. It returns null while the browser composites on the GPU,
+  // where viz draws none.
   FrameSinkBroker(
       viz::HostFrameSinkManager* host_frame_sink_manager,
       FrameSinkIdAllocator allocate_frame_sink_id,
@@ -95,7 +99,9 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
           DisplayCaptureTargetGetter(),
       BrowserWindowCaptureTargetGetter get_browser_window_capture_target =
           BrowserWindowCaptureTargetGetter(),
-      PointerTargetsSetter set_pointer_targets = PointerTargetsSetter());
+      PointerTargetsSetter set_pointer_targets = PointerTargetsSetter(),
+      SharedImageInterfaceGetter get_software_shared_image_interface =
+          SharedImageInterfaceGetter());
 
   FrameSinkBroker(const FrameSinkBroker&) = delete;
   FrameSinkBroker& operator=(const FrameSinkBroker&) = delete;
@@ -253,6 +259,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   const raw_ptr<viz::HostFrameSinkManager> host_frame_sink_manager_;
   const FrameSinkIdAllocator allocate_frame_sink_id_;
   const SharedImageInterfaceGetter get_shared_image_interface_;
+  const SharedImageInterfaceGetter get_software_shared_image_interface_;
   // See DisplayLayoutSetter.
   const DisplayLayoutSetter set_display_layout_;
   // See ClipboardSetter.

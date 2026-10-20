@@ -53,9 +53,11 @@ Usual causes:
 
 ## Scanout and render cards can differ
 
-ozone/drm does not support software compositing. A GPU process that falls back
-to software dies with `Software rendering mode is not supported with GBM
-platform`, often after restarts on `GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT`.
+A GPU process that falls back to software on its own, often after restarts on
+`GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT`, draws a desktop whose windows are
+blank: the compositor still sends dmabufs. `DOMICILE_SOFTWARE_COMPOSITING=yes`
+composites on the CPU from the start
+([Software output](architecture/A-DESKTOP-ON-A-TTY.md#software-output)).
 
 A common cause is the two card choices landing on different cards:
 
@@ -70,5 +72,5 @@ card and scan out on another (cross-device PRIME).
 Example: `crux`, the build host, has `card0` = vkms (connected, no render
 node) and `card1` = an nvidia GPU (no connected outputs, the only render node).
 Scanout picks vkms and rendering picks nvidia. On `crux`, the engine starts and
-modesets, but the GPU process cannot render to the scanout card. Test a visible
-desktop on a single-GPU machine.
+modesets, but the GPU process cannot render to the scanout card.
+`DOMICILE_SOFTWARE_COMPOSITING=yes` draws on vkms on the CPU instead.
