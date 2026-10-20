@@ -47,10 +47,12 @@ class CORE_EXPORT AppInputClient : public Supplement<LocalDOMWindow> {
   // takes the keyboard, and give it the keyboard unless the shell says no.
   virtual void AppPressed(HTMLAppElement& app, const String& app_id) = 0;
   // Where the pointer is over `app_id`: `point` within an element `size` big,
-  // both in the element's own CSS pixels.
+  // both in the element's own CSS pixels. `moved` is whether the pointer moved
+  // on the screen; see `HTMLAppElement::ForwardMotion`.
   virtual void AppPointerMotion(const String& app_id,
                                 const gfx::PointF& point,
-                                const gfx::SizeF& size) = 0;
+                                const gfx::SizeF& size,
+                                bool moved) = 0;
   // A Linux button code (input-event-codes.h), going down or coming up.
   virtual void AppPointerButton(const String& app_id,
                                 uint32_t button,

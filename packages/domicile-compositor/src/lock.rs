@@ -745,6 +745,7 @@ mod tests {
                     app_id: "app-1".into(),
                     x: 4.0,
                     y: 8.0,
+                    moved: true,
                 },
             ),
             ("the pointer leaving a window", ClientRequest::PointerLeave),

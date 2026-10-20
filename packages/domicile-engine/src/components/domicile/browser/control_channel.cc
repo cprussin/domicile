@@ -615,10 +615,12 @@ void ControlChannel::Key(const std::string& app_id,
 
 void ControlChannel::PointerMotion(const std::string& app_id,
                                    double x,
-                                   double y) {
+                                   double y,
+                                   bool moved) {
   base::DictValue message = ForApp("pointer_motion", app_id);
   message.Set("x", x);
   message.Set("y", y);
+  message.Set("moved", moved);
   SendMessage(std::move(message));
 }
 
