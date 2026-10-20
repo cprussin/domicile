@@ -321,6 +321,24 @@ GBM buffer and submits that (`uploads.rs`, `shm_upload.rs`).
   as for exo, and may show an unfinished copy. No check reads a lit screen,
   so torn shm frames on hardware are unmeasured.
 
+### `wl_shm` clients on the CPU
+
+An engine that composites in software reads only memory
+([Software output](A-DESKTOP-ON-A-TTY.md#software-output)). With
+`--software-compositing`, the compositor copies each `wl_shm` frame whole into
+a memfd of the window's (`memory_frames.rs`) and imports it with
+`domicile_surface_import_shm`.
+
+- The browser makes the memfd a software SharedImage
+  (`DomicileCreateSharedImageForSoftwareCompositor`, patch `0135`). Viz reads
+  it without a copy.
+- [`uploads.rs`](../../packages/domicile-compositor/src/uploads.rs) keeps a
+  memfd out until viz releases it, as for GPU buffers.
+- The whole frame is copied, since each memfd misses the frames shown from the
+  others. A 1080p frame is 8 MB.
+- The browser refuses a window in memory while it composites on the GPU.
+- Casts read dmabufs, so they miss these windows.
+
 ### Damage
 
 The submit takes a damage rectangle in box pixels, where empty means the whole
