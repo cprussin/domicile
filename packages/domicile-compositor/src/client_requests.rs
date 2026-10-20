@@ -454,6 +454,7 @@ impl DomicileCompositor {
                 self.scope_clients,
                 self.hub.child_nice,
                 Some(&activation::mint(&mut self.xdg_activation_state)),
+                self.launched.as_ref(),
             ),
             ClientRequest::CloseApp { app_id } => match self.toplevel_for(&app_id) {
                 Some(toplevel) => {

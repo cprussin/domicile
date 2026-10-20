@@ -411,6 +411,7 @@ dependencies = [
  "pipewire",
  "png",
  "reis",
+ "serde",
  "serde_json",
  "smithay",
  "tempfile",

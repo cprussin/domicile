@@ -51,6 +51,10 @@ pub struct Runtime {
     /// Set here rather than derived in [`compositor`] because the launcher
     /// waits on it.
     pub session: PathBuf,
+    /// The clients the compositor launched, kept across a compositor restart
+    /// so the next one launches again those the crash took. See
+    /// `domicile_compositor::launches`.
+    pub launches: PathBuf,
 }
 
 /// The ozone platform that drives the display directly.
@@ -201,6 +205,8 @@ pub fn compositor(
         runtime.session.clone().into(),
         "--engine-socket".into(),
         runtime.broker.clone().into(),
+        "--launches".into(),
+        runtime.launches.clone().into(),
     ];
     // Omit `--config` when there is none. The compositor uses defaults for a
     // missing flag but fails on a path it cannot load.
