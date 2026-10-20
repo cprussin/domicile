@@ -5,6 +5,7 @@ import type { SystemError, SystemHost } from "./system";
 import {
   Bus,
   FileType,
+  Listened,
   ScreenshotKept,
   Signal,
   SystemErrorKind,
@@ -281,7 +282,7 @@ describe("watches", () => {
       [1, { call: "unwatch" }],
     ]);
     expect(await Array.fromAsync(watch.items)).toStrictEqual([
-      "/home/ada/.config/a",
+      Listened.Heard("/home/ada/.config/a"),
     ]);
     expect(await watch.ended).toStrictEqual(Ok("stopped"));
   });
@@ -319,8 +320,9 @@ describe("watches", () => {
       [2, { call: "unwatch" }],
     ]);
     expect(await Array.fromAsync(watch.items)).toStrictEqual([
-      "/tmp/a",
-      "/tmp/b",
+      Listened.Heard("/tmp/a"),
+      Listened.Missed(),
+      Listened.Heard("/tmp/b"),
     ]);
     expect(await watch.ended).toStrictEqual(Ok("stopped"));
   });
@@ -502,16 +504,32 @@ describe("D-Bus", () => {
       [1, { call: "unwatch" }],
     ]);
     expect(await Array.fromAsync(match.items)).toStrictEqual([
-      {
+      Listened.Heard({
         body: ["org.mpris.MediaPlayer2.Player", {}, []],
         interface: "org.freedesktop.DBus.Properties",
         member: "PropertiesChanged",
         path: "/org/mpris/MediaPlayer2",
         sender: ":1.4",
         signature: "sa{sv}as",
-      },
+      }),
     ]);
     expect(await match.ended).toStrictEqual(Ok("stopped"));
+  });
+
+  // See "A compositor restart" in docs/architecture/ENGINE-FORK.md.
+  it("says what it missed while the compositor restarted", async () => {
+    const host = new FakeHost();
+    const matching = system(host).dbusMatch({ bus: Bus.System });
+    host.reply(1, { kind: "started" });
+    const match = started(await matching);
+    host.end(1, gone);
+    host.reply(2, { kind: "started" });
+    match.stop();
+    host.end(2, { kind: "stopped" });
+
+    expect(await Array.fromAsync(match.items)).toStrictEqual([
+      Listened.Missed(),
+    ]);
   });
 });
 

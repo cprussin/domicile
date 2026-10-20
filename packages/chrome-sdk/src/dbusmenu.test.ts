@@ -12,7 +12,7 @@ import type {
   Listening,
   SystemError,
 } from "./system";
-import { Bus, SystemErrorKind } from "./system";
+import { Bus, Listened, SystemErrorKind } from "./system";
 
 const MENU = { bus: ":1.42", path: "/MenuBar" };
 
@@ -176,9 +176,11 @@ const fakeBus = (
   const calls: DbusCall[] = [];
   const matches: DbusMatch[] = [];
   const signals =
-    Promise.withResolvers<ReadableStreamDefaultController<DbusSignal>>();
+    Promise.withResolvers<
+      ReadableStreamDefaultController<Listened<DbusSignal>>
+    >();
   const ended = Promise.withResolvers<Result<"stopped", SystemError>>();
-  const items = new ReadableStream<DbusSignal>({
+  const items = new ReadableStream<Listened<DbusSignal>>({
     start: (controller) => {
       signals.resolve(controller);
     },
@@ -193,8 +195,12 @@ const fakeBus = (
     /** Settles when the match ends. */
     ended: ended.promise,
     matches,
+    /** Says the compositor restarted under the match. */
+    miss: async () => {
+      (await signals.promise).enqueue(Listened.Missed());
+    },
     send: async (sent: DbusSignal) => {
-      (await signals.promise).enqueue(sent);
+      (await signals.promise).enqueue(Listened.Heard(sent));
     },
     get stopped() {
       return state.stopped;
@@ -213,7 +219,7 @@ const fakeBus = (
         matches.push(match);
         return Promise.resolve(
           refused === undefined
-            ? Ok<Listening<DbusSignal>, SystemError>({
+            ? Ok<Listening<Listened<DbusSignal>>, SystemError>({
                 ended: ended.promise,
                 items,
                 stop: () => {
@@ -228,7 +234,7 @@ const fakeBus = (
                     });
                 },
               })
-            : Err<Listening<DbusSignal>, SystemError>(refused),
+            : Err<Listening<Listened<DbusSignal>>, SystemError>(refused),
         );
       },
     },
@@ -324,6 +330,19 @@ describe("watchMenu", () => {
       expect(await heard.next()).toStrictEqual(Ok(parsed("Close", 0)));
       await bus.send(signal("ItemsPropertiesUpdated", [[], []]));
       expect(await heard.next()).toStrictEqual(Ok(parsed("Open", 0)));
+      menu.stop();
+    });
+
+    // See "A compositor restart" in docs/architecture/ENGINE-FORK.md.
+    it("reads again after a compositor restart", async () => {
+      const bus = fakeBus([Ok(recorded("_Open")), Ok(recorded("_Close"))]);
+      const heard = reports();
+
+      const menu = watchMenu(bus.system, MENU, heard.on);
+      await heard.next();
+
+      await bus.miss();
+      expect(await heard.next()).toStrictEqual(Ok(parsed("Close", 0)));
       menu.stop();
     });
 

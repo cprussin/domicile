@@ -22,7 +22,6 @@ item when it ships.
    - Wayland clients lose their display and exit. Nothing starts them again.
    - An app module's channel (`app_channel.cc`) does not dial the new
      compositor.
-   - A change during the gap is missed: a watch hears only later ones.
 
    [THE-DOMICILE-BINARY.md](docs/architecture/THE-DOMICILE-BINARY.md#crashes-are-recovered).
 

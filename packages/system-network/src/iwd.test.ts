@@ -222,6 +222,24 @@ describe("watchIwd", () => {
       );
     });
 
+    // See "A compositor restart" in docs/architecture/ENGINE-FORK.md.
+    it("reads again after a compositor restart", async () => {
+      const objects = { reply: connected() };
+      const bus = iwd(() => objects.reply);
+      const seen = reports();
+      watchIwd(bus.system, seen.on);
+      await seen.next();
+
+      objects.reply = Ok(
+        managedObjects({ [STATION]: recorded.station("disconnected") }),
+      );
+      await bus.miss();
+
+      expect(await seen.next()).toStrictEqual(
+        Ok({ connectivity: Connectivity.Unknown, link: Link.None() }),
+      );
+    });
+
     it("reads again when an object comes or goes", async () => {
       const bus = iwd(connected);
       const seen = reports();

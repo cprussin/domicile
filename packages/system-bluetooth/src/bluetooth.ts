@@ -5,11 +5,12 @@ import type { Result } from "@cprussin/option-result";
 import { Err } from "@cprussin/option-result";
 import type {
   DbusSignal,
+  Listened,
   Listening,
   System,
   SystemError,
 } from "@domicile-desktop/sdk/system";
-import { Bus } from "@domicile-desktop/sdk/system";
+import { Bus, ListenedKind } from "@domicile-desktop/sdk/system";
 import { z } from "zod";
 
 const SERVICE = "org.bluez";
@@ -179,7 +180,7 @@ const call = async (
 
 /** A watch's state, shared by its loop and its stop function. */
 type Watch = {
-  listening: Listening<DbusSignal> | undefined;
+  listening: Listening<Listened<DbusSignal>> | undefined;
   stopped: boolean;
 };
 
@@ -214,16 +215,19 @@ const follow = async (
   });
 };
 
-/** Read now, and again on each signal that changes what was read. */
+/**
+ * Read now, and again on each signal that changes what was read and after a
+ * compositor restart.
+ */
 const changes = async (
   system: BluetoothSystem,
-  listening: Listening<DbusSignal>,
+  listening: Listening<Listened<DbusSignal>>,
   report: (bluetooth: Result<Bluetooth, SystemError>) => void,
 ): Promise<void> => {
   const reader = listening.items.getReader();
   report(await read(system));
   for (let next = await reader.read(); !next.done; next = await reader.read()) {
-    if (matters(next.value)) {
+    if (next.value.kind === ListenedKind.Missed || matters(next.value.item)) {
       report(await read(system));
     }
   }

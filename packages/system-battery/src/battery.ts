@@ -5,11 +5,16 @@ import type { Option, Result } from "@cprussin/option-result";
 import { Err, None, Ok, Some } from "@cprussin/option-result";
 import type {
   DbusSignal,
+  Listened,
   Listening,
   System,
   SystemError,
 } from "@domicile-desktop/sdk/system";
-import { Bus } from "@domicile-desktop/sdk/system";
+import {
+  Bus,
+  ListenedKind,
+  SystemErrorKind,
+} from "@domicile-desktop/sdk/system";
 import { z } from "zod";
 
 const UPOWER = "org.freedesktop.UPower";
@@ -39,8 +44,8 @@ export const readBattery = async (
 /**
  * The battery now as the first item, then after each change.
  *
- * Listens before it reads, so no change is missed. Works while the desktop is
- * locked.
+ * Listens before it reads, so no change is missed, and reads again after a
+ * compositor restart. Works while the desktop is locked.
  */
 export const watchBattery = async (
   bus: Pick<System, "dbusCall" | "dbusMatch">,
@@ -62,7 +67,7 @@ export const watchBattery = async (
       Ok: (properties) =>
         Ok({
           ended: changes.ended,
-          items: changes.items.pipeThrough(readings(properties)),
+          items: changes.items.pipeThrough(readings(bus, properties)),
           stop: changes.stop,
         }),
     }),
@@ -105,19 +110,41 @@ const readProperties = async (
 
 /**
  * Each reading, starting from `properties` and folding in each change to the
- * device's own interface.
+ * device's own interface. After a compositor restart, the properties are read
+ * again; a read the next restart ends waits for the restart after it.
  */
-const readings = (properties: Properties) => {
+const readings = (bus: Pick<System, "dbusCall">, properties: Properties) => {
   let current = properties;
-  return new TransformStream<DbusSignal, Option<Battery>>({
+  return new TransformStream<Listened<DbusSignal>, Option<Battery>>({
     start: (controller) => {
       controller.enqueue(batteryOf(current));
     },
-    transform: (signal, controller) => {
-      const [iface, changed] = propertiesChangedSchema.parse(signal.body);
-      if (iface === DEVICE) {
-        current = { ...current, ...changed };
-        controller.enqueue(batteryOf(current));
+    transform: async (heard, controller) => {
+      switch (heard.kind) {
+        case ListenedKind.Heard: {
+          const [iface, changed] = propertiesChangedSchema.parse(
+            heard.item.body,
+          );
+          if (iface === DEVICE) {
+            current = { ...current, ...changed };
+            controller.enqueue(batteryOf(current));
+          }
+          break;
+        }
+        case ListenedKind.Missed: {
+          (await readProperties(bus)).match({
+            Err: (error) => {
+              if (error.kind !== SystemErrorKind.CompositorGone) {
+                controller.error(error);
+              }
+            },
+            Ok: (read) => {
+              current = read;
+              controller.enqueue(batteryOf(current));
+            },
+          });
+          break;
+        }
       }
     },
   });
