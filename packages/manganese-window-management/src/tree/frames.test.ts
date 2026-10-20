@@ -316,6 +316,7 @@ describe("framesOf", () => {
             box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
             divided: false,
             end: { height: TITLE_BAR, width: 760, x: 240, y: 0 },
+            endDivided: false,
             group: groupOf(1),
             nested: false,
             open: true,
@@ -332,6 +333,7 @@ describe("framesOf", () => {
             box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
             divided: false,
             end: { height: TITLE_BAR, width: 520, x: 480, y: 0 },
+            endDivided: true,
             group: groupOf(2),
             nested: false,
             open: true,
@@ -346,6 +348,7 @@ describe("framesOf", () => {
             box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
             divided: false,
             end: { height: TITLE_BAR, width: 520, x: 480, y: 0 },
+            endDivided: true,
             group: groupOf(2),
             nested: false,
             open: false,
@@ -369,6 +372,7 @@ describe("framesOf", () => {
         box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
         divided: true,
         end: { height: TITLE_BAR, width: 72, x: 928, y: 0 },
+        endDivided: true,
         group: groupOf(8),
         nested: false,
         open: false,
@@ -384,6 +388,7 @@ describe("framesOf", () => {
             box: { height: TITLE_BAR * 2, width: 1000, x: 0, y: 0 },
             divided: false,
             end: undefined,
+            endDivided: false,
             group: groupOf(2),
             nested: false,
             open: true,
@@ -398,6 +403,7 @@ describe("framesOf", () => {
             box: { height: TITLE_BAR * 2, width: 1000, x: 0, y: 0 },
             divided: true,
             end: undefined,
+            endDivided: false,
             group: groupOf(2),
             nested: false,
             open: false,
@@ -425,6 +431,25 @@ describe("framesOf", () => {
 
       // `b` is open: only `d` starts beside a hidden tab.
       expect(divided).toEqual([false, false, false, true]);
+    });
+
+    it("divides the end from a hidden last tab, and not from the open one", () => {
+      const endDivided = (focused: number) =>
+        framesOf(
+          {
+            depth: 1,
+            root: LayoutNode.Container(
+              Layout.Tabbed,
+              ["a", "b"].map((id) => LayoutNode.Window(id)),
+              focused,
+            ),
+          },
+          AREA,
+          0,
+        ).frames.map(({ strip }) => strip?.endDivided);
+
+      expect(endDivided(0)).toEqual([true, true]);
+      expect(endDivided(1)).toEqual([false, false]);
     });
 
     it("places a window's own bar in no strip", () => {
@@ -463,6 +488,7 @@ describe("framesOf", () => {
           box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
           divided: false,
           end: { height: TITLE_BAR, width: 520, x: 480, y: 0 },
+          endDivided: true,
           group: { node: { id: "a", up: 2 }, windows: ["a", "b", "c"] },
           nested: false,
           open: true,
@@ -601,6 +627,7 @@ describe("framesOf", () => {
           box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
           divided: false,
           end: { height: TITLE_BAR, width: 520, x: 480, y: 0 },
+          endDivided: false,
           group: { node: { id: "c", up: 1 }, windows: ["a", "b", "c"] },
           nested: false,
           open: false,

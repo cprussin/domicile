@@ -62,6 +62,11 @@ export type StripPlace = {
    */
   end: Rect | undefined;
   /**
+   * Whether a divider marks the end's start: the last tab is hidden. The open
+   * tab's own edge divides it from the end.
+   */
+  endDivided: boolean;
+  /**
    * Whether a divider marks its start: a hidden tab of a tabbed container
    * after another hidden tab, or any but the first bar of a stack. The open
    * tab's own edge divides it from its neighbors.
@@ -467,6 +472,8 @@ const stripPlaceOf = (
       (container.layout === Layout.Stacking ||
         (at !== container.focused && at - 1 !== container.focused)),
     end: endOf(container, area),
+    endDivided:
+      container.layout !== Layout.Stacking && container.focused !== count - 1,
     group: {
       node: {
         id: focusedWindowIn(container),

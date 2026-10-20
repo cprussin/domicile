@@ -1263,6 +1263,7 @@ const GroupStrip = memo(
           depth={depth}
           dragging={dragging}
           end={strip.end}
+          endDivided={strip.endDivided}
           float={float}
           frame={frame}
           fullscreen={fullscreen}

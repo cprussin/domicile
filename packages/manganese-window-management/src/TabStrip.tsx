@@ -36,6 +36,8 @@ type Props = {
   dragging: boolean;
   /** The strip's empty end, or `undefined` for a stack. */
   end: Rect | undefined;
+  /** Whether a divider marks the end's start. See `StripPlace.endDivided`. */
+  endDivided: boolean;
   /** The float holding the group, or `undefined` while it is tiled. */
   float: Float | undefined;
   /**
@@ -91,6 +93,7 @@ export const TabStrip = ({
   depth,
   dragging,
   end,
+  endDivided,
   float,
   frame,
   fullscreen,
@@ -155,7 +158,12 @@ export const TabStrip = ({
             rect={within(end, box)}
             targets={targets}
           />
-          <NewTab at={within(end, box)} onNewTab={onNewTab} settler={settler} />
+          <NewTab
+            at={within(end, box)}
+            divided={endDivided}
+            onNewTab={onNewTab}
+            settler={settler}
+          />
           <StripButtons
             floating={float !== undefined}
             fullscreen={fullscreen}
@@ -184,14 +192,17 @@ const stripKeyOf = (window: string): string => `strip:${window}`;
 
 /**
  * The new-tab button at the start of the strip's end, `at`. It eases along the
- * strip as tabs open and close before it, as the tabs do.
+ * strip as tabs open and close before it, as the tabs do. A divided button
+ * draws a divider before it, as a hidden tab does (see `TitleBar`).
  */
 const NewTab = ({
   at,
+  divided,
   onNewTab,
   settler,
 }: {
   at: Rect;
+  divided: boolean;
   onNewTab: () => void;
   settler: Settler | undefined;
 }) => {
@@ -203,6 +214,7 @@ const NewTab = ({
     // A press here must not drag the group.
     <span
       className={newTabStyles}
+      data-divided={divided || undefined}
       data-new-tab
       onPointerDown={(event) => {
         event.stopPropagation();
@@ -253,13 +265,23 @@ const stripStyles = cva({
 
 /**
  * Level with the tabs, which sit below the strip's top inset, and centered as
- * `StripButtons` centers the group buttons.
+ * `StripButtons` centers the group buttons. A divided button's divider matches
+ * a hidden tab's, at the same height on the strip.
  */
 const newTabStyles = flex({
+  "&[data-divided]::before": {
+    backgroundColor: "borderStrong",
+    content: '""',
+    inlineSize: "1px",
+    insetBlockEnd: 1,
+    insetBlockStart: "calc({spacing.1} + 1px)",
+    insetInlineStart: 0.5,
+    position: "absolute",
+  },
   align: "center",
   insetBlockEnd: "1px",
   insetBlockStart: 1,
-  paddingInlineStart: 0.5,
+  paddingInlineStart: 1,
   pointerEvents: "auto",
   position: "absolute",
 });

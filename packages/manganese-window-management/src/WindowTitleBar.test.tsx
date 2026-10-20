@@ -48,6 +48,7 @@ const tabProps = {
     box: { ...TAB, width: 600 },
     divided: false,
     end: undefined,
+    endDivided: false,
     group: { node: { id: "a", up: 1 }, windows: ["a"] },
     nested: false,
     open: true,
