@@ -52,11 +52,14 @@ export const domicilePreset = definePreset({
     // old. This avoids a global color `transition` that would override
     // element transitions. `data-theme-flip-to` on `<html>` sets the
     // direction: dark from the top, light from the bottom.
-    "::view-transition-old(root)": {
+    //
+    // Scoped to the wipe, so other view transitions, such as `load_shell`'s
+    // handover from the splash, keep the browser's crossfade.
+    "html[data-theme-flip-to]::view-transition-old(root)": {
       // Disable the default fade-out so only the wipe plays.
       animationName: "none",
     },
-    "::view-transition-new(root)": {
+    "html[data-theme-flip-to]::view-transition-new(root)": {
       animationDuration: "{durations.wipe}",
       animationTimingFunction: "{easings.outQuart}",
       // The default `plus-lighter` blend leaves a bright seam at the clip
