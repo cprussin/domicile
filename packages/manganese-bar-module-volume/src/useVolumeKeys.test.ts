@@ -24,12 +24,15 @@ describe("useVolumeKeys", () => {
   it("steps the default output's volume by 5%", () => {
     const { asked, keys } = keysOn(laptop);
 
-    keys.up();
-    keys.down();
+    const levels = [keys.up(), keys.down()];
 
     expect(asked).toEqual([
       ["setVolume", "output:speakers", 0.55],
       ["setVolume", "output:speakers", 0.45],
+    ]);
+    expect(levels).toEqual([
+      { level: 0.55, muted: false },
+      { level: 0.45, muted: false },
     ]);
   });
 
@@ -49,12 +52,15 @@ describe("useVolumeKeys", () => {
   it("toggles the mute of the default output and the microphone", () => {
     const { asked, keys } = keysOn(laptop);
 
-    keys.mute();
-    keys.micMute();
+    const levels = [keys.mute(), keys.micMute()];
 
     expect(asked).toEqual([
       ["setMuted", "output:speakers", true],
       ["setMuted", "input:mic", true],
+    ]);
+    expect(levels).toEqual([
+      { level: 0.5, muted: true },
+      { level: 0.3, muted: true },
     ]);
   });
 
@@ -64,9 +70,9 @@ describe("useVolumeKeys", () => {
       useVolumeKeys({ audio: sound.audio, sound: sound.server }),
     );
 
-    result.current.up();
-    result.current.mute();
+    const levels = [result.current.up(), result.current.mute()];
 
     expect(sound.asked).toEqual([]);
+    expect(levels).toEqual([undefined, undefined]);
   });
 });

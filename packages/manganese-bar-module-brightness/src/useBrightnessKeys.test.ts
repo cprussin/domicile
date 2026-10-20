@@ -16,10 +16,10 @@ describe("useBrightnessKeys", () => {
   it("steps the brightness by 5%", () => {
     const { asked, keys } = keysAt(0.5);
 
-    keys.up();
-    keys.down();
+    const levels = [keys.up(), keys.down()];
 
     expect(asked).toEqual([0.55, 0.45]);
+    expect(levels).toEqual([0.55, 0.45]);
   });
 
   it("keeps the brightness between 0 and 100%", () => {
@@ -36,8 +36,9 @@ describe("useBrightnessKeys", () => {
     const held = heldBacklight();
     const { result } = renderHook(() => useBrightnessKeys(held.backlight));
 
-    result.current.up();
+    const level = result.current.up();
 
     expect(held.asked).toEqual([]);
+    expect(level).toBeUndefined();
   });
 });
