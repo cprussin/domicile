@@ -22,6 +22,10 @@
     "typescript": "catalog:",
     "vite": "catalog:"
   },
+  "engines": {
+    "bun": ">=1.4.2",
+    "node": ">=24"
+  },
   "license": "MIT",
   "name": "@domicile-desktop/shell-splash",
   "private": true,

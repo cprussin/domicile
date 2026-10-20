@@ -10,6 +10,10 @@
     "@types/bun": "catalog:",
     "typescript": "catalog:"
   },
+  "engines": {
+    "bun": ">=1.4.2",
+    "node": ">=24"
+  },
   "exports": {
     "./app": {
       "types": "./dist/app.d.ts",

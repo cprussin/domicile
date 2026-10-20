@@ -22,6 +22,10 @@
     "typescript": "catalog:",
     "zod": "catalog:"
   },
+  "engines": {
+    "bun": ">=1.4.2",
+    "node": ">=24"
+  },
   "exports": {
     ".": "./src/bar-item.tsx",
     "./desk-backlight": "./src/desk-backlight.ts",
