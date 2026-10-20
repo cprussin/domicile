@@ -2512,6 +2512,29 @@ describe("Shell", () => {
       expect(barFor(container, "app:three").dataset.focus).toBe("focused");
     });
 
+    it("tints the open tab, which stands over the rest of its strip", () => {
+      // A sibling window keeps the tabs from filling the screen.
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      press("e");
+      press("v");
+      clientAppears("three");
+      press("w");
+
+      press("a");
+
+      // Drawn after every tab, so an equal depth covers the open tab too.
+      expect(
+        Number(
+          container.querySelector<HTMLElement>("[data-selection]")?.style
+            .zIndex,
+        ),
+      ).toBeGreaterThanOrEqual(
+        Number(barFor(container, "app:three").style.zIndex),
+      );
+    });
+
     it("offers to tile a floating group from the tab that stands for it", () => {
       // A tabbed container holding a column, floated whole.
       renderShell();

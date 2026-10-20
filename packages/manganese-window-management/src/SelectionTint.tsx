@@ -18,7 +18,7 @@ import {
 } from "./window-styles";
 
 type Props = {
-  /** The depth of the windows it tints. */
+  /** Its `z-index`: the open tab's, over the windows it tints. See `raised`. */
   depth: number;
   /** Whether the selection is being dragged, so it follows the pointer. */
   dragging: boolean;
@@ -36,7 +36,7 @@ type Props = {
  * An accent wash over the container `focus parent` selected: its tabs, its
  * windows and the gaps between them.
  *
- * - It sits at the windows' depth after every window and tab in the
+ * - It sits at the open tab's depth after every window and tab in the
  *   document, so it covers them and windows stacked above stay above.
  * - It plays the focused window's motion, moves with its windows, and takes
  *   no pointer events.
