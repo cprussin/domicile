@@ -6,7 +6,6 @@
 #include <optional>
 #include <utility>
 
-#include "content/public/browser/desktop_media_id.h"
 #include "media/mojo/mojom/display_media_information.mojom.h"
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
 
@@ -16,11 +15,10 @@ bool IsScreenCapture(blink::mojom::MediaStreamType video) {
   return video == blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE;
 }
 
-blink::mojom::StreamDevicesSetPtr PortalScreenCapture() {
-  // A null id: webrtc's PipeWire capturer keeps restore tokens by source id,
-  // and null has none, so the portal asks every time.
+blink::mojom::StreamDevicesSetPtr PortalScreenCapture(
+    content::DesktopMediaID::Id source) {
   const content::DesktopMediaID screen(content::DesktopMediaID::TYPE_SCREEN,
-                                       content::DesktopMediaID::kNullId);
+                                       source);
   blink::MediaStreamDevice device(
       blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE, screen.ToString(),
       "Screen");
