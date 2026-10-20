@@ -22,7 +22,7 @@ replaces them.
 | Meta+Shift+Q | Close the window. |
 | Meta+Space, Meta+D | Toggle the launcher. |
 | Meta+Shift+V | Toggle the clipboard history. |
-| Meta+Shift+Space | Open the copied URL, or search Google for the copied text. |
+| Meta+Shift+Space | Open the copied URL, or search Google for the copied text. Private from a private window. |
 | Meta+Shift+Return | Lock. Does nothing if the config has no `lock`. |
 | Print | Take a screenshot: pick the area in the screenshot dialog. Ctrl+C there copies it instead of saving. |
 | XF86AudioRaiseVolume / XF86AudioLowerVolume | Raise or lower the default output's volume by 5%, between 0 and 100%. |
@@ -61,7 +61,7 @@ Manganese-only commands:
 | `launcher` | Toggle the launcher. |
 | `clipboard` | Toggle the clipboard history. |
 | `screenshot` | Take a screenshot, as Print does. |
-| `search-clipboard` | Open the newest copy in a browser window: as a site if it is a URL, else as a search. Reads the first 160 characters. |
+| `search-clipboard` | Open the newest copy in a browser window: as a site if it is a URL, else as a search. The window is private when the active one is. Reads the first 160 characters. |
 | `resize grow left/right/up/down` | Grow the window that way: a tiled window by 1/50 of its container, a floating one by 10 px. Unbound by default. |
 | `volume up/down/mute` | Step the default output's volume, or toggle its mute. |
 | `mic mute` | Toggle the default microphone's mute. |

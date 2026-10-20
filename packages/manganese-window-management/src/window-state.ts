@@ -545,7 +545,7 @@ export const WindowAction = {
 
   /**
    * `search-clipboard`: open the newest copy as a site if it is a URL, else
-   * search for it.
+   * search for it. The window is private when the active one is.
    *
    * Changes no state; `useWindows` asks the engine for the browser window.
    */
