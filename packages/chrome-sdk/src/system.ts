@@ -177,6 +177,26 @@ export type Listening<T> = {
   ended: Promise<Result<"stopped", SystemError>>;
 };
 
+/** What a watch or a D-Bus match heard. */
+export enum ListenedKind {
+  /** A change or a signal. */
+  Heard,
+  /**
+   * The compositor restarted, and the call was sent again for the next one.
+   * Changes in between were not heard: read again what the items told you.
+   */
+  Missed,
+}
+
+export const Listened = {
+  Heard: <T>(item: T) => ({ item, kind: ListenedKind.Heard as const }),
+  Missed: () => ({ kind: ListenedKind.Missed as const }),
+};
+
+export type Listened<T> =
+  | ReturnType<typeof Listened.Heard<T>>
+  | ReturnType<typeof Listened.Missed>;
+
 /** Part of a file: from `offset` (0 by default), `length` bytes or to the end. */
 export type ByteRange = {
   offset?: number;
@@ -204,8 +224,8 @@ export type ScreenshotKept = ReturnType<
   (typeof ScreenshotKept)[keyof typeof ScreenshotKept]
 >;
 
-/** A watch's `items` are the absolute path of each change. */
-export type Watch = Listening<string>;
+/** A watch's `items` hear the absolute path of each change. */
+export type Watch = Listening<Listened<string>>;
 
 /**
  * The calls. A relative path starts at the home. The compositor runs each in
@@ -241,7 +261,7 @@ export type System = {
   dbusCall: (call: DbusCall) => Promise<Result<DbusBody, SystemError>>;
   dbusMatch: (
     match: DbusMatch,
-  ) => Promise<Result<Listening<DbusSignal>, SystemError>>;
+  ) => Promise<Result<Listening<Listened<DbusSignal>>, SystemError>>;
   /**
    * Take a screenshot as an interactive Screenshot portal call takes one, as
    * if the shell were the application: the desk freezes, `<PortalDialogs />`
@@ -321,7 +341,7 @@ export const system = (host: SystemHost): System => {
             : unexpected(reply),
       ),
     dbusMatch: (match) =>
-      listening(
+      listening<Listened<DbusSignal>>(
         calls,
         {
           bus: busName(match.bus),
@@ -333,15 +353,16 @@ export const system = (host: SystemHost): System => {
         },
         (event) =>
           event.kind === "signal"
-            ? {
+            ? Listened.Heard({
                 body: dbusBody(event.body),
                 interface: event.interface,
                 member: event.member,
                 path: event.path,
                 sender: event.sender,
                 signature: event.signature,
-              }
+              })
             : unexpected(event),
+        Listened.Missed(),
       ),
     idleWarnings: () =>
       listening(calls, { call: "idle_warnings" }, (event) =>
@@ -410,8 +431,14 @@ export const system = (host: SystemHost): System => {
           : unexpected(event),
       ),
     watch: (path) =>
-      listening(calls, { call: "watch", path }, (event) =>
-        event.kind === "changed" ? event.path : unexpected(event),
+      listening<Listened<string>>(
+        calls,
+        { call: "watch", path },
+        (event) =>
+          event.kind === "changed"
+            ? Listened.Heard(event.path)
+            : unexpected(event),
+        Listened.Missed(),
       ),
     windowRequests: () =>
       listening(calls, { call: "window_requests" }, (event) =>
@@ -617,13 +644,15 @@ const spawn = (
  * A call that streams `item`s from its events until `unwatch` stops it: a
  * watch or a D-Bus match. One the browser ends because the compositor exited
  * is sent again, under a new id: the browser holds it for the next compositor.
- * What changed in between is not heard. See "A compositor restart" in
+ * Once the next one starts it, `missed`, when given, is streamed: what changed
+ * in between was not heard. See "A compositor restart" in
  * docs/architecture/ENGINE-FORK.md.
  */
 const listening = <T>(
   calls: Calls,
   request: object,
   item: (event: Event) => T,
+  missed?: T,
 ): Promise<Result<Listening<T>, SystemError>> =>
   new Promise((resolve) => {
     const items = streamed<T>();
@@ -659,7 +688,11 @@ const listening = <T>(
             }
           } else if (reply.kind !== "started") {
             unexpected(reply);
-          } else if (!answered) {
+          } else if (answered) {
+            if (missed !== undefined) {
+              items.push(missed);
+            }
+          } else {
             answered = true;
             resolve(
               Ok({

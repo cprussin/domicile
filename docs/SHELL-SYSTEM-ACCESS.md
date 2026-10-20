@@ -46,8 +46,12 @@ export const Shell = async (root, domicile) => {
   readout is empty until its first reply.
 - A compositor restart keeps the page. A call it had open fails
   `compositor_gone`, except a watch, D-Bus match or other stream: the SDK
-  sends it again for the next compositor, and changes in between are missed.
-  `system-backlight` starts `udevadm` again; `system-audio` already resubscribes.
+  sends it again for the next compositor. Changes in between are not heard: a
+  watch's or match's `items` stream `Listened.Missed()` once the next
+  compositor starts it, and a reader reads again. `system-battery`,
+  `system-bluetooth`, `system-network`, the tray menu and the icon theme do.
+  `system-backlight` starts `udevadm` again and reads; `system-audio`
+  resubscribes.
   See [ENGINE-FORK.md](architecture/ENGINE-FORK.md#a-compositor-restart).
 
 ## The browser's cookies

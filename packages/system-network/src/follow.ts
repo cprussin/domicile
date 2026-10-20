@@ -1,14 +1,16 @@
 // The loop each watch runs: listen, read, then read again on each signal that
-// can change what was read.
+// can change what was read, and after a compositor restart.
 
 import type { Result } from "@cprussin/option-result";
 import { Err } from "@cprussin/option-result";
 import type {
   DbusMatch,
   DbusSignal,
+  Listened,
   Listening,
   SystemError,
 } from "@domicile-desktop/sdk/system";
+import { ListenedKind } from "@domicile-desktop/sdk/system";
 
 import type { NetworkSystem } from "./network-state";
 
@@ -46,7 +48,7 @@ export const followBus = <T extends NonNullable<unknown>>(
 
 /** A watch's state, shared by its loop and its stop function. */
 type Watch = {
-  listening: Listening<DbusSignal> | undefined;
+  listening: Listening<Listened<DbusSignal>> | undefined;
   stopped: boolean;
 };
 
@@ -82,9 +84,12 @@ const follow = async <T extends NonNullable<unknown>>(
   });
 };
 
-/** Read now, and again on each signal that matters to the last read. */
+/**
+ * Read now, and again on each signal that matters to the last read and after
+ * a compositor restart.
+ */
 const changes = async <T extends NonNullable<unknown>>(
-  listening: Listening<DbusSignal>,
+  listening: Listening<Listened<DbusSignal>>,
   read: () => Promise<Reading<T>>,
   report: (value: Result<T, SystemError>) => void,
 ): Promise<void> => {
@@ -93,7 +98,7 @@ const changes = async <T extends NonNullable<unknown>>(
   report(first.value);
   let matters = first.matters;
   for (let next = await reader.read(); !next.done; next = await reader.read()) {
-    if (matters(next.value)) {
+    if (next.value.kind === ListenedKind.Missed || matters(next.value.item)) {
       const again = await read();
       report(again.value);
       matters = again.matters;

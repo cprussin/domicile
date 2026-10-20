@@ -8,7 +8,7 @@ import type {
   Listening,
   SystemError,
 } from "@domicile-desktop/sdk/system";
-import { Bus, SystemErrorKind } from "@domicile-desktop/sdk/system";
+import { Bus, Listened, SystemErrorKind } from "@domicile-desktop/sdk/system";
 import type { Battery } from "./battery";
 import { readBattery, watchBattery } from "./battery";
 
@@ -51,31 +51,39 @@ const LOCKED: SystemError = {
 };
 
 /**
- * The system bus as UPower answers it: `GetAll` returns `reply`, and a match
- * hands over the signals `signal` sends.
+ * The system bus as UPower answers it: `GetAll` returns what `answer` queued,
+ * then `reply`, and a match hands over the signals `signal` sends and
+ * the restarts `miss` sends.
  */
 const upower = (
   reply: ReturnType<typeof displayDevice> | SystemError = displayDevice(),
 ) => {
   const asked: (DbusCall | DbusMatch)[] = [];
   const stops = { count: 0 };
+  const queued: (ReturnType<typeof displayDevice> | SystemError)[] = [];
   const { promise: listening, resolve: listen } =
-    Promise.withResolvers<ReadableStreamDefaultController<DbusSignal>>();
+    Promise.withResolvers<
+      ReadableStreamDefaultController<Listened<DbusSignal>>
+    >();
   return {
+    answer: (...next: (ReturnType<typeof displayDevice> | SystemError)[]) => {
+      queued.push(...next);
+    },
     asked,
     dbusCall: (call: DbusCall) => {
       asked.push(call);
+      const answer = queued.shift() ?? reply;
       return Promise.resolve(
-        "kind" in reply
-          ? Err<{ body: unknown[]; signature: string }, SystemError>(reply)
-          : Ok<{ body: unknown[]; signature: string }, SystemError>(reply),
+        "kind" in answer
+          ? Err<{ body: unknown[]; signature: string }, SystemError>(answer)
+          : Ok<{ body: unknown[]; signature: string }, SystemError>(answer),
       );
     },
     dbusMatch: (match: DbusMatch) => {
       asked.push(match);
-      const items = new ReadableStream<DbusSignal>({ start: listen });
+      const items = new ReadableStream<Listened<DbusSignal>>({ start: listen });
       return Promise.resolve(
-        Ok<Listening<DbusSignal>, SystemError>({
+        Ok<Listening<Listened<DbusSignal>>, SystemError>({
           ended: Promise.resolve(Ok("stopped")),
           items,
           stop: () => {
@@ -84,8 +92,11 @@ const upower = (
         }),
       );
     },
+    miss: async () => {
+      (await listening).enqueue(Listened.Missed());
+    },
     signal: async (signal: DbusSignal) => {
-      (await listening).enqueue(signal);
+      (await listening).enqueue(Listened.Heard(signal));
     },
     stops,
   };
@@ -205,6 +216,51 @@ describe("watchBattery", () => {
     expect((await readings.read()).value).toStrictEqual(
       Some({ charge: 0.5, charging: false }),
     );
+  });
+
+  // See "A compositor restart" in docs/architecture/ENGINE-FORK.md.
+  it("reads again after a compositor restart", async () => {
+    const bus = upower();
+    const watching = started(await watchBattery(bus));
+    const readings = watching.items.getReader();
+    await readings.read();
+
+    bus.answer(displayDevice({ Percentage: { signature: "d", value: 40 } }));
+    await bus.miss();
+
+    expect((await readings.read()).value).toStrictEqual(
+      Some({ charge: 0.4, charging: false }),
+    );
+  });
+
+  it("waits for the next compositor when a read after a restart is cut off", async () => {
+    const bus = upower();
+    const watching = started(await watchBattery(bus));
+    const readings = watching.items.getReader();
+    await readings.read();
+
+    bus.answer(
+      { kind: SystemErrorKind.CompositorGone, message: "gone" },
+      displayDevice({ Percentage: { signature: "d", value: 40 } }),
+    );
+    await bus.miss();
+    await bus.miss();
+
+    expect((await readings.read()).value).toStrictEqual(
+      Some({ charge: 0.4, charging: false }),
+    );
+  });
+
+  it("fails when a read after a restart fails", async () => {
+    const bus = upower();
+    const watching = started(await watchBattery(bus));
+    const readings = watching.items.getReader();
+    await readings.read();
+
+    bus.answer(LOCKED);
+    await bus.miss();
+
+    await expect(readings.read()).rejects.toStrictEqual(LOCKED);
   });
 
   it("stops listening when stopped", async () => {

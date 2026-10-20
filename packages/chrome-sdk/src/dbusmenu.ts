@@ -9,11 +9,12 @@ import { z } from "zod";
 import type {
   DbusCall,
   DbusSignal,
+  Listened,
   Listening,
   System,
   SystemError,
 } from "./system";
-import { Bus } from "./system";
+import { Bus, ListenedKind } from "./system";
 
 const DBUSMENU = "com.canonical.dbusmenu";
 
@@ -150,7 +151,7 @@ export const watchMenu = (
 
 /** A watch's state, shared by its loop, its requests and its stop function. */
 type Watch = {
-  listening: Listening<DbusSignal> | undefined;
+  listening: Listening<Listened<DbusSignal>> | undefined;
   /** The read in flight, or the last one. */
   reading: Promise<void>;
   stopped: boolean;
@@ -194,15 +195,21 @@ const follow = async (
   });
 };
 
-/** Read now, and again on each signal that changes the menu. */
+/**
+ * Read now, and again on each signal that changes the menu and after a
+ * compositor restart.
+ */
 const changes = async (
-  listening: Listening<DbusSignal>,
+  listening: Listening<Listened<DbusSignal>>,
   reread: () => Promise<void>,
 ): Promise<void> => {
   const reader = listening.items.getReader();
   await reread();
   for (let next = await reader.read(); !next.done; next = await reader.read()) {
-    if (CHANGES.has(next.value.member)) {
+    if (
+      next.value.kind === ListenedKind.Missed ||
+      CHANGES.has(next.value.item.member)
+    ) {
       await reread();
     }
   }
