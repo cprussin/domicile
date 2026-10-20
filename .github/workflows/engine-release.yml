@@ -166,6 +166,11 @@ jobs:
           EOF
           chmod +x /tmp/domicile-release-build
 
+          # The log is printed only once the build ends, so say how far it
+          # has got every ten minutes meanwhile.
+          .github/scripts/engine-build-progress.sh --every 600 /tmp/domicile-shell.log &
+          progress=$!
+
           # Under the render node lock as `noisy`, so the other runner's latency
           # guard waits for it. Yields the compile slot to any run that wants
           # it; see the header.
@@ -177,6 +182,7 @@ jobs:
           else
             echo "the shell exited $?"
           fi
+          kill "$progress"
           # Compiler errors appear above siso's summary, which only counts
           # failed steps. Print matching lines first, then the tail for
           # context. `|| true` so a grep with no matches does not stop the tail
