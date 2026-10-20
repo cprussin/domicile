@@ -30,6 +30,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `Kbd` | Keyboard key cap. |
 | `list-walk` | Arrow-key movement of a highlight through a list while focus stays in an input. |
 | `ModalDialog` | Modal dialog with `title`, `footer` and `trigger` props. |
+| `Notice` | Pill that briefly shows a change, such as a zoom level or volume, with an optional level meter. Key it per change. |
 | `ContextMenu` | Menu opened at a point, such as a right click's. Parts: `Item`, `CheckboxItem`, `RadioGroup` and `RadioItem`, `Submenu`, `Separator`. Items take an `icon` and a `mnemonic`, whose letter chooses them. |
 | `PortalDialogs` | Every dialog applications ask for through the desktop portal. Mount one per shell with `host={domicile}`; it refuses kinds it cannot draw. `omitScreenCasts` leaves screen casts out of its indicator. See [PORTALS.md](/docs/PORTALS.md). |
 | `source-name` | `sourceName`: how a screen cast's source is named. |
