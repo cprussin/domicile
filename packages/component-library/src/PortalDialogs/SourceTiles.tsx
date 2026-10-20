@@ -29,7 +29,7 @@ type Props = {
 /**
  * A labeled grid of sources to pick, each a tile previewing it from the
  * frozen desk, or showing its icon large without a preview, over its icon
- * and name. The screen cast and screenshot pickers share it.
+ * and name, for the screen cast picker.
  */
 export const SourceTiles = ({
   desk,
