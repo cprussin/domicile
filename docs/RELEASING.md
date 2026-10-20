@@ -48,8 +48,9 @@ as it is.
 
 ## Prereleases
 
-Check `prerelease` too to publish the commit the run is dispatched on (main)
-to the apt, rpm and pacman repositories and the AUR, for testing the installs.
+Check `prerelease` too to publish `stable`, whose engine is the official,
+optimized build, to the apt, rpm and pacman repositories and the AUR, for
+testing the installs.
 It skips npm (its alphas publish under `next` on every push), the tags and
 `release`.
 
