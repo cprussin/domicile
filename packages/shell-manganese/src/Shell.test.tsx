@@ -1255,7 +1255,7 @@ describe("Shell", () => {
         asked();
 
         await userEvent.click(
-          await screen.findByRole("button", {
+          await screen.findByRole("radio", {
             name: "Browser: Untitled window",
           }),
         );
@@ -1276,7 +1276,7 @@ describe("Shell", () => {
         asked();
 
         await userEvent.click(
-          await screen.findByRole("button", { name: "one" }),
+          await screen.findByRole("radio", { name: "one" }),
         );
         await userEvent.click(screen.getByRole("button", { name: "Save" }));
 

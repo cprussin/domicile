@@ -107,8 +107,7 @@ One request channel carries all dialogs. Each interface's backend builds on it.
     (persist mode 1): engine ids do not survive a restart.
   - The picker previews each source on a desk shot taken as it opens
     (`desk`, a `FrozenDesk`). A source not on screen, or every source when
-    the shot fails, shows its icon. Its tiles are the screenshot picker's
-    (`SourceTiles`).
+    the shot fails, shows its icon (`SourceTiles`).
 - **Input uses EIS.** RemoteDesktop and InputCapture hand out a libei socket
   (`ConnectToEIS`) served by the compositor (`reis`). Emulated input takes the
   engine's input injection path, so the lock screen still blocks it.
@@ -157,15 +156,15 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   frame, so they never capture themselves; the shell answers an area or a
   pixel in frame pixels. Saved as a PNG under
   `$XDG_PICTURES_DIR/Screenshots/`.
-  - **Ctrl+C in the picker copies the pick** (desk, screen, window or area)
-    to the clipboard as a PNG and closes it (`copy` on the answer). It
+  - **Copy, or Ctrl+C, in the picker copies the pick** (desk, screen,
+    window or area) to the clipboard as a PNG and closes it (`copy` on the answer). It
     becomes a clipboard history row. An application that asked still gets
     its file; the shell's own screenshot is not saved
     (`SystemReply::Copied`).
-  - The picker lists screens and windows apart, as tiles previewing each
-    on the frozen desk; the screen cast picker shares them. A screen is
-    named by its make and model, a window by its application's desktop
-    entry and its title.
+  - The picker lists the whole desk, then screens, then windows, beside the
+    frozen desk. The desk outlines the pick with its size; arrow keys move
+    through the list. A screen is named by its make and model, a window by
+    its title over its application's desktop entry.
   - A window is answered `screenshot_window` and saved from the last frame
     it showed, which the engine still holds. What is over it, such as a
     notification, is left out, and so is the shell's title bar or tab. This
