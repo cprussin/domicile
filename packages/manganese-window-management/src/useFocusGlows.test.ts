@@ -53,6 +53,16 @@ describe("useFocusGlows", () => {
     ]);
   });
 
+  it("keeps a group's glow when its tabs reorder", () => {
+    const group = { ...LEFT, windows: ["app:term", "app:editor"] };
+    const { rerender, result } = glowsFor(group);
+    const reordered = { ...group, windows: ["app:editor", "app:term"] };
+
+    rerender({ box: reordered });
+
+    expect(result.current.glows).toEqual([{ box: reordered, leaving: false }]);
+  });
+
   it("fades the box out when nothing is lit", () => {
     const { rerender, result } = glowsFor(LEFT);
 
