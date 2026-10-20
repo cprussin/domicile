@@ -72,12 +72,6 @@ type Props = {
    */
   group?: { layout: Layout; windows: number } | undefined;
   /**
-   * Whether the window is inside the `focus parent` selection. A tab gets an
-   * accent line along its top, which tells a selected tab group from its
-   * focused tab: the glow lights the whole group for both.
-   */
-  groupSelected?: boolean;
-  /**
    * The window's whole box, which bar and contents both scale about. See
    * {@link scaledAbout}. For a tab, this is the tab's own box.
    */
@@ -160,7 +154,6 @@ export const TitleBar = ({
   frame,
   fullscreen,
   group,
-  groupSelected = false,
   hanging = false,
   icon,
   motion,
@@ -211,7 +204,6 @@ export const TitleBar = ({
       data-divided={strip?.divided || undefined}
       // Exposed as attributes so devtools and tests can read the state.
       data-focus={focus}
-      data-group-selected={groupSelected || undefined}
       data-motion={motion}
       // A press here lands outside every `<app>`, so the window is named for
       // the focus handling in `AppWindow`.
@@ -263,7 +255,6 @@ export const TitleBar = ({
               : tabStyles({
                   focus,
                   joined: !hidden && tabbed === Layout.Tabbed,
-                  marked: groupSelected,
                   nested: strip.nested,
                   open: !hidden,
                 }),
@@ -557,12 +548,6 @@ const tabStyles = cva({
     joined: {
       false: {},
       true: { marginBlockEnd: "-1px", paddingBlockEnd: "1px" },
-    },
-    // In the `focus parent` selection. A shape as well as a color, and it
-    // leaves a hidden tab flat, so it does not look open.
-    marked: {
-      false: {},
-      true: { boxShadow: "inset 0 {spacing.0.5} 0 {colors.accent}" },
     },
     nested: { false: {}, true: {} },
     open: {

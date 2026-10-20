@@ -67,11 +67,12 @@ Workspaces belong to the desktop, and screens show them, as in sway:
   window, so pointer-driven focus changes don't flash or slide. A glow that
   has faded out leaves the page (`useFocusGlows`).
 - **Meta+A selects a group.** Commands then act on the whole container. One
-  glow surrounds the group; the focused window's bar gets the accent color.
-  Its tabs keep their usual states, and each gets an accent line along its
-  top, since the glow lights the whole tab group for a focused tab too.
-  Meta+Shift+A, focusing a floating window, or clicking another window ends
-  the selection.
+  glow surrounds the group, and an accent tint covers its tabs, windows and
+  the gaps between them (`SelectionTint.tsx`). The tint tells a selected tab
+  group from its focused tab, since the glow lights the whole tab group for
+  both. The focused window's bar gets the accent color; tabs keep their usual
+  states. Meta+Shift+A, focusing a floating window, or clicking another window
+  ends the selection.
 - **`xdg-activation` requests are granted.** The compositor forwards them as
   `focus_requested`. Manganese switches to that window's workspace, shows its
   tab, focuses it and warps the pointer to it. A browser window whose page or

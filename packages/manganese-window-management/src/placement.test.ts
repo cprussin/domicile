@@ -479,6 +479,7 @@ describe("the focus box", () => {
     expect(focusBoxOf(state)).toMatchObject({
       depth: TILED,
       rect: placementFor(state, "editor")?.frame ?? {},
+      selection: undefined,
       windows: [appWindowId("editor")],
     });
   });
@@ -492,6 +493,7 @@ describe("the focus box", () => {
 
     expect(focusBoxOf(state)).toMatchObject({
       rect: { height: 1018, width: 1880, x: 20, y: 42 },
+      selection: { height: 1018, width: 1880, x: 20, y: 42 },
       windows: [appWindowId("kitty"), appWindowId("editor")],
     });
   });
@@ -510,7 +512,28 @@ describe("the focus box", () => {
     expect(focusBoxOf(state)).toEqual({
       depth: TILED,
       rect: { height: 1018, width: 930, x: 970, y: 42 },
+      selection: undefined,
       windows: [appWindowId("editor"), appWindowId("mail")],
+    });
+  });
+
+  // `focus parent` from a tab selects its tab group, so the box is the same
+  // as for the tab, and only `selection` tells the two apart.
+  it("selects a tab group's box when `focus parent` selects the group", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.LayoutSet(Layout.SplitH),
+      WindowAction.ContainerSplit(Axis.Vertical),
+      WindowAction.AppAppeared("mail", "mail"),
+      WindowAction.LayoutSet(Layout.Tabbed),
+      WindowAction.ParentFocused(),
+    );
+
+    expect(focusBoxOf(state)?.selection).toEqual({
+      height: 1018,
+      width: 930,
+      x: 970,
+      y: 42,
     });
   });
 
