@@ -139,8 +139,9 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
   clipboard an application may control), `InputCapture`, `GlobalShortcuts`
   (review the chords an app asks for), `Wallpaper` (a picture to preview),
   `DynamicLauncher` (an install confirm with an editable name), `Usb` (a
-  device grant), `ScreenCast` (a picker of the windows or screens to share,
-  or a region to draw), `Print` (a
+  device grant), `ScreenCast` (a picker of the windows, browser windows or
+  screens to share, each previewed on the desk, or a region to draw; pass
+  `shownWindows` here too), `Print` (a
   printer and its options, or "No printers are set up."), `Screenshot` (pick
   the desk, a monitor, a window or a dragged area of a frozen frame, and save
   it or copy it with Ctrl+C; pass `shownWindows` so a window includes your

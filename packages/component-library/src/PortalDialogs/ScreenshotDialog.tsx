@@ -5,7 +5,6 @@ import type {
   ShotRect,
 } from "@domicile-desktop/sdk/portal";
 import { PortalAnswer as Answer } from "@domicile-desktop/sdk/portal";
-import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import { GlobeIcon } from "@phosphor-icons/react/dist/ssr/Globe";
 import { MonitorIcon } from "@phosphor-icons/react/dist/ssr/Monitor";
 import type { PointerEvent, ReactNode } from "react";
@@ -18,8 +17,11 @@ import type { App } from "../useApps/useApps";
 import type { FramePoint } from "./frame-point";
 import { draggedArea, framePoint } from "./frame-point";
 import { onFrame } from "./on-frame";
+import type { SourceTile } from "./SourceTiles";
+import { SourceTiles } from "./SourceTiles";
 import type { ShownWindow } from "./shown-windows";
 import { ShownWindowKind } from "./shown-windows";
+import { WindowIcon } from "./WindowIcon";
 
 type Props = {
   answer: (answer: PortalAnswer) => void;
@@ -71,8 +73,9 @@ type Pick = ReturnType<(typeof Pick)[keyof typeof Pick]>;
 type Choice = { icon: ReactNode; name: string; pick: Pick };
 
 /**
- * Picks what to save of a frozen desk: all of it, a screen, a window, or an
- * area dragged over it. A window is saved from its own frame, so what is
+ * Picks what to save of a frozen desk: all of it, a screen, a window, each
+ * a tile previewing it as the screen cast picker's do, or an area dragged
+ * over the desk. A window is saved from its own frame, so what is
  * over it, such as a notification, is left out. Ctrl+C copies the pick to
  * the clipboard instead of saving it. Dismissing it cancels.
  */
@@ -105,7 +108,7 @@ export const ScreenshotDialog = ({
     ...shown.flatMap((window) => browserChoices(body, browserWindows, window)),
   ];
   const whole: Choice = {
-    icon: undefined,
+    icon: <MonitorIcon aria-hidden />,
     name: "Whole desk",
     pick: Pick.Area({ height: body.height, width: body.width, x: 0, y: 0 }),
   };
@@ -130,21 +133,32 @@ export const ScreenshotDialog = ({
       document.removeEventListener("keydown", copy);
     };
   }, [answer, pick]);
-  const button = (choice: Choice, index: number) => (
-    <Button
-      aria-pressed={index === picked}
-      beforeIcon={choice.icon}
-      // Names repeat, as two untitled windows do; the order is fixed.
-      key={index}
-      onClick={() => {
-        setPicked(index);
-      }}
-      size="sm"
-      variant={index === picked ? "primary" : "outline"}
-    >
-      {choice.name}
-    </Button>
-  );
+  // A choice's tile, keyed by its index: names repeat, as two untitled
+  // windows do, and the order is fixed.
+  const group = (label: string, members: readonly Choice[], first: number) =>
+    members.length > 0 && (
+      <SourceTiles
+        desk={body}
+        label={label}
+        multiple={false}
+        onValueChange={([value]) => {
+          // Picking the picked tile again keeps it.
+          if (value !== undefined) {
+            setPicked(Number(value));
+          }
+        }}
+        tiles={members.map((choice, offset) =>
+          tileOf(choice, String(first + offset)),
+        )}
+        value={
+          typeof picked === "number" &&
+          picked >= first &&
+          picked < first + members.length
+            ? [String(picked)]
+            : []
+        }
+      />
+    );
   const pointAt = (event: PointerEvent<HTMLDivElement>) =>
     framePoint(
       { x: event.clientX, y: event.clientY },
@@ -185,19 +199,9 @@ export const ScreenshotDialog = ({
     >
       {asker !== undefined && <p className={askerStyles}>{`${asker} asks`}</p>}
       <div className={choicesStyles}>
-        {button(whole, 0)}
-        {screens.length > 0 && (
-          <ChoiceGroup label="Screens">
-            {screens.map((choice, offset) => button(choice, 1 + offset))}
-          </ChoiceGroup>
-        )}
-        {windows.length > 0 && (
-          <ChoiceGroup label="Windows">
-            {windows.map((choice, offset) =>
-              button(choice, 1 + screens.length + offset),
-            )}
-          </ChoiceGroup>
-        )}
+        {group("Desk", [whole], 0)}
+        {group("Screens", screens, 1)}
+        {group("Windows", windows, 1 + screens.length)}
       </div>
       {pick.kind === PickKind.Window && pick.area === undefined && (
         <p className={askerStyles}>
@@ -236,40 +240,13 @@ export const ScreenshotDialog = ({
   );
 };
 
-/** A labeled row of choices. */
-const ChoiceGroup = ({
-  children,
-  label,
-}: {
-  children: ReactNode;
-  label: string;
-}) => (
-  <div aria-label={label} className={groupStyles} role="group">
-    <span aria-hidden className={groupLabelStyles}>
-      {label}
-    </span>
-    {children}
-  </div>
-);
-
 const askerStyles = css({ color: "muted", fontSize: "sm", margin: 0 });
 
 const choicesStyles = flex({
-  align: "start",
   direction: "column",
-  gap: 2,
+  gap: 4,
   marginBlock: 3,
 });
-
-const groupStyles = flex({ align: "center", gap: 2, wrap: "wrap" });
-
-const groupLabelStyles = css({
-  color: "muted",
-  fontSize: "sm",
-  minInlineSize: 20,
-});
-
-const appIconStyles = css({ blockSize: 4, inlineSize: 4 });
 
 const deskStyles = css({
   cursor: "crosshair",
@@ -300,6 +277,14 @@ const placed = (
   left: `${String((area.x / frame.width) * 100)}%`,
   top: `${String((area.y / frame.height) * 100)}%`,
   width: `${String((area.width / frame.width) * 100)}%`,
+});
+
+/** `choice`'s tile under `key`, previewing what it saves. */
+const tileOf = (choice: Choice, key: string): SourceTile => ({
+  area: choice.pick.area,
+  icon: choice.icon,
+  key,
+  name: choice.name,
 });
 
 /** The name of a window titled `title`, which may be empty. */
@@ -376,12 +361,7 @@ const windowChoice = (
   title: string,
   app: App | undefined,
 ): Choice => ({
-  icon:
-    app?.icon === undefined ? (
-      <AppWindowIcon aria-hidden />
-    ) : (
-      <img alt="" className={appIconStyles} src={app.icon} />
-    ),
+  icon: <WindowIcon app={app} />,
   name: app === undefined ? title : `${app.name}: ${title}`,
   pick,
 });

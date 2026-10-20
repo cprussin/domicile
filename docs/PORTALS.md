@@ -95,6 +95,20 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   reports the node. `Source::Monitor` names a `wl_output`; `Source::Region`
   is a desktop rectangle in logical pixels. The pointer is drawn from the
   compositor's state, so it shows only over a window.
+  - `Source::BrowserWindow` is a browser window's page alone, by the
+    engine's window id: the engine captures its frame sink
+    (`CaptureBrowserWindow`), as a browser window screenshot does. The
+    capture keeps the page drawing while the shell hides it, so a hidden
+    tab still streams. The stream is the page's size; it has no pointer.
+  - The compositor does not list browser windows. The dialog says
+    `browser_windows` when windows may be picked, and the shell offers
+    `DomicileHost.browserWindows`. A pick of a closed window fails to start.
+  - Restore tokens keep a browser window only while the compositor runs
+    (persist mode 1): engine ids do not survive a restart.
+  - The picker previews each source on a desk shot taken as it opens
+    (`desk`, a `FrozenDesk`). A source not on screen, or every source when
+    the shot fails, shows its icon. Its tiles are the screenshot picker's
+    (`SourceTiles`).
 - **Input uses EIS.** RemoteDesktop and InputCapture hand out a libei socket
   (`ConnectToEIS`) served by the compositor (`reis`). Emulated input takes the
   engine's input injection path, so the lock screen still blocks it.
@@ -148,9 +162,10 @@ One request channel carries all dialogs. Each interface's backend builds on it.
     becomes a clipboard history row. An application that asked still gets
     its file; the shell's own screenshot is not saved
     (`SystemReply::Copied`).
-  - The picker lists screens and windows apart. A screen is named by its
-    make and model, a window by its application's desktop entry and its
-    title.
+  - The picker lists screens and windows apart, as tiles previewing each
+    on the frozen desk; the screen cast picker shares them. A screen is
+    named by its make and model, a window by its application's desktop
+    entry and its title.
   - A window is answered `screenshot_window` and saved from the last frame
     it showed, which the engine still holds. What is over it, such as a
     notification, is left out, and so is the shell's title bar or tab. This
@@ -217,8 +232,7 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   relative to the monitor it is mostly on, so it follows that monitor.
 - **A region is drawn on the desk.** The picker's region option closes the
   dialog and the user drags a rectangle over the page, whose pixels are the
-  desktop's logical pixels. The picker has no monitor thumbnails: the engine
-  captures a display only while a stream shows it.
+  desktop's logical pixels.
 
 - **The frontend installs launchers.** `Install`, `Uninstall`,
   `LaunchDesktopFile`, `GetDesktopEntry` and `GetIcon` are frontend methods:
@@ -246,7 +260,7 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 | Notification | v2, direct to `domicile_host::notifications` | existing drawer |
 | Inhibit | idle inhibit through `idle.rs`; logout/suspend inhibitors listed as `inhibit` requests; `QueryEndResponse` on session end (the desk has no session end yet, so no query-end is sent) | "X is preventing logout" |
 | Lockdown | properties from the config's `lockdown`; signaled on reload | — |
-| ScreenCast | windows, monitors, region; cursor embedded/metadata/hidden; PipeWire streams; restore tokens | source picker, sharing indicator |
+| ScreenCast | windows, browser windows, monitors, region; cursor embedded/metadata/hidden; PipeWire streams; restore tokens | source picker, sharing indicator |
 | Screenshot | one frame from the same sources, PNG to `$XDG_PICTURES_DIR`; `PickColor` | region picker, color picker |
 | RemoteDesktop | EIS socket; legacy `Notify*` methods use the same path | device grant |
 | Clipboard | selection to/from a RemoteDesktop session through `clipboard.rs` | part of that grant |

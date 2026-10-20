@@ -3,8 +3,9 @@
 //!
 //! The portal hands the application's frontend a token as `restore_data`.
 //! A token names windows by their client's app id and title, since host ids
-//! do not survive a restart; monitors by `wl_output` name; and regions by a
-//! rectangle on the monitor they are mostly on. Tokens for `persist_mode` 2 are saved to a file
+//! do not survive a restart; monitors by `wl_output` name; regions by a
+//! rectangle on the monitor they are mostly on; and browser windows by the
+//! engine's id, which is only granted while the compositor runs. Tokens for `persist_mode` 2 are saved to a file
 //! under `$XDG_STATE_HOME/domicile/`; tokens for mode 1 live as long as the
 //! compositor. See `docs/PORTALS.md`.
 
@@ -61,6 +62,9 @@ pub enum Shared {
         /// Its `wl_output` name.
         name: String,
     },
+    /// A browser window's page, by the engine's window id, and the title it
+    /// was picked with.
+    BrowserWindow { id: String, title: String },
     /// A rectangle in logical pixels, kept relative to a monitor so it
     /// follows that monitor when the desktop is rearranged.
     Region {
@@ -98,6 +102,8 @@ pub enum Restored {
     Window(String),
     /// A monitor, by `wl_output` name.
     Monitor(String),
+    /// A browser window's page, as [`Shared::BrowserWindow`] names it.
+    BrowserWindow { id: String, title: String },
     /// A rectangle of the desktop, in logical pixels.
     Region {
         position: (i32, i32),
@@ -221,7 +227,9 @@ impl Grants {
 /// A window matches on app id and title. Titles change (a browser's names its
 /// page), so a window whose title moved on matches by app id alone, unless
 /// another window of that app id still has the title. Each window matches
-/// once. A monitor matches by name, and a region by its monitor.
+/// once. A monitor matches by name, and a region by its monitor. A browser
+/// window is not listed here, so it is restored as named; a closed one fails
+/// to start.
 pub fn matched(shared: &[Shared], open: &[Open]) -> Option<Vec<Restored>> {
     let mut taken: Vec<&str> = Vec::new();
     let mut restored = Vec::new();
@@ -252,6 +260,10 @@ pub fn matched(shared: &[Shared], open: &[Open]) -> Option<Vec<Restored>> {
                 monitor(open, name)?;
                 restored.push(Restored::Monitor(name.clone()));
             }
+            Shared::BrowserWindow { id, title } => restored.push(Restored::BrowserWindow {
+                id: id.clone(),
+                title: title.clone(),
+            }),
             Shared::Region {
                 monitor: name,
                 offset,
@@ -355,6 +367,22 @@ mod tests {
             "one firefox window cannot be both"
         );
         assert_eq!(matched(&[shared("org.gnome.Terminal", "")], &open), None);
+    }
+
+    #[test]
+    fn a_browser_window_is_restored_by_its_engine_id_as_is() {
+        let page = Shared::BrowserWindow {
+            id: "7".into(),
+            title: "Meet".into(),
+        };
+
+        assert_eq!(
+            matched(&[page], &[]),
+            Some(vec![Restored::BrowserWindow {
+                id: "7".into(),
+                title: "Meet".into(),
+            }])
+        );
     }
 
     #[test]

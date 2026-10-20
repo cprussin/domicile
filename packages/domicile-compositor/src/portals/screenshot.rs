@@ -459,7 +459,7 @@ fn now() -> Taken {
 }
 
 /// `desk` as the shell's picker shows it.
-fn frozen(desk: &Desk) -> FrozenDesk {
+pub(super) fn frozen(desk: &Desk) -> FrozenDesk {
     FrozenDesk {
         frame: data_url("image/png", &encode(&desk.shot)),
         width: desk.shot.width,

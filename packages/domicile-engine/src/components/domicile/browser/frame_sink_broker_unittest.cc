@@ -339,7 +339,8 @@ class FrameSinkBrokerTest : public testing::Test {
         base::BindRepeating(&FrameSinkBrokerTest::RecordClipboard,
                             base::Unretained(this)),
         base::BindRepeating(&FrameSinkBrokerTest::CaptureTarget),
-        base::BindRepeating(&FrameSinkBrokerTest::BrowserWindowTarget),
+        base::BindRepeating(&FrameSinkBrokerTest::BrowserWindowTarget,
+                            base::Unretained(this)),
         base::BindRepeating(&FrameSinkBrokerTest::RecordPointers,
                             base::Unretained(this)));
     page_ = broker_->NewEmbedRequester();
@@ -351,12 +352,19 @@ class FrameSinkBrokerTest : public testing::Test {
   }
 
   // Fake for //chrome's browser windows: window "1" is open, drawn by the
-  // page's frame sink.
-  static std::optional<BrowserWindowCaptureTarget> BrowserWindowTarget(
+  // page's frame sink. Counts the holds that keep it drawing.
+  std::optional<BrowserWindowCaptureTarget> BrowserWindowTarget(
       const std::string& window_id) {
-    return window_id == "1" ? BrowserWindowCaptureTargetOf(
-                                  kPageFrameSinkId, gfx::Size(800, 600), 1.0f)
-                            : std::nullopt;
+    std::optional<BrowserWindowCaptureTarget> target =
+        window_id == "1" ? BrowserWindowCaptureTargetOf(
+                               kPageFrameSinkId, gfx::Size(800, 600), 1.0f)
+                         : std::nullopt;
+    if (target.has_value()) {
+      ++drawing_holds_;
+      target->drawing = base::ScopedClosureRunner(base::BindOnce(
+          [](int* holds) { --*holds; }, base::Unretained(&drawing_holds_)));
+    }
+    return target;
   }
 
   // Fake for aura::Env's GPU: none, as when headless, unless a test gives
@@ -405,6 +413,9 @@ class FrameSinkBrokerTest : public testing::Test {
   // Every clipboard the producer sent, in order.
   std::vector<std::pair<mojom::Clipboard, FrameSinkBroker::ClipboardContents>>
       clipboards_;
+
+  // How many browser window captures keep their page drawing.
+  int drawing_holds_ = 0;
 
   // Fake for the browser's frame sink id allocator.
   viz::FrameSinkIdAllocator allocator_{kBrowserClientId};
@@ -1271,6 +1282,25 @@ TEST_F(FrameSinkBrokerTest, AnOpenBrowserWindowIsCapturedAlone) {
   EXPECT_TRUE(started.Get());
   RunUntilIdle();
   EXPECT_TRUE(capture.is_connected());
+}
+
+// A hidden page draws no frames, so the capture keeps it drawing until the
+// producer closes it.
+TEST_F(FrameSinkBrokerTest, ABrowserWindowDrawsWhileItIsCaptured) {
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  FakeDisplayCaptureObserver observer;
+  mojo::Remote<mojom::DisplayCapture> capture;
+
+  base::test::TestFuture<bool> started;
+  remote->CaptureBrowserWindow("1", 30, capture.BindNewPipeAndPassReceiver(),
+                               observer.BindRemote(), started.GetCallback());
+  ASSERT_TRUE(started.Get());
+  EXPECT_EQ(drawing_holds_, 1);
+
+  capture.reset();
+  RunUntilIdle();
+  EXPECT_EQ(drawing_holds_, 0);
 }
 
 TEST_F(FrameSinkBrokerTest, ABrowserWindowThatIsNotOpenIsRefused) {

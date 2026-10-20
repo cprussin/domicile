@@ -283,7 +283,9 @@ const Dialog = ({
           apps={apps}
           asker={asker}
           body={request.body}
+          browserWindows={browserWindows}
           screen={screen}
+          shownWindows={shownWindows}
         />
       );
     case PortalKind.Print:

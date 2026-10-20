@@ -440,6 +440,21 @@ describe("watchPortalRequests", () => {
       {
         app_id: "us.zoom.Zoom",
         body: {
+          browser_windows: true,
+          desk: {
+            desk: { position: [0, 0], size: [1920, 1080] },
+            frame: "data:image/png;base64,AA==",
+            height: 1080,
+            monitors: [
+              {
+                area: { height: 1080, width: 1920, x: 0, y: 0 },
+                description: "",
+                name: "drm-1",
+              },
+            ],
+            width: 1920,
+            windows: [],
+          },
           multiple: true,
           region: true,
           sources: [
@@ -467,6 +482,21 @@ describe("watchPortalRequests", () => {
       {
         appId: "us.zoom.Zoom",
         body: {
+          browserWindows: true,
+          desk: {
+            desk: { position: [0, 0], size: [1920, 1080] },
+            frame: "data:image/png;base64,AA==",
+            height: 1080,
+            monitors: [
+              {
+                area: { height: 1080, width: 1920, x: 0, y: 0 },
+                description: "",
+                name: "drm-1",
+              },
+            ],
+            width: 1920,
+            windows: [],
+          },
           multiple: true,
           region: true,
           sources: [
@@ -791,6 +821,7 @@ describe("watchCapturing", () => {
           body: {
             sources: [
               { id: "app-3", title: "Notes", type: "window" },
+              { id: "7", title: "Meet", type: "browser_window" },
               { name: "drm-1", type: "monitor" },
               { position: [10, -20], size: [300, 200], type: "region" },
             ],
@@ -808,6 +839,7 @@ describe("watchCapturing", () => {
         kind: CapturingKind.ScreenCast,
         sources: [
           Captured.Window({ id: "app-3", title: "Notes" }),
+          Captured.BrowserWindow({ id: "7", title: "Meet" }),
           Captured.Monitor({ name: "drm-1" }),
           Captured.Region({ position: [10, -20], size: [300, 200] }),
         ],
@@ -1002,6 +1034,7 @@ describe("answerPortalRequest", () => {
       4,
       PortalAnswer.ScreenCast([
         CastSource.Window({ appId: "", id: "app-3", title: "Notes" }),
+        CastSource.BrowserWindow({ id: "7", title: "Meet" }),
         CastSource.Monitor({
           description: "",
           name: "drm-1",
@@ -1018,6 +1051,7 @@ describe("answerPortalRequest", () => {
           kind: "screen_cast",
           sources: [
             { id: "app-3", type: "window" },
+            { id: "7", title: "Meet", type: "browser_window" },
             { name: "drm-1", type: "monitor" },
             { position: [10, -20], size: [300, 200], type: "region" },
           ],

@@ -60,6 +60,8 @@ pub use test_pattern::TestPattern;
 pub enum Source {
     /// A window, by its host app id.
     Window(String),
+    /// A browser window's page alone, by the engine's window id.
+    BrowserWindow(String),
     /// A monitor, by its `wl_output` name, at its own density.
     Monitor(String),
     /// A rectangle of the desktop, at the highest density it touches.
