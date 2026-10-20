@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Tests `release-check.sh`, which says whether `stable` has something to
-# release: a commit `release` lacks, with every changeset versioned.
+# release: a commit `release` lacks. Changesets not yet versioned wait for the
+# next release.
 #
 # Uses real `git` against a local remote.
 set -u
@@ -96,10 +97,11 @@ expect "and names stable's commit" "$tip" "$(releasable)"
 
 echo "== a stable with a changeset not yet versioned =="
 echo '---' >"$WORK/repo/.changeset/a-change.md"
-commit "a change" >/dev/null
+tip="$(commit "a change")"
 out="$(check)"
-expect "is refused" refused "$(status "$out")"
-contains "saying why" "Version packages" "$out"
+expect "is allowed" ok "$(status "$out")"
+expect "and names stable's commit" "$tip" "$(releasable)"
+contains "saying the changeset waits" "a-change.md" "$out"
 
 echo "== a domicile that was never versioned =="
 setup 0.0.0
