@@ -74,6 +74,7 @@ const MIDDLE_TAB = {
   box: { height: 30, width: 1000, x: 0, y: 0 },
   divided: false,
   end: { height: 30, width: 280, x: 720, y: 0 },
+  endDivided: false,
   group: { node: { id: "a", up: 1 }, windows: ["a", "b", "c"] },
   nested: false,
   open: false,

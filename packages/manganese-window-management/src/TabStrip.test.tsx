@@ -23,6 +23,7 @@ const stripProps = {
   depth: 2,
   dragging: false,
   end: END,
+  endDivided: false,
   float: undefined,
   frame: FRAME,
   fullscreen: false,
@@ -209,6 +210,21 @@ describe("TabStrip", () => {
       });
       fireEvent.click(screen.getByRole("button", { name: "New tab" }));
       await added;
+    });
+
+    it("marks off the new-tab button from a hidden last tab", () => {
+      expect(
+        partOf(
+          render(<TabStrip {...stripProps} endDivided />).container,
+          "[data-new-tab]",
+        ),
+      ).toHaveAttribute("data-divided");
+      expect(
+        partOf(
+          render(<TabStrip {...stripProps} />).container,
+          "[data-new-tab]",
+        ),
+      ).not.toHaveAttribute("data-divided");
     });
 
     it("centers the new-tab button level with the group buttons", () => {
