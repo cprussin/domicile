@@ -429,6 +429,34 @@ describe("a command", () => {
     it("opens nothing when nothing was copied", () => {
       expect(searched([])).toEqual([]);
     });
+
+    it("opens a private window from a private one", () => {
+      const { host, result } = desktop([LEFT, RIGHT]);
+      host.lists([
+        {
+          height: 0,
+          id: "1",
+          isApp: false,
+          isPrivate: true,
+          popupWindow: null,
+          title: "",
+          url: "https://example.com/",
+          width: 0,
+        },
+      ]);
+      act(() => {
+        host.fake.set({ clipboard: [{ id: 0, preview: "hello world" }] });
+      });
+
+      act(() => {
+        result.current.act(WindowAction.ClipboardSearched());
+      });
+
+      expect(host.openedPrivately).toEqual([
+        "https://google.com/search?q=hello%20world",
+      ]);
+      expect(host.opened).toEqual([]);
+    });
   });
 
   it("runs the command of an application the launcher chose", () => {

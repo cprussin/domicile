@@ -25,6 +25,7 @@ import type { WindowAction, WindowState } from "./window-state";
 import {
   WindowAction as Action,
   activeIdOf,
+  activeIsPrivate,
   killedIdsOf,
   NO_WINDOWS,
   reduceWindows,
@@ -103,9 +104,14 @@ export const useWindows = (
         domicile.spawn(action.command);
       }
       if (action.kind === WindowActionKind.ClipboardSearched) {
+        // From a private window, the search stays private.
         const url = clipboardUrl(domicile);
         if (url !== undefined) {
-          domicile.openBrowserWindow(url);
+          if (activeIsPrivate(drawn.current)) {
+            domicile.openPrivateBrowserWindow(url);
+          } else {
+            domicile.openBrowserWindow(url);
+          }
         }
       }
       if (action.kind === WindowActionKind.BrowserOpened) {
