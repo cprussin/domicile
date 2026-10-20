@@ -180,8 +180,9 @@ two frame sinks, so the page needs a new token for it.
 - An app module's channel (`app_channel.cc`) ends its calls the same way and
   dials the new compositor. Both channels track calls with `OpenCalls`
   (`system_call.h`).
-- Wayland clients lose their display and exit
-  ([ROADMAP.md](/ROADMAP.md), item 2).
+- Wayland clients lose their display. The new compositor launches again the
+  ones Domicile launched
+  ([THE-DOMICILE-BINARY.md](THE-DOMICILE-BINARY.md#crashes-are-recovered)).
 - `guard-app-survives-compositor-restart.sh` covers the re-embed and the
   watch.
 

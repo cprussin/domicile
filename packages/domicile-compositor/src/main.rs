@@ -97,6 +97,7 @@ mod idle;
 mod keymap;
 mod latency;
 mod latency_run;
+mod launches;
 mod lock;
 mod locking;
 mod logind;
@@ -387,6 +388,9 @@ struct DomicileCompositor {
     /// Whether clients start in their own systemd scopes; see
     /// [`crate::app_scope`].
     scope_clients: bool,
+    /// The clients launched from the chrome, kept for the next compositor;
+    /// see [`crate::launches`]. `None` when started without `--launches`.
+    launched: Option<Arc<launches::Launches>>,
     /// Mapped toplevels, paired with the host-assigned app id (Wayland-thread only).
     toplevels: Vec<(String, ToplevelSurface)>,
     /// Where the page last said each window is, in desktop logical units
@@ -810,8 +814,34 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Bind the Wayland socket before anything can spawn a client. A chrome may
     // send `spawn` as soon as it connects, and the client needs our display
     // name. The event loop source is added later.
-    let source = ListeningSocketSource::new_auto()?;
+    //
+    // A compositor that replaces one that crashed binds the same name, so a
+    // client that reconnects finds it, and launches again the clients the
+    // crash took. See `launches`.
+    let left = arguments
+        .launches
+        .as_deref()
+        .map(|path| launches::left(path, launches::started))
+        .unwrap_or_default();
+    let source = match left
+        .wayland_display
+        .as_deref()
+        .map(ListeningSocketSource::with_name)
+    {
+        Some(Ok(source)) => source,
+        Some(Err(err)) => {
+            tracing::warn!(%err, "the last compositor's display would not bind; reconnecting clients will not find this one");
+            ListeningSocketSource::new_auto()?
+        }
+        None => ListeningSocketSource::new_auto()?,
+    };
     let socket_name = source.socket_name().to_os_string();
+    let launched = arguments.launches.clone().map(|path| {
+        Arc::new(launches::Launches::new(
+            path,
+            socket_name.to_string_lossy().into_owned(),
+        ))
+    });
     // A second socket for the chrome, which identifies it; see
     // `ClientState::is_chrome`.
     let chrome_socket_name = chrome_display(&socket_name);
@@ -845,8 +875,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         {
             let display = socket_name.clone();
             let scoped = arguments.scope_clients;
+            let launched = launched.clone();
             Box::new(move |command, token| {
-                spawn_client(command, &display, scoped, child_nice, Some(token))
+                spawn_client(
+                    command,
+                    &display,
+                    scoped,
+                    child_nice,
+                    Some(token),
+                    launched.as_ref(),
+                )
             })
         },
     );
@@ -869,7 +907,17 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             {
                 let display = socket_name.clone();
                 let scoped = arguments.scope_clients;
-                move |command| spawn_client(command, &display, scoped, child_nice, None)
+                let launched = launched.clone();
+                move |command| {
+                    spawn_client(
+                        command,
+                        &display,
+                        scoped,
+                        child_nice,
+                        None,
+                        launched.as_ref(),
+                    )
+                }
             },
             portals::ScreenCasting {
                 casting: casting::Casting::new(cast_requests.clone()),
@@ -1158,6 +1206,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         gpu,
         hub,
         scope_clients: arguments.scope_clients,
+        launched: launched.clone(),
         toplevels: Vec::new(),
         app_bounds: HashMap::new(),
         held_frames: HeldFrames::new(),
@@ -1481,7 +1530,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         &arguments.session,
     )?;
     // Startup commands, once the desktop is live. Not run on reload; see
-    // `StartupConfig`.
+    // `StartupConfig`. Not recorded in `launched`: every compositor runs them.
     for command in &config.startup.commands {
         spawn_client(
             command,
@@ -1489,6 +1538,21 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             arguments.scope_clients,
             child_nice,
             None,
+            None,
+        );
+    }
+    for command in &left.lost {
+        info!(
+            ?command,
+            "launching again a client the last compositor's crash took"
+        );
+        spawn_client(
+            command,
+            &socket_name,
+            arguments.scope_clients,
+            child_nice,
+            None,
+            launched.as_ref(),
         );
     }
 

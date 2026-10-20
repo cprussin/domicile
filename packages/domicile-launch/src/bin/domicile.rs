@@ -545,6 +545,7 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         profile: profile.path.clone(),
         shims: runtime.join("bin"),
         session: runtime.join("session.json"),
+        launches: runtime.join("launches.json"),
     };
     shim(
         &places.shims,

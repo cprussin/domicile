@@ -259,19 +259,24 @@ fn next(policy: &Policy, started: Started, failures: u32, lived: Duration) -> Ne
 /// - A stale socket makes the next bind fail. The engine `CHECK`s its command
 ///   socket bind, so it would crash.
 ///
+/// - The launched clients' record goes, so a new desktop launches none of the
+///   last one's again.
+///
 /// The profile is kept so the user stays signed in. Chromium recovers its own
 /// stale singleton lock. The control socket belongs to this process and stays.
 ///
 /// A missing path is success. Any other error is returned.
 pub fn clear_the_last_one(runtime: &Runtime) -> Result<(), Leftover> {
     clear_the_last_compositor(runtime)?;
-    clear_the_last_engine(runtime)
+    clear_the_last_engine(runtime)?;
+    gone(&runtime.launches, std::fs::remove_file(&runtime.launches))
 }
 
 /// Removes the last compositor's chrome socket and session file.
 ///
 /// Leaves the broker and command sockets, which belong to the engine that is
-/// still running.
+/// still running, and the launched clients' record, which the next compositor
+/// reads.
 pub fn clear_the_last_compositor(runtime: &Runtime) -> Result<(), Leftover> {
     gone(
         &runtime.chrome_socket,

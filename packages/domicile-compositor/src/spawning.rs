@@ -3,6 +3,7 @@
 
 use std::ffi::{OsStr, OsString};
 use std::process::Command;
+use std::sync::Arc;
 use std::thread;
 
 use tracing::debug;
@@ -11,6 +12,7 @@ use domicile_host::priority;
 use domicile_host::system::Environment;
 
 use crate::grepped;
+use crate::launches::Launches;
 use crate::portals::CURRENT_DESKTOP;
 use crate::{app_scope, engine};
 
@@ -19,13 +21,16 @@ use crate::{app_scope, engine};
 /// A reaper thread waits on the child so it doesn't become a zombie.
 /// `scoped` starts it in its own systemd scope; see [`crate::app_scope`]. It
 /// starts at nice value `nice`; see [`client_command`]. `activation_token`
-/// lets it raise its window; see [`client_command`].
+/// lets it raise its window; see [`client_command`]. A client in `launches`
+/// is launched again by the next compositor if a crash takes it; see
+/// [`crate::launches`].
 pub fn spawn_client(
     command: &[String],
     wayland_display: &OsStr,
     scoped: bool,
     nice: i32,
     activation_token: Option<&str>,
+    launches: Option<&Arc<Launches>>,
 ) {
     let Some(mut child) = client_command(
         command,
@@ -48,8 +53,15 @@ pub fn spawn_client(
                 "{}",
                 grepped::SPAWNING
             );
+            let launches = launches.cloned();
+            if let Some(launches) = &launches {
+                launches.launched(child.id(), command);
+            }
             thread::spawn(move || {
                 let _ = child.wait();
+                if let Some(launches) = launches {
+                    launches.ended(child.id());
+                }
             });
         }
         Err(err) => tracing::error!(
@@ -126,6 +138,9 @@ pub fn desktop_environment(wayland_display: &OsStr, library_path: Option<&OsStr>
         ("XDG_CURRENT_DESKTOP", Some(CURRENT_DESKTOP.into())),
         ("DISPLAY", None),
         ("LD_LIBRARY_PATH", library_path.and_then(without_the_engine)),
+        // Qt 6.6 and later reconnect to the next compositor after a crash,
+        // keeping their windows. See `crate::launches`.
+        ("QT_WAYLAND_RECONNECT", Some("1".into())),
     ]
     .into_iter()
     .chain(
@@ -229,6 +244,14 @@ mod tests {
         assert_eq!(
             child_env(&kitty(), "wayland-7", "WAYLAND_DISPLAY"),
             Some(OsString::from("wayland-7")),
+        );
+    }
+
+    #[test]
+    fn a_spawned_qt_client_reconnects_after_a_compositor_crash() {
+        assert_eq!(
+            child_env(&kitty(), "wayland-7", "QT_WAYLAND_RECONNECT"),
+            Some(OsString::from("1")),
         );
     }
 

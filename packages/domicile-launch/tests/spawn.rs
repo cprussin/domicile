@@ -28,6 +28,7 @@ fn runtime() -> Runtime {
         profile: PathBuf::from("/run/d/profile"),
         shims: PathBuf::from("/run/d/bin"),
         session: PathBuf::from("/run/d/session.json"),
+        launches: PathBuf::from("/run/d/launches.json"),
     }
 }
 
@@ -326,6 +327,8 @@ fn the_compositor_is_a_producer_to_the_engine() {
             "/run/d/session.json",
             "--engine-socket",
             "/run/d/broker",
+            "--launches",
+            "/run/d/launches.json",
         ]
     );
     // The engine's own directory, so `libdomicile_engine.so` is loadable.
@@ -708,6 +711,8 @@ fn the_compositor_is_given_the_config_it_was_started_with() {
             "/run/d/session.json",
             "--engine-socket",
             "/run/d/broker",
+            "--launches",
+            "/run/d/launches.json",
             "--config",
             "/etc/domicile/desk.json",
         ]

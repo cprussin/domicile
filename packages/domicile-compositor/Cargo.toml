@@ -57,6 +57,8 @@ libloading = "0.9"
 pipewire = { version = "0.10", features = ["v0_3_34"] }
 # Watches the home directory for the file index (see `src/file_indexing.rs`).
 notify.workspace = true
+# The launched clients' file (see `src/launches.rs`). Adds no crates.
+serde.workspace = true
 # A shell's `options` reach the chrome as JSON (see `src/shell_config.rs`).
 serde_json.workspace = true
 thiserror.workspace = true

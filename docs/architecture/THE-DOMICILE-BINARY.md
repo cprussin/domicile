@@ -261,8 +261,18 @@ Compositor restart:
   The page hears the old compositor's windows close, its system calls end with
   `compositor_gone`, then `compositorreplaced`. See
   [ENGINE-FORK.md](ENGINE-FORK.md#a-compositor-restart).
-- The shell and browser windows stay open. Wayland clients lose their display
-  and exit.
+- The shell and browser windows stay open. Wayland clients lose their display.
+  Qt 6.6 and later reconnect (`QT_WAYLAND_RECONNECT=1`); the rest exit.
+- The compositor writes each client it launches for the shell (`spawn`, a
+  notification's action, a portal) to `launches.json` in the run directory,
+  with its pid and start time, and strikes it off when it exits. The next
+  compositor binds the same Wayland display and launches again each recorded
+  client no longer running (`domicile-compositor`'s `launches`). Startup
+  commands are not recorded, since every compositor runs them.
+- What this misses: a client started from a terminal or another client, the
+  app behind a launcher that forks and exits, and anything a client had not
+  saved. A client that reconnected is not followed after that.
+- A new desktop removes `launches.json` (`clear_the_last_one`).
 
 Backoff:
 

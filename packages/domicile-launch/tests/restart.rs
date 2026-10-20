@@ -208,6 +208,7 @@ fn nothing_the_last_desktop_bound_or_published_outlives_it() {
         &runtime.chrome_socket,
         &runtime.command,
         &runtime.session,
+        &runtime.launches,
     ] {
         std::fs::write(path, "the last desktop's").expect("it is written");
     }
@@ -216,6 +217,12 @@ fn nothing_the_last_desktop_bound_or_published_outlives_it() {
     std::fs::write(&runtime.control, "this process's own").expect("it is written");
 
     clear_the_last_one(&runtime).expect("it clears");
+
+    // A new desktop launches none of the last one's clients again.
+    assert!(
+        !runtime.launches.exists(),
+        "the last desktop's launched clients are still there"
+    );
 
     assert!(!runtime.broker.exists(), "the broker socket is still there");
     assert!(
@@ -449,6 +456,7 @@ fn what_the_last_engine_left_goes_and_what_the_compositor_bound_stays() {
         &runtime.chrome_socket,
         &runtime.command,
         &runtime.session,
+        &runtime.launches,
     ] {
         std::fs::write(path, "the desktop's").expect("it is written");
     }
@@ -488,11 +496,18 @@ fn what_the_last_compositor_left_goes_and_what_the_engine_bound_stays() {
         &runtime.chrome_socket,
         &runtime.command,
         &runtime.session,
+        &runtime.launches,
     ] {
         std::fs::write(path, "the desktop's").expect("it is written");
     }
 
     clear_the_last_compositor(&runtime).expect("it clears");
+
+    // The next compositor launches again the clients the crash took.
+    assert!(
+        runtime.launches.exists(),
+        "the next compositor needs the clients this one launched"
+    );
 
     assert!(
         !runtime.chrome_socket.exists(),
@@ -521,6 +536,7 @@ fn runtime(directory: &std::path::Path) -> Runtime {
         profile: directory.join("profile"),
         shims: directory.join("bin"),
         session: directory.join("session.json"),
+        launches: directory.join("launches.json"),
     }
 }
 
