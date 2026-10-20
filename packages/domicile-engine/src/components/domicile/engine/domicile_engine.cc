@@ -3,6 +3,7 @@
 
 #include "components/domicile/engine/domicile_engine.h"
 
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -27,6 +28,8 @@
 #include "base/memory/platform_shared_memory_region.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/read_only_shared_memory_region.h"
+#include "base/memory/unsafe_shared_memory_region.h"
+#include "base/unguessable_token.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/run_loop.h"
@@ -674,6 +677,48 @@ gfx::GpuMemoryBufferHandle ToGpuMemoryBufferHandle(
   return gfx::GpuMemoryBufferHandle(std::move(pixmap));
 }
 
+// Converts a window's shared memory for mojo. Duplicates the fd; the caller
+// keeps the original. Null, logged, if the fd cannot back it.
+gfx::GpuMemoryBufferHandle ToGpuMemoryBufferHandle(
+    const DomicileShmBuffer& buffer) {
+  // Four bytes a pixel: every format the ABI names.
+  if (buffer.width == 0 || buffer.height == 0 ||
+      buffer.stride / 4 < buffer.width) {
+    LOG(ERROR) << "domicile: " << buffer.width << "x" << buffer.height
+               << " pixels do not fit rows " << buffer.stride << " bytes apart";
+    return gfx::GpuMemoryBufferHandle();
+  }
+  const size_t size = static_cast<size_t>(buffer.stride) * buffer.height;
+  // Viz reading past the end of the file would take a SIGBUS.
+  struct stat file;
+  if (fstat(buffer.fd, &file) != 0 ||
+      static_cast<size_t>(file.st_size) < size) {
+    PLOG(ERROR) << "domicile: a window's shared memory is smaller than the "
+                << size << " bytes its frame needs";
+    return gfx::GpuMemoryBufferHandle();
+  }
+  base::ScopedFD duplicated(HANDLE_EINTR(dup(buffer.fd)));
+  if (!duplicated.is_valid()) {
+    PLOG(ERROR) << "domicile: could not dup a window's shared memory fd";
+    return gfx::GpuMemoryBufferHandle();
+  }
+  base::UnsafeSharedMemoryRegion region =
+      base::UnsafeSharedMemoryRegion::Deserialize(
+          base::subtle::PlatformSharedMemoryRegion::Take(
+              std::move(duplicated),
+              base::subtle::PlatformSharedMemoryRegion::Mode::kUnsafe, size,
+              base::UnguessableToken::Create()));
+  if (!region.IsValid()) {
+    LOG(ERROR) << "domicile: a window's shared memory fd is not open for "
+                  "reading and writing";
+    return gfx::GpuMemoryBufferHandle();
+  }
+  gfx::GpuMemoryBufferHandle handle(std::move(region));
+  handle.offset = 0;
+  handle.stride = buffer.stride;
+  return handle;
+}
+
 // Converts the C ABI's transform to the mojom enum.
 //
 // An undefined value means the compositor broke the ABI, so crash rather than
@@ -887,13 +932,15 @@ struct DomicileEngine {
                                       base::Unretained(this), surface));
   }
 
-  // Blocks; runs once per buffer, not per frame.
+  // Blocks; runs once per buffer, not per frame. A null `handle` is refused.
   DomicileBufferId ImportBuffer(DomicileSurfaceId surface,
-                                const DomicileDmabuf& dmabuf) {
+                                gfx::GpuMemoryBufferHandle handle,
+                                const gfx::Size& size,
+                                uint32_t fourcc) {
     DomicileBufferId imported = 0;
-    RunOnThreadAndWait(base::BindOnce(&DomicileEngine::ImportBufferOnThread,
-                                      base::Unretained(this), surface,
-                                      std::ref(dmabuf), &imported));
+    RunOnThreadAndWait(base::BindOnce(
+        &DomicileEngine::ImportBufferOnThread, base::Unretained(this), surface,
+        std::move(handle), size, fourcc, &imported));
     return imported;
   }
 
@@ -1296,25 +1343,19 @@ struct DomicileEngine {
   }
 
   void ImportBufferOnThread(DomicileSurfaceId surface,
-                            const DomicileDmabuf& dmabuf,
+                            gfx::GpuMemoryBufferHandle handle,
+                            const gfx::Size& size,
+                            uint32_t fourcc,
                             DomicileBufferId* imported) {
     auto iter = surfaces_.find(surface);
-    if (iter == surfaces_.end() || !broker_) {
-      return;
-    }
-    gfx::GpuMemoryBufferHandle handle =
-        domicile::ToGpuMemoryBufferHandle(dmabuf);
-    if (handle.is_null()) {
+    if (iter == surfaces_.end() || !broker_ || handle.is_null()) {
       return;
     }
 
     base::RunLoop loop(base::RunLoop::Type::kNestableTasksAllowed);
     domicile::Surface* raw = iter->second.get();
     broker_->ImportBuffer(
-        raw->frame_sink_id(), std::move(handle),
-        gfx::Size(static_cast<int>(dmabuf.width),
-                  static_cast<int>(dmabuf.height)),
-        dmabuf.fourcc,
+        raw->frame_sink_id(), std::move(handle), size, fourcc,
         base::BindOnce(
             [](base::RunLoop* loop, DomicileBufferId* imported,
                domicile::Surface* surface, bool has_alpha, uint64_t id,
@@ -1327,7 +1368,7 @@ struct DomicileEngine {
               }
               loop->Quit();
             },
-            &loop, imported, raw, domicile::FourccHasAlpha(dmabuf.fourcc)));
+            &loop, imported, raw, domicile::FourccHasAlpha(fourcc)));
     loop.Run();
   }
 
@@ -1629,7 +1670,25 @@ DomicileBufferId domicile_surface_import(DomicileEngine* engine,
   if (!engine || !dmabuf) {
     return 0;
   }
-  return engine->ImportBuffer(surface, *dmabuf);
+  return engine->ImportBuffer(
+      surface, domicile::ToGpuMemoryBufferHandle(*dmabuf),
+      gfx::Size(static_cast<int>(dmabuf->width),
+                static_cast<int>(dmabuf->height)),
+      dmabuf->fourcc);
+}
+
+DomicileBufferId domicile_surface_import_shm(DomicileEngine* engine,
+                                             DomicileSurfaceId surface,
+                                             const DomicileShmBuffer* buffer) {
+  CHECK(buffer);
+  if (!engine) {
+    return 0;
+  }
+  return engine->ImportBuffer(
+      surface, domicile::ToGpuMemoryBufferHandle(*buffer),
+      gfx::Size(static_cast<int>(buffer->width),
+                static_cast<int>(buffer->height)),
+      buffer->fourcc);
 }
 
 void domicile_surface_import_async(DomicileEngine* engine,

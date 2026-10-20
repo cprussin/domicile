@@ -34,6 +34,9 @@ pub struct Arguments {
     /// Whether to start each client in its own systemd scope. Only a desk that
     /// is the login session does; see `docs/RUNNING-A-DESKTOP.md`.
     pub scope_clients: bool,
+    /// Whether the engine composites on the CPU, so windows go to it in
+    /// shared memory. See [`crate::software_compositing`].
+    pub software_compositing: bool,
     /// Where PAM services are read from. `None` is the machine's
     /// `/etc/pam.d`; tests name a directory holding a service of their own.
     pub pam_confdir: Option<PathBuf>,
@@ -72,6 +75,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut engine_socket = None;
     let mut expect_a_page = None;
     let mut scope_clients = None;
+    let mut software_compositing = None;
     let mut pam_confdir = None;
     let mut launches = None;
 
@@ -94,6 +98,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             ENGINE_SOCKET => &mut engine_socket,
             EXPECT_A_PAGE => &mut expect_a_page,
             SCOPE_CLIENTS => &mut scope_clients,
+            SOFTWARE_COMPOSITING => &mut software_compositing,
             PAM_CONFDIR => &mut pam_confdir,
             LAUNCHES => &mut launches,
             _ => return Err(ArgumentError::Unknown { argument: flag }),
@@ -129,6 +134,10 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             Some(value) => yes_or_no(SCOPE_CLIENTS, &value)?,
             None => false,
         },
+        software_compositing: match software_compositing {
+            Some(value) => yes_or_no(SOFTWARE_COMPOSITING, &value)?,
+            None => false,
+        },
         pam_confdir: pam_confdir.map(PathBuf::from),
         launches: launches.map(PathBuf::from),
     })
@@ -140,6 +149,7 @@ const CONFIG: &str = "--config";
 const ENGINE_SOCKET: &str = "--engine-socket";
 const EXPECT_A_PAGE: &str = "--expect-a-page";
 const SCOPE_CLIENTS: &str = "--scope-clients";
+const SOFTWARE_COMPOSITING: &str = "--software-compositing";
 const PAM_CONFDIR: &str = "--pam-confdir";
 const LAUNCHES: &str = "--launches";
 
