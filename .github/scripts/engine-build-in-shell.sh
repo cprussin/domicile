@@ -33,6 +33,11 @@ nixpkgs="$(nix eval --raw --impure --expr '(builtins.getFlake "nixpkgs").outPath
 echo "nixpkgs is $nixpkgs"
 export NIX_PATH="nixpkgs=$nixpkgs"
 
+# The log is printed only once the build ends, so say how far it has got
+# every ten minutes meanwhile.
+"$ROOT/.github/scripts/engine-build-progress.sh" --every 600 "$LOG" &
+progress=$!
+
 # `nix-shell`, not `nix develop`: the directory has a shell.nix and no
 # flake.nix. NIX_SHELL_RUN gets a script path because its contents are
 # re-quoted twice.
@@ -42,6 +47,7 @@ if NIX_SHELL_RUN="$ROOT/.github/scripts/engine-build.sh $CHROMIUM $DONE" \
 else
   echo "the shell exited $?"
 fi
+kill "$progress"
 
 # siso's summary omits the compiler errors, so print matching lines first, then
 # the tail for context. `|| true` so a grep with no match does not skip the

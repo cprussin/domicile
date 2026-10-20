@@ -108,6 +108,15 @@ rebuild.
   (`cprussin/dotfiles`: `config/machines/crux/chromium-build.nix`). The pool
   creates nothing. Without that unit, a run uses the single tree.
 
+## Build progress
+
+CI prints how far a build has got every ten minutes: steps done, the time so
+far, and the time left at that rate. To ask on `crux` yourself:
+
+```sh
+.github/scripts/engine-build-progress.sh /tmp/domicile-shell.log
+```
+
 ## Build cost
 
 From scratch on `crux` (16 cores, no remote execution, no cache):
