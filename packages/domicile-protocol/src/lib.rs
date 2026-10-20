@@ -451,6 +451,19 @@ pub enum HostMessage {
         transient_for: Option<String>,
     },
 
+    /// The page anchor a window asked to be laid out at
+    /// (`domicile_toplevel_anchor_v1.set_anchor`), or `None` for none, sent
+    /// whenever it changes.
+    ///
+    /// Sent right after [`HostMessage::AppAppeared`] when set before the first
+    /// frame. The name means what the shell says it does; a shell with no
+    /// anchor of that name lays the window out as any other. See
+    /// `docs/architecture/WINDOW-COMPOSITING.md#anchored-windows`.
+    AppAnchored {
+        app_id: String,
+        anchor: Option<String>,
+    },
+
     /// Whether a window wants attention, sent whenever that changes.
     ///
     /// Set when the compositor drops the window's `xdg-activation` request

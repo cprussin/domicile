@@ -94,14 +94,6 @@ item when it ships.
      ([New windows](docs/architecture/ENGINE-BROWSER-BEHAVIOR.md#new-windows)).
    - A cancelable navigation event, like Electron's `will-navigate`.
 
-8. **Frame-synchronized `<app>` state.** The child allocates the
-   `LocalSurfaceId`, so a client's frame and the page's layout change in the
-   same frame
-   ([What each side knows](docs/architecture/WINDOW-COMPOSITING.md#what-each-side-knows)).
-   Domicile's own subsurfaces and popups sync
-   ([Synced frames](docs/architecture/WINDOW-COMPOSITING.md#synced-frames)).
-   - Next: a protocol for clients to anchor to page layout.
-
 ## Known gaps
 
 Understood and not scheduled.

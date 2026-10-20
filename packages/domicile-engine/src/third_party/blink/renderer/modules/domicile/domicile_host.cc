@@ -1322,6 +1322,12 @@ void DomicileHost::AppTransientFor(const String& app_id,
   WindowsChanged();
 }
 
+void DomicileHost::AppAnchored(const String& app_id, const String& anchor) {
+  // Empty on the pipe is no anchor, which the page reads as null.
+  WindowNamed(app_id).anchor = anchor.empty() ? String() : anchor;
+  WindowsChanged();
+}
+
 void DomicileHost::AppUrgent(const String& app_id, bool urgent) {
   WindowNamed(app_id).urgent = urgent;
   WindowsChanged();
