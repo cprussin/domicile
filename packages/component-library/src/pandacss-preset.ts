@@ -145,6 +145,17 @@ export const domicilePreset = definePreset({
   theme: {
     extend: {
       keyframes: {
+        // `Notice`: appears quickly, holds long enough to read, then fades
+        // out on its own.
+        noticeShown: {
+          "0%": {
+            opacity: "0",
+            transform: "translateY(calc(-1 * {spacing.1}))",
+          },
+          "10%": { opacity: "1", transform: "translateY(0)" },
+          "75%": { opacity: "1" },
+          "100%": { opacity: "0" },
+        },
         pulse: {
           "0%": { opacity: "0.3" },
           "50%": { opacity: "0.7" },
@@ -384,6 +395,9 @@ export const domicilePreset = definePreset({
         durations: {
           // Wallpaper crossfade. Long because nothing waits on it.
           crossfade: { value: "2s" },
+          // How long a `Notice` stays up. Longer than the scale above, which
+          // is for control feedback, not reading.
+          notice: { value: "1.5s" },
           pulse: { value: "1.5s" },
           // One turn of `spin`. A slower spinner looks stuck.
           spin: { value: "1s" },
