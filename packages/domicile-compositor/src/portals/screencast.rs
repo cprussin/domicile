@@ -4,7 +4,9 @@
 //! - `SelectSources` keeps the application's options on the session.
 //! - `Start` asks the shell what to share, of the source types the
 //!   application asked for, unless a restore token names sources that are
-//!   there, and starts a [`Casting`] stream of each.
+//!   there, and starts a [`Casting`] stream of each. The picker previews the
+//!   sources on a frame of the desk, and offers browser windows from the
+//!   engine's own list when windows were asked for.
 //! - The capture is listed for the shell's sharing indicator until it ends.
 //!   Closing the session, the shell's stop, or every stream ending ends it.
 //!
@@ -17,13 +19,15 @@ use std::sync::{Arc, Mutex};
 
 use domicile_host::cast_grants::{matched, Grants, Open, Persist, Placed, Restored, Shared};
 use domicile_protocol::{
-    Captured, CapturingKind, CastPick, CastSource, PortalAnswer, PortalKind, ScreenCastDialog,
+    Captured, CapturingKind, CastPick, CastSource, FrozenDesk, PortalAnswer, PortalKind,
+    ScreenCastDialog,
 };
 use tracing::{info, warn};
 use zbus::object_server::ObjectServer;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 
 use super::queue::{ask, Queue};
+use super::screenshot::{frozen, Shoot};
 use super::session;
 use crate::casting::{Candidate, Casting, CursorMode, Event, Region, Source, StreamId};
 use crate::reply::{reply, Replier};
@@ -52,6 +56,8 @@ pub struct ScreenCast {
     casting: Casting,
     sessions: Arc<Mutex<HashMap<OwnedObjectPath, CastSession>>>,
     grants: Arc<Mutex<Grants>>,
+    /// Takes the frame of the desk the picker previews sources on.
+    shoot: Shoot,
 }
 
 /// One session, from `CreateSession` until it closes.
@@ -78,14 +84,16 @@ struct Selected {
 }
 
 impl ScreenCast {
-    /// The backend over `queue`'s dialogs, casting through `casting` and
-    /// keeping restore tokens in `grants`.
-    pub fn new(queue: Arc<Queue>, casting: Casting, grants: Grants) -> Self {
+    /// The backend over `queue`'s dialogs, casting through `casting`,
+    /// keeping restore tokens in `grants`, and previewing on what `shoot`
+    /// takes.
+    pub fn new(queue: Arc<Queue>, casting: Casting, grants: Grants, shoot: Shoot) -> Self {
         ScreenCast {
             queue,
             casting,
             sessions: Arc::default(),
             grants: Arc::new(Mutex::new(grants)),
+            shoot,
         }
     }
 }
@@ -177,7 +185,7 @@ impl ScreenCast {
         let picked = match self.recalled(&selected, &open, &monitors) {
             Some(picked) => picked,
             None => {
-                let kind = self.dialog(&selected, &open);
+                let kind = self.dialog(&selected, &open, self.preview().await);
                 match ask(
                     &self.queue,
                     connection.object_server(),
@@ -290,7 +298,7 @@ impl ScreenCast {
                     app_id: candidate.app_id.clone(),
                     title: candidate.title.clone(),
                 }),
-                Source::Monitor(_) | Source::Region(_) => None,
+                Source::BrowserWindow(_) | Source::Monitor(_) | Source::Region(_) => None,
             })
             .chain(monitors.iter().cloned().map(Open::Monitor))
             .collect();
@@ -300,6 +308,10 @@ impl ScreenCast {
                 let source = match restored {
                     Restored::Window(id) => Source::Window(id),
                     Restored::Monitor(name) => Source::Monitor(name),
+                    Restored::BrowserWindow { id, title } => {
+                        return asked_for(selected, &Source::BrowserWindow(id.clone()))
+                            .then(|| browser_window(id, title));
+                    }
                     Restored::Region { position, size } => {
                         return asked_for(selected, &Source::Region(Region { position, size }))
                             .then(|| region(position, size));
@@ -312,8 +324,25 @@ impl ScreenCast {
             .collect()
     }
 
-    /// The source picker for `open`.
-    fn dialog(&self, selected: &Selected, open: &[Candidate]) -> PortalKind {
+    /// The frame of the desk the picker previews on. The picker draws
+    /// icons in its place when the desk cannot be shot.
+    async fn preview(&self) -> Option<FrozenDesk> {
+        match (self.shoot)().await {
+            Ok(desk) => Some(frozen(&desk)),
+            Err(why) => {
+                warn!(%why, "the desk could not be shot to preview a screen cast's sources");
+                None
+            }
+        }
+    }
+
+    /// The source picker for `open`, previewed on `desk`.
+    fn dialog(
+        &self,
+        selected: &Selected,
+        open: &[Candidate],
+        desk: Option<FrozenDesk>,
+    ) -> PortalKind {
         PortalKind::ScreenCast(ScreenCastDialog {
             multiple: selected.multiple,
             sources: open
@@ -329,10 +358,16 @@ impl ScreenCast {
                         description: candidate.title.clone(),
                         size: candidate.bounds.expect("a monitor has bounds").size,
                     },
-                    Source::Region(_) => unreachable!("regions are drawn, not listed"),
+                    Source::BrowserWindow(_) | Source::Region(_) => {
+                        unreachable!(
+                            "browser windows are the engine's to list, and regions are drawn"
+                        )
+                    }
                 })
                 .collect(),
             region: selected.types & VIRTUAL != 0,
+            browser_windows: selected.types & WINDOW != 0,
+            desk,
         })
     }
 
@@ -393,10 +428,20 @@ impl ScreenCast {
                 }),
                 Source::Monitor(name) => Some(Shared::Monitor { name: name.clone() }),
                 Source::Region(region) => Shared::region(region.position, region.size, monitors),
+                // The engine's ids start over with it.
+                Source::BrowserWindow(id) => {
+                    (selected.persist != Persist::Saved).then(|| Shared::BrowserWindow {
+                        id: id.clone(),
+                        title: candidate.title.clone(),
+                    })
+                }
             })
             .collect::<Option<Vec<_>>>()
         else {
-            warn!("a screen cast region left every monitor; the application will ask again");
+            warn!(
+                "a screen cast region left every monitor, or a browser window was to be kept \
+                 past a restart; the application will ask again"
+            );
             return None;
         };
         let granted = self.grants.lock().unwrap().grant(
@@ -595,6 +640,7 @@ fn chosen(picks: &[CastPick], open: &[Candidate], selected: &Selected) -> Option
         .map(|pick| {
             let source = match pick {
                 CastPick::Window { id } => Source::Window(id.clone()),
+                CastPick::BrowserWindow { id, .. } => Source::BrowserWindow(id.clone()),
                 CastPick::Monitor { name } => Source::Monitor(name.clone()),
                 CastPick::Region { position, size } => Source::Region(Region {
                     position: *position,
@@ -604,11 +650,15 @@ fn chosen(picks: &[CastPick], open: &[Candidate], selected: &Selected) -> Option
             if !asked_for(selected, &source) {
                 return None;
             }
-            match source {
-                Source::Region(Region { position, size }) => {
+            match (source, pick) {
+                (Source::Region(Region { position, size }), _) => {
                     (size.0 > 0 && size.1 > 0).then(|| region(position, size))
                 }
-                source => open
+                // Not listed: the engine has them. A closed one fails to start.
+                (Source::BrowserWindow(id), CastPick::BrowserWindow { title, .. }) => {
+                    Some(browser_window(id, title.clone()))
+                }
+                (source, _) => open
                     .iter()
                     .find(|candidate| candidate.source == source)
                     .cloned(),
@@ -626,8 +676,18 @@ fn asked_for(selected: &Selected, source: &Source) -> bool {
 fn source_type(source: &Source) -> u32 {
     match source {
         Source::Monitor(_) => MONITOR,
-        Source::Window(_) => WINDOW,
+        Source::Window(_) | Source::BrowserWindow(_) => WINDOW,
         Source::Region(_) => VIRTUAL,
+    }
+}
+
+/// Browser window `id`'s page, titled `title`, as a candidate.
+fn browser_window(id: String, title: String) -> Candidate {
+    Candidate {
+        source: Source::BrowserWindow(id),
+        title,
+        app_id: String::new(),
+        bounds: None,
     }
 }
 
@@ -655,7 +715,7 @@ fn placed(listed: &[Candidate]) -> Vec<Placed> {
                     size: bounds.size,
                 })
             }
-            Source::Window(_) | Source::Region(_) => None,
+            Source::Window(_) | Source::BrowserWindow(_) | Source::Region(_) => None,
         })
         .collect()
 }
@@ -664,6 +724,10 @@ fn placed(listed: &[Candidate]) -> Vec<Placed> {
 fn captured(candidate: &Candidate) -> Captured {
     match &candidate.source {
         Source::Window(id) => Captured::Window {
+            id: id.clone(),
+            title: candidate.title.clone(),
+        },
+        Source::BrowserWindow(id) => Captured::BrowserWindow {
             id: id.clone(),
             title: candidate.title.clone(),
         },
@@ -682,7 +746,7 @@ fn stream_properties(candidate: &Candidate) -> HashMap<String, OwnedValue> {
         owned(Value::from(source_type(&candidate.source))),
     )]);
     match &candidate.source {
-        Source::Window(id) | Source::Monitor(id) => {
+        Source::Window(id) | Source::BrowserWindow(id) | Source::Monitor(id) => {
             properties.insert("id".to_string(), owned(Value::from(id.as_str())));
         }
         Source::Region(_) => {}
@@ -722,9 +786,11 @@ mod tests {
     use smithay::reexports::calloop::EventLoop;
     use zbus::zvariant::{ObjectPath, OwnedValue, Value};
 
-    use crate::casting::{Candidate, Ended, Event, Region, Request, Source};
+    use crate::casting::{Candidate, Desk, Ended, Event, Region, Request, Source};
+    use crate::portals::screenshot::{Shoot, Shots};
     use crate::portals::socket_pair::connected;
     use crate::portals::OBJECT_PATH;
+    use domicile_host::screenshot::Shot;
 
     const INTERFACE: &str = "org.freedesktop.impl.portal.ScreenCast";
     const SESSION: &str = "/org/freedesktop/portal/desktop/session/1_7/s";
@@ -739,8 +805,14 @@ mod tests {
     }
 
     /// The backend, over windows `app-3` ("Notes", `org.gnome.TextEditor`)
-    /// and `app-4` ("Todo"), with grants kept in `grants`.
+    /// and `app-4` ("Todo"), with grants kept in `grants`, on a desk that
+    /// cannot be shot.
     fn served(grants: Grants) -> Served {
+        served_shooting(grants, Shots::none().shoot)
+    }
+
+    /// [`served`], with the desk shot by `shoot`.
+    fn served_shooting(grants: Grants, shoot: Shoot) -> Served {
         let queue = Arc::<Queue>::default();
         let (publish, published) = channel();
         queue.listen(
@@ -751,7 +823,7 @@ mod tests {
             |_| None,
         );
         let (casting, casts) = wayland_thread();
-        let backend = ScreenCast::new(Arc::clone(&queue), casting, grants);
+        let backend = ScreenCast::new(Arc::clone(&queue), casting, grants, shoot);
         let (server, client) = connected(|builder| {
             builder
                 .serve_at(OBJECT_PATH, backend)
@@ -1065,6 +1137,8 @@ mod tests {
                         },
                     ],
                     region: false,
+                    browser_windows: true,
+                    desk: None,
                 }),
             }]
         );
@@ -1103,10 +1177,129 @@ mod tests {
                     },
                 ],
                 region: true,
+                browser_windows: false,
+                desk: None,
             })
         );
         served.queue.answer(items[0].id, PortalAnswer::Canceled);
         starting.join().expect("Start returned");
+    }
+
+    #[test]
+    fn the_picker_shows_the_desk_to_preview_the_sources_on() {
+        let shoot: Shoot = Arc::new(|| {
+            Box::pin(async {
+                Ok(Desk {
+                    shot: Shot {
+                        width: 1,
+                        height: 1,
+                        bgra: vec![0, 51, 255, 255],
+                    },
+                    monitors: vec![],
+                    windows: vec![],
+                    place: (0, 0, 1, 1),
+                })
+            })
+        });
+        let served = served_shooting(Grants::default(), shoot);
+        select(&served.client, vec![("types", Value::from(1u32))]);
+        let starting = start(&served.client);
+
+        let (items, _) = next(&served.published);
+
+        let PortalKind::ScreenCast(ScreenCastDialog {
+            desk: Some(desk), ..
+        }) = &items[0].kind
+        else {
+            panic!("no desk to preview on: {:?}", items[0].kind);
+        };
+        assert!(desk.frame.starts_with("data:image/png;base64,"));
+        assert_eq!((desk.width, desk.height), (1, 1));
+        served.queue.answer(items[0].id, PortalAnswer::Canceled);
+        starting.join().expect("Start returned");
+    }
+
+    #[test]
+    fn a_picked_browser_window_is_cast_by_the_engines_id() {
+        let served = served(Grants::default());
+        select(&served.client, vec![("types", Value::from(2u32))]);
+
+        let (response, results) = pick(&served, vec![meet()]);
+
+        assert_eq!(response, 0);
+        assert_eq!(heard(&served.casts), r#"start BrowserWindow("7") Hidden"#);
+        assert_eq!(read::<u32>(&streams(&results)[0], "source_type"), 2);
+        assert_eq!(
+            captured(&served),
+            [Captured::BrowserWindow {
+                id: "7".into(),
+                title: "Meet".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn a_restore_token_shares_the_same_browser_window_without_asking() {
+        let served = served(Grants::default());
+        let windows = |restore: Option<OwnedValue>| {
+            let mut options = vec![
+                ("types", Value::from(2u32)),
+                ("persist_mode", Value::from(1u32)),
+            ];
+            if let Some(restore) = restore {
+                options.push(("restore_data", Value::from(restore)));
+            }
+            options
+        };
+        select(&served.client, windows(None));
+        let (_, results) = pick(&served, vec![meet()]);
+        heard(&served.casts);
+        let restore = results
+            .get("restore_data")
+            .expect("a token")
+            .try_clone()
+            .expect("cloned");
+        close(&served);
+        heard(&served.casts);
+
+        select(&served.client, windows(Some(restore)));
+        let (response, _) = start(&served.client).join().expect("Start returned");
+
+        assert_eq!(response, 0);
+        assert_eq!(heard(&served.casts), r#"start BrowserWindow("7") Hidden"#);
+        assert!(
+            served
+                .published
+                .try_iter()
+                .all(|(items, _)| items.is_empty()),
+            "no dialog was shown"
+        );
+    }
+
+    #[test]
+    fn a_browser_window_is_not_granted_past_a_restart() {
+        // The engine's ids start over with it.
+        let served = served(Grants::default());
+        select(
+            &served.client,
+            vec![
+                ("types", Value::from(2u32)),
+                ("persist_mode", Value::from(2u32)),
+            ],
+        );
+
+        let (response, results) = pick(&served, vec![meet()]);
+
+        assert_eq!(response, 0);
+        assert!(!results.contains_key("restore_data"));
+    }
+
+    /// Browser window `7`, "Meet", as the shell picks it.
+    fn meet() -> CastPick {
+        CastPick::BrowserWindow {
+            id: "7".into(),
+            title: "Meet".into(),
+        }
     }
 
     #[test]
@@ -1393,6 +1586,10 @@ mod tests {
         assert!(
             chosen(&[monitor("drm-1")], &open, &asked(2)).is_none(),
             "windows only"
+        );
+        assert!(
+            chosen(&[meet()], &open, &asked(1)).is_none(),
+            "a browser window is a window"
         );
         assert!(
             chosen(&[region((10, 10))], &open, &asked(3)).is_none(),

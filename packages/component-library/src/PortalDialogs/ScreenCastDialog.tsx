@@ -1,24 +1,30 @@
-import { Toggle } from "@base-ui/react/toggle";
-import { ToggleGroup } from "@base-ui/react/toggle-group";
+import type { DomicileBrowserWindow } from "@domicile-desktop/sdk/domicile-host";
 import type {
   CastSource,
+  FrozenDesk,
   PortalAnswer,
   ScreenCastBody,
+  ShotRect,
 } from "@domicile-desktop/sdk/portal";
 import {
   PortalAnswer as Answer,
   CastSourceKind,
   CastSource as Source,
 } from "@domicile-desktop/sdk/portal";
-import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
+import { GlobeIcon } from "@phosphor-icons/react/dist/ssr/Globe";
 import { MonitorIcon } from "@phosphor-icons/react/dist/ssr/Monitor";
 import { useState } from "react";
 import { css } from "../../styled-system/css";
 import { Button } from "../Button/Button";
 import { ModalDialog } from "../ModalDialog/ModalDialog";
-import { Tabs } from "../Tabs/Tabs";
 import type { App } from "../useApps/useApps";
+import { onFrame } from "./on-frame";
 import { RegionPicker } from "./RegionPicker";
+import type { SourceTile } from "./SourceTiles";
+import { SourceTiles } from "./SourceTiles";
+import type { ShownWindow } from "./shown-windows";
+import { ShownWindowKind } from "./shown-windows";
+import { WindowIcon } from "./WindowIcon";
 
 type Props = {
   answer: (answer: PortalAnswer) => void;
@@ -27,13 +33,18 @@ type Props = {
   /** Who asks, as the dialog names them. */
   asker: string;
   body: ScreenCastBody;
+  /** The desktop's browser windows, as the engine lists them. */
+  browserWindows: readonly DomicileBrowserWindow[];
   screen: string | undefined;
+  /** The windows the shell draws on screen, read once as the dialog opens. */
+  shownWindows: () => readonly ShownWindow[];
 };
 
 /**
- * A source picker: the windows and screens an application may record, on a
- * tab each when it may have either, and a region drawn on the desk when it
- * asks for one. Picks one, or several when the application asks for more.
+ * A source picker: the windows, browser windows and screens an application
+ * may record, each a tile previewing it on the desk, and a region drawn on
+ * the desk when it asks for one. A browser window is its page alone, from
+ * the engine. Picks one, or several when the application asks for more.
  * Dismissing it cancels.
  */
 export const ScreenCastDialog = ({
@@ -41,52 +52,49 @@ export const ScreenCastDialog = ({
   apps,
   asker,
   body,
+  browserWindows,
   screen,
+  shownWindows,
 }: Props) => {
+  // Read once, as the desk was shot; a later move would not match it.
+  const [shown] = useState(shownWindows);
   const [picked, setPicked] = useState<readonly string[]>([]);
   const [drawing, setDrawing] = useState(false);
   const windows = body.sources.filter(
     (source) => source.kind === CastSourceKind.Window,
   );
+  const browsers = body.browserWindows
+    ? browserWindows.map(({ id, title }) => Source.BrowserWindow({ id, title }))
+    : [];
   const monitors = body.sources.filter(
     (source) => source.kind === CastSourceKind.Monitor,
   );
-  const pick = (group: readonly CastSource[], value: readonly string[]) => {
-    setPicked(
-      body.multiple
-        ? [
-            ...picked.filter(
-              (key) => !group.some((source) => sourceKey(source) === key),
-            ),
-            ...value,
-          ]
-        : value,
+  const offered = [...windows, ...browsers, ...monitors];
+  const group = (label: string, sources: readonly CastSource[]) =>
+    sources.length > 0 && (
+      <SourceTiles
+        desk={body.desk}
+        label={label}
+        multiple={body.multiple}
+        onValueChange={(value) => {
+          setPicked(
+            body.multiple
+              ? [
+                  ...picked.filter(
+                    (key) =>
+                      !sources.some((source) => sourceKey(source) === key),
+                  ),
+                  ...value,
+                ]
+              : value,
+          );
+        }}
+        tiles={sources.map((source) => tileOf(source, apps, body.desk, shown))}
+        value={picked.filter((key) =>
+          sources.some((source) => sourceKey(source) === key),
+        )}
+      />
     );
-  };
-  const list = (group: readonly CastSource[]) => (
-    <ToggleGroup
-      className={listStyles}
-      multiple={body.multiple}
-      onValueChange={(value) => {
-        pick(group, value);
-      }}
-      orientation="vertical"
-      value={picked.filter((key) =>
-        group.some((source) => sourceKey(source) === key),
-      )}
-    >
-      {group.map((source) => (
-        <Toggle
-          className={rowStyles}
-          key={sourceKey(source)}
-          value={sourceKey(source)}
-        >
-          <SourceIcon app={appOf(apps, source)} source={source} />
-          <span>{sourceName(source, appOf(apps, source))}</span>
-        </Toggle>
-      ))}
-    </ToggleGroup>
-  );
   return drawing ? (
     <RegionPicker
       cancel={() => {
@@ -124,7 +132,7 @@ export const ScreenCastDialog = ({
             onClick={() => {
               answer(
                 Answer.ScreenCast(
-                  body.sources.filter((source) =>
+                  offered.filter((source) =>
                     picked.includes(sourceKey(source)),
                   ),
                 ),
@@ -142,77 +150,33 @@ export const ScreenCastDialog = ({
       }}
       open
       screen={screen}
-      title={title(body.multiple, windows.length > 0, monitors.length > 0)}
+      size="xl"
+      title={title(
+        body.multiple,
+        windows.length + browsers.length > 0,
+        monitors.length > 0,
+      )}
     >
       <p className={askerStyles}>{`${asker} wants to record`}</p>
-      {windows.length > 0 && monitors.length > 0 ? (
-        <Tabs
-          defaultValue="windows"
-          tabs={[
-            { content: list(windows), label: "Windows", value: "windows" },
-            { content: list(monitors), label: "Screens", value: "screens" },
-          ]}
-        />
-      ) : (
-        list(body.sources)
-      )}
+      <div className={groupsStyles}>
+        {group("Windows", windows)}
+        {group("Browser windows", browsers)}
+        {group("Screens", monitors)}
+      </div>
     </ModalDialog>
   );
 };
 
-/** A window's application icon, a window outline without one, or a screen. */
-const SourceIcon = ({
-  app,
-  source,
-}: {
-  app: App | undefined;
-  source: CastSource;
-}) => {
-  switch (source.kind) {
-    case CastSourceKind.Window:
-      return app?.icon === undefined ? (
-        <AppWindowIcon aria-hidden className={iconStyles} />
-      ) : (
-        <img alt="" className={iconStyles} src={app.icon} />
-      );
-    case CastSourceKind.Monitor:
-    case CastSourceKind.Region:
-      return <MonitorIcon aria-hidden className={iconStyles} />;
-  }
-};
-
 const askerStyles = css({ color: "muted", fontSize: "sm", margin: 0 });
 
-const listStyles = css({
+const groupsStyles = css({
   display: "flex",
   flexDirection: "column",
-  gap: 1,
+  gap: 4,
   marginBlockStart: 3,
-  maxBlockSize: 96,
+  maxBlockSize: "60vh",
   overflowY: "auto",
 });
-
-const rowStyles = css({
-  _hover: { backgroundColor: "card" },
-  "&[data-pressed]": {
-    backgroundColor: "color-mix(in oklab, {colors.accent} 20%, transparent)",
-    borderColor: "accent",
-  },
-  alignItems: "center",
-  backgroundColor: "transparent",
-  border: "1px solid transparent",
-  borderRadius: "md",
-  color: "foreground",
-  cursor: "pointer",
-  display: "flex",
-  font: "inherit",
-  gap: 3,
-  paddingBlock: 2,
-  paddingInline: 3,
-  textAlign: "start",
-});
-
-const iconStyles = css({ blockSize: 6, flexShrink: 0, inlineSize: 6 });
 
 /** The dialog's title for what it offers. */
 const title = (
@@ -234,6 +198,8 @@ const sourceKey = (source: CastSource): string => {
   switch (source.kind) {
     case CastSourceKind.Window:
       return `window:${source.id}`;
+    case CastSourceKind.BrowserWindow:
+      return `browser-window:${source.id}`;
     case CastSourceKind.Monitor:
       return `monitor:${source.name}`;
     case CastSourceKind.Region:
@@ -241,27 +207,68 @@ const sourceKey = (source: CastSource): string => {
   }
 };
 
-/** A window's application, or `undefined` for a screen or a window with no app id. */
-const appOf = (
-  apps: (appId: string) => App,
+/** `source`'s tile, previewed where `desk` shows it. */
+const tileOf = (
   source: CastSource,
-): App | undefined =>
-  source.kind === CastSourceKind.Window && source.appId !== ""
-    ? apps(source.appId)
-    : undefined;
-
-/** How the picker names a source, a window by its `app` too. */
-const sourceName = (source: CastSource, app: App | undefined): string => {
+  apps: (appId: string) => App,
+  desk: FrozenDesk | undefined,
+  shown: readonly ShownWindow[],
+): SourceTile => {
   switch (source.kind) {
     case CastSourceKind.Window: {
-      const title = source.title === "" ? "Untitled window" : source.title;
-      return app === undefined ? title : `${app.name}: ${title}`;
+      const app = source.appId === "" ? undefined : apps(source.appId);
+      const title = titled(source.title);
+      return {
+        area: shownArea(desk, shown, ShownWindowKind.App, source.id),
+        icon: <WindowIcon app={app} />,
+        key: sourceKey(source),
+        name: app === undefined ? title : `${app.name}: ${title}`,
+      };
     }
+    case CastSourceKind.BrowserWindow:
+      return {
+        area: shownArea(desk, shown, ShownWindowKind.Browser, source.id),
+        icon: <GlobeIcon aria-hidden />,
+        key: sourceKey(source),
+        name: `Browser: ${titled(source.title)}`,
+      };
     case CastSourceKind.Monitor:
-      return source.description === ""
-        ? source.name
-        : `${source.name}: ${source.description}`;
+      return {
+        area: desk?.monitors.find(({ name }) => name === source.name)?.area,
+        icon: <MonitorIcon aria-hidden />,
+        key: sourceKey(source),
+        name:
+          source.description === ""
+            ? source.name
+            : `${source.name}: ${source.description}`,
+      };
     case CastSourceKind.Region:
-      return "Region";
+      return {
+        area: undefined,
+        icon: <MonitorIcon aria-hidden />,
+        key: sourceKey(source),
+        name: "Region",
+      };
   }
+};
+
+/** The name of a window titled `title`, which may be empty. */
+const titled = (title: string): string =>
+  title === "" ? "Untitled window" : title;
+
+/** Where `desk` shows the window of `kind` and `id`, if it does. */
+const shownArea = (
+  desk: FrozenDesk | undefined,
+  shown: readonly ShownWindow[],
+  kind: ShownWindowKind,
+  id: string,
+): ShotRect | undefined => {
+  const window = shown.find((window) =>
+    window.kind === ShownWindowKind.App
+      ? kind === ShownWindowKind.App && window.appId === id
+      : kind === ShownWindowKind.Browser && window.id === id,
+  );
+  return desk === undefined || window === undefined
+    ? undefined
+    : onFrame(desk, window.box);
 };

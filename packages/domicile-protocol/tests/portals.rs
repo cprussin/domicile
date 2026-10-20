@@ -699,21 +699,44 @@ fn a_screen_cast_request_lists_the_sources_to_pick_from() {
                 },
             ],
             region: true,
+            browser_windows: true,
+            desk: None,
         }),
     };
 
     assert_eq!(
         serde_json::to_string(&request).expect("it serializes"),
-        r#"{"id":2,"app_id":"us.zoom.Zoom","kind":"screen_cast","body":{"multiple":false,"sources":[{"type":"window","id":"app-3","title":"Notes","app_id":"org.gnome.TextEditor"},{"type":"monitor","name":"drm-1","description":"Dell Inc. DELL U3219Q","size":[1920,1080]}],"region":true}}"#
+        r#"{"id":2,"app_id":"us.zoom.Zoom","kind":"screen_cast","body":{"multiple":false,"sources":[{"type":"window","id":"app-3","title":"Notes","app_id":"org.gnome.TextEditor"},{"type":"monitor","name":"drm-1","description":"Dell Inc. DELL U3219Q","size":[1920,1080]}],"region":true,"browser_windows":true}}"#
+    );
+}
+
+#[test]
+fn a_screen_cast_request_shows_the_desk_to_preview_its_sources() {
+    let written = serde_json::to_value(ScreenCastDialog {
+        multiple: false,
+        sources: vec![],
+        region: false,
+        browser_windows: false,
+        desk: Some(frozen()),
+    })
+    .expect("it serializes");
+
+    assert_eq!(
+        written["desk"],
+        serde_json::to_value(frozen()).expect("it serializes")
     );
 }
 
 #[test]
 fn the_shell_answers_a_screen_cast_with_the_sources_picked() {
-    let line = r#"{"type":"answer_portal_request","id":2,"answer":{"kind":"screen_cast","sources":[{"type":"window","id":"app-3"},{"type":"monitor","name":"drm-1"},{"type":"region","position":[10,-20],"size":[300,200]}]}}"#;
+    let line = r#"{"type":"answer_portal_request","id":2,"answer":{"kind":"screen_cast","sources":[{"type":"window","id":"app-3"},{"type":"browser_window","id":"7","title":"Meet"},{"type":"monitor","name":"drm-1"},{"type":"region","position":[10,-20],"size":[300,200]}]}}"#;
     let answer = PortalAnswer::ScreenCast {
         sources: vec![
             CastPick::Window { id: "app-3".into() },
+            CastPick::BrowserWindow {
+                id: "7".into(),
+                title: "Meet".into(),
+            },
             CastPick::Monitor {
                 name: "drm-1".into(),
             },
@@ -735,6 +758,8 @@ fn the_shell_answers_a_screen_cast_with_the_sources_picked() {
         multiple: false,
         sources: vec![],
         region: false,
+        browser_windows: false,
+        desk: None,
     });
     assert!(cast.accepts(&answer));
     assert!(!cast.accepts(&PortalAnswer::Access));
@@ -752,6 +777,10 @@ fn a_running_screen_cast_says_what_it_records() {
                     id: "app-3".into(),
                     title: "Notes".into(),
                 },
+                Captured::BrowserWindow {
+                    id: "7".into(),
+                    title: "Meet".into(),
+                },
                 Captured::Monitor {
                     name: "drm-1".into(),
                 },
@@ -766,7 +795,7 @@ fn a_running_screen_cast_says_what_it_records() {
 
     assert_eq!(
         written,
-        r#"{"id":5,"app_id":"us.zoom.Zoom","kind":"screen_cast","body":{"sources":[{"type":"window","id":"app-3","title":"Notes"},{"type":"monitor","name":"drm-1"},{"type":"region","position":[10,-20],"size":[300,200]}]}}"#
+        r#"{"id":5,"app_id":"us.zoom.Zoom","kind":"screen_cast","body":{"sources":[{"type":"window","id":"app-3","title":"Notes"},{"type":"browser_window","id":"7","title":"Meet"},{"type":"monitor","name":"drm-1"},{"type":"region","position":[10,-20],"size":[300,200]}]}}"#
     );
 }
 /// A frozen 300x100 desk with one monitor and one window.
