@@ -65,6 +65,8 @@ struct Told {
   std::string visits_of;
   std::optional<std::vector<base::Time>> deleted;
   std::optional<BrowsingDataClearing> clearing;
+  bool listed_site_data = false;
+  std::string cleared_host;
   // Whether the recording `disable_while_typing` has the pads rest.
   bool typing_rests = true;
 };
@@ -112,6 +114,13 @@ std::vector<HistoryEntry> VisitedPages() {
   HistoryEntry plain;
   plain.url = GURL("https://plain.example/");
   return {news, plain};
+}
+
+// What the recording `site_data` finds: a site with cookies and storage, and
+// one with storage only.
+std::vector<StoredSiteData> SitesWithData() {
+  return {{.host = "mail.example", .bytes = 5000000000, .cookies = 3},
+          {.host = "notes.example", .bytes = 2048, .cookies = 0}};
 }
 
 // `us` microseconds after the Unix epoch, the precision history keeps.
@@ -282,6 +291,23 @@ std::string Answer(std::string_view line,
     }
     std::move(done).Run(base::ok());
   };
+  auto list_site_data = [told, has_window](SiteDataFound found) {
+    told->listed_site_data = true;
+    if (!has_window) {
+      std::move(found).Run(base::unexpected("no shell"));
+      return;
+    }
+    std::move(found).Run(base::ok(SitesWithData()));
+  };
+  auto clear_site_data = [told, has_window](const std::string& host,
+                                            CommandDone done) {
+    told->cleared_host = host;
+    if (!has_window) {
+      std::move(done).Run(base::unexpected("no shell"));
+      return;
+    }
+    std::move(done).Run(base::ok());
+  };
   auto disable_while_typing = [told, has_window](std::optional<bool> enabled)
       -> base::expected<bool, std::string> {
     if (!has_window) {
@@ -310,6 +336,8 @@ std::string Answer(std::string_view line,
                  .list_visits = list_visits,
                  .delete_visits = delete_visits,
                  .clear_browsing_data = clear_browsing_data,
+                 .list_site_data = list_site_data,
+                 .clear_site_data = clear_site_data,
                  .disable_while_typing = disable_while_typing},
                 base::BindOnce([](std::string* out,
                                   std::string line) { *out = std::move(line); },
@@ -1034,6 +1062,51 @@ TEST(CommandProtocolTest, RefusesBrowsingDataItCannotClear) {
                           &told)),
             "refused");
   EXPECT_FALSE(told.clearing.has_value());
+}
+
+// Sizes pass five billion bytes, past what an int holds.
+TEST(CommandProtocolTest, ListsEachSitesStoredData) {
+  Told told;
+  const std::string reply =
+      Answer(R"({"type":"site_data","version":1})", &told);
+  EXPECT_EQ(base::JSONReader::ReadDict(reply, base::JSON_PARSE_RFC),
+            base::JSONReader::ReadDict(
+                R"({"type":"site_data","sites":[)"
+                R"({"host":"mail.example","bytes":5000000000.0,"cookies":3},)"
+                R"({"host":"notes.example","bytes":2048.0,"cookies":0}]})",
+                base::JSON_PARSE_RFC));
+
+  const std::string refused =
+      Answer(R"({"type":"site_data","version":1})", &told,
+             /*has_window=*/false);
+  EXPECT_EQ(TypeOf(refused), "refused");
+  EXPECT_THAT(WhyOf(refused), HasSubstr("no shell"));
+}
+
+TEST(CommandProtocolTest, ClearsTheSiteDataOfTheHostARequestNames) {
+  Told told;
+  EXPECT_EQ(TypeOf(Answer(R"({"type":"clear_site_data","version":1,)"
+                          R"("host":"mail.example"})",
+                          &told)),
+            "cleared");
+  EXPECT_EQ(told.cleared_host, "mail.example");
+
+  const std::string refused =
+      Answer(R"({"type":"clear_site_data","version":1,"host":"a.example"})",
+             &told, /*has_window=*/false);
+  EXPECT_EQ(TypeOf(refused), "refused");
+  EXPECT_THAT(WhyOf(refused), HasSubstr("no shell"));
+
+  told.cleared_host.clear();
+  for (const char* line :
+       {R"({"type":"clear_site_data","version":1})",
+        R"({"type":"clear_site_data","version":1,"host":""})",
+        R"({"type":"clear_site_data","version":1,"host":7})"}) {
+    const std::string no_host = Answer(line, &told);
+    EXPECT_EQ(TypeOf(no_host), "refused");
+    EXPECT_THAT(WhyOf(no_host), HasSubstr("\"host\""));
+  }
+  EXPECT_TRUE(told.cleared_host.empty());
 }
 
 }  // namespace

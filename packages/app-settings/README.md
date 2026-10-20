@@ -1,7 +1,7 @@
 # @domicile-desktop/app-settings
 
 The Settings app: an app module, `settings.js`, that edits the desktop's
-config, its shell's source, its extensions and its site permissions. See
+config, its shell's source, its extensions, its site permissions and site data. See
 [SETTINGS.md](/docs/SETTINGS.md) and
 [APP-MODULES.md](/docs/architecture/APP-MODULES.md).
 

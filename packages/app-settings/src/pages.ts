@@ -11,6 +11,7 @@ export enum PageId {
   Shell,
   Extensions,
   Permissions,
+  SiteData,
   Code,
 }
 
@@ -66,6 +67,11 @@ export const PAGES = [
     description: "What each site may use: the camera, your location and more.",
     id: PageId.Permissions,
     title: "Site permissions",
+  },
+  {
+    description: "What each site stores on this computer: cookies and more.",
+    id: PageId.SiteData,
+    title: "Site data",
   },
   {
     description: "The config file and the shell, as code.",

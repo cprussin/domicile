@@ -27,6 +27,7 @@
 #include "chrome/browser/domicile/domicile_extension_installer.h"
 #include "chrome/browser/domicile/domicile_history.h"
 #include "chrome/browser/domicile/domicile_media_devices.h"
+#include "chrome/browser/domicile/domicile_site_data.h"
 #include "chrome/browser/profiles/profile.h"
 #include "base/task/bind_post_task.h"
 #include "chrome/browser/ui/browser_window/public/browser_collection.h"
@@ -435,6 +436,30 @@ void ClearShellBrowsingData(const BrowsingDataClearing& clearing,
   ClearBrowsingDataIn(*profile, clearing, std::move(done));
 }
 
+constexpr char kNoSiteData[] =
+    "this engine has no shell, and so no profile to hold site data";
+
+// The shell profile's site data, for the Settings app.
+void ListShellSiteData(SiteDataFound found) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  Profile* profile = ShellProfile();
+  if (profile == nullptr) {
+    std::move(found).Run(base::unexpected(kNoSiteData));
+    return;
+  }
+  ListSiteDataIn(*profile, std::move(found));
+}
+
+void ClearShellSiteData(const std::string& host, CommandDone done) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  Profile* profile = ShellProfile();
+  if (profile == nullptr) {
+    std::move(done).Run(base::unexpected(kNoSiteData));
+    return;
+  }
+  ClearSiteDataIn(*profile, host, std::move(done));
+}
+
 // Sets whether the touchpads rest while a keyboard types, when asked to, and
 // says whether they do. Only the DRM platform reads touchpads itself: nested,
 // the host compositor does.
@@ -458,7 +483,7 @@ base::expected<bool, std::string> DisableTouchpadsWhileTyping(
 // Runs on the UI thread because `ShellSource` is unlocked and UI-thread only,
 // and loading a shell navigates a window. `reply` is bound to the IO thread,
 // so it may be called from any thread, and later for `load_shell`, `run_app`,
-// `open_url`, `load_unpacked` and the History app's commands.
+// `open_url`, `load_unpacked`, the History app's commands and site data.
 void AnswerOnUIThread(const std::string& line, CommandReply reply) {
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   AnswerCommand(line,
@@ -479,6 +504,8 @@ void AnswerOnUIThread(const std::string& line, CommandReply reply) {
                  .list_visits = &ListShellVisits,
                  .delete_visits = &DeleteShellVisits,
                  .clear_browsing_data = &ClearShellBrowsingData,
+                 .list_site_data = &ListShellSiteData,
+                 .clear_site_data = &ClearShellSiteData,
                  .disable_while_typing = &DisableTouchpadsWhileTyping},
                 std::move(reply));
 }

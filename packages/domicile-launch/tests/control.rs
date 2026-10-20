@@ -11,6 +11,7 @@ use domicile_launch::control::{
 use domicile_launch::extensions::InstalledExtension;
 use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
+use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
 #[test]
@@ -565,6 +566,52 @@ fn a_desktop_told_to_clear_browsing_data_tells_the_engine() {
 }
 
 #[test]
+fn a_desktop_asked_for_site_data_asks_the_engine() {
+    let answered = reply_to(
+        "{\"type\":\"site_data\"}",
+        &Desktop {
+            site_data: &|| {
+                Ok(vec![SiteData {
+                    host: "a.example".to_string(),
+                    bytes: 2048.0,
+                    cookies: 1,
+                }])
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(
+        answered,
+        Response::SiteData {
+            sites: vec![SiteData {
+                host: "a.example".to_string(),
+                bytes: 2048.0,
+                cookies: 1,
+            }],
+        }
+    );
+}
+
+#[test]
+fn a_desktop_told_to_clear_a_host_s_site_data_tells_the_engine() {
+    let told = RefCell::new(None);
+    let answered = reply_to(
+        "{\"type\":\"clear_site_data\",\"host\":\"a.example\"}",
+        &Desktop {
+            clear_site_data: &|host| {
+                told.replace(Some(host.to_string()));
+                Ok(())
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(told.take(), Some("a.example".to_string()));
+    assert_eq!(answered, Response::Cleared);
+}
+
+#[test]
 fn a_desktop_asked_about_disable_while_typing_asks_the_engine() {
     let answered = reply_to(
         "{\"type\":\"disable_while_typing\"}",
@@ -690,6 +737,7 @@ fn nothing_dialed() -> Desktop<'static> {
     Desktop {
         capture: &|_| panic!("only screenshot captures anything"),
         clear_browsing_data: &|_| panic!("only clear_browsing_data clears anything"),
+        clear_site_data: &|_| panic!("only clear_site_data clears a site's data"),
         config_extensions: &|| panic!("only config_extensions lists the config's extensions"),
         delete_history: &|_| panic!("only delete_history deletes visits"),
         disable_while_typing: &|_| panic!("only disable_while_typing sets it"),
@@ -705,6 +753,7 @@ fn nothing_dialed() -> Desktop<'static> {
         run_app: &|_, _| panic!("only run_app runs an app module"),
         permissions: &|| panic!("only site_permissions lists site permissions"),
         send: &|_| panic!("only send_shell sends anything"),
+        site_data: &|| panic!("only site_data lists site data"),
         set_extension_enabled: &|_, _| panic!("only set_extension_enabled enables one"),
         set_media_device: &|_, _| panic!("only set_media_device prefers one"),
         set_permission: &|_| panic!("only set_site_permission sets one"),

@@ -179,6 +179,8 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                     clear_browsing_data: &|_| {
                         panic!("a question about this desktop reaches no engine")
                     },
+                    site_data: &|| panic!("a question about this desktop reaches no engine"),
+                    clear_site_data: &|_| panic!("a question about this desktop reaches no engine"),
                 },
             )
         })

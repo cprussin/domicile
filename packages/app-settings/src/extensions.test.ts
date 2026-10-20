@@ -34,6 +34,7 @@ const withInstalled = (installed: InstalledExtension[]) =>
     },
     installed,
     media: { cameras: [], microphones: [] },
+    siteData: [],
     sites: {
       defaults: {
         camera: "ask",
