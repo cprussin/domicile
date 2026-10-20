@@ -34,6 +34,10 @@ on:
         description: Version the packages as changesets did, not by commit time
         type: boolean
         default: false
+      prerelease:
+        description: Version the packages as a prerelease of what changesets gave them
+        type: boolean
+        default: false
   # To publish again after a failure: the commit stable.yml promoted, and
   # `publish`.
   workflow_dispatch:
@@ -48,6 +52,10 @@ on:
         default: false
       release:
         description: Version the packages as changesets did, not by commit time
+        type: boolean
+        default: false
+      prerelease:
+        description: Version the packages as a prerelease of what changesets gave them
         type: boolean
         default: false
 
@@ -102,6 +110,7 @@ jobs:
       - run: distro/build.sh binaries distro-out
         env:
           DOMICILE_RELEASE: ${{ inputs.release && '1' || '' }}
+          DOMICILE_PRERELEASE: ${{ inputs.prerelease && '1' || '' }}
       # The installs check the repositories, signed with a key made here.
       # Releases sign with the real key.
       - name: Make the signed repositories

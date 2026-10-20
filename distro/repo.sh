@@ -75,6 +75,8 @@ prune() { # directory, pattern
 }
 
 VERSION="$(basename "$(built 'domicile_*_amd64.deb')" | sed 's/^domicile_\(.*\)_amd64\.deb$/\1/')"
+# pacman's, as `distro/version.sh ... arch` gives it.
+ARCH_VERSION="${VERSION//\~/}"
 
 echo "== apt =="
 for suite in current legacy; do
@@ -121,8 +123,8 @@ done
 
 echo "== pacman =="
 arch="$REPO/arch/x86_64"
-package="$arch/domicile-$VERSION-1-x86_64.pkg.tar.zst"
-if add "$(built "domicile-$VERSION-1-x86_64.pkg.tar.zst")" "$package"; then
+package="$arch/domicile-$ARCH_VERSION-1-x86_64.pkg.tar.zst"
+if add "$(built "domicile-$ARCH_VERSION-1-x86_64.pkg.tar.zst")" "$package"; then
   gpg --batch --yes --local-user "$KEY" --detach-sign --output "$package.sig" "$package"
   repo-add --quiet --sign --key "$KEY" "$arch/domicile.db.tar.gz" "$package"
   # Object storage has no symlinks: `domicile.db` and the rest become copies.
