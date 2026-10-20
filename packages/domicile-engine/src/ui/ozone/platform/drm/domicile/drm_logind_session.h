@@ -18,6 +18,7 @@
 #include "base/synchronization/lock.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/thread_annotations.h"
+#include "base/threading/thread.h"
 #include "dbus/bus.h"
 #include "dbus/message.h"
 #include "dbus/object_proxy.h"
@@ -130,6 +131,8 @@ class DrmLogindSession {
       base::OnceCallback<void(base::WeakPtr<DrmLogindInputListener>)>;
   void ToListener(ListenerSignal signal);
 
+  // The bus's thread, stopped once the bus has shut down on it.
+  base::Thread bus_thread_{"DrmLogind"};
   scoped_refptr<dbus::Bus> bus_;
   raw_ptr<dbus::ObjectProxy> session_ = nullptr;
 

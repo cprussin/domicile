@@ -142,10 +142,14 @@ unit test.
   echo is expected from when the call is sent: logind sends it before it
   answers.
 - The session's bus runs blocking calls on its own thread. `dbus::Bus` needs
-  an IO thread's `FileDescriptorWatcher`, which a thread-pool worker has.
-- Each bus (`DrmLogindSession`, `DrmVtSwitcher`, `DrmSleep`) has a
-  `DEDICATED` single-thread runner. On a shared runner, the session's blocking
-  calls (about 45 per switch on a 15-device laptop) would delay
+  an IO thread's `FileDescriptorWatcher`.
+- That thread is a `base::Thread` ("DrmLogind"), not a thread-pool worker.
+  `DrmLogindSession` blocks the UI thread in `InitializeUI`, before the
+  browser's thread pool runs tasks, so a pool task there never ran and the
+  browser hung before its first log line.
+- `DrmVtSwitcher` and `DrmSleep` don't block on their buses, so each has a
+  `DEDICATED` thread-pool runner. Sharing one thread with the session would let
+  its blocking calls (about 45 per switch on a 15-device laptop) delay
   `DrmVtSwitcher`'s `Active` signal.
 
 ### Reopening a revoked device

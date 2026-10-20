@@ -20,7 +20,7 @@ require_engine_out
 
 FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*:CommandProtocolTest.*:DomicileDisplayListTest.*:DomicileKeyboardLayoutTest.*:ShellWindowsTest.*:ShellWindowPlacesTest.*:LineFramerTest.*:DesktopPrefsTest.*:SurfaceCropTest.*:SurfaceTransformTest.*:SurfaceAlphaTest.*:ExtensionInstallerTest.*:ExtensionTrayEntryTest.*:DeskTabsTest.*:DeskGeometryTest.*:DomicileDisplayRegionsTest.*:DomicileDeskTargeterTest.*:PlaceholderStageTest.*:SystemCallTest.*:PortalRequestTest.*:FileChoiceTest.*:DisplayCaptureTest.*:CapturedFourccTest.*:DisplayCaptureTargetTest.*:HeldChordsTest.*:ForwardedKeysTest.*:SitePermissionsTest.*:ControlChannelTest.*:DeviceChoicesTest.*:SurfaceFramesTest.*:GuestDialogsTest.*:DownloadTallyTest.*:SurfaceSubmitsTest.*:PrivatePagesTest.*:ShellOriginTest.*:AppRootsTest.*:AppChannelTest.*:AppDocumentTest.*:WebViewUrlTest.*:ShellFetchTest.*:BrowserWindowCaptureTargetTest.*:ShellWindowWaitTest.*:DeskCursorThemeSourceTest.*:XCursorThemeTest.*:XCursorThemeDirectoryTest.*:SyncedFrameTest.*:RenderProcessTest.*:ShellDeathTest.*:ProbeWaitTest.*:ScreenCaptureTest.*:ScreenChoiceTest.*:WebViewPartitionTest.*:WillNavigateTest.*'
 
-# Every suite in the filter, counted rather than estimated: FrameSinkBroker 42,
+# Every suite in the filter, counted rather than estimated: FrameSinkBroker 44,
 # WindowDiff 7, EngineEventQueue 7, ShortcutRegistry 14, ShellURLLoaderFactory
 # 16, ShellDocument 14, ShellSource 3, CursorShape 3, CommandProtocol 48,
 # DomicileDisplayList 8, DomicileKeyboardLayout 3, ShellWindows 8,
@@ -38,10 +38,11 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # SyncedFrame 7, RenderProcess 3, ShellDeath 5, ProbeWait 3, ScreenCapture 2,
 # ScreenChoice 3, WebViewPartition 5, WillNavigate 4.
 #
-# 449, and it was 440 — a <webview>'s partition is five WebViewPartition
-# cases, and which navigations ask the shell four WillNavigate ones. Before that
-# 440, and it was 438 — listing and clearing a site's data is two
-# CommandProtocol cases. Before that 438, and it was 435 — an app's channel ending its calls and dialing the
+# 451, and it was 449 — a window in shared memory, a software image or refused
+# on the GPU, is two FrameSinkBroker cases. Before that 449, and it was 440 — a
+# <webview>'s partition is five WebViewPartition cases, and which navigations
+# ask the shell four WillNavigate ones. Before that 440, and it was 438 —
+# listing and clearing a site's data is two CommandProtocol cases. Before that 438, and it was 435 — an app's channel ending its calls and dialing the
 # next compositor is one AppChannel case and two SystemCall ones. Before that
 # 435, and it was 434 — a browser window drawing while it is captured is one
 # more FrameSinkBroker case. Before that 434, and it was 431 — a page's screen share picked before it is answered is
@@ -167,7 +168,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=449
+FLOOR=451
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.
