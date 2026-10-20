@@ -20,7 +20,7 @@ require_engine_out
 
 FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRegistryTest.*:ShellURLLoaderFactoryTest.*:ShellDocumentTest.*:ShellSourceTest.*:CursorShapeTest.*:CommandProtocolTest.*:DomicileDisplayListTest.*:DomicileKeyboardLayoutTest.*:ShellWindowsTest.*:ShellWindowPlacesTest.*:LineFramerTest.*:DesktopPrefsTest.*:SurfaceCropTest.*:SurfaceTransformTest.*:SurfaceAlphaTest.*:ExtensionInstallerTest.*:ExtensionTrayEntryTest.*:DeskTabsTest.*:DeskGeometryTest.*:DomicileDisplayRegionsTest.*:DomicileDeskTargeterTest.*:PlaceholderStageTest.*:SystemCallTest.*:PortalRequestTest.*:FileChoiceTest.*:DisplayCaptureTest.*:CapturedFourccTest.*:DisplayCaptureTargetTest.*:HeldChordsTest.*:ForwardedKeysTest.*:SitePermissionsTest.*:ControlChannelTest.*:DeviceChoicesTest.*:SurfaceFramesTest.*:GuestDialogsTest.*:DownloadTallyTest.*:SurfaceSubmitsTest.*:PrivatePagesTest.*:ShellOriginTest.*:AppRootsTest.*:AppChannelTest.*:AppDocumentTest.*:WebViewUrlTest.*:ShellFetchTest.*:BrowserWindowCaptureTargetTest.*:ShellWindowWaitTest.*:DeskCursorThemeSourceTest.*:XCursorThemeTest.*:XCursorThemeDirectoryTest.*:SyncedFrameTest.*:RenderProcessTest.*:ShellDeathTest.*:ProbeWaitTest.*:ScreenCaptureTest.*:ScreenChoiceTest.*'
 
-# Every suite in the filter, counted rather than estimated: FrameSinkBroker 41,
+# Every suite in the filter, counted rather than estimated: FrameSinkBroker 42,
 # WindowDiff 7, EngineEventQueue 7, ShortcutRegistry 14, ShellURLLoaderFactory
 # 16, ShellDocument 14, ShellSource 3, CursorShape 3, CommandProtocol 46,
 # DomicileDisplayList 8, DomicileKeyboardLayout 3, ShellWindows 8,
@@ -38,7 +38,8 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # SyncedFrame 7, RenderProcess 3, ShellDeath 5, ProbeWait 3, ScreenCapture 2,
 # ScreenChoice 3.
 #
-# 434, and it was 431 — a page's screen share picked before it is answered is
+# 435, and it was 434 — a browser window drawing while it is captured is one
+# more FrameSinkBroker case. Before that 434, and it was 431 — a page's screen share picked before it is answered is
 # three ScreenChoice cases. Before that 431, and it was 428 — the touchpad's disable-while-typing switch is three
 # CommandProtocol cases. Before that 428, and it was 426 — a page's
 # getDisplayMedia answered through the portal is two ScreenCapture cases.
@@ -161,7 +162,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=434
+FLOOR=435
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

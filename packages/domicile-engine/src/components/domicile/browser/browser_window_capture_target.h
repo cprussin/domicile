@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -18,9 +19,16 @@ namespace domicile {
 struct BrowserWindowCaptureTarget {
   viz::FrameSinkId frame_sink_id;
   gfx::Size size_in_pixels;
+  // Keeps the page drawing while the shell hides it, such as on another
+  // workspace, until it runs. The capture holds it for its life.
+  base::ScopedClosureRunner drawing;
 
-  friend bool operator==(const BrowserWindowCaptureTarget&,
-                         const BrowserWindowCaptureTarget&) = default;
+  // The same page at the same size; `drawing` is not compared.
+  friend bool operator==(const BrowserWindowCaptureTarget& a,
+                         const BrowserWindowCaptureTarget& b) {
+    return a.frame_sink_id == b.frame_sink_id &&
+           a.size_in_pixels == b.size_in_pixels;
+  }
 };
 
 // The target of a page that `frame_sink_id` draws, `size` DIPs big at `scale`

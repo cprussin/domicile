@@ -49,6 +49,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
 
 namespace domicile {
@@ -503,6 +504,10 @@ class BrowserWindowsService final
 
 // Browser window `id`'s page in the shell's profile, for a capture of it
 // alone. nullopt when there is no shell, no such window, or no page drawn.
+//
+// The page counts as captured while the target's `drawing` is held, so it
+// keeps drawing, and tells its page it is visible, while the shell hides it,
+// as a captured tab does in Chrome.
 std::optional<BrowserWindowCaptureTarget> CaptureTargetOf(
     const std::string& id) {
   content::WebContents* shell = ShellContentsIn(nullptr);
@@ -520,9 +525,16 @@ std::optional<BrowserWindowCaptureTarget> CaptureTargetOf(
   if (view == nullptr) {
     return std::nullopt;
   }
-  return BrowserWindowCaptureTargetOf(
-      view->GetRenderWidgetHost()->GetFrameSinkId(),
-      view->GetViewBounds().size(), view->GetDeviceScaleFactor());
+  std::optional<BrowserWindowCaptureTarget> target =
+      BrowserWindowCaptureTargetOf(
+          view->GetRenderWidgetHost()->GetFrameSinkId(),
+          view->GetViewBounds().size(), view->GetDeviceScaleFactor());
+  if (target.has_value()) {
+    target->drawing = guest->contents().IncrementCapturerCount(
+        /*capture_size=*/gfx::Size(), /*stay_hidden=*/false,
+        /*stay_awake=*/true, /*is_activity=*/false);
+  }
+  return target;
 }
 
 }  // namespace

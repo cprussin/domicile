@@ -1212,6 +1212,15 @@ pub struct ScreenCastDialog {
     pub sources: Vec<CastSource>,
     /// Whether the user may draw a region of the desktop instead.
     pub region: bool,
+    /// Whether the user may pick a browser window's page alone. The
+    /// compositor does not list them: the shell offers the engine's own list,
+    /// and answers [`CastPick::BrowserWindow`].
+    pub browser_windows: bool,
+    /// A frame of the desk to preview the sources on, as the Screenshot
+    /// dialog's. `None` when the desk could not be shot, such as before the
+    /// engine connects.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub desk: Option<FrozenDesk>,
 }
 
 /// One source a [`ScreenCastDialog`] offers.
@@ -1244,6 +1253,9 @@ pub enum CastSource {
 pub enum CastPick {
     /// The window with this host app id.
     Window { id: String },
+    /// A browser window's page alone, by the engine's window id, with the
+    /// title the shell names it by.
+    BrowserWindow { id: String, title: String },
     /// The monitor with this `wl_output` name.
     Monitor { name: String },
     /// A rectangle of the desktop, in logical pixels.
@@ -1259,6 +1271,9 @@ pub enum CastPick {
 pub enum Captured {
     /// A window, by host app id, with its title when the capture started.
     Window { id: String, title: String },
+    /// A browser window's page, by the engine's window id, with its title
+    /// when it was picked.
+    BrowserWindow { id: String, title: String },
     /// A monitor, by `wl_output` name.
     Monitor { name: String },
     /// A rectangle of the desktop, in logical pixels.

@@ -1,4 +1,7 @@
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type {
+  DomicileBrowserWindow,
+  DomicileHost,
+} from "@domicile-desktop/sdk/domicile-host";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import type { GlobalShortcutsHost } from "@domicile-desktop/sdk/global-shortcuts";
 import type { SystemHost } from "@domicile-desktop/sdk/system";
@@ -9,12 +12,14 @@ import { PortalDialogs } from "./PortalDialogs";
 import { ShownWindow } from "./shown-windows";
 
 /**
- * A desktop that pushes `items` and `capturing` once. Answers go to the
- * console; nothing goes away, since no compositor takes it away.
+ * A desktop that pushes `items` and `capturing` once, with
+ * `browserWindows` open. Answers go to the console; nothing goes away,
+ * since no compositor takes it away.
  */
 const pushing = (
   items: readonly object[],
   capturing: readonly object[] = [],
+  browserWindows: readonly DomicileBrowserWindow[] | null = null,
 ): GlobalShortcutsHost & SystemHost & Pick<DomicileHost, "browserWindows"> => {
   const fake = new FakeDomicileHost();
   const data = JSON.stringify({ capturing, items, type: "portal_requests" });
@@ -38,7 +43,7 @@ const pushing = (
     },
     ungrabShortcut: () => undefined,
   };
-  return { ...host, browserWindows: null, callSystem: () => undefined };
+  return { ...host, browserWindows, callSystem: () => undefined };
 };
 
 const access = {
@@ -247,6 +252,7 @@ const globalShortcuts = {
 const screenCast = {
   app_id: "us.zoom.Zoom",
   body: {
+    browser_windows: false,
     multiple: false,
     region: true,
     sources: [
@@ -311,6 +317,47 @@ const screenshot = {
   id: 9,
   kind: "screenshot",
 };
+
+/** A screen cast picker over `frozenDesk`, browser windows offered. */
+const screenCastOnDesk = {
+  app_id: "com.google.Meet",
+  body: {
+    browser_windows: true,
+    desk: frozenDesk,
+    multiple: false,
+    region: true,
+    sources: [
+      {
+        app_id: "org.gnome.TextEditor",
+        id: "app-1",
+        title: "Notes",
+        type: "window",
+      },
+      { app_id: "kitty", id: "app-2", title: "~/src", type: "window" },
+      {
+        description: "Dell Inc. DELL U3219Q",
+        name: "DP-1",
+        size: [1000, 500],
+        type: "monitor",
+      },
+      { description: "", name: "HDMI-A-1", size: [600, 500], type: "monitor" },
+    ],
+  },
+  id: 11,
+  kind: "screen_cast",
+};
+
+/** A browser window the engine lists, by `id` and `title`. */
+const browserWindow = (id: string, title: string): DomicileBrowserWindow => ({
+  height: 0,
+  id,
+  isApp: false,
+  isPrivate: false,
+  popupWindow: null,
+  title,
+  url: "https://example.com",
+  width: 0,
+});
 
 const pickColor = {
   app_id: "org.example.Paint",
@@ -413,6 +460,29 @@ export const ScreenCast: Story = {
     host: pushing([screenCast]),
     screen: undefined,
     screenOf: undefined,
+    systemOf: installed,
+  },
+};
+
+/**
+ * The source picker previewing each source on the desk: the text editor
+ * and one browser window are on screen; the terminal and the other
+ * browser window are hidden, so they show their icons.
+ */
+export const ScreenCastPreviews: Story = {
+  args: {
+    host: pushing(
+      [screenCastOnDesk],
+      [],
+      [browserWindow("1", "Pull requests"), browserWindow("2", "Docs")],
+    ),
+    screen: undefined,
+    screenOf: undefined,
+    shellChords: undefined,
+    shownWindows: () => [
+      ShownWindow.App("app-1", { height: 360, width: 520, x: 80, y: 40 }),
+      ShownWindow.Browser("1", { height: 260, width: 420, x: 1080, y: 120 }),
+    ],
     systemOf: installed,
   },
 };

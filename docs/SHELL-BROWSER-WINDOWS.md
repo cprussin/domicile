@@ -382,8 +382,10 @@ frame.addEventListener(WEBVIEW_PERMISSION_REQUEST_EVENT, (event) => {
   ([NOTIFICATIONS.md](/docs/architecture/NOTIFICATIONS.md)).
 - **Screen capture** (`getDisplayMedia`) asks no site permission. The
   desktop's ScreenCast portal asks, in the shell's picker
-  ([PORTALS.md](PORTALS.md)). The page gets the window, monitor or region
-  picked, with the pointer and no audio. A tab of its own is refused.
+  ([PORTALS.md](PORTALS.md)). The page gets the window, browser window,
+  monitor or region picked, with the pointer (none over a browser window)
+  and no audio. A browser window is its page alone. A tab of its own is
+  refused.
   - The promise waits for the pick. Canceling the picker rejects it with
     `NotAllowedError`.
   - The pick opens two portal sessions: the picker's, then the capture's,

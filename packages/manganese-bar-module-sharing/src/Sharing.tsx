@@ -117,6 +117,8 @@ const sourceKey = (source: Captured): string => {
   switch (source.kind) {
     case CapturedKind.Window:
       return `window:${source.id}`;
+    case CapturedKind.BrowserWindow:
+      return `browser-window:${source.id}`;
     case CapturedKind.Monitor:
       return `monitor:${source.name}`;
     case CapturedKind.Region:

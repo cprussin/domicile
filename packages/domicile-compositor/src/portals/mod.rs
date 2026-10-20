@@ -90,7 +90,7 @@ use queue::Queue;
 use remote_desktop::{RemoteDesktop, Remotes};
 use restore::Tokens;
 use screencast::ScreenCast;
-use screenshot::{Screenshot, Shots};
+use screenshot::{Screenshot, Shoot, Shots};
 use settings::{color_scheme, Appearance, Settings};
 use usb::Usb;
 use wallpaper::{Pictures, Wallpaper};
@@ -499,8 +499,8 @@ pub fn serve(
     thread::spawn(move || {
         let starting = Starting {
             lockdown,
+            screen_cast: screen_cast(&backends.queue, casting, shots.shoot.clone()),
             shots,
-            screen_cast: screen_cast(&backends.queue, casting),
             open,
             user: account::the_user(),
             cups: Cups::at(std::env::var_os("CUPS_SERVER"), account::login_name()),
@@ -852,12 +852,14 @@ fn idle_screen_cast(queue: &Arc<Queue>) -> ScreenCast {
             casting: Casting::new(requests),
             grants: None,
         },
+        Shots::none().shoot,
     )
 }
 
-/// The ScreenCast backend, with the restore tokens saved before. Unreadable
-/// tokens are set aside: applications ask again.
-fn screen_cast(queue: &Arc<Queue>, casting: ScreenCasting) -> ScreenCast {
+/// The ScreenCast backend, with the restore tokens saved before, previewing
+/// sources on what `shoot` takes. Unreadable tokens are set aside:
+/// applications ask again.
+fn screen_cast(queue: &Arc<Queue>, casting: ScreenCasting, shoot: Shoot) -> ScreenCast {
     let grants = match casting.grants {
         Some(file) => Grants::load(file.clone()).unwrap_or_else(|why| {
             warn!(%why, file = %file.display(), "saved screen cast grants are unreadable; applications will ask again");
@@ -865,7 +867,7 @@ fn screen_cast(queue: &Arc<Queue>, casting: ScreenCasting) -> ScreenCast {
         }),
         None => Grants::default(),
     };
-    ScreenCast::new(Arc::clone(queue), casting.casting, grants)
+    ScreenCast::new(Arc::clone(queue), casting.casting, grants, shoot)
 }
 
 /// Opens a `mailto:` URL with the desk's default `x-scheme-handler/mailto`

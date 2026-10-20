@@ -9,6 +9,7 @@
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "components/domicile/browser/brokered_frame_sink.h"
 #include "mojo/public/cpp/bindings/clone_traits.h"
 #include "gpu/command_buffer/client/client_shared_image.h"
@@ -329,7 +330,7 @@ void FrameSinkBroker::CaptureBrowserWindow(
     std::move(callback).Run(false);
     return;
   }
-  const std::optional<BrowserWindowCaptureTarget> target =
+  std::optional<BrowserWindowCaptureTarget> target =
       get_browser_window_capture_target_
           ? get_browser_window_capture_target_.Run(window_id)
           : std::nullopt;
@@ -340,7 +341,8 @@ void FrameSinkBroker::CaptureBrowserWindow(
     return;
   }
   StartCapture(target->frame_sink_id, target->size_in_pixels, max_fps,
-               std::move(capture), std::move(observer));
+               std::move(capture), std::move(observer),
+               std::move(target->drawing));
   std::move(callback).Run(true);
 }
 
@@ -349,7 +351,8 @@ void FrameSinkBroker::StartCapture(
     const gfx::Size& size,
     uint32_t max_fps,
     mojo::PendingReceiver<mojom::DisplayCapture> capture,
-    mojo::PendingRemote<mojom::DisplayCaptureObserver> observer) {
+    mojo::PendingRemote<mojom::DisplayCaptureObserver> observer,
+    base::ScopedClosureRunner held) {
   const bool gpu = get_shared_image_interface_ &&
                    get_shared_image_interface_.Run() != nullptr;
   const uint64_t id = next_capture_++;
@@ -363,11 +366,12 @@ void FrameSinkBroker::StartCapture(
           },
           base::Unretained(host_frame_sink_manager_.get())),
       target, size, max_fps, gpu, std::move(capture), std::move(observer),
+      // `held` lives as long as this callback, which is the capture's life.
       base::BindOnce(
-          [](FrameSinkBroker* broker, uint64_t id) {
+          [](FrameSinkBroker* broker, uint64_t id, base::ScopedClosureRunner) {
             broker->captures_.erase(id);
           },
-          base::Unretained(this), id));
+          base::Unretained(this), id, std::move(held)));
 }
 
 BrokeredFrameSink* FrameSinkBroker::SinkForApp(const std::string& app_id) {
