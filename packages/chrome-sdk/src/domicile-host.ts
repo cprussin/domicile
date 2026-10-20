@@ -955,6 +955,13 @@ export type DomicileWindow = {
    */
   readonly transientFor: string | null;
   /**
+   * The page anchor the client asked to lay the window out at
+   * (domicile_toplevel_anchor_v1), following every change; null for none, and
+   * for a popup. The name means what the shell says it does. A shell with no
+   * anchor of that name lays the window out as any other.
+   */
+  readonly anchor: string | null;
+  /**
    * The compositor dropped the window's request for the keyboard (a token
    * from before the keyboard last moved, or a stale one), and the window has
    * not had the keyboard since. False while it holds the keyboard.

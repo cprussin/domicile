@@ -15,6 +15,8 @@
 {"type":"app_suspended","app_id":"app-2","suspended":true}
 {"type":"app_transient_for","app_id":"app-4","transient_for":"app-2"}
 {"type":"app_transient_for","app_id":"app-4","transient_for":null}
+{"type":"app_anchored","app_id":"app-4","anchor":"bar"}
+{"type":"app_anchored","app_id":"app-4","anchor":null}
 {"type":"app_urgent","app_id":"app-2","urgent":true}
 {"type":"app_inhibits_shortcuts","app_id":"app-2","inhibits":true}
 {"type":"displays","displays":[{"name":"left","position":[0,0],"size":[1920,1080],"scale":1,"mode":[1920,1080],"transform":"normal"},{"name":"right","position":[1920,0],"size":[2560,1440],"scale":2,"mode":[5120,2880],"transform":"normal"}]}

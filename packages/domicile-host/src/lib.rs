@@ -99,6 +99,9 @@ pub struct App {
     pub max_size: (f64, f64),
     /// The client holds an active `zwp_keyboard_shortcuts_inhibitor_v1`.
     pub inhibits_shortcuts: bool,
+    /// The page anchor the client asked to be laid out at. See
+    /// [`HostMessage::AppAnchored`].
+    pub anchor: Option<String>,
     /// The window's latest synced frame. See [`Host::sync_frame`].
     pub frame: u32,
 }
@@ -442,6 +445,7 @@ impl Host {
                 min_size: NO_LIMIT,
                 max_size: NO_LIMIT,
                 inhibits_shortcuts: false,
+                anchor: None,
                 frame: 0,
             },
         );
@@ -685,6 +689,19 @@ impl Host {
         }
     }
 
+    /// Record the page anchor a window asked for. Returns the chrome
+    /// notification, or `None` if the app is unknown, unannounced or nothing
+    /// changed.
+    pub fn app_anchored(&mut self, app_id: &str, anchor: Option<String>) -> Option<HostMessage> {
+        let app = self.apps.get_mut(app_id)?;
+        if app.anchor == anchor {
+            None
+        } else {
+            app.anchor = anchor;
+            reported(app, anchoring(app))
+        }
+    }
+
     /// Record whether a window holds a shortcuts inhibitor. Returns the chrome
     /// notification, or `None` if the app is unknown or nothing changed.
     pub fn app_inhibits_shortcuts(&mut self, app_id: &str, inhibits: bool) -> Option<HostMessage> {
@@ -918,13 +935,23 @@ fn announced(app: &App, mapped: Mapped) -> Vec<HostMessage> {
             app_id: app.app_id.clone(),
             inhibits: true,
         });
+    let anchor = app.anchor.is_some().then(|| anchoring(app));
     std::iter::once(appeared)
         .chain(min)
         .chain(max)
         .chain(parent)
         .chain(urgent)
         .chain(inhibits)
+        .chain(anchor)
         .collect()
+}
+
+/// The chrome message for the page anchor `app` asked for.
+fn anchoring(app: &App) -> HostMessage {
+    HostMessage::AppAnchored {
+        app_id: app.app_id.clone(),
+        anchor: app.anchor.clone(),
+    }
 }
 
 /// The chrome message for the window `app` is a dialog for.

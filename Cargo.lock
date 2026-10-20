@@ -421,6 +421,7 @@ dependencies = [
  "wayland-client",
  "wayland-protocols",
  "wayland-protocols-wlr",
+ "wayland-scanner",
  "zbus",
 ]
 
@@ -500,6 +501,7 @@ dependencies = [
  "wayland-client",
  "wayland-protocols",
  "wayland-protocols-misc",
+ "wayland-scanner",
 ]
 
 [[package]]

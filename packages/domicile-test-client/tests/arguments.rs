@@ -492,3 +492,11 @@ fn a_popup_that_moves_is_a_popup() {
     assert!(asked.repositioned_popup);
     assert!(asked.popup, "it opens the popup it moves");
 }
+
+#[test]
+fn a_client_can_ask_for_a_page_anchor() {
+    let asked = given(&["--anchor", "bar"]).expect("a window anchored in the page");
+
+    assert_eq!(asked.anchor.as_deref(), Some("bar"));
+    assert_eq!(given(&[]).expect("no arguments").anchor, None);
+}
