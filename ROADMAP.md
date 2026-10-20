@@ -144,9 +144,8 @@ Understood and not scheduled.
 ### Browser windows
 
 - **Some permission requests are refused,** including a tab's capture.
-- **A page's screen capture resolves before the pick.** Canceling the
-  portal's picker ends the track instead of rejecting `getDisplayMedia()`. It
-  has no audio, and reports every source as a monitor.
+- **A page's screen capture has no audio,** and reports every source as a
+  monitor.
 - **Some file dialogs are refused:** from the shell's own page, and a
   directory dropped on a page.
 - **No `chrome://` pages,** so no Print Preview: printing goes straight to

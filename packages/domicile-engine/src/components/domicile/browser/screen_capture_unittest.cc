@@ -21,18 +21,18 @@ TEST(ScreenCaptureTest, OnlyGetDisplayMediaIsScreenCapture) {
   EXPECT_FALSE(IsScreenCapture(MediaStreamType::NO_SERVICE));
 }
 
-TEST(ScreenCaptureTest, TheAnswerIsOneScreenThePortalPicks) {
-  const blink::mojom::StreamDevicesSetPtr answer = PortalScreenCapture();
+TEST(ScreenCaptureTest, TheAnswerIsOneScreenThePortalPicked) {
+  const blink::mojom::StreamDevicesSetPtr answer = PortalScreenCapture(7);
 
   ASSERT_EQ(answer->stream_devices.size(), 1u);
   const blink::mojom::StreamDevices& devices = *answer->stream_devices[0];
   EXPECT_FALSE(devices.audio_device.has_value());
   ASSERT_TRUE(devices.video_device.has_value());
   EXPECT_EQ(devices.video_device->type, MediaStreamType::DISPLAY_VIDEO_CAPTURE);
-  // A null id carries no restore token, so the portal asks every time.
+  // The source the picker's restore token is kept under, so the capture's
+  // own portal session restores the pick.
   EXPECT_EQ(content::DesktopMediaID::Parse(devices.video_device->id),
-            content::DesktopMediaID(content::DesktopMediaID::TYPE_SCREEN,
-                                    content::DesktopMediaID::kNullId));
+            content::DesktopMediaID(content::DesktopMediaID::TYPE_SCREEN, 7));
   ASSERT_TRUE(devices.video_device->display_media_info);
   EXPECT_EQ(devices.video_device->display_media_info->display_surface,
             media::mojom::DisplayCaptureSurfaceType::MONITOR);
