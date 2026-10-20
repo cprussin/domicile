@@ -43,28 +43,22 @@ item when it ships.
    damage and presentation latency are unmeasured.
    [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#plan).
 
-3. **Overlay promotion under `backdrop-filter`.** Show that viz declines it
+2. **Overlay promotion under `backdrop-filter`.** Show that viz declines it
    for an `<app>`. Needs a lit CRTC, like item 1.
    [WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md).
 
-4. **Strip what a desktop never runs.** Tab strip, New Tab page, settings,
+3. **Strip what a desktop never runs.** Tab strip, New Tab page, settings,
    sign-in and sync. Keep PDFium. Measured: 19.6 MB of a 418 MB install,
    5.4 MB of it code
    ([ENGINE-FORK-MEASUREMENTS.md](docs/architecture/ENGINE-FORK-MEASUREMENTS.md#engine-size-by-subsystem)).
    Which to cut is the maintainer's decision.
 
-5. **Shortcuts inhibitor (patch `0038`) beyond sway.**
+4. **Shortcuts inhibitor (patch `0038`) beyond sway.**
    [ENGINE-FORK-MEASUREMENTS.md](docs/architecture/ENGINE-FORK-MEASUREMENTS.md#host-shortcut-inhibitor).
    - Untested on other hosts. mutter may show an unseen permission dialog.
    - Untested with a physical keyboard.
 
-6. **Software rendering on DRM.** A CPU output path for GPUs and VMs without
-   3D: 2D virtio-gpu, Hyper-V, simpledrm. DRM needs a 3D-capable GPU today
-   ([Scanout and render cards can differ](docs/TTY-DEBUGGING.md#scanout-and-render-cards-can-differ),
-   [A tty desktop in a virtio-gpu VM](docs/HARDWARE-CHECKS.md#a-tty-desktop-in-a-virtio-gpu-vm)).
-   - It would let CI run tty end-to-end tests on vkms.
-
-7. **`<webview>` profiles and navigation.**
+5. **`<webview>` profiles and navigation.**
    [SHELL-BROWSER-WINDOWS.md](docs/SHELL-BROWSER-WINDOWS.md).
    - Persistent isolated profiles, for example `partition="persist:x"`.
      Guests share the default partition, and patch `0115` relies on that

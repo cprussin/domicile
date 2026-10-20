@@ -53,6 +53,7 @@ Details live in separate docs:
 | Mouse acceleration and wheel | Unit tests (`WheelTicksTest`). Patch `0059` |
 | An absolute mouse hovers, clicks with every button and scrolls | Unit tests (`AbsoluteMouseConverterTest`). Patch `0123` |
 | A stop during startup stops | Unit tests (`domicile-launch` milestones) |
+| A card with no 3D draws the desktop on the CPU | Unit tests (`DrmCanvasTest`, `software_compositing`). See [Software output](#software-output) |
 
 ## Building ozone/drm off ChromeOS
 
@@ -193,10 +194,39 @@ A nested run still uses the host's clipboard; `ROADMAP.md` tracks it.
 
 - Popups (select lists, date pickers, menus) stay inside their parent window
   (patch `0051`), as on ash.
-- Tooltips do too (patch `0076`). A top-level tooltip asks for software
-  compositing, which ozone/drm refuses.
+- Tooltips do too (patch `0076`). A top-level tooltip would be a window of
+  its own, which no CRTC shows.
 - On a monitor other than the host's, a presenter mirrors them
   ([One page for the desk](ONE-PAGE-FOR-THE-DESK.md#browser-one-page-n-presenters)).
+
+## Software output
+
+A card with no 3D (2D virtio-gpu, Hyper-V, simpledrm, vkms) gives the GPU
+process no GL. The desktop is composited on the CPU instead.
+
+- **Who decides:** `domicile-launch` (`software_compositing.rs`), once per run,
+  on drm only. The CPU composites when no render node has 3D: simpledrm, vkms,
+  hyperv_drm and bochs have no render node, and virtio-gpu has 3D only with the
+  `VIRTIO_GPU_F_VIRGL` feature bit (`device/features`, first character).
+  `DOMICILE_SOFTWARE_COMPOSITING=yes` or `no` decides instead.
+- **Engine:** gets `--disable-gpu`, so viz composites in software.
+  `GbmSurfaceFactory::CreateCanvasForWidget` returns a `DrmCanvas`
+  (patch `0134`, `domicile/drm_canvas.h`):
+  - Viz paints into a frame in memory.
+  - Each present copies what changed into one of two XRGB8888 dumb buffers
+    and page-flips the window's CRTC to it. The dumb buffers are only written:
+    on hardware they are write-combined.
+  - A buffer misses the frames shown while the other was up, so each keeps the
+    region it is stale by.
+  - A swap is acknowledged when its flip lands (`MaxFramesPending` 1).
+  - `SWAP_NAK_RECREATE_BUFFERS` reallocates both buffers.
+- **Compositor:** gets `--software-compositing yes` and hands windows over in
+  shared memory. See
+  [WINDOW-COMPOSITING.md](WINDOW-COMPOSITING.md#wl_shm-clients-on-the-cpu).
+- `--disable-gpu-process-crash-limit` stays: a GPU process that fell back to
+  software on its own would get dmabufs it cannot show.
+- **Not covered:** no vsync provider (viz's begin frames pace painting), casts
+  of a window in memory, and dmabuf clients, which the CPU path cannot show.
 
 ## Key decisions
 

@@ -1,7 +1,9 @@
-//! A `memfd` mapped into the compositor, for one shm stream buffer.
+//! A `memfd` mapped into the compositor, for one shm stream buffer or one
+//! window frame for an engine on the CPU (see `crate::memory_frames`).
 //!
-//! The PipeWire thread creates it and hands the consumer its fd. The Wayland
-//! thread writes frames into the mapping while the buffer is lent to it.
+//! For a stream, the PipeWire thread creates it and hands the consumer its fd.
+//! The Wayland thread writes frames into the mapping while the buffer is lent
+//! to it.
 
 use std::ffi::CStr;
 use std::fs::File;
@@ -23,11 +25,11 @@ unsafe impl Send for Mapping {}
 unsafe impl Sync for Mapping {}
 
 impl Mapping {
-    /// A new zeroed `memfd` of `length` bytes, mapped.
-    pub fn new(length: usize) -> std::io::Result<Mapping> {
-        const NAME: &CStr = c"domicile-cast";
+    /// A new zeroed `memfd` of `length` bytes, mapped. `name` is what
+    /// `/proc/<pid>/fd` shows.
+    pub fn new(name: &CStr, length: usize) -> std::io::Result<Mapping> {
         // SAFETY: a valid name, and flags the kernel defines.
-        let raw = unsafe { libc::memfd_create(NAME.as_ptr(), libc::MFD_CLOEXEC) };
+        let raw = unsafe { libc::memfd_create(name.as_ptr(), libc::MFD_CLOEXEC) };
         if raw < 0 {
             return Err(std::io::Error::last_os_error());
         }
@@ -95,7 +97,7 @@ mod tests {
 
     #[test]
     fn what_is_written_reaches_the_fd() {
-        let mapping = Mapping::new(8).expect("a memfd");
+        let mapping = Mapping::new(c"test", 8).expect("a memfd");
 
         // SAFETY: this test is the only user.
         unsafe { mapping.bytes() }.copy_from_slice(b"frame!!!");
