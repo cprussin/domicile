@@ -61,8 +61,9 @@ git init -q --bare "$AUR"
 release() { # package, environment...
   local package="$1"
   shift
-  (cd "$ROOT" && env DOMICILE_AUR_REMOTE="$AUR" GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t.invalid \
-    GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t.invalid "$@" \
+  # No git identity, as on a CI runner.
+  (cd "$ROOT" && env DOMICILE_AUR_REMOTE="$AUR" GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
+    EMAIL= "$@" \
     .github/scripts/release-aur.sh "$package" https://packages.invalid 2>&1)
 }
 commits() { git -C "$AUR" log --format=%s master 2>/dev/null; }
@@ -70,6 +71,8 @@ commits() { git -C "$AUR" log --format=%s master 2>/dev/null; }
 echo "== the first release =="
 if out="$(release "$(package 1.2.3)")"; then
   expect "commits domicile-bin 1.2.3-1" "domicile-bin 1.2.3-1" "$(commits)"
+  expect "as the package's maintainer" "Connor Prussin <connor@prussin.net>" \
+    "$(git -C "$AUR" log -1 --format='%an <%ae>' master 2>&1)"
   expect "with the AUR's files" ".SRCINFO PKGBUILD domicile.install" \
     "$(git -C "$AUR" ls-tree --name-only master | paste -sd' ')"
 else
