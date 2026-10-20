@@ -4,7 +4,6 @@
 #ifndef COMPONENTS_DOMICILE_BROWSER_CONTROL_CHANNEL_H_
 #define COMPONENTS_DOMICILE_BROWSER_CONTROL_CHANNEL_H_
 
-#include <map>
 #include <memory>
 #include <optional>
 #include <set>
@@ -21,6 +20,7 @@
 #include "components/domicile/browser/extension_installer.h"
 #include "components/domicile/browser/line_framer.h"
 #include "components/domicile/browser/shortcut_registry.h"
+#include "components/domicile/browser/system_call.h"
 #include "components/domicile/mojom/control_channel.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -233,9 +233,9 @@ class ControlChannel : public mojom::ControlChannel {
   bool ever_connected_ = false;
 
   // What OnHungUp ends: the compositor's windows the page has heard of, and
-  // the page's system calls, by id, with whether each has `started`.
+  // the page's system calls.
   std::set<std::string> open_apps_;
-  std::map<uint32_t, bool> calls_;
+  OpenCalls calls_;
 
   base::TimeTicks give_up_at_;
   base::OneShotTimer retry_timer_;

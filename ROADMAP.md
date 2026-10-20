@@ -20,8 +20,6 @@ item when it ships.
    shell's control channel dials the new compositor
    ([ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#a-compositor-restart)).
    - Wayland clients lose their display and exit. Nothing starts them again.
-   - An app module's channel (`app_channel.cc`) does not dial the new
-     compositor.
 
    [THE-DOMICILE-BINARY.md](docs/architecture/THE-DOMICILE-BINARY.md#crashes-are-recovered).
 

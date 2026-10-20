@@ -10,7 +10,10 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "components/domicile/browser/line_framer.h"
+#include "components/domicile/browser/system_call.h"
 #include "components/domicile/mojom/app_channel.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -29,8 +32,8 @@ namespace domicile {
 class AppChannel : public mojom::AppChannel {
  public:
   // `socket_path` is the compositor's --chrome-socket. Owns itself and deletes
-  // itself when the page's end goes away, or closes it when the compositor
-  // cannot be reached.
+  // itself when the page's end goes away, or closes it when no compositor
+  // answers for kReachFor -- at the start or after one hangs up.
   AppChannel(const std::string& socket_path,
              mojo::PendingReceiver<mojom::AppChannel> receiver);
 
@@ -44,8 +47,17 @@ class AppChannel : public mojom::AppChannel {
   void CallSystem(uint32_t id, const std::string& request) override;
 
  private:
-  void Connect(const std::string& socket_path);
+  // As ControlChannel's. A restarted compositor binds its socket a second or
+  // more after the last one exits.
+  static constexpr base::TimeDelta kReachFor = base::Seconds(30);
+  static constexpr base::TimeDelta kRetryEvery = base::Milliseconds(50);
+
+  void Connect();
   void OnConnect(int result);
+  // The compositor hung up. Ends the page's calls with `compositor_gone` and
+  // dials the next one, as ControlChannel::OnHungUp does. See "A compositor
+  // restart" in docs/architecture/ENGINE-FORK.md.
+  void OnHungUp();
   void Send(std::string line);
   void WriteNext();
   void OnWrite(int result);
@@ -54,14 +66,23 @@ class AppChannel : public mojom::AppChannel {
   // One line off the socket: an answer goes to the page, and anything else,
   // such as `welcome`, stops here.
   void DispatchLine(const std::string& line);
+  // An answer, to the page or held for it.
+  void Answer(const std::string& line);
 
+  const std::string socket_path_;
   mojo::Receiver<mojom::AppChannel> receiver_;
   mojo::Remote<mojom::AppChannelClient> client_;
 
   std::unique_ptr<net::UnixDomainClientSocket> socket_;
   bool connected_ = false;
+  base::TimeTicks give_up_at_;
+  base::OneShotTimer retry_timer_;
 
-  // Lines waiting for the socket, in order. `app_hello` is first.
+  // What OnHungUp ends.
+  OpenCalls calls_;
+
+  // Lines waiting for the socket, in order. `app_hello` goes first on each
+  // connection.
   std::vector<std::string> pending_;
   bool writing_ = false;
   scoped_refptr<net::DrainableIOBuffer> write_buffer_;
@@ -70,7 +91,9 @@ class AppChannel : public mojom::AppChannel {
   std::vector<std::string> held_;
 
   scoped_refptr<net::IOBufferWithSize> read_buffer_;
-  LineFramer framer_;
+  // One per compositor: a line the last one left half-written is not the
+  // next one's.
+  std::unique_ptr<LineFramer> framer_ = std::make_unique<LineFramer>();
 
   base::WeakPtrFactory<AppChannel> weak_factory_{this};
 };

@@ -127,7 +127,8 @@ The engine has two channels to the rest of Domicile:
   `components/domicile/mojom/app_channel.mojom`. The browser opens its own
   connection to the compositor, says `app_hello`, and carries `call_system`
   and the `system` event only. It binds for an app's origin in the window
-  pinned to that app. See
+  pinned to that app. A compositor that hangs up ends its calls and is
+  dialed again, as above, with no `compositorreplaced`. See
   [APP-MODULES.md](/docs/architecture/APP-MODULES.md).
 - **Extension tray:** the `extensions` event and `activateExtension()` use
   `components/domicile/mojom/extension_tray.mojom`, a separate browser-side
