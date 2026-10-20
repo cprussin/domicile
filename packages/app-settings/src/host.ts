@@ -1,6 +1,6 @@
 // `domicile-app-host`, the process the app runs, as Settings uses it: the
-// desktop's config and shell files, its site permissions, the extensions it
-// loads and uninstalls, and its cameras and microphones. Every reply is
+// desktop's config and shell files, its site permissions and site data, the
+// extensions it loads and uninstalls, and its cameras and microphones. Every reply is
 // parsed. The protocol is `domicile_launch::app_host`'s.
 
 import type { Result } from "@cprussin/option-result";
@@ -65,6 +65,15 @@ const siteSettingsSchema = z.object({
 /** Every permission's default and every site's own setting. */
 export type SiteSettings = z.infer<typeof siteSettingsSchema>;
 
+const siteDataSchema = z.object({
+  bytes: z.number(),
+  cookies: z.number(),
+  host: z.string(),
+});
+
+/** What one host stores: its cookies, and its bytes on disk of every kind. */
+export type SiteData = z.infer<typeof siteDataSchema>;
+
 const mediaDeviceSchema = z.object({ id: z.string(), name: z.string() });
 
 /** A camera or microphone. */
@@ -122,6 +131,10 @@ export type SettingsHost = {
   sitePermissions: () => Promise<SiteSettings>;
   /** Stores a site's setting; a permission's default removes it. */
   setSitePermission: (site: SitePermission) => Promise<void>;
+  /** Every host that stores data in browser windows' profile. */
+  siteData: () => Promise<SiteData[]>;
+  /** Removes everything `host` stores. */
+  clearSiteData: (host: string) => Promise<void>;
   /**
    * Loads the unpacked extension in `directory`, absolute or under `~`, and
    * resolves with its id. It stays until uninstalled.
@@ -216,6 +229,12 @@ export const spawnedHost = (system: Pick<System, "spawn">): SettingsHost => {
         throw unexpected(reply, "folder");
       }
     },
+    clearSiteData: async (host) => {
+      const reply = await ask({ host, type: "clear_site_data" });
+      if (reply.type !== "cleared") {
+        throw unexpected(reply, "cleared");
+      }
+    },
     configExtensions: async () => {
       const reply = await ask({ type: "config_extensions" });
       if (reply.type === "config_extensions") {
@@ -299,6 +318,14 @@ export const spawnedHost = (system: Pick<System, "spawn">): SettingsHost => {
         throw unexpected(reply, "stored");
       }
     },
+    siteData: async () => {
+      const reply = await ask({ type: "site_data" });
+      if (reply.type === "site_data") {
+        return reply.sites;
+      } else {
+        throw unexpected(reply, "site_data");
+      }
+    },
     sitePermissions: async () => {
       const reply = await ask({ type: "site_permissions" });
       if (reply.type === "site_permissions") {
@@ -369,6 +396,12 @@ const replySchema = z.discriminatedUnion("type", [
     type: z.literal("extensions"),
   }),
   z.object({ id: z.number(), type: z.literal("opened") }),
+  z.object({
+    id: z.number(),
+    sites: z.array(siteDataSchema),
+    type: z.literal("site_data"),
+  }),
+  z.object({ id: z.number(), type: z.literal("cleared") }),
   z.object({ id: z.number(), type: z.literal("refused"), why: z.string() }),
   z.object({ type: z.literal("changed") }),
 ]);
