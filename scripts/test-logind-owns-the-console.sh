@@ -127,8 +127,8 @@ for member in PropertiesChanged Active; do
   fi
 done
 
-# `DrmMaster` keeps the browser's copy of each card descriptor, and the
-# switcher calls upstream's display control methods on it.
+# The switcher stops and restarts drawing through upstream's display control
+# methods; logind drops and sets DRM master itself.
 for seam in RelinquishDisplayControl TakeDisplayControl; do
   if in_sources "$seam"; then
     ok "$seam is what a switch drives"

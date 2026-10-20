@@ -79,8 +79,8 @@ fn an_empty_variable_is_not_a_display() {
 
 #[test]
 fn a_tty_with_a_vt_is_a_desktop_on_that_vt() {
-    // `DrmMaster::Add` takes master on each card as it arrives, so a tty with a
-    // VT can be drawn on without setting `OZONE`.
+    // The engine takes each card from logind, which gives it DRM master, so a
+    // tty with a VT can be drawn on without setting `OZONE`.
     //
     // `XDG_VTNR` decides because pam_systemd sets it for a session that owns a
     // VT, and the engine asks that same logind session for `TakeControl` and
