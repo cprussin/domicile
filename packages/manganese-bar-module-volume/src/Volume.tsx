@@ -165,7 +165,8 @@ const triggerStyles = cva({
   variants: {
     muted: {
       false: {},
-      true: { opacity: "inactive" },
+      // Dims the icon alone, so the hover background stays as strong.
+      true: { "& > svg": { opacity: "inactive" } },
     },
   },
 });

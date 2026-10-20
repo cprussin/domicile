@@ -129,12 +129,12 @@ describe("Bluetooth", () => {
     bluetooth.report(reading(false, []));
     expect(
       screen.getByRole("button", { name: "Bluetooth off" }).className,
-    ).toContain(css({ opacity: "inactive" }));
+    ).toContain(css({ "& > svg": { opacity: "inactive" } }));
 
     bluetooth.report(reading(true, []));
     expect(
       screen.getByRole("button", { name: "Bluetooth on" }).className,
-    ).not.toContain(css({ opacity: "inactive" }));
+    ).not.toContain(css({ "& > svg": { opacity: "inactive" } }));
 
     bluetooth.report(reading(true, ["WH-1000XM4", "MX Master 3"]));
     expect(
