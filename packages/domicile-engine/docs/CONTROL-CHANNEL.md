@@ -26,7 +26,8 @@ The engine has two channels to the rest of Domicile:
   `focus_chrome`, `sync_frames`, `close_app`, `set_app_bounds`, `set_desktop_size`,
   `set_device_pixel_ratio`, `set_theme`, `theme_captured`, `unlock`, `lock`,
   `key`, `pointer_motion`, `pointer_leave`, `pointer_button`, `pointer_axis`.
-  The browser also sends `hello` on connect.
+  The browser also sends `hello` on connect, and `activity` for its own
+  input, at most every 200 ms, for the idle clock.
 - **Inbound:** `welcome`, `app_appeared`, `app_titled`, `app_desktop_id`,
   `app_resized`, `app_min_size`, `app_max_size`, `popup_placed`, `app_closed`,
   `app_cursor`, `app_presented`, `app_suspended`, `app_transient_for`,
@@ -111,6 +112,10 @@ The engine has two channels to the rest of Domicile:
     `compositorreplaced`.
   The SDK's watches listen again on `compositor_gone`. See
   [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md#a-compositor-restart).
+- **`activity`** is the browser's, not the page's. `StartDeskActivity`
+  (`chrome/browser/domicile/domicile_desk_activity.h`) watches
+  `ui::UserActivityDetector`, and every control channel sends it while a
+  compositor is connected. See `components/domicile/browser/desk_activity.h`.
 - **`displays`** is an attribute, `domicile.displays`, with a
   `displayschanged` event. A component that mounts late can read it.
   - `null`: the compositor has not described a desktop yet.

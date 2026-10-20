@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Tue, 20 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the idle clock hears every key
+
+The desk locked under somebody typing. The compositor's idle clock hears
+only the input the shell forwards to its windows, and a key typed into a
+browser window or into the shell's own page is forwarded nowhere.
+
+- `StartDeskActivity` (`chrome/browser/domicile/domicile_desk_activity.cc`)
+  observes `ui::UserActivityDetector`, which sees every event the platform
+  dispatches and skips aura's synthesized mouse moves.
+- It tells `DeskActivity` (`components/domicile/browser/desk_activity.cc`),
+  and each control channel sends the compositor `activity`.
+- Started in `PostBrowserStart`, beside the shell windows.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ chrome/browser/chrome_browser_main.cc | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
+index 7801ac3..ca1e8d6 100644
+--- a/chrome/browser/chrome_browser_main.cc
++++ b/chrome/browser/chrome_browser_main.cc
+@@ -6,6 +6,7 @@
+ 
+ #include "chrome/browser/domicile/domicile_command_socket.h"
+ #include "chrome/browser/domicile/domicile_desk.h"
++#include "chrome/browser/domicile/domicile_desk_activity.h"
+ #include "chrome/browser/domicile/domicile_file_dialogs.h"
+ #include "chrome/browser/domicile/domicile_shell_windows.h"
+ #include "components/domicile/browser/desktop_prefs.h"
+@@ -1774,6 +1775,12 @@ void ChromeBrowserMainParts::PostBrowserStart() {
+   // somebody will want to point `load_shell` at.
+   domicile::StartShellWindows();
+ 
++  // Domicile's engine fork: every input event, to the compositor's idle clock,
++  // which hears only what the shell forwards to its windows. Here because the
++  // platform's event source exists by now, and it is the browser process's
++  // input rather than any page's.
++  domicile::StartDeskActivity();
++
+   for (auto& chrome_extra_part : chrome_extra_parts_) {
+     chrome_extra_part->PostBrowserStart();
+   }

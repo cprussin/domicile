@@ -826,6 +826,7 @@ impl Host {
             | ChromeMessage::Key { .. }
             | ChromeMessage::Unlock { .. }
             | ChromeMessage::Lock
+            | ChromeMessage::Activity
             | ChromeMessage::SyncFrames
             | ChromeMessage::SystemRequest { .. }
             | ChromeMessage::AnswerPortalRequest { .. } => {
@@ -841,6 +842,8 @@ impl Host {
                 //
                 // `SyncFrames` is a page's, and the compositor holds it per
                 // chrome.
+                //
+                // `Activity` is the idle clock's.
             }
         }
         Ok(())
