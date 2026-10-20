@@ -80,6 +80,10 @@ jobs:
   release-packages:
     needs: release-check
     if: needs.release-check.outputs.commit != ''
+    # The called workflow's `publish` job asks for this, and a called workflow
+    # gets no more than its caller grants, or the run fails to start.
+    permissions:
+      contents: write
     uses: ./.github/workflows/distro-packages.yml
     with:
       ref: ${{ needs.release-check.outputs.commit }}
