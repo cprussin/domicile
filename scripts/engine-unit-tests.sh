@@ -27,17 +27,19 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # ShellWindowPlaces 7, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
 # SurfaceTransform 3, SurfaceAlpha 2, ExtensionInstaller 3, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 20,
 # DomicileDisplayRegions 27, DomicileDeskTargeter 4, PlaceholderStage 3,
-# SystemCall 4, PortalRequest 3, FileChoice 13, DisplayCapture 7,
+# SystemCall 6, PortalRequest 3, FileChoice 13, DisplayCapture 7,
 # CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, ForwardedKeys 5,
 # SitePermissions 11,
 # ControlChannel 10, DeviceChoices 9, SurfaceFrames 6,
 # GuestDialogs 6, DownloadTally 6, SurfaceSubmits 4,
-# PrivatePages 3, ShellOrigin 2, AppRoots 4, AppChannel 2, AppDocument 3,
+# PrivatePages 3, ShellOrigin 2, AppRoots 4, AppChannel 3, AppDocument 3,
 # WebViewUrl 5, ShellFetch 22, BrowserWindowCaptureTarget 3, ShellWindowWait 4,
 # DeskCursorThemeSource 2, XCursorTheme 5, XCursorThemeDirectory 4,
 # SyncedFrame 7, RenderProcess 3, ShellDeath 5, ProbeWait 3, ScreenCapture 2,
 # ScreenChoice 3.
 #
+# 438, and it was 435 — an app's channel ending its calls and dialing the
+# next compositor is one AppChannel case and two SystemCall ones. Before that
 # 435, and it was 434 — a browser window drawing while it is captured is one
 # more FrameSinkBroker case. Before that 434, and it was 431 — a page's screen share picked before it is answered is
 # three ScreenChoice cases. Before that 431, and it was 428 — the touchpad's disable-while-typing switch is three
@@ -162,7 +164,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=435
+FLOOR=438
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.
