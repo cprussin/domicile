@@ -34,15 +34,7 @@ item when it ships.
    - A list of sites with stored data. History clears cookies by time range
      or by site ([HISTORY.md](docs/HISTORY.md)).
 
-5. **Distribution packages.**
-   [RUNNING-A-DESKTOP.md](docs/RUNNING-A-DESKTOP.md#other-distributions).
-   - Released on GitHub only. APT and RPM repositories, package signing, an
-     AUR package and COPR wait until users ask for them; until then upgrades
-     are by hand.
-   - Checked by installing in containers; no packaged session has run on
-     hardware.
-
-6. **Revisit the docs for users.** Start with the README.
+5. **Revisit the docs for users.** Start with the README.
    - A clearer reading path through the docs.
    - Screenshots and videos of manganese.
    - A short getting started guide: installing and setup.
@@ -60,7 +52,7 @@ item when it ships.
      - Writing a desktop from scratch
        ([WRITING-A-SHELL.md](docs/WRITING-A-SHELL.md)).
 
-7. **Smithay from a fork.** `Cargo.toml` patches Smithay 0.7.0 with
+6. **Smithay from a fork.** `Cargo.toml` patches Smithay 0.7.0 with
    Smithay/smithay#2217, which sends keymaps as read-only fds. Drop the patch
    and `flake.nix`'s `outputHashes` once a Smithay release contains it.
 
