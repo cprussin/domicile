@@ -30,7 +30,7 @@ trap 'rm -rf "$WORK"' EXIT
 
 if [ -n "${AUR_SSH_KEY:-}" ]; then
   (umask 077 && printf '%s\n' "$AUR_SSH_KEY" >"$WORK/key")
-  ssh-keyscan -q -t ed25519 aur.archlinux.org >"$WORK/known_hosts"
+  ssh-keyscan -t ed25519 aur.archlinux.org >"$WORK/known_hosts" 2>/dev/null
   scanned="$(ssh-keygen -lf "$WORK/known_hosts" | awk '{print $2}')"
   [ "$scanned" = "$AUR_HOST_KEY" ] || {
     echo "release-aur.sh: aur.archlinux.org offered host key $scanned, not $AUR_HOST_KEY" >&2
