@@ -4,11 +4,10 @@
 #   .github/scripts/release-check.sh
 #
 # Sets the step output `commit` to stable's commit when `release` lacks it.
-# Refuses:
+# Releases the versions stable holds: a changeset not yet versioned waits for
+# the next release. Refuses:
 #
 # - a `release` that is not an ancestor, since someone put it there;
-# - a changeset not yet versioned, which would ship its change at the old
-#   version: merge the "Version packages" pull request first;
 # - a `domicile` at 0.0.0, which no changeset versioned.
 set -euo pipefail
 
@@ -40,9 +39,8 @@ esac
 
 pending="$(find .changeset -name '*.md' ! -name README.md | sort)"
 [ -z "$pending" ] || {
-  echo "${head:0:12} has changesets not yet versioned; merge the \"Version packages\" pull request first:" >&2
-  echo "$pending" >&2
-  exit 1
+  echo "changesets not yet versioned, left for the next release:"
+  echo "$pending"
 }
 
 version="$(jq -r .version packages/domicile/package.json)"

@@ -29,8 +29,10 @@ crates, the engine or `distro/` names it in its changeset.
 
 Run **Publish packages** (`publish-packages.yml`) with `release` checked:
 
-1. Checks `stable`: ahead of `release`, no pending changesets, `domicile`
-   past 0.0.0 (`.github/scripts/release-check.sh`).
+1. Checks `stable`: ahead of `release`, `domicile` past 0.0.0
+   (`.github/scripts/release-check.sh`). Changesets not yet versioned wait
+   for the next release, though a version published for the first time
+   ships the code `stable` has, theirs included.
 2. Builds the distribution packages at their versions and installs each in
    its distribution (`distro-packages.yml`).
 3. Publishes to npm under `latest`.
