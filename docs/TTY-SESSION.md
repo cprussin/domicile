@@ -4,56 +4,54 @@ How the engine shares a tty with logind. Overview:
 [A-DESKTOP-ON-A-TTY.md](architecture/A-DESKTOP-ON-A-TTY.md). Code is in
 `packages/domicile-engine/src/ui/ozone/platform/drm/domicile/`.
 
+## The session
+
+`DrmLogindSession` holds control of the logind session. Every card, keyboard
+and mouse comes from it.
+
+- `InitializeUI` builds it, before the primary card is opened and before the
+  evdev thread starts. It calls `Manager.GetSessionByPID(0)`, subscribes to
+  the session's signals, then calls `Session.TakeControl(false)`.
+- logind accepts `TakeDevice` only from the D-Bus connection that called
+  `TakeControl`, so the cards and the input devices share this one.
+- Calls block the bus's own thread, never the caller's, except at startup and
+  when a card is taken. Those wait on the UI thread for one round trip, so
+  `DrmLogindSession` is a friend of
+  `ScopedAllowBaseSyncPrimitivesOutsideBlockingScope` (patch `0131`).
+- Signals arrive on the UI thread. A card's (DRM major 226) are handled
+  there; an input device's go to `DrmLogindInput` on the evdev thread.
+- Its destructor calls `ReleaseControl`, which releases every device.
+
 ## DRM master
 
-### Taking it
+logind owns DRM master. The engine makes no master ioctls.
 
-- The browser process opens the card with `open()`. A logind session on the
-  active VT gives the user an ACL on the card node. This is the only ACL the
-  tty desktop relies on.
-- The `open()` takes master only if the card is free, and nothing checks.
-- `DrmWrapper::has_master_` starts `true`, so `TakeDisplayControl` assumes
-  master is already held. On ChromeOS, ash calls
-  `DisplayConfigurator::TakeControl` at startup. Off ChromeOS nothing does.
-- Without master, `DRM_IOCTL_MODE_ATOMIC` fails with `EACCES` and nothing
-  draws until a console round trip.
-- `DrmMaster::Add` calls `drmSetMaster` as each card arrives, after the `open`
-  and before any commit. On a card already held by this file it is a no-op.
-- A card that arrives while another console is active is recorded but not
-  taken. The take on the way back covers it.
-
-### Only the opening process may drop it
-
-1. The browser process opens the card and becomes master, which sets
-   `fpriv->was_master` (`drivers/gpu/drm/drm_auth.c`).
-2. `drm_file_update_pid` stops updating the file's pid once it has been master
-   (`drivers/gpu/drm/drm_file.c`). The pid stays the browser's.
-3. The fd moves to the GPU process over `SCM_RIGHTS`, which shares the same
-   `struct drm_file` and so the same pid.
-4. `drm_dropmaster_ioctl` passes only if `was_master` and the pid matches the
-   caller, or the caller has `CAP_SYS_ADMIN`. The GPU process has neither.
-   `drmSetMaster` runs the same check.
-
-So `DrmMaster` keeps a `dup` of every card, keyed by sysfs path, and both
-ioctls run in the browser process. A `dup` shares the `struct drm_file`, so the
-drop also applies to the GPU process's copy.
-
-### Ordering
-
-- **Release:** the GPU process detaches planes while master is still held,
-  then the browser drops master. If the drop fails, the whole release fails, so
-  the switcher retries on the way back.
-- **Take:** master first. The GPU process is not asked if that fails.
-- The GPU process cannot set master itself, so it calls
-  `DrmWrapper::AssumeMaster` to set and clear the flag. Release must clear it
-  before the switch completes. Otherwise `DrmWindow::SchedulePageFlip` keeps
-  committing, the commit fails, and `PageFlipWatchdog` crashes the GPU process
-  after 15 s.
+- **Taking a card.** `OpenDrmDevice` calls `DrmLogindSession::TakeCard`, which
+  is `Session.TakeDevice`. logind opens the card and sets master while the
+  session is active. A card the session already holds is released first, as
+  when a relaunched GPU process opens the primary card again.
+- **Switching away.** A seat with VTs gets `PauseDevice(..., "force")` for the
+  card: logind drops master before the switch, then `Active` goes false. A
+  flip in between fails with `EACCES`. `HardwareDisplayController` asks the
+  kernel (`DrmWrapper::HoldsMaster`), records master as lost and skips the
+  frame, so `PageFlipWatchdog` stays disarmed. Then `DrmVtSwitcher`'s
+  relinquish records it for every card (`DrmWrapper::AssumeMaster(false)`).
+- **Switching back.** logind sets master on the same file, sends
+  `ResumeDevice`, then answers `Active`. `DrmVtSwitcher` reads `Active` with a
+  round trip to logind, so master is set before the GPU process is told to
+  draw (`AssumeMaster(true)`).
 - **Relight after a take.** Master does not restore the mode. The kernel
   restores its own framebuffer when the last master leaves, so the GPU
   process's state is stale. `StepVtSwitch` answers a successful take with
   `kRelightDisplay`, and `DrmModeset::Relight` runs a modeset. It runs only
   after the take, never while another console holds the card.
+- **A removed card** is given back with `ReleaseDevice`.
+- On a seat without VTs logind sends "pause" instead, and the session answers
+  `PauseDeviceComplete` at once.
+
+`scripts/test-the-card-comes-from-logind.sh` checks the series for each of
+these; `HardwareDisplayControllerTest.AFlipAfterLogindTookMasterIsSkipped`
+covers the skipped flip.
 
 ## Console switching
 
@@ -78,10 +76,6 @@ drop also applies to the GPU process's copy.
 - The session's `Active` property drives `DrmVtSwitcher`. Its ordering is a
   tested free function, because `Active` can flip twice before the display
   delegate answers once.
-- **Known gap:** the card is not a logind device, so no `PauseDevice` holds the
-  switch open. Master drops one D-Bus round trip after the switch. The console
-  shows a stale frame for that time, not a black one. Fix:
-  [take the card from logind](architecture/A-DESKTOP-ON-A-TTY.md#the-card-should-come-from-logind-too).
 
 ## Suspend
 
@@ -97,8 +91,8 @@ is lost.
 
 | Event | Action |
 |---|---|
-| evdev thread starts | `Manager.GetSessionByPID(0)`, subscribe to signals, `Session.TakeControl(false)` |
-| udev announces a device | `stat` the node, `Session.TakeDevice(major, minor)` |
+| evdev thread starts | Listen to `DrmLogindSession`'s input-device signals |
+| udev announces a device | `stat` the node, `Session.TakeDevice(major, minor)`; open the device when logind answers |
 | `PauseDevice(..., "force")` | logind has already revoked the fd. Mark the device revoked; send no reply |
 | `PauseDevice(..., "pause")` (seat without VTs) | Reply `PauseDeviceComplete` |
 | `PauseDevice(..., "gone")` after our own `ReleaseDevice` | Ignore it; `released_` records the release. Not yet run on hardware: input after a console round trip is unverified |
@@ -106,7 +100,7 @@ is lost.
 | `ResumeDevice(major, minor, fd)` | Park the fd; close and reopen the device |
 | session `Active` goes true | `ReleaseDevice` and `TakeDevice` each revoked device again |
 | reopen | `RemoveInputDevice(path)`, then `AddInputDevice(id, path)`; the open takes the parked fd or a fresh one |
-| shutdown | `ReleaseDevice` per device, then `ReleaseControl` |
+| shutdown | `ReleaseDevice` per device; `DrmLogindSession` then calls `ReleaseControl` |
 
 `DrmTakenDevices` keeps device names in `names_`, so a resume works for a
 device whose fd was already dropped.
@@ -132,23 +126,27 @@ force-pause resume.
 
 Tests: `DrmInputDevicesTest` covers the table.
 `scripts/test-input-comes-from-logind.sh` checks what unit tests cannot;
-`drm_logind_input.cc` talks to D-Bus and has no unit test.
+`drm_logind_input.cc` and `drm_logind_session.cc` talk to D-Bus and have no
+unit test.
 
 ### The D-Bus thread
 
-- `OpenInputDevice` is synchronous and runs on the evdev thread. The bus is
-  created there, so signals arrive on that thread with no locks.
-- Method calls use `CallMethodAndBlock` on the bus's own D-Bus thread, with the
-  evdev thread waiting on a `base::WaitableEvent`.
-- The evdev thread cannot run the bus alone: it has a UI message pump, and
-  `dbus::Bus` needs an IO thread's `FileDescriptorWatcher`.
-- Each bus (`DrmLogindInput`, `DrmVtSwitcher`, `DrmSleep`) has a `DEDICATED`
-  single-thread runner. On a shared runner, the input bus's blocking calls
-  (about 45 per switch on a 15-device laptop) would delay `DrmVtSwitcher`'s
-  `Active` signal, and the GPU process would crash on the page-flip watchdog.
-- **Open item:** the evdev thread still blocks for the whole switch, so input
-  stops during it. Fixing this needs `OpenInputDevice` to answer
-  asynchronously.
+- `OpenInputDevice` answers with a callback (patch `0132`).
+  `DrmLogindInput` asks `DrmLogindSession` for the device and answers when
+  logind does, so the evdev thread keeps reading every open device through a
+  console switch.
+- `InputDeviceFactoryEvdev` attaches the converter when the opener answers,
+  posted to the evdev thread.
+- logind answers calls in order, so a `TakeDevice` sent right after a
+  `ReleaseDevice` does not wait for the release's answer. A release's "gone"
+  echo is expected from when the call is sent: logind sends it before it
+  answers.
+- The session's bus runs blocking calls on its own thread. `dbus::Bus` needs
+  an IO thread's `FileDescriptorWatcher`, which a thread-pool worker has.
+- Each bus (`DrmLogindSession`, `DrmVtSwitcher`, `DrmSleep`) has a
+  `DEDICATED` single-thread runner. On a shared runner, the session's blocking
+  calls (about 45 per switch on a 15-device laptop) would delay
+  `DrmVtSwitcher`'s `Active` signal.
 
 ### Reopening a revoked device
 

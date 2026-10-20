@@ -147,8 +147,9 @@ class DrmConsoleChordSink : public PlatformEventDispatcher {
 // evdev nodes; all keys arrive here first, ahead of any dispatcher or nested
 // run loop.
 //
-// The card is not a logind device, so no `PauseDevice` arrives for it. The
-// display follows `Active` instead, one D-Bus round trip after the switch.
+// logind drops and sets DRM master on the card itself (`DrmLogindSession`).
+// The display follows `Active`: the GPU process stops drawing when the
+// session leaves and draws again once master is back.
 class DrmVtSwitcher : public PlatformEventObserver {
  public:
   // `events` and `modeset` must outlive this. `OzonePlatformDrm` creates both

@@ -13,6 +13,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/check.h"
@@ -66,8 +67,9 @@ struct Reopened {
   friend bool operator==(const Reopened&, const Reopened&) = default;
 };
 
-// Fake `Session.ReleaseDevice`: records calls in order and fails for devices
-// passed to `Refuse`.
+// Fake `Session.ReleaseDevice`: records calls in order and refuses devices
+// passed to `Refuse`. Answers at once, or on `Answer` after `AnswerLater`,
+// since logind's answer arrives after the call returns.
 class RecordedRelease {
  public:
   ReleaseDeviceCall Bind() {
@@ -76,17 +78,39 @@ class RecordedRelease {
 
   void Refuse(DeviceNumber number) { refused_.push_back(number); }
 
+  void AnswerLater() { answer_later_ = true; }
+
+  // Answers every call held since `AnswerLater`.
+  void Answer() {
+    std::vector<std::pair<DeviceNumber, ReleaseAnswer>> held =
+        std::move(held_);
+    held_.clear();
+    for (auto& [number, answered] : held) {
+      std::move(answered).Run(Agrees(number));
+    }
+  }
+
   const std::vector<DeviceNumber>& calls() const { return calls_; }
 
  private:
-  bool Run(DeviceNumber number) {
+  void Run(DeviceNumber number, ReleaseAnswer answered) {
     calls_.push_back(number);
+    if (answer_later_) {
+      held_.emplace_back(number, std::move(answered));
+      return;
+    }
+    std::move(answered).Run(Agrees(number));
+  }
+
+  bool Agrees(DeviceNumber number) const {
     return std::find(refused_.begin(), refused_.end(), number) ==
            refused_.end();
   }
 
   std::vector<DeviceNumber> calls_;
   std::vector<DeviceNumber> refused_;
+  bool answer_later_ = false;
+  std::vector<std::pair<DeviceNumber, ReleaseAnswer>> held_;
 };
 
 constexpr DeviceNumber kKeyboard{13, 64};
@@ -260,7 +284,7 @@ TEST(DrmInputDevicesTest, ADeviceThatIsGoneIsNotReleasedAfterwards) {
                DeviceLiveness::kLive);
 
   EXPECT_EQ(devices.Pause(kMouse, "gone"), PauseAnswer::kNothingToSay);
-  EXPECT_TRUE(devices.Release());
+  devices.Release();
 
   // An unplugged device is no longer logind's to release.
   EXPECT_EQ(release.calls(), std::vector<DeviceNumber>({kKeyboard}));
@@ -319,7 +343,7 @@ TEST(DrmInputDevicesTest, AForcePausedDeviceIsStillOwedBackToLogind) {
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
                DeviceLiveness::kLive);
   EXPECT_EQ(devices.Pause(kKeyboard, "force"), PauseAnswer::kDeviceIsRevoked);
-  EXPECT_TRUE(devices.Release());
+  devices.Release();
 
   // Unlike "gone", "force" leaves this session holding the device, so it
   // must still be released.
@@ -411,7 +435,7 @@ TEST(DrmInputDevicesTest, GivingADeviceBackIsWhatLetsItBeTakenAgain) {
   EXPECT_EQ(release.calls(), std::vector<DeviceNumber>({kKeyboard}));
 
   // No longer held, so shutdown doesn't release it again.
-  EXPECT_TRUE(devices.Release());
+  devices.Release();
   EXPECT_EQ(release.calls(), std::vector<DeviceNumber>({kKeyboard}));
 
   // Nothing to release for a device never taken.
@@ -432,7 +456,7 @@ TEST(DrmInputDevicesTest, ReleasesEveryDeviceItTookInOrder) {
   devices.Take(kMouse, kMouseId, base::FilePath(kMousePath),
                DeviceLiveness::kLive);
 
-  EXPECT_TRUE(devices.Release());
+  devices.Release();
   // Ordered by device number, so failures report consistently.
   EXPECT_EQ(release.calls(),
             std::vector<DeviceNumber>({kKeyboard, kMouse, kTouchpad}));
@@ -452,7 +476,7 @@ TEST(DrmInputDevicesTest, ADeviceThatRefusesTheReleaseDoesNotStrandTheRest) {
                DeviceLiveness::kLive);
   release.Refuse(kMouse);
 
-  EXPECT_FALSE(devices.Release());
+  devices.Release();
   // Continues past a failure, so the touchpad isn't stranded.
   EXPECT_EQ(release.calls(),
             std::vector<DeviceNumber>({kKeyboard, kMouse, kTouchpad}));
@@ -467,8 +491,8 @@ TEST(DrmInputDevicesTest, ReleasingTwiceReleasesOnce) {
   devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
                DeviceLiveness::kLive);
 
-  EXPECT_TRUE(devices.Release());
-  EXPECT_TRUE(devices.Release());
+  devices.Release();
+  devices.Release();
   // The destructor releases too, so a second pass must release nothing.
   EXPECT_EQ(release.calls(), std::vector<DeviceNumber>({kKeyboard}));
 }
@@ -512,7 +536,7 @@ TEST(DrmInputDevicesTest, ADeviceResumedAfterBeingGivenBackIsOwedBackAgain) {
 
   // A resume means logind holds the device for us again, so shutdown must
   // release it.
-  EXPECT_TRUE(devices.Release());
+  devices.Release();
   EXPECT_EQ(release.calls(), std::vector<DeviceNumber>({kKeyboard, kKeyboard}));
 }
 
@@ -592,6 +616,45 @@ TEST(DrmInputDevicesTest, OnlyOneGoneIsAnsweredForEachReleaseAsked) {
 
   EXPECT_FALSE(devices.Resume(kKeyboard, OpenZero()))
       << "the second gone is the node unplugged, so the name is forgotten";
+}
+
+// logind sends a release's "gone" before it answers the release, so the echo
+// is expected from the moment the release is sent.
+TEST(DrmInputDevicesTest, AGoneBeforeTheReleaseIsAnsweredIsStillAnEcho) {
+  RecordedRelease release;
+  RecordedReopen reopen;
+  DrmTakenDevices devices(release.Bind(), reopen.Bind());
+  reopen.Watch(&devices);
+  release.AnswerLater();
+
+  devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
+               DeviceLiveness::kRevoked);
+  EXPECT_TRUE(devices.GiveBack(kKeyboard));
+
+  EXPECT_EQ(devices.Pause(kKeyboard, "gone"), PauseAnswer::kNothingToSay);
+  release.Answer();
+
+  // An echo keeps the name, so a resume still finds the device.
+  EXPECT_TRUE(devices.Resume(kKeyboard, OpenZero()));
+}
+
+// A refused release sends no "gone", so the next one is a real unplug.
+TEST(DrmInputDevicesTest, ARefusedReleaseIsOwedNoGone) {
+  RecordedRelease release;
+  RecordedReopen reopen;
+  DrmTakenDevices devices(release.Bind(), reopen.Bind());
+  reopen.Watch(&devices);
+  release.AnswerLater();
+  release.Refuse(kKeyboard);
+
+  devices.Take(kKeyboard, kKeyboardId, base::FilePath(kKeyboardPath),
+               DeviceLiveness::kRevoked);
+  EXPECT_TRUE(devices.GiveBack(kKeyboard));
+  release.Answer();
+
+  EXPECT_EQ(devices.Pause(kKeyboard, "gone"), PauseAnswer::kNothingToSay);
+  EXPECT_FALSE(devices.Resume(kKeyboard, OpenZero()))
+      << "the gone is the node unplugged, so the name is forgotten";
 }
 
 }  // namespace

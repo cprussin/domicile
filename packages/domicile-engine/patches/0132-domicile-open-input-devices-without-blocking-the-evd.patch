@@ -1,0 +1,202 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 20 Oct 2026 22:17:33 +0000
+Subject: [PATCH] domicile: open input devices without blocking the evdev
+ thread
+
+`InputDeviceOpener::OpenInputDevice` answers with a callback, before
+returning or later. `DrmLogindInput` asks logind for each device without
+waiting, so the devices already open keep reading through a console
+switch.
+
+- `InputDeviceOpenerEvdev::OpenDeviceFd` answers the same way. The
+  plain opener answers before returning.
+- `InputDeviceFactoryEvdev::AddInputDevice` attaches the converter when
+  the opener answers, posted to its own thread as before.
+- The factory unit test's fake opener answers at once.
+---
+ .../ozone/evdev/input_device_factory_evdev.cc | 16 ++++----
+ .../input_device_factory_evdev_unittest.cc    |  6 +--
+ ui/events/ozone/evdev/input_device_opener.h   | 12 +++++-
+ .../ozone/evdev/input_device_opener_evdev.cc  | 41 +++++++++++++------
+ .../ozone/evdev/input_device_opener_evdev.h   | 13 ++++--
+ 5 files changed, 59 insertions(+), 29 deletions(-)
+
+diff --git a/ui/events/ozone/evdev/input_device_factory_evdev.cc b/ui/events/ozone/evdev/input_device_factory_evdev.cc
+index 29699ed..03680ab 100644
+--- a/ui/events/ozone/evdev/input_device_factory_evdev.cc
++++ b/ui/events/ozone/evdev/input_device_factory_evdev.cc
+@@ -16,6 +16,7 @@
+ #include "base/functional/bind.h"
+ #include "base/logging.h"
+ #include "base/memory/ptr_util.h"
++#include "base/task/bind_post_task.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/time/time.h"
+ #include "base/trace_event/trace_event.h"
+@@ -147,15 +148,14 @@ void InputDeviceFactoryEvdev::AddInputDevice(int id,
+   params.gesture_property_provider = gesture_property_provider_.get();
+ #endif
+ 
+-  std::unique_ptr<EventConverterEvdev> converter =
+-      input_device_opener_->OpenInputDevice(params);
+-
+-  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+-      FROM_HERE,
+-      base::BindOnce(&InputDeviceFactoryEvdev::AttachInputDevice,
+-                     weak_ptr_factory_.GetWeakPtr(), std::move(converter)));
+-
+   ++pending_device_changes_;
++
++  // DOMICILE: the opener may answer later, so the attach is its answer.
++  // Posted either way, as it always was.
++  input_device_opener_->OpenInputDevice(
++      params, base::BindPostTaskToCurrentDefault(
++                  base::BindOnce(&InputDeviceFactoryEvdev::AttachInputDevice,
++                                 weak_ptr_factory_.GetWeakPtr())));
+ }
+ 
+ void InputDeviceFactoryEvdev::RemoveInputDevice(const base::FilePath& path) {
+diff --git a/ui/events/ozone/evdev/input_device_factory_evdev_unittest.cc b/ui/events/ozone/evdev/input_device_factory_evdev_unittest.cc
+index 4cf6b5c..f6ae0c5 100644
+--- a/ui/events/ozone/evdev/input_device_factory_evdev_unittest.cc
++++ b/ui/events/ozone/evdev/input_device_factory_evdev_unittest.cc
+@@ -193,12 +193,12 @@ class FakeInputDeviceOpenerEvdev : public InputDeviceOpener {
+ 
+   std::vector<std::unique_ptr<FakeEventConverterEvdev>> converters_;
+ 
+-  std::unique_ptr<EventConverterEvdev> OpenInputDevice(
+-      const OpenInputDeviceParams& params) override {
++  void OpenInputDevice(const OpenInputDeviceParams& params,
++                       OpenInputDeviceCallback opened) override {
+     std::unique_ptr<FakeEventConverterEvdev> converter =
+         std::move(converters_[0]);
+     converters_.erase(converters_.begin());
+-    return std::move(converter);
++    std::move(opened).Run(std::move(converter));
+   }
+ };
+ 
+diff --git a/ui/events/ozone/evdev/input_device_opener.h b/ui/events/ozone/evdev/input_device_opener.h
+index 7d6ca2a..ce0052b 100644
+--- a/ui/events/ozone/evdev/input_device_opener.h
++++ b/ui/events/ozone/evdev/input_device_opener.h
+@@ -49,6 +49,11 @@ struct OpenInputDeviceParams {
+ using ReopenInputDeviceCall =
+     base::RepeatingCallback<void(int id, const base::FilePath& path)>;
+ 
++// Answers `OpenInputDevice` with the device's converter, or null when it
++// could not be opened.
++using OpenInputDeviceCallback =
++    base::OnceCallback<void(std::unique_ptr<EventConverterEvdev>)>;
++
+ class COMPONENT_EXPORT(EVDEV) InputDeviceOpener {
+  public:
+   // Out of line, both of them, because `reopen_device_` makes this a class
+@@ -59,8 +64,11 @@ class COMPONENT_EXPORT(EVDEV) InputDeviceOpener {
+   InputDeviceOpener();
+   virtual ~InputDeviceOpener();
+ 
+-  virtual std::unique_ptr<EventConverterEvdev> OpenInputDevice(
+-      const OpenInputDeviceParams& params) = 0;
++  // DOMICILE: answers `opened` on this thread, before returning or later. An
++  // opener whose descriptors come from another process over D-Bus answers
++  // later, so the evdev thread keeps reading the devices it has meanwhile.
++  virtual void OpenInputDevice(const OpenInputDeviceParams& params,
++                               OpenInputDeviceCallback opened) = 0;
+ 
+   // Handed over by the factory that owns this opener, once that factory
+   // exists -- an opener is constructed in order to be given to the factory, so
+diff --git a/ui/events/ozone/evdev/input_device_opener_evdev.cc b/ui/events/ozone/evdev/input_device_opener_evdev.cc
+index a2f5076..1102a9e 100644
+--- a/ui/events/ozone/evdev/input_device_opener_evdev.cc
++++ b/ui/events/ozone/evdev/input_device_opener_evdev.cc
+@@ -118,16 +118,12 @@ std::unique_ptr<EventConverterEvdev> CreateConverter(
+       params.dispatcher);
+ }
+ 
+-}  // namespace
+-
+-std::unique_ptr<EventConverterEvdev> InputDeviceOpenerEvdev::OpenInputDevice(
+-    const OpenInputDeviceParams& params) {
++// Builds the converter for a device `OpenDeviceFd` answered, or null.
++std::unique_ptr<EventConverterEvdev> ConvertOpenedDevice(
++    const OpenInputDeviceParams& params,
++    base::ScopedFD fd) {
+   const base::FilePath& path = params.path;
+-  TRACE_EVENT1("evdev", "OpenInputDevice", "path", path.value());
+-
+-  base::ScopedFD fd = OpenDeviceFd(params);
+-  if (fd.get() < 0) {
+-    PLOG(ERROR) << "Cannot open " << path.value();
++  if (!fd.is_valid()) {
+     return nullptr;
+   }
+ 
+@@ -147,10 +143,29 @@ std::unique_ptr<EventConverterEvdev> InputDeviceOpenerEvdev::OpenInputDevice(
+   return CreateConverter(params, std::move(fd), devinfo);
+ }
+ 
+-base::ScopedFD InputDeviceOpenerEvdev::OpenDeviceFd(
+-    const OpenInputDeviceParams& params) {
+-  return base::ScopedFD(
+-      open(params.path.value().c_str(), O_RDWR | O_NONBLOCK));
++}  // namespace
++
++void InputDeviceOpenerEvdev::OpenInputDevice(const OpenInputDeviceParams& params,
++                                             OpenInputDeviceCallback opened) {
++  TRACE_EVENT1("evdev", "OpenInputDevice", "path", params.path.value());
++
++  OpenDeviceFd(params, base::BindOnce(
++                           [](const OpenInputDeviceParams& params,
++                              OpenInputDeviceCallback opened,
++                              base::ScopedFD fd) {
++                             std::move(opened).Run(
++                                 ConvertOpenedDevice(params, std::move(fd)));
++                           },
++                           params, std::move(opened)));
++}
++
++void InputDeviceOpenerEvdev::OpenDeviceFd(const OpenInputDeviceParams& params,
++                                          OpenedDeviceFd opened) {
++  base::ScopedFD fd(open(params.path.value().c_str(), O_RDWR | O_NONBLOCK));
++  if (!fd.is_valid()) {
++    PLOG(ERROR) << "Cannot open " << params.path.value();
++  }
++  std::move(opened).Run(std::move(fd));
+ }
+ 
+ InputDeviceOpenerFactory OpenInputDevicesDirectly() {
+diff --git a/ui/events/ozone/evdev/input_device_opener_evdev.h b/ui/events/ozone/evdev/input_device_opener_evdev.h
+index 4afe766..f5916d0 100644
+--- a/ui/events/ozone/evdev/input_device_opener_evdev.h
++++ b/ui/events/ozone/evdev/input_device_opener_evdev.h
+@@ -22,10 +22,13 @@ class COMPONENT_EXPORT(EVDEV) InputDeviceOpenerEvdev
+ 
+   ~InputDeviceOpenerEvdev() override = default;
+ 
+-  std::unique_ptr<EventConverterEvdev> OpenInputDevice(
+-      const OpenInputDeviceParams& params) override;
++  void OpenInputDevice(const OpenInputDeviceParams& params,
++                       OpenInputDeviceCallback opened) override;
+ 
+  protected:
++  // Answers `OpenDeviceFd` with the descriptor, invalid on failure.
++  using OpenedDeviceFd = base::OnceCallback<void(base::ScopedFD)>;
++
+   // The descriptor for `params.path`, and the ONE thing a platform whose
+   // descriptors do not come from an `open` has to replace. It is given the
+   // whole of `params` rather than the path because a platform that has to
+@@ -39,7 +42,11 @@ class COMPONENT_EXPORT(EVDEV) InputDeviceOpenerEvdev
+   // input devices, only `ID_INPUT_JOYSTICK`, so a keyboard keeps its
+   // group-owned mode and the session user gets nothing on it. See
+   // `ui/ozone/platform/drm/domicile/drm_logind_input.h`.
+-  virtual base::ScopedFD OpenDeviceFd(const OpenInputDeviceParams& params);
++  //
++  // Answers `opened` on this thread, before returning or later. A failure is
++  // logged here, where its cause is known.
++  virtual void OpenDeviceFd(const OpenInputDeviceParams& params,
++                            OpenedDeviceFd opened);
+ };
+ 
+ // The opener every platform but Domicile's DRM one wants.

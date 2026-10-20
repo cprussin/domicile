@@ -204,10 +204,9 @@ DrmVtSwitcher::DrmVtSwitcher(
   // signals and replies arrive where the delegate may be called and keys are
   // dispatched. Nothing here blocks.
   //
-  // Dedicated, because `DrmLogindInput` makes blocking calls. On a shared
-  // thread they would delay the session-inactive signal that starts the drop;
-  // without the drop, `PageFlipWatchdog` kills the GPU process after 15
-  // seconds. See `domicile/drm_logind_input.cc`.
+  // Dedicated, because `DrmLogindSession` blocks its bus's thread on each
+  // call. On a shared thread they would delay the session-inactive signal
+  // that stops the GPU process drawing. See `domicile/drm_logind_session.h`.
   options.dbus_task_runner = base::ThreadPool::CreateSingleThreadTaskRunner(
       {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
       base::SingleThreadTaskRunnerThreadMode::DEDICATED);
