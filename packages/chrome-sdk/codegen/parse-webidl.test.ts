@@ -61,6 +61,7 @@ describe("parseWebIdl", () => {
               arguments: [
                 {
                   name: "command",
+                  optional: false,
                   type: {
                     arguments: [
                       { arguments: [], name: "DOMString", nullable: false },
@@ -144,6 +145,26 @@ dictionary Key : EventInit {
 };
 `).enums,
     ).toStrictEqual([{ doc: [], name: "Theme", values: ["dark", "light"] }]);
+  });
+
+  it("reads an operation's optional argument and skips its default", () => {
+    expect(
+      parseWebIdl(`${LICENSE}interface Host {
+  undefined open(USVString url, optional DOMString partition = "");
+};
+`).interfaces[0]?.operations[0]?.arguments,
+    ).toStrictEqual([
+      {
+        name: "url",
+        optional: false,
+        type: { arguments: [], name: "USVString", nullable: false },
+      },
+      {
+        name: "partition",
+        optional: true,
+        type: { arguments: [], name: "DOMString", nullable: false },
+      },
+    ]);
   });
 
   it("throws on syntax it does not read, naming the line", () => {

@@ -54,6 +54,26 @@ plus.addEventListener("click", () => {
 - **A `<webview src="…">` with no `window`** is your own page, such as an
   extension's popup or a preview. It closes with your document.
 
+## Navigations
+
+A page's own navigation (a link, `location`, a form) fires
+`domicile-will-navigate` (`WEBVIEW_WILL_NAVIGATE_EVENT`) first, as Electron's
+`will-navigate`:
+
+```ts
+import { WEBVIEW_WILL_NAVIGATE_EVENT } from "@domicile-desktop/sdk/webview-element";
+
+view.addEventListener(WEBVIEW_WILL_NAVIGATE_EVENT, (event) => {
+  if (!allowed(event.url)) {
+    event.preventDefault(); // stays on the page; nothing is requested
+  }
+});
+```
+
+- Answer synchronously: the navigation waits for dispatch to return.
+- Only the main frame asks. `src`, `goBack`, `goForward`, `reload` and the
+  page's own history steps and reloads do not.
+
 ## Private browsing
 
 - **`openPrivateBrowserWindow(url)`** opens a private window. It is listed with
@@ -66,6 +86,22 @@ plus.addEventListener("click", () => {
   window or a `<webview private>`. The next private page starts empty.
 - A private window's new windows are private too.
 - Extensions see no private page.
+
+## Partitions
+
+A partition is storage of its own (cookies, cache, IndexedDB), apart from the
+user's and every other partition, like a separate browser profile:
+
+- **`<webview partition="persist:work">`** keeps it on disk across restarts.
+  **Any other name** keeps it in memory until the engine exits. No
+  `partition` is the user's own storage. Set it before the view enters the
+  document.
+- **`openBrowserWindow(url, partition)`** opens a window in one. It is listed
+  with its `partition` (`""` for none).
+- Pages and windows with the same name share it. Their new windows keep it.
+- `private` with a partition is in memory, apart from other private pages.
+- `persist:` with no name is refused: the view stays empty, and
+  `openBrowserWindow` throws a `TypeError`.
 
 ## Basics
 

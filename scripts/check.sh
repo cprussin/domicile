@@ -307,6 +307,8 @@ if wanted engine; then
       scripts/engine-guard-webview-new-window.sh \
       scripts/engine-guard-webview-window-open.sh \
       scripts/engine-guard-webview-private.sh \
+      scripts/engine-guard-webview-partition.sh \
+      scripts/engine-guard-webview-will-navigate.sh \
       scripts/engine-guard-webview-app-window.sh \
       scripts/engine-guard-webview-routed-link.sh \
       scripts/engine-guard-webview-target-url.sh \

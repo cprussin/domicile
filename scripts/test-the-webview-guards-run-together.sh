@@ -22,7 +22,8 @@ TOGETHER="webview-framing shell-local-network webview-content-script extension-i
   webview-click webview-activate webview-new-window webview-window-open webview-routed-link webview-target-url webview-fullscreen webview-device-request webview-dialog webview-beforeunload webview-print webview-context-menu webview-upload
   webview-download webview-save-picker webview-tabs webview-active-tab webview-passkey-extension
   webview-popup-window windows-state webview-notifications
-  webview-survives-load-shell webview-hidden webview-crash webview-private webview-app-window"
+  webview-survives-load-shell webview-hidden webview-crash webview-private webview-app-window
+  webview-partition webview-will-navigate"
 
 # A repository with check.sh and a stand-in for every engine check that
 # records its start and end. `bun` is stubbed because the group installs.

@@ -137,9 +137,10 @@ export class FakeDomicileHost {
         } else if (Object.hasOwn(state, name)) {
           return state[name as keyof DomicileState];
         } else if (name === "openBrowserWindow") {
-          return (url: string) => {
-            calls.push([name, url]);
-            this.openBrowser(url);
+          return (...args: Parameters<DomicileHost["openBrowserWindow"]>) => {
+            calls.push([name, ...args]);
+            const [url, partition = ""] = args;
+            this.openBrowser(url, { partition });
           };
         } else if (name === "openPrivateBrowserWindow") {
           return (url: string) => {
@@ -222,9 +223,13 @@ export class FakeDomicileHost {
     {
       isApp = false,
       isPrivate = false,
+      partition = "",
       popupWindow = null,
     }: Partial<
-      Pick<DomicileBrowserWindow, "isApp" | "isPrivate" | "popupWindow">
+      Pick<
+        DomicileBrowserWindow,
+        "isApp" | "isPrivate" | "partition" | "popupWindow"
+      >
     > = {},
   ): void {
     this.#browsersOpened += 1;
@@ -236,6 +241,7 @@ export class FakeDomicileHost {
           id: this.#browsersOpened.toString(),
           isApp,
           isPrivate,
+          partition,
           popupWindow,
           title: "",
           url,
