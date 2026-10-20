@@ -121,7 +121,16 @@ pub enum ChromeMessage {
     // Input the chrome captured over an <app> element, for the compositor to
     // inject into the client.
     /// Pointer moved to a surface-local coordinate `(x, y)` over an app.
-    PointerMotion { app_id: String, x: f64, y: f64 },
+    ///
+    /// `moved` is whether the pointer moved on the screen. The browser also
+    /// sends a move under a still pointer after a window changes, which is
+    /// nobody at the desk.
+    PointerMotion {
+        app_id: String,
+        x: f64,
+        y: f64,
+        moved: bool,
+    },
     /// Pointer left an app (focus returns to the chrome).
     PointerLeave { app_id: String },
     /// Pointer button changed over an app. `button` is a Linux input event code

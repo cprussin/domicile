@@ -60,7 +60,7 @@ impl Capture {
     ) -> bool {
         let taken = match (self.enabled, self.active, request) {
             (false, _, _) => false,
-            (true, None, ClientRequest::PointerMotion { app_id, x, y }) => {
+            (true, None, ClientRequest::PointerMotion { app_id, x, y, .. }) => {
                 let reached = desk.point_in(app_id, *x, *y).and_then(|point| {
                     self.barriers
                         .iter()
@@ -76,7 +76,7 @@ impl Capture {
                 }
             }
             (true, None, _) => false,
-            (true, Some(last), ClientRequest::PointerMotion { app_id, x, y }) => {
+            (true, Some(last), ClientRequest::PointerMotion { app_id, x, y, .. }) => {
                 if let Some(point) = desk.point_in(app_id, *x, *y) {
                     self.active = Some(point);
                     send(devices, Kind::Pointer, connection, |device| {

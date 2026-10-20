@@ -19,6 +19,11 @@ input, and locks the desktop after `idle.lock_after_seconds`
   page is mirrored to can show its last frame when it lights again, and that
   frame must not be the unlocked desktop.
 - Releasing the last inhibitor after either timeout acts at once.
+- **Input is a key, a click, a scroll or a pointer that moved on the
+  screen.** aura synthesizes a move under a still pointer after a window
+  changes or the displays are configured, and blanking can be such a change. The
+  engine forwards it with `moved: false` (Blink's `movementX/Y` are zero), so
+  the client still hears it and the clock does not.
 
 ## Blanking
 

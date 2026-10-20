@@ -194,6 +194,7 @@ impl Input {
                     app_id,
                     x: local.x,
                     y: local.y,
+                    moved: true,
                 }]
             }
             None => match self.over.take() {
@@ -254,6 +255,7 @@ mod tests {
             app_id: "1".into(),
             x,
             y,
+            moved: true,
         }
     }
 

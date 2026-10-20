@@ -93,7 +93,8 @@ class MODULES_EXPORT DomicileHost final
   void AppPressed(HTMLAppElement& app, const String& app_id) override;
   void AppPointerMotion(const String& app_id,
                         const gfx::PointF& point,
-                        const gfx::SizeF& size) override;
+                        const gfx::SizeF& size,
+                        bool moved) override;
   void AppPointerButton(const String& app_id,
                         uint32_t button,
                         bool pressed) override;

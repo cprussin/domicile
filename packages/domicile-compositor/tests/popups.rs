@@ -140,6 +140,7 @@ fn a_pointer_over_a_popup_is_over_the_popups_surface() {
             app_id: popup,
             x: 5.0,
             y: 6.0,
+            moved: true,
         })
         .expect("the chrome can move the pointer");
 
@@ -222,6 +223,7 @@ fn a_grabbing_popup_goes_when_the_keyboard_leaves_its_window() {
             app_id: popup,
             x: 1.0,
             y: 1.0,
+            moved: true,
         })
         .expect("the chrome can move the pointer");
     assert!(client.wait_for_trace(&format!("{surface}, 1, 1)"), 1));
@@ -347,6 +349,7 @@ fn a_bubble_takes_the_pointer_and_goes_when_hidden() {
             app_id: bubble.clone(),
             x: 5.0,
             y: 6.0,
+            moved: true,
         })
         .expect("the chrome can move the pointer");
     assert!(
@@ -398,6 +401,7 @@ fn press(chrome: &mut Chrome, app_id: &str) {
             app_id: app_id.to_string(),
             x: 1.0,
             y: 1.0,
+            moved: true,
         })
         .expect("the chrome can move the pointer");
     for pressed in [true, false] {
