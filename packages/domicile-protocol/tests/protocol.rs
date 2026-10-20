@@ -44,6 +44,7 @@ fn chrome_messages_round_trip() {
         app_id: "term".into(),
         x: 12.5,
         y: 3.0,
+        moved: true,
     });
     chrome_round_trip(&ChromeMessage::PointerLeave {
         app_id: "term".into(),

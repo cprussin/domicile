@@ -46,6 +46,9 @@ pub enum ClientRequest {
         app_id: String,
         x: f64,
         y: f64,
+        /// Whether the pointer moved on the screen. See
+        /// [`ChromeMessage::PointerMotion`](domicile_protocol::ChromeMessage::PointerMotion).
+        moved: bool,
     },
     PointerLeave,
     PointerButton {
@@ -195,7 +198,7 @@ impl DomicileCompositor {
             return;
         }
         match event {
-            ClientRequest::PointerMotion { app_id, x, y } => {
+            ClientRequest::PointerMotion { app_id, x, y, .. } => {
                 let Some(surface) = self.surface_for(&app_id) else {
                     tracing::debug!(%app_id, "pointer motion: no surface");
                     return;

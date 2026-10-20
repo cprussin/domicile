@@ -420,13 +420,23 @@ void HTMLAppElement::ForwardInput(AppInputClient& client,
 
 // Motion is the one forward that needs a box: without one there is no point
 // on the surface to report, where a press and a release still mean something.
+//
+// A STILL POINTER MOVES TOO. aura synthesizes a mouse move after a window
+// changes or the displays are configured (`EF_IS_SYNTHESIZED`, which never
+// reaches Blink), and Blink dispatches it as a `pointermove`. The client still
+// hears it, so a window that appears under the pointer gets its enter, but the
+// compositor must not read it as somebody at the desk, or blanking the screens,
+// itself such a change, lights them again. Blink computes
+// `movementX/Y` from the pointer's last place on the screen, so a synthesized
+// move is the one with no movement.
 void HTMLAppElement::ForwardMotion(AppInputClient& client,
                                    const String& app_id,
                                    const MouseEvent& event) {
   gfx::PointF point;
   gfx::SizeF size;
   if (MapToContent(event, point, size)) {
-    client.AppPointerMotion(app_id, point, size);
+    client.AppPointerMotion(app_id, point, size,
+                            event.movementX() != 0 || event.movementY() != 0);
   }
 }
 

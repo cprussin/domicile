@@ -163,6 +163,7 @@ fn emulated_input_becomes_what_the_lock_refuses() {
             app_id: "1".into(),
             x: 10.0,
             y: 20.0,
+            moved: true,
         },
         ClientRequest::PointerButton {
             button: 0x111,
@@ -178,6 +179,7 @@ fn emulated_input_becomes_what_the_lock_refuses() {
             app_id: "1".into(),
             x: 30.0,
             y: 20.0,
+            moved: true,
         },
         ClientRequest::PointerButton {
             button: 0x110,
@@ -248,6 +250,7 @@ fn input_sent_without_a_socket_takes_the_same_path_and_is_let_go_of() {
                 app_id: "1".into(),
                 x: 300.0,
                 y: 200.0,
+                moved: true,
             },
             ClientRequest::Key {
                 keycode: 30,
@@ -294,6 +297,7 @@ fn a_capture_takes_the_input_that_crosses_a_barrier_until_released() {
         app_id: "2".into(),
         x,
         y,
+        moved: true,
     };
     assert!(
         !served.diverted(pointing(100.0, 100.0)),
