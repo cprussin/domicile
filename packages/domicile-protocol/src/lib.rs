@@ -768,8 +768,8 @@ pub enum PortalKind {
 impl PortalKind {
     /// Whether `answer` can answer a request of this kind: its own kind, or a
     /// dismissal or refusal. A chosen application or printer must be one
-    /// offered, and a print job needs a copy and real pages. An inhibitor
-    /// takes none.
+    /// offered, a print job needs a copy and real pages, and a PDF an
+    /// absolute path. An inhibitor takes none.
     pub fn accepts(&self, answer: &PortalAnswer) -> bool {
         match (self, answer) {
             (PortalKind::Inhibit(_), _) => false,
@@ -798,10 +798,10 @@ impl PortalKind {
                     .iter()
                     .any(|offered| &offered.name == printer)
                     && options.copies >= 1
-                    && options
-                        .pages
-                        .iter()
-                        .all(|range| 1 <= range.first && range.first <= range.last)
+                    && real_pages(options)
+            }
+            (PortalKind::Print(_), PortalAnswer::SaveToPdf { path, options }) => {
+                path.starts_with('/') && real_pages(options)
             }
             (PortalKind::Screenshot(desk), PortalAnswer::Screenshot { area, .. }) => {
                 desk.holds(area)
@@ -828,6 +828,7 @@ impl PortalKind {
                 | PortalAnswer::DynamicLauncher { .. }
                 | PortalAnswer::ScreenCast { .. }
                 | PortalAnswer::Print { .. }
+                | PortalAnswer::SaveToPdf { .. }
                 | PortalAnswer::Screenshot { .. }
                 | PortalAnswer::ScreenshotWindow { .. }
                 | PortalAnswer::ScreenshotBrowserWindow { .. }
@@ -838,6 +839,14 @@ impl PortalKind {
             ) => false,
         }
     }
+}
+
+/// Whether each of `options`' page ranges counts from 1 and runs forward.
+fn real_pages(options: &PrintOptions) -> bool {
+    options
+        .pages
+        .iter()
+        .all(|range| 1 <= range.first && range.first <= range.last)
 }
 
 /// A `PrepareInstall`: the launcher an application would install.
@@ -1299,7 +1308,8 @@ pub enum Captured {
     },
 }
 
-/// A print dialog: the printers CUPS offers, each with what it supports.
+/// A print dialog: the printers CUPS offers, each with what it supports, and
+/// saving to a PDF.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PrintDialog {
     /// The document's title.
@@ -1313,6 +1323,11 @@ pub struct PrintDialog {
     /// default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub printer: Option<String>,
+    /// The user's home directory, where the PDF's file picker starts.
+    pub home: String,
+    /// What saving to a PDF offers, as a printer would. Its `name` is not a
+    /// CUPS queue.
+    pub pdf: Printer,
 }
 
 /// A CUPS queue and the options it supports. An empty list means the
@@ -1441,6 +1456,9 @@ pub enum PortalAnswer {
         printer: String,
         options: PrintOptions,
     },
+    /// The user saves a [`PortalKind::Print`]'s document as a PDF at the
+    /// absolute `path`, with the options of its `pdf`.
+    SaveToPdf { path: String, options: PrintOptions },
     /// The user stopped a [`Capturing`] session.
     Stop,
     /// The chords the user chose in a [`PortalKind::GlobalShortcuts`].
@@ -1497,6 +1515,7 @@ impl PortalAnswer {
             | PortalAnswer::GlobalShortcuts { .. }
             | PortalAnswer::ScreenCast { .. }
             | PortalAnswer::Print { .. }
+            | PortalAnswer::SaveToPdf { .. }
             | PortalAnswer::Screenshot { .. }
             | PortalAnswer::ScreenshotWindow { .. }
             | PortalAnswer::ScreenshotBrowserWindow { .. }

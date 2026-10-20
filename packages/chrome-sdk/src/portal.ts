@@ -494,10 +494,14 @@ export type Printer = {
   sides: readonly Sides[];
 };
 
-/** A print dialog: the document's title and the printers on offer. */
+/** A print dialog: the document's title, the printers on offer and Save to PDF. */
 export type PrintBody = {
   /** The print button's label; the shell's own when absent. */
   acceptLabel: string | undefined;
+  /** The user's home directory, where the PDF's file picker starts. */
+  home: string;
+  /** What Save to PDF offers, as a printer would. Its `name` is no CUPS queue. */
+  pdf: Printer;
   /** The printer to start with. */
   printer: string | undefined;
   /** Empty when CUPS has none or cannot be reached. */
@@ -616,6 +620,8 @@ export enum PortalAnswerKind {
   DynamicLauncher,
   /** The printer and options the user chose in a {@link PortalKind.Print}. */
   Print,
+  /** The file a {@link PortalKind.Print} saves its PDF to, and its options. */
+  SaveToPdf,
   /** The area of a {@link PortalKind.Screenshot} the user kept. */
   Screenshot,
   /**
@@ -674,6 +680,12 @@ export const PortalAnswer = {
     clipboard,
     devices,
     kind: PortalAnswerKind.RemoteDesktop as const,
+  }),
+  /** An absolute `path`; `options` within the request's `pdf`. */
+  SaveToPdf: (path: string, options: PrintOptions) => ({
+    kind: PortalAnswerKind.SaveToPdf as const,
+    options,
+    path,
   }),
   ScreenCast: (sources: readonly CastSource[]) => ({
     kind: PortalAnswerKind.ScreenCast as const,
@@ -1250,46 +1262,54 @@ const printOptionsSchema = z
     }),
   );
 
+const printerSchema = z
+  .object({
+    color_modes: z.array(colorModeSchema),
+    copies_max: z.number(),
+    description: z.string().optional(),
+    initial: printOptionsSchema,
+    media: z.array(z.object({ label: z.string(), name: z.string() })),
+    name: z.string(),
+    orientations: z.array(orientationSchema),
+    page_ranges: z.boolean(),
+    qualities: z.array(qualitySchema),
+    sides: z.array(sidesSchema),
+  })
+  .transform(
+    (printer): Printer => ({
+      colorModes: printer.color_modes.map((mode) =>
+        valueFor(COLOR_MODES, mode),
+      ),
+      copiesMax: printer.copies_max,
+      description: printer.description,
+      initial: printer.initial,
+      media: printer.media,
+      name: printer.name,
+      orientations: printer.orientations.map((name) =>
+        valueFor(ORIENTATIONS, name),
+      ),
+      pageRanges: printer.page_ranges,
+      qualities: printer.qualities.map((name) => valueFor(QUALITIES, name)),
+      sides: printer.sides.map((name) => valueFor(SIDES, name)),
+    }),
+  );
+
 const printSchema = z
   .object({
     accept_label: z.string().optional(),
+    home: z.string(),
+    pdf: printerSchema,
     printer: z.string().optional(),
-    printers: z.array(
-      z.object({
-        color_modes: z.array(colorModeSchema),
-        copies_max: z.number(),
-        description: z.string().optional(),
-        initial: printOptionsSchema,
-        media: z.array(z.object({ label: z.string(), name: z.string() })),
-        name: z.string(),
-        orientations: z.array(orientationSchema),
-        page_ranges: z.boolean(),
-        qualities: z.array(qualitySchema),
-        sides: z.array(sidesSchema),
-      }),
-    ),
+    printers: z.array(printerSchema),
     title: z.string(),
   })
   .transform(
     (body): PrintBody => ({
       acceptLabel: body.accept_label,
+      home: body.home,
+      pdf: body.pdf,
       printer: body.printer,
-      printers: body.printers.map((printer) => ({
-        colorModes: printer.color_modes.map((mode) =>
-          valueFor(COLOR_MODES, mode),
-        ),
-        copiesMax: printer.copies_max,
-        description: printer.description,
-        initial: printer.initial,
-        media: printer.media,
-        name: printer.name,
-        orientations: printer.orientations.map((name) =>
-          valueFor(ORIENTATIONS, name),
-        ),
-        pageRanges: printer.page_ranges,
-        qualities: printer.qualities.map((name) => valueFor(QUALITIES, name)),
-        sides: printer.sides.map((name) => valueFor(SIDES, name)),
-      })),
+      printers: body.printers,
       title: body.title,
     }),
   );
@@ -1500,16 +1520,14 @@ const wireAnswer = (answer: PortalAnswer): object => {
     case PortalAnswerKind.Print:
       return {
         kind: "print",
-        options: {
-          color_mode: wireOf(COLOR_MODES, answer.options.colorMode),
-          copies: answer.options.copies,
-          media: answer.options.media,
-          orientation: wireOf(ORIENTATIONS, answer.options.orientation),
-          pages: answer.options.pages,
-          quality: wireOf(QUALITIES, answer.options.quality),
-          sides: wireOf(SIDES, answer.options.sides),
-        },
+        options: wireOptions(answer.options),
         printer: answer.printer,
+      };
+    case PortalAnswerKind.SaveToPdf:
+      return {
+        kind: "save_to_pdf",
+        options: wireOptions(answer.options),
+        path: answer.path,
       };
     case PortalAnswerKind.Screenshot:
       return { area: answer.area, copy: answer.copy, kind: "screenshot" };
@@ -1527,6 +1545,16 @@ const wireAnswer = (answer: PortalAnswer): object => {
       return { kind: "refused" };
   }
 };
+
+const wireOptions = (options: PrintOptions): object => ({
+  color_mode: wireOf(COLOR_MODES, options.colorMode),
+  copies: options.copies,
+  media: options.media,
+  orientation: wireOf(ORIENTATIONS, options.orientation),
+  pages: options.pages,
+  quality: wireOf(QUALITIES, options.quality),
+  sides: wireOf(SIDES, options.sides),
+});
 
 const wireSource = (source: CastSource): object => {
   switch (source.kind) {

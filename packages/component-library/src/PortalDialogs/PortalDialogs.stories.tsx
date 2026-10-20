@@ -152,9 +152,36 @@ const officePrinter = {
   sides: ["one_sided", "two_sided_long_edge", "two_sided_short_edge"],
 };
 
+const pdfPrinter = {
+  color_modes: [],
+  copies_max: 1,
+  description: "Save to PDF",
+  initial: {
+    copies: 1,
+    media: "na_letter_8.5x11in",
+    orientation: "portrait",
+    pages: [],
+  },
+  media: [
+    { label: "Letter (8.5 × 11 in)", name: "na_letter_8.5x11in" },
+    { label: "A4 (210 × 297 mm)", name: "iso_a4_210x297mm" },
+  ],
+  name: "pdf",
+  orientations: ["portrait", "landscape"],
+  page_ranges: true,
+  qualities: [],
+  sides: [],
+};
+
 const print = (printers: readonly object[]) => ({
   app_id: "org.example.Editor",
-  body: { printer: "office", printers, title: "Quarterly report" },
+  body: {
+    home: "/home/u",
+    pdf: pdfPrinter,
+    printer: "office",
+    printers,
+    title: "Quarterly report",
+  },
   id: 9,
   kind: "print",
 });

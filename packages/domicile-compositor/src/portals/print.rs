@@ -1,30 +1,35 @@
 //! `org.freedesktop.impl.portal.Print`: the shell's print dialog, and the job
-//! sent to CUPS over IPP.
+//! sent to CUPS over IPP or saved as a PDF.
 //!
 //! `PreparePrint` asks and answers with GTK's `settings` and `page-setup` and
 //! a token. `Print` sends the document with that token's choice, or asks
 //! first without one. No preview: the document arrives after the dialog
-//! closes. With no printers the dialog says so, and the call ends with `2`.
+//! closes. Save to PDF writes the application's own PDF to the chosen file.
 
 use std::collections::HashMap;
 use std::io::Read;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
 use domicile_host::cups::{Cups, Offered};
 use domicile_host::print_settings::{page_setup, settings as gtk_settings, Preset};
+use domicile_host::save_to_pdf;
 use domicile_protocol::{PortalAnswer, PortalKind, PrintDialog, PrintOptions, Printer};
 use tracing::{debug, warn};
 use zbus::object_server::ObjectServer;
 use zbus::zvariant::{OwnedFd, OwnedObjectPath, OwnedValue, Value};
 
 use super::queue::{ask, Queue};
+use super::uri::file_uri;
 use crate::reply::reply;
 
 /// The `Print` backend object.
 pub struct Print {
     pub queue: Arc<Queue>,
     pub cups: Cups,
+    /// The user's home directory, where Save to PDF's picker starts.
+    pub home: String,
     pub prepared: Mutex<Prepared>,
 }
 
@@ -35,11 +40,18 @@ pub struct Prepared {
     chosen: HashMap<u32, Chosen>,
 }
 
-/// A printer and its options.
+/// Where the document goes, and its options.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Chosen {
-    printer: String,
+    destination: Destination,
     options: PrintOptions,
+}
+
+/// A CUPS queue, or a PDF file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Destination {
+    Printer(String),
+    File(PathBuf),
 }
 
 #[zbus::interface(name = "org.freedesktop.impl.portal.Print")]
@@ -123,14 +135,18 @@ impl Print {
                     std::fs::File::from(std::os::fd::OwnedFd::from(fd))
                         .read_to_end(&mut document)
                         .map_err(|why| why.to_string())?;
-                    cups.print(&chosen.printer, &chosen.options, &title, &document)
-                        .map_err(|why| why.to_string())
+                    match &chosen.destination {
+                        Destination::Printer(printer) => cups
+                            .print(printer, &chosen.options, &title, &document)
+                            .map_err(|why| why.to_string()),
+                        Destination::File(path) => save_pdf(path, &document),
+                    }
                 })
                 .await;
                 match printed {
                     Ok(()) => (0, HashMap::new()),
                     Err(why) => {
-                        warn!(%why, "a print job did not reach CUPS");
+                        warn!(%why, "a print job did not reach CUPS or its file");
                         (2, HashMap::new())
                     }
                 }
@@ -149,9 +165,9 @@ struct Asked {
 }
 
 impl Print {
-    /// Put the printers CUPS offers to the shell, starting from `preset`.
-    /// `Err` is the portal's response: `1` when the user dismissed it, `2`
-    /// when there was nothing to choose.
+    /// Put the printers CUPS offers and Save to PDF to the shell, starting
+    /// from `preset`. `Err` is the portal's response: `1` when the user
+    /// dismissed it.
     async fn choose(
         &self,
         server: &ObjectServer,
@@ -174,8 +190,13 @@ impl Print {
             .options
             .remove("accept_label")
             .and_then(|label| String::try_from(label).ok());
-        let dialog = dialog(asked.title, accept_label, offered, preset);
-        let none = dialog.printers.is_empty();
+        let dialog = dialog(
+            asked.title,
+            accept_label,
+            offered,
+            preset,
+            self.home.clone(),
+        );
         let kind = PortalKind::Print(dialog);
         match ask(
             &self.queue,
@@ -187,11 +208,17 @@ impl Print {
         )
         .await
         {
-            PortalAnswer::Print { printer, options } => Ok(Chosen { printer, options }),
-            PortalAnswer::Canceled if !none => Err(1),
+            PortalAnswer::Print { printer, options } => Ok(Chosen {
+                destination: Destination::Printer(printer),
+                options,
+            }),
+            PortalAnswer::SaveToPdf { path, options } => Ok(Chosen {
+                destination: Destination::File(path.into()),
+                options,
+            }),
+            PortalAnswer::Canceled => Err(1),
             // The queue takes no other kind's answer; see `PortalKind::accepts`.
-            PortalAnswer::Canceled
-            | PortalAnswer::Refused
+            PortalAnswer::Refused
             | PortalAnswer::Access
             | PortalAnswer::AppChooser { .. }
             | PortalAnswer::FileChooser(_)
@@ -225,13 +252,14 @@ impl Prepared {
     }
 }
 
-/// The dialog for `offered`, each printer starting from `preset`, and from
-/// the application's printer, else CUPS's default.
+/// The dialog for `offered` and Save to PDF, each starting from `preset`, and
+/// from the application's printer, else CUPS's default.
 fn dialog(
     title: String,
     accept_label: Option<String>,
     offered: Offered,
     preset: &Preset,
+    home: String,
 ) -> PrintDialog {
     let printers: Vec<Printer> = offered
         .printers
@@ -246,11 +274,17 @@ fn dialog(
         .clone()
         .filter(|wanted| printers.iter().any(|printer| &printer.name == wanted))
         .or(offered.default);
+    let pdf = save_to_pdf::printer();
     PrintDialog {
         title,
         accept_label,
         printers,
         printer,
+        home,
+        pdf: Printer {
+            initial: preset.applied(&pdf),
+            ..pdf
+        },
     }
 }
 
@@ -265,12 +299,31 @@ fn strings(map: &HashMap<String, OwnedValue>) -> HashMap<String, String> {
         .collect()
 }
 
-/// GTK's settings for `chosen`.
+/// GTK's settings for `chosen`. A file is GTK's own "Print to File".
 fn settings_of(chosen: &Chosen) -> Vec<(&'static str, Value<'static>)> {
-    gtk_settings(&chosen.printer, &chosen.options)
+    let settings = match &chosen.destination {
+        Destination::Printer(printer) => gtk_settings(printer, &chosen.options),
+        Destination::File(path) => gtk_settings("Print to File", &chosen.options)
+            .into_iter()
+            .chain([
+                ("output-uri", file_uri(&path.display().to_string())),
+                ("output-file-format", "pdf".to_string()),
+            ])
+            .collect(),
+    };
+    settings
         .into_iter()
         .map(|(key, value)| (key, Value::from(value)))
         .collect()
+}
+
+/// Write `document` to `path`, if it is a PDF.
+fn save_pdf(path: &std::path::Path, document: &[u8]) -> Result<(), String> {
+    if document.starts_with(b"%PDF-") {
+        std::fs::write(path, document).map_err(|why| format!("{}: {why}", path.display()))
+    } else {
+        Err(format!("not a PDF for {}", path.display()))
+    }
 }
 
 /// GTK's page setup for `options`; none when its paper is unknown.
@@ -366,6 +419,7 @@ mod tests {
                     Print {
                         queue: serving,
                         cups: Cups::new(endpoints, "me".into()),
+                        home: "/home/me".into(),
                         prepared: Mutex::default(),
                     },
                 )
@@ -661,15 +715,85 @@ mod tests {
     }
 
     #[test]
-    fn with_no_cups_the_dialog_has_no_printers_and_print_fails() {
+    fn with_no_cups_the_dialog_offers_only_a_pdf() {
         let dir = tempfile::tempdir().expect("a directory");
         let served = served(vec![Endpoint::Socket(dir.path().join("cups.sock"))]);
         let printing = print(&served, b"%PDF", Results::new());
 
-        assert_eq!(asked(&served).printers, []);
+        let dialog = asked(&served);
+        assert_eq!(dialog.printers, []);
+        assert_eq!(dialog.pdf.description.as_deref(), Some("Save to PDF"));
         served.queue.answer(1, PortalAnswer::Canceled);
 
+        assert_eq!(printing.join().expect("the call returned").0, 1);
+    }
+
+    #[test]
+    fn a_prepared_pdf_is_written_to_its_file_and_not_to_cups() {
+        let (cups, jobs, _cups_dir) = fake_cups(0);
+        let served = served(vec![cups]);
+        let dir = tempfile::tempdir().expect("a directory");
+        let path = dir.path().join("My Report.pdf");
+        let preparing = prepare(&served, strings(&[("paper-format", "iso_a4")]));
+
+        let dialog = asked(&served);
+        assert_eq!(dialog.home, "/home/me");
+        assert_eq!(
+            dialog.pdf.initial.media.as_deref(),
+            Some("iso_a4_210x297mm"),
+            "the application's paper"
+        );
+        served.queue.answer(
+            1,
+            PortalAnswer::SaveToPdf {
+                path: path.display().to_string(),
+                options: dialog.pdf.initial.clone(),
+            },
+        );
+
+        let (response, results) = preparing.join().expect("the call returned");
+        assert_eq!(response, 0);
+        let settings = dict(&results, "settings");
+        assert_eq!(text(&settings, "printer"), "Print to File");
+        assert_eq!(text(&settings, "output-file-format"), "pdf");
+        assert_eq!(
+            text(&settings, "output-uri"),
+            format!("file://{}/My%20Report.pdf", dir.path().display())
+        );
+        let token = u32::try_from(results.get("token").expect("a token")).expect("a u32");
+
+        let printing = print(
+            &served,
+            b"%PDF-1.7",
+            HashMap::from([("token".to_string(), OwnedValue::from(token))]),
+        );
+
+        assert_eq!(
+            printing.join().expect("the call returned"),
+            (0, Results::new())
+        );
+        assert_eq!(std::fs::read(&path).expect("the file"), b"%PDF-1.7");
+        assert!(jobs.try_recv().is_err(), "no print job");
+    }
+
+    #[test]
+    fn a_document_that_is_not_a_pdf_is_not_saved_as_one() {
+        let (cups, _jobs, _cups_dir) = fake_cups(0);
+        let served = served(vec![cups]);
+        let dir = tempfile::tempdir().expect("a directory");
+        let path = dir.path().join("Report.pdf");
+        let printing = print(&served, b"%!PS", Results::new());
+        let dialog = asked(&served);
+        served.queue.answer(
+            1,
+            PortalAnswer::SaveToPdf {
+                path: path.display().to_string(),
+                options: dialog.pdf.initial,
+            },
+        );
+
         assert_eq!(printing.join().expect("the call returned").0, 2);
+        assert!(!path.exists());
     }
 
     #[test]

@@ -195,8 +195,11 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 - **Print speaks IPP itself.** `domicile_host::ipp` encodes the few message
   shapes CUPS needs, rather than adding the `ipp` crate and its HTTP stack. A
   token's choice lives in memory until `Print` takes it.
-- **No printers ends with `2`.** With CUPS unreachable or empty, the dialog
-  says there are no printers; closing it is a failure, not a cancel.
+- **Save to PDF is a destination.** The dialog lists it after CUPS's
+  printers, and alone when there are none. The shell's file picker chooses
+  the file. GTK's settings say "Print to File" with that `output-uri`, and
+  `Print` writes the application's own PDF there. A document that is not a
+  PDF ends with `2`.
 - **Browser windows print through the portal.** The engine's print dialog is
   Chromium's `PrintDialogLinuxPortal`, so `view.print()` and a page's
   `window.print()` reach this backend as any application's print does. Print
@@ -270,7 +273,7 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 | Wallpaper | copies the picture; `set-on` background, lock screen or both | preview dialog, shell wallpaper and lock screen |
 | DynamicLauncher | `PrepareInstall` asks; no install tokens; `SupportedLauncherTypes` application and web app | install confirm, name editable |
 | Usb | names each device from its udev properties, else udev's database | device grant, all or none |
-| Print | printers and options from CUPS over IPP (`domicile_host::cups`, its own IPP codec); GTK `settings`/`page-setup` round-trip; `Print-Job` with the token's choice; no CUPS or no printers ends with `2` | printer, paper, copies, pages, sides, color, orientation, quality |
+| Print | printers and options from CUPS over IPP (`domicile_host::cups`, its own IPP codec); GTK `settings`/`page-setup` round-trip; `Print-Job` with the token's choice; Save to PDF writes the application's PDF to the file picked | printer or PDF, paper, copies, pages, sides, color, orientation, quality |
 | Secret | keyring, not Domicile | — |
 
 Outside the portal, the compositor serves `ext-data-control-v1`, so clipboard

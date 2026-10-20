@@ -294,6 +294,7 @@ const Dialog = ({
           answer={answer}
           asker={asker}
           body={request.body}
+          list={list}
           screen={screen}
         />
       );

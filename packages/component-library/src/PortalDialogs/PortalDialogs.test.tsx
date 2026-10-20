@@ -209,9 +209,37 @@ const printer = (name: string, initial: object = {}) => ({
   sides: ["one_sided", "two_sided_long_edge"],
 });
 
+const pdf = {
+  color_modes: [],
+  copies_max: 1,
+  description: "Save to PDF",
+  initial: {
+    copies: 1,
+    media: "na_letter_8.5x11in",
+    orientation: "portrait",
+    pages: [],
+  },
+  media: [
+    { label: "Letter (8.5 × 11 in)", name: "na_letter_8.5x11in" },
+    { label: "A4 (210 × 297 mm)", name: "iso_a4_210x297mm" },
+  ],
+  name: "pdf",
+  orientations: ["portrait", "landscape"],
+  page_ranges: true,
+  qualities: [],
+  sides: [],
+};
+
 const print = (id: number, printers: readonly object[], start = "office") => ({
   app_id: "org.example.Editor",
-  body: { accept_label: "Print it", printer: start, printers, title: "Report" },
+  body: {
+    accept_label: "Print it",
+    home: "/home/me",
+    pdf,
+    printer: start,
+    printers,
+    title: "Report",
+  },
   id,
   kind: "print",
 });
@@ -1160,8 +1188,11 @@ describe("PortalDialogs", () => {
         "org.example.Editor prints “Report”",
       );
       expect(
-        screen.getByRole("combobox", { name: "Printer" }).textContent,
+        screen.getByRole("combobox", { name: "Destination" }).textContent,
       ).toContain("office printer");
+      expect(
+        screen.getByRole("combobox", { name: "Two-sided" }).textContent,
+      ).toContain("Off");
       expect(screen.queryByRole("combobox", { name: "Quality" })).toBeNull();
       await userEvent.click(screen.getByRole("button", { name: "Print it" }));
 
@@ -1189,13 +1220,19 @@ describe("PortalDialogs", () => {
       render(<PortalDialogs host={host.host} />);
       host.push([print(1, twoPrinters)]);
 
-      await user.click(screen.getByRole("combobox", { name: "Printer" }));
+      await user.click(screen.getByRole("combobox", { name: "Destination" }));
       await user.click(screen.getByRole("option", { name: "lab printer" }));
-      await user.click(screen.getByRole("combobox", { name: "Orientation" }));
+      await user.click(screen.getByRole("combobox", { name: "Layout" }));
       await user.click(screen.getByRole("option", { name: "Landscape" }));
       await user.clear(screen.getByRole("spinbutton", { name: "Copies" }));
       await user.type(screen.getByRole("spinbutton", { name: "Copies" }), "3");
-      await user.type(screen.getByRole("textbox", { name: "Pages" }), "1-2, 5");
+      expect(screen.queryByRole("textbox", { name: "Page range" })).toBeNull();
+      await user.click(screen.getByRole("combobox", { name: "Pages" }));
+      await user.click(screen.getByRole("option", { name: "Custom" }));
+      await user.type(
+        screen.getByRole("textbox", { name: "Page range" }),
+        "1-2, 5",
+      );
       await user.click(screen.getByRole("button", { name: "Print it" }));
 
       expect(host.answers).toEqual([
@@ -1224,24 +1261,89 @@ describe("PortalDialogs", () => {
       render(<PortalDialogs host={host.host} />);
       host.push([print(1, twoPrinters)]);
 
-      await user.type(screen.getByRole("textbox", { name: "Pages" }), "3-1");
-      expect(screen.getByRole("button", { name: "Print it" })).toBeDisabled();
-      await user.clear(screen.getByRole("textbox", { name: "Pages" }));
       await user.clear(screen.getByRole("spinbutton", { name: "Copies" }));
       await user.type(screen.getByRole("spinbutton", { name: "Copies" }), "10");
       expect(screen.getByRole("button", { name: "Print it" })).toBeDisabled();
+      await user.clear(screen.getByRole("spinbutton", { name: "Copies" }));
+      await user.type(screen.getByRole("spinbutton", { name: "Copies" }), "1");
+      await user.click(screen.getByRole("combobox", { name: "Pages" }));
+      await user.click(screen.getByRole("option", { name: "Custom" }));
+      expect(screen.getByRole("button", { name: "Print it" })).toBeDisabled();
+      await user.type(
+        screen.getByRole("textbox", { name: "Page range" }),
+        "3-1",
+      );
+      expect(
+        screen.getByRole("textbox", { name: "Page range" }),
+      ).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByRole("button", { name: "Print it" })).toBeDisabled();
     });
 
-    it("says there are no printers and closes as canceled", async () => {
+    it("saves a PDF where the user picks, with its paper and pages", async () => {
+      const user = userEvent.setup();
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} systemOf={home()} />);
+      host.push([print(1, twoPrinters)]);
+
+      await user.click(screen.getByRole("combobox", { name: "Destination" }));
+      await user.click(screen.getByRole("option", { name: "Save to PDF" }));
+      expect(screen.queryByRole("spinbutton", { name: "Copies" })).toBeNull();
+      await user.click(screen.getByRole("combobox", { name: "Pages" }));
+      await user.click(screen.getByRole("option", { name: "Custom" }));
+      await user.type(screen.getByRole("textbox", { name: "Page range" }), "2");
+      await user.click(screen.getByRole("button", { name: "Save…" }));
+      await listed();
+
+      expect(screen.getByRole("combobox", { name: "Name" })).toHaveValue(
+        "Report.pdf",
+      );
+      await user.click(screen.getByRole("button", { name: "Save" }));
+
+      expect(host.answers).toEqual([
+        [
+          1,
+          {
+            kind: "save_to_pdf",
+            options: {
+              copies: 1,
+              media: "na_letter_8.5x11in",
+              orientation: "portrait",
+              pages: [{ first: 2, last: 2 }],
+            },
+            path: "/home/me/Report.pdf",
+          },
+        ],
+      ]);
+    });
+
+    it("goes back to its options when the PDF's picker is canceled", async () => {
+      const user = userEvent.setup();
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} systemOf={home()} />);
+      host.push([print(1, twoPrinters)]);
+
+      await user.click(screen.getByRole("combobox", { name: "Destination" }));
+      await user.click(screen.getByRole("option", { name: "Save to PDF" }));
+      await user.click(screen.getByRole("button", { name: "Save…" }));
+      await listed();
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(
+        screen.getByRole("combobox", { name: "Destination" }).textContent,
+      ).toContain("Save to PDF");
+      expect(host.answers).toEqual([]);
+    });
+
+    it("offers a PDF when no printers are set up", () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} />);
       host.push([print(1, [], "")]);
 
+      expect(
+        screen.getByRole("combobox", { name: "Destination" }).textContent,
+      ).toContain("Save to PDF");
       expect(screen.getByText("No printers are set up.")).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Print it" })).toBeNull();
-      await userEvent.click(screen.getByRole("button", { name: "Close" }));
-
-      expect(host.answers).toEqual([[1, { kind: "canceled" }]]);
+      expect(screen.getByRole("button", { name: "Save…" })).toBeEnabled();
     });
 
     it("cancels", async () => {
