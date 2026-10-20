@@ -99,11 +99,9 @@ item when it ships.
    `LocalSurfaceId`, so a client's frame and the page's layout change in the
    same frame
    ([What each side knows](docs/architecture/WINDOW-COMPOSITING.md#what-each-side-knows)).
-   - Phase 1: Domicile's own subsurfaces and popups, so `wl_subsurface` sync
-     holds. Bubbles sync
-     ([Synced frames](docs/architecture/WINDOW-COMPOSITING.md#synced-frames));
-     xdg popups do not.
-   - Phase 2: a protocol for clients to anchor to page layout.
+   Domicile's own subsurfaces and popups sync
+   ([Synced frames](docs/architecture/WINDOW-COMPOSITING.md#synced-frames)).
+   - Next: a protocol for clients to anchor to page layout.
 
 ## Known gaps
 

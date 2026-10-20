@@ -79,6 +79,9 @@ const SIZE: (u32, u32) = (320, 240);
 /// pixels. Public so checks can compare it with what the compositor reports.
 pub const POPUP: (i32, i32, i32, i32) = (10, 20, 120, 80);
 
+/// The `--repositioned-popup` geometry once it has moved, as [`POPUP`].
+pub const POPUP_MOVED: (i32, i32, i32, i32) = (60, 50, 140, 90);
+
 /// The `--bubble` geometry as `(x, y, width, height)` in window surface
 /// pixels, when it opens.
 pub const BUBBLE: (i32, i32, i32, i32) = (40, 30, 100, 60);
@@ -251,6 +254,9 @@ struct Client {
     wants_popup: bool,
     /// See [`crate::arguments::Arguments::popup_grab`].
     popup_grab: bool,
+    /// Whether the popup has yet to move. See
+    /// [`crate::arguments::Arguments::repositioned_popup`].
+    repositions: bool,
     /// See [`crate::arguments::Arguments::sliding_menu`].
     sliding_menu: bool,
     /// The open popups, each over the one before it or the window.
@@ -379,14 +385,18 @@ struct CopyRole;
 /// from the window's.
 struct PopupRole;
 
-/// An open `--popup` or `--sliding-menu`: one surface drawn once in
-/// [`POPUP_COLOR`].
+/// An open `--popup` or `--sliding-menu`: one surface drawn in
+/// [`POPUP_COLOR`], once at each size it is configured to.
 struct Popup {
     surface: wl_surface::WlSurface,
     xdg: xdg_surface::XdgSurface,
     popup: xdg_popup::XdgPopup,
-    /// Its buffer and backing file, created at its first configure.
-    drawn: Option<(wl_buffer::WlBuffer, std::fs::File)>,
+    /// The size its last `xdg_popup.configure` gave it.
+    configured: (i32, i32),
+    /// The size it last drew at, `None` before its first frame.
+    drawn_at: Option<(i32, i32)>,
+    /// Its buffers and backing files, kept until the client exits.
+    drawn: Vec<(wl_buffer::WlBuffer, std::fs::File)>,
 }
 
 /// User data for a bubble's objects. See [`PopupRole`].
@@ -510,6 +520,7 @@ impl Client {
             title: asked.title.clone(),
             wants_popup: asked.popup,
             popup_grab: asked.popup_grab,
+            repositions: asked.repositioned_popup,
             sliding_menu: asked.sliding_menu,
             popups: Vec::new(),
             wants_bubble: asked.bubble || asked.scrolling_bubble,
@@ -1234,18 +1245,8 @@ fn open_a_popup(
     ) else {
         unreachable!("open() refuses a compositor without these");
     };
-    let (x, y, width, height) = POPUP;
-    let positioner = wm_base.create_positioner(handle, ());
-    positioner.set_size(width, height);
-    positioner.set_anchor_rect(x, y, 1, 1);
-    positioner.set_anchor(xdg_positioner::Anchor::TopLeft);
-    positioner.set_gravity(xdg_positioner::Gravity::BottomRight);
-    if slides {
-        positioner.set_constraint_adjustment(
-            xdg_positioner::ConstraintAdjustment::SlideX
-                | xdg_positioner::ConstraintAdjustment::SlideY,
-        );
-    }
+    let positioner = positioner(wm_base, handle, POPUP, slides);
+    let (_, _, width, height) = POPUP;
     let surface = compositor.create_surface(handle, PopupRole);
     let xdg = wm_base.get_xdg_surface(&surface, handle, PopupRole);
     let popup = xdg.get_popup(Some(parent), &positioner, handle, PopupRole);
@@ -1266,11 +1267,15 @@ fn open_a_popup(
         surface,
         xdg,
         popup,
-        drawn: None,
+        configured: (width, height),
+        drawn_at: None,
+        drawn: Vec::new(),
     });
 }
 
-/// Draw the single frame of the popup `xdg` is, or exit with the error.
+/// Draw the popup `xdg` is at the size it was configured to, unless it has
+/// drawn at that size already, or exit with the error. A
+/// `--repositioned-popup` moves once it has drawn.
 fn draw_popup_or_stop(
     client: &mut Client,
     handle: &QueueHandle<Client>,
@@ -1286,15 +1291,50 @@ fn draw_popup_or_stop(
         .iter_mut()
         .find(|popup| popup.xdg == *xdg)
         .expect("only a popup this client opened is configured");
-    if popup.drawn.is_some() {
+    if popup.drawn_at == Some(popup.configured) {
         return;
     }
-    let (_, _, width, height) = POPUP;
+    let (width, height) = popup.configured;
     let (buffer, file) = solid_or_stop(shm, handle, (width, height), PopupRole);
     popup.surface.attach(Some(&buffer), 0, 0);
     popup.surface.damage(0, 0, width, height);
     popup.surface.commit();
-    popup.drawn = Some((buffer, file));
+    popup.drawn_at = Some(popup.configured);
+    popup.drawn.push((buffer, file));
+    if client.repositions {
+        client.repositions = false;
+        let wm_base = client
+            .globals
+            .wm_base
+            .as_ref()
+            .expect("open() refuses a compositor without xdg_wm_base");
+        let positioner = positioner(wm_base, handle, POPUP_MOVED, false);
+        popup.popup.reposition(&positioner, 1);
+        positioner.destroy();
+        crate::say!(popup.popup.id(), "reposition()");
+    }
+}
+
+/// A positioner for a `(x, y, width, height)` popup with its corner at
+/// `(x, y)` of its parent, sliding on both axes if `slides`.
+fn positioner(
+    wm_base: &xdg_wm_base::XdgWmBase,
+    handle: &QueueHandle<Client>,
+    (x, y, width, height): (i32, i32, i32, i32),
+    slides: bool,
+) -> xdg_positioner::XdgPositioner {
+    let positioner = wm_base.create_positioner(handle, ());
+    positioner.set_size(width, height);
+    positioner.set_anchor_rect(x, y, 1, 1);
+    positioner.set_anchor(xdg_positioner::Anchor::TopLeft);
+    positioner.set_gravity(xdg_positioner::Gravity::BottomRight);
+    if slides {
+        positioner.set_constraint_adjustment(
+            xdg_positioner::ConstraintAdjustment::SlideX
+                | xdg_positioner::ConstraintAdjustment::SlideY,
+        );
+    }
+    positioner
 }
 
 /// A buffer of `size` filled with [`POPUP_COLOR`], or exit with the error.
@@ -1712,6 +1752,12 @@ impl Dispatch<xdg_popup::XdgPopup, PopupRole> for Client {
                 height,
             } => {
                 crate::say!(popup.id(), "configure({x}, {y}, {width}, {height})");
+                client
+                    .popups
+                    .iter_mut()
+                    .find(|open| open.popup == *popup)
+                    .expect("only a popup this client has open is configured")
+                    .configured = (width, height);
             }
             // Destroy a dismissed popup, as toolkits do.
             xdg_popup::Event::PopupDone => {

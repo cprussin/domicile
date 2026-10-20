@@ -732,7 +732,7 @@ impl Host {
     }
 
     /// A popup the client repositioned. Returns the chrome notification, or
-    /// `None` if `app_id` is no popup.
+    /// `None` if `app_id` is no popup or is already there.
     pub fn popup_moved(
         &mut self,
         app_id: &str,
@@ -740,6 +740,9 @@ impl Host {
         size: (f64, f64),
     ) -> Option<HostMessage> {
         let popup = self.popups.get_mut(app_id)?;
+        if (popup.position, popup.size) == (position, size) {
+            return None;
+        }
         popup.position = position;
         popup.size = size;
         Some(placed(popup))

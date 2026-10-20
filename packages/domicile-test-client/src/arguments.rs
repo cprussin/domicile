@@ -74,6 +74,12 @@ pub struct Arguments {
     /// menu does. Implies `popup`.
     pub popup_grab: bool,
 
+    /// Whether the popup moves once it has drawn, as a menu does when its
+    /// anchor scrolls: `xdg_popup.reposition` to
+    /// [`crate::window::POPUP_MOVED`], drawn anew at its new size. Implies
+    /// `popup`.
+    pub repositioned_popup: bool,
+
     /// Whether each press opens a menu over what it pressed, the window or a
     /// menu, whose positioner lets it slide on both axes.
     ///
@@ -222,6 +228,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut paste = None;
     let mut popup = None;
     let mut popup_grab = None;
+    let mut repositioned_popup = None;
     let mut sliding_menu = None;
     let mut bubble = None;
     let mut scrolling_bubble = None;
@@ -303,6 +310,9 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             "--popup-grab" => {
                 take(&mut popup_grab, &flag, true)?;
             }
+            "--repositioned-popup" => {
+                take(&mut repositioned_popup, &flag, true)?;
+            }
             "--sliding-menu" => {
                 take(&mut sliding_menu, &flag, true)?;
             }
@@ -358,8 +368,11 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
         copy,
         copy_primary,
         paste: paste.unwrap_or(false),
-        popup: popup.unwrap_or(false) || popup_grab.unwrap_or(false),
+        popup: popup.unwrap_or(false)
+            || popup_grab.unwrap_or(false)
+            || repositioned_popup.unwrap_or(false),
         popup_grab: popup_grab.unwrap_or(false),
+        repositioned_popup: repositioned_popup.unwrap_or(false),
         sliding_menu: sliding_menu.unwrap_or(false),
         bubble: bubble.unwrap_or(false),
         scrolling_bubble: scrolling_bubble.unwrap_or(false),

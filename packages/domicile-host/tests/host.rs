@@ -622,6 +622,11 @@ fn a_popup_moved_is_placed_again_and_closed_like_a_window() {
             frames: vec![],
         })
     );
+    assert_eq!(
+        host.popup_moved(&popup, (40.0, 30.0), (180.0, 200.0)),
+        None,
+        "a popup that stayed put is not placed again"
+    );
     assert_eq!(host.popup_moved(&window, (0.0, 0.0), (1.0, 1.0)), None);
 
     assert_eq!(

@@ -98,8 +98,10 @@ compositor names, and the page embeds that id in the same render as the move.
   fed by `AppAppeared.frame` and `PopupPlaced.frames`).
 - **Reload:** `Host` keeps each surface's last frame, and `AppAppeared.frame`
   and a catch-up `PopupPlaced` tell a new page where each one is.
-- **xdg popups** are not synced. Their moves are not sent, and no parent
-  content shares their transaction.
+- **xdg popups:** a reposition (`xdg_popup.reposition`) is placed when the
+  client commits the configure it acked, synced with that commit's frame and
+  its sync subsurfaces'. The parent's content is not in the popup's
+  transaction, so a popup and the window under it can show a frame apart.
 - **Check:** `guard-scrolling-bubble.sh` scrolls a window under a sync bubble
   on `crux` and reads a monitor cast: each frame shows the bubble at the
   window's content. Its control places each move a step late and shows the

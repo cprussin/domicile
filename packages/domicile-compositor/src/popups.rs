@@ -10,7 +10,7 @@ use smithay::wayland::{
         get_children, get_parent, get_role, is_sync_subsurface, with_states, BufferAssignment,
         SubsurfaceCachedState, SurfaceAttributes,
     },
-    shell::xdg::{PopupSurface, PositionerState, XDG_POPUP_ROLE},
+    shell::xdg::{PopupSurface, PositionerState, XdgPopupSurfaceData, XDG_POPUP_ROLE},
 };
 use tracing::debug;
 
@@ -64,11 +64,11 @@ impl DomicileCompositor {
         if !has_a_buffer {
             return;
         }
-        let geometry = popup.with_pending_state(|state| state.geometry);
+        let (position, size) = committed_placement(surface);
         let placed = self.hub.host.lock().unwrap().popup_placed(
             &parent,
-            (f64::from(geometry.loc.x), f64::from(geometry.loc.y)),
-            (f64::from(geometry.size.w), f64::from(geometry.size.h)),
+            position,
+            size,
             self.grabbing.contains(&popup),
         );
         if let Some((app_id, message)) = placed {
@@ -80,6 +80,28 @@ impl DomicileCompositor {
             );
             self.popups.push((app_id, popup));
             self.hub.broadcast(message);
+        }
+    }
+
+    /// Place a popup again once its client commits a reposition
+    /// (`xdg_popup.reposition`), with the frame that commit submits.
+    pub fn place_a_repositioned_popup(&mut self, surface: &WlSurface) {
+        let Some((app_id, _)) = self
+            .popups
+            .iter()
+            .find(|(_, popup)| popup.wl_surface() == surface)
+        else {
+            return;
+        };
+        let (position, size) = committed_placement(surface);
+        let moved = self
+            .hub
+            .host
+            .lock()
+            .unwrap()
+            .popup_moved(app_id, position, size);
+        if let Some(message) = moved {
+            self.tell_the_move(message);
         }
     }
 
@@ -321,6 +343,25 @@ fn drawn_size(surface: &WlSurface) -> Option<(f64, f64)> {
         );
         Some((f64::from(width), f64::from(height)))
     })
+}
+
+/// Where a popup is over its parent and its size, logical, as its client last
+/// committed them: the configure it acked before this commit.
+fn committed_placement(surface: &WlSurface) -> ((f64, f64), (f64, f64)) {
+    let geometry = with_states(surface, |states| {
+        states
+            .data_map
+            .get::<XdgPopupSurfaceData>()
+            .expect("an xdg popup's surface has its role data")
+            .lock()
+            .unwrap()
+            .current
+            .geometry
+    });
+    (
+        (f64::from(geometry.loc.x), f64::from(geometry.loc.y)),
+        (f64::from(geometry.size.w), f64::from(geometry.size.h)),
+    )
 }
 
 /// Where a bubble is over `parent`, logical: its subsurface position from
