@@ -178,6 +178,7 @@ impl DomicileCompositor {
     /// One surface's part of a commit transaction.
     fn apply_the_commit(&mut self, surface: &WlSurface) {
         self.announce_a_new_popup(surface);
+        self.place_a_repositioned_popup(surface);
         self.place_the_bubbles(surface);
         let Some((committer, role)) = self.committer(surface) else {
             return;

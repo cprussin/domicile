@@ -484,3 +484,11 @@ fn a_client_can_be_asked_to_bind_wl_seat_7() {
         "and binds version 5 unless told"
     );
 }
+
+#[test]
+fn a_popup_that_moves_is_a_popup() {
+    let asked = given(&["--repositioned-popup"]).expect("a popup that moves once drawn");
+
+    assert!(asked.repositioned_popup);
+    assert!(asked.popup, "it opens the popup it moves");
+}

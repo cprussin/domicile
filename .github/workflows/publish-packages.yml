@@ -11,7 +11,7 @@ name: Publish packages
 #   skips what is already published, so a failed release is rerun as it is.
 #   `dry_run`, on by default, builds and checks everything and publishes
 #   nothing.
-# - With `prerelease` too, publishes main as a prerelease of `domicile`'s
+# - With `prerelease` too, publishes `stable` as a prerelease of `domicile`'s
 #   version to the repositories and the AUR, for testing the installs: no npm,
 #   no tags, `release` stays. The release replaces it.
 #
@@ -41,7 +41,7 @@ on:
         type: boolean
         default: true
       prerelease:
-        description: With release, publish main as a prerelease to the repositories and the AUR only
+        description: With release, publish stable as a prerelease to the repositories and the AUR only
         type: boolean
         default: false
 
@@ -79,7 +79,7 @@ jobs:
       # The whole history, so release can be checked as an ancestor.
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.prerelease && github.sha || 'stable' }}
+          ref: stable
           fetch-depth: 0
       - id: check
         if: ${{ !inputs.prerelease }}
@@ -94,7 +94,7 @@ jobs:
             echo "domicile $version is released: a prerelease of it would sort before it" >&2
             exit 1
           fi
-          echo "commit=$GITHUB_SHA" >>"$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
 
   release-packages:
     needs: release-check

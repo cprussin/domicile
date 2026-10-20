@@ -175,7 +175,8 @@ two frame sinks, so the page needs a new token for it.
   (`control_channel.cc`). Before it does, the page hears every window of the
   old one close and every open system call end with `compositor_gone`. Then
   `DomicileHost` sends the page's size and density again and fires
-  `compositorreplaced`, and the new compositor's state follows. The SDK sends each watch and D-Bus match again.
+  `compositorreplaced`, and the new compositor's state follows. The SDK sends each watch and D-Bus match again,
+  and streams `Listened.Missed()` once the new compositor starts it.
 - An app module's channel (`app_channel.cc`) ends its calls the same way and
   dials the new compositor. Both channels track calls with `OpenCalls`
   (`system_call.h`).

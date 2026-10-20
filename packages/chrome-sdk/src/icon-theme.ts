@@ -6,8 +6,14 @@ import type { Option, Result } from "@cprussin/option-result";
 import { Err, None, Ok, Some } from "@cprussin/option-result";
 import { z } from "zod";
 
-import type { DbusSignal, Listening, System, SystemError } from "./system";
-import { Bus } from "./system";
+import type {
+  DbusSignal,
+  Listened,
+  Listening,
+  System,
+  SystemError,
+} from "./system";
+import { Bus, ListenedKind } from "./system";
 
 const DESTINATION = "org.freedesktop.impl.portal.desktop.domicile";
 const PATH = "/org/freedesktop/portal/desktop";
@@ -50,7 +56,7 @@ export const watchIconTheme = (
   listener: (theme: Result<Option<string>, SystemError>) => void,
 ): (() => void) => {
   const watch: {
-    listening: Listening<DbusSignal> | undefined;
+    listening: Listening<Listened<DbusSignal>> | undefined;
     stopped: boolean;
   } = { listening: undefined, stopped: false };
   const report = (theme: Result<Option<string>, SystemError>) => {
@@ -68,10 +74,16 @@ export const watchIconTheme = (
   };
 };
 
-/** Listen, read, then report each `icon-theme` change. */
+/**
+ * Listen, read, then report each `icon-theme` change. Read again after a
+ * compositor restart.
+ */
 const follow = async (
   system: IconThemeSystem,
-  watch: { listening: Listening<DbusSignal> | undefined; stopped: boolean },
+  watch: {
+    listening: Listening<Listened<DbusSignal>> | undefined;
+    stopped: boolean;
+  },
   report: (theme: Result<Option<string>, SystemError>) => void,
 ): Promise<void> => {
   // Listen before reading, so a change between the two is not missed.
@@ -99,11 +111,15 @@ const follow = async (
         !next.done;
         next = await reader.read()
       ) {
-        const [namespace, key, { value }] = settingChangedSchema.parse(
-          next.value.body,
-        );
-        if (namespace === INTERFACE && key === ICON_THEME) {
-          report(Ok(Some(z.string().parse(value))));
+        switch (next.value.kind) {
+          case ListenedKind.Heard: {
+            reportChange(next.value.item, report);
+            break;
+          }
+          case ListenedKind.Missed: {
+            report(await readIconTheme(system));
+            break;
+          }
         }
       }
       (await listening.ended).match({
@@ -116,6 +132,17 @@ const follow = async (
       });
     },
   });
+};
+
+/** Reports `signal` if it changed the icon theme. */
+const reportChange = (
+  signal: DbusSignal,
+  report: (theme: Result<Option<string>, SystemError>) => void,
+) => {
+  const [namespace, key, { value }] = settingChangedSchema.parse(signal.body);
+  if (namespace === INTERFACE && key === ICON_THEME) {
+    report(Ok(Some(z.string().parse(value))));
+  }
 };
 
 /** `ReadAll`'s `a{sa{sv}}`, keeping only the icon theme. */

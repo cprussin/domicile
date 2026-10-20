@@ -49,9 +49,12 @@ export const useFocusGlows = (
   };
 };
 
-/** Names a box by the windows inside it. */
+/**
+ * Names a box by the windows inside it, in any order, so reordering a group's
+ * tabs keeps its glow.
+ */
 export const keyOf = (box: PlacedFocusBox | undefined): string | undefined =>
-  box?.windows.join(" ");
+  box?.windows.toSorted().join(" ");
 
 const sameBox = (
   a: PlacedFocusBox | undefined,

@@ -11,7 +11,7 @@ import type {
   Listening,
   SystemError,
 } from "@domicile-desktop/sdk/system";
-import { SystemErrorKind } from "@domicile-desktop/sdk/system";
+import { Listened, SystemErrorKind } from "@domicile-desktop/sdk/system";
 
 import type { Network } from "./network-state";
 
@@ -77,9 +77,11 @@ export const fakeBus = (
   const calls: DbusCall[] = [];
   const matches: DbusMatch[] = [];
   const signals =
-    Promise.withResolvers<ReadableStreamDefaultController<DbusSignal>>();
+    Promise.withResolvers<
+      ReadableStreamDefaultController<Listened<DbusSignal>>
+    >();
   const ended = Promise.withResolvers<Result<"stopped", SystemError>>();
-  const items = new ReadableStream<DbusSignal>({
+  const items = new ReadableStream<Listened<DbusSignal>>({
     start: (controller) => {
       signals.resolve(controller);
     },
@@ -92,8 +94,12 @@ export const fakeBus = (
     },
     calls,
     matches,
+    /** Says the compositor restarted under the match. */
+    miss: async () => {
+      (await signals.promise).enqueue(Listened.Missed());
+    },
     send: async (signal: DbusSignal) => {
-      (await signals.promise).enqueue(signal);
+      (await signals.promise).enqueue(Listened.Heard(signal));
     },
     get stopped() {
       return state.stopped;
@@ -107,7 +113,7 @@ export const fakeBus = (
         matches.push(match);
         return Promise.resolve(
           refused === undefined
-            ? Ok<Listening<DbusSignal>, SystemError>({
+            ? Ok<Listening<Listened<DbusSignal>>, SystemError>({
                 ended: ended.promise,
                 items,
                 stop: () => {
@@ -122,7 +128,7 @@ export const fakeBus = (
                     });
                 },
               })
-            : Err<Listening<DbusSignal>, SystemError>(refused),
+            : Err<Listening<Listened<DbusSignal>>, SystemError>(refused),
         );
       },
     },

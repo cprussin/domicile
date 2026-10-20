@@ -11,7 +11,7 @@ import type {
   Listening,
   SystemError,
 } from "./system";
-import { Bus, SystemErrorKind } from "./system";
+import { Bus, Listened, SystemErrorKind } from "./system";
 
 /** A desktop whose Settings portal answers `ReadAll` with `answer`. */
 const answering = (answer: Result<DbusBody, SystemError>) => {
@@ -101,8 +101,10 @@ const changed = (
 const portal = (theme: string, refused?: SystemError) => {
   const matches: DbusMatch[] = [];
   const signals =
-    Promise.withResolvers<ReadableStreamDefaultController<DbusSignal>>();
-  const items = new ReadableStream<DbusSignal>({
+    Promise.withResolvers<
+      ReadableStreamDefaultController<Listened<DbusSignal>>
+    >();
+  const items = new ReadableStream<Listened<DbusSignal>>({
     start: (controller) => {
       signals.resolve(controller);
     },
@@ -110,8 +112,12 @@ const portal = (theme: string, refused?: SystemError) => {
   const state = { stopped: false };
   return {
     matches,
+    /** Says the compositor restarted under the match. */
+    miss: async () => {
+      (await signals.promise).enqueue(Listened.Missed());
+    },
     send: async (signal: DbusSignal) => {
-      (await signals.promise).enqueue(signal);
+      (await signals.promise).enqueue(Listened.Heard(signal));
     },
     state,
     system: {
@@ -120,7 +126,7 @@ const portal = (theme: string, refused?: SystemError) => {
         matches.push(match);
         return Promise.resolve(
           refused === undefined
-            ? Ok<Listening<DbusSignal>, SystemError>({
+            ? Ok<Listening<Listened<DbusSignal>>, SystemError>({
                 ended: new Promise(() => {
                   /* never ends on its own */
                 }),
@@ -129,7 +135,7 @@ const portal = (theme: string, refused?: SystemError) => {
                   state.stopped = true;
                 },
               })
-            : Err<Listening<DbusSignal>, SystemError>(refused),
+            : Err<Listening<Listened<DbusSignal>>, SystemError>(refused),
         );
       },
     },
@@ -174,6 +180,19 @@ describe("watchIconTheme", () => {
         path: "/org/freedesktop/portal/desktop",
         sender: "org.freedesktop.impl.portal.desktop.domicile",
       },
+    ]);
+  });
+
+  // See "A compositor restart" in docs/architecture/ENGINE-FORK.md.
+  it("reads the theme again after a compositor restart", async () => {
+    const bus = portal("Papirus");
+    const { heard } = reports(bus.system, 2);
+
+    await bus.miss();
+
+    expect(await heard).toStrictEqual([
+      Ok(Some("Papirus")),
+      Ok(Some("Papirus")),
     ]);
   });
 

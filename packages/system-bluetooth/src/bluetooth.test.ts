@@ -9,7 +9,7 @@ import type {
   Listening,
   SystemError,
 } from "@domicile-desktop/sdk/system";
-import { Bus, SystemErrorKind } from "@domicile-desktop/sdk/system";
+import { Bus, Listened, SystemErrorKind } from "@domicile-desktop/sdk/system";
 
 import type { Bluetooth } from "./bluetooth";
 import {
@@ -115,9 +115,11 @@ const fakeBus = (
   const calls: DbusCall[] = [];
   const matches: DbusMatch[] = [];
   const signals =
-    Promise.withResolvers<ReadableStreamDefaultController<DbusSignal>>();
+    Promise.withResolvers<
+      ReadableStreamDefaultController<Listened<DbusSignal>>
+    >();
   const ended = Promise.withResolvers<Result<"stopped", SystemError>>();
-  const items = new ReadableStream<DbusSignal>({
+  const items = new ReadableStream<Listened<DbusSignal>>({
     start: (controller) => {
       signals.resolve(controller);
     },
@@ -130,8 +132,12 @@ const fakeBus = (
     },
     calls,
     matches,
+    /** Says the compositor restarted under the match. */
+    miss: async () => {
+      (await signals.promise).enqueue(Listened.Missed());
+    },
     send: async (signal: DbusSignal) => {
-      (await signals.promise).enqueue(signal);
+      (await signals.promise).enqueue(Listened.Heard(signal));
     },
     get stopped() {
       return state.stopped;
@@ -150,7 +156,7 @@ const fakeBus = (
         matches.push(match);
         return Promise.resolve(
           refused === undefined
-            ? Ok<Listening<DbusSignal>, SystemError>({
+            ? Ok<Listening<Listened<DbusSignal>>, SystemError>({
                 ended: ended.promise,
                 items,
                 stop: () => {
@@ -165,7 +171,7 @@ const fakeBus = (
                     });
                 },
               })
-            : Err<Listening<DbusSignal>, SystemError>(refused),
+            : Err<Listening<Listened<DbusSignal>>, SystemError>(refused),
         );
       },
     },
@@ -289,6 +295,23 @@ describe("watchBluetooth", () => {
           Connected: { signature: "b", value: true },
         }),
       );
+
+      expect(await seen.next()).toStrictEqual(
+        Ok({ ...MOUSE_AWAY, devices: [headphones, mouse(true), speaker] }),
+      );
+    });
+
+    // See "A compositor restart" in docs/architecture/ENGINE-FORK.md.
+    it("reads again after a compositor restart", async () => {
+      const bus = fakeBus([
+        Ok(recorded(true, false)),
+        Ok(recorded(true, true)),
+      ]);
+      const seen = reports();
+      watchBluetooth(bus.system, seen.on);
+      await seen.next();
+
+      await bus.miss();
 
       expect(await seen.next()).toStrictEqual(
         Ok({ ...MOUSE_AWAY, devices: [headphones, mouse(true), speaker] }),
