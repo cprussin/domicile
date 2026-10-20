@@ -815,6 +815,7 @@
         "@domicile-desktop/manganese-window-management": "workspace:*",
         "@domicile-desktop/sdk": "workspace:*",
         "@pandacss/dev": "catalog:",
+        "@phosphor-icons/react": "catalog:",
         "react": "catalog:",
         "react-dom": "catalog:",
       },

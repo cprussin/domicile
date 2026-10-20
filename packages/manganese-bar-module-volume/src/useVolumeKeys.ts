@@ -8,14 +8,20 @@ import { primary } from "./primary";
 /** How far one press moves the volume. Matches the wheel over the bar's icon. */
 const STEP = 0.05;
 
-/** What the volume and microphone keys do. */
+/** A device's volume and mute after a press asked for them. */
+export type AskedLevel = { level: number; muted: boolean };
+
+/**
+ * What the volume and microphone keys do. Each returns what it asked for, or
+ * `undefined` when it did nothing.
+ */
 export type VolumeKeys = {
-  up: () => void;
-  down: () => void;
+  up: () => AskedLevel | undefined;
+  down: () => AskedLevel | undefined;
   /** Toggles the default output's mute. */
-  mute: () => void;
+  mute: () => AskedLevel | undefined;
   /** Toggles the default microphone's mute. */
-  micMute: () => void;
+  micMute: () => AskedLevel | undefined;
 };
 
 /**
@@ -34,28 +40,27 @@ export const useVolumeKeys = ({ audio, sound }: DeskSound): VolumeKeys => {
       primary(audio.current()?.inputs.filter((input) => !input.monitor) ?? []);
     const step = (by: number) => {
       const device = output();
-      if (device !== undefined) {
-        ask(sound.setVolume(device.id, stepped(device, by)));
+      if (device === undefined) {
+        return undefined;
+      } else {
+        const level = stepped(device, by);
+        ask(sound.setVolume(device.id, level));
+        return { level, muted: device.muted };
       }
     };
     const toggleMute = (device: AudioDevice | undefined) => {
-      if (device !== undefined) {
+      if (device === undefined) {
+        return undefined;
+      } else {
         ask(sound.setMuted(device.id, !device.muted));
+        return { level: device.volume, muted: !device.muted };
       }
     };
     return {
-      down: () => {
-        step(-STEP);
-      },
-      micMute: () => {
-        toggleMute(microphone());
-      },
-      mute: () => {
-        toggleMute(output());
-      },
-      up: () => {
-        step(STEP);
-      },
+      down: () => step(-STEP),
+      micMute: () => toggleMute(microphone()),
+      mute: () => toggleMute(output()),
+      up: () => step(STEP),
     };
   }, [audio, sound]);
 };

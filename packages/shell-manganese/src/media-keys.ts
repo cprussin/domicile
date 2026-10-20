@@ -3,41 +3,62 @@
 // bar's volume and brightness items.
 
 import type { BrightnessKeys } from "@domicile-desktop/manganese-bar-module-brightness/useBrightnessKeys";
-import type { VolumeKeys } from "@domicile-desktop/manganese-bar-module-volume/useVolumeKeys";
+import type {
+  AskedLevel,
+  VolumeKeys,
+} from "@domicile-desktop/manganese-bar-module-volume/useVolumeKeys";
 import { MediaKey } from "@domicile-desktop/manganese-window-management/keyboard/media-key";
 
 /** What each media key does. */
 export type MediaKeys = { brightness: BrightnessKeys; volume: VolumeKeys };
 
-/** Run what `key` does. */
+/** Which level a media key changed. */
+export enum LevelKind {
+  Volume,
+  Microphone,
+  Brightness,
+}
+
+/** The level a media key asked for, to show the user. */
+export type KeyLevel = AskedLevel & { kind: LevelKind };
+
+/**
+ * Run what `key` does. Returns the level it asked for, or `undefined` when
+ * the key did nothing.
+ */
 export const pressMediaKey = (
   { brightness, volume }: MediaKeys,
   key: MediaKey,
-): void => {
+): KeyLevel | undefined => {
   switch (key) {
     case MediaKey.VolumeUp: {
-      volume.up();
-      break;
+      return ofKind(LevelKind.Volume, volume.up());
     }
     case MediaKey.VolumeDown: {
-      volume.down();
-      break;
+      return ofKind(LevelKind.Volume, volume.down());
     }
     case MediaKey.VolumeMute: {
-      volume.mute();
-      break;
+      return ofKind(LevelKind.Volume, volume.mute());
     }
     case MediaKey.MicMute: {
-      volume.micMute();
-      break;
+      return ofKind(LevelKind.Microphone, volume.micMute());
     }
     case MediaKey.BrightnessUp: {
-      brightness.up();
-      break;
+      return brightnessLevel(brightness.up());
     }
     case MediaKey.BrightnessDown: {
-      brightness.down();
-      break;
+      return brightnessLevel(brightness.down());
     }
   }
 };
+
+const ofKind = (
+  kind: LevelKind,
+  asked: AskedLevel | undefined,
+): KeyLevel | undefined =>
+  asked === undefined ? undefined : { ...asked, kind };
+
+const brightnessLevel = (level: number | undefined): KeyLevel | undefined =>
+  level === undefined
+    ? undefined
+    : { kind: LevelKind.Brightness, level, muted: false };

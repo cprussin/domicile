@@ -84,6 +84,8 @@ import { system } from "@domicile-desktop/sdk/system";
 import type { ReactNode } from "react";
 import { useCallback, useMemo, useState } from "react";
 import { LOCK_BAR } from "./default-bars";
+import type { LevelPress } from "./LevelNotice";
+import { LevelNotice } from "./LevelNotice";
 import { pressMediaKey } from "./media-keys";
 import { options } from "./options";
 import { Monitor } from "./screens/Monitor";
@@ -263,6 +265,8 @@ export const Desktop = ({
 
   const volumeKeys = useVolumeKeys(deskSound(domicile));
   const brightnessKeys = useBrightnessKeys(deskBacklight(domicile));
+  // The level the last media key set, counted so each press shows it again.
+  const [levelPress, setLevelPress] = useState<LevelPress | undefined>();
   // Once for the desk, so a portal's sign-in page opens once, not per bar.
   const portal = useCaptivePortal(domicile);
 
@@ -274,10 +278,13 @@ export const Desktop = ({
   const onAction = useCallback(
     (action: WindowAction) => {
       if (action.kind === WindowActionKind.MediaKeyPressed) {
-        pressMediaKey(
+        const level = pressMediaKey(
           { brightness: brightnessKeys, volume: volumeKeys },
           action.key,
         );
+        if (level !== undefined) {
+          setLevelPress((last) => ({ count: (last?.count ?? 0) + 1, level }));
+        }
       } else {
         spendShift();
         act(action);
@@ -505,6 +512,8 @@ export const Desktop = ({
         screen={windows.focused}
         shown={!lock.locked}
       />
+      {/* Like the toasts, on the screen with the keyboard. */}
+      <LevelNotice press={levelPress} screen={windows.focused} />
       {/* Over the whole desktop, like the clipboard. */}
       <NotificationDrawer
         items={notifications.items}
