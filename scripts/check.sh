@@ -277,6 +277,7 @@ if wanted engine; then
     scripts/engine-build-the-compositor.sh \
     scripts/engine-guard-shortcuts-inhibitor.sh \
     scripts/engine-guard-client-window.sh \
+    scripts/engine-guard-client-window-in-memory.sh \
     scripts/engine-guard-two-windows.sh \
     scripts/engine-guard-buffer-transform.sh \
     scripts/engine-guard-scrolling-bubble.sh \
