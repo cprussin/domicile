@@ -182,6 +182,11 @@ export const areaOf = (
 /** The box focus lights in a tiling, and the windows inside it. */
 export type FocusBox = {
   rect: Rect;
+  /**
+   * The box of the container `focus parent` selected, or `undefined` when a
+   * window is focused.
+   */
+  selection: Rect | undefined;
   windows: readonly string[];
 };
 
@@ -201,9 +206,14 @@ export const focusBoxOf = (
   if (root === undefined) {
     return undefined;
   } else {
-    const path = tabGroupAround(root, focusPathOf(root, tiling.depth));
+    const focused = focusPathOf(root, tiling.depth);
+    const path = tabGroupAround(root, focused);
     return {
       rect: areaOf(root, path, area, gap),
+      selection:
+        nodeAt(root, focused).kind === NodeKind.Container
+          ? areaOf(root, focused, area, gap)
+          : undefined,
       windows: windowsIn(nodeAt(root, path)),
     };
   }

@@ -30,6 +30,7 @@ import type { Popup } from "./popup";
 import { popupsOver } from "./popup";
 import type { Rect } from "./rect";
 import type { Restack } from "./restacking";
+import { SelectionTint } from "./SelectionTint";
 import { SettleHandoffs } from "./SettleHandoffs";
 import type { StageScreen } from "./screens/stage-screens";
 import { useShared } from "./screens/useShared";
@@ -201,10 +202,11 @@ export const Stage = memo(
       () => new Map(windows.map((window) => [window.id, window])),
       [windows],
     );
-    const { glows, onFaded } = useFocusGlows(
-      focusBoxShowing(screens, activeId),
-    );
+    const lit = focusBoxShowing(screens, activeId);
+    const { glows, onFaded } = useFocusGlows(lit);
     const active = motions.drawn.find(({ window }) => window.id === activeId);
+    const activeMotion =
+      active === undefined ? "resting" : barMotion(active.motion);
     // Drawn over every window, not by the dragged one: see `DropIndicator`.
     const [aim, setAim] = useState<Aim | undefined>(undefined);
     // A border drag or a tiled resize grab resizes in place, so unlike a move
@@ -666,6 +668,28 @@ export const Stage = memo(
               />
             );
           })}
+          {/*
+          After every window and tab, so it covers the selected container's
+          windows and tabs. It follows the focused window as its glow does.
+        */}
+          {lit?.selection !== undefined && (
+            <Sliding
+              frame={active?.placement?.frame}
+              motion={activeMotion}
+              on={screenNamed(desk, active?.screen)}
+              rewound={active?.rewound ?? 0}
+            >
+              <SelectionTint
+                depth={lit.depth}
+                dragging={
+                  stretching || (activeId !== undefined && held.has(activeId))
+                }
+                motion={activeMotion}
+                rect={lit.selection}
+                restack={active?.restack}
+              />
+            </Sliding>
+          )}
           {aim !== undefined && <DropIndicator rect={aim.rect} />}
           {movingId !== undefined && <GrabbingSheet />}
           {/*
@@ -1000,7 +1024,6 @@ const WindowBar = memo(
           })}
           frame={placement.frame}
           fullscreen={fullscreen}
-          groupSelected={placement.selected}
           icon={icon}
           motion={barMotion(motion)}
           onAim={onAim}
@@ -1102,7 +1125,6 @@ const ContainerTab = memo(
           frame={tab.rect}
           fullscreen={fullscreen}
           group={{ layout: tab.group, windows: tab.windows }}
-          groupSelected={tab.selected}
           icon={icon}
           motion={motion}
           onClose={closed}

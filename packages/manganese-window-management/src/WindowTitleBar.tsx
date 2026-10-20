@@ -29,8 +29,6 @@ type Props = {
   float: Float | undefined;
   /** The bar's focus state. See `title-focus.ts`. */
   focus: TitleFocus;
-  /** Whether its tab group is selected. See {@link TitleBar}. */
-  groupSelected: boolean;
   /** The window's whole box. See {@link TitleBar}. */
   frame: Rect;
   /** Whether the window is fullscreen. See {@link TitleBar}. */
@@ -88,7 +86,6 @@ export const WindowTitleBar = ({
   focus,
   frame,
   fullscreen,
-  groupSelected,
   icon,
   motion,
   onAim,
@@ -142,7 +139,6 @@ export const WindowTitleBar = ({
       focus={focus}
       frame={frame}
       fullscreen={fullscreen}
-      groupSelected={groupSelected}
       hanging={float?.scratchpad === true}
       icon={icon}
       motion={motion}

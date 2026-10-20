@@ -638,6 +638,33 @@ const lit = (container: HTMLElement): readonly string[] | undefined =>
   glowOf(container)?.dataset.focusBox?.split(" ");
 
 /**
+ * The box of the tint over the `focus parent` selection, or `undefined` when
+ * a window is focused. See `SelectionTint`.
+ */
+const tinted = (container: HTMLElement): string | undefined => {
+  const tint = container.querySelector<HTMLElement>("[data-selection]");
+  return tint === null
+    ? undefined
+    : [
+        tint.style.insetInlineStart,
+        tint.style.insetBlockStart,
+        tint.style.inlineSize,
+        tint.style.blockSize,
+      ].join(" ");
+};
+
+/** The box of the lit glow, as {@link tinted} gives a tint's. */
+const glowBox = (container: HTMLElement): string => {
+  const glow = glowing(container);
+  return [
+    glow.style.insetInlineStart,
+    glow.style.insetBlockStart,
+    glow.style.inlineSize,
+    glow.style.blockSize,
+  ].join(" ");
+};
+
+/**
  * Whether `focus parent` targets a group: the focused window's bar marks
  * itself apart from the group.
  */
@@ -2445,21 +2472,24 @@ describe("Shell", () => {
       clientAppears("two");
       press("e");
       expect(lit(container)).toEqual(["app:two"]);
+      expect(tinted(container)).toBeUndefined();
 
       press("a");
 
-      // The glow takes in every window in it and every bar is raised, the
-      // focused one marked apart.
+      // The glow takes in every window in it, a tint covers them all, and
+      // every bar is raised, the focused one marked apart.
       expect(lit(container)).toEqual(["app:one", "app:two"]);
+      expect(tinted(container)).toBe(glowBox(container));
       expect(barFor(container, "app:one").dataset.focus).toBe("selected");
       expect(barFor(container, "app:two").dataset.focus).toBe("leaf");
       // `mod+Shift+a` returns to the window.
       press("a", true);
       expect(lit(container)).toEqual(["app:two"]);
+      expect(tinted(container)).toBeUndefined();
       expect(barFor(container, "app:two").dataset.focus).toBe("focused");
     });
 
-    it("marks every tab of a selected tab group, leaving their states", () => {
+    it("tints a selected tab group, leaving its tabs' states", () => {
       // The tabs keep showing which one is open and has the keyboard. A
       // sibling window keeps the tabs from filling the screen.
       const { container } = renderShell();
@@ -2469,14 +2499,17 @@ describe("Shell", () => {
       press("v");
       clientAppears("three");
       press("w");
+      // A focused tab lights its whole group too, so only the tint tells
+      // the two apart.
+      expect(lit(container)).toEqual(["app:two", "app:three"]);
+      expect(tinted(container)).toBeUndefined();
 
       press("a");
 
       expect(lit(container)).toEqual(["app:two", "app:three"]);
+      expect(tinted(container)).toBe(glowBox(container));
       expect(barFor(container, "app:two").dataset.focus).toBe("resting");
       expect(barFor(container, "app:three").dataset.focus).toBe("focused");
-      expect(barFor(container, "app:two").dataset.groupSelected).toBe("true");
-      expect(barFor(container, "app:three").dataset.groupSelected).toBe("true");
     });
 
     it("offers to tile a floating group from the tab that stands for it", () => {
