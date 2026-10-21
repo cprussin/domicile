@@ -6,7 +6,8 @@
 //! [`Host::app_appeared`] and a closed one calls [`Host::app_closed`].
 //!
 //! Client buffers reach the engine as viz surfaces (see `engine_session`).
-//! `wl_shm` frames are first copied into a GPU buffer (see `uploads`). Design:
+//! `wl_shm` frames are first copied into a GPU buffer, or into memory for an
+//! engine on the CPU (see `uploads`). Design:
 //! `docs/architecture/WINDOW-COMPOSITING.md`.
 
 use std::collections::{HashMap, HashSet};
@@ -18,7 +19,6 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::input::{keyboard::XkbConfig, Seat, SeatState};
 use smithay::reexports::{
     calloop::{
@@ -89,6 +89,7 @@ mod engine_surfaces;
 mod engine_waiting;
 mod file_indexing;
 mod frame_callbacks;
+mod frame_descriptor;
 mod frame_pacing;
 mod frame_publishing;
 mod frame_report;
@@ -102,6 +103,7 @@ mod launches;
 mod lock;
 mod locking;
 mod logind;
+mod memory_frames;
 mod modifiers;
 mod notifications;
 mod once_per_window;
@@ -143,6 +145,7 @@ mod xdg_shell;
 use crate::engine::Bounds;
 use crate::engine_session::EngineSession;
 use crate::frame_callbacks::FrameCallbacks;
+use crate::frame_publishing::Upload;
 use crate::gbm::Gbm;
 use crate::held_frames::HeldFrames;
 use crate::latency::Latency;
@@ -472,9 +475,12 @@ struct DomicileCompositor {
     /// Clients whose shm frame could not be copied, already logged. Logged once
     /// per client, not per frame.
     shm_refused: OncePerWindow,
-    /// GPU buffers that shm frames are copied into, so the engine gets a
-    /// dmabuf. See [`crate::uploads`].
-    uploads: Uploads<Dmabuf>,
+    /// The buffers shm frames are copied into: GPU buffers, so the engine gets
+    /// a dmabuf, or memfds for an engine on the CPU. See [`crate::uploads`].
+    uploads: Uploads<Upload>,
+    /// Whether the engine composites on the CPU, so shm frames go to it in
+    /// memory. See [`crate::memory_frames`].
+    software_compositing: bool,
     /// Each toplevel's numbered configures, so a commit is shown at the box
     /// it was drawn for. See [`crate::configure_answers`].
     configure_answers: HashMap<String, ConfigureAnswers<Serial>>,
@@ -1233,6 +1239,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         latency_reported: false,
         shm_refused: OncePerWindow::default(),
         uploads: Uploads::default(),
+        software_compositing: arguments.software_compositing,
         configure_answers: HashMap::new(),
         shown: engine_damage::Shown::default(),
         size_limits: HashMap::new(),
