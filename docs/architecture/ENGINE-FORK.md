@@ -242,6 +242,7 @@ Calls (compositor → engine):
 |---|---|
 | `domicile_surface_create(engine, app_id)` → `DomicileSurfaceId` | a window appearing. The page's embed waits for this call. |
 | `domicile_surface_import_async(surface, dmabuf, request)`, answered by `imported` | `zwp_linux_dmabuf_v1`. `domicile_surface_import` is the blocking form an older compositor calls. |
+| `domicile_surface_import_shm(surface, buffer)` | `wl_shm`, for an engine on the CPU. Blocks; refused while the browser composites on the GPU ([`wl_shm` clients on the CPU](WINDOW-COMPOSITING.md#wl_shm-clients-on-the-cpu)). |
 | `domicile_surface_submit_transformed(surface, buffer, crop, damage, box, transform)` | `wl_surface.commit` with `xdg_surface.set_window_geometry` and `wl_surface.set_buffer_transform`, shown at the box of the acked configure |
 | `domicile_surface_submit_fenced(…, transform, acquire_fence)` | the same, read once `acquire_fence` signals, like `zwp_linux_surface_synchronization_v1`'s acquire fence. The compositor's shm copies use it ([WINDOW-COMPOSITING.md](WINDOW-COMPOSITING.md#wl_shm-clients-on-a-gpu)). |
 | `domicile_surface_sync(engine, surface, frame)` | a commit whose popup or bubble the page moves: later submits go up at synced frame `frame` ([Synced frames](WINDOW-COMPOSITING.md#synced-frames)) |

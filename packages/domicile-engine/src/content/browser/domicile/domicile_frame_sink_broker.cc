@@ -28,11 +28,14 @@
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/domicile/domicile_desk.h"
 #include "content/browser/domicile/domicile_spike_probe.h"
+#include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/gpu_utils.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
+#include "gpu/ipc/client/gpu_channel_host.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/compositor/compositor.h"
@@ -74,6 +77,31 @@ gpu::SharedImageInterface* GetSharedImageInterface() {
     return nullptr;
   }
   return context_provider->SharedImageInterface();
+}
+
+// The interface that makes a window in shared memory a software image, while
+// the browser composites in software: 2D virtio-gpu, simpledrm, vkms,
+// --disable-gpu. Null while it composites on the GPU, where viz draws no
+// software image. Made on the GPU channel, as VizProcessTransportFactory makes
+// a compositor's, and again after the channel is lost.
+gpu::SharedImageInterface* GetSoftwareSharedImageInterface() {
+  if (!content::GpuDataManagerImpl::GetInstance()->IsGpuCompositingDisabled()) {
+    return nullptr;
+  }
+  static base::NoDestructor<scoped_refptr<gpu::GpuChannelHost>> channel;
+  static base::NoDestructor<scoped_refptr<gpu::SharedImageInterface>> sii;
+  if (!*channel || (*channel)->IsLost()) {
+    *channel =
+        content::GetGpuChannelEstablishFactory()->EstablishGpuChannelSync();
+    if (!*channel) {
+      LOG(ERROR) << "domicile: no GPU channel to make a window's software "
+                    "image on";
+      *sii = nullptr;
+      return nullptr;
+    }
+    *sii = (*channel)->CreateClientSharedImageInterface();
+  }
+  return sii->get();
 }
 
 // The ozone platform whose displays are the machine's monitors. On any other
@@ -258,7 +286,8 @@ class DomicileBrowserService {
                 base::BindRepeating(&SetClipboard),
                 base::BindRepeating(&DisplayCaptureTarget),
                 base::BindRepeating(&domicile::FindBrowserWindowCaptureTarget),
-                base::BindRepeating(&SetPointerTargets)),
+                base::BindRepeating(&SetPointerTargets),
+                base::BindRepeating(&GetSoftwareSharedImageInterface)),
         provider_(&broker_) {
     // Registered on every platform so copies made in a page reach the producer.
     // `SetClipboard` handles copies made outside. Unretained is safe: this is a
