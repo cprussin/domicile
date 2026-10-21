@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::extensions::InstalledExtension;
 use crate::history::{BrowsingData, HistoryItem, HistoryQuery};
 use crate::media_devices::{MediaDevices, MediaKind};
+use crate::site_data::SiteData;
 use crate::site_permissions::{SitePermission, SiteSettings};
 
 /// The file a built shell's declared options are written to, beside its
@@ -82,6 +83,10 @@ pub enum Request {
     DeleteHistory { visits: Vec<f64> },
     /// Clear the engine's browsing data.
     ClearBrowsingData(BrowsingData),
+    /// Report every host that stores data in the engine's profile.
+    SiteData,
+    /// Clear everything one host stores.
+    ClearSiteData { host: String },
     /// Turn the touchpads' disable-while-typing on, off or over, or with no
     /// `to`, report it. See `docs/RUNNING-A-DESKTOP.md#disable-while-typing`.
     DisableWhileTyping {
@@ -178,8 +183,11 @@ pub enum Response {
     /// The engine deleted the visits.
     Deleted,
 
-    /// The engine cleared the browsing data.
+    /// The engine cleared the browsing data or the host's site data.
     Cleared,
+
+    /// Answers `site_data`.
+    SiteData { sites: Vec<SiteData> },
 
     /// Whether the touchpads rest while a keyboard types, after the request.
     DisableWhileTyping { enabled: bool },
@@ -303,6 +311,16 @@ pub type DeleteHistory<'a> = &'a dyn Fn(&[f64]) -> Result<(), String>;
 /// tests.
 pub type ClearBrowsingData<'a> = &'a dyn Fn(&BrowsingData) -> Result<(), String>;
 
+/// Asks the engine for every host that stores data.
+///
+/// [`crate::command_socket::site_data`] in a desktop; a closure in tests.
+pub type ListSiteData<'a> = &'a dyn Fn() -> Result<Vec<SiteData>, String>;
+
+/// Tells the engine to clear everything a host stores.
+///
+/// [`crate::command_socket::clear_site_data`] in a desktop; a closure in tests.
+pub type ClearSiteData<'a> = &'a dyn Fn(&str) -> Result<(), String>;
+
 /// Tells the engine whether the touchpads rest while a keyboard types, or with
 /// none only asks, and returns whether they do.
 ///
@@ -337,6 +355,8 @@ pub struct Desktop<'a> {
     pub visits: ListVisits<'a>,
     pub delete_history: DeleteHistory<'a>,
     pub clear_browsing_data: ClearBrowsingData<'a>,
+    pub site_data: ListSiteData<'a>,
+    pub clear_site_data: ClearSiteData<'a>,
     pub disable_while_typing: DisableWhileTyping<'a>,
 }
 
@@ -459,6 +479,14 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
                 Err(why) => Response::Refused { why },
             })
         }
+        Ok(Request::SiteData) => to_line(&match (desktop.site_data)() {
+            Ok(sites) => Response::SiteData { sites },
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::ClearSiteData { host }) => to_line(&match (desktop.clear_site_data)(&host) {
+            Ok(()) => Response::Cleared,
+            Err(why) => Response::Refused { why },
+        }),
         Ok(Request::DisableWhileTyping { to }) => {
             to_line(&match switched(to, desktop.disable_while_typing) {
                 Ok(enabled) => Response::DisableWhileTyping { enabled },

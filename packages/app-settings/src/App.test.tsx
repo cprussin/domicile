@@ -75,6 +75,11 @@ const MEDIA = {
   microphones: [{ id: "default", name: "Default" }],
 } as const satisfies FakeHostState["media"];
 
+const SITE_DATA = [
+  { bytes: 2048, cookies: 0, host: "notes.example" },
+  { bytes: 4_800_000_000, cookies: 3, host: "mail.example" },
+] as const satisfies FakeHostState["siteData"];
+
 const INSTALLED: InstalledExtension[] = [
   {
     description: "An efficient content blocker.",
@@ -114,6 +119,7 @@ const renderApp = async (
     installed: structuredClone(INSTALLED),
     media: structuredClone(MEDIA),
     refuse,
+    siteData: structuredClone(SITE_DATA),
     sites: structuredClone(SITES),
   });
   const user = userEvent.setup();
@@ -602,6 +608,50 @@ describe(App, () => {
       expect(
         screen.queryByRole("button", { name: /^meet\.example/ }),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe("site data", () => {
+    it("lists each site's data, largest first", async () => {
+      await renderApp("Site data");
+      expect(await screen.findByText("4.8 GB · 3 cookies")).toBeInTheDocument();
+      expect(screen.getByText("2 kB")).toBeInTheDocument();
+      expect(
+        screen
+          .getAllByRole("button", { name: /^Remove / })
+          .map((button) => button.getAttribute("aria-label")),
+      ).toEqual(["Remove mail.example's data", "Remove notes.example's data"]);
+    });
+
+    it("finds a site by its name", async () => {
+      const { user } = await renderApp("Site data");
+      await user.type(
+        await screen.findByRole("searchbox", { name: "Search sites" }),
+        "notes",
+      );
+      expect(screen.getByText("notes.example")).toBeInTheDocument();
+      expect(screen.queryByText("mail.example")).not.toBeInTheDocument();
+      await user.type(screen.getByRole("searchbox"), "zzz");
+      expect(
+        screen.getByText("No site with data matches."),
+      ).toBeInTheDocument();
+    });
+
+    it("removes a site's data once asked", async () => {
+      const { host, user } = await renderApp("Site data");
+      await user.click(
+        await screen.findByRole("button", {
+          name: "Remove mail.example's data",
+        }),
+      );
+      const dialog = await screen.findByRole("dialog");
+      await user.click(within(dialog).getByRole("button", { name: "Remove" }));
+      await waitFor(() => {
+        expect(host.state.siteData).toEqual([SITE_DATA[0]]);
+      });
+      await waitFor(() => {
+        expect(screen.queryByText("mail.example")).not.toBeInTheDocument();
+      });
     });
   });
 

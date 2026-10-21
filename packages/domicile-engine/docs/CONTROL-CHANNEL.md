@@ -233,6 +233,12 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 {"type":"clear_browsing_data","version":1,"since":1700000000000,"types":["cookies","localStorage"],"origins":["https://a.example"]}
 {"type":"cleared"}   |   {"type":"refused","why":"…"}
 
+{"type":"site_data","version":1}
+{"type":"site_data","sites":[{"host":"mail.example","bytes":20480.0,"cookies":3}]}   |   {"type":"refused","why":"…"}
+
+{"type":"clear_site_data","version":1,"host":"mail.example"}
+{"type":"cleared"}   |   {"type":"refused","why":"…"}
+
 {"type":"disable_while_typing","version":1,"enabled":false}
 {"type":"disable_while_typing","enabled":false}   |   {"type":"refused","why":"…"}
 ```
@@ -304,6 +310,14 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
     or `passwords`. A site's cookies are those of its registrable domain.
     `webSQL` clears nothing: Chromium no longer has it. An unknown type is
     refused.
+- `site_data` and `clear_site_data` are the Settings app's
+  ([SETTINGS.md](/docs/SETTINGS.md)). Both build Chrome's `BrowsingDataModel`
+  for the shell profile, as `chrome://settings/content/all` does.
+  - `site_data` lists each web host that stores data: its cookies, and the
+    bytes on disk of every kind summed. Extensions' and Domicile's own pages'
+    data is left out.
+  - `clear_site_data` removes everything one host stores, and replies once
+    it is gone.
 - `disable_while_typing` is `domicile disable-while-typing`
   ([RUNNING-A-DESKTOP.md](/docs/RUNNING-A-DESKTOP.md#disable-while-typing)).
   It sets whether the touchpads rest while a keyboard types when `enabled` is

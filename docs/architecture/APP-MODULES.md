@@ -96,7 +96,7 @@ An app reaches Domicile's own state through programs it spawns. Each inherits
 
 | App | Spawns | For |
 |---|---|---|
-| Settings | `domicile-app-host`, over stdio | config and shell files, site permissions, media devices, extensions |
+| Settings | `domicile-app-host`, over stdio | config and shell files, site permissions, site data, media devices, extensions |
 | History | `domicile-app-host`, over stdio | history, favicons, clearing browsing data |
 
 - Both spawn `domicile-app-host`, framed as a 4-byte length and JSON
