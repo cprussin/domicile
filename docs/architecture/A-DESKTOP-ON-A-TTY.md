@@ -2,10 +2,10 @@
 
 On a tty, `domicile` runs the engine with `--ozone-platform=drm`. The engine:
 
-- takes DRM master on each card as it arrives;
+- takes each card from logind, which sets DRM master on it;
 - modesets each panel at its native mode;
 - opens a fullscreen window that covers each CRTC;
-- takes every keyboard and pointer from logind;
+- takes every keyboard and pointer from logind too;
 - asks logind for a console switch on `Ctrl+Alt+F<n>`.
 
 `domicile-launch` picks this platform when `XDG_VTNR` is set and neither
@@ -43,6 +43,8 @@ Details live in separate docs:
 | The trackpad moves it; a click reaches the page | Hardware. Patch `0027`, `use_libinput = true` |
 | The screens relight after a console round trip | Hardware |
 | Input works after a console round trip | Unverified. The `released_` fix in `DrmTakenDevices` has not run on hardware |
+| The card comes from logind, and a console switch does not crash the GPU process | Unverified. `HardwareDisplayControllerTest.AFlipAfterLogindTookMasterIsSkipped` |
+| Input keeps reading while logind answers | Unverified. Patch `0132` |
 | `Ctrl+Alt+F<n>` reaches `Seat.SwitchTo` | Not run on hardware |
 | Display drop and retake on a console switch | Reasoned from source. `DrmVtSwitcherTest` |
 | The screens relight after suspend | Reasoned from source. `DrmSleepTest`, `DrmModesetTest` |
@@ -113,20 +115,9 @@ back and a wake from suspend use it.
 
 Details: [TTY-SESSION.md](../TTY-SESSION.md).
 
-### The card should come from logind too
-
-The main open item. `Session.TakeDevice` on `/dev/dri/card0` would:
-
-- bring `PauseDevice` / `ResumeDevice` for the card, so logind waits for
-  `PauseDeviceComplete` before switching. Today master is dropped one D-Bus
-  round trip after the switch.
-- remove the need for the `dup` of each card
-  ([TTY-SESSION.md](../TTY-SESSION.md#only-the-opening-process-may-drop-it));
-- remove the browser's `open()` of the card and its ACL.
-
 ## Exiting during startup
 
-- An engine that outlives its launcher keeps session control, input, DRM master
+- An engine that outlives its launcher keeps session control, input, the cards
   and a `K_OFF` console until its bus name drops. Only the power button
   recovers.
 - So `domicile-launch` stops the engine at once on `SIGINT` or `SIGTERM` during
@@ -137,7 +128,8 @@ The main open item. `Session.TakeDevice` on `/dev/dri/card0` would:
 
 - The browser takes evdev devices from logind with `Session.TakeDevice`
   (`DrmLogindInput`, `DrmTakenDevices`, patch `0020`). It plugs in as the
-  `InputDeviceOpener` that `InputDeviceFactoryEvdev` already accepts.
+  `InputDeviceOpener` that `InputDeviceFactoryEvdev` already accepts, and
+  answers when logind does (patch `0132`).
 - logind's ACLs cover the card but not keyboards or mice, so a plain `open()`
   of `/dev/input/event*` fails.
 - It uses Chromium's `dbus::Bus`, already in the engine. No libseat.
@@ -227,8 +219,3 @@ A nested run still uses the host's clipboard; `ROADMAP.md` tracks it.
 - **The compositor pushes the clipboard to the browser.** It already reads
   every selection for the history, and a pull would add a round trip to each
   paste.
-
-## Plan
-
-- [ ] take the card node from logind too: `TakeDevice` on `/dev/dri/card0` plus `PauseDevice` / `ResumeDevice`. See [The card should come from logind too](#the-card-should-come-from-logind-too)
-- [ ] stop the evdev thread blocking through a console switch: `InputDeviceOpener::OpenInputDevice` must answer asynchronously, which means re-plumbing `OpenInputDeviceParams`, `EventFactoryEvdev` and the factory proxy. See [TTY-SESSION.md](../TTY-SESSION.md#the-d-bus-thread)

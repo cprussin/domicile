@@ -44,7 +44,7 @@ DrmSleep::DrmSleep(DrmModeset* modeset) : modeset_(modeset) {
   // Same setup as `DrmVtSwitcher`. The bus runs on a dedicated worker, which
   // installs the `FileDescriptorWatcher` it needs; the origin thread stays the
   // UI thread, where `DrmModeset` lives. Dedicated, because a shared thread
-  // could not read this socket while `DrmLogindInput` waits on logind.
+  // could not read this socket while `DrmLogindSession` waits on logind.
   options.dbus_task_runner = base::ThreadPool::CreateSingleThreadTaskRunner(
       {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
       base::SingleThreadTaskRunnerThreadMode::DEDICATED);

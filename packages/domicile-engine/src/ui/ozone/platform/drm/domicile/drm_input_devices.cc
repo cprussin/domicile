@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/functional/bind.h"
 #include "base/logging.h"
 
 namespace ui {
@@ -214,16 +215,13 @@ bool DrmTakenDevices::GiveBack(DeviceNumber number) {
     return false;
   }
 
-  if (release_.Run(number)) {
-    // Expect logind's "gone" echo for this release. See `Pause`.
-    released_[number] += 1;
-  } else {
-    LOG(ERROR) << "logind refused to take back " << taken->second.path.value()
-               << " (" << number.major << ":" << number.minor
-               << "), so it cannot be taken again and this device stays dead";
-  }
+  // Expect logind's "gone" echo for this release. See `Pause`.
+  released_[number] += 1;
+  release_.Run(number, base::BindOnce(&DrmTakenDevices::OnGivenBack,
+                                      weak_factory_.GetWeakPtr(), number,
+                                      taken->second.path));
 
-  // Forget it even if the release failed, so shutdown doesn't release it
+  // Forget it even if the release fails, so shutdown doesn't release it
   // twice. Keep `names_` for a `ResumeDevice` before the re-take.
   devices_.erase(taken);
   VLOG(2) << "domicile: gave back input device " << number.major << ":"
@@ -231,16 +229,21 @@ bool DrmTakenDevices::GiveBack(DeviceNumber number) {
   return true;
 }
 
-bool DrmTakenDevices::Release() {
+void DrmTakenDevices::Release() {
   // Release every device even after a failure, so none stays with this
   // session after it exits.
-  bool every_device_agreed = true;
   for (const auto& [number, device] : devices_) {
-    if (!release_.Run(number)) {
-      LOG(ERROR) << "logind refused to take back " << device.path.value()
-                 << " (" << number.major << ":" << number.minor << ")";
-      every_device_agreed = false;
-    }
+    release_.Run(number, base::BindOnce(
+                             [](DeviceNumber number, const base::FilePath& path,
+                                bool agreed) {
+                               if (!agreed) {
+                                 LOG(ERROR) << "logind refused to take back "
+                                            << path.value() << " ("
+                                            << number.major << ":"
+                                            << number.minor << ")";
+                               }
+                             },
+                             number, device.path));
   }
 
   // Clear everything, since the destructor calls this again.
@@ -249,7 +252,29 @@ bool DrmTakenDevices::Release() {
   resumed_.clear();
   // Drop pending echoes, or a later real unplug would look like one.
   released_.clear();
-  return every_device_agreed;
+}
+
+void DrmTakenDevices::OnGivenBack(DeviceNumber number,
+                                  const base::FilePath& path,
+                                  bool agreed) {
+  if (agreed) {
+    return;
+  }
+
+  LOG(ERROR) << "logind refused to take back " << path.value() << " ("
+             << number.major << ":" << number.minor
+             << "), so it cannot be taken again and this device stays dead";
+
+  const auto echo = released_.find(number);
+  if (echo == released_.end()) {
+    // Nothing to strike off: `Release` cleared the count, or an unplug's
+    // "gone" used it.
+    return;
+  }
+  echo->second -= 1;
+  if (echo->second == 0) {
+    released_.erase(echo);
+  }
 }
 
 }  // namespace ui
