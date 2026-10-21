@@ -16,9 +16,7 @@
 // Needed for the upcast to `scoped_refptr<base::SequencedTaskRunner>` in
 // `Bus::Options`; other headers only forward-declare it.
 #include "base/task/single_thread_task_runner.h"
-#include "base/task/single_thread_task_runner_thread_mode.h"
-#include "base/task/task_traits.h"
-#include "base/task/thread_pool.h"
+#include "base/message_loop/message_pump_type.h"
 #include "base/threading/thread_restrictions.h"
 #include "dbus/error.h"
 #include "dbus/object_path.h"
@@ -132,15 +130,19 @@ DrmLogindSession::DrmLogindSession() {
   dbus::Bus::Options options;
   options.bus_type = dbus::Bus::SYSTEM;
   options.connection_type = dbus::Bus::PRIVATE;
-  // A thread-pool worker has the `FileDescriptorWatcher` the bus needs.
+  // A thread of its own, not a thread-pool worker. The constructor runs in
+  // `InitializeUI` and blocks the UI thread on this thread's answers. A pool
+  // task posted here never ran, and the browser hung before its first log
+  // line (`tty-on-a-card-with-no-3d`). An IO thread has the
+  // `FileDescriptorWatcher` the bus needs.
   //
-  // `DEDICATED`, not `SHARED`: calls here block that thread until logind
-  // answers. On a shared thread, a console switch's input calls would delay
-  // `DrmVtSwitcher`'s `PropertiesChanged`. See
-  // docs/TTY-SESSION.md#the-d-bus-thread.
-  options.dbus_task_runner = base::ThreadPool::CreateSingleThreadTaskRunner(
-      {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
-      base::SingleThreadTaskRunnerThreadMode::DEDICATED);
+  // Not shared: calls here block this thread until logind answers, and a
+  // console switch's input calls would delay `DrmVtSwitcher`'s
+  // `PropertiesChanged`. See docs/TTY-SESSION.md#the-d-bus-thread.
+  CHECK(bus_thread_.StartWithOptions(
+      base::Thread::Options(base::MessagePumpType::IO, 0)))
+      << "cannot start the thread that talks to logind";
+  options.dbus_task_runner = bus_thread_.task_runner();
   bus_ = base::MakeRefCounted<dbus::Bus>(std::move(options));
 
   dbus::ObjectProxy* manager =
@@ -205,6 +207,8 @@ DrmLogindSession::~DrmLogindSession() {
   weak_factory_.InvalidateWeakPtrs();
   session_ = nullptr;
   bus_->ShutdownOnDBusThreadAndBlock();
+  base::ScopedAllowBaseSyncPrimitivesOutsideBlockingScope allow_join;
+  bus_thread_.Stop();
 }
 
 base::ScopedFD DrmLogindSession::TakeCard(const base::FilePath& node) {
