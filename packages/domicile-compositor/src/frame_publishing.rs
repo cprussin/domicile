@@ -1,5 +1,6 @@
 //! Handing a committed app frame to the engine: its dmabuf, or a copy of its shm
-//! buffer (see `crate::uploads`).
+//! buffer (see `crate::uploads`), on the GPU or in memory for an engine on the
+//! CPU (see `crate::memory_frames`).
 
 use std::os::fd::OwnedFd;
 use std::time::Instant;
@@ -9,13 +10,15 @@ use smithay::backend::allocator::Buffer as _;
 use smithay::reexports::wayland_server::protocol::{wl_buffer, wl_surface::WlSurface};
 use smithay::wayland::compositor::with_states;
 use smithay::wayland::dmabuf::get_dmabuf;
+use smithay::wayland::shm::with_buffer_contents;
 use tracing::warn;
 
 use crate::buffer_transform::Sampled;
 use crate::dmabuf_descriptor::descriptor_from;
-use crate::dmabuf_descriptor::DmabufDescriptor;
 use crate::engine_session::{EngineSession, Remapped, Submission, Submitted};
+use crate::frame_descriptor::FrameDescriptor;
 use crate::frame_pacing::Paced;
+use crate::memory_frames::{MemoryError, MemoryFrame};
 use crate::shm_upload::{render_modifiers, shm_shape, CopyError};
 use crate::surface_commit::{committed_buffer, CommittedBuffer, Mapping};
 use crate::uploads::{UploadId, Uploads};
@@ -55,10 +58,43 @@ pub struct Commit<'a> {
     pub damage: Option<(i32, i32, i32, i32)>,
 }
 
+/// A compositor buffer an shm frame is copied into.
+#[derive(Debug)]
+pub enum Upload {
+    /// On the GPU, for an engine that composites there.
+    Gpu(Dmabuf),
+    /// In memory, for an engine on the CPU.
+    Memory(MemoryFrame),
+}
+
+impl Upload {
+    /// The buffer for the engine. Borrows its fds.
+    pub fn describe(&self) -> FrameDescriptor {
+        match self {
+            Upload::Gpu(dmabuf) => FrameDescriptor::Dmabuf(descriptor_from(dmabuf)),
+            Upload::Memory(frame) => FrameDescriptor::Shm(frame.describe()),
+        }
+    }
+
+    fn size(&self) -> (u32, u32) {
+        match self {
+            Upload::Gpu(dmabuf) => (dmabuf.width(), dmabuf.height()),
+            Upload::Memory(frame) => frame.size(),
+        }
+    }
+
+    fn dmabuf(&self) -> Option<&Dmabuf> {
+        match self {
+            Upload::Gpu(dmabuf) => Some(dmabuf),
+            Upload::Memory(_) => None,
+        }
+    }
+}
+
 /// An shm frame in one of the compositor's buffers, ready to submit.
 struct CopiedFrame {
     id: UploadId,
-    descriptor: DmabufDescriptor,
+    descriptor: FrameDescriptor,
     /// The format the surface's texture now holds it in.
     fourcc: u32,
     /// Signals when the copy lands. `None` when the copy was waited for.
@@ -87,6 +123,13 @@ enum ShmRefused {
     Allocation(#[from] gbm::AllocationError),
     #[error("could not copy this client's frame to the GPU: {0}")]
     Copy(#[from] CopyError),
+    #[error(
+        "this client drew into shared memory, the engine composites on the CPU, and this \
+         engine is too old to take a window in memory"
+    )]
+    NoMemoryImport,
+    #[error("could not put this client's frame in memory for the engine: {0}")]
+    Memory(#[from] MemoryError),
 }
 
 impl DomicileCompositor {
@@ -95,8 +138,8 @@ impl DomicileCompositor {
     /// [`Published::Held`] means viz is sampling the client's dmabuf and the
     /// caller must not release it. Otherwise the caller releases it.
     ///
-    /// Every frame reaches the engine as a dmabuf; shm frames are copied first
-    /// (see [`crate::uploads`]).
+    /// A dmabuf reaches the engine as it is; shm frames are copied first (see
+    /// [`crate::uploads`]).
     pub fn publish_frame(&mut self, app_id: &str, commit: &Commit) -> Published {
         let Some(committed) = committed_buffer(commit.buffer) else {
             return Published::NotShown;
@@ -119,7 +162,7 @@ impl DomicileCompositor {
                 let published = self.submit_to_the_engine(
                     app_id,
                     Submitted::Client(commit.buffer.clone()),
-                    &descriptor_from(dmabuf),
+                    &FrameDescriptor::Dmabuf(descriptor_from(dmabuf)),
                     None,
                     commit,
                     damage,
@@ -160,8 +203,7 @@ impl DomicileCompositor {
         let session = self.engine.as_mut()?;
         let uploads = &self.uploads;
         let sample = |buffer: &Submitted| {
-            dmabuf_of(buffer, uploads)
-                .map(|dmabuf| mapping.sampled((dmabuf.width(), dmabuf.height()), configured))
+            size_of(buffer, uploads).map(|size| mapping.sampled(size, configured))
         };
         // Before the submit, which numbers this commit's frame.
         let last = session.frame_of(app_id);
@@ -175,10 +217,13 @@ impl DomicileCompositor {
         self.presentations.committed(app_id, at_box, last);
         // The client's next damage is relative to a frame mapped otherwise.
         self.shown.missed(app_id);
-        let dmabuf = dmabuf_of(&buffer, &self.uploads).expect("the engine holds what it shows");
-        let sampled = mapping.sampled((dmabuf.width(), dmabuf.height()), configured);
-        self.casting
-            .shown(app_id, casting::Shown { dmabuf, sampled });
+        let size = size_of(&buffer, &self.uploads).expect("the engine holds what it shows");
+        let sampled = mapping.sampled(size, configured);
+        // A cast reads dmabufs, so it misses a window in memory.
+        if let Some(dmabuf) = dmabuf_of(&buffer, &self.uploads) {
+            self.casting
+                .shown(app_id, casting::Shown { dmabuf, sampled });
+        }
         Some(paced)
     }
 
@@ -190,7 +235,7 @@ impl DomicileCompositor {
         &mut self,
         app_id: &str,
         submitted: Submitted,
-        descriptor: &DmabufDescriptor,
+        descriptor: &FrameDescriptor,
         fence: Option<OwnedFd>,
         commit: &Commit,
         damage: (i32, i32, i32, i32),
@@ -263,16 +308,17 @@ impl DomicileCompositor {
         if published == Published::NotShown {
             // Never reached viz, so nothing will release it.
             self.uploads.give_back(copied.id);
-        } else {
-            let dmabuf = self
-                .uploads
-                .get(copied.id)
-                .expect("a buffer the engine holds is there")
-                .clone();
+        } else if let Some(dmabuf) = self
+            .uploads
+            .get(copied.id)
+            .expect("a buffer the engine holds is there")
+            .dmabuf()
+        {
+            // A cast reads dmabufs, so it misses a window in memory.
             self.casting.shown(
                 app_id,
                 casting::Shown {
-                    dmabuf,
+                    dmabuf: dmabuf.clone(),
                     sampled: commit.sampled,
                 },
             );
@@ -280,18 +326,72 @@ impl DomicileCompositor {
         published
     }
 
-    /// Copy the commit's buffer into a free buffer of `app_id`'s.
+    /// Copy the commit's buffer into a free buffer of `app_id`'s: on the GPU,
+    /// or in memory for an engine on the CPU.
+    ///
+    /// The buffer comes back taken; the caller gives it back if the engine
+    /// does not take it.
+    fn copy_shm_frame(&mut self, app_id: &str, commit: &Commit) -> Result<CopiedFrame, ShmRefused> {
+        match self.software_compositing {
+            true => self.copy_shm_frame_to_memory(app_id, commit),
+            false => self.copy_shm_frame_to_the_gpu(app_id, commit),
+        }
+    }
+
+    /// Copy the commit's buffer into one of `app_id`'s memfds, whole. See
+    /// [`crate::memory_frames`].
+    fn copy_shm_frame_to_memory(
+        &mut self,
+        app_id: &str,
+        commit: &Commit,
+    ) -> Result<CopiedFrame, ShmRefused> {
+        if !self.engine.as_ref().is_some_and(EngineSession::imports_shm) {
+            return Err(ShmRefused::NoMemoryImport);
+        }
+        let shape = shm_shape(commit.buffer).ok_or(ShmRefused::Unreadable)?;
+        let taken = self.uploads.take(app_id, shape, |shape| {
+            MemoryFrame::allocate(shape).map(Upload::Memory)
+        })?;
+        they_were_dropped(self.engine.as_mut(), &taken.dropped);
+        let Some(Upload::Memory(target)) = self.uploads.get_mut(taken.id) else {
+            unreachable!("an engine on the CPU has only memory frames")
+        };
+        let copied = with_buffer_contents(commit.buffer, |pool, length, data| {
+            // SAFETY: Smithay maps the client's pool, `length` bytes, for the
+            // call.
+            let pool = unsafe { std::slice::from_raw_parts(pool, length) };
+            target.copy_from(pool, data.offset as usize, data.stride as usize)
+        });
+        let descriptor = FrameDescriptor::Shm(target.describe());
+        let refused = match copied {
+            Ok(Ok(())) => {
+                return Ok(CopiedFrame {
+                    id: taken.id,
+                    descriptor,
+                    fourcc: shape.fourcc,
+                    fence: None,
+                })
+            }
+            Ok(Err(err)) => ShmRefused::Memory(err),
+            Err(_) => ShmRefused::Unreadable,
+        };
+        self.uploads.give_back(taken.id);
+        Err(refused)
+    }
+
+    /// Copy the commit's buffer into a free GPU buffer of `app_id`'s.
     ///
     /// The client's pixels reach the GPU through a texture kept on the
     /// surface, so only the damage is uploaded while it holds the previous
     /// commit.
     ///
-    /// The buffer comes back taken; the caller gives it back if the engine
-    /// does not take it.
-    ///
     /// An engine that takes fences gets the copy's, so this thread does not
     /// wait for the GPU.
-    fn copy_shm_frame(&mut self, app_id: &str, commit: &Commit) -> Result<CopiedFrame, ShmRefused> {
+    fn copy_shm_frame_to_the_gpu(
+        &mut self,
+        app_id: &str,
+        commit: &Commit,
+    ) -> Result<CopiedFrame, ShmRefused> {
         let fenced = self
             .engine
             .as_ref()
@@ -300,18 +400,13 @@ impl DomicileCompositor {
         let gbm = gpu.gbm.as_ref().ok_or(ShmRefused::NoAllocator)?;
         let shape = shm_shape(commit.buffer).ok_or(ShmRefused::Unreadable)?;
         let modifiers = render_modifiers(&gpu.renderer, shape.fourcc);
-        let taken = self
-            .uploads
-            .take(app_id, shape, |shape| gbm.allocate(shape, &modifiers))?;
-        if let Some(session) = self.engine.as_mut() {
-            for dropped in &taken.dropped {
-                session.upload_dropped(*dropped);
-            }
-        }
-        let target = self
-            .uploads
-            .get_mut(taken.id)
-            .expect("a buffer just taken is there");
+        let taken = self.uploads.take(app_id, shape, |shape| {
+            gbm.allocate(shape, &modifiers).map(Upload::Gpu)
+        })?;
+        they_were_dropped(self.engine.as_mut(), &taken.dropped);
+        let Some(Upload::Gpu(target)) = self.uploads.get_mut(taken.id) else {
+            unreachable!("an engine on the GPU has only GPU buffers")
+        };
         let size = (shape.width as i32, shape.height as i32).into();
         let damage = shm_upload::uploaded(
             commit.damage,
@@ -326,7 +421,7 @@ impl DomicileCompositor {
         match copied {
             Ok(fence) => Ok(CopiedFrame {
                 id: taken.id,
-                descriptor: descriptor_from(target),
+                descriptor: FrameDescriptor::Dmabuf(descriptor_from(target)),
                 fourcc: shape.fourcc,
                 fence,
             }),
@@ -338,11 +433,30 @@ impl DomicileCompositor {
     }
 }
 
+/// Tells the engine to forget buffers [`Uploads::take`] dropped.
+fn they_were_dropped(engine: Option<&mut EngineSession>, dropped: &[UploadId]) {
+    if let Some(session) = engine {
+        for dropped in dropped {
+            session.upload_dropped(*dropped);
+        }
+    }
+}
+
 /// The dmabuf behind a submitted buffer: the client's, or the compositor's
-/// copy of its shm frame.
-fn dmabuf_of(buffer: &Submitted, uploads: &Uploads<Dmabuf>) -> Option<Dmabuf> {
+/// copy of its shm frame on the GPU. `None` for a frame in memory.
+fn dmabuf_of(buffer: &Submitted, uploads: &Uploads<Upload>) -> Option<Dmabuf> {
     match buffer {
         Submitted::Client(buffer) => get_dmabuf(buffer).ok().cloned(),
-        Submitted::Upload(id) => uploads.get(*id).cloned(),
+        Submitted::Upload(id) => uploads.get(*id).and_then(Upload::dmabuf).cloned(),
+    }
+}
+
+/// The size of a submitted buffer.
+fn size_of(buffer: &Submitted, uploads: &Uploads<Upload>) -> Option<(u32, u32)> {
+    match buffer {
+        Submitted::Client(buffer) => get_dmabuf(buffer)
+            .ok()
+            .map(|dmabuf| (dmabuf.width(), dmabuf.height())),
+        Submitted::Upload(id) => uploads.get(*id).map(Upload::size),
     }
 }

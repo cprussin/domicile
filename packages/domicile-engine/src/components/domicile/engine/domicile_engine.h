@@ -108,6 +108,21 @@ typedef struct DomicileDmabuf {
   DomicileDmabufPlane planes[4];
 } DomicileDmabuf;
 
+// A window's frame in shared memory, one plane at offset 0.
+//
+// The fd is borrowed for the call: the library duplicates what it sends and the
+// caller keeps the original. It must be open for reading and writing, as
+// memfd_create makes it.
+typedef struct DomicileShmBuffer {
+  int fd;
+  uint32_t width;
+  uint32_t height;
+  // Bytes from one row to the next; at least 4 * width.
+  uint32_t stride;
+  // DRM_FORMAT_ARGB8888, XRGB8888, ABGR8888 or XBGR8888.
+  uint32_t fourcc;
+} DomicileShmBuffer;
+
 // A capture id, of a display or a browser window. Zero is never valid and is
 // the failure return of domicile_display_capture_start and
 // domicile_browser_window_capture_start.
@@ -417,6 +432,18 @@ DOMICILE_ENGINE_EXPORT void domicile_surface_import_async(
     DomicileSurfaceId surface,
     const DomicileDmabuf* dmabuf,
     uint64_t request);
+
+// Imports a window's frame in shared memory, for a browser that composites in
+// software (2D virtio-gpu, simpledrm, vkms, --disable-gpu). Returns the buffer
+// id, or zero if the browser refused: it refuses while it composites on the
+// GPU, where a dmabuf is the way in.
+//
+// Viz reads the memory itself at each frame that shows the buffer. Write to it
+// only while the buffer is released. Blocks for a round trip to the browser.
+DOMICILE_ENGINE_EXPORT DomicileBufferId
+domicile_surface_import_shm(DomicileEngine* engine,
+                            DomicileSurfaceId surface,
+                            const DomicileShmBuffer* buffer);
 
 // Submits a frame showing `buffer` (wl_surface.commit), damaging the given
 // rectangle. An empty rectangle means the whole surface.
