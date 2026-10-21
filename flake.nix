@@ -602,7 +602,9 @@
         #   which the shell's mixer spawns (PipeWire systems may have none),
         #   and `curl`, which shells spawn to fetch bookmark icons
         #   (`@domicile-desktop/system-apps/curl`) and check for a captive
-        #   portal (`@domicile-desktop/system-network/portal`).
+        #   portal (`@domicile-desktop/system-network/portal`), and `ip`, for
+        #   the network panel's addresses
+        #   (`@domicile-desktop/system-network/interfaces`).
         #
         # `--set-default` and `--suffix` so a user's own value wins.
         postFixup = ''
@@ -614,7 +616,7 @@
           wrapProgram "$out/bin/domicile-compositor" \
             --prefix LD_LIBRARY_PATH : "/run/opengl-driver/lib" \
             --set-default DOMICILE_PNP_IDS "${pkgs.hwdata}/share/hwdata/pnp.ids" \
-            --suffix PATH : "${pkgs.lib.makeBinPath [ pkgs.pulseaudio pkgs.curl ]}"
+            --suffix PATH : "${pkgs.lib.makeBinPath [ pkgs.pulseaudio pkgs.curl pkgs.iproute2 ]}"
         '';
       };
 
@@ -697,7 +699,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-jXVuvy0uA7EyYqRCJ0vaRGvRsVtAeeOQUSAYuOaDj0U=";
+        outputHash = "sha256-yMtaKClxm/IwcAgG8kk3cI2mbppkJNVHpIeUErZpil8=";
       };
 
 

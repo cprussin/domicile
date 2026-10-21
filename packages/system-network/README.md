@@ -70,6 +70,23 @@ await connectWifi(host, device, network, "passphrase");
   when a scan runs, so `scanning` is always `false`.
 - iwd does not report addresses, so `connection.ip` is `undefined`.
 
+## Interfaces
+
+```ts
+import { watchAddresses, watchInterfaces } from "@domicile-desktop/system-network/interfaces";
+
+const stop = watchInterfaces(host, (interfaces) => interfaces.map(show));
+```
+
+- `readInterfaces` lists `/sys/class/net`'s interfaces with a `device`:
+  wired or wireless, hardware address, whether the link is up, and a wired
+  link's speed. Loopback, bridges and VPNs are left out. Works while locked.
+- `readAddresses` runs `ip -j address show` and `ip -j route show default`:
+  each interface's global addresses and default gateway. `ip` must be on the
+  compositor's `PATH`.
+- The watches read every 5 seconds, since a cable's carrier sends no uevent,
+  and report only a change.
+
 ## Captive portals
 
 ```ts

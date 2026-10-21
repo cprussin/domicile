@@ -9,6 +9,6 @@
     "rootDir": "src",
     "types": []
   },
-  "exclude": ["src/**/*.test.ts", "src/fake-bus.ts"],
+  "exclude": ["src/**/*.test.ts", "src/fake-bus.ts", "src/fake-sysfs.ts"],
   "extends": "./tsconfig.json"
 }

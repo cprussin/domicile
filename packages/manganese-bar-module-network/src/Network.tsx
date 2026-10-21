@@ -6,6 +6,11 @@ import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { System, SystemError } from "@domicile-desktop/sdk/system";
 import { system } from "@domicile-desktop/sdk/system";
 import type {
+  Addressing,
+  NetworkInterface,
+} from "@domicile-desktop/system-network/interfaces";
+import { InterfaceKind } from "@domicile-desktop/system-network/interfaces";
+import type {
   Link,
   Network as Reading,
 } from "@domicile-desktop/system-network/network";
@@ -18,15 +23,21 @@ import { NetworkIcon } from "@phosphor-icons/react/dist/ssr/Network";
 import { WifiSlashIcon } from "@phosphor-icons/react/dist/ssr/WifiSlash";
 import { useMemo } from "react";
 import { cva } from "../styled-system/css";
+import { flex } from "../styled-system/patterns";
 import { signalOf } from "./signal";
 import { WifiPanel } from "./WifiPanel";
 import { WifiSignalIcon } from "./WifiSignalIcon";
+import { WiredPanel } from "./WiredPanel";
 import type { WifiActions } from "./wifi-actions";
 import { WIFI_ACTIONS } from "./wifi-actions";
 
 type Props = {
   /** The desk's network, from the network service. */
   network: SharedWatch<Result<Reading, SystemError>>;
+  /** The network hardware, from `/sys`. */
+  interfaces: SharedWatch<Result<NetworkInterface[], SystemError>>;
+  /** Each interface's addresses, read while the panel is open. */
+  addresses: SharedWatch<Result<Map<string, Addressing>, SystemError>>;
   /** The Wi-Fi device, read while the panel is open. */
   wifi: SharedWatch<Result<Option<Wifi>, SystemError>>;
   /** The host whose system calls reach the Wi-Fi service. */
@@ -38,48 +49,68 @@ type Props = {
 /**
  * The network item on the bar: an icon for the primary connection, named on
  * hover with the Wi-Fi network or VPN. Dims with no link, and turns `warning`
- * when the link does not reach the internet. A click opens the
- * {@link WifiPanel}.
+ * when the link does not reach the internet or the service fails. A click
+ * opens the wired ports and the {@link WifiPanel}.
  *
  * An icon alone, so its width never changes with the name.
  *
- * Draws nothing until the network service answers, and nothing on an error,
- * so a machine without one shows no item.
+ * Draws nothing until the service or the hardware answers, and nothing on a
+ * machine with no network hardware.
  */
 export const Network = ({
   actions = WIFI_ACTIONS,
+  addresses,
   domicile,
+  interfaces,
   network,
   wifi,
 }: Props) => {
   const host = useMemo(() => system(domicile), [domicile]);
-  return useSharedWatch(network)?.match({
-    Err: () => undefined,
-    Ok: (reading) => (
-      <Item actions={actions} host={host} network={reading} wifi={wifi} />
-    ),
-  });
+  const reading = useSharedWatch(network);
+  const hardware = useSharedWatch(interfaces);
+  const ports = hardware?.match({ Err: () => undefined, Ok: (found) => found });
+  if (
+    (reading === undefined && hardware === undefined) ||
+    ports?.length === 0
+  ) {
+    return undefined;
+  } else {
+    return (
+      <Item
+        actions={actions}
+        addresses={addresses}
+        host={host}
+        reading={reading}
+        wifi={wifi}
+        wired={(ports ?? []).filter(({ kind }) => kind === InterfaceKind.Wired)}
+      />
+    );
+  }
 };
 
-/** The button and its panel once the network service has answered. */
+/** What the icon shows. */
+type Shown = { link: Link; label: string; online: boolean };
+
+/** The button and its panel. */
 const Item = ({
   actions,
+  addresses,
   host,
-  network: { connectivity, link },
+  reading,
   wifi,
+  wired,
 }: {
   actions: WifiActions;
+  addresses: Props["addresses"];
   host: System;
-  network: Reading;
+  reading: Result<Reading, SystemError> | undefined;
   wifi: Props["wifi"];
+  wired: NetworkInterface[];
 }) => {
-  const online =
-    connectivity !== Connectivity.Limited &&
-    connectivity !== Connectivity.Portal;
-  const name = nameOf(link);
-  const named =
-    name === undefined ? describe(link) : `${describe(link)}: ${name}`;
-  const label = online ? named : `${named}, no internet`;
+  const { label, link, online } = shownOf(
+    reading,
+    wired.some(({ up }) => up),
+  );
   return (
     <Popover
       align="center"
@@ -99,21 +130,89 @@ const Item = ({
       }
       wide
     >
-      <OpenPanel actions={actions} host={host} wifi={wifi} />
+      <OpenPanel
+        actions={actions}
+        addresses={addresses}
+        host={host}
+        wifi={wifi}
+        wired={wired}
+      />
     </Popover>
   );
 };
 
-/** The panel, which watches Wi-Fi while it is open. */
+/**
+ * The icon for the service's reading. A cable that is in shows as wired when
+ * the service reports no link, as iwd and wpa_supplicant never do.
+ */
+const shownOf = (
+  reading: Result<Reading, SystemError> | undefined,
+  cabled: boolean,
+): Shown => {
+  if (reading === undefined) {
+    return cabled
+      ? { label: "Wired", link: WIRED, online: true }
+      : { label: "Reading the network", link: NONE, online: true };
+  } else {
+    return reading.match({
+      Err: (error): Shown =>
+        cabled
+          ? { label: "Wired", link: WIRED, online: true }
+          : {
+              label: `Network unavailable: ${error.message}`,
+              link: NONE,
+              online: false,
+            },
+      Ok: ({ connectivity, link }): Shown => {
+        const online =
+          connectivity !== Connectivity.Limited &&
+          connectivity !== Connectivity.Portal;
+        const shown = cabled && link.kind === LinkKind.None ? WIRED : link;
+        const cable = cabled && shown.kind !== LinkKind.Wired ? "; Wired" : "";
+        const named = `${nameOf(shown)}${cable}`;
+        return {
+          label: online ? named : `${named}, no internet`,
+          link: shown,
+          online,
+        };
+      },
+    });
+  }
+};
+
+/** A cable the service does not report. */
+const WIRED: Link = { kind: LinkKind.Wired, name: "" };
+
+const NONE: Link = { kind: LinkKind.None };
+
+/** The panel, which watches Wi-Fi and the addresses while it is open. */
 const OpenPanel = ({
   actions,
+  addresses,
   host,
   wifi,
+  wired,
 }: {
   actions: WifiActions;
+  addresses: Props["addresses"];
   host: System;
   wifi: Props["wifi"];
-}) => <WifiPanel actions={actions} host={host} wifi={useSharedWatch(wifi)} />;
+  wired: NetworkInterface[];
+}) => (
+  <div className={panelStyles}>
+    {wired.length > 0 && <Wired addresses={addresses} ports={wired} />}
+    <WifiPanel actions={actions} host={host} wifi={useSharedWatch(wifi)} />
+  </div>
+);
+
+/** The wired ports, which watch the addresses while shown. */
+const Wired = ({
+  addresses,
+  ports,
+}: {
+  addresses: Props["addresses"];
+  ports: NetworkInterface[];
+}) => <WiredPanel addresses={useSharedWatch(addresses)} ports={ports} />;
 
 const LinkIcon = ({ label, link }: { label: string; link: Link }) => {
   switch (link.kind) {
@@ -130,6 +229,8 @@ const LinkIcon = ({ label, link }: { label: string; link: Link }) => {
       return <WifiSignalIcon label={label} strength={link.strength} />;
   }
 };
+
+const panelStyles = flex({ direction: "column", gap: 3 });
 
 // Matches the volume item's button.
 const triggerStyles = cva({
@@ -163,29 +264,16 @@ const triggerStyles = cva({
   },
 });
 
-/** What the icon shows, for its accessible name. */
-const describe = (link: Link): string => {
+/** What the icon shows, for its accessible name, with the Wi-Fi network's or VPN's name. */
+const nameOf = (link: Link): string => {
   switch (link.kind) {
     case LinkKind.None:
       return "Offline";
     case LinkKind.Wired:
       return "Wired";
     case LinkKind.Wifi:
-      return `Wi-Fi, ${signalOf(link.strength)} signal`;
+      return `Wi-Fi, ${signalOf(link.strength)} signal: ${link.ssid}`;
     case LinkKind.Other:
-      return "Network";
-  }
-};
-
-/** The Wi-Fi network's or VPN's name; a cable or no link has none. */
-const nameOf = (link: Link): string | undefined => {
-  switch (link.kind) {
-    case LinkKind.Wifi:
-      return link.ssid;
-    case LinkKind.Other:
-      return link.name;
-    case LinkKind.None:
-    case LinkKind.Wired:
-      return undefined;
+      return `Network: ${link.name}`;
   }
 };
