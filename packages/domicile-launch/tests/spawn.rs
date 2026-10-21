@@ -3,7 +3,9 @@
 use std::path::{Path, PathBuf};
 
 use domicile_launch::shell_path::Shell;
-use domicile_launch::spawn::{compositor, engine, Runtime};
+use domicile_launch::spawn::{
+    composite_on_the_cpu, compositor, engine, send_frames_in_memory, Runtime,
+};
 
 /// A built shell, split as `shell_path` returns it: the directory the engine
 /// serves and the module the generated document loads.
@@ -121,10 +123,8 @@ fn a_tty_desktop_asks_for_the_whole_screen() {
 #[test]
 fn a_tty_desktop_keeps_retrying_a_crashed_gpu_process() {
     // After three GPU process crashes Chromium falls back to software
-    // compositing (`GpuProcessHost::RecordProcessCrash`). ozone/drm has no
-    // software output, so the browser aborts in
-    // `IntentionallyCrashBrowserForUnusableGpuProcess` and the shell page and
-    // its webviews are lost with it.
+    // compositing (`GpuProcessHost::RecordProcessCrash`). A compositor sending
+    // dmabufs would then blank every window.
     let args = args_of(&engine(
         Path::new("/l/engine"),
         &shell(),
@@ -737,4 +737,38 @@ fn a_desktop_with_no_config_is_given_no_flag_rather_than_an_empty_one() {
         !args.iter().any(|arg| arg == "--config"),
         "no config was asked for, so none should be named: {args:?}"
     );
+}
+
+#[test]
+fn an_engine_on_the_cpu_has_no_gpu() {
+    // Software compositing over dumb buffers. With a GL that only half works
+    // (Mesa's software rasterizer behind a 2D card), Chromium would otherwise
+    // composite on it, and the compositor's shared-memory windows would be
+    // dropped.
+    let mut spawned = engine(Path::new("/l/engine"), &shell(), "drm", &runtime(), None);
+    composite_on_the_cpu(&mut spawned);
+
+    assert!(args_of(&spawned).contains(&"--disable-gpu".to_string()));
+}
+
+#[test]
+fn a_compositor_for_an_engine_on_the_cpu_sends_frames_in_memory() {
+    let mut spawned = compositor(
+        Path::new("/l/compositor"),
+        Path::new("/l/engine"),
+        Path::new("/l/open-url"),
+        Path::new("/l/data"),
+        &runtime(),
+        None,
+        false,
+        &|_| None,
+    );
+    send_frames_in_memory(&mut spawned);
+
+    let args = args_of(&spawned);
+    let at = args
+        .iter()
+        .position(|arg| arg == "--software-compositing")
+        .expect("the flag is passed");
+    assert_eq!(args[at + 1], "yes");
 }
