@@ -19,6 +19,11 @@ not in the Extensions page or any extension list.
   their own for it, or each site with all its permissions. **Remove site**
   clears all of a site's own settings. Changes take effect at once in open
   browser windows. An installed extension shows by its name.
+- **Site data:** each site that stores cookies or other data on this
+  computer, largest first, with its size and cookie count, and a search.
+  **Remove** clears everything the site stores after a confirmation.
+  History clears data by time range or for one row's site
+  ([HISTORY.md](HISTORY.md)).
 - **Camera and microphone device:** under Camera and Microphone, the device a
   site gets when it does not ask for a particular one. A site that names a
   device still gets that device. Manganese's address bar site permissions panel picks
@@ -55,12 +60,14 @@ Settings page ─ spawn, stdio ─▶ domicile-app-host ─ DOMICILE_SOCK ─▶
  (app module)                       reads and writes the files    settings_files,                site_permissions,
                                                                      site_permissions,              set_site_permission,
                                                                      extensions,                    load_unpacked,
-                                                                     media_devices                  uninstall_extension,
-                                                                                                    config_extensions,
+                                                                     media_devices,                 uninstall_extension,
+                                                                     site_data                      config_extensions,
                                                                                                     extensions,
                                                                                                     set_extension_enabled,
                                                                                                     media_devices,
-                                                                                                    set_media_device
+                                                                                                    set_media_device,
+                                                                                                    site_data,
+                                                                                                    clear_site_data
 ```
 
 | Part | Where |
@@ -74,6 +81,7 @@ Settings page ─ spawn, stdio ─▶ domicile-app-host ─ DOMICILE_SOCK ─▶
 | Extensions | The engine's `extensions`, `set_extension_enabled`, `load_unpacked`, `uninstall_extension` and `config_extensions` commands. |
 | Picking a folder | The host calls the `FileChooser` portal's `OpenFile` with `directory`, which the shell draws ([PORTALS.md](PORTALS.md)). A page cannot learn the path of a folder from `<input type="file">`. |
 | Site permissions | The engine's `site_permissions` and `set_site_permission` commands ([CONTROL-CHANNEL.md](/packages/domicile-engine/docs/CONTROL-CHANNEL.md#command-socket)). They read and write the shell profile's content settings as the address bar's panel does. |
+| Site data | The engine's `site_data` and `clear_site_data` commands. They read and remove the shell profile's data through Chrome's `BrowsingDataModel`, as `chrome://settings/content/all` does. |
 | Camera and microphone | The engine's `media_devices` and `set_media_device` commands. They read and write Chrome's device ranking in the shell profile's prefs, which Chrome uses for a site that names no device. |
 | Opening it | `domicile-settings` runs `domicile run-app` on `settings.js`. |
 

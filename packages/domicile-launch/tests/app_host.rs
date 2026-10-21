@@ -9,6 +9,7 @@ use domicile_launch::control::{Request, Response, SettingsFiles};
 use domicile_launch::extensions::InstalledExtension;
 use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
+use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 use serde_json::{json, Value};
 
@@ -418,6 +419,35 @@ fn browsing_data_is_cleared_on_the_desktop_for_the_origins_named() {
 }
 
 #[test]
+fn site_data_is_the_desktop_s() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({"id": 24, "type": "site_data"})),
+        json!({
+            "id": 24,
+            "type": "site_data",
+            "sites": [{"host": "a.example", "bytes": 2048.0, "cookies": 1}],
+        })
+    );
+    assert_eq!(host.asked.take().last(), Some(&Request::SiteData));
+}
+
+#[test]
+fn a_host_s_site_data_is_cleared_on_the_desktop() {
+    let host = a_host(FILES.clone());
+    assert_eq!(
+        host.answer(&json!({"id": 25, "type": "clear_site_data", "host": "a.example"})),
+        json!({"id": 25, "type": "cleared"})
+    );
+    assert_eq!(
+        host.asked.take().last(),
+        Some(&Request::ClearSiteData {
+            host: "a.example".to_string(),
+        })
+    );
+}
+
+#[test]
 fn a_folder_is_chosen_with_the_desktop_s_picker() {
     let host = a_host(FILES.clone());
     assert_eq!(
@@ -574,6 +604,14 @@ impl Fake {
                         },
                         Request::DeleteHistory { .. } => Response::Deleted,
                         Request::ClearBrowsingData(_) => Response::Cleared,
+                        Request::SiteData => Response::SiteData {
+                            sites: vec![SiteData {
+                                host: "a.example".to_string(),
+                                bytes: 2048.0,
+                                cookies: 1,
+                            }],
+                        },
+                        Request::ClearSiteData { .. } => Response::Cleared,
                         other => panic!("the host never asks {other:?}"),
                     })
                 },

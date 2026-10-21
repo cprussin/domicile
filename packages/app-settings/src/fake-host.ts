@@ -5,6 +5,7 @@ import type {
   MediaDevices,
   SettingsFiles,
   SettingsHost,
+  SiteData,
   SiteSettings,
   Target,
 } from "./host";
@@ -19,6 +20,8 @@ export type FakeHostState = {
   /** The extensions in the profile, which switches change. */
   installed: InstalledExtension[];
   sites: SiteSettings;
+  /** The hosts that store data, which clearing one removes. */
+  siteData: SiteData[];
   media: MediaDevices;
   /** The reason every write is refused, if any. */
   refuse?: string | undefined;
@@ -40,6 +43,10 @@ export const fakeHost = (state: FakeHostState) => {
     chooseFolder: () => {
       chosen.push(state.chosen);
       return Promise.resolve(state.chosen);
+    },
+    clearSiteData: (cleared) => {
+      state.siteData = state.siteData.filter(({ host }) => host !== cleared);
+      return Promise.resolve();
     },
     configExtensions: () => Promise.resolve([...state.configExtensions]),
     extensions: () => Promise.resolve(structuredClone(state.installed)),
@@ -90,6 +97,7 @@ export const fakeHost = (state: FakeHostState) => {
       };
       return Promise.resolve();
     },
+    siteData: () => Promise.resolve(structuredClone(state.siteData)),
     sitePermissions: () => Promise.resolve(structuredClone(state.sites)),
     uninstallExtension: (id) => {
       uninstalled.push(id);
