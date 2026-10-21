@@ -207,7 +207,10 @@ class MODULES_EXPORT DomicileHost final
 
   // Opens or closes a browser window. The next `browserwindowschanged`
   // reflects it.
-  void openBrowserWindow(ScriptState*, const String& url, ExceptionState&);
+  void openBrowserWindow(ScriptState*,
+                         const String& url,
+                         const String& partition,
+                         ExceptionState&);
   void openPrivateBrowserWindow(ScriptState*,
                                 const String& url,
                                 ExceptionState&);
@@ -445,7 +448,11 @@ class MODULES_EXPORT DomicileHost final
 
   // What openBrowserWindow, openPrivateBrowserWindow and openAppWindow open.
   enum class WindowKind { kBrowser, kPrivate, kApp };
-  void OpenBrowserWindow(const String& url, WindowKind, ExceptionState&);
+  // `partition` as openBrowserWindow's; only kBrowser takes one.
+  void OpenBrowserWindow(const String& url,
+                         WindowKind,
+                         const String& partition,
+                         ExceptionState&);
   bool ReadyForApp(const String& app_id, ExceptionState&);
 
   Member<LocalDOMWindow> window_;

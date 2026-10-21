@@ -105,6 +105,14 @@ interface Host {
   grab(shortcut: Shortcut | string): void;`);
   });
 
+  it("emits an optional argument as an optional parameter", () => {
+    expect(
+      emit(`interface Host {
+  undefined open(USVString url, optional DOMString partition = "");
+};`),
+    ).toContain("  open(url: string, partition?: string): void;");
+  });
+
   it("types an event target's listeners by an event map, Event unless the options say otherwise", () => {
     const typescript = emit(
       `interface Host : EventTarget {

@@ -265,12 +265,19 @@ interface WebViewGuestHost {
   // is then in the profile's off-the-record profile: nothing it stores
   // outlives the browser, and it shares nothing with the user's pages.
   // Ignored with `window`, whose page already has its profile.
+  //
+  // `partition` is the element's `partition` attribute, empty for none. The
+  // guest's page then has storage of its own: "persist:<name>" kept on disk,
+  // any other name in memory. See
+  // components/domicile/browser/web_view_partition.h. "persist:" with no name
+  // is refused as an unknown `window` is. Ignored with `window`.
   CreateGuest(blink.mojom.LocalFrameToken placeholder_frame,
               pending_receiver<WebViewGuest> guest,
               pending_remote<WebViewGuestClient> client,
               string? window,
               bool extension_popup,
-              bool private_browsing);
+              bool private_browsing,
+              string partition);
 };
 
 // Browser -> renderer: guest state only the browser has.
@@ -502,6 +509,14 @@ interface WebViewGuestClient {
   // From WebContents' crashed status. Sent only when it changes; a fresh guest
   // sends nothing.
   RenderProcessChanged(WebViewRenderProcess state, int32 exit_code);
+
+  // The page is about to navigate its main frame to `url`: a link, a form or
+  // a script setting `location`. Not sent for the shell's own navigations,
+  // history steps or reloads. See components/domicile/browser/will_navigate.h.
+  //
+  // The navigation waits for the answer. `proceed` false cancels it and the
+  // page stays. An unhandled event or a closed pipe proceeds.
+  WillNavigate(url.mojom.Url url) => (bool proceed);
 };
 
 // One guest, for the life of the element that requested it.
