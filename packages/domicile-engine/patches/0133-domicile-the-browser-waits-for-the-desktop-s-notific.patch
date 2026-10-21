@@ -1,0 +1,108 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Tue, 20 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the browser waits for the desktop's notification
+ server
+
+Chrome's Linux bridge looks for org.freedesktop.Notifications once, when
+it starts. Domicile starts the engine before the compositor that serves
+the name, so the bridge could find nothing and show Chrome's own popups
+for the whole session, or start an activatable daemon that then held the
+compositor's name.
+
+- Init() waits up to 20 seconds for an owner, through the proxy's
+  WaitForServiceToBeAvailable, before Chrome's own lookup runs. A name
+  already owned, as under another desktop, ends the wait at once.
+- Notifications shown meanwhile wait in NotificationDisplayServiceImpl's
+  queue, as they do for any bridge that is not ready.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`. guard-notification-server-late.sh covers it.
+---
+ .../notification_platform_bridge_linux.cc     | 42 +++++++++++++++++--
+ 1 file changed, 39 insertions(+), 3 deletions(-)
+
+diff --git a/chrome/browser/notifications/notification_platform_bridge_linux.cc b/chrome/browser/notifications/notification_platform_bridge_linux.cc
+index 1d4014d..4a97c2b 100644
+--- a/chrome/browser/notifications/notification_platform_bridge_linux.cc
++++ b/chrome/browser/notifications/notification_platform_bridge_linux.cc
+@@ -49,6 +49,7 @@
+ #include "base/task/thread_pool.h"
+ #include "base/threading/sequence_bound.h"
+ #include "base/time/time.h"
++#include "base/timer/timer.h"
+ #include "base/types/expected.h"
+ #include "base/version.h"
+ #include "chrome/browser/browser_process.h"
+@@ -92,6 +93,11 @@ BASE_FEATURE(kWebNotificationPortalFallback, base::FEATURE_ENABLED_BY_DEFAULT);
+ const char kFreedesktopNotificationsName[] = "org.freedesktop.Notifications";
+ const char kFreedesktopNotificationsPath[] = "/org/freedesktop/Notifications";
+ 
++// Domicile's engine fork: how long Init() waits for a server to take
++// kFreedesktopNotificationsName before looking for one to start or falling
++// back.
++constexpr base::TimeDelta kServerWait = base::Seconds(20);
++
+ // DBus name / path / interface for portal notifications.
+ const char kPortalDesktopName[] = "org.freedesktop.portal.Desktop";
+ const char kPortalDesktopPath[] = "/org/freedesktop/portal/desktop";
+@@ -435,12 +441,23 @@ class NotificationPlatformBridgeLinuxImpl : public NotificationPlatformBridge {
+   }
+ 
+   // Sets up the D-Bus connection.
++  //
++  // Domicile's engine fork: waits up to kServerWait for a server to take the
++  // name first. Domicile starts the engine before the compositor that serves
++  // it, and Chrome looks only once: seeing no server, it would show its own
++  // popups all session, or start an activatable daemon that then holds the
++  // compositor's name.
+   void Init() {
+     CHECK_CURRENTLY_ON(content::BrowserThread::UI, base::NotFatalUntil::M161);
+-    dbus_utils::CheckForServiceAndStart(
+-        bus_, kFreedesktopNotificationsName,
+-        base::BindOnce(&NotificationPlatformBridgeLinuxImpl::OnServiceStarted,
++    server_wait_.Start(
++        FROM_HERE, kServerWait,
++        base::BindOnce(&NotificationPlatformBridgeLinuxImpl::CheckForServer,
+                        weak_factory_.GetWeakPtr()));
++    bus_->GetObjectProxy(kFreedesktopNotificationsName,
++                         dbus::ObjectPath(kFreedesktopNotificationsPath))
++        ->WaitForServiceToBeAvailable(base::IgnoreArgs<bool>(base::BindOnce(
++            &NotificationPlatformBridgeLinuxImpl::CheckForServer,
++            weak_factory_.GetWeakPtr())));
+   }
+ 
+   // Makes the "Notify" call to D-Bus.
+@@ -633,6 +650,20 @@ class NotificationPlatformBridgeLinuxImpl : public NotificationPlatformBridge {
+     CleanUp();
+   }
+ 
++  // Domicile's engine fork: Chrome's own lookup, once, when a server takes the
++  // name or kServerWait ends, whichever is first.
++  void CheckForServer() {
++    CHECK_CURRENTLY_ON(content::BrowserThread::UI, base::NotFatalUntil::M161);
++    if (std::exchange(checked_for_server_, true)) {
++      return;
++    }
++    server_wait_.Stop();
++    dbus_utils::CheckForServiceAndStart(
++        bus_, kFreedesktopNotificationsName,
++        base::BindOnce(&NotificationPlatformBridgeLinuxImpl::OnServiceStarted,
++                       weak_factory_.GetWeakPtr()));
++  }
++
+   void OnServiceStarted(std::optional<bool> service_started) {
+     CHECK_CURRENTLY_ON(content::BrowserThread::UI, base::NotFatalUntil::M161);
+     if (!service_started.value_or(false)) {
+@@ -1633,6 +1664,11 @@ class NotificationPlatformBridgeLinuxImpl : public NotificationPlatformBridge {
+   scoped_refptr<dbus::Bus> bus_;
+   raw_ptr<dbus::ObjectProxy> notification_proxy_ = nullptr;
+ 
++  // Domicile's engine fork: Init()'s wait for a server, and whether it has
++  // ended.
++  base::OneShotTimer server_wait_;
++  bool checked_for_server_ = false;
++
+   std::unordered_set<std::string> capabilities_;
+ 
+   std::string server_name_;

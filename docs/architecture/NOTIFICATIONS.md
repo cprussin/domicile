@@ -25,6 +25,7 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key)
 | D-Bus: the name, `Notify`, the signals | `packages/domicile-compositor/src/notifications.rs` |
 | `notifications` attribute, `dismissNotifications()`, `invokeNotificationAction()`, `replyToNotification()` | `control_channel.mojom`, `modules/domicile/domicile_notification*`, patch 0067 |
 | Sites ask before they notify; the shell page is allowed; a notification that stays up is not marked critical | patch 0105, `guard-webview-notifications.sh`; for the shell page, `guard-shell-web-apis.sh` |
+| Chrome waits for the server, which starts after the engine | patch 0133, `guard-notification-server-late.sh` |
 | SDK: `DomicileNotification`, `notifications`, `dismissNotifications`, `invokeNotificationAction`, `replyToNotification`; `Notification` | `@domicile-desktop/sdk/domicile-host`, `@domicile-desktop/sdk/notification` |
 | `Toaster` component | `@domicile-desktop/component-library/Toaster` |
 | Manganese toasts, bell and drawer | `packages/manganese-notifications/src/` |
@@ -40,6 +41,11 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key)
   `persistent` keeps the toast up; buttons and `default-action` become actions
   and a click. `transient` and the lock-screen hints change nothing: the drawer
   keeps every notification, and the shell shows none while locked.
+- **Chrome waits up to 20 seconds for the server.** The engine starts before
+  the compositor, and Chrome's bridge looks for the server once. Patch 0133
+  has it wait for the name first, so it neither shows its own popups nor
+  starts an activatable daemon that would hold the compositor's name.
+  Notifications shown meanwhile are queued.
 - **Sites ask before they notify.** The profile's default is ask, reset at
   every start, and the shell answers the prompt. An allow-all default would
   let any site a browser window opened push notifications from the
@@ -97,10 +103,3 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key)
   color.
 - **Toasts show on the focused monitor,** the one with the keyboard, in its
   top-right corner under its bar.
-
-## Open questions
-
-- **Startup race with Chrome's bridge.** Chrome checks for the server once,
-  when its bridge starts. The compositor takes the name long before the engine
-  starts, but a slow bus could leave Chrome using its own popups.
-  Recommendation: wait until it is seen in practice.
