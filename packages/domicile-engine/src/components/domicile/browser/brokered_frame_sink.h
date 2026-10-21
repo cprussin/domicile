@@ -65,6 +65,9 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
   // Returns the browser's SharedImageInterface, or null with no GPU (headless).
   // Injected because the only source is aura::Env and this target must not
   // depend on //ui/aura.
+  //
+  // The software getter returns the interface for software images, or null
+  // while the browser composites on the GPU.
   using SharedImageInterfaceGetter =
       base::RepeatingCallback<gpu::SharedImageInterface*()>;
 
@@ -73,7 +76,9 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
                     mojo::PendingRemote<mojom::SurfaceObserver> observer,
                     mojo::ReceiverId owner,
                     const std::string& app_id,
-                    SharedImageInterfaceGetter get_shared_image_interface);
+                    SharedImageInterfaceGetter get_shared_image_interface,
+                    SharedImageInterfaceGetter
+                        get_software_shared_image_interface);
 
   BrokeredFrameSink(const BrokeredFrameSink&) = delete;
   BrokeredFrameSink& operator=(const BrokeredFrameSink&) = delete;
@@ -112,6 +117,10 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
 
   // Imports a dmabuf as a SharedImage and returns its buffer id, or 0 on
   // failure. Follows components/exo/buffer.cc.
+  //
+  // A `handle` in shared memory becomes a software SharedImage over that
+  // memory, for a browser that composites in software. The producer leaves
+  // the memory alone until the buffer is released.
   //
   // Fills `exported` so a producer holding its own sink can reference the same
   // SharedImage. See docs/architecture/ENGINE-FORK.md#buffer-import.
@@ -179,6 +188,7 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
 
   const mojo::ReceiverId owner_;
   const SharedImageInterfaceGetter get_shared_image_interface_;
+  const SharedImageInterfaceGetter get_software_shared_image_interface_;
 
   // The frame sink this one was last embedded under. Invalid until embedded.
   viz::FrameSinkId parent_frame_sink_id_;
