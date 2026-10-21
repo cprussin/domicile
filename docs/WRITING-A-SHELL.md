@@ -288,6 +288,12 @@ Each entry in `domicile.windows` describes one client window.
 - **Parent:** `transientFor` is the `appId` of the window this one is a dialog
   for (`xdg_toplevel.set_parent`), or `null`. It follows every change. When the
   parent closes, it names the parent's own parent, as xdg-shell says.
+- **Anchor:** `anchor` names the place in your page the client asked to be
+  laid out at (`domicile_anchor_v1`), or is `null`. It follows every change.
+  The names are yours to define. Lay the window's `<app>` out inside your
+  anchor element and it moves with your layout in the same frame. Treat a
+  name you have no anchor for as `null`. `shell-manganese` defines none.
+  See [Anchored windows](architecture/WINDOW-COMPOSITING.md#anchored-windows).
 - **Urgency:** `urgent` is `true` when the compositor dropped the window's
   focus request (see [A client asking for focus](#a-client-asking-for-focus))
   and the window has not had the keyboard since. It clears when the window gets

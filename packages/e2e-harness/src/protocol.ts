@@ -170,6 +170,17 @@ const appTransientForSchema = z.looseObject({
   type: z.literal("app_transient_for"),
 });
 
+// The page anchor a window asked to be laid out at, sent on change. `null` on
+// the wire for none; normalized to `undefined`.
+const appAnchoredSchema = z.looseObject({
+  anchor: z
+    .string()
+    .nullable()
+    .transform((anchor) => anchor ?? undefined),
+  app_id: z.string(),
+  type: z.literal("app_anchored"),
+});
+
 // Whether a window wants attention: set when the compositor drops its
 // activation request, cleared when it gets the keyboard.
 const appUrgentSchema = z.looseObject({
@@ -597,6 +608,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   appPresentedSchema,
   appSuspendedSchema,
   appTransientForSchema,
+  appAnchoredSchema,
   appUrgentSchema,
   displaysSchema,
   keymapSchema,
@@ -639,6 +651,7 @@ export type AppMaxSizeMessage = z.infer<typeof appMaxSizeSchema>;
 export type AppClosedMessage = z.infer<typeof appClosedSchema>;
 export type AppCursorMessage = z.infer<typeof appCursorSchema>;
 export type AppTransientForMessage = z.infer<typeof appTransientForSchema>;
+export type AppAnchoredMessage = z.infer<typeof appAnchoredSchema>;
 export type AppUrgentMessage = z.infer<typeof appUrgentSchema>;
 export type DisplaysMessage = z.infer<typeof displaysSchema>;
 export type KeymapMessage = z.infer<typeof keymapSchema>;
