@@ -51,11 +51,6 @@ item when it ships.
    damage and presentation latency are unmeasured.
    [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#plan).
 
-2. **Two tty tasks.** [A-DESKTOP-ON-A-TTY.md](docs/architecture/A-DESKTOP-ON-A-TTY.md#plan).
-   - Take `/dev/dri/card0` from logind (`TakeDevice`, `PauseDevice`,
-     `ResumeDevice`) instead of `open()`.
-   - Stop the evdev thread blocking during a console switch.
-
 3. **Overlay promotion under `backdrop-filter`.** Show that viz declines it
    for an `<app>`. Needs a lit CRTC, like item 1.
    [WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md).

@@ -38,8 +38,7 @@ SUITES=(
   DrmVtSwitcherTest:20
   DrmSleepTest:2
   DrmFullscreenTest:4
-  DrmMasterTest:8
-  DrmInputDevicesTest:25
+  DrmInputDevicesTest:27
   DrmInputControllerTest:2
   DrmCursorFactoryTest:4
   DrmCursorFactoryThemeTest:4

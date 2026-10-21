@@ -17,6 +17,7 @@
 #include "base/files/scoped_file.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/memory/weak_ptr.h"
 
 namespace ui {
 
@@ -71,9 +72,13 @@ enum class DeviceLiveness {
   kRevoked,
 };
 
-// Calls `Session.ReleaseDevice(major, minor)`; true on success. Injectable
-// because unit tests have no logind session.
-using ReleaseDeviceCall = base::RepeatingCallback<bool(DeviceNumber number)>;
+// Answers a `Session.ReleaseDevice`: true when logind agreed.
+using ReleaseAnswer = base::OnceCallback<void(bool agreed)>;
+
+// Calls `Session.ReleaseDevice(major, minor)` without waiting, and answers
+// later. Injectable because unit tests have no logind session.
+using ReleaseDeviceCall =
+    base::RepeatingCallback<void(DeviceNumber number, ReleaseAnswer answered)>;
 
 // Asks the evdev device factory to close the device at `path` and reopen it
 // under `id`. Injected because the factory owns the opener.
@@ -133,11 +138,13 @@ class DrmTakenDevices {
   size_t Reclaim();
 
   // Releases `number` if held, so it can be taken again. False when nothing
-  // was held, as on every first open.
+  // was held, as on every first open. logind handles calls in order, so a
+  // `TakeDevice` sent after this need not wait for the answer.
   bool GiveBack(DeviceNumber number);
 
-  // Releases every device; true when logind agreed to all of them.
-  bool Release();
+  // Releases every device. A refusal is logged; nothing else can be done
+  // with it at shutdown.
+  void Release();
 
  private:
   // A device's evdev factory id and path. logind identifies it by
@@ -165,10 +172,18 @@ class DrmTakenDevices {
   // which is what `OpenInputDevice` gets.
   std::map<base::FilePath, base::ScopedFD> resumed_;
 
+  // Handles logind's answer to a `GiveBack`. A refused release sends no
+  // "gone", so the echo it was expected to send is struck off.
+  void OnGivenBack(DeviceNumber number,
+                   const base::FilePath& path,
+                   bool agreed);
+
   // `ReleaseDevice` calls whose "gone" echo has not arrived yet. A count, not
-  // a flag, because the evdev thread blocks through each call, so several
-  // echoes can queue up. See `Pause`.
+  // a flag, because several releases can be in flight. Counted when the call
+  // is sent: logind sends the echo before it answers. See `Pause`.
   std::map<DeviceNumber, int> released_;
+
+  base::WeakPtrFactory<DrmTakenDevices> weak_factory_{this};
 };
 
 }  // namespace ui
