@@ -68,13 +68,16 @@ BrokeredFrameSink::BrokeredFrameSink(
     mojo::PendingRemote<mojom::SurfaceObserver> observer,
     mojo::ReceiverId owner,
     const std::string& app_id,
-    SharedImageInterfaceGetter get_shared_image_interface)
+    SharedImageInterfaceGetter get_shared_image_interface,
+    SharedImageInterfaceGetter get_software_shared_image_interface)
     : host_frame_sink_manager_(host_frame_sink_manager),
       frame_sink_id_(frame_sink_id),
       app_id_(app_id),
       observer_(std::move(observer)),
       owner_(owner),
-      get_shared_image_interface_(std::move(get_shared_image_interface)) {
+      get_shared_image_interface_(std::move(get_shared_image_interface)),
+      get_software_shared_image_interface_(
+          std::move(get_software_shared_image_interface)) {
   host_frame_sink_manager_->RegisterFrameSinkId(
       frame_sink_id_, this, viz::ReportFirstSurfaceActivation::kNo);
   // Names the app in viz traces.
@@ -149,23 +152,43 @@ uint64_t BrokeredFrameSink::ImportBuffer(
     return 0;
   }
 
-  gpu::SharedImageInterface* sii = get_shared_image_interface_.Run();
-  if (!sii) {
-    LOG(ERROR) << "domicile: no GPU to import a buffer into. The ozone "
-                  "platform must be one that implements "
-                  "CreateNativePixmapFromHandle — headless does not.";
-    return 0;
-  }
-
-  // The part of exo::Buffer this needs. Its caching, fences, protected content
-  // and YUV handling are viz's job or not yet supported.
-  scoped_refptr<gpu::ClientSharedImage> shared_image = sii->CreateSharedImage(
-      {*format, size, gfx::ColorSpace::CreateSRGB(), kWindowUsage,
-       "DomicileWindow"},
-      std::move(handle));
-  if (!shared_image) {
-    LOG(ERROR) << "domicile: the GPU refused the dmabuf";
-    return 0;
+  scoped_refptr<gpu::ClientSharedImage> shared_image;
+  gpu::SharedImageInterface* sii = nullptr;
+  if (handle.type == gfx::SHARED_MEMORY_BUFFER) {
+    sii = get_software_shared_image_interface_.Run();
+    if (!sii) {
+      LOG(ERROR) << "domicile: a window in shared memory, but the browser "
+                    "composites on the GPU, where viz draws no software "
+                    "image. The producer imports a dmabuf here.";
+      return 0;
+    }
+    // Viz reads the producer's memory itself: no copy on either side.
+    const uint32_t stride = handle.stride;
+    shared_image = sii->DomicileCreateSharedImageForSoftwareCompositor(
+        {*format, size, gfx::ColorSpace::CreateSRGB(),
+         gpu::SHARED_IMAGE_USAGE_CPU_WRITE_ONLY, "DomicileWindow"},
+        std::move(handle).region(), stride);
+    if (!shared_image) {
+      return 0;
+    }
+  } else {
+    sii = get_shared_image_interface_.Run();
+    if (!sii) {
+      LOG(ERROR) << "domicile: no GPU to import a buffer into. The ozone "
+                    "platform must be one that implements "
+                    "CreateNativePixmapFromHandle — headless does not.";
+      return 0;
+    }
+    // The part of exo::Buffer this needs. Its caching, fences, protected
+    // content and YUV handling are viz's job or not yet supported.
+    shared_image = sii->CreateSharedImage(
+        {*format, size, gfx::ColorSpace::CreateSRGB(), kWindowUsage,
+         "DomicileWindow"},
+        std::move(handle));
+    if (!shared_image) {
+      LOG(ERROR) << "domicile: the GPU refused the dmabuf";
+      return 0;
+    }
   }
 
   ImportedBuffer buffer;

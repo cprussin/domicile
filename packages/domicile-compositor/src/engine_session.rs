@@ -9,7 +9,7 @@ use std::path::Path;
 use std::time::Instant;
 
 use crate::buffer_transform::Sampled;
-use crate::dmabuf_descriptor::DmabufDescriptor;
+use crate::frame_descriptor::FrameDescriptor;
 use domicile_host::clipboard::Contents;
 use smithay::reexports::wayland_server::backend::ObjectId;
 use smithay::reexports::wayland_server::protocol::wl_buffer;
@@ -26,7 +26,8 @@ use crate::engine_waiting::Waiting;
 use crate::uploads::UploadId;
 
 /// A buffer submitted to the engine: a client's dmabuf, or a compositor buffer
-/// holding a copied shm frame.
+/// holding a copied shm frame (on the GPU, or in memory for an engine on the
+/// CPU).
 ///
 /// Both are held until viz releases them. A client buffer then gets a
 /// `wl_buffer.release`; an upload goes back to [`crate::uploads::Uploads`].
@@ -89,7 +90,7 @@ struct Mapping {
 #[derive(Debug)]
 struct Frame {
     buffer: Submitted,
-    descriptor: DmabufDescriptor,
+    descriptor: FrameDescriptor,
     sampled: Sampled,
     at_box: u64,
     /// Signals when the compositor's draw into the buffer lands. `None` for a
@@ -145,11 +146,11 @@ pub struct Release {
     pub why: Returned,
 }
 
-/// Looks up a submitted buffer's dmabuf again.
+/// Looks up a submitted buffer's description again.
 ///
 /// The caller provides it because this module has no Smithay buffer types.
 /// `None` means the window cannot be shown on the new engine.
-pub type Describe<'a> = dyn Fn(&Submitted) -> Option<DmabufDescriptor> + 'a;
+pub type Describe<'a> = dyn Fn(&Submitted) -> Option<FrameDescriptor> + 'a;
 
 /// The result of [`EngineSession::reconnect`].
 #[derive(Debug)]
@@ -353,7 +354,7 @@ impl EngineSession {
         &mut self,
         app_id: &str,
         buffer: Submitted,
-        descriptor: &DmabufDescriptor,
+        descriptor: &FrameDescriptor,
         sampled: Sampled,
         damage: (i32, i32, i32, i32),
         at_box: u64,
@@ -441,18 +442,32 @@ impl EngineSession {
         now: Instant,
     ) -> PutUp {
         let key = frame.buffer.key();
-        let dmabuf = match self.imports.knows(surface, &key) {
-            true => None,
-            false => match Dmabuf::from_descriptor(&frame.descriptor) {
-                Some(dmabuf) => Some(dmabuf),
+        let dmabuf = match (&frame.descriptor, self.imports.knows(surface, &key)) {
+            (_, true) => None,
+            // Mapping memory is quick, so a window in memory is imported while
+            // the caller waits.
+            (FrameDescriptor::Shm(shm), false) => match self.engine.import_shm(surface, shm) {
+                Some(id) => {
+                    self.imports.imported(surface, key.clone(), id);
+                    None
+                }
                 None => {
-                    tracing::error!(
-                        planes = frame.descriptor.planes.len(),
-                        "a dmabuf with this many planes cannot cross the engine ABI"
-                    );
+                    say_it_was_refused(&frame.descriptor);
                     return PutUp::Refused(frame);
                 }
             },
+            (FrameDescriptor::Dmabuf(descriptor), false) => {
+                match Dmabuf::from_descriptor(descriptor) {
+                    Some(dmabuf) => Some(dmabuf),
+                    None => {
+                        tracing::error!(
+                            planes = descriptor.planes.len(),
+                            "a dmabuf with this many planes cannot cross the engine ABI"
+                        );
+                        return PutUp::Refused(frame);
+                    }
+                }
+            }
         };
         if let Some(dmabuf) = &dmabuf {
             if !self.engine.imports_in_the_background() {
@@ -755,6 +770,11 @@ impl EngineSession {
         self.engine.reports_frames()
     }
 
+    /// See [`crate::engine::Engine::imports_shm`].
+    pub fn imports_shm(&self) -> bool {
+        self.engine.imports_shm()
+    }
+
     /// See [`crate::engine::Engine::takes_fences`].
     pub fn takes_fences(&self) -> bool {
         self.engine.takes_fences()
@@ -802,13 +822,20 @@ impl EngineSession {
     }
 }
 
-/// Logs a dmabuf the browser would not import.
-fn say_it_was_refused(descriptor: &DmabufDescriptor) {
-    tracing::error!(
-        fourcc = descriptor.fourcc,
-        modifier = descriptor.modifier,
-        "the browser refused this dmabuf"
-    );
+/// Logs a buffer the browser would not import.
+fn say_it_was_refused(descriptor: &FrameDescriptor) {
+    match descriptor {
+        FrameDescriptor::Dmabuf(dmabuf) => tracing::error!(
+            fourcc = dmabuf.fourcc,
+            modifier = dmabuf.modifier,
+            "the browser refused this dmabuf"
+        ),
+        FrameDescriptor::Shm(shm) => tracing::error!(
+            fourcc = shm.fourcc,
+            "the browser refused this window in shared memory; it takes one only while it \
+             composites on the CPU"
+        ),
+    }
 }
 
 /// Converts removed holds into releases.
