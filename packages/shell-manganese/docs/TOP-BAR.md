@@ -112,6 +112,14 @@ Every bar and the lock screen share one watch per system readout. See
 - Centered on the bar, so it does not shift as other items change.
 - A fixed English day and ISO date keep the width stable.
 
+## Hardware
+
+- An item for hardware hides only when the machine has none. Each looks in
+  `/sys` every 10 seconds (`watchPresence`,
+  `@domicile-desktop/manganese-host/watch-presence`), which works while
+  locked.
+- The theme selector, idle inhibitor and notification bell always show.
+
 ## Network
 
 - The primary connection from NetworkManager, iwd or wpa_supplicant, whichever
@@ -171,7 +179,10 @@ Every bar and the lock screen share one watch per system readout. See
   - Pairing registers no agent, so a device that asks for a code does not
     pair.
   - A refusal, such as an rfkill block, shows under what was asked.
-- Hidden without BlueZ or without an adapter.
+- Hidden only without Bluetooth hardware: a controller or an rfkill switch
+  for one in `/sys`. With hardware and no adapter from BlueZ it is the icon
+  alone: `Bluetooth off` (such as an rfkill block), or
+  `Bluetooth unavailable: …` in `warning` when BlueZ fails.
 
 ## Battery
 
@@ -181,7 +192,9 @@ Every bar and the lock screen share one watch per system readout. See
 - At 10% or less it turns `danger`. At 5% or less it also flashes
   (`chargeFlashing`). Both thresholds use the displayed percentage. Neither
   applies on AC.
-- Hidden on machines without a battery, and until UPower answers.
+- Hidden only on machines without a battery in `/sys/class/power_supply`
+  (a peripheral's, scope `Device`, does not count). Until UPower reports it,
+  a dimmed empty outline, `Battery unavailable`.
 - Read from UPower by
   [`@domicile-desktop/system-battery`](../../system-battery/README.md).
 
@@ -197,7 +210,9 @@ Every bar and the lock screen share one watch per system readout. See
 
 ## Brightness
 
-- A light bulb icon: empty, lit filament or filled by level. Hidden with no backlight.
+- A light bulb icon: empty, lit filament or filled by level.
+- Hidden only with no backlight in `/sys/class/backlight`. Until there is a
+  level, a dimmed bulb, `Brightness unavailable`.
 - Click for a slider in a popover. Scroll over it to step by 5%.
 - The level never goes to zero. See [Host readouts](HOST-READOUTS.md#brightness).
 - The slider shows the level `/sys` reports. During a drag it stays under the
@@ -208,7 +223,9 @@ Every bar and the lock screen share one watch per system readout. See
 ## Volume
 
 - A speaker icon with zero, one (under 50%) or two waves, or slashed when
-  muted. Dims while muted. Hidden with no sound server.
+  muted. Dims while muted.
+- Hidden only with no sound card in `/sys/class/sound`. With one and no sound
+  server, a dimmed slashed speaker, `Sound unavailable`.
 - Scroll over it to step the output by 5%. Middle-click to mute or unmute it.
   Click for the mixer:
   - Default output and default input, each with mute, slider, level meter and

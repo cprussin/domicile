@@ -28,6 +28,10 @@
       "types": "./dist/audio-error.d.ts",
       "default": "./dist/audio-error.js"
     },
+    "./hardware": {
+      "types": "./dist/hardware.d.ts",
+      "default": "./dist/hardware.js"
+    },
     "./sound-server": {
       "types": "./dist/sound-server.d.ts",
       "default": "./dist/sound-server.js"

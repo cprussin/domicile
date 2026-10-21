@@ -41,6 +41,29 @@ const heldBluetooth = () => {
   };
 };
 
+/** A test-controlled check for Bluetooth hardware. */
+const heldHardware = () => {
+  const listeners: ((present: Result<boolean, SystemError>) => void)[] = [];
+  return {
+    hardware: sharedWatch(
+      (onPresent: (present: Result<boolean, SystemError>) => void) => {
+        listeners.push(onPresent);
+        return () => undefined;
+      },
+    ),
+    report: (present: Result<boolean, SystemError>) => {
+      act(() => {
+        for (const onPresent of listeners) {
+          onPresent(present);
+        }
+      });
+    },
+  };
+};
+
+/** A check that never answers, for tests about BlueZ alone. */
+const UNCHECKED = heldHardware().hardware;
+
 /** A host the component never calls, since the library is injected. */
 const NO_HOST = new FakeDomicileHost().host;
 
@@ -88,22 +111,26 @@ describe("Bluetooth", () => {
         actions={NO_ACTIONS}
         bluetooth={bluetooth.bluetooth}
         domicile={NO_HOST}
+        hardware={UNCHECKED}
       />,
     );
 
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("shows nothing without BlueZ or without an adapter", () => {
+  it("shows nothing on a machine without Bluetooth hardware", () => {
     const bluetooth = heldBluetooth();
+    const hardware = heldHardware();
     const { container } = render(
       <Bluetooth
         actions={NO_ACTIONS}
         bluetooth={bluetooth.bluetooth}
         domicile={NO_HOST}
+        hardware={hardware.hardware}
       />,
     );
 
+    hardware.report(Ok(false));
     bluetooth.report(
       Err({
         kind: SystemErrorKind.Dbus,
@@ -116,6 +143,54 @@ describe("Bluetooth", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  describe("with hardware BlueZ cannot use", () => {
+    const shown = () => {
+      const bluetooth = heldBluetooth();
+      const hardware = heldHardware();
+      render(
+        <Bluetooth
+          actions={NO_ACTIONS}
+          bluetooth={bluetooth.bluetooth}
+          domicile={NO_HOST}
+          hardware={hardware.hardware}
+        />,
+      );
+      hardware.report(Ok(true));
+      return bluetooth;
+    };
+
+    it("shows it reading until BlueZ answers", () => {
+      shown();
+
+      expect(
+        screen.getByRole("img", { name: "Reading Bluetooth" }),
+      ).toBeVisible();
+    });
+
+    it("shows it off when rfkill took the adapter away", () => {
+      shown().report(Ok({ adapters: [], devices: [] }));
+
+      expect(
+        screen.getByRole("img", { name: "Bluetooth off" }).className,
+      ).toContain(css({ opacity: "inactive" }));
+    });
+
+    it("warns when BlueZ fails", () => {
+      shown().report(
+        Err({
+          kind: SystemErrorKind.Dbus,
+          message: "org.freedesktop.DBus.Error.ServiceUnknown",
+        }),
+      );
+
+      expect(
+        screen.getByRole("img", {
+          name: "Bluetooth unavailable: org.freedesktop.DBus.Error.ServiceUnknown",
+        }).className,
+      ).toContain(css({ color: "warning" }));
+    });
+  });
+
   it("says whether it is on, dimmed when off, and what is connected", () => {
     const bluetooth = heldBluetooth();
     render(
@@ -123,6 +198,7 @@ describe("Bluetooth", () => {
         actions={NO_ACTIONS}
         bluetooth={bluetooth.bluetooth}
         domicile={NO_HOST}
+        hardware={UNCHECKED}
       />,
     );
 
@@ -151,6 +227,7 @@ describe("Bluetooth", () => {
         actions={NO_ACTIONS}
         bluetooth={bluetooth.bluetooth}
         domicile={NO_HOST}
+        hardware={UNCHECKED}
       />,
     );
 
@@ -173,6 +250,7 @@ describe("Bluetooth", () => {
         actions={NO_ACTIONS}
         bluetooth={bluetooth.bluetooth}
         domicile={NO_HOST}
+        hardware={UNCHECKED}
         locked
       />,
     );
@@ -198,6 +276,7 @@ describe("Bluetooth", () => {
         actions={held.actions}
         bluetooth={bluetooth.bluetooth}
         domicile={NO_HOST}
+        hardware={UNCHECKED}
       />,
     );
     bluetooth.report(reading(true, ["WH-1000XM4"]));
@@ -215,6 +294,7 @@ describe("Bluetooth", () => {
         actions={NO_ACTIONS}
         bluetooth={bluetooth.bluetooth}
         domicile={NO_HOST}
+        hardware={UNCHECKED}
       />,
     );
 

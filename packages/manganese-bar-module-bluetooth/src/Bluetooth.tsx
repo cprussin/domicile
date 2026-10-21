@@ -2,6 +2,7 @@ import type { Result } from "@cprussin/option-result";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
+import { isAbsent } from "@domicile-desktop/manganese-host/watch-presence";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { System, SystemError } from "@domicile-desktop/sdk/system";
 import { system } from "@domicile-desktop/sdk/system";
@@ -21,6 +22,8 @@ import { BLUETOOTH_ACTIONS } from "./bluetooth-actions";
 type Props = {
   /** The desk's Bluetooth, from BlueZ. */
   bluetooth: SharedWatch<Result<Reading, SystemError>>;
+  /** Whether the machine has Bluetooth hardware, from `/sys`. */
+  hardware: SharedWatch<Result<boolean, SystemError>>;
   /** The host whose system calls reach BlueZ. */
   domicile: DomicileHost;
   /**
@@ -37,29 +40,71 @@ type Props = {
  * the connected devices and their batteries. Dims while off. A click opens the {@link BluetoothPanel}. On a locked
  * desktop it is the icon alone.
  *
- * Draws nothing until BlueZ answers, on a D-Bus error, or with no adapter.
+ * Hidden only on a machine without Bluetooth hardware. With hardware and no
+ * adapter from BlueZ, such as while rfkill blocks the radio or BlueZ fails, it
+ * is the icon alone, saying why.
  */
 export const Bluetooth = ({
   actions = BLUETOOTH_ACTIONS,
   bluetooth,
   domicile,
+  hardware,
   locked = false,
 }: Props) => {
   const host = useMemo(() => system(domicile), [domicile]);
-  return useSharedWatch(bluetooth)?.match({
+  const reading = useSharedWatch(bluetooth);
+  const present = useSharedWatch(hardware);
+  const usable = reading?.match({
     Err: () => undefined,
-    Ok: (reading) => {
-      if (reading.adapters.length === 0) {
-        return undefined;
-      } else {
-        return locked ? (
-          <Status reading={reading} />
-        ) : (
-          <Item actions={actions} host={host} reading={reading} />
-        );
-      }
-    },
+    Ok: (found) => (found.adapters.length > 0 ? found : undefined),
   });
+  if (usable !== undefined) {
+    return locked ? (
+      <Status reading={usable} />
+    ) : (
+      <Item actions={actions} host={host} reading={usable} />
+    );
+  } else if (isAbsent(present)) {
+    return undefined;
+  } else {
+    return <Unavailable reading={reading} />;
+  }
+};
+
+/** The icon alone, saying why BlueZ reports no adapter. */
+const Unavailable = ({
+  reading,
+}: {
+  reading: Result<Reading, SystemError> | undefined;
+}) => {
+  const failure = reading?.match({
+    Err: (error) => error.message,
+    Ok: () => undefined,
+  });
+  const label = unavailableLabelOf(reading === undefined, failure);
+  return (
+    <span
+      aria-label={label}
+      className={statusStyles({ failed: failure !== undefined, on: false })}
+      role="img"
+      title={label}
+    >
+      <Icon connected={false} on={false} />
+    </span>
+  );
+};
+
+const unavailableLabelOf = (
+  reading: boolean,
+  failure: string | undefined,
+): string => {
+  if (reading) {
+    return "Reading Bluetooth";
+  } else if (failure === undefined) {
+    return "Bluetooth off";
+  } else {
+    return `Bluetooth unavailable: ${failure}`;
+  }
 };
 
 /** The icon alone, on a locked desktop. */
@@ -70,7 +115,7 @@ const Status = ({ reading }: { reading: Reading }) => {
   return (
     <span
       aria-label={label}
-      className={statusStyles({ on })}
+      className={statusStyles({ failed: false, on })}
       role="img"
       title={label}
     >
@@ -165,6 +210,10 @@ const statusStyles = cva({
     justifyContent: "center",
   },
   variants: {
+    failed: {
+      false: {},
+      true: { color: "warning" },
+    },
     on: {
       false: { opacity: "inactive" },
       true: {},

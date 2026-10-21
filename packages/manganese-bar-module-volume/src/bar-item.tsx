@@ -1,6 +1,6 @@
 import { useBar } from "@domicile-desktop/manganese-bar/bar-context";
 import { useDomicile } from "@domicile-desktop/manganese-host/domicile-context";
-import { deskSound } from "./desk-sound";
+import { deskSound, deskSoundHardware } from "./desk-sound";
 import { Volume as Control } from "./Volume";
 
 /**
@@ -8,7 +8,15 @@ import { Volume as Control } from "./Volume";
  * locked.
  */
 export const Volume = () => {
-  const { audio, sound } = deskSound(useDomicile());
+  const domicile = useDomicile();
+  const { audio, sound } = deskSound(domicile);
   const { locked } = useBar();
-  return <Control audio={audio} locked={locked} server={sound} />;
+  return (
+    <Control
+      audio={audio}
+      hardware={deskSoundHardware(domicile)}
+      locked={locked}
+      server={sound}
+    />
+  );
 };

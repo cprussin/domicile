@@ -1,8 +1,35 @@
 import { describe, expect, it } from "bun:test";
-import { render, screen, within } from "@testing-library/react";
+import type { Result } from "@cprussin/option-result";
+import { Ok } from "@cprussin/option-result";
+import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
+import type { SystemError } from "@domicile-desktop/sdk/system";
+import { act, render, screen, within } from "@testing-library/react";
 import { css } from "../styled-system/css";
 import { Battery } from "./Battery";
 import { heldBattery } from "./held-battery";
+
+/** A test-controlled check for a battery. */
+const heldHardware = () => {
+  const listeners: ((present: Result<boolean, SystemError>) => void)[] = [];
+  return {
+    hardware: sharedWatch(
+      (onPresent: (present: Result<boolean, SystemError>) => void) => {
+        listeners.push(onPresent);
+        return () => undefined;
+      },
+    ),
+    report: (present: Result<boolean, SystemError>) => {
+      act(() => {
+        for (const onPresent of listeners) {
+          onPresent(present);
+        }
+      });
+    },
+  };
+};
+
+/** A check that never answers, for tests about UPower alone. */
+const UNCHECKED = heldHardware().hardware;
 
 /**
  * The readout container, which holds everything that turns red and flashes.
@@ -21,24 +48,43 @@ describe("Battery", () => {
   it("shows nothing until the machine has answered", () => {
     const battery = heldBattery();
 
-    render(<Battery battery={battery.battery} />);
+    render(<Battery battery={battery.battery} hardware={UNCHECKED} />);
 
     expect(screen.queryByRole("meter")).not.toBeInTheDocument();
   });
 
   it("shows nothing for a machine without a battery", () => {
     const battery = heldBattery();
-    render(<Battery battery={battery.battery} />);
+    const hardware = heldHardware();
+    render(<Battery battery={battery.battery} hardware={hardware.hardware} />);
 
+    hardware.report(Ok(false));
     battery.report({ charge: 0.5, charging: false });
     battery.absent();
 
     expect(screen.queryByRole("meter")).not.toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("says, dimmed, when UPower reports no battery the machine has", () => {
+    const battery = heldBattery();
+    const hardware = heldHardware();
+    render(<Battery battery={battery.battery} hardware={hardware.hardware} />);
+
+    hardware.report(Ok(true));
+    expect(
+      screen.getByRole("img", { name: "Battery unavailable" }).className,
+    ).toContain(css({ opacity: "inactive" }));
+
+    battery.absent();
+    expect(
+      screen.getByRole("img", { name: "Battery unavailable" }),
+    ).toBeVisible();
   });
 
   it("shows the charge as a percent and as a meter", () => {
     const battery = heldBattery();
-    render(<Battery battery={battery.battery} />);
+    render(<Battery battery={battery.battery} hardware={UNCHECKED} />);
 
     battery.report({ charge: 0.873, charging: false });
 
@@ -51,7 +97,9 @@ describe("Battery", () => {
 
   it("insets itself like the bar's icon buttons, so the gaps beside it match", () => {
     const battery = heldBattery();
-    const { container } = render(<Battery battery={battery.battery} />);
+    const { container } = render(
+      <Battery battery={battery.battery} hardware={UNCHECKED} />,
+    );
 
     battery.report({ charge: 0.5, charging: false });
 
@@ -60,7 +108,7 @@ describe("Battery", () => {
 
   it("marks the meter when AC is plugged in, and not when it is out", () => {
     const battery = heldBattery();
-    render(<Battery battery={battery.battery} />);
+    render(<Battery battery={battery.battery} hardware={UNCHECKED} />);
 
     battery.report({ charge: 0.5, charging: true });
 
@@ -80,7 +128,7 @@ describe("Battery", () => {
   it("keeps room for its widest percentage", () => {
     // `100%` is the widest, so the item never grows past it.
     const battery = heldBattery();
-    render(<Battery battery={battery.battery} />);
+    render(<Battery battery={battery.battery} hardware={UNCHECKED} />);
 
     battery.report({ charge: 0.5, charging: false });
 
@@ -92,7 +140,7 @@ describe("Battery", () => {
 
   it("follows the battery as it drains", () => {
     const battery = heldBattery();
-    render(<Battery battery={battery.battery} />);
+    render(<Battery battery={battery.battery} hardware={UNCHECKED} />);
 
     battery.report({ charge: 0.42, charging: false });
     battery.report({ charge: 0.41, charging: false });
@@ -102,7 +150,9 @@ describe("Battery", () => {
 
   it("stops watching when it goes away", () => {
     const battery = heldBattery();
-    const { unmount } = render(<Battery battery={battery.battery} />);
+    const { unmount } = render(
+      <Battery battery={battery.battery} hardware={UNCHECKED} />,
+    );
 
     unmount();
 
@@ -112,7 +162,9 @@ describe("Battery", () => {
   describe("the charge running out", () => {
     it("turns the readout to danger at a tenth left", () => {
       const battery = heldBattery();
-      const { container } = render(<Battery battery={battery.battery} />);
+      const { container } = render(
+        <Battery battery={battery.battery} hardware={UNCHECKED} />,
+      );
 
       battery.report({ charge: 0.11, charging: false });
 
@@ -127,7 +179,9 @@ describe("Battery", () => {
 
     it("flashes it at a twentieth, and not before", () => {
       const battery = heldBattery();
-      const { container } = render(<Battery battery={battery.battery} />);
+      const { container } = render(
+        <Battery battery={battery.battery} hardware={UNCHECKED} />,
+      );
 
       battery.report({ charge: 0.06, charging: false });
 
@@ -146,7 +200,9 @@ describe("Battery", () => {
     it("says so on the figures it shows rather than the level behind them", () => {
       // 10.4% displays as `10%`, so the color must agree with that.
       const battery = heldBattery();
-      const { container } = render(<Battery battery={battery.battery} />);
+      const { container } = render(
+        <Battery battery={battery.battery} hardware={UNCHECKED} />,
+      );
 
       battery.report({ charge: 0.104, charging: false });
 
@@ -157,7 +213,9 @@ describe("Battery", () => {
     it("stops saying so once the lead is in", () => {
       // A charging battery needs no warning.
       const battery = heldBattery();
-      const { container } = render(<Battery battery={battery.battery} />);
+      const { container } = render(
+        <Battery battery={battery.battery} hardware={UNCHECKED} />,
+      );
 
       battery.report({ charge: 0.04, charging: true });
 

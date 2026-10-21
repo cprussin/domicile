@@ -19,6 +19,10 @@
     "./bluetooth": {
       "types": "./dist/bluetooth.d.ts",
       "default": "./dist/bluetooth.js"
+    },
+    "./hardware": {
+      "types": "./dist/hardware.d.ts",
+      "default": "./dist/hardware.js"
     }
   },
   "files": [

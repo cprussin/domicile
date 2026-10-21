@@ -264,6 +264,7 @@
       "name": "@domicile-desktop/manganese-bar-module-brightness",
       "version": "1.0.0",
       "dependencies": {
+        "@cprussin/option-result": "catalog:",
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/manganese-host": "workspace:*",
         "@domicile-desktop/sdk": "workspace:*",

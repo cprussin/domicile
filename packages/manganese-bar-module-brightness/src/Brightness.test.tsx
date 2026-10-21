@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
+import type { Result } from "@cprussin/option-result";
+import { Ok } from "@cprussin/option-result";
+import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
+import type { SystemError } from "@domicile-desktop/sdk/system";
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -7,23 +12,72 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { css } from "../styled-system/css";
 import { Brightness } from "./Brightness";
 import { heldBacklight } from "./held-backlight";
 
+/** A test-controlled check for a backlight. */
+const heldHardware = () => {
+  const listeners: ((present: Result<boolean, SystemError>) => void)[] = [];
+  return {
+    hardware: sharedWatch(
+      (onPresent: (present: Result<boolean, SystemError>) => void) => {
+        listeners.push(onPresent);
+        return () => undefined;
+      },
+    ),
+    report: (present: Result<boolean, SystemError>) => {
+      act(() => {
+        for (const onPresent of listeners) {
+          onPresent(present);
+        }
+      });
+    },
+  };
+};
+
+/** A check that never answers, for tests about the level alone. */
+const UNCHECKED = heldHardware().hardware;
+
 const opened = async (backlight: ReturnType<typeof heldBacklight>) => {
-  render(<Brightness backlight={backlight.backlight} />);
+  render(<Brightness backlight={backlight.backlight} hardware={UNCHECKED} />);
   backlight.report(0.42);
   await userEvent.click(screen.getByRole("button", { name: "Brightness 42%" }));
   return screen.getByRole("slider", { name: "Brightness" });
 };
 
 describe("Brightness", () => {
-  it("shows nothing on a machine that has said no brightness", () => {
+  it("shows nothing on a machine without a backlight", () => {
     const backlight = heldBacklight();
+    const hardware = heldHardware();
 
-    render(<Brightness backlight={backlight.backlight} />);
+    render(
+      <Brightness
+        backlight={backlight.backlight}
+        hardware={hardware.hardware}
+      />,
+    );
+    hardware.report(Ok(false));
 
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("says, dimmed, when a backlight has no level to show", () => {
+    const backlight = heldBacklight();
+    const hardware = heldHardware();
+
+    render(
+      <Brightness
+        backlight={backlight.backlight}
+        hardware={hardware.hardware}
+      />,
+    );
+    hardware.report(Ok(true));
+
+    expect(
+      screen.getByRole("img", { name: "Brightness unavailable" }).className,
+    ).toContain(css({ opacity: "inactive" }));
   });
 
   it("opens a slider at the level the desk is at", async () => {
@@ -56,7 +110,7 @@ describe("Brightness", () => {
 
   it("steps by a twentieth from wherever the wheel left it", () => {
     const backlight = heldBacklight();
-    render(<Brightness backlight={backlight.backlight} />);
+    render(<Brightness backlight={backlight.backlight} hardware={UNCHECKED} />);
     backlight.report(0.42);
     const icon = screen.getByRole("button", { name: "Brightness 42%" });
 
@@ -68,7 +122,7 @@ describe("Brightness", () => {
 
   it("never asks past either end", () => {
     const backlight = heldBacklight();
-    render(<Brightness backlight={backlight.backlight} />);
+    render(<Brightness backlight={backlight.backlight} hardware={UNCHECKED} />);
     backlight.report(0.98);
 
     fireEvent.wheel(screen.getByRole("button"), { deltaY: -100 });
@@ -78,7 +132,7 @@ describe("Brightness", () => {
 
   it("draws a bulb that dims with the level", () => {
     const backlight = heldBacklight();
-    render(<Brightness backlight={backlight.backlight} />);
+    render(<Brightness backlight={backlight.backlight} hardware={UNCHECKED} />);
     const icon = () => screen.getByRole("button", { name: /^Brightness/ });
 
     backlight.report(0.2);
