@@ -50,6 +50,7 @@ use wayland_protocols_misc::server_decoration::client::{
     org_kde_kwin_server_decoration, org_kde_kwin_server_decoration_manager,
 };
 
+use crate::anchor_protocol::{domicile_anchor_manager_v1, domicile_toplevel_anchor_v1};
 use crate::arguments::{Arguments, AskForFocus, AskTo, HoldTheScreensOn, TakeTheShortcuts};
 
 /// Why the client stopped.
@@ -257,6 +258,8 @@ struct Client {
     /// Whether the popup has yet to move. See
     /// [`crate::arguments::Arguments::repositioned_popup`].
     repositions: bool,
+    /// See [`crate::arguments::Arguments::anchor`].
+    anchor: Option<String>,
     /// See [`crate::arguments::Arguments::sliding_menu`].
     sliding_menu: bool,
     /// The open popups, each over the one before it or the window.
@@ -502,6 +505,8 @@ struct Globals {
     /// Decoration negotiation as GTK3 does it.
     kde_decoration:
         Option<org_kde_kwin_server_decoration_manager::OrgKdeKwinServerDecorationManager>,
+    /// For `--anchor`.
+    anchors: Option<domicile_anchor_manager_v1::DomicileAnchorManagerV1>,
     /// Window export as GTK3 does it, for `tests/xdg_foreign.rs`.
     exporter_v1: Option<zxdg_exporter_v1::ZxdgExporterV1>,
     /// Window export as GTK4, Chromium and Electron do it.
@@ -521,6 +526,7 @@ impl Client {
             wants_popup: asked.popup,
             popup_grab: asked.popup_grab,
             repositions: asked.repositioned_popup,
+            anchor: asked.anchor.clone(),
             sliding_menu: asked.sliding_menu,
             popups: Vec::new(),
             wants_bubble: asked.bubble || asked.scrolling_bubble,
@@ -597,6 +603,9 @@ impl Client {
                 }
                 "zwp_idle_inhibit_manager_v1" => {
                     self.globals.inhibit = Some(registry.bind(name, version.min(1), handle, ()));
+                }
+                "domicile_anchor_manager_v1" => {
+                    self.globals.anchors = Some(registry.bind(name, version.min(1), handle, ()));
                 }
                 "zwp_keyboard_shortcuts_inhibit_manager_v1" => {
                     self.globals.shortcuts_inhibit =
@@ -704,6 +713,14 @@ impl Client {
         if let Some(manager) = &self.globals.kde_decoration {
             let decoration = manager.create(&surface, handle, ());
             decoration.request_mode(org_kde_kwin_server_decoration::Mode::Client);
+        }
+        if let Some(name) = &self.anchor {
+            let manager = self.globals.anchors.as_ref().ok_or(ClientError::Missing {
+                global: "domicile_anchor_manager_v1",
+            })?;
+            let anchor = manager.get_toplevel_anchor(&toplevel, handle, ());
+            anchor.set_anchor(Some(name.clone()));
+            crate::say!(anchor.id(), "set_anchor({name})");
         }
         // Export the window as a toolkit does before a portal call;
         // `tests/xdg_foreign.rs` checks the handles.
@@ -2171,6 +2188,8 @@ delegate_noop!(Client: ignore wp_fractional_scale_manager_v1::WpFractionalScaleM
 delegate_noop!(Client: ignore wp_viewporter::WpViewporter);
 delegate_noop!(Client: ignore wp_viewport::WpViewport);
 delegate_noop!(Client: ignore zxdg_exporter_v1::ZxdgExporterV1);
+delegate_noop!(Client: ignore domicile_anchor_manager_v1::DomicileAnchorManagerV1);
+delegate_noop!(Client: ignore domicile_toplevel_anchor_v1::DomicileToplevelAnchorV1);
 delegate_noop!(Client: ignore zxdg_exporter_v2::ZxdgExporterV2);
 
 /// Traces the preferred scale in the protocol's 120ths, so 1.2 reads

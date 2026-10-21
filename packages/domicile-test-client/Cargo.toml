@@ -28,3 +28,6 @@ wayland-protocols = { version = "0.32", features = [
 # `org_kde_kwin_server_decoration`, the decoration request GTK3 makes, for
 # `tests/decorations.rs`.
 wayland-protocols-misc = { version = "0.3", features = ["client"] }
+# Generates Domicile's own `domicile_anchor_v1`, from the compositor's
+# `protocols/`, for `tests/anchors.rs`.
+wayland-scanner = "0.31"

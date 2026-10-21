@@ -285,6 +285,7 @@ class MODULES_EXPORT DomicileHost final
   void AppSuspended(const String& app_id, bool suspended) override;
   void AppTransientFor(const String& app_id,
                        const String& transient_for) override;
+  void AppAnchored(const String& app_id, const String& anchor) override;
   void AppUrgent(const String& app_id, bool urgent) override;
   void ShortcutPressed(domicile::mojom::blink::ShortcutPtr shortcut) override;
   void ShortcutReleased(domicile::mojom::blink::ShortcutPtr shortcut) override;

@@ -472,6 +472,10 @@ interface ControlChannelClient {
   // none.
   AppTransientFor(string app_id, string transient_for);
 
+  // The page anchor a window asked to be laid out at
+  // (domicile_toplevel_anchor_v1.set_anchor); empty for none.
+  AppAnchored(string app_id, string anchor);
+
   // Whether a window wants attention: the compositor dropped its activation
   // request and it has not had the keyboard since.
   AppUrgent(string app_id, bool urgent);
