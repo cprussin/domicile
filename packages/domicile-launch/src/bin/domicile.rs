@@ -23,9 +23,9 @@ use domicile_launch::app_entry::app_entry;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
 use domicile_launch::cli::{invocation, CliError, Invocation};
 use domicile_launch::command_socket::{
-    clear_browsing_data, config_extensions, delete_history, disable_while_typing, extensions,
-    history, load_shell, load_unpacked, media_devices, open_app, open_url, run_app,
-    set_extension_enabled, set_media_device, set_site_permission, site_permissions,
+    clear_browsing_data, clear_site_data, config_extensions, delete_history, disable_while_typing,
+    extensions, history, load_shell, load_unpacked, media_devices, open_app, open_url, run_app,
+    set_extension_enabled, set_media_device, set_site_permission, site_data, site_permissions,
     uninstall_extension, visits,
 };
 use domicile_launch::components::{builder, components, our_shell, Components};
@@ -456,7 +456,8 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         | Response::History { .. }
         | Response::Visits { .. }
         | Response::Deleted
-        | Response::Cleared => Err(format!(
+        | Response::Cleared
+        | Response::SiteData { .. } => Err(format!(
             "the desktop answered {answer:?}, which no command asks for"
         )),
         // Print the desktop's own reason.
@@ -1006,6 +1007,11 @@ fn answer_a_command(
                 },
                 clear_browsing_data: &|data| {
                     clear_browsing_data(engine, data, CLEAR_WITHIN).map_err(|why| why.to_string())
+                },
+                // Both read every kind of storage from disk, as clearing does.
+                site_data: &|| site_data(engine, CLEAR_WITHIN).map_err(|why| why.to_string()),
+                clear_site_data: &|host| {
+                    clear_site_data(engine, host, CLEAR_WITHIN).map_err(|why| why.to_string())
                 },
                 disable_while_typing: &|enabled| {
                     disable_while_typing(engine, enabled, ANSWER_WITHIN)

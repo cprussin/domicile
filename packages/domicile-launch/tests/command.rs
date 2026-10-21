@@ -4,15 +4,16 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use domicile_launch::command::{
-    clear_browsing_data_line, config_extensions_line, delete_history_line,
+    clear_browsing_data_line, clear_site_data_line, config_extensions_line, delete_history_line,
     disable_while_typing_line, extensions_line, history_line, load_shell_line, load_unpacked_line,
     media_devices_line, open_app_line, open_url_line, reply, run_app_line,
-    set_extension_enabled_line, set_media_device_line, set_site_permission_line,
+    set_extension_enabled_line, set_media_device_line, set_site_permission_line, site_data_line,
     site_permissions_line, uninstall_extension_line, visits_line, Reply,
 };
 use domicile_launch::extensions::InstalledExtension;
 use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
+use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
 #[test]
@@ -351,5 +352,30 @@ fn disable_while_typing_is_asked_or_set() {
     assert_eq!(
         reply("{\"type\":\"disable_while_typing\",\"enabled\":true}").unwrap(),
         Reply::DisableWhileTyping { enabled: true }
+    );
+}
+
+#[test]
+fn site_data_is_listed_by_host() {
+    assert_eq!(site_data_line(), "{\"type\":\"site_data\",\"version\":1}\n");
+    // The engine writes `bytes` as a double, which can pass what an int holds.
+    assert_eq!(
+        reply("{\"type\":\"site_data\",\"sites\":[{\"host\":\"mail.example\",\"bytes\":5000000000.0,\"cookies\":3}]}")
+            .unwrap(),
+        Reply::SiteData {
+            sites: vec![SiteData {
+                host: "mail.example".to_string(),
+                bytes: 5_000_000_000.0,
+                cookies: 3,
+            }],
+        }
+    );
+}
+
+#[test]
+fn a_host_s_site_data_is_cleared() {
+    assert_eq!(
+        clear_site_data_line("mail.example"),
+        "{\"type\":\"clear_site_data\",\"version\":1,\"host\":\"mail.example\"}\n"
     );
 }

@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: MIT
 
 # The fork's browser-side code that needs //chrome: the command socket, the
-# desk, browser windows, extensions, history, file dialogs, permission prompts,
-# device choosers, printing and pointer warps.
+# desk, browser windows, extensions, history, site data, file dialogs,
+# permission prompts, device choosers, printing and pointer warps.
 #
 # A separate target because //chrome/browser:browser accepts no new sources,
 # and it keeps the fork to one added dependency in a Chromium-owned file.
@@ -47,6 +47,8 @@ source_set("domicile") {
     "domicile_shell_fetch.h",
     "domicile_shell_windows.cc",
     "domicile_shell_windows.h",
+    "domicile_site_data.cc",
+    "domicile_site_data.h",
     "domicile_tab_helpers.cc",
     "domicile_tab_helpers.h",
     "domicile_window_controller.cc",
@@ -135,6 +137,9 @@ source_set("domicile") {
     "//components/favicon_base",
     "//components/history/core/browser",
     "//components/keyed_service/core",
+    # The Settings app's site data, through Chrome's BrowsingDataModel.
+    "//chrome/browser/browsing_data",
+    "//components/browsing_data/content",
     # DevTools for a guest's page: Chrome's front end and its bindings.
     "//chrome/browser/devtools",
     # Printing a guest's page: Chrome's PrintViewManager and its system
