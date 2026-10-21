@@ -1,4 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import type { Result } from "@cprussin/option-result";
+import { Err, Ok } from "@cprussin/option-result";
+import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
+import type { SystemError } from "@domicile-desktop/sdk/system";
+import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import { SpeakerSlashIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSlash";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -6,8 +11,33 @@ import { css } from "../styled-system/css";
 import { device, heldSound, laptop } from "./fixture";
 import { Volume } from "./Volume";
 
+/** A test-controlled check for a sound card. */
+const heldHardware = () => {
+  const listeners: ((present: Result<boolean, SystemError>) => void)[] = [];
+  return {
+    hardware: sharedWatch(
+      (onPresent: (present: Result<boolean, SystemError>) => void) => {
+        listeners.push(onPresent);
+        return () => undefined;
+      },
+    ),
+    report: (present: Result<boolean, SystemError>) => {
+      act(() => {
+        for (const onPresent of listeners) {
+          onPresent(present);
+        }
+      });
+    },
+  };
+};
+
+/** A check that never answers, for tests about the sound server alone. */
+const UNCHECKED = heldHardware().hardware;
+
 const shown = (sound: ReturnType<typeof heldSound>) => {
-  render(<Volume audio={sound.audio} server={sound.server} />);
+  render(
+    <Volume audio={sound.audio} hardware={UNCHECKED} server={sound.server} />,
+  );
   sound.report(laptop);
 };
 
@@ -18,12 +48,46 @@ const opened = async (sound: ReturnType<typeof heldSound>) => {
 
 describe("Volume", () => {
   describe("on the bar", () => {
-    it("shows nothing on a desk with no sound server", () => {
+    it("shows nothing on a machine with no sound card", () => {
       const sound = heldSound();
+      const hardware = heldHardware();
 
-      render(<Volume audio={sound.audio} server={sound.server} />);
+      render(
+        <Volume
+          audio={sound.audio}
+          hardware={hardware.hardware}
+          server={sound.server}
+        />,
+      );
+      hardware.report(Ok(false));
 
+      expect(screen.queryByRole("img")).not.toBeInTheDocument();
       expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    });
+
+    it("says, dimmed, when a sound card has no sound server", () => {
+      const sound = heldSound();
+      const hardware = heldHardware();
+      render(
+        <Volume
+          audio={sound.audio}
+          hardware={hardware.hardware}
+          server={sound.server}
+        />,
+      );
+
+      for (const present of [
+        Ok<boolean, SystemError>(true),
+        Err<boolean, SystemError>({
+          kind: SystemErrorKind.PermissionDenied,
+          message: "/sys/class/sound: Permission denied",
+        }),
+      ]) {
+        hardware.report(present);
+        expect(
+          screen.getByRole("img", { name: "Sound unavailable" }).className,
+        ).toContain(css({ opacity: "inactive" }));
+      }
     });
 
     it("says the default output's volume, and dims when it is muted", () => {
@@ -185,7 +249,14 @@ describe("Volume", () => {
     // volume and mute.
     it("has only the default output, unmetered", async () => {
       const sound = heldSound();
-      render(<Volume audio={sound.audio} locked server={sound.server} />);
+      render(
+        <Volume
+          audio={sound.audio}
+          hardware={UNCHECKED}
+          locked
+          server={sound.server}
+        />,
+      );
       sound.report(laptop);
 
       await userEvent.click(screen.getByRole("button", { name: "Volume 50%" }));

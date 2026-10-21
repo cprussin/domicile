@@ -1,6 +1,9 @@
+import type { Result } from "@cprussin/option-result";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
+import { isAbsent } from "@domicile-desktop/manganese-host/watch-presence";
+import type { SystemError } from "@domicile-desktop/sdk/system";
 import type { Audio, AudioDevice } from "@domicile-desktop/system-audio/audio";
 import { SpeakerHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerHigh";
 import { SpeakerLowIcon } from "@phosphor-icons/react/dist/ssr/SpeakerLow";
@@ -20,6 +23,8 @@ const WHEEL_STEP = 0.05;
 type Props = {
   /** The sound server's state. */
   audio: SharedWatch<Audio>;
+  /** Whether the machine has a sound card, from `/sys`. */
+  hardware: SharedWatch<Result<boolean, SystemError>>;
   /** Whether the desktop is locked; see below. */
   locked?: boolean | undefined;
   /** The target of volume changes. */
@@ -31,18 +36,34 @@ type Props = {
  * over the icon changes the default output's volume; a middle click mutes or
  * unmutes it.
  *
- * Dims while the default output is muted. Renders nothing until the server
- * reports, so it stays hidden without a sound server. The mixer meters only while open, because metering a
- * microphone records it.
+ * Dims while the default output is muted. Until a sound server reports, it is
+ * a dimmed icon alone on a machine with a sound card, and nothing on one
+ * without. The mixer meters only while open, because metering a microphone
+ * records it.
  *
  * On a locked desktop the panel holds only the default output's volume and
  * mute, the requests a locked desktop allows.
  */
-export const Volume = ({ audio: watch, locked = false, server }: Props) => {
+export const Volume = ({
+  audio: watch,
+  hardware,
+  locked = false,
+  server,
+}: Props) => {
   const audio = useSharedWatch(watch);
+  const present = useSharedWatch(hardware);
 
   if (audio === undefined) {
-    return undefined;
+    return isAbsent(present) ? undefined : (
+      <span
+        aria-label="Sound unavailable"
+        className={unavailableStyles}
+        role="img"
+        title="Sound unavailable"
+      >
+        <SpeakerSlashIcon size={15} weight="bold" />
+      </span>
+    );
   } else {
     const output = audio.outputs.find((device) => device.default);
     return (
@@ -169,6 +190,17 @@ const triggerStyles = cva({
       true: { "& > svg": { opacity: "inactive" } },
     },
   },
+});
+
+// The button's box, so the bar's spacing stays the same.
+const unavailableStyles = css({
+  alignItems: "center",
+  blockSize: 7,
+  display: "inline-flex",
+  flexShrink: 0,
+  inlineSize: 7,
+  justifyContent: "center",
+  opacity: "inactive",
 });
 
 // As wide as the brightness item's slider.

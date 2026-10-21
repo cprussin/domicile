@@ -1,6 +1,8 @@
-import type { Option } from "@cprussin/option-result";
+import type { Option, Result } from "@cprussin/option-result";
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
+import { isAbsent } from "@domicile-desktop/manganese-host/watch-presence";
+import type { SystemError } from "@domicile-desktop/sdk/system";
 import type { Battery as BatteryReading } from "@domicile-desktop/system-battery/battery";
 import { LightningIcon } from "@phosphor-icons/react/dist/ssr/Lightning";
 import { useId } from "react";
@@ -19,6 +21,8 @@ const FILL_WIDTH = 18;
 type Props = {
   /** The desk's battery, from UPower. */
   battery: SharedWatch<Option<BatteryReading>>;
+  /** Whether the machine has a battery, from `/sys`. */
+  hardware: SharedWatch<Result<boolean, SystemError>>;
 };
 
 /**
@@ -30,14 +34,58 @@ type Props = {
  *
  * Holds the width of `100%`, so the items beside it never move.
  *
- * Draws nothing until UPower reports a battery, so a machine without one shows
- * no false empty meter.
+ * Until UPower reports the battery, a dimmed empty outline on a machine with
+ * one, and nothing on a machine without, so it shows no false empty meter.
  */
-export const Battery = ({ battery }: Props) =>
-  useSharedWatch(battery)?.match({
+export const Battery = ({ battery, hardware }: Props) => {
+  const reading = useSharedWatch(battery)?.match({
     None: () => undefined,
-    Some: (reading) => <Meter reading={reading} />,
+    Some: (found) => found,
   });
+  const present = useSharedWatch(hardware);
+  if (reading === undefined) {
+    return isAbsent(present) ? undefined : <Unavailable />;
+  } else {
+    return <Meter reading={reading} />;
+  }
+};
+
+/** The outline alone, dimmed, as wide as the meter and its percentage. */
+const Unavailable = () => (
+  <div
+    aria-label="Battery unavailable"
+    className={cx(rootStyles({ charge: "fine" }), unavailableStyles)}
+    role="img"
+    title="Battery unavailable"
+  >
+    <svg aria-hidden className={meterStyles} viewBox="0 0 24 12">
+      <Outline />
+    </svg>
+    <span className={percentSlotStyles}>
+      <span aria-hidden className={percentSizerStyles}>
+        100%
+      </span>
+      <span className={percentStyles}>–</span>
+    </span>
+  </div>
+);
+
+/** The meter's case and its terminal nub; the nub's left end hides under the case. */
+const Outline = () => (
+  <>
+    <rect
+      fill="none"
+      height="10.5"
+      rx="2.25"
+      stroke="currentcolor"
+      strokeWidth="1.5"
+      width="21.5"
+      x="0.75"
+      y="0.75"
+    />
+    <rect fill="currentcolor" height="4" rx="1" width="2" x="22" y="4" />
+  </>
+);
 
 /**
  * The readout once there is a reading.
@@ -78,18 +126,7 @@ const Meter = ({ reading }: { reading: BatteryReading }) => {
             />
           </mask>
         )}
-        <rect
-          fill="none"
-          height="10.5"
-          rx="2.25"
-          stroke="currentcolor"
-          strokeWidth="1.5"
-          width="21.5"
-          x="0.75"
-          y="0.75"
-        />
-        {/* The terminal nub; its left end hides under the outline. */}
-        <rect fill="currentcolor" height="4" rx="1" width="2" x="22" y="4" />
+        <Outline />
         <rect
           fill="currentcolor"
           height="7"
@@ -145,6 +182,8 @@ const rootStyles = cva({
     },
   },
 });
+
+const unavailableStyles = css({ opacity: "inactive" });
 
 // One CSS pixel per unit of the viewBox.
 const meterStyles = css({
