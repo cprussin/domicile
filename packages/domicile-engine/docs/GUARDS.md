@@ -74,6 +74,7 @@ Headless.
 | `guard-shell-shortcuts.sh` | Chrome's reload, back, fullscreen, zoom, close and quit keys do nothing to the shell (patch 0047) |
 | `guard-shell-local-network.sh` | the shell loads an image from loopback with no Local Network Access prompt (patch 0066) |
 | `guard-shell-web-apis.sh` | the shell may show notifications and read cross-origin responses (patches 0066, 0105) |
+| `guard-notification-server-late.sh` | the browser connects to a notification server that takes its name after the browser looked, on a private bus (patch 0133) |
 | `guard-shell-script-src.sh` | an injected inline `<script>` and `onerror` do not run in the shell; a `<script src>` from the shell root does |
 | `guard-domicile-fetch.sh` | the shell `fetch()`es a file beside it and one from `domicile://home/` (patch 0126); a site in its `<webview>` reads neither with `fetch()`, a no-cors `fetch()` or `XMLHttpRequest` |
 | `guard-video-codecs.sh` | the engine plays H.264 and AAC (`src/build/args/domicile_codecs.gn`); VP9 is the control |
