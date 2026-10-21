@@ -166,6 +166,52 @@ fn a_window_that_inhibits_before_it_draws_says_so_right_after_it_appears() {
 }
 
 #[test]
+fn a_window_names_the_page_anchor_it_asked_for_right_after_it_appears() {
+    // The shell lays an anchored window out at its anchor rather than tiling
+    // it, so the anchor comes with the announcement and the replay.
+    let mut host = Host::new();
+    let app = host.app_created(OWNER);
+    assert_eq!(host.app_anchored(&app, Some("bar".to_string())), None);
+
+    let announced = host.app_mapped(&app, mapped());
+
+    let anchored = HostMessage::AppAnchored {
+        app_id: app.clone(),
+        anchor: Some("bar".to_string()),
+    };
+    assert!(
+        matches!(announced.first(), Some(HostMessage::AppAppeared { .. })),
+        "{announced:?}"
+    );
+    assert_eq!(announced.last(), Some(&anchored));
+    assert!(host.open_apps().contains(&anchored));
+}
+
+#[test]
+fn a_window_that_changes_its_anchor_says_so_once() {
+    let mut host = Host::new();
+    let app = drawn(&mut host);
+
+    assert_eq!(host.app_anchored(&app, None), None, "it had none");
+    assert_eq!(
+        host.app_anchored(&app, Some("bar".to_string())),
+        Some(HostMessage::AppAnchored {
+            app_id: app.clone(),
+            anchor: Some("bar".to_string()),
+        })
+    );
+    assert_eq!(host.app_anchored(&app, Some("bar".to_string())), None);
+    assert_eq!(
+        host.app_anchored(&app, None),
+        Some(HostMessage::AppAnchored {
+            app_id: app.clone(),
+            anchor: None,
+        })
+    );
+    assert_eq!(host.app_anchored("app-nowhere", None), None);
+}
+
+#[test]
 fn a_window_is_announced_when_it_first_draws_with_what_its_client_said_before() {
     // A client sets its title, app id and limits before its first frame. The
     // shell places a window once, so it needs them in the announcement.

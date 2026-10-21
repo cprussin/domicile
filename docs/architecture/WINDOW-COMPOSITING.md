@@ -108,6 +108,35 @@ compositor names, and the page embeds that id in the same render as the move.
   bubble off it. A page that ignores frames is no control: it embeds the
   frames each move names, so it does not lag either.
 
+## Anchored windows
+
+A client can ask for its window to be laid out at a named place in the page,
+such as a slot in a panel (`domicile_anchor_v1`,
+`packages/domicile-compositor/protocols/domicile-anchor-v1.xml`). The page lays
+it out with its own elements, so the window moves with them in the same frame.
+
+```
+ client: domicile_toplevel_anchor_v1.set_anchor("bar"); wl_surface.commit
+   └─▶ compositor: AppAnchored { app_id, anchor: "bar" } ──▶ page
+         window.anchor == "bar":  <div class="bar-slot"><app app-id=…></div>
+```
+
+- **Double-buffered:** the anchor applies on the window's next commit
+  (`anchors.rs`). Set before the first buffer, it rides the window's
+  announcement, right after `AppAppeared`, so the shell never places it
+  elsewhere first.
+- **Size:** unchanged. The `<app>`'s box becomes `xdg_toplevel.configure`, as
+  for any window.
+- **Names are the shell's.** A shell with no anchor of the name lays the window
+  out as any other. `shell-manganese` defines none.
+- **One object per toplevel.** A second `get_toplevel_anchor` while the first
+  lives is `already_anchored`. Destroying it unanchors the window on its next
+  commit.
+- **Toplevels only.** Popups place themselves by their positioner.
+- **Checks:** `tests/anchors.rs` (the announcement), `host.rs` (changes and
+  replay), `ControlChannelTest.AWindowsAnchorReachesThePage` (the page's
+  `DomicileWindow.anchor`).
+
 ## Frame pacing
 
 A client draws its next frame when viz takes its last one, so it draws at the

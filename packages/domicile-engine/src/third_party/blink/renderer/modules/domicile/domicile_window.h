@@ -44,6 +44,8 @@ struct DomicileWindowState {
   uint32_t frame = 0;
   // Null for no parent.
   String transient_for;
+  // Null for no anchor.
+  String anchor;
   bool urgent = false;
   bool inhibits_shortcuts = false;
   V8DomicileCursorShape cursor =
@@ -85,6 +87,7 @@ class MODULES_EXPORT DomicileWindow final : public ScriptWrappable {
   bool clientFrame() const { return state_.client_frame; }
   uint32_t frame() const { return state_.frame; }
   const String& transientFor() const { return state_.transient_for; }
+  const String& anchor() const { return state_.anchor; }
   bool urgent() const { return state_.urgent; }
   bool inhibitsShortcuts() const { return state_.inhibits_shortcuts; }
   V8DomicileCursorShape cursor() const { return state_.cursor; }

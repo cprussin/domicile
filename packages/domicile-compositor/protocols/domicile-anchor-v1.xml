@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="domicile_anchor_v1">
+  <copyright>
+    Copyright (c) 2026 Connor Prussin
+
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and associated documentation files (the "Software"),
+    to deal in the Software without restriction, including without limitation
+    the rights to use, copy, modify, merge, publish, distribute, sublicense,
+    and/or sell copies of the Software, and to permit persons to whom the
+    Software is furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in
+    all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+    DEALINGS IN THE SOFTWARE.
+  </copyright>
+
+  <description summary="lay a window out at a named place in the desktop">
+    Domicile draws the desktop as a web page, and each window as an element
+    in it. This protocol lets a client ask for its window to be laid out at a
+    named place in that page, an anchor, such as a slot in a panel, rather
+    than placed as an ordinary window.
+
+    The page lays the window out with its own elements, so the window moves
+    with them in the same frame. Its size still comes from xdg_toplevel's
+    configure, set from the box the page gives it.
+
+    What anchors exist, and what each name means, is up to the desktop. A
+    desktop with no anchor of the name asked for treats the window as an
+    ordinary one.
+  </description>
+
+  <interface name="domicile_anchor_manager_v1" version="1">
+    <description summary="anchors windows to the page">
+      The global that hands out a window's anchor object.
+    </description>
+
+    <enum name="error">
+      <entry name="already_anchored" value="0"
+        summary="the toplevel already has an anchor object"/>
+    </enum>
+
+    <request name="destroy" type="destructor">
+      <description summary="destroy the manager">
+        Anchor objects already made keep working.
+      </description>
+    </request>
+
+    <request name="get_toplevel_anchor">
+      <description summary="the anchor object of a window">
+        Make the object that sets toplevel's anchor. A toplevel has at most
+        one; asking for a second while the first exists is the
+        already_anchored error.
+      </description>
+      <arg name="id" type="new_id" interface="domicile_toplevel_anchor_v1"/>
+      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
+    </request>
+  </interface>
+
+  <interface name="domicile_toplevel_anchor_v1" version="1">
+    <description summary="where a window is anchored">
+      Sets the anchor of one toplevel. A window has no anchor until it sets
+      one.
+    </description>
+
+    <request name="destroy" type="destructor">
+      <description summary="unanchor the window">
+        The window has no anchor from its surface's next commit.
+      </description>
+    </request>
+
+    <request name="set_anchor">
+      <description summary="name the anchor to lay the window out at">
+        Ask for the window to be laid out at the anchor called name, or at
+        none for null. Double-buffered: applied on the surface's next
+        wl_surface.commit. Set before the window's first buffer is committed,
+        the window first appears at its anchor.
+      </description>
+      <arg name="name" type="string" allow-null="true"/>
+    </request>
+  </interface>
+</protocol>

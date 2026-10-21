@@ -947,6 +947,18 @@ void ControlChannel::DispatchLine(const std::string& line,
     return;
   }
 
+  if (*type == "app_anchored") {
+    const std::string* app_id = message.FindString("app_id");
+    if (!app_id) {
+      return;
+    }
+    // Null is a window with no anchor, as `transient_for` is one with no
+    // parent.
+    const std::string* anchor = message.FindString("anchor");
+    client_->AppAnchored(*app_id, anchor ? *anchor : std::string());
+    return;
+  }
+
   if (*type == "app_urgent") {
     const std::string* app_id = message.FindString("app_id");
     const std::optional<bool> urgent = message.FindBool("urgent");

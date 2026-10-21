@@ -119,6 +119,11 @@ class FakeClient : public mojom::ControlChannelClient {
     heard_.push_back(base::StringPrintf("transient %s for %s", app_id.c_str(),
                                         transient_for.c_str()));
   }
+  void AppAnchored(const std::string& app_id,
+                   const std::string& anchor) override {
+    heard_.push_back(base::StringPrintf("anchored %s at %s", app_id.c_str(),
+                                        anchor.c_str()));
+  }
   void AppUrgent(const std::string& app_id, bool urgent) override {
     heard_.push_back(base::StringPrintf("urgent %s %s", app_id.c_str(),
                                         urgent ? "true" : "false"));
@@ -370,6 +375,23 @@ TEST_F(ControlChannelTest, AWindowsParentAndUrgencyReachThePage) {
             (std::vector<std::string>{"transient app-4 for app-2",
                                       "transient app-4 for ",
                                       "urgent app-2 true", "locked false"}));
+}
+
+// A window's page anchor reaches the page, and a null one is no anchor, not
+// a malformed line.
+TEST_F(ControlChannelTest, AWindowsAnchorReachesThePage) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  Say("{\"type\":\"app_anchored\",\"app_id\":\"app-4\","
+      "\"anchor\":\"bar\"}\n"
+      "{\"type\":\"app_anchored\",\"app_id\":\"app-4\","
+      "\"anchor\":null}\n"
+      "{\"type\":\"locked\",\"locked\":false}\n");
+  EXPECT_TRUE(client_.locked_.Wait());
+
+  EXPECT_EQ(client_.heard_,
+            (std::vector<std::string>{"anchored app-4 at bar",
+                                      "anchored app-4 at ", "locked false"}));
 }
 
 // A window taking and giving back a shortcuts inhibitor reaches the page,
