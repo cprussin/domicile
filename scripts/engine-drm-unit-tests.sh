@@ -47,6 +47,8 @@ SUITES=(
   DrmConnectorNameTest:6
   DrmPointerCrossingTest:20
   DrmPointerTargetsTest:5
+  DrmCanvasTest:7
+  DrmNoGbmModesetTest:1
   GbmPixmapScanoutTest:3
   ScrollAcceleratorTest:7
   TypingGuardTest:8

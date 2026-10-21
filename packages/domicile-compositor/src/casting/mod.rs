@@ -27,7 +27,7 @@ mod captures;
 mod cursor;
 mod gpu;
 mod lifecycle;
-mod memory;
+pub(crate) mod memory;
 mod negotiation;
 mod pacing;
 mod paint;
