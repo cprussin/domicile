@@ -153,7 +153,8 @@ const itemStyles = hstack({
   gap: 1,
   justifyContent: "center",
   paddingBlock: 0,
-  paddingInline: 1.5,
+  // The ends' radius, so the text stays clear of the curve.
+  paddingInline: 3,
   transition: "background-color {durations.fast} {easings.default}",
 });
 

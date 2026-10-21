@@ -126,7 +126,10 @@ const Meter = ({ reading }: { reading: BatteryReading }) => {
  * it all red, and one animation flashes it all.
  */
 const rootStyles = cva({
-  base: hstack.raw({ gap: 1 }),
+  // The inset matches the icon buttons beside it, so the gaps on either side
+  // look like the gaps between them. 6px, not their 6.5px, so the meter's
+  // outline stays on whole pixels.
+  base: hstack.raw({ gap: 1, paddingInline: 1.5 }),
   variants: {
     charge: {
       // The whole readout turns red, not just the meter.

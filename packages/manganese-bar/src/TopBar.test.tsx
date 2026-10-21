@@ -25,6 +25,16 @@ describe("TopBar", () => {
     ).toEqual(["ab", "clock", "c"]);
   });
 
+  it("spaces the right column's items evenly, wider than the buttons' insets", () => {
+    // Most items are 28px buttons around a 15px icon, so the space seen
+    // between icons is the gap plus two 6.5px insets.
+    const { container } = render(<TopBar layout={EMPTY} />);
+
+    expect(
+      container.querySelector("header")?.lastElementChild?.className,
+    ).toContain(css({ gap: 4 }));
+  });
+
   it("draws its text white, with a shadow to keep it off the wallpaper", () => {
     // The bar has no background, so the shadow separates text from the
     // wallpaper. Checked by declarations because Panda hashes class names.
