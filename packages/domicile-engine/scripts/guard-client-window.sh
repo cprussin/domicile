@@ -11,6 +11,11 @@
 #
 # kitty draws a known background color, so the guard asserts that exact color.
 #
+# SOFTWARE=1 runs the path for a card with no 3D: the engine composites on the
+# CPU (`--disable-gpu`), the compositor hands windows over in shared memory
+# (`--software-compositing yes`), and the client is foot, which draws only in
+# shared memory. See docs/architecture/A-DESKTOP-ON-A-TTY.md#software-output.
+#
 # Processes, started in this order:
 #
 #   sway        nested compositor from under-wayland.sh; headless Ozone cannot
@@ -48,6 +53,10 @@ COLOR="${COLOR:-3366CC}"
 CLIENT_APP_ID="${CLIENT_APP_ID:-app-1}"
 # NEGATIVE=1 starts no client, so the assertion must fail.
 NEGATIVE="${NEGATIVE:-0}"
+SOFTWARE="${SOFTWARE:-0}"
+# The control waits a multiple of its own guard's time. See lib-control-budget.sh.
+BUDGET=client-window
+[ "$SOFTWARE" = "1" ] && BUDGET=client-window-in-memory
 
 # Client lifetime in seconds. Must outlast the poll: the probe runs on the
 # submit path, so a client killed mid-poll reads as "nothing drew".
@@ -68,7 +77,8 @@ STARTED=()
 # and the engine's has the page's console lines. The negative control gets its
 # own files so it does not overwrite the run's.
 WHICH=""
-[ "$NEGATIVE" = "1" ] && WHICH="-negative"
+[ "$SOFTWARE" = "1" ] && WHICH="-in-memory"
+[ "$NEGATIVE" = "1" ] && WHICH="$WHICH-negative"
 LOG_COPY="${LOG_COPY:-/tmp/domicile-client-window$WHICH-compositor.log}"
 ENGINE_LOG_COPY="${ENGINE_LOG_COPY:-/tmp/domicile-client-window$WHICH-engine.log}"
 cleanup() {
@@ -100,14 +110,23 @@ cd "$CHROMIUM" || {
   annotate "guard-client-window: no compositor at $COMPOSITOR; build it with cargo build -p domicile-compositor"
   exit 1
 }
-# kitty is not in Chromium's toolchain shell, so fetch it with nix if missing.
-if command -v kitty >/dev/null; then
-  KITTY=(kitty)
+# The client is not in Chromium's toolchain shell, so fetch it with nix if
+# missing.
+CLIENT_NAME=kitty
+[ "$SOFTWARE" = "1" ] && CLIENT_NAME=foot
+if command -v "$CLIENT_NAME" >/dev/null; then
+  CLIENT=("$CLIENT_NAME")
 elif command -v nix >/dev/null; then
-  KITTY=(nix shell nixpkgs#kitty --command kitty)
+  CLIENT=(nix shell "nixpkgs#$CLIENT_NAME" --command "$CLIENT_NAME")
 else
-  skip "guard-client-window: no kitty to draw with, and no nix to fetch one"
+  skip "guard-client-window: no $CLIENT_NAME to draw with, and no nix to fetch one"
   exit 77
+fi
+ENGINE_SWITCHES=()
+COMPOSITOR_SWITCHES=()
+if [ "$SOFTWARE" = "1" ]; then
+  ENGINE_SWITCHES=(--disable-gpu)
+  COMPOSITOR_SWITCHES=(--software-compositing yes)
 fi
 
 fresh_broker
@@ -123,6 +142,7 @@ rm -rf "$PROFILE"; mkdir -p "$PROFILE"
   --domicile-shell-root="$SCRIPTS" \
   --enable-logging=stderr --log-level=0 \
   --domicile-broker-socket="$BROKER" \
+  "${ENGINE_SWITCHES[@]}" \
   "domicile://shell/spike-page.html?app=$CLIENT_APP_ID" >"$ENGINE_LOG" 2>&1 &
 STARTED+=($!)
 
@@ -147,7 +167,8 @@ DOMICILE_SPIKE_CENTER=1 \
     --chrome-socket "$COMP_SOCK" \
     --session "$COMP_SOCK.session" \
     --engine-socket "$BROKER" \
-    --expect-a-page no >"$COMP_LOG" 2>&1 &
+    --expect-a-page no \
+    "${COMPOSITOR_SWITCHES[@]}" >"$COMP_LOG" 2>&1 &
 COMP=$!
 STARTED+=("$COMP")
 
@@ -186,15 +207,23 @@ CLIENT_DISPLAY="${CLIENT_DISPLAY:-wayland-1}"
 if [ "$NEGATIVE" = "1" ]; then
   echo "negative control: no client, so nothing draws"
 else
-  echo "driving kitty, drawing #$COLOR"
-  # Keep kitty committing frames: the probe runs on the submit path, and
+  echo "driving $CLIENT_NAME, drawing #$COLOR"
+  # Keep the client committing frames: the probe runs on the submit path, and
   # kitty stops redrawing its cursor blink after about 15 seconds. The dots
   # are foreground pixels and do not affect the background color.
-  NO_COLOR=1 WAYLAND_DISPLAY="$CLIENT_DISPLAY" timeout "$CLIENT_LIVES_FOR" \
-    "${KITTY[@]}" --config NONE -o confirm_os_window_close=0 \
-          -o "background=#$COLOR" \
-          -o initial_window_width=640 -o initial_window_height=480 \
-          sh -c 'while :; do printf .; sleep 0.2; done' >"$CLI_LOG" 2>&1 &
+  if [ "$SOFTWARE" = "1" ]; then
+    WAYLAND_DISPLAY="$CLIENT_DISPLAY" timeout "$CLIENT_LIVES_FOR" \
+      "${CLIENT[@]}" --config=/dev/null \
+            --override="colors.background=$COLOR" \
+            --window-size-pixels=640x480 \
+            sh -c 'while :; do printf .; sleep 0.2; done' >"$CLI_LOG" 2>&1 &
+  else
+    NO_COLOR=1 WAYLAND_DISPLAY="$CLIENT_DISPLAY" timeout "$CLIENT_LIVES_FOR" \
+      "${CLIENT[@]}" --config NONE -o confirm_os_window_close=0 \
+            -o "background=#$COLOR" \
+            -o initial_window_width=640 -o initial_window_height=480 \
+            sh -c 'while :; do printf .; sleep 0.2; done' >"$CLI_LOG" 2>&1 &
+  fi
   STARTED+=($!)
 fi
 
@@ -208,7 +237,7 @@ fi
 # can slow a draw several times over. It costs nothing on a healthy run.
 # CLIENT_LIVES_FOR must exceed it.
 LOOKS="${LOOKS:-240}"
-[ "$NEGATIVE" = "1" ] && LOOKS="$(budget_for client-window "$LOOKS")"
+[ "$NEGATIVE" = "1" ] && LOOKS="$(budget_for "$BUDGET" "$LOOKS")"
 
 # Wait for the client's color, not any draw: spike-page.html paints its own
 # indigo first. `DRAWN` keeps the last draw for the timeout message.
@@ -224,7 +253,7 @@ done
 # Record the wait only when the guard saw the client's color. A timeout is not
 # a measurement and would give the control its largest budget.
 if [ "$NEGATIVE" != "1" ] && [ "${DRAWN#FF}" = "$COLOR" ]; then
-  budget_note client-window "$WAITED"
+  budget_note "$BUDGET" "$WAITED"
 fi
 
 echo
@@ -238,7 +267,7 @@ if [ -z "$DRAWN" ]; then
 fi
 
 echo "the engine drew #$DRAWN; the client drew #$COLOR"
-# kitty's background is opaque (alpha FF). The client's buffer is not
+# The client's background is opaque (alpha FF). The client's buffer is not
 # resampled, so compare the color exactly.
 if [ "${DRAWN#FF}" = "$COLOR" ]; then
   if [ "$NEGATIVE" = "1" ]; then

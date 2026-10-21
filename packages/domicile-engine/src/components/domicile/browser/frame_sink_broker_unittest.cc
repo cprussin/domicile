@@ -18,13 +18,14 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/unsafe_shared_memory_region.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
+#include "base/unguessable_token.h"
 #include "components/domicile/browser/browser_window_capture_target.h"
 #include "components/domicile/browser/external_surface_provider.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
-#include "components/viz/common/resources/shared_image_format.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/frame_sink_id_allocator.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
@@ -39,6 +40,7 @@
 #include "gpu/command_buffer/client/client_shared_image.h"
 #include "gpu/command_buffer/client/test_shared_image_interface.h"
 #include "gpu/command_buffer/common/mailbox.h"
+#include "gpu/command_buffer/common/shared_image_info.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -52,6 +54,8 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_fence.h"
 #include "ui/gfx/gpu_fence_handle.h"
+#include "ui/gfx/gpu_memory_buffer_handle.h"
+#include "ui/gfx/native_pixmap_handle.h"
 
 namespace domicile {
 namespace {
@@ -109,6 +113,55 @@ void FenceRecordingSharedImageInterface::UpdateSharedImage(
   fenced_.push_back(mailbox);
   gpu::TestSharedImageInterface::UpdateSharedImage(
       sync_token, std::move(acquire_fence), mailbox);
+}
+
+// The browser's SharedImageInterface while it composites in software,
+// recording the shared memory each window's image is made over.
+class SoftwareSharedImageInterface : public gpu::TestSharedImageInterface {
+ public:
+  SoftwareSharedImageInterface();
+
+  scoped_refptr<gpu::ClientSharedImage>
+  DomicileCreateSharedImageForSoftwareCompositor(
+      const gpu::SharedImageInfo& si_info,
+      base::UnsafeSharedMemoryRegion region,
+      uint32_t stride) override;
+
+  // Each image's region and row stride, in order.
+  const std::vector<std::pair<base::UnguessableToken, uint32_t>>& made_over()
+      const {
+    return made_over_;
+  }
+
+ private:
+  ~SoftwareSharedImageInterface() override;
+
+  std::vector<std::pair<base::UnguessableToken, uint32_t>> made_over_;
+};
+
+SoftwareSharedImageInterface::SoftwareSharedImageInterface() = default;
+SoftwareSharedImageInterface::~SoftwareSharedImageInterface() = default;
+
+scoped_refptr<gpu::ClientSharedImage>
+SoftwareSharedImageInterface::DomicileCreateSharedImageForSoftwareCompositor(
+    const gpu::SharedImageInfo& si_info,
+    base::UnsafeSharedMemoryRegion region,
+    uint32_t stride) {
+  made_over_.emplace_back(region.GetGUID(), stride);
+  // The test interface's own software image: what it is made over does not
+  // reach viz here.
+  return CreateSharedImageForSoftwareCompositor(si_info);
+}
+
+// A window's dmabuf of `size`, four bytes a pixel. Any fd crosses mojo as one.
+gfx::GpuMemoryBufferHandle ADmabuf(const gfx::Size& size) {
+  base::ScopedFD read_end;
+  base::ScopedFD write_end;
+  CHECK(base::CreatePipe(&read_end, &write_end));
+  gfx::NativePixmapHandle pixmap;
+  pixmap.planes.emplace_back(4 * size.width(), /*offset=*/0, /*size=*/0,
+                             std::move(read_end));
+  return gfx::GpuMemoryBufferHandle(std::move(pixmap));
 }
 
 // A fence for the producer's draw. Any fd crosses mojo as one.
@@ -274,16 +327,30 @@ class FrameSinkBrokerTest : public testing::Test {
       const viz::FrameSinkId& frame_sink_id) {
     base::test::TestFuture<uint64_t, std::optional<gpu::ExportedSharedImage>>
         future;
-    remote->ImportBuffer(frame_sink_id,
-                         gpu::TestSharedImageInterface::CreateGMBHandle(
-                             viz::SinglePlaneFormat::kBGRA_8888, kBufferSize),
-                         kBufferSize, kArgb8888, future.GetCallback());
+    remote->ImportBuffer(frame_sink_id, ADmabuf(kBufferSize), kBufferSize,
+                         kArgb8888, future.GetCallback());
     auto [buffer_id, exported] = future.Take();
     CHECK_NE(buffer_id, 0u);
     CHECK(exported.has_value());
     return {buffer_id,
             gpu::ClientSharedImage::ImportUnowned(std::move(exported).value())
                 ->mailbox()};
+  }
+
+  // Imports `region` into `frame_sink_id` as an ARGB8888 window of
+  // kBufferSize with rows `stride` apart.
+  std::pair<uint64_t, std::optional<gpu::ExportedSharedImage>> ImportShm(
+      mojo::Remote<mojom::FrameSinkBroker>& remote,
+      const viz::FrameSinkId& frame_sink_id,
+      base::UnsafeSharedMemoryRegion region,
+      uint32_t stride) {
+    gfx::GpuMemoryBufferHandle handle(std::move(region));
+    handle.stride = stride;
+    base::test::TestFuture<uint64_t, std::optional<gpu::ExportedSharedImage>>
+        future;
+    remote->ImportBuffer(frame_sink_id, std::move(handle), kBufferSize,
+                         kArgb8888, future.GetCallback());
+    return future.Take();
   }
 
   // Brokers a sink the browser holds, as a producer with only dmabufs asks
@@ -342,6 +409,8 @@ class FrameSinkBrokerTest : public testing::Test {
         base::BindRepeating(&FrameSinkBrokerTest::BrowserWindowTarget,
                             base::Unretained(this)),
         base::BindRepeating(&FrameSinkBrokerTest::RecordPointers,
+                            base::Unretained(this)),
+        base::BindRepeating(&FrameSinkBrokerTest::SoftwareInterface,
                             base::Unretained(this)));
     page_ = broker_->NewEmbedRequester();
   }
@@ -374,6 +443,13 @@ class FrameSinkBrokerTest : public testing::Test {
 
   // Gives the broker a GPU.
   void UseTheGpu() { gpu_ = sii_.get(); }
+
+  // Fake for the browser's software compositing: off, unless a test turns it
+  // on.
+  gpu::SharedImageInterface* SoftwareInterface() { return software_; }
+
+  // Makes the browser composite in software.
+  void CompositeInSoftware() { software_ = software_sii_.get(); }
 
   // Fake for the ozone platform that owns the CRTCs.
   void RecordLayout(std::vector<mojom::DisplayLayoutPtr> layout) {
@@ -426,6 +502,9 @@ class FrameSinkBrokerTest : public testing::Test {
   scoped_refptr<FenceRecordingSharedImageInterface> sii_ =
       base::MakeRefCounted<FenceRecordingSharedImageInterface>();
   raw_ptr<gpu::SharedImageInterface> gpu_ = nullptr;
+  scoped_refptr<SoftwareSharedImageInterface> software_sii_ =
+      base::MakeRefCounted<SoftwareSharedImageInterface>();
+  raw_ptr<gpu::SharedImageInterface> software_ = nullptr;
   std::unique_ptr<viz::HostFrameSinkManager> host_frame_sink_manager_;
   std::unique_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_;
   std::unique_ptr<FrameSinkBroker> broker_;
@@ -1358,6 +1437,53 @@ TEST_F(FrameSinkBrokerTest, FencingABufferNeverImportedIsRefused) {
 
   EXPECT_FALSE(fenced.Get().has_value());
   EXPECT_TRUE(sii_->fenced().empty());
+}
+
+// A window drawn into shared memory, on a browser that composites in
+// software: the memory itself becomes the image viz draws, uncopied.
+TEST_F(FrameSinkBrokerTest, AWindowInSharedMemoryIsASoftwareImageOverIt) {
+  CompositeInSoftware();
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+  constexpr uint32_t kStride = 4 * 64 + 16;
+  base::UnsafeSharedMemoryRegion region =
+      base::UnsafeSharedMemoryRegion::Create(kStride * 48);
+  const base::UnguessableToken guid = region.GetGUID();
+
+  auto [buffer_id, exported] =
+      ImportShm(remote, frame_sink_id, std::move(region), kStride);
+
+  EXPECT_NE(buffer_id, 0u);
+  ASSERT_TRUE(exported.has_value());
+  EXPECT_TRUE(gpu::ClientSharedImage::ImportUnowned(std::move(exported).value())
+                  ->is_software());
+  EXPECT_EQ(software_sii_->made_over(),
+            (std::vector<std::pair<base::UnguessableToken, uint32_t>>{
+                {guid, kStride}}));
+}
+
+// Viz composited on the GPU drops a software image, so the window would be
+// blank with nothing said.
+TEST_F(FrameSinkBrokerTest, AWindowInSharedMemoryIsRefusedOnTheGpu) {
+  UseTheGpu();
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+  viz::MockCompositorFrameSinkClient sink_client;
+  mojo::Remote<viz::mojom::CompositorFrameSink> sink;
+  const viz::FrameSinkId frame_sink_id =
+      BrokerASink(remote, sink_client, sink, mojo::NullRemote());
+
+  auto [buffer_id, exported] =
+      ImportShm(remote, frame_sink_id,
+                base::UnsafeSharedMemoryRegion::Create(4 * 64 * 48), 4 * 64);
+
+  EXPECT_EQ(buffer_id, 0u);
+  EXPECT_FALSE(exported.has_value());
+  EXPECT_TRUE(software_sii_->made_over().empty());
 }
 
 }  // namespace domicile

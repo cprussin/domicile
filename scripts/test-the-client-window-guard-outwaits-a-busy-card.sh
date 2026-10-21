@@ -92,6 +92,8 @@ poll() { # $1 how patient, $2 how many looks before the client's line lands, $3.
     # The color the guard drives its client with.
     COLOR=3366CC
     COMP_LOG="$dir/comp"
+    # The control's budget the guard notes, as the kitty run names it.
+    BUDGET=client-window
     # A directory per case, so cases do not read each other's notes.
     DOMICILE_CONTROL_BUDGET_DIR="$dir/budgets"
     LANDS_AFTER="$2"
