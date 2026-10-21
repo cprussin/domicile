@@ -57,7 +57,10 @@ use domicile_launch::serving::serve;
 use domicile_launch::session::Session;
 use domicile_launch::shell_path::Shell;
 use domicile_launch::shell_source::{shell_source, ShellSource};
-use domicile_launch::spawn::{compositor, engine, Runtime};
+use domicile_launch::software_compositing::{self, composites_on_the_cpu};
+use domicile_launch::spawn::{
+    composite_on_the_cpu, compositor, engine, send_frames_in_memory, Runtime,
+};
 use domicile_launch::splash::{lay_out, tell, the_page_ends, Progress, ENDED};
 use domicile_launch::supervise::{catch_interrupts, interrupted, Running, ASK_EVERY};
 use domicile_launch::uninstall_app::uninstall_app;
@@ -628,6 +631,16 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     )
     .map_err(|why| why.to_string())?;
     println!("the engine is taking the {platform} platform");
+    // Only drm scans out itself; a nested engine draws as its host lets it.
+    let on_the_cpu = platform == "drm"
+        && composites_on_the_cpu(
+            env(software_compositing::VARIABLE).as_deref(),
+            Path::new("/sys/class/drm"),
+        )
+        .map_err(|why| why.to_string())?;
+    if on_the_cpu {
+        println!("no card here has 3D, so the engine composites on the CPU");
+    }
 
     // Install before starting components. Each runs in its own process
     // group, so Ctrl-C reaches only this process, whose default action would
@@ -648,6 +661,7 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         env: &env,
         places: &places,
         platform: &platform,
+        on_the_cpu,
         policy: &policy,
         said: &said,
         serving: &serving,
@@ -686,6 +700,9 @@ struct Desktop<'a> {
     env: &'a dyn Fn(&str) -> Option<String>,
     places: &'a Runtime,
     platform: &'a str,
+    /// Whether the engine composites on the CPU. See
+    /// `domicile_launch::software_compositing`.
+    on_the_cpu: bool,
     /// The restart policy, shared by the engine, compositor and desktop. Each
     /// counts its own failures.
     policy: &'a Policy,
@@ -835,21 +852,21 @@ fn start_a_compositor(
     running: &mut Running,
     heard: &Arc<Mutex<Heard>>,
 ) -> Result<(), String> {
+    let mut spawn = compositor(
+        &desktop.components.compositor,
+        &desktop.components.engine,
+        desktop.browser,
+        &data_of(desktop.browser)?,
+        desktop.places,
+        desktop.config,
+        desktop.said.scope_clients,
+        desktop.env,
+    );
+    if desktop.on_the_cpu {
+        send_frames_in_memory(&mut spawn);
+    }
     running
-        .start_overheard(
-            "compositor",
-            &compositor(
-                &desktop.components.compositor,
-                &desktop.components.engine,
-                desktop.browser,
-                &data_of(desktop.browser)?,
-                desktop.places,
-                desktop.config,
-                desktop.said.scope_clients,
-                desktop.env,
-            ),
-            heard,
-        )
+        .start_overheard("compositor", &spawn, heard)
         .map_err(|why| why.to_string())?;
     wait_for(
         &session(&desktop.places.session),
@@ -864,17 +881,18 @@ fn start_a_compositor(
 ///
 /// The wait also watches for exits, so a crash is reported at once.
 fn start_an_engine(desktop: &Desktop, running: &mut Running) -> Result<(), String> {
+    let mut spawn = engine(
+        &desktop.components.engine,
+        &served(desktop.serving),
+        desktop.platform,
+        desktop.places,
+        (desktop.env)("DOMICILE_ENGINE_ARGS").as_deref(),
+    );
+    if desktop.on_the_cpu {
+        composite_on_the_cpu(&mut spawn);
+    }
     running
-        .start(
-            "engine",
-            &engine(
-                &desktop.components.engine,
-                &served(desktop.serving),
-                desktop.platform,
-                desktop.places,
-                (desktop.env)("DOMICILE_ENGINE_ARGS").as_deref(),
-            ),
-        )
+        .start("engine", &spawn)
         .map_err(|why| why.to_string())?;
     wait_for(
         &broker(&desktop.places.broker, &desktop.components.engine),

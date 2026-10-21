@@ -1290,6 +1290,113 @@
 
             touch "$out"
           '';
+
+        # A tty desktop on a card with no 3D: 2D virtio-gpu, no virgl. The
+        # launcher picks software compositing, the engine scans out dumb
+        # buffers, and a `wl_shm` client's window reaches the screen. See
+        # docs/architecture/A-DESKTOP-ON-A-TTY.md#software-output.
+        #
+        # Runs the pinned engine, so on a pull request that changes the fork it
+        # fails until engine.yml writes the release back.
+        tty-on-a-card-with-no-3d = pkgs.testers.runNixOSTest {
+          name = "tty-on-a-card-with-no-3d";
+          extraPythonPackages = python: [ python.pillow ];
+          nodes.machine = {
+            imports = [ self.nixosModules.domicile ];
+            programs.domicile.enable = true;
+            virtualisation = {
+              memorySize = 4096;
+              cores = 2;
+              # The only card, so it is `card0`, and 2D.
+              qemu.options = [ "-vga none" "-device virtio-gpu-pci,xres=1280,yres=800" ];
+            };
+            users.users.alice = {
+              isNormalUser = true;
+              uid = 1000;
+              extraGroups = [ "domicile" "video" "input" ];
+            };
+            # A logind session on tty1, as a console login gets.
+            services.getty.autologinUser = "alice";
+            environment.loginShellInit = ''
+              if [ "$(tty)" = /dev/tty1 ]; then
+                # What the engine does on the way to the desk, for a failure.
+                export DOMICILE_ENGINE_ARGS="--log-level=0 --vmodule=*ozone*=1,*domicile*=1,*viz*=1"
+                export RUST_LOG=domicile_compositor=debug
+                exec ${self.packages.${system}.simple}/bin/simple >/tmp/domicile.log 2>&1
+              fi
+            '';
+            environment.systemPackages = [ pkgs.foot pkgs.gdb ];
+            fonts.enableDefaultPackages = true;
+          };
+          testScript = ''
+            import datetime as dt
+            import os
+            from PIL import Image
+
+            def colors_on_the_screen(name):
+                """Each color on the screen and its share of the pixels."""
+                machine.screenshot(name)
+                image = Image.open(os.path.join(machine.out_dir, f"{name}.png")).convert("RGB")
+                pixels = image.width * image.height
+                colors = image.getcolors(maxcolors=pixels)
+                assert colors is not None
+                return {color: count / pixels for count, color in colors}
+
+            def the_desktop_shows_a_window():
+                machine.wait_until_succeeds(
+                    "grep -q 'composites on the CPU' /tmp/domicile.log", timeout=dt.timedelta(seconds=120))
+                machine.wait_until_succeeds("ls /run/user/1000/wayland-[0-9]", timeout=dt.timedelta(seconds=90))
+
+                # The page covers the screen. The console it replaced is mostly
+                # black.
+                def page_is_up(_):
+                    shares = colors_on_the_screen("desk")
+                    color = max(shares, key=lambda color: shares[color])
+                    return shares[color] > 0.5 and color != (0, 0, 0)
+                retry(page_is_up, timeout=dt.timedelta(seconds=300))
+
+                # foot draws only in shared memory.
+                machine.succeed(
+                    "su alice -c 'XDG_RUNTIME_DIR=/run/user/1000 "
+                    "WAYLAND_DISPLAY=$(basename $(ls /run/user/1000/wayland-[0-9] | head -1)) "
+                    "foot --override=colors.background=3366cc "
+                    "--window-size-pixels=400x300 sleep 600' >/tmp/foot.log 2>&1 &")
+
+                # foot's 400x300 is 12% of the 1280x800 screen.
+                def window_is_up(_):
+                    return colors_on_the_screen("window").get((0x33, 0x66, 0xCC), 0) > 0.04
+                retry(window_is_up, timeout=dt.timedelta(seconds=300))
+
+            machine.wait_for_unit("multi-user.target")
+            try:
+                the_desktop_shows_a_window()
+            except Exception:
+                # What the screen showed instead: its biggest colors.
+                shares = colors_on_the_screen("failed")
+                screen = sorted(shares.items(), key=lambda share: -share[1])[:4]
+                # The session ends first: a crashing process floods the console,
+                # and CI keeps only the last 100 lines.
+                machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3")
+                # What the launcher and the session saw, for the CI log.
+                for command in [
+                    "grep -E 'FATAL|Check failed|ERROR:.*domicile' /tmp/domicile.log | tail -6 | cut -c1-200 || true",
+                    # The compositor's complaints, and how far foot's window got.
+                    "grep -E ' (WARN|ERROR) ' /tmp/domicile.log | tail -6 | cut -c1-200 || true",
+                    "grep -E 'toplevel created|brokered a frame sink|first frame' /tmp/domicile.log "
+                    "| tail -5 | cut -c1-200 || true",
+                    "tail -3 /tmp/foot.log | cut -c1-160",
+                    # A crashing engine process: which one, and its crashing thread.
+                    "coredumpctl list --no-pager --no-legend 2>/dev/null | tail -2 | cut -c1-150 || true",
+                    "coredumpctl info --no-pager -1 2>/dev/null | grep -oE -m1 -- '--type=[a-z-]+' || true",
+                    "coredumpctl info --no-pager -1 2>/dev/null | grep -E -m1 -A24 'Stack trace of thread' "
+                    "| cut -c1-110 || true",
+                ]:
+                    print(f"$ {command}")
+                    print(machine.execute(f"{command} 2>&1")[1])
+                print("the screen's biggest colors:", screen)
+                raise
+          '';
+        };
       };
 
       apps.${system} = {

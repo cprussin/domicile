@@ -283,7 +283,20 @@ fi
 # socket meanwhile. If `DrmVtSwitcher` shared it, its `PropertiesChanged`
 # would arrive late and the GPU process would keep drawing on a console it
 # left.
-for bus in drm_logind_session drm_vt_switcher drm_sleep; do
+#
+# `DrmLogindSession`'s thread is a `base::Thread`, not the pool's: it blocks
+# the UI thread in `InitializeUI`, before the pool runs tasks, and a pool task
+# there never runs.
+if grep -q 'options.dbus_task_runner = bus_thread_.task_runner()' "$DOMICILE/drm_logind_session.cc" \
+  && ! grep -q 'base::ThreadPool' "$DOMICILE/drm_logind_session.cc"; then
+  ok "drm_logind_session's bus has a thread of its own, outside the pool"
+else
+  fail "drm_logind_session's bus has a thread of its own, outside the pool" \
+    "drm_logind_session.cc does not run its bus on bus_thread_, so the UI \
+thread waits in InitializeUI on a task that never runs"
+fi
+
+for bus in drm_vt_switcher drm_sleep; do
   if grep -q 'SingleThreadTaskRunnerThreadMode::DEDICATED' "$DOMICILE/$bus.cc"; then
     ok "$bus's bus has a thread of its own"
   else
