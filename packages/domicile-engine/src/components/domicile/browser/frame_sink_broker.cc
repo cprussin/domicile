@@ -49,10 +49,13 @@ FrameSinkBroker::FrameSinkBroker(
     ClipboardSetter set_clipboard,
     DisplayCaptureTargetGetter get_display_capture_target,
     BrowserWindowCaptureTargetGetter get_browser_window_capture_target,
-    PointerTargetsSetter set_pointer_targets)
+    PointerTargetsSetter set_pointer_targets,
+    SharedImageInterfaceGetter get_software_shared_image_interface)
     : host_frame_sink_manager_(host_frame_sink_manager),
       allocate_frame_sink_id_(std::move(allocate_frame_sink_id)),
       get_shared_image_interface_(std::move(get_shared_image_interface)),
+      get_software_shared_image_interface_(
+          std::move(get_software_shared_image_interface)),
       set_display_layout_(std::move(set_display_layout)),
       set_clipboard_(std::move(set_clipboard)),
       get_display_capture_target_(std::move(get_display_capture_target)),
@@ -122,14 +125,15 @@ void FrameSinkBroker::CreateFrameSink(
     CreateFrameSinkCallback callback) {
   const viz::FrameSinkId frame_sink_id = allocate_frame_sink_id_.Run();
 
+  const auto none = base::BindRepeating(
+      []() -> gpu::SharedImageInterface* { return nullptr; });
   auto frame_sink = std::make_unique<BrokeredFrameSink>(
       host_frame_sink_manager_, frame_sink_id, std::move(observer),
       receivers_.current_receiver(), app_id,
-      get_shared_image_interface_
-          ? get_shared_image_interface_
-          : base::BindRepeating([]() -> gpu::SharedImageInterface* {
-              return nullptr;
-            }));
+      get_shared_image_interface_ ? get_shared_image_interface_ : none,
+      get_software_shared_image_interface_
+          ? get_software_shared_image_interface_
+          : none);
   frame_sink->CreateCompositorFrameSink(std::move(client), std::move(receiver));
   BrokeredFrameSink* raw_frame_sink = frame_sink.get();
   frame_sink_map_[frame_sink_id] = std::move(frame_sink);

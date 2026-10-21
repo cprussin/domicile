@@ -315,6 +315,25 @@ fn scoping_takes_yes_or_no() {
     );
 }
 
+/// Windows go to the engine as dmabufs unless the launcher says it composites
+/// on the CPU.
+#[test]
+fn windows_are_dmabufs_unless_the_command_line_says_otherwise() {
+    let parsed = parse(the_required_two()).expect("both are there");
+    assert!(!parsed.software_compositing);
+
+    let parsed = parse([
+        "--chrome-socket",
+        "/run/chrome.sock",
+        "--session",
+        "/run/session.json",
+        "--software-compositing",
+        "yes",
+    ])
+    .expect("a command line for software compositing parses");
+    assert!(parsed.software_compositing);
+}
+
 /// A real desk reads `/etc/pam.d`, which the compositor names.
 #[test]
 fn pam_services_come_from_the_machine_unless_the_command_line_says_otherwise() {
