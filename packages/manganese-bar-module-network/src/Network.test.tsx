@@ -6,6 +6,11 @@ import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
+import type {
+  Addressing,
+  NetworkInterface,
+} from "@domicile-desktop/system-network/interfaces";
+import { InterfaceKind } from "@domicile-desktop/system-network/interfaces";
 import type { Network as Reading } from "@domicile-desktop/system-network/network";
 import { Connectivity, Link } from "@domicile-desktop/system-network/network";
 import type { Wifi } from "@domicile-desktop/system-network/wifi";
@@ -51,21 +56,45 @@ const heldNetwork = () => held<Result<Reading, SystemError>>();
 /** A host the item never calls, since the library is injected. */
 const NO_HOST = new FakeDomicileHost().host;
 
-/** The item, with a Wi-Fi watch the test holds when given. */
+const heldInterfaces = () => held<Result<NetworkInterface[], SystemError>>();
+
+/** The item, with the watches the test holds when given. */
 const Item = ({
+  addresses = held<Result<Map<string, Addressing>, SystemError>>().watch,
+  interfaces = heldInterfaces().watch,
   network,
   wifi = held<Result<Option<Wifi>, SystemError>>().watch,
 }: {
+  addresses?: SharedWatch<Result<Map<string, Addressing>, SystemError>>;
+  interfaces?: SharedWatch<Result<NetworkInterface[], SystemError>>;
   network: SharedWatch<Result<Reading, SystemError>>;
   wifi?: SharedWatch<Result<Option<Wifi>, SystemError>>;
 }) => (
   <Network
     actions={heldWifiActions().actions}
+    addresses={addresses}
     domicile={NO_HOST}
+    interfaces={interfaces}
     network={network}
     wifi={wifi}
   />
 );
+
+const port = (up: boolean): NetworkInterface => ({
+  hardwareAddress: "8c:16:45:5a:3e:01",
+  kind: InterfaceKind.Wired,
+  name: "enp0s31f6",
+  speed: up ? 1000 : undefined,
+  up,
+});
+
+const RADIO: NetworkInterface = {
+  hardwareAddress: "a4:c3:f0:85:ac:2d",
+  kind: InterfaceKind.Wireless,
+  name: "wlan0",
+  speed: undefined,
+  up: false,
+};
 
 const online = (link: Reading["link"]) =>
   Ok<Reading, SystemError>({ connectivity: Connectivity.Full, link });
@@ -79,10 +108,25 @@ describe("Network", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("shows nothing without a network service", () => {
+  it("shows nothing on a machine with no network hardware", () => {
     const network = heldNetwork();
-    const { container } = render(<Item network={network.watch} />);
+    const interfaces = heldInterfaces();
+    const { container } = render(
+      <Item interfaces={interfaces.watch} network={network.watch} />,
+    );
 
+    network.report(online(Link.None()));
+    interfaces.report(Ok([]));
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("shows, with a warning, when the network service fails", () => {
+    const network = heldNetwork();
+    const interfaces = heldInterfaces();
+    render(<Item interfaces={interfaces.watch} network={network.watch} />);
+
+    interfaces.report(Ok([RADIO]));
     network.report(
       Err({
         kind: SystemErrorKind.Dbus,
@@ -90,7 +134,27 @@ describe("Network", () => {
       }),
     );
 
-    expect(container).toBeEmptyDOMElement();
+    expect(
+      screen.getByRole("img", {
+        name: "Network unavailable: org.freedesktop.DBus.Error.ServiceUnknown",
+      }),
+    ).toBeVisible();
+    expect(screen.getByRole("button").className).toContain(
+      css({ color: "warning" }),
+    );
+  });
+
+  it("shows once the hardware is read, before the service answers", () => {
+    const interfaces = heldInterfaces();
+    render(
+      <Item interfaces={interfaces.watch} network={heldNetwork().watch} />,
+    );
+
+    interfaces.report(Ok([RADIO]));
+
+    expect(
+      screen.getByRole("img", { name: "Reading the network" }),
+    ).toBeVisible();
   });
 
   describe("the link", () => {
@@ -134,6 +198,34 @@ describe("Network", () => {
       network.report(online(Link.Wired("Wired connection 1")));
 
       expect(screen.getByRole("img", { name: "Wired" })).toBeVisible();
+    });
+
+    it("marks a cable the service does not report, such as iwd's", () => {
+      const network = heldNetwork();
+      const interfaces = heldInterfaces();
+      render(<Item interfaces={interfaces.watch} network={network.watch} />);
+
+      network.report(
+        Ok({ connectivity: Connectivity.Unknown, link: Link.None() }),
+      );
+      interfaces.report(Ok([port(false), RADIO]));
+      expect(screen.getByRole("img", { name: "Offline" })).toBeVisible();
+
+      interfaces.report(Ok([port(true), RADIO]));
+      expect(screen.getByRole("img", { name: "Wired" })).toBeVisible();
+    });
+
+    it("names a cable beside Wi-Fi", () => {
+      const network = heldNetwork();
+      const interfaces = heldInterfaces();
+      render(<Item interfaces={interfaces.watch} network={network.watch} />);
+
+      network.report(online(Link.Wifi("Home", 0.72)));
+      interfaces.report(Ok([port(true), RADIO]));
+
+      expect(
+        screen.getByRole("img", { name: "Wi-Fi, strong signal: Home; Wired" }),
+      ).toBeVisible();
     });
 
     it("names any other link", () => {
@@ -207,11 +299,67 @@ describe("Network", () => {
       wifi.report(Ok(None()));
 
       expect(screen.getByText("No Wi-Fi device")).toBeVisible();
+      expect(
+        screen.queryByRole("region", { name: /^Wired/ }),
+      ).not.toBeInTheDocument();
       expect(wifi.started).toBe(1);
 
       await userEvent.keyboard("{Escape}");
 
       expect(wifi.stopped).toBe(1);
+    });
+
+    it("shows each wired port, with its addresses while open", async () => {
+      const network = heldNetwork();
+      const interfaces = heldInterfaces();
+      const addresses = held<Result<Map<string, Addressing>, SystemError>>();
+      render(
+        <Item
+          addresses={addresses.watch}
+          interfaces={interfaces.watch}
+          network={network.watch}
+        />,
+      );
+      network.report(online(Link.Wired("Wired connection 1")));
+      interfaces.report(Ok([port(true), RADIO]));
+
+      await userEvent.click(screen.getByRole("button", { name: "Wired" }));
+      addresses.report(
+        Ok(
+          new Map([
+            [
+              "enp0s31f6",
+              { addresses: ["192.168.1.40/24"], gateway: "192.168.1.1" },
+            ],
+          ]),
+        ),
+      );
+
+      const wired = screen.getByRole("region", {
+        name: "Wired: enp0s31f6, connected",
+      });
+      expect(wired).toHaveTextContent("1000 Mbit/s");
+      expect(wired).toHaveTextContent("192.168.1.40/24");
+      expect(wired).toHaveTextContent("192.168.1.1");
+      expect(wired).toHaveTextContent("8c:16:45:5a:3e:01");
+      expect(addresses.started).toBe(1);
+
+      await userEvent.keyboard("{Escape}");
+      expect(addresses.stopped).toBe(1);
+    });
+
+    it("says when a port has no cable", async () => {
+      const network = heldNetwork();
+      const interfaces = heldInterfaces();
+      render(<Item interfaces={interfaces.watch} network={network.watch} />);
+      network.report(online(Link.None()));
+      interfaces.report(Ok([port(false)]));
+
+      await userEvent.click(screen.getByRole("button", { name: "Offline" }));
+
+      expect(
+        screen.getByRole("region", { name: "Wired: enp0s31f6, no cable" }),
+      ).toBeVisible();
     });
   });
 });

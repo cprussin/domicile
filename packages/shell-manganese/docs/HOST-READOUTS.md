@@ -22,8 +22,8 @@ The page reads both itself through libraries, as it does the battery; see
   count.
   On a tty and nested alike the shell is one page; see
   [ONE-PAGE-FOR-THE-DESK.md](/docs/architecture/ONE-PAGE-FOR-THE-DESK.md).
-- Failures are handled inside each watch as before: logged, or passed on as
-  an `Err` the item hides on.
+- Failures are handled inside each watch: logged, or passed on as an `Err`;
+  see each item in [TOP-BAR.md](TOP-BAR.md).
 - The launcher's installed applications are read once per page already
   (`appSearch` in `Desktop`).
 

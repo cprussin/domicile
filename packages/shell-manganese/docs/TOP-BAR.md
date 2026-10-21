@@ -118,13 +118,17 @@ Every bar and the lock screen share one watch per system readout. See
   is on the system bus first in that order
   ([`@domicile-desktop/system-network`](../../system-network/README.md)).
   iwd and wpa_supplicant report Wi-Fi only.
+- The hardware from `/sys/class/net`: interfaces with a `device`, wired or
+  Wi-Fi. A wired port with a cable in counts as a wired link when the service
+  reports none, as iwd and wpa_supplicant never do.
 - An icon only. Wi-Fi: a signal icon graded strong, fair or weak by thirds.
   Wired, or any other kind such as a VPN: a network icon. No connection: a
   crossed-out Wi-Fi icon.
 - Hover for the kind and the SSID or VPN name, e.g.
-  `Wi-Fi, strong signal: Home`.
+  `Wi-Fi, strong signal: Home`, and `; Wired` when a cable is in beside it.
 - Dims with no connection. Turns `warning` when NetworkManager reports limited
-  connectivity or a captive portal.
+  connectivity or a captive portal, or when the service fails
+  (`Network unavailable: …`).
 - On joining a network, the desk checks for a captive portal and shows its
   sign-in page in a dialog on the screen with the keyboard. The check asks
   `curl` for `http://www.gstatic.com/generate_204`, so it works with iwd and
@@ -132,18 +136,25 @@ Every bar and the lock screen share one watch per system readout. See
   - While the dialog shows, the check repeats every 3 seconds. The dialog
     closes once the probe answers `204`, or on leaving the network.
   - Closing it by hand stops the checks until the next network.
-- Hidden without any of the three.
-- Click for the Wi-Fi panel, from NetworkManager or iwd. With wpa_supplicant
-  alone it says there is no Wi-Fi device.
-  - A switch turns the radio on or off.
-  - Opening it scans. The arrow scans again.
-  - The connection: signal, frequency, speed, addresses, gateway, DNS,
-    interface and hardware address, and **Disconnect**. iwd reports no
-    addresses.
-  - The other networks, strongest first, marked saved and secured. A click
-    joins a saved or open network. A new secured one asks for its passphrase.
-  - A refusal shows under what was asked.
-  - Wi-Fi is read only while the panel is open.
+- Hidden only on a machine with no network hardware.
+- The compositor refuses the service's calls while locked, so the watches
+  start again on unlock.
+- Click for the panel:
+  - Each wired port: connected or no cable, speed, addresses, gateway,
+    interface and hardware address. Addresses come from `ip -j` while the
+    panel is open.
+  - The Wi-Fi panel, from NetworkManager or iwd. With wpa_supplicant alone it
+    says there is no Wi-Fi device.
+    - A switch turns the radio on or off.
+    - Opening it scans. The arrow scans again.
+    - The connection: signal, frequency, speed, addresses, gateway, DNS,
+      interface and hardware address, and **Disconnect**. iwd reports no
+      addresses.
+    - The other networks, strongest first, marked saved and secured. A click
+      joins a saved or open network. A new secured one asks for its
+      passphrase.
+    - A refusal shows under what was asked.
+    - Wi-Fi is read only while the panel is open.
 
 ## Bluetooth
 

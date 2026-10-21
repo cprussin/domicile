@@ -15,6 +15,10 @@
     "node": ">=24"
   },
   "exports": {
+    "./interfaces": {
+      "types": "./dist/interfaces.d.ts",
+      "default": "./dist/interfaces.js"
+    },
     "./iwd": {
       "types": "./dist/iwd.d.ts",
       "default": "./dist/iwd.js"

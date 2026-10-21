@@ -15,6 +15,7 @@ import { LockSimpleIcon } from "@phosphor-icons/react/dist/ssr/LockSimple";
 import { useEffect, useState } from "react";
 import { css } from "../styled-system/css";
 import { flex, hstack } from "../styled-system/patterns";
+import { Details } from "./Details";
 import { signalOf } from "./signal";
 import { WifiSignalIcon } from "./WifiSignalIcon";
 import type { WifiActions } from "./wifi-actions";
@@ -199,14 +200,7 @@ const Connection = ({
       </Button>
     </div>
     <Failure error={failed} />
-    <dl className={detailsStyles}>
-      {detailsOf(wifi, connection).map(([term, value]) => (
-        <div className={detailStyles} key={term}>
-          <dt className={termStyles}>{term}</dt>
-          <dd className={valueStyles}>{value}</dd>
-        </div>
-      ))}
-    </dl>
+    <Details rows={detailsOf(wifi, connection)} />
   </section>
 );
 
@@ -353,25 +347,6 @@ const connectionStyles = flex({
   direction: "column",
   gap: 1,
   paddingBlock: 2,
-});
-
-const detailsStyles = flex({
-  direction: "column",
-  gap: 0.5,
-  margin: 0,
-});
-
-const detailStyles = hstack({
-  gap: 2,
-  justify: "space-between",
-});
-
-const termStyles = css({ opacity: 0.75 });
-
-const valueStyles = css({
-  margin: 0,
-  overflowWrap: "anywhere",
-  textAlign: "end",
 });
 
 const listStyles = flex({
