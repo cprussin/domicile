@@ -1,5 +1,5 @@
 //! The protocol the supervisor uses to send `load-shell`, `open-url`, the
-//! Settings app's site permissions, extensions and media devices, the History
+//! Settings app's site permissions, extensions, media devices and site data, the History
 //! app's history and browsing data, and `disable-while-typing` to the engine.
 //!
 //! One JSON line each way per connection:
@@ -52,6 +52,12 @@
 //! {"type":"clear_browsing_data","version":1,"since":0,"types":["cookies"],"origins":["https://example.com"]}
 //! {"type":"cleared"}   |   {"type":"refused","why":"…"}
 //!
+//! {"type":"site_data","version":1}
+//! {"type":"site_data","sites":[{"host":"mail.example","bytes":20480.0,"cookies":3}]}   |   {"type":"refused","why":"…"}
+//!
+//! {"type":"clear_site_data","version":1,"host":"mail.example"}
+//! {"type":"cleared"}   |   {"type":"refused","why":"…"}
+//!
 //! {"type":"disable_while_typing","version":1,"enabled":false}
 //! {"type":"disable_while_typing","enabled":false}   |   {"type":"refused","why":"…"}
 //! ```
@@ -74,6 +80,7 @@ use serde::{Deserialize, Serialize};
 use crate::extensions::InstalledExtension;
 use crate::history::{BrowsingData, HistoryItem, HistoryQuery};
 use crate::media_devices::{MediaDevices, MediaKind};
+use crate::site_data::SiteData;
 use crate::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
 
 /// The protocol version the supervisor sends and the engine checks.
@@ -120,8 +127,10 @@ pub enum Reply {
     Visits { times: Vec<f64> },
     /// The engine deleted the visits.
     Deleted,
-    /// The engine cleared the browsing data.
+    /// The engine cleared the browsing data or a host's site data.
     Cleared,
+    /// Every host that stores data.
+    SiteData { sites: Vec<SiteData> },
     /// Whether the touchpads rest while a keyboard types.
     DisableWhileTyping { enabled: bool },
     /// The engine refused, with its reason.
@@ -273,6 +282,19 @@ pub fn clear_browsing_data_line(data: &BrowsingData) -> String {
     })
 }
 
+/// The request for every host that stores data.
+pub fn site_data_line() -> String {
+    line(&Command::SiteData { version: VERSION })
+}
+
+/// The request to clear everything `host` stores.
+pub fn clear_site_data_line(host: &str) -> String {
+    line(&Command::ClearSiteData {
+        version: VERSION,
+        host,
+    })
+}
+
 /// The request to set whether the touchpads rest while a keyboard types, or,
 /// with no `enabled`, to ask.
 pub fn disable_while_typing_line(enabled: Option<bool>) -> String {
@@ -372,6 +394,13 @@ enum Command<'a> {
         // Left out for every origin.
         #[serde(skip_serializing_if = "Option::is_none")]
         origins: Option<&'a [String]>,
+    },
+    SiteData {
+        version: u32,
+    },
+    ClearSiteData {
+        version: u32,
+        host: &'a str,
     },
     DisableWhileTyping {
         version: u32,

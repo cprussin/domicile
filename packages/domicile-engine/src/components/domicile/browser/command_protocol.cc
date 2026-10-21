@@ -17,6 +17,7 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
@@ -44,6 +45,8 @@ constexpr char kHistory[] = "history";
 constexpr char kVisits[] = "visits";
 constexpr char kDeleteHistory[] = "delete_history";
 constexpr char kClearBrowsingData[] = "clear_browsing_data";
+constexpr char kSiteData[] = "site_data";
+constexpr char kClearSiteData[] = "clear_site_data";
 constexpr char kDisableWhileTyping[] = "disable_while_typing";
 
 // Matched whole by domicile-launch (`NO_SHELL_WINDOW` in command.rs), which
@@ -104,6 +107,10 @@ void AnswerDeleteHistory(const base::DictValue& request,
 void AnswerClearBrowsingData(const base::DictValue& request,
                              ClearBrowsingData clear_browsing_data,
                              CommandReply reply);
+void AnswerSiteData(ListSiteData list_site_data, CommandReply reply);
+void AnswerClearSiteData(const base::DictValue& request,
+                         ClearSiteData clear_site_data,
+                         CommandReply reply);
 std::string AnswerDisableWhileTyping(const base::DictValue& request,
                                      DisableWhileTyping disable_while_typing);
 
@@ -246,6 +253,14 @@ void AnswerCommand(std::string_view line,
                             std::move(reply));
     return;
   }
+  if (*type == kSiteData) {
+    AnswerSiteData(actions.list_site_data, std::move(reply));
+    return;
+  }
+  if (*type == kClearSiteData) {
+    AnswerClearSiteData(*request, actions.clear_site_data, std::move(reply));
+    return;
+  }
   if (*type == kDisableWhileTyping) {
     std::move(reply).Run(
         AnswerDisableWhileTyping(*request, actions.disable_while_typing));
@@ -260,7 +275,8 @@ void AnswerCommand(std::string_view line,
        kExtensions, "\", \"", kSetExtensionEnabled, "\", \"",
        kMediaDevices, "\", \"", kSetMediaDevice, "\", \"", kHistory, "\", \"",
        kVisits, "\", \"", kDeleteHistory, "\", \"", kClearBrowsingData,
-       "\" and \"", kDisableWhileTyping, "\""})));
+       "\", \"", kSiteData, "\", \"", kClearSiteData, "\" and \"",
+       kDisableWhileTyping, "\""})));
 }
 
 namespace {
@@ -863,6 +879,44 @@ void AnswerClearBrowsingData(const base::DictValue& request,
   }
   clear_browsing_data(clearing.value(),
                       ReplyWhenDone("cleared", std::move(reply)));
+}
+
+void AnswerSiteData(ListSiteData list_site_data, CommandReply reply) {
+  list_site_data(base::BindOnce(
+      [](CommandReply reply,
+         base::expected<std::vector<StoredSiteData>, std::string> found) {
+        if (!found.has_value()) {
+          std::move(reply).Run(RefusedCommand(found.error()));
+          return;
+        }
+        base::ListValue sites;
+        for (const StoredSiteData& stored : found.value()) {
+          base::DictValue site;
+          site.Set("host", stored.host);
+          // A double: a site can store more bytes than an int holds.
+          site.Set("bytes", static_cast<double>(stored.bytes));
+          site.Set("cookies", base::checked_cast<int>(stored.cookies));
+          sites.Append(std::move(site));
+        }
+        base::DictValue done;
+        done.Set("type", kSiteData);
+        done.Set("sites", std::move(sites));
+        std::move(reply).Run(Line(std::move(done)));
+      },
+      std::move(reply)));
+}
+
+void AnswerClearSiteData(const base::DictValue& request,
+                         ClearSiteData clear_site_data,
+                         CommandReply reply) {
+  const std::string* host = request.FindString("host");
+  if (host == nullptr || host->empty()) {
+    std::move(reply).Run(RefusedCommand(
+        "clear_site_data needs a \"host\": the site whose data to clear, as "
+        "site_data names it"));
+    return;
+  }
+  clear_site_data(*host, ReplyWhenDone("cleared", std::move(reply)));
 }
 
 std::string AnswerDisableWhileTyping(const base::DictValue& request,

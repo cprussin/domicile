@@ -243,6 +243,26 @@ describe(spawnedHost, () => {
       await stored;
     });
 
+    it("lists site data and clears a host's", async () => {
+      const { asked, host, processes } = await started((host) =>
+        host.siteData(),
+      );
+      const sites = [{ bytes: 2048, cookies: 1, host: "a.example" }];
+      expect(processes[0]?.sent.at(-1)).toEqual({ id: 1, type: "site_data" });
+      processes[0]?.answer({ id: 1, sites, type: "site_data" });
+      expect(await asked).toEqual(sites);
+
+      const cleared = host.clearSiteData("a.example");
+      await settled();
+      expect(processes[0]?.sent.at(-1)).toEqual({
+        host: "a.example",
+        id: 2,
+        type: "clear_site_data",
+      });
+      processes[0]?.answer({ id: 2, type: "cleared" });
+      await cleared;
+    });
+
     it("loads and uninstalls extensions, and lists the config's", async () => {
       const id = "b".repeat(32);
       const { asked, host, processes } = await started((host) =>
