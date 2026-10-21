@@ -106,6 +106,14 @@ once, when the view connects. The SDK provides types only.
   off-the-record profile, and `openPrivateBrowserWindow(url)` opens a private
   window. Set `private` on first render. See
   [SHELL-BROWSER-WINDOWS.md](/docs/SHELL-BROWSER-WINDOWS.md#private-browsing).
+- **Partitions:** `<webview partition="persist:work">` gives a page storage of
+  its own, kept on disk; any other name keeps it in memory.
+  `openBrowserWindow(url, partition)` opens a window in one. Set `partition`
+  on first render. See
+  [SHELL-BROWSER-WINDOWS.md](/docs/SHELL-BROWSER-WINDOWS.md#partitions).
+- **Navigations:** `domicile-will-navigate` fires before the page navigates
+  itself; `preventDefault()` cancels it. See
+  [SHELL-BROWSER-WINDOWS.md](/docs/SHELL-BROWSER-WINDOWS.md#navigations).
 
 ## Reading held modifiers
 

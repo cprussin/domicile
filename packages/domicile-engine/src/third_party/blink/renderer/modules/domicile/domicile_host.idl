@@ -311,8 +311,11 @@
   // Opens a browser window at `url`, for the shell's own UI such as a `+`
   // button or a launcher. It appears in the next `browserwindowschanged`. A
   // domicile:// address shows blocked, as in a <webview>.
+  //
+  // `partition` gives its page storage of its own, as a <webview>'s
+  // `partition` attribute does. Throws TypeError for "persist:" with no name.
   [CallWith=ScriptState, RaisesException] undefined openBrowserWindow(
-      USVString url);
+      USVString url, optional DOMString partition = "");
 
   // Opens a private browser window at `url`, as openBrowserWindow does. Its
   // page is in the off-the-record profile; see DomicileBrowserWindow's

@@ -1,0 +1,16 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// Dispatched by a <webview> before its page navigates its main frame: a link,
+// a form or a script setting `location`. `preventDefault()` cancels the
+// navigation and the page stays. Like Electron's `will-navigate`.
+//
+// Domicile-only, not a web standard. No constructor: only the browser creates
+// one.
+[
+    RuntimeEnabled=DomicileExternalSurface,
+    Exposed=Window
+] interface DomicileWillNavigateEvent : Event {
+  // Where the page would go.
+  readonly attribute USVString url;
+};

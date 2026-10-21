@@ -1578,24 +1578,27 @@ void DomicileHost::FocusRequested(const String& app_id) {
 // tray's. EnsureBound binds them together.
 void DomicileHost::openBrowserWindow(ScriptState*,
                                      const String& url,
+                                     const String& partition,
                                      ExceptionState& exception_state) {
-  OpenBrowserWindow(url, WindowKind::kBrowser, exception_state);
+  OpenBrowserWindow(url, WindowKind::kBrowser, partition, exception_state);
 }
 
 void DomicileHost::openPrivateBrowserWindow(ScriptState*,
                                             const String& url,
                                             ExceptionState& exception_state) {
-  OpenBrowserWindow(url, WindowKind::kPrivate, exception_state);
+  OpenBrowserWindow(url, WindowKind::kPrivate, g_empty_string,
+                    exception_state);
 }
 
 void DomicileHost::openAppWindow(ScriptState*,
                                  const String& url,
                                  ExceptionState& exception_state) {
-  OpenBrowserWindow(url, WindowKind::kApp, exception_state);
+  OpenBrowserWindow(url, WindowKind::kApp, g_empty_string, exception_state);
 }
 
 void DomicileHost::OpenBrowserWindow(const String& url,
                                      WindowKind kind,
+                                     const String& partition,
                                      ExceptionState& exception_state) {
   // Resolved against this document, as a <webview src> is. An unresolvable
   // address is a shell bug, so it throws a TypeError instead of opening an
@@ -1605,13 +1608,21 @@ void DomicileHost::OpenBrowserWindow(const String& url,
     exception_state.ThrowTypeError("url must be an address");
     return;
   }
+  // The one name ParseWebViewPartition refuses
+  // (components/domicile/browser/web_view_partition.h). The browser treats it
+  // as a bad message, so a shell bug throws here instead.
+  if (partition == "persist:") {
+    exception_state.ThrowTypeError(
+        "partition \"persist:\" names no partition to keep");
+    return;
+  }
   if (Ready(exception_state)) {
     switch (kind) {
       case WindowKind::kBrowser:
-        windows_->Open(resolved, /*private_browsing=*/false);
+        windows_->Open(resolved, /*private_browsing=*/false, partition);
         break;
       case WindowKind::kPrivate:
-        windows_->Open(resolved, /*private_browsing=*/true);
+        windows_->Open(resolved, /*private_browsing=*/true, partition);
         break;
       case WindowKind::kApp:
         windows_->OpenApp(resolved);
@@ -1707,7 +1718,7 @@ void DomicileHost::WindowsChanged(
         window->popup_window == 0 ? std::nullopt
                                   : std::optional<int32_t>(window->popup_window),
         window->width, window->height, window->private_browsing,
-        window->app));
+        window->partition, window->app));
   }
   browser_windows_ = MakeGarbageCollected<FrozenArray<DomicileBrowserWindow>>(
       std::move(listed));

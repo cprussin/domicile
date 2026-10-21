@@ -36,6 +36,11 @@
   // page. A private window's new windows are private too.
   readonly attribute boolean isPrivate;
 
+  // The page's storage partition, as a <webview>'s `partition` attribute
+  // names it: "persist:<name>" on disk, any other name in memory. Empty for
+  // the profile's own. A window's new windows share it.
+  readonly attribute DOMString partition;
+
   // Whether this is an app window, opened by `domicile open-app`. Draw it as
   // an application: no address bar. Its page's new windows are browser
   // windows. See docs/architecture/WEB-APPS.md.
