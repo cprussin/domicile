@@ -97,6 +97,19 @@ pub const FOURCCS: [u32; 4] = [
     0x3432_4258, // DRM_FORMAT_XBGR8888
 ];
 
+/// `DomicileShmBuffer`: a window in shared memory, for an engine that
+/// composites on the CPU. One plane at offset 0. The fd is borrowed for the
+/// call.
+#[repr(C)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShmBuffer {
+    pub fd: c_int,
+    pub width: u32,
+    pub height: u32,
+    pub stride: u32,
+    pub fourcc: u32,
+}
+
 /// `DomicileDmabuf`: a client's buffer. The fds are borrowed for the call.
 #[repr(C)]
 pub struct Dmabuf {
@@ -747,6 +760,36 @@ impl Engine {
         // SAFETY: as above, and `dmabuf` outlives the call.
         let buffer = unsafe { f(self.handle, surface, dmabuf as *const Dmabuf) };
         (buffer != 0).then_some(buffer)
+    }
+
+    /// Imports a window in shared memory, while the caller waits. `None` if
+    /// the browser refused it, as it does while it composites on the GPU, or
+    /// if the engine is too old to take one.
+    ///
+    /// The fd is borrowed; the engine duplicates it before returning.
+    pub fn import_shm(&self, surface: SurfaceId, buffer: &ShmBuffer) -> Option<BufferId> {
+        let f = self.import_shm_symbol().ok()?;
+        // SAFETY: as above, and `buffer` outlives the call.
+        let id = unsafe { f(self.handle, surface, buffer as *const ShmBuffer) };
+        (id != 0).then_some(id)
+    }
+
+    /// Whether the engine has [`Engine::import_shm`].
+    pub fn imports_shm(&self) -> bool {
+        self.import_shm_symbol().is_ok()
+    }
+
+    #[allow(clippy::type_complexity)] // the C signature, spelled out
+    fn import_shm_symbol(
+        &self,
+    ) -> Result<
+        Symbol<'_, unsafe extern "C" fn(*mut Handle, SurfaceId, *const ShmBuffer) -> BufferId>,
+        EngineError,
+    > {
+        self.symbol(
+            b"domicile_surface_import_shm\0",
+            "domicile_surface_import_shm",
+        )
     }
 
     /// Whether the engine has [`Engine::import_in_the_background`]. An older
@@ -1887,6 +1930,12 @@ mod tests {
         // 16 (four `uint32_t`) + 8 (modifier) + 4 (count) + 48 (four planes)
         // + 32 (content and damage) + 4 tail padding.
         assert_eq!(std::mem::size_of::<RawCapturedFrame>(), 112);
+    }
+
+    #[test]
+    fn a_shm_buffer_is_the_five_fields_the_c_header_declares() {
+        assert_eq!(std::mem::size_of::<ShmBuffer>(), 20);
+        assert_eq!(std::mem::offset_of!(ShmBuffer, fourcc), 16);
     }
 
     #[test]

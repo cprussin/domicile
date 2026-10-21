@@ -747,7 +747,7 @@ impl Cast {
         let target = match format.modifier {
             None => {
                 let (stride, length) = shm_layout(format.size);
-                Mapping::new(length as usize)
+                Mapping::new(c"domicile-cast", length as usize)
                     .map(|mapping| {
                         // SAFETY: PipeWire's buffer, in its add_buffer
                         // callback, with the one block `buffers` asked for.

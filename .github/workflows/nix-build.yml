@@ -25,13 +25,25 @@ env:
 jobs:
   packages:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Includes the tty VM test (`tty-on-a-card-with-no-3d` in flake.nix).
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+
+      # The runner's /dev/kvm is root's. Opened before nix is installed, so
+      # nix sees the `kvm` feature the VM test asks for.
+      - name: Let the VM test use KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
+            sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       - uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
+            system-features = nixos-test benchmark big-parallel kvm
 
       # The assertions live in `scripts/nix-*.sh`, so they can also be run from
       # a checkout. A nix build has its own node_modules, so bun is not set up.
