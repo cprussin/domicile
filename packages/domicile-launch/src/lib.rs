@@ -65,6 +65,7 @@ pub mod session;
 mod shell_options;
 pub mod shell_path;
 pub mod shell_source;
+pub mod site_data;
 pub mod site_permissions;
 pub mod spawn;
 pub mod splash;
