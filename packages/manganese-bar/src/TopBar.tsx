@@ -85,4 +85,5 @@ const startStyles = hstack({ gap: 4 });
 
 const centerStyles = css({ justifySelf: "center" });
 
-const endStyles = hstack({ gap: 3, justify: "flex-end" });
+// Most items are 28px buttons around a 15px icon, so icons sit 29px apart.
+const endStyles = hstack({ gap: 4, justify: "flex-end" });

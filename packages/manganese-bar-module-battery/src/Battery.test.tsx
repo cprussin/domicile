@@ -49,6 +49,15 @@ describe("Battery", () => {
     );
   });
 
+  it("insets itself like the bar's icon buttons, so the gaps beside it match", () => {
+    const battery = heldBattery();
+    const { container } = render(<Battery battery={battery.battery} />);
+
+    battery.report({ charge: 0.5, charging: false });
+
+    expect(readout(container).className).toContain(css({ paddingInline: 1.5 }));
+  });
+
   it("marks the meter when AC is plugged in, and not when it is out", () => {
     const battery = heldBattery();
     render(<Battery battery={battery.battery} />);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { css } from "../styled-system/css";
 import { Gmail } from "./Gmail";
 import type { Inbox as InboxReading } from "./inbox";
 import { Inbox } from "./inbox";
@@ -131,6 +132,16 @@ describe("Gmail", () => {
       });
       expect(button).toHaveTextContent("Work3 / 12");
       expect(button).toHaveAttribute("data-unread", "true");
+    });
+
+    it("keeps its text clear of the rounded ends", () => {
+      // Half the 28px height: the ends' radius.
+      shown(Inbox.Counted(12, 0));
+
+      expect(
+        screen.getByRole("button", { name: "Work: 12 conversations" })
+          .className,
+      ).toContain(css({ paddingInline: 3 }));
     });
 
     it("opens the account's inbox", async () => {
