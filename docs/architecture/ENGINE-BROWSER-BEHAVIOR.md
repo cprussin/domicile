@@ -73,10 +73,21 @@ Patch `0110`:
 - Content CHECKs that a guest's opener has a guest SiteInstance, which needs a
   partition of its own and would log the user out of every site. Patch `0115`
   relaxes it for guests without one.
+- A `<webview partition>` and a window opened in a partition have a guest
+  SiteInstance in a StoragePartition of their own (`ParamsFor` in
+  `web_view_guest.cc`), so their new windows keep the partition.
 - `WebViewGuest::CreateNewGuestWindow` makes the page as a browser window, and
   `AddNewContents` lists it once the page shows it.
 - A middle click and an extension's window open at the address with no
   opener (`ReportNewWindow`).
+
+## Navigations
+
+- `WillNavigateThrottle` defers a page's own main-frame navigation and asks
+  the element (`domicile-will-navigate`), as Electron's `will-navigate`.
+  `preventDefault()` cancels it before any request. The shell's `src`,
+  history steps and reloads do not ask (`AsksBeforeNavigating`).
+- A closed element answers yes, so a navigation never hangs.
 
 ## Dialogs
 
@@ -128,4 +139,6 @@ from patch `0038`, which is the engine asking a host compositor.
 - `guard-webview-permissions.sh`: permission requests and site settings.
 - `guard-webview-device-request.sh`: device requests.
 - `guard-webview-dialog.sh` and `guard-webview-beforeunload.sh`: dialogs.
+- `guard-webview-partition.sh`: partitions.
+- `guard-webview-will-navigate.sh`: will-navigate.
 - No guard reads the browser's offers.

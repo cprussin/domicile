@@ -9,6 +9,7 @@
 #include "components/domicile/browser/browser_pages.h"
 #include "components/domicile/browser/web_view_guest.h"
 #include "components/domicile/browser/web_view_url.h"
+#include "components/domicile/browser/will_navigate_throttle.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/navigation_throttle_registry.h"
 
@@ -20,6 +21,9 @@ void BrowserPageThrottle::MaybeCreateAndAdd(
   if (WebViewGuest::FromWebContents(
           registry.GetNavigationHandle().GetWebContents())) {
     registry.AddThrottle(std::make_unique<BrowserPageThrottle>(registry));
+    // After this one, so the shell is never asked about a page it may not
+    // show.
+    WillNavigateThrottle::Add(registry);
   }
 }
 

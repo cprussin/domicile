@@ -248,6 +248,9 @@ relative to the source window and passes `NaN` without them.
 - **Default profile.** Browser windows use it (see `web_view_guest.h`, *NO
   GUEST SiteInstance*), so content scripts and network rules see the pages the
   user browses.
+  A `<webview partition>` page has a guest SiteInstance in its own
+  StoragePartition. Content scripts still run in it, but an extension page
+  opened there gets no extension APIs.
 - **One window for all `<webview>`s.** Extensions expect many tabs and one
   active tab per window.
 - **Refuse unsupported calls.** A no-op `tabs.move` that reports success is a

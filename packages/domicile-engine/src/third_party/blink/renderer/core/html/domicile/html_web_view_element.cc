@@ -30,6 +30,7 @@
 #include "third_party/blink/renderer/core/html/domicile/domicile_dialog_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_file_chooser_event.h"
 #include "third_party/blink/renderer/core/html/domicile/domicile_permission_request_event.h"
+#include "third_party/blink/renderer/core/html/domicile/domicile_will_navigate_event.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/layout_iframe.h"
@@ -127,6 +128,9 @@ constexpr char kSettingAsk[] = "ask";
 constexpr char kSettingAllow[] = "allow";
 constexpr char kSettingBlock[] = "block";
 
+// The page is about to navigate. See domicile_will_navigate_event.h.
+constexpr char kWillNavigateEvent[] = "domicile-will-navigate";
+
 // The page called window.close().
 constexpr char kCloseEvent[] = "domicile-close";
 // An extension asked to raise this window.
@@ -140,6 +144,11 @@ constexpr char kExtensionPopupAttr[] = "extensionpopup";
 // Makes the guest's page private: in the off-the-record profile. Read once,
 // on requesting the guest; only presence matters.
 constexpr char kPrivateAttr[] = "private";
+
+// Gives the guest's page storage of its own: "persist:<name>" on disk, any
+// other name in memory. Read once, on requesting the guest. See
+// components/domicile/browser/web_view_partition.h.
+constexpr char kPartitionAttr[] = "partition";
 
 // Names the browser window a <webview> shows. Read once, on requesting the
 // guest. Not in html_names, to avoid patching Chromium's list. See
@@ -317,11 +326,17 @@ void HTMLWebViewElement::RequestGuest() {
                      client_receiver_.BindNewPipeAndPassRemote(task_runner),
                      BrowserWindow(),
                      hasAttribute(AtomicString(kExtensionPopupAttr)),
-                     hasAttribute(AtomicString(kPrivateAttr)));
+                     hasAttribute(AtomicString(kPrivateAttr)), Partition());
 }
 
 String HTMLWebViewElement::BrowserWindow() const {
   return getAttribute(AtomicString(kWindowAttr));
+}
+
+String HTMLWebViewElement::Partition() const {
+  const AtomicString& partition = getAttribute(AtomicString(kPartitionAttr));
+  // Empty, not null, when absent: Mojo's string cannot be null.
+  return partition.IsNull() ? g_empty_string : partition.GetString();
 }
 
 void HTMLWebViewElement::NavigateGuest() {
@@ -915,6 +930,16 @@ void HTMLWebViewElement::DialogWithdrawn() {
     dialog_->DismissIfUnanswered();
     DispatchEvent(*Event::CreateBubble(AtomicString(kDialogWithdrawnEvent)));
   }
+}
+
+// Answered when dispatch returns, so the navigation waits only on the shell's
+// listeners.
+void HTMLWebViewElement::WillNavigate(const KURL& url,
+                                      WillNavigateCallback callback) {
+  auto* event = MakeGarbageCollected<DomicileWillNavigateEvent>(
+      AtomicString(kWillNavigateEvent), url.GetString());
+  DispatchEvent(*event);
+  std::move(callback).Run(!event->defaultPrevented());
 }
 
 void HTMLWebViewElement::DialogAnswered(DomicileDialogEvent& event) {

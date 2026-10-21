@@ -145,6 +145,22 @@ describe("FakeDomicileHost", () => {
     ]);
   });
 
+  it("opens browser windows in a partition as the engine does", () => {
+    const fake = new FakeDomicileHost();
+
+    fake.host.openBrowserWindow("https://example.com", "persist:work");
+    fake.host.openBrowserWindow("https://example.org");
+
+    expect(fake.host.browserWindows).toMatchObject([
+      { id: "1", partition: "persist:work", url: "https://example.com" },
+      { id: "2", partition: "", url: "https://example.org" },
+    ]);
+    expect(fake.calls).toStrictEqual([
+      ["openBrowserWindow", "https://example.com", "persist:work"],
+      ["openBrowserWindow", "https://example.org"],
+    ]);
+  });
+
   it("opens app windows as the engine does", () => {
     const fake = new FakeDomicileHost();
 

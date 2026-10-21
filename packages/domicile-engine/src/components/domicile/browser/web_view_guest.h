@@ -26,6 +26,7 @@
 #include "components/domicile/browser/download_tally.h"
 #include "components/domicile/browser/guest_dialogs.h"
 #include "components/domicile/browser/screen_choice.h"
+#include "components/domicile/browser/web_view_partition.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
 #include "components/download/public/common/download_item.h"
 #include "components/input/native_web_keyboard_event.h"
@@ -83,9 +84,11 @@ class BrowserWindowHost {
  public:
   virtual ~BrowserWindowHost() = default;
 
-  // Opens a browser window at `url` in `context`'s desk, for a page's new
-  // window or an extension's tabs.create.
-  virtual void Open(content::BrowserContext& context, const GURL& url) = 0;
+  // Opens a browser window at `url` in `context`'s desk and `partition`, for a
+  // page's new window or an extension's tabs.create.
+  virtual void Open(content::BrowserContext& context,
+                    const GURL& url,
+                    const std::optional<WebViewPartition>& partition) = 0;
 
   // Makes a browser window for a page's `window.open()` or `target="_blank"`
   // from content's `params`, which name the opener and the window. Content
@@ -203,10 +206,10 @@ class MediaAccess {
 //   `upstream/browser-plugin-embedder-null-guest-manager.md`.
 // - Uses AttachInnerWebContents, not AttachGuestPage, which requires
 //   features::kGuestViewMPArch (disabled at our pin).
-// - No guest SiteInstance: that requires a separate StoragePartition, which
-//   would log the user out of every site. Patch 0115 lets
-//   WebContentsImpl::CreateNewWindow make a guest's new window without one,
-//   through CreateNewGuestWindow.
+// - No guest SiteInstance unless the element names a `partition`: a guest
+//   SiteInstance requires a separate StoragePartition, which would log the
+//   user out of every site. Patch 0115 lets WebContentsImpl::CreateNewWindow
+//   make a guest's new window without one, through CreateNewGuestWindow.
 class WebViewGuest : public mojom::WebViewGuest,
                      public content::BrowserPluginGuestDelegate,
                      public content::WebContentsDelegate,
@@ -224,6 +227,7 @@ class WebViewGuest : public mojom::WebViewGuest,
   // helpers see the first navigation. `extension_popup`: see
   // extension_popup(). `private_browsing` makes the page in
   // BrowserWindowHost::PrivateContext rather than the owner's context.
+  // `partition` gives it storage of its own; see partition().
   static void CreateAndAttach(
       content::RenderFrameHost& owner,
       content::RenderFrameHost& placeholder,
@@ -231,6 +235,7 @@ class WebViewGuest : public mojom::WebViewGuest,
       mojo::PendingRemote<mojom::WebViewGuestClient> client,
       bool extension_popup,
       bool private_browsing,
+      const std::optional<WebViewPartition>& partition,
       const GuestCreatedCallback& created);
 
   // Makes a browser window's page, owned by BrowserWindowHost's
@@ -242,7 +247,7 @@ class WebViewGuest : public mojom::WebViewGuest,
   // - `window_id`: the id a <webview window> uses.
   // - `popup_window`: the chrome.windows popup window whose one tab this is;
   //   empty for a tab of the desk's window. See popup_window().
-  // - `private_browsing`: as in CreateAndAttach.
+  // - `private_browsing`, `partition`: as in CreateAndAttach.
   // - `created`: runs before the first navigation, as in CreateAndAttach.
   //
   // The caller navigates it with Navigate.
@@ -251,6 +256,7 @@ class WebViewGuest : public mojom::WebViewGuest,
       const std::string& window_id,
       std::optional<int> popup_window,
       bool private_browsing,
+      const std::optional<WebViewPartition>& partition,
       const GuestCreatedCallback& created);
 
   // Makes the page of browser window `window_id` from content's `params`, for
@@ -310,6 +316,11 @@ class WebViewGuest : public mojom::WebViewGuest,
 
   // This guest's WebContents. Lives as long as the guest.
   content::WebContents& contents() const { return *guest_contents_; }
+
+  // The storage partition the page was made in, or nothing for its profile's
+  // own. A partitioned page has a guest SiteInstance, so its new windows share
+  // the partition. In a private page it is always in memory.
+  std::optional<WebViewPartition> partition() const;
 
   WebViewGuest(const WebViewGuest&) = delete;
   WebViewGuest& operator=(const WebViewGuest&) = delete;
@@ -372,6 +383,13 @@ class WebViewGuest : public mojom::WebViewGuest,
 
   // Tells the shell the request AskForDevice sent is gone unanswered.
   void WithdrawDeviceRequest();
+
+  // Asks the shell whether the page may navigate its main frame to `url`. See
+  // WillNavigate in the mojom and WillNavigateThrottle.
+  //
+  // `answered` gets the shell's answer, or true if the shell ignored it or the
+  // element went away.
+  void AskToNavigate(const GURL& url, base::OnceCallback<void(bool)> answered);
 
   base::WeakPtr<WebViewGuest> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();

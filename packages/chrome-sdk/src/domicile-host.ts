@@ -218,6 +218,12 @@ export type DomicileBrowserWindow = {
    */
   readonly isPrivate: boolean;
   /**
+   * The page's storage partition, as a <webview>'s `partition` attribute
+   * names it: "persist:<name>" on disk, any other name in memory. Empty for
+   * the profile's own. A window's new windows share it.
+   */
+  readonly partition: string;
+  /**
    * Whether this is an app window, opened by `domicile open-app`. Draw it as
    * an application: no address bar. Its page's new windows are browser
    * windows. See docs/architecture/WEB-APPS.md.
@@ -623,8 +629,11 @@ export type DomicileHost = {
    * Opens a browser window at `url`, for the shell's own UI such as a `+`
    * button or a launcher. It appears in the next `browserwindowschanged`. A
    * domicile:// address shows blocked, as in a <webview>.
+   *
+   * `partition` gives its page storage of its own, as a <webview>'s
+   * `partition` attribute does. Throws TypeError for "persist:" with no name.
    */
-  openBrowserWindow(url: string): void;
+  openBrowserWindow(url: string, partition?: string): void;
   /**
    * Opens a private browser window at `url`, as openBrowserWindow does. Its
    * page is in the off-the-record profile; see DomicileBrowserWindow's

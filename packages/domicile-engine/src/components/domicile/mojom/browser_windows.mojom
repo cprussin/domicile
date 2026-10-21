@@ -52,6 +52,9 @@ struct BrowserWindow {
   // Whether the page is in the profile's off-the-record profile. A private
   // window's new windows are private too.
   bool private_browsing;
+  // The page's storage partition, as a <webview>'s `partition` attribute
+  // names it. Empty for the profile's own. A window's new windows share it.
+  string partition;
   // Whether this is an app window (`domicile open-app`, OpenApp), which the
   // shell draws without an address bar. Its page's new windows are browser
   // windows.
@@ -68,7 +71,9 @@ interface BrowserWindows {
   // Opens a browser window at `url`; it appears in the next list. A
   // domicile:// address shows about:blank#blocked, as in a <webview>.
   // `private_browsing` puts its page in the off-the-record profile.
-  Open(url.mojom.Url url, bool private_browsing);
+  // `partition` gives it storage of its own, as a <webview>'s `partition`
+  // attribute does; empty for none. "persist:" with no name is a bad message.
+  Open(url.mojom.Url url, bool private_browsing, string partition);
 
   // Opens an app window at `url`, as `domicile open-app` does; it appears in
   // the next list with `app` set. A domicile:// address shows

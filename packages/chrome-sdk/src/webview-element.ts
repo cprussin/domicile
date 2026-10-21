@@ -99,6 +99,22 @@ export type WebViewSecurity = (typeof WEBVIEW_SECURITY_LEVELS)[number];
 export const WEBVIEW_WINDOW_ATTRIBUTE = "window";
 
 /**
+ * The attribute that gives a `<webview>`'s page storage of its own, apart from
+ * the user's: `<webview partition="persist:work">`.
+ *
+ * - **`persist:<name>`** keeps the partition on disk across restarts. Any
+ *   other name keeps it in memory until the engine exits.
+ * - **Shared by name:** every view and window with the same partition shares
+ *   its cookies and storage.
+ * - **Read once,** when the element is inserted, like
+ *   {@link WEBVIEW_WINDOW_ATTRIBUTE}. Ignored with it.
+ * - **New windows** the page opens share its partition, and list it as
+ *   `DomicileBrowserWindow.partition`.
+ * - `persist:` with no name shows nothing.
+ */
+export const WEBVIEW_PARTITION_ATTRIBUTE = "partition";
+
+/**
  * Fired when the page calls `window.close()`, or an extension's
  * `chrome.tabs.remove` names the view. The shell should remove the view.
  * Bubbles.
@@ -111,6 +127,18 @@ export const WEBVIEW_WINDOW_ATTRIBUTE = "window";
  * Extension popups close this way.
  */
 export const WEBVIEW_CLOSE_EVENT = "domicile-close";
+
+/**
+ * A {@link DomicileWillNavigateEvent} fired before the page navigates its main
+ * frame: a link, a form or a script setting `location`. Call
+ * `preventDefault()` during dispatch to cancel the navigation; the page stays.
+ * Bubbles. Like Electron's `will-navigate`.
+ *
+ * Not fired for the shell's own navigations (`src`, `goBack()`, `reload()`),
+ * history steps, reloads, subframes or new windows. The navigation waits for
+ * dispatch, so keep listeners fast.
+ */
+export const WEBVIEW_WILL_NAVIGATE_EVENT = "domicile-will-navigate";
 
 /**
  * Fired when the page calls `window.focus()` or `client.focus()` (how a site
@@ -807,6 +835,15 @@ declare global {
   }
 
   /**
+   * The {@link WEBVIEW_WILL_NAVIGATE_EVENT} event. The engine defines it in
+   * `domicile_will_navigate_event.idl`.
+   */
+  interface DomicileWillNavigateEvent extends Event {
+    /** Where the page would go. */
+    readonly url: string;
+  }
+
+  /**
    * Types `addEventListener` for the events that carry data. Merged into
    * `HTMLElementEventMap` because `HTMLWebViewElement` has no event map of its
    * own.
@@ -819,5 +856,6 @@ declare global {
     "domicile-permission-request": DomicilePermissionRequestEvent;
     "domicile-device-request": DomicileDeviceRequestEvent;
     "domicile-dialog": DomicileDialogEvent;
+    "domicile-will-navigate": DomicileWillNavigateEvent;
   }
 }
