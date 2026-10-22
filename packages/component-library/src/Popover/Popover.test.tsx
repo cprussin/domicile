@@ -11,7 +11,7 @@ import userEvent from "@testing-library/user-event";
 import { Button } from "../Button/Button";
 import { Select } from "../Select/Select";
 
-import { Popover, PopoverContainer } from "./Popover";
+import { createHandle, Popover, PopoverContainer } from "./Popover";
 
 describe(Popover, () => {
   describe("rendering", () => {
@@ -88,6 +88,16 @@ describe(Popover, () => {
       expect(screen.queryByText("Body")).not.toBeInTheDocument();
     });
 
+    it("keeps its body in the page while closed when kept mounted", () => {
+      render(
+        <Popover keepMounted trigger={<Button>Details</Button>}>
+          Body
+        </Popover>,
+      );
+      expect(screen.getByText("Body")).toBeInTheDocument();
+      expect(screen.getByText("Body")).not.toBeVisible();
+    });
+
     it("draws the panel in the element a PopoverContainer names", () => {
       const layer = document.createElement("div");
       document.body.append(layer);
@@ -114,8 +124,94 @@ describe(Popover, () => {
       expect(screen.getByText("Body")).toBeInTheDocument();
     });
 
+    describe("with triggers elsewhere", () => {
+      it("opens from a trigger that shares its handle", async () => {
+        const handle = createHandle();
+        render(
+          <>
+            <Popover handle={handle}>Body</Popover>
+            <Popover.Trigger
+              handle={handle}
+              render={<Button>Elsewhere</Button>}
+            />
+          </>,
+        );
+
+        await userEvent.click(
+          screen.getByRole("button", { name: "Elsewhere" }),
+        );
+
+        expect(screen.getByText("Body")).toBeInTheDocument();
+      });
+
+      it("closes when that trigger is pressed again", async () => {
+        const handle = createHandle();
+        render(
+          <>
+            <Popover handle={handle} trigger={<Button>Here</Button>}>
+              Body
+            </Popover>
+            <Popover.Trigger
+              handle={handle}
+              render={<Button>Elsewhere</Button>}
+            />
+          </>,
+        );
+        const elsewhere = screen.getByRole("button", { name: "Elsewhere" });
+        await userEvent.click(elsewhere);
+
+        await userEvent.click(elsewhere);
+
+        await waitFor(() => {
+          expect(screen.queryByText("Body")).not.toBeInTheDocument();
+        });
+      });
+    });
+
     describe("on a desktop of several screens", () => {
       afterEach(undrawPanels);
+
+      it("stays on the screen of the trigger that opened it", async () => {
+        const handle = createHandle();
+        render(
+          <>
+            <div data-screen="DP-1">
+              <Popover handle={handle} trigger={<Button>Here</Button>}>
+                Body
+              </Popover>
+            </div>
+            <div data-screen="DP-2">
+              <Popover.Trigger
+                handle={handle}
+                render={<Button>Elsewhere</Button>}
+              />
+            </div>
+          </>,
+        );
+        const here = screen.getByRole("button", { name: "Here" });
+        const elsewhere = screen.getByRole("button", { name: "Elsewhere" });
+        drawAt(here, { height: 28, width: 28, x: 560, y: 0 });
+        drawAt(here.parentElement as HTMLElement, {
+          height: 800,
+          width: 600,
+          x: 0,
+          y: 0,
+        });
+        drawAt(elsewhere, { height: 28, width: 28, x: 610, y: 0 });
+        drawAt(elsewhere.parentElement as HTMLElement, {
+          height: 800,
+          width: 600,
+          x: 600,
+          y: 0,
+        });
+        drawPanels({ height: 100, width: 300 });
+
+        await userEvent.click(elsewhere);
+
+        await waitFor(() => {
+          expect(panelRight()).toBeGreaterThanOrEqual(900);
+        });
+      });
 
       it("stays on its trigger's screen", async () => {
         render(

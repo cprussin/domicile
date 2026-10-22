@@ -25,6 +25,7 @@
   "exports": {
     "./bar-context": "./src/bar-context.ts",
     "./bar-layout": "./src/bar-layout.ts",
+    "./panel-keyboard": "./src/panel-keyboard.ts",
     "./TopBar": "./src/TopBar.tsx"
   },
   "files": [

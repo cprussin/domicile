@@ -32,6 +32,7 @@ Items no default bar has:
 |---|---|
 | `Mode` | `@domicile-desktop/manganese-bar-module-mode` |
 | `Gmail` | `@domicile-desktop/manganese-bar-module-gmail` |
+| `GoogleMessages` | `@domicile-desktop/manganese-bar-module-google-messages` |
 
 ```tsx
 import { runManganese } from "@domicile-desktop/manganese";
@@ -300,6 +301,31 @@ one account's inbox, read with the Gmail API. Not in `DEFAULT_BAR`.
     `threadsUnread`, with an access token kept until it expires.
   - Requests go through `fetchWithCookies`
     ([SHELL-SYSTEM-ACCESS.md](../../../docs/SHELL-SYSTEM-ACCESS.md#the-browsers-cookies)).
+
+## Google Messages
+
+`<GoogleMessages />`: [Google Messages for web](https://messages.google.com/web/)
+in a panel. Not in `DEFAULT_BAR`.
+
+- A chat bubble. With uncleared notifications from Messages, it is lit with
+  their count, as the Gmail item is for unread mail.
+- Click opens the page in a panel under it. Opening clears Messages'
+  notifications. The panel keeps the keyboard while open.
+- Pressing one of Messages' notifications opens the panel.
+- The page's permission requests are asked above it. Allow notifications, or
+  nothing is counted.
+- How it keeps the page:
+  - The page loads with the shell and keeps running while the panel is
+    closed, hidden like a background tab
+    ([SHELL-BROWSER-WINDOWS.md](../../../docs/SHELL-BROWSER-WINDOWS.md#basics)).
+    So its notifications keep coming.
+  - Storage of its own (`persist:google-messages`), kept across restarts, so
+    the pairing lasts. Pair it once in the panel.
+  - One page for the desk: the first bar showing the item draws it, and every
+    bar's item opens it. Messages runs one web session at a time. When that
+    bar goes, the next one loads the page again.
+  - A shell reload loads the page again.
+- File pickers are not offered, so attachments cannot be sent from it.
 
 ## Tray
 

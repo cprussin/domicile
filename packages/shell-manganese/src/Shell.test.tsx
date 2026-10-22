@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import { standaloneThemeSource } from "@domicile-desktop/component-library/standalone-theme-source";
 import { useBar } from "@domicile-desktop/manganese-bar/bar-context";
 import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
+import { useKeepsKeyboard } from "@domicile-desktop/manganese-bar/panel-keyboard";
 import {
   answerSystemCalls,
   THINKPAD_BACKLIGHT,
@@ -47,6 +48,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { css } from "../styled-system/css";
 import { Shell } from "./Shell";
 
@@ -1387,6 +1389,44 @@ describe("Shell", () => {
         battery.compareDocumentPosition(bell) &
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
+    });
+  });
+
+  describe("a bar item's panel", () => {
+    it("takes the keyboard off the window while it is open, and gives it back", async () => {
+      // Such as a page to type into in a popover.
+      const Panel = () => {
+        const [open, setOpen] = useState(false);
+        useKeepsKeyboard(open);
+        return (
+          <button
+            onClick={() => {
+              setOpen(!open);
+            }}
+            type="button"
+          >
+            Panel
+          </button>
+        );
+      };
+      renderingShell([LEFT], {
+        center: [],
+        left: [<Panel key="panel" />],
+        right: [],
+      });
+      clientAppears("one");
+      domicile.set({ focusedWindow: "one" });
+      domicile.calls.length = 0;
+
+      await userEvent.click(screen.getByRole("button", { name: "Panel" }));
+
+      expect(domicile.calls).toContainEqual(["focusChrome"]);
+
+      domicile.set({ focusedWindow: null });
+      domicile.calls.length = 0;
+      await userEvent.click(screen.getByRole("button", { name: "Panel" }));
+
+      expect(domicile.calls).toContainEqual(["focusApp", "one"]);
     });
   });
 
