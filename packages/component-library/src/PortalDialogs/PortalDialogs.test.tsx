@@ -2168,7 +2168,89 @@ describe("screen cast", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("shares the rectangle dragged on the desk", async () => {
+    it("shares an area dragged on the desk shot", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([
+        screenCast(false, MONITORS, true, {
+          desk: frozen(1, "screenshot").body,
+        }),
+      ]);
+      const desk = drawnAtHalfSize(
+        screen.getByRole("group", { name: "Drag to pick an area" }),
+      );
+      fireEvent.pointerDown(desk, { clientX: 60, clientY: 30 });
+      fireEvent.pointerMove(desk, { clientX: 20, clientY: 45 });
+      fireEvent.pointerUp(desk, { clientX: 20, clientY: 45 });
+      await userEvent.click(screen.getByRole("button", { name: "Share" }));
+
+      expect(host.answers).toEqual([
+        [
+          5,
+          {
+            kind: "screen_cast",
+            sources: [{ position: [0, 10], size: [41, 16], type: "region" }],
+          },
+        ],
+      ]);
+    });
+
+    it("shares a source picked after an area was dragged", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([
+        screenCast(false, MONITORS, true, {
+          desk: frozen(1, "screenshot").body,
+        }),
+      ]);
+      const desk = drawnAtHalfSize(
+        screen.getByRole("group", { name: "Drag to pick an area" }),
+      );
+      fireEvent.pointerDown(desk, { clientX: 60, clientY: 30 });
+      fireEvent.pointerUp(desk, { clientX: 20, clientY: 45 });
+      await userEvent.click(screen.getAllByRole("radio")[1] as HTMLElement);
+      await userEvent.click(screen.getByRole("button", { name: "Share" }));
+
+      expect(host.answers).toEqual([
+        [
+          5,
+          {
+            kind: "screen_cast",
+            sources: [{ name: "drm-2", type: "monitor" }],
+          },
+        ],
+      ]);
+    });
+
+    it("draws no separate region with a desk shot to drag on", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([
+        screenCast(false, MONITORS, true, {
+          desk: frozen(1, "screenshot").body,
+        }),
+      ]);
+
+      expect(
+        screen.queryByRole("button", { name: "Draw a region" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("cannot be dragged when the application asks for no region", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([
+        screenCast(false, MONITORS, false, {
+          desk: frozen(1, "screenshot").body,
+        }),
+      ]);
+
+      expect(
+        screen.queryByRole("group", { name: "Drag to pick an area" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("shares the rectangle drawn over the page without a desk shot", async () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} />);
       host.push([screenCast(false, MONITORS, true)]);

@@ -239,9 +239,11 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   survive a restart. A window whose title changed matches by app id alone.
   A monitor is named by its `wl_output` name, and a region by its rectangle
   relative to the monitor it is mostly on, so it follows that monitor.
-- **A region is drawn on the desk.** The picker's region option closes the
-  dialog and the user drags a rectangle over the page, whose pixels are the
-  desktop's logical pixels.
+- **A region is dragged on the desk shot.** As in the screenshot picker,
+  the user drags over the picker's desk preview, and the area is turned
+  into the desktop's logical pixels, grown to whole ones. With no desk shot,
+  "Draw a region" closes the dialog and the user drags over the page, whose
+  pixels are the desktop's logical pixels.
 
 - **The frontend installs launchers.** `Install`, `Uninstall`,
   `LaunchDesktopFile`, `GetDesktopEntry` and `GetIcon` are frontend methods:
