@@ -44,6 +44,11 @@ type Props = ExtendProps<
      * surface, such as an embedded page.
      */
     flush?: boolean | undefined;
+    /**
+     * Keep the body in the page while closed, hidden. For content that must
+     * keep running, such as an embedded page.
+     */
+    keepMounted?: boolean | undefined;
     side?: Side | undefined;
     title?: ReactNode | undefined;
     /**
@@ -64,8 +69,9 @@ type Props = ExtendProps<
  * A non-modal panel anchored to its trigger, for detail the trigger has no
  * room for. Use `ModalDialog` when the user must respond first.
  *
- * Stays on its trigger's `<Screen>` region, so on a desktop of several
- * monitors it never spans two.
+ * Stays on the `<Screen>` region of the trigger that opened it, so on a
+ * desktop of several monitors it never spans two. Triggers elsewhere open it
+ * through a `handle` from `createHandle()`, as `Popover.Trigger`.
  *
  * Closes on an outside press, Escape, or focus leaving it. The focus check
  * catches presses inside out-of-process frames, which the document can't
@@ -76,6 +82,8 @@ const PopoverComponent = ({
   align = "center",
   children,
   flush = false,
+  keepMounted = false,
+  onOpenChange,
   side = "bottom",
   title,
   tone = "card",
@@ -95,14 +103,26 @@ const PopoverComponent = ({
     },
     [setTriggerRef],
   );
+  // The trigger that opened it, which may be outside this component.
+  const opener = useRef<Element | undefined>(undefined);
   const within = useRef<FocusEvent | undefined>(undefined);
   const container = useContext(PopoverContainer);
   return (
-    <BasePopover.Root actionsRef={actions} {...rootProps}>
+    <BasePopover.Root
+      actionsRef={actions}
+      onOpenChange={(open, details) => {
+        if (open && details.trigger !== undefined) {
+          opener.current = details.trigger;
+          setScreen(details.trigger.closest("[data-screen]") ?? undefined);
+        }
+        onOpenChange?.(open, details);
+      }}
+      {...rootProps}
+    >
       {trigger !== undefined && (
         <BasePopover.Trigger ref={attachTrigger} render={trigger} />
       )}
-      <BasePopover.Portal container={container}>
+      <BasePopover.Portal container={container} keepMounted={keepMounted}>
         <BasePopover.Positioner
           align={align}
           className={positionerStyles}
@@ -122,6 +142,7 @@ const PopoverComponent = ({
           >
             <CloseOnFocusOut
               actions={actions}
+              opener={opener}
               popup={popupRef}
               trigger={triggerRef}
               within={within}
@@ -142,10 +163,12 @@ const PopoverComponent = ({
 };
 
 /**
- * A close button, for panels that need one besides outside press and Escape.
+ * `Close` is a close button, for panels that need one besides outside press
+ * and Escape. `Trigger` opens a popover from elsewhere, given its `handle`.
  */
 export const Popover = Object.assign(PopoverComponent, {
   Close: BasePopover.Close,
+  Trigger: BasePopover.Trigger,
 });
 
 const positionerStyles = css({
@@ -235,19 +258,21 @@ const bodyStyles = cva({
 });
 
 /**
- * Closes the panel when focus leaves it and its trigger. Mounted inside the
- * popup, so it listens only while open.
+ * Closes the panel when focus leaves it, its trigger and the trigger that
+ * opened it. Mounted inside the popup, so it listens only while open.
  *
  * Portaled content counts as inside: React focus events follow the component
  * tree and reach `within` before the document sees them.
  */
 const CloseOnFocusOut = ({
   actions,
+  opener,
   popup,
   trigger,
   within,
 }: {
   actions: RefObject<BasePopover.Root.Actions | null>;
+  opener: RefObject<Element | undefined>;
   popup: RefObject<HTMLDivElement | null>;
   trigger: RefObject<HTMLElement | null>;
   within: RefObject<FocusEvent | undefined>;
@@ -259,7 +284,8 @@ const CloseOnFocusOut = ({
         target instanceof Node &&
         event !== within.current &&
         popup.current?.contains(target) !== true &&
-        trigger.current?.contains(target) !== true
+        trigger.current?.contains(target) !== true &&
+        opener.current?.contains(target) !== true
       ) {
         actions.current?.close();
       }
@@ -268,6 +294,6 @@ const CloseOnFocusOut = ({
     return () => {
       document.removeEventListener("focusin", left);
     };
-  }, [actions, popup, trigger, within]);
+  }, [actions, opener, popup, trigger, within]);
   return undefined;
 };

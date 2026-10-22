@@ -5,6 +5,8 @@ import { createToastManager } from "@domicile-desktop/component-library/Toaster"
 import { usePictureUrl } from "@domicile-desktop/component-library/usePictureUrl";
 import { usePortalWallpaper } from "@domicile-desktop/component-library/usePortalWallpaper";
 import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
+import type { HoldKeyboard } from "@domicile-desktop/manganese-bar/panel-keyboard";
+import { PanelKeyboardContext } from "@domicile-desktop/manganese-bar/panel-keyboard";
 import { deskBacklight } from "@domicile-desktop/manganese-bar-module-brightness/desk-backlight";
 import { useBrightnessKeys } from "@domicile-desktop/manganese-bar-module-brightness/useBrightnessKeys";
 import type { ClockOptions } from "@domicile-desktop/manganese-bar-module-clock/clock-options";
@@ -266,6 +268,15 @@ export const Desktop = ({
   const volumeKeys = useVolumeKeys(deskSound(domicile));
   const brightnessKeys = useBrightnessKeys(deskBacklight(domicile));
   // The level the last media key set, counted so each press shows it again.
+  // How many bar items' panels hold the keyboard; see `useKeepsKeyboard`.
+  const [heldPanels, setHeldPanels] = useState(0);
+  const holdKeyboard = useCallback(() => {
+    setHeldPanels((held) => held + 1);
+    return () => {
+      setHeldPanels((held) => held - 1);
+    };
+  }, []);
+
   const [levelPress, setLevelPress] = useState<LevelPress | undefined>();
   // Once for the desk, so a portal's sign-in page opens once, not per bar.
   const portal = useCaptivePortal(domicile);
@@ -411,6 +422,7 @@ export const Desktop = ({
       clock={shellOptions.clock}
       domicile={domicile}
       drawer={drawer}
+      holdKeyboard={holdKeyboard}
       launcher={launcherControl}
       tray={trayState}
       workspaces={shownWorkspaces}
@@ -441,6 +453,7 @@ export const Desktop = ({
             popupOpen ||
             portal.url !== undefined ||
             notificationsOpen ||
+            heldPanels > 0 ||
             lock.locked
           }
           // While a desktop panel is open the page keeps the keyboard; see
@@ -571,6 +584,7 @@ const BarProviders = ({
   clock,
   domicile,
   drawer,
+  holdKeyboard,
   launcher,
   tray,
   workspaces,
@@ -579,6 +593,7 @@ const BarProviders = ({
   clock: ClockOptions;
   domicile: DomicileHost;
   drawer: NotificationsDrawer;
+  holdKeyboard: HoldKeyboard;
   launcher: LauncherControl;
   tray: TrayState;
   workspaces: Workspaces;
@@ -588,7 +603,11 @@ const BarProviders = ({
       <LauncherContext value={launcher}>
         <NotificationsContext value={drawer}>
           <TrayContext value={tray}>
-            <ClockOptionsContext value={clock}>{children}</ClockOptionsContext>
+            <PanelKeyboardContext value={holdKeyboard}>
+              <ClockOptionsContext value={clock}>
+                {children}
+              </ClockOptionsContext>
+            </PanelKeyboardContext>
           </TrayContext>
         </NotificationsContext>
       </LauncherContext>
