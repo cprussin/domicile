@@ -790,7 +790,7 @@
       # `.#bun` from the same set.
       legacyPackages.${system} = pkgs;
 
-      # `nix run` offers only running a desktop and building the engine.
+      # `nix run` offers running a desktop and claiming a new npm package.
       # Checks, e2e scripts and measurements need a checkout; run them as
       # `./scripts/<name>.sh`.
 
@@ -1412,7 +1412,23 @@
         inherit (domicileApps) manganese simple;
         # No `engine` app: running it would only start bare Chromium. Use
         # `nix build .#engine`.
-      };
+      } // pkgs.lib.genAttrs [ "npm-claim" "npm-claim-cleanup" ] (name:
+        let
+          script = pkgs.writeShellApplication {
+            inherit name;
+            runtimeInputs = [ pkgs.nodejs_24 pkgs.jq ];
+            text = builtins.readFile ./.github/scripts/${name}.sh;
+          };
+        in
+        {
+          type = "app";
+          program = pkgs.lib.getExe script;
+          meta.description =
+            {
+              npm-claim = "Claim a new @domicile-desktop npm package for publish-packages.yml";
+              npm-claim-cleanup = "Remove a claimed npm package's placeholder once CI has published it";
+            }.${name};
+        });
 
       devShells.${system} = {
         # Default shell: tools for the pure-logic crates and TypeScript.
