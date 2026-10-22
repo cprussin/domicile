@@ -67,11 +67,12 @@ const page = () => {
 };
 
 describe("GoogleMessages", () => {
-  it("loads Messages in storage of its own before it is opened, hidden", () => {
+  it("loads Messages in the user's storage before it is opened, hidden", () => {
+    // The engine denies notifications to a page in a partition.
     render(onBars(new FakeDomicileHost(), ["left"]));
 
     expect(page()).toHaveAttribute("src", "https://messages.google.com/web/");
-    expect(page()).toHaveAttribute("partition", "persist:google-messages");
+    expect(page()).not.toHaveAttribute("partition");
     expect(page()).not.toBeVisible();
   });
 

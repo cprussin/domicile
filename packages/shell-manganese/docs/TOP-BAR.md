@@ -319,8 +319,9 @@ in a panel. Not in `DEFAULT_BAR`.
     closed, hidden like a background tab
     ([SHELL-BROWSER-WINDOWS.md](../../../docs/SHELL-BROWSER-WINDOWS.md#basics)).
     So its notifications keep coming.
-  - Storage of its own (`persist:google-messages`), kept across restarts, so
-    the pairing lasts. Pair it once in the panel.
+  - The user's own storage, so the pairing lasts. Pair it once in the panel.
+    A partition would get no notifications: Chromium denies them to a page in
+    one.
   - One page for the desk: the first bar showing the item draws it, and every
     bar's item opens it. Messages runs one web session at a time. When that
     bar goes, the next one loads the page again.
