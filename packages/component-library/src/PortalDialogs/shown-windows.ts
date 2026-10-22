@@ -1,3 +1,6 @@
+import type { FrozenDesk, ShotRect } from "@domicile-desktop/sdk/portal";
+import { onFrame } from "./on-frame";
+
 /** A rectangle of the page, in its CSS pixels. */
 export type PageBox = { x: number; y: number; width: number; height: number };
 
@@ -44,6 +47,23 @@ export const drawnWindows = (page: ParentNode): ShownWindow[] => [
     drawn(view, (box) => ShownWindow.Browser(attribute(view, "window"), box)),
   ),
 ];
+
+/** Where `desk` shows the window of `kind` and `id`, if it does. */
+export const shownArea = (
+  desk: FrozenDesk | undefined,
+  shown: readonly ShownWindow[],
+  kind: ShownWindowKind,
+  id: string,
+): ShotRect | undefined => {
+  const window = shown.find((window) =>
+    window.kind === ShownWindowKind.App
+      ? kind === ShownWindowKind.App && window.appId === id
+      : kind === ShownWindowKind.Browser && window.id === id,
+  );
+  return desk === undefined || window === undefined
+    ? undefined
+    : onFrame(desk, window.box);
+};
 
 /** `element` as `shown` makes it, unless it has no box. */
 const drawn = (

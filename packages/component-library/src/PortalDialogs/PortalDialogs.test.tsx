@@ -1485,7 +1485,8 @@ describe("PortalDialogs", () => {
       ]);
     });
 
-    it("saves each browser window the shell shows from its page alone", async () => {
+    it("saves each browser window from its page alone, shown or not", async () => {
+      // "Hidden" is a tab behind another in a stack.
       const host = new FakeHost();
       host.fake.set({
         browserWindows: [
@@ -1503,19 +1504,20 @@ describe("PortalDialogs", () => {
         />,
       );
       host.push([frozen(1, "screenshot")]);
-      const windows = within(screen.getByRole("group", { name: "Windows" }));
       const listed = radiosNamed("Windows", [
         "kitty: ~/src",
         "Browser: Pull requests",
+        "Browser: Hidden",
       ]);
       expect(listed.actual).toEqual(listed.expected);
       await userEvent.click(
-        windows.getByRole("radio", { name: "Browser: Pull requests" }),
+        screen.getByRole("radio", { name: "Browser: Hidden" }),
       );
+      expect(screen.getByRole("dialog")).toHaveTextContent("Not on screen");
       await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
       expect(host.answers).toEqual([
-        [1, { copy: false, id: "1", kind: "screenshot_browser_window" }],
+        [1, { copy: false, id: "2", kind: "screenshot_browser_window" }],
       ]);
     });
 
@@ -1819,22 +1821,32 @@ describe("PortalDialogs", () => {
 });
 
 describe("screen cast", () => {
-  it("lists the windows with their applications' names and icons", async () => {
+  it("lists the windows beside the desk, by title over application", async () => {
     const host = new FakeHost();
     render(<PortalDialogs host={host.host} systemOf={desktop()} />);
-    host.push([screenCast()]);
+    host.push([
+      screenCast(false, WINDOWS, false, {
+        desk: frozen(1, "screenshot").body,
+      }),
+    ]);
 
     expect(screen.getByRole("dialog")).toHaveTextContent("Share a window");
     expect(
       screen.getByText("us.zoom.Zoom wants to record"),
     ).toBeInTheDocument();
-    const notes = await screen.findByRole("button", { name: "Firefox: Notes" });
+    expect(screen.getByRole("img", { name: "The desk" })).toHaveAttribute(
+      "src",
+      "data:image/png;base64,AA==",
+    );
+    const notes = await screen.findByRole("radio", { name: "Firefox: Notes" });
     expect(
       within(notes).getByRole("presentation").getAttribute("src"),
     ).toStartWith("data:image/svg+xml");
-    expect(
-      screen.getByRole("button", { name: "Untitled window" }),
-    ).toBeInTheDocument();
+    const windows = radiosNamed("Windows", [
+      "Firefox: Notes",
+      "Untitled window",
+    ]);
+    expect(windows.actual).toEqual(windows.expected);
   });
 
   it("shares nothing until a window is picked", () => {
@@ -1850,7 +1862,7 @@ describe("screen cast", () => {
     render(<PortalDialogs host={host.host} />);
     host.push([screenCast()]);
     await userEvent.click(
-      screen.getByRole("button", { name: "firefox: Notes" }),
+      screen.getByRole("radio", { name: "firefox: Notes" }),
     );
     await userEvent.click(screen.getByRole("button", { name: "Share" }));
 
@@ -1859,34 +1871,15 @@ describe("screen cast", () => {
     ]);
   });
 
-  it("picks one window unless the application asks for more", async () => {
-    const host = new FakeHost();
-    render(<PortalDialogs host={host.host} />);
-    host.push([screenCast()]);
-    await userEvent.click(
-      screen.getByRole("button", { name: "firefox: Notes" }),
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: "Untitled window" }),
-    );
-
-    expect(
-      screen.getByRole("button", { name: "firefox: Notes" }),
-    ).toHaveAttribute("aria-pressed", "false");
-    expect(
-      screen.getByRole("button", { name: "Untitled window" }),
-    ).toHaveAttribute("aria-pressed", "true");
-  });
-
   it("shares several windows when the application asks for more", async () => {
     const host = new FakeHost();
     render(<PortalDialogs host={host.host} />);
     host.push([screenCast(true)]);
     await userEvent.click(
-      screen.getByRole("button", { name: "firefox: Notes" }),
+      screen.getByRole("checkbox", { name: "firefox: Notes" }),
     );
     await userEvent.click(
-      screen.getByRole("button", { name: "Untitled window" }),
+      screen.getByRole("checkbox", { name: "Untitled window" }),
     );
     await userEvent.click(screen.getByRole("button", { name: "Share" }));
 
@@ -1914,13 +1907,25 @@ describe("screen cast", () => {
   });
 
   describe("browser windows", () => {
-    it("offers each browser window's page alone and shares it", async () => {
+    it("offers each browser window's page alone, shown or not, and shares it", async () => {
       const host = new FakeHost();
-      host.fake.set({ browserWindows: [browserWindow("7", "Meet")] });
-      render(<PortalDialogs host={host.host} />);
+      host.fake.set({
+        browserWindows: [
+          browserWindow("7", "Meet"),
+          browserWindow("8", "Docs"),
+        ],
+      });
+      render(<PortalDialogs host={host.host} shownWindows={() => []} />);
       host.push([screenCast(false, WINDOWS, false, { browser_windows: true })]);
+      const windows = radiosNamed("Windows", [
+        "firefox: Notes",
+        "Untitled window",
+        "Browser: Meet",
+        "Browser: Docs",
+      ]);
+      expect(windows.actual).toEqual(windows.expected);
       await userEvent.click(
-        screen.getByRole("button", { name: "Browser: Meet" }),
+        screen.getByRole("radio", { name: "Browser: Docs" }),
       );
       await userEvent.click(screen.getByRole("button", { name: "Share" }));
 
@@ -1929,7 +1934,7 @@ describe("screen cast", () => {
           5,
           {
             kind: "screen_cast",
-            sources: [{ id: "7", title: "Meet", type: "browser_window" }],
+            sources: [{ id: "8", title: "Docs", type: "browser_window" }],
           },
         ],
       ]);
@@ -1942,26 +1947,19 @@ describe("screen cast", () => {
       host.push([screenCast(false, MONITORS)]);
 
       expect(
-        screen.queryByRole("group", { name: "Browser windows" }),
+        screen.queryByRole("radio", { name: "Browser: Meet" }),
       ).not.toBeInTheDocument();
     });
   });
 
-  it("previews each source the desk shows, and a hidden one by its icon", () => {
-    const host = new FakeHost();
-    host.fake.set({ browserWindows: [browserWindow("7", "Meet")] });
-    render(
-      <PortalDialogs
-        host={host.host}
-        shownWindows={() => [
-          ShownWindow.App("app-3", { height: 10, width: 20, x: 0, y: 5 }),
-          ShownWindow.Browser("7", { height: 10, width: 20, x: 20, y: 5 }),
-        ]}
-      />,
-    );
-    host.push([
+  describe("preview", () => {
+    const shown = () => [
+      ShownWindow.App("app-3", { height: 10, width: 20, x: 0, y: 5 }),
+      ShownWindow.Browser("7", { height: 10, width: 30, x: 20, y: 5 }),
+    ];
+    const withDesk = () =>
       screenCast(
-        false,
+        true,
         [
           ...WINDOWS,
           {
@@ -1973,42 +1971,65 @@ describe("screen cast", () => {
         ],
         false,
         { browser_windows: true, desk: frozen(1, "screenshot").body },
-      ),
-    ]);
-    const preview = (name: string) =>
-      screen.getByRole("button", { name }).querySelector("[data-preview]");
-    const shot = { backgroundImage: "url(data:image/png;base64,AA==)" };
+      );
 
-    expect(preview("firefox: Notes")).toHaveStyle(shot);
-    expect(preview("Untitled window")).not.toHaveStyle(shot);
-    expect(preview("Browser: Meet")).toHaveStyle(shot);
-    expect(preview("HDMI-A-1")).toHaveStyle(shot);
+    it("outlines each source picked on the desk, with its size", async () => {
+      const host = new FakeHost();
+      host.fake.set({ browserWindows: [browserWindow("7", "Meet")] });
+      render(<PortalDialogs host={host.host} shownWindows={shown} />);
+      host.push([withDesk()]);
+      await userEvent.click(
+        screen.getByRole("checkbox", { name: "firefox: Notes" }),
+      );
+      await userEvent.click(
+        screen.getByRole("checkbox", { name: "Browser: Meet" }),
+      );
+      await userEvent.click(screen.getByRole("checkbox", { name: "HDMI-A-1" }));
+
+      const stage = screen.getByRole("figure");
+      expect(stage).toHaveTextContent("40 × 20");
+      expect(stage).toHaveTextContent("60 × 20");
+      expect(stage).toHaveTextContent("100 × 100");
+    });
+
+    it("says when the source picked is not on screen", async () => {
+      const host = new FakeHost();
+      host.fake.set({ browserWindows: [browserWindow("7", "Meet")] });
+      render(<PortalDialogs host={host.host} shownWindows={shown} />);
+      host.push([withDesk()]);
+      await userEvent.click(
+        screen.getByRole("checkbox", { name: "Untitled window" }),
+      );
+
+      expect(screen.getByRole("figure")).toHaveTextContent("Not on screen");
+    });
   });
 
   describe("screens", () => {
-    it("lists each screen by name and panel", () => {
+    it("lists each screen by its panel over its name", () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} />);
       host.push([screenCast(false, MONITORS)]);
 
       expect(screen.getByRole("dialog")).toHaveTextContent("Share a screen");
-      expect(
-        screen.getByRole("button", { name: "drm-1: Dell Inc. DELL U3219Q" }),
-      ).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "drm-2" })).toBeInTheDocument();
+      const screens = radiosNamed("Screens", [
+        "Dell Inc. DELL U3219Q",
+        "drm-2",
+      ]);
+      expect(screens.actual).toEqual(screens.expected);
       expect(
         screen.queryByRole("group", { name: "Windows" }),
       ).not.toBeInTheDocument();
     });
 
-    it("offers windows and screens side by side and shares from both", async () => {
+    it("offers windows and screens together and shares from both", async () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} />);
       host.push([screenCast(true, [...WINDOWS, ...MONITORS])]);
       await userEvent.click(
-        screen.getByRole("button", { name: "firefox: Notes" }),
+        screen.getByRole("checkbox", { name: "firefox: Notes" }),
       );
-      await userEvent.click(screen.getByRole("button", { name: "drm-2" }));
+      await userEvent.click(screen.getByRole("checkbox", { name: "drm-2" }));
       await userEvent.click(screen.getByRole("button", { name: "Share" }));
 
       expect(host.answers).toEqual([
@@ -2017,8 +2038,8 @@ describe("screen cast", () => {
           {
             kind: "screen_cast",
             sources: [
-              { id: "app-3", type: "window" },
               { name: "drm-2", type: "monitor" },
+              { id: "app-3", type: "window" },
             ],
           },
         ],
@@ -2030,9 +2051,9 @@ describe("screen cast", () => {
       render(<PortalDialogs host={host.host} />);
       host.push([screenCast(false, [...WINDOWS, ...MONITORS])]);
       await userEvent.click(
-        screen.getByRole("button", { name: "firefox: Notes" }),
+        screen.getByRole("radio", { name: "firefox: Notes" }),
       );
-      await userEvent.click(screen.getByRole("button", { name: "drm-2" }));
+      await userEvent.click(screen.getByRole("radio", { name: "drm-2" }));
       await userEvent.click(screen.getByRole("button", { name: "Share" }));
 
       expect(host.answers).toEqual([
