@@ -215,6 +215,17 @@ pub enum ChromeMessage {
     /// way, and the idle clock must hear it.
     Activity,
 
+    /// Where the pointer is on the desk, in the shell page's CSS pixels,
+    /// which are the desktop's logical pixels, or `None` off it.
+    ///
+    /// The browser sends it on each move, wherever the pointer is. Screen
+    /// casts draw the pointer from it; the compositor knows it no other way
+    /// outside a window.
+    DeskPointer {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        at: Option<(f64, f64)>,
+    },
+
     /// The page renders `<app frame>`, so the compositor may sync frames
     /// ([`HostMessage::PopupPlaced`]'s `frames`) until the next `Hello`.
     ///

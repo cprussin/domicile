@@ -381,7 +381,9 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             // From an application, like a Wayland idle inhibitor.
             | ClientRequest::HeldAwakeByThePortal { .. }
             // Reaches no client; it only stirs the idle clock.
-            | ClientRequest::Activity,
+            | ClientRequest::Activity
+            // Reaches no client; a cast of the lock screen draws it.
+            | ClientRequest::DeskPointer { .. },
         )
         | Asked::OnTheConnection(ConnectionRequest::SetTheme { .. })
         | Asked::System(
@@ -956,6 +958,12 @@ mod tests {
                 ClientRequest::Lock,
             ),
             ("a key on the lock screen", ClientRequest::Activity),
+            (
+                "the pointer moving over the lock screen",
+                ClientRequest::DeskPointer {
+                    at: Some((4.0, 8.0)),
+                },
+            ),
         ] {
             assert_eq!(
                 refused(Asked::OnTheWaylandThread(&request)),

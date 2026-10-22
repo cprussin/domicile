@@ -495,6 +495,10 @@ fn read_chrome_messages(
                 hub.send_request(ClientRequest::Activity);
                 Vec::new()
             }
+            Ok(ChromeMessage::DeskPointer { at }) => {
+                hub.send_request(ClientRequest::DeskPointer { at });
+                Vec::new()
+            }
             Ok(ChromeMessage::SyncFrames) => {
                 hub.chrome_syncs_frames(writer, true);
                 Vec::new()

@@ -99,8 +99,8 @@ pub struct Streams {
     shown: HashMap<String, Shown>,
     /// The window under the pointer, and where, in its box's logical pixels.
     pointer: Option<(String, (f64, f64))>,
-    /// Where the pointer is on the desktop, in logical pixels, when the
-    /// compositor knows: over a window.
+    /// Where the pointer is on the desktop, in logical pixels, as the engine
+    /// reports it, or `None` off it.
     desk_pointer: Option<(f64, f64)>,
     /// The monitors, for monitor and region streams.
     screens: Vec<Screen>,
@@ -981,17 +981,41 @@ impl Streams {
     }
 
     /// The pointer moved to `at`, in `app_id`'s box, or left every window.
-    /// `desk` is the same point on the desktop. Streams that show it are
-    /// damaged where it was and where it is.
-    pub fn pointer(
+    /// Window streams that show it are damaged where it was and where it is.
+    pub fn pointer_in_window(
         &mut self,
         at: Option<(String, (f64, f64))>,
-        desk: Option<(f64, f64)>,
-        mut renderer: Option<&mut GlesRenderer>,
+        renderer: Option<&mut GlesRenderer>,
         now: Instant,
     ) -> Option<Instant> {
         let before = std::mem::replace(&mut self.pointer, at);
-        let desk_before = std::mem::replace(&mut self.desk_pointer, desk);
+        let desk_before = self.desk_pointer;
+        self.pointer_moved(before, desk_before, renderer, now)
+    }
+
+    /// The pointer moved to `at` on the desktop, or left it, as the engine
+    /// reports it. Desk streams that show it are damaged where it was and
+    /// where it is.
+    pub fn pointer_on_desk(
+        &mut self,
+        at: Option<(f64, f64)>,
+        renderer: Option<&mut GlesRenderer>,
+        now: Instant,
+    ) -> Option<Instant> {
+        let desk_before = std::mem::replace(&mut self.desk_pointer, at);
+        let before = self.pointer.clone();
+        self.pointer_moved(before, desk_before, renderer, now)
+    }
+
+    /// Damages the streams that show the pointer where it was, `before` in a
+    /// window and `desk_before` on the desktop, and where it is.
+    fn pointer_moved(
+        &mut self,
+        before: Option<(String, (f64, f64))>,
+        desk_before: Option<(f64, f64)>,
+        mut renderer: Option<&mut GlesRenderer>,
+        now: Instant,
+    ) -> Option<Instant> {
         let touched: Vec<(StreamId, Vec<Rect>)> = self
             .casts
             .iter()
@@ -1473,6 +1497,22 @@ mod tests {
         let mut streams = Streams::new(channel().0, None);
         streams.screens(screens(), None);
         streams
+    }
+
+    /// The engine says where the pointer is on the desk; the page says where
+    /// it is in a window. Each keeps the other.
+    #[test]
+    fn the_pointer_on_the_desk_and_in_a_window_are_heard_apart() {
+        let mut streams = streams();
+        let now = Instant::now();
+
+        streams.pointer_in_window(Some(("app-1".into(), (2.0, 3.0))), None, now);
+        streams.pointer_on_desk(Some((40.0, 50.0)), None, now);
+
+        assert_eq!(streams.pointer, Some(("app-1".into(), (2.0, 3.0))));
+        assert_eq!(streams.desk_pointer, Some((40.0, 50.0)));
+        streams.pointer_in_window(None, None, now);
+        assert_eq!(streams.desk_pointer, Some((40.0, 50.0)));
     }
 
     #[test]

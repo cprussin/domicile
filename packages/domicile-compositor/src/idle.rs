@@ -392,6 +392,8 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         | ClientRequest::InvokeNotificationAction { .. }
         | ClientRequest::ReplyToNotification { .. }
         | ClientRequest::AnswerPortalRequest { .. }
+        // The browser sends `Activity` for the same input.
+        | ClientRequest::DeskPointer { .. }
         // An application, not a person.
         | ClientRequest::HeldAwakeByThePortal { .. }
         // The lock chord landed on the shell, and locking must not light the
@@ -1194,6 +1196,12 @@ mod tests {
     fn what_the_desktop_does_to_itself_is_not_somebody_here() {
         for (what, request) in [
             ("the pointer leaving a window", ClientRequest::PointerLeave),
+            (
+                "the pointer's place on the desk, which comes with activity",
+                ClientRequest::DeskPointer {
+                    at: Some((4.0, 8.0)),
+                },
+            ),
             (
                 "the browser restating a still pointer after a window changed",
                 ClientRequest::PointerMotion {

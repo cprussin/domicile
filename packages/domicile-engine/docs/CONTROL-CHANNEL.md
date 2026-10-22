@@ -26,8 +26,9 @@ The engine has two channels to the rest of Domicile:
   `focus_chrome`, `sync_frames`, `close_app`, `set_app_bounds`, `set_desktop_size`,
   `set_device_pixel_ratio`, `set_theme`, `theme_captured`, `unlock`, `lock`,
   `key`, `pointer_motion`, `pointer_leave`, `pointer_button`, `pointer_axis`.
-  The browser also sends `hello` on connect, and `activity` for its own
-  input, at most every 200 ms, for the idle clock.
+  The browser also sends `hello` on connect, `activity` for its own
+  input, at most every 200 ms, for the idle clock, and `desk_pointer` for
+  each pointer move, for screen casts.
 - **Inbound:** `welcome`, `app_appeared`, `app_titled`, `app_desktop_id`,
   `app_resized`, `app_min_size`, `app_max_size`, `popup_placed`, `app_closed`,
   `app_cursor`, `app_presented`, `app_suspended`, `app_transient_for`,
@@ -116,6 +117,11 @@ The engine has two channels to the rest of Domicile:
   (`chrome/browser/domicile/domicile_desk_activity.h`) watches
   `ui::UserActivityDetector`, and every control channel sends it while a
   compositor is connected. See `components/domicile/browser/desk_activity.h`.
+- **`desk_pointer`** is the browser's too. `StartDeskPointer`
+  (`chrome/browser/domicile/domicile_desk_pointer.h`) watches aura's mouse
+  moves and drags, and sends `at`, in the shell page's CSS pixels, or no `at`
+  while there is no shell. A repeat of the last place is dropped. See
+  `components/domicile/browser/desk_pointer.h`.
 - **`displays`** is an attribute, `domicile.displays`, with a
   `displayschanged` event. A component that mounts late can read it.
   - `null`: the compositor has not described a desktop yet.
