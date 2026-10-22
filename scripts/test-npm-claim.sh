@@ -35,7 +35,7 @@ case "$1" in
   view)
     [ -s "$REG/versions" ] || { echo "E404" >&2; exit 1; }
     case "$3" in
-      versions) tr '\n' ' ' <"$REG/versions" ;;
+      versions) jq -R . "$REG/versions" | jq -s . ;;
       dist-tags.*) cat "$REG/tag-${3#dist-tags.}" 2>/dev/null ;;
       *) tail -1 "$REG/versions" ;;
     esac
@@ -98,7 +98,7 @@ fi
 
 # cleanup
 reset
-printf '0.0.0-0\n0.0.0-alpha-abc\n' >"$WORK/registry/versions"
+printf '0.0.0-stage\n0.0.0-0\n0.0.0-alpha-abc\n' >"$WORK/registry/versions"
 echo 0.0.0-0 >"$WORK/registry/tag-latest"
 echo 0.0.0-0 >"$WORK/registry/tag-placeholder"
 echo 0.0.0-alpha-abc >"$WORK/registry/tag-next"
@@ -114,8 +114,16 @@ fi
   ok "removes the placeholder dist-tag" ||
   fail "removes the placeholder dist-tag" "$(cat "$WORK/calls")"
 [ "$(cat "$WORK/registry/versions")" = 0.0.0-alpha-abc ] &&
-  ok "unpublishes the placeholder" ||
-  fail "unpublishes the placeholder" "$(cat "$WORK/registry/versions")"
+  ok "unpublishes the placeholder and the 0.0.0-stage npm made with it" ||
+  fail "unpublishes the placeholder and the 0.0.0-stage npm made with it" "$(cat "$WORK/registry/versions")"
+: >"$WORK/calls"
+if "$CLEANUP" "$PKG" >"$WORK/log" 2>&1; then
+  ! grep -qE '^(unpublish|dist-tag rm)' "$WORK/calls" &&
+    ok "runs again without touching what is already gone" ||
+    fail "runs again without touching what is already gone" "$(cat "$WORK/calls")"
+else
+  fail "runs again without touching what is already gone" "$(tail -5 "$WORK/log")"
+fi
 
 reset
 echo 0.0.0-0 >"$WORK/registry/versions"

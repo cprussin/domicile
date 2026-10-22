@@ -2,7 +2,8 @@
 # Remove the placeholder `.github/scripts/npm-claim.sh` published, once
 # `publish-packages.yml` has published an alpha: point `latest` at the alpha on
 # `next`, as on the other packages, then drop the `placeholder` dist-tag and
-# unpublish `0.0.0-0`.
+# unpublish `0.0.0-0` and the `0.0.0-stage` npm adds when it creates a package.
+# Skips what is already gone, so it can run again.
 #
 # Run as an owner of the scope, logged in (`npm login`):
 #   nix run .#npm-claim-cleanup -- @domicile-desktop/<name>
@@ -21,6 +22,14 @@ if [ -z "$NEXT" ] || [ "$NEXT" = "$PLACEHOLDER" ]; then
 fi
 
 npm dist-tag add "$PKG@$NEXT" latest
-npm dist-tag rm "$PKG" placeholder
-npm unpublish "$PKG@$PLACEHOLDER"
-echo "$PKG: latest is $NEXT, placeholder removed"
+if [ -n "$(npm view "$PKG" dist-tags.placeholder)" ]; then
+  npm dist-tag rm "$PKG" placeholder
+fi
+# `npm view --json` gives one version as a string, several as an array.
+mapfile -t VERSIONS < <(npm view "$PKG" versions --json | jq -r 'if type == "array" then .[] else . end')
+for version in "$PLACEHOLDER" 0.0.0-stage; do
+  if printf '%s\n' "${VERSIONS[@]}" | grep -qxF "$version"; then
+    npm unpublish "$PKG@$version"
+  fi
+done
+echo "$PKG: latest is $NEXT, placeholders removed"
