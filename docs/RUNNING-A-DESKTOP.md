@@ -309,9 +309,67 @@ It does not enable a display manager or set the default session.
 
 ## Other distributions
 
-Each commit `stable` moves to is released as packages for Debian, Ubuntu,
-Fedora, openSUSE and Arch. They run the same desktop as
-`nix run github:cprussin/domicile/stable`.
+Domicile is packaged for Debian, Ubuntu, Fedora, openSUSE and Arch, two ways:
+
+- **[Releases](#from-the-package-repositories)**, from signed package
+  repositories and the AUR. Your package manager upgrades them.
+- **[Each `stable` commit](#a-stable-commit)**, as packages you download. They
+  run the same desktop as `nix run github:cprussin/domicile/stable`.
+
+### From the package repositories
+
+The repositories at `https://packages.domicile-desktop.com` hold the three
+newest releases, signed by the key at
+[`domicile.asc`](https://packages.domicile-desktop.com/domicile.asc).
+
+**Debian 13+, Ubuntu 24.04+** (`legacy` instead of `current` on Debian 12 and
+Ubuntu 22.04):
+
+```sh
+sudo curl -fsSL -o /etc/apt/keyrings/domicile.asc https://packages.domicile-desktop.com/domicile.asc
+echo "deb [signed-by=/etc/apt/keyrings/domicile.asc] https://packages.domicile-desktop.com/apt current main" |
+  sudo tee /etc/apt/sources.list.d/domicile.list
+sudo apt update && sudo apt install domicile
+```
+
+**Fedora, RHEL 10+:**
+
+```sh
+sudo tee /etc/yum.repos.d/domicile.repo <<'REPO'
+[domicile]
+name=Domicile
+baseurl=https://packages.domicile-desktop.com/rpm/fedora
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.domicile-desktop.com/domicile.asc
+REPO
+sudo dnf install domicile
+```
+
+**openSUSE Tumbleweed:**
+
+```sh
+sudo rpm --import https://packages.domicile-desktop.com/domicile.asc
+sudo zypper addrepo --gpgcheck https://packages.domicile-desktop.com/rpm/opensuse domicile
+sudo zypper install domicile
+```
+
+**Arch:** `domicile-bin` on the AUR, or the repository:
+
+```sh
+curl -fsSL -o domicile.asc https://packages.domicile-desktop.com/domicile.asc
+sudo pacman-key --add domicile.asc
+sudo pacman-key --lsign-key "$(gpg --show-keys --with-colons domicile.asc | awk -F: '/^fpr/ {print $10; exit}')"
+printf '[domicile]\nServer = https://packages.domicile-desktop.com/arch/$arch\n' |
+  sudo tee -a /etc/pacman.conf
+sudo pacman -Syu domicile
+```
+
+Then [finish the install](#after-installing).
+
+### A `stable` commit
+
+Each commit `stable` moves to is released as packages on GitHub:
 
 - **`packages-latest`** holds the newest packages under fixed names, so the
   commands below always fetch them.
@@ -338,7 +396,7 @@ Then install it:
 | openSUSE Tumbleweed | `sudo zypper install --allow-unsigned-rpm ./domicile-opensuse.x86_64.rpm` |
 | Arch | `sudo pacman -U ./domicile-x86_64.pkg.tar.zst` |
 
-After installing:
+### After installing
 
 1. Join the `domicile` group: `sudo usermod -aG domicile "$USER"`.
 2. Name a shell in `~/.config/domicile/domicile.json`:
@@ -368,8 +426,7 @@ The package installs what [the NixOS module](#the-machines-half) provides:
 - **Recommended** (optional on Arch): UPower (the battery readout), hwdata
   (monitor makers), `pactl` (the volume readout), curl, `xdg-desktop-portal`.
 
-There is no package repository. Upgrade by downloading and installing the
-package again.
+Upgrade a `stable` package by downloading and installing it again.
 
 ### Nix on another distribution
 
