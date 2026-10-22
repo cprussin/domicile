@@ -3,6 +3,7 @@ import type {
   CastSource,
   PortalAnswer,
   ScreenCastBody,
+  ShotRect,
 } from "@domicile-desktop/sdk/portal";
 import {
   PortalAnswer as Answer,
@@ -14,6 +15,7 @@ import { css } from "../../styled-system/css";
 import { Button } from "../Button/Button";
 import { ModalDialog } from "../ModalDialog/ModalDialog";
 import type { App } from "../useApps/useApps";
+import { onDesk } from "./on-frame";
 import { RegionPicker } from "./RegionPicker";
 import type { Choice } from "./SourcePicker";
 import { SourcePicker } from "./SourcePicker";
@@ -46,8 +48,9 @@ type Offered = Choice & { source: CastSource };
  * windows and browser windows an application may record in a list beside
  * the desk shot as it opened, which outlines each pick. A browser window is
  * its page alone, from the engine. Picks one, or several when the
- * application asks for more, or a region drawn over the desk when it asks
- * for one. Dismissing it cancels.
+ * application asks for more, or, when it asks for a region, an area dragged
+ * over the desk shot as the screenshot picker's is. Without a desk shot, the
+ * region is drawn over the page instead. Dismissing it cancels.
  */
 export const ScreenCastDialog = ({
   answer,
@@ -62,7 +65,10 @@ export const ScreenCastDialog = ({
   // Read once, as the desk was shot; a later move would not match it.
   const [shown] = useState(shownWindows);
   const [picked, setPicked] = useState<readonly number[]>([]);
+  // An area of the desk shot dragged in place of the picks.
+  const [dragged, setDragged] = useState<ShotRect | undefined>(undefined);
   const [drawing, setDrawing] = useState(false);
+  const { desk } = body;
   const screens: Offered[] = body.sources.flatMap((source) =>
     source.kind === CastSourceKind.Monitor
       ? [
@@ -120,7 +126,7 @@ export const ScreenCastDialog = ({
       closeButton={false}
       footer={
         <>
-          {body.region ? (
+          {body.region && desk === undefined ? (
             <Button
               onClick={() => {
                 setDrawing(true);
@@ -139,13 +145,15 @@ export const ScreenCastDialog = ({
             Cancel
           </Button>
           <Button
-            disabled={picked.length === 0}
+            disabled={picked.length === 0 && dragged === undefined}
             onClick={() => {
               answer(
                 Answer.ScreenCast(
-                  offered.flatMap(({ source }, index) =>
-                    picked.includes(index) ? [source] : [],
-                  ),
+                  desk !== undefined && dragged !== undefined
+                    ? [Source.Region(onDesk(desk, dragged))]
+                    : offered.flatMap(({ source }, index) =>
+                        picked.includes(index) ? [source] : [],
+                      ),
                 ),
               );
             }}
@@ -166,11 +174,23 @@ export const ScreenCastDialog = ({
     >
       <p className={askerStyles}>{`${asker} wants to record`}</p>
       <SourcePicker
-        caption={caption(offered, picked)}
-        desk={body.desk}
+        caption={caption(offered, picked, dragged, body.region)}
+        desk={desk}
+        dragged={dragged}
         label="What to share"
         multiple={body.multiple}
-        onPick={setPicked}
+        onDrag={
+          body.region
+            ? (area) => {
+                setDragged(area);
+                setPicked([]);
+              }
+            : undefined
+        }
+        onPick={(indices) => {
+          setPicked(indices);
+          setDragged(undefined);
+        }}
         picked={picked}
         previewWindow={previewWindow}
         sections={[
@@ -199,13 +219,22 @@ const title = (
   }
 };
 
-/** What the desk says of the sources `picked` from `offered`. */
+/**
+ * What the desk says of the sources `picked` from `offered`, or of the area
+ * `dragged`, and whether a `region` may be dragged.
+ */
 const caption = (
   offered: readonly Offered[],
   picked: readonly number[],
+  dragged: ShotRect | undefined,
+  region: boolean,
 ): string => {
-  if (picked.length === 0) {
-    return "Pick what to share.";
+  if (dragged !== undefined) {
+    return "Shared live, as it changes.";
+  } else if (picked.length === 0) {
+    return region
+      ? "Pick what to share, or drag over the desk for an area."
+      : "Pick what to share.";
   } else if (picked.some((index) => offered[index]?.area === undefined)) {
     return "Not on screen: shared as it draws itself.";
   } else {

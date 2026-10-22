@@ -30,3 +30,23 @@ export const onFrame = (
  */
 const pixels = (desk: FrozenDesk, logical: number): number =>
   Math.round((logical * desk.width) / desk.desk.size[0]);
+
+/**
+ * `area` of `desk`'s frame on the desktop, in its logical pixels: the
+ * inverse of `onFrame`. Grown to whole pixels, so it covers all of `area`.
+ */
+export const onDesk = (
+  desk: FrozenDesk,
+  area: ShotRect,
+): { position: [number, number]; size: [number, number] } => {
+  const [deskX, deskY] = desk.desk.position;
+  const left = Math.floor(deskX + logical(desk, area.x));
+  const top = Math.floor(deskY + logical(desk, area.y));
+  const right = Math.ceil(deskX + logical(desk, area.x + area.width));
+  const bottom = Math.ceil(deskY + logical(desk, area.y + area.height));
+  return { position: [left, top], size: [right - left, bottom - top] };
+};
+
+/** The logical pixels `frame` pixels into `desk`. */
+const logical = (desk: FrozenDesk, frame: number): number =>
+  (frame * desk.desk.size[0]) / desk.width;
