@@ -190,6 +190,10 @@ fn read_chrome_messages(
         let portals = hub.portals.clone();
         move |file| portals.screenshot(file)
     })
+    .previewing_with({
+        let portals = hub.portals.clone();
+        move |window| portals.preview(window)
+    })
     .sharing_shell_commands(hub.shell_commands.clone())
     .sharing_idle_warnings(hub.idle_warnings.clone())
     .sharing_unlock_refusals(hub.unlock_refusals.clone())

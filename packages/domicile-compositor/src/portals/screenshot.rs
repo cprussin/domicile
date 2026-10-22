@@ -19,8 +19,8 @@ use domicile_host::screenshot::{
 };
 use domicile_host::system::Kept;
 use domicile_protocol::{
-    AccessDialog, DeskRect, FrozenDesk, PortalAnswer, PortalKind, SystemError, SystemErrorKind,
-    SHELL_APP_ID,
+    AccessDialog, DeskRect, FrozenDesk, PortalAnswer, PortalKind, PreviewedWindow, SystemError,
+    SystemErrorKind, SHELL_APP_ID,
 };
 use tracing::warn;
 use zbus::object_server::ObjectServer;
@@ -345,6 +345,17 @@ pub async fn for_the_shell(
             }
         }
     }
+}
+
+/// Draws `window` as it last drew itself, for the shell's picker to preview,
+/// as `SystemRequest::PreviewWindow` describes.
+pub async fn preview(shots: &Shots, window: PreviewedWindow) -> Result<String, SystemError> {
+    let shot = match window {
+        PreviewedWindow::App { id } => (shots.shoot_window)(id).await,
+        PreviewedWindow::Browser { id } => (shots.shoot_browser_window)(id).await,
+    };
+    shot.map(|shot| data_url("image/png", &encode(&shot)))
+        .map_err(|why| other(format!("the window could not be drawn: {why}")))
 }
 
 /// Why a picker's answer kept no shot.
@@ -773,6 +784,57 @@ mod tests {
         let mut pixels = vec![0; reader.output_buffer_size().expect("a size")];
         let info = reader.next_frame(&mut pixels).expect("a frame");
         ((info.width, info.height), pixels)
+    }
+
+    /// Shots that draw window `app-3` and browser window `1`.
+    fn windows() -> Shots {
+        Shots {
+            shoot_window: own_frame(),
+            shoot_browser_window: browser_page(),
+            ..Shots::none()
+        }
+    }
+
+    /// The PNG in a `data:` URL: its size and straight RGBA pixels.
+    fn png_in(frame: &str) -> ((u32, u32), Vec<u8>) {
+        let base64 = frame
+            .strip_prefix("data:image/png;base64,")
+            .expect("a PNG data URL");
+        png_of(domicile_host::base64::decoded(base64).expect("base64"))
+    }
+
+    #[test]
+    fn a_window_previews_as_its_own_last_frame() {
+        let frame = zbus::block_on(preview(
+            &windows(),
+            PreviewedWindow::App { id: "app-3".into() },
+        ))
+        .expect("drawn");
+
+        assert_eq!(png_in(&frame), ((1, 1), vec![0, 255, 0, 255]));
+    }
+
+    #[test]
+    fn a_browser_window_previews_as_its_page_alone() {
+        let frame = zbus::block_on(preview(
+            &windows(),
+            PreviewedWindow::Browser { id: "1".into() },
+        ))
+        .expect("drawn");
+
+        assert_eq!(png_in(&frame), ((1, 1), vec![0, 0, 255, 255]));
+    }
+
+    #[test]
+    fn a_window_that_cannot_be_drawn_says_why() {
+        let failed = zbus::block_on(preview(
+            &windows(),
+            PreviewedWindow::App { id: "app-9".into() },
+        ))
+        .expect_err("not drawn");
+
+        assert_eq!(failed.kind, SystemErrorKind::Other);
+        assert!(failed.message.contains("no window app-9"), "{failed:?}");
     }
 
     #[test]

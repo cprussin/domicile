@@ -114,6 +114,10 @@
       "types": "./dist/webview-element.d.ts",
       "default": "./dist/webview-element.js"
     },
+    "./previewed-window": {
+      "types": "./dist/previewed-window.d.ts",
+      "default": "./dist/previewed-window.js"
+    },
     "./window-state": {
       "types": "./dist/window-state.d.ts",
       "default": "./dist/window-state.js"

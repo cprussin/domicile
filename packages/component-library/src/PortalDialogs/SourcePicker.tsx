@@ -2,21 +2,28 @@ import { Checkbox } from "@base-ui/react/checkbox";
 import { CheckboxGroup } from "@base-ui/react/checkbox-group";
 import { Radio } from "@base-ui/react/radio";
 import { RadioGroup } from "@base-ui/react/radio-group";
+import type { Result } from "@cprussin/option-result";
 import type { FrozenDesk, ShotRect } from "@domicile-desktop/sdk/portal";
+import type { PreviewedWindow } from "@domicile-desktop/sdk/previewed-window";
+import type { SystemError } from "@domicile-desktop/sdk/system";
 import type { CSSProperties, PointerEvent, ReactNode } from "react";
 import { useState } from "react";
 import { css } from "../../styled-system/css";
 import { center, flex } from "../../styled-system/patterns";
 import type { FramePoint } from "./frame-point";
 import { draggedArea, framePoint } from "./frame-point";
+import type { DrawPreview } from "./useWindowPreview";
+import { useWindowPreview } from "./useWindowPreview";
 
 /**
  * Something a picker offers, and how its row shows it: `name` over
  * `detail`. `label` names it to a screen reader. `area` is where the frozen
- * desk shows it, if it does.
+ * desk shows it, if it does; `preview` is the window to draw when it does
+ * not.
  */
 export type Choice = {
   area: ShotRect | undefined;
+  preview: PreviewedWindow | undefined;
   detail: string | undefined;
   icon: ReactNode;
   label: string;
@@ -46,12 +53,15 @@ type Props = {
   onPick: (picked: number[]) => void;
   /** The indexes, across every section, of the choices picked. */
   picked: readonly number[];
+  /** Draws a window the desk does not show. */
+  previewWindow: DrawPreview;
   sections: readonly ChoiceSection[];
 };
 
 /**
  * Picks from a list of sources beside one preview of the frozen desk, which
- * outlines each pick with its size. One source is a radio, several are
+ * outlines each pick with its size. A window picked last that the desk does
+ * not show is drawn alone instead. One source is a radio, several are
  * checkboxes. The screenshot and screen cast pickers share it.
  */
 export const SourcePicker = ({
@@ -63,10 +73,14 @@ export const SourcePicker = ({
   onDrag,
   onPick,
   picked,
+  previewWindow,
   sections,
 }: Props) => {
   const rows = numbered(sections, multiple);
   const choices = sections.flatMap((section) => section.choices);
+  const last = dragged === undefined ? lastOf(choices, picked) : undefined;
+  const hidden = last?.area === undefined ? last : undefined;
+  const frame = useWindowPreview(hidden?.preview, previewWindow);
   const outlined: Outline[] =
     dragged === undefined
       ? picked.flatMap((index) => {
@@ -105,15 +119,61 @@ export const SourcePicker = ({
         </RadioGroup>
       )}
       <figure className={stageStyles}>
-        {desk === undefined ? (
-          <span className={noDeskStyles}>No preview</span>
-        ) : (
-          <Desk desk={desk} onDrag={onDrag} outlined={outlined} />
-        )}
+        <Stage
+          desk={desk}
+          frame={frame}
+          hidden={hidden}
+          onDrag={onDrag}
+          outlined={outlined}
+        />
         <figcaption className={captionStyles}>{caption}</figcaption>
       </figure>
     </div>
   );
+};
+
+/**
+ * What the stage shows: `hidden` drawn alone as `frame` once it draws, else
+ * the desk.
+ */
+const Stage = ({
+  desk,
+  frame,
+  hidden,
+  onDrag,
+  outlined,
+}: {
+  desk: FrozenDesk | undefined;
+  frame: Result<string, SystemError> | undefined;
+  hidden: Choice | undefined;
+  onDrag: ((area: ShotRect) => void) | undefined;
+  outlined: readonly Outline[];
+}) => {
+  if (hidden?.preview !== undefined) {
+    return frame === undefined ? (
+      <span className={noDeskStyles}>Drawing a preview…</span>
+    ) : (
+      frame.match({
+        Err: () => <span className={noDeskStyles}>No preview</span>,
+        Ok: (src) => (
+          <img alt={hidden.label} className={previewStyles} src={src} />
+        ),
+      })
+    );
+  } else if (desk === undefined) {
+    return <span className={noDeskStyles}>No preview</span>;
+  } else {
+    return <Desk desk={desk} onDrag={onDrag} outlined={outlined} />;
+  }
+};
+
+/** The choice picked last, if any is. */
+const lastOf = (
+  choices: readonly Choice[],
+  picked: readonly number[],
+): Choice | undefined => {
+  const index = picked.at(-1);
+  return index === undefined ? undefined : choices[index];
 };
 
 /** Each section's rows, numbered across the sections. */
@@ -352,6 +412,14 @@ const stageStyles = flex({
 });
 
 const noDeskStyles = css({ color: "muted", fontSize: "sm" });
+
+// No taller than the desk would be, so the dialog fits on the screen.
+const previewStyles = css({
+  borderRadius: "sm",
+  maxBlockSize: "56cqh",
+  maxInlineSize: "full",
+  objectFit: "contain",
+});
 
 const deskStyles = css({
   "&[data-draggable]": { cursor: "crosshair" },

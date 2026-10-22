@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test";
+import type { Result } from "@cprussin/option-result";
+import { Err, Ok } from "@cprussin/option-result";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { SHELL_APP_ID } from "@domicile-desktop/sdk/portal";
+import type { PreviewedWindow } from "@domicile-desktop/sdk/previewed-window";
+import type { SystemError } from "@domicile-desktop/sdk/system";
+import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import type { Node } from "@domicile-desktop/system-apps/fake-system";
 import { fakeSystem } from "@domicile-desktop/system-apps/fake-system";
 import {
@@ -93,6 +98,22 @@ const desktop =
           "XDG_CONFIG_HOME=/config\0XDG_DATA_HOME=/data\0XDG_DATA_DIRS=/share\0",
       }),
     );
+
+/**
+ * A desktop that previews window `app-3` and browser window `2`, each as a
+ * `data:` URL naming it, and no other window.
+ */
+const previewing = () => () => ({
+  ...desktop()(),
+  previewWindow: (
+    window: PreviewedWindow,
+  ): Promise<Result<string, SystemError>> =>
+    Promise.resolve(
+      window.id === "app-3" || window.id === "2"
+        ? Ok(`data:image/png;base64,${window.id}`)
+        : Err({ kind: SystemErrorKind.NotFound, message: window.id }),
+    ),
+});
 
 const chooser = (id: number, body: object = {}) => ({
   app_id: "org.example.App",
@@ -1485,6 +1506,52 @@ describe("PortalDialogs", () => {
       ]);
     });
 
+    it("previews a window that is not on screen as it last drew itself", async () => {
+      const host = new FakeHost();
+      host.fake.set({ browserWindows: [browserWindow("2", "Hidden")] });
+      render(
+        <PortalDialogs
+          host={host.host}
+          shownWindows={() => []}
+          systemOf={previewing()}
+        />,
+      );
+      host.push([frozen(1, "screenshot")]);
+      await userEvent.click(
+        screen.getByRole("radio", { name: "kitty: ~/src" }),
+      );
+
+      expect(
+        await screen.findByRole("img", { name: "kitty: ~/src" }),
+      ).toHaveAttribute("src", "data:image/png;base64,app-3");
+      await userEvent.click(
+        screen.getByRole("radio", { name: "Browser: Hidden" }),
+      );
+      expect(
+        await screen.findByRole("img", { name: "Browser: Hidden" }),
+      ).toHaveAttribute("src", "data:image/png;base64,2");
+      await userEvent.click(screen.getByRole("radio", { name: "Whole desk" }));
+      expect(screen.getByRole("img", { name: "The desk" })).toBeInTheDocument();
+    });
+
+    it("says when a window's preview cannot be drawn", async () => {
+      const host = new FakeHost();
+      host.fake.set({ browserWindows: [browserWindow("9", "Gone")] });
+      render(
+        <PortalDialogs
+          host={host.host}
+          shownWindows={() => []}
+          systemOf={previewing()}
+        />,
+      );
+      host.push([frozen(1, "screenshot")]);
+      await userEvent.click(
+        screen.getByRole("radio", { name: "Browser: Gone" }),
+      );
+
+      expect(await screen.findByText("No preview")).toBeInTheDocument();
+    });
+
     it("saves each browser window from its page alone, shown or not", async () => {
       // "Hidden" is a tab behind another in a stack.
       const host = new FakeHost();
@@ -1990,6 +2057,28 @@ describe("screen cast", () => {
       expect(stage).toHaveTextContent("40 × 20");
       expect(stage).toHaveTextContent("60 × 20");
       expect(stage).toHaveTextContent("100 × 100");
+    });
+
+    it("previews the source picked last when it is not on screen", async () => {
+      const host = new FakeHost();
+      host.fake.set({ browserWindows: [browserWindow("2", "Docs")] });
+      render(
+        <PortalDialogs
+          host={host.host}
+          shownWindows={shown}
+          systemOf={previewing()}
+        />,
+      );
+      host.push([withDesk()]);
+      await userEvent.click(
+        screen.getByRole("checkbox", { name: "Browser: Docs" }),
+      );
+
+      expect(
+        await screen.findByRole("img", { name: "Browser: Docs" }),
+      ).toHaveAttribute("src", "data:image/png;base64,2");
+      await userEvent.click(screen.getByRole("checkbox", { name: "HDMI-A-1" }));
+      expect(screen.getByRole("img", { name: "The desk" })).toBeInTheDocument();
     });
 
     it("says when the source picked is not on screen", async () => {

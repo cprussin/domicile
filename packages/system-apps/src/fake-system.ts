@@ -68,6 +68,7 @@ export const fakeSystem = (
         : unexpected(),
     dbusMatch: unexpected,
     idleWarnings: unexpected,
+    previewWindow: unexpected,
     readDir: (path) =>
       Promise.resolve(
         at(path).andThen((node) =>

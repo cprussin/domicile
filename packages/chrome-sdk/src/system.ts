@@ -10,6 +10,8 @@ import { Err, Ok } from "@cprussin/option-result";
 import { z } from "zod";
 
 import type { DomicileHost } from "./domicile-host";
+import type { PreviewedWindow } from "./previewed-window";
+import { PreviewedWindowKind } from "./previewed-window";
 import type {
   SystemEndMessage,
   SystemEventMessage,
@@ -271,6 +273,14 @@ export type System = {
    */
   screenshot: () => Promise<Result<ScreenshotKept, SystemError>>;
   /**
+   * Draw `window` as it last drew itself, as a `data:` URL of a PNG, for a
+   * picker to preview a window that is not on screen. A browser window's page
+   * draws while it is captured, so a hidden one draws too.
+   */
+  previewWindow: (
+    window: PreviewedWindow,
+  ) => Promise<Result<string, SystemError>>;
+  /**
    * Hear each command `domicile send-shell` sends, as its words. Every page
    * listening hears every command. Allowed while the desktop is locked.
    */
@@ -369,6 +379,12 @@ export const system = (host: SystemHost): System => {
         event.kind === "idle_warning"
           ? (event.blanks_in_ms ?? undefined)
           : unexpected(event),
+      ),
+    previewWindow: (window) =>
+      oneShot(
+        calls,
+        { call: "preview_window", window: wirePreviewedWindow(window) },
+        (reply) => (reply.kind === "preview" ? reply.frame : unexpected(reply)),
       ),
     readDir: (path) =>
       oneShot(calls, { call: "read_dir", path }, (reply) =>
@@ -790,6 +806,18 @@ const stopOf = (end: End): Result<"stopped", SystemError> => {
 };
 
 /** An answer the protocol does not allow at this point: a compositor bug. */
+/** `window` as a `preview_window` call names it. */
+const wirePreviewedWindow = (
+  window: PreviewedWindow,
+): { id: string; type: "app" | "browser" } => {
+  switch (window.kind) {
+    case PreviewedWindowKind.App:
+      return { id: window.id, type: "app" };
+    case PreviewedWindowKind.Browser:
+      return { id: window.id, type: "browser" };
+  }
+};
+
 /** Where a screenshot call's reply says the screenshot went. */
 const keptOf = (reply: Reply): ScreenshotKept => {
   switch (reply.kind) {

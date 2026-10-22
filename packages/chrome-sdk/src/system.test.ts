@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
+import { PreviewedWindow } from "./previewed-window";
 import type { SystemError, SystemHost } from "./system";
 import {
   Bus,
@@ -564,6 +565,32 @@ describe("screenshots", () => {
     expect(await taking).toStrictEqual(
       Err({ kind: SystemErrorKind.Canceled, message: "dismissed" }),
     );
+  });
+});
+
+describe("window previews", () => {
+  it("draws a client's window by its host app id", async () => {
+    const host = new FakeHost();
+    const drawing = system(host).previewWindow(PreviewedWindow.App("app-3"));
+    host.reply(1, { frame: "data:image/png;base64,AA==", kind: "preview" });
+
+    expect(host.calls).toStrictEqual([
+      [1, { call: "preview_window", window: { id: "app-3", type: "app" } }],
+    ]);
+    expect(await drawing).toStrictEqual(Ok("data:image/png;base64,AA=="));
+  });
+
+  it("draws a browser window by the engine's id", () => {
+    const host = new FakeHost();
+    system(host)
+      .previewWindow(PreviewedWindow.Browser("7"))
+      .catch(() => {
+        /* never answered */
+      });
+
+    expect(host.calls).toStrictEqual([
+      [1, { call: "preview_window", window: { id: "7", type: "browser" } }],
+    ]);
   });
 });
 

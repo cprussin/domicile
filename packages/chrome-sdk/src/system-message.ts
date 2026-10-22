@@ -50,6 +50,7 @@ const systemReplySchema = z.looseObject({
     z.looseObject({ kind: z.literal("started") }),
     z.looseObject({ kind: z.literal("saved"), path: z.string() }),
     z.looseObject({ kind: z.literal("copied") }),
+    z.looseObject({ frame: z.string(), kind: z.literal("preview") }),
     z.looseObject({ kind: z.literal("sent") }),
     z.looseObject({ kind: z.literal("set") }),
     z.looseObject({ error: systemErrorSchema, kind: z.literal("failed") }),

@@ -9,8 +9,8 @@ use std::time::{Duration, Instant};
 use domicile_host::priority;
 use domicile_host::system::{locked_out, reach, refused_to_an_app, Handled, Reach, System};
 use domicile_protocol::{
-    Bus, FileType, HostMessage, Signal, Stream, SystemEnd, SystemErrorKind, SystemEvent,
-    SystemReply, SystemRequest,
+    Bus, FileType, HostMessage, PreviewedWindow, Signal, Stream, SystemEnd, SystemErrorKind,
+    SystemEvent, SystemReply, SystemRequest,
 };
 
 /// How long a test waits for the next message before failing.
@@ -583,6 +583,9 @@ mod reaches {
                 atomic: false,
             },
             SystemRequest::Screenshot { file: None },
+            SystemRequest::PreviewWindow {
+                window: PreviewedWindow::App { id: "app-1".into() },
+            },
         ] {
             assert_eq!(reach(&acts), Reach::Acts);
         }
@@ -657,6 +660,78 @@ mod screenshots {
         let (system, heard) = system_in(home.path());
 
         system.handle(1, SystemRequest::Screenshot { file: None });
+
+        assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::Other);
+    }
+}
+
+/// Window previews, drawn by whatever the compositor hands the system.
+mod previews {
+    use domicile_protocol::SystemError;
+
+    use super::*;
+
+    #[test]
+    fn a_preview_is_the_frame_the_compositor_draws() {
+        let home = tempfile::tempdir().unwrap();
+        let (told, asked) = channel();
+        let (system, heard) = system_in(home.path());
+        let system = system.previewing_with(move |window| {
+            told.send(window).unwrap();
+            Ok("data:image/png;base64,AA==".into())
+        });
+
+        system.handle(
+            1,
+            SystemRequest::PreviewWindow {
+                window: PreviewedWindow::Browser { id: "7".into() },
+            },
+        );
+
+        assert_eq!(
+            reply(&heard, 1),
+            SystemReply::Preview {
+                frame: "data:image/png;base64,AA==".into()
+            }
+        );
+        assert_eq!(
+            asked.recv().unwrap(),
+            PreviewedWindow::Browser { id: "7".into() }
+        );
+    }
+
+    #[test]
+    fn a_preview_the_compositor_did_not_draw_says_why() {
+        let home = tempfile::tempdir().unwrap();
+        let (system, heard) = system_in(home.path());
+        let system = system.previewing_with(|_| {
+            Err(SystemError {
+                kind: SystemErrorKind::NotFound,
+                message: "no window app-1".into(),
+            })
+        });
+
+        system.handle(
+            1,
+            SystemRequest::PreviewWindow {
+                window: PreviewedWindow::App { id: "app-1".into() },
+            },
+        );
+
+        assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::NotFound);
+    }
+
+    #[test]
+    fn a_system_that_draws_no_previews_says_so() {
+        let home = tempfile::tempdir().unwrap();
+        let (system, heard) = system_in(home.path());
+
+        system.handle(
+            1,
+            SystemRequest::PreviewWindow {
+                window: PreviewedWindow::App { id: "app-1".into() },
+            },
+        );
 
         assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::Other);
     }
@@ -1057,6 +1132,9 @@ mod locked {
         for starts in [
             spawn(&["true"]),
             SystemRequest::Screenshot { file: None },
+            SystemRequest::PreviewWindow {
+                window: PreviewedWindow::App { id: "app-1".into() },
+            },
             SystemRequest::SendShell {
                 command: vec!["focus".into(), "right".into()],
             },
@@ -1114,6 +1192,9 @@ mod apps {
     fn an_app_may_not_reach_the_desktop() {
         for refused in [
             SystemRequest::Screenshot { file: None },
+            SystemRequest::PreviewWindow {
+                window: PreviewedWindow::App { id: "app-1".into() },
+            },
             SystemRequest::ShellCommands,
             SystemRequest::SendShell {
                 command: vec!["focus".into(), "right".into()],

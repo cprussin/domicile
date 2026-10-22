@@ -32,6 +32,9 @@ export const Shell = async (root, domicile) => {
   shell were the app: `<PortalDialogs />` draws the dialog, and the call
   resolves with `ScreenshotKept.Saved(path)`, `ScreenshotKept.Copied()` when
   the user pressed Ctrl+C, or fails `canceled`.
+- `previewWindow()` draws a window as it last drew itself, or a browser
+  window's page, as a PNG `data:` URL. The pickers preview a window that is
+  not on screen with it.
 - `setWindowStates()` and `windowRequests()` set a window's tiled,
   maximized and fullscreen states and hear clients ask for them; see
   [WRITING-A-SHELL.md](WRITING-A-SHELL.md#window-states).
@@ -126,7 +129,7 @@ recorded output.
 
 - Page to compositor: `system_request { id, request }`. `request` starts a
   call (`read_file`, `write_file`, `read_dir`, `stat`, `watch`, `spawn`,
-  `dbus_call`, `dbus_match`, `screenshot`, `shell_commands`, `send_shell`,
+  `dbus_call`, `dbus_match`, `screenshot`, `preview_window`, `shell_commands`, `send_shell`,
   `idle_warnings`, `unlock_refusals`, `set_window_states`, `window_requests`)
   or
   drives one running under the same `id` (`unwatch`, `stdin`, `close_stdin`,

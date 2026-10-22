@@ -6,9 +6,9 @@
 use std::collections::BTreeMap;
 
 use domicile_protocol::{
-    Bus, ChromeMessage, DirEntry, FileType, HostMessage, Signal, Stream, SystemEnd, SystemError,
-    SystemErrorKind, SystemEvent, SystemReply, SystemRequest, UnlockRefusal, WindowRequest,
-    WindowState,
+    Bus, ChromeMessage, DirEntry, FileType, HostMessage, PreviewedWindow, Signal, Stream,
+    SystemEnd, SystemError, SystemErrorKind, SystemEvent, SystemReply, SystemRequest,
+    UnlockRefusal, WindowRequest, WindowState,
 };
 
 fn chrome(json: &str) -> ChromeMessage {
@@ -340,6 +340,43 @@ fn a_d_bus_match_streams_the_signals_it_names() {
             },
         }),
         r#"{"type":"system_event","id":9,"event":{"kind":"signal","sender":":1.4","path":"/org/mpris/MediaPlayer2","interface":"org.freedesktop.DBus.Properties","member":"PropertiesChanged","signature":"sa{sv}as","body":"[\"org.mpris.MediaPlayer2.Player\",{},[]]"}}"#
+    );
+}
+
+/// A picker previews a window it cannot see on the frozen desk: a client's
+/// window by host app id, or a browser window by the engine's id.
+#[test]
+fn a_window_preview_is_answered_with_its_frame() {
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":12,"request":{"call":"preview_window","window":{"type":"app","id":"app-3"}}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 12,
+            request: SystemRequest::PreviewWindow {
+                window: PreviewedWindow::App { id: "app-3".into() },
+            },
+        }
+    );
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":13,"request":{"call":"preview_window","window":{"type":"browser","id":"7"}}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 13,
+            request: SystemRequest::PreviewWindow {
+                window: PreviewedWindow::Browser { id: "7".into() },
+            },
+        }
+    );
+    assert_eq!(
+        host(&HostMessage::SystemReply {
+            id: 12,
+            reply: SystemReply::Preview {
+                frame: "data:image/png;base64,AA==".into(),
+            },
+        }),
+        r#"{"type":"system_reply","id":12,"reply":{"kind":"preview","frame":"data:image/png;base64,AA=="}}"#
     );
 }
 
