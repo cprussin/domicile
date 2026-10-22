@@ -100,6 +100,8 @@ user's and every other partition, like a separate browser profile:
   with its `partition` (`""` for none).
 - Pages and windows with the same name share it. Their new windows keep it.
 - `private` with a partition is in memory, apart from other private pages.
+- A page in a partition cannot show notifications. Chromium denies them
+  outside a site's own storage.
 - `persist:` with no name is refused: the view stays empty, and
   `openBrowserWindow` throws a `TypeError`.
 

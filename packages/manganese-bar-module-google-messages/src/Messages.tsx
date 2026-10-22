@@ -13,10 +13,6 @@ import { hstack } from "../styled-system/patterns";
 
 const MESSAGES_URL = "https://messages.google.com/web/";
 
-// Storage of its own, kept across restarts, so the pairing lasts and a
-// Messages tab in a browser window is a separate session.
-const PARTITION = "persist:google-messages";
-
 type Handle = ReturnType<typeof createHandle>;
 
 type Props = {
@@ -124,12 +120,8 @@ const Page = ({ onShow }: { onShow: () => void }) => {
           />
         </div>
       )}
-      <webview
-        className={viewStyles}
-        partition={PARTITION}
-        ref={setView}
-        src={MESSAGES_URL}
-      />
+      {/* No partition: the engine denies notifications to a page in one. */}
+      <webview className={viewStyles} ref={setView} src={MESSAGES_URL} />
     </>
   );
 };
