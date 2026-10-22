@@ -9,11 +9,11 @@ item when it ships.
 
 ## In this repository
 
-1. **Keystroke-to-pixel latency on a panel** (#206). Run `guard-latency.sh`
-   with `PLATFORM=drm` on a machine with a panel
-   ([Latency on a panel](docs/HARDWARE-CHECKS.md#latency-on-a-panel)). The
-   probe still won't measure presentation.
-   [ENGINE-FORK-MEASUREMENTS.md](docs/architecture/ENGINE-FORK-MEASUREMENTS.md#keystroke-to-pixel).
+1. **Latency on a 120 Hz panel** (#206). On lyra's 120 Hz panel, `commit to
+   pixel` is 2.5 real frames, but the run assumes 60 Hz and passes it at 1.2.
+   Its floor also reads about 60 Hz. Find out whether viz draws at 60 Hz on a
+   120 Hz CRTC, and make the run read the real interval.
+   [ENGINE-FORK-MEASUREMENTS.md](docs/architecture/ENGINE-FORK-MEASUREMENTS.md#on-a-tty).
 
 2. **Revisit the docs for users.** Start with the README.
    - A clearer reading path through the docs.
