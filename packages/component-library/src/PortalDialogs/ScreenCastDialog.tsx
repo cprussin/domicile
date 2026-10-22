@@ -1,30 +1,25 @@
 import type { DomicileBrowserWindow } from "@domicile-desktop/sdk/domicile-host";
 import type {
   CastSource,
-  FrozenDesk,
   PortalAnswer,
   ScreenCastBody,
-  ShotRect,
 } from "@domicile-desktop/sdk/portal";
 import {
   PortalAnswer as Answer,
   CastSourceKind,
   CastSource as Source,
 } from "@domicile-desktop/sdk/portal";
-import { GlobeIcon } from "@phosphor-icons/react/dist/ssr/Globe";
-import { MonitorIcon } from "@phosphor-icons/react/dist/ssr/Monitor";
 import { useState } from "react";
 import { css } from "../../styled-system/css";
 import { Button } from "../Button/Button";
 import { ModalDialog } from "../ModalDialog/ModalDialog";
 import type { App } from "../useApps/useApps";
-import { onFrame } from "./on-frame";
 import { RegionPicker } from "./RegionPicker";
-import type { SourceTile } from "./SourceTiles";
-import { SourceTiles } from "./SourceTiles";
+import type { Choice } from "./SourcePicker";
+import { SourcePicker } from "./SourcePicker";
 import type { ShownWindow } from "./shown-windows";
-import { ShownWindowKind } from "./shown-windows";
-import { WindowIcon } from "./WindowIcon";
+import { ShownWindowKind, shownArea } from "./shown-windows";
+import { browserChoice, screenChoice, windowChoice } from "./source-choices";
 
 type Props = {
   answer: (answer: PortalAnswer) => void;
@@ -40,12 +35,16 @@ type Props = {
   shownWindows: () => readonly ShownWindow[];
 };
 
+/** Something the dialog offers to share. */
+type Offered = Choice & { source: CastSource };
+
 /**
- * A source picker: the windows, browser windows and screens an application
- * may record, each a tile previewing it on the desk, and a region drawn on
- * the desk when it asks for one. A browser window is its page alone, from
- * the engine. Picks one, or several when the application asks for more.
- * Dismissing it cancels.
+ * A source picker laid out as the screenshot picker is: the screens,
+ * windows and browser windows an application may record in a list beside
+ * the desk shot as it opened, which outlines each pick. A browser window is
+ * its page alone, from the engine. Picks one, or several when the
+ * application asks for more, or a region drawn over the desk when it asks
+ * for one. Dismissing it cancels.
  */
 export const ScreenCastDialog = ({
   answer,
@@ -58,43 +57,49 @@ export const ScreenCastDialog = ({
 }: Props) => {
   // Read once, as the desk was shot; a later move would not match it.
   const [shown] = useState(shownWindows);
-  const [picked, setPicked] = useState<readonly string[]>([]);
+  const [picked, setPicked] = useState<readonly number[]>([]);
   const [drawing, setDrawing] = useState(false);
-  const windows = body.sources.filter(
-    (source) => source.kind === CastSourceKind.Window,
+  const screens: Offered[] = body.sources.flatMap((source) =>
+    source.kind === CastSourceKind.Monitor
+      ? [
+          {
+            ...screenChoice(
+              source.name,
+              source.description,
+              body.desk?.monitors.find(({ name }) => name === source.name)
+                ?.area,
+            ),
+            source,
+          },
+        ]
+      : [],
   );
-  const browsers = body.browserWindows
-    ? browserWindows.map(({ id, title }) => Source.BrowserWindow({ id, title }))
-    : [];
-  const monitors = body.sources.filter(
-    (source) => source.kind === CastSourceKind.Monitor,
-  );
-  const offered = [...windows, ...browsers, ...monitors];
-  const group = (label: string, sources: readonly CastSource[]) =>
-    sources.length > 0 && (
-      <SourceTiles
-        desk={body.desk}
-        label={label}
-        multiple={body.multiple}
-        onValueChange={(value) => {
-          setPicked(
-            body.multiple
-              ? [
-                  ...picked.filter(
-                    (key) =>
-                      !sources.some((source) => sourceKey(source) === key),
-                  ),
-                  ...value,
-                ]
-              : value,
-          );
-        }}
-        tiles={sources.map((source) => tileOf(source, apps, body.desk, shown))}
-        value={picked.filter((key) =>
-          sources.some((source) => sourceKey(source) === key),
-        )}
-      />
-    );
+  const windows: Offered[] = [
+    ...body.sources.flatMap((source) =>
+      source.kind === CastSourceKind.Window
+        ? [
+            {
+              ...windowChoice(
+                source.title,
+                source.appId === "" ? undefined : apps(source.appId),
+                shownArea(body.desk, shown, ShownWindowKind.App, source.id),
+              ),
+              source,
+            },
+          ]
+        : [],
+    ),
+    ...(body.browserWindows
+      ? browserWindows.map(({ id, title }) => ({
+          ...browserChoice(
+            title,
+            shownArea(body.desk, shown, ShownWindowKind.Browser, id),
+          ),
+          source: Source.BrowserWindow({ id, title }),
+        }))
+      : []),
+  ];
+  const offered = [...screens, ...windows];
   return drawing ? (
     <RegionPicker
       cancel={() => {
@@ -132,8 +137,8 @@ export const ScreenCastDialog = ({
             onClick={() => {
               answer(
                 Answer.ScreenCast(
-                  offered.filter((source) =>
-                    picked.includes(sourceKey(source)),
+                  offered.flatMap(({ source }, index) =>
+                    picked.includes(index) ? [source] : [],
                   ),
                 ),
               );
@@ -151,32 +156,26 @@ export const ScreenCastDialog = ({
       open
       screen={screen}
       size="xl"
-      title={title(
-        body.multiple,
-        windows.length + browsers.length > 0,
-        monitors.length > 0,
-      )}
+      title={title(body.multiple, windows.length > 0, screens.length > 0)}
     >
       <p className={askerStyles}>{`${asker} wants to record`}</p>
-      <div className={groupsStyles}>
-        {group("Windows", windows)}
-        {group("Browser windows", browsers)}
-        {group("Screens", monitors)}
-      </div>
+      <SourcePicker
+        caption={caption(offered, picked)}
+        desk={body.desk}
+        label="What to share"
+        multiple={body.multiple}
+        onPick={setPicked}
+        picked={picked}
+        sections={[
+          { choices: screens, label: "Screens" },
+          { choices: windows, label: "Windows" },
+        ]}
+      />
     </ModalDialog>
   );
 };
 
 const askerStyles = css({ color: "muted", fontSize: "sm", margin: 0 });
-
-const groupsStyles = css({
-  display: "flex",
-  flexDirection: "column",
-  gap: 4,
-  marginBlockStart: 3,
-  maxBlockSize: "60vh",
-  overflowY: "auto",
-});
 
 /** The dialog's title for what it offers. */
 const title = (
@@ -193,82 +192,16 @@ const title = (
   }
 };
 
-/** A source's key in the picked list, unique across kinds. */
-const sourceKey = (source: CastSource): string => {
-  switch (source.kind) {
-    case CastSourceKind.Window:
-      return `window:${source.id}`;
-    case CastSourceKind.BrowserWindow:
-      return `browser-window:${source.id}`;
-    case CastSourceKind.Monitor:
-      return `monitor:${source.name}`;
-    case CastSourceKind.Region:
-      return `region:${source.position.join(",")}:${source.size.join("x")}`;
+/** What the desk says of the sources `picked` from `offered`. */
+const caption = (
+  offered: readonly Offered[],
+  picked: readonly number[],
+): string => {
+  if (picked.length === 0) {
+    return "Pick what to share.";
+  } else if (picked.some((index) => offered[index]?.area === undefined)) {
+    return "Not on screen: shared as it draws itself.";
+  } else {
+    return "Shared live, as it changes.";
   }
-};
-
-/** `source`'s tile, previewed where `desk` shows it. */
-const tileOf = (
-  source: CastSource,
-  apps: (appId: string) => App,
-  desk: FrozenDesk | undefined,
-  shown: readonly ShownWindow[],
-): SourceTile => {
-  switch (source.kind) {
-    case CastSourceKind.Window: {
-      const app = source.appId === "" ? undefined : apps(source.appId);
-      const title = titled(source.title);
-      return {
-        area: shownArea(desk, shown, ShownWindowKind.App, source.id),
-        icon: <WindowIcon app={app} />,
-        key: sourceKey(source),
-        name: app === undefined ? title : `${app.name}: ${title}`,
-      };
-    }
-    case CastSourceKind.BrowserWindow:
-      return {
-        area: shownArea(desk, shown, ShownWindowKind.Browser, source.id),
-        icon: <GlobeIcon aria-hidden />,
-        key: sourceKey(source),
-        name: `Browser: ${titled(source.title)}`,
-      };
-    case CastSourceKind.Monitor:
-      return {
-        area: desk?.monitors.find(({ name }) => name === source.name)?.area,
-        icon: <MonitorIcon aria-hidden />,
-        key: sourceKey(source),
-        name:
-          source.description === ""
-            ? source.name
-            : `${source.name}: ${source.description}`,
-      };
-    case CastSourceKind.Region:
-      return {
-        area: undefined,
-        icon: <MonitorIcon aria-hidden />,
-        key: sourceKey(source),
-        name: "Region",
-      };
-  }
-};
-
-/** The name of a window titled `title`, which may be empty. */
-const titled = (title: string): string =>
-  title === "" ? "Untitled window" : title;
-
-/** Where `desk` shows the window of `kind` and `id`, if it does. */
-const shownArea = (
-  desk: FrozenDesk | undefined,
-  shown: readonly ShownWindow[],
-  kind: ShownWindowKind,
-  id: string,
-): ShotRect | undefined => {
-  const window = shown.find((window) =>
-    window.kind === ShownWindowKind.App
-      ? kind === ShownWindowKind.App && window.appId === id
-      : kind === ShownWindowKind.Browser && window.id === id,
-  );
-  return desk === undefined || window === undefined
-    ? undefined
-    : onFrame(desk, window.box);
 };

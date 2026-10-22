@@ -105,9 +105,10 @@ One request channel carries all dialogs. Each interface's backend builds on it.
     `DomicileHost.browserWindows`. A pick of a closed window fails to start.
   - Restore tokens keep a browser window only while the compositor runs
     (persist mode 1): engine ids do not survive a restart.
-  - The picker previews each source on a desk shot taken as it opens
-    (`desk`, a `FrozenDesk`). A source not on screen, or every source when
-    the shot fails, shows its icon (`SourceTiles`).
+  - The picker is laid out as the screenshot picker is (`SourcePicker`): screens
+    and windows in a list beside a desk shot taken as it opens (`desk`, a
+    `FrozenDesk`), which outlines each pick. Several picks are checkboxes.
+    Without a shot it says there is no preview.
 - **Input uses EIS.** RemoteDesktop and InputCapture hand out a libei socket
   (`ConnectToEIS`) served by the compositor (`reis`). Emulated input takes the
   engine's input injection path, so the lock screen still blocks it.
@@ -179,7 +180,8 @@ One request channel carries all dialogs. Each interface's backend builds on it.
     browser window id. The engine captures its page's own frame sink
     (`CaptureBrowserWindow`) and the compositor saves the first frame. The
     shot is the page alone: no address bar, title bar or anything over it.
-    One not on screen is not offered: its page draws no frames.
+    One not on screen, such as a tab behind another, is offered too: the
+    capture keeps its page drawing.
   - The frontend checks the `PermissionStore` for a non-interactive
     screenshot (`permission_store_checked`). Without that, the backend asks
     through an `Access` dialog once per app and keeps the answer in the same
