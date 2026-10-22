@@ -16,6 +16,7 @@ import { SourcePicker } from "./SourcePicker";
 import type { ShownWindow } from "./shown-windows";
 import { ShownWindowKind, shownArea } from "./shown-windows";
 import { browserChoice, screenChoice, windowChoice } from "./source-choices";
+import type { DrawPreview } from "./useWindowPreview";
 
 type Props = {
   answer: (answer: PortalAnswer) => void;
@@ -27,6 +28,8 @@ type Props = {
   /** The desktop's browser windows, as the engine lists them. */
   browserWindows: readonly DomicileBrowserWindow[];
   screen: string | undefined;
+  /** Draws a window that is not on screen. */
+  previewWindow: DrawPreview;
   /** The windows the shell draws on screen, read once as the dialog opens. */
   shownWindows: () => readonly ShownWindow[];
 };
@@ -71,6 +74,7 @@ export const ScreenshotDialog = ({
   asker,
   body,
   browserWindows,
+  previewWindow,
   screen,
   shownWindows,
 }: Props) => {
@@ -84,6 +88,7 @@ export const ScreenshotDialog = ({
     label: "Whole desk",
     name: "Whole desk",
     pick: Pick.Area(desk),
+    preview: undefined,
   };
   const screens: Picked[] = body.monitors.map(
     ({ area, description, name }) => ({
@@ -94,6 +99,7 @@ export const ScreenshotDialog = ({
   const windows: Picked[] = [
     ...body.windows.map(({ appId, id, title }) => ({
       ...windowChoice(
+        id,
         title,
         appId === "" ? undefined : apps(appId),
         shownArea(body, shown, ShownWindowKind.App, id),
@@ -102,6 +108,7 @@ export const ScreenshotDialog = ({
     })),
     ...browserWindows.map(({ id, title }) => ({
       ...browserChoice(
+        id,
         title,
         shownArea(body, shown, ShownWindowKind.Browser, id),
       ),
@@ -188,6 +195,7 @@ export const ScreenshotDialog = ({
           }
         }}
         picked={typeof picked === "number" ? [picked] : []}
+        previewWindow={previewWindow}
         sections={[
           { choices: [whole], label: undefined },
           { choices: screens, label: "Screens" },

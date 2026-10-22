@@ -284,6 +284,7 @@ const Dialog = ({
           asker={asker}
           body={request.body}
           browserWindows={browserWindows}
+          previewWindow={files.previewWindow}
           screen={screen}
           shownWindows={shownWindows}
         />
@@ -306,6 +307,7 @@ const Dialog = ({
           asker={request.appId === SHELL_APP_ID ? undefined : asker}
           body={request.body}
           browserWindows={browserWindows}
+          previewWindow={files.previewWindow}
           screen={screen}
           shownWindows={shownWindows}
         />

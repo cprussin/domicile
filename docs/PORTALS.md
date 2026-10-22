@@ -108,7 +108,8 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   - The picker is laid out as the screenshot picker is (`SourcePicker`): screens
     and windows in a list beside a desk shot taken as it opens (`desk`, a
     `FrozenDesk`), which outlines each pick. Several picks are checkboxes.
-    Without a shot it says there is no preview.
+    Without a shot it says there is no preview. A window not on screen is
+    drawn alone instead (`previewWindow`).
 - **Input uses EIS.** RemoteDesktop and InputCapture hand out a libei socket
   (`ConnectToEIS`) served by the compositor (`reis`). Emulated input takes the
   engine's input injection path, so the lock screen still blocks it.
@@ -171,6 +172,9 @@ One request channel carries all dialogs. Each interface's backend builds on it.
     notification, is left out, and so is the shell's title bar or tab. This
     covers windows the shell does not show (a hidden tab, another
     workspace).
+  - A window or browser window the shell does not show is drawn alone in
+    place of the desk when picked: the `preview_window` system call draws
+    it as the screenshot would save it.
   - The picker outlines a shown window on the frozen desk by its box. The
     shell passes its boxes as `shownWindows`; without them the picker reads
     the page's `<app>` and `<webview window>` boxes. A box is placed with

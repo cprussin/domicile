@@ -31,7 +31,8 @@ use domicile_host::mime_apps::{default_handler, lists};
 use domicile_host::portal_notifications::Invoked;
 use domicile_host::system::Kept;
 use domicile_protocol::{
-    BoundShortcut, Capturing, PortalAnswer, PortalRequest, PortalWallpaper, SystemError, Theme,
+    BoundShortcut, Capturing, PortalAnswer, PortalRequest, PortalWallpaper, PreviewedWindow,
+    SystemError, Theme,
 };
 use tracing::{debug, warn};
 use zbus::blocking::connection::Builder;
@@ -286,6 +287,12 @@ impl Portals {
             &self.shots,
             file,
         ))
+    }
+
+    /// Draws a window for the shell's picker to preview. Blocks until it is
+    /// drawn. See [`screenshot::preview`].
+    pub fn preview(&self, window: PreviewedWindow) -> Result<String, SystemError> {
+        zbus::block_on(screenshot::preview(&self.shots, window))
     }
 
     fn tell(&self, told: Told) {

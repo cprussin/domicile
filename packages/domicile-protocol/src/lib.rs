@@ -1540,6 +1540,16 @@ impl PortalAnswer {
     }
 }
 
+/// A window a [`SystemRequest::PreviewWindow`] draws.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PreviewedWindow {
+    /// A client's window, by host app id.
+    App { id: String },
+    /// A browser window's page, by the engine's window id.
+    Browser { id: String },
+}
+
 /// What a [`ChromeMessage::SystemRequest`] asks for.
 ///
 /// A relative path is read from the home directory. Bytes travel as standard
@@ -1642,6 +1652,9 @@ pub enum SystemRequest {
         #[serde(default)]
         file: Option<String>,
     },
+    /// Draw `window` as it last drew itself, for a picker to preview one it
+    /// cannot see on the frozen desk. Answered with [`SystemReply::Preview`].
+    PreviewWindow { window: PreviewedWindow },
     /// Report each command sent with [`SystemRequest::SendShell`]. Answered
     /// with [`SystemReply::Started`], then a [`SystemEvent::ShellCommand`] per
     /// command. [`SystemRequest::Unwatch`] ends it.
@@ -1757,6 +1770,8 @@ pub enum SystemReply {
     Saved { path: String },
     /// The screenshot was put on the clipboard and not saved.
     Copied,
+    /// A window's frame, as a `data:` URL of a PNG.
+    Preview { frame: String },
     /// At least one page heard the command.
     Sent,
     /// The window's states were replaced.

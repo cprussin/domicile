@@ -27,8 +27,8 @@ use std::thread;
 use std::time::{Instant, UNIX_EPOCH};
 
 use domicile_protocol::{
-    Bus, DirEntry, FileType, HostMessage, Signal, Stream, SystemEnd, SystemError, SystemErrorKind,
-    SystemEvent, SystemReply, SystemRequest, WindowState,
+    Bus, DirEntry, FileType, HostMessage, PreviewedWindow, Signal, Stream, SystemEnd, SystemError,
+    SystemErrorKind, SystemEvent, SystemReply, SystemRequest, WindowState,
 };
 use notify::{EventKindMask, RecursiveMode, Watcher};
 use zbus::blocking::{Connection, MessageIterator};
@@ -71,6 +71,8 @@ pub struct System {
     buses: Arc<Mutex<HashMap<Bus, Connection>>>,
     /// Takes screenshots; `None` on a system that takes none.
     screenshot: Option<Screenshot>,
+    /// Draws window previews; `None` on a system that draws none.
+    preview: Option<Preview>,
     /// The pages that hear a `SystemRequest::SendShell`.
     shell_commands: ShellCommands,
     /// The warning that the screens are about to blank.
@@ -90,6 +92,10 @@ pub type SetWindowStates =
 /// Takes a screenshot, into the file if one is given, and returns where it
 /// went. Blocks until it is kept, the dialog included.
 pub type Screenshot = Arc<dyn Fn(Option<PathBuf>) -> Result<Kept, SystemError> + Send + Sync>;
+
+/// Draws a window as it last drew itself, as a `data:` URL of a PNG. Blocks
+/// until it is drawn.
+pub type Preview = Arc<dyn Fn(PreviewedWindow) -> Result<String, SystemError> + Send + Sync>;
 
 /// Where a screenshot went.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -195,6 +201,7 @@ pub fn reach(request: &SystemRequest) -> Reach {
         SystemRequest::WriteFile { .. }
         | SystemRequest::Stdin { .. }
         | SystemRequest::Screenshot { .. }
+        | SystemRequest::PreviewWindow { .. }
         | SystemRequest::SendShell { .. } => Reach::Acts,
     }
 }
@@ -216,6 +223,7 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::DbusCall { .. }
         | SystemRequest::DbusMatch { .. }
         | SystemRequest::Screenshot { .. }
+        | SystemRequest::PreviewWindow { .. }
         | SystemRequest::ShellCommands
         | SystemRequest::IdleWarnings
         | SystemRequest::UnlockRefusals
@@ -257,6 +265,7 @@ pub fn refused_to_an_app(id: u32, request: &SystemRequest) -> Option<HostMessage
         | SystemRequest::DbusCall { .. }
         | SystemRequest::DbusMatch { .. } => None,
         SystemRequest::Screenshot { .. }
+        | SystemRequest::PreviewWindow { .. }
         | SystemRequest::ShellCommands
         | SystemRequest::SendShell { .. }
         | SystemRequest::IdleWarnings
@@ -297,6 +306,7 @@ impl System {
             }),
             buses: Arc::default(),
             screenshot: None,
+            preview: None,
             shell_commands: ShellCommands::default(),
             idle_warnings: IdleWarnings::default(),
             unlock_refusals: UnlockRefusals::default(),
@@ -321,6 +331,15 @@ impl System {
         screenshot: impl Fn(Option<PathBuf>) -> Result<Kept, SystemError> + Send + Sync + 'static,
     ) -> System {
         self.screenshot = Some(Arc::new(screenshot));
+        self
+    }
+
+    /// This system, drawing window previews through `preview`.
+    pub fn previewing_with(
+        mut self,
+        preview: impl Fn(PreviewedWindow) -> Result<String, SystemError> + Send + Sync + 'static,
+    ) -> System {
+        self.preview = Some(Arc::new(preview));
         self
     }
 
@@ -612,6 +631,18 @@ impl System {
                             path: path.display().to_string(),
                         },
                         Kept::Copied => SystemReply::Copied,
+                    })
+                })
+            }
+            SystemRequest::PreviewWindow { window } => {
+                let preview = self.preview.clone();
+                self.on_a_thread(id, move |_| -> Result<SystemReply, SystemError> {
+                    let preview = preview.ok_or_else(|| SystemError {
+                        kind: SystemErrorKind::Other,
+                        message: "this desktop draws no previews".into(),
+                    })?;
+                    Ok(SystemReply::Preview {
+                        frame: preview(window)?,
                     })
                 })
             }
