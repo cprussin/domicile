@@ -93,8 +93,9 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   socket. One producer keeps cursor modes and restore tokens in one place.
   The producer is `src/casting/`: `Casting::start` takes a `Source` and
   reports the node. `Source::Monitor` names a `wl_output`; `Source::Region`
-  is a desktop rectangle in logical pixels. The pointer is drawn from the
-  compositor's state, so it shows only over a window.
+  is a desktop rectangle in logical pixels. The pointer is drawn where the
+  engine last saw it (`desk_pointer`), so it shows over pages and windows
+  alike.
   - `Source::BrowserWindow` is a browser window's page alone, by the
     engine's window id: the engine captures its frame sink
     (`CaptureBrowserWindow`), as a browser window screenshot does. The

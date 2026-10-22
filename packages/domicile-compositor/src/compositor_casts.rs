@@ -102,14 +102,15 @@ impl DomicileCompositor {
 
     /// The pointer moved over `at`'s window box, or left every window.
     pub fn cast_pointer(&mut self, at: Option<(String, (f64, f64))>) {
-        // The same point on the desktop, for monitor and region streams. The
-        // compositor knows the pointer only over a window.
-        let desk = at.as_ref().and_then(|(app_id, (x, y))| {
-            let bounds = self.held_frames.shown_box(&self.app_bounds, app_id)?;
-            Some((bounds.min.x + x, bounds.min.y + y))
-        });
         let renderer = self.gpu.as_mut().map(Gpu::renderer);
-        let due = self.casting.pointer(at, desk, renderer, Instant::now());
+        let due = self.casting.pointer_in_window(at, renderer, Instant::now());
+        self.arm_the_cast_deadline(due);
+    }
+
+    /// The engine says the pointer is at `at` on the desktop, or off it.
+    pub fn cast_desk_pointer(&mut self, at: Option<(f64, f64)>) {
+        let renderer = self.gpu.as_mut().map(Gpu::renderer);
+        let due = self.casting.pointer_on_desk(at, renderer, Instant::now());
         self.arm_the_cast_deadline(due);
     }
 
