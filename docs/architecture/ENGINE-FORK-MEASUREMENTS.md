@@ -183,8 +183,23 @@ that compositor's. `PLATFORM=drm` runs on the scanout platform:
 - `latency_window_flags` and `latency_platform_refusal` in `lib-latency.sh`
   implement this. `scripts/test-the-latency-run-picks-its-platform.sh` tests
   it.
-- Nobody has run it. [ROADMAP.md](/ROADMAP.md) (*Needs a machine with a
-  screen*) has the command. It would still not measure presentation.
+- It still does not measure presentation.
+
+One run on lyra (Framework 13, Radeon 890M, 2880x1920 panel modeset at
+120 Hz), 60 rounds, 2026-10-22:
+
+| Stage | Median | Over 16.67 ms | Over 8.33 ms |
+|---|---|---|---|
+| Floor | 17.92 ms | 1.1 | 2.2 |
+| Key to commit | 21.18 ms | 1.3 | 2.5 |
+| Commit to pixel | 20.64 ms | 1.2 | 2.5 |
+| Key to pixel | 42.54 ms | 2.6 | 5.1 |
+
+- No round was abandoned, late, moved or undelivered.
+- The run passes, but only against `SPIKE_REFRESH_MHZ` (60 Hz) in
+  `latency_run.rs`. Against the panel's 120 Hz it would fail.
+- The floor's minimum is 10.50 ms, longer than a 120 Hz frame, so viz
+  likely draws at 60 Hz here. Unconfirmed. See [ROADMAP.md](/ROADMAP.md).
 
 ## A client's window on the page
 
