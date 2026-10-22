@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Thu, 22 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: screen casts see the pointer everywhere
+
+A cast of a monitor showed no pointer over the shell's page or a browser
+window. The compositor hears the pointer only over a window, from the
+shell.
+
+- `StartDeskPointer` (`chrome/browser/domicile/domicile_desk_pointer.cc`)
+  observes aura's mouse moves and drags, in the shell page's CSS pixels.
+- It tells `DeskPointer` (`components/domicile/browser/desk_pointer.cc`),
+  and each control channel sends the compositor `desk_pointer`.
+- Started in `PostBrowserStart`, beside `StartDeskActivity`.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ chrome/browser/chrome_browser_main.cc | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
+index ca1e8d6..f3b2a91 100644
+--- a/chrome/browser/chrome_browser_main.cc
++++ b/chrome/browser/chrome_browser_main.cc
+@@ -7,6 +7,7 @@
+ #include "chrome/browser/domicile/domicile_command_socket.h"
+ #include "chrome/browser/domicile/domicile_desk.h"
+ #include "chrome/browser/domicile/domicile_desk_activity.h"
++#include "chrome/browser/domicile/domicile_desk_pointer.h"
+ #include "chrome/browser/domicile/domicile_file_dialogs.h"
+ #include "chrome/browser/domicile/domicile_shell_windows.h"
+ #include "components/domicile/browser/desktop_prefs.h"
+@@ -1781,6 +1782,10 @@ void ChromeBrowserMainParts::PostBrowserStart() {
+   // input rather than any page's.
+   domicile::StartDeskActivity();
+ 
++  // Domicile's engine fork: every pointer move, to the compositor's screen
++  // casts, which hear the pointer only over a window. Here for the same reason.
++  domicile::StartDeskPointer();
++
+   for (auto& chrome_extra_part : chrome_extra_parts_) {
+     chrome_extra_part->PostBrowserStart();
+   }

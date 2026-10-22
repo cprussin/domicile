@@ -13,6 +13,7 @@ class GURL;
 
 namespace content {
 class RenderFrameHost;
+class WebContents;
 }  // namespace content
 
 namespace domicile {
@@ -49,6 +50,9 @@ bool OpenBrowserWindow(const GURL& url, bool app);
 // Returns false when there is no shell to own it. See
 // docs/architecture/APP-MODULES.md.
 bool OpenAppModuleWindow(const GURL& url, const std::string& app_host);
+
+// The shell's WebContents in any profile, or null while there is none.
+content::WebContents* DeskShellContents();
 
 // Binds BrowserWindows for `frame`. Sends the whole list on binding and on
 // every change, and takes the shell's opens and closes.

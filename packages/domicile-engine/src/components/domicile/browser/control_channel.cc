@@ -81,11 +81,15 @@ ControlChannel::ControlChannel(
   activity_ = DeskActivity::Get().AddListener(
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &ControlChannel::SomebodyIsHere, weak_factory_.GetWeakPtr())));
+  pointer_ = DeskPointer::Get().AddListener(
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
+          &ControlChannel::DeskPointerMoved, weak_factory_.GetWeakPtr())));
   give_up_at_ = base::TimeTicks::Now() + kReachFor;
   Connect();
 }
 
 ControlChannel::~ControlChannel() {
+  DeskPointer::Get().RemoveListener(pointer_);
   DeskActivity::Get().RemoveListener(activity_);
   ShortcutRegistry::Get().RemoveChannel(channel_);
 }
@@ -708,6 +712,20 @@ void ControlChannel::SomebodyIsHere() {
   if (connected_) {
     SendMessage(Typed("activity"));
   }
+}
+
+void ControlChannel::DeskPointerMoved(std::optional<gfx::PointF> at) {
+  if (!connected_) {
+    return;
+  }
+  base::DictValue message = Typed("desk_pointer");
+  if (at) {
+    base::ListValue point;
+    point.Append(static_cast<double>(at->x()));
+    point.Append(static_cast<double>(at->y()));
+    message.Set("at", std::move(point));
+  }
+  SendMessage(std::move(message));
 }
 
 void ControlChannel::ReadLoop() {

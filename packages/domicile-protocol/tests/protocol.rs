@@ -34,6 +34,10 @@ fn chrome_messages_round_trip() {
     chrome_round_trip(&ChromeMessage::SetDevicePixelRatio { ratio: 1.5 });
     chrome_round_trip(&ChromeMessage::FocusChrome);
     chrome_round_trip(&ChromeMessage::Activity);
+    chrome_round_trip(&ChromeMessage::DeskPointer {
+        at: Some((12.5, 3.0)),
+    });
+    chrome_round_trip(&ChromeMessage::DeskPointer { at: None });
     chrome_round_trip(&ChromeMessage::CloseApp {
         app_id: "term".into(),
     });
@@ -564,4 +568,20 @@ fn an_anchored_window_names_its_anchor_or_null() {
         serde_json::json!({"type": "app_anchored", "app_id": "app-2", "anchor": "bar"})
     );
     assert_eq!(anchored(None)["anchor"], serde_json::Value::Null);
+}
+
+/// The engine writes these lines itself (`ControlChannel::DeskPointerMoved`).
+#[test]
+fn the_desk_pointer_is_a_point_or_nothing_on_the_wire() {
+    assert_eq!(
+        serde_json::from_str::<ChromeMessage>(r#"{"type":"desk_pointer","at":[12.5,3.0]}"#)
+            .expect("parsed"),
+        ChromeMessage::DeskPointer {
+            at: Some((12.5, 3.0))
+        }
+    );
+    assert_eq!(
+        serde_json::from_str::<ChromeMessage>(r#"{"type":"desk_pointer"}"#).expect("parsed"),
+        ChromeMessage::DeskPointer { at: None }
+    );
 }

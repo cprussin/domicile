@@ -591,6 +591,10 @@ bool OpenAppModuleWindow(const GURL& url, const std::string& app_host) {
       .OpenAppModule(url, app_host);
 }
 
+content::WebContents* DeskShellContents() {
+  return ShellContentsIn(nullptr);
+}
+
 void BindBrowserWindows(content::RenderFrameHost* frame,
                         mojo::PendingReceiver<mojom::BrowserWindows> receiver) {
   // Owns itself and dies with the document, like every DocumentService.
