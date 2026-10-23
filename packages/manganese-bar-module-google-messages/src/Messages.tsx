@@ -109,6 +109,22 @@ const Page = ({ onShow }: { onShow: () => void }) => {
     }
   }, [onShow, view]);
 
+  // A page loaded before the network was up stays offline until reloaded,
+  // and the panel has no reload button.
+  useEffect(() => {
+    if (view === null) {
+      return undefined;
+    } else {
+      const reload = () => {
+        view.reload();
+      };
+      globalThis.addEventListener("online", reload);
+      return () => {
+        globalThis.removeEventListener("online", reload);
+      };
+    }
+  }, [view]);
+
   return (
     <>
       {request !== undefined && (
