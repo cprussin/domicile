@@ -247,6 +247,8 @@ export type System = {
     data: Uint8Array | string,
     options?: { atomic?: boolean },
   ) => Promise<Result<"written", SystemError>>;
+  /** Fails {@link SystemErrorKind.AlreadyExists} if anything has the name. */
+  createDir: (path: string) => Promise<Result<"created", SystemError>>;
   readDir: (path: string) => Promise<Result<DirEntry[], SystemError>>;
   stat: (path: string) => Promise<Result<Stat, SystemError>>;
   watch: (path: string) => Promise<Result<Watch, SystemError>>;
@@ -332,6 +334,10 @@ export type SystemHost = Pick<DomicileHost, "callSystem"> & {
 export const system = (host: SystemHost): System => {
   const calls = callsOn(host);
   return {
+    createDir: (path) =>
+      oneShot(calls, { call: "create_dir", path }, (reply) =>
+        reply.kind === "created" ? "created" : unexpected(reply),
+      ),
     dbusCall: (request) =>
       oneShot(
         calls,

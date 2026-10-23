@@ -211,6 +211,51 @@ describe("watchPortalRequests", () => {
     ]);
   });
 
+  // GTK marks a label's access key with `_`, and writes a literal one as `__`.
+  it("drops the access key marks from a file chooser's labels", async () => {
+    const host = new FakeHost();
+    const requests = watched(host);
+    host.push([
+      {
+        app_id: "org.gnome.SimpleScan",
+        body: {
+          accept_label: "_Save",
+          choices: [
+            {
+              id: "mode",
+              initial: "a",
+              label: "_Scan__mode",
+              options: [{ id: "a", label: "_All pages" }],
+            },
+          ],
+          directory: false,
+          files: [],
+          filters: [],
+          home: "/home/me",
+          mode: "save",
+          multiple: false,
+          title: "Save As",
+        },
+        id: 5,
+        kind: "file_chooser",
+      },
+    ]);
+
+    expect(await requests).toMatchObject([
+      {
+        body: {
+          acceptLabel: "Save",
+          choices: [
+            {
+              label: "Scan_mode",
+              options: [{ id: "a", label: "All pages" }],
+            },
+          ],
+        },
+      },
+    ]);
+  });
+
   it("parses an inhibitor's body", async () => {
     const host = new FakeHost();
     const requests = watched(host);

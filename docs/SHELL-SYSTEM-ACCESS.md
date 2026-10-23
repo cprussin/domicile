@@ -128,7 +128,7 @@ recorded output.
 ## Wire
 
 - Page to compositor: `system_request { id, request }`. `request` starts a
-  call (`read_file`, `write_file`, `read_dir`, `stat`, `watch`, `spawn`,
+  call (`read_file`, `write_file`, `create_dir`, `read_dir`, `stat`, `watch`, `spawn`,
   `dbus_call`, `dbus_match`, `screenshot`, `preview_window`, `shell_commands`, `send_shell`,
   `idle_warnings`, `unlock_refusals`, `set_window_states`, `window_requests`)
   or

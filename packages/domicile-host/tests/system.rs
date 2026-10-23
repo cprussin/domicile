@@ -192,6 +192,20 @@ mod files {
     }
 
     #[test]
+    fn a_directory_is_created_once() {
+        let home = tempfile::tempdir().unwrap();
+        let (system, heard) = system_in(home.path());
+
+        for id in [1, 2] {
+            system.handle(id, SystemRequest::CreateDir { path: "new".into() });
+        }
+
+        assert_eq!(reply(&heard, 1), SystemReply::Created);
+        assert!(home.path().join("new").is_dir());
+        assert_eq!(failure(reply(&heard, 2)), SystemErrorKind::AlreadyExists);
+    }
+
+    #[test]
     fn data_that_is_not_base64_is_refused() {
         let home = tempfile::tempdir().unwrap();
         let (system, heard) = system_in(home.path());

@@ -74,6 +74,13 @@ fn file_calls_name_a_path() {
             request: SystemRequest::Stat { path: "/".into() },
         }
     );
+    assert_eq!(
+        chrome(r#"{"type":"system_request","id":5,"request":{"call":"create_dir","path":"new"}}"#),
+        ChromeMessage::SystemRequest {
+            id: 5,
+            request: SystemRequest::CreateDir { path: "new".into() },
+        }
+    );
 }
 
 #[test]
@@ -174,6 +181,13 @@ fn replies_carry_the_requests_id() {
             reply: SystemReply::Written,
         }),
         r#"{"type":"system_reply","id":2,"reply":{"kind":"written"}}"#
+    );
+    assert_eq!(
+        host(&HostMessage::SystemReply {
+            id: 5,
+            reply: SystemReply::Created,
+        }),
+        r#"{"type":"system_reply","id":5,"reply":{"kind":"created"}}"#
     );
     assert_eq!(
         host(&HostMessage::SystemReply {

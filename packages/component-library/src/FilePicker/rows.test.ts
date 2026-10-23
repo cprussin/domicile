@@ -20,9 +20,15 @@ const listed = (
     accept = [],
     directory = "/mnt/usb",
     filter = "",
-  }: { accept?: string[]; directory?: string; filter?: string } = {},
+    hidden = false,
+  }: {
+    accept?: string[];
+    directory?: string;
+    filter?: string;
+    hidden?: boolean;
+  } = {},
 ) =>
-  rowsIn({ accept, directory, entries: ENTRIES, filter, mode }).map(
+  rowsIn({ accept, directory, entries: ENTRIES, filter, hidden, mode }).map(
     ({ name }) => name,
   );
 
@@ -47,6 +53,7 @@ describe("rowsIn", () => {
         directory: "/mnt/usb",
         entries: ["a/", "b.txt"],
         filter: "",
+        hidden: false,
         mode: ChooserMode.Open,
       }),
     ).toStrictEqual([
@@ -93,5 +100,9 @@ describe("rowsIn", () => {
       "notes.txt",
       "photo.PNG",
     ]);
+  });
+
+  it("shows what starts with a dot when hidden files are shown", () => {
+    expect(listed(ChooserMode.Open, { hidden: true })).toContain(".cache");
   });
 });

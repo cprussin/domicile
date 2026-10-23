@@ -18,8 +18,9 @@ import {
 } from "@domicile-desktop/sdk/portal";
 import type { System, SystemHost } from "@domicile-desktop/sdk/system";
 import { system } from "@domicile-desktop/sdk/system";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { listDirectory } from "../FilePicker/list-directory";
+import { memo, useEffect, useMemo, useState } from "react";
+import type { Folders } from "../FilePicker/folders";
+import { systemFolders } from "../FilePicker/folders";
 import type { App } from "../useApps/useApps";
 import { useApps } from "../useApps/useApps";
 import { AccessDialog } from "./AccessDialog";
@@ -93,10 +94,7 @@ export const PortalDialogs = memo(
   }: Props) => {
     const [requests, setRequests] = useState<readonly PortalRequest[]>([]);
     const files = useMemo(() => systemOf(host), [systemOf, host]);
-    const list = useCallback(
-      (path: string) => listDirectory(files, path),
-      [files],
-    );
+    const folders = useMemo(() => systemFolders(files), [files]);
     const [sessions, setSessions] = useState<readonly Capturing[]>([]);
     const apps = useApps(files, [
       ...requests.flatMap(appIds),
@@ -140,8 +138,8 @@ export const PortalDialogs = memo(
             apps={apps}
             asker={apps(shown.appId).name}
             browserWindows={host.browserWindows ?? []}
+            folders={folders}
             key={shown.id}
-            list={list}
             request={shown}
             screen={screenFor(shown, screen, screenOf)}
             shellChords={shellChords}
@@ -163,7 +161,7 @@ const Dialog = ({
   apps,
   asker,
   browserWindows,
-  list,
+  folders,
   request,
   screen,
   shellChords,
@@ -174,7 +172,7 @@ const Dialog = ({
   apps: (appId: string) => App;
   asker: string;
   browserWindows: readonly DomicileBrowserWindow[];
-  list: (path: string) => Promise<readonly string[]>;
+  folders: Folders;
   request: PortalRequest;
   screen: string | undefined;
   shellChords: readonly string[];
@@ -224,7 +222,7 @@ const Dialog = ({
         <FileChooserDialog
           answer={answer}
           body={request.body}
-          list={list}
+          folders={folders}
           screen={screen}
         />
       );
@@ -295,7 +293,7 @@ const Dialog = ({
           answer={answer}
           asker={asker}
           body={request.body}
-          list={list}
+          folders={folders}
           screen={screen}
         />
       );

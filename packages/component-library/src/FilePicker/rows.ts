@@ -27,6 +27,8 @@ type Listed = {
   entries: readonly string[];
   /** The filter text. */
   filter: string;
+  /** Whether to show dotfiles without a dot typed. */
+  hidden: boolean;
   mode: ChooserMode;
 };
 
@@ -36,14 +38,15 @@ type Listed = {
  * shows all so taken names are visible.
  *
  * The filter matches case-insensitively, prefix matches first, so Enter after
- * typing a name picks it. Dotfiles are hidden until the filter starts with a
- * dot, as in a shell.
+ * typing a name picks it. Dotfiles are hidden, unless `hidden` is set, until
+ * the filter starts with a dot, as in a shell.
  */
 export const rowsIn = ({
   accept,
   directory,
   entries,
   filter,
+  hidden,
   mode,
 }: Listed): readonly Row[] => {
   const lowered = filter.toLowerCase();
@@ -52,7 +55,7 @@ export const rowsIn = ({
     .filter(
       ({ kind, name }) =>
         name.toLowerCase().includes(lowered) &&
-        (!name.startsWith(".") || filter.startsWith(".")) &&
+        (hidden || !name.startsWith(".") || filter.startsWith(".")) &&
         (kind === RowKind.Directory || offersFile(mode, accept, name)),
     )
     .toSorted(

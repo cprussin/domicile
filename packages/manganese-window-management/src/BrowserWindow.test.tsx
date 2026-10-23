@@ -817,10 +817,16 @@ describe("BrowserWindow", () => {
       depth: 0,
       domicile: silentDomicile,
       dragging: false,
+      // One file in the home directory is enough for these tests.
+      folders: () => ({
+        create: () => {
+          throw new Error("unexpected create");
+        },
+        list: () => Promise.resolve(["notes.txt"]),
+        watch: () => () => undefined,
+      }),
       frame: FRAME,
       fullscreen: false,
-      // One file in the home directory is enough for these tests.
-      listDirectory: () => Promise.resolve(["notes.txt"]),
       motion: "resting",
       onDescription: noDescription,
       onFocusRequest: () => undefined,

@@ -11,7 +11,7 @@ export type HeldRequest = FileRequest & { serial: number };
 
 /**
  * The file request the page in `view` is waiting on, if any, listing
- * directories with `list`.
+ * browsing `folders`.
  *
  * `preventDefault()` claims the request; the engine cancels unclaimed ones
  * when dispatch returns (see `WEBVIEW_FILE_CHOOSER_EVENT`). An unknown mode
@@ -25,7 +25,7 @@ export type HeldRequest = FileRequest & { serial: number };
  */
 export const useFileRequest = (
   view: HTMLElement | null,
-  list: FileRequest["list"],
+  folders: FileRequest["folders"],
 ): HeldRequest | undefined => {
   const [asking, setAsking] = useState<HeldRequest | undefined>(undefined);
   // The pending request, in a ref because two can arrive before a render.
@@ -38,7 +38,7 @@ export const useFileRequest = (
       return undefined;
     } else {
       const took = (event: DomicileFileChooserEvent) => {
-        const request = fileRequestOf(event, list);
+        const request = fileRequestOf(event, folders);
         event.preventDefault();
         outstanding.current?.cancel();
         asked.current += 1;
@@ -69,7 +69,7 @@ export const useFileRequest = (
         outstanding.current?.cancel();
       };
     }
-  }, [view, list]);
+  }, [view, folders]);
 
   return asking;
 };

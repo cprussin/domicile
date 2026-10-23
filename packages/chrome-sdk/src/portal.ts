@@ -943,8 +943,18 @@ const fileChooserSchema = z
   })
   .transform(
     (body): FileChooserBody => ({
-      acceptLabel: body.accept_label,
-      choices: body.choices,
+      acceptLabel:
+        body.accept_label === undefined
+          ? undefined
+          : withoutAccessKeys(body.accept_label),
+      choices: body.choices.map((choice) => ({
+        ...choice,
+        label: withoutAccessKeys(choice.label),
+        options: choice.options.map((option) => ({
+          ...option,
+          label: withoutAccessKeys(option.label),
+        })),
+      })),
       currentFilter: body.current_filter,
       currentFolder: body.current_folder,
       currentName: body.current_name,
@@ -1293,6 +1303,13 @@ const printerSchema = z
       sides: printer.sides.map((name) => valueFor(SIDES, name)),
     }),
   );
+
+/**
+ * A GTK label as shown: `_` marks the next letter as the access key, and
+ * `__` is a literal `_`.
+ */
+const withoutAccessKeys = (label: string): string =>
+  label.replaceAll(/_(.)/gsu, "$1");
 
 const printSchema = z
   .object({

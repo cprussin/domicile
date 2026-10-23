@@ -12,6 +12,7 @@ import { css } from "../../styled-system/css";
 import { focusOnAttach } from "../_control/focusOnAttach";
 import { FilePicker } from "../FilePicker/FilePicker";
 import { ChooserMode } from "../FilePicker/file-request";
+import type { Folders } from "../FilePicker/folders";
 import { useScreenRegion } from "../Screen/DisplayProvider";
 import { Select } from "../Select/Select";
 
@@ -24,7 +25,7 @@ const YES_NO = [
 type Props = {
   answer: (answer: PortalAnswer) => void;
   body: FileChooserBody;
-  list: (path: string) => Promise<readonly string[]>;
+  folders: Folders;
   screen: string | undefined;
 };
 
@@ -33,7 +34,7 @@ type Props = {
  * whole page, with the application's choices beside its buttons. Its box
  * takes the keyboard on open.
  */
-export const FileChooserDialog = ({ answer, body, list, screen }: Props) => {
+export const FileChooserDialog = ({ answer, body, folders, screen }: Props) => {
   const region = useScreenRegion(screen);
   const [choices, setChoices] = useState<ReadonlyMap<string, string>>(
     () => new Map(body.choices.map((choice) => [choice.id, choice.initial])),
@@ -75,8 +76,8 @@ export const FileChooserDialog = ({ answer, body, list, screen }: Props) => {
           currentFilter: body.currentFilter,
           currentFolder: body.currentFolder,
           filters: body.filters.length === 0 ? undefined : body.filters,
+          folders,
           home: body.home,
-          list,
           mode: chooserModeOf(body),
           suggestedName: body.currentName ?? "",
           title: body.title,

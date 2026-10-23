@@ -1,8 +1,12 @@
+import type { SystemError } from "@domicile-desktop/sdk/system";
+import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import { ArrowBendLeftUpIcon } from "@phosphor-icons/react/dist/ssr/ArrowBendLeftUp";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
 import { CheckIcon } from "@phosphor-icons/react/dist/ssr/Check";
 import { DesktopIcon } from "@phosphor-icons/react/dist/ssr/Desktop";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr/DownloadSimple";
+import { EyeIcon } from "@phosphor-icons/react/dist/ssr/Eye";
+import { EyeSlashIcon } from "@phosphor-icons/react/dist/ssr/EyeSlash";
 import { FileIcon } from "@phosphor-icons/react/dist/ssr/File";
 import { FileArrowUpIcon } from "@phosphor-icons/react/dist/ssr/FileArrowUp";
 import { FileAudioIcon } from "@phosphor-icons/react/dist/ssr/FileAudio";
@@ -17,12 +21,14 @@ import { FilmStripIcon } from "@phosphor-icons/react/dist/ssr/FilmStrip";
 import { FloppyDiskIcon } from "@phosphor-icons/react/dist/ssr/FloppyDisk";
 import { FolderIcon } from "@phosphor-icons/react/dist/ssr/Folder";
 import { FolderOpenIcon } from "@phosphor-icons/react/dist/ssr/FolderOpen";
+import { FolderPlusIcon } from "@phosphor-icons/react/dist/ssr/FolderPlus";
 import { HardDrivesIcon } from "@phosphor-icons/react/dist/ssr/HardDrives";
 import { HouseIcon } from "@phosphor-icons/react/dist/ssr/House";
 import { ImageIcon } from "@phosphor-icons/react/dist/ssr/Image";
 import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
 import { MusicNotesIcon } from "@phosphor-icons/react/dist/ssr/MusicNotes";
+import { PencilSimpleIcon } from "@phosphor-icons/react/dist/ssr/PencilSimple";
 import { WarningIcon } from "@phosphor-icons/react/dist/ssr/Warning";
 import type { FocusEvent, KeyboardEvent, ReactNode, Ref } from "react";
 import { useId, useState } from "react";
@@ -33,7 +39,6 @@ import { focusOnAttach } from "../_control/focusOnAttach";
 import { useStableRef } from "../_control/useStableRef";
 import { Button } from "../Button/Button";
 import { Input } from "../Input/Input";
-import { Kbd } from "../Kbd/Kbd";
 import { highlightIn, keepInView, stepOf, steppedTo } from "../list-walk";
 import { Select } from "../Select/Select";
 import { Clash, clashOf } from "./clash";
@@ -82,27 +87,32 @@ type Props = {
 /** A sidebar entry. */
 type Place = { glyph: typeof FolderIcon; label: string; path: string };
 
+/** A folder being named, and why the last try to make it failed. */
+type NewFolder = { failure: string | undefined; name: string };
+
 /**
  * A file picker drawn over its positioned parent only, so the rest of the
  * screen stays usable.
  *
- * Starts in `currentFolder`, or the home, and lists one directory at a time;
- * nothing is indexed. One box has the keyboard: the filter, or the file name
- * when saving. A `/` in it walks the path like a shell (see `walked`).
+ * Starts in `currentFolder`, or the home, and lists one directory at a time,
+ * again whenever it changes; nothing is indexed. One box has the keyboard:
+ * the filter, or the file name when saving. A `/` in the filter walks the
+ * path like a shell (see `walked`); the path box takes a path in any mode.
  * Opening, a click or arrow key selects a file; Enter, a double click or the
  * button chooses it. Saving, the arrows pick a folder to enter and Enter
  * saves, asking first before replacing a file. Clicking a directory enters
  * it.
  *
  * Keys: arrows move, Enter opens, Backspace in an empty box goes up,
- * Ctrl+Enter confirms, Escape cancels, and Tab marks a file in multi-select,
- * as in fzf.
+ * Ctrl+Enter confirms, Ctrl+L opens the path box, Ctrl+H shows hidden files,
+ * Escape cancels, and Tab marks a file in multi-select, as in fzf.
  */
 export const FilePicker = ({ ref, request }: Props) => {
   const titleId = useId();
   const listId = useId();
   const replaceTitleId = useId();
   const replaceNoteId = useId();
+  const failureId = useId();
   const [box, setBox] = useStableRef(ref);
   const [directory, setDirectory] = useState(
     request.currentFolder ?? request.home,
@@ -116,6 +126,11 @@ export const FilePicker = ({ ref, request }: Props) => {
   const [name, setName] = useState(request.suggestedName);
   // Whether the user is asked to confirm replacing a file.
   const [replacing, setReplacing] = useState(false);
+  // Whether dotfiles show without a dot typed.
+  const [hidden, setHidden] = useState(false);
+  // The path box's text while it is open.
+  const [typedPath, setTypedPath] = useState<string | undefined>(undefined);
+  const [newFolder, setNewFolder] = useState<NewFolder | undefined>(undefined);
   const [filter, setFilter] = useState<FileFilter | undefined>(
     request.filters?.[request.currentFilter ?? 0],
   );
@@ -126,16 +141,17 @@ export const FilePicker = ({ ref, request }: Props) => {
   };
 
   const saving = request.mode === ChooserMode.Save;
-  const listing = useListing(request.list, directory);
+  const listing = useListing(request.folders, directory);
   const entries = listing.state === ListingState.Listed ? listing.entries : [];
   // Lists the home directory to find which standard folders exist.
-  const homeListing = useListing(request.list, request.home);
+  const homeListing = useListing(request.folders, request.home);
   const clash = saving ? clashOf(entries, name) : Clash.None;
   const rows = rowsIn({
     accept: filter === undefined ? request.accept : filter.extensions,
     directory,
     entries,
     filter: query,
+    hidden,
     mode: request.mode,
   });
   const highlighted =
@@ -175,6 +191,49 @@ export const FilePicker = ({ ref, request }: Props) => {
   const reconsider = () => {
     setReplacing(false);
     box.current?.focus();
+  };
+
+  const closePath = () => {
+    setTypedPath(undefined);
+    box.current?.focus();
+  };
+
+  const goTyped = (typed: string) => {
+    go(
+      walked({
+        directory,
+        home: request.home,
+        typed: typed.endsWith("/") ? typed : `${typed}/`,
+      }).directory,
+    );
+    closePath();
+  };
+
+  const closeNewFolder = () => {
+    setNewFolder(undefined);
+    box.current?.focus();
+  };
+
+  // Makes the folder named here and enters it, or says why it could not.
+  const make = (named: string) => {
+    const path = pathIn(directory, named);
+    request.folders
+      .create(path)
+      .then((made) => {
+        made.match({
+          Err: (error) => {
+            setNewFolder({ failure: failureOf(error), name: named });
+          },
+          Ok: () => {
+            go(path);
+            closeNewFolder();
+          },
+        });
+      })
+      .catch((error: unknown) => {
+        // biome-ignore lint/suspicious/noConsole: reports an unexpected failure to make a folder
+        console.error("The file picker could not make a folder", error);
+      });
   };
 
   // Enter or double click: enters a directory, or chooses a file (or names
@@ -239,8 +298,12 @@ export const FilePicker = ({ ref, request }: Props) => {
           event.preventDefault();
           if (asking) {
             reconsider();
-          } else {
+          } else if (typedPath !== undefined) {
+            closePath();
+          } else if (newFolder === undefined) {
             request.cancel();
+          } else {
+            closeNewFolder();
           }
         }
       }}
@@ -279,46 +342,116 @@ export const FilePicker = ({ ref, request }: Props) => {
                 onMouseDown={(event) => {
                   event.preventDefault();
                 }}
-                size="sm"
                 variant="ghost"
               >
                 {label}
               </Button>
             ))}
           </nav>
-          <Keys mode={request.mode} />
         </aside>
         <section className={mainStyles}>
-          <nav aria-label="Path" className={pathBarStyles}>
-            {crumbsOf(directory, request.home).map((crumb, at, crumbs) => (
-              <span className={crumbStyles} key={crumb.path}>
-                {at > 0 && (
-                  <span aria-hidden className={crumbSeparatorStyles}>
-                    <CaretRightIcon size={12} weight="bold" />
+          <div className={locationStyles}>
+            {typedPath === undefined ? (
+              <nav aria-label="Path" className={pathBarStyles}>
+                {crumbsOf(directory, request.home).map((crumb, at, crumbs) => (
+                  <span className={crumbStyles} key={crumb.path}>
+                    {at > 0 && (
+                      <span aria-hidden className={crumbSeparatorStyles}>
+                        <CaretRightIcon size={12} weight="bold" />
+                      </span>
+                    )}
+                    <Button
+                      aria-current={
+                        at === crumbs.length - 1 ? "location" : undefined
+                      }
+                      beforeIcon={
+                        at === 0 ? (
+                          <CrumbGlyph label={crumb.label} />
+                        ) : undefined
+                      }
+                      onClick={() => {
+                        go(crumb.path);
+                      }}
+                      // The keyboard stays in the box.
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                      }}
+                      size="sm"
+                      variant="ghost"
+                    >
+                      {crumb.label}
+                    </Button>
                   </span>
-                )}
-                <Button
-                  aria-current={
-                    at === crumbs.length - 1 ? "location" : undefined
-                  }
-                  beforeIcon={
-                    at === 0 ? <CrumbGlyph label={crumb.label} /> : undefined
-                  }
-                  onClick={() => {
-                    go(crumb.path);
-                  }}
-                  // The keyboard stays in the box.
-                  onMouseDown={(event) => {
+                ))}
+              </nav>
+            ) : (
+              <Input
+                aria-label="Path"
+                onChange={(event) => {
+                  setTypedPath(event.target.value);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
                     event.preventDefault();
-                  }}
-                  size="sm"
-                  variant="ghost"
-                >
-                  {crumb.label}
-                </Button>
-              </span>
-            ))}
-          </nav>
+                    goTyped(event.currentTarget.value);
+                  }
+                }}
+                ref={focusOnAttach}
+                size="sm"
+                spellCheck={false}
+                value={typedPath}
+              />
+            )}
+            <div className={toolsStyles}>
+              <Button
+                label="Type a path"
+                onClick={() => {
+                  setTypedPath(typedPathOf(directory, request.home));
+                }}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                }}
+                size="sm"
+                variant="ghost"
+              >
+                <PencilSimpleIcon size={ICON_SIZE} />
+              </Button>
+              <Button
+                aria-pressed={hidden}
+                beforeIcon={
+                  hidden ? (
+                    <EyeIcon size={ICON_SIZE} />
+                  ) : (
+                    <EyeSlashIcon size={ICON_SIZE} />
+                  )
+                }
+                onClick={() => {
+                  setHidden(!hidden);
+                }}
+                // The keyboard stays in the box.
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                }}
+                size="sm"
+                variant="ghost"
+              >
+                Hidden files
+              </Button>
+              <Button
+                beforeIcon={<FolderPlusIcon size={ICON_SIZE} />}
+                onClick={() => {
+                  setNewFolder({ failure: undefined, name: "" });
+                }}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                }}
+                size="sm"
+                variant="ghost"
+              >
+                New folder
+              </Button>
+            </div>
+          </div>
           <Input
             aria-activedescendant={
               highlighted === undefined ? undefined : rowId(listId, highlighted)
@@ -327,15 +460,15 @@ export const FilePicker = ({ ref, request }: Props) => {
             aria-expanded
             aria-label={saving ? "Name" : PROMPT}
             onChange={(event) => {
-              const to = walked({
-                directory,
-                home: request.home,
-                typed: event.target.value,
-              });
-              setDirectory(to.directory);
               if (saving) {
-                setName(to.filter);
+                setName(event.target.value);
               } else {
+                const to = walked({
+                  directory,
+                  home: request.home,
+                  typed: event.target.value,
+                });
+                setDirectory(to.directory);
                 setQuery(to.filter);
               }
               setStepped(undefined);
@@ -347,6 +480,12 @@ export const FilePicker = ({ ref, request }: Props) => {
               if (step !== undefined) {
                 event.preventDefault();
                 setStepped(steppedTo(highlighted ?? 0, step, rows.length));
+              } else if (isChord(event, "h")) {
+                event.preventDefault();
+                setHidden(!hidden);
+              } else if (isChord(event, "l")) {
+                event.preventDefault();
+                setTypedPath(typedPathOf(directory, request.home));
               } else if (
                 event.key === "Enter" &&
                 !event.ctrlKey &&
@@ -395,6 +534,41 @@ export const FilePicker = ({ ref, request }: Props) => {
             spellCheck={false}
             value={saving ? name : query}
           />
+          {newFolder !== undefined && (
+            <div className={newFolderStyles}>
+              <Input
+                aria-describedby={
+                  newFolder.failure === undefined ? undefined : failureId
+                }
+                aria-invalid={newFolder.failure !== undefined}
+                aria-label="Folder name"
+                onChange={(event) => {
+                  setNewFolder({
+                    failure: undefined,
+                    name: event.target.value,
+                  });
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    if (event.currentTarget.value !== "") {
+                      make(event.currentTarget.value);
+                    }
+                  }
+                }}
+                placeholder="Name the new folder"
+                prefixIcon={<FolderPlusIcon size={ICON_SIZE} />}
+                ref={focusOnAttach}
+                spellCheck={false}
+                value={newFolder.name}
+              />
+              {newFolder.failure !== undefined && (
+                <span className={failureStyles} id={failureId}>
+                  {newFolder.failure}
+                </span>
+              )}
+            </div>
+          )}
           <div className={resultsStyles}>
             <div aria-hidden className={columnsStyles}>
               <span>Name</span>
@@ -502,7 +676,7 @@ export const FilePicker = ({ ref, request }: Props) => {
         ) : (
           <footer className={footerStyles}>
             {saving ? (
-              <ClashHint clash={clash} />
+              <NameHint clash={clash} name={name} />
             ) : (
               <output
                 aria-label="Selection"
@@ -674,6 +848,28 @@ const pathBarStyles = flex({
   flexWrap: "wrap",
   marginInlineStart: -2,
   rowGap: 0.5,
+});
+
+// The path bar, or the path box, then the folder's tools.
+const locationStyles = hstack({
+  gap: 2,
+  justifyContent: "space-between",
+  minInlineSize: 0,
+});
+
+const toolsStyles = hstack({
+  flexShrink: 0,
+  gap: 0.5,
+});
+
+const newFolderStyles = flex({
+  direction: "column",
+  gap: 1,
+});
+
+const failureStyles = css({
+  color: "danger",
+  fontSize: "sm",
 });
 
 const crumbStyles = hstack({
@@ -964,31 +1160,6 @@ const actionsStyles = hstack({
   gap: 2,
 });
 
-// Two columns, keys and what they do, aligned across every row.
-const keysStyles = grid({
-  alignItems: "center",
-  color: "muted",
-  columnGap: 3,
-  fontSize: "xs",
-  gridTemplateColumns: "max-content minmax(0, 1fr)",
-  margin: 0,
-  marginBlockStart: "auto",
-  paddingInline: 2,
-  rowGap: 2,
-});
-
-const keyStyles = css({
-  display: "contents",
-});
-
-const keyCapsStyles = hstack({
-  gap: 1,
-});
-
-const keyWhatStyles = css({
-  margin: 0,
-});
-
 /** The sidebar icon for the request mode. */
 const ModeGlyph = ({ mode }: { mode: ChooserMode }) => {
   switch (mode) {
@@ -1020,6 +1191,16 @@ const NameGlyph = ({ name }: { name: string }) => {
   const Glyph = glyphOf(fileKindOf(name));
   return <Glyph size={ICON_SIZE} weight="duotone" />;
 };
+
+/** What is wrong with the name, if anything. Holds its place when empty. */
+const NameHint = ({ clash, name }: { clash: Clash; name: string }) =>
+  name.includes("/") ? (
+    <span className={clashHintStyles} data-clash="file">
+      <WarningIcon size={14} weight="fill" />A name can't have a /
+    </span>
+  ) : (
+    <ClashHint clash={clash} />
+  );
 
 /** What saving under the name would hit. Holds its place when empty. */
 const ClashHint = ({ clash }: { clash: Clash }) => {
@@ -1216,39 +1397,6 @@ const SelectedPath = ({ path }: { path: string }) => {
   );
 };
 
-/** The key help at the foot of the sidebar. */
-const Keys = ({ mode }: { mode: ChooserMode }) =>
-  mode === ChooserMode.Save ? (
-    <dl className={keysStyles}>
-      <Key keys={["↑", "↓"]} what="Pick a folder" />
-      <Key keys={["↵"]} what="Open it, or save" />
-      <Key keys={["/"]} what="Type a path" />
-      <Key keys={["esc"]} what="Cancel" />
-    </dl>
-  ) : (
-    <dl className={keysStyles}>
-      <Key keys={["↑", "↓"]} what="Move" />
-      <Key keys={["↵"]} what="Open" />
-      <Key keys={["⌫"]} what="Up a folder" />
-      {mode === ChooserMode.OpenMultiple && <Key keys={["tab"]} what="Mark" />}
-      {mode === ChooserMode.OpenFolder && (
-        <Key keys={["ctrl", "↵"]} what={confirmOf(mode)} />
-      )}
-      <Key keys={["esc"]} what="Cancel" />
-    </dl>
-  );
-
-const Key = ({ keys, what }: { keys: readonly string[]; what: string }) => (
-  <div className={keyStyles}>
-    <dt className={keyCapsStyles}>
-      {keys.map((key) => (
-        <Kbd key={key}>{key}</Kbd>
-      ))}
-    </dt>
-    <dd className={keyWhatStyles}>{what}</dd>
-  </div>
-);
-
 /** The sidebar entries: home, the standard folders present, and root. */
 const placesOf = (
   home: string,
@@ -1298,7 +1446,7 @@ const answerOf = ({
       return [directory];
     }
     case ChooserMode.Save: {
-      return name === "" || clash === Clash.Folder
+      return name === "" || name.includes("/") || clash === Clash.Folder
         ? undefined
         : [pathIn(directory, name)];
     }
@@ -1442,4 +1590,29 @@ const isConfirmChord = (event: KeyboardEvent): boolean =>
 /** Selects the name up to its extension, so typing keeps the extension. */
 const selectStem = (event: FocusEvent<HTMLInputElement>) => {
   event.currentTarget.setSelectionRange(0, stemEnd(event.currentTarget.value));
+};
+
+/** Ctrl, or Cmd, and `key`. */
+const isChord = (event: KeyboardEvent, key: string): boolean =>
+  event.key === key && (event.ctrlKey || event.metaKey);
+
+/** The path box's text for `directory`, ready for a name after it. */
+const typedPathOf = (directory: string, home: string): string => {
+  const shown = shownPath(directory, home);
+  return shown === "/" ? shown : `${shown}/`;
+};
+
+/** Why a folder could not be made, for the user. */
+const failureOf = (error: SystemError): string => {
+  switch (error.kind) {
+    case SystemErrorKind.AlreadyExists: {
+      return "Something here already has that name";
+    }
+    case SystemErrorKind.PermissionDenied: {
+      return "You can't make folders here";
+    }
+    default: {
+      return error.message;
+    }
+  }
 };
