@@ -890,6 +890,21 @@ describe("BrowserWindow", () => {
       expect(pickerBox()).toHaveFocus();
     });
 
+    // The PDF viewer refocuses its own button after asking where to save, and
+    // the keys would follow it into a page that is waiting.
+    it("takes the keyboard back when the waiting page takes focus", async () => {
+      const { container } = render(<BrowserWindow {...windowProps} focused />);
+      asksForAFile(view(container), []);
+      await screen.findByRole("option", { name: "notes.txt" });
+
+      act(() => {
+        pickerBox().blur();
+        view(container).dispatchEvent(new Event(WEBVIEW_GUEST_FOCUS_EVENT));
+      });
+
+      expect(pickerBox()).toHaveFocus();
+    });
+
     // A newer request replaces the older one (see `useFileRequest`) and starts
     // empty.
     it("starts afresh on a second question", async () => {
