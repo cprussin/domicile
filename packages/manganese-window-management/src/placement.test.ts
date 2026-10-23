@@ -461,8 +461,24 @@ describe("placementsOf", () => {
     expect(concealing?.depth ?? TILED).toBeLessThan(TILED);
   });
 
+  // A captured page draws only while laid out, so a screenshot or cast of a
+  // hidden tab keeps it under the shown one.
+  it("draws a captured tab under the one hiding it", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.LayoutSet(Layout.Tabbed),
+    );
+    const shown = placementFor(state, "editor");
+
+    const captured = contentsOf(placementFor(state, "kitty"), "resting", true);
+
+    expect(captured?.rect).toEqual(shown?.surface ?? GEOMETRY.screen);
+    expect(captured?.depth ?? TILED).toBeLessThan(TILED);
+  });
+
   it("draws nothing for a window that is not on screen", () => {
     expect(contentsOf(undefined, "resting")).toBeUndefined();
+    expect(contentsOf(undefined, "resting", true)).toBeUndefined();
   });
 });
 
