@@ -1,0 +1,109 @@
+name: Docs media
+
+# Captures docs/media on `crux` and commits it to the branch. See
+# docs/media/README.md.
+#
+# - On a pull request that changes a scene, so the pull request carries the
+#   media it describes.
+# - On dispatch, to retake every file on a branch (for a release).
+on:
+  pull_request:
+    paths:
+      - scripts/docs-media.sh
+      - scripts/docs-media/**
+      - .github/workflows/docs-media.yml
+      - .github/scripts/docs-media-writeback.sh
+  workflow_dispatch:
+    inputs:
+      scenes:
+        description: Scenes to retake, space-separated. Empty retakes all.
+        required: false
+        default: ""
+
+# Keyed by ref, as scripts/test-engine-concurrency.sh requires of every
+# workflow on this machine. Cancels in progress: a capture leaves nothing on
+# disk, and a newer push retakes everything.
+concurrency:
+  group: docs-media-${{ github.ref }}
+  cancel-in-progress: true
+
+# `contents: write` pushes the media back onto the branch.
+permissions:
+  contents: write
+
+jobs:
+  capture:
+    # Shared-memory clients need a DRM render node, which `ubuntu-latest`
+    # lacks. `crux-light`, since this never opens the Chromium checkout
+    # (cprussin/dotfiles: config/machines/crux/domicile-ci.nix).
+    runs-on: [self-hosted, crux-light]
+
+    # A fork's branch is not writable, and its scenes would run on crux.
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch'
+          || github.event.pull_request.head.repo.full_name == github.repository }}
+
+    timeout-minutes: 45
+
+    env:
+      CARD_OWNER: docs-media.yml run ${{ github.run_id }} attempt ${{ github.run_attempt }}
+      UNDER_WAYLAND_RUNTIME_DIR: /tmp/domicile-docs-media-rt-${{ github.run_id }}
+      BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The branch tip, so the write-back commits onto it and never merges
+          # main in.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 2
+
+      # The write-back's own commit would otherwise capture and push again
+      # forever.
+      - name: Skip the write-back's own commit
+        id: gate
+        run: |
+          set -euo pipefail
+          if [ "$(git log -1 --format=%an)" = "domicile CI" ] &&
+             git log -1 --format=%s | grep -q '^Retake docs media'; then
+            echo "the tip is the last capture's write-back; nothing to retake"
+            echo "run=false" >>"$GITHUB_OUTPUT"
+          else
+            echo "run=true" >>"$GITHUB_OUTPUT"
+          fi
+
+      # The render node lock as `noisy`, so engine.yml's latency guard waits
+      # for it.
+      - name: Capture
+        if: ${{ steps.gate.outputs.run == 'true' }}
+        env:
+          SCENES: ${{ github.event.inputs.scenes }}
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2086 # scenes are space-separated names
+          .github/scripts/engine-render-node-lock.sh noisy "$CARD_OWNER" -- \
+            ./scripts/docs-media.sh $SCENES
+
+      - name: Upload the media
+        if: ${{ steps.gate.outputs.run == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: docs-media
+          path: docs/media/
+
+      - name: Commit the media to the branch
+        if: ${{ steps.gate.outputs.run == 'true' }}
+        env:
+          # Optional; without it the write-back's CI waits for an approval.
+          DOMICILE_WRITEBACK_TOKEN: ${{ secrets.DOMICILE_WRITEBACK_TOKEN }}
+        run: .github/scripts/docs-media-writeback.sh "$BRANCH"
+
+      - name: What the scenes wrote down
+        if: ${{ failure() }}
+        run: |
+          for log in /tmp/domicile-under-wayland.log /tmp/domicile-media.*/*.log; do
+            [ -f "$log" ] || continue
+            echo "::group::$log"
+            tail -200 "$log"
+            echo "::endgroup::"
+          done

@@ -170,6 +170,7 @@ How to use, configure and debug Domicile. No authority level.
 | Doc | Covers |
 |---|---|
 | [/docs/RELEASING.md](/docs/RELEASING.md) | Branches, per-package versions, cutting a release, its secrets. |
+| [/docs/media/README.md](/docs/media/README.md) | Docs screenshots and videos: scenes, their helpers, retaking them on `crux`. |
 | [/docs/RUNNING-A-DESKTOP.md](/docs/RUNNING-A-DESKTOP.md) | Running a desktop nested or on a tty, the pinned engine, launching clients, and the home-manager module. |
 | [/docs/SHELL-CONFIG.md](/docs/SHELL-CONFIG.md) | The desk config: file location, config modules, the home-manager module, what reloads, and the keyboard, idle, lock, theme and display sections. |
 | [/docs/HISTORY.md](/docs/HISTORY.md) | The History app: how visits are recorded, how every desktop installs and opens it, and Domicile's own launcher entries. |
