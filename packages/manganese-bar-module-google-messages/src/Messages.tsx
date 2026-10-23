@@ -9,7 +9,6 @@ import { WEBVIEW_FOCUS_REQUEST_EVENT } from "@domicile-desktop/sdk/webview-eleme
 import { ChatCircleTextIcon } from "@phosphor-icons/react/dist/ssr/ChatCircleText";
 import { useEffect, useState } from "react";
 import { css } from "../styled-system/css";
-import { hstack } from "../styled-system/patterns";
 
 const MESSAGES_URL = "https://messages.google.com/web/";
 
@@ -137,44 +136,63 @@ const count = (unread: number) => (
     type="button"
   >
     <ChatCircleTextIcon aria-hidden size={15} weight="bold" />
-    {unread > 0 && <span className={figureStyles}>{unread}</span>}
+    {unread > 0 && (
+      <span aria-hidden className={badgeStyles}>
+        {unread}
+      </span>
+    )}
   </button>
 );
 
 /** The id of `screen`'s button, for opening the panel under it. */
 const triggerId = (screen: string) => `google-messages-${screen}`;
 
-// Matches the Gmail item, lit as it is for unread mail.
-const itemStyles = hstack({
+// Round, like the bar's other icon buttons, lit while there are new messages.
+const itemStyles = css({
   _hover: {
     backgroundColor: "color-mix(in oklab, white 16%, transparent)",
   },
   "&[data-unread=true]": {
     backgroundColor: "color-mix(in oklab, white 24%, transparent)",
   },
+  alignItems: "center",
   backgroundColor: "transparent",
   blockSize: 7,
   borderRadius: "full",
   borderStyle: "none",
   color: "inherit",
   cursor: "pointer",
+  display: "inline-flex",
   flexShrink: 0,
-  font: "inherit",
-  gap: 1,
+  inlineSize: 7,
   justifyContent: "center",
-  paddingBlock: 0,
-  // The ends' radius, so the icon and count stay clear of the curve.
-  paddingInline: 3,
+  padding: 0,
+  position: "relative",
   transition: "background-color {durations.fast} {easings.default}",
 });
 
-// 10px to match the bar's other figures; no font-size token fits. Fixed-width
-// digits, so the bar does not shift as the count changes.
-const figureStyles = css({
-  fontSize: "0.625rem",
+// The count in a pill on the button's corner, as on the notification bell.
+// The bar's text shadow is removed because it smudges small figures.
+const badgeStyles = css({
+  alignItems: "center",
+  backgroundColor: "accent",
+  blockSize: 3.5,
+  borderRadius: "full",
+  boxShadow: "lifted",
+  color: "background",
+  display: "inline-flex",
+  fontSize: "0.5625rem",
   fontVariantNumeric: "tabular-nums",
-  fontWeight: "semibold",
-  whiteSpace: "nowrap",
+  fontWeight: "bold",
+  insetBlockStart: 0,
+  insetInlineEnd: 0,
+  justifyContent: "center",
+  lineHeight: "none",
+  minInlineSize: 3.5,
+  paddingInline: 0.75,
+  pointerEvents: "none",
+  position: "absolute",
+  textShadow: "none",
 });
 
 // The panel is flush, so the request gets its own inset.

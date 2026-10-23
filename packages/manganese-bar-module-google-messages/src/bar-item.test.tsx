@@ -17,6 +17,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
+import { css } from "../styled-system/css";
 
 import { GoogleMessages } from "./bar-item";
 
@@ -91,6 +92,22 @@ describe("GoogleMessages", () => {
     expect(
       screen.getByRole("button", { name: "Messages: 2 new" }),
     ).toHaveTextContent("2");
+  });
+
+  it("is round, like the bar's other icon buttons, with or without a count", () => {
+    const fake = new FakeDomicileHost();
+    render(onBars(fake, ["left"]));
+    const isRound = (name: string) => {
+      const { className } = screen.getByRole("button", { name });
+      expect(className).toContain(css({ inlineSize: 7 }));
+      expect(className).toContain(css({ padding: 0 }));
+    };
+
+    isRound("Messages");
+    act(() => {
+      fake.set({ notifications: [notification(1, "messages.google.com")] });
+    });
+    isRound("Messages: 1 new");
   });
 
   it("shows the page when pressed, and clears Messages' notifications", async () => {
