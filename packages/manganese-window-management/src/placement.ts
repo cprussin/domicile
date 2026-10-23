@@ -273,16 +273,21 @@ const focusUnder = (
  * `undefined` when not drawn.
  *
  * A hidden tab is drawn only while it is `concealing` (see `tab-switch.ts`),
- * at its `behind` rect under the tab taking its place. Otherwise it has no
- * box, so the compositor stops its client drawing.
+ * or `captured`, as a screenshot or screen cast of its page alone is, at its
+ * `behind` rect under the tab taking its place. Otherwise it has no box, so
+ * the compositor stops its client drawing, and a page stops drawing too.
  */
 export const contentsOf = (
   placement: Placement | undefined,
   motion: WindowMotion,
+  captured = false,
 ): { depth: number; rect: Rect } | undefined => {
   if (placement?.surface !== undefined) {
     return { depth: placement.depth, rect: placement.surface };
-  } else if (placement?.behind === undefined || motion !== "concealing") {
+  } else if (
+    placement?.behind === undefined ||
+    (motion !== "concealing" && !captured)
+  ) {
     return undefined;
   } else {
     return { depth: COVERED, rect: placement.behind };

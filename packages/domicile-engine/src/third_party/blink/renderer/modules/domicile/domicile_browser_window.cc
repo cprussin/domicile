@@ -14,7 +14,8 @@ DomicileBrowserWindow::DomicileBrowserWindow(
     int32_t height,
     bool is_private,
     const String& partition,
-    bool is_app)
+    bool is_app,
+    bool is_captured)
     : id_(id),
       url_(url),
       title_(title),
@@ -23,7 +24,8 @@ DomicileBrowserWindow::DomicileBrowserWindow(
       height_(height),
       is_private_(is_private),
       partition_(partition),
-      is_app_(is_app) {}
+      is_app_(is_app),
+      is_captured_(is_captured) {}
 
 DomicileBrowserWindow::~DomicileBrowserWindow() = default;
 
