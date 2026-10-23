@@ -57,6 +57,7 @@ export enum AimKind {
   Group,
   Screen,
   Strip,
+  Tab,
   Window,
 }
 
@@ -89,6 +90,17 @@ export const Aim = {
     rect,
   }),
   /**
+   * Goes in tab `id`'s strip, on its `edge` side. `rect` is the line between
+   * the two tabs it goes between, and `depth` the depth of the strip.
+   */
+  Tab: (id: string, edge: Direction, rect: Rect, depth: number) => ({
+    depth,
+    edge,
+    id,
+    kind: AimKind.Tab as const,
+    rect,
+  }),
+  /**
    * Goes on window `id`'s `edge`, or into its tab group after it when `edge`
    * is `undefined`.
    */
@@ -114,16 +126,19 @@ export type Corner = {
  */
 const EDGE_ZONE = 0.3;
 
+/** How thick the line between two tabs is that a new tab is aimed at. */
+const TAB_LINE = 4;
+
 /**
  * What dropping the `dragged` windows at `x`, `y` would do, or `undefined` over
  * one of them or over nothing to drop them on. `dragged` is one window, or
  * every window in a dragged group.
  *
  * A window goes before or after the tab under the pointer, by which half of it
- * the pointer is in. A tab over its own strip takes the slot under the pointer,
- * and over its own window goes beside its group. Tabs come before windows,
- * whose frames hold their strips. A float hides what is behind it, but not
- * from a drag that carries it.
+ * the pointer is in, or beside the nearest tab anywhere else on its strip. A
+ * tab over its own strip takes the slot nearest the pointer, and over its own
+ * window goes beside its group. Strips come before windows, whose frames hold
+ * them. A float hides what is behind it, but not from a drag that carries it.
  */
 export const aimAt = (
   { floats, screens, tabs, windows }: DropTargets,
@@ -132,16 +147,12 @@ export const aimAt = (
   y: number,
 ): Aim | undefined => {
   const cover = coverAt(floats, dragged, x, y);
-  const tab = tabs
-    .filter(
-      ({ depth, rect }) =>
-        contains(rect, x, y) && (cover === undefined || depth >= cover),
-    )
-    .reduce<TabTarget | undefined>(
-      (front, next) =>
-        front === undefined || next.depth > front.depth ? next : front,
-      undefined,
-    );
+  const shown = tabs.filter(
+    ({ depth }) => cover === undefined || depth >= cover,
+  );
+  const tab =
+    frontOf(shown.filter(({ rect }) => contains(rect, x, y))) ??
+    tabNearestOnStrip(shown, x, y);
   const target =
     cover === undefined
       ? windows.find(({ frame }) => contains(frame, x, y))
@@ -171,6 +182,51 @@ export const aimAt = (
       x,
       y,
     );
+  }
+};
+
+/** The front one of `tabs`, by depth. */
+const frontOf = (tabs: readonly TabTarget[]): TabTarget | undefined =>
+  tabs.reduce<TabTarget | undefined>(
+    (front, next) =>
+      front === undefined || next.depth > front.depth ? next : front,
+    undefined,
+  );
+
+/**
+ * The tab nearest the point along the front strip under it, or `undefined`
+ * off every strip.
+ */
+const tabNearestOnStrip = (
+  tabs: readonly TabTarget[],
+  x: number,
+  y: number,
+): TabTarget | undefined => {
+  const front = frontOf(tabs.filter(({ strip }) => contains(strip, x, y)));
+  return front === undefined
+    ? undefined
+    : tabs
+        .filter(({ strip }) => sameRect(strip, front.strip))
+        .reduce((nearest, next) =>
+          distanceAlong(next, x, y) < distanceAlong(nearest, x, y)
+            ? next
+            : nearest,
+        );
+};
+
+/** How far the point is from `tab`, along its strip. */
+const distanceAlong = (
+  { rect, tabbed }: TabTarget,
+  x: number,
+  y: number,
+): number => {
+  switch (tabbed) {
+    case Layout.Tabbed: {
+      return Math.max(rect.x - x, 0, x - rect.x - rect.width);
+    }
+    case Layout.Stacking: {
+      return Math.max(rect.y - y, 0, y - rect.y - rect.height);
+    }
   }
 };
 
@@ -273,12 +329,38 @@ const aimAtTab = (
   x: number,
   y: number,
 ): Aim => {
-  const { id, rect, tabbed } = tab;
+  const { depth, id, rect, tabbed } = tab;
   if (dragged !== undefined && sameRect(dragged.strip, tab.strip)) {
     return Aim.Strip(id, alongStrip(tabbed, tab.at > dragged.at), rect);
   } else {
     const edge = tabEdgeNear(rect, tabbed, x, y);
-    return Aim.Window(id, edge, halfOf(rect, edge));
+    return Aim.Tab(id, edge, lineAt(rect, edge), depth);
+  }
+};
+
+/** The line along `rect`'s `edge`, centered on it. */
+const lineAt = (rect: Rect, edge: Direction): Rect => {
+  switch (edge) {
+    case Direction.Left: {
+      return { ...rect, width: TAB_LINE, x: rect.x - TAB_LINE / 2 };
+    }
+    case Direction.Right: {
+      return {
+        ...rect,
+        width: TAB_LINE,
+        x: rect.x + rect.width - TAB_LINE / 2,
+      };
+    }
+    case Direction.Up: {
+      return { ...rect, height: TAB_LINE, y: rect.y - TAB_LINE / 2 };
+    }
+    case Direction.Down: {
+      return {
+        ...rect,
+        height: TAB_LINE,
+        y: rect.y + rect.height - TAB_LINE / 2,
+      };
+    }
   }
 };
 

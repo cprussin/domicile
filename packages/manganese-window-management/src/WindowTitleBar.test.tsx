@@ -241,7 +241,12 @@ describe("WindowTitleBar", () => {
 
       expect(onMove).not.toHaveBeenCalled();
       expect(onDropOn).toHaveBeenCalledWith(
-        Aim.Window("t", Direction.Left, { ...TILED_TAB.rect, width: 100 }),
+        Aim.Tab(
+          "t",
+          Direction.Left,
+          { ...TILED_TAB.rect, width: 4, x: 698 },
+          0,
+        ),
       );
     });
 
@@ -250,7 +255,12 @@ describe("WindowTitleBar", () => {
 
       expect(onMove).toHaveBeenCalledWith(710, 0);
       expect(onDropOn).toHaveBeenCalledWith(
-        Aim.Window("t", Direction.Left, { ...TILED_TAB.rect, width: 100 }),
+        Aim.Tab(
+          "t",
+          Direction.Left,
+          { ...TILED_TAB.rect, width: 4, x: 698 },
+          0,
+        ),
       );
     });
   });
