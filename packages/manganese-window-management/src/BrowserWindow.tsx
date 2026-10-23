@@ -478,6 +478,24 @@ export const BrowserWindow = ({
     }
   }, [dialogBox, domicile, focusOwn, holdsKeyboard, pickerBox, view]);
 
+  // Takes the keyboard back for the file picker or the page's dialog when the
+  // waiting page takes focus. The PDF viewer refocuses its own button after
+  // asking where to save, and the keys would follow it into the page.
+  useEffect(() => {
+    const waiting = pickerBox ?? dialogBox;
+    if (view === null || waiting === null) {
+      return undefined;
+    } else {
+      const reclaim = () => {
+        focusOwn(waiting);
+      };
+      view.addEventListener(WEBVIEW_GUEST_FOCUS_EVENT, reclaim);
+      return () => {
+        view.removeEventListener(WEBVIEW_GUEST_FOCUS_EVENT, reclaim);
+      };
+    }
+  }, [dialogBox, focusOwn, pickerBox, view]);
+
   // Releases focus when the window loses it. The engine forwards keys from this
   // document to clients, but keys sent to a focused guest never reach the
   // document. A guest left focused would block typing into every client.
