@@ -385,7 +385,8 @@ interface WebViewGuestClient {
   // `accept` is lower-case extensions without the dot; the browser expands
   // MIME types like `image/*`. Empty accepts anything. `suggested_name` is set
   // only for saves. `home` is the absolute home directory, which the renderer
-  // cannot learn otherwise.
+  // cannot learn otherwise. `folder` is the absolute folder to start in, or
+  // empty for the home: a download starts in the download folder.
   //
   // `paths` are absolute or home-relative. See
   // components/domicile/browser/file_choice.h. Null cancels, as does an
@@ -393,7 +394,8 @@ interface WebViewGuestClient {
   FileChooserRequested(WebViewFileChooserMode mode,
                        array<string> accept,
                        string suggested_name,
-                       string home)
+                       string home,
+                       string folder)
       => (array<string>? paths);
 
   // The page called window.close() and its renderer allowed it, or an

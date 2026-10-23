@@ -194,6 +194,9 @@ SAW_FETCHED=$(grep -qF "GET /file " "$HTTP_LOG" && echo 1 || echo 0)
 SAW_BROWSER=$(saw "domicile: a <webview>'s download asked the shell where to go.")
 SAW_ASKED=$(saw "GUARD file-chooser mode=save ")
 SAW_SUGGESTED=$(saw "GUARD file-chooser mode=save suggested=$NAME ")
+# No user-dirs.dirs under the guard's home, so the download folder is
+# ~/Downloads.
+SAW_FOLDER=$(saw "GUARD file-chooser mode=save suggested=$NAME accept= folder=$HOME_DIR/Downloads")
 SAW_ANSWERED=$(saw "GUARD answered")
 SAVED=$([ "$(cat "$HOME_DIR/$PICK" 2>/dev/null)" = "$TEXT" ] && echo 1 || echo 0)
 # The download anywhere in the home: a file with the site's bytes, or a
@@ -219,7 +222,7 @@ SAW_FORGOTTEN=$(saw "GUARD downloads count=0 received=0 total=0 completed=0")
 
 echo
 echo "shell=$SAW_SHELL page=$SAW_PAGE press=$SAW_CHROME guest=$SAW_GUEST fetched=$SAW_FETCHED"
-echo "the browser asked=$SAW_BROWSER; the shell was asked=$SAW_ASKED with the name=$SAW_SUGGESTED and answered=$SAW_ANSWERED"
+echo "the browser asked=$SAW_BROWSER; the shell was asked=$SAW_ASKED with the name=$SAW_SUGGESTED in the folder=$SAW_FOLDER and answered=$SAW_ANSWERED"
 echo "on the disk: where the shell said=$SAVED anywhere=$SAVED_ANYWHERE"
 echo "in progress: the guest counted=$SAW_GUEST_COUNTED; the shell heard=$SAW_COUNTED, then none=$SAW_CLEARED"
 echo "finished: kept=$SAW_FINISHED, cleared=$SAW_FORGOTTEN"
@@ -262,6 +265,10 @@ elif [ "$SAW_SUGGESTED" != "1" ]; then
   FAILURE="the shell was asked with the wrong name: the site called the file \
 $NAME and the question did not carry it. The suggestion is the base name of \
 the path //chrome proposed -- see ChooseDownloadPath"
+elif [ "$SAW_FOLDER" != "1" ]; then
+  FAILURE="the shell was asked with the wrong folder: a download's picker \
+starts in the download folder, the folder of the path //chrome proposed -- \
+see StartFolder in file_choice.h"
 elif [ "$SAW_ANSWERED" != "1" ]; then
   FAILURE="the shell was asked and its answer threw: this guard's page called \
 choose() or cancel() and never got past it. The engine log has the exception"

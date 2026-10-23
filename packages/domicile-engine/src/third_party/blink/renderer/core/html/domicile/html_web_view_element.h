@@ -304,6 +304,7 @@ class CORE_EXPORT HTMLWebViewElement final
       const Vector<String>& accept,
       const String& suggested_name,
       const String& home,
+      const String& folder,
       FileChooserRequestedCallback callback) override;
 
   // Dispatches `domicile-permission-request`. If no listener calls
