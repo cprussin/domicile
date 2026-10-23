@@ -158,7 +158,6 @@ not rules, and carry no authority level. Read the one for the area you work in.
 | [/docs/architecture/KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md) | A shell's keybindings as props: sway-style chords resolved against the compositor's keyboard layout and dispatched by the SDK. |
 | [/docs/architecture/WEB-APPS.md](/docs/architecture/WEB-APPS.md) | Web apps as desktop entries: `domicile open-app`, app windows without an address bar, and the plan for installing sites as apps. |
 | [/docs/architecture/APP-MODULES.md](/docs/architecture/APP-MODULES.md) | Apps as modules: `domicile run-app <entry.js>` calls `main(root, host)` on `domicile://app-<id>/`; History and Settings as app modules instead of extensions. |
-| [/docs/architecture/APP-FROM-A-COMMAND.md](/docs/architecture/APP-FROM-A-COMMAND.md) | `<App cmd>`: run a command and show every window it opens, bound by a per-launch Wayland socket and activation token; closed and killed on unmount. |
 
 [`/ROADMAP.md`](/ROADMAP.md) lists open work and known gaps, each pointing at
 the doc with the detail. Read it before substantial work. Remove items when
