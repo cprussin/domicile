@@ -197,6 +197,8 @@ const ghost = {
     _hoverEnabled: "foreground",
     base: "muted",
   },
+  // The text is already `muted`, so the usual disabled fade barely shows.
+  opacity: { _disabled: "inactive" },
 };
 
 const styles = cva({
