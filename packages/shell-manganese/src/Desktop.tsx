@@ -726,6 +726,7 @@ const stageActionsOf = (
         break;
       }
       case AimKind.Strip:
+      case AimKind.Tab:
       case AimKind.Window: {
         act(WindowAction.WindowDroppedOn(id, { id: aim.id, up: 0 }, aim.edge));
         break;
@@ -763,6 +764,7 @@ const stageActionsOf = (
         // `aimAt` aims only a single dragged tab along its strip.
         throw new Error(`desktop: group ${group.id} aimed along a strip`);
       }
+      case AimKind.Tab:
       case AimKind.Window: {
         act(
           WindowAction.GroupDroppedOn(group, { id: aim.id, up: 0 }, aim.edge),

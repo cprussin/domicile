@@ -208,9 +208,11 @@ announces a window only then, so its title, app id and limits are known.
 - **A drop can land on any screen.** Targets include tiled windows on other
   screens, and the whole of a screen with nothing tiled. Focus follows the
   window.
-- **Dropping on a tab**, tiled or floating, puts the window before or after
-  it in its strip, by which half of the tab the pointer is over. A float hides
-  the targets behind it.
+- **Dropping on a tab strip**, tiled or floating, puts the window in it as a
+  tab, before or after the nearest tab, by which half of that tab the pointer
+  is nearer. The overlay is a line between the two tabs. A float hides the
+  targets behind it.
+- The overlay is drawn over the open tabs of the windows it aims at.
 - **Dropping on the edge of a window in a tab group** puts the window beside
   the group, as in sway. A group of one becomes a split.
 - **Dragging a tab over its own group** breaks it out of the group: it goes
@@ -218,8 +220,8 @@ announces a window only then, so its title, app id and limits are known.
 - **Dragging the empty end of a tab strip**, past its last tab, picks up the
   whole tab group. It is selected as by Meta+A and drops like a window, but
   never on a window inside it (`StripEnd.tsx`).
-- **Dragging a tab along its strip** moves it at once into the slot under the
-  pointer, with no overlay.
+- **Dragging a tab along its strip** moves it at once into the slot nearest
+  the pointer, with no overlay.
 - The pointer shows `grabbing` anywhere on the desktop while a window moves
   (`GrabbingSheet.tsx`).
 - A move aims only once the pointer is 8px from the press, so clicking a tab

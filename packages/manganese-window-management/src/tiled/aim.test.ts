@@ -5,6 +5,9 @@ import { Layout } from "../tree/node";
 import type { TabTarget } from "./aim";
 import { Aim, aimAt, cornerOf, tabAimAt } from "./aim";
 
+/** The line between two tabs of `TABS`, at `x`. */
+const lineAt = (x: number) => ({ height: 30, width: 4, x: x - 2, y: 0 });
+
 const LEFT = { frame: { height: 400, width: 500, x: 0, y: 0 }, id: "a" };
 const RIGHT = { frame: { height: 400, width: 500, x: 500, y: 0 }, id: "b" };
 /** A screen below the two with nothing tiled on it. */
@@ -57,12 +60,12 @@ describe("aimAt", () => {
 
     it("aims at its tabs", () => {
       expect(aimAt(FLOATING, ["a"], 350, 110)).toEqual(
-        Aim.Window("f", Direction.Left, {
-          height: 30,
-          width: 100,
-          x: 300,
-          y: 100,
-        }),
+        Aim.Tab(
+          "f",
+          Direction.Left,
+          { height: 30, width: 4, x: 298, y: 100 },
+          2,
+        ),
       );
     });
 
@@ -156,15 +159,23 @@ describe("aimAt", () => {
   it("aims a window before or after the tab under the pointer, by its half", () => {
     // Over the open window's frame too: the tab wins.
     expect(aimAt(TABS, ["x"], 550, 10)).toEqual(
-      Aim.Window("c", Direction.Right, {
-        height: 30,
-        width: 100,
-        x: 500,
-        y: 0,
-      }),
+      Aim.Tab("c", Direction.Right, lineAt(600), 0),
     );
     expect(aimAt(TABS, ["x"], 250, 10)).toEqual(
-      Aim.Window("b", Direction.Left, { height: 30, width: 100, x: 200, y: 0 }),
+      Aim.Tab("b", Direction.Left, lineAt(200), 0),
+    );
+  });
+
+  it("aims a window beside the nearest tab anywhere on the strip", () => {
+    // Past the last tab, over the strip's empty end.
+    expect(aimAt(TABS, ["x"], 800, 10)).toEqual(
+      Aim.Tab("c", Direction.Right, lineAt(600), 0),
+    );
+  });
+
+  it("moves a tab along its own strip from anywhere on it", () => {
+    expect(aimAt(TABS, ["a"], 800, 10)).toEqual(
+      Aim.Strip("c", Direction.Right, tabAt("c", 2).rect),
     );
   });
 
@@ -213,12 +224,7 @@ describe("aimAt", () => {
     };
     const targets = { floats: [], screens: [], tabs: [stacked], windows: [] };
     expect(aimAt(targets, ["a"], 500, 50)).toEqual(
-      Aim.Window("b", Direction.Down, {
-        height: 15,
-        width: 1000,
-        x: 0,
-        y: 45,
-      }),
+      Aim.Tab("b", Direction.Down, { height: 4, width: 1000, x: 0, y: 58 }, 0),
     );
   });
 

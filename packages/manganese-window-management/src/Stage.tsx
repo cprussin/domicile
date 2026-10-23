@@ -694,7 +694,7 @@ export const Stage = memo(
               />
             </Sliding>
           )}
-          {aim !== undefined && <DropIndicator rect={aim.rect} />}
+          {aim !== undefined && <DropIndicator aim={aim} />}
           {movingId !== undefined && <GrabbingSheet />}
           {/*
           Last, so a popup wins the `z-index` tie at its window's depth but
