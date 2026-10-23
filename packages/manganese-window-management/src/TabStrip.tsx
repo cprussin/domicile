@@ -122,7 +122,7 @@ export const TabStrip = ({
     origin,
     rect: box,
     settler,
-    shared: group.windows.map(stripKeyOf),
+    shared: group.windows.map((window) => stripKeyOf(group, window)),
     still: dragging || isMoving(playing),
   });
   return (
@@ -186,9 +186,11 @@ const stripMotion = (motion: WindowMotion): WindowMotion =>
 
 /**
  * The key a strip shares with every window in it, so the strip drawn by a
- * newly open tab takes over from the one before.
+ * newly open tab takes over from the one before. Keyed by depth too, so a
+ * nested group's strip does not take over from the one around it.
  */
-const stripKeyOf = (window: string): string => `strip:${window}`;
+const stripKeyOf = ({ wells }: StripGroup, window: string): string =>
+  `strip:${wells.toString()}:${window}`;
 
 /**
  * The new-tab button at the start of the strip's end, `at`. It eases along the

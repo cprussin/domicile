@@ -75,7 +75,7 @@ const MIDDLE_TAB = {
   divided: false,
   end: { height: 30, width: 280, x: 720, y: 0 },
   endDivided: false,
-  group: { node: { id: "a", up: 1 }, windows: ["a", "b", "c"] },
+  group: { node: { id: "a", up: 1 }, wells: 0, windows: ["a", "b", "c"] },
   nested: false,
   open: false,
   tabs: 3,

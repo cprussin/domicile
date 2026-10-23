@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { WELL_MARGIN } from "../gaps";
 import { SURFACE_TUCK, TITLE_BAR } from "../rect";
-import { areaOf, framesOf, tabKeyOf } from "./frames";
+import { areaOf, focusBoxOf, framesOf, tabKeyOf } from "./frames";
 import { Layout, LayoutNode } from "./node";
 import { NOTHING_TILED } from "./tiling";
 
@@ -290,6 +290,7 @@ describe("framesOf", () => {
     /** The group `strip` lays out, which holds `count` windows. */
     const groupOf = (count: number) => ({
       node: { id: "0", up: 1 },
+      wells: 0,
       windows: Array.from({ length: count }, (_, at) => at.toString()),
     });
     const strip = (layout: Layout, count: number) =>
@@ -489,7 +490,11 @@ describe("framesOf", () => {
           divided: false,
           end: { height: TITLE_BAR, width: 520, x: 480, y: 0 },
           endDivided: true,
-          group: { node: { id: "a", up: 2 }, windows: ["a", "b", "c"] },
+          group: {
+            node: { id: "a", up: 2 },
+            wells: 0,
+            windows: ["a", "b", "c"],
+          },
           nested: false,
           open: true,
           tabs: 2,
@@ -576,6 +581,9 @@ describe("framesOf", () => {
 
     expect(tiled.tabs.map(({ strip }) => strip.nested)).toEqual([false]);
     expect(frameFor(tiled, "a").strip?.nested).toBe(true);
+    // Both strips hold "a", so their depth tells them apart.
+    expect(tiled.tabs.map(({ strip }) => strip.group.wells)).toEqual([0]);
+    expect(frameFor(tiled, "a").strip?.group.wells).toBe(1);
     expect(frameFor(tiled, "c").strip).toBeUndefined();
   });
 
@@ -628,7 +636,11 @@ describe("framesOf", () => {
           divided: false,
           end: { height: TITLE_BAR, width: 520, x: 480, y: 0 },
           endDivided: false,
-          group: { node: { id: "c", up: 1 }, windows: ["a", "b", "c"] },
+          group: {
+            node: { id: "c", up: 1 },
+            wells: 0,
+            windows: ["a", "b", "c"],
+          },
           nested: false,
           open: false,
           tabs: 2,
@@ -680,5 +692,25 @@ describe("framesOf", () => {
 
     expect(tiled.frames.every(({ selected }) => selected)).toBe(true);
     expect(tiled.tabs.map(({ selected }) => selected)).toEqual([true]);
+  });
+});
+
+describe("focusBoxOf", () => {
+  // The tabs belong to the outer group, not to the group selected inside it.
+  it("lights only a group `focus parent` selects inside a tab", () => {
+    const root = LayoutNode.Container(Layout.Tabbed, [
+      LayoutNode.Container(Layout.SplitH, [
+        LayoutNode.Window("a"),
+        LayoutNode.Window("b"),
+      ]),
+      LayoutNode.Window("c"),
+    ]);
+    const inside = areaOf(root, [0], AREA, 0);
+
+    expect(focusBoxOf({ depth: 1, root }, AREA, 0)).toEqual({
+      rect: inside,
+      selection: inside,
+      windows: ["a", "b"],
+    });
   });
 });

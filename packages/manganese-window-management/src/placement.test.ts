@@ -90,6 +90,7 @@ describe("placementsOf", () => {
         endDivided: false,
         group: {
           node: { id: appWindowId("kitty"), up: 1 },
+          wells: 0,
           windows: [appWindowId("kitty")],
         },
         nested: false,

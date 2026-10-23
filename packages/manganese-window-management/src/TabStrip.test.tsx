@@ -3,6 +3,7 @@ import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-st
 import { fireEvent, render, screen } from "@testing-library/react";
 import { css } from "../styled-system/css";
 import { recordedSettles } from "./recorded-settles";
+import { SettleHandoffs } from "./SettleHandoffs";
 import { TabStrip } from "./TabStrip";
 
 loadEmittedStylesheet(
@@ -27,7 +28,7 @@ const stripProps = {
   float: undefined,
   frame: FRAME,
   fullscreen: false,
-  group: { node: { id: "a", up: 1 }, windows: ["a", "b"] },
+  group: { node: { id: "a", up: 1 }, wells: 0, windows: ["a", "b"] },
   motion: "resting",
   nested: false,
   onAim: nothing,
@@ -166,6 +167,43 @@ describe("TabStrip", () => {
       );
 
       expect(played).toStrictEqual([{ scaleX: 1, scaleY: 1, x: 50, y: 0 }]);
+    });
+
+    // A tab switch inside a nested group hands both strips to new elements,
+    // since the outer tab is named after the nested group's open window.
+    it("takes over from its own group's strip, not the one around it", () => {
+      const { played, settler } = recordedSettles();
+      const inner = { ...BOX, width: 500, y: 90 };
+      const strips = (open: string) => (
+        <SettleHandoffs>
+          <TabStrip
+            {...stripProps}
+            box={inner}
+            group={{ node: { id: open, up: 1 }, wells: 1, windows: ["b", "c"] }}
+            key={`inner-${open}`}
+            nested
+            settler={settler}
+          />
+          <TabStrip
+            {...stripProps}
+            group={{
+              node: { id: open, up: 2 },
+              wells: 0,
+              windows: ["a", "b", "c"],
+            }}
+            key={`outer-${open}`}
+            settler={settler}
+          />
+        </SettleHandoffs>
+      );
+      const { rerender } = render(strips("b"));
+
+      rerender(strips("c"));
+
+      expect(played).toStrictEqual([
+        { scaleX: 1, scaleY: 1, x: 0, y: 0 },
+        { scaleX: 1, scaleY: 1, x: 0, y: 0 },
+      ]);
     });
 
     // A dragged float's strip would trail the pointer.
