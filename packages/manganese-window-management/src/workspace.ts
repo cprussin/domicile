@@ -258,6 +258,23 @@ export const reached = (workspace: Workspace, id: string): Workspace => {
 };
 
 /**
+ * {@link reached}, with commands on the window alone: a click on a window or
+ * one of its title bar's buttons ends a `focus parent` selection around it.
+ * Returns the same object when nothing changed.
+ */
+export const picked = (workspace: Workspace, id: string): Workspace => {
+  const found = reached(workspace, id);
+  if (floatOn(found, id) === undefined) {
+    const tiling = withCommandsOnWindow(found.tiling);
+    return tiling === found.tiling ? found : { ...found, tiling };
+  } else {
+    return withFloat(found, id, (float) =>
+      retiled(float, withCommandsOnWindow),
+    );
+  }
+};
+
+/**
  * `floating toggle`: floats the focused window or `focus parent` selection, or
  * tiles the focused float. A new float is sized to fit `screen` (see
  * `floatFor`).
@@ -286,6 +303,32 @@ export const floatToggled = (workspace: Workspace, screen: Rect): Workspace => {
       // Not {@link floatFocused}: `removedAt` already leaves the tiling's
       // focus on a window.
       tiling: removedAt(tiling.root, focusPathOf(tiling.root, tiling.depth)),
+    };
+  }
+};
+
+/**
+ * The float button on window `id`'s title bar: {@link floatToggled}, except
+ * that a window in a floating group of several tiles alone, leaving the rest
+ * floating.
+ */
+export const windowFloatToggled = (
+  workspace: Workspace,
+  id: string,
+  screen: Rect,
+): Workspace => {
+  const float = floatOn(workspace, id);
+  if (float === undefined || windowsIn(float.root).length === 1) {
+    return floatToggled(workspace, screen);
+  } else {
+    const rest = removedAt(float.root, pathToRef(float.root, { id, up: 0 }));
+    return {
+      ...workspace,
+      floatFocus: undefined,
+      floats: workspace.floats.map((found) =>
+        found === float ? retiled(found, () => rest) : found,
+      ),
+      tiling: insertedNode(workspace.tiling, Node.Window(id)),
     };
   }
 };

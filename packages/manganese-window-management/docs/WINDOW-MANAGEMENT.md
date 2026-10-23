@@ -71,9 +71,10 @@ Workspaces belong to the desktop, and screens show them, as in sway:
   the gaps between them (`SelectionTint.tsx`). The tint tells a selected tab
   group from its focused tab, since the glow lights the whole tab group for
   both. A group selected inside another group's tab is lit in its well,
-  without that tab. The focused window's bar gets the accent color; tabs keep their usual
-  states. Meta+Shift+A, focusing a floating window, or clicking another window
-  ends the selection.
+  without that tab. The focused window's bar gets the accent color; tabs keep
+  their usual states. Meta+Shift+A, focusing a floating window, clicking
+  another window, or pressing a title bar or tab inside the group ends the
+  selection, leaving that window selected.
 - **`xdg-activation` requests are granted.** The compositor forwards them as
   `focus_requested`. Manganese switches to that window's workspace, shows its
   tab, focuses it and warps the pointer to it. A browser window whose page or
@@ -236,6 +237,8 @@ announces a window only then, so its title, app id and limits are known.
 
 - Every window has a title bar: its name, a float/tile button (same as
   Meta+Shift+Tab), a fullscreen button (same as Meta+F) and a close button.
+  The buttons act on their own window, never its group. A tab of a floating
+  group tiles alone; the rest stays floating.
 - A browser window's name is its page's title, or its site when the page has
   none.
 - Each bar and tab draws its window's icon before the name, else a stand-in:

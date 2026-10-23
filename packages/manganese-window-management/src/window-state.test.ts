@@ -1548,6 +1548,49 @@ describe("the buttons on a tab group's strip", () => {
   });
 });
 
+describe("a tab of a selected group", () => {
+  /** Kitty and the editor tabbed, the whole group selected. */
+  const selected = () =>
+    reduce(desktop("kitty", "editor"), WindowAction.ParentFocused());
+  /** The two tabbed and floated as one box. */
+  const floated = () => reduce(selected(), WindowAction.FloatToggled());
+  const floatsOf = (state: WindowState) =>
+    workspaceHere(state).floats.map(({ root }) => windowsIn(root));
+
+  it("takes the selection when its open tab is pressed", () => {
+    const state = reduce(
+      selected(),
+      WindowAction.WindowBarPressed(APP("editor")),
+    );
+
+    expect(focusedNodeOf(workspaceHere(state).tiling)).toEqual(
+      LayoutNode.Window(APP("editor"), 2),
+    );
+  });
+
+  it("answers a press on the bar of a window alone in focus with the same state", () => {
+    const state = desktop("kitty", "editor");
+
+    expect(
+      reduceWindows(state, WindowAction.WindowBarPressed(APP("editor"))),
+    ).toBe(state);
+  });
+
+  it("floats alone from its float button", () => {
+    const state = reduce(selected(), WindowAction.WindowFloated(APP("editor")));
+
+    expect(windowsOf(workspaceHere(state).tiling)).toEqual([APP("kitty")]);
+    expect(floatsOf(state)).toEqual([[APP("editor")]]);
+  });
+
+  it("tiles alone from its float button in a floating group", () => {
+    const state = reduce(floated(), WindowAction.WindowFloated(APP("editor")));
+
+    expect(windowsOf(workspaceHere(state).tiling)).toEqual([APP("editor")]);
+    expect(floatsOf(state)).toEqual([[APP("kitty")]]);
+  });
+});
+
 describe("a tab group dragged by its strip", () => {
   /** Kitty and the editor tabbed on the left screen; a terminal on the right. */
   const twoScreens = () =>
