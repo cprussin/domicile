@@ -437,6 +437,7 @@
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/component-library": "workspace:*",
+        "@domicile-desktop/manganese-bar": "workspace:*",
         "@domicile-desktop/manganese-host": "workspace:*",
         "@domicile-desktop/sdk": "workspace:*",
         "@domicile-desktop/system-network": "workspace:*",
