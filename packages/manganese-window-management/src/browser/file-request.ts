@@ -31,6 +31,15 @@ const modeSchema = z.enum(WEBVIEW_FILE_CHOOSER_MODES).transform((mode) => {
   }
 });
 
+/**
+ * Reads the engine's start folder: `""` and an engine without the attribute
+ * both mean the home.
+ */
+const folderSchema = z
+  .string()
+  .optional()
+  .transform((folder) => (folder === "" ? undefined : folder));
+
 /** The `FileRequest` for a page's file chooser event, listing with `list`. */
 export const fileRequestOf = (
   event: DomicileFileChooserEvent,
@@ -43,6 +52,7 @@ export const fileRequestOf = (
   choose: (paths) => {
     event.choose(paths);
   },
+  currentFolder: folderSchema.parse(event.currentFolder),
   home: event.home,
   list,
   mode: modeSchema.parse(event.mode),

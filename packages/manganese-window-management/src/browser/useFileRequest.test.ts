@@ -24,6 +24,7 @@ const asks = (
       choose: (paths: readonly string[]) => {
         answers.push(`choose ${mode} ${paths.join(",")}`);
       },
+      currentFolder: "",
       home: "/home/someone",
       mode,
       suggestedName: "",

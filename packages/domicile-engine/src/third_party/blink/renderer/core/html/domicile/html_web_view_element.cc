@@ -805,10 +805,11 @@ void HTMLWebViewElement::FileChooserRequested(
     const Vector<String>& accept,
     const String& suggested_name,
     const String& home,
+    const String& folder,
     FileChooserRequestedCallback callback) {
   auto* event = MakeGarbageCollected<DomicileFileChooserEvent>(
       AtomicString(kFileChooserEvent), mode, accept, suggested_name, home,
-      std::move(callback), *this);
+      folder, std::move(callback), *this);
   waiting_choosers_.insert(event);
   DispatchEvent(*event);
   if (!event->defaultPrevented()) {

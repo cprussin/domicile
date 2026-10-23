@@ -364,6 +364,8 @@ frame.addEventListener(WEBVIEW_FILE_CHOOSER_EVENT, (event) => {
 - **`preventDefault()`:** claims it. Unclaimed choosers are canceled when
   dispatch returns.
 - **`event.home`** is the absolute home directory.
+- **`event.currentFolder`** is the absolute folder to start in, or `""` for
+  the home. A download starts in the download folder (`XDG_DOWNLOAD_DIR`).
 - **Listing directories:** `readDir` and `stat` from
   `@domicile-desktop/sdk/system`
   ([SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md)).
