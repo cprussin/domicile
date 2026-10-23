@@ -241,6 +241,9 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   survive a restart. A window whose title changed matches by app id alone.
   A monitor is named by its `wl_output` name, and a region by its rectangle
   relative to the monitor it is mostly on, so it follows that monitor.
+- **Asking for monitors offers a region too.** A region is part of a
+  monitor, so a `types` with `MONITOR` or `VIRTUAL` lets the user drag one.
+  Browsers ask for monitors and windows, never `VIRTUAL`.
 - **A region is dragged on the desk shot.** As in the screenshot picker,
   the user drags over the picker's desk preview, and the area is turned
   into the desktop's logical pixels, grown to whole ones. With no desk shot,
