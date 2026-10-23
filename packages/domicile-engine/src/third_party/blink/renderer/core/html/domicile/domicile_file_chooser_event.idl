@@ -24,6 +24,10 @@
   // it otherwise.
   readonly attribute DOMString home;
 
+  // The absolute folder to start in, or empty for `home`: a download starts
+  // in the download folder.
+  readonly attribute DOMString currentFolder;
+
   // Answers with paths, absolute or home-relative, as many as `mode` allows.
   // Throws TypeError for a wrong count or a `..` path, and InvalidStateError
   // if already answered.

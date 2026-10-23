@@ -40,6 +40,7 @@ class CORE_EXPORT DomicileFileChooserEvent final : public Event {
                            const Vector<String>& accept,
                            const String& suggested_name,
                            const String& home,
+                           const String& folder,
                            Answer answer,
                            HTMLWebViewElement& owner);
   ~DomicileFileChooserEvent() override;
@@ -48,6 +49,7 @@ class CORE_EXPORT DomicileFileChooserEvent final : public Event {
   const Vector<String>& accept() const { return accept_; }
   const String& suggestedName() const { return suggested_name_; }
   const String& home() const { return home_; }
+  const String& currentFolder() const { return current_folder_; }
 
   void choose(const Vector<String>& paths, ExceptionState&);
   void cancel(ExceptionState&);
@@ -66,6 +68,7 @@ class CORE_EXPORT DomicileFileChooserEvent final : public Event {
   Vector<String> accept_;
   String suggested_name_;
   String home_;
+  String current_folder_;
   // Null once answered.
   Answer answer_;
   // Notified on answer so it releases this event.
