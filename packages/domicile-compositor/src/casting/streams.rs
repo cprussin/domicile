@@ -34,7 +34,7 @@ use tracing::{debug, warn};
 use crate::buffer_transform::Sampled;
 use crate::casting::captured::{self, Kept};
 use crate::casting::captures::{Capturer, Captures, Frame};
-use crate::casting::cursor::{arrow, embed, plan, CursorMode, Plan, Sprite};
+use crate::casting::cursor::{arrow, at_density, embed, plan, CursorMode, Plan, Sprite};
 use crate::casting::gpu::{self, FillError, Layer, Snapshot};
 use crate::casting::lifecycle::Ended;
 use crate::casting::negotiation::{offer, shm_layout, Pixel, MAX_FRAMERATE, PIXELS};
@@ -1040,14 +1040,15 @@ impl Streams {
                         .collect(),
                 };
                 let size = view_size(&cast.shows, &self.shots, &self.pages)?;
+                let sprite = at_density(&self.sprite, density(&cast.shows, &self.shots));
                 let damage: Vec<Rect> = places
                     .into_iter()
                     .filter_map(|(x, y)| {
-                        let (width, height) = self.sprite.size;
+                        let (width, height) = sprite.size;
                         within(
                             (
-                                x.round() as i32 - self.sprite.hotspot.0,
-                                y.round() as i32 - self.sprite.hotspot.1,
+                                x.round() as i32 - sprite.hotspot.0,
+                                y.round() as i32 - sprite.hotspot.1,
                                 width as i32,
                                 height as i32,
                             ),
@@ -1122,7 +1123,8 @@ impl Streams {
         ) else {
             return;
         };
-        match step(stream, cast, &view, damage, &self.sprite, renderer, now) {
+        let sprite = at_density(&self.sprite, density(&cast.shows, &self.shots));
+        match step(stream, cast, &view, damage, &sprite, renderer, now) {
             Outcome::Nothing => {}
             Outcome::Send(filled) => self.send(filled),
             Outcome::Starved => self.send(ToPipewire::Starved { stream }),
@@ -1199,6 +1201,16 @@ fn capture_size(screen: &Screen) -> (u32, u32) {
 /// A point in a window's box, in frame pixels.
 fn in_window(point: (f64, f64), scale: i32) -> (f64, f64) {
     (point.0 * f64::from(scale), point.1 * f64::from(scale))
+}
+
+/// How many stream pixels a logical pixel of what `shows` shows is. A
+/// browser window's page is in CSS pixels, which its stream is the size of.
+fn density(shows: &Shows, shots: &HashMap<String, Shot>) -> f64 {
+    match shows {
+        Shows::Window(app_id) => shots.get(app_id).map_or(1.0, |shot| f64::from(shot.scale)),
+        Shows::BrowserWindow(_) => 1.0,
+        Shows::Desk { target, layout, .. } => f64::from(layout.size.0) / f64::from(target.2),
+    }
 }
 
 /// A desktop point in a stream of `target`, in stream pixels, or `None` off
@@ -1401,12 +1413,14 @@ mod tests {
 
     use smithay::utils::Transform;
 
-    use super::{damage_in_view, view, Cast, Shows, Streams};
+    use super::{damage_in_view, density, view, Cast, Shows, Streams};
     use crate::buffer_transform::Sampled;
     use crate::casting::captures::Capturer;
     use crate::casting::cursor::{CursorMode, Plan};
     use crate::casting::lifecycle::Ended;
+    use crate::casting::pacing::Rect;
     use crate::casting::producer::ToWayland;
+    use crate::casting::region;
     use crate::casting::region::Screen;
     use crate::casting::shots::Desk;
     use crate::casting::{Candidate, Region, Request, Source, StreamId};
@@ -1501,6 +1515,21 @@ mod tests {
 
     /// The engine says where the pointer is on the desk; the page says where
     /// it is in a window. Each keeps the other.
+    /// A cast draws the pointer at its source's density: a 2x monitor's
+    /// stream has two pixels a logical pixel, a 1x one has one.
+    #[test]
+    fn a_cast_draws_the_pointer_at_its_sources_density() {
+        let desk = |target: Rect| Shows::Desk {
+            monitor: None,
+            target,
+            layout: region::layout(target, &screens()).expect("on a monitor"),
+        };
+
+        assert_eq!(density(&desk((0, 0, 1, 1)), &HashMap::new()), 1.0);
+        assert_eq!(density(&desk((1, 0, 1, 1)), &HashMap::new()), 2.0);
+        assert_eq!(density(&Shows::BrowserWindow(1), &HashMap::new()), 1.0);
+    }
+
     #[test]
     fn the_pointer_on_the_desk_and_in_a_window_are_heard_apart() {
         let mut streams = streams();
