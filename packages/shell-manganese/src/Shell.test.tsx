@@ -183,6 +183,13 @@ class Desk {
     });
   }
 
+  /** Starts or ends a capture of browser window `id`'s page, as the engine does. */
+  engineCaptures(id: string, captured = true): void {
+    act(() => {
+      this.fake.captureBrowser(id, captured);
+    });
+  }
+
   /** Closes one as the engine does: its page's window.close(), or an extension. */
   engineCloses(id: string): void {
     act(() => {
@@ -1959,6 +1966,24 @@ describe("Shell", () => {
       expect(windowsOnScreen(container)).toEqual([]);
     });
 
+    // A page draws only while laid out, so a screenshot or screen cast of a
+    // hidden tab would never get a frame.
+    it("lays out a hidden tab while the engine captures its page", () => {
+      const { container } = renderShell();
+      domicile.engineOpens("https://example.com");
+      clientAppears("two");
+      press("w");
+      const browser = () =>
+        container.querySelector("webview[window='1']")?.closest("section");
+      expect(browser()).toHaveAttribute("hidden");
+
+      domicile.engineCaptures("1");
+      expect(browser()).not.toHaveAttribute("hidden");
+
+      domicile.engineCaptures("1", false);
+      expect(browser()).toHaveAttribute("hidden");
+    });
+
     it("keeps a window that is on another workspace mounted and hidden", () => {
       // Hidden, not unmounted: remounting blanks a portal and reloads a page.
       const { container } = renderShell();
@@ -2450,6 +2475,23 @@ describe("Shell", () => {
       press("h", true);
 
       expect(barFor(container, "app:two").getAnimations()).toHaveLength(1);
+      expect(barFor(container, "app:one").getAnimations()).toHaveLength(1);
+    });
+
+    it("slides a dragged tab into the slot it moves to along its strip", () => {
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      motionsPlayOut(container);
+      const y = TOP_BAR + TOP_GAP + TITLE_BAR / 2;
+
+      fireEvent.pointerDown(barFor(container, "app:one"), {
+        clientX: GAP + 100,
+        clientY: y,
+      });
+      fireEvent.pointerMove(window, { clientX: GAP + 400, clientY: y });
+
+      expect(tabOrder(container)).toEqual(["app:two", "app:one"]);
       expect(barFor(container, "app:one").getAnimations()).toHaveLength(1);
     });
 

@@ -59,6 +59,11 @@ struct BrowserWindow {
   // shell draws without an address bar. Its page's new windows are browser
   // windows.
   bool app;
+  // Whether a capture of the page alone is running, as a screenshot, a
+  // picker's preview or a screen cast of it takes. A page draws only while
+  // laid out, so a shell keeps a window it hides, such as behind a tab, laid
+  // out while it is captured.
+  bool captured;
 };
 
 // Renderer -> browser, bound per document.

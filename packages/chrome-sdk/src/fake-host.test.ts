@@ -129,6 +129,21 @@ describe("FakeDomicileHost", () => {
     expect(changed).toBe(4);
   });
 
+  it("lists a browser window as captured while its capture runs", () => {
+    const fake = new FakeDomicileHost();
+    fake.host.openBrowserWindow("https://example.com");
+
+    fake.captureBrowser("1");
+    expect(fake.host.browserWindows).toMatchObject([
+      { id: "1", isCaptured: true },
+    ]);
+
+    fake.captureBrowser("1", false);
+    expect(fake.host.browserWindows).toMatchObject([
+      { id: "1", isCaptured: false },
+    ]);
+  });
+
   it("opens private browser windows as the engine does", () => {
     const fake = new FakeDomicileHost();
 

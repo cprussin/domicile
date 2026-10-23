@@ -4,8 +4,8 @@ import type { Inbox as InboxReading } from "./inbox";
 import { Inbox } from "./inbox";
 import { watchInbox } from "./watch-inbox";
 
-/** A minute: how often the watch reads. */
-const POLL_MS = 60_000;
+/** Half a minute: how often the watch reads. */
+const POLL_MS = 30_000;
 
 /** Lets every settled read reach its listener. */
 const settle = async () => {
@@ -97,13 +97,36 @@ describe("watchInbox", () => {
     const { read, reads } = counting();
     const seen: InboxReading[] = [];
 
-    const { stop } = watchInbox(read, (inbox) => seen.push(inbox), notPaused);
+    const { readSoon, stop } = watchInbox(
+      read,
+      (inbox) => seen.push(inbox),
+      notPaused,
+    );
+    readSoon();
     stop();
     await settle();
     jest.advanceTimersByTime(POLL_MS * 2);
 
     expect(reads.count).toBe(1);
     expect(seen).toStrictEqual([]);
+  });
+
+  it("reads a second and five seconds after the last nudge", async () => {
+    const { read, reads } = counting();
+
+    const { readSoon, stop } = watchInbox(read, () => undefined, notPaused);
+    readSoon();
+    jest.advanceTimersByTime(500);
+    readSoon();
+    jest.advanceTimersByTime(999);
+    const beforeFirst = reads.count;
+    jest.advanceTimersByTime(1);
+    const afterFirst = reads.count;
+    jest.advanceTimersByTime(4000);
+    await settle();
+    stop();
+
+    expect([beforeFirst, afterFirst, reads.count]).toStrictEqual([1, 2, 3]);
   });
 
   it("answers a reading it is handed, failed or not, as it answers a poll", async () => {

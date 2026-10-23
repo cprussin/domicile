@@ -375,6 +375,7 @@ const browserWindow = (id: string, title: string) => ({
   height: 0,
   id,
   isApp: false,
+  isCaptured: false,
   isPrivate: false,
   partition: "",
   popupWindow: null,
@@ -1532,6 +1533,31 @@ describe("PortalDialogs", () => {
       ).toHaveAttribute("src", "data:image/png;base64,2");
       await userEvent.click(screen.getByRole("radio", { name: "Whole desk" }));
       expect(screen.getByRole("img", { name: "The desk" })).toBeInTheDocument();
+    });
+
+    // A preview of another shape would resize the dialog on every pick.
+    it("draws a preview in the desk's box, so the dialog keeps its size", async () => {
+      const host = new FakeHost();
+      render(
+        <PortalDialogs
+          host={host.host}
+          shownWindows={() => []}
+          systemOf={previewing()}
+        />,
+      );
+      host.push([frozen(1, "screenshot")]);
+      const box = (element: HTMLElement) => element.parentElement?.style;
+      const desk = box(screen.getByRole("img", { name: "The desk" }));
+
+      await userEvent.click(
+        screen.getByRole("radio", { name: "kitty: ~/src" }),
+      );
+      const preview = box(
+        await screen.findByRole("img", { name: "kitty: ~/src" }),
+      );
+
+      expect(preview?.aspectRatio).toBe(desk?.aspectRatio);
+      expect(preview?.inlineSize).toBe(desk?.inlineSize);
     });
 
     it("says when a window's preview cannot be drawn", async () => {
