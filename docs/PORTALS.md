@@ -95,9 +95,12 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   reports the node. `Source::Monitor` names a `wl_output`; `Source::Region`
   is a desktop rectangle in logical pixels. The pointer is drawn where the
   engine last saw it (`desk_pointer`), so it shows over pages and windows
-  alike. As metadata, the cursor's meta size is a range up to 384×384, as
-  Mutter's is: a consumer makes room for its own largest cursor (WebRTC asks
-  for 64×64), and PipeWire drops a meta whose sizes do not meet.
+  alike. Drawn in, the arrow is grown to the source's density, rounded up:
+  on a 2x screen each of its pixels is a 2x2 block, or it would be half a
+  pointer, and a speck once a call scales the stream down. As metadata, the
+  cursor's meta size is a range up to 384×384, as Mutter's is: a consumer
+  makes room for its own largest cursor (WebRTC asks for 64×64), and
+  PipeWire drops a meta whose sizes do not meet.
   - `Source::BrowserWindow` is a browser window's page alone, by the
     engine's window id: the engine captures its frame sink
     (`CaptureBrowserWindow`), as a browser window screenshot does. The

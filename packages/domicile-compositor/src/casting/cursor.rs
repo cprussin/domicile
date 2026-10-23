@@ -63,6 +63,29 @@ pub fn arrow() -> Sprite {
     }
 }
 
+/// `sprite` for a source of `density` frame pixels per logical pixel: each
+/// pixel grown to a block, `density` rounded up. The arrow is drawn for one
+/// frame pixel a logical pixel, so on a 2x screen it would be half a pointer.
+pub fn at_density(sprite: &Sprite, density: f64) -> Sprite {
+    let factor = density.ceil().max(1.0) as u32;
+    let (width, height) = (sprite.size.0 * factor, sprite.size.1 * factor);
+    let pixels = (0..height)
+        .flat_map(|y| (0..width).map(move |x| (x / factor, y / factor)))
+        .flat_map(|(x, y)| {
+            let from = ((y * sprite.size.0 + x) * 4) as usize;
+            sprite.pixels[from..from + 4].iter().copied()
+        })
+        .collect();
+    Sprite {
+        size: (width, height),
+        hotspot: (
+            sprite.hotspot.0 * factor as i32,
+            sprite.hotspot.1 * factor as i32,
+        ),
+        pixels,
+    }
+}
+
 /// [`arrow`], drawn: `B` black, `W` white, `.` clear.
 const ARROW: [&str; 19] = [
     "B...........",
@@ -110,7 +133,7 @@ pub fn embed(frame: &mut [u8], stride: usize, size: (u32, u32), sprite: &Sprite,
 
 #[cfg(test)]
 mod tests {
-    use super::{arrow, embed, plan, CursorMode, Plan, Sprite};
+    use super::{arrow, at_density, embed, plan, CursorMode, Plan, Sprite};
 
     const OPAQUE_RED: [u8; 4] = [0, 0, 255, 255];
     const CLEAR: [u8; 4] = [0, 0, 0, 0];
@@ -196,5 +219,28 @@ mod tests {
         assert_eq!(arrow.hotspot, (0, 0));
         assert_eq!(arrow.pixels.len(), (width * height * 4) as usize);
         assert_eq!(arrow.pixels[3], 255);
+    }
+
+    #[test]
+    fn the_sprite_is_as_dense_as_its_source() {
+        let dense = at_density(&sprite(), 1.5);
+
+        // 1.5x rounds up to 2x: each pixel becomes a 2x2 block.
+        assert_eq!(dense.size, (4, 4));
+        assert_eq!(dense.hotspot, (2, 0));
+        let pixel = |x: usize, y: usize| -> [u8; 4] {
+            let at = (y * 4 + x) * 4;
+            dense.pixels[at..at + 4].try_into().expect("four bytes")
+        };
+        assert_eq!(pixel(1, 1), OPAQUE_RED);
+        assert_eq!(pixel(2, 0), CLEAR);
+        assert_eq!(pixel(1, 2), HALF_WHITE);
+        assert_eq!(pixel(3, 3), OPAQUE_RED);
+    }
+
+    #[test]
+    fn a_sparse_source_keeps_the_sprite_as_drawn() {
+        assert_eq!(at_density(&sprite(), 1.0), sprite());
+        assert_eq!(at_density(&sprite(), 0.5), sprite());
     }
 }
