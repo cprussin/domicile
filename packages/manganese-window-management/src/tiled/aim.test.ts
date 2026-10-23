@@ -237,6 +237,19 @@ describe("aimAt", () => {
     );
   });
 
+  it("aims beside a tab group of one at its edge, not into its strip", () => {
+    const lone = { ...TABS, tabs: [tabAt("a", 0)] };
+
+    expect(aimAt(lone, ["x"], 990, 200)).toEqual(
+      Aim.Group("a", Direction.Right, {
+        height: 400,
+        width: 500,
+        x: 500,
+        y: 0,
+      }),
+    );
+  });
+
   it("aims a tab over its own group at the half of the group it is in", () => {
     // Beside the group, through one of its other tabs, since this one leaves.
     expect(aimAt(TABS, ["a"], 900, 200)).toEqual(

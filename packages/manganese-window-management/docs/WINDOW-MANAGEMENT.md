@@ -200,16 +200,17 @@ announces a window only then, so its title, app id and limits are known.
 
 - **Meta+drag**, or dragging its title bar, picks up a tiled window. An
   overlay shows where it will land: half of a target puts it on that side; the
-  center swaps the two. Dropping over nothing does nothing. See
-  `tree/drop.ts`.
+  center puts it in the target's tab group, just after the target. A target
+  outside a tab group becomes one with it. Dropping over
+  nothing does nothing. See `tree/drop.ts`.
 - **A drop can land on any screen.** Targets include tiled windows on other
   screens, and the whole of a screen with nothing tiled. Focus follows the
   window.
 - **Dropping on a tab**, tiled or floating, puts the window before or after
   it in its strip, by which half of the tab the pointer is over. A float hides
   the targets behind it.
-- **Dropping on the edge of a window in a tab group** of several puts the
-  window beside the group, as in sway. A group of one becomes a split.
+- **Dropping on the edge of a window in a tab group** puts the window beside
+  the group, as in sway. A group of one becomes a split.
 - **Dragging a tab over its own group** breaks it out of the group: it goes
   beside the group, on the half under the pointer.
 - **Dragging the empty end of a tab strip**, past its last tab, picks up the

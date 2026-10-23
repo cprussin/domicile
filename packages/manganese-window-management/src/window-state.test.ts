@@ -1370,7 +1370,7 @@ describe("the pointer", () => {
     ).toBeUndefined();
   });
 
-  it("retiles a tiled window where it was dropped on another", () => {
+  it("tabs a tiled window after the one it is dropped in the middle of", () => {
     const state = reduce(
       desktop("kitty", "editor", "browser"),
       WindowAction.WindowDroppedOn(
@@ -1381,8 +1381,8 @@ describe("the pointer", () => {
     );
 
     expect(windowsOf(workspaceHere(state).tiling)).toEqual([
-      APP("browser"),
       APP("editor"),
+      APP("browser"),
       APP("kitty"),
     ]);
     expect(activeIdOf(state)).toBe(APP("kitty"));
@@ -1462,7 +1462,7 @@ describe("a tiled window dragged across screens", () => {
     ]);
   });
 
-  it("trades places with the window it is dropped in the middle of", () => {
+  it("joins the tab group of the window it is dropped in the middle of", () => {
     const state = reduce(
       twoScreens(),
       WindowAction.WindowDroppedOn(
@@ -1473,12 +1473,12 @@ describe("a tiled window dragged across screens", () => {
     );
 
     expect(windowsOf(workspaceOn(state, "left").tiling)).toEqual([
-      APP("term"),
       APP("editor"),
     ]);
-    expect(windowsOf(workspaceOn(state, "right").tiling)).toEqual([
-      APP("kitty"),
-    ]);
+    expect(workspaceOn(state, "right").tiling.root).toMatchObject({
+      children: [{ id: APP("term") }, { id: APP("kitty") }],
+      layout: Layout.Tabbed,
+    });
   });
 
   it("fills a screen with nothing tiled on it", () => {

@@ -55,7 +55,6 @@ import {
   nodeHeld,
   nodeLifted,
   nodeTiledIn,
-  nodeTraded,
   opened,
   openedCentered,
   openedFloating,
@@ -1856,10 +1855,7 @@ const dropNode = (
     );
   } else {
     const { node, rest } = nodeLifted(from, moving);
-    // A middle drop swaps, so the target takes its place.
-    const left = onWorkspace(state, from.name, (workspace) =>
-      edge === undefined ? nodeTraded(workspace, moving, target.id) : rest,
-    );
+    const left = onWorkspace(state, from.name, () => rest);
     return onWorkspace({ ...left, focused: screen }, to.name, (workspace) =>
       nodeArrived(workspace, node, target, edge),
     );
