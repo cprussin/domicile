@@ -79,6 +79,8 @@ type Props = {
   clientIcons: ReadonlyMap<string, string>;
   /** Held modifiers, which decide who gets the pointer. */
   modifiers: Modifiers;
+  /** A press on window `id`'s title bar or tab. */
+  onBarPress: (id: string) => void;
   onClose: (id: string) => void;
   /** A press on the backdrop under scratchpad window `id`. */
   onDismiss: (id: string) => void;
@@ -157,6 +159,7 @@ export const Stage = memo(
     draggingId,
     focusedId,
     modifiers: { meta, shift },
+    onBarPress,
     onClose,
     onDescription,
     onDismiss,
@@ -472,7 +475,7 @@ export const Stage = memo(
                   onHover={onHover}
                   onMove={onMove}
                   onPlayedOut={onPlayedOut}
-                  onSelect={onSelect}
+                  onPress={onBarPress}
                   placement={placement}
                   restack={restack}
                   rewound={rewound}
@@ -926,7 +929,7 @@ type WindowBarProps = {
   onHover: (id: string, at: Spot) => void;
   onMove: (id: string, x: number, y: number) => void;
   onPlayedOut: WindowMotions["onPlayedOut"];
-  onSelect: (id: string) => void;
+  onPress: (id: string) => void;
   placement: Placement;
   restack: Restack | undefined;
   /** How far into its motion it starts. See `DrawnWindow.rewound`. */
@@ -958,7 +961,7 @@ const WindowBar = memo(
     onHover,
     onMove,
     onPlayedOut,
-    onSelect,
+    onPress,
     placement,
     restack,
     rewound,
@@ -975,8 +978,8 @@ const WindowBar = memo(
       [id, onHover],
     );
     const reached = useCallback(() => {
-      onSelect(id);
-    }, [id, onSelect]);
+      onPress(id);
+    }, [id, onPress]);
     const ended = useCallback(() => {
       onPlayedOut(id, motion, screen, "bar");
     }, [id, motion, onPlayedOut, screen]);

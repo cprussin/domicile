@@ -132,12 +132,14 @@ export const withCommandsOn = (tiling: Tiling, node: LayoutNode): Tiling => {
  * `focus parent` selection.
  *
  * Used when the keyboard leaves the tiling, so a stale container selection is
- * neither acted on nor outlined.
+ * neither acted on nor outlined. The same object when commands already target
+ * the window.
  */
-export const withCommandsOnWindow = (tiling: Tiling): Tiling =>
-  tiling.root === undefined
-    ? tiling
-    : { ...tiling, depth: focusChainOf(tiling.root).length };
+export const withCommandsOnWindow = (tiling: Tiling): Tiling => {
+  const depth =
+    tiling.root === undefined ? tiling.depth : focusChainOf(tiling.root).length;
+  return depth === tiling.depth ? tiling : { ...tiling, depth };
+};
 
 /** `focus parent`: select the enclosing container, stopping at the root. */
 export const focusedParent = (tiling: Tiling): Tiling => ({

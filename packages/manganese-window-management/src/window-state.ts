@@ -60,6 +60,7 @@ import {
   openedFloating,
   pageFullscreened,
   parentFocused,
+  picked,
   pointedOn,
   pushedOffBy,
   pushedOnBy,
@@ -68,6 +69,7 @@ import {
   shown,
   splitFlipped,
   tiledStretched,
+  windowFloatToggled,
   windowGrown,
   windowMoved,
   windowsOn,
@@ -376,6 +378,7 @@ export enum WindowActionKind {
   ScreenshotTaken,
   ScreensDescribed,
   SplitToggled,
+  WindowBarPressed,
   WindowClosed,
   WindowDropped,
   WindowDroppedOn,
@@ -808,6 +811,16 @@ export const WindowAction = {
   /** `layout toggle split`. */
   SplitToggled: () => ({ kind: WindowActionKind.SplitToggled as const }),
 
+  /**
+   * The user pressed window `id`'s title bar or tab. Unlike
+   * {@link WindowAction.WindowSelected}, it ends a `focus parent` selection
+   * around the window.
+   */
+  WindowBarPressed: (id: string) => ({
+    id,
+    kind: WindowActionKind.WindowBarPressed as const,
+  }),
+
   /** The user closed a window from its title bar. */
   WindowClosed: (id: string) => ({
     id,
@@ -917,7 +930,7 @@ export const WindowAction = {
     kind: WindowActionKind.WindowResized as const,
   }),
 
-  /** The user clicked in a window or on its title bar. */
+  /** The user clicked in a window. A selection around it stays. */
   WindowSelected: (id: string) => ({
     id,
     kind: WindowActionKind.WindowSelected as const,
@@ -1235,16 +1248,16 @@ const reduceAction = (
     case WindowActionKind.WindowFloated: {
       // Focus the window first, as for `WindowFullscreened`. Reaching it also
       // focuses its screen, which the float is placed on.
-      const reached = reachWindow(state, action.id);
+      const reached = reachWindow(state, action.id, picked);
       return onWorkspaceWith(reached, action.id, (workspace) =>
-        floatToggled(workspace, screenHere(reached)),
+        windowFloatToggled(workspace, action.id, screenHere(reached)),
       );
     }
     case WindowActionKind.WindowFullscreened: {
       // Focus the window first: `fullscreenToggled` acts on the focused
       // window, and pressing a bar focuses its window anyway.
       return onWorkspaceWith(
-        reachWindow(state, action.id),
+        reachWindow(state, action.id, picked),
         action.id,
         (workspace) => fullscreenToggled(workspace, false),
       );
@@ -1272,6 +1285,9 @@ const reduceAction = (
       return onWorkspaceWith(state, action.id, (workspace) =>
         floatSized(workspace, action.id, action.box),
       );
+    }
+    case WindowActionKind.WindowBarPressed: {
+      return reachWindow(state, action.id, picked);
     }
     case WindowActionKind.WindowSelected: {
       return reachWindow(state, action.id);
@@ -1529,17 +1545,23 @@ const groupHeld = (state: WindowState, group: NodeRef): WindowState =>
   );
 
 /**
- * Focuses a window, raising it if it floats, and shows its workspace.
+ * Focuses a window, raising it if it floats, and shows its workspace. `reach`
+ * focuses it on its workspace: {@link picked} for a click, which also ends a
+ * selection around it.
  *
  * Only `xdg-activation` can reach an off-screen window, and switching to its
  * workspace is what makes granting that request visible.
  */
-const reachWindow = (state: WindowState, id: string): WindowState => {
+const reachWindow = (
+  state: WindowState,
+  id: string,
+  reach: typeof reached = reached,
+): WindowState => {
   const workspace = workspaceHolding(state, id);
   if (workspace === undefined) {
     return state;
   } else {
-    const found = reached(workspace, id);
+    const found = reach(workspace, id);
     const shown = showWorkspace(state, workspace.name);
     if (found === workspace && shown === state) {
       // Return the same object when nothing changed. `AppWindow` relies on

@@ -700,6 +700,9 @@ const stageActionsOf = (
   act: (action: WindowAction) => void,
   pointing: (at: Spot) => boolean,
 ) => ({
+  onBarPress: (id: string) => {
+    act(WindowAction.WindowBarPressed(id));
+  },
   onClose: (id: string) => {
     act(WindowAction.WindowClosed(id));
   },
