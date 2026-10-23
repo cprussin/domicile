@@ -1,5 +1,6 @@
 import type { Option, Result } from "@cprussin/option-result";
 import { Popover } from "@domicile-desktop/component-library/Popover";
+import { useKeepsKeyboard } from "@domicile-desktop/manganese-bar/panel-keyboard";
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
@@ -21,7 +22,7 @@ import {
 import type { Wifi } from "@domicile-desktop/system-network/wifi";
 import { NetworkIcon } from "@phosphor-icons/react/dist/ssr/Network";
 import { WifiSlashIcon } from "@phosphor-icons/react/dist/ssr/WifiSlash";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { cva } from "../styled-system/css";
 import { flex } from "../styled-system/patterns";
 import { signalOf } from "./signal";
@@ -91,7 +92,10 @@ export const Network = ({
 /** What the icon shows. */
 type Shown = { link: Link; label: string; online: boolean };
 
-/** The button and its panel. */
+/**
+ * The button and its panel. The panel keeps the keyboard while open, for
+ * typing a Wi-Fi password.
+ */
 const Item = ({
   actions,
   addresses,
@@ -111,9 +115,12 @@ const Item = ({
     reading,
     wired.some(({ up }) => up),
   );
+  const [open, setOpen] = useState(false);
+  useKeepsKeyboard(open);
   return (
     <Popover
       align="center"
+      onOpenChange={setOpen}
       side="bottom"
       tone="overPhoto"
       trigger={

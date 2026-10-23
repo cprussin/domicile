@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Option, Result } from "@cprussin/option-result";
 import { Err, None, Ok } from "@cprussin/option-result";
+import { PanelKeyboardContext } from "@domicile-desktop/manganese-bar/panel-keyboard";
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
@@ -58,26 +59,33 @@ const NO_HOST = new FakeDomicileHost().host;
 
 const heldInterfaces = () => held<Result<NetworkInterface[], SystemError>>();
 
+/** Holds nothing: for tests that do not look at the keyboard. */
+const ignoreKeyboard = () => () => undefined;
+
 /** The item, with the watches the test holds when given. */
 const Item = ({
   addresses = held<Result<Map<string, Addressing>, SystemError>>().watch,
+  hold = ignoreKeyboard,
   interfaces = heldInterfaces().watch,
   network,
   wifi = held<Result<Option<Wifi>, SystemError>>().watch,
 }: {
   addresses?: SharedWatch<Result<Map<string, Addressing>, SystemError>>;
+  hold?: () => () => void;
   interfaces?: SharedWatch<Result<NetworkInterface[], SystemError>>;
   network: SharedWatch<Result<Reading, SystemError>>;
   wifi?: SharedWatch<Result<Option<Wifi>, SystemError>>;
 }) => (
-  <Network
-    actions={heldWifiActions().actions}
-    addresses={addresses}
-    domicile={NO_HOST}
-    interfaces={interfaces}
-    network={network}
-    wifi={wifi}
-  />
+  <PanelKeyboardContext value={hold}>
+    <Network
+      actions={heldWifiActions().actions}
+      addresses={addresses}
+      domicile={NO_HOST}
+      interfaces={interfaces}
+      network={network}
+      wifi={wifi}
+    />
+  </PanelKeyboardContext>
 );
 
 const port = (up: boolean): NetworkInterface => ({
@@ -286,6 +294,34 @@ describe("Network", () => {
   });
 
   describe("its panel", () => {
+    it("keeps the keyboard while open, for the Wi-Fi password", async () => {
+      // The compositor sends keys to the focused window, not the page,
+      // unless the panel holds the keyboard.
+      const network = heldNetwork();
+      const keyboard = { held: 0, released: 0 };
+      render(
+        <Item
+          hold={() => {
+            keyboard.held += 1;
+            return () => {
+              keyboard.released += 1;
+            };
+          }}
+          network={network.watch}
+        />,
+      );
+      network.report(online(Link.Wifi("Home", 0.72)));
+      expect(keyboard).toStrictEqual({ held: 0, released: 0 });
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Wi-Fi, strong signal: Home" }),
+      );
+      expect(keyboard).toStrictEqual({ held: 1, released: 0 });
+
+      await userEvent.keyboard("{Escape}");
+      expect(keyboard).toStrictEqual({ held: 1, released: 1 });
+    });
+
     it("opens on a click, and reads Wi-Fi only while open", async () => {
       const network = heldNetwork();
       const wifi = held<Result<Option<Wifi>, SystemError>>();
