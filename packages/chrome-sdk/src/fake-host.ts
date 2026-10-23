@@ -240,6 +240,7 @@ export class FakeDomicileHost {
           height: 0,
           id: this.#browsersOpened.toString(),
           isApp,
+          isCaptured: false,
           isPrivate,
           partition,
           popupWindow,
@@ -248,6 +249,18 @@ export class FakeDomicileHost {
           width: 0,
         } satisfies DomicileBrowserWindow,
       ],
+    });
+  }
+
+  /**
+   * A capture of browser window `id`'s page alone started, or with `captured`
+   * false ended, as the engine lists it.
+   */
+  captureBrowser(id: string, captured = true): void {
+    this.set({
+      browserWindows: (this.#state.browserWindows ?? []).map((window) =>
+        window.id === id ? { ...window, isCaptured: captured } : window,
+      ),
     });
   }
 

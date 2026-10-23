@@ -47,6 +47,7 @@ import { tabKeyOf } from "./tree/frames";
 import { windowsIn } from "./tree/node";
 import type { NodeRef } from "./tree/path";
 import { focusedWindowIn } from "./tree/tiling";
+import { useCaptured } from "./useCaptured";
 import { keyOf, useFocusGlows } from "./useFocusGlows";
 import type { DrawnWindow, WindowMotions } from "./useWindowMotion";
 import { useWindowMotion } from "./useWindowMotion";
@@ -819,7 +820,11 @@ const WindowContents = memo(
     window,
   }: WindowContentsProps) => {
     const { id } = window;
-    const contents = contentsOf(placement, motion);
+    const captured = useCaptured(
+      domicile,
+      window.kind === WindowKind.App ? undefined : engineWindowOf(id),
+    );
+    const contents = contentsOf(placement, motion, captured);
     const hovered = useCallback(
       (at: Spot) => {
         onHover(id, at);

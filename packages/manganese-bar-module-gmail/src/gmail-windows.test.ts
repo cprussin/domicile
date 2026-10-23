@@ -12,6 +12,7 @@ const browser = (
   height: 0,
   id,
   isApp: false,
+  isCaptured: false,
   isPrivate: false,
   partition: "",
   popupWindow: null,

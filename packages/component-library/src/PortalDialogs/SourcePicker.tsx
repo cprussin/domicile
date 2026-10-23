@@ -150,15 +150,24 @@ const Stage = ({
   outlined: readonly Outline[];
 }) => {
   if (hidden?.preview !== undefined) {
-    return frame === undefined ? (
-      <span className={noDeskStyles}>Drawing a preview…</span>
+    const preview =
+      frame === undefined ? (
+        <span className={noDeskStyles}>Drawing a preview…</span>
+      ) : (
+        frame.match({
+          Err: () => <span className={noDeskStyles}>No preview</span>,
+          Ok: (src) => (
+            <img alt={hidden.label} className={previewStyles} src={src} />
+          ),
+        })
+      );
+    // In the desk's box, so a pick of another shape keeps the dialog's size.
+    return desk === undefined ? (
+      preview
     ) : (
-      frame.match({
-        Err: () => <span className={noDeskStyles}>No preview</span>,
-        Ok: (src) => (
-          <img alt={hidden.label} className={previewStyles} src={src} />
-        ),
-      })
+      <div className={previewBoxStyles} style={fitted(desk)}>
+        {preview}
+      </div>
     );
   } else if (desk === undefined) {
     return <span className={noDeskStyles}>No preview</span>;
@@ -419,6 +428,11 @@ const previewStyles = css({
   maxBlockSize: "56cqh",
   maxInlineSize: "full",
   objectFit: "contain",
+});
+
+// The desk's box, with the preview fitted and centered inside it.
+const previewBoxStyles = center({
+  "& > img": { blockSize: "full", inlineSize: "full", maxBlockSize: "none" },
 });
 
 const deskStyles = css({

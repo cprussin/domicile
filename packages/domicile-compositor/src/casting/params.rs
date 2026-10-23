@@ -160,6 +160,16 @@ pub fn buffers(memory: Memory) -> Vec<u8> {
     })
 }
 
+/// The side of the largest cursor a consumer may make room for, as Mutter's.
+const LARGEST_CURSOR: usize = 384;
+
+/// The bytes of `SPA_META_Cursor` with a square BGRA bitmap `side` pixels big.
+fn cursor_meta_size(side: usize) -> usize {
+    size_of::<spa::sys::spa_meta_cursor>()
+        + size_of::<spa::sys::spa_meta_bitmap>()
+        + side * side * 4
+}
+
 /// The `Meta` pods: a header and damage on every buffer, and room for the
 /// cursor and an image of `cursor_bytes` when the cursor is sent as metadata.
 pub fn metas(cursor_bytes: Option<usize>) -> Vec<Vec<u8>> {
@@ -181,12 +191,27 @@ pub fn metas(cursor_bytes: Option<usize>) -> Vec<Vec<u8>> {
         .into_iter()
         .chain(cursor)
         .map(|(kind, size)| {
+            // The cursor's size is a range, as Mutter's is: a consumer asks
+            // for room for the largest cursor it reads, as WebRTC asks for
+            // 64x64, and PipeWire drops a meta whose sizes do not meet.
+            let size = if kind == spa::sys::SPA_META_Cursor {
+                Value::Choice(ChoiceValue::Int(Choice(
+                    ChoiceFlags::empty(),
+                    ChoiceEnum::Range {
+                        default: size as i32,
+                        min: size as i32,
+                        max: cursor_meta_size(LARGEST_CURSOR) as i32,
+                    },
+                )))
+            } else {
+                Value::Int(size as i32)
+            };
             serialize(Object {
                 type_: SpaTypes::ObjectParamMeta.as_raw(),
                 id: ParamType::Meta.as_raw(),
                 properties: vec![
                     Property::new(spa::sys::SPA_PARAM_META_type, Value::Id(Id(kind))),
-                    Property::new(spa::sys::SPA_PARAM_META_size, Value::Int(size as i32)),
+                    Property::new(spa::sys::SPA_PARAM_META_size, size),
                 ],
             })
         })
@@ -530,6 +555,33 @@ mod tests {
 
         assert_eq!(types(metas(None)), vec![header.clone(), damage.clone()]);
         assert_eq!(types(metas(Some(64))), vec![header, damage, cursor]);
+    }
+
+    // A consumer asks for room for its own largest cursor, as WebRTC asks for
+    // 64x64; a fixed size of the arrow's would match none, and PipeWire would
+    // drop the cursor metadata.
+    #[test]
+    fn cursor_metadata_fits_a_consumer_asking_for_a_larger_cursor() {
+        let pods = metas(Some(64));
+        let cursor = object(pods.last().expect("the cursor meta"));
+        let least =
+            size_of::<spa::sys::spa_meta_cursor>() + size_of::<spa::sys::spa_meta_bitmap>() + 64;
+        let webrtc = size_of::<spa::sys::spa_meta_cursor>()
+            + size_of::<spa::sys::spa_meta_bitmap>()
+            + 64 * 64 * 4;
+
+        let size = property(&cursor, spa::sys::SPA_PARAM_META_size)
+            .expect("a meta size")
+            .value
+            .clone();
+
+        let Value::Choice(ChoiceValue::Int(Choice(_, ChoiceEnum::Range { default, min, max }))) =
+            size
+        else {
+            panic!("a fixed cursor meta size: {size:?}");
+        };
+        assert_eq!((default, min), (least as i32, least as i32));
+        assert!(max as usize >= webrtc);
     }
 
     #[test]

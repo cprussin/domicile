@@ -116,6 +116,10 @@ user's and every other partition, like a separate browser profile:
   it mounted. Its page is then hidden like a background tab:
   `document.visibilityState` is `hidden`, timers slow and nothing paints.
   Showing the view shows the page.
+- **Lay out a hidden window while it `isCaptured`.** A screenshot, a picker's
+  preview or a screen cast of the page alone sets it, and `browserwindowschanged`
+  fires. A page with no layout box draws nothing, so the capture would get no
+  frame. Manganese draws a hidden tab under the shown one meanwhile.
 - `domicile://` addresses, and `blob:` URLs the shell created, show
   `about:blank#blocked`. A guest on the shell's origin could control the
   compositor.

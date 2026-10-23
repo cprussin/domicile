@@ -379,6 +379,7 @@ const browserWindow = (id: string, title: string): DomicileBrowserWindow => ({
   height: 0,
   id,
   isApp: false,
+  isCaptured: false,
   isPrivate: false,
   partition: "",
   popupWindow: null,
