@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { ChooserMode } from "@domicile-desktop/component-library/file-request";
+import type { Folders } from "@domicile-desktop/component-library/folders";
 import { WEBVIEW_FILE_CHOOSER_EVENT } from "@domicile-desktop/sdk/webview-element";
 import { fileRequestOf } from "./file-request";
 
@@ -21,8 +22,14 @@ const asking = (mode: string, answers: string[] = []) =>
     suggestedName: "photo.png",
   });
 
-/** A lister the request should hand to the picker as is. */
-const listed = (path: string) => Promise.resolve([`${path}/a`, `${path}/b/`]);
+/** Folders the request should hand to the picker as they are. */
+const listed: Folders = {
+  create: () => {
+    throw new Error("unexpected create");
+  },
+  list: (path) => Promise.resolve([`${path}/a`, `${path}/b/`]),
+  watch: () => () => undefined,
+};
 
 describe("fileRequestOf", () => {
   it("reads each of the engine's modes", () => {
@@ -63,7 +70,7 @@ describe("fileRequestOf", () => {
     expect(answers).toStrictEqual(["choose a.png,b.jpg", "cancel"]);
   });
 
-  it("lists directories with the lister it is given", () => {
-    expect(fileRequestOf(asking("open"), listed).list).toBe(listed);
+  it("browses the folders it is given", () => {
+    expect(fileRequestOf(asking("open"), listed).folders).toBe(listed);
   });
 });

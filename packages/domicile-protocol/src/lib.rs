@@ -1589,6 +1589,9 @@ pub enum SystemRequest {
         data: String,
         atomic: bool,
     },
+    /// Create a directory, failing if anything has its name. Answered with
+    /// [`SystemReply::Created`].
+    CreateDir { path: String },
     /// List a directory. Answered with [`SystemReply::Entries`].
     ReadDir { path: String },
     /// Describe a path, following symlinks. Answered with
@@ -1762,6 +1765,8 @@ pub enum SystemReply {
     Read { data: String },
     /// The file was written.
     Written,
+    /// The directory was created.
+    Created,
     /// A directory's entries, in no particular order.
     Entries { entries: Vec<DirEntry> },
     /// A path's type, size in bytes and modification time in milliseconds

@@ -1,7 +1,7 @@
 /// <reference types="@domicile-desktop/manganese-host/domicile-elements" />
 
 import { FilePicker } from "@domicile-desktop/component-library/FilePicker";
-import { listDirectory as defaultListDirectory } from "@domicile-desktop/component-library/list-directory";
+import { systemFolders } from "@domicile-desktop/component-library/folders";
 import { DeviceAsk } from "@domicile-desktop/manganese-page-requests/DeviceAsk";
 import { PageDialog } from "@domicile-desktop/manganese-page-requests/PageDialog";
 import { useDeviceRequest } from "@domicile-desktop/manganese-page-requests/useDeviceRequest";
@@ -104,7 +104,7 @@ type Props = {
   /** Whether this window is fullscreen, which removes its edge and corners. */
   fullscreen: boolean;
   /** Lists a directory for the file picker. */
-  listDirectory?: typeof defaultListDirectory;
+  folders?: typeof systemFolders;
   /**
    * The window's current animation, if any.
    *
@@ -203,7 +203,7 @@ export const BrowserWindow = ({
   fullscreen,
   isApp = false,
   isPrivate = false,
-  listDirectory = defaultListDirectory,
+  folders: foldersOf = systemFolders,
   motion,
   onDescription,
   onFocusRequest,
@@ -266,14 +266,13 @@ export const BrowserWindow = ({
   // True while `focusOwn` is calling `focus()`. Focus events fire
   // synchronously inside that call, so this marks them as not user reaches.
   const focusing = useRef(false);
-  const files = useMemo(() => system(domicile), [domicile]);
-  const list = useCallback(
-    (path: string) => listDirectory(files, path),
-    [files, listDirectory],
+  const folders = useMemo(
+    () => foldersOf(system(domicile)),
+    [domicile, foldersOf],
   );
   // A pending file request from the page. The engine draws no dialog; see
   // `useFileRequest`.
-  const asking = useFileRequest(view, list);
+  const asking = useFileRequest(view, folders);
   // The file picker's input. While open it takes the window's keyboard.
   const [pickerBox, setPickerBox] = useState<HTMLInputElement | null>(null);
   // Whether the find bar is open, and its input.

@@ -199,6 +199,7 @@ pub fn reach(request: &SystemRequest) -> Reach {
         | SystemRequest::WindowRequests => Reach::Listens,
         SystemRequest::SetWindowStates { .. } => Reach::Arranges,
         SystemRequest::WriteFile { .. }
+        | SystemRequest::CreateDir { .. }
         | SystemRequest::Stdin { .. }
         | SystemRequest::Screenshot { .. }
         | SystemRequest::PreviewWindow { .. }
@@ -216,6 +217,7 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
     match request {
         SystemRequest::ReadFile { .. }
         | SystemRequest::WriteFile { .. }
+        | SystemRequest::CreateDir { .. }
         | SystemRequest::ReadDir { .. }
         | SystemRequest::Stat { .. }
         | SystemRequest::Watch { .. }
@@ -254,6 +256,7 @@ pub fn refused_to_an_app(id: u32, request: &SystemRequest) -> Option<HostMessage
     match request {
         SystemRequest::ReadFile { .. }
         | SystemRequest::WriteFile { .. }
+        | SystemRequest::CreateDir { .. }
         | SystemRequest::ReadDir { .. }
         | SystemRequest::Stat { .. }
         | SystemRequest::Watch { .. }
@@ -401,6 +404,9 @@ impl System {
                     false => std::fs::write(&path, &bytes),
                 }
                 .map(|()| SystemReply::Written)
+            }),
+            SystemRequest::CreateDir { path } => self.on_a_thread(id, move |home| {
+                std::fs::create_dir(home.join(path)).map(|()| SystemReply::Created)
             }),
             SystemRequest::ReadDir { path } => self.on_a_thread(id, move |home| {
                 std::fs::read_dir(home.join(path))?

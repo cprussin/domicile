@@ -1,9 +1,13 @@
 import { describe, expect, it } from "bun:test";
+import { Err, Ok } from "@cprussin/option-result";
+import type { SystemError } from "@domicile-desktop/sdk/system";
+import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FilePicker } from "./FilePicker";
 import type { FileRequest } from "./file-request";
 import { ChooserMode } from "./file-request";
+import type { Folders } from "./folders";
 
 const HOME = "/home/someone";
 
@@ -11,7 +15,7 @@ const HOME = "/home/someone";
  * A fake filesystem by absolute path. Directory names end in `/`; missing
  * paths are unreadable.
  */
-const FILESYSTEM = new Map<string, readonly string[]>([
+const FILESYSTEM: ReadonlyMap<string, readonly string[]> = new Map([
   ["/", ["home/", "tmp/"]],
   ["/home", ["someone/"]],
   [HOME, ["Documents/", "Pictures/", "Scratch/", "notes.txt", ".bashrc"]],
@@ -22,11 +26,53 @@ const FILESYSTEM = new Map<string, readonly string[]>([
   ["/tmp", []],
 ]);
 
-const list = (path: string): Promise<readonly string[]> => {
-  const entries = FILESYSTEM.get(path);
-  return entries === undefined
-    ? Promise.reject(new DOMException(path, "NotReadableError"))
-    : Promise.resolve(entries);
+/**
+ * Folders over a copy of {@link FILESYSTEM}. `change` replaces a directory's
+ * entries and tells its watchers; `create` adds a directory unless the name
+ * is taken.
+ */
+const foldersOf = () => {
+  const tree = new Map(FILESYSTEM);
+  const watchers = new Map<string, () => void>();
+  const change = (path: string, entries: readonly string[]) => {
+    tree.set(path, entries);
+    act(() => {
+      watchers.get(path)?.();
+    });
+  };
+  const folders: Folders = {
+    create: (path) => {
+      const cut = path.lastIndexOf("/");
+      const parent = path.slice(0, cut);
+      const name = path.slice(cut + 1);
+      const entries = tree.get(parent) ?? [];
+      if (entries.includes(name) || entries.includes(`${name}/`)) {
+        return Promise.resolve(
+          Err<"created", SystemError>({
+            kind: SystemErrorKind.AlreadyExists,
+            message: "File exists",
+          }),
+        );
+      } else {
+        tree.set(parent, [...entries, `${name}/`]);
+        tree.set(path, []);
+        return Promise.resolve(Ok<"created", SystemError>("created"));
+      }
+    },
+    list: (path) => {
+      const entries = tree.get(path);
+      return entries === undefined
+        ? Promise.reject(new DOMException(path, "NotReadableError"))
+        : Promise.resolve(entries);
+    },
+    watch: (path, changed) => {
+      watchers.set(path, changed);
+      return () => {
+        watchers.delete(path);
+      };
+    },
+  };
+  return { change, folders };
 };
 
 /** The chosen paths, or `undefined` on cancel. */
@@ -49,8 +95,8 @@ const picker = (
             resolve(undefined);
           },
           choose: resolve,
+          folders: foldersOf().folders,
           home: HOME,
-          list,
           mode,
           suggestedName: "",
           ...request,
@@ -84,6 +130,17 @@ const where = (): readonly string[] =>
 
 const selection = (): HTMLElement =>
   screen.getByRole("status", { name: "Selection" });
+
+/** Whether the picker has not answered yet. */
+const unanswered = async (answered: Promise<Answer>): Promise<boolean> =>
+  Promise.race([
+    answered.then(() => false),
+    new Promise<boolean>((resolve) => {
+      setTimeout(() => {
+        resolve(true);
+      }, 0);
+    }),
+  ]);
 
 /** Cancels with Escape, from wherever in the picker focus is. */
 const cancel = async (answered: Promise<Answer>) => {
@@ -231,6 +288,78 @@ describe("FilePicker", () => {
       await cancel(answered);
     });
 
+    it("shows hidden files while the button or Ctrl+H turns them on", async () => {
+      const answered = picker(ChooserMode.Open);
+      await rows();
+      act(() => {
+        box().focus();
+      });
+      const hidden = screen.getByRole("button", { name: "Hidden files" });
+      expect(hidden).toHaveAttribute("aria-pressed", "false");
+
+      await userEvent.click(hidden);
+
+      expect(hidden).toHaveAttribute("aria-pressed", "true");
+      expect(await rows()).toContain(".bashrc");
+      expect(box()).toHaveFocus();
+      await userEvent.type(box(), "{Control>}h{/Control}");
+      expect(await rows()).not.toContain(".bashrc");
+      await cancel(answered);
+    });
+
+    it("shows what changes in the folder while it is open", async () => {
+      const { change, folders } = foldersOf();
+      const answered = picker(ChooserMode.Open, { folders });
+      await userEvent.type(box(), "Scratch{Enter}");
+      await rows();
+
+      change(`${HOME}/Scratch`, ["draft.md", "final.md"]);
+
+      expect(await rows()).toStrictEqual(["..", "draft.md", "final.md"]);
+      await cancel(answered);
+    });
+
+    it("goes to a path typed in the path box, opened with Ctrl+L or its button", async () => {
+      const answered = picker(ChooserMode.Open);
+      await rows();
+
+      await userEvent.type(box(), "{Control>}l{/Control}");
+      const path = screen.getByRole("textbox", { name: "Path" });
+      expect(path).toHaveFocus();
+      expect(path).toHaveValue("~/");
+      await userEvent.type(path, "Pictures/trips{Enter}");
+
+      expect(where()).toStrictEqual(["~", "Pictures", "trips"]);
+      expect(box()).toHaveFocus();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Type a path" }),
+      );
+      await userEvent.clear(screen.getByRole("textbox", { name: "Path" }));
+      await userEvent.type(
+        screen.getByRole("textbox", { name: "Path" }),
+        "/tmp{Enter}",
+      );
+      expect(where()).toStrictEqual(["/", "tmp"]);
+      await cancel(answered);
+    });
+
+    it("puts the path box away on Escape, and stays open", async () => {
+      const answered = picker(ChooserMode.Open);
+      await rows();
+      await userEvent.type(box(), "{Control>}l{/Control}");
+      expect(screen.getByRole("textbox", { name: "Path" })).toHaveFocus();
+
+      await userEvent.keyboard("{Escape}");
+
+      expect(
+        screen.queryByRole("textbox", { name: "Path" }),
+      ).not.toBeInTheDocument();
+      expect(box()).toHaveFocus();
+      expect(await unanswered(answered)).toBe(true);
+      await cancel(answered);
+    });
+
     it("starts in the folder the request names", async () => {
       const answered = picker(ChooserMode.Open, {
         currentFolder: `${HOME}/Pictures`,
@@ -310,8 +439,8 @@ describe("FilePicker", () => {
                 { extensions: ["png"], name: "Images" },
                 { extensions: ["txt"], name: "Text" },
               ],
+              folders: foldersOf().folders,
               home: HOME,
-              list,
               mode: ChooserMode.Open,
               suggestedName: "",
             }}
@@ -487,18 +616,18 @@ describe("FilePicker", () => {
       expect(await answered).toStrictEqual([`${HOME}/photo.png`]);
     });
 
-    it("walks a path typed into the name", async () => {
+    // Paths go in the path box, so a name is only a name.
+    it("keeps a slash typed into the name, and saves nothing with one", async () => {
       const answered = picker(ChooserMode.Save);
       await rows();
 
-      await userEvent.type(nameBox(), "Pictures/trips/beach.png");
+      await userEvent.type(nameBox(), "10/23 notes.txt");
 
-      expect(where()).toStrictEqual(["~", "Pictures", "trips"]);
-      expect(nameBox()).toHaveValue("beach.png");
-      await userEvent.type(nameBox(), "{Enter}");
-      expect(await answered).toStrictEqual([
-        `${HOME}/Pictures/trips/beach.png`,
-      ]);
+      expect(where()).toStrictEqual(["~"]);
+      expect(nameBox()).toHaveValue("10/23 notes.txt");
+      expect(screen.getByText("A name can't have a /")).toBeVisible();
+      expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+      await cancel(answered);
     });
 
     it("takes the name of a file that is clicked", async () => {
@@ -562,6 +691,90 @@ describe("FilePicker", () => {
       await userEvent.clear(nameBox());
       await userEvent.type(nameBox(), "notes2.txt{Enter}");
       expect(await answered).toStrictEqual([`${HOME}/notes2.txt`]);
+    });
+  });
+
+  describe("making a folder", () => {
+    it("makes the folder named, and goes into it", async () => {
+      const answered = picker(ChooserMode.Save, { suggestedName: "a.txt" });
+      await rows();
+
+      await userEvent.click(screen.getByRole("button", { name: "New folder" }));
+      const named = screen.getByRole("textbox", { name: "Folder name" });
+      expect(named).toHaveFocus();
+      await userEvent.type(named, "Drafts{Enter}");
+
+      expect(
+        await screen.findByRole("button", { name: "Drafts" }),
+      ).toBeVisible();
+      expect(where()).toStrictEqual(["~", "Drafts"]);
+      expect(nameBox()).toHaveFocus();
+      await userEvent.type(nameBox(), "{Enter}");
+      expect(await answered).toStrictEqual([`${HOME}/Drafts/a.txt`]);
+    });
+
+    it("says why it could not, and keeps the name to fix", async () => {
+      const answered = picker(ChooserMode.Open);
+      await rows();
+      await userEvent.click(screen.getByRole("button", { name: "New folder" }));
+
+      await userEvent.type(
+        screen.getByRole("textbox", { name: "Folder name" }),
+        "Pictures{Enter}",
+      );
+
+      expect(
+        await screen.findByText("Something here already has that name"),
+      ).toBeVisible();
+      expect(screen.getByRole("textbox", { name: "Folder name" })).toHaveValue(
+        "Pictures",
+      );
+      expect(where()).toStrictEqual(["~"]);
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(await answered).toBeUndefined();
+    });
+
+    it("makes none without a name", async () => {
+      const made: string[] = [];
+      const { folders } = foldersOf();
+      const answered = picker(ChooserMode.Open, {
+        folders: {
+          ...folders,
+          create: (path) => {
+            made.push(path);
+            return folders.create(path);
+          },
+        },
+      });
+      await rows();
+      await userEvent.click(screen.getByRole("button", { name: "New folder" }));
+
+      await userEvent.type(
+        screen.getByRole("textbox", { name: "Folder name" }),
+        "{Enter}",
+      );
+
+      expect(made).toStrictEqual([]);
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(await answered).toBeUndefined();
+    });
+
+    it("makes none on Escape, and stays open", async () => {
+      const answered = picker(ChooserMode.Open);
+      await rows();
+      await userEvent.click(screen.getByRole("button", { name: "New folder" }));
+      expect(
+        screen.getByRole("textbox", { name: "Folder name" }),
+      ).toHaveFocus();
+
+      await userEvent.keyboard("{Escape}");
+
+      expect(
+        screen.queryByRole("textbox", { name: "Folder name" }),
+      ).not.toBeInTheDocument();
+      expect(box()).toHaveFocus();
+      expect(await unanswered(answered)).toBe(true);
+      await cancel(answered);
     });
   });
 

@@ -31,10 +31,10 @@ const modeSchema = z.enum(WEBVIEW_FILE_CHOOSER_MODES).transform((mode) => {
   }
 });
 
-/** The `FileRequest` for a page's file chooser event, listing with `list`. */
+/** The `FileRequest` for a page's file chooser event, browsing `folders`. */
 export const fileRequestOf = (
   event: DomicileFileChooserEvent,
-  list: FileRequest["list"],
+  folders: FileRequest["folders"],
 ): FileRequest => ({
   accept: event.accept,
   cancel: () => {
@@ -43,8 +43,8 @@ export const fileRequestOf = (
   choose: (paths) => {
     event.choose(paths);
   },
+  folders,
   home: event.home,
-  list,
   mode: modeSchema.parse(event.mode),
   suggestedName: event.suggestedName,
 });

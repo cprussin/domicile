@@ -494,6 +494,7 @@ const systemReplySchema = z.looseObject({
   reply: z.discriminatedUnion("kind", [
     z.looseObject({ data: z.string(), kind: z.literal("read") }),
     z.looseObject({ kind: z.literal("written") }),
+    z.looseObject({ kind: z.literal("created") }),
     z.looseObject({
       entries: z.array(
         z.looseObject({ file_type: fileTypeSchema, name: z.string() }),

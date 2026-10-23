@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 
+import type { Folders } from "./folders";
+
 /** The kind of file chooser. */
 export enum ChooserMode {
   Open,
@@ -43,11 +45,8 @@ export type FileRequest = {
   filters?: readonly FileFilter[] | undefined;
   /** The absolute home directory. */
   home: string;
-  /**
-   * Lists the directory at `path`; subdirectory names end in `/`. Rejects
-   * with a `NotReadableError` `DOMException` if it is unreadable.
-   */
-  list: (path: string) => Promise<readonly string[]>;
+  /** The folders browsed, listed, watched and created in. */
+  folders: Folders;
   mode: ChooserMode;
   /** The suggested file name for a save; `""` otherwise. */
   suggestedName: string;

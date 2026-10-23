@@ -148,6 +148,17 @@ describe("files", () => {
     expect(await bytes).toStrictEqual(Ok("written"));
   });
 
+  it("creates a directory", async () => {
+    const host = new FakeHost();
+    const creating = system(host).createDir("new");
+    host.reply(1, { kind: "created" });
+
+    expect(host.calls).toStrictEqual([
+      [1, { call: "create_dir", path: "new" }],
+    ]);
+    expect(await creating).toStrictEqual(Ok("created"));
+  });
+
   it("lists a directory", async () => {
     const host = new FakeHost();
     const listing = system(host).readDir("/sys/class/power_supply");

@@ -1,9 +1,13 @@
+import { Err } from "@cprussin/option-result";
+import type { SystemError } from "@domicile-desktop/sdk/system";
+import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import { css } from "../../styled-system/css";
 import { FilePicker as FilePickerComponent } from "./FilePicker";
 import type { FileRequest } from "./file-request";
 import { ChooserMode } from "./file-request";
+import type { Folders } from "./folders";
 
 const HOME = "/home/someone";
 
@@ -19,11 +23,22 @@ const FOLDERS = new Map<string, readonly string[]>([
   ["/tmp", []],
 ]);
 
-const list = (path: string): Promise<readonly string[]> => {
-  const entries = FOLDERS.get(path);
-  return entries === undefined
-    ? Promise.reject(new DOMException(path, "NotReadableError"))
-    : Promise.resolve(entries);
+/** Lists {@link FOLDERS}; never changes, and makes no folders. */
+const folders: Folders = {
+  create: (path) =>
+    Promise.resolve(
+      Err<"created", SystemError>({
+        kind: SystemErrorKind.PermissionDenied,
+        message: path,
+      }),
+    ),
+  list: (path) => {
+    const entries = FOLDERS.get(path);
+    return entries === undefined
+      ? Promise.reject(new DOMException(path, "NotReadableError"))
+      : Promise.resolve(entries);
+  },
+  watch: () => () => undefined,
 };
 
 const request = (overrides: Partial<FileRequest>): FileRequest => ({
@@ -36,8 +51,8 @@ const request = (overrides: Partial<FileRequest>): FileRequest => ({
   },
   currentFolder: undefined,
   filters: undefined,
+  folders,
   home: HOME,
-  list,
   mode: ChooserMode.Open,
   suggestedName: "",
   title: undefined,
@@ -67,7 +82,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "A keyboard-first file picker drawn over its positioned parent. It lists one folder at a time through the request's `list`, and answers through `choose` or `cancel`.",
+          "A keyboard-first file picker drawn over its positioned parent. It lists one folder at a time through the request's `folders`, again when it changes, and answers through `choose` or `cancel`.",
       },
     },
     // The picker covers its parent, which the centered layout shrinks to

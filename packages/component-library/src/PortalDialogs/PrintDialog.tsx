@@ -22,6 +22,7 @@ import { Button } from "../Button/Button";
 import { Field } from "../Field/Field";
 import { FilePicker } from "../FilePicker/FilePicker";
 import { ChooserMode } from "../FilePicker/file-request";
+import type { Folders } from "../FilePicker/folders";
 import { Input } from "../Input/Input";
 import { ModalDialog } from "../ModalDialog/ModalDialog";
 import { useScreenRegion } from "../Screen/DisplayProvider";
@@ -68,8 +69,8 @@ type Props = {
   /** Who asks, as the dialog names them. */
   asker: string;
   body: PrintBody;
-  /** Lists a directory for the PDF's file picker; see `FileRequest.list`. */
-  list: (path: string) => Promise<readonly string[]>;
+  /** The folders the PDF's file picker browses. */
+  folders: Folders;
   screen: string | undefined;
 };
 
@@ -78,7 +79,13 @@ type Props = {
  * Saving to a PDF picks its file after. Dismissing it cancels. No preview:
  * the document arrives only after it closes.
  */
-export const PrintDialog = ({ answer, asker, body, list, screen }: Props) => {
+export const PrintDialog = ({
+  answer,
+  asker,
+  body,
+  folders,
+  screen,
+}: Props) => {
   const [chosen, setChosen] = useState(() => startingChoice(body));
   const [picking, setPicking] = useState(false);
   const options = readOptions(chosen);
@@ -90,7 +97,7 @@ export const PrintDialog = ({ answer, asker, body, list, screen }: Props) => {
         setPicking(false);
       }}
       body={body}
-      list={list}
+      folders={folders}
       options={options}
       screen={screen}
     />
@@ -334,14 +341,14 @@ const PdfPicker = ({
   answer,
   back,
   body,
-  list,
+  folders,
   options,
   screen,
 }: {
   answer: (answer: PortalAnswer) => void;
   back: () => void;
   body: PrintBody;
-  list: (path: string) => Promise<readonly string[]>;
+  folders: Folders;
   options: PrintOptions;
   screen: string | undefined;
 }) => {
@@ -361,8 +368,8 @@ const PdfPicker = ({
               answer(Answer.SaveToPdf(path, options));
             }
           },
+          folders,
           home: body.home,
-          list,
           mode: ChooserMode.Save,
           suggestedName: pdfName(body.title),
           title: "Save as PDF",
