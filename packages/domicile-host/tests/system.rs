@@ -196,12 +196,13 @@ mod files {
         let home = tempfile::tempdir().unwrap();
         let (system, heard) = system_in(home.path());
 
-        for id in [1, 2] {
-            system.handle(id, SystemRequest::CreateDir { path: "new".into() });
-        }
-
+        // One at a time: each call answers from its own thread, so the second
+        // could otherwise create the directory first.
+        system.handle(1, SystemRequest::CreateDir { path: "new".into() });
         assert_eq!(reply(&heard, 1), SystemReply::Created);
         assert!(home.path().join("new").is_dir());
+
+        system.handle(2, SystemRequest::CreateDir { path: "new".into() });
         assert_eq!(failure(reply(&heard, 2)), SystemErrorKind::AlreadyExists);
     }
 
