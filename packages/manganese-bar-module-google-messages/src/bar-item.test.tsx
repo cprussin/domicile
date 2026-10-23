@@ -173,6 +173,22 @@ describe("GoogleMessages", () => {
     });
   });
 
+  it("reloads the page when the network comes back, as it may have loaded offline", () => {
+    render(onBars(new FakeDomicileHost(), ["left"]));
+    let reloads = 0;
+    Object.assign(page(), {
+      reload: () => {
+        reloads += 1;
+      },
+    });
+
+    act(() => {
+      globalThis.dispatchEvent(new Event("online"));
+    });
+
+    expect(reloads).toBe(1);
+  });
+
   it("asks the page's permission requests above it", async () => {
     render(onBars(new FakeDomicileHost(), ["left"]));
     await userEvent.click(screen.getByRole("button", { name: "Messages" }));
