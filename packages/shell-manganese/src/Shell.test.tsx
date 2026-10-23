@@ -183,6 +183,13 @@ class Desk {
     });
   }
 
+  /** Starts or ends a capture of browser window `id`'s page, as the engine does. */
+  engineCaptures(id: string, captured = true): void {
+    act(() => {
+      this.fake.captureBrowser(id, captured);
+    });
+  }
+
   /** Closes one as the engine does: its page's window.close(), or an extension. */
   engineCloses(id: string): void {
     act(() => {
@@ -1957,6 +1964,24 @@ describe("Shell", () => {
 
       expect(movingParts(container, "closing")).toEqual([]);
       expect(windowsOnScreen(container)).toEqual([]);
+    });
+
+    // A page draws only while laid out, so a screenshot or screen cast of a
+    // hidden tab would never get a frame.
+    it("lays out a hidden tab while the engine captures its page", () => {
+      const { container } = renderShell();
+      domicile.engineOpens("https://example.com");
+      clientAppears("two");
+      press("w");
+      const browser = () =>
+        container.querySelector("webview[window='1']")?.closest("section");
+      expect(browser()).toHaveAttribute("hidden");
+
+      domicile.engineCaptures("1");
+      expect(browser()).not.toHaveAttribute("hidden");
+
+      domicile.engineCaptures("1", false);
+      expect(browser()).toHaveAttribute("hidden");
     });
 
     it("keeps a window that is on another workspace mounted and hidden", () => {

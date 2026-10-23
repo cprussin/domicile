@@ -29,7 +29,8 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
                         int32_t height,
                         bool is_private,
                         const String& partition,
-                        bool is_app);
+                        bool is_app,
+                        bool is_captured);
   ~DomicileBrowserWindow() override;
 
   const String& id() const { return id_; }
@@ -41,6 +42,7 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   bool isPrivate() const { return is_private_; }
   const String& partition() const { return partition_; }
   bool isApp() const { return is_app_; }
+  bool isCaptured() const { return is_captured_; }
 
   void Trace(Visitor*) const override;
 
@@ -54,6 +56,7 @@ class MODULES_EXPORT DomicileBrowserWindow final : public ScriptWrappable {
   bool is_private_ = false;
   String partition_;
   bool is_app_ = false;
+  bool is_captured_ = false;
 };
 
 }  // namespace blink

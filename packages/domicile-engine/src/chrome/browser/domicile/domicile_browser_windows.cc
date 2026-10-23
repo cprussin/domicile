@@ -13,6 +13,7 @@
 #include "base/check.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
@@ -255,9 +256,23 @@ class DeskWindows final : public base::SupportsUserData::Data,
           window.height, contents.GetBrowserContext()->IsOffTheRecord(),
           partition.has_value() ? WebViewPartitionAttribute(*partition)
                                 : std::string(),
-          window.app));
+          window.app, window.captures > 0));
     }
     return list;
+  }
+
+  // Counts a capture of window `id` until the returned runner runs, and lists
+  // the window as captured meanwhile. An unknown id counts nothing.
+  base::ScopedClosureRunner Capture(const std::string& id) {
+    auto found = std::ranges::find(windows_, id, &Window::id);
+    if (found == windows_.end()) {
+      return base::ScopedClosureRunner();
+    }
+    if (found->captures++ == 0) {
+      Changed();
+    }
+    return base::ScopedClosureRunner(base::BindOnce(
+        &DeskWindows::Uncapture, weak_factory_.GetWeakPtr(), id));
   }
 
   void AddObserver(Observer* observer) { observers_.AddObserver(observer); }
@@ -295,6 +310,8 @@ class DeskWindows final : public base::SupportsUserData::Data,
     // For a window a page opened, the address content navigates it to. Listed
     // until its first navigation commits, since content lists it first.
     GURL opened_at;
+    // The captures of its page running; see Capture.
+    int captures = 0;
   };
 
   bool Make(const GURL& url,
@@ -356,6 +373,14 @@ class DeskWindows final : public base::SupportsUserData::Data,
       LOG(INFO) << "domicile: ended private browsing.";
       ending_private_profile_ = otr->GetWeakPtr();
       ProfileDestroyer::DestroyOTRProfileWhenAppropriate(otr);
+    }
+  }
+
+  // A capture Capture counted ended. The window may have closed first.
+  void Uncapture(const std::string& id) {
+    auto found = std::ranges::find(windows_, id, &Window::id);
+    if (found != windows_.end() && --found->captures == 0) {
+      Changed();
     }
   }
 
@@ -530,17 +555,18 @@ class BrowserWindowsService final
 // alone. nullopt when there is no shell, no such window, or no page drawn.
 //
 // The page counts as captured while the target's `drawing` is held, so it
-// keeps drawing, and tells its page it is visible, while the shell hides it,
-// as a captured tab does in Chrome.
+// keeps drawing, and tells its page it is visible, as a captured tab does in
+// Chrome. The list says so meanwhile, so the shell keeps a window it hides
+// laid out: a page with no layout box draws nothing.
 std::optional<BrowserWindowCaptureTarget> CaptureTargetOf(
     const std::string& id) {
   content::WebContents* shell = ShellContentsIn(nullptr);
   if (shell == nullptr) {
     return std::nullopt;
   }
-  WebViewGuest* guest =
-      DeskWindows::For(Profile::FromBrowserContext(shell->GetBrowserContext()))
-          .Find(id);
+  DeskWindows& windows =
+      DeskWindows::For(Profile::FromBrowserContext(shell->GetBrowserContext()));
+  WebViewGuest* guest = windows.Find(id);
   if (guest == nullptr) {
     return std::nullopt;
   }
@@ -554,9 +580,15 @@ std::optional<BrowserWindowCaptureTarget> CaptureTargetOf(
           view->GetRenderWidgetHost()->GetFrameSinkId(),
           view->GetViewBounds().size(), view->GetDeviceScaleFactor());
   if (target.has_value()) {
-    target->drawing = guest->contents().IncrementCapturerCount(
-        /*capture_size=*/gfx::Size(), /*stay_hidden=*/false,
-        /*stay_awake=*/true, /*is_activity=*/false);
+    // Both end with the capture: the runners run as the callback holding
+    // them goes.
+    target->drawing = base::ScopedClosureRunner(base::BindOnce(
+        [](base::ScopedClosureRunner drawing,
+           base::ScopedClosureRunner listed) {},
+        guest->contents().IncrementCapturerCount(
+            /*capture_size=*/gfx::Size(), /*stay_hidden=*/false,
+            /*stay_awake=*/true, /*is_activity=*/false),
+        windows.Capture(id)));
   }
   return target;
 }
