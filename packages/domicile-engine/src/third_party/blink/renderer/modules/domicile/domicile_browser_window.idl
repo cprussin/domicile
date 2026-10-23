@@ -45,4 +45,9 @@
   // an application: no address bar. Its page's new windows are browser
   // windows. See docs/architecture/WEB-APPS.md.
   readonly attribute boolean isApp;
+
+  // Whether a capture of the page alone is running: a screenshot, a picker's
+  // preview or a screen cast of it. A page draws only while laid out, so keep
+  // a window you hide, such as behind a tab, laid out while it is captured.
+  readonly attribute boolean isCaptured;
 };

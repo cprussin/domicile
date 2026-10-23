@@ -229,6 +229,12 @@ export type DomicileBrowserWindow = {
    * windows. See docs/architecture/WEB-APPS.md.
    */
   readonly isApp: boolean;
+  /**
+   * Whether a capture of the page alone is running: a screenshot, a picker's
+   * preview or a screen cast of it. A page draws only while laid out, so keep
+   * a window you hide, such as behind a tab, laid out while it is captured.
+   */
+  readonly isCaptured: boolean;
 };
 
 /**
