@@ -214,6 +214,70 @@ describe("useWindowMotion", () => {
       });
     });
 
+    // A tab switch hid the group holding it. The window stays on the
+    // workspace, so it is hidden as a tab is, not sent off.
+    describe("hidden in a group behind a tab", () => {
+      const MAIL = ShellWindow.App("mail", "mail");
+      const windows = [TERMINAL, EDITOR, MAIL];
+      const strip = {
+        at: 0,
+        box: { height: 30, width: 1200, x: 0, y: 32 },
+        divided: false,
+        end: undefined,
+        endDivided: false,
+        group: {
+          node: { id: MAIL.id, up: 1 },
+          wells: 0,
+          windows: windows.map(({ id }) => id),
+        },
+        nested: false,
+        open: true,
+        tabs: 2,
+      };
+      const nestedShown = desktop("1", windows, [TERMINAL, EDITOR]);
+
+      it("is not sent off when a window's tab is shown", () => {
+        const { rerender, result } = showing(nestedShown);
+
+        act(() => {
+          rerender({
+            ...desktop("1", windows, [MAIL]),
+            placements: [{ ...placementOf(MAIL.id), strip }],
+          });
+        });
+
+        expect(motionOf(result, TERMINAL.id)).toBe("resting");
+        expect(motionOf(result, EDITOR.id)).toBe("resting");
+      });
+
+      it("is not sent off when another group's tab is shown", () => {
+        const { rerender, result } = showing(nestedShown);
+
+        act(() => {
+          rerender({
+            ...desktop("1", windows, []),
+            tabs: [
+              {
+                active: true,
+                depth: 0,
+                group: Layout.SplitH,
+                id: MAIL.id,
+                node: { id: MAIL.id, up: 1 },
+                rect: strip.box,
+                selected: false,
+                strip,
+                tabbed: Layout.Tabbed,
+                well: placementOf(MAIL.id).frame,
+                windows: 1,
+              },
+            ],
+          });
+        });
+
+        expect(motionOf(result, TERMINAL.id)).toBe("resting");
+      });
+    });
+
     it("closes up along its strip when it was a tab", () => {
       const tabs = (showing: readonly ShellWindow[]): Shown => ({
         ...desktop("1", [TERMINAL, EDITOR], showing),

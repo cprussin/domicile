@@ -69,7 +69,8 @@ export const departed = (
  * `desk` shows: sent to the scratchpad or to an unseen workspace.
  *
  * Skips them when the screen switched workspace from `before` to `now`: they
- * slide off with the workspace instead.
+ * slide off with the workspace instead. Skips those a tab switch hid inside a
+ * group still on `now`, as a hidden tab is.
  */
 export const sentAway = (
   before: Shown,
@@ -79,7 +80,9 @@ export const sentAway = (
   before.current === now.current
     ? before.placements.flatMap((placement) => {
         const window = now.windows.find(({ id }) => id === placement.id);
-        return window === undefined || placedOn(desk, placement.id)
+        return window === undefined ||
+          placedOn(desk, placement.id) ||
+          inStripOn(now, placement.id)
           ? []
           : [
               leavingFrom(
@@ -96,6 +99,13 @@ export const sentAway = (
 /** Whether a screen in `desk` shows the window `id`. */
 export const placedOn = (desk: readonly Shown[], id: string): boolean =>
   desk.some(({ placements }) => placements.some((placed) => placed.id === id));
+
+/** Whether a tab strip `shown` draws holds the window `id`. */
+const inStripOn = ({ placements, tabs }: Shown, id: string): boolean =>
+  [
+    ...placements.flatMap(({ strip }) => (strip === undefined ? [] : [strip])),
+    ...tabs.map(({ strip }) => strip),
+  ].some(({ group }) => group.windows.includes(id));
 
 /**
  * Whether a window opens and closes along its tab strip. A group's only tab

@@ -34,7 +34,7 @@ const nothing = () => undefined;
 const endProps = {
   float: undefined,
   fullscreen: false,
-  group: { node: { id: "a", up: 1 }, windows: ["a", "b"] },
+  group: { node: { id: "a", up: 1 }, wells: 0, windows: ["a", "b"] },
   onAim: nothing,
   onDrop: nothing,
   onDropOn: nothing,

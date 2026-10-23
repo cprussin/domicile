@@ -48,7 +48,7 @@ const tabProps = {
     divided: false,
     end: undefined,
     endDivided: false,
-    group: { node: { id: "a", up: 1 }, windows: ["a"] },
+    group: { node: { id: "a", up: 1 }, wells: 0, windows: ["a"] },
     nested: false,
     open: true,
     tabs: 1,

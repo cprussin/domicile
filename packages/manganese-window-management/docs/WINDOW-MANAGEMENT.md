@@ -70,7 +70,8 @@ Workspaces belong to the desktop, and screens show them, as in sway:
   glow surrounds the group, and an accent tint covers its tabs, windows and
   the gaps between them (`SelectionTint.tsx`). The tint tells a selected tab
   group from its focused tab, since the glow lights the whole tab group for
-  both. The focused window's bar gets the accent color; tabs keep their usual
+  both. A group selected inside another group's tab is lit in its well,
+  without that tab. The focused window's bar gets the accent color; tabs keep their usual
   states. Meta+Shift+A, focusing a floating window, or clicking another window
   ends the selection.
 - **`xdg-activation` requests are granted.** The compositor forwards them as
@@ -321,7 +322,11 @@ Rules:
   until it has settled, so a window leaving fullscreen stays over the windows
   it still covers.
 - A part drawn by a new element, such as a strip handed to the next open tab,
-  eases from where the element it replaces was drawn (`SettleHandoffs`).
+  eases from where the element it replaces was drawn (`SettleHandoffs`). A
+  strip takes over only from one at its own nesting depth, not from the strip
+  of a group around it.
+- A tab switch that hides a nested group hides its windows at once. They do
+  not leave as windows sent to another workspace do.
 - A window being dragged or resized follows the pointer without easing. A
   dragged float carries all its windows, tabs and strip.
 - While an edge drag or a modifier resize runs, every `<app>` carries
