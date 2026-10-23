@@ -23,6 +23,7 @@
     "happy-dom": "^20.14.0",
     "http-server": "^14.1.1",
     "lowlight": "^3.3.0",
+    "next": "^16.4.2",
     "postcss": "^8.5.28",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

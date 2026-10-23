@@ -41,6 +41,16 @@
       "inputs": ["$TURBO_DEFAULT$", "!README.md", "!**/*.test.*"],
       "outputs": ["dist/**"]
     },
+    "build:next": {
+      "dependsOn": ["^build", "//#build", "^prepare", "prepare"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!README.md",
+        "!**/*.test.*",
+        "$TURBO_ROOT$/docs/media/**"
+      ],
+      "outputs": [".next/**", "!.next/cache/**"]
+    },
     "build:storybook": {
       "dependsOn": ["^build", "//#build", "^prepare", "prepare"],
       "inputs": ["$TURBO_DEFAULT$", "!README.md", "!**/*.test.*"],
@@ -67,7 +77,7 @@
       "persistent": true
     },
     "test": {
-      "with": ["test:types", "test:unit", "build:vite"]
+      "with": ["test:types", "test:unit", "build:vite", "build:next"]
     },
     "test:types": {
       "dependsOn": ["^build", "//#build", "^prepare", "prepare"]

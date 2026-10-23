@@ -1,0 +1,7 @@
+{
+  "compilerOptions": {
+    "types": ["bun", "@domicile-desktop/test-support"]
+  },
+  "extends": "@cprussin/tsconfig/nextjs.json",
+  "include": ["src", "next.config.ts", "panda.config.ts", "next-env.d.ts"]
+}
