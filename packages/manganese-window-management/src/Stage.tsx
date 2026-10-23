@@ -216,8 +216,7 @@ export const Stage = memo(
     // `draggingId`, which keeps its `TileGrab` mounted once the modifier is
     // let go.
     const movingId = stretching ? undefined : draggingId;
-    // Every window the drag moves, which follow the pointer without easing:
-    // a dragged float carries all its windows.
+    // Every window the drag carries, which follow the pointer without easing.
     const held = useMemo(() => heldBy(desk, movingId), [desk, movingId]);
     const { onPlayedOut } = motions;
     const tabsShown = motions.tabs.map(({ tab }) => tab);
@@ -1316,14 +1315,13 @@ const GroupStrip = memo(
 const leavesStrip = (motion: WindowMotion): boolean =>
   motion === "closing-tab" || motion === "sending-tab";
 
-/** The windows a drag of `id` moves: a float's every window, else `id`. */
+/**
+ * The windows a drag of `id` carries with the pointer: a float's every window.
+ * A dragged tiled window stays in its slot until it moves, so it eases there.
+ */
 const heldBy = (desk: Desk, id: string | undefined): ReadonlySet<string> => {
-  if (id === undefined) {
-    return new Set();
-  } else {
-    const float = desk.floats.get(id);
-    return new Set(float === undefined ? [id] : windowsIn(float.root));
-  }
+  const float = id === undefined ? undefined : desk.floats.get(id);
+  return new Set(float === undefined ? [] : windowsIn(float.root));
 };
 
 /** Whether the group of `windows` is fullscreen. */

@@ -2453,6 +2453,23 @@ describe("Shell", () => {
       expect(barFor(container, "app:one").getAnimations()).toHaveLength(1);
     });
 
+    it("slides a dragged tab into the slot it moves to along its strip", () => {
+      const { container } = renderShell();
+      clientAppears("one");
+      clientAppears("two");
+      motionsPlayOut(container);
+      const y = TOP_BAR + TOP_GAP + TITLE_BAR / 2;
+
+      fireEvent.pointerDown(barFor(container, "app:one"), {
+        clientX: GAP + 100,
+        clientY: y,
+      });
+      fireEvent.pointerMove(window, { clientX: GAP + 400, clientY: y });
+
+      expect(tabOrder(container)).toEqual(["app:two", "app:one"]);
+      expect(barFor(container, "app:one").getAnimations()).toHaveLength(1);
+    });
+
     it("moves a window through the tiling with Shift held", () => {
       const { container } = renderShell();
       clientAppears("one");
