@@ -1,6 +1,7 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, jest } from "bun:test";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 
+import { inboxAddress } from "./addresses";
 import { consentAddress } from "./consent";
 import { deskInbox } from "./desk-inbox";
 import { CLIENT, EMAIL } from "./held-google";
@@ -40,5 +41,24 @@ describe("deskInbox", () => {
     expect(String(fake.calls[0]?.[1])).toStartWith(
       consentAddress(CLIENT, EMAIL, ""),
     );
+  });
+
+  it("reads again a second after a Gmail window changes", async () => {
+    jest.useFakeTimers();
+    const fake = new FakeDomicileHost();
+    const { inbox } = deskInbox(fake.host)(EMAIL, CLIENT);
+    const readings = { count: 0 };
+
+    const stop = inbox.subscribe(() => {
+      readings.count += 1;
+    });
+    await Promise.resolve();
+    fake.openBrowser(inboxAddress(EMAIL));
+    jest.advanceTimersByTime(1000);
+    await Promise.resolve();
+    stop();
+    jest.useRealTimers();
+
+    expect(readings.count).toBe(2);
   });
 });

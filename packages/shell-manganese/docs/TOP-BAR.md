@@ -286,8 +286,9 @@ one account's inbox, read with the Gmail API. Not in `DEFAULT_BAR`.
 - **Failed read:** the envelope, the nickname and a warning. Its tooltip
   says why.
 - Click opens the inbox in a browser window.
-- Read every minute, and not while the desktop is locked. Counts are
-  conversations, as Gmail's inbox counts them.
+- Read every 30 seconds, and 1 and 5 seconds after a Gmail browser window
+  opens, closes, navigates or changes title. Not read while the desktop is
+  locked. Counts are conversations, as Gmail's inbox counts them.
 - How it reads:
   - `client` is a Google Cloud OAuth client of the Desktop app type, with the
     Gmail API on and the `gmail.labels` scope. Publish its consent screen:

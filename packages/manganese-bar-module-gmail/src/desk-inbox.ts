@@ -4,6 +4,7 @@ import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 
 import type { GoogleClient } from "./consent";
+import { watchGmailWindows } from "./gmail-windows";
 import type { Inbox } from "./inbox";
 import { inboxReader } from "./read-inbox";
 import { signIn } from "./sign-in";
@@ -22,8 +23,9 @@ export type DeskAccount = {
 };
 
 /**
- * Each account's inbox, watched once for every bar on the desk. Paused while
- * the desk is locked, which refuses the reads.
+ * Each account's inbox, watched once for every bar on the desk. Read again
+ * soon after a Gmail window changes. Paused while the desk is locked, which
+ * refuses the reads.
  */
 export const deskInbox = perHost((domicile) => {
   const accounts = new Map<string, DeskAccount>();
@@ -49,8 +51,10 @@ const watchedAccount = (
   return {
     inbox: sharedWatch((onInbox: (inbox: Inbox) => void) => {
       const watch = watchInbox(read, onInbox, () => domicile.locked === true);
+      const stopGmail = watchGmailWindows(domicile, watch.readSoon);
       running.watch = watch;
       return () => {
+        stopGmail();
         watch.stop();
         running.watch = undefined;
       };
