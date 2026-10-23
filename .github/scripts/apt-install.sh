@@ -8,6 +8,11 @@
 #   GitHub kills it.
 # - Failed attempts before the last are warnings, so a run that succeeds on a
 #   retry stays green.
+# - Retries skip Azure's mirror: it sometimes serves at tens of kB/s for a
+#   whole job, so every attempt against it times out. The runner's sources use
+#   `mirror+file:/etc/apt/apt-mirrors.txt`, which lists Azure first and
+#   archive.ubuntu.com next; deleting the Azure line makes apt use the next
+#   one. Packages fetched before the switch stay in apt's cache.
 # - `--no-install-recommends`: recommends pull in large packages (weston's pull
 #   in ffmpeg) that slow mirrors time out on.
 # - `declare -f` carries the function into `bash -c`, because `timeout` cannot
@@ -24,6 +29,9 @@ install() {
 }
 
 for attempt in 1 2 3; do
+  if [ "$attempt" -gt 1 ]; then
+    sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+  fi
   if timeout --kill-after=10 300 \
        bash -c "$(declare -f install); install $*"; then
     exit 0
