@@ -40,6 +40,10 @@ const MONITOR: u32 = 1;
 const WINDOW: u32 = 2;
 const VIRTUAL: u32 = 4;
 
+/// The types an application may ask for to be offered a region. A region is
+/// part of a monitor, so asking for monitors is asking for regions too.
+const REGION_TYPES: u32 = MONITOR | VIRTUAL;
+
 /// `AvailableSourceTypes`: every type.
 const SOURCE_TYPES: u32 = MONITOR | WINDOW | VIRTUAL;
 
@@ -365,7 +369,7 @@ impl ScreenCast {
                     }
                 })
                 .collect(),
-            region: selected.types & VIRTUAL != 0,
+            region: selected.types & REGION_TYPES != 0,
             browser_windows: selected.types & WINDOW != 0,
             desk,
         })
@@ -669,7 +673,11 @@ fn chosen(picks: &[CastPick], open: &[Candidate], selected: &Selected) -> Option
 
 /// Whether `source` is of a type the application asked for.
 fn asked_for(selected: &Selected, source: &Source) -> bool {
-    selected.types & source_type(source) != 0
+    let types = match source {
+        Source::Region(_) => REGION_TYPES,
+        _ => source_type(source),
+    };
+    selected.types & types != 0
 }
 
 /// The spec's source type of `source`.
@@ -1152,7 +1160,9 @@ mod tests {
         select(
             &served.client,
             vec![
-                ("types", Value::from(1u32 | 4)),
+                // A region is part of a monitor, so asking for monitors is
+                // asking for regions too.
+                ("types", Value::from(1u32)),
                 ("multiple", Value::from(true)),
             ],
         );
@@ -1592,8 +1602,13 @@ mod tests {
             "a browser window is a window"
         );
         assert!(
-            chosen(&[region((10, 10))], &open, &asked(3)).is_none(),
+            chosen(&[region((10, 10))], &open, &asked(2)).is_none(),
             "no region"
+        );
+        assert_eq!(
+            chosen(&[region((10, 10))], &open, &asked(1)),
+            Some(vec![super::region((0, 0), (10, 10))]),
+            "a region of a monitor"
         );
         assert!(
             chosen(&[region((0, 10))], &open, &asked(4)).is_none(),

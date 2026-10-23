@@ -48,7 +48,7 @@ type Offered = Choice & { source: CastSource };
  * windows and browser windows an application may record in a list beside
  * the desk shot as it opened, which outlines each pick. A browser window is
  * its page alone, from the engine. Picks one, or several when the
- * application asks for more, or, when it asks for a region, an area dragged
+ * application asks for more, or, when it may have a region, an area dragged
  * over the desk shot as the screenshot picker's is. Without a desk shot, the
  * region is drawn over the page instead. Dismissing it cancels.
  */
