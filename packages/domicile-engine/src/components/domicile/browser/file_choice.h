@@ -30,6 +30,13 @@ namespace domicile {
 std::optional<base::FilePath> ResolvedPath(const base::FilePath& home,
                                            std::string_view path);
 
+// The absolute folder a picker for `suggested` starts in, or empty when
+// `suggested` names none and the picker starts in the home.
+//
+// Chrome suggests a download's path in the download folder, which follows
+// XDG_DOWNLOAD_DIR, and a browser dialog's under its own default.
+std::string StartFolder(const base::FilePath& suggested);
+
 // Whether `count` paths answer what `mode` asked: one, except for
 // kOpenMultiple, which takes at least one.
 bool IsAnswerFor(mojom::WebViewFileChooserMode mode, size_t count);

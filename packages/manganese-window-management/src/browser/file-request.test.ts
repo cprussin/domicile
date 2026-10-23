@@ -16,6 +16,7 @@ const asking = (mode: string, answers: string[] = []) =>
     choose: (paths: readonly string[]) => {
       answers.push(`choose ${paths.join(",")}`);
     },
+    currentFolder: "/home/someone/Scratch" as string | undefined,
     home: "/home/someone",
     mode,
     suggestedName: "photo.png",
@@ -49,6 +50,26 @@ describe("fileRequestOf", () => {
     expect(request.accept).toStrictEqual(["png", "jpg"]);
     expect(request.suggestedName).toBe("photo.png");
     expect(request.home).toBe("/home/someone");
+  });
+
+  // A download starts in the download folder.
+  it("starts in the folder the engine names", () => {
+    expect(fileRequestOf(asking("save"), listed).currentFolder).toBe(
+      "/home/someone/Scratch",
+    );
+  });
+
+  // An engine without the attribute sends none; one with no folder, "".
+  it("starts in the home when the engine names no folder", () => {
+    expect(
+      [undefined, ""].map(
+        (folder) =>
+          fileRequestOf(
+            Object.assign(asking("save"), { currentFolder: folder }),
+            listed,
+          ).currentFolder,
+      ),
+    ).toStrictEqual([undefined, undefined]);
   });
 
   it("answers the engine through the event", () => {

@@ -49,6 +49,18 @@ TEST(FileChoiceTest, ADirectoryMayEndInASlash) {
             base::FilePath("/etc"));
 }
 
+TEST(FileChoiceTest, APickerStartsWhereTheSuggestedPathIs) {
+  // A download's suggested path is in the download folder.
+  EXPECT_EQ(StartFolder(base::FilePath("/home/someone/Scratch/report.pdf")),
+            "/home/someone/Scratch");
+}
+
+TEST(FileChoiceTest, ABareNameNamesNoFolder) {
+  // Blink's save suggests only a name; the shell starts in the home.
+  EXPECT_EQ(StartFolder(base::FilePath("report.pdf")), "");
+  EXPECT_EQ(StartFolder(base::FilePath()), "");
+}
+
 TEST(FileChoiceTest, NoPathClimbs) {
   // The element rejects these, so one arriving here is untrusted.
   EXPECT_EQ(ResolvedPath(base::FilePath(kHome), "../other/secret"),

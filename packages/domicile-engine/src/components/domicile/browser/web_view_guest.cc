@@ -951,7 +951,7 @@ void WebViewGuest::ChooseDownloadPath(
   client_->FileChooserRequested(
       mojom::WebViewFileChooserMode::kSave, {},
       suggested_path.BaseName().AsUTF8Unsafe(),
-      base::GetHomeDir().AsUTF8Unsafe(),
+      base::GetHomeDir().AsUTF8Unsafe(), StartFolder(suggested_path),
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
           base::BindOnce(&DownloadPathChosen, std::move(chosen)),
           std::nullopt));
@@ -966,7 +966,7 @@ void WebViewGuest::ChooseFiles(
   // Wrapped, as in ChooseDownloadPath: the dialog waits for an answer.
   client_->FileChooserRequested(
       mode, accept, suggested_path.BaseName().AsUTF8Unsafe(),
-      base::GetHomeDir().AsUTF8Unsafe(),
+      base::GetHomeDir().AsUTF8Unsafe(), StartFolder(suggested_path),
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
           base::BindOnce(&DialogFilesChosen, mode, std::move(chosen)),
           std::nullopt));
@@ -1532,7 +1532,7 @@ void WebViewGuest::RunFileChooser(
       AsWebViewFileChooserMode(params.mode),
       AcceptedExtensions(params.accept_types),
       params.default_file_name.BaseName().AsUTF8Unsafe(),
-      base::GetHomeDir().AsUTF8Unsafe(),
+      base::GetHomeDir().AsUTF8Unsafe(), StartFolder(params.default_file_name),
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
           base::BindOnce(&FilesChosen, std::move(listener), params.mode),
           std::nullopt));

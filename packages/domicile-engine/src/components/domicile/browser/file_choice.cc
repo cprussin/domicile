@@ -24,6 +24,11 @@ std::optional<base::FilePath> ResolvedPath(const base::FilePath& home,
   return named.empty() ? home : home.Append(named);
 }
 
+std::string StartFolder(const base::FilePath& suggested) {
+  return suggested.IsAbsolute() ? suggested.DirName().AsUTF8Unsafe()
+                                : std::string();
+}
+
 bool IsAnswerFor(mojom::WebViewFileChooserMode mode, size_t count) {
   switch (mode) {
     case mojom::WebViewFileChooserMode::kOpen:

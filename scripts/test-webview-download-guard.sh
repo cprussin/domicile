@@ -42,6 +42,7 @@ run_block() { # $1 NEGATIVE, then NAME=value overrides
   SAW_BROWSER=1
   SAW_ASKED=1
   SAW_SUGGESTED=1
+  SAW_FOLDER=1
   SAW_ANSWERED=1
   SAVED=1
   SAVED_ANYWHERE=1
@@ -104,6 +105,8 @@ expect "a browser that asked and a shell not told says so" "yes" \
   "$(blames "SHELL WAS NOT TOLD" 0 SAW_ASKED=0)"
 expect "the wrong suggested name says so" "yes" \
   "$(blames "wrong name" 0 SAW_SUGGESTED=0)"
+expect "a picker that starts outside the download folder blames the folder" yes \
+  "$(blames "wrong folder" 0 SAW_FOLDER=0)"
 expect "an answer that threw blames this guard's page" "yes" \
   "$(blames "threw" 0 SAW_ANSWERED=0)"
 
