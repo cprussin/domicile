@@ -22,6 +22,10 @@ bun run build:next
 
 ## Vercel
 
-- Root directory: `packages/site`. Vercel installs from the repository root,
-  which runs each package's `prepare` (Panda codegen).
+- Root directory: `packages/site`. `vercel.json` installs from the
+  repository root, filtered to the site and the packages it uses, which runs
+  their `prepare` (Panda codegen). It installs with the repository's bun
+  (`packageManager`), since Vercel's own is older.
 - Production branch: `stable`.
+- `vercel.json` skips every deployment but production, since each build
+  costs.
