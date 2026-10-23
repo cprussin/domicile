@@ -39,6 +39,7 @@ DomicileFileChooserEvent::DomicileFileChooserEvent(
     const Vector<String>& accept,
     const String& suggested_name,
     const String& home,
+    const String& folder,
     Answer answer,
     HTMLWebViewElement& owner)
     : Event(type, Bubbles::kYes, Cancelable::kYes),
@@ -46,6 +47,7 @@ DomicileFileChooserEvent::DomicileFileChooserEvent(
       accept_(accept),
       suggested_name_(suggested_name),
       home_(home),
+      current_folder_(folder),
       answer_(std::move(answer)),
       owner_(&owner) {}
 

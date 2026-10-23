@@ -57,7 +57,7 @@ export const Shell = () => {
   // answer, not by falling back to the element's default cancel.
   document.addEventListener("domicile-file-chooser", (event) => {
     say(
-      `file-chooser mode=${event.mode} suggested=${event.suggestedName} accept=${event.accept.join(",")}`,
+      `file-chooser mode=${event.mode} suggested=${event.suggestedName} accept=${event.accept.join(",")} folder=${event.currentFolder}`,
     );
     event.preventDefault();
     answerIt(event);

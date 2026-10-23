@@ -709,8 +709,13 @@ declare global {
     readonly accept: readonly string[];
     /** The name the page suggests for a `save`; `""` otherwise. */
     readonly suggestedName: string;
-    /** The absolute home directory, where a picker starts. */
+    /** The absolute home directory. */
     readonly home: string;
+    /**
+     * The absolute folder a picker starts in, or `""` for `home`: a download
+     * starts in the download folder. `undefined` from an engine without it.
+     */
+    readonly currentFolder: string | undefined;
     /**
      * Answer with the picked paths. `open-multiple` takes one or more; other
      * modes take exactly one. Otherwise throws a `TypeError`. Answering twice
