@@ -1,17 +1,19 @@
 // Dropping a dragged tiled window or group onto a window, as in sway's
 // `tiling_drag`.
 //
-// Dropping on the middle swaps the two. Dropping on an edge puts the window on
-// that side: in the target's container if it runs that way, else in a new
-// split with the target.
+// Dropping on the middle puts the window in the target's tab group, after it.
+// Dropping on an edge puts the window on that side: in the target's container
+// if it runs that way, else in a new split with the target.
 
 import type { Direction } from "../direction";
 import { axisOf as axisOfDirection, isForward } from "../direction";
 import type { LayoutNode } from "./node";
 import {
   axisOf,
+  Layout,
   LayoutNode as Node,
   NodeKind,
+  showsOneChild,
   splitFor,
   windowsIn,
   withChildAt,
@@ -42,17 +44,16 @@ export const droppedOn = (
   if (windowsIn(node).includes(target.id)) {
     return tiling;
   } else {
-    const moved =
-      edge === undefined
-        ? traded(root, from, target)
-        : besideTarget(root, from, target, edge);
-    return withCommandsOn({ ...tiling, root: moved }, node);
+    return withCommandsOn(
+      { ...tiling, root: movedOnto(root, from, target, edge) },
+      node,
+    );
   }
 };
 
 /**
- * The tiling with `node`, dragged in from another workspace, dropped on the
- * `edge` of the node `target` names, or in its place when `edge` is
+ * The tiling with `node`, dragged in from another workspace or layer, dropped
+ * on the `edge` of the node `target` names, or its middle when `edge` is
  * `undefined`. Focus and commands go to `node`.
  *
  * Throws if `target` is not tiled here.
@@ -64,65 +65,74 @@ export const arrivedOn = (
   edge: Direction | undefined,
 ): Tiling => {
   const root = tiledRoot(tiling);
-  const at = pathToRef(root, target);
-  const moved =
-    edge === undefined
-      ? replacedAt(root, at, () => node)
-      : placedBeside(root, at, node, edge);
-  return withCommandsOn({ ...tiling, root: moved }, node);
-};
-
-/**
- * The tiling with the node `moving` names replaced by `by`, the window it was
- * dropped in the middle of on another workspace.
- *
- * Throws if `moving` is not tiled here.
- */
-export const tradedFor = (
-  tiling: Tiling,
-  moving: NodeRef,
-  by: string,
-): Tiling => {
-  const root = tiledRoot(tiling);
-  return {
-    ...tiling,
-    root: replacedAt(root, pathToRef(root, moving), () => Node.Window(by)),
-  };
-};
-
-/** Swaps the node at `from` with `target`, keeping both boxes' sizes. */
-const traded = (root: LayoutNode, from: Path, target: NodeRef): LayoutNode => {
-  const to = pathToRef(root, target);
-  const moving = nodeAt(root, from);
-  return replacedAt(
-    replacedAt(root, from, () => nodeAt(root, to)),
-    to,
-    () => moving,
+  return withCommandsOn(
+    { ...tiling, root: placed(root, pathToRef(root, target), node, edge) },
+    node,
   );
 };
 
 /**
- * Removes the node at `from` and puts it on the `edge` side of `target`.
+ * Removes the node at `from` and drops it on the `edge` of `target`, or its
+ * middle when `edge` is `undefined`.
  *
  * Removes it first, like a keyed `move`, so the tree collapses as after a
  * close before the target is located.
  */
-const besideTarget = (
+const movedOnto = (
   root: LayoutNode,
   from: Path,
   target: NodeRef,
-  edge: Direction,
+  edge: Direction | undefined,
 ): LayoutNode => {
   const rest = withoutAt(root, from);
   if (rest === undefined) {
     // Unreachable: the target is still in the tree.
     throw new Error(`layout tree: dropping on ${target.id} left nothing`);
   } else {
-    return placedBeside(
-      rest,
-      pathToRef(rest, target),
-      nodeAt(root, from),
-      edge,
+    return placed(rest, pathToRef(rest, target), nodeAt(root, from), edge);
+  }
+};
+
+/**
+ * Puts `moving` on the `edge` side of the node at `at`, or in its tab group
+ * when `edge` is `undefined`.
+ */
+const placed = (
+  root: LayoutNode,
+  at: Path,
+  moving: LayoutNode,
+  edge: Direction | undefined,
+): LayoutNode =>
+  edge === undefined
+    ? joined(root, at, moving)
+    : placedBeside(root, at, moving, edge);
+
+/**
+ * Puts `moving` just after the node at `at` in its tab group. A node alone in
+ * its group makes that group a tab group; any other node gets a tab group of
+ * the two.
+ */
+const joined = (root: LayoutNode, at: Path, moving: LayoutNode): LayoutNode => {
+  const index = at.at(-1);
+  const around = at.slice(0, -1);
+  const parent = index === undefined ? undefined : nodeAt(root, around);
+  if (
+    parent?.kind === NodeKind.Container &&
+    index !== undefined &&
+    (showsOneChild(parent.layout) || parent.children.length === 1)
+  ) {
+    return replacedAt(root, around, () =>
+      withChildAt(
+        showsOneChild(parent.layout)
+          ? parent
+          : Node.Container(Layout.Tabbed, parent.children),
+        index + 1,
+        moving,
+      ),
+    );
+  } else {
+    return replacedAt(root, at, (node) =>
+      Node.Container(Layout.Tabbed, [node, moving], 1),
     );
   }
 };
@@ -130,9 +140,35 @@ const besideTarget = (
 /**
  * Puts `moving` on the `edge` side of the node at `at`: in its parent if the
  * parent runs along that axis, else in a new split with the node (also when
- * there is no parent).
+ * there is no parent). A tab group of one becomes that split.
  */
 const placedBeside = (
+  root: LayoutNode,
+  at: Path,
+  moving: LayoutNode,
+  edge: Direction,
+): LayoutNode => {
+  const target = nodeAt(root, at);
+  const [only, ...others] =
+    target.kind === NodeKind.Container && showsOneChild(target.layout)
+      ? target.children
+      : [];
+  if (only !== undefined && others.length === 0) {
+    const forward = isForward(edge);
+    return replacedAt(root, at, () =>
+      Node.Container(
+        splitFor(axisOfDirection(edge)),
+        forward ? [only, moving] : [moving, only],
+        forward ? 1 : 0,
+      ),
+    );
+  } else {
+    return besideNode(root, at, moving, edge);
+  }
+};
+
+/** {@link placedBeside} for any node but a tab group of one. */
+const besideNode = (
   root: LayoutNode,
   at: Path,
   moving: LayoutNode,

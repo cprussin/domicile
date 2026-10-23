@@ -694,7 +694,7 @@ describe("nodeDropped", () => {
     expect(focusedOn(workspace)).toBe("c");
   });
 
-  it("swaps a floating window with a tiled one it is dropped in the middle of", () => {
+  it("tabs a floating window into a tiled one it is dropped in the middle of", () => {
     const workspace = nodeDropped(
       desk(["a"], ["b", "c"]),
       { id: "c", up: 0 },
@@ -702,7 +702,8 @@ describe("nodeDropped", () => {
       undefined,
     );
 
-    expect(tiled(workspace)).toEqual(["c"]);
-    expect(floating(workspace)).toEqual([["b", "a"]]);
+    expect(tiled(workspace)).toEqual(["a", "c"]);
+    expect(floating(workspace)).toEqual([["b"]]);
+    expect(focusedOn(workspace)).toBe("c");
   });
 });

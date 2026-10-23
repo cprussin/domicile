@@ -89,7 +89,8 @@ export const Aim = {
     rect,
   }),
   /**
-   * Goes on window `id`'s `edge`, or swaps with it when `edge` is `undefined`.
+   * Goes on window `id`'s `edge`, or into its tab group after it when `edge`
+   * is `undefined`.
    */
   Window: (id: string, edge: Direction | undefined, rect: Rect) => ({
     edge,
@@ -108,8 +109,8 @@ export type Corner = {
 };
 
 /**
- * How near an edge a drop goes beside the target instead of swapping, as a
- * share of its shorter side. Matches sway.
+ * How near an edge a drop goes beside the target instead of into its tab
+ * group, as a share of its shorter side. Matches sway.
  */
 const EDGE_ZONE = 0.3;
 
@@ -164,7 +165,12 @@ export const aimAt = (
   } else if (dragged.includes(target.id)) {
     return aimOutOfGroup(tabs, dragged, target.frame, x, y);
   } else {
-    return aimAtWindow(target, sharesStrip(tabs, target.id), x, y);
+    return aimAtWindow(
+      target,
+      tabs.some(({ id }) => id === target.id),
+      x,
+      y,
+    );
   }
 };
 
@@ -211,8 +217,8 @@ export const cornerOf = (frame: Rect, x: number, y: number): Corner => ({
 });
 
 /**
- * Aims at `target`'s edge or middle. The edge of a window that shares its tab
- * strip, `tabbed`, is its group's, as in sway.
+ * Aims at `target`'s edge or middle. The edge of a window with a tab,
+ * `tabbed`, is its tab group's, as in sway.
  */
 const aimAtWindow = (
   { frame, id }: Target,
@@ -258,15 +264,6 @@ const aimOutOfGroup = (
     const edge = edgeNearest(frame, x, y);
     return Aim.Group(other.id, edge, halfOf(frame, edge));
   }
-};
-
-/** Whether window `id` is a tab with others in its strip. */
-const sharesStrip = (tabs: readonly TabTarget[], id: string): boolean => {
-  const tab = tabs.find((found) => found.id === id);
-  return (
-    tab !== undefined &&
-    tabs.some((other) => other.id !== id && sameRect(other.strip, tab.strip))
-  );
 };
 
 /** Aims at `tab`, along the strip if `dragged` is a tab in the same one. */

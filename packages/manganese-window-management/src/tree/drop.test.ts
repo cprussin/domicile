@@ -3,7 +3,6 @@ import { describe, expect, it } from "bun:test";
 import { Direction } from "../direction";
 import { droppedOn } from "./drop";
 import { Layout, LayoutNode } from "./node";
-import { removed } from "./remove";
 import { focusedIdOf, focusedNodeOf, withFocusOn } from "./tiling";
 
 const ROW = {
@@ -17,7 +16,7 @@ const ROW = {
 };
 
 describe("droppedOn", () => {
-  it("trades places with the window dropped on the middle of", () => {
+  it("joins the window dropped on the middle of in a tab group", () => {
     const dropped = droppedOn(
       ROW,
       { id: "a", up: 0 },
@@ -25,32 +24,18 @@ describe("droppedOn", () => {
       undefined,
     );
 
-    expect(dropped.root).toEqual(
-      LayoutNode.Container(
-        Layout.SplitH,
-        [
-          LayoutNode.Window("c"),
-          LayoutNode.Window("b"),
-          LayoutNode.Window("a", 1),
-        ],
-        2,
-        [0.2, 0.3, 0.5],
-      ),
-    );
+    expect(dropped.root).toMatchObject({
+      children: [
+        { id: "b" },
+        {
+          children: [{ id: "c" }, { id: "a" }],
+          focused: 1,
+          layout: Layout.Tabbed,
+        },
+      ],
+      layout: Layout.SplitH,
+    });
     expect(focusedIdOf(dropped)).toBe("a");
-  });
-
-  it("keeps both windows' focus history when they trade places", () => {
-    const visited = withFocusOn(withFocusOn(withFocusOn(ROW, "c"), "a"), "b");
-
-    expect(
-      focusedIdOf(
-        removed(
-          droppedOn(visited, { id: "b", up: 0 }, { id: "a", up: 0 }, undefined),
-          "b",
-        ),
-      ),
-    ).toBe("a");
   });
 
   it("goes beside a window dropped on the edge that runs along its row", () => {
@@ -134,6 +119,15 @@ describe("droppedOn", () => {
       });
     });
 
+    it("takes a window dropped on the middle of a tab in after it", () => {
+      expect(
+        droppedOn(TABS, { id: "c", up: 0 }, { id: "a", up: 0 }, undefined).root,
+      ).toMatchObject({
+        children: [{ id: "a" }, { id: "c" }, { id: "b" }],
+        layout: Layout.Tabbed,
+      });
+    });
+
     it("splits with a window dropped on its edge, which leaves it", () => {
       expect(
         droppedOn(TABS, { id: "c", up: 0 }, { id: "a", up: 1 }, Direction.Right)
@@ -148,6 +142,24 @@ describe("droppedOn", () => {
         ],
         layout: Layout.SplitH,
       });
+    });
+  });
+
+  it("splits a tab group of one with a window dropped on any of its edges", () => {
+    const lone = {
+      depth: 1,
+      root: LayoutNode.Container(Layout.SplitV, [
+        LayoutNode.Container(Layout.Tabbed, [LayoutNode.Window("a")]),
+        LayoutNode.Window("b"),
+      ]),
+    };
+
+    expect(
+      droppedOn(lone, { id: "b", up: 0 }, { id: "a", up: 1 }, Direction.Right)
+        .root,
+    ).toMatchObject({
+      children: [{ id: "a" }, { id: "b" }],
+      layout: Layout.SplitH,
     });
   });
 
@@ -189,11 +201,12 @@ describe("droppedOn", () => {
       expect(focusedNodeOf(dropped)).toMatchObject({ layout: Layout.Tabbed });
     });
 
-    it("trades places with a window dropped on the middle of", () => {
+    it("goes in as a tab of a window dropped on the middle of", () => {
       expect(
         droppedOn(TABS_BESIDE, GROUP, { id: "c", up: 0 }, undefined).root,
       ).toMatchObject({
-        children: [LayoutNode.Window("c"), { layout: Layout.Tabbed }],
+        children: [{ id: "c" }, { layout: Layout.Tabbed }],
+        layout: Layout.Tabbed,
       });
     });
 

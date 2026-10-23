@@ -22,7 +22,7 @@ import {
 } from "./floating/float";
 import { INNER_GAP, tiledAreaOf } from "./gaps";
 import type { Rect } from "./rect";
-import { arrivedOn, droppedOn, tradedFor } from "./tree/drop";
+import { arrivedOn, droppedOn } from "./tree/drop";
 import { enteredFrom, focusMoved, leavesBy } from "./tree/focus-direction";
 import { inserted, insertedNode } from "./tree/insert";
 import { laidOut, split, splitToggled } from "./tree/layout";
@@ -711,18 +711,6 @@ export const nodeDropped = (
       to,
       node,
     );
-  } else if (edge === undefined) {
-    // A swap: each takes the other's place, in the other's layer.
-    const swapped = inLayerOf(workspace, from, (tiling) =>
-      tradedFor(tiling, moving, target.id),
-    );
-    return landedIn(
-      inLayerOf(swapped, to, (tiling) =>
-        arrivedOn(tiling, node, target, undefined),
-      ),
-      to,
-      node,
-    );
   } else {
     return nodeArrived(nodeLifted(workspace, moving).rest, node, target, edge);
   }
@@ -757,8 +745,8 @@ export const nodeLifted = (
 };
 
 /**
- * `node`, dragged in from elsewhere, dropped on `target`'s `edge`, or in its
- * place when `edge` is `undefined` — see `arrivedOn`. The target may be tiled
+ * `node`, dragged in from elsewhere, dropped on `target`'s `edge`, or its
+ * middle when `edge` is `undefined` — see `arrivedOn`. The target may be tiled
  * or floating.
  */
 export const nodeArrived = (
@@ -774,19 +762,6 @@ export const nodeArrived = (
     node,
   );
 };
-
-/**
- * The node `moving` names, tiled or floating, swapped for `by`, from another
- * workspace, which it was dropped in the middle of.
- */
-export const nodeTraded = (
-  workspace: Workspace,
-  moving: NodeRef,
-  by: string,
-): Workspace =>
-  inLayerOf(workspace, floatOn(workspace, moving.id), (tiling) =>
-    tradedFor(tiling, moving, by),
-  );
 
 /**
  * A tiled window's `edge` dragged `by` pixels, on a workspace laid out in
