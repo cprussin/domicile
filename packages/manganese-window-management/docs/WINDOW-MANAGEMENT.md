@@ -282,7 +282,8 @@ announces a window only then, so its title, app id and limits are known.
 - Opening a tab: the tab opens out from its start as the tabs after it slide
   along; the contents fade in.
 - Rearranging: windows ease to their new boxes.
-- Moving a tab along its strip: the tabs slide to their new places.
+- Moving a tab along its strip, by keys or by dragging: the tabs slide to
+  their new places, the moved one included.
 - Closing: shrink and fade out.
 - Sending to a workspace no screen shows: shrink further and fade out.
 - Closing or sending away a tab: it closes up toward its start as the tabs
@@ -328,8 +329,9 @@ Rules:
   of a group around it.
 - A tab switch that hides a nested group hides its windows at once. They do
   not leave as windows sent to another workspace do.
-- A window being dragged or resized follows the pointer without easing. A
-  dragged float carries all its windows, tabs and strip.
+- A float being dragged, or a window being resized, follows the pointer
+  without easing. A dragged float carries all its windows, tabs and strip. A
+  dragged tiled tab eases into each slot it moves to along its strip.
 - While an edge drag or a modifier resize runs, every `<app>` carries
   `resizing`, so the engine does not wait for a client to draw each box. Every
   window, since a tiled edge resizes the windows on both sides.
