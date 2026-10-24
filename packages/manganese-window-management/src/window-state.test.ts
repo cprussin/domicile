@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { Axis, Direction } from "./direction";
 import { SURFACE_TUCK, TITLE_BAR } from "./rect";
-import { Layout, LayoutNode, windowsIn } from "./tree/node";
+import { Layout, LayoutNode, NodeKind, windowsIn } from "./tree/node";
 import { focusedNodeOf, shownOver, windowsOf } from "./tree/tiling";
 import { appWindowId, browserWindowId } from "./window";
 import type { WindowState } from "./window-state";
@@ -1616,11 +1616,28 @@ describe("a tab group dragged by its strip", () => {
     );
   const GROUP = { id: APP("kitty"), up: 1 };
 
-  it("selects and holds the group a drag takes hold of", () => {
-    const state = reduce(twoScreens(), WindowAction.GroupGrabbed(GROUP));
+  it("holds the group a drag takes hold of, focusing its open tab alone", () => {
+    const state = reduce(
+      twoScreens(),
+      WindowAction.WindowSelected(APP("editor")),
+      WindowAction.GroupGrabbed(GROUP),
+    );
 
     expect(state.draggingId).toBe(APP("kitty"));
-    expect(activeIdOf(state)).toBe(APP("kitty"));
+    expect(focusedNodeOf(workspaceHere(state).tiling)).toMatchObject({
+      id: APP("editor"),
+      kind: NodeKind.Window,
+    });
+  });
+
+  it("keeps a selection already on the group a drag takes hold of", () => {
+    const state = reduce(
+      twoScreens(),
+      WindowAction.WindowSelected(APP("editor")),
+      WindowAction.ParentFocused(),
+      WindowAction.GroupGrabbed(GROUP),
+    );
+
     expect(focusedNodeOf(workspaceHere(state).tiling)).toMatchObject({
       layout: Layout.Tabbed,
     });
