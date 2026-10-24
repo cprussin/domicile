@@ -729,13 +729,27 @@ fn a_screen_cast_request_shows_the_desk_to_preview_its_sources() {
 
 #[test]
 fn the_shell_answers_a_screen_cast_with_the_sources_picked() {
-    let line = r#"{"type":"answer_portal_request","id":2,"answer":{"kind":"screen_cast","sources":[{"type":"window","id":"app-3"},{"type":"browser_window","id":"7","title":"Meet"},{"type":"monitor","name":"drm-1"},{"type":"region","position":[10,-20],"size":[300,200]}]}}"#;
+    let line = r#"{"type":"answer_portal_request","id":2,"answer":{"kind":"screen_cast","sources":[{"type":"window","id":"app-3"},{"type":"browser_window","id":"7","title":"Meet"},{"type":"browser_window","id":"8","title":"Docs","area":{"x":1,"y":2,"width":3,"height":4}},{"type":"monitor","name":"drm-1"},{"type":"region","position":[10,-20],"size":[300,200]}]}}"#;
     let answer = PortalAnswer::ScreenCast {
         sources: vec![
-            CastPick::Window { id: "app-3".into() },
+            CastPick::Window {
+                id: "app-3".into(),
+                area: None,
+            },
             CastPick::BrowserWindow {
                 id: "7".into(),
                 title: "Meet".into(),
+                area: None,
+            },
+            CastPick::BrowserWindow {
+                id: "8".into(),
+                title: "Docs".into(),
+                area: Some(ShotRect {
+                    x: 1,
+                    y: 2,
+                    width: 3,
+                    height: 4,
+                }),
             },
             CastPick::Monitor {
                 name: "drm-1".into(),
@@ -856,6 +870,7 @@ fn the_screenshot_and_color_answers_the_sdk_sends_parse() {
             PortalAnswer::ScreenshotWindow {
                 id: "app-3".into(),
                 copy: false,
+                area: None,
             },
         ),
         (
@@ -875,6 +890,7 @@ fn the_screenshot_and_color_answers_the_sdk_sends_parse() {
             PortalAnswer::ScreenshotWindow {
                 id: "app-3".into(),
                 copy: true,
+                area: None,
             },
         ),
         (
@@ -882,6 +898,20 @@ fn the_screenshot_and_color_answers_the_sdk_sends_parse() {
             PortalAnswer::ScreenshotBrowserWindow {
                 id: "1".into(),
                 copy: true,
+                area: None,
+            },
+        ),
+        (
+            r#"{"kind":"screenshot_window","id":"app-3","area":{"x":1,"y":2,"width":3,"height":4}}"#,
+            PortalAnswer::ScreenshotWindow {
+                id: "app-3".into(),
+                copy: false,
+                area: Some(ShotRect {
+                    x: 1,
+                    y: 2,
+                    width: 3,
+                    height: 4,
+                }),
             },
         ),
         (
@@ -922,6 +952,7 @@ fn a_frozen_desk_takes_only_its_own_answer_inside_the_frame() {
     let window = |id: &str| PortalAnswer::ScreenshotWindow {
         id: id.into(),
         copy: false,
+        area: None,
     };
     assert!(picker.accepts(&window("app-3")));
     assert!(!picker.accepts(&window("app-9")), "not on the desk");
@@ -931,6 +962,7 @@ fn a_frozen_desk_takes_only_its_own_answer_inside_the_frame() {
     let browser = PortalAnswer::ScreenshotBrowserWindow {
         id: "1".into(),
         copy: false,
+        area: None,
     };
     assert!(picker.accepts(&browser));
     assert!(!picking.accepts(&browser));

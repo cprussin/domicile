@@ -118,7 +118,10 @@ One request channel carries all dialogs. Each interface's backend builds on it.
     and windows in a list beside a desk shot taken as it opens (`desk`, a
     `FrozenDesk`), which outlines each pick. Several picks are checkboxes.
     Without a shot it says there is no preview. A window not on screen is
-    drawn alone instead (`previewWindow`).
+    drawn alone instead (`previewWindow`), and a part of it may be dragged
+    over it: the pick's `area`, in the pixels of the frame the preview drew.
+    The stream is that part of the window's frame alone, kept inside the
+    frame if the window shrinks. A part is not kept by a restore token.
   - When the application may have a region, the list starts with
     "Everything", the whole desk as a region, picked as it opens.
 - **Input uses EIS.** RemoteDesktop and InputCapture hand out a libei socket
@@ -185,7 +188,8 @@ One request channel carries all dialogs. Each interface's backend builds on it.
     workspace).
   - A window or browser window the shell does not show is drawn alone in
     place of the desk when picked: the `preview_window` system call draws
-    it as the screenshot would save it.
+    it as the screenshot would save it. A part dragged over it is the
+    answer's `area`, in that frame's pixels, and only that part is saved.
   - The picker outlines a shown window on the frozen desk by its box. The
     shell passes its boxes as `shownWindows`; without them the picker reads
     the page's `<app>` and `<webview window>` boxes. A box is placed with

@@ -1063,6 +1063,16 @@ describe("answerPortalRequest", () => {
       13,
       PortalAnswer.ScreenshotBrowserWindow("1", false),
     );
+    answerPortalRequest(
+      host,
+      14,
+      PortalAnswer.ScreenshotWindow("app-3", false, {
+        height: 4,
+        width: 3,
+        x: 1,
+        y: 2,
+      }),
+    );
 
     expect(host.answers).toEqual([
       [1, { kind: "access" }],
@@ -1107,6 +1117,15 @@ describe("answerPortalRequest", () => {
       [11, { kind: "pick_color", x: 5, y: 6 }],
       [12, { copy: true, id: "app-3", kind: "screenshot_window" }],
       [13, { copy: false, id: "1", kind: "screenshot_browser_window" }],
+      [
+        14,
+        {
+          area: { height: 4, width: 3, x: 1, y: 2 },
+          copy: false,
+          id: "app-3",
+          kind: "screenshot_window",
+        },
+      ],
     ]);
   });
 
@@ -1118,6 +1137,11 @@ describe("answerPortalRequest", () => {
       PortalAnswer.ScreenCast([
         CastSource.Window({ appId: "", id: "app-3", title: "Notes" }),
         CastSource.BrowserWindow({ id: "7", title: "Meet" }),
+        CastSource.BrowserWindow({
+          area: { height: 4, width: 3, x: 1, y: 2 },
+          id: "8",
+          title: "Docs",
+        }),
         CastSource.Monitor({
           description: "",
           name: "drm-1",
@@ -1135,6 +1159,12 @@ describe("answerPortalRequest", () => {
           sources: [
             { id: "app-3", type: "window" },
             { id: "7", title: "Meet", type: "browser_window" },
+            {
+              area: { height: 4, width: 3, x: 1, y: 2 },
+              id: "8",
+              title: "Docs",
+              type: "browser_window",
+            },
             { name: "drm-1", type: "monitor" },
             { position: [10, -20], size: [300, 200], type: "region" },
           ],

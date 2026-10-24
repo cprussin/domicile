@@ -246,7 +246,10 @@ fn picked(dialog: &ScreenCastDialog, wanted: &Wanted) -> Option<CastPick> {
         .iter()
         .find_map(|source| match (source, wanted) {
             (CastSource::Window { id, title, .. }, Wanted::Window(wanted)) if title == wanted => {
-                Some(CastPick::Window { id: id.clone() })
+                Some(CastPick::Window {
+                    id: id.clone(),
+                    area: None,
+                })
             }
             (CastSource::Monitor { name, .. }, Wanted::Monitor) => {
                 Some(CastPick::Monitor { name: name.clone() })

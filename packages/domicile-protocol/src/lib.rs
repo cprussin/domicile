@@ -1314,10 +1314,23 @@ pub enum CastSource {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum CastPick {
     /// The window with this host app id.
-    Window { id: String },
+    Window {
+        id: String,
+        /// Part of it alone, in pixels of its frame as
+        /// [`PreviewedWindow`] draws it. All of it when `None`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        area: Option<ShotRect>,
+    },
     /// A browser window's page alone, by the engine's window id, with the
     /// title the shell names it by.
-    BrowserWindow { id: String, title: String },
+    BrowserWindow {
+        id: String,
+        title: String,
+        /// Part of it alone, in pixels of its frame as
+        /// [`PreviewedWindow`] draws it. All of it when `None`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        area: Option<ShotRect>,
+    },
     /// The monitor with this `wl_output` name.
     Monitor { name: String },
     /// A rectangle of the desktop, in logical pixels.
@@ -1516,6 +1529,10 @@ pub enum PortalAnswer {
         id: String,
         #[serde(default)]
         copy: bool,
+        /// Part of it alone, in pixels of its frame as
+        /// [`PreviewedWindow`] draws it. All of it when `None`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        area: Option<ShotRect>,
     },
     /// A browser window of a [`PortalKind::Screenshot`] the user picked, by
     /// the id the engine's browser window list gives it. Saved from the
@@ -1525,6 +1542,10 @@ pub enum PortalAnswer {
         id: String,
         #[serde(default)]
         copy: bool,
+        /// Part of it alone, in pixels of its frame as
+        /// [`PreviewedWindow`] draws it. All of it when `None`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        area: Option<ShotRect>,
     },
     /// The pixel of a [`PortalKind::PickColor`] the user picked.
     PickColor { x: u32, y: u32 },

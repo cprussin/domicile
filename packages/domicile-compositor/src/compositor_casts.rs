@@ -48,6 +48,7 @@ impl DomicileCompositor {
                     .and_then(|app| app.title.clone())
                     .unwrap_or_default(),
                 app_id: app_id.unwrap_or_default(),
+                part: None,
                 bounds: self
                     .held_frames
                     .shown_box(&self.app_bounds, id)
@@ -244,6 +245,7 @@ impl DomicileCompositor {
             info!(%app_id, "casting the window DOMICILE_CAST_WINDOW names");
             casting.start(
                 casting::Source::Window(app_id.to_string()),
+                None,
                 casting::CursorMode::Embedded,
                 |_| Box::new(|event| info!(?event, "DOMICILE_CAST_WINDOW cast")),
             );
@@ -270,6 +272,7 @@ impl DomicileCompositor {
             info!(%spec, "casting what DOMICILE_CAST_MONITOR names");
             casting.start(
                 casting::Source::desk(&spec),
+                None,
                 casting::CursorMode::Embedded,
                 |_| Box::new(|event| info!(?event, "DOMICILE_CAST_MONITOR cast")),
             );

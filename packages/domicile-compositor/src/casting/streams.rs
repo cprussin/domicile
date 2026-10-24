@@ -31,7 +31,7 @@ use smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer;
 use smithay::utils::Transform;
 use tracing::{debug, warn};
 
-use crate::buffer_transform::Sampled;
+use crate::buffer_transform::{crop_in_buffer, upright_size, Sampled};
 use crate::casting::captured::{self, Kept};
 use crate::casting::captures::{Capturer, Captures, Frame};
 use crate::casting::cursor::{arrow, at_density, embed, plan, CursorMode, Plan, Sprite};
@@ -179,6 +179,9 @@ struct Cast {
     asked: (u32, u32),
     /// The pointer as the filled, unsent frame shows it.
     cursor_plan: Plan,
+    /// The part of a window shown, in its frame's pixels, or `None` for all
+    /// of it.
+    part: Option<Rect>,
 }
 
 /// What a stream's next frame is made of.
@@ -235,6 +238,7 @@ impl Streams {
             Request::Start {
                 stream,
                 source,
+                part,
                 cursor,
                 listener,
             } => {
@@ -244,7 +248,15 @@ impl Streams {
                         |candidate| matches!(&candidate.source, Source::Window(id) if id == app_id),
                     )
                 };
-                self.start(stream, source, cursor, listener, window_open, capturer);
+                self.start(
+                    stream,
+                    source,
+                    part,
+                    cursor,
+                    listener,
+                    window_open,
+                    capturer,
+                );
             }
             Request::List { reply } => reply.send(open()),
             Request::Shoot { stream, developed } => {
@@ -280,10 +292,12 @@ impl Streams {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn start(
         &mut self,
         stream: StreamId,
         source: Source,
+        part: Option<Rect>,
         cursor: CursorMode,
         mut listener: Listener,
         window_open: impl Fn(&str) -> bool,
@@ -296,12 +310,16 @@ impl Streams {
                 return;
             }
         };
-        let size = match &shows {
+        let size = match (&shows, part) {
+            // Asks again with the first frame if the window is now smaller.
+            (Shows::Window(_) | Shows::BrowserWindow(_), Some((_, _, width, height))) => {
+                (width.max(1) as u32, height.max(1) as u32)
+            }
             // A window that has not drawn is offered at one pixel, and asks
             // again with its first frame. So is a browser window's page.
-            Shows::Window(app_id) => self.sizes.get(app_id).copied().unwrap_or((1, 1)),
-            Shows::BrowserWindow(_) => (1, 1),
-            Shows::Desk { layout, .. } => layout.size,
+            (Shows::Window(app_id), None) => self.sizes.get(app_id).copied().unwrap_or((1, 1)),
+            (Shows::BrowserWindow(_), None) => (1, 1),
+            (Shows::Desk { layout, .. }, _) => layout.size,
         };
         let offered = offer(|pixel| {
             self.gpu
@@ -320,6 +338,7 @@ impl Streams {
                 filling: false,
                 asked: size,
                 cursor_plan: Plan::Nothing,
+                part,
             },
         );
         self.send(ToPipewire::Start {
@@ -1156,6 +1175,18 @@ impl Streams {
         ) else {
             return;
         };
+        // Damage is in the whole window's pixels, as the view was.
+        let (view, damage) = match cast.part {
+            Some(part) => {
+                let (view, shown) = cut(view, part);
+                let damage = damage
+                    .into_iter()
+                    .filter_map(|rect| within(rect, shown))
+                    .collect();
+                (view, damage)
+            }
+            None => (view, damage),
+        };
         let sprite = at_density(&self.sprite, density(&cast.shows, &self.shots));
         match step(stream, cast, &view, damage, &sprite, renderer, now) {
             Outcome::Nothing => {}
@@ -1359,6 +1390,54 @@ fn view<'a>(
     }
 }
 
+/// `view` cut to `part`, in its pixels, and the part shown: `part` kept
+/// inside the view, which may have shrunk since it was picked, or all of the
+/// view when none of `part` is left.
+fn cut(view: View<'_>, part: Rect) -> (View<'_>, Rect) {
+    let whole = (0, 0, view.size.0 as i32, view.size.1 as i32);
+    let shown = within(part, whole).unwrap_or(whole);
+    let layers = view
+        .layers
+        .into_iter()
+        .filter_map(|layer| {
+            // Relative to the part.
+            let visible = within(layer.to, shown)?;
+            let (from_width, from_height) =
+                upright_size((layer.from.2 as u32, layer.from.3 as u32), layer.transform);
+            let (across, down) = (
+                f64::from(from_width) / f64::from(layer.to.2),
+                f64::from(from_height) / f64::from(layer.to.3),
+            );
+            let upright = (
+                (f64::from(visible.0 + shown.0 - layer.to.0) * across).round() as i32,
+                (f64::from(visible.1 + shown.1 - layer.to.1) * down).round() as i32,
+                (f64::from(visible.2) * across).round() as i32,
+                (f64::from(visible.3) * down).round() as i32,
+            );
+            let (x, y, width, height) =
+                crop_in_buffer(upright, (from_width, from_height), layer.transform);
+            Some(Layer {
+                from: (layer.from.0 + x, layer.from.1 + y, width, height),
+                to: visible,
+                ..layer
+            })
+        })
+        .collect();
+    let pointer = view.pointer.and_then(|(x, y)| {
+        let (x, y) = (x - f64::from(shown.0), y - f64::from(shown.1));
+        let inside = x >= 0.0 && y >= 0.0 && x < f64::from(shown.2) && y < f64::from(shown.3);
+        inside.then_some((x, y))
+    });
+    (
+        View {
+            size: (shown.2 as u32, shown.3 as u32),
+            layers,
+            pointer,
+        },
+        shown,
+    )
+}
+
 /// Damages `cast` and fills a buffer from `view` if one is lent.
 fn step(
     stream: StreamId,
@@ -1456,7 +1535,7 @@ mod tests {
 
     use smithay::utils::Transform;
 
-    use super::{damage_in_view, density, view, Cast, EnginePointer, Shot, Shows, Streams};
+    use super::{cut, damage_in_view, density, view, Cast, EnginePointer, Shot, Shows, Streams};
     use crate::buffer_transform::Sampled;
     use crate::casting::captures::Capturer;
     use crate::casting::cursor::{CursorMode, Plan};
@@ -1611,6 +1690,96 @@ mod tests {
         assert_eq!(density(&shows, &streams.shots), 1.75);
     }
 
+    /// A window `size` big, its buffer turned by `transform`.
+    fn shot_of(size: (u32, u32), transform: Transform) -> Shot {
+        let buffer = crate::buffer_transform::upright_size(size, transform);
+        Shot {
+            snapshot: Snapshot::Pixels {
+                bytes: vec![0; (buffer.0 * buffer.1 * 4) as usize],
+                stride: buffer.0 as usize * 4,
+                alpha: false,
+                size: buffer,
+            },
+            sampled: Sampled {
+                crop: (0, 0, buffer.0 as i32, buffer.1 as i32),
+                transform,
+            },
+            pixels_a_point: (1.0, 1.0),
+        }
+    }
+
+    /// A part of a hidden window picked over its preview is cast alone: the
+    /// stream is the part's size, and the pointer is on it from its corner.
+    #[test]
+    fn a_window_part_is_cast_alone() {
+        let mut streams = streams();
+        streams
+            .shots
+            .insert("app-1".into(), shot_of((100, 50), Transform::Normal));
+        let shown = |part, pointer: (f64, f64)| {
+            let view = view(
+                &Shows::Window("app-1".into()),
+                &streams.shots,
+                &streams.captures,
+                &streams.pages,
+                &streams.screens,
+                Some(&("app-1".into(), pointer)),
+                &EnginePointer::default(),
+            )
+            .expect("a frame to show");
+            let (view, shown) = cut(view, part);
+            (
+                view.size,
+                view.layers[0].from,
+                view.layers[0].to,
+                view.pointer,
+                shown,
+            )
+        };
+
+        assert_eq!(
+            shown((10, 5, 30, 20), (20.0, 10.0)),
+            (
+                (30, 20),
+                (10, 5, 30, 20),
+                (0, 0, 30, 20),
+                Some((10.0, 5.0)),
+                (10, 5, 30, 20)
+            )
+        );
+        assert_eq!(shown((10, 5, 30, 20), (60.0, 10.0)).3, None, "off the part");
+        // The window shrank: what is left of the part.
+        assert_eq!(shown((90, 40, 30, 20), (0.0, 0.0)).0, (10, 10));
+        // None of it is left: all of the window.
+        assert_eq!(shown((200, 200, 30, 20), (0.0, 0.0)).0, (100, 50));
+    }
+
+    /// A turned window's part is cut from the right pixels of its buffer.
+    #[test]
+    fn a_part_of_a_turned_window_is_cut_from_its_buffer() {
+        let mut streams = streams();
+        // Upright 100x50, from a 50x100 buffer turned a quarter.
+        streams
+            .shots
+            .insert("app-1".into(), shot_of((100, 50), Transform::_90));
+        let view = view(
+            &Shows::Window("app-1".into()),
+            &streams.shots,
+            &streams.captures,
+            &streams.pages,
+            &streams.screens,
+            None,
+            &EnginePointer::default(),
+        )
+        .expect("a frame to show");
+
+        let (view, _) = cut(view, (10, 5, 30, 20));
+
+        let from = view.layers[0].from;
+        assert_eq!((from.2, from.3), (20, 30), "the buffer's sides are swapped");
+        assert_eq!(view.layers[0].to, (0, 0, 30, 20));
+    }
+
     #[test]
     fn the_pointer_on_the_desk_and_in_a_window_are_heard_apart() {
         let mut streams = streams();
@@ -1635,11 +1804,13 @@ mod tests {
                 title: "~/src".into(),
                 app_id: "kitty".into(),
                 bounds: None,
+                part: None,
             },
             Candidate {
                 source: Source::Monitor("drm-1".into()),
                 title: "BOE NE135A1M-NY1".into(),
                 app_id: String::new(),
+                part: None,
                 bounds: Some(Region {
                     position: (0, 0),
                     size: (1, 1),
@@ -2093,6 +2264,7 @@ mod tests {
             filling: false,
             asked: (1, 1),
             cursor_plan: Plan::Nothing,
+            part: None,
         }
     }
 }

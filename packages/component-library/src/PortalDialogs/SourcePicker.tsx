@@ -50,6 +50,13 @@ type Props = {
   dragged?: ShotRect | undefined;
   /** Called with a dragged area; without it, the desk cannot be dragged. */
   onDrag?: ((area: ShotRect) => void) | undefined;
+  /**
+   * A part dragged over a window drawn alone, in its frame's pixels, outlined
+   * on it.
+   */
+  draggedPart?: ShotRect | undefined;
+  /** Called with a part dragged over a window drawn alone. */
+  onDragPart?: ((area: ShotRect) => void) | undefined;
   onPick: (picked: number[]) => void;
   /** The indexes, across every section, of the choices picked. */
   picked: readonly number[];
@@ -61,16 +68,19 @@ type Props = {
 /**
  * Picks from a list of sources beside one preview of the frozen desk, which
  * outlines each pick with its size. A window picked last that the desk does
- * not show is drawn alone instead. One source is a radio, several are
- * checkboxes. The screenshot and screen cast pickers share it.
+ * not show is drawn alone instead, and a part of it may be dragged over it.
+ * One source is a radio, several are checkboxes. The screenshot and screen
+ * cast pickers share it.
  */
 export const SourcePicker = ({
   caption,
   desk,
   dragged,
+  draggedPart,
   label,
   multiple,
   onDrag,
+  onDragPart,
   onPick,
   picked,
   previewWindow,
@@ -121,9 +131,11 @@ export const SourcePicker = ({
       <figure className={stageStyles}>
         <Stage
           desk={desk}
+          draggedPart={draggedPart}
           frame={frame}
           hidden={hidden}
           onDrag={onDrag}
+          onDragPart={onDragPart}
           outlined={outlined}
         />
         <figcaption className={captionStyles}>{caption}</figcaption>
@@ -138,15 +150,19 @@ export const SourcePicker = ({
  */
 const Stage = ({
   desk,
+  draggedPart,
   frame,
   hidden,
   onDrag,
+  onDragPart,
   outlined,
 }: {
   desk: FrozenDesk | undefined;
+  draggedPart: ShotRect | undefined;
   frame: Result<string, SystemError> | undefined;
   hidden: Choice | undefined;
   onDrag: ((area: ShotRect) => void) | undefined;
+  onDragPart: ((area: ShotRect) => void) | undefined;
   outlined: readonly Outline[];
 }) => {
   if (hidden?.preview !== undefined) {
@@ -157,7 +173,15 @@ const Stage = ({
         frame.match({
           Err: () => <span className={noDeskStyles}>No preview</span>,
           Ok: (src) => (
-            <img alt={hidden.label} className={previewStyles} src={src} />
+            <Preview
+              alt={hidden.label}
+              box={desk}
+              dragged={draggedPart}
+              // Keyed so a part outlined on one window is not kept on the next.
+              key={src}
+              onDrag={onDragPart}
+              src={src}
+            />
           ),
         })
       );
@@ -257,6 +281,57 @@ const Row = ({
   );
 };
 
+/**
+ * A window drawn alone from `src`, fitted in `box`. With `onDrag`, a part of
+ * it may be dragged, in its frame's pixels, and `dragged` is outlined.
+ */
+const Preview = ({
+  alt,
+  box,
+  dragged,
+  onDrag,
+  src,
+}: {
+  alt: string;
+  box: { width: number; height: number } | undefined;
+  dragged: ShotRect | undefined;
+  onDrag: ((area: ShotRect) => void) | undefined;
+  src: string;
+}) => {
+  // The frame's size, which the drag is in, once it loads.
+  const [frame, setFrame] = useState<
+    { width: number; height: number } | undefined
+  >(undefined);
+  return (
+    <>
+      {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: reads the frame's size as it loads, which is no interaction */}
+      <img
+        alt={alt}
+        className={previewStyles}
+        draggable={false}
+        onLoad={(event) => {
+          setFrame({
+            height: event.currentTarget.naturalHeight,
+            width: event.currentTarget.naturalWidth,
+          });
+        }}
+        src={src}
+      />
+      {frame !== undefined && box !== undefined && onDrag !== undefined && (
+        <Dragged
+          frame={frame}
+          label="Drag to pick a part of the window"
+          onDrag={onDrag}
+          outlined={
+            dragged === undefined ? [] : [{ area: dragged, key: "dragged" }]
+          }
+          style={{ ...contained(frame, box), position: "absolute" }}
+        />
+      )}
+    </>
+  );
+};
+
 /** The frozen desk, outlining `outlined`, and dragged when `onDrag` is set. */
 const Desk = ({
   desk,
@@ -267,44 +342,61 @@ const Desk = ({
   onDrag: ((area: ShotRect) => void) | undefined;
   outlined: readonly Outline[];
 }) => {
+  const image = (
+    <img
+      alt="The desk"
+      className={frameStyles}
+      draggable={false}
+      src={desk.frame}
+    />
+  );
+  return onDrag === undefined ? (
+    <div className={deskStyles} style={fitted(desk)}>
+      {image}
+      <Outlines frame={desk} outlined={outlined} />
+    </div>
+  ) : (
+    <Dragged
+      frame={desk}
+      label="Drag to pick an area"
+      onDrag={onDrag}
+      outlined={outlined}
+      style={fitted(desk)}
+    >
+      {image}
+    </Dragged>
+  );
+};
+
+/**
+ * A box over a frame of `frame`'s size that an area is dragged on, in the
+ * frame's pixels, outlining `outlined`.
+ */
+const Dragged = ({
+  children,
+  frame,
+  label,
+  onDrag,
+  outlined,
+  style,
+}: {
+  children?: ReactNode;
+  frame: { width: number; height: number };
+  label: string;
+  onDrag: (area: ShotRect) => void;
+  outlined: readonly Outline[];
+  style: CSSProperties;
+}) => {
   const [dragFrom, setDragFrom] = useState<FramePoint | undefined>(undefined);
   const pointAt = (event: PointerEvent<HTMLDivElement>) =>
     framePoint(
       { x: event.clientX, y: event.clientY },
       event.currentTarget.getBoundingClientRect(),
-      desk,
+      frame,
     );
-  const frame = (
-    <>
-      <img
-        alt="The desk"
-        className={frameStyles}
-        draggable={false}
-        src={desk.frame}
-      />
-      {outlined.map(({ area, key }) => (
-        <div
-          className={pickedStyles}
-          // One pick shades the rest of the desk; several would shade each
-          // other.
-          data-shaded={outlined.length === 1 ? "" : undefined}
-          key={key}
-          style={placed(area, desk)}
-        >
-          <span className={sizeStyles}>
-            {`${String(area.width)} × ${String(area.height)}`}
-          </span>
-        </div>
-      ))}
-    </>
-  );
-  return onDrag === undefined ? (
-    <div className={deskStyles} style={fitted(desk)}>
-      {frame}
-    </div>
-  ) : (
+  return (
     <div
-      aria-label="Drag to pick an area"
+      aria-label={label}
       className={deskStyles}
       data-draggable=""
       onPointerDown={(event) => {
@@ -321,12 +413,36 @@ const Desk = ({
         setDragFrom(undefined);
       }}
       role="group"
-      style={fitted(desk)}
+      style={style}
     >
-      {frame}
+      {children}
+      <Outlines frame={frame} outlined={outlined} />
     </div>
   );
 };
+
+/** `outlined` over a frame of `frame`'s size, each with its size. */
+const Outlines = ({
+  frame,
+  outlined,
+}: {
+  frame: { width: number; height: number };
+  outlined: readonly Outline[];
+}) =>
+  outlined.map(({ area, key }) => (
+    <div
+      className={pickedStyles}
+      // One pick shades the rest of the frame; several would shade each
+      // other.
+      data-shaded={outlined.length === 1 ? "" : undefined}
+      key={key}
+      style={placed(area, frame)}
+    >
+      <span className={sizeStyles}>
+        {`${String(area.width)} × ${String(area.height)}`}
+      </span>
+    </div>
+  ));
 
 const layoutStyles = css({
   alignItems: "stretch",
@@ -492,6 +608,24 @@ const fitted = (frame: { width: number; height: number }): CSSProperties => {
   return {
     aspectRatio: ratio,
     inlineSize: `min(100%, calc(56cqh * ${ratio}))`,
+  };
+};
+
+/**
+ * Where a frame of `frame`'s size is drawn in `box`, scaled to fit and
+ * centered as `object-fit: contain` draws it, in percent of the box.
+ */
+const contained = (
+  frame: { width: number; height: number },
+  box: { width: number; height: number },
+): CSSProperties => {
+  const wider = frame.width / frame.height / (box.width / box.height);
+  const [width, height] = wider > 1 ? [100, 100 / wider] : [100 * wider, 100];
+  return {
+    height: `${String(height)}%`,
+    left: `${String((100 - width) / 2)}%`,
+    top: `${String((100 - height) / 2)}%`,
+    width: `${String(width)}%`,
   };
 };
 
