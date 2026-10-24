@@ -269,7 +269,8 @@ announces a window only then, so its title, app id and limits are known.
 - A "+" past a tabbed strip's last tab focuses the strip's open tab and opens
   the launcher, so the launched window opens as a tab beside it.
 - Two buttons at the far end of a tabbed strip float/tile and fullscreen the
-  whole group (`StripButtons.tsx`). Each selects the group as Meta+A does.
+  whole group (`StripButtons.tsx`). Float selects the group as Meta+A does.
+  Fullscreen focuses the strip's open tab and leaves the selection on it.
 - A hidden tab shows only its close button. Dividers separate hidden tabs.
 - A tab for a nested container shows the name of its last-focused window, an
   icon for its layout and its window count.
