@@ -6,6 +6,9 @@
 //!
 //! The connection is made on the first start, so a desktop without PipeWire
 //! runs. A lost connection ends every stream; the next start reconnects.
+//!
+//! A cast that hears sound holds a sound node, which the producer links the
+//! apps it hears into (see [`super::audio`]).
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -13,7 +16,7 @@ use std::os::fd::{AsFd as _, AsRawFd as _, OwnedFd};
 use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use pipewire as pw;
 use pw::context::ContextRc;
@@ -30,12 +33,15 @@ use smithay::reexports::calloop::channel::Sender;
 use spa::pod::Pod;
 use tracing::{debug, info, warn};
 
+use crate::casting::audio::{self, Graph, Heard, Holders};
 use crate::casting::cursor::{arrow, within, CursorMode, Plan, Sprite};
 use crate::casting::lifecycle::{Ended, Lifecycle, Phase, Step};
 use crate::casting::memory::Mapping;
 use crate::casting::negotiation::{settle, shm_layout, Offered, Pixel, Settled};
 use crate::casting::pacing::Rect;
-use crate::casting::params::{buffers, enum_formats, fixated, metas, read_format, Memory};
+use crate::casting::params::{
+    audio_ports, buffers, enum_formats, fixated, metas, read_format, Memory,
+};
 use crate::casting::{Event, Listener, StreamId};
 use crate::gbm::Gbm;
 use crate::uploads::Shape;
@@ -62,12 +68,14 @@ pub enum Target {
 
 /// A request from the Wayland thread.
 pub enum ToPipewire {
-    /// Make a stream offering `offered` at `size`.
+    /// Make a stream offering `offered` at `size`, holding the sound node of
+    /// what it `heard`, if anything.
     Start {
         stream: StreamId,
         offered: Vec<Offered>,
         size: (u32, u32),
         cursor: CursorMode,
+        heard: Option<Heard>,
         listener: Listener,
     },
     /// The source's frames changed size: negotiate again.
@@ -185,7 +193,7 @@ impl Shared {
 struct Connection {
     core: CoreRc,
     _core_listener: pw::core::Listener,
-    _registry: RegistryRc,
+    registry: RegistryRc,
     _registry_listener: pw::registry::Listener,
 }
 
@@ -197,6 +205,12 @@ struct Producer {
     casts: RefCell<HashMap<StreamId, Rc<Cast>>>,
     /// Link global ids to the stream whose node they feed.
     links: RefCell<HashMap<u32, StreamId>>,
+    /// The apps' audio streams and ports, and each client's process.
+    graph: RefCell<Graph>,
+    /// Each client, bound for the process it reports.
+    clients: RefCell<HashMap<u32, (pw::client::Client, pw::client::ClientListener)>>,
+    /// The sound nodes, by name.
+    sounds: RefCell<HashMap<String, Sound>>,
 }
 
 fn run(
@@ -226,6 +240,9 @@ fn run(
         connection: RefCell::new(None),
         casts: RefCell::new(HashMap::new()),
         links: RefCell::new(HashMap::new()),
+        graph: RefCell::new(Graph::default()),
+        clients: RefCell::new(HashMap::new()),
+        sounds: RefCell::new(HashMap::new()),
     });
     let _requests = requests.attach(main_loop.loop_(), {
         let producer = producer.clone();
@@ -235,6 +252,14 @@ fn run(
         let producer = producer.clone();
         move |reap| producer.reap(reap)
     });
+    let sweep = main_loop.loop_().add_timer({
+        let producer = producer.clone();
+        move |_| producer.sweep_sounds(Instant::now())
+    });
+    let second = Some(Duration::from_secs(1));
+    if let Err(why) = sweep.update_timer(second, second).into_result() {
+        warn!(%why, "idle sound nodes will not be swept");
+    }
     main_loop.run();
 }
 
@@ -246,8 +271,9 @@ impl Producer {
                 offered,
                 size,
                 cursor,
+                heard,
                 listener,
-            } => self.start(stream, offered, size, cursor, listener),
+            } => self.start(stream, offered, size, cursor, heard, listener),
             ToPipewire::Resize { stream, size } => {
                 if let Some(cast) = self.cast(stream) {
                     cast.resize(size);
@@ -291,15 +317,20 @@ impl Producer {
         offered: Vec<Offered>,
         size: (u32, u32),
         cursor: CursorMode,
+        heard: Option<Heard>,
         mut listener: Listener,
     ) {
+        let sound = heard.as_ref().map(Heard::node_name);
         let started = self
             .core()
-            .and_then(|core| Cast::new(id, core, &self.shared, offered, size, cursor));
+            .and_then(|core| Cast::new(id, core, &self.shared, offered, size, cursor, sound));
         match started {
             Ok(cast) => {
                 cast.state.borrow_mut().listener = Some(listener);
                 self.casts.borrow_mut().insert(id, cast);
+                if let Some(heard) = heard {
+                    self.hold_sound(id, heard);
+                }
             }
             Err(why) => {
                 warn!(%why, ?id, "the cast did not start");
@@ -325,11 +356,11 @@ impl Producer {
             .add_listener_local()
             .error({
                 let producer = Rc::downgrade(self);
-                move |id, _seq, _res, message| {
-                    if id == pw::core::PW_ID_CORE {
-                        if let Some(producer) = producer.upgrade() {
-                            producer.lost(message);
-                        }
+                move |id, _seq, res, message| {
+                    if !lost(id, res) {
+                        warn!(id, res, message, "PipeWire refused a request");
+                    } else if let Some(producer) = producer.upgrade() {
+                        producer.lost(message);
                     }
                 }
             })
@@ -357,7 +388,7 @@ impl Producer {
         *self.connection.borrow_mut() = Some(Connection {
             core: core.clone(),
             _core_listener: core_listener,
-            _registry: registry,
+            registry,
             _registry_listener: registry_listener,
         });
         Ok(core)
@@ -377,19 +408,72 @@ impl Producer {
         }
         // Queued after the streams, so it is dropped after them.
         self.links.borrow_mut().clear();
+        *self.graph.borrow_mut() = Graph::default();
+        self.clients.borrow_mut().clear();
+        self.sounds.borrow_mut().clear();
         // Fails only once the reaper is gone, at exit.
         let _ = self.shared.reap.send(Reap::Connection);
     }
 
-    /// A link to one of the streams' nodes appeared.
-    fn global(&self, global: &pw::registry::GlobalObject<&spa::utils::dict::DictRef>) {
-        if global.type_ != ObjectType::Link {
-            return;
+    /// Something appeared: a link to one of the streams' nodes, or a node,
+    /// port or client casts' sound may come from.
+    fn global(self: &Rc<Self>, global: &pw::registry::GlobalObject<&spa::utils::dict::DictRef>) {
+        let props = |key| global.props.and_then(|props| props.get(key));
+        let number = |key| props(key).and_then(|value| value.parse::<u32>().ok());
+        match global.type_ {
+            ObjectType::Link => self.linked(global),
+            ObjectType::Node => {
+                if let Some(name) = props(*pw::keys::NODE_NAME) {
+                    self.named(global.id, name);
+                }
+                self.graph.borrow_mut().nodes.insert(
+                    global.id,
+                    audio::Node {
+                        plays: props(*pw::keys::MEDIA_CLASS) == Some("Stream/Output/Audio"),
+                        client: number(*pw::keys::CLIENT_ID),
+                    },
+                );
+                self.relink();
+            }
+            ObjectType::Port => {
+                let (Some(node), Some(channel)) =
+                    (number(*pw::keys::NODE_ID), props(*pw::keys::AUDIO_CHANNEL))
+                else {
+                    return;
+                };
+                self.graph.borrow_mut().ports.insert(
+                    global.id,
+                    audio::Port {
+                        node,
+                        output: props(*pw::keys::PORT_DIRECTION) == Some("out"),
+                        channel: channel.to_string(),
+                    },
+                );
+                self.relink();
+            }
+            ObjectType::Client => {
+                if let Some(process) = number(*pw::keys::SEC_PID) {
+                    self.graph.borrow_mut().clients.insert(global.id, process);
+                }
+                self.bind_client(global);
+                self.relink();
+            }
+            _ => {}
         }
+    }
+
+    /// A link appeared: one to a stream's node is its consumer's.
+    fn linked(&self, global: &pw::registry::GlobalObject<&spa::utils::dict::DictRef>) {
         let output = global
             .props
             .and_then(|props| props.get("link.output.node"))
             .and_then(|node| node.parse::<u32>().ok());
+        for sound in self.sounds.borrow_mut().values_mut() {
+            if output.is_some() && sound.id == output {
+                debug!(link = global.id, "a consumer linked to a sound node");
+                sound.holders.consumer_linked(global.id);
+            }
+        }
         let casts = self.casts.borrow();
         let fed = casts
             .values()
@@ -402,6 +486,21 @@ impl Producer {
     }
 
     fn global_removed(&self, id: u32) {
+        {
+            let mut graph = self.graph.borrow_mut();
+            let gone = graph.nodes.remove(&id).is_some()
+                | graph.ports.remove(&id).is_some()
+                | graph.clients.remove(&id).is_some();
+            drop(graph);
+            self.clients.borrow_mut().remove(&id);
+            let now = Instant::now();
+            for sound in self.sounds.borrow_mut().values_mut() {
+                sound.holders.consumer_unlinked(id, now);
+            }
+            if gone {
+                self.relink();
+            }
+        }
         let Some(stream) = self.links.borrow_mut().remove(&id) else {
             return;
         };
@@ -409,6 +508,149 @@ impl Producer {
             debug!(link = id, ?stream, "a consumer unlinked from a cast");
             let steps = cast.state.borrow_mut().lifecycle.unlinked();
             cast.apply(steps);
+        }
+    }
+
+    /// Binds client `global` to read the process it reports, which PipeWire's
+    /// PulseAudio server sets to its own client's.
+    fn bind_client(
+        self: &Rc<Self>,
+        global: &pw::registry::GlobalObject<&spa::utils::dict::DictRef>,
+    ) {
+        let bound = self
+            .connection
+            .borrow()
+            .as_ref()
+            .map(|connection| connection.registry.bind::<pw::client::Client, _>(global));
+        let client = match bound {
+            Some(Ok(client)) => client,
+            Some(Err(why)) => {
+                debug!(%why, client = global.id, "a client could not be bound");
+                return;
+            }
+            None => return,
+        };
+        let id = global.id;
+        let listener = client
+            .add_listener_local()
+            .info({
+                let producer = Rc::downgrade(self);
+                move |info| {
+                    let reported = info
+                        .props()
+                        .and_then(|props| props.get(*pw::keys::APP_PROCESS_ID))
+                        .and_then(|process| process.parse::<u32>().ok());
+                    if let (Some(producer), Some(process)) = (producer.upgrade(), reported) {
+                        producer.graph.borrow_mut().clients.insert(id, process);
+                        producer.relink();
+                    }
+                }
+            })
+            .register();
+        self.clients.borrow_mut().insert(id, (client, listener));
+    }
+
+    /// Node `id` is named `name`: it may be a sound node.
+    fn named(&self, id: u32, name: &str) {
+        if let Some(sound) = self.sounds.borrow_mut().get_mut(name) {
+            sound.id = Some(id);
+        }
+    }
+
+    /// Cast `cast` holds the sound node of what it `heard`, made if it is
+    /// not there.
+    fn hold_sound(self: &Rc<Self>, cast: StreamId, heard: Heard) {
+        let name = heard.node_name();
+        if let Some(sound) = self.sounds.borrow_mut().get_mut(&name) {
+            sound.holders.cast_started(cast);
+            return;
+        }
+        let made = self.core().and_then(|core| {
+            core.create_object::<pw::node::Node>(
+                "adapter",
+                &properties! {
+                    "factory.name" => "support.null-audio-sink",
+                    *pw::keys::NODE_NAME => name.as_str(),
+                    *pw::keys::NODE_DESCRIPTION => "Screen cast sound",
+                    *pw::keys::MEDIA_CLASS => "Audio/Source/Virtual",
+                    "audio.position" => "[ FL FR ]",
+                    *pw::keys::OBJECT_LINGER => "false",
+                },
+            )
+            .map_err(|why| why.to_string())
+        });
+        match made {
+            Ok(node) => {
+                let ports = audio_ports();
+                node.set_param(spa::param::ParamType::PortConfig, 0, pod_of(&ports));
+                info!(stream = ?cast, %name, "cast sound node made");
+                let mut holders = Holders::default();
+                holders.cast_started(cast);
+                self.sounds.borrow_mut().insert(
+                    name,
+                    Sound {
+                        heard,
+                        _node: node,
+                        id: None,
+                        links: HashMap::new(),
+                        holders,
+                    },
+                );
+            }
+            Err(why) => warn!(%why, stream = ?cast, "the cast's sound node was not made"),
+        }
+    }
+
+    /// Drops the sound nodes nothing has held for [`audio::GRACE`].
+    fn sweep_sounds(&self, now: Instant) {
+        self.sounds.borrow_mut().retain(|name, sound| {
+            let keep = !sound.holders.expired(now);
+            if !keep {
+                info!(%name, "an idle sound node was dropped");
+            }
+            keep
+        });
+    }
+
+    /// Links what each sound node hears into it, and unlinks what it no
+    /// longer hears.
+    fn relink(&self) {
+        let Some(core) = self.connection.borrow().as_ref().map(|c| c.core.clone()) else {
+            return;
+        };
+        let graph = self.graph.borrow();
+        for (name, sound) in self.sounds.borrow_mut().iter_mut() {
+            let Some(node) = sound.id else {
+                continue;
+            };
+            let wanted = graph.wanted(node, &sound.heard, audio::parent);
+            sound.links.retain(|ports, _| wanted.contains(ports));
+            for ports in wanted {
+                if sound.links.contains_key(&ports) {
+                    continue;
+                }
+                let (output, input) = ports;
+                let Some(from) = graph.ports.get(&output).map(|port| port.node) else {
+                    continue;
+                };
+                let link = core.create_object::<pw::link::Link>(
+                    "link-factory",
+                    &properties! {
+                        *pw::keys::LINK_OUTPUT_NODE => from.to_string(),
+                        *pw::keys::LINK_OUTPUT_PORT => output.to_string(),
+                        *pw::keys::LINK_INPUT_NODE => node.to_string(),
+                        *pw::keys::LINK_INPUT_PORT => input.to_string(),
+                        *pw::keys::OBJECT_LINGER => "false",
+                    },
+                );
+                match link {
+                    Ok(link) => {
+                        debug!(%name, output, input, "linked sound into a sound node");
+                        sound.links.insert(ports, link);
+                    }
+                    Err(why) => warn!(%why, %name, "sound could not be linked"),
+                }
+            }
         }
     }
 
@@ -424,6 +666,11 @@ impl Producer {
         let cast = self.casts.borrow_mut().remove(&stream);
         if let Some(cast) = cast {
             self.links.borrow_mut().retain(|_, fed| *fed != stream);
+            if let Some(name) = &cast.sound {
+                if let Some(sound) = self.sounds.borrow_mut().get_mut(name) {
+                    sound.holders.cast_ended(stream, Instant::now());
+                }
+            }
             cast.listener.borrow_mut().take();
             if let Err(why) = cast.stream.disconnect() {
                 debug!(%why, ?stream, "an ended cast did not disconnect cleanly");
@@ -436,6 +683,8 @@ impl Producer {
 struct Cast {
     id: StreamId,
     stream: StreamRc,
+    /// The name of the sound node it holds.
+    sound: Option<String>,
     shared: Rc<Shared>,
     listener: RefCell<Option<StreamListener<()>>>,
     state: RefCell<State>,
@@ -445,6 +694,17 @@ struct Cast {
 struct Held {
     buffer: *mut pw::sys::pw_buffer,
     _target: Target,
+}
+
+/// A sound node, the links into it by (output, input) port, and what keeps
+/// it.
+struct Sound {
+    heard: Heard,
+    _node: pw::node::Node,
+    /// Its global id, once the registry names it.
+    id: Option<u32>,
+    links: HashMap<(u32, u32), pw::link::Link>,
+    holders: Holders,
 }
 
 /// A filled buffer waiting for the next `process`.
@@ -479,6 +739,7 @@ impl Cast {
         offered: Vec<Offered>,
         size: (u32, u32),
         cursor: CursorMode,
+        sound: Option<String>,
     ) -> Result<Rc<Cast>, String> {
         let stream = StreamRc::new(
             core,
@@ -495,6 +756,7 @@ impl Cast {
         let cast = Rc::new(Cast {
             id,
             stream,
+            sound,
             shared: shared.clone(),
             listener: RefCell::new(None),
             state: RefCell::new(State {
@@ -1114,12 +1376,27 @@ fn monotonic_nanoseconds() -> i64 {
     now.tv_sec * 1_000_000_000 + now.tv_nsec
 }
 
+/// Whether a core error of `res` on object `id` is the connection's end. The
+/// daemon also reports a request to an object it already removed on the core,
+/// as `ENOENT`, as a sound node's links race the apps they link; the
+/// connection stays up.
+fn lost(id: u32, res: i32) -> bool {
+    id == pw::core::PW_ID_CORE && res != -libc::ENOENT
+}
+
 #[cfg(test)]
 mod tests {
     use pipewire::spa;
 
-    use super::write_cursor;
+    use super::{lost, write_cursor};
     use crate::casting::cursor::Sprite;
+
+    #[test]
+    fn a_request_to_a_removed_object_keeps_the_connection() {
+        assert!(lost(pipewire::core::PW_ID_CORE, -libc::EPIPE));
+        assert!(!lost(pipewire::core::PW_ID_CORE, -libc::ENOENT));
+        assert!(!lost(7, -libc::EINVAL), "an object's own error");
+    }
 
     /// A consumer makes room for its own largest cursor, as WebRTC does for
     /// 64x64. A pointer the engine drew larger is shrunk into it, not dropped.
