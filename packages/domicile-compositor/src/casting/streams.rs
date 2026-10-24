@@ -33,6 +33,7 @@ use smithay::utils::Transform;
 use tracing::{debug, warn};
 
 use crate::buffer_transform::{crop_in_buffer, upright_size, Sampled};
+use crate::casting::audio::Heard;
 use crate::casting::captured::{self, Kept};
 use crate::casting::captures::{Capturer, Captures, Frame};
 use crate::casting::cursor::{arrow, at_density, embed, plan, CursorMode, Plan, Sprite};
@@ -271,10 +272,14 @@ impl Streams {
                     self.clients.insert(stream);
                 }
                 let open = open();
-                let window_open = |app_id: &str| {
-                    open.iter().any(
+                let window = |app_id: &str| {
+                    open.iter().find(
                         |candidate| matches!(&candidate.source, Source::Window(id) if id == app_id),
                     )
+                };
+                let process = match &source {
+                    Source::Window(app_id) => window(app_id).and_then(|window| window.process),
+                    _ => None,
                 };
                 self.start(
                     stream,
@@ -282,7 +287,8 @@ impl Streams {
                     part,
                     cursor,
                     listener,
-                    window_open,
+                    process,
+                    |app_id| window(app_id).is_some(),
                     capturer,
                 );
             }
@@ -319,6 +325,7 @@ impl Streams {
         part: Option<Rect>,
         cursor: CursorMode,
         mut listener: Listener,
+        process: Option<u32>,
         window_open: impl Fn(&str) -> bool,
         capturer: Option<&mut (dyn Capturer + 'static)>,
     ) {
@@ -333,6 +340,7 @@ impl Streams {
                 return;
             }
         };
+        let heard = heard(&shows, process, self.clients.contains(&stream));
         let size = match (&shows, part) {
             // Asks again with the first frame if the window is now smaller.
             (Shows::Window(_) | Shows::BrowserWindow(_), Some((_, _, width, height))) => {
@@ -370,6 +378,7 @@ impl Streams {
             offered,
             size,
             cursor,
+            heard,
             listener,
         });
     }
@@ -1616,6 +1625,21 @@ fn fill(
     }
 }
 
+/// Whose sound a cast of `shows` carries: a window's client `process`'s, or
+/// every app's for the desk. A Wayland capture `client` carries none, and a
+/// browser window's page sound is the engine's own.
+fn heard(shows: &Shows, process: Option<u32>, client: bool) -> Option<Heard> {
+    match shows {
+        _ if client => None,
+        Shows::Window(id) => process.map(|process| Heard::Window {
+            id: id.clone(),
+            process,
+        }),
+        Shows::BrowserWindow(_) => None,
+        Shows::Desk { .. } => Some(Heard::Everything),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::{HashMap, HashSet};
@@ -1631,8 +1655,11 @@ mod tests {
 
     use smithay::utils::Transform;
 
-    use super::{cut, damage_in_view, density, view, Cast, EnginePointer, Shot, Shows, Streams};
+    use super::{
+        cut, damage_in_view, density, heard, view, Cast, EnginePointer, Shot, Shows, Streams,
+    };
     use crate::buffer_transform::Sampled;
+    use crate::casting::audio::Heard;
     use crate::casting::captures::Capturer;
     use crate::casting::cursor::{CursorMode, Plan, Sprite};
     use crate::casting::gpu::Snapshot;
@@ -1902,12 +1929,14 @@ mod tests {
                 title: "~/src".into(),
                 app_id: "kitty".into(),
                 bounds: None,
+                process: None,
                 part: None,
             },
             Candidate {
                 source: Source::Monitor("drm-1".into()),
                 title: "BOE NE135A1M-NY1".into(),
                 app_id: String::new(),
+                process: None,
                 part: None,
                 bounds: Some(Region {
                     position: (0, 0),
@@ -2352,6 +2381,28 @@ mod tests {
             streams.windows(),
             HashSet::from(["term".to_string(), "editor".to_string()])
         );
+    }
+
+    #[test]
+    fn a_window_cast_hears_its_process_and_a_monitor_cast_every_app() {
+        let window = Shows::Window("term".into());
+
+        assert_eq!(
+            heard(&window, Some(7), false),
+            Some(Heard::Window {
+                id: "term".into(),
+                process: 7
+            })
+        );
+        assert_eq!(heard(&window, None, false), None, "credentials unknown");
+        assert_eq!(heard(&window, Some(7), true), None, "a Wayland capture");
+        let target = (0, 0, 1, 1);
+        let desk = Shows::Desk {
+            monitor: None,
+            target,
+            layout: region::layout(target, &screens()).expect("on a monitor"),
+        };
+        assert_eq!(heard(&desk, None, false), Some(Heard::Everything));
     }
 
     /// A Wayland capture client's cast is offered to the client, and one that

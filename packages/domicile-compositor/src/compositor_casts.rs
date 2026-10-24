@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use smithay::reexports::{
     calloop::timer::{TimeoutAction, Timer},
-    wayland_server::protocol::wl_buffer,
+    wayland_server::{protocol::wl_buffer, Resource as _},
 };
 use smithay::wayland::{
     compositor::with_states,
@@ -48,6 +48,11 @@ impl DomicileCompositor {
                     .and_then(|app| app.title.clone())
                     .unwrap_or_default(),
                 app_id: app_id.unwrap_or_default(),
+                process: toplevel
+                    .wl_surface()
+                    .client()
+                    .and_then(|client| client.get_credentials(&self.display_handle).ok())
+                    .and_then(|credentials| u32::try_from(credentials.pid).ok()),
                 part: None,
                 bounds: self
                     .held_frames

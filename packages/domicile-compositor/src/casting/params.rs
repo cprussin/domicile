@@ -3,6 +3,7 @@
 use std::io::Cursor;
 
 use pipewire::spa;
+use spa::param::audio::{AudioFormat, AudioInfoRaw};
 use spa::param::format::{FormatProperties, MediaSubtype, MediaType};
 use spa::param::video::VideoFormat;
 use spa::param::ParamType;
@@ -271,6 +272,43 @@ fn format(pixel: Pixel, size: (u32, u32), modifier: Option<Property>) -> Vec<u8>
     })
 }
 
+/// The `PortConfig` pod for a cast's audio node: stereo float input ports,
+/// with capture ports of what they take. A session manager configures an
+/// app's node so; the producer does its own, so it works without one.
+pub fn audio_ports() -> Vec<u8> {
+    let mut info = AudioInfoRaw::new();
+    info.set_format(AudioFormat::F32P);
+    info.set_rate(48_000);
+    info.set_channels(2);
+    let mut position = [0; spa::sys::SPA_AUDIO_MAX_CHANNELS as usize];
+    position[0] = spa::sys::SPA_AUDIO_CHANNEL_FL;
+    position[1] = spa::sys::SPA_AUDIO_CHANNEL_FR;
+    info.set_position(position);
+    serialize(Object {
+        type_: spa::sys::SPA_TYPE_OBJECT_ParamPortConfig,
+        id: ParamType::PortConfig.as_raw(),
+        properties: vec![
+            Property::new(
+                spa::sys::SPA_PARAM_PORT_CONFIG_direction,
+                Value::Id(Id(spa::sys::SPA_DIRECTION_INPUT)),
+            ),
+            Property::new(
+                spa::sys::SPA_PARAM_PORT_CONFIG_mode,
+                Value::Id(Id(spa::sys::SPA_PARAM_PORT_CONFIG_MODE_dsp)),
+            ),
+            Property::new(spa::sys::SPA_PARAM_PORT_CONFIG_monitor, Value::Bool(true)),
+            Property::new(
+                spa::sys::SPA_PARAM_PORT_CONFIG_format,
+                Value::Object(Object {
+                    type_: SpaTypes::ObjectParamFormat.as_raw(),
+                    id: ParamType::Format.as_raw(),
+                    properties: info.into(),
+                }),
+            ),
+        ],
+    })
+}
+
 /// `value`, with a fixed choice unwrapped: PipeWire sends a fixated value as
 /// a choice of one.
 fn fixed(value: &Value) -> Value {
@@ -322,7 +360,9 @@ mod tests {
     use spa::pod::{ChoiceValue, Object, Pod, Property, PropertyFlags, Value};
     use spa::utils::{Choice, ChoiceEnum, ChoiceFlags, Fraction, Id, Rectangle, SpaTypes};
 
-    use super::{buffers, enum_formats, fixated, metas, read_format, Format, Memory, Unreadable};
+    use super::{
+        audio_ports, buffers, enum_formats, fixated, metas, read_format, Format, Memory, Unreadable,
+    };
     use crate::casting::negotiation::{Offered, Picked, Pixel};
 
     const LINEAR: u64 = 0;
@@ -629,5 +669,35 @@ mod tests {
                 framerate: 30,
             })
         );
+    }
+
+    #[test]
+    fn a_cast_audio_node_takes_stereo_into_dsp_ports_it_also_captures() {
+        let config = object(&audio_ports());
+
+        assert_eq!(config.type_, spa::sys::SPA_TYPE_OBJECT_ParamPortConfig);
+        let id = |key| match property(&config, key).map(|property| &property.value) {
+            Some(Value::Id(Id(id))) => *id,
+            other => panic!("key {key} is {other:?}"),
+        };
+        assert_eq!(
+            id(spa::sys::SPA_PARAM_PORT_CONFIG_direction),
+            spa::sys::SPA_DIRECTION_INPUT
+        );
+        assert_eq!(
+            id(spa::sys::SPA_PARAM_PORT_CONFIG_mode),
+            spa::sys::SPA_PARAM_PORT_CONFIG_MODE_dsp
+        );
+        assert!(matches!(
+            property(&config, spa::sys::SPA_PARAM_PORT_CONFIG_monitor).map(|p| &p.value),
+            Some(Value::Bool(true))
+        ));
+        let Some(Value::Object(format)) =
+            property(&config, spa::sys::SPA_PARAM_PORT_CONFIG_format).map(|p| &p.value)
+        else {
+            panic!("no format");
+        };
+        assert_eq!(int(format, spa::sys::SPA_FORMAT_AUDIO_channels), 2);
+        assert_eq!(int(format, spa::sys::SPA_FORMAT_AUDIO_rate), 48_000);
     }
 }

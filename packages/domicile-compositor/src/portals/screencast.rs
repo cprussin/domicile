@@ -674,6 +674,7 @@ fn chosen(picks: &[CastPick], open: &[Candidate], selected: &Selected) -> Option
                     .cloned(),
             }?;
             Some(Candidate {
+                process: None,
                 part: part_of(pick),
                 ..candidate
             })
@@ -724,6 +725,7 @@ fn browser_window(id: String, title: String) -> Candidate {
         title,
         app_id: String::new(),
         bounds: None,
+        process: None,
         part: None,
     }
 }
@@ -736,6 +738,7 @@ fn region(position: (i32, i32), size: (i32, i32)) -> Candidate {
         title: String::new(),
         app_id: String::new(),
         bounds: Some(region),
+        process: None,
         part: None,
     }
 }
@@ -935,6 +938,7 @@ mod tests {
                 source: Source::Window("app-3".into()),
                 title: "Notes".into(),
                 app_id: "org.gnome.TextEditor".into(),
+                process: None,
                 part: None,
                 bounds: Some(Region {
                     position: (10, 20),
@@ -946,6 +950,7 @@ mod tests {
                 title: "Todo".into(),
                 app_id: String::new(),
                 bounds: None,
+                process: None,
                 part: None,
             },
         ]
@@ -958,6 +963,7 @@ mod tests {
                 source: Source::Monitor("drm-1".into()),
                 title: "BOE NE135A1M-NY1".into(),
                 app_id: String::new(),
+                process: None,
                 part: None,
                 bounds: Some(Region {
                     position: (0, 0),
@@ -968,6 +974,7 @@ mod tests {
                 source: Source::Monitor("drm-2".into()),
                 title: String::new(),
                 app_id: String::new(),
+                process: None,
                 part: None,
                 bounds: Some(Region {
                     position: (1920, 0),
@@ -1686,6 +1693,7 @@ mod tests {
         assert_eq!(
             chosen(&[part(3, 4)], &open, &asked),
             Some(vec![Candidate {
+                process: None,
                 part: Some((1, 2, 3, 4)),
                 ..windows()[1].clone()
             }])

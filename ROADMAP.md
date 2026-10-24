@@ -108,7 +108,8 @@ Understood and not scheduled.
 
 - **Some permission requests are refused,** including a tab's capture.
 - **A page's screen capture has no audio,** and reports every source as a
-  monitor.
+  monitor. The compositor makes each cast's sound node; the engine does not
+  read it yet.
 - **Some file dialogs are refused:** from the shell's own page, and a
   directory dropped on a page.
 - **No `chrome://` pages,** so no Print Preview: printing goes straight to

@@ -419,6 +419,7 @@ impl Screens {
                     .description
                     .clone(),
                 app_id: String::new(),
+                process: None,
                 part: None,
                 bounds: Some(crate::casting::Region {
                     position: (screen.desk.0, screen.desk.1),
@@ -1180,6 +1181,7 @@ mod tests {
                 source: crate::casting::Source::Monitor("drm-2".into()),
                 title: DESK_MONITOR.into(),
                 app_id: String::new(),
+                process: None,
                 part: None,
                 bounds: Some(crate::casting::Region {
                     position: desk,

@@ -22,6 +22,7 @@
 //! [`Candidate`]s. A shot of the whole desk, for the Screenshot portal, draws
 //! from the same captures; see [`shots`].
 
+mod audio;
 mod captured;
 mod captures;
 mod cursor;
@@ -93,6 +94,9 @@ pub struct Candidate {
     /// The part of a window picked, in its frame's pixels, or `None` for
     /// all of it.
     pub part: Option<Rect>,
+    /// A window client's process, whose sound its cast carries. `None` for
+    /// a monitor, or when the client's credentials are unknown.
+    pub process: Option<u32>,
 }
 
 /// One stream, as long as it lives.

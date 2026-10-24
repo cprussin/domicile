@@ -234,6 +234,18 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   cancel rejects `getDisplayMedia()`; the capture then restores the pick from
   the picker session's restore token (`persist_mode` 1). See
   [SHELL-BROWSER-WINDOWS.md](SHELL-BROWSER-WINDOWS.md#permissions).
+- **A cast carries its source's sound.** A window's cast holds a PipeWire
+  `Audio/Source/Virtual` node, `domicile-sound-window-<stream id>`, into
+  which the compositor links the audio streams of the window's client
+  process and its children (by each stream's PipeWire client's
+  `application.process.id`, else its socket peer). A monitor's or region's
+  cast holds `domicile-sound-desk`, which links every app's. Apps keep
+  playing where they were. A node outlives its last cast and consumer by 5
+  s, so a page capture that restores its pick in a new session finds it.
+  The ScreenCast interface has no audio, so only the engine reads the node,
+  by name. An app in its own PID namespace, as Flatpak's are, may report a
+  pid the compositor does not know, and is then not heard. The code is
+  `src/casting/audio.rs`.
 - **The shell shows active sharing.** `portal_requests` carries `capturing`:
   each running session (id, app, what it holds). The shell stops one by
   answering its id with `stop`. `<PortalDialogs />` draws the indicator;
