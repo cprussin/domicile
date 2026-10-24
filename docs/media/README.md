@@ -6,14 +6,14 @@ captured by a script, never by hand, so it can be retaken for each release.
 - **Retake them:** run the `Docs media` workflow (`.github/workflows/docs-media.yml`)
   on a branch. It captures on `crux` and commits the results to that branch.
   A pull request that changes a scene does the same.
-- **Locally:** `./scripts/docs-media.sh [scene...]` on a machine with a GPU.
+- **Locally:** `packages/site/scripts/docs-media.sh [scene...]` on a machine with a GPU.
   Without a DRM render node, terminal windows come out blank.
 
 ## Scenes
 
-A scene is `scripts/docs-media/scenes/<name>.sh`, plus an optional
+A scene is `packages/site/scripts/docs-media/scenes/<name>.sh`, plus an optional
 `scenes/<name>/` directory for its shell and fixtures. It runs in its own
-nested sway with these helpers (`scripts/docs-media/lib.sh`):
+nested sway with these helpers (`packages/site/scripts/docs-media/lib.sh`):
 
 | Helper | Does |
 |---|---|

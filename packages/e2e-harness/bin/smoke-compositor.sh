@@ -2,10 +2,10 @@
 # Smoke test: boots the headless compositor and checks that wayland-info sees
 # the globals clients need.
 #
-# Run inside the full shell:  nix develop .#full -c ./scripts/smoke-compositor.sh
+# Run inside the full shell:  nix develop .#full -c packages/e2e-harness/bin/smoke-compositor.sh
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 BIN="$ROOT/target/debug/domicile-compositor"
 # Always build: a stale binary would test code that is not in the tree.
 cargo build -p domicile-compositor >/dev/null 2>&1 || {

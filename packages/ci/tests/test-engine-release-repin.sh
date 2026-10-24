@@ -55,7 +55,7 @@ setup() {
   # bare remote and push anyway. Disable negotiation so the test output stays
   # clean.
   git -C "$WORK/repo" config push.negotiate false
-  mkdir -p "$WORK/repo/.github/scripts" "$WORK/repo/scripts" \
+  mkdir -p "$WORK/repo/.github/scripts" "$WORK/repo/packages/domicile-engine/scripts" \
            "$WORK/repo/packages/domicile-engine"
   cp "$REPIN" "$WORK/repo/.github/scripts/"
   echo "pinned = 0" >"$WORK/repo/packages/domicile-engine/engine-release.nix"
@@ -85,15 +85,15 @@ setup() {
   MERGE_REF="$(git -C "$WORK/repo" rev-parse HEAD)"
 
   # Fake generator: the real one downloads and hashes a tarball.
-  mkdir -p "$WORK/repo/scripts"
-  cat > "$WORK/repo/scripts/update-engine-release.sh" <<'GEN'
+  mkdir -p "$WORK/repo/packages/domicile-engine/scripts"
+  cat > "$WORK/repo/packages/domicile-engine/scripts/update-engine-release.sh" <<'GEN'
 #!/usr/bin/env bash
 set -eu
 [ -z "${GENERATOR_FAILS:-}" ] || { echo "no such release" >&2; exit 1; }
 printf 'pinned = 1 # %s\n' "${DOMICILE_ENGINE_TAG:-none}" \
   > packages/domicile-engine/engine-release.nix
 GEN
-  chmod +x "$WORK/repo/scripts/update-engine-release.sh"
+  chmod +x "$WORK/repo/packages/domicile-engine/scripts/update-engine-release.sh"
 }
 
 repin() { # extra env assignments
