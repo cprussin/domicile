@@ -14,13 +14,22 @@ use std::os::unix::fs::FileExt as _;
 use std::os::unix::net::UnixStream;
 use std::process::Stdio;
 
-use wayland_client::protocol::{wl_buffer, wl_output, wl_registry, wl_shm, wl_shm_pool};
+use domicile_protocol::{ChromeMessage, CursorImage, HostMessage};
+use wayland_client::protocol::{
+    wl_buffer, wl_output, wl_pointer, wl_registry, wl_seat, wl_shm, wl_shm_pool,
+};
 use wayland_client::{Connection, Dispatch, EventQueue, QueueHandle, WEnum};
+use wayland_protocols::ext::foreign_toplevel_list::v1::client::{
+    ext_foreign_toplevel_handle_v1::{self, ExtForeignToplevelHandleV1},
+    ext_foreign_toplevel_list_v1::{self, ExtForeignToplevelListV1},
+};
 use wayland_protocols::ext::image_capture_source::v1::client::{
+    ext_foreign_toplevel_image_capture_source_manager_v1::ExtForeignToplevelImageCaptureSourceManagerV1,
     ext_image_capture_source_v1::ExtImageCaptureSourceV1,
     ext_output_image_capture_source_manager_v1::ExtOutputImageCaptureSourceManagerV1,
 };
 use wayland_protocols::ext::image_copy_capture::v1::client::{
+    ext_image_copy_capture_cursor_session_v1::{self, ExtImageCopyCaptureCursorSessionV1},
     ext_image_copy_capture_frame_v1::{self, ExtImageCopyCaptureFrameV1, FailureReason},
     ext_image_copy_capture_manager_v1::{ExtImageCopyCaptureManagerV1, Options},
     ext_image_copy_capture_session_v1::{self, ExtImageCopyCaptureSessionV1},
@@ -294,6 +303,142 @@ fn a_wlr_screencopy_client_copies_frame_after_frame() {
     assert_eq!(center(&memory, (640, 480)), PATTERN);
 }
 
+/// A window is listed as a foreign toplevel, and a session of it captures
+/// the window alone.
+#[test]
+fn a_listed_window_is_captured_alone() {
+    let compositor = started();
+    let mut chrome = compositor.chrome();
+    let _client = compositor.client("capture-me");
+    chrome
+        .wait_for(|message| matches!(message, HostMessage::AppAppeared { .. }))
+        .expect("the window appeared");
+    let (mut queue, mut copier) = connected(&compositor, 3);
+    let handle = queue.handle();
+    while !copier
+        .toplevels
+        .iter()
+        .any(|(_, title)| title == "capture-me")
+    {
+        queue
+            .blocking_dispatch(&mut copier)
+            .expect("the window listed");
+    }
+    let (toplevel, _) = copier
+        .toplevels
+        .iter()
+        .find(|(_, title)| title == "capture-me")
+        .cloned()
+        .expect("listed");
+    let source = copier
+        .window_sources
+        .clone()
+        .expect("ext_foreign_toplevel_image_capture_source_manager_v1")
+        .create_source(&toplevel, &handle, ());
+    let session = copier
+        .ext
+        .clone()
+        .expect("ext_image_copy_capture_manager_v1")
+        .create_session(&source, Options::empty(), &handle, ());
+    while copier.sizes.is_empty() {
+        queue
+            .blocking_dispatch(&mut copier)
+            .expect("the session's constraints");
+    }
+    let size = copier.sizes[0];
+
+    let (buffer, memory) = copier.buffer(size, &handle);
+    let frame = session.create_frame(&handle, ());
+    frame.attach_buffer(&buffer);
+    frame.capture();
+    assert_eq!(
+        copier.outcome(&mut queue),
+        Outcome::Ready,
+        "the compositor said:\n{}",
+        compositor.complaint()
+    );
+    assert_ne!(
+        center(&memory, size),
+        PATTERN,
+        "the window's pixels, not the monitor's"
+    );
+}
+
+/// A cursor session of a monitor follows the pointer over it in the monitor's
+/// pixels, and its capture session copies the pointer's image at the
+/// monitor's density.
+#[test]
+fn a_cursor_session_follows_the_pointer_over_its_monitor() {
+    let compositor = started();
+    let mut chrome = compositor.chrome();
+    let (mut queue, mut copier) = connected(&compositor, 3);
+    let handle = queue.handle();
+    let source = copier
+        .sources
+        .clone()
+        .expect("the output source manager")
+        .create_source(copier.output(), &handle, ());
+    let pointer = copier
+        .seat
+        .clone()
+        .expect("a seat")
+        .get_pointer(&handle, ());
+    let cursor = copier
+        .ext
+        .clone()
+        .expect("ext_image_copy_capture_manager_v1")
+        .create_pointer_cursor_session(&source, &pointer, &handle, ());
+    let session = cursor.get_capture_session(&handle, ());
+
+    // Two by two at one pixel a logical pixel, hotspot in its corner.
+    let image = CursorImage {
+        size: (2, 2),
+        hotspot: (1, 1),
+        scale: 1.0,
+        bgra: domicile_host::base64::encoded(&[10, 20, 30, 255].repeat(4)),
+    };
+    chrome
+        .say(&ChromeMessage::DeskCursor { image: Some(image) })
+        .expect("the pointer's image");
+    chrome
+        .say(&ChromeMessage::DeskPointer {
+            at: Some((10.0, 20.0)),
+            windows: Vec::new(),
+        })
+        .expect("the pointer moved");
+    while copier.cursor_at.is_none() || copier.sizes.is_empty() {
+        queue.blocking_dispatch(&mut copier).expect("the pointer");
+    }
+    assert!(copier.cursor_entered);
+    assert_eq!(copier.cursor_at, Some((20, 40)), "at the monitor's 2x");
+    assert_eq!(copier.hotspot, Some((2, 2)));
+    assert_eq!(copier.sizes.last(), Some(&(4, 4)));
+
+    let (buffer, memory) = copier.buffer((4, 4), &handle);
+    let frame = session.create_frame(&handle, ());
+    frame.attach_buffer(&buffer);
+    frame.capture();
+    assert_eq!(
+        copier.outcome(&mut queue),
+        Outcome::Ready,
+        "the compositor said:\n{}",
+        compositor.complaint()
+    );
+    assert_eq!(center(&memory, (4, 4)), [30, 20, 10]);
+
+    chrome
+        .say(&ChromeMessage::DeskPointer {
+            at: None,
+            windows: Vec::new(),
+        })
+        .expect("the pointer left");
+    while copier.cursor_entered {
+        queue
+            .blocking_dispatch(&mut copier)
+            .expect("the pointer left");
+    }
+}
+
 /// How a copy ended.
 #[derive(Debug, PartialEq)]
 enum Outcome {
@@ -309,6 +454,13 @@ struct Copier {
     sources: Option<ExtOutputImageCaptureSourceManagerV1>,
     output: Option<wl_output::WlOutput>,
     shm: Option<wl_shm::WlShm>,
+    seat: Option<wl_seat::WlSeat>,
+    window_sources: Option<ExtForeignToplevelImageCaptureSourceManagerV1>,
+    /// Each listed window, with its title.
+    toplevels: Vec<(ExtForeignToplevelHandleV1, String)>,
+    cursor_entered: bool,
+    cursor_at: Option<(i32, i32)>,
+    hotspot: Option<(i32, i32)>,
     /// The output's current mode, in pixels.
     mode: Option<(i32, i32)>,
     /// The `zwlr_screencopy_manager_v1` version to bind.
@@ -423,6 +575,13 @@ impl Dispatch<wl_registry::WlRegistry, ()> for Copier {
                 }
                 "wl_output" => copier.output = Some(registry.bind(name, 4, handle, ())),
                 "wl_shm" => copier.shm = Some(registry.bind(name, 1, handle, ())),
+                "wl_seat" => copier.seat = Some(registry.bind(name, 1, handle, ())),
+                "ext_foreign_toplevel_list_v1" => {
+                    let _: ExtForeignToplevelListV1 = registry.bind(name, 1, handle, ());
+                }
+                "ext_foreign_toplevel_image_capture_source_manager_v1" => {
+                    copier.window_sources = Some(registry.bind(name, 1, handle, ()));
+                }
                 _ => {}
             }
         }
@@ -525,6 +684,69 @@ impl Dispatch<ExtImageCopyCaptureFrameV1, ()> for Copier {
     }
 }
 
+impl Dispatch<ExtForeignToplevelListV1, ()> for Copier {
+    fn event(
+        copier: &mut Self,
+        _: &ExtForeignToplevelListV1,
+        event: ext_foreign_toplevel_list_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let ext_foreign_toplevel_list_v1::Event::Toplevel { toplevel } = event {
+            copier.toplevels.push((toplevel, String::new()));
+        }
+    }
+
+    wayland_client::event_created_child!(Copier, ExtForeignToplevelListV1, [
+        ext_foreign_toplevel_list_v1::EVT_TOPLEVEL_OPCODE => (ExtForeignToplevelHandleV1, ()),
+    ]);
+}
+
+impl Dispatch<ExtForeignToplevelHandleV1, ()> for Copier {
+    fn event(
+        copier: &mut Self,
+        toplevel: &ExtForeignToplevelHandleV1,
+        event: ext_foreign_toplevel_handle_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let ext_foreign_toplevel_handle_v1::Event::Title { title } = event {
+            for (listed, named) in &mut copier.toplevels {
+                if listed == toplevel {
+                    *named = title.clone();
+                }
+            }
+        }
+    }
+}
+
+impl Dispatch<ExtImageCopyCaptureCursorSessionV1, ()> for Copier {
+    fn event(
+        copier: &mut Self,
+        _: &ExtImageCopyCaptureCursorSessionV1,
+        event: ext_image_copy_capture_cursor_session_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        match event {
+            ext_image_copy_capture_cursor_session_v1::Event::Enter => copier.cursor_entered = true,
+            ext_image_copy_capture_cursor_session_v1::Event::Leave => {
+                copier.cursor_entered = false;
+            }
+            ext_image_copy_capture_cursor_session_v1::Event::Position { x, y } => {
+                copier.cursor_at = Some((x, y));
+            }
+            ext_image_copy_capture_cursor_session_v1::Event::Hotspot { x, y } => {
+                copier.hotspot = Some((x, y));
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Objects that send this test nothing it reads.
 macro_rules! ignored {
     ($($interface:ty),*) => {
@@ -549,7 +771,10 @@ ignored!(
     ExtImageCaptureSourceV1,
     wl_shm::WlShm,
     wl_shm_pool::WlShmPool,
-    wl_buffer::WlBuffer
+    wl_buffer::WlBuffer,
+    wl_seat::WlSeat,
+    wl_pointer::WlPointer,
+    ExtForeignToplevelImageCaptureSourceManagerV1
 );
 
 /// Shared memory `length` bytes long.

@@ -100,6 +100,9 @@ pub struct Streams {
     casts: HashMap<StreamId, Cast>,
     /// Each window's last frame size, offered when a stream starts.
     sizes: HashMap<String, (u32, u32)>,
+    /// How many buffer pixels span each window's surface point, for the
+    /// pointer over it.
+    densities: HashMap<String, (f64, f64)>,
     /// Each cast window's last frame.
     shots: HashMap<String, Shot>,
     /// Each window's last frame the engine shows, for a shot of it alone.
@@ -192,6 +195,15 @@ struct Cast {
     cursor_sprite: Option<Arc<Sprite>>,
 }
 
+/// The pointer over a source.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Over {
+    /// In the source's pixels.
+    pub at: (f64, f64),
+    /// At the source's density.
+    pub sprite: Sprite,
+}
+
 /// What a stream's next frame is made of.
 struct View<'a> {
     size: (u32, u32),
@@ -222,6 +234,7 @@ impl Streams {
             to_pipewire: None,
             casts: HashMap::new(),
             sizes: HashMap::new(),
+            densities: HashMap::new(),
             shots: HashMap::new(),
             shown: HashMap::new(),
             pointer: None,
@@ -789,6 +802,8 @@ impl Streams {
     ) -> Option<Instant> {
         self.sizes
             .insert(frame.app_id.to_string(), frame.sampled.upright_size());
+        self.densities
+            .insert(frame.app_id.to_string(), frame.pixels_a_point);
         let streams: Vec<_> = self
             .casts
             .iter()
@@ -1175,6 +1190,7 @@ impl Streams {
     /// A window closed: its streams end.
     pub fn window_gone(&mut self, app_id: &str) {
         self.sizes.remove(app_id);
+        self.densities.remove(app_id);
         self.shown.remove(app_id);
         self.shots.remove(app_id);
         let gone: Vec<_> = self
@@ -1189,6 +1205,37 @@ impl Streams {
                 why: Ended::SourceGone,
             });
         }
+    }
+
+    /// Where the pointer is over `source`, in its pixels, and its image at
+    /// the source's density. `None` off the source, while the pointer is
+    /// hidden, and for a browser window or region, which Wayland capture has
+    /// no source for.
+    pub fn pointer_over(&self, source: &Source) -> Option<Over> {
+        if self.sprite.is_hidden() {
+            return None;
+        }
+        let (at, density) = match source {
+            Source::Monitor(name) => {
+                let screen = self.screens.iter().find(|screen| screen.name == *name)?;
+                let (x, y, width, height) = screen.desk;
+                let (left, top) = self.engine_pointer.desk?;
+                let (left, top) = (left - f64::from(x), top - f64::from(y));
+                let inside =
+                    left >= 0.0 && top >= 0.0 && left < f64::from(width) && top < f64::from(height);
+                inside.then_some(((left * screen.scale, top * screen.scale), screen.scale))?
+            }
+            Source::Window(app_id) => {
+                let (_, point) = self.pointer.as_ref().filter(|(id, _)| id == app_id)?;
+                let density = self.densities.get(app_id).copied().unwrap_or((1.0, 1.0));
+                (in_window(*point, density), density.0)
+            }
+            Source::BrowserWindow(_) | Source::Region(_) => return None,
+        };
+        Some(Over {
+            at,
+            sprite: at_density(&self.sprite, density),
+        })
     }
 
     /// Damages `stream` by `damage` and fills a buffer from what it shows, if
@@ -2424,6 +2471,33 @@ mod tests {
         assert_eq!(filled(&heard), None, "nothing new to show");
         streams.news(ToWayland::Wanted { stream }, None, Some(&mut engine), later);
         assert_eq!(filled(&heard), Some(vec![(0, 0, 1, 1)]), "wanted");
+    }
+
+    /// The pointer over a monitor or a window is in its pixels, with its
+    /// image at its density. Off it, or hidden, there is none.
+    #[test]
+    fn the_pointer_over_a_source_is_in_its_pixels_at_its_density() {
+        let mut streams = streams();
+        streams.sprite =
+            Sprite::from_bgra((1, 1), (0, 0), 1.0, vec![1, 2, 3, 255]).expect("a sprite");
+        streams.engine_pointer.desk = Some((1.5, 0.25));
+        streams.pointer = Some(("app-1".into(), (2.0, 3.0)));
+        streams.densities.insert("app-1".into(), (1.5, 1.5));
+
+        let over = streams
+            .pointer_over(&Source::Monitor("drm-2".into()))
+            .expect("over drm-2");
+        assert_eq!(over.at, (1.0, 0.5));
+        assert_eq!(over.sprite.size, (2, 2));
+        assert_eq!(streams.pointer_over(&Source::Monitor("drm-1".into())), None);
+        let over = streams
+            .pointer_over(&Source::Window("app-1".into()))
+            .expect("over the window");
+        assert_eq!(over.at, (3.0, 4.5));
+        assert_eq!(streams.pointer_over(&Source::Window("app-2".into())), None);
+
+        streams.sprite = Sprite::hidden();
+        assert_eq!(streams.pointer_over(&Source::Monitor("drm-2".into())), None);
     }
 
     /// A stream of `shows` that has not negotiated.

@@ -88,6 +88,7 @@ mod engine_session;
 mod engine_surfaces;
 mod engine_waiting;
 mod file_indexing;
+mod foreign_toplevels;
 mod frame_callbacks;
 mod frame_descriptor;
 mod frame_pacing;
@@ -613,6 +614,8 @@ struct DomicileCompositor {
     screen_copying: casting::Casting,
     /// The casts Wayland capture clients take.
     copies: screencopy::Copies,
+    /// The windows, as capture tools list them.
+    foreign_toplevels: foreign_toplevels::ForeignToplevels,
     /// When the soonest superseded engine hold expires, if one is held. See
     /// [`crate::engine_buffers`].
     hold_deadline: Option<RegistrationToken>,
@@ -762,8 +765,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     IdleInhibitManagerState::new::<DomicileCompositor>(&dh);
     // `parent_window` handles for portal dialogs.
     xdg_foreign::advertise(&dh);
-    // Screenshot and recording tools such as `grim` and `wf-recorder`.
+    // Screenshot and recording tools such as `grim` and `wf-recorder`, and
+    // the windows they may capture.
     screencopy::advertise(&dh);
+    let foreign_toplevels = foreign_toplevels::ForeignToplevels::new(&dh);
     // Windows laid out at a named place in the page.
     anchors::advertise(&dh);
 
@@ -1293,6 +1298,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         cast_deadline: None,
         screen_copying: casting::Casting::new(cast_requests.clone()),
         copies: screencopy::Copies::default(),
+        foreign_toplevels,
         cast_on_title: std::env::var("DOMICILE_CAST_WINDOW")
             .ok()
             .map(|title| (title, casting::Casting::new(cast_requests.clone()))),

@@ -24,11 +24,13 @@ const ONE_DISPLAY: &str = r#"
 "#;
 
 /// The globals only an unsandboxed client sees.
-const PRIVILEGED: [&str; 6] = [
+const PRIVILEGED: [&str; 8] = [
     "ext_data_control_manager_v1",
     "zwlr_data_control_manager_v1",
     "ext_image_copy_capture_manager_v1",
     "ext_output_image_capture_source_manager_v1",
+    "ext_foreign_toplevel_image_capture_source_manager_v1",
+    "ext_foreign_toplevel_list_v1",
     "zwlr_screencopy_manager_v1",
     "wp_security_context_manager_v1",
 ];
