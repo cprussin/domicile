@@ -108,7 +108,7 @@ HOST_LOG="${HOST_LOG:-/tmp/domicile-shortcuts-inhibitor-chord$WHICH-host.log}"
 #
 # Also remove the binding: in a person's own session it would otherwise
 # capture a Mod4 chord.
-# `scripts/test-the-shortcuts-guards-leave-nothing-running.sh` checks both.
+# `packages/domicile-engine/tests/test-the-shortcuts-guards-leave-nothing-running.sh` checks both.
 BOUND=0
 cleanup() {
   if [ "$BOUND" = "1" ]; then
@@ -380,7 +380,7 @@ echo "keyboard=$KEYBOARD_UP bound=$BOUND calibrated=$HOST_CALIBRATED listening=$
 echo "the chord: host=$HOST_TOOK page=$PAGE_TOOK meta=$PAGE_META"
 echo
 
-# The verdict. `scripts/test-shortcuts-inhibitor-chord-guard.sh` runs this
+# The verdict. `packages/domicile-engine/tests/test-shortcuts-inhibitor-chord-guard.sh` runs this
 # block directly. Both modes pass the same gates first, so a blind observer
 # cannot produce a pass.
 FAILURE=""

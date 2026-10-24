@@ -216,7 +216,7 @@ echo
 echo "guest=$SAW_GUEST before=$PRESSED_BEFORE crash=$SAW_CRASH after=$PRESSED_AFTER"
 echo
 
-# Turn the readings into a verdict. `scripts/test-webview-escape-guard.sh`
+# Turn the readings into a verdict. `packages/domicile-engine/tests/test-webview-escape-guard.sh`
 # tests this block. Setup readings are checked first, for both runs.
 FAILURE=""
 PASSED=""

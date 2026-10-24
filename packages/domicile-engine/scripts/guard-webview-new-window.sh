@@ -69,7 +69,7 @@ HEIGHT="${HEIGHT:-768}"
 # the strip and links stay aligned.
 #
 # Not named `STRIP`: `nix develop .#full` exports STRIP=strip, which breaks the
-# arithmetic below under `set -u`. `scripts/test-webview-guard-startup.sh`
+# arithmetic below under `set -u`. `packages/domicile-engine/tests/test-webview-guard-startup.sh`
 # starts every guard in that environment to catch this.
 STRIP_HEIGHT="${STRIP_HEIGHT:-64}"
 CHROME_X=$((WIDTH / 2))
@@ -247,7 +247,7 @@ echo "the browser process said: made=$SAW_MADE"
 echo "the pages in the windows saw: press=$SAW_GUEST opened=$SAW_OPENED posted=$SAW_POSTED stayed=$SAW_STAYED"
 echo
 
-# Picks which side to blame. `scripts/test-webview-new-window-guard.sh` runs
+# Picks which side to blame. `packages/domicile-engine/tests/test-webview-new-window-guard.sh` runs
 # this block directly.
 #
 # Ordered by dependency: each arm assumes the readings before it held.

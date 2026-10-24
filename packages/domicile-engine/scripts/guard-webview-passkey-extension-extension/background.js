@@ -3,7 +3,7 @@
 // UI.
 //
 // It answers with an error whose message is `ANSWER`, which avoids forging a
-// signed attestation. scripts/test-webview-passkey-extension-guard.sh checks it
+// signed attestation. packages/domicile-engine/tests/test-webview-passkey-extension-guard.sh checks it
 // matches the message the page looks for.
 //
 // Read from `globalThis` because the linter does not know the `chrome` global.

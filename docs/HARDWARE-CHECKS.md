@@ -172,7 +172,7 @@ nix develop .#full --command env OUT=. PLATFORM=drm \
   planned.
 - `OUT=.` because `nix build .#engine` produces a store path that is itself
   the out directory.
-- Call `guard-latency.sh` directly. `scripts/engine-guard-latency.sh` wraps it
+- Call `guard-latency.sh` directly. `packages/domicile-engine/scripts/check-latency.sh` wraps it
   in `under-wayland.sh` and takes `crux`'s render-node lock, which a laptop
   does not need.
 

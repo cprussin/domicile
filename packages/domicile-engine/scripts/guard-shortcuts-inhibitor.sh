@@ -95,7 +95,7 @@ ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-shortcuts-inhibitor$WHICH-engine.log}"
 KEYBOARD_LOG="${KEYBOARD_LOG:-/tmp/domicile-shortcuts-inhibitor$WHICH-keyboard.log}"
 
 # Each reading's pattern, kept separate so
-# `scripts/test-shortcuts-inhibitor-guard.sh` can test them against both dump
+# `packages/domicile-engine/tests/test-shortcuts-inhibitor-guard.sh` can test them against both dump
 # formats libwayland has used.
 #
 # Patterns match request names, not the ` -> ` direction marker, whose spelling
@@ -249,7 +249,7 @@ echo
 echo "wire=$SAW_WIRE toplevel=$SAW_TOPLEVEL manager=$SAW_MANAGER keyboard=$SAW_KEYBOARD asked=$ASKED"
 echo
 
-# The verdict. `scripts/test-shortcuts-inhibitor-guard.sh` runs this block
+# The verdict. `packages/domicile-engine/tests/test-shortcuts-inhibitor-guard.sh` runs this block
 # directly. A capture that is not a wire dump looks like a missing request to
 # grep, so the setup readings are checked first.
 FAILURE=""

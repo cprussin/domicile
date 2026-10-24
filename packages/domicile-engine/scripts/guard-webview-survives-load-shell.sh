@@ -209,7 +209,7 @@ echo
 echo "measured: $MEASURED"
 echo "  (mode answered loads tokens shown-by-the-new-shell ticked-on)"
 
-# Which end to blame. `scripts/test-webview-survives-load-shell-guard.sh` runs
+# Which end to blame. `packages/domicile-engine/tests/test-webview-survives-load-shell-guard.sh` runs
 # this block directly. MEASURED is "<mode> <answered> <loads> <tokens>
 # <shown> <ticked>".
 FAILURE=""

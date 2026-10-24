@@ -61,7 +61,7 @@ Details live in separate docs:
   gates the ChromeOS-only deps.
 - Patch `0014` fixes a static initializer.
 - Both build scripts set `ozone_platform_drm = true`;
-  `scripts/test-the-builds-agree-on-ozone.sh` checks they agree.
+  `packages/domicile-engine/tests/test-the-builds-agree-on-ozone.sh` checks they agree.
 - Some gaps show up only at link time. `host/drm_cursor.cc` includes
   `cursor_controller.h`, which ships everywhere, but `cursor_controller.cc`
   compiles only on ChromeOS. CI builds a drm probe

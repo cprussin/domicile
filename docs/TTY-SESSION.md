@@ -49,7 +49,7 @@ logind owns DRM master. The engine makes no master ioctls.
 - On a seat without VTs logind sends "pause" instead, and the session answers
   `PauseDeviceComplete` at once.
 
-`scripts/test-the-card-comes-from-logind.sh` checks the series for each of
+`packages/domicile-engine/tests/test-the-card-comes-from-logind.sh` checks the series for each of
 these; `HardwareDisplayControllerTest.AFlipAfterLogindTookMasterIsSkipped`
 covers the skipped flip.
 
@@ -59,7 +59,7 @@ covers the skipped flip.
   `K_OFF`, `KD_GRAPHICS` and `VT_PROCESS` on the VT.
 - `K_OFF` disables the kernel's `Ctrl+Alt+F<n>`. Only the desktop can start a
   switch, as with every Wayland compositor.
-- The engine makes no VT ioctls; `scripts/test-logind-owns-the-console.sh`
+- The engine makes no VT ioctls; `packages/domicile-engine/tests/test-logind-owns-the-console.sh`
   checks this. A `VT_SETMODE` from the engine would silently replace logind's
   handler, and logind would then never pause devices or hand over the
   console.
@@ -125,7 +125,7 @@ force-pause resume.
   hidden.
 
 Tests: `DrmInputDevicesTest` covers the table.
-`scripts/test-input-comes-from-logind.sh` checks what unit tests cannot;
+`packages/domicile-engine/tests/test-input-comes-from-logind.sh` checks what unit tests cannot;
 `drm_logind_input.cc` and `drm_logind_session.cc` talk to D-Bus and have no
 unit test.
 

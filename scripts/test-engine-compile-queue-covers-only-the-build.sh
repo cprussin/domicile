@@ -77,7 +77,7 @@ has "and builds" '^      - name: Build$' "$build"
 has "in a tree it takes" 'engine-tree-pool\.sh pick' "$build"
 has "and hands that tree on" \
   'chromium: \$\{\{ steps\.[a-z]+\.outputs\.chromium \}\}' "$build"
-lacks "and runs no checks" 'check\.sh engine|scripts/engine-guard-' "$build"
+lacks "and runs no checks" 'test:engine|run-checks\.sh' "$build"
 lacks "and publishes nothing" \
   'engine-release-(package|publish|repin)\.sh|engine-proof\.sh record' "$build"
 # The build job keeps the tree locked on success, so no other run can reset it
@@ -106,14 +106,14 @@ has_line "runs whenever the build ran, so a red build is a red engine" \
 has "and fails when the build did" "needs\\.build\\.result != 'success'" \
   "$(printf '%s\n' "$engine" | sed -n '/^    steps:/,/^      - uses:/p')"
 holds="$(line_of "$engine" 'engine-tree-lock\.sh holds "\$CHROMIUM" "\$LOCK_OWNER"')"
-checks="$(line_of "$engine" 'check\.sh engine')"
+checks="$(line_of "$engine" 'test:engine')"
 if [ "$holds" -gt 0 ] && [ "$holds" -lt "$checks" ]; then
   ok "and makes sure it still holds the tree before checking it"
 else
   fail "and makes sure it still holds the tree before checking it" \
     "holds at line $holds, the checks at line $checks"
 fi
-for what in 'check\.sh engine' 'engine-release-package\.sh' 'engine-guard-client-window\.sh' \
+for what in 'test:engine' 'engine-release-package\.sh' 'run-checks\.sh guard-client-window' \
             'engine-release-publish\.sh' 'engine-release-repin\.sh' 'engine-proof\.sh record'; do
   has "runs $what" "$what" "$engine"
 done

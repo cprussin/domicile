@@ -306,7 +306,7 @@ echo "#$NEW_COLOR after it: $(size_of "$NEW_COLOR") (W H)"
 echo "measured: $MEASURED"
 echo "  (mode answered loads before readopted looked fresh grown)"
 
-# Which end to blame. `scripts/test-app-survives-load-shell-guard.sh` runs
+# Which end to blame. `packages/domicile-engine/tests/test-app-survives-load-shell-guard.sh` runs
 # this block directly. MEASURED is "<mode> <answered> <loads> <before>
 # <readopted> <looked> <fresh> <grown>".
 FAILURE=""

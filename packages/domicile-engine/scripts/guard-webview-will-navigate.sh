@@ -155,7 +155,7 @@ echo "asked: $ASKED"
 echo "served: start=$SERVED_START blocked=$SERVED_BLOCKED allowed=$SERVED_ALLOWED shell-set=$SERVED_SHELL_SET"
 echo
 
-# The verdict. `scripts/test-webview-will-navigate-guard.sh` runs this block
+# The verdict. `packages/domicile-engine/tests/test-webview-will-navigate-guard.sh` runs this block
 # directly.
 FAILURE=""
 PASSED=""

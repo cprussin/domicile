@@ -205,7 +205,7 @@ echo "the browser was asked=$SAW_BROWSER; the shell was asked=$SAW_ASKED and ans
 echo "the page got: the file=$SAW_PICKED any file=$SAW_ANY_PICK nothing=$SAW_NOTHING"
 echo
 
-# Map the readings to a verdict. `scripts/test-webview-upload-guard.sh` runs
+# Map the readings to a verdict. `packages/domicile-engine/tests/test-webview-upload-guard.sh` runs
 # this block directly.
 FAILURE=""
 PASSED=""

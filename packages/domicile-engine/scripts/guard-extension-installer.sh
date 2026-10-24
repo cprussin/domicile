@@ -50,7 +50,7 @@ fi
 NEGATIVE="${NEGATIVE:-0}"
 
 # The mark. Fixed rather than overridable: the fixture's `content.js` paints
-# it, and `scripts/test-extension-installer-guard.sh` holds the two together.
+# it, and `packages/domicile-engine/tests/test-extension-installer-guard.sh` holds the two together.
 readonly COLOR="8E24AA"
 # The shell's background, and the served page's own color: not the
 # content-script guard's, so the two can share a machine without reading each
@@ -202,7 +202,7 @@ fi
 echo
 echo "measured: $MEASURED"
 
-# WHICH END TO BLAME. `scripts/test-extension-installer-guard.sh` runs this
+# WHICH END TO BLAME. `packages/domicile-engine/tests/test-extension-installer-guard.sh` runs this
 # block directly. The last field is whether the stand-in sent the list.
 FAILURE=""
 PASSED=""

@@ -14,9 +14,9 @@ name: Engine
 on:
   push:
     branches: [main]
-    # `.github/scripts/engine-*.sh` and these `scripts/` files are the steps
-    # and checks of this job, so a change to them must run it. Listed by name:
-    # the rest of `scripts/` runs on `ubuntu-latest` and must not take `crux`.
+    # `.github/scripts/engine-*.sh` and `check-runner`'s report are the steps
+    # and the runner of this job, so a change to them must run it. The
+    # package's `tests/` run on `ubuntu-latest` and must not take `crux`.
     # Written out twice because GitHub does not resolve YAML anchors.
     #
     # Markdown is excluded because prose cannot change the build. The exclusion
@@ -32,22 +32,20 @@ on:
       - "!packages/domicile-engine/**/*.md"
       - "!packages/domicile-engine/engine-release.nix"
       - "!packages/domicile-engine/engine-official.nix"
+      - "!packages/domicile-engine/tests/**"
       - .github/workflows/engine.yml
       - .github/scripts/engine-*.sh
-      - scripts/check.sh
-      - scripts/engine-*.sh
-      - scripts/lib/engine-guard.sh
+      - packages/check-runner/src/report.sh
   pull_request:
     paths:
       - packages/domicile-engine/**
       - "!packages/domicile-engine/**/*.md"
       - "!packages/domicile-engine/engine-release.nix"
       - "!packages/domicile-engine/engine-official.nix"
+      - "!packages/domicile-engine/tests/**"
       - .github/workflows/engine.yml
       - .github/scripts/engine-*.sh
-      - scripts/check.sh
-      - scripts/engine-*.sh
-      - scripts/lib/engine-guard.sh
+      - packages/check-runner/src/report.sh
   workflow_dispatch:
 
 # Keyed by ref, so a push can evict only the pending run it supersedes. A
@@ -439,7 +437,7 @@ jobs:
       - name: This run still holds its tree
         run: .github/scripts/engine-tree-lock.sh holds "$CHROMIUM" "$LOCK_OWNER"
 
-      # All of this job's checks, defined in `scripts/check.sh engine` so a
+      # All of this job's checks, the engine package's `test:engine`, so a
       # person on `crux` can run the same suite. Stops at the first failure.
       # See packages/domicile-engine/docs/TESTING.md.
       #
@@ -461,7 +459,9 @@ jobs:
           # Where a failing check's full log goes. /tmp because $TMPDIR inside
           # `nix develop` is per command; `engine-diagnostics.sh` reads it.
           DOMICILE_CHECK_LOG_DIR: /tmp
-        run: nix develop .#full --command ./scripts/check.sh engine
+        run: |
+          nix develop .#full --command bash -c 'bun install --frozen-lockfile &&
+            node_modules/.bin/turbo run test:engine --filter=@domicile-desktop/engine --ui=stream'
 
       # ===================================================================
       # Release
@@ -501,7 +501,7 @@ jobs:
             nix develop .#full --command cargo build -p domicile-compositor
           DOMICILE_CHROMIUM="$CHROMIUM" DOMICILE_ENGINE_OUT=out/Release-staged \
             .github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- \
-            nix develop .#full --command ./scripts/engine-guard-client-window.sh
+            nix develop .#full --command packages/domicile-engine/scripts/run-checks.sh guard-client-window
 
       - name: Publish the release
         if: ${{ needs.build.outputs.build == 'true' }}

@@ -175,7 +175,7 @@ STARTED+=("$COMP")
 # Wait for the compositor only. `chrome protocol socket up` is logged after the
 # Wayland socket opens and needs no client. Do not wait for a frame sink here:
 # that needs a client, which starts below.
-# scripts/test-the-client-window-guard-waits-for-the-compositor.sh checks this.
+# packages/domicile-engine/tests/test-the-client-window-guard-waits-for-the-compositor.sh checks this.
 COMPOSITOR_LOOKS="${COMPOSITOR_LOOKS:-120}"
 
 UP=0

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Checks that workflows call checks defined under `scripts/` instead of
-# defining them in `run:` blocks.
+# Checks that workflows call checks defined in scripts (`scripts/`, a package's
+# task) instead of defining them in `run:` blocks.
 #
 # A check defined only in YAML cannot run outside CI, so copies of it drift
 # unnoticed. Workflows may still carry what is specific to CI: the runner
@@ -11,6 +11,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKFLOWS="$ROOT/.github/workflows"
 CHECK="$ROOT/scripts/check.sh"
 GUARDS="$ROOT/packages/domicile-engine/scripts"
+RUN_CHECKS="$GUARDS/run-checks.sh"
 [ -d "$WORKFLOWS" ] || { echo "no $WORKFLOWS" >&2; exit 1; }
 [ -f "$CHECK" ] || { echo "no $CHECK" >&2; exit 1; }
 [ -d "$GUARDS" ] || { echo "no $GUARDS" >&2; exit 1; }
@@ -36,9 +37,9 @@ without_comments() { # workflow
 # run) in YAML.
 echo "no workflow holds a check's definition"
 
-# Patterns match invocations, not bare names: `engine-guard-client-window.sh`
-# contains `guard-client-window.sh`, and an error message may mention
-# `ozone_unittests`.
+# Patterns match invocations, not bare names: `run-checks.sh
+# guard-client-window` names a guard without running its script, and an error
+# message may mention `ozone_unittests`.
 for pattern in \
   'packages/domicile-engine/scripts/guard-' \
   'packages/domicile-engine/scripts/spike' \
@@ -60,22 +61,22 @@ do
   fi
 done
 
-# --- every guard is reachable from a script ---------------------------------
+# --- every guard is run -----------------------------------------------------
 
-# Every guard script must be run by some `scripts/engine-*.sh`; otherwise it
-# never runs.
+# Every guard script must be listed in `run-checks.sh`; otherwise it never
+# runs.
 echo "every guard is run by something"
 
 guards=0
 for guard in "$GUARDS"/guard-*.sh; do
   [ -e "$guard" ] || continue
   guards=$((guards + 1))
-  name="$(basename "$guard")"
-  if grep -qlF "$name" "$ROOT"/scripts/engine-*.sh 2>/dev/null; then
-    ok "$name is run by a scripts/engine-*.sh"
+  name="$(basename "$guard" .sh)"
+  if grep -qx "  $name" "$RUN_CHECKS"; then
+    ok "$name is run by run-checks.sh"
   else
-    fail "$name is run by a scripts/engine-*.sh" \
-      "nothing under scripts/ names it, so it runs nowhere"
+    fail "$name is run by run-checks.sh" \
+      "run-checks.sh does not list it, so it runs nowhere"
   fi
 done
 
@@ -87,30 +88,13 @@ else
     "only $guards matched $GUARDS/guard-*.sh; the rules above asserted nothing"
 fi
 
-# --- the engine group's list holds every engine check ------------------------
-
-# `check.sh` lists the engine group's scripts in order (cheap checks first)
-# instead of globbing them. This rule ensures the list stays complete.
-echo "the engine group runs every engine check"
-
-engine_checks=0
-for script in "$ROOT"/scripts/engine-*.sh; do
-  [ -e "$script" ] || continue
-  engine_checks=$((engine_checks + 1))
-  name="$(basename "$script")"
-  if grep -qF "scripts/$name" "$CHECK"; then
-    ok "$name is in the engine group"
-  else
-    fail "$name is in the engine group" \
-      "check.sh's engine list does not name it, so it never runs"
-  fi
-done
-
-if [ "$engine_checks" -ge 12 ]; then
-  ok "the engine checks were found at all ($engine_checks of them)"
+# `run-checks.sh` is the engine package's `test:engine`, so a workflow must run
+# that task or the guards run only by hand.
+if grep -qE 'turbo run test:engine' "$WORKFLOWS"/*.yml; then
+  ok "a workflow runs test:engine"
 else
-  fail "the engine checks were found at all" \
-    "only $engine_checks matched scripts/engine-*.sh; the rules above asserted nothing"
+  fail "a workflow runs test:engine" \
+    "no workflow runs \`turbo run test:engine\`, so the guards run only by hand"
 fi
 
 # --- the group itself never opts out of its controls -------------------------
@@ -169,17 +153,18 @@ else
   done
 fi
 
-# --- the workflows that check, check through scripts/ -----------------------
+# --- the workflows that check, check through scripts ------------------------
 
-# Workflows that check things must do so through `scripts/`. The list is
-# explicit. Excluded:
+# Workflows that check things must do so through a script or a turbo task.
+# The list is explicit. Excluded:
 #
 #   engine-cancel-stale.yml   cancels stale runs; asserts nothing.
 #   engine-release.yml        builds and publishes a tarball; its guard runs
-#                             from `scripts/`, which the first rule enforces.
+#                             from `run-checks.sh`, which the first rule
+#                             enforces.
 #   engine-drm-probe.yml      dispatch-only hardware run; its suites run from
-#                             `scripts/`.
-echo "the checking workflows check through scripts/"
+#                             the engine package's scripts.
+echo "the checking workflows check through scripts"
 
 for name in cargo-test turbo-test e2e nix-build engine pinned-engine distro-packages; do
   workflow="$WORKFLOWS/$name.yml"
@@ -187,11 +172,11 @@ for name in cargo-test turbo-test e2e nix-build engine pinned-engine distro-pack
     fail "$name.yml exists" "it does not, so nothing below was asserted about it"
     continue
   fi
-  if without_comments "$workflow" | grep -qE '(\./)?scripts/[a-z][a-z0-9-]*\.sh'; then
-    ok "$name.yml reaches its checks through scripts/"
+  if without_comments "$workflow" | grep -qE '(\./)?scripts/[a-z][a-z0-9-]*\.sh|turbo run test'; then
+    ok "$name.yml reaches its checks through scripts"
   else
-    fail "$name.yml reaches its checks through scripts/" \
-      "it names nothing under scripts/, so whatever it checks is defined in YAML"
+    fail "$name.yml reaches its checks through scripts" \
+      "it names no script or turbo task, so whatever it checks is defined in YAML"
   fi
 done
 

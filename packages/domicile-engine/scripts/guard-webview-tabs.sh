@@ -62,11 +62,11 @@ fi
 NEGATIVE="${NEGATIVE:-0}"
 
 # The fixture, as the tray must name it. Fixed rather than overridable:
-# `scripts/test-webview-tabs-guard.sh` holds the id to the manifest's `key`.
+# `packages/domicile-engine/tests/test-webview-tabs-guard.sh` holds the id to the manifest's `key`.
 readonly ID="almpdkloglkdomnhghbmejhddjoajijj"
 readonly POPUP="chrome-extension://$ID/popup.html"
 # The factor the popup zooms to, as the shell and the popup both print it.
-# `scripts/test-webview-tabs-guard.sh` holds it to the fixture's.
+# `packages/domicile-engine/tests/test-webview-tabs-guard.sh` holds it to the fixture's.
 readonly ZOOM="1.50"
 
 EXTENSION="$SCRIPTS/guard-webview-tabs-extension"
@@ -236,7 +236,7 @@ echo "measured: $MEASURED"
 echo "what the popup answered, and the zoom the windows heard:"
 grep -F -e '"GUARD answer ' -e '"GUARD zoom ' "$ENGINE_LOG" | tail -7 || true
 
-# WHICH END TO BLAME. `scripts/test-webview-tabs-guard.sh` runs this block
+# WHICH END TO BLAME. `packages/domicile-engine/tests/test-webview-tabs-guard.sh` runs this block
 # directly. MEASURED is "<leg> <sent> <tray> <shown> <focused> <answered>
 # <named-a> <named-b> <zoomed-a> <zoomed-b> <read> <framed>".
 FAILURE=""

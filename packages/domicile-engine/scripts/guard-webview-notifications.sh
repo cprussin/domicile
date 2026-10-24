@@ -189,7 +189,7 @@ fi
 echo
 echo "measured: $MEASURED"
 
-# The verdict. `scripts/test-webview-notifications-guard.sh` runs this block
+# The verdict. `packages/domicile-engine/tests/test-webview-notifications-guard.sh` runs this block
 # directly.
 FAILURE=""
 PASSED=""

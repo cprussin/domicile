@@ -6,7 +6,7 @@
 // is the tray's `activateExtension`; that grant is what the guard checks.
 //
 // The color must match the guard's `COLOR`
-// (scripts/test-webview-active-tab-guard.sh checks this). `!important` beats
+// (packages/domicile-engine/tests/test-webview-active-tab-guard.sh checks this). `!important` beats
 // the page's own background.
 //
 // Read from `globalThis` because the repo's linter does not know the

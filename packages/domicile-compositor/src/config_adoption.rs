@@ -25,7 +25,7 @@ use crate::{pam, shell_config};
 ///
 /// Kept as two enums because `domicile-protocol` depends only on serde, like
 /// `DisplayTransform` and `domicile_config::Transform`.
-/// `scripts/test-themes-agree.sh` keeps them in sync.
+/// `packages/domicile-engine/tests/test-themes-agree.sh` keeps them in sync.
 pub fn theme_on_the_wire(mode: ThemeMode) -> Theme {
     match mode {
         ThemeMode::Dark => Theme::Dark,

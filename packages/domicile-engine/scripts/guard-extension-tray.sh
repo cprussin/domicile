@@ -63,7 +63,7 @@ fi
 NEGATIVE="${NEGATIVE:-0}"
 
 # The fixture, as the tray must report it. Fixed rather than overridable:
-# `scripts/test-extension-tray-guard.sh` holds them to the fixture -- the id to
+# `packages/domicile-engine/tests/test-extension-tray-guard.sh` holds them to the fixture -- the id to
 # the manifest's `key`, the badge and color to the service worker, the title
 # to the manifest, the context to what Chrome calls an extension page in a tab.
 readonly ID="cobncddhpfhclknjbapgflpohofecjhg"
@@ -247,7 +247,7 @@ grep -F '"GUARD tray ' "$ENGINE_LOG" | tail -3 || true
 echo "the sizes the <webview> reported:"
 grep -F '"GUARD size ' "$ENGINE_LOG" | tail -3 || true
 
-# WHICH END TO BLAME. `scripts/test-extension-tray-guard.sh` runs this block
+# WHICH END TO BLAME. `packages/domicile-engine/tests/test-extension-tray-guard.sh` runs this block
 # directly. MEASURED is "<leg> <sent> <heard> <tray> <opened> <contexts>
 # <closed> <sized>".
 FAILURE=""

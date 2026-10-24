@@ -10,7 +10,7 @@
 //
 // The same list exists in `domicile-config`, `domicile-protocol`, the
 // engine's `theme.h`, `mojom::Theme` and `domicile_theme.idl`.
-// `scripts/test-themes-agree.sh` checks they match in members and order.
+// `packages/domicile-engine/tests/test-themes-agree.sh` checks they match in members and order.
 
 import { z } from "zod";
 

@@ -216,25 +216,27 @@ else
   fail "a step script builds the engine" "no .github/scripts/engine-*.sh"
 fi
 
-# The checks the job runs: `scripts/engine-*.sh`, the guard library
-# `scripts/lib/engine-guard.sh`, and the runner `scripts/check.sh`. Editing them
-# changes what the job proves, so they must trigger it.
-engine_check="$(cd "$ROOT" && ls scripts/engine-*.sh 2>/dev/null | head -1)"
-if [ -n "$engine_check" ]; then
-  triggers "an engine check builds the engine" "$engine_check" "${patterns[@]}"
-else
-  fail "an engine check builds the engine" "no scripts/engine-*.sh"
-fi
+# The checks the job runs live in the package, and `check-runner`'s report
+# runs them. Editing either changes what the job proves, so both must trigger
+# it.
+real packages/domicile-engine/scripts/run-checks.sh &&
+  triggers "the engine's runner builds the engine" \
+    packages/domicile-engine/scripts/run-checks.sh "${patterns[@]}"
 
-real scripts/lib/engine-guard.sh &&
+real packages/domicile-engine/scripts/lib-engine-guard.sh &&
   triggers "the guard library builds the engine" \
-    scripts/lib/engine-guard.sh "${patterns[@]}"
+    packages/domicile-engine/scripts/lib-engine-guard.sh "${patterns[@]}"
 
-real scripts/check.sh &&
-  triggers "the runner builds the engine" scripts/check.sh "${patterns[@]}"
+real packages/check-runner/src/report.sh &&
+  triggers "the report builds the engine" \
+    packages/check-runner/src/report.sh "${patterns[@]}"
 
-# Other checks under `scripts/` run on `ubuntu-latest` and must not take the
-# `crux` slot. This catches a widening to `scripts/**`.
+# The package's own tests and every other check run on `ubuntu-latest` and
+# must not take the `crux` slot.
+real packages/domicile-engine/tests/test-annotate.sh &&
+  does_not_trigger "an engine package test does not build the engine" \
+    packages/domicile-engine/tests/test-annotate.sh "${patterns[@]}"
+
 does_not_trigger "an unrelated check does not build the engine" \
   scripts/test-american-english.sh "${patterns[@]}"
 
