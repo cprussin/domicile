@@ -6,7 +6,7 @@
 # would change its hash on every "Version packages" pull request.
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SHELL_WORKSPACE="$ROOT/distro/shell-workspace.sh"
 BUN="$(command -v bun)" || { echo "SKIP: no bun"; exit 77; }
 

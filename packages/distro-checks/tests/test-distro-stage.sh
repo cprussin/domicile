@@ -8,7 +8,7 @@
 # display manager, systemd and the portal look.
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 STAGE_SH="$ROOT/distro/stage.sh"
 [ -x "$STAGE_SH" ] || { echo "no $STAGE_SH" >&2; exit 1; }
 

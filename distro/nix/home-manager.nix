@@ -3,7 +3,7 @@
 # Writes `~/.config/domicile/domicile.json` and installs a `domicile` that runs
 # the configured shell by default, plus a desktop entry for each of `webApps`.
 # `settings` mirrors the `domicile-config` crate's schema;
-# `scripts/test-the-home-manager-module-agrees.sh` checks that they match.
+# `packages/distro-checks/tests/test-the-home-manager-module-agrees.sh` checks that they match.
 # `settings` is freeform so a newer domicile works with an older module.
 # `configDirectory` builds a TS config into that file and a shell.
 #

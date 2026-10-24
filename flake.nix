@@ -17,7 +17,7 @@
 
       # The bun `package.json` asks for, ahead of nixpkgs'. The x86_64 build is
       # nixpkgs' choice of upstream zip. Drop this once nixpkgs ships it.
-      # `scripts/nix-the-flake-ships-the-bun-package-json-asks-for.sh` checks
+      # `packages/distro-checks/tests/nix-the-flake-ships-the-bun-package-json-asks-for.sh` checks
       # the version.
       bunOverlay = final: prev: {
         bun = prev.bun.overrideAttrs (finalAttrs: old: {
@@ -673,7 +673,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-DXOgtlPVSs33snBT3ADATkIMN6VhSut4apQEn1RCKFc=";
+        outputHash = "sha256-GLKRHv3Z5kcv/X6fL4n7JyxE3X6camgCqXbdgZomIxY=";
       };
 
       # The production modules `shellWorkspace` ships, from
@@ -699,7 +699,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-3iy7Ujq6aq3kBM6sBIBvd2X2hLX1eEDgp4nHjOXmYhc=";
+        outputHash = "sha256-+zGe64RV/CzroPXQfSdZqpmTNgQ4rfFWbm12zGITcSw=";
       };
 
 
@@ -796,7 +796,7 @@
 
       # `nix flake check` evaluates the two modules, which nothing else does.
       #
-      # `scripts/test-the-home-manager-module-agrees.sh` checks option names
+      # `packages/distro-checks/tests/test-the-home-manager-module-agrees.sh` checks option names
       # against the Rust schema without nix. These checks cover types,
       # defaults and the generated config JSON.
       #
