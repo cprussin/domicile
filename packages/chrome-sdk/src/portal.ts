@@ -344,6 +344,8 @@ export const CastSource = {
     id: string;
     /** Its title as the shell named it, for the sharing indicator. */
     title: string;
+    /** Part of its page alone, as a window's `area` is. */
+    area?: ShotRect | undefined;
   }) => ({ ...window, kind: CastSourceKind.BrowserWindow as const }),
   Monitor: (monitor: {
     /** Its `wl_output` name, as `DomicileHost.displays` names it. */
@@ -365,6 +367,11 @@ export const CastSource = {
     title: string;
     /** Its Wayland app id, which names its desktop entry; empty if unset. */
     appId: string;
+    /**
+     * Part of the window alone, in pixels of its frame as
+     * `System.previewWindow` draws it. All of it when unset.
+     */
+    area?: ShotRect | undefined;
   }) => ({ ...window, kind: CastSourceKind.Window as const }),
 };
 
@@ -704,13 +711,27 @@ export const PortalAnswer = {
    * A browser window, by its `DomicileBrowserWindow` id; `copy` as above.
    * Nothing the shell draws over the window is in the shot.
    */
-  ScreenshotBrowserWindow: (id: string, copy: boolean) => ({
+  ScreenshotBrowserWindow: (
+    id: string,
+    copy: boolean,
+    area?: ShotRect | undefined,
+  ) => ({
+    area,
     copy,
     id,
     kind: PortalAnswerKind.ScreenshotBrowserWindow as const,
   }),
-  /** One of the request's windows, by {@link ShotWindow.id}; `copy` as above. */
-  ScreenshotWindow: (id: string, copy: boolean) => ({
+  /**
+   * One of the request's windows, by {@link ShotWindow.id}; `copy` as above.
+   * `area` is part of it, in pixels of its frame as `System.previewWindow`
+   * draws it; all of it when unset.
+   */
+  ScreenshotWindow: (
+    id: string,
+    copy: boolean,
+    area?: ShotRect | undefined,
+  ) => ({
+    area,
     copy,
     id,
     kind: PortalAnswerKind.ScreenshotWindow as const,
@@ -1549,9 +1570,15 @@ const wireAnswer = (answer: PortalAnswer): object => {
     case PortalAnswerKind.Screenshot:
       return { area: answer.area, copy: answer.copy, kind: "screenshot" };
     case PortalAnswerKind.ScreenshotWindow:
-      return { copy: answer.copy, id: answer.id, kind: "screenshot_window" };
+      return {
+        ...wireArea(answer.area),
+        copy: answer.copy,
+        id: answer.id,
+        kind: "screenshot_window",
+      };
     case PortalAnswerKind.ScreenshotBrowserWindow:
       return {
+        ...wireArea(answer.area),
         copy: answer.copy,
         id: answer.id,
         kind: "screenshot_browser_window",
@@ -1576,15 +1603,24 @@ const wireOptions = (options: PrintOptions): object => ({
 const wireSource = (source: CastSource): object => {
   switch (source.kind) {
     case CastSourceKind.Window:
-      return { id: source.id, type: "window" };
+      return { ...wireArea(source.area), id: source.id, type: "window" };
     case CastSourceKind.BrowserWindow:
-      return { id: source.id, title: source.title, type: "browser_window" };
+      return {
+        ...wireArea(source.area),
+        id: source.id,
+        title: source.title,
+        type: "browser_window",
+      };
     case CastSourceKind.Monitor:
       return { name: source.name, type: "monitor" };
     case CastSourceKind.Region:
       return { position: source.position, size: source.size, type: "region" };
   }
 };
+
+/** Part of a window, when only part is picked. */
+const wireArea = (area: ShotRect | undefined): { area?: ShotRect } =>
+  area === undefined ? {} : { area };
 
 /** The value `pairs` gives `wire`. Every wire name the schema takes is listed. */
 const valueFor = <W extends string, V>(pairs: Pairs<W, V>, wire: W): V => {

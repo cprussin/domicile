@@ -49,6 +49,7 @@ use crate::reply::{reply, Replier, Reply};
 pub use captures::Capturer;
 pub use cursor::CursorMode;
 pub use lifecycle::Ended;
+pub use pacing::Rect;
 pub use producer::ToWayland;
 pub use region::Screen;
 pub use shots::{Desk, Developed, DevelopedWindow, Shown};
@@ -88,6 +89,9 @@ pub struct Candidate {
     /// Where it is on the desktop, and its size, in logical pixels. `None`
     /// before the page has placed it.
     pub bounds: Option<Region>,
+    /// The part of a window picked, in its frame's pixels, or `None` for
+    /// all of it.
+    pub part: Option<Rect>,
 }
 
 /// One stream, as long as it lives.
@@ -112,6 +116,8 @@ pub enum Request {
     Start {
         stream: StreamId,
         source: Source,
+        /// Part of a window's frame, in its pixels; see [`Candidate::part`].
+        part: Option<Rect>,
         cursor: CursorMode,
         listener: Listener,
     },
@@ -164,12 +170,13 @@ impl Casting {
         }
     }
 
-    /// Starts a stream of `source`. `listener` makes the stream's listener
-    /// from its id, before the stream can end; the listener hears `Ready`
-    /// with the node, then `Ended` once.
+    /// Starts a stream of `source`, or of `part` of a window's frame.
+    /// `listener` makes the stream's listener from its id, before the stream
+    /// can end; the listener hears `Ready` with the node, then `Ended` once.
     pub fn start(
         &self,
         source: Source,
+        part: Option<Rect>,
         cursor: CursorMode,
         listener: impl FnOnce(StreamId) -> Listener,
     ) -> StreamId {
@@ -177,6 +184,7 @@ impl Casting {
         self.send(Request::Start {
             stream,
             source,
+            part,
             cursor,
             listener: listener(stream),
         });

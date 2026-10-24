@@ -400,6 +400,13 @@ const drawnAtHalfSize = (element: HTMLElement): HTMLElement => {
   return element;
 };
 
+/** Loads `preview` as a 200x100 frame, as the browser would decode it. */
+const loaded200x100 = (preview: HTMLElement): void => {
+  Object.defineProperty(preview, "naturalWidth", { value: 200 });
+  Object.defineProperty(preview, "naturalHeight", { value: 100 });
+  fireEvent.load(preview);
+};
+
 describe("PortalDialogs", () => {
   describe("rendering", () => {
     it("draws nothing while no application asks", () => {
@@ -1507,6 +1514,47 @@ describe("PortalDialogs", () => {
       ]);
     });
 
+    it("saves a part dragged over a window that is not on screen", async () => {
+      const host = new FakeHost();
+      render(
+        <PortalDialogs
+          host={host.host}
+          shownWindows={() => []}
+          systemOf={previewing()}
+        />,
+      );
+      host.push([frozen(1, "screenshot")]);
+      await userEvent.click(
+        screen.getByRole("radio", { name: "kitty: ~/src" }),
+      );
+      loaded200x100(await screen.findByRole("img", { name: "kitty: ~/src" }));
+      const preview = drawnAtHalfSize(
+        screen.getByRole("group", {
+          name: "Drag to pick a part of the window",
+        }),
+      );
+      fireEvent.pointerDown(preview, { clientX: 60, clientY: 30 });
+      fireEvent.pointerMove(preview, { clientX: 20, clientY: 45 });
+      fireEvent.pointerUp(preview, { clientX: 20, clientY: 45 });
+
+      expect(screen.getByRole("figure")).toHaveTextContent("54 × 31");
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "A part of the window",
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(host.answers).toEqual([
+        [
+          1,
+          {
+            area: { height: 31, width: 54, x: 13, y: 20 },
+            copy: false,
+            id: "app-3",
+            kind: "screenshot_window",
+          },
+        ],
+      ]);
+    });
+
     it("previews a window that is not on screen as it last drew itself", async () => {
       const host = new FakeHost();
       host.fake.set({ browserWindows: [browserWindow("2", "Hidden")] });
@@ -2105,6 +2153,49 @@ describe("screen cast", () => {
       ).toHaveAttribute("src", "data:image/png;base64,2");
       await userEvent.click(screen.getByRole("checkbox", { name: "HDMI-A-1" }));
       expect(screen.getByRole("img", { name: "The desk" })).toBeInTheDocument();
+    });
+
+    it("shares a part dragged over a window that is not on screen", async () => {
+      const host = new FakeHost();
+      host.fake.set({ browserWindows: [browserWindow("2", "Docs")] });
+      render(
+        <PortalDialogs
+          host={host.host}
+          shownWindows={shown}
+          systemOf={previewing()}
+        />,
+      );
+      host.push([withDesk()]);
+      await userEvent.click(
+        screen.getByRole("checkbox", { name: "Browser: Docs" }),
+      );
+      loaded200x100(await screen.findByRole("img", { name: "Browser: Docs" }));
+      const preview = drawnAtHalfSize(
+        screen.getByRole("group", {
+          name: "Drag to pick a part of the window",
+        }),
+      );
+      fireEvent.pointerDown(preview, { clientX: 60, clientY: 30 });
+      fireEvent.pointerMove(preview, { clientX: 20, clientY: 45 });
+      fireEvent.pointerUp(preview, { clientX: 20, clientY: 45 });
+      await userEvent.click(screen.getByRole("button", { name: "Share" }));
+
+      expect(host.answers).toEqual([
+        [
+          5,
+          {
+            kind: "screen_cast",
+            sources: [
+              {
+                area: { height: 31, width: 54, x: 13, y: 20 },
+                id: "2",
+                title: "Docs",
+                type: "browser_window",
+              },
+            ],
+          },
+        ],
+      ]);
     });
 
     it("says when the source picked is not on screen", async () => {

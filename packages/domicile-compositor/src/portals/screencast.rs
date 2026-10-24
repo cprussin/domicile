@@ -29,7 +29,7 @@ use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 use super::queue::{ask, Queue};
 use super::screenshot::{frozen, Shoot};
 use super::session;
-use crate::casting::{Candidate, Casting, CursorMode, Event, Region, Source, StreamId};
+use crate::casting::{self, Candidate, Casting, CursorMode, Event, Region, Source, StreamId};
 use crate::reply::{reply, Replier};
 
 /// The `org.freedesktop.impl.portal.ScreenCast` version implemented.
@@ -387,12 +387,15 @@ impl ScreenCast {
             .iter()
             .map(|candidate| {
                 let (ready, node) = reply();
-                let stream = self
-                    .casting
-                    .start(candidate.source.clone(), cursor, |stream| {
+                let stream = self.casting.start(
+                    candidate.source.clone(),
+                    candidate.part,
+                    cursor,
+                    |stream| {
                         ending.started(stream);
                         listener(stream, ready, ending.clone())
-                    });
+                    },
+                );
                 (stream, node)
             })
             .collect();
@@ -426,6 +429,9 @@ impl ScreenCast {
         let Some(shared) = picked
             .iter()
             .map(|candidate| match &candidate.source {
+                // A part is picked from a frame, which a restart does not
+                // keep.
+                _ if candidate.part.is_some() => None,
                 Source::Window(_) => Some(Shared::Window {
                     app_id: candidate.app_id.clone(),
                     title: candidate.title.clone(),
@@ -643,7 +649,7 @@ fn chosen(picks: &[CastPick], open: &[Candidate], selected: &Selected) -> Option
         .iter()
         .map(|pick| {
             let source = match pick {
-                CastPick::Window { id } => Source::Window(id.clone()),
+                CastPick::Window { id, .. } => Source::Window(id.clone()),
                 CastPick::BrowserWindow { id, .. } => Source::BrowserWindow(id.clone()),
                 CastPick::Monitor { name } => Source::Monitor(name.clone()),
                 CastPick::Region { position, size } => Source::Region(Region {
@@ -654,7 +660,7 @@ fn chosen(picks: &[CastPick], open: &[Candidate], selected: &Selected) -> Option
             if !asked_for(selected, &source) {
                 return None;
             }
-            match (source, pick) {
+            let candidate = match (source, pick) {
                 (Source::Region(Region { position, size }), _) => {
                     (size.0 > 0 && size.1 > 0).then(|| region(position, size))
                 }
@@ -666,9 +672,31 @@ fn chosen(picks: &[CastPick], open: &[Candidate], selected: &Selected) -> Option
                     .iter()
                     .find(|candidate| candidate.source == source)
                     .cloned(),
-            }
+            }?;
+            Some(Candidate {
+                part: part_of(pick),
+                ..candidate
+            })
         })
         .collect()
+}
+
+/// The part of a window `pick` names, or `None` for all of it or an empty
+/// part.
+fn part_of(pick: &CastPick) -> Option<casting::Rect> {
+    match pick {
+        CastPick::Window { area, .. } | CastPick::BrowserWindow { area, .. } => area
+            .filter(|area| area.width > 0 && area.height > 0)
+            .map(|area| {
+                (
+                    area.x as i32,
+                    area.y as i32,
+                    area.width as i32,
+                    area.height as i32,
+                )
+            }),
+        CastPick::Monitor { .. } | CastPick::Region { .. } => None,
+    }
 }
 
 /// Whether `source` is of a type the application asked for.
@@ -696,6 +724,7 @@ fn browser_window(id: String, title: String) -> Candidate {
         title,
         app_id: String::new(),
         bounds: None,
+        part: None,
     }
 }
 
@@ -707,6 +736,7 @@ fn region(position: (i32, i32), size: (i32, i32)) -> Candidate {
         title: String::new(),
         app_id: String::new(),
         bounds: Some(region),
+        part: None,
     }
 }
 
@@ -865,6 +895,7 @@ mod tests {
                         source,
                         cursor,
                         mut listener,
+                        ..
                     }) => {
                         let _ = told.send(format!("start {source:?} {cursor:?}"));
                         listener(Event::Ready { node: 42 });
@@ -906,6 +937,7 @@ mod tests {
                 source: Source::Window("app-3".into()),
                 title: "Notes".into(),
                 app_id: "org.gnome.TextEditor".into(),
+                part: None,
                 bounds: Some(Region {
                     position: (10, 20),
                     size: (640, 480),
@@ -916,6 +948,7 @@ mod tests {
                 title: "Todo".into(),
                 app_id: String::new(),
                 bounds: None,
+                part: None,
             },
         ]
     }
@@ -927,6 +960,7 @@ mod tests {
                 source: Source::Monitor("drm-1".into()),
                 title: "BOE NE135A1M-NY1".into(),
                 app_id: String::new(),
+                part: None,
                 bounds: Some(Region {
                     position: (0, 0),
                     size: (1920, 1080),
@@ -936,6 +970,7 @@ mod tests {
                 source: Source::Monitor("drm-2".into()),
                 title: String::new(),
                 app_id: String::new(),
+                part: None,
                 bounds: Some(Region {
                     position: (1920, 0),
                     size: (1280, 800),
@@ -1030,7 +1065,13 @@ mod tests {
 
     /// Pick `app-3` in the dialog `Start` puts up.
     fn pick_notes(served: &Served) -> (u32, HashMap<String, OwnedValue>) {
-        pick(served, vec![CastPick::Window { id: "app-3".into() }])
+        pick(
+            served,
+            vec![CastPick::Window {
+                id: "app-3".into(),
+                area: None,
+            }],
+        )
     }
 
     /// Pick `sources` in the dialog `Start` puts up.
@@ -1309,6 +1350,7 @@ mod tests {
         CastPick::BrowserWindow {
             id: "7".into(),
             title: "Meet".into(),
+            area: None,
         }
     }
 
@@ -1580,7 +1622,10 @@ mod tests {
         let asked =
             |types: u32| selected(&options(vec![("types", Value::from(types))])).expect("selected");
         let open: Vec<Candidate> = windows().into_iter().chain(monitors()).collect();
-        let window = |id: &str| CastPick::Window { id: id.into() };
+        let window = |id: &str| CastPick::Window {
+            id: id.into(),
+            area: None,
+        };
         let monitor = |name: &str| CastPick::Monitor { name: name.into() };
         let region = |size: (i32, i32)| CastPick::Region {
             position: (0, 0),
@@ -1621,6 +1666,35 @@ mod tests {
         assert_eq!(
             chosen(&[monitor("drm-2")], &open, &asked(1)),
             Some(vec![monitors()[1].clone()])
+        );
+    }
+
+    /// A part of a window dragged over its preview is cast alone; an empty
+    /// one is all of it.
+    #[test]
+    fn the_shell_may_pick_part_of_a_window() {
+        let asked = selected(&options(vec![("types", Value::from(2u32))])).expect("selected");
+        let open: Vec<Candidate> = windows().into_iter().chain(monitors()).collect();
+        let part = |width, height| CastPick::Window {
+            id: "app-4".into(),
+            area: Some(domicile_protocol::ShotRect {
+                x: 1,
+                y: 2,
+                width,
+                height,
+            }),
+        };
+
+        assert_eq!(
+            chosen(&[part(3, 4)], &open, &asked),
+            Some(vec![Candidate {
+                part: Some((1, 2, 3, 4)),
+                ..windows()[1].clone()
+            }])
+        );
+        assert_eq!(
+            chosen(&[part(0, 4)], &open, &asked),
+            Some(vec![windows()[1].clone()])
         );
     }
 

@@ -89,6 +89,11 @@ export const ScreenCastDialog = ({
   );
   // An area of the desk shot dragged in place of the picks.
   const [dragged, setDragged] = useState<ShotRect | undefined>(undefined);
+  // A part dragged over the window picked last, drawn alone as it is not on
+  // screen, by the window's index.
+  const [part, setPart] = useState<
+    { index: number; area: ShotRect } | undefined
+  >(undefined);
   const [drawing, setDrawing] = useState(false);
   const screens: Offered[] = body.sources.flatMap((source) =>
     source.kind === CastSourceKind.Monitor
@@ -173,7 +178,13 @@ export const ScreenCastDialog = ({
                   desk !== undefined && dragged !== undefined
                     ? [Source.Region(onDesk(desk, dragged))]
                     : offered.flatMap(({ source }, index) =>
-                        picked.includes(index) ? [source] : [],
+                        picked.includes(index)
+                          ? [
+                              part?.index === index
+                                ? partOf(source, part.area)
+                                : source,
+                            ]
+                          : [],
                       ),
                 ),
               );
@@ -195,9 +206,10 @@ export const ScreenCastDialog = ({
     >
       <p className={askerStyles}>{`${asker} wants to record`}</p>
       <SourcePicker
-        caption={caption(offered, picked, dragged, body.region)}
+        caption={caption(offered, picked, dragged, part, body.region)}
         desk={desk}
         dragged={dragged}
+        draggedPart={part?.area}
         label="What to share"
         multiple={body.multiple}
         onDrag={
@@ -205,12 +217,20 @@ export const ScreenCastDialog = ({
             ? (area) => {
                 setDragged(area);
                 setPicked([]);
+                setPart(undefined);
               }
             : undefined
         }
+        onDragPart={(area) => {
+          const index = picked.at(-1);
+          if (index !== undefined) {
+            setPart({ area, index });
+          }
+        }}
         onPick={(indices) => {
           setPicked(indices);
           setDragged(undefined);
+          setPart(undefined);
         }}
         picked={picked}
         previewWindow={previewWindow}
@@ -241,14 +261,27 @@ const title = (
   }
 };
 
+/** `source`, or `area` of it when it is a window. */
+const partOf = (source: CastSource, area: ShotRect): CastSource => {
+  switch (source.kind) {
+    case CastSourceKind.Window:
+    case CastSourceKind.BrowserWindow:
+      return { ...source, area };
+    case CastSourceKind.Monitor:
+    case CastSourceKind.Region:
+      return source;
+  }
+};
+
 /**
- * What the desk says of the sources `picked` from `offered`, or of the area
- * `dragged`, and whether a `region` may be dragged.
+ * What the desk says of the sources `picked` from `offered`, of the area
+ * `dragged` or of a window's `part`, and whether a `region` may be dragged.
  */
 const caption = (
   offered: readonly Offered[],
   picked: readonly number[],
   dragged: ShotRect | undefined,
+  part: { index: number; area: ShotRect } | undefined,
   region: boolean,
 ): string => {
   if (dragged !== undefined) {
@@ -257,8 +290,10 @@ const caption = (
     return region
       ? "Pick what to share, or drag over the desk for an area."
       : "Pick what to share.";
+  } else if (part !== undefined) {
+    return "A part of the window, shared as it draws itself.";
   } else if (picked.some((index) => offered[index]?.area === undefined)) {
-    return "Not on screen: shared as it draws itself.";
+    return "Not on screen: shared as it draws itself. Drag over it to pick a part.";
   } else {
     return "Shared live, as it changes.";
   }

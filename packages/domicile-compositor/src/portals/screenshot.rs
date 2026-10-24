@@ -19,8 +19,8 @@ use domicile_host::screenshot::{
 };
 use domicile_host::system::Kept;
 use domicile_protocol::{
-    AccessDialog, DeskRect, FrozenDesk, PortalAnswer, PortalKind, PreviewedWindow, SystemError,
-    SystemErrorKind, SHELL_APP_ID,
+    AccessDialog, DeskRect, FrozenDesk, PortalAnswer, PortalKind, PreviewedWindow, ShotRect,
+    SystemError, SystemErrorKind, SHELL_APP_ID,
 };
 use tracing::warn;
 use zbus::object_server::ObjectServer;
@@ -380,16 +380,48 @@ async fn picked(shots: &Shots, desk: &Desk, answer: PortalAnswer) -> Result<Pick
             shot: crop(&desk.shot, area),
             copy,
         }),
-        PortalAnswer::ScreenshotWindow { id, copy } => (shots.shoot_window)(id)
+        PortalAnswer::ScreenshotWindow { id, copy, area } => (shots.shoot_window)(id)
             .await
-            .map(|shot| Picked { shot, copy })
+            .map(|shot| Picked {
+                shot: part(shot, area),
+                copy,
+            })
             .map_err(Unpicked::Failed),
-        PortalAnswer::ScreenshotBrowserWindow { id, copy } => (shots.shoot_browser_window)(id)
-            .await
-            .map(|shot| Picked { shot, copy })
-            .map_err(Unpicked::Failed),
+        PortalAnswer::ScreenshotBrowserWindow { id, copy, area } => {
+            (shots.shoot_browser_window)(id)
+                .await
+                .map(|shot| Picked {
+                    shot: part(shot, area),
+                    copy,
+                })
+                .map_err(Unpicked::Failed)
+        }
         answer => Err(Unpicked::Not(answer)),
     }
+}
+
+/// `area` of a window's `shot`, or all of it. The window may have resized
+/// since the picker drew it, so the area is kept inside the shot, and one
+/// left wholly outside it keeps all of it.
+fn part(shot: Shot, area: Option<ShotRect>) -> Shot {
+    let Some(area) = area else {
+        return shot;
+    };
+    let (left, top) = (area.x.min(shot.width), area.y.min(shot.height));
+    let right = area.x.saturating_add(area.width).min(shot.width);
+    let bottom = area.y.saturating_add(area.height).min(shot.height);
+    if right <= left || bottom <= top {
+        return shot;
+    }
+    crop(
+        &shot,
+        ShotRect {
+            x: left,
+            y: top,
+            width: right - left,
+            height: bottom - top,
+        },
+    )
 }
 
 /// A [`Shoot`] that takes its frames through `casting`.
@@ -997,12 +1029,59 @@ mod tests {
             PortalAnswer::ScreenshotWindow {
                 id: "app-3".into(),
                 copy: false,
+                area: None,
             },
         );
 
         let (response, results) = picking.join().expect("returned");
         assert_eq!(response, 0);
         assert_eq!(png_at(&results["uri"]), ((1, 1), vec![0, 255, 0, 255]));
+    }
+
+    /// A 3x2 shot, each pixel's blue byte its index.
+    fn numbered() -> Shot {
+        Shot {
+            width: 3,
+            height: 2,
+            bgra: (0..6).flat_map(|blue| [blue, 0, 0, 255]).collect(),
+        }
+    }
+
+    /// A part of a hidden window dragged over its preview is cut from its
+    /// own frame, which the preview drew.
+    #[test]
+    fn a_part_of_a_window_is_cut_from_its_frame() {
+        let area = |x, y, width, height| {
+            Some(ShotRect {
+                x,
+                y,
+                width,
+                height,
+            })
+        };
+        let blues = |shot: Shot| {
+            (
+                shot.width,
+                shot.height,
+                shot.bgra.iter().step_by(4).copied().collect::<Vec<u8>>(),
+            )
+        };
+
+        assert_eq!(
+            blues(part(numbered(), area(1, 0, 2, 2))),
+            (2, 2, vec![1, 2, 4, 5])
+        );
+        assert_eq!(
+            blues(part(numbered(), None)),
+            (3, 2, vec![0, 1, 2, 3, 4, 5])
+        );
+        // The window shrank since the preview: what is left of the part.
+        assert_eq!(blues(part(numbered(), area(2, 1, 5, 5))), (1, 1, vec![5]));
+        // All of the part is gone: all of the window.
+        assert_eq!(
+            blues(part(numbered(), area(9, 9, 2, 2))),
+            (3, 2, vec![0, 1, 2, 3, 4, 5])
+        );
     }
 
     #[test]
@@ -1018,6 +1097,7 @@ mod tests {
             PortalAnswer::ScreenshotBrowserWindow {
                 id: "1".into(),
                 copy: false,
+                area: None,
             },
         );
 
@@ -1160,6 +1240,7 @@ mod tests {
             PortalAnswer::ScreenshotWindow {
                 id: "app-3".into(),
                 copy: false,
+                area: None,
             },
         );
 
@@ -1186,6 +1267,7 @@ mod tests {
             PortalAnswer::ScreenshotWindow {
                 id: "app-3".into(),
                 copy: true,
+                area: None,
             },
         );
 

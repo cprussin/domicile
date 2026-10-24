@@ -52,12 +52,20 @@ const Pick = {
    * A browser window from the engine's capture of its page, without what is
    * over it. A hidden one draws while it is captured.
    */
-  BrowserWindow: (id: string) => ({
+  BrowserWindow: (id: string, part?: ShotRect | undefined) => ({
     id,
     kind: PickKind.BrowserWindow as const,
+    part,
   }),
-  /** A window from its own last frame, without what is over it. */
-  Window: (id: string) => ({ id, kind: PickKind.Window as const }),
+  /**
+   * A window from its own last frame, without what is over it, or `part` of
+   * it, in the frame's pixels.
+   */
+  Window: (id: string, part?: ShotRect | undefined) => ({
+    id,
+    kind: PickKind.Window as const,
+    part,
+  }),
 };
 
 type Pick = ReturnType<(typeof Pick)[keyof typeof Pick]>;
@@ -116,9 +124,12 @@ export const ScreenshotDialog = ({
   const choices = [whole, ...screens, ...windows];
   // The index of the choice picked, or the area dragged.
   const [picked, setPicked] = useState<number | ShotRect>(0);
+  // A part dragged over the window picked, drawn alone as it is not on
+  // screen.
+  const [part, setPart] = useState<ShotRect | undefined>(undefined);
   const pick =
     typeof picked === "number"
-      ? pickAt(choices, picked).pick
+      ? partOf(pickAt(choices, picked).pick, part)
       : Pick.Area(picked);
   useEffect(() => {
     const copy = (event: KeyboardEvent) => {
@@ -174,22 +185,27 @@ export const ScreenshotDialog = ({
     >
       {asker !== undefined && <p className={askerStyles}>{`${asker} asks`}</p>}
       <SourcePicker
-        caption={
+        caption={caption(
           typeof picked === "number" &&
-          pickAt(choices, picked).area === undefined
-            ? "Not on screen: saved as it last drew itself."
-            : "Drag over the desk to pick an area."
-        }
+            pickAt(choices, picked).area === undefined,
+          part,
+        )}
         desk={body}
         dragged={typeof picked === "number" ? undefined : picked}
+        draggedPart={part}
         label="What to save"
         multiple={false}
-        onDrag={setPicked}
+        onDrag={(area) => {
+          setPicked(area);
+          setPart(undefined);
+        }}
+        onDragPart={setPart}
         onPick={([index]) => {
           if (index === undefined) {
             throw new Error("a screenshot pick of nothing");
           } else {
             setPicked(index);
+            setPart(undefined);
           }
         }}
         picked={typeof picked === "number" ? [picked] : []}
@@ -216,15 +232,38 @@ const pickAt = (choices: readonly Picked[], index: number): Picked => {
   }
 };
 
+/** `pick`, or `part` of it when it is a window and a part is dragged. */
+const partOf = (pick: Pick, part: ShotRect | undefined): Pick => {
+  switch (pick.kind) {
+    case PickKind.Area:
+      return pick;
+    case PickKind.Window:
+      return Pick.Window(pick.id, part);
+    case PickKind.BrowserWindow:
+      return Pick.BrowserWindow(pick.id, part);
+  }
+};
+
+/** Under the desk, for a window `hidden` from it, with a `part` of it. */
+const caption = (hidden: boolean, part: ShotRect | undefined): string => {
+  if (part !== undefined) {
+    return "A part of the window, as it last drew itself.";
+  } else if (hidden) {
+    return "Not on screen: saved as it last drew itself. Drag over it to pick a part.";
+  } else {
+    return "Drag over the desk to pick an area.";
+  }
+};
+
 /** The answer that saves `pick`, and copies it too when `copy` is set. */
 const answerOf = (pick: Pick, copy: boolean): PortalAnswer => {
   switch (pick.kind) {
     case PickKind.Area:
       return Answer.Screenshot(pick.area, copy);
     case PickKind.Window:
-      return Answer.ScreenshotWindow(pick.id, copy);
+      return Answer.ScreenshotWindow(pick.id, copy, pick.part);
     case PickKind.BrowserWindow:
-      return Answer.ScreenshotBrowserWindow(pick.id, copy);
+      return Answer.ScreenshotBrowserWindow(pick.id, copy, pick.part);
   }
 };
 
