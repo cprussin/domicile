@@ -100,11 +100,21 @@ export const FocusGlow = ({
   );
 };
 
-/** Rounded like a window's frame. The ring is 1px, like a window's edge. */
+/**
+ * Rounded like a window's frame.
+ *
+ * - Dark: a 1px ring, like a window's edge, and a wide glow.
+ * - Light: a translucent glow barely shows on a light wallpaper, so a solid
+ *   ring with a pale outer band, which reads on light and dark parts of the
+ *   photo alike.
+ */
 const glowStyles = css({
   borderRadius: "lg",
-  boxShadow:
-    "0 0 0 1px color-mix(in oklab, {colors.accent} 70%, transparent), 0 0 {spacing.9} color-mix(in oklab, {colors.accent} 45%, transparent), {shadows.lifted}",
+  boxShadow: {
+    _light:
+      "0 0 0 {spacing.0.75} {colors.accent}, 0 0 0 {spacing.1.25} color-mix(in oklab, {colors.accent} 35%, {colors.background}), 0 0 {spacing.6} {spacing.1.5} color-mix(in oklab, {colors.accent} 50%, transparent), {shadows.lifted}",
+    base: "0 0 0 1px color-mix(in oklab, {colors.accent} 70%, transparent), 0 0 {spacing.9} color-mix(in oklab, {colors.accent} 45%, transparent), {shadows.lifted}",
+  },
   pointerEvents: "none",
 });
 
