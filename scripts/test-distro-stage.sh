@@ -202,14 +202,14 @@ SESSION="$USR/share/wayland-sessions/domicile.desktop"
 holds_line "the session runs domicile" "$SESSION" "Exec=/usr/bin/domicile"
 holds_line "the session names the desktop" "$SESSION" "DesktopNames=domicile"
 for unit in domicile-session.target domicile-session-shutdown.target; do
-  cmp -s "$ROOT/nix/$unit" "$USR/lib/systemd/user/$unit" &&
+  cmp -s "$ROOT/distro/nix/$unit" "$USR/lib/systemd/user/$unit" &&
     ok "$unit is the flake's" ||
     fail "$unit is the flake's" "missing or different"
 done
-cmp -s "$ROOT/nix/domicile.portal" "$USR/share/xdg-desktop-portal/portals/domicile.portal" &&
+cmp -s "$ROOT/distro/nix/domicile.portal" "$USR/share/xdg-desktop-portal/portals/domicile.portal" &&
   ok "domicile.portal is the flake's" ||
   fail "domicile.portal is the flake's" "missing or different"
-cmp -s "$ROOT/nix/domicile-portals.conf" "$USR/share/xdg-desktop-portal/domicile-portals.conf" &&
+cmp -s "$ROOT/distro/nix/domicile-portals.conf" "$USR/share/xdg-desktop-portal/domicile-portals.conf" &&
   ok "domicile-portals.conf is the flake's" ||
   fail "domicile-portals.conf is the flake's" "missing or different"
 holds_line "the domicile group is declared" "$USR/lib/sysusers.d/domicile.conf" \

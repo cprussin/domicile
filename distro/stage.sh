@@ -97,7 +97,7 @@ for module in "${APP_MODULES[@]}"; do
   cp -a "$WORKSPACE/packages/app-$module/.vite/app" "$LIBEXEC/app-modules/$module"
 done
 
-# Fills `@bin@`, `@icon@` and `@preview@` in a template from `nix/`, as
+# Fills `@bin@`, `@icon@` and `@preview@` in a template from `distro/nix/`, as
 # `substitute` does in `flake.nix`.
 fill() { # template, destination, icon name
   local icon="${3:-}"
@@ -108,32 +108,32 @@ fill() { # template, destination, icon name
     "$1" >"$2"
 }
 
-fill "$ROOT/nix/domicile-session.desktop" "$USR/share/wayland-sessions/domicile.desktop"
-fill "$ROOT/nix/domicile-open-url.desktop" "$USR/share/applications/domicile-open-url.desktop"
-install -D -m 644 "$ROOT/nix/domicile-mimeapps.list" \
+fill "$ROOT/distro/nix/domicile-session.desktop" "$USR/share/wayland-sessions/domicile.desktop"
+fill "$ROOT/distro/nix/domicile-open-url.desktop" "$USR/share/applications/domicile-open-url.desktop"
+install -D -m 644 "$ROOT/distro/nix/domicile-mimeapps.list" \
   "$USR/share/applications/domicile-mimeapps.list"
 
 # The launcher's entries for Domicile's own programs.
 mkdir -p "$STAGE$ICONS"
 launcher() { # id, directory holding <id>.svg and <id>-preview.svg
   cp "$2/$1.svg" "$2/$1-preview.svg" "$STAGE$ICONS/"
-  fill "$ROOT/nix/launcher/domicile-$1.desktop" \
+  fill "$ROOT/distro/nix/launcher/domicile-$1.desktop" \
     "$USR/share/applications/domicile-$1.desktop" "$1"
 }
 launcher history "$WORKSPACE/packages/app-history/icons"
 launcher settings "$WORKSPACE/packages/app-settings/icons"
-launcher screenshot "$ROOT/nix/launcher"
-launcher shutdown "$ROOT/nix/launcher"
-launcher reboot "$ROOT/nix/launcher"
-launcher logout "$ROOT/nix/launcher"
+launcher screenshot "$ROOT/distro/nix/launcher"
+launcher shutdown "$ROOT/distro/nix/launcher"
+launcher reboot "$ROOT/distro/nix/launcher"
+launcher logout "$ROOT/distro/nix/launcher"
 
-install -D -m 644 "$ROOT/nix/domicile.portal" \
+install -D -m 644 "$ROOT/distro/nix/domicile.portal" \
   "$USR/share/xdg-desktop-portal/portals/domicile.portal"
-install -D -m 644 "$ROOT/nix/domicile-portals.conf" \
+install -D -m 644 "$ROOT/distro/nix/domicile-portals.conf" \
   "$USR/share/xdg-desktop-portal/domicile-portals.conf"
-install -D -m 644 "$ROOT/nix/domicile-session.target" \
+install -D -m 644 "$ROOT/distro/nix/domicile-session.target" \
   "$USR/lib/systemd/user/domicile-session.target"
-install -D -m 644 "$ROOT/nix/domicile-session-shutdown.target" \
+install -D -m 644 "$ROOT/distro/nix/domicile-session-shutdown.target" \
   "$USR/lib/systemd/user/domicile-session-shutdown.target"
 install -D -m 644 "$ROOT/distro/sysusers.conf" "$USR/lib/sysusers.d/domicile.conf"
 

@@ -128,8 +128,8 @@ to `options.json` beside `shell.js`. `settings_files` reports it
 
 ### Home Manager module
 
-`nix/home-manager.nix` writes the config file that `config_path` reads. It
-has one option per field of the `domicile-config` schema and generates JSON
+`distro/nix/home-manager.nix` writes the config file that `config_path`
+reads. It has one option per field of the `domicile-config` schema and generates JSON
 with `pkgs.formats.json`. `configDirectory` adds a config module's exports,
 evaluated at build time by the builder.
 
@@ -140,7 +140,7 @@ whole file (see Config file) and the desk does not start. So:
   config fails the build.
 - `removedSettings` lists settings the schema dropped, by dotted path
   (`output.profiles[].displays[].mode`). Setting one fails an assertion that
-  says where it went; `nix/removed-settings.nix` builds them.
+  says where it went; `distro/nix/removed-settings.nix` builds them.
 
 Checks:
 
@@ -151,7 +151,7 @@ Checks:
   `removedSettings` lists neither it nor an ancestor.
 - `nix flake check` evaluates the module, reads back the file it writes,
   checks that a refused config fails to build, and tests
-  `nix/removed-settings.nix` at the top, in a section and in a list.
+  `distro/nix/removed-settings.nix` at the top, in a section and in a list.
 
 ## Key decisions
 

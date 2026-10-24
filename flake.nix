@@ -336,11 +336,11 @@
       };
 
       # A launcher entry, `domicile-<id>.desktop`, for something Domicile
-      # does: `nix/launcher/domicile-<id>.desktop` filled in, as
+      # does: `distro/nix/launcher/domicile-<id>.desktop` filled in, as
       # `distro/stage.sh` does. The icon is `<icon>` and the launcher's
       # preview `<preview>`, both SVGs.
       launcherFile = { id, icon, preview }: ''
-        substitute ${./nix/launcher + "/domicile-${id}.desktop"} \
+        substitute ${./distro/nix/launcher + "/domicile-${id}.desktop"} \
           "$out/share/applications/domicile-${id}.desktop" \
           --subst-var-by bin "$out/bin" \
           --subst-var-by icon ${icon} \
@@ -409,7 +409,7 @@
       # stay a symlink because nothing resolves its path.
       domicilePackage = pkgs.runCommand "domicile"
         {
-          # The login session, `nix/domicile-session.desktop`. NixOS's
+          # The login session, `distro/nix/domicile-session.desktop`. NixOS's
           # `sessionPackages` requires `providedSessions`.
           passthru.providedSessions = [ "domicile" ];
           meta = {
@@ -435,10 +435,10 @@
         cp ${domicileBinaries}/bin/domicile-app-host "$out/bin/domicile-app-host"
         # The web link handler and the file making it the default.
         mkdir -p "$out/share/applications"
-        substitute ${./nix/domicile-open-url.desktop} \
+        substitute ${./distro/nix/domicile-open-url.desktop} \
           "$out/share/applications/domicile-open-url.desktop" \
           --subst-var-by bin "$out/bin"
-        cp ${./nix/domicile-mimeapps.list} \
+        cp ${./distro/nix/domicile-mimeapps.list} \
           "$out/share/applications/domicile-mimeapps.list"
         ln -s ${domicileEngine} "$out/libexec/domicile/engine"
         cp ${domicileBuilder} "$out/libexec/domicile/builder"
@@ -463,43 +463,43 @@
         }}
         ${launcherFile {
           id = "screenshot";
-          icon = ./nix/launcher/screenshot.svg;
-          preview = ./nix/launcher/screenshot-preview.svg;
+          icon = ./distro/nix/launcher/screenshot.svg;
+          preview = ./distro/nix/launcher/screenshot-preview.svg;
         }}
         ${launcherFile {
           id = "shutdown";
-          icon = ./nix/launcher/shutdown.svg;
-          preview = ./nix/launcher/shutdown-preview.svg;
+          icon = ./distro/nix/launcher/shutdown.svg;
+          preview = ./distro/nix/launcher/shutdown-preview.svg;
         }}
         ${launcherFile {
           id = "reboot";
-          icon = ./nix/launcher/reboot.svg;
-          preview = ./nix/launcher/reboot-preview.svg;
+          icon = ./distro/nix/launcher/reboot.svg;
+          preview = ./distro/nix/launcher/reboot-preview.svg;
         }}
         ${launcherFile {
           id = "logout";
-          icon = ./nix/launcher/logout.svg;
-          preview = ./nix/launcher/logout-preview.svg;
+          icon = ./distro/nix/launcher/logout.svg;
+          preview = ./distro/nix/launcher/logout-preview.svg;
         }}
         # Tells `xdg-desktop-portal` which interfaces Domicile implements. The
         # compositor owns the D-Bus name and sets the matching
         # `XDG_CURRENT_DESKTOP` on clients.
         mkdir -p "$out/share/xdg-desktop-portal/portals"
-        cp ${./nix/domicile.portal} \
+        cp ${./distro/nix/domicile.portal} \
           "$out/share/xdg-desktop-portal/portals/domicile.portal"
         # Routes portal calls (xdg-desktop-portal >= 1.17): Domicile for
         # everything but `Secret`, which goes to the keyring.
-        cp ${./nix/domicile-portals.conf} \
+        cp ${./distro/nix/domicile-portals.conf} \
           "$out/share/xdg-desktop-portal/domicile-portals.conf"
         # The user target the login session starts. It binds
         # `graphical-session.target`, which the portal requires.
         mkdir -p "$out/lib/systemd/user"
-        cp ${./nix/domicile-session.target} \
+        cp ${./distro/nix/domicile-session.target} \
           "$out/lib/systemd/user/domicile-session.target"
-        cp ${./nix/domicile-session-shutdown.target} \
+        cp ${./distro/nix/domicile-session-shutdown.target} \
           "$out/lib/systemd/user/domicile-session-shutdown.target"
         mkdir -p "$out/share/wayland-sessions"
-        substitute ${./nix/domicile-session.desktop} \
+        substitute ${./distro/nix/domicile-session.desktop} \
           "$out/share/wayland-sessions/domicile.desktop" \
           --subst-var-by bin "$out/bin"
       '';
@@ -759,7 +759,7 @@
       # The login session and the lock screen's PAM service are machine
       # settings, so they live in `nixosModules`.
       homeManagerModules = rec {
-        domicile = import ./nix/home-manager.nix {
+        domicile = import ./distro/nix/home-manager.nix {
           domicilePackages = self.packages.${system};
           bun2nix = bun2nix.packages.${system}.default;
         };
@@ -770,7 +770,7 @@
 
       # NixOS module for the machine-level settings.
       nixosModules = rec {
-        domicile = import ./nix/nixos.nix {
+        domicile = import ./distro/nix/nixos.nix {
           domicilePackages = self.packages.${system};
         };
         default = domicile;
@@ -918,8 +918,8 @@
               ];
               specialArgs = { inherit pkgs; };
             };
-            # The module with `nix/test-ts-config`, a TS config that imports a
-            # package from npm, as its config directory.
+            # The module with `distro/nix/test-ts-config`, a TS config that
+            # imports a package from npm, as its config directory.
             fromDirectory = directory: pkgs.lib.evalModules {
               modules = [
                 stub
@@ -934,10 +934,10 @@
               ];
               specialArgs = { inherit pkgs; };
             };
-            fromTs = (fromDirectory ./nix/test-ts-config).config;
+            fromTs = (fromDirectory ./distro/nix/test-ts-config).config;
             # A directory with no `domicile.{ts,tsx,js,mjs}` fails evaluation.
             withoutModule = builtins.tryEval
-              (fromDirectory ./nix/launcher).config.programs.domicile.shell;
+              (fromDirectory ./distro/nix/launcher).config.programs.domicile.shell;
 
             appEntry = withApp.config.xdg.desktopEntries.Music;
             # Built as home-manager builds it, so `desktop-file-validate` runs.
@@ -1106,12 +1106,13 @@
             touch "$out"
           '';
 
-        # `nix/removed-settings.nix` on its own, with paths the real module does
-        # not list: one at the top, one in a section, one in a list's elements.
+        # `distro/nix/removed-settings.nix` on its own, with paths the real
+        # module does not list: one at the top, one in a section, one in a
+        # list's elements.
         removed-settings =
           let
             lib = pkgs.lib;
-            removed = import ./nix/removed-settings.nix { inherit lib; } {
+            removed = import ./distro/nix/removed-settings.nix { inherit lib; } {
               gone = "top note";
               "section.gone" = "section note";
               "items[].gone" = "item note";
