@@ -744,6 +744,16 @@ export const nodeHeld = (workspace: Workspace, held: NodeRef): Workspace => {
 };
 
 /**
+ * {@link reached} for the window the node `held` names last focused, tiled or
+ * floating. A selection already on or around that window stays.
+ */
+export const nodeReached = (workspace: Workspace, held: NodeRef): Workspace =>
+  reached(
+    workspace,
+    focusedWindowIn(nodeIn(workspace, floatOn(workspace, held.id), held)),
+  );
+
+/**
  * A window or group dragged onto a window or its group and let go: onto its
  * `edge`, or its middle where that is `undefined` — see `tree/drop.ts`. Either
  * may be tiled or floating. Focus goes with the moved node, and a float it

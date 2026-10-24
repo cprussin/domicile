@@ -219,8 +219,8 @@ announces a window only then, so its title, app id and limits are known.
 - **Dragging a tab over its own group** breaks it out of the group: it goes
   beside the group, on the half under the pointer.
 - **Dragging the empty end of a tab strip**, past its last tab, picks up the
-  whole tab group. It is selected as by Meta+A and drops like a window, but
-  never on a window inside it (`StripEnd.tsx`).
+  whole tab group. It focuses the open tab and leaves the selection alone,
+  and drops like a window, but never on a window inside it (`StripEnd.tsx`).
 - **Dragging a tab along its strip** moves it at once into the slot nearest
   the pointer, with no overlay.
 - The pointer shows `grabbing` anywhere on the desktop while a window moves

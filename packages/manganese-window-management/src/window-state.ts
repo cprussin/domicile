@@ -55,6 +55,7 @@ import {
   nodeFullscreenToggled,
   nodeHeld,
   nodeLifted,
+  nodeReached,
   nodeTiledIn,
   opened,
   openedCentered,
@@ -690,8 +691,8 @@ export const WindowAction = {
   }),
 
   /**
-   * The user started dragging the tiled group `group` by its tab strip. It is
-   * selected, as by `focus parent`, for the drag.
+   * The user started dragging the tiled group `group` by its tab strip. Its
+   * open tab is focused, as by a click; a selection around it stays.
    */
   GroupGrabbed: (group: NodeRef) => ({
     group,
@@ -1149,8 +1150,8 @@ const reduceAction = (
     case WindowActionKind.GroupGrabbed: {
       const { id } = action.group;
       return {
-        ...onWorkspaceWith(reachWindow(state, id), id, (workspace) =>
-          nodeHeld(workspace, action.group),
+        ...reachWindow(state, id, (workspace) =>
+          nodeReached(workspace, action.group),
         ),
         draggingId: id,
       };
