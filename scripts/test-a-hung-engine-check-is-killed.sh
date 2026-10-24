@@ -21,6 +21,8 @@ fail() { printf '  FAIL  %s\n    %s\n' "$1" "$2"; FAILED=$((FAILED + 1)); }
 # starts a child and sleeps past the budget.
 mkdir -p "$WORK/repo/scripts" "$WORK/repo/.github/scripts" "$WORK/bin"
 cp "$ROOT/scripts/check.sh" "$WORK/repo/scripts/"
+mkdir -p "$WORK/repo/packages/check-runner/src"
+cp "$ROOT/packages/check-runner/src/report.sh" "$WORK/repo/packages/check-runner/src/"
 cp "$ROOT/.github/scripts/engine-render-node-lock.sh" "$WORK/repo/.github/scripts/"
 export DOMICILE_RENDER_NODE_LOCK="$WORK/card" DOMICILE_RENDER_NODE_NOISE="$WORK/noise"
 printf '#!/bin/sh\nexit 0\n' >"$WORK/bin/bun"

@@ -157,7 +157,8 @@ its own, for when that is all you have changed.
 
 All TypeScript code should pass all checks run via
 `bun run turbo test -- --ui stream`. This runs linting, formatting,
-typechecking, and unit tests, and builds the shells' Vite bundles so a green
+typechecking, unit tests and each package's shell checks (`test:shell`, run by
+[`check-runner`](/packages/check-runner/README.md)), and builds the shells' Vite bundles so a green
 run means they actually build. If code is failing, first try
 `bun run turbo fix -- --ui stream` to apply auto-fixes.
 
@@ -173,8 +174,8 @@ passes before considering tests complete.
 A package's own tasks are reached the same way:
 `bun run turbo test --filter @domicile-desktop/sdk`. Note that
 `bun run --filter <pkg> test` is *not* the same thing and does not work — no
-package here declares a `test` script, only `test:types` and `test:unit`, and
-bun answers "No packages matched the filter".
+package here declares a `test` script, only `test:types`, `test:unit` and
+`test:shell`, and bun answers "No packages matched the filter".
 
 The Rust side has its own required checks; see
 [/docs/guidelines/RUST.md](/docs/guidelines/RUST.md). A change that touches
