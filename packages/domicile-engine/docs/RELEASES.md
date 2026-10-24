@@ -13,7 +13,7 @@ How CI publishes prebuilt engines and how the flake picks one.
 - `engine-pin.nix` uses the official build only when it was built from the
   same series as the checked build. Between a merge that changes the fork and
   the next nightly, `main` runs the checked build.
-- `/scripts/update-engine-release.sh` moves `engine-release.nix` to the newest
+- `/packages/domicile-engine/scripts/update-engine-release.sh` moves `engine-release.nix` to the newest
   release.
 
 ## Release names

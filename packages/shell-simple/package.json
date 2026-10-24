@@ -8,6 +8,7 @@
   "description": "A Domicile desktop with nothing in it but windows: floating windows moved and resized with the Alt key, and a key the config binds for a terminal.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/dev-shell": "workspace:*",
     "@domicile-desktop/test-support": "workspace:*",
     "@pandacss/dev": "catalog:",
     "@pandacss/preset-panda": "catalog:",
@@ -31,7 +32,7 @@
   "scripts": {
     "build:vite": "vite build",
     "prepare": "panda codegen --silent",
-    "start:dev": "../../scripts/dev-shell.sh simple",
+    "start:dev": "dev-shell simple",
     "test:types": "tsc --noEmit",
     "test:unit": "bun test"
   },

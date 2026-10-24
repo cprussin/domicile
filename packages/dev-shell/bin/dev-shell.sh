@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs a shell in Domicile and reloads it on every rebuild.
 #
-#   ./scripts/dev-shell.sh manganese
+#   packages/dev-shell/bin/dev-shell.sh manganese
 #   bun run --filter @domicile-desktop/manganese start:dev
 #
 # Starts the engine, compositor and shell as `nix run .#manganese` does. The
@@ -13,7 +13,8 @@
 # The compositor and runner are built from this checkout.
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Resolved, because shells run it through their `node_modules/.bin` link.
+ROOT="$(cd "$(dirname "$(realpath "$0")")/../../.." && pwd)"
 SHELL_NAME="${1:-}"
 if [ -z "$SHELL_NAME" ]; then
   echo "usage: dev-shell.sh <shell>   e.g. dev-shell.sh manganese" >&2
@@ -55,7 +56,7 @@ WATCHING+=($!)
 
 # The reload loop waits for the socket file, so it can start before the
 # `cargo build` below produces the `domicile` it runs.
-"$ROOT/scripts/dev-shell-reload.sh" \
+"$ROOT/packages/dev-shell/bin/dev-shell-reload.sh" \
   "$ROOT/target/debug/domicile" "$PAGE_DIR/shell.js" "$WORK/sock" &
 WATCHING+=($!)
 

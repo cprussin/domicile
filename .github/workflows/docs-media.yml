@@ -9,8 +9,8 @@ name: Docs media
 on:
   pull_request:
     paths:
-      - scripts/docs-media.sh
-      - scripts/docs-media/**
+      - packages/site/scripts/docs-media.sh
+      - packages/site/scripts/docs-media/**
       - .github/workflows/docs-media.yml
       - .github/scripts/docs-media-writeback.sh
   workflow_dispatch:
@@ -82,7 +82,7 @@ jobs:
           set -euo pipefail
           # shellcheck disable=SC2086 # scenes are space-separated names
           .github/scripts/engine-render-node-lock.sh noisy "$CARD_OWNER" -- \
-            ./scripts/docs-media.sh $SCENES
+            packages/site/scripts/docs-media.sh $SCENES
 
       - name: Upload the media
         if: ${{ steps.gate.outputs.run == 'true' }}
