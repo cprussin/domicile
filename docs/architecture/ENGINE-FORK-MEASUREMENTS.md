@@ -198,8 +198,10 @@ One run on lyra (Framework 13, Radeon 890M, 2880x1920 panel modeset at
 - No round was abandoned, late, moved or undelivered.
 - The run passes, but only against `SPIKE_REFRESH_MHZ` (60 Hz) in
   `latency_run.rs`. Against the panel's 120 Hz it would fail.
-- The floor's minimum is 10.50 ms, longer than a 120 Hz frame, so viz
-  likely draws at 60 Hz here. Unconfirmed. See [ROADMAP.md](/ROADMAP.md).
+- The floor's minimum is 10.50 ms, longer than a 120 Hz frame. viz does
+  draw at 120 Hz here: testufo.com in a browser window reads 120 fps at
+  120 Hz (2026-10-24). So the floor is slow for another reason. See
+  [ROADMAP.md](/ROADMAP.md).
 
 ## A client's window on the page
 
