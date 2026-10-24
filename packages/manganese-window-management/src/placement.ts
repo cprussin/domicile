@@ -18,6 +18,7 @@ import type {
   Tiled,
 } from "./tree/frames";
 import { focusBoxOf, framesOf } from "./tree/frames";
+import type { Tiling } from "./tree/tiling";
 import { focusedWindowIn } from "./tree/tiling";
 import type { WindowMotion } from "./window-motion";
 import type { Workspace } from "./workspace";
@@ -187,14 +188,15 @@ export const placementsOf = (
       ),
     ),
   ];
+  const full = fullscreenOn(workspace);
   const filled = fullscreenIn(workspace, geometry);
   // Replace the fullscreen windows' rectangles instead of adding a second.
   const covered = filled.frames.map(({ id }) => id);
   return {
     focusBox:
-      workspace.fullscreen === undefined
+      full === undefined
         ? focusBoxIn(workspace, geometry, floating)
-        : undefined,
+        : fullscreenSelectionIn(full, geometry),
     placements: [
       ...laidOut.filter(({ id }) => !covered.includes(id)),
       ...filled.frames.map((frame) =>
@@ -255,6 +257,25 @@ const focusBoxIn = (
       return box === undefined ? undefined : { ...box, depth };
     }
   }
+};
+
+/**
+ * The focus box of a fullscreen group `focus parent` selected, so its
+ * selection still shows. `undefined` when a window inside it is focused, as
+ * the fullscreen covers the screen and there is nothing to set apart.
+ */
+const fullscreenSelectionIn = (
+  full: { global: boolean; tiling: Tiling },
+  geometry: Geometry,
+): PlacedFocusBox | undefined => {
+  const box = focusBoxOf(
+    full.tiling,
+    fullscreenArea(full, geometry),
+    INNER_GAP,
+  );
+  return box?.selection === undefined
+    ? undefined
+    : { ...box, depth: FULLSCREEN };
 };
 
 /**

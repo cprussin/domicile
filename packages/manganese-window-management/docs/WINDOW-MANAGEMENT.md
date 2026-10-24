@@ -71,7 +71,8 @@ Workspaces belong to the desktop, and screens show them, as in sway:
   the gaps between them (`SelectionTint.tsx`). The tint tells a selected tab
   group from its focused tab, since the glow lights the whole tab group for
   both. A group selected inside another group's tab is lit in its well,
-  without that tab. The focused window's bar gets the accent color; tabs keep
+  without that tab. A fullscreen group keeps its glow and tint while
+  selected. The focused window's bar gets the accent color; tabs keep
   their usual states. Meta+Shift+A, focusing a floating window, clicking
   another window, or pressing a title bar or tab inside the group ends the
   selection, leaving that window selected.

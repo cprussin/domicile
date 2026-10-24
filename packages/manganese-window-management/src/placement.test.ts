@@ -589,6 +589,21 @@ describe("the focus box", () => {
 
     expect(focusBoxOf(state)).toBeUndefined();
   });
+
+  it("selects a fullscreen tab group `focus parent` selected", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.ParentFocused(),
+      WindowAction.FullscreenToggled(false),
+    );
+    const editor = placementFor(state, "editor");
+
+    expect(focusBoxOf(state)).toMatchObject({
+      depth: editor?.depth ?? -1,
+      selection: { height: 1080, width: 1920, x: 0, y: 0 },
+      windows: [appWindowId("kitty"), appWindowId("editor")],
+    });
+  });
 });
 
 describe("wellDepthOf", () => {
