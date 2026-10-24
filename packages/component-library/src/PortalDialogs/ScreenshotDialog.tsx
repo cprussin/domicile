@@ -5,7 +5,6 @@ import type {
   ShotRect,
 } from "@domicile-desktop/sdk/portal";
 import { PortalAnswer as Answer } from "@domicile-desktop/sdk/portal";
-import { MonitorIcon } from "@phosphor-icons/react/dist/ssr/Monitor";
 import { useEffect, useState } from "react";
 import { css } from "../../styled-system/css";
 import { Button } from "../Button/Button";
@@ -15,7 +14,12 @@ import type { Choice } from "./SourcePicker";
 import { SourcePicker } from "./SourcePicker";
 import type { ShownWindow } from "./shown-windows";
 import { ShownWindowKind, shownArea } from "./shown-windows";
-import { browserChoice, screenChoice, windowChoice } from "./source-choices";
+import {
+  browserChoice,
+  screenChoice,
+  wholeDeskChoice,
+  windowChoice,
+} from "./source-choices";
 import type { DrawPreview } from "./useWindowPreview";
 
 type Props = {
@@ -80,15 +84,9 @@ export const ScreenshotDialog = ({
 }: Props) => {
   // Read once, as the desk froze; a later move would not match the frame.
   const [shown] = useState(shownWindows);
-  const desk = { height: body.height, width: body.width, x: 0, y: 0 };
   const whole: Picked = {
-    area: desk,
-    detail: `${String(body.width)} × ${String(body.height)}`,
-    icon: <MonitorIcon aria-hidden />,
-    label: "Whole desk",
-    name: "Whole desk",
-    pick: Pick.Area(desk),
-    preview: undefined,
+    ...wholeDeskChoice(body),
+    pick: Pick.Area({ height: body.height, width: body.width, x: 0, y: 0 }),
   };
   const screens: Picked[] = body.monitors.map(
     ({ area, description, name }) => ({

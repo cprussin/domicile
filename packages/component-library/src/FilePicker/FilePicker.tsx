@@ -924,7 +924,7 @@ const listStyles = flex({
 });
 
 const rowStyles = grid({
-  _hover: {
+  _hoverEnabled: {
     backgroundColor: "color-mix(in oklab, {colors.foreground} 5%, transparent)",
   },
   // The tile color shows the file kind. Tones that blend two hues mix in

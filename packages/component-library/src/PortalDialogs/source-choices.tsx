@@ -1,10 +1,20 @@
-import type { ShotRect } from "@domicile-desktop/sdk/portal";
+import type { FrozenDesk, ShotRect } from "@domicile-desktop/sdk/portal";
 import { PreviewedWindow } from "@domicile-desktop/sdk/previewed-window";
 import { GlobeIcon } from "@phosphor-icons/react/dist/ssr/Globe";
 import { MonitorIcon } from "@phosphor-icons/react/dist/ssr/Monitor";
 import type { App } from "../useApps/useApps";
 import type { Choice } from "./SourcePicker";
 import { WindowIcon } from "./WindowIcon";
+
+/** All of `desk`, sized in its frame's pixels. */
+export const wholeDeskChoice = (desk: FrozenDesk): Choice => ({
+  area: { height: desk.height, width: desk.width, x: 0, y: 0 },
+  detail: `${String(desk.width)} × ${String(desk.height)}`,
+  icon: <MonitorIcon aria-hidden />,
+  label: "Whole desk",
+  name: "Whole desk",
+  preview: undefined,
+});
 
 /** A screen, named by its make and model, else its output's name. */
 export const screenChoice = (

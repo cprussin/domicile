@@ -288,9 +288,13 @@ const rowStyles = hstack({
     "background-color {durations.fast} {easings.default}, color {durations.fast} {easings.default}",
 });
 
-// Hover styling, off during a drag so it doesn't obscure reordering rows.
+// Hover styling, off during a drag so it doesn't obscure reordering rows. The
+// active tab keeps its fill.
 const rowHoverStyles = css({
-  _hover: { backgroundColor: "card", color: "foreground" },
+  "&:hover:not(:has([aria-current=page]))": {
+    backgroundColor: "card",
+    color: "foreground",
+  },
 });
 
 // The active tab, keyed off `aria-current`. The attribute selector outranks

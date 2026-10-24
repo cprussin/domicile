@@ -32,7 +32,10 @@ export const domicilePreset = definePreset({
       // `theme.contrast` set to `high`, as `data-contrast="high"` on
       // `<html>`. Panda's own `_highContrast` matches forced colors instead.
       contrastHigh: "[data-contrast=high] &",
-      hoverEnabled: "&:hover:not(:disabled):not([data-disabled])",
+      // A picked item keeps its fill under the pointer: the current page or
+      // place, a selected tab or option, a checked row.
+      hoverEnabled:
+        "&:hover:not(:disabled):not([data-disabled]):not([aria-current]):not([aria-selected=true]):not([data-checked])",
       // Panda's default `_light` matches a `light` class; we use
       // `data-theme="light"` on `<html>`.
       light: "[data-theme=light] &",
