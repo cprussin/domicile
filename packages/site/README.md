@@ -29,3 +29,6 @@ bun run build:next
 - Production branch: `stable`.
 - `vercel.json` skips every deployment but production, since each build
   costs.
+- Vercel also skips a `stable` push that changes nothing under
+  `packages/site` or its dependencies. To deploy without a site change, use
+  **Redeploy** on the latest production deployment.
