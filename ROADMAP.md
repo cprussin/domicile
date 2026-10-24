@@ -38,6 +38,16 @@ item when it ships.
    Smithay/smithay#2217, which sends keymaps as read-only fds. Drop the patch
    and `flake.nix`'s `outputHashes` once a Smithay release contains it.
 
+4. **Cast the desktop to a TV.** A virtual monitor at the TV's mode, placed on
+   the desk, streamed to Moonlight (Sunshine or similar), with idle blanking
+   held off while it runs.
+
+5. **Automatic brightness.** Set the backlight from the ambient light sensor,
+   learning from manual changes (as wluma does).
+
+6. **Night light.** Warm the colors after sunset. Needs gamma control per
+   monitor: a DRM gamma ramp on a tty, `wlr-gamma-control` for clients.
+
 ## In the engine fork (the agent on `crux`)
 
 1. **Measure presentation.** Nothing reads a lit CRTC, so overlay promotion,
