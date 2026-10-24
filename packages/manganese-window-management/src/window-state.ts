@@ -52,6 +52,7 @@ import {
   modeToggled,
   nodeArrived,
   nodeDropped,
+  nodeFullscreenToggled,
   nodeHeld,
   nodeLifted,
   nodeTiledIn,
@@ -1140,9 +1141,9 @@ const reduceAction = (
     }
     case WindowActionKind.GroupFullscreened: {
       return onWorkspaceWith(
-        groupHeld(state, action.group),
+        reachWindow(state, action.group.id),
         action.group.id,
-        (workspace) => fullscreenToggled(workspace, false),
+        (workspace) => nodeFullscreenToggled(workspace, action.group, false),
       );
     }
     case WindowActionKind.GroupGrabbed: {

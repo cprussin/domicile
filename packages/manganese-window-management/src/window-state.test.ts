@@ -1535,6 +1535,18 @@ describe("the buttons on a tab group's strip", () => {
     ).toBeUndefined();
   });
 
+  it("leaves the selection on the open tab", () => {
+    const state = reduce(
+      twoScreens(),
+      WindowAction.GroupFullscreened(GROUP),
+      WindowAction.GroupFullscreened(GROUP),
+    );
+
+    expect(focusedNodeOf(workspaceOn(state, "left").tiling)).toEqual(
+      LayoutNode.Window(APP("editor"), 2),
+    );
+  });
+
   it("fills the screen with a floating group", () => {
     const state = reduce(
       desktop("kitty", "editor"),

@@ -566,10 +566,22 @@ export const fullscreenToggled = (
   global: boolean,
 ): Workspace => {
   const target = commandedOn(workspace);
+  return target === undefined
+    ? workspace
+    : nodeFullscreenToggled(workspace, target, global);
+};
+
+/**
+ * {@link fullscreenToggled} on the node `target` names, wherever the
+ * selection is, as a tab group's strip buttons fill the screen with it.
+ */
+export const nodeFullscreenToggled = (
+  workspace: Workspace,
+  target: NodeRef,
+  global: boolean,
+): Workspace => {
   const was = workspace.fullscreen;
-  if (target === undefined) {
-    return workspace;
-  } else if (
+  if (
     was !== undefined &&
     was.global === global &&
     sameNode(workspace, was, target)
