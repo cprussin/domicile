@@ -10,6 +10,7 @@
   "description": "domicile-desktop.com: the Domicile and manganese landing pages and the docs.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/check-runner": "workspace:*",
     "@domicile-desktop/test-support": "workspace:*",
     "@pandacss/dev": "catalog:",
     "@pandacss/preset-panda": "catalog:",
@@ -32,6 +33,7 @@
     "build:next": "next build",
     "prepare": "panda codegen --silent",
     "start:dev": "next dev",
+    "test:shell": "check-runner tests/*.sh",
     "test:types": "tsc --noEmit",
     "test:unit": "bun test"
   },

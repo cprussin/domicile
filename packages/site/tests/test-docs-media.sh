@@ -10,8 +10,8 @@
 # (`docs-media.yml`).
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-CAPTURE="$ROOT/scripts/docs-media.sh"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+CAPTURE="$ROOT/packages/site/scripts/docs-media.sh"
 WRITEBACK="$ROOT/.github/scripts/docs-media-writeback.sh"
 
 FAILED=0

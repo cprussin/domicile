@@ -191,7 +191,7 @@ The engine has two channels to the rest of Domicile:
    `domicile-host.ts` from the IDL. An event dispatched as anything but a
    plain `Event` also needs its type in `EVENT_TYPES` in
    `codegen/generate-domicile-host.ts`, since `EventHandler` does not say.
-   `scripts/test-host-types-match-the-idl.sh` fails until the file is current.
+   `packages/domicile-engine/tests/test-host-types-match-the-idl.sh` fails until the file is current.
 
 ## Command socket
 
@@ -362,4 +362,4 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 - The shell has no reload key (patch 0047).
 - Reload a rebuilt shell with `domicile load-shell <path>`. Run it from a
   watch script for live reload.
-- `scripts/test-dev-shell.sh` checks the served page has no reload poller.
+- `packages/dev-shell/tests/test-dev-shell.sh` checks the served page has no reload poller.

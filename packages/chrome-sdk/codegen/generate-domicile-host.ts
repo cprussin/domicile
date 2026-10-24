@@ -3,7 +3,7 @@
 //   bun run generate              # in packages/chrome-sdk
 //   bun codegen/generate-domicile-host.ts <path>   # somewhere else
 //
-// `scripts/test-host-types-match-the-idl.sh` checks the file is current.
+// `packages/domicile-engine/tests/test-host-types-match-the-idl.sh` checks the file is current.
 
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";

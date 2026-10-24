@@ -1,0 +1,12 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "test:shell": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/check-runner/**",
+        "$TURBO_ROOT$/packages/domicile-launch/src/**"
+      ]
+    }
+  }
+}
