@@ -962,6 +962,7 @@ mod tests {
                 "the pointer moving over the lock screen",
                 ClientRequest::DeskPointer {
                     at: Some((4.0, 8.0)),
+                    windows: Vec::new(),
                 },
             ),
         ] {

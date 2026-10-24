@@ -714,16 +714,27 @@ void ControlChannel::SomebodyIsHere() {
   }
 }
 
-void ControlChannel::DeskPointerMoved(std::optional<gfx::PointF> at) {
+void ControlChannel::DeskPointerMoved(const DeskPointerAt& at) {
   if (!connected_) {
     return;
   }
+  const auto point = [](const gfx::PointF& xy) {
+    base::ListValue list;
+    list.Append(static_cast<double>(xy.x()));
+    list.Append(static_cast<double>(xy.y()));
+    return list;
+  };
   base::DictValue message = Typed("desk_pointer");
-  if (at) {
-    base::ListValue point;
-    point.Append(static_cast<double>(at->x()));
-    point.Append(static_cast<double>(at->y()));
-    message.Set("at", std::move(point));
+  if (at.at) {
+    message.Set("at", point(*at.at));
+  }
+  if (!at.windows.empty()) {
+    base::ListValue windows;
+    for (const PointerOverWindow& over : at.windows) {
+      windows.Append(
+          base::DictValue().Set("id", over.id).Set("at", point(over.fraction)));
+    }
+    message.Set("windows", std::move(windows));
   }
   SendMessage(std::move(message));
 }

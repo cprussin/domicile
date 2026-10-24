@@ -56,6 +56,16 @@ impl std::fmt::Debug for Passphrase {
     }
 }
 
+/// Where the pointer is on one browser window's page, in
+/// [`ChromeMessage::DeskPointer`]. A cast of the window alone draws it there.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PointerOverWindow {
+    /// The browser window's id, as the engine lists it.
+    pub id: String,
+    /// The point as a fraction of the page's size, from its top left.
+    pub at: (f64, f64),
+}
+
 /// Messages sent from the chrome (in-page client) to the host.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -216,7 +226,8 @@ pub enum ChromeMessage {
     Activity,
 
     /// Where the pointer is on the desk, in the shell page's CSS pixels,
-    /// which are the desktop's logical pixels, or `None` off it.
+    /// which are the desktop's logical pixels, or `None` off it, and each
+    /// browser window whose page it is on.
     ///
     /// The browser sends it on each move, wherever the pointer is. Screen
     /// casts draw the pointer from it; the compositor knows it no other way
@@ -224,6 +235,8 @@ pub enum ChromeMessage {
     DeskPointer {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         at: Option<(f64, f64)>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        windows: Vec<PointerOverWindow>,
     },
 
     /// The page renders `<app frame>`, so the compositor may sync frames
