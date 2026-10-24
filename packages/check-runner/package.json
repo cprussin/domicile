@@ -1,0 +1,25 @@
+{
+  "bin": {
+    "check-runner": "./bin/check-runner.sh"
+  },
+  "description": "Runs a package's shell checks and reports each as passed, failed or skipped.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "bun": ">=1.4.2",
+    "node": ">=24"
+  },
+  "license": "MIT",
+  "name": "@domicile-desktop/check-runner",
+  "private": true,
+  "scripts": {
+    "test:shell": "./bin/check-runner.sh tests/*.sh",
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.1"
+}
