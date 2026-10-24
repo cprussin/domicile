@@ -6,7 +6,7 @@ name: Nix build
 # `packages/domicile-engine/engine-release.nix`, because a repin cannot change
 # what it builds. This job covers a repin instead: `nix build .#manganese
 # .#simple` fetches the url and hash in that file, so a deleted tag or bad hash
-# fails here in minutes. `scripts/test-engine-path-filter.sh` fails if this job
+# fails here in minutes. `packages/ci/tests/test-engine-path-filter.sh` fails if this job
 # gains a `paths:` filter.
 on:
   pull_request:

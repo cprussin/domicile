@@ -48,7 +48,7 @@ builds. It runs in `./scripts/check.sh shell`. It catches:
 
 Two more checks cover this manifest as written:
 
-- [`/scripts/test-the-example-shell-names-one-release.sh`](/scripts/test-the-example-shell-names-one-release.sh)
+- [`/packages/ci/tests/test-the-example-shell-names-one-release.sh`](/packages/ci/tests/test-the-example-shell-names-one-release.sh)
   (`./scripts/check.sh shell`): the SDK is an exact published version, and the
   commands above name its commit and the built file.
 - [`/.github/scripts/example-shell-from-npm.sh`](/.github/scripts/example-shell-from-npm.sh)

@@ -8,7 +8,7 @@
 #
 # Use the official build only when it matches the checked pin's series, so the
 # engine never lacks a patch in this tree.
-# `scripts/test-the-pinned-engine-is-this-series.sh` checks that the checked pin
+# `packages/ci/tests/test-the-pinned-engine-is-this-series.sh` checks that the checked pin
 # matches the tree.
 #
 # The `stable` branch tracks the newest main where this picks the official

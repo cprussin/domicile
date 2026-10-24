@@ -19,7 +19,7 @@ name: Cancel a pull request's stale queued engine runs
 #
 # The decisions live in .github/scripts/crux-stale-runs.sh and
 # .github/scripts/crux-cancelable-step.sh, tested by
-# scripts/test-crux-stale-runs.sh.
+# packages/ci/tests/test-crux-stale-runs.sh.
 #
 # Race: a queued run can get a runner between the listing and the cancel. The
 # status is read again just before each cancel, and a job that young is still
