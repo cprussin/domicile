@@ -27,8 +27,8 @@ bun run build:next
   their `prepare` (Panda codegen). It installs with the repository's bun
   (`packageManager`), since Vercel's own is older.
 - Production branch: `stable`.
-- `vercel.json` skips every deployment but production, since each build
-  costs.
+- `vercel-ignore.sh` skips every deployment but production, since each build
+  costs. It logs what it decided at the top of the build log.
 - Vercel also skips a `stable` push that changes nothing under
   `packages/site` or its dependencies. To deploy without a site change, use
   **Redeploy** on the latest production deployment.
