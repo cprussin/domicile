@@ -20,7 +20,7 @@ on:
         required: false
         default: ""
 
-# Keyed by ref, as scripts/test-engine-concurrency.sh requires of every
+# Keyed by ref, as packages/ci/tests/test-engine-concurrency.sh requires of every
 # workflow on this machine. Cancels in progress: a capture leaves nothing on
 # disk, and a newer push retakes everything.
 concurrency:

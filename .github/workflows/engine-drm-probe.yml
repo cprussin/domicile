@@ -16,7 +16,7 @@ on:
 
 # Per ref, not shared with engine.yml: `engine-tree-pool.sh pick` and the
 # per-tree lock already keep runs out of each other's trees, and a shared group
-# evicts pending runs. scripts/test-engine-concurrency.sh requires every
+# evicts pending runs. packages/ci/tests/test-engine-concurrency.sh requires every
 # `self-hosted, crux` workflow to key its group by ref.
 #
 # Never canceled mid-run: a killed `autoninja` leaves a half-linked output

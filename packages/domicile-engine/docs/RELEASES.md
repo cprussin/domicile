@@ -56,7 +56,7 @@ On a pull request that changes the series, `engine.yml`:
 |---|---|
 | `.github/scripts/engine-release-needed.sh` | decides whether this run must publish a release |
 | `.github/scripts/engine-release-repin.sh` | commits `engine-release.nix` onto the branch tip |
-| `/scripts/test-the-pinned-engine-is-this-series.sh` | checks the pinned engine matches the series; runs on `ubuntu-latest` |
+| `/packages/ci/tests/test-the-pinned-engine-is-this-series.sh` | checks the pinned engine matches the series; runs on `ubuntu-latest` |
 
 - The engine's hash is known only after CI builds it, so CI writes
   `engine-release.nix` back instead of the author.

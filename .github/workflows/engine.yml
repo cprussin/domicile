@@ -25,7 +25,7 @@ on:
     # `engine-release.nix` and `engine-official.nix` are excluded because this
     # job never reads them: it builds `CHROMIUM_PIN` plus `patches/`.
     # nix-build.yml fetches the tarball they name and so checks a repin.
-    # scripts/test-engine-path-filter.sh asserts that nix-build.yml keeps
+    # packages/ci/tests/test-engine-path-filter.sh asserts that nix-build.yml keeps
     # running on every change.
     paths:
       - packages/domicile-engine/**
@@ -59,7 +59,7 @@ on:
 #
 # Runs are kept apart on `crux` by `engine-tree-pool.sh pick`,
 # `engine-compile-slot.sh` and `engine-tree-lock.sh`, not by this group.
-# scripts/test-engine-concurrency.sh asserts this.
+# packages/ci/tests/test-engine-concurrency.sh asserts this.
 concurrency:
   group: engine-${{ github.ref }}
   cancel-in-progress: false
@@ -162,7 +162,7 @@ jobs:
     # cold builds (~9h measured), and the slot wait can be another run's pin
     # roll. Under 24h because GITHUB_TOKEN expires then. `timeout-minutes` is
     # fixed before the job knows which case it is in, so it covers the worst.
-    # scripts/test-the-engine-budget-holds-both-builds.sh asserts this.
+    # packages/ci/tests/test-the-engine-budget-holds-both-builds.sh asserts this.
     timeout-minutes: 1200
 
     env:
@@ -357,7 +357,7 @@ jobs:
 
       # Nothing after this compiles Chromium, so the slot is released for
       # other runs. `drop` is a no-op on a slot already dropped. See
-      # scripts/test-the-compile-slot-covers-only-the-compile.sh.
+      # packages/ci/tests/test-the-compile-slot-covers-only-the-compile.sh.
       - name: Drop the compile slot, the compile is done
         run: .github/scripts/engine-compile-slot.sh drop "$LOCK_OWNER"
 
@@ -454,7 +454,7 @@ jobs:
           DOMICILE_CARGO_TARGET: /build/cargo-target/${{ runner.name }}
           DOMICILE_CHECK_STRICT: "1"
           # The compile slot's wait, since the compile it waits out can be a
-          # cold build. See scripts/test-the-engine-budget-holds-both-builds.sh.
+          # cold build. See packages/ci/tests/test-the-engine-budget-holds-both-builds.sh.
           DOMICILE_RENDER_NODE_QUIET_WAIT: 36000
           # Where a failing check's full log goes. /tmp because $TMPDIR inside
           # `nix develop` is per command; `engine-diagnostics.sh` reads it.
@@ -488,7 +488,7 @@ jobs:
       #
       # It keeps its control, because no step of this workflow may set
       # `DOMICILE_GUARD_CONTROL`. See
-      # scripts/test-the-workflows-delegate-their-checks.sh.
+      # packages/ci/tests/test-the-workflows-delegate-their-checks.sh.
       - name: The packaged release passes the guard
         if: ${{ needs.build.outputs.build == 'true' }}
         run: |
@@ -512,7 +512,7 @@ jobs:
 
       # Only for a pull request from this repository: this job never commits to
       # main, and a fork's branch is not writable. On main,
-      # scripts/test-the-pinned-engine-is-this-series.sh fails instead.
+      # packages/ci/tests/test-the-pinned-engine-is-this-series.sh fails instead.
       #
       # Commits onto the branch tip, not the merge ref, so main is not merged
       # into the branch. If main changed the series during the run, this

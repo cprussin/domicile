@@ -56,7 +56,7 @@ case "${1:-}" in
     if [ "${GITHUB_EVENT_NAME:-}" != workflow_dispatch ]; then
       "$0" has "$key"
       case $? in
-        0) "${DOMICILE_PINNED_ENGINE_CHECK:-scripts/test-the-pinned-engine-is-this-series.sh}" \
+        0) "${DOMICILE_PINNED_ENGINE_CHECK:-packages/ci/tests/test-the-pinned-engine-is-this-series.sh}" \
              >/dev/null 2>&1 && proved=true ;;
         1) ;;
         *) exit 3 ;;
