@@ -6,8 +6,8 @@
 # `packageManager` names, so a stale flake bun fails only for Nix users.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-. "$ROOT/scripts/lib/nix-check.sh"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+. "$ROOT/packages/distro-checks/lib/nix-check.sh"
 require_nix
 cd "$ROOT"
 

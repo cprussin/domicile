@@ -1,7 +1,7 @@
 #!/bin/sh
 # Checks an installed Domicile package, inside the distribution's container.
 #
-# Run by `scripts/distro-packages-install.sh` after the install, as root. No
+# Run by `packages/distro-checks/tests/distro-packages-install.sh` after the install, as root. No
 # GPU or display: it checks that every library resolves, that each program
 # starts, and that the files a session needs are in place. Prints a `PASS:` or
 # `FAIL:` line per check and exits 1 if any failed.

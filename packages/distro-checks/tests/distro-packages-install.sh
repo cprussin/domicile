@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Installs each distribution package in its distribution's container and checks
-# the result with `scripts/lib/distro-installed.sh`.
+# the result with `packages/distro-checks/lib/distro-installed.sh`.
 #
-#   DOMICILE_DISTRO_PACKAGES=<dir> scripts/distro-packages-install.sh
-#   DOMICILE_DISTRO_REPO=<dir> scripts/distro-packages-install.sh
+#   DOMICILE_DISTRO_PACKAGES=<dir> packages/distro-checks/tests/distro-packages-install.sh
+#   DOMICILE_DISTRO_REPO=<dir> packages/distro-checks/tests/distro-packages-install.sh
 #
 # <dir> holds `distro/build.sh`'s output, or the repositories `distro/repo.sh`
 # made from it, which each package manager installs from, checking the
@@ -13,8 +13,8 @@
 # proves the hard dependencies are enough. No GPU is needed: nothing draws.
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-INSTALLED="$ROOT/scripts/lib/distro-installed.sh"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+INSTALLED="$ROOT/packages/distro-checks/lib/distro-installed.sh"
 [ -f "$INSTALLED" ] || { echo "no $INSTALLED" >&2; exit 1; }
 
 PACKAGES="${DOMICILE_DISTRO_PACKAGES:-}"

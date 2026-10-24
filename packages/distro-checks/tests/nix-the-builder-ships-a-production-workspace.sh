@@ -4,11 +4,11 @@
 #
 # `shellWorkspace` is in every desktop's closure, so a development dependency,
 # test or source map in it costs each install. `distro/shell-workspace.sh`
-# prunes it; `scripts/test-distro-stage.sh` covers the pruning in detail.
+# prunes it; `packages/distro-checks/tests/test-distro-stage.sh` covers the pruning in detail.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-. "$ROOT/scripts/lib/nix-check.sh"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+. "$ROOT/packages/distro-checks/lib/nix-check.sh"
 require_nix
 cd "$ROOT"
 

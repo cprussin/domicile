@@ -15,8 +15,8 @@ on:
       - flake.lock
       - packages/domicile-engine/engine-*.nix
       - scripts/check.sh
-      - scripts/distro-*.sh
-      - scripts/lib/distro-installed.sh
+      - packages/check-runner/**
+      - packages/distro-checks/**
       - .github/scripts/distro-packages-publish.sh
       - .github/workflows/distro-packages.yml
   workflow_call:
@@ -148,9 +148,11 @@ jobs:
         with:
           name: repo
           path: distro-repo/
+      - uses: oven-sh/setup-bun@v2
+      # Absolute: turbo runs the check from its package.
       - run: ./scripts/check.sh distro
         env:
-          DOMICILE_DISTRO_REPO: distro-repo
+          DOMICILE_DISTRO_REPO: ${{ github.workspace }}/distro-repo
           DOMICILE_DISTROS: ${{ matrix.distro }}
 
   publish:

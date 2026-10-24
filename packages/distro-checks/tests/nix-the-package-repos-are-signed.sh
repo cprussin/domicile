@@ -4,15 +4,15 @@
 # repositories keep the three newest versions.
 #
 # Uses small stand-in packages, so it needs no build. The real packages are
-# installed from these repositories in `scripts/distro-packages-install.sh`.
+# installed from these repositories in `packages/distro-checks/tests/distro-packages-install.sh`.
 #
 # `DOMICILE_REPO_TOOLS=1` says the tools in `distro/repo-tools`, nfpm,
 # libarchive and fakeroot are on PATH already; otherwise they come from the
 # flake's nixpkgs.
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-. "$ROOT/scripts/lib/nix-check.sh"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+. "$ROOT/packages/distro-checks/lib/nix-check.sh"
 require_nix
 
 if [ "${DOMICILE_REPO_TOOLS:-}" != 1 ]; then
