@@ -487,6 +487,7 @@ source_set("web_view_guest") {
     ":download_tally",
     ":file_choice",
     ":guest_dialogs",
+    ":page_matches",
     ":placeholder_stage",
     ":render_process",
     ":screen_capture",
@@ -618,6 +619,18 @@ source_set("browser_page_throttle") {
     ":will_navigate_throttle",
     "//base",
   ]
+}
+
+# Counting the elements in a <webview>'s page that match a selector. Its own
+# target beside :web_view_guest for the reason :file_choice is one: it needs no
+# browser, which is where its tests are.
+source_set("page_matches") {
+  sources = [
+    "browser/page_matches.cc",
+    "browser/page_matches.h",
+  ]
+
+  public_deps = [ "//base" ]
 }
 
 # A <webview>'s storage partition, named by its `partition` attribute. Its own
@@ -961,6 +974,7 @@ source_set("unit_tests") {
     "browser/frame_sink_broker_unittest.cc",
     "browser/guest_dialogs_unittest.cc",
     "browser/line_framer_unittest.cc",
+    "browser/page_matches_unittest.cc",
     "browser/placeholder_stage_unittest.cc",
     "browser/pointer_warp_unittest.cc",
     "browser/portal_request_unittest.cc",
@@ -1030,6 +1044,7 @@ source_set("unit_tests") {
     ":held_chords",
     ":keyboard_layout",
     ":line_framer",
+    ":page_matches",
     ":placeholder_stage",
     ":pointer_warp",
     ":portal_request",

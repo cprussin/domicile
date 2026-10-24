@@ -626,4 +626,11 @@ interface WebViewGuest {
   // gets it, as Chrome's camera and microphone settings do. Answers why not
   // when no connected device of that kind has the id.
   SetMediaDevice(WebViewMediaDeviceKind kind, string id) => (string? refusal);
+
+  // How many elements in the page's main document match the CSS `selector`,
+  // read in Chrome's internal isolated world, so the page's own script cannot
+  // change the answer. Works while the page is hidden. Null when the page
+  // gave no number: it navigated before the read ran, or the selector is not
+  // valid there. The element rejects a selector it cannot parse first.
+  CountMatches(string selector) => (int32? count);
 };

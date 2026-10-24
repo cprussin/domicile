@@ -316,6 +316,7 @@ if wanted engine; then
       scripts/engine-guard-webview-fullscreen.sh \
       scripts/engine-guard-webview-device-request.sh \
       scripts/engine-guard-webview-media-devices.sh \
+      scripts/engine-guard-webview-count-matches.sh \
       scripts/engine-guard-webview-dialog.sh \
       scripts/engine-guard-webview-beforeunload.sh \
       scripts/engine-guard-webview-print.sh \
