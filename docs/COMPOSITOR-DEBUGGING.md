@@ -63,7 +63,7 @@ pw-link domicile-cast:capture_1 <consumer>:input_1   # without a session manager
 logical pixels. Both need an engine with display capture; a nested desktop's
 one monitor is its window. Without an engine, `DOMICILE_CAST_TEST_PATTERN=1`
 fills monitor and region casts with one color instead
-(`scripts/e2e-a-monitor-casts-through-the-portal.sh` uses it).
+(`packages/e2e-harness/tests/e2e-a-monitor-casts-through-the-portal.sh` uses it).
 
 - `cast ready … node=N`: the stream's node. A consumer connects to it.
 - `cast format … settled=…`: what the consumer picked: `Shm`, `Dmabuf`, or a
@@ -75,7 +75,7 @@ fills monitor and region casts with one color instead
 - The pointer is the built-in arrow. The engine draws the desk's pointer from
   its theme, so the compositor has no image of it.
 
-`scripts/e2e-a-window-casts-to-pipewire.sh` runs this against its own
+`packages/e2e-harness/tests/e2e-a-window-casts-to-pipewire.sh` runs this against its own
 `pipewire` daemon.
 
 ## Rendering pitfalls

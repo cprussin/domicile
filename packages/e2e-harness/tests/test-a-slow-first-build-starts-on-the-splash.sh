@@ -3,7 +3,7 @@
 # the shell once it is built, and that a failed build stays on the splash and
 # says why.
 #
-#   ./scripts/test-a-slow-first-build-starts-on-the-splash.sh
+#   packages/e2e-harness/tests/test-a-slow-first-build-starts-on-the-splash.sh
 #
 # `domicile_launch::splash` covers the progress file and the retry. This
 # covers the supervisor around them: the engine starts on the splash, each
@@ -15,7 +15,7 @@
 # its own tests.
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 TARGET="${CARGO_TARGET_DIR:-$ROOT/target}"
 
 command -v cargo >/dev/null 2>&1 || { echo "SKIP: no cargo"; exit 77; }

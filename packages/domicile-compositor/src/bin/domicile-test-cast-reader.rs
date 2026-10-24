@@ -1,4 +1,4 @@
-//! A PipeWire consumer for `scripts/e2e-a-window-casts-to-pipewire.sh` and
+//! A PipeWire consumer for `packages/e2e-harness/tests/e2e-a-window-casts-to-pipewire.sh` and
 //! `guard-scrolling-bubble.sh`.
 //!
 //!     domicile-test-cast-reader FRAMES [RRGGBB...]

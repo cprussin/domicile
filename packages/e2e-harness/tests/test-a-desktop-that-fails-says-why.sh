@@ -2,7 +2,7 @@
 # Checks the supervisor reports a failed component on the terminal, restarts
 # it, and gives up after repeated failures.
 #
-#   ./scripts/test-a-desktop-that-fails-says-why.sh
+#   packages/e2e-harness/tests/test-a-desktop-that-fails-says-why.sh
 #
 # Unit tests cover the messages and restart policy. This runs the real
 # `domicile` binary against stub engine and compositor scripts, and counts
@@ -16,7 +16,7 @@
 # known to exercise the supervisor and not a broken harness.
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 TARGET="${CARGO_TARGET_DIR:-$ROOT/target}"
 
 command -v cargo >/dev/null 2>&1 || { echo "SKIP: no cargo"; exit 77; }

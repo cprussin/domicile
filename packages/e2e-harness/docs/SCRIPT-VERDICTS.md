@@ -1,6 +1,7 @@
 # Script verdicts
 
-How `scripts/*.sh` report failures, and what `src/verdicts.ts` checks.
+How the shell checks (`scripts/*.sh` and each package's `tests/*.sh`) report
+failures, and what `src/verdicts.ts` checks.
 
 ## Exit codes
 
@@ -13,7 +14,7 @@ How `scripts/*.sh` report failures, and what `src/verdicts.ts` checks.
 apart, so a compositor crash reported as a harness fault hides the real
 failure.
 
-## Helpers in `scripts/lib/harness.sh`
+## Helpers in `packages/e2e-harness/lib/harness.sh`
 
 - `harness_fault <pid> <what it was doing> <line>...`: bail for the script's
   own fault. Checks first whether the compositor is still alive, and reports a
@@ -48,7 +49,7 @@ fi
 Most scripts don't source the helpers. To list the ones that do:
 
 ```sh
-grep -l lib/harness.sh scripts/*.sh
+grep -l lib/harness.sh scripts/*.sh packages/*/tests/*.sh
 ```
 
 ## Rules in `src/verdicts.ts`
@@ -57,7 +58,7 @@ Applied to every `.sh` directly in `scripts/` (not `scripts/lib/`):
 
 1. No bare `exit 99`.
 2. No local definition of any helper above.
-3. No call to a helper without a line that sources `scripts/lib/harness.sh`.
+3. No call to a helper without a line that sources `packages/e2e-harness/lib/harness.sh`.
 
 Rules 2 and 3 only apply to scripts that use the helpers. The rules catch
 common mistakes. They can't catch every one, so follow the script structure.

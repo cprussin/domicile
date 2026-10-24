@@ -2,7 +2,7 @@
 # Checks the compositor sizes the chrome to the whole desktop, including after
 # a display is added.
 #
-#   nix develop .#full -c ./scripts/e2e-chrome-fills-the-desktop.sh
+#   nix develop .#full -c packages/e2e-harness/tests/e2e-chrome-fills-the-desktop.sh
 #
 # `present` draws the chrome at its committed size without scaling, so a
 # wrong configure shows as a page in the corner of a black screen.
@@ -12,11 +12,11 @@
 # under test. Checks that read the engine's pixels live in
 # `packages/domicile-engine/scripts/`.
 set -u
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# shellcheck source=scripts/lib/harness.sh
-. "$ROOT/scripts/lib/harness.sh"
-# shellcheck source=scripts/lib/test-client.sh
-. "$ROOT/scripts/lib/test-client.sh"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+# shellcheck source=packages/e2e-harness/lib/harness.sh
+. "$ROOT/packages/e2e-harness/lib/harness.sh"
+# shellcheck source=packages/e2e-harness/lib/test-client.sh
+. "$ROOT/packages/e2e-harness/lib/test-client.sh"
 BIN="$ROOT/target/debug/domicile-compositor"
 cargo build -p domicile-compositor >/dev/null 2>&1 || {
   echo "the compositor did not build; run: nix develop .#full -c cargo build -p domicile-compositor"

@@ -193,7 +193,7 @@ use smithay::backend::renderer::gles::GlesRenderer;
 /// Log messages that tests and operators search for by text.
 ///
 /// Renaming one means updating the tests named on it. Not a complete list:
-/// `scripts/e2e-dmabuf.sh` and `tests/` also match unnamed messages such as
+/// `packages/e2e-harness/tests/e2e-dmabuf.sh` and `tests/` also match unnamed messages such as
 /// `toplevel drew`.
 mod grepped {
     /// A chrome message that failed to parse.

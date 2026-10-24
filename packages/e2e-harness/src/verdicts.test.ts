@@ -9,7 +9,7 @@ import { bailFaults } from "./verdicts";
 const SCRIPTS = join(import.meta.dir, "..", "..", "..", "scripts");
 
 /** The sourced helper the scripts bail through. */
-const HARNESS = join(SCRIPTS, "lib", "harness.sh");
+const HARNESS = join(import.meta.dir, "..", "lib", "harness.sh");
 
 /**
  * Runs `harness_fault` against `pid` and reports what the shell saw.
@@ -158,14 +158,14 @@ describe("bailFaults", () => {
     expect(
       bailFaults(
         [
-          '. "$ROOT/scripts/lib/harness.sh"',
+          '. "$ROOT/packages/e2e-harness/lib/harness.sh"',
           'if [ -z "$X" ]; then',
           "  exit 99",
           "fi",
         ].join("\n"),
       ),
     ).toStrictEqual([
-      "3: exits 99 without a helper from scripts/lib/harness.sh",
+      "3: exits 99 without a helper from packages/e2e-harness/lib/harness.sh",
     ]);
   });
 
@@ -198,7 +198,7 @@ describe("bailFaults", () => {
     expect(
       bailFaults(
         [
-          '. "$ROOT/scripts/lib/harness.sh"',
+          '. "$ROOT/packages/e2e-harness/lib/harness.sh"',
           "function harness_fault {",
           '  exit "99"',
           "}",
@@ -211,12 +211,12 @@ describe("bailFaults", () => {
     // Each names the helper's path without sourcing it. A substring rule
     // would accept the shellcheck directive alone.
     for (const script of [
-      '# shellcheck source=scripts/lib/harness.sh\nharness_fault "$COMP" "x"',
-      '# . "$ROOT/scripts/lib/harness.sh"\nharness_fault "$COMP" "x"',
-      'echo "see scripts/lib/harness.sh"\nharness_fault "$COMP" "x"',
+      '# shellcheck source=packages/e2e-harness/lib/harness.sh\nharness_fault "$COMP" "x"',
+      '# . "$ROOT/packages/e2e-harness/lib/harness.sh"\nharness_fault "$COMP" "x"',
+      'echo "see packages/e2e-harness/lib/harness.sh"\nharness_fault "$COMP" "x"',
     ]) {
       expect(bailFaults(script)).toContain(
-        "calls harness_fault without sourcing scripts/lib/harness.sh",
+        "calls harness_fault without sourcing packages/e2e-harness/lib/harness.sh",
       );
     }
   });
@@ -227,7 +227,7 @@ describe("bailFaults", () => {
     expect(
       bailFaults(
         [
-          '. "$ROOT/scripts/lib/harness.sh"',
+          '. "$ROOT/packages/e2e-harness/lib/harness.sh"',
           "harness_fault() (",
           "  exit 99",
           ")",
@@ -241,12 +241,12 @@ describe("bailFaults", () => {
     expect(
       bailFaults(['compositor_verdict "$COMP" "FAIL: it did not"'].join("\n")),
     ).toStrictEqual([
-      "calls compositor_verdict without sourcing scripts/lib/harness.sh",
+      "calls compositor_verdict without sourcing packages/e2e-harness/lib/harness.sh",
     ]);
     expect(
       bailFaults(
         [
-          '. "$ROOT/scripts/lib/harness.sh"',
+          '. "$ROOT/packages/e2e-harness/lib/harness.sh"',
           "compositor_verdict() {",
           "  exit 1",
           "}",
@@ -291,7 +291,7 @@ describe("bailFaults", () => {
     expect(
       bailFaults(['harness_fault "$COMP" "it worked"'].join("\n")),
     ).toStrictEqual([
-      "calls harness_fault without sourcing scripts/lib/harness.sh",
+      "calls harness_fault without sourcing packages/e2e-harness/lib/harness.sh",
     ]);
   });
 
@@ -299,7 +299,7 @@ describe("bailFaults", () => {
     expect(
       bailFaults(
         [
-          '. "$ROOT/scripts/lib/harness.sh"',
+          '. "$ROOT/packages/e2e-harness/lib/harness.sh"',
           'if [ -z "$X" ]; then',
           '  harness_fault "$COMP" "it worked" "ERROR: it did not"',
           "fi",

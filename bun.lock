@@ -185,6 +185,7 @@
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/check-runner": "workspace:*",
         "@types/bun": "catalog:",
         "typescript": "catalog:",
       },

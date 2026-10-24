@@ -2,7 +2,7 @@
 # Checks a window reaches a PipeWire consumer as video, upright, and that the
 # cast ends when the consumer leaves.
 #
-#   nix develop .#full -c ./scripts/e2e-a-window-casts-to-pipewire.sh
+#   nix develop .#full -c packages/e2e-harness/tests/e2e-a-window-casts-to-pipewire.sh
 #
 # Starts its own headless `pipewire` daemon, with no session manager, so the
 # check links the consumer with `pw-link`. `DOMICILE_CAST_WINDOW` starts the
@@ -15,11 +15,11 @@
 # the bottom half, so the center pixel is #3366CC. Cast as drawn, the frames
 # would be 240x320.
 set -u
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# shellcheck source=scripts/lib/harness.sh
-. "$ROOT/scripts/lib/harness.sh"
-# shellcheck source=scripts/lib/test-client.sh
-. "$ROOT/scripts/lib/test-client.sh"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+# shellcheck source=packages/e2e-harness/lib/harness.sh
+. "$ROOT/packages/e2e-harness/lib/harness.sh"
+# shellcheck source=packages/e2e-harness/lib/test-client.sh
+. "$ROOT/packages/e2e-harness/lib/test-client.sh"
 
 for tool in pipewire pw-link; do
   command -v "$tool" >/dev/null || {
