@@ -37,7 +37,7 @@ so the copy outlives the client that copied it.
 - Both selections. A data-control copy enters the history like any other, and
   a restored row is what data-control clients read.
 - Tested in `packages/domicile-compositor/tests/selection.rs` and
-  `scripts/e2e-data-control.sh`.
+  `packages/e2e-harness/tests/e2e-data-control.sh`.
 
 ## Browser windows
 

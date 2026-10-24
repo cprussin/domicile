@@ -89,7 +89,7 @@ GPU. Every gate in `WaylandBufferManagerGpu::GetGbmDevice()` passes on `crux`:
   provide it, and NixOS keeps vendor libraries in `/run/opengl-driver/lib`. So
   the engine falls back to software unless the library path is set.
 - `GPU=1` on the spike scripts sets the path.
-- `scripts/e2e-dmabuf.sh` passes on `crux`.
+- `packages/e2e-harness/tests/e2e-dmabuf.sh` passes on `crux`.
 
 ## `SurfaceLayerBridge` vs the OOPIF path
 

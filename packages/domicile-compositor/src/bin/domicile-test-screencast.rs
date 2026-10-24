@@ -1,5 +1,5 @@
-//! An application and a shell for `scripts/e2e-a-screen-cast-through-the-portal.sh`
-//! and `scripts/e2e-a-monitor-casts-through-the-portal.sh`.
+//! An application and a shell for `packages/e2e-harness/tests/e2e-a-screen-cast-through-the-portal.sh`
+//! and `packages/e2e-harness/tests/e2e-a-monitor-casts-through-the-portal.sh`.
 //!
 //!     domicile-test-screencast CHROME_SOCKET (--window TITLE | --monitor)
 //!

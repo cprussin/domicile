@@ -11,7 +11,7 @@ const ROOT = join(import.meta.dir, "..", "..", "..");
  * Every check, as `[path, contents]`: `scripts/*.sh` and each package's
  * `tests/*.sh`.
  *
- * Does not recurse, which leaves out the sourced `scripts/lib/harness.sh`.
+ * Does not recurse, which leaves out the sourced `packages/e2e-harness/lib/harness.sh`.
  */
 const shellScripts = (): [string, string][] =>
   ["scripts", ...packageTests()].flatMap((directory) =>

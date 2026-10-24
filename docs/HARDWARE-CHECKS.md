@@ -90,7 +90,7 @@ last frame.
 
 Fail: `blank=` above zero, or an `on the page with nothing in it` line.
 
-Elsewhere, `scripts/test-a-desktop-that-fails-says-why.sh` covers the
+Elsewhere, `packages/e2e-harness/tests/test-a-desktop-that-fails-says-why.sh` covers the
 launcher against fake components, and unit tests cover the compositor's
 decisions. Only this run covers the real `dlopen`, reconnect and re-import.
 

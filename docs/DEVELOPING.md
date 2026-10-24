@@ -13,11 +13,12 @@ bun run turbo test           # TypeScript: lint, types, unit tests
 
 nix develop .#full           # adds wayland, mesa, weston, kitty
 ./scripts/check.sh           # all checks; run before every push
-./scripts/check.sh e2e       # one group: shell, rust, typescript, e2e, engine, nix
+./scripts/check.sh e2e       # one group: shell, rust, typescript, e2e, nix, distro
 ```
 
-- `check.sh` runs every `scripts/test-*.sh` and `scripts/e2e-*.sh` by glob. A
-  new script in that pattern runs automatically.
+- Each package's `tests/*.sh` runs in its turbo `test:shell`, or `test:e2e`
+  for `e2e-harness`. `check.sh shell` runs every `scripts/test-*.sh`. A new
+  script in either place runs automatically.
 - `scripts/smoke-compositor.sh` is not in `check.sh`. Run it by hand.
 - No test needs a display.
 - The flake has no app for running checks; use a checkout.

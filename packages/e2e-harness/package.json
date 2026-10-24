@@ -6,6 +6,7 @@
   "description": "Headless chrome stand-ins that drive the repo's end-to-end scripts, and the check on those scripts' own machinery.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/check-runner": "workspace:*",
     "@types/bun": "catalog:",
     "typescript": "catalog:"
   },
@@ -24,6 +25,7 @@
   "name": "@domicile-desktop/e2e-harness",
   "private": true,
   "scripts": {
+    "test:e2e": "check-runner tests/*.sh",
     "test:types": "tsc --noEmit",
     "test:unit": "bun test"
   },

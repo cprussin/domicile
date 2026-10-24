@@ -2,14 +2,14 @@
 # Checks `wl-copy` and `wl-paste` work with no window focused, on both the
 # clipboard and the primary selection.
 #
-#   nix develop .#full -c ./scripts/e2e-data-control.sh
+#   nix develop .#full -c packages/e2e-harness/tests/e2e-data-control.sh
 #
 # Both use `ext-data-control-v1`, or `zwlr_data_control_v1` when they predate
 # it. Without either they wait for keyboard focus, which no window here has.
 set -u
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# shellcheck source=scripts/lib/harness.sh
-. "$ROOT/scripts/lib/harness.sh"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+# shellcheck source=packages/e2e-harness/lib/harness.sh
+. "$ROOT/packages/e2e-harness/lib/harness.sh"
 command -v wl-copy >/dev/null && command -v wl-paste >/dev/null || {
   echo "SKIP: no wl-copy or wl-paste; they are in nix develop .#full"
   exit 77

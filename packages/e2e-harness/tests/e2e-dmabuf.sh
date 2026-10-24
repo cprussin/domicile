@@ -2,12 +2,12 @@
 # Checks the compositor advertises `zwp_linux_dmabuf_v1`, which a GPU client
 # binds before it can send a buffer.
 #
-#   nix develop .#full -c ./scripts/e2e-dmabuf.sh
+#   nix develop .#full -c packages/e2e-harness/tests/e2e-dmabuf.sh
 #
 # Headless: no chrome and no output. Mesa's software EGL is enough to
 # advertise the global.
 set -u
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 BIN="$ROOT/target/debug/domicile-compositor"
 # Always build: a stale binary would test code that is not in the tree.
 cargo build -p domicile-compositor >/dev/null 2>&1 || {

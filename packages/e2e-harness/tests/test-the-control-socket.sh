@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tests that every running desktop answers its own control socket.
 #
-#   ./scripts/test-the-control-socket.sh
+#   packages/e2e-harness/tests/test-the-control-socket.sh
 #
 # The unit tests cover the socket's rules. This covers the wiring in the
 # binary: a desktop takes its own socket, names it in DOMICILE_SOCK, answers
@@ -16,7 +16,7 @@
 # are, and a real engine takes hours to build and needs a display.
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 TARGET="${CARGO_TARGET_DIR:-$ROOT/target}"
 
 command -v cargo >/dev/null 2>&1 || { echo "SKIP: no cargo"; exit 77; }

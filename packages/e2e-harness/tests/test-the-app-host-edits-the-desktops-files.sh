@@ -2,7 +2,7 @@
 # Tests `domicile-app-host` as an app runs it: framed messages on stdin
 # and stdout, and the desktop asked over DOMICILE_SOCK.
 #
-#   ./scripts/test-the-app-host-edits-the-desktops-files.sh
+#   packages/e2e-harness/tests/test-the-app-host-edits-the-desktops-files.sh
 #
 # The unit tests cover the protocol (`domicile_launch::app_host`). This covers
 # the binary: the framing on real pipes, reading and writing real files, the
@@ -10,7 +10,7 @@
 # desktop is a fake that answers `settings_files`.
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 TARGET="${CARGO_TARGET_DIR:-$ROOT/target}"
 
 command -v cargo >/dev/null 2>&1 || { echo "SKIP: no cargo"; exit 77; }
