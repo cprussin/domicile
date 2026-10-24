@@ -10,7 +10,8 @@
 # and `distro` needs packages from `distro/build.sh` and docker; without them
 # they skip.
 #
-# `DOMICILE_CHECK_STRICT=1` turns a skip into a failure, for CI.
+# Each check is reported as `packages/check-runner` reports it; see its README
+# for the verdicts and `DOMICILE_CHECK_STRICT`.
 #
 # It sets up what the checks need (dependencies, tools, a display) and reports
 # any check it could not run as skipped, never as passed.
@@ -20,8 +21,6 @@ set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-
-PASSED=(); FAILED=(); SKIPPED=()
 
 # Which groups to run; none means all.
 #
@@ -41,25 +40,9 @@ wanted() {
   return 1
 }
 
-STRICT="${DOMICILE_CHECK_STRICT:-0}"
-
-# Checks known not to run here, space separated. Under `STRICT`, these may
-# skip and any other skip fails.
-EXPECTED_SKIPS="${DOMICILE_CHECK_ALLOW_SKIP:-}"
-
-# The exit status a script uses to say it could not run (automake's
-# convention). It distinguishes a skip from a pass.
-readonly SKIPPED_STATUS=77
-
-# A check's output goes to a file, shown only when it fails. A passing check's
-# `PASS:` lines are printed under its `ok`, so a pass says what it established.
-run() {
-  local name="$1"; shift
-  local log; log="$(mktemp)"
-  label "$name"
-  "$@" >"$log" 2>&1
-  verdict "$name" "$?" "$log"
-}
+# How each check is run and reported, shared with the packages' own checks.
+. "$ROOT/packages/check-runner/src/report.sh"
+report_start
 
 # Runs the given engine scripts at once, as noise, then prints their verdicts
 # in order. Waits on its own PIDs only: a bare `wait` would also wait on the
@@ -80,64 +63,9 @@ run_together() {
   rm -rf "$dir"
 }
 
-verdict() {
-  local name="$1" status="$2" log="$3"
-  if [ "$status" -eq 0 ]; then
-    echo "ok"
-    sed -n 's/^ *PASS: /    PASS: /p' "$log"
-    PASSED+=("$name")
-  elif [ "$status" -eq "$SKIPPED_STATUS" ]; then
-    # Its own reason, printed so a skip is visible.
-    skip "$name" "$(sed -n 's/^ *SKIP: *//p' "$log" | head -1)"
-  else
-    echo "FAILED"
-    FAILED+=("$name")
-    echo "--- $name ---" >>"$FAILURES"
-    # A failing test's report from `cargo test`, which later test binaries
-    # can push above the tail.
-    sed -n '/^---- .* stdout ----$/,/^test result: /p' "$log" >>"$FAILURES"
-    tail -100 "$log" >>"$FAILURES"
-    # Keeps the whole log too: a failure's key line can sit above the tail.
-    KEPT="$KEEP_LOGS/$name.log"
-    cp "$log" "$KEPT"
-    echo "  (the whole log: $KEPT)" >>"$FAILURES"
-    echo >>"$FAILURES"
-  fi
-  rm -f "$log"
-}
-
-# Prints the verdict only; `label` already printed the name.
-skip() {
-  case " $EXPECTED_SKIPS " in
-    *" $1 "*)
-      printf 'skipped, as expected here (%s)\n' "$2"
-      SKIPPED+=("$1 — expected: $2")
-      return
-      ;;
-  esac
-  if [ "$STRICT" = "1" ]; then
-    printf 'FAILED (%s)\n' "$2"
-    FAILED+=("$1 — could not run: $2")
-    echo "--- $1 ---" >>"$FAILURES"
-    echo "could not run: $2" >>"$FAILURES"
-    echo >>"$FAILURES"
-  else
-    printf 'skipped (%s)\n' "$2"
-    SKIPPED+=("$1 — $2")
-  fi
-}
-
-# Prints the name and leaves the line open for the verdict, so a long check
-# shows what is running.
-label() {
-  printf '  %-24s ' "$1"
-}
-
-FAILURES="$(mktemp)"
-# Where a failing check's whole log is kept. Not cleaned up, so it outlives the
-# run. `DOMICILE_CHECK_LOG_DIR` lets engine.yml choose a shared path: inside
-# `nix develop --command`, $TMPDIR is private to that command.
-KEEP_LOGS="${DOMICILE_CHECK_LOG_DIR:-${TMPDIR:-/tmp}}/domicile-check-logs"
+# Where a failing check's whole log is kept. `DOMICILE_CHECK_LOG_DIR` lets
+# engine.yml choose a shared path: inside `nix develop --command`, $TMPDIR is
+# private to that command. Emptied so a log here is from this run.
 rm -rf "$KEEP_LOGS"; mkdir -p "$KEEP_LOGS"
 cleanup() {
   [ -n "${XVFB:-}" ] && kill "$XVFB" 2>/dev/null
@@ -366,17 +294,4 @@ fi
 
 # ---- what happened --------------------------------------------------------
 
-echo
-if [ "${#FAILED[@]}" -gt 0 ]; then
-  echo "== what failed =="
-  cat "$FAILURES"
-fi
-echo "== ${#PASSED[@]} passed, ${#FAILED[@]} failed, ${#SKIPPED[@]} skipped =="
-# A run that checked nothing fails.
-if [ $(( ${#PASSED[@]} + ${#FAILED[@]} + ${#SKIPPED[@]} )) -eq 0 ]; then
-  echo "  and that is a failure: nothing ran."
-  exit 1
-fi
-for one in "${SKIPPED[@]:-}"; do [ -n "$one" ] && echo "  skipped: $one"; done
-for one in "${FAILED[@]:-}"; do [ -n "$one" ] && echo "  failed:  $one"; done
-[ "${#FAILED[@]}" -eq 0 ]
+report_end
