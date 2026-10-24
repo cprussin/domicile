@@ -24,13 +24,17 @@ namespace domicile {
 
 // Every permission a shell shows, in the order SitePermissionsChanged reports
 // them.
-inline constexpr std::array<mojom::WebViewPermission, 6> kSitePermissions = {
+inline constexpr std::array<mojom::WebViewPermission, 10> kSitePermissions = {
     mojom::WebViewPermission::kCamera,
     mojom::WebViewPermission::kMicrophone,
     mojom::WebViewPermission::kLocation,
     mojom::WebViewPermission::kNotifications,
     mojom::WebViewPermission::kClipboard,
     mojom::WebViewPermission::kMidi,
+    mojom::WebViewPermission::kWindowManagement,
+    mojom::WebViewPermission::kLocalFonts,
+    mojom::WebViewPermission::kIdleDetection,
+    mojom::WebViewPermission::kAutomaticDownloads,
 };
 
 // The permission a prompt's request asks for, or nothing for a request no
@@ -52,7 +56,9 @@ ContentSetting StoredSetting(mojom::WebViewPermissionSetting setting,
                              ContentSetting default_setting);
 
 // The name a shell and the command socket give `permission`: "camera",
-// "microphone", "location", "notifications", "clipboard" or "midi".
+// "microphone", "location", "notifications", "clipboard", "midi",
+// "window-management", "local-fonts", "idle-detection" or
+// "automatic-downloads".
 std::string_view PermissionName(mojom::WebViewPermission permission);
 std::optional<mojom::WebViewPermission> PermissionNamed(std::string_view name);
 

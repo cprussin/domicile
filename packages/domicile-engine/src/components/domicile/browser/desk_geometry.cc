@@ -94,6 +94,37 @@ display::ScreenInfos DeskScreenInfos(const DeskGeometry& desk,
   return infos;
 }
 
+display::ScreenInfos PopupScreenInfos(display::ScreenInfos infos,
+                                      const gfx::Rect& popup) {
+  const display::ScreenInfo* on = nullptr;
+  int overlap = 0;
+  for (const display::ScreenInfo& monitor : infos.screen_infos) {
+    if (monitor.label != cc::kDomicileDisplayLabel) {
+      continue;
+    }
+    if (monitor.rect.Contains(popup.origin())) {
+      on = &monitor;
+      break;
+    }
+    gfx::Rect shared = monitor.rect;
+    shared.Intersect(popup);
+    const int area = shared.width() * shared.height();
+    if (area > overlap) {
+      overlap = area;
+      on = &monitor;
+    }
+  }
+  if (on == nullptr) {
+    return infos;
+  }
+  const gfx::Rect rect = on->rect;
+  const gfx::Rect available_rect = on->available_rect;
+  display::ScreenInfo& current = infos.mutable_current();
+  current.rect = rect;
+  current.available_rect = available_rect;
+  return infos;
+}
+
 std::optional<int64_t> WarpLandsOn(const std::vector<DeskPlace>& lit,
                                    int64_t host,
                                    const gfx::Point& at) {

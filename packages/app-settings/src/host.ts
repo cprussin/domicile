@@ -26,6 +26,10 @@ export const PERMISSIONS = [
   "notifications",
   "clipboard",
   "midi",
+  "window-management",
+  "local-fonts",
+  "idle-detection",
+  "automatic-downloads",
 ] as const;
 
 /** A permission a site can be granted. */

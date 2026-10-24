@@ -29,7 +29,9 @@ use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 use super::queue::{ask, Queue};
 use super::screenshot::{frozen, Shoot};
 use super::session;
-use crate::casting::{self, Candidate, Casting, CursorMode, Event, Region, Source, StreamId};
+use crate::casting::{
+    self, Candidate, Casting, CursorMode, Event, Heard, Region, Source, StreamId,
+};
 use crate::reply::{reply, Replier};
 
 /// The `org.freedesktop.impl.portal.ScreenCast` version implemented.
@@ -62,6 +64,21 @@ pub struct ScreenCast {
     grants: Arc<Mutex<Grants>>,
     /// Takes the frame of the desk the picker previews sources on.
     shoot: Shoot,
+    picks: Picks,
+}
+
+/// What each running stream's node shows, for [`CastPicks`].
+type Picks = Arc<Mutex<HashMap<u32, Pick>>>;
+
+/// What a stream's node shows.
+struct Pick {
+    stream: StreamId,
+    source_type: u32,
+    /// The engine's id of the browser window it shows; empty for any other
+    /// source.
+    browser_window: String,
+    /// Its sound node's name, or empty when it has none.
+    sound: String,
 }
 
 /// One session, from `CreateSession` until it closes.
@@ -98,7 +115,46 @@ impl ScreenCast {
             sessions: Arc::default(),
             grants: Arc::new(Mutex::new(grants)),
             shoot,
+            picks: Arc::default(),
         }
+    }
+
+    /// The `org.domicile.ScreenCast` object, which says what a stream's node
+    /// shows.
+    pub fn picks(&self) -> CastPicks {
+        CastPicks {
+            picks: Arc::clone(&self.picks),
+        }
+    }
+}
+
+/// Says what a running stream's node shows. The engine asks it for a page's
+/// `getDisplayMedia()`, which webrtc's portal capturer gives the node alone:
+/// the answer names the display surface, a browser window to capture as a
+/// tab, and the sound node (see `crate::casting::audio`). Start's results
+/// carry none of the last two.
+pub struct CastPicks {
+    picks: Picks,
+}
+
+#[zbus::interface(name = "org.domicile.ScreenCast")]
+impl CastPicks {
+    /// The source type, browser window and sound node name of node `node`'s
+    /// stream. The browser window is empty for any other source; the sound
+    /// is empty when the stream carries none.
+    fn pick(&self, node: u32) -> zbus::fdo::Result<(u32, String, String)> {
+        self.picks
+            .lock()
+            .unwrap()
+            .get(&node)
+            .map(|pick| {
+                (
+                    pick.source_type,
+                    pick.browser_window.clone(),
+                    pick.sound.clone(),
+                )
+            })
+            .ok_or_else(|| zbus::fdo::Error::UnknownObject(format!("no stream at node {node}")))
     }
 }
 
@@ -218,12 +274,19 @@ impl ScreenCast {
             queue: Arc::clone(&self.queue),
             casting: self.casting.clone(),
             sessions: Arc::clone(&self.sessions),
+            picks: Arc::clone(&self.picks),
             connection: connection.clone(),
             handle: session_handle.clone(),
         };
         let Some(streams) = self.cast(&picked, selected.cursor, &ending).await else {
             return (2, HashMap::new());
         };
+        {
+            let mut picks = self.picks.lock().unwrap();
+            for ((stream, node), candidate) in streams.iter().zip(&picked) {
+                picks.insert(*node, pick(*stream, candidate));
+            }
+        }
         let capture = self.queue.begin(
             app_id,
             CapturingKind::ScreenCast {
@@ -497,6 +560,7 @@ struct Ending {
     queue: Arc<Queue>,
     casting: Casting,
     sessions: Arc<Mutex<HashMap<OwnedObjectPath, CastSession>>>,
+    picks: Picks,
     connection: zbus::Connection,
     handle: OwnedObjectPath,
 }
@@ -530,6 +594,10 @@ impl Ending {
     /// `stream` ended. Runs on the Wayland or PipeWire thread, so the session
     /// is closed on the bus's executor.
     fn ended(&self, stream: StreamId) {
+        self.picks
+            .lock()
+            .unwrap()
+            .retain(|_, pick| pick.stream != stream);
         let capture = {
             let mut sessions = self.sessions.lock().unwrap();
             let Some(session) = sessions.get_mut(&self.handle) else {
@@ -674,7 +742,6 @@ fn chosen(picks: &[CastPick], open: &[Candidate], selected: &Selected) -> Option
                     .cloned(),
             }?;
             Some(Candidate {
-                process: None,
                 part: part_of(pick),
                 ..candidate
             })
@@ -707,6 +774,27 @@ fn asked_for(selected: &Selected, source: &Source) -> bool {
         _ => source_type(source),
     };
     selected.types & types != 0
+}
+
+/// What `stream` of `candidate` shows.
+fn pick(stream: StreamId, candidate: &Candidate) -> Pick {
+    let sound = match &candidate.source {
+        Source::Window(id) => candidate.process.map(|process| Heard::Window {
+            id: id.clone(),
+            process,
+        }),
+        Source::Monitor(_) | Source::Region(_) => Some(Heard::Everything),
+        Source::BrowserWindow(_) => None,
+    };
+    Pick {
+        stream,
+        source_type: source_type(&candidate.source),
+        browser_window: match &candidate.source {
+            Source::BrowserWindow(id) => id.clone(),
+            _ => String::new(),
+        },
+        sound: sound.map(|heard| heard.node_name()).unwrap_or_default(),
+    }
 }
 
 /// The spec's source type of `source`.
@@ -865,8 +953,11 @@ mod tests {
         );
         let (casting, casts) = wayland_thread();
         let backend = ScreenCast::new(Arc::clone(&queue), casting, grants, shoot);
+        let picks = backend.picks();
         let (server, client) = connected(|builder| {
             builder
+                .serve_at(OBJECT_PATH, picks)
+                .expect("the picks registered")
                 .serve_at(OBJECT_PATH, backend)
                 .expect("the interface registered")
         });
@@ -938,7 +1029,7 @@ mod tests {
                 source: Source::Window("app-3".into()),
                 title: "Notes".into(),
                 app_id: "org.gnome.TextEditor".into(),
-                process: None,
+                process: Some(7),
                 part: None,
                 bounds: Some(Region {
                     position: (10, 20),
@@ -1273,6 +1364,71 @@ mod tests {
         assert_eq!((desk.width, desk.height), (1, 1));
         served.queue.answer(items[0].id, PortalAnswer::Canceled);
         starting.join().expect("Start returned");
+    }
+
+    /// What `Pick` says of node 42, the fake Wayland thread's every stream.
+    fn picked(served: &Served) -> zbus::Result<(u32, String, String)> {
+        served
+            .client
+            .call_method(
+                None::<&str>,
+                OBJECT_PATH,
+                Some("org.domicile.ScreenCast"),
+                "Pick",
+                &(42u32,),
+            )
+            .map(|reply| reply.body().deserialize().expect("(uss)"))
+    }
+
+    #[test]
+    fn the_engine_learns_what_a_streams_node_shows() {
+        let served = served(Grants::default());
+        select(&served.client, vec![("types", Value::from(2u32))]);
+        assert!(picked(&served).is_err(), "nothing is cast yet");
+
+        pick_notes(&served);
+        heard(&served.casts);
+
+        assert_eq!(
+            picked(&served).expect("a pick"),
+            (2, String::new(), "domicile-sound-window-app-3".into())
+        );
+        close(&served);
+        heard(&served.casts);
+        assert!(picked(&served).is_err(), "the stream ended");
+    }
+
+    #[test]
+    fn a_monitors_stream_carries_the_desks_sound() {
+        let served = served(Grants::default());
+        select(&served.client, vec![("types", Value::from(1u32))]);
+
+        pick(
+            &served,
+            vec![CastPick::Monitor {
+                name: "drm-1".into(),
+            }],
+        );
+        heard(&served.casts);
+
+        assert_eq!(
+            picked(&served).expect("a pick"),
+            (1, String::new(), "domicile-sound-desk".into())
+        );
+    }
+
+    #[test]
+    fn a_browser_windows_stream_names_it_and_carries_no_sound() {
+        let served = served(Grants::default());
+        select(&served.client, vec![("types", Value::from(2u32))]);
+
+        pick(&served, vec![meet()]);
+        heard(&served.casts);
+
+        assert_eq!(
+            picked(&served).expect("a pick"),
+            (2, "7".into(), String::new())
+        );
     }
 
     #[test]

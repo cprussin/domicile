@@ -14,8 +14,8 @@ namespace domicile {
 // window is the desk, so the dialog and the whole desk stop taking input.
 //
 // The dialog asks the page's <webview> through FileChooserRequested. A page in
-// no <webview> (the shell itself) has no one to ask, so its dialog is
-// canceled and logged.
+// no <webview> (the shell itself) asks the compositor's FileChooser portal
+// backend instead, whose picker the shell draws (see AskThePortalForFiles).
 //
 // Must be called on the UI thread before any page can open a dialog.
 void UseTheShellForFileDialogs();

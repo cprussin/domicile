@@ -35,6 +35,7 @@
 #include "components/domicile/browser/file_choice.h"
 #include "components/domicile/browser/page_matches.h"
 #include "components/domicile/browser/placeholder_stage.h"
+#include "components/domicile/browser/portal_picker.h"
 #include "components/domicile/browser/render_process.h"
 #include "components/domicile/browser/screen_capture.h"
 #include "components/domicile/browser/shortcut_registry.h"
@@ -44,7 +45,6 @@
 #include "components/security_state/content/content_utils.h"
 #include "components/security_state/core/security_state.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/desktop_capture.h"
 #include "content/public/browser/document_service.h"
 #include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/host_zoom_map.h"
@@ -61,12 +61,14 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/unowned_inner_web_contents_client.h"
+#include "content/public/browser/web_contents_media_capture_id.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/common/isolated_world_ids.h"
 #include "content/public/common/javascript_dialog_type.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/stop_find_action.h"
 #include "content/public/common/url_constants.h"
+#include "media/mojo/mojom/capture_handle.mojom.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "net/http/http_request_headers.h"
@@ -78,6 +80,7 @@
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom.h"
 #include "third_party/blink/public/mojom/frame/find_in_page.mojom.h"
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
+#include "third_party/blink/public/mojom/media/capture_handle_config.mojom.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/page_transition_types.h"
@@ -108,6 +111,67 @@ BrowserWindowHost& Host() {
   // guest finding none means the fork never set it.
   CHECK(g_browser_window_host);
   return *g_browser_window_host;
+}
+
+// The capture handle `capturer`, of `origin`, sees of a capture of
+// `captured`, or null where the captured page withholds it. As Chrome's
+// CreateCaptureHandle (desktop_capture_devices_util.cc).
+media::mojom::CaptureHandlePtr CaptureHandleFor(content::WebContents& capturer,
+                                                const url::Origin& origin,
+                                                content::WebContents& captured) {
+  if (origin.opaque()) {
+    return nullptr;
+  }
+  content::RenderFrameHost& captured_frame =
+      captured.GetPrimaryPage().GetMainDocument();
+  const blink::mojom::CaptureHandleConfig& config =
+      captured.GetPrimaryPage().GetCaptureHandleConfig();
+  if (!config.all_origins_permitted &&
+      std::ranges::none_of(config.permitted_origins,
+                           [&origin](const url::Origin& permitted) {
+                             return origin.IsSameOriginWith(permitted);
+                           })) {
+    return nullptr;
+  }
+  // Private pages see no handle across pages, nor show one.
+  if (&capturer.GetPrimaryPage().GetMainDocument() != &captured_frame &&
+      (capturer.GetBrowserContext()->IsOffTheRecord() ||
+       captured.GetBrowserContext()->IsOffTheRecord())) {
+    return nullptr;
+  }
+  if (!config.expose_origin && config.capture_handle.empty()) {
+    return nullptr;
+  }
+  media::mojom::CaptureHandlePtr handle = media::mojom::CaptureHandle::New();
+  if (config.expose_origin) {
+    handle->origin = captured_frame.GetLastCommittedOrigin();
+  }
+  handle->capture_handle = config.capture_handle;
+  return handle;
+}
+
+// The answer for `capturer`'s `getDisplayMedia()` of browser window
+// `window`'s page as a tab, or null once either has closed. See ScreenChoice.
+blink::mojom::StreamDevicesSetPtr BrowserWindowTab(
+    base::WeakPtr<content::WebContents> capturer,
+    const url::Origin& origin,
+    bool audio,
+    bool mute,
+    const std::string& window) {
+  if (!capturer) {
+    return nullptr;
+  }
+  WebViewGuest* const guest =
+      Host().Find(*capturer->GetBrowserContext(), window);
+  if (guest == nullptr) {
+    return nullptr;
+  }
+  content::WebContents& captured = guest->contents();
+  content::RenderFrameHost& page = captured.GetPrimaryPage().GetMainDocument();
+  const content::WebContentsMediaCaptureId tab(
+      page.GetProcess()->GetDeprecatedID(), page.GetRoutingID(),
+      /*disable_local_echo=*/mute);
+  return TabCapture(tab, CaptureHandleFor(*capturer, origin, captured), audio);
 }
 
 // The context a guest's page is made in: `owner`, or its off-the-record
@@ -1539,6 +1603,15 @@ void WebViewGuest::RunFileChooser(
           std::nullopt));
 }
 
+void WebViewGuest::EnumerateDirectory(
+    content::WebContents* web_contents,
+    scoped_refptr<content::FileSelectListener> listener,
+    const base::FilePath& path) {
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()}, base::BindOnce(&FilesUnder, path),
+      base::BindOnce(&FolderRead, std::move(listener), path));
+}
+
 void WebViewGuest::NavigationStateChanged(
     content::WebContents* source,
     content::InvalidateTypes changed_flags) {
@@ -1858,20 +1931,26 @@ void WebViewGuest::RequestMediaAccessPermission(
     content::MediaResponseCallback callback) {
   if (IsScreenCapture(request.video_type)) {
     const int choice = next_screen_choice_++;
+    const bool audio = request.audio_type ==
+                       blink::mojom::MediaStreamType::DISPLAY_AUDIO_CAPTURE;
     // Unretained: the guest owns the choice, which answers only while alive.
     screen_choices_[choice] = std::make_unique<ScreenChoice>(
-        content::desktop_capture::CreateScreenCapturer(
-            content::desktop_capture::CreateDesktopCaptureOptions(),
-            /*for_snapshot=*/false),
+        MakePortalPicker(), audio, base::BindOnce(&AskWhatThePortalPicked),
+        base::BindOnce(&BrowserWindowTab, web_contents->GetWeakPtr(),
+                       request.url_origin, audio,
+                       request.suppress_local_audio_playback),
         base::BindOnce(
             [](WebViewGuest* guest, int choice,
+               blink::mojom::MediaStreamType video,
                content::MediaResponseCallback callback,
                blink::mojom::StreamDevicesSetPtr devices,
                blink::mojom::MediaStreamRequestResult result) {
               guest->screen_choices_.erase(choice);
-              std::move(callback).Run(*devices, result, /*ui=*/nullptr);
+              std::move(callback).Run(*AsRequested(video, std::move(devices)),
+                                      result, /*ui=*/nullptr);
             },
-            base::Unretained(this), choice, std::move(callback)));
+            base::Unretained(this), choice, request.video_type,
+            std::move(callback)));
     return;
   }
   if (!IsDeviceCapture(request.audio_type, request.video_type)) {

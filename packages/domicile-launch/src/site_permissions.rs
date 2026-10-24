@@ -29,7 +29,7 @@ pub struct SitePermission {
 
 /// A permission a site can be granted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub enum Permission {
     Camera,
     Microphone,
@@ -37,6 +37,10 @@ pub enum Permission {
     Notifications,
     Clipboard,
     Midi,
+    WindowManagement,
+    LocalFonts,
+    IdleDetection,
+    AutomaticDownloads,
 }
 
 /// What a site gets when it asks. Setting a permission's default removes the
@@ -47,4 +51,34 @@ pub enum Setting {
     Ask,
     Allow,
     Block,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_permission_has_the_engines_name() {
+        let names: Vec<String> = [
+            Permission::Midi,
+            Permission::WindowManagement,
+            Permission::LocalFonts,
+            Permission::IdleDetection,
+            Permission::AutomaticDownloads,
+        ]
+        .iter()
+        .map(|permission| serde_json::to_string(permission).expect("serialized"))
+        .collect();
+
+        assert_eq!(
+            names,
+            [
+                r#""midi""#,
+                r#""window-management""#,
+                r#""local-fonts""#,
+                r#""idle-detection""#,
+                r#""automatic-downloads""#
+            ]
+        );
+    }
 }

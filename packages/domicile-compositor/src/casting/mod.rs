@@ -47,6 +47,7 @@ use smithay::reexports::calloop::channel::Sender;
 
 use crate::reply::{reply, Replier, Reply};
 
+pub use audio::Heard;
 pub use captures::Capturer;
 pub use cursor::{CursorMode, Sprite};
 pub use lifecycle::Ended;

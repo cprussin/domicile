@@ -9,10 +9,12 @@
 
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
+#include "components/domicile/browser/desk_geometry.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/aura/client/aura_constants.h"
+#include "ui/aura/client/window_types.h"
 #include "ui/aura/window.h"
 #include "ui/base/class_property.h"
 #include "ui/compositor/layer.h"
@@ -131,6 +133,11 @@ std::optional<display::ScreenInfos> DomicileDeskScreenInfosFor(
       for (display::ScreenInfo& info : placed.screen_infos) {
         info.rect += corner;
         info.available_rect += corner;
+      }
+      // A popup, such as a <select>'s list, fits itself on its monitor.
+      if (view->GetType() == aura::client::WINDOW_TYPE_MENU) {
+        return domicile::PopupScreenInfos(std::move(placed),
+                                          view->GetBoundsInScreen());
       }
       return placed;
     }

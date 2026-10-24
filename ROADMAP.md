@@ -96,8 +96,6 @@ Understood and not scheduled.
 
 - **A monitor profile can require a mode but not set it.** Same for refresh
   rate. [A-DESKTOP-ON-A-TTY.md](docs/architecture/A-DESKTOP-ON-A-TTY.md).
-- **Engine popups are kept inside the desk, not their monitor.** A `<select>`
-  near a monitor's edge can open across the seam.
 - **Filter quality on lower-density displays is unmeasured.**
 - **The desk rasters what no monitor shows.**
   [DISPLAY-TILINGS.md](docs/architecture/DISPLAY-TILINGS.md#cost).
@@ -106,12 +104,8 @@ Understood and not scheduled.
 
 ### Browser windows
 
-- **Some permission requests are refused,** including a tab's capture.
-- **A page's screen capture has no audio,** and reports every source as a
-  monitor. The compositor makes each cast's sound node; the engine does not
-  read it yet.
-- **Some file dialogs are refused:** from the shell's own page, and a
-  directory dropped on a page.
+- **Some permission requests are refused,** such as storage access, an
+  extension's `chrome.tabCapture`, and keyboard and pointer lock prompts.
 - **No `chrome://` pages,** so no Print Preview: printing goes straight to
   the desktop's print dialog.
 - **Some extension calls are refused.**
