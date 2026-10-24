@@ -11,8 +11,9 @@ item when it ships.
 
 1. **Latency on a 120 Hz panel** (#206). On lyra's 120 Hz panel, `commit to
    pixel` is 2.5 real frames, but the run assumes 60 Hz and passes it at 1.2.
-   Its floor also reads about 60 Hz. Find out whether viz draws at 60 Hz on a
-   120 Hz CRTC, and make the run read the real interval.
+   Its floor also reads about 60 Hz, though viz draws at 120 Hz there
+   (testufo.com in a browser window, 2026-10-24). Find out why the floor is
+   slow, and make the run read the real interval.
    [ENGINE-FORK-MEASUREMENTS.md](docs/architecture/ENGINE-FORK-MEASUREMENTS.md#on-a-tty).
 
 2. **Revisit the docs for users.** Start with the README.
