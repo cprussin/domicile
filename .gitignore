@@ -42,3 +42,6 @@ __pycache__
 # Next.js
 .next/
 next-env.d.ts
+
+# Python wheels
+*.whl
