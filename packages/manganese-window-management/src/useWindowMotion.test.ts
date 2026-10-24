@@ -268,7 +268,7 @@ describe("useWindowMotion", () => {
                 strip,
                 tabbed: Layout.Tabbed,
                 well: placementOf(MAIL.id).frame,
-                windows: 1,
+                windows: [MAIL.id],
               },
             ],
           });

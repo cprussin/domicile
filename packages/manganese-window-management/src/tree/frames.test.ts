@@ -501,7 +501,7 @@ describe("framesOf", () => {
         },
         tabbed: Layout.Tabbed,
         well: { height: 1000 - TITLE_BAR, width: 1000, x: 0, y: TITLE_BAR },
-        windows: 2,
+        windows: ["a", "b"],
       },
     ]);
     // Its windows are laid out in the well, with their own title bars.
@@ -647,7 +647,7 @@ describe("framesOf", () => {
         },
         tabbed: Layout.Tabbed,
         well: undefined,
-        windows: 2,
+        windows: ["a", "b"],
       },
     ]);
   });

@@ -206,6 +206,52 @@ describe("TabStrip", () => {
       ]);
     });
 
+    // A window moved out of a nested tab group draws the outer strip next,
+    // which must not fly out of the well.
+    it("takes over at its new depth when its window changes group", () => {
+      const { played, settler } = recordedSettles();
+      const inner = { ...BOX, width: 500, y: 90 };
+      const { rerender } = render(
+        <SettleHandoffs>
+          <TabStrip
+            {...stripProps}
+            box={inner}
+            group={{ node: { id: "c", up: 1 }, wells: 1, windows: ["b", "c"] }}
+            key="c"
+            nested
+            settler={settler}
+          />
+          <TabStrip
+            {...stripProps}
+            group={{
+              node: { id: "c", up: 2 },
+              wells: 0,
+              windows: ["a", "b", "c"],
+            }}
+            key="tab"
+            settler={settler}
+          />
+        </SettleHandoffs>,
+      );
+
+      rerender(
+        <SettleHandoffs>
+          <TabStrip
+            {...stripProps}
+            group={{
+              node: { id: "c", up: 1 },
+              wells: 0,
+              windows: ["a", "b", "c"],
+            }}
+            key="c"
+            settler={settler}
+          />
+        </SettleHandoffs>,
+      );
+
+      expect(played).toStrictEqual([{ scaleX: 1, scaleY: 1, x: 0, y: 0 }]);
+    });
+
     // A dragged float's strip would trail the pointer.
     it("follows its group exactly while the group is dragged", () => {
       const { played, settler } = recordedSettles();

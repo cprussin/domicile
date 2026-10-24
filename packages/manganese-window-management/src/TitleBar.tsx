@@ -69,9 +69,9 @@ type Props = {
   focus: TitleFocus;
   /**
    * For a tab standing for a nested container, that container's layout and
-   * how many windows it holds.
+   * the windows it holds.
    */
-  group?: { layout: Layout; windows: number } | undefined;
+  group?: { layout: Layout; windows: readonly string[] } | undefined;
   /**
    * The window's whole box, which bar and contents both scale about. See
    * {@link scaledAbout}. For a tab, this is the tab's own box.
@@ -186,6 +186,7 @@ export const TitleBar = ({
     origin,
     rect,
     settler,
+    shared: groupTabKeysOf(group, strip),
     still: dragging || isMoving(motion),
   });
   return (
@@ -266,7 +267,7 @@ export const TitleBar = ({
         >
           <span className={leadStyles} {...{ [UPRIGHT]: "" }}>
             {group !== undefined && (
-              <GroupMark layout={group.layout} windows={group.windows} />
+              <GroupMark layout={group.layout} windows={group.windows.length} />
             )}
             {/* Keyed so a new icon gets another try after one fails to load. */}
             <WindowIcon icon={icon} key={icon} />
@@ -365,6 +366,22 @@ const alongStrip = (motion: WindowMotion): boolean =>
 
 /** The `transform-origin` of a tab moving along its strip. */
 const STRIP_START = { x: 0, y: 0 };
+
+/**
+ * The keys a group's tab shares with every window in the group, so a new
+ * element drawing the tab, as when the window it is named after moves out,
+ * takes over from the one before. Keyed by its strip's depth too, as
+ * `TabStrip` keys a strip.
+ */
+const groupTabKeysOf = (
+  group: Props["group"],
+  strip: StripPlace | undefined,
+): readonly string[] | undefined =>
+  group === undefined || strip === undefined
+    ? undefined
+    : group.windows.map(
+        (window) => `tab:${strip.group.wells.toString()}:${window}`,
+      );
 
 /**
  * The layout of the group a tab stands for, and its size, so a group in a tab
