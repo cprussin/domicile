@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/base64.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
@@ -40,6 +41,29 @@ std::string Line(const base::DictValue& message) {
   std::string line;
   base::JSONWriter::Write(message, &line);
   return line;
+}
+
+// `desk_cursor`: the pointer on screen, or no `image` while it is hidden.
+base::DictValue DeskCursorMessage(const ui::DeskCursorImage& image) {
+  base::DictValue message;
+  message.Set("type", "desk_cursor");
+  if (image.hidden()) {
+    return message;
+  }
+  const auto pair = [](int x, int y) {
+    base::ListValue list;
+    list.Append(x);
+    list.Append(y);
+    return list;
+  };
+  message.Set(
+      "image",
+      base::DictValue()
+          .Set("size", pair(image.size.width(), image.size.height()))
+          .Set("hotspot", pair(image.hotspot.x(), image.hotspot.y()))
+          .Set("scale", static_cast<double>(image.scale))
+          .Set("bgra", base::Base64Encode(image.bgra)));
+  return message;
 }
 
 }  // namespace
@@ -84,11 +108,15 @@ ControlChannel::ControlChannel(
   pointer_ = DeskPointer::Get().AddListener(
       base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &ControlChannel::DeskPointerMoved, weak_factory_.GetWeakPtr())));
+  cursor_ = ui::DeskCursorImageSource::Get().AddListener(
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
+          &ControlChannel::DeskCursorChanged, weak_factory_.GetWeakPtr())));
   give_up_at_ = base::TimeTicks::Now() + kReachFor;
   Connect();
 }
 
 ControlChannel::~ControlChannel() {
+  ui::DeskCursorImageSource::Get().RemoveListener(cursor_);
   DeskPointer::Get().RemoveListener(pointer_);
   DeskActivity::Get().RemoveListener(activity_);
   ShortcutRegistry::Get().RemoveChannel(channel_);
@@ -120,10 +148,18 @@ void ControlChannel::OnConnect(int result) {
   base::DictValue hello;
   hello.Set("type", "hello");
   hello.Set("protocol_version", kProtocolVersion);
+  std::vector<std::string> greeting;
   std::string line;
   if (base::JSONWriter::Write(hello, &line)) {
-    pending_.insert(pending_.begin(), line);
+    greeting.push_back(line);
   }
+  // Then the pointer as it is, which the compositor otherwise hears only
+  // when it next changes.
+  if (const std::optional<ui::DeskCursorImage> cursor =
+          ui::DeskCursorImageSource::Get().current()) {
+    greeting.push_back(Line(DeskCursorMessage(*cursor)));
+  }
+  pending_.insert(pending_.begin(), greeting.begin(), greeting.end());
 
   // Before anything the new compositor says, so the page resubscribes against
   // the desk state that follows. A page with no client yet has nothing to
@@ -737,6 +773,12 @@ void ControlChannel::DeskPointerMoved(const DeskPointerAt& at) {
     message.Set("windows", std::move(windows));
   }
   SendMessage(std::move(message));
+}
+
+void ControlChannel::DeskCursorChanged(const ui::DeskCursorImage& image) {
+  if (connected_) {
+    SendMessage(DeskCursorMessage(image));
+  }
 }
 
 void ControlChannel::ReadLoop() {

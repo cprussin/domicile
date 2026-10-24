@@ -394,6 +394,8 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         | ClientRequest::AnswerPortalRequest { .. }
         // The browser sends `Activity` for the same input.
         | ClientRequest::DeskPointer { .. }
+        // A page's pointer changing under a still hand, or the same input.
+        | ClientRequest::DeskCursor { .. }
         // An application, not a person.
         | ClientRequest::HeldAwakeByThePortal { .. }
         // The lock chord landed on the shell, and locking must not light the
@@ -1202,6 +1204,10 @@ mod tests {
                     at: Some((4.0, 8.0)),
                     windows: Vec::new(),
                 },
+            ),
+            (
+                "the pointer changing shape over a page",
+                ClientRequest::DeskCursor { image: None },
             ),
             (
                 "the browser restating a still pointer after a window changed",

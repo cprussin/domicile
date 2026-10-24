@@ -27,8 +27,9 @@ The engine has two channels to the rest of Domicile:
   `set_device_pixel_ratio`, `set_theme`, `theme_captured`, `unlock`, `lock`,
   `key`, `pointer_motion`, `pointer_leave`, `pointer_button`, `pointer_axis`.
   The browser also sends `hello` on connect, `activity` for its own
-  input, at most every 200 ms, for the idle clock, and `desk_pointer` for
-  each pointer move, for screen casts.
+  input, at most every 200 ms, for the idle clock, `desk_pointer` for
+  each pointer move, and `desk_cursor` for each change of the pointer's
+  image, for screen casts.
 - **Inbound:** `welcome`, `app_appeared`, `app_titled`, `app_desktop_id`,
   `app_resized`, `app_min_size`, `app_max_size`, `popup_placed`, `app_closed`,
   `app_cursor`, `app_presented`, `app_suspended`, `app_transient_for`,
@@ -124,6 +125,12 @@ The engine has two channels to the rest of Domicile:
   page is under the pointer, as `id` and `at`, a fraction of that page, for
   browser window casts. A repeat of the last place is dropped. See
   `components/domicile/browser/desk_pointer.h`.
+- **`desk_cursor`** is the browser's too: the pointer the DRM platform puts
+  on screen (`DrmCursor::SetCursor`, patch 0138), through
+  `ui/base/cursor/domicile/desk_cursor_image.h`. `image` has `size` and
+  `hotspot` in pixels, `scale` in pixels a logical pixel, and `bgra`, the
+  first frame as premultiplied BGRA in base64. No `image` while the pointer
+  is hidden. Sent after `hello` too, once the platform has set one.
 - **`displays`** is an attribute, `domicile.displays`, with a
   `displayschanged` event. A component that mounts late can read it.
   - `null`: the compositor has not described a desktop yet.

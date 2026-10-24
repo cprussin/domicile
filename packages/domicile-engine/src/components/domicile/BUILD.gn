@@ -924,6 +924,9 @@ source_set("control_channel") {
     "//mojo/public/cpp/bindings",
     "//net",
 
+    # The pointer on screen, which `desk_cursor` carries to the compositor.
+    "//ui/base/cursor/domicile:desk_cursor_image",
+
     # The pointer theme the `appearance` message carries, in the shape the
     # DRM platform's cursor factory reads.
     "//ui/base/cursor/domicile:desk_cursor_theme",
