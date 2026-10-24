@@ -196,7 +196,7 @@ echo "the element said: found=$FOUND next=$NEXT previous=$PREVIOUS stopped=$STOP
 echo "find events: at found=$FOUND_EVENTS at navigated=$NAVIGATED_EVENTS"
 echo
 
-# Turn the readings into a verdict. `scripts/test-webview-find-guard.sh` tests
+# Turn the readings into a verdict. `packages/domicile-engine/tests/test-webview-find-guard.sh` tests
 # this block. Checks run in dependency order.
 FAILURE=""
 PASSED=""

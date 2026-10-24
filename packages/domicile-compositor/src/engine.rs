@@ -89,7 +89,7 @@ pub const MAX_PLANES: usize = 4;
 
 /// The DRM fourccs the engine imports, matching `FormatFromFourcc` in
 /// `packages/domicile-engine/src/components/domicile/browser/brokered_frame_sink.cc`.
-/// `scripts/test-the-engines-fourccs-agree.sh` checks the two lists match.
+/// `packages/domicile-engine/tests/test-the-engines-fourccs-agree.sh` checks the two lists match.
 pub const FOURCCS: [u32; 4] = [
     0x3432_5241, // DRM_FORMAT_ARGB8888
     0x3432_5258, // DRM_FORMAT_XRGB8888

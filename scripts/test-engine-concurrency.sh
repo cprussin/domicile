@@ -222,18 +222,18 @@ fi
 # Two runners can put two clients on the GPU, which `guard-latency.sh` reads as
 # a latency regression.
 #
-# `engine.yml` runs all checks in one `check.sh engine` step, so it cannot hold
-# the card around just the timed guard. The lock lives in
-# `scripts/engine-guard-latency.sh` instead. The rules below read both
-# workflows and engine check scripts.
+# `engine.yml` runs all checks in one `test:engine` step, so it cannot hold the
+# card around just the timed guard. The lock lives in
+# `packages/domicile-engine/scripts/check-latency.sh` instead. The rules below
+# read both workflows and engine check scripts.
 LOCK_SH=".github/scripts/engine-render-node-lock.sh"
 [ -x "$ROOT/$LOCK_SH" ] || fail "the render node lock exists" "no $ROOT/$LOCK_SH"
 
 # Every file that could run the timed guard or take the card: the workflows and
-# the engine checks `check.sh` runs. Globbed so new files are covered.
+# the engine checks `run-checks.sh` runs. Globbed so new files are covered.
 subjects() {
   printf '%s\n' "$WORKFLOWS"/*.yml
-  printf '%s\n' "$ROOT"/scripts/engine-*.sh
+  printf '%s\n' "$ROOT"/packages/domicile-engine/scripts/check-*.sh
 }
 
 # A subject's commands, with whole-line comments removed. Trailing `#` is kept,
@@ -279,14 +279,14 @@ fi
 # `quiet` relies on noisy work declaring itself. Every compile, reset, sync,
 # packaging step, and guard run without the card must call
 # `engine-render-node-lock.sh noisy` on the line that runs it.
-# (`check.sh engine` declares its own; see
+# (`test:engine` declares its own; see
 # `test-the-webview-guards-run-together.sh`.)
 noise=0
 for workflow in "$WORKFLOWS"/*.yml; do
   name="$(basename "$workflow")"
   grep -qE '^[[:space:]]*runs-on:.*self-hosted' "$workflow" || continue
   pattern='nix-shell|engine-build-in-shell\.sh|cargo build|engine-(reset|sync|release-package)\.sh'
-  takes_card "$workflow" || pattern="$pattern|scripts/engine-guard-"
+  takes_card "$workflow" || pattern="$pattern|run-checks\.sh"
   while IFS= read -r line; do
     noise=$((noise + 1))
     case "$line" in

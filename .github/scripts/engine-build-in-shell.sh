@@ -12,7 +12,7 @@
 #
 # The shell can exit 0 without running anything, so the build writes a sentinel
 # and this checks for it.
-# `scripts/engine-build-produced-what-the-guards-load.sh` checks the output.
+# `packages/domicile-engine/scripts/build-produced-what-the-guards-load.sh` checks the output.
 set -euo pipefail
 
 CHROMIUM="${1:-}"

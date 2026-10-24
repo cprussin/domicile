@@ -1,0 +1,19 @@
+{
+  "description": "Domicile's Chromium fork: the pin, the patch series, and the checks that run against a build of it.",
+  "devDependencies": {
+    "@domicile-desktop/check-runner": "workspace:*"
+  },
+  "engines": {
+    "bun": ">=1.4.2",
+    "node": ">=24"
+  },
+  "license": "MIT",
+  "name": "@domicile-desktop/engine",
+  "private": true,
+  "scripts": {
+    "test:engine": "./scripts/run-checks.sh",
+    "test:shell": "check-runner tests/*.sh"
+  },
+  "type": "module",
+  "version": "0.0.1"
+}

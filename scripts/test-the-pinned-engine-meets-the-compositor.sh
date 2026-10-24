@@ -14,7 +14,7 @@
 #
 # This file asserts that the job:
 #
-# - Stays cheap. It runs `scripts/engine-guard-client-window.sh` against
+# - Stays cheap. It runs `run-checks.sh guard-client-window` against
 #   `nix build .#engine`, which fetches the pinned tarball and patches it. It
 #   must not build Chromium on `crux`'s single slot.
 # - Runs on every change. The compositor side
@@ -44,7 +44,7 @@ GUARDS=""
 for workflow in "$WORKFLOWS"/*.yml; do
   code="$(grep -v '^[[:space:]]*#' "$workflow")"
   printf '%s\n' "$code" | grep -qE 'nix build[^|&;]*\.#engine' || continue
-  printf '%s\n' "$code" | grep -qE 'engine-guard-client-window\.sh' || continue
+  printf '%s\n' "$code" | grep -qE 'run-checks\.sh guard-client-window' || continue
   GUARDS="$GUARDS $(basename "$workflow")"
 done
 
@@ -84,7 +84,7 @@ elif grep -q "DOMICILE_CHROMIUM=\"\$$engine_var\"" "$WORKFLOW"; then
   ok "the guard is pointed at the engine that build produced"
 else
   fail "the guard is pointed at the engine that build produced" \
-    "\$$engine_var holds the store path, and DOMICILE_CHROMIUM is not set to it — see scripts/lib/engine-guard.sh for the two variables that decide which build a check reads"
+    "\$$engine_var holds the store path, and DOMICILE_CHROMIUM is not set to it — see packages/domicile-engine/scripts/lib-engine-guard.sh for the two variables that decide which build a check reads"
 fi
 
 # The store path is a Chromium `out` directory itself. Without
@@ -102,18 +102,19 @@ fi
 # runs the engine under a nested wlroots compositor on a render node. See
 # under-wayland.sh and AGENTS.md's "Three things this cannot reach".
 #
-# The check script decides this: `scripts/engine-guard-client-window.sh` calls
-# `engine_guard_and_control_under_wayland`, defined in
-# `scripts/lib/engine-guard.sh`. Both are checked, so a call to an undefined
-# helper fails.
-CHECK="$ROOT/scripts/engine-guard-client-window.sh"
-LIB="$ROOT/scripts/lib/engine-guard.sh"
-if grep -q 'engine_guard_and_control_under_wayland' "$CHECK" 2>/dev/null &&
+# The runner decides this: `run-checks.sh` lists `guard-client-window` to run
+# with `engine_guard_and_control_under_wayland`, defined in
+# `lib-engine-guard.sh`. Both are checked, so a call to an undefined helper
+# fails.
+CHECK="$ROOT/packages/domicile-engine/scripts/run-checks.sh"
+LIB="$ROOT/packages/domicile-engine/scripts/lib-engine-guard.sh"
+if awk '/^UNDER_WAYLAND=\(/,/^\)/' "$CHECK" 2>/dev/null | grep -qx '  guard-client-window' &&
+   grep -q 'engine_guard_and_control_under_wayland' "$CHECK" 2>/dev/null &&
    grep -q 'under-wayland\.sh' "$LIB" 2>/dev/null; then
   ok "the guard runs under a compositor that can pass a dmabuf"
 else
   fail "the guard runs under a compositor that can pass a dmabuf" \
-    "scripts/engine-guard-client-window.sh does not reach under-wayland.sh through scripts/lib/engine-guard.sh"
+    "run-checks.sh does not run guard-client-window through under-wayland.sh in lib-engine-guard.sh"
 fi
 
 # A render node needs hardware, and only `crux` has one. AGENTS.md lists the

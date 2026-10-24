@@ -30,7 +30,7 @@
 # owner liveness would kill the other run's live compositor.
 #
 # Each rule protects a compositor that may be in use; each has a case in
-# `scripts/test-under-wayland-cleanup.sh`:
+# `packages/domicile-engine/tests/test-under-wayland-cleanup.sh`:
 #
 #   - a run kills its own compositor only by its owner marker;
 #   - the leftover sweep spares compositors whose owner (pid and start time)

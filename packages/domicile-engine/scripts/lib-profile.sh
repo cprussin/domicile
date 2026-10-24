@@ -12,7 +12,7 @@
 # table but each has its own /tmp, so a process holding a file at this path
 # may be another run's engine.
 #
-# Checked by `scripts/test-a-profile-is-removed-while-the-engine-still-writes.sh`.
+# Checked by `packages/domicile-engine/tests/test-a-profile-is-removed-while-the-engine-still-writes.sh`.
 
 # Removes `$1`, retrying for up to five seconds. Each try checks after a
 # pause, so a write that recreates the profile is caught. Says so on stderr if

@@ -139,7 +139,7 @@ echo "shell=$SAW_SHELL listed=$LISTED bad kind refused=$SAW_BAD_KIND"
 echo "prefer=$PREFER preferred=$SAW_PREFERRED refused=$SAW_REFUSED relisted=$RELISTED"
 echo
 
-# The verdict. `scripts/test-webview-media-devices-guard.sh` runs this block.
+# The verdict. `packages/domicile-engine/tests/test-webview-media-devices-guard.sh` runs this block.
 FAILURE=""
 PASSED=""
 if [ "$SAW_SHELL" != "1" ]; then

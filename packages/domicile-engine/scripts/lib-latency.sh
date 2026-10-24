@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Parses a latency run from the compositor's log.
 #
-# Sourced by `guard-latency.sh` and `scripts/test-latency-report.sh`, so the
+# Sourced by `guard-latency.sh` and `packages/domicile-engine/tests/test-latency-report.sh`, so the
 # parsing is testable without starting a browser. Each function takes strings
 # and returns a string.
 #

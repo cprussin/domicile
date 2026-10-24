@@ -56,7 +56,7 @@ fi
 NEGATIVE="${NEGATIVE:-0}"
 
 # The fixture, as the tray must name it, and the color its onClicked paints.
-# Fixed rather than overridable: `scripts/test-webview-active-tab-guard.sh`
+# Fixed rather than overridable: `packages/domicile-engine/tests/test-webview-active-tab-guard.sh`
 # holds the id to the manifest's `key` and the color to `background.js`.
 readonly ID="hbnfdakjdmmlmbpllmlphpingenajmci"
 readonly COLOR="00897B"
@@ -221,7 +221,7 @@ echo "measured: $MEASURED"
 echo "what the fixture was refused, if anything:"
 grep -F 'GUARD refused' "$ENGINE_LOG" | tail -3 || true
 
-# WHICH END TO BLAME. `scripts/test-webview-active-tab-guard.sh` runs this
+# WHICH END TO BLAME. `packages/domicile-engine/tests/test-webview-active-tab-guard.sh` runs this
 # block directly. MEASURED is "<leg> <probe status> <sent> <tray> <activated>
 # <granted>"; the probe's status is 0 for the color seen, 1 for the witness
 # alone, 2 for neither.

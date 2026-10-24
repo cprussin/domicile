@@ -205,7 +205,7 @@ jobs:
           # `DrmScreen` is reached through. engine.yml runs the cheaper subset.
           # The test floors are kept in the script.
           nix develop "$GITHUB_WORKSPACE#full" --command \
-            "$GITHUB_WORKSPACE/scripts/engine-drm-unit-tests.sh" all
+            "$GITHUB_WORKSPACE/packages/domicile-engine/scripts/drm-unit-tests.sh" all
 
       # Removed while the tree is still locked, and even on failure. Nothing
       # reads it after this job.

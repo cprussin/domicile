@@ -7,16 +7,16 @@ not happen, its control makes it happen, which proves the guard can detect it.
 
 A headless guard's compositor stand-in (`*-compositor.py`,
 `guard-webview-keyboard-socket.py`) says nothing until the browser's `hello`,
-like the real compositor. `/scripts/test-the-guard-stand-ins-wait-for-hello.sh`
+like the real compositor. `/packages/domicile-engine/tests/test-the-guard-stand-ins-wait-for-hello.sh`
 checks this.
 
 Every guard and spike starts Chrome with `--disable-component-update`.
 Otherwise Chrome downloads components into `$TMPDIR`, and a guard stops it
 before the download finishes, leaving 85-195M per run in the runner's tmpfs
-`/tmp`. `/scripts/test-the-guards-disable-component-updates.sh` checks this.
+`/tmp`. `/packages/domicile-engine/tests/test-the-guards-disable-component-updates.sh` checks this.
 
-CI runs them through `/scripts/engine-guard-*.sh`. Run one by hand inside the
-toolchain shell ([BUILD-MACHINE.md](BUILD-MACHINE.md#toolchain-shell)).
+CI runs them through `run-checks.sh`, which lists each one. Run one by hand
+inside the toolchain shell ([BUILD-MACHINE.md](BUILD-MACHINE.md#toolchain-shell)).
 
 ## Helpers
 
@@ -27,7 +27,7 @@ toolchain shell ([BUILD-MACHINE.md](BUILD-MACHINE.md#toolchain-shell)).
 | `guard-webview-guest-page.py` | the guest page for the keyboard and click guards |
 | `lib-annotate.sh` | reports where a guard stopped as a GitHub annotation |
 | `lib-last-words.sh` | prints the end of an engine's log, reaching back to a crash's fatal line |
-| `lib-latency.sh` | reads a latency run's log; also used by `/scripts/test-latency-report.sh` |
+| `lib-latency.sh` | reads a latency run's log; also used by `/packages/domicile-engine/tests/test-latency-report.sh` |
 | `lib-compositor-cleanup.sh` | stops a nested compositor and its whole process group |
 | `lib-control-budget.sh` | sizes a control's timeout from how long its guard took |
 | `lib-ports.sh` | gives each guard free ports, since two engine jobs share `crux` |
@@ -40,7 +40,7 @@ Under `under-wayland.sh` unless marked headless.
 
 | Guard | Checks |
 |---|---|
-| `guard-client-window.sh` | a Wayland client's window appears on the page in the color it drew; `SOFTWARE=1` with the engine on the CPU and the window in shared memory (`scripts/engine-guard-client-window-in-memory.sh`) |
+| `guard-client-window.sh` | a Wayland client's window appears on the page in the color it drew; `SOFTWARE=1` with the engine on the CPU and the window in shared memory (`run-checks.sh guard-client-window-in-memory`) |
 | `guard-two-windows.sh` | two clients' windows on one page, in one aggregation |
 | `guard-buffer-transform.sh` | a `wl_shm` buffer drawn with `wl_surface.set_buffer_transform` is shown upright |
 | `guard-scrolling-bubble.sh` | each frame of a monitor cast shows a sync bubble at the content its window scrolls, on a page that syncs frames. Control: the page places each move a step late, and the bubble is off its content |

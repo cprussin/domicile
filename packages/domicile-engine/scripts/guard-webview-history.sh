@@ -318,7 +318,7 @@ echo "and this far loaded: settled=$SETTLED_PROGRESS pending=$PENDING_PROGRESS"
 echo "progress events: at pending=$PENDING_PROGRESS_EVENTS"
 echo
 
-# The verdict. `scripts/test-webview-history-guard.sh` runs this block
+# The verdict. `packages/domicile-engine/tests/test-webview-history-guard.sh` runs this block
 # directly. Checks are ordered by dependency, so each failure names the first
 # layer that broke: with no second page, "did not go back" would blame the
 # wrong layer.

@@ -48,7 +48,7 @@ fi
 NEGATIVE="${NEGATIVE:-0}"
 
 # Not overridable: must match `content.js`, which
-# `scripts/test-webview-content-script-guard.sh` checks.
+# `packages/domicile-engine/tests/test-webview-content-script-guard.sh` checks.
 readonly COLOR="8E24AA"
 # Colors no other guard or browser default uses.
 WITNESS="${WITNESS:-2E3A1C}"
@@ -201,7 +201,7 @@ echo
 echo "measured: $MEASURED"
 
 # Turn the statuses into a verdict.
-# `scripts/test-webview-content-script-guard.sh` tests this block.
+# `packages/domicile-engine/tests/test-webview-content-script-guard.sh` tests this block.
 FAILURE=""
 PASSED=""
 case "$MEASURED" in

@@ -2,7 +2,7 @@
 //
 // The `wp_cursor_shape_v1` shapes, named by their CSS `cursor` keyword, plus
 // `none`. Mirrors `domicile_protocol::CursorShape`;
-// `scripts/test-cursor-shapes-agree.sh` checks that all copies match in
+// `packages/domicile-engine/tests/test-cursor-shapes-agree.sh` checks that all copies match in
 // membership and order.
 //
 // The engine already restricts the value to this set, but the engine and the
