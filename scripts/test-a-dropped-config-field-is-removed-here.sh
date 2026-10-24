@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tests that a config field `domicile-config` stops parsing, at any depth, is
-# listed in `removedSettings` in `nix/home-manager.nix`, or has an ancestor
-# that is.
+# listed in `removedSettings` in `distro/nix/home-manager.nix`, or has an
+# ancestor that is.
 #
 # Every config struct is `deny_unknown_fields`, so dropping a field makes every
 # config that still sets it a desk that will not start. `removedSettings` turns
@@ -20,7 +20,7 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-MODULE="$ROOT/nix/home-manager.nix"
+MODULE="$ROOT/distro/nix/home-manager.nix"
 SRC=packages/domicile-config/src
 cd "$ROOT"
 

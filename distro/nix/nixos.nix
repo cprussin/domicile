@@ -1,9 +1,9 @@
 # NixOS module for the machine-level parts of a Domicile desk.
 #
-# `nix/home-manager.nix` configures the desk itself. This module provides the
-# `domicile` login session and its user units, the PAM service the lock uses,
-# UPower for the battery, portal routing, and the `domicile` group whose
-# sessions may raise the engine's frame threads. See
+# `distro/nix/home-manager.nix` configures the desk itself. This module
+# provides the `domicile` login session and its user units, the PAM service
+# the lock uses, UPower for the battery, portal routing, and the `domicile`
+# group whose sessions may raise the engine's frame threads. See
 # docs/RUNNING-A-DESKTOP.md#on-nixos.
 #
 # The session runs whichever shell the config names. The module sets no

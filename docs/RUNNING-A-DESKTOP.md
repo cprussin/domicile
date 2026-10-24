@@ -376,7 +376,7 @@ package again.
 `nix profile install github:cprussin/domicile/stable#domicile` installs
 Domicile without the machine's half. Add it by hand, from this repository:
 
-- **Session:** `nix/domicile-session.desktop` as
+- **Session:** `distro/nix/domicile-session.desktop` as
   `/usr/local/share/wayland-sessions/domicile.desktop`, with `@bin@` replaced
   by your profile's `bin` as an absolute path (`/home/<you>/.nix-profile/bin`).
 - **PAM:** your distribution's file from `distro/pam/` as

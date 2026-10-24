@@ -7,7 +7,7 @@
 # `settings` is freeform so a newer domicile works with an older module.
 # `configDirectory` builds a TS config into that file and a shell.
 #
-# The login session belongs to the NixOS module (`nix/nixos.nix`).
+# The login session belongs to the NixOS module (`distro/nix/nixos.nix`).
 #
 # Curried so `domicilePackages` can supply this flake's package defaults and
 # `bun2nix` its `fetchBunDeps`.
@@ -216,8 +216,8 @@
     ''"${lib.escape ["\\" "\"" "`" "$"] word}"'';
 
   # Settings the compositor no longer reads, by dotted path, and where each
-  # went. `nix/removed-settings.nix` makes them hidden options that fail an
-  # assertion when set. `scripts/test-a-dropped-config-field-is-removed-here.sh`
+  # went. `distro/nix/removed-settings.nix` makes them hidden options that
+  # fail an assertion when set. `scripts/test-a-dropped-config-field-is-removed-here.sh`
   # fails when a field leaves `domicile-config` and neither it nor an ancestor
   # is listed here.
   removedSettings = {
