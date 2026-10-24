@@ -66,6 +66,19 @@ pub struct PointerOverWindow {
     pub at: (f64, f64),
 }
 
+/// The pointer the engine draws, in [`ChromeMessage::DeskCursor`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CursorImage {
+    /// In pixels.
+    pub size: (u32, u32),
+    /// From the top left, in pixels.
+    pub hotspot: (i32, i32),
+    /// Pixels per logical pixel.
+    pub scale: f64,
+    /// Premultiplied BGRA, rows top to bottom, padded base64.
+    pub bgra: String,
+}
+
 /// Messages sent from the chrome (in-page client) to the host.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -237,6 +250,16 @@ pub enum ChromeMessage {
         at: Option<(f64, f64)>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         windows: Vec<PointerOverWindow>,
+    },
+
+    /// The pointer on screen, or `None` while it is hidden.
+    ///
+    /// The browser sends it each time the pointer changes, and after `Hello`.
+    /// The engine draws the pointer, so screen casts draw it from this; the
+    /// compositor has no pointer image of its own.
+    DeskCursor {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        image: Option<CursorImage>,
     },
 
     /// The page renders `<app frame>`, so the compositor may sync frames

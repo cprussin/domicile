@@ -27,6 +27,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/io_buffer.h"
 #include "net/socket/unix_domain_client_socket_posix.h"
+#include "ui/base/cursor/domicile/desk_cursor_image.h"
 #include "ui/base/cursor/domicile/desk_cursor_theme.h"
 
 namespace domicile {
@@ -201,6 +202,10 @@ class ControlChannel : public mojom::ControlChannel {
   // The pointer moved on the desk; see DeskPointer. Dropped while no
   // compositor is connected, like SomebodyIsHere.
   void DeskPointerMoved(const DeskPointerAt& at);
+  // The pointer on screen changed; see ui::DeskCursorImageSource. Dropped
+  // while no compositor is connected: the next one is sent the pointer as it
+  // is then, after `hello`.
+  void DeskCursorChanged(const ui::DeskCursorImage& image);
 
   void ReadLoop();
   void OnRead(int result);
@@ -232,6 +237,8 @@ class ControlChannel : public mojom::ControlChannel {
   DeskActivity::ListenerId activity_;
   // And with the process's DeskPointer.
   DeskPointer::ListenerId pointer_;
+  // And with the process's ui::DeskCursorImageSource.
+  ui::DeskCursorImageSource::ListenerId cursor_;
 
   std::unique_ptr<net::UnixDomainClientSocket> socket_;
   bool connected_ = false;

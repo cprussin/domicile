@@ -849,6 +849,7 @@ impl Host {
             | ChromeMessage::Lock
             | ChromeMessage::Activity
             | ChromeMessage::DeskPointer { .. }
+            | ChromeMessage::DeskCursor { .. }
             | ChromeMessage::SyncFrames
             | ChromeMessage::SystemRequest { .. }
             | ChromeMessage::AnswerPortalRequest { .. } => {
@@ -865,8 +866,8 @@ impl Host {
                 // `SyncFrames` is a page's, and the compositor holds it per
                 // chrome.
                 //
-                // `Activity` is the idle clock's, and `DeskPointer` the screen
-                // casts'.
+                // `Activity` is the idle clock's, and `DeskPointer` and
+                // `DeskCursor` the screen casts'.
             }
         }
         Ok(())
