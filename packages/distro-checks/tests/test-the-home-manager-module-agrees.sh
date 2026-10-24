@@ -15,7 +15,7 @@
 # type changes.
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 MODULE="$ROOT/distro/nix/home-manager.nix"
 LIB="$ROOT/packages/domicile-config/src/lib.rs"
 PROFILE="$ROOT/packages/domicile-config/src/profile.rs"

@@ -5,7 +5,7 @@
 # that version marked as coming before it, with the commit's time.
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 VERSION_SH="$ROOT/distro/version.sh"
 [ -x "$VERSION_SH" ] || { echo "no $VERSION_SH" >&2; exit 1; }
 

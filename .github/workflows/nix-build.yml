@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Nix is installed below, so a skip means a `scripts/nix-*.sh` check broke.
+  # Nix is installed below, so a skip means a `test:nix` check broke.
   # No skips are expected.
   DOMICILE_CHECK_STRICT: "1"
 
@@ -45,6 +45,8 @@ jobs:
             experimental-features = nix-command flakes
             system-features = nixos-test benchmark big-parallel kvm
 
-      # The assertions live in `scripts/nix-*.sh`, so they can also be run from
-      # a checkout. A nix build has its own node_modules, so bun is not set up.
+      # The assertions are `distro-checks`' `test:nix`, so they can also be run
+      # from a checkout. Bun is here only to run turbo; a nix build has its own
+      # node_modules.
+      - uses: oven-sh/setup-bun@v2
       - run: ./scripts/check.sh nix
