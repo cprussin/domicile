@@ -308,18 +308,19 @@ one account's inbox, read with the Gmail API. Not in `DEFAULT_BAR`.
 `<GoogleMessages />`: [Google Messages for web](https://messages.google.com/web/)
 in a panel. Not in `DEFAULT_BAR`.
 
-- A chat bubble. With uncleared notifications from Messages, it is lit with
-  their count, as the Gmail item is for unread mail.
-- Click opens the page in a panel under it. Opening clears Messages'
-  notifications. The panel keeps the keyboard while open.
+- A chat bubble. With unread conversations, it is lit with their count, as
+  the Gmail item is for unread mail. The count is read from the page every 5
+  seconds: conversations Messages marks unread, leaving out muted ones.
+- Click opens the page in a panel under it. The panel keeps the keyboard while
+  open.
 - Pressing one of Messages' notifications opens the panel.
-- The page's permission requests are asked above it. Allow notifications, or
-  nothing is counted.
+- The page's permission requests are asked above it. Allow notifications to
+  get them.
 - How it keeps the page:
   - The page loads with the shell and keeps running while the panel is
     closed, hidden like a background tab
     ([SHELL-BROWSER-WINDOWS.md](../../../docs/SHELL-BROWSER-WINDOWS.md#basics)).
-    So its notifications keep coming.
+    So its notifications keep coming and its count stays current.
   - The user's own storage, so the pairing lasts. Pair it once in the panel.
     A partition would get no notifications: Chromium denies them to a page in
     one.

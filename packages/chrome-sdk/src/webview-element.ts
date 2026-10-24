@@ -638,6 +638,14 @@ declare global {
      * has the id.
      */
     setMediaDevice(kind: WebViewMediaDeviceKind, id: string): Promise<void>;
+    /**
+     * How many elements in the page's main document match the CSS
+     * `selector`. The page's own script cannot change the answer, and a
+     * hidden page answers. Throws a `SyntaxError` for a selector that does
+     * not parse. Rejects with an `InvalidStateError` before the view has a
+     * page, and when the page gave no number, as when it navigated first.
+     */
+    countMatches(selector: string): Promise<number>;
     goBack(): void;
     goForward(): void;
     stop(): void;

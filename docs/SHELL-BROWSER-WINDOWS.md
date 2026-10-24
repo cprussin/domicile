@@ -129,6 +129,11 @@ user's and every other partition, like a separate browser profile:
   element reports what you need through properties and events.
 - All `<webview>` events bubble, so one listener on your window frame covers
   them. In JSX, bind them with `addEventListener` on a ref.
+- **`view.countMatches(selector)`** resolves with how many elements in the
+  page's main document match a CSS selector, read where the page's script
+  cannot change the answer. A hidden page answers. It throws `SyntaxError` for
+  a bad selector, and rejects with `InvalidStateError` before the view has a
+  page or when the page gave no number, as when it navigated first.
 
 ## State: history, loading, address
 

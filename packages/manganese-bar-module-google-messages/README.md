@@ -1,7 +1,7 @@
 # @domicile-desktop/manganese-bar-module-google-messages
 
-A manganese bar item: Google Messages in a panel, with a count of its new
-messages.
+A manganese bar item: Google Messages in a panel, with a count of its unread
+conversations.
 
 ## Use
 
