@@ -334,6 +334,10 @@ Rules:
   eases from where the element it replaces was drawn (`SettleHandoffs`). A
   strip takes over only from one at its own nesting depth, not from the strip
   of a group around it.
+- A window moved into or out of a nested group moves alone. The outer strip
+  stays where it is, and the group's tab eases to its new slot. A window's
+  strip at another depth is a new element (`TabStrip`), and a group's tab
+  takes over from the one drawn before (`TitleBar`).
 - A tab switch that hides a nested group hides its windows at once. They do
   not leave as windows sent to another workspace do.
 - A float being dragged, or a window being resized, follows the pointer

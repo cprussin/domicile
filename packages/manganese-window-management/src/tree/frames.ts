@@ -125,8 +125,8 @@ export type Tab = {
    * {@link WELL_MARGIN} around it. `undefined` for a hidden tab.
    */
   well: Rect | undefined;
-  /** How many windows the nested container holds. */
-  windows: number;
+  /** The windows the nested container holds. */
+  windows: readonly string[];
 };
 
 /**
@@ -426,7 +426,7 @@ const titled = (
             strip,
             tabbed: layout,
             well: showing ? contents : undefined,
-            windows: windowsIn(child).length,
+            windows: windowsIn(child),
           };
           const inside = showing
             ? placed(

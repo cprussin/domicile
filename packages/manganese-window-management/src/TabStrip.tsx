@@ -88,8 +88,16 @@ type Props = {
  * the group's open window, and moves and settles with it. A tab switch hands
  * it to the next open window, which takes over where it is drawn (see
  * `useSettling`).
+ *
+ * A window moved into or out of a nested group draws a strip at another depth
+ * next. That is a new strip, which takes over from the one at its depth.
  */
-export const TabStrip = ({
+export const TabStrip = (props: Props) => (
+  <PlacedStrip key={props.group.wells} {...props} />
+);
+
+/** The strip {@link TabStrip} draws at one depth. */
+const PlacedStrip = ({
   box,
   depth,
   dragging,

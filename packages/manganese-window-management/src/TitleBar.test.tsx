@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { css } from "../styled-system/css";
 import { raised } from "./placement";
 import { recordedSettles } from "./recorded-settles";
+import { SettleHandoffs } from "./SettleHandoffs";
 import { TitleBar } from "./TitleBar";
 import type { StripPlace } from "./tree/frames";
 import { Layout } from "./tree/node";
@@ -485,10 +486,38 @@ describe("TitleBar", () => {
 
     it("shows the layout and size of a group it stands for", () => {
       const { getByRole } = tab({
-        group: { layout: Layout.SplitV, windows: 3 },
+        group: { layout: Layout.SplitV, windows: ["a", "b", "c"] },
       });
 
       expect(getByRole("img", { name: "Column of 3" }).textContent).toBe("3");
+    });
+
+    // A group's tab is named after its open window, so a window moved out of
+    // it hands the tab to a new element.
+    it("takes over from its group's tab before a window left the group", () => {
+      const { played, settler } = recordedSettles();
+      const groupTab = (
+        open: string,
+        windows: readonly string[],
+        x: number,
+      ) => (
+        <SettleHandoffs>
+          <TitleBar
+            {...barProps}
+            group={{ layout: Layout.SplitH, windows }}
+            key={open}
+            rect={{ ...ON_SCREEN, width: 240, x }}
+            settler={settler}
+            strip={MIDDLE_TAB}
+            tabbed={Layout.Tabbed}
+          />
+        </SettleHandoffs>
+      );
+      const { rerender } = render(groupTab("c", ["b", "c"], 240));
+
+      rerender(groupTab("b", ["b"], 480));
+
+      expect(played).toStrictEqual([{ scaleX: 1, scaleY: 1, x: -240, y: 0 }]);
     });
   });
 
