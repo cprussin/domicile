@@ -11,8 +11,8 @@ export const wholeDeskChoice = (desk: FrozenDesk): Choice => ({
   area: { height: desk.height, width: desk.width, x: 0, y: 0 },
   detail: `${String(desk.width)} × ${String(desk.height)}`,
   icon: <MonitorIcon aria-hidden />,
-  label: "Whole desk",
-  name: "Whole desk",
+  label: "Everything",
+  name: "Everything",
   preview: undefined,
 });
 
