@@ -13,12 +13,20 @@
 namespace domicile {
 namespace {
 
-using Heard = std::vector<std::optional<gfx::PointF>>;
+using Heard = std::vector<DeskPointerAt>;
 
 DeskPointer::Moved Into(Heard* heard) {
   return base::BindRepeating(
-      [](Heard* heard, std::optional<gfx::PointF> at) { heard->push_back(at); },
+      [](Heard* heard, const DeskPointerAt& at) { heard->push_back(at); },
       base::Unretained(heard));
+}
+
+DeskPointerAt On(float x, float y) {
+  return DeskPointerAt{gfx::PointF(x, y), {}};
+}
+
+DeskPointerAt Off() {
+  return DeskPointerAt();
 }
 
 // Every control channel hears it: there is one per shell page.
@@ -29,10 +37,10 @@ TEST(DeskPointerTest, EveryListenerHearsWhereThePointerIs) {
   pointer.AddListener(Into(&left));
   pointer.AddListener(Into(&right));
 
-  pointer.MovedTo(gfx::PointF(12.5, 3));
-  pointer.MovedTo(std::nullopt);
+  pointer.MovedTo(On(12.5, 3));
+  pointer.MovedTo(Off());
 
-  const Heard expected{gfx::PointF(12.5, 3), std::nullopt};
+  const Heard expected{On(12.5, 3), Off()};
   EXPECT_EQ(left, expected);
   EXPECT_EQ(right, expected);
 }
@@ -44,12 +52,27 @@ TEST(DeskPointerTest, APlaceThePointerIsAlreadyAtTellsNobody) {
   Heard heard;
   pointer.AddListener(Into(&heard));
 
-  pointer.MovedTo(gfx::PointF(1, 2));
-  pointer.MovedTo(gfx::PointF(1, 2));
-  pointer.MovedTo(std::nullopt);
-  pointer.MovedTo(std::nullopt);
+  pointer.MovedTo(On(1, 2));
+  pointer.MovedTo(On(1, 2));
+  pointer.MovedTo(Off());
+  pointer.MovedTo(Off());
 
-  EXPECT_EQ(heard, (Heard{gfx::PointF(1, 2), std::nullopt}));
+  EXPECT_EQ(heard, (Heard{On(1, 2), Off()}));
+}
+
+// A browser window that moves under a still pointer moves the pointer on its
+// page, so the compositor hears it though the desk point is the same.
+TEST(DeskPointerTest, AWindowMovingUnderTheSamePlaceIsHeard) {
+  DeskPointer pointer;
+  Heard heard;
+  pointer.AddListener(Into(&heard));
+  const DeskPointerAt left{gfx::PointF(1, 2), {{"1", gfx::PointF(0.25, 0.5)}}};
+  const DeskPointerAt right{gfx::PointF(1, 2), {{"1", gfx::PointF(0.5, 0.5)}}};
+
+  pointer.MovedTo(left);
+  pointer.MovedTo(right);
+
+  EXPECT_EQ(heard, (Heard{left, right}));
 }
 
 // A channel that closed is not told, or it would run on a deleted page's
@@ -60,7 +83,7 @@ TEST(DeskPointerTest, ARemovedListenerHearsNothing) {
   const DeskPointer::ListenerId listener = pointer.AddListener(Into(&heard));
 
   pointer.RemoveListener(listener);
-  pointer.MovedTo(gfx::PointF(1, 2));
+  pointer.MovedTo(On(1, 2));
 
   EXPECT_TRUE(heard.empty());
 }

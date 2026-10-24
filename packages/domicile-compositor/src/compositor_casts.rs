@@ -107,10 +107,17 @@ impl DomicileCompositor {
         self.arm_the_cast_deadline(due);
     }
 
-    /// The engine says the pointer is at `at` on the desktop, or off it.
-    pub fn cast_desk_pointer(&mut self, at: Option<(f64, f64)>) {
+    /// The engine says the pointer is at `at` on the desktop, or off it, and
+    /// over the pages of `windows`.
+    pub fn cast_desk_pointer(
+        &mut self,
+        at: Option<(f64, f64)>,
+        windows: Vec<domicile_protocol::PointerOverWindow>,
+    ) {
         let renderer = self.gpu.as_mut().map(Gpu::renderer);
-        let due = self.casting.pointer_on_desk(at, renderer, Instant::now());
+        let due = self
+            .casting
+            .pointer_on_desk(at, windows, renderer, Instant::now());
         self.arm_the_cast_deadline(due);
     }
 

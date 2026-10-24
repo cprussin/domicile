@@ -22,7 +22,7 @@ use std::os::fd::OwnedFd;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use domicile_protocol::ShotWindow;
+use domicile_protocol::{PointerOverWindow, ShotWindow};
 use pipewire as pw;
 use smithay::backend::allocator::Buffer as _;
 use smithay::backend::renderer::gles::GlesRenderer;
@@ -99,9 +99,8 @@ pub struct Streams {
     shown: HashMap<String, Shown>,
     /// The window under the pointer, and where, in its box's logical pixels.
     pointer: Option<(String, (f64, f64))>,
-    /// Where the pointer is on the desktop, in logical pixels, as the engine
-    /// reports it, or `None` off it.
-    desk_pointer: Option<(f64, f64)>,
+    /// Where the engine reports the pointer.
+    engine_pointer: EnginePointer,
     /// The monitors, for monitor and region streams.
     screens: Vec<Screen>,
     captures: Captures,
@@ -148,9 +147,20 @@ enum Shows {
     },
 }
 
+/// Where the engine reports the pointer.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct EnginePointer {
+    /// On the desktop, in logical pixels, or `None` off it.
+    desk: Option<(f64, f64)>,
+    /// Over each browser window's page, by id, as a fraction of the page.
+    pages: HashMap<String, (f64, f64)>,
+}
+
 /// A browser window's page, as its capture last drew it.
 #[derive(Default)]
 struct Page {
+    /// The browser window's id.
+    window: String,
     frame: Option<Frame>,
     /// The engine's frame `frame` samples, if it is sampled in place.
     held: Option<u64>,
@@ -200,7 +210,7 @@ impl Streams {
             shots: HashMap::new(),
             shown: HashMap::new(),
             pointer: None,
-            desk_pointer: None,
+            engine_pointer: EnginePointer::default(),
             screens: Vec::new(),
             captures: Captures::default(),
             shooting: Vec::new(),
@@ -342,7 +352,13 @@ impl Streams {
                 let capture = capturer
                     .start_browser_window(&id, MAX_FRAMERATE)
                     .map_err(Ended::Failed)?;
-                self.pages.insert(capture, Page::default());
+                self.pages.insert(
+                    capture,
+                    Page {
+                        window: id,
+                        ..Page::default()
+                    },
+                );
                 Ok(Shows::BrowserWindow(capture))
             }
             Source::Monitor(name) => {
@@ -461,7 +477,7 @@ impl Streams {
                 &self.pages,
                 &self.screens,
                 None,
-                None,
+                &EnginePointer::default(),
             )
             .map(|view| compose(view.size, &view.layers, renderer.as_deref_mut()));
             let Some(composed) = composed else {
@@ -989,30 +1005,38 @@ impl Streams {
         now: Instant,
     ) -> Option<Instant> {
         let before = std::mem::replace(&mut self.pointer, at);
-        let desk_before = self.desk_pointer;
-        self.pointer_moved(before, desk_before, renderer, now)
+        let engine_before = self.engine_pointer.clone();
+        self.pointer_moved(before, engine_before, renderer, now)
     }
 
-    /// The pointer moved to `at` on the desktop, or left it, as the engine
-    /// reports it. Desk streams that show it are damaged where it was and
-    /// where it is.
+    /// The pointer moved to `at` on the desktop, or left it, over the pages of
+    /// `windows`, as the engine reports it. Desk and browser window streams
+    /// that show it are damaged where it was and where it is.
     pub fn pointer_on_desk(
         &mut self,
         at: Option<(f64, f64)>,
+        windows: Vec<PointerOverWindow>,
         renderer: Option<&mut GlesRenderer>,
         now: Instant,
     ) -> Option<Instant> {
-        let desk_before = std::mem::replace(&mut self.desk_pointer, at);
+        let engine_now = EnginePointer {
+            desk: at,
+            pages: windows
+                .into_iter()
+                .map(|window| (window.id, window.at))
+                .collect(),
+        };
+        let engine_before = std::mem::replace(&mut self.engine_pointer, engine_now);
         let before = self.pointer.clone();
-        self.pointer_moved(before, desk_before, renderer, now)
+        self.pointer_moved(before, engine_before, renderer, now)
     }
 
     /// Damages the streams that show the pointer where it was, `before` in a
-    /// window and `desk_before` on the desktop, and where it is.
+    /// window and `engine_before` as the engine reported it, and where it is.
     fn pointer_moved(
         &mut self,
         before: Option<(String, (f64, f64))>,
-        desk_before: Option<(f64, f64)>,
+        engine_before: EnginePointer,
         mut renderer: Option<&mut GlesRenderer>,
         now: Instant,
     ) -> Option<Instant> {
@@ -1031,13 +1055,21 @@ impl Streams {
                             .map(|(_, point)| in_window(*point, shot.scale))
                             .collect::<Vec<_>>()
                     }
-                    // The compositor does not know the pointer over a page.
-                    Shows::BrowserWindow(_) => Vec::new(),
-                    Shows::Desk { target, layout, .. } => [desk_before, self.desk_pointer]
-                        .into_iter()
-                        .flatten()
-                        .filter_map(|point| on_desk(point, *target, layout))
-                        .collect(),
+                    Shows::BrowserWindow(capture) => {
+                        let page = self.pages.get(capture)?;
+                        let size = page_size(page.frame.as_ref()?.content);
+                        [&engine_before, &self.engine_pointer]
+                            .into_iter()
+                            .filter_map(|engine| on_page(engine, page, size))
+                            .collect()
+                    }
+                    Shows::Desk { target, layout, .. } => {
+                        [engine_before.desk, self.engine_pointer.desk]
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|point| on_desk(point, *target, layout))
+                            .collect()
+                    }
                 };
                 let size = view_size(&cast.shows, &self.shots, &self.pages)?;
                 let sprite = at_density(&self.sprite, density(&cast.shows, &self.shots));
@@ -1119,7 +1151,7 @@ impl Streams {
             &self.pages,
             &self.screens,
             self.pointer.as_ref(),
-            self.desk_pointer,
+            &self.engine_pointer,
         ) else {
             return;
         };
@@ -1254,6 +1286,13 @@ fn view_size(
     }
 }
 
+/// Where `engine` puts the pointer over `page`, `size` stream pixels, or
+/// `None` off it.
+fn on_page(engine: &EnginePointer, page: &Page, size: (u32, u32)) -> Option<(f64, f64)> {
+    let (x, y) = engine.pages.get(&page.window)?;
+    Some((x * f64::from(size.0), y * f64::from(size.1)))
+}
+
 /// What a stream's next frame is made of, or `None` until every source it
 /// draws from has drawn.
 fn view<'a>(
@@ -1263,7 +1302,7 @@ fn view<'a>(
     pages: &'a HashMap<CaptureId, Page>,
     screens: &[Screen],
     pointer: Option<&(String, (f64, f64))>,
-    desk_pointer: Option<(f64, f64)>,
+    engine_pointer: &EnginePointer,
 ) -> Option<View<'a>> {
     match shows {
         Shows::Window(app_id) => {
@@ -1277,7 +1316,8 @@ fn view<'a>(
             })
         }
         Shows::BrowserWindow(capture) => {
-            let frame = pages.get(capture)?.frame.as_ref()?;
+            let page = pages.get(capture)?;
+            let frame = page.frame.as_ref()?;
             let size = page_size(frame.content);
             Some(View {
                 size,
@@ -1287,7 +1327,7 @@ fn view<'a>(
                     to: (0, 0, size.0 as i32, size.1 as i32),
                     transform: Transform::Normal,
                 }],
-                pointer: None,
+                pointer: on_page(engine_pointer, page, size),
             })
         }
         Shows::Desk { target, layout, .. } => {
@@ -1310,7 +1350,9 @@ fn view<'a>(
             Some(View {
                 size: layout.size,
                 layers,
-                pointer: desk_pointer.and_then(|point| on_desk(point, *target, layout)),
+                pointer: engine_pointer
+                    .desk
+                    .and_then(|point| on_desk(point, *target, layout)),
             })
         }
     }
@@ -1409,11 +1451,11 @@ mod tests {
 
     use smithay::reexports::calloop::channel::channel;
 
-    use domicile_protocol::ShotWindow;
+    use domicile_protocol::{PointerOverWindow, ShotWindow};
 
     use smithay::utils::Transform;
 
-    use super::{damage_in_view, density, view, Cast, Shows, Streams};
+    use super::{damage_in_view, density, view, Cast, EnginePointer, Shows, Streams};
     use crate::buffer_transform::Sampled;
     use crate::casting::captures::Capturer;
     use crate::casting::cursor::{CursorMode, Plan};
@@ -1536,12 +1578,12 @@ mod tests {
         let now = Instant::now();
 
         streams.pointer_in_window(Some(("app-1".into(), (2.0, 3.0))), None, now);
-        streams.pointer_on_desk(Some((40.0, 50.0)), None, now);
+        streams.pointer_on_desk(Some((40.0, 50.0)), Vec::new(), None, now);
 
         assert_eq!(streams.pointer, Some(("app-1".into(), (2.0, 3.0))));
-        assert_eq!(streams.desk_pointer, Some((40.0, 50.0)));
+        assert_eq!(streams.engine_pointer.desk, Some((40.0, 50.0)));
         streams.pointer_in_window(None, None, now);
-        assert_eq!(streams.desk_pointer, Some((40.0, 50.0)));
+        assert_eq!(streams.engine_pointer.desk, Some((40.0, 50.0)));
     }
 
     #[test]
@@ -1823,6 +1865,65 @@ mod tests {
         assert!(heard.try_recv().expect("developed").is_err());
     }
 
+    /// The compositor cannot see the pointer over a page; the engine says
+    /// where on each window's page it is.
+    #[test]
+    fn a_browser_window_cast_draws_the_pointer_where_the_engine_puts_it() {
+        let (mut streams, mut engine) = (streams(), Engine::default());
+        let shows = streams
+            .shows(
+                StreamId(4),
+                Source::BrowserWindow("1".into()),
+                |_| false,
+                Some(&mut engine),
+            )
+            .expect("a browser window cast");
+        streams.casts.insert(StreamId(4), cast(shows));
+        streams.captured(
+            BROWSER_WINDOW,
+            7,
+            Ok(frame((4, 2), 0)),
+            None,
+            &mut engine,
+            Instant::now(),
+        );
+        let pointer = |streams: &Streams| {
+            view(
+                &streams.casts[&StreamId(4)].shows,
+                &streams.shots,
+                &streams.captures,
+                &streams.pages,
+                &streams.screens,
+                None,
+                &streams.engine_pointer,
+            )
+            .expect("a frame to show")
+            .pointer
+        };
+
+        streams.pointer_on_desk(
+            Some((40.0, 50.0)),
+            vec![PointerOverWindow {
+                id: "1".into(),
+                at: (0.5, 0.25),
+            }],
+            None,
+            Instant::now(),
+        );
+        assert_eq!(pointer(&streams), Some((2.0, 0.5)));
+
+        streams.pointer_on_desk(
+            Some((40.0, 50.0)),
+            vec![PointerOverWindow {
+                id: "2".into(),
+                at: (0.5, 0.25),
+            }],
+            None,
+            Instant::now(),
+        );
+        assert_eq!(pointer(&streams), None, "over another window");
+    }
+
     #[test]
     fn a_browser_window_cast_shows_its_page_alone_from_its_own_capture() {
         let (mut streams, mut engine) = (streams(), Engine::default());
@@ -1856,7 +1957,7 @@ mod tests {
             &streams.pages,
             &streams.screens,
             None,
-            None,
+            &EnginePointer::default(),
         )
         .expect("a frame to show");
         assert_eq!(shown.size, (2, 2));

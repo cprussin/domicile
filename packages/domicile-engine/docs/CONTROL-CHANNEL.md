@@ -120,7 +120,9 @@ The engine has two channels to the rest of Domicile:
 - **`desk_pointer`** is the browser's too. `StartDeskPointer`
   (`chrome/browser/domicile/domicile_desk_pointer.h`) watches aura's mouse
   moves and drags, and sends `at`, in the shell page's CSS pixels, or no `at`
-  while there is no shell. A repeat of the last place is dropped. See
+  while there is no shell. With it go `windows`, each browser window whose
+  page is under the pointer, as `id` and `at`, a fraction of that page, for
+  browser window casts. A repeat of the last place is dropped. See
   `components/domicile/browser/desk_pointer.h`.
 - **`displays`** is an attribute, `domicile.displays`, with a
   `displayschanged` event. A component that mounts late can read it.

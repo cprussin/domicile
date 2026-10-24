@@ -33,7 +33,7 @@ void DeskPointer::RemoveListener(ListenerId listener) {
   });
 }
 
-void DeskPointer::MovedTo(std::optional<gfx::PointF> at) {
+void DeskPointer::MovedTo(const DeskPointerAt& at) {
   // Run outside the lock, since a callback may re-enter this.
   std::vector<Moved> tell;
   {
