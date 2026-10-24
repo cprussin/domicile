@@ -28,8 +28,8 @@ shells together in one tree. A shell's own name is what the flake calls its app
 — `simple`, `manganese` — which is what a user types after `nix run`. A shell
 has no `bin/` entry and nothing to install: it is a built module, and
 `nix run github:cprussin/domicile#simple` is the whole of running one. Out of a
-checkout, `scripts/dev-shell.sh simple` builds the page and runs the engine and
-the compositor against it. The end-to-end scripts drive the
+checkout, `bun run --filter @domicile-desktop/shell-simple start:dev` builds
+the page and runs the engine and the compositor against it. The end-to-end scripts drive the
 compositor directly with a stand-in chrome of their own, which is why they name
 a `--chrome-socket` and a `--session` and start no shell at all.
 See `packages/domicile-launch`, which is `domicile` itself — every decision it
@@ -170,6 +170,12 @@ that package alone. Either way, verify the output shows the root-level tasks
 The root-level `biome check` (run by `//#test:lint`) enforces formatting,
 import ordering, and lint rules across the entire monorepo — always verify it
 passes before considering tests complete.
+
+Checks that need more than bun are tasks outside `test`, never cached:
+`test:engine` (a built Chromium tree, on `crux`), `test:e2e` (cargo and the
+Wayland tools), `test:nix` and `test:distro`. `check.sh` runs each in its group.
+Repo-wide checks with no package of their own stay in `scripts/test-*.sh`, the
+`shell` group.
 
 A package's own tasks are reached the same way:
 `bun run turbo test --filter @domicile-desktop/sdk`. Note that

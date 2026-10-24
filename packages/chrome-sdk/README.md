@@ -33,7 +33,7 @@ export const Shell: ShellModule = (root, domicile) => {
 - `searchFiles` returns a promise. A newer call rejects the older with an
   `AbortError`.
 - Only Domicile calls a shell. Develop against the real desktop with
-  `./scripts/dev-shell.sh <shell>`.
+  `packages/dev-shell/bin/dev-shell.sh <shell>`.
 - Render `<app app-id="…">` and `<webview window="…">` as normal DOM. CSS
   (rounding, blur, transforms, z-index) applies to the live surface.
 - The engine sends the pointer, wheel and keys over an `<app>` to its client,
@@ -104,7 +104,7 @@ bun run generate    # after changing the IDL or domicile-config
   and the TypeScript it emits. It throws on syntax outside that subset.
 - `EVENT_TYPES` in `codegen/generate-domicile-host.ts` names the event type
   each `on<name>` handler dispatches, which WebIDL cannot express.
-- `scripts/test-host-types-match-the-idl.sh` fails when the file is stale.
+- `packages/domicile-engine/tests/test-host-types-match-the-idl.sh` fails when the file is stale.
 
 `config.schema.json` is the JSON Schema `schemars` derives from
 `domicile-config`'s Rust types, and `src/config.ts` is generated from it, with

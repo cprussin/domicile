@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Commits docs/media, as `scripts/docs-media.sh` left it, onto a branch.
+# Commits docs/media, as `packages/site/scripts/docs-media.sh` left it, onto a branch.
 #
 #   .github/scripts/docs-media-writeback.sh <branch>
 #

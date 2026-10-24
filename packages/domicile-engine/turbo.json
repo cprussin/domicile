@@ -10,6 +10,7 @@
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/.github/**",
         "$TURBO_ROOT$/packages/check-runner/**",
+        "$TURBO_ROOT$/packages/chrome-sdk/codegen/**",
         "$TURBO_ROOT$/packages/chrome-sdk/src/**",
         "$TURBO_ROOT$/packages/domicile-compositor/src/**",
         "$TURBO_ROOT$/packages/domicile-config/src/**",

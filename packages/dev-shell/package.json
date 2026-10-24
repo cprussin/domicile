@@ -1,0 +1,21 @@
+{
+  "bin": {
+    "dev-shell": "./bin/dev-shell.sh"
+  },
+  "description": "Runs a shell from this checkout in Domicile and reloads it on every rebuild.",
+  "devDependencies": {
+    "@domicile-desktop/check-runner": "workspace:*"
+  },
+  "engines": {
+    "bun": ">=1.4.2",
+    "node": ">=24"
+  },
+  "license": "MIT",
+  "name": "@domicile-desktop/dev-shell",
+  "private": true,
+  "scripts": {
+    "test:shell": "check-runner tests/*.sh"
+  },
+  "type": "module",
+  "version": "0.0.1"
+}
