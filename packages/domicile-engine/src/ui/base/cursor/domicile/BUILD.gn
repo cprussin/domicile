@@ -15,6 +15,25 @@ component("desk_cursor_theme") {
   public_deps = [ "//base" ]
 }
 
+# The pointer on screen. The DRM platform's `DrmCursor` sets it (patch 0138)
+# and the control channel sends it to the compositor's screen casts. A
+# component for the theme's reason above.
+component("desk_cursor_image") {
+  sources = [
+    "desk_cursor_image.cc",
+    "desk_cursor_image.h",
+  ]
+
+  defines = [ "IS_DESK_CURSOR_IMAGE_IMPL" ]
+
+  public_deps = [
+    "//base",
+    "//ui/gfx/geometry",
+  ]
+
+  deps = [ "//skia" ]
+}
+
 # Reads XCursor themes for the DRM platform, which has no toolkit to do it.
 # Patch 0121 links it into //ui/ozone/platform/drm.
 source_set("xcursor_theme") {
@@ -38,11 +57,13 @@ source_set("unit_tests") {
   testonly = true
 
   sources = [
+    "desk_cursor_image_unittest.cc",
     "desk_cursor_theme_unittest.cc",
     "xcursor_theme_unittest.cc",
   ]
 
   deps = [
+    ":desk_cursor_image",
     ":desk_cursor_theme",
     ":xcursor_theme",
     "//base",

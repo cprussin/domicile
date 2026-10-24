@@ -30,7 +30,7 @@ use smithay::reexports::calloop::channel::Sender;
 use spa::pod::Pod;
 use tracing::{debug, info, warn};
 
-use crate::casting::cursor::{arrow, CursorMode, Plan, Sprite};
+use crate::casting::cursor::{arrow, within, CursorMode, Plan, Sprite};
 use crate::casting::lifecycle::{Ended, Lifecycle, Phase, Step};
 use crate::casting::memory::Mapping;
 use crate::casting::negotiation::{settle, shm_layout, Offered, Pixel, Settled};
@@ -78,6 +78,8 @@ pub enum ToPipewire {
         buffer: BufferId,
         damage: Vec<Rect>,
         cursor: Plan,
+        /// The pointer's image, for cursor metadata over the source.
+        sprite: Option<Arc<Sprite>>,
         fence: Option<OwnedFd>,
     },
     /// A frame came and no buffer was lent: lend any that are free.
@@ -238,10 +240,11 @@ impl Producer {
                 buffer,
                 damage,
                 cursor,
+                sprite,
                 fence,
             } => {
                 if let Some(cast) = self.cast(stream) {
-                    cast.filled(buffer, damage, cursor, fence);
+                    cast.filled(buffer, damage, cursor, sprite, fence);
                 }
             }
             ToPipewire::Starved { stream } => {
@@ -431,6 +434,7 @@ struct Ready {
     buffer: BufferId,
     damage: Vec<Rect>,
     cursor: Plan,
+    sprite: Option<Arc<Sprite>>,
 }
 
 struct State {
@@ -810,7 +814,14 @@ impl Cast {
     }
 
     /// The Wayland thread filled `buffer`.
-    fn filled(&self, buffer: BufferId, damage: Vec<Rect>, cursor: Plan, fence: Option<OwnedFd>) {
+    fn filled(
+        &self,
+        buffer: BufferId,
+        damage: Vec<Rect>,
+        cursor: Plan,
+        sprite: Option<Arc<Sprite>>,
+        fence: Option<OwnedFd>,
+    ) {
         if !self.state.borrow().lent.contains(&buffer) {
             // Removed while it was being filled, as on a resize.
             return;
@@ -822,6 +833,7 @@ impl Cast {
             buffer,
             damage,
             cursor,
+            sprite,
         });
         self.process_soon();
     }
@@ -844,6 +856,7 @@ impl Cast {
             buffer,
             damage,
             cursor,
+            sprite,
         } in ready
         {
             let Some(held) = state.buffers.get(&buffer) else {
@@ -855,7 +868,8 @@ impl Cast {
             // SAFETY: a buffer of this stream, dequeued when lent and not yet
             // queued.
             unsafe {
-                write_metas(raw, state.sequence, &damage, cursor, &self.shared.sprite);
+                let sprite = sprite.as_deref().unwrap_or(&self.shared.sprite);
+                write_metas(raw, state.sequence, &damage, cursor, sprite);
                 pw::sys::pw_stream_queue_buffer(self.stream.as_raw_ptr(), raw);
             }
         }
@@ -1022,7 +1036,7 @@ unsafe fn write_metas(
     }
 }
 
-/// Writes `SPA_META_Cursor`, with the arrow's image when it fits.
+/// Writes `SPA_META_Cursor`, with `sprite`'s image shrunk to fit.
 ///
 /// # Safety
 ///
@@ -1046,12 +1060,16 @@ unsafe fn write_cursor(data: *mut u8, size: usize, at: Option<(i32, i32)>, sprit
         cursor.flags = 0;
         cursor.position.x = x;
         cursor.position.y = y;
-        cursor.hotspot.x = sprite.hotspot.0;
-        cursor.hotspot.y = sprite.hotspot.1;
-        if size < cursor_size + bitmap_size + sprite.pixels.len() {
+        let room = size.saturating_sub(cursor_size + bitmap_size) / 4;
+        if room == 0 {
+            cursor.hotspot.x = sprite.hotspot.0;
+            cursor.hotspot.y = sprite.hotspot.1;
             cursor.bitmap_offset = 0;
             return;
         }
+        let sprite = &within(sprite, room);
+        cursor.hotspot.x = sprite.hotspot.0;
+        cursor.hotspot.y = sprite.hotspot.1;
         cursor.bitmap_offset = cursor_size as u32;
         let bitmap = &mut *data.add(cursor_size).cast::<spa::sys::spa_meta_bitmap>();
         bitmap.format = spa::sys::SPA_VIDEO_FORMAT_BGRA;
@@ -1076,4 +1094,41 @@ fn monotonic_nanoseconds() -> i64 {
     // SAFETY: a valid clock and a live timespec.
     unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut now) };
     now.tv_sec * 1_000_000_000 + now.tv_nsec
+}
+
+#[cfg(test)]
+mod tests {
+    use pipewire::spa;
+
+    use super::write_cursor;
+    use crate::casting::cursor::Sprite;
+
+    /// A consumer makes room for its own largest cursor, as WebRTC does for
+    /// 64x64. A pointer the engine drew larger is shrunk into it, not dropped.
+    #[test]
+    fn a_pointer_larger_than_the_metadata_is_shrunk_into_it() {
+        let cursor_size = size_of::<spa::sys::spa_meta_cursor>();
+        let bitmap_size = size_of::<spa::sys::spa_meta_bitmap>();
+        let size = cursor_size + bitmap_size + 64 * 64 * 4;
+        // u64s, so the metas are aligned as PipeWire aligns them.
+        let mut meta = vec![0u64; size.div_ceil(8)];
+        let big =
+            Sprite::from_bgra((80, 80), (40, 20), 2.0, vec![255; 80 * 80 * 4]).expect("a sprite");
+
+        // SAFETY: `meta` is `size` writable bytes.
+        let (cursor, bitmap) = unsafe {
+            let data = meta.as_mut_ptr().cast::<u8>();
+            write_cursor(data, size, Some((5, 6)), &big);
+            (
+                &*data.cast::<spa::sys::spa_meta_cursor>(),
+                &*data.add(cursor_size).cast::<spa::sys::spa_meta_bitmap>(),
+            )
+        };
+
+        assert_eq!(cursor.id, 1);
+        assert_eq!((cursor.position.x, cursor.position.y), (5, 6));
+        assert_eq!(cursor.bitmap_offset as usize, cursor_size);
+        assert_eq!((bitmap.size.width, bitmap.size.height), (64, 64));
+        assert_eq!((cursor.hotspot.x, cursor.hotspot.y), (32, 16));
+    }
 }

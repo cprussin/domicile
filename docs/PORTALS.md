@@ -95,14 +95,17 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   reports the node. `Source::Monitor` names a `wl_output`; `Source::Region`
   is a desktop rectangle in logical pixels. The pointer is drawn where the
   engine last saw it (`desk_pointer`), so it shows over pages and windows
-  alike. Drawn in, the arrow is grown to the source's density, rounded up:
-  on a 2x screen each of its pixels is a 2x2 block, or it would be half a
-  pointer, and a speck once a call scales the stream down. A window's density
-  is its buffer pixels a surface point, which `wp_viewport` makes fractional
-  under `wp_fractional_scale`. As metadata, the
-  cursor's meta size is a range up to 384×384, as Mutter's is: a consumer
-  makes room for its own largest cursor (WebRTC asks for 64×64), and
-  PipeWire drops a meta whose sizes do not meet.
+  alike. It is the pointer the engine draws (`desk_cursor`): a hand over a
+  link is a hand in the cast. Until the engine has said, it is a built-in
+  arrow. While the engine hides the pointer, no cast shows it. The image is
+  resized to the source's density, never below one pixel a logical pixel,
+  or a call that scales the stream down would make it a speck. A window's
+  density is its buffer pixels a surface point, which `wp_viewport` makes
+  fractional under `wp_fractional_scale`. As metadata,
+  the cursor's meta size is a range up to 384×384, as Mutter's is: a
+  consumer makes room for its own largest cursor (WebRTC asks for 64×64),
+  and PipeWire drops a meta whose sizes do not meet. A pointer larger than
+  the room is shrunk into it.
   - `Source::BrowserWindow` is a browser window's page alone, by the
     engine's window id: the engine captures its frame sink
     (`CaptureBrowserWindow`), as a browser window screenshot does. The

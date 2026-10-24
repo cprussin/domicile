@@ -11,7 +11,7 @@ use smithay::wayland::{
     compositor::with_states,
     shell::xdg::{ToplevelSurface, XdgToplevelSurfaceData},
 };
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::buffer_transform::Sampled;
 use crate::client_damage::Region;
@@ -118,6 +118,29 @@ impl DomicileCompositor {
         let due = self
             .casting
             .pointer_on_desk(at, windows, renderer, Instant::now());
+        self.arm_the_cast_deadline(due);
+    }
+
+    /// The pointer the engine draws, or `None` while it is hidden, for casts
+    /// to draw. An image that does not decode leaves the last one.
+    pub fn cast_desk_cursor(&mut self, image: Option<domicile_protocol::CursorImage>) {
+        let sprite = match image {
+            None => casting::Sprite::hidden(),
+            Some(image) => {
+                let sprite = domicile_host::base64::decoded(&image.bgra)
+                    .ok()
+                    .and_then(|bgra| {
+                        casting::Sprite::from_bgra(image.size, image.hotspot, image.scale, bgra)
+                    });
+                let Some(sprite) = sprite else {
+                    warn!(size = ?image.size, "the engine's pointer did not decode");
+                    return;
+                };
+                sprite
+            }
+        };
+        let renderer = self.gpu.as_mut().map(Gpu::renderer);
+        let due = self.casting.pointer_image(sprite, renderer, Instant::now());
         self.arm_the_cast_deadline(due);
     }
 
