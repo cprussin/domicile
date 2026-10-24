@@ -9,6 +9,7 @@ import { useSettling } from "./useSettling";
 import type { WindowMotion } from "./window-motion";
 import { isMoving } from "./window-motion";
 import {
+  heldStyles,
   movingStyles,
   originOf,
   placedAt,
@@ -80,6 +81,7 @@ export const FocusGlow = ({
         fadeStyles({ leaving }),
         movingStyles({ motion }),
         settlingStyles({ lowered }),
+        dragging && heldStyles,
       )}
       data-focus-box={windows.join(" ")}
       data-leaving={leaving || undefined}

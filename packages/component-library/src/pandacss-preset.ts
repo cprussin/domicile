@@ -131,7 +131,12 @@ export const domicilePreset = definePreset({
           base: "transparent",
         },
         outlineOffset: 0.5,
-        outlineStyle: "solid",
+        // Only where it can show: Blink repaints an element with an outline,
+        // even a transparent one, every time it moves.
+        outlineStyle: {
+          _focusVisible: "solid",
+          base: "none",
+        },
         outlineWidth: 2,
         scrollbarColor: "{colors.border} transparent",
         scrollbarWidth: "thin",
@@ -187,6 +192,8 @@ export const domicilePreset = definePreset({
             display: "inline-flex",
             flexDirection: "row",
             justifyContent: "center",
+            // Always, so the focus ring fades out with `outline-color`.
+            outlineStyle: "solid",
             transition: `
               color {durations.fastest} {easings.linear},
               border-color {durations.fastest} {easings.linear},

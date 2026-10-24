@@ -385,6 +385,12 @@ identity, so each step keeps unchanged objects:
   focus dropped by chrome unmounting or going inert anywhere. It does not
   reclaim behind a desktop panel or the lock screen, whose keys must not
   reach the page.
+- A window being dragged or resized puts each part on a layer of its own
+  (`heldStyles`), so a move shifts layers and repaints nothing. Otherwise
+  Chromium squashes the parts over an `<app>` into shared layers and repaints
+  their blurred shadows and glows on every pointer move.
+- Nothing a drag changes every frame is inherited by a window's parts:
+  `--lift` is set only while the scratchpad slides the window.
 - Listeners every window would add exist only while needed: a tile drag's
   and a border drag's while it runs, `useReclaimFocus`'s while its window is
   focused.

@@ -129,10 +129,29 @@ describe("slidAcross", () => {
   const SCREEN = { height: 1080, width: 1920, x: 0, y: 0 };
 
   // A scratchpad slide that cuts the other short starts partway in.
+  const FLOAT = { height: 400, width: 600, x: 40, y: 200 };
+
   it("starts the slide as far in as the window was rewound", () => {
-    expect(slidAcross(SCREEN, undefined, 300)).toMatchObject({
+    expect(slidAcross(SCREEN, undefined, "dropping", 300)).toMatchObject({
       "--motion-delay": "-300ms",
     });
+  });
+
+  it.each(["dropping", "stowing"] as const)(
+    "lifts a %s window clear of the screen's top edge",
+    (motion) => {
+      expect(slidAcross(SCREEN, FLOAT, motion, 0)).toMatchObject({
+        "--lift": "600px",
+      });
+    },
+  );
+
+  // A dragged float changes its frame every frame. A lift that followed it
+  // would restyle and repaint every part of the window each time.
+  it("leaves out the lift while the scratchpad is not sliding the window", () => {
+    expect(slidAcross(SCREEN, FLOAT, "resting", 0)).not.toHaveProperty(
+      "--lift",
+    );
   });
 });
 

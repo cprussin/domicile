@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
-
 import { WindowFrame } from "./WindowFrame";
+import type { WindowMotion } from "./window-motion";
 
 const noHover = () => {
   // Nothing in the case moves the pointer into the window.
@@ -65,11 +65,11 @@ describe("WindowFrame", () => {
 
   describe("on a screen", () => {
     const SCREEN = { height: 800, width: 1280, x: 0, y: 100 };
-    const styleOf = () => {
+    const styleOf = (motion: WindowMotion = "resting") => {
       render(
         <WindowFrame
           frame={{ height: 400, width: 600, x: 40, y: 300 }}
-          motion="resting"
+          motion={motion}
           onHover={noHover}
           onReach={noReach}
           rewound={0}
@@ -86,9 +86,9 @@ describe("WindowFrame", () => {
       expect(styleOf()?.getPropertyValue("--workspace-width")).toBe("1280px");
     });
 
-    it("lifts its parts far enough to clear the top of the screen", () => {
+    it("lifts its parts far enough to clear the top of the screen while the scratchpad slides it", () => {
       // The scratchpad slides a window up off the screen and back down.
-      expect(styleOf()?.getPropertyValue("--lift")).toBe("600px");
+      expect(styleOf("dropping")?.getPropertyValue("--lift")).toBe("600px");
     });
   });
 });

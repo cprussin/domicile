@@ -7,6 +7,7 @@ import { useSettling } from "./useSettling";
 import type { WindowMotion } from "./window-motion";
 import { isMoving } from "./window-motion";
 import {
+  heldStyles,
   movingStyles,
   originOf,
   placedAt,
@@ -64,6 +65,7 @@ export const GroupWell = ({
         wellStyles({ castsShadow, nested }),
         movingStyles({ motion }),
         settlingStyles({ lowered }),
+        dragging && heldStyles,
       )}
       data-well
       ref={element}

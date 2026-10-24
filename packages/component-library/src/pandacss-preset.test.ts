@@ -55,6 +55,26 @@ describe("the domicile preset", () => {
     ).toStrictEqual({ animationName: "none" });
   });
 
+  it("draws an outline only where focus can show it", () => {
+    // Blink repaints an element with an outline whenever it moves, even a
+    // transparent one, so a dragged window would repaint every frame.
+    const everything = at(at(at(domicilePreset, "globalCss"), "html"), "*");
+    expect(at(everything, "outlineStyle")).toStrictEqual({
+      _focusVisible: "solid",
+      base: "none",
+    });
+  });
+
+  it("keeps a control's outline, so its focus ring fades out", () => {
+    // `control` transitions `outline-color`; with no outline, the ring would
+    // vanish at once on blur.
+    const control = at(
+      at(at(at(domicilePreset, "theme"), "extend"), "recipes"),
+      "control",
+    );
+    expect(at(at(control, "base"), "outlineStyle")).toBe("solid");
+  });
+
   describe("under high contrast", () => {
     it("draws text further from the light ground", () => {
       expect(textContrast("_light", true)).toBeGreaterThan(

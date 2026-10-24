@@ -9,6 +9,7 @@ import { useSettling } from "./useSettling";
 import type { WindowMotion } from "./window-motion";
 import { isMoving } from "./window-motion";
 import {
+  heldStyles,
   movingStyles,
   originOf,
   placedAt,
@@ -64,6 +65,7 @@ export const SelectionTint = ({
         tintStyles,
         movingStyles({ motion }),
         settlingStyles({ lowered }),
+        dragging && heldStyles,
       )}
       data-selection
       ref={element}
