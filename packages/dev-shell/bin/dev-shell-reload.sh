@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Reloads the shell in a running desktop each time its bundle is rebuilt.
 #
-#   ./scripts/dev-shell-reload.sh <domicile> <module> <socket-file> [settle] [burst]
+#   packages/dev-shell/bin/dev-shell-reload.sh <domicile> <module> <socket-file> [settle] [burst]
 #
 # `dev-shell.sh` starts this beside the watcher. It watches one file, waits
 # for writes to stop, and runs `domicile load-shell`. See
 # docs/architecture/THE-DOMICILE-BINARY.md.
 #
-# Every input is an argument so `scripts/test-dev-shell.sh` can run it without
+# Every input is an argument so `tests/test-dev-shell.sh` can run it without
 # a desktop.
 #
 # The socket path comes from a file because this script is not a child of the

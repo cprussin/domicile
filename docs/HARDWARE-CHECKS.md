@@ -221,13 +221,13 @@ pw-link domicile-cast:capture_1 <consumer>:input_1
 
 ## `dev-shell.sh` against a real engine
 
-Run `./scripts/dev-shell.sh <name>` and check:
+Run `packages/dev-shell/bin/dev-shell.sh <name>` and check:
 
 - A saved edit shows on screen.
 - Windows stay where they were.
 - A shell that fails to load leaves the current shell running.
 
-`scripts/test-dev-shell.sh` covers the watch loop, coalescing and refusal
+`packages/dev-shell/tests/test-dev-shell.sh` covers the watch loop, coalescing and refusal
 against a fake `domicile`.
 
 ## A USB device for a page
