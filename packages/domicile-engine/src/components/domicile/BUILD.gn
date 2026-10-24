@@ -739,6 +739,21 @@ source_set("color_scheme") {
   ]
 }
 
+# Which sites are drawn dark while the desk is: the config's
+# `theme.force_dark`. Its own target for :color_scheme's reason: a test reaches
+# it with no browser. //url only -- no //content.
+source_set("force_dark") {
+  sources = [
+    "browser/force_dark.cc",
+    "browser/force_dark.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//url",
+  ]
+}
+
 # Which extensions to install, load and uninstall so a profile holds what the
 # desk's config names.
 #
@@ -970,6 +985,7 @@ source_set("unit_tests") {
     "browser/download_tally_unittest.cc",
     "browser/extension_installer_unittest.cc",
     "browser/extension_tray_entry_unittest.cc",
+    "browser/force_dark_unittest.cc",
     "browser/file_choice_unittest.cc",
     "browser/frame_sink_broker_unittest.cc",
     "browser/guest_dialogs_unittest.cc",
@@ -1039,6 +1055,7 @@ source_set("unit_tests") {
     ":extension_installer",
     ":extension_tray_entry",
     ":file_choice",
+    ":force_dark",
     ":forwarded_keys",
     ":guest_dialogs",
     ":held_chords",

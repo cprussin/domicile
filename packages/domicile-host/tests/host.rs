@@ -926,6 +926,7 @@ fn the_displays_are_answered_after_the_welcome() {
             HostMessage::Theme { theme: Theme::Dark },
             HostMessage::WindowsTheme { theme: Theme::Dark },
             HostMessage::Appearance(Appearance::default()),
+            HostMessage::ForceDark { sites: vec![] },
         ]
     );
 }

@@ -365,6 +365,12 @@ export type ThemeConfig = {
    */
   font_name?: string | null;
   /**
+   * Host names of sites the browser draws dark while the theme is dark,
+   * for sites with no dark theme of their own. A host covers its
+   * subdomains.
+   */
+  force_dark?: string[];
+  /**
    * The freedesktop icon theme's directory name, such as `Papirus-Dark`.
    * Unset leaves shells with `hicolor`.
    */

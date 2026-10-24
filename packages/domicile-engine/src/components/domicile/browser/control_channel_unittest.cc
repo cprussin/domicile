@@ -187,7 +187,8 @@ class ControlChannelTest : public testing::Test {
     new ControlChannel(path, control_.BindNewPipeAndPassReceiver(),
                        keymap_.GetRepeatingCallback<const std::string&>(),
                        base::DoNothing(), base::DoNothing(), base::DoNothing(),
-                       cursor_theme_.GetRepeatingCallback(), Page{});
+                       cursor_theme_.GetRepeatingCallback(),
+                       force_dark_.GetRepeatingCallback(), Page{});
 
     base::test::TestFuture<int> accepted;
     ASSERT_EQ(
@@ -253,6 +254,7 @@ class ControlChannelTest : public testing::Test {
   mojo::Remote<mojom::ControlChannel> control_;
   base::test::TestFuture<std::string> keymap_;
   base::test::TestFuture<std::optional<ui::DeskCursorTheme>> cursor_theme_;
+  base::test::TestFuture<std::vector<std::string>> force_dark_;
   FakeClient client_;
   LineFramer framer_;
   std::vector<std::string> lines_;
@@ -437,6 +439,16 @@ TEST_F(ControlChannelTest, TheDesksPointerThemeReachesTheBrowser) {
   Say("{\"type\":\"appearance\",\"high_contrast\":false,"
       "\"reduced_motion\":false}\n");
   EXPECT_EQ(cursor_theme_.Take(), std::nullopt);
+}
+
+// The sites to draw dark are for this process, so they reach it before the
+// page has a client. One whose sites are not strings is dropped.
+TEST_F(ControlChannelTest, TheSitesToForceDarkReachTheBrowser) {
+  Say("{\"type\":\"force_dark\",\"sites\":[1]}\n"
+      "{\"type\":\"force_dark\",\"sites\":[\"mail.google.com\"]}\n");
+
+  EXPECT_EQ(force_dark_.Take(),
+            (std::vector<std::string>{"mail.google.com"}));
 }
 
 // A compositor that exits takes its windows and the page's system calls with
