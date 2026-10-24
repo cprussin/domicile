@@ -224,7 +224,8 @@ where
             texture,
             source,
             place,
-            &[place],
+            // Damage is relative to `place`.
+            &[Rectangle::from_size(place.size)],
             &[],
             // Smithay's GLES frame turns the texture by the inverse of the
             // transform it is given; `a_turned_frame_is_drawn_upright` says
@@ -244,7 +245,7 @@ where
             arrow,
             Rectangle::from_size((f64::from(width), f64::from(height)).into()),
             place,
-            &[place],
+            &[Rectangle::from_size(place.size)],
             &[],
             Transform::Normal,
             1.0,
@@ -386,5 +387,45 @@ mod tests {
         read_back(&mut renderer, &target, (0, 0, 2, 2), &mut drawn, 8).expect("read back");
         let [red, green, blue, white] = [0, 1, 2, 3].map(|corner| &CORNERS[corner * 4..][..4]);
         assert_eq!(drawn, [green, white, red, blue].concat()[..]);
+    }
+
+    /// A layer and the arrow placed away from the frame's corner are drawn
+    /// where they are placed.
+    #[test]
+    fn a_layer_and_the_arrow_away_from_the_corner_are_drawn() {
+        let (mut renderer, _) = headless_renderer().expect("EGL: llvmpipe will do");
+        let snapshot = Snapshot::Pixels {
+            bytes: CORNERS.to_vec(),
+            stride: 8,
+            alpha: true,
+            size: (2, 2),
+        };
+        let layer = Layer {
+            snapshot: &snapshot,
+            from: (0, 0, 2, 2),
+            to: (30, 0, 2, 2),
+            transform: Transform::Normal,
+        };
+        let target: GlesTexture = renderer
+            .create_buffer(Fourcc::Argb8888, Size::from((32, 32)))
+            .expect("a texture to draw into");
+
+        draw(
+            &mut renderer,
+            &[layer],
+            &target,
+            (32, 32),
+            Plan::Embed { at: (20, 10) },
+            &arrow(),
+        )
+        .expect("drawn");
+
+        let mut drawn = [0; 32 * 32 * 4];
+        read_back(&mut renderer, &target, (0, 0, 32, 32), &mut drawn, 32 * 4).expect("read back");
+        let pixel = |x: usize, y: usize| &drawn[(y * 32 + x) * 4..][..4];
+        assert_eq!(pixel(30, 0), &CORNERS[..4], "the layer's top left");
+        // The arrow's tip is black, and white below its outline.
+        assert_eq!(pixel(20, 10), [0, 0, 0, 255]);
+        assert_eq!(pixel(21, 12), [255, 255, 255, 255]);
     }
 }
