@@ -490,6 +490,10 @@ class WebViewGuest : public mojom::WebViewGuest,
                       const std::string& id,
                       SetMediaDeviceCallback callback) override;
 
+  // Counts in the primary main frame, as ReadDescription reads.
+  void CountMatches(const std::string& selector,
+                    CountMatchesCallback callback) override;
+
   // content::BrowserPluginGuestDelegate:
   content::WebContents* GetOwnerWebContents() override;
   content::RenderFrameHost* GetProspectiveOuterDocument() override;

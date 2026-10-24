@@ -2,10 +2,10 @@ import { describe, expect, it } from "bun:test";
 import { BarContext } from "@domicile-desktop/manganese-bar/bar-context";
 import { PanelKeyboardContext } from "@domicile-desktop/manganese-bar/panel-keyboard";
 import { DomicileContext } from "@domicile-desktop/manganese-host/domicile-context";
-import type { DomicileNotification } from "@domicile-desktop/sdk/domicile-host";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import {
   WEBVIEW_FOCUS_REQUEST_EVENT,
+  WEBVIEW_LOADING_CHANGE_EVENT,
   WEBVIEW_PERMISSION_REQUEST_EVENT,
 } from "@domicile-desktop/sdk/webview-element";
 import {
@@ -47,24 +47,21 @@ const Bar = ({ children, screen }: { children: ReactNode; screen: string }) => (
   </div>
 );
 
-/** A notification from `appName`, as the engine holds one. */
-const notification = (id: number, appName: string): DomicileNotification => ({
-  actions: [],
-  appName,
-  body: "",
-  clickable: true,
-  icon: "",
-  id,
-  summary: "New message",
-  time: id,
-  timeoutMs: -1,
-  urgency: "normal",
-});
-
 const page = () => {
   const views = document.querySelectorAll("webview");
   expect(views).toHaveLength(1);
   return views[0] as HTMLElement;
+};
+
+/** Finishes loading the page, which then has `unread` unread conversations. */
+const loadWith = (unread: number) => {
+  act(() => {
+    Object.assign(page(), {
+      countMatches: () => Promise.resolve(unread),
+      loading: false,
+    });
+    page().dispatchEvent(new Event(WEBVIEW_LOADING_CHANGE_EVENT));
+  });
 };
 
 describe("GoogleMessages", () => {
@@ -77,55 +74,36 @@ describe("GoogleMessages", () => {
     expect(page()).not.toBeVisible();
   });
 
-  it("counts Messages' notifications", () => {
-    const fake = new FakeDomicileHost();
-    fake.set({
-      notifications: [
-        notification(1, "messages.google.com"),
-        notification(2, "chat.example.com"),
-        notification(3, "messages.google.com"),
-      ],
+  it("counts Messages' unread conversations, read from its page", async () => {
+    render(onBars(new FakeDomicileHost(), ["left", "right"]));
+
+    loadWith(2);
+
+    const counted = await screen.findAllByRole("button", {
+      name: "Messages: 2 new",
     });
-
-    render(onBars(fake, ["left"]));
-
-    expect(
-      screen.getByRole("button", { name: "Messages: 2 new" }),
-    ).toHaveTextContent("2");
+    expect(counted).toHaveLength(2);
+    expect(counted[0]).toHaveTextContent("2");
   });
 
-  it("is round, like the bar's other icon buttons, with or without a count", () => {
-    const fake = new FakeDomicileHost();
-    render(onBars(fake, ["left"]));
-    const isRound = (name: string) => {
-      const { className } = screen.getByRole("button", { name });
-      expect(className).toContain(css({ inlineSize: 7 }));
-      expect(className).toContain(css({ padding: 0 }));
+  it("is round, like the bar's other icon buttons, with or without a count", async () => {
+    render(onBars(new FakeDomicileHost(), ["left"]));
+    const isRound = (button: HTMLElement) => {
+      expect(button.className).toContain(css({ inlineSize: 7 }));
+      expect(button.className).toContain(css({ padding: 0 }));
     };
 
-    isRound("Messages");
-    act(() => {
-      fake.set({ notifications: [notification(1, "messages.google.com")] });
-    });
-    isRound("Messages: 1 new");
+    isRound(screen.getByRole("button", { name: "Messages" }));
+    loadWith(1);
+    isRound(await screen.findByRole("button", { name: "Messages: 1 new" }));
   });
 
-  it("shows the page when pressed, and clears Messages' notifications", async () => {
-    const fake = new FakeDomicileHost();
-    fake.set({
-      notifications: [
-        notification(1, "messages.google.com"),
-        notification(2, "chat.example.com"),
-      ],
-    });
-    render(onBars(fake, ["left"]));
+  it("shows the page when pressed", async () => {
+    render(onBars(new FakeDomicileHost(), ["left"]));
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Messages: 1 new" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Messages" }));
 
     expect(page()).toBeVisible();
-    expect(fake.calls).toContainEqual(["dismissNotifications", [1]]);
   });
 
   it("keeps the keyboard while open", async () => {

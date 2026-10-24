@@ -149,4 +149,12 @@
   // InvalidStateError before the element has a page.
   [CallWith=ScriptState, RaisesException]
   Promise<undefined> setMediaDevice(DOMString kind, DOMString id);
+
+  // How many elements in the page's main document match the CSS `selector`.
+  // The page's own script cannot change the answer, and a hidden page
+  // answers. Throws SyntaxError for a selector that does not parse. Rejects
+  // with InvalidStateError before the element has a page, and when the page
+  // gave no number, as when it navigated first.
+  [CallWith=ScriptState, RaisesException]
+  Promise<long> countMatches(DOMString selector);
 };

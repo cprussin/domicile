@@ -10,6 +10,8 @@ import { ChatCircleTextIcon } from "@phosphor-icons/react/dist/ssr/ChatCircleTex
 import { useEffect, useState } from "react";
 import { css } from "../styled-system/css";
 
+import { watchUnread } from "./watch-unread";
+
 const MESSAGES_URL = "https://messages.google.com/web/";
 
 type Handle = ReturnType<typeof createHandle>;
@@ -19,23 +21,23 @@ type Props = {
   drawsPage: boolean;
   /** Opens the panel from any bar. */
   handle: Handle;
-  /** The panel opened. */
-  onOpen: () => void;
+  /** The page read a new count of unread conversations. */
+  onUnread: (count: number) => void;
   /** The bar's monitor. */
   screen: string;
-  /** How many of Messages' notifications are uncleared. */
+  /** How many conversations are unread. */
   unread: number;
 };
 
 /**
- * The item: a button with the count of new messages, which opens Messages in
- * a panel. The bar that draws the page holds the panel; the others' buttons
+ * The item: a button with the count of unread conversations, which opens
+ * Messages in a panel. The bar that draws the page holds the panel; the others' buttons
  * open it under themselves.
  */
 export const Messages = ({
   drawsPage,
   handle,
-  onOpen,
+  onUnread,
   screen,
   unread,
 }: Props) => {
@@ -46,7 +48,7 @@ export const Messages = ({
   return drawsPage ? (
     <>
       {trigger}
-      <Panel handle={handle} onOpen={onOpen} triggerId={id} />
+      <Panel handle={handle} onUnread={onUnread} triggerId={id} />
     </>
   ) : (
     trigger
@@ -55,7 +57,7 @@ export const Messages = ({
 
 type PanelProps = {
   handle: Handle;
-  onOpen: () => void;
+  onUnread: (count: number) => void;
   /** The id of this bar's button, to open under on the page's request. */
   triggerId: string;
 };
@@ -64,7 +66,7 @@ type PanelProps = {
  * The panel, kept mounted so the page keeps running while it is closed. It
  * keeps the keyboard while open, for typing into the page.
  */
-const Panel = ({ handle, onOpen, triggerId }: PanelProps) => {
+const Panel = ({ handle, onUnread, triggerId }: PanelProps) => {
   const [open, setOpen] = useState(false);
   useKeepsKeyboard(open);
   return (
@@ -73,27 +75,27 @@ const Panel = ({ handle, onOpen, triggerId }: PanelProps) => {
       flush
       handle={handle}
       keepMounted
-      onOpenChange={(opened) => {
-        setOpen(opened);
-        if (opened) {
-          onOpen();
-        }
-      }}
+      onOpenChange={setOpen}
     >
       <Page
         onShow={() => {
           handle.open(triggerId);
         }}
+        onUnread={onUnread}
       />
     </Popover>
   );
 };
 
-/**
- * Messages' page, with its permission requests asked above it. `onShow` is
- * the page asking to be shown, as on a press of its notification.
- */
-const Page = ({ onShow }: { onShow: () => void }) => {
+type PageProps = {
+  /** The page asked to be shown, as on a press of its notification. */
+  onShow: () => void;
+  /** The page's count of unread conversations. */
+  onUnread: (count: number) => void;
+};
+
+/** Messages' page, with its permission requests asked above it. */
+const Page = ({ onShow, onUnread }: PageProps) => {
   // `null` because React passes it to a callback ref on unmount.
   const [view, setView] = useState<HTMLWebViewElement | null>(null);
   const request = usePermissionRequest(view);
@@ -108,6 +110,11 @@ const Page = ({ onShow }: { onShow: () => void }) => {
       };
     }
   }, [onShow, view]);
+
+  useEffect(
+    () => (view === null ? undefined : watchUnread(view, onUnread)),
+    [onUnread, view],
+  );
 
   // A page loaded before the network was up stays offline until reloaded,
   // and the panel has no reload button.

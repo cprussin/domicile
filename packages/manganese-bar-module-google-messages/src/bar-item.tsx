@@ -1,36 +1,34 @@
 import { useBar } from "@domicile-desktop/manganese-bar/bar-context";
 import { useDomicile } from "@domicile-desktop/manganese-host/domicile-context";
-import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
 import { useEffect, useSyncExternalStore } from "react";
 
 import { deskMessages } from "./desk-messages";
 import { Messages } from "./Messages";
 
-const NONE: readonly number[] = [];
-
 /**
- * Google Messages in a panel, with a count of its new messages. Not in the
- * default bar.
+ * Google Messages in a panel, with a count of its unread conversations. Not
+ * in the default bar.
  *
  * The page stays loaded while the panel is closed, so its notifications keep
- * coming. One bar draws it; every bar's item opens it.
+ * coming and its count stays current. One bar draws it; every bar's item
+ * opens it.
  */
 export const GoogleMessages = () => {
-  const domicile = useDomicile();
   const { screen } = useBar();
-  const desk = deskMessages(domicile);
+  const desk = deskMessages(useDomicile());
   useEffect(() => desk.bars.show(screen), [desk, screen]);
   const drawer = useSyncExternalStore(desk.bars.subscribe, desk.bars.drawer);
-  const unread = useSharedWatch(desk.notifications) ?? NONE;
+  const unread = useSyncExternalStore(
+    desk.unread.subscribe,
+    desk.unread.current,
+  );
   return (
     <Messages
       drawsPage={drawer === screen}
       handle={desk.handle}
-      onOpen={() => {
-        domicile.dismissNotifications(unread);
-      }}
+      onUnread={desk.unread.set}
       screen={screen}
-      unread={unread.length}
+      unread={unread}
     />
   );
 };

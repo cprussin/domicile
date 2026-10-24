@@ -593,6 +593,16 @@ void SettleMediaDevice(ScriptPromiseResolver<IDLUndefined>* resolver,
   }
 }
 
+void SettleCount(ScriptPromiseResolver<IDLLong>* resolver,
+                 std::optional<int32_t> count) {
+  if (count.has_value()) {
+    resolver->Resolve(*count);
+  } else {
+    resolver->RejectWithDOMException(DOMExceptionCode::kInvalidStateError,
+                                     "The page gave no count.");
+  }
+}
+
 std::optional<domicile::mojom::blink::WebViewMediaDeviceKind>
 MediaDeviceKindNamed(const String& kind) {
   if (kind == "camera") {
@@ -647,6 +657,29 @@ ScriptPromise<IDLUndefined> HTMLWebViewElement::setMediaDevice(
   auto promise = resolver->Promise();
   guest_->SetMediaDevice(
       *named, id, BindOnce(&SettleMediaDevice, WrapPersistent(resolver)));
+  return promise;
+}
+
+// The selector is parsed here first, against the shell's own document, so a
+// bad one throws as querySelectorAll() does rather than rejecting later.
+ScriptPromise<IDLLong> HTMLWebViewElement::countMatches(
+    ScriptState* script_state,
+    const String& selector,
+    ExceptionState& exception_state) {
+  GetDocument().QuerySelector(AtomicString(selector), exception_state);
+  if (exception_state.HadException()) {
+    return EmptyPromise();
+  }
+  if (!guest_.is_bound()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "This <webview> has no page yet.");
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLLong>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  guest_->CountMatches(selector,
+                       BindOnce(&SettleCount, WrapPersistent(resolver)));
   return promise;
 }
 

@@ -33,6 +33,7 @@
 #include "components/domicile/browser/context_menu.h"
 #include "components/domicile/browser/download_tally.h"
 #include "components/domicile/browser/file_choice.h"
+#include "components/domicile/browser/page_matches.h"
 #include "components/domicile/browser/placeholder_stage.h"
 #include "components/domicile/browser/render_process.h"
 #include "components/domicile/browser/screen_capture.h"
@@ -1782,6 +1783,21 @@ void WebViewGuest::ReportDescription(const std::string& description) {
     reported_description_ = description;
     client_->DescriptionChanged(description);
   }
+}
+
+void WebViewGuest::CountMatches(const std::string& selector,
+                                CountMatchesCallback callback) {
+  CHECK(guest_contents_);
+  guest_contents_->GetPrimaryMainFrame()->ExecuteJavaScriptInIsolatedWorld(
+      CountMatchesScript(selector),
+      // A frame that goes before the read runs drops the callback unrun.
+      base::BindOnce(
+          [](CountMatchesCallback callback, base::Value result) {
+            std::move(callback).Run(CountFrom(result));
+          },
+          mojo::WrapCallbackWithDefaultInvokeIfNotRun(std::move(callback),
+                                                      std::nullopt)),
+      kChromeInternalWorld);
 }
 
 void WebViewGuest::OnContentSettingChanged(
