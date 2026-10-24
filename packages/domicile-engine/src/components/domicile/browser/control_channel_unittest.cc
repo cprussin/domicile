@@ -29,7 +29,10 @@
 #include "net/socket/unix_domain_server_socket_posix.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/cursor/domicile/desk_cursor_image.h"
 #include "ui/base/cursor/domicile/desk_cursor_theme.h"
+#include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace domicile {
 namespace {
@@ -494,6 +497,34 @@ TEST_F(ControlChannelTest, APageLineWithNoCompositorUpReachesTheNextOne) {
 
   EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
   EXPECT_EQ(Heard(), R"({"type":"focus_chrome"})");
+}
+
+// The compositor's casts draw the pointer on screen, which only the browser
+// has. A compositor that connects later hears it as it is, after `hello`.
+TEST_F(ControlChannelTest, ThePointerOnScreenReachesTheCompositor) {
+  control_->SetClient(client_.BindRemote());
+  control_.FlushForTesting();
+  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+
+  ui::DeskCursorImage hand;
+  hand.size = gfx::Size(1, 1);
+  hand.hotspot = gfx::Point(0, 0);
+  hand.scale = 2;
+  hand.bgra = {1, 2, 3, 255};
+  ui::DeskCursorImageSource::Get().Set(hand);
+  EXPECT_EQ(Heard(),
+            R"({"image":{"bgra":"AQID/w==","hotspot":[0,0],"scale":2.0,)"
+            R"("size":[1,1]},"type":"desk_cursor"})");
+
+  ui::DeskCursorImageSource::Get().Set(ui::DeskCursorImage());
+  EXPECT_EQ(Heard(), R"({"type":"desk_cursor"})");
+
+  compositor_.reset();
+  AcceptTheNextCompositor();
+  EXPECT_EQ(Heard(), R"({"protocol_version":1,"type":"hello"})");
+  EXPECT_EQ(Heard(), R"({"type":"desk_cursor"})");
+
+  ui::DeskCursorImageSource::Get().ResetForTesting();
 }
 
 }  // namespace
