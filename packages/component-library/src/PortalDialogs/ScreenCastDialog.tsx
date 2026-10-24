@@ -21,7 +21,12 @@ import type { Choice } from "./SourcePicker";
 import { SourcePicker } from "./SourcePicker";
 import type { ShownWindow } from "./shown-windows";
 import { ShownWindowKind, shownArea } from "./shown-windows";
-import { browserChoice, screenChoice, windowChoice } from "./source-choices";
+import {
+  browserChoice,
+  screenChoice,
+  wholeDeskChoice,
+  windowChoice,
+} from "./source-choices";
 import type { DrawPreview } from "./useWindowPreview";
 
 type Props = {
@@ -64,11 +69,27 @@ export const ScreenCastDialog = ({
 }: Props) => {
   // Read once, as the desk was shot; a later move would not match it.
   const [shown] = useState(shownWindows);
-  const [picked, setPicked] = useState<readonly number[]>([]);
+  const { desk } = body;
+  // All of the desk, as a region, when the application may have one.
+  const whole: Offered[] =
+    body.region && desk !== undefined
+      ? [
+          {
+            ...wholeDeskChoice(desk),
+            source: Source.Region({
+              position: desk.desk.position,
+              size: desk.desk.size,
+            }),
+          },
+        ]
+      : [];
+  // The whole desk, first in the list, is picked as the dialog opens.
+  const [picked, setPicked] = useState<readonly number[]>(
+    whole.length > 0 ? [0] : [],
+  );
   // An area of the desk shot dragged in place of the picks.
   const [dragged, setDragged] = useState<ShotRect | undefined>(undefined);
   const [drawing, setDrawing] = useState(false);
-  const { desk } = body;
   const screens: Offered[] = body.sources.flatMap((source) =>
     source.kind === CastSourceKind.Monitor
       ? [
@@ -111,7 +132,7 @@ export const ScreenCastDialog = ({
         }))
       : []),
   ];
-  const offered = [...screens, ...windows];
+  const offered = [...whole, ...screens, ...windows];
   return drawing ? (
     <RegionPicker
       cancel={() => {
@@ -194,6 +215,7 @@ export const ScreenCastDialog = ({
         picked={picked}
         previewWindow={previewWindow}
         sections={[
+          { choices: whole, label: undefined },
           { choices: screens, label: "Screens" },
           { choices: windows, label: "Windows" },
         ]}

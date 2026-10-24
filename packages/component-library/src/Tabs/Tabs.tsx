@@ -90,15 +90,13 @@ const tabStyles = cva({
       backgroundColor: "color-mix(in oklab, {colors.accent} 16%, transparent)",
       outlineColor: "transparent",
     },
+    // Hover only lifts inactive, enabled tabs; the active tab keeps its accent.
+    _hoverEnabled: {
+      backgroundColor: "card",
+      color: "foreground",
+    },
     _selected: {
       color: "accent",
-    },
-    // Hover only lifts inactive, enabled tabs; the active tab keeps its accent.
-    "&:not([data-selected])": {
-      _hoverEnabled: {
-        backgroundColor: "card",
-        color: "foreground",
-      },
     },
     background: "transparent",
     border: "none",

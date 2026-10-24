@@ -364,7 +364,7 @@ const rowStyles = css({
     backgroundColor: "color-mix(in oklab, {colors.accent} 20%, transparent)",
     borderColor: "accent",
   },
-  _hover: {
+  _hoverEnabled: {
     backgroundColor: "color-mix(in oklab, {colors.foreground} 6%, transparent)",
   },
   "& > :is(svg, img)": {
@@ -430,9 +430,17 @@ const previewStyles = css({
   objectFit: "contain",
 });
 
-// The desk's box, with the preview fitted and centered inside it.
+// The desk's box, with the preview fitted and centered inside it. The
+// preview is out of the flow, so a tall one cannot stretch the box.
 const previewBoxStyles = center({
-  "& > img": { blockSize: "full", inlineSize: "full", maxBlockSize: "none" },
+  "& > img": {
+    blockSize: "full",
+    inlineSize: "full",
+    inset: 0,
+    maxBlockSize: "none",
+    position: "absolute",
+  },
+  position: "relative",
 });
 
 const deskStyles = css({

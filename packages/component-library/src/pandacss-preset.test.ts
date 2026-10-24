@@ -65,6 +65,33 @@ describe("the domicile preset", () => {
     });
   });
 
+  it("lifts only an enabled element that is not picked on hover", () => {
+    const hover = at(
+      at(at(domicilePreset, "conditions"), "extend"),
+      "hoverEnabled",
+    );
+    if (typeof hover !== "string") {
+      throw new Error("no hoverEnabled condition");
+    }
+    // happy-dom matches no `:hover`, so the test asks what else must hold.
+    const lifts = (html: string) => {
+      const parent = document.createElement("div");
+      parent.innerHTML = html;
+      const element = parent.firstElementChild;
+      if (element === null) {
+        throw new Error(`no element in ${html}`);
+      }
+      return element.matches(hover.replace("&:hover", "*"));
+    };
+
+    expect(lifts("<button></button>")).toBe(true);
+    expect(lifts('<button aria-selected="false"></button>')).toBe(true);
+    expect(lifts("<button disabled></button>")).toBe(false);
+    expect(lifts('<button aria-current="page"></button>')).toBe(false);
+    expect(lifts('<button aria-selected="true"></button>')).toBe(false);
+    expect(lifts("<button data-checked></button>")).toBe(false);
+  });
+
   it("keeps a control's outline, so its focus ring fades out", () => {
     // `control` transitions `outline-color`; with no outline, the ring would
     // vanish at once on blur.

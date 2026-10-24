@@ -2221,6 +2221,42 @@ describe("screen cast", () => {
       ]);
     });
 
+    it("picks the whole desk at first and shares it", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([
+        screenCast(false, MONITORS, true, {
+          desk: frozen(1, "screenshot").body,
+        }),
+      ]);
+
+      expect(screen.getByRole("radio", { name: "Whole desk" })).toBeChecked();
+      await userEvent.click(screen.getByRole("button", { name: "Share" }));
+      expect(host.answers).toEqual([
+        [
+          5,
+          {
+            kind: "screen_cast",
+            sources: [{ position: [-10, 0], size: [150, 50], type: "region" }],
+          },
+        ],
+      ]);
+    });
+
+    it("offers no whole desk when the application asks for no region", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([
+        screenCast(false, MONITORS, false, {
+          desk: frozen(1, "screenshot").body,
+        }),
+      ]);
+
+      expect(
+        screen.queryByRole("radio", { name: "Whole desk" }),
+      ).not.toBeInTheDocument();
+    });
+
     it("shares a source picked after an area was dragged", async () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} />);
@@ -2234,7 +2270,7 @@ describe("screen cast", () => {
       );
       fireEvent.pointerDown(desk, { clientX: 60, clientY: 30 });
       fireEvent.pointerUp(desk, { clientX: 20, clientY: 45 });
-      await userEvent.click(screen.getAllByRole("radio")[1] as HTMLElement);
+      await userEvent.click(screen.getByRole("radio", { name: "drm-2" }));
       await userEvent.click(screen.getByRole("button", { name: "Share" }));
 
       expect(host.answers).toEqual([
