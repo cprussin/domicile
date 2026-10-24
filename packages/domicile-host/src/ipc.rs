@@ -49,6 +49,8 @@ pub fn apply_chrome_message(
                     // The theme the browser draws its own pages in.
                     host.describe_windows_theme(),
                     host.describe_appearance(),
+                    // Before any site loads, so its first page is drawn dark.
+                    host.describe_force_dark(),
                 ]
                 .into_iter()
                 .chain(host.describe_keymap())

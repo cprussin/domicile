@@ -603,6 +603,17 @@ in {
             example = "Iosevka 12";
           };
 
+          theme.force_dark = lib.mkOption {
+            description = ''
+              Host names of sites the browser draws dark while `theme.mode` is
+              `"dark"`, for sites with no dark theme of their own. A host
+              covers its subdomains.
+            '';
+            type = lib.types.listOf lib.types.str;
+            default = [];
+            example = ["mail.google.com"];
+          };
+
           input.keyboard = {
             xkb_rules = lib.mkOption {
               description = "Passed to xkb as is. Empty uses the libxkbcommon default.";

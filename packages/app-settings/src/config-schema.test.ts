@@ -114,6 +114,20 @@ describe(readSettings, () => {
     ).toBe(true);
   });
 
+  it("reads the sites to force dark, which Settings does not edit", () => {
+    const force_dark = ["mail.google.com"];
+    expect(
+      readSettings({ theme: { force_dark } }).map((read) => read.theme),
+    ).toEqual(
+      Ok({
+        contrast: "normal",
+        force_dark,
+        mode: "dark",
+        reduced_motion: false,
+      }),
+    );
+  });
+
   it("says where a config does not fit", () => {
     expect(readSettings({ theme: { mode: "system" } }).isErr()).toBe(true);
     expect(readSettings({ theme: { tint: "red" } }).isErr()).toBe(true);

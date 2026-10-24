@@ -75,6 +75,7 @@ fn hello_completes_the_handshake_with_a_welcome_and_the_desktop() {
             HostMessage::Theme { theme: Theme::Dark },
             HostMessage::WindowsTheme { theme: Theme::Dark },
             HostMessage::Appearance(Appearance::default()),
+            HostMessage::ForceDark { sites: vec![] },
         ]
     );
 }
@@ -245,6 +246,7 @@ fn a_keymap_the_compositor_compiled_rides_with_the_handshake() {
             HostMessage::Theme { theme: Theme::Dark },
             HostMessage::WindowsTheme { theme: Theme::Dark },
             HostMessage::Appearance(Appearance::default()),
+            HostMessage::ForceDark { sites: vec![] },
             HostMessage::Keymap {
                 keymap: KEYMAP.into()
             },
@@ -275,6 +277,27 @@ fn the_extensions_the_config_names_ride_with_the_handshake() {
             unpacked: vec!["/home/you/src/my-extension".into()],
         }),
         "after the keymap, the other fact only the browser process reads"
+    );
+}
+
+#[test]
+fn the_sites_to_force_dark_ride_with_the_handshake() {
+    // The browser process reads these, so a reloaded page's new channel needs
+    // them again.
+    let mut session = Session::new();
+    session
+        .host_mut()
+        .set_force_dark(vec!["mail.google.com".into()]);
+
+    let out = session.ingest(&to_line(&ChromeMessage::Hello {
+        protocol_version: PROTOCOL_VERSION,
+    }));
+
+    assert!(
+        out.contains(&HostMessage::ForceDark {
+            sites: vec!["mail.google.com".into()],
+        }),
+        "{out:?}"
     );
 }
 

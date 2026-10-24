@@ -137,6 +137,7 @@ An edit applies to the running desktop, and windows stay open:
 | `theme.accent_color`, `contrast`, `reduced_motion` | Shell and windows that read the settings portal follow |
 | `theme.cursor_theme`, `cursor_size` | The pointer on a tty is redrawn; windows that read the settings portal follow |
 | `theme.font_name`, `monospace_font_name` | Windows that read the settings portal follow |
+| `theme.force_dark` | Those sites are drawn dark from their next load |
 | `theme.icon_theme` | Shell and windows that read the settings portal follow; tray icons redrawn and later notifications drawn in it; manganese on the next menu or launcher opening, and title bars when a new app id appears |
 | `files.omit` | Launcher file index rebuilt |
 | `extensions` | Extensions installed or removed ([EXTENSIONS.md](/docs/architecture/EXTENSIONS.md)) |
@@ -322,6 +323,20 @@ In manganese:
   is logged and drawn as `hicolor`.
 
 Shell side: [SHELL-DESKTOP-EVENTS.md](SHELL-DESKTOP-EVENTS.md#theme).
+
+### Sites drawn dark
+
+```json
+{ "theme": { "force_dark": ["mail.google.com"] } }
+```
+
+For sites with no dark theme of their own, such as Gmail:
+
+- While `mode` is `"dark"`, the browser draws these sites with Chromium's
+  automatic dark mode. A switch to `"light"` draws them as they are.
+- Each entry is a host name. It covers its subdomains. A URL, path or port is
+  rejected.
+- Default: `[]`.
 
 ## Displays
 
