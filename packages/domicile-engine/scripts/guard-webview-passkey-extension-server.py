@@ -28,7 +28,7 @@ from urllib.parse import urlsplit
 PAGE_PATH = "/page"
 
 # Must match the extension's `ANSWER`;
-# scripts/test-webview-passkey-extension-guard.sh checks this.
+# packages/domicile-engine/tests/test-webview-passkey-extension-guard.sh checks this.
 ANSWER = "domicile-guard-passkey-extension"
 
 PAGE = """<!doctype html>

@@ -79,7 +79,7 @@ PROFILE="${PROFILE:-/tmp/domicile-spike-profile}"
 # keep each run's log.
 ENGINE_LOG="${ENGINE_LOG:-/tmp/domicile-spike-engine.log}"
 # Remove the profile on exit: on crux /tmp is RAM that nothing else clears.
-# See scripts/test-the-guards-take-their-profiles-with-them.sh.
+# See packages/domicile-engine/tests/test-the-guards-take-their-profiles-with-them.sh.
 # shellcheck source=packages/domicile-engine/scripts/lib-profile.sh
 . "$SCRIPTS/lib-profile.sh"
 trap 'remove_profile "$PROFILE"' EXIT

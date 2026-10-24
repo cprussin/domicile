@@ -169,7 +169,7 @@ echo "window: listed=$SAW_WINDOW private=$WINDOW_PRIVATE read=$SAW_WINDOW_READ h
 echo "after: closed=$SAW_CLOSED ended=$SAW_ENDED read=$SAW_AFTER has=$AFTER_HAS"
 echo
 
-# The verdict. `scripts/test-webview-private-guard.sh` runs this block
+# The verdict. `packages/domicile-engine/tests/test-webview-private-guard.sh` runs this block
 # directly.
 #
 # The setter's side is private in the run and ordinary in the control.

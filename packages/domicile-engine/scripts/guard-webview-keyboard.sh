@@ -294,7 +294,7 @@ echo "the page in the window saw: after=$SAW_GUEST_KEY"
 echo "handed back: chord=$SAW_GUEST_CHORD plain=$SAW_PLAIN_CHORD; zoom=$SAW_ZOOM drawn=$SAW_ZOOM_DRAWN"
 echo
 
-# The verdict. `scripts/test-webview-keyboard-guard.sh` runs this block
+# The verdict. `packages/domicile-engine/tests/test-webview-keyboard-guard.sh` runs this block
 # directly. Checks are ordered by dependency, so each failure names the first
 # layer that broke.
 FAILURE=""

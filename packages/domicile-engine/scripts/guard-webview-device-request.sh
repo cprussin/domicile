@@ -70,7 +70,7 @@ HEIGHT="${HEIGHT:-768}"
 # Height of the shell's strip in CSS pixels. The press points derive from it.
 #
 # Not `STRIP`: `nix develop .#full` exports `STRIP=strip`, which breaks the
-# arithmetic below under `set -u`. `scripts/test-webview-guard-startup.sh`
+# arithmetic below under `set -u`. `packages/domicile-engine/tests/test-webview-guard-startup.sh`
 # starts every guard in that environment to catch this.
 STRIP_HEIGHT="${STRIP_HEIGHT:-64}"
 CHROME_X=$((WIDTH / 2))
@@ -234,7 +234,7 @@ echo "request: refused=$SAW_REFUSED asked=$SAW_ASKED heard=$SAW_REQUEST answered
 echo
 
 # The verdict: names the component to blame. Checks run in dependency order.
-# `scripts/test-webview-device-request-guard.sh` runs this block directly.
+# `packages/domicile-engine/tests/test-webview-device-request-guard.sh` runs this block directly.
 FAILURE=""
 PASSED=""
 if [ "$SAW_SHELL" != "1" ]; then

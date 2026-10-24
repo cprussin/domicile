@@ -153,7 +153,7 @@ echo "shell=$SAW_SHELL trusted=$NEGATIVE page loaded=$SAW_PAGE"
 echo "the element said: security=$SECURITY url=$URL"
 echo
 
-# The verdict. `scripts/test-webview-untrusted-cert-guard.sh` runs this block.
+# The verdict. `packages/domicile-engine/tests/test-webview-untrusted-cert-guard.sh` runs this block.
 FAILURE=""
 PASSED=""
 if [ "$SAW_SHELL" != "1" ]; then

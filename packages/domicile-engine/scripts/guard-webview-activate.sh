@@ -148,7 +148,7 @@ echo "shell=$SAW_SHELL loaded=$SAW_PAGE brought=$BROUGHT target=$FRONTED"
 echo "the engine asked=$SAW_ASKED; the shell heard=$SAW_REQUEST"
 echo
 
-# The verdict. `scripts/test-webview-activate-guard.sh` runs this block.
+# The verdict. `packages/domicile-engine/tests/test-webview-activate-guard.sh` runs this block.
 FAILURE=""
 PASSED=""
 if [ "$SAW_SHELL" != "1" ]; then

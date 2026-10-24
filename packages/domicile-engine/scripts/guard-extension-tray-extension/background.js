@@ -4,7 +4,7 @@
 // reaching the page, not the list read once at load.
 //
 // The text and the color are the guard's BADGE and BADGE_COLOR, and
-// scripts/test-extension-tray-guard.sh holds the three together.
+// packages/domicile-engine/tests/test-extension-tray-guard.sh holds the three together.
 //
 // Off `globalThis` because `chrome` is an extension's global, which the
 // linter this repository runs over every script does not know.

@@ -4,11 +4,12 @@
 #   nix develop .#full -c ./scripts/check.sh
 #   ./scripts/check.sh e2e            # one group
 #
-# Groups: `shell`, `rust`, `typescript`, `e2e`, `engine`, `nix` and `distro`.
+# Groups: `shell`, `rust`, `typescript`, `e2e`, `nix` and `distro`.
 # Workflows run groups only;
-# `scripts/test-the-workflows-delegate-their-checks.sh` asserts that. `engine` needs a warm Chromium tree, `nix` needs `nix` on PATH
-# and `distro` needs packages from `distro/build.sh` and docker; without them
-# they skip.
+# `scripts/test-the-workflows-delegate-their-checks.sh` asserts that. `nix`
+# needs `nix` on PATH and `distro` needs packages from `distro/build.sh` and
+# docker; without them they skip. The engine's checks are its package's
+# `test:engine`.
 #
 # Each check is reported as `packages/check-runner` reports it; see its README
 # for the verdicts and `DOMICILE_CHECK_STRICT`.
@@ -25,7 +26,7 @@ cd "$ROOT"
 # Which groups to run; none means all.
 #
 # Not `GROUPS`: bash reserves that name and ignores assignments to it.
-KNOWN=(shell rust typescript e2e engine nix distro)
+KNOWN=(shell rust typescript e2e nix distro)
 SELECTED=("$@")
 [ "${#SELECTED[@]}" -eq 0 ] && SELECTED=("${KNOWN[@]}")
 # An unknown group is an error, so a typo cannot check nothing and exit 0.
@@ -44,29 +45,6 @@ wanted() {
 . "$ROOT/packages/check-runner/src/report.sh"
 report_start
 
-# Runs the given engine scripts at once, as noise, then prints their verdicts
-# in order. Waits on its own PIDs only: a bare `wait` would also wait on the
-# e2e group's Xvfb.
-run_together() {
-  local dir script pids=(); dir="$(mktemp -d)"
-  for script in "$@"; do
-    ( engine_noisy "$script" >"$dir/$(basename "$script")" 2>&1
-      echo $? >"$dir/$(basename "$script").status" ) &
-    pids+=($!)
-  done
-  wait "${pids[@]}"
-  for script in "$@"; do
-    label "$(basename "$script" .sh)"
-    verdict "$(basename "$script" .sh)" "$(cat "$dir/$(basename "$script").status")" \
-      "$dir/$(basename "$script")"
-  done
-  rm -rf "$dir"
-}
-
-# Where a failing check's whole log is kept. `DOMICILE_CHECK_LOG_DIR` lets
-# engine.yml choose a shared path: inside `nix develop --command`, $TMPDIR is
-# private to that command. Emptied so a log here is from this run.
-rm -rf "$KEEP_LOGS"; mkdir -p "$KEEP_LOGS"
 cleanup() {
   [ -n "${XVFB:-}" ] && kill "$XVFB" 2>/dev/null
   rm -f "$FAILURES" "${DISPLAY_FILE:-}" "${XVFB_LOG:-}"
@@ -84,7 +62,7 @@ echo "== environment =="
 # Only for groups that read `node_modules`. `cargo-test.yml` and
 # `nix-build.yml` run without bun.
 needs_node_modules() {
-  for group in typescript e2e engine shell; do wanted "$group" && return 0; done
+  for group in typescript e2e shell; do wanted "$group" && return 0; done
   return 1
 }
 if needs_node_modules; then
@@ -150,136 +128,6 @@ if wanted distro; then
   for script in scripts/distro-*.sh; do
     run "$(basename "$script" .sh)" "$script"
   done
-fi
-
-# Ordered and fail-fast: every check here uses the one Chromium tree on
-# `crux`, so the cheap checks run first and a failure stops the expensive
-# guards.
-#
-# Listed rather than globbed, to keep the order.
-# `scripts/test-the-workflows-delegate-their-checks.sh` asserts the list holds
-# every `scripts/engine-*.sh`.
-if wanted engine; then
-  echo
-  echo "== engine =="
-  # A skip does not stop the group, so a machine with no tree reports every
-  # check that did not run.
-  engine_stop() {
-    [ "${#FAILED[@]}" -eq 0 ] && return 1
-    echo "  (stopping: the tree is one slot, and the rest would measure a build already known bad)"
-  }
-  # Every check but latency runs as noise, so another run's latency guard
-  # waits for it. Only when `CARD_OWNER` is set (engine.yml), since the lock
-  # registry lives on `crux`. Latency is not noise, or it would wait for itself.
-  #
-  # Each check has a timeout, so a hung check cannot hold `crux`. The budget
-  # is a cold cargo build's. The timeout runs inside `noisy`, so waiting for
-  # the card does not count, and it kills the check's whole process group.
-  ENGINE_CHECK_TIMEOUT="${DOMICILE_ENGINE_CHECK_TIMEOUT:-1800}"
-  engine_noisy() {
-    local status
-    if [ -n "${CARD_OWNER:-}" ]; then
-      "$ROOT/.github/scripts/engine-render-node-lock.sh" noisy "$CARD_OWNER" -- \
-        timeout -k 30 "$ENGINE_CHECK_TIMEOUT" "$@"
-    else
-      timeout -k 30 "$ENGINE_CHECK_TIMEOUT" "$@"
-    fi
-    status=$?
-    [ "$status" -ne 124 ] || echo "$(basename "$1") ran past ${ENGINE_CHECK_TIMEOUT}s and was killed"
-    return "$status"
-  }
-  engine_serial() {
-    local script
-    for script in "$@"; do
-      run "$(basename "$script" .sh)" engine_noisy "$script"
-      engine_stop && return 1
-    done
-    return 0
-  }
-  # These run together: they are headless and share no card, port, broker,
-  # profile or log. Latency runs after them because it measures time.
-  engine_serial \
-    scripts/engine-build-produced-what-the-guards-load.sh \
-    scripts/engine-unit-tests.sh \
-    scripts/engine-drm-unit-tests.sh \
-    scripts/engine-build-the-compositor.sh \
-    scripts/engine-guard-shortcuts-inhibitor.sh \
-    scripts/engine-guard-client-window.sh \
-    scripts/engine-guard-client-window-in-memory.sh \
-    scripts/engine-guard-two-windows.sh \
-    scripts/engine-guard-buffer-transform.sh \
-    scripts/engine-guard-scrolling-bubble.sh \
-    scripts/engine-guard-webview-permissions.sh \
-    scripts/engine-guard-app-survives-load-shell.sh \
-    scripts/engine-guard-app-survives-compositor-restart.sh \
-    scripts/engine-guard-shell.sh \
-    scripts/engine-guard-shell-manganese.sh \
-    scripts/engine-guard-shell-shortcuts.sh &&
-  { run_together \
-      scripts/engine-guard-webview-framing.sh \
-      scripts/engine-guard-shell-local-network.sh \
-      scripts/engine-guard-webview-notifications.sh \
-      scripts/engine-guard-notification-server-late.sh \
-      scripts/engine-guard-shell-web-apis.sh \
-      scripts/engine-guard-display-capture.sh \
-      scripts/engine-guard-webview-content-script.sh \
-      scripts/engine-guard-extension-installer.sh \
-      scripts/engine-guard-extension-tray.sh \
-      scripts/engine-guard-webview-keyboard.sh \
-      scripts/engine-guard-webview-escape.sh \
-      scripts/engine-guard-webview-browser-page.sh \
-      scripts/engine-guard-webview-history.sh \
-      scripts/engine-guard-webview-untrusted-cert.sh \
-      scripts/engine-guard-webview-find.sh \
-      scripts/engine-guard-webview-click.sh \
-      scripts/engine-guard-webview-activate.sh \
-      scripts/engine-guard-webview-new-window.sh \
-      scripts/engine-guard-webview-window-open.sh \
-      scripts/engine-guard-webview-private.sh \
-      scripts/engine-guard-webview-partition.sh \
-      scripts/engine-guard-webview-will-navigate.sh \
-      scripts/engine-guard-webview-app-window.sh \
-      scripts/engine-guard-webview-routed-link.sh \
-      scripts/engine-guard-webview-target-url.sh \
-      scripts/engine-guard-webview-fullscreen.sh \
-      scripts/engine-guard-webview-device-request.sh \
-      scripts/engine-guard-webview-media-devices.sh \
-      scripts/engine-guard-webview-count-matches.sh \
-      scripts/engine-guard-webview-dialog.sh \
-      scripts/engine-guard-webview-beforeunload.sh \
-      scripts/engine-guard-webview-print.sh \
-      scripts/engine-guard-webview-context-menu.sh \
-      scripts/engine-guard-webview-upload.sh \
-      scripts/engine-guard-webview-download.sh \
-      scripts/engine-guard-webview-save-picker.sh \
-      scripts/engine-guard-webview-tabs.sh \
-      scripts/engine-guard-webview-active-tab.sh \
-      scripts/engine-guard-webview-popup-window.sh \
-      scripts/engine-guard-webview-passkey-extension.sh \
-      scripts/engine-guard-webview-survives-load-shell.sh \
-      scripts/engine-guard-webview-hidden.sh \
-      scripts/engine-guard-webview-crash.sh \
-      scripts/engine-guard-desktop-geometry.sh \
-      scripts/engine-guard-windows-state.sh \
-      scripts/engine-guard-desk-state.sh \
-      scripts/engine-guard-held-moments.sh \
-      scripts/engine-guard-asks-promise.sh \
-      scripts/engine-guard-portal-requests.sh \
-      scripts/engine-guard-shortcut-chords.sh \
-      scripts/engine-guard-app-routes-input.sh \
-      scripts/engine-guard-shell-handover.sh \
-      scripts/engine-guard-shell-script-src.sh \
-      scripts/engine-guard-shell-crash.sh \
-      scripts/engine-guard-app-only-in-shell.sh \
-      scripts/engine-guard-domicile-fetch.sh \
-      scripts/engine-guard-app-module.sh \
-      scripts/engine-guard-video-codecs.sh
-    ! engine_stop; } &&
-  engine_serial scripts/engine-guard-css-and-resize.sh &&
-  run engine-guard-latency scripts/engine-guard-latency.sh &&
-  engine_serial scripts/engine-guard-shortcuts-inhibitor-chord.sh
-  # The chord runs last: it can fail because of the host compositor, not the
-  # build, and that should not stop the other guards.
 fi
 
 if wanted e2e; then

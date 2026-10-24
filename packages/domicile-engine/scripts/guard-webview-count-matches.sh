@@ -134,7 +134,7 @@ echo "shell=$SAW_SHELL bad selector refused=$SAW_BAD_SELECTOR"
 echo "selector=$SELECTOR counted=$COUNTED (want $WANT) webviews=$VIEWS"
 echo
 
-# The verdict. `scripts/test-webview-count-matches-guard.sh` runs this block.
+# The verdict. `packages/domicile-engine/tests/test-webview-count-matches-guard.sh` runs this block.
 FAILURE=""
 PASSED=""
 if [ "$SAW_SHELL" != "1" ]; then

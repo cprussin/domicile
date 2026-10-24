@@ -170,7 +170,7 @@ echo "the browser was asked=$SAW_BROWSER; the shell was asked=$SAW_ASKED and ans
 echo "the page got: the camera=$SAW_GRANTED refused=$SAW_REFUSED; the site's camera is $STORED=$SAW_STORED"
 echo
 
-# Map the readings to a verdict. `scripts/test-webview-permissions-guard.sh`
+# Map the readings to a verdict. `packages/domicile-engine/tests/test-webview-permissions-guard.sh`
 # runs this block directly.
 FAILURE=""
 PASSED=""

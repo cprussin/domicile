@@ -67,7 +67,7 @@ HEIGHT="${HEIGHT:-768}"
 # so they stay in the strip and in the window below it.
 #
 # Not named `STRIP`: `nix develop .#full` exports STRIP=strip, which breaks the
-# arithmetic below under `set -u`. `scripts/test-webview-guard-startup.sh`
+# arithmetic below under `set -u`. `packages/domicile-engine/tests/test-webview-guard-startup.sh`
 # catches this class of bug.
 STRIP_HEIGHT="${STRIP_HEIGHT:-64}"
 CHROME_X=$((WIDTH / 2))
@@ -245,7 +245,7 @@ grep -F "GUARD shell-focus-state" "$ENGINE_LOG" 2>/dev/null | tail -6 | sed 's/^
 echo
 
 # Turn the readings into one verdict naming where the failure is.
-# `scripts/test-webview-click-guard.sh` tests this block. Checks run in
+# `packages/domicile-engine/tests/test-webview-click-guard.sh` tests this block. Checks run in
 # dependency order: a later reading means nothing if an earlier one failed.
 FAILURE=""
 PASSED=""

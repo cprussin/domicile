@@ -59,7 +59,7 @@ fi
 NEGATIVE="${NEGATIVE:-0}"
 
 # The fixture, as the tray must name it, and the size its popup asks for.
-# Fixed rather than overridable: `scripts/test-webview-popup-window-guard.sh`
+# Fixed rather than overridable: `packages/domicile-engine/tests/test-webview-popup-window-guard.sh`
 # holds the id to the manifest's `key` and the size to popup.js.
 readonly ID="eeakegpaijmndccnpjplchoonieggcfo"
 readonly POPUP="chrome-extension://$ID/popup.html"
@@ -221,7 +221,7 @@ echo "what the shell was asked, and what the window's page heard:"
 grep -F -e '"GUARD asked ' -e '"GUARD window ' -e '"GUARD created ' \
   "$ENGINE_LOG" | tail -6 || true
 
-# WHICH END TO BLAME. `scripts/test-webview-popup-window-guard.sh` runs this
+# WHICH END TO BLAME. `packages/domicile-engine/tests/test-webview-popup-window-guard.sh` runs this
 # block directly. MEASURED is "<leg> <sent> <tray> <shown> <asked> <sized>
 # <typed> <same> <found> <closed> <created>".
 FAILURE=""

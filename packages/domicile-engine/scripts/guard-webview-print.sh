@@ -187,7 +187,7 @@ echo "window.print(): before=$SAW_OWN_BEFORE after=$SAW_OWN_AFTER any=$SAW_ANY"
 echo
 
 # The verdict: names the component to blame. Checks run in dependency order.
-# `scripts/test-webview-print-guard.sh` runs this block directly.
+# `packages/domicile-engine/tests/test-webview-print-guard.sh` runs this block directly.
 FAILURE=""
 PASSED=""
 if [ "$SAW_SHELL" != "1" ]; then

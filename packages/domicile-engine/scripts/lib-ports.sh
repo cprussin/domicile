@@ -4,7 +4,7 @@
 # one network, so a fixed port can collide (`Address already in use`).
 #
 # Sourced by the guards and the fixtures' tests.
-# `scripts/test-the-webview-guards-take-free-ports.sh` enforces this.
+# `packages/domicile-engine/tests/test-the-webview-guards-take-free-ports.sh` enforces this.
 
 # The port a fixture server bound, from its `serving ... on 127.0.0.1:<port>`
 # line. Fails on no line or on port 0 (the requested port, not the bound one).

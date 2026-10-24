@@ -222,7 +222,7 @@ jobs:
           DOMICILE_CHROMIUM="$CHROMIUM" DOMICILE_ENGINE_OUT="$OUT-staged" \
             DOMICILE_GUARD_CONTROL=0 \
             .github/scripts/engine-render-node-lock.sh noisy "$LOCK_OWNER" -- \
-            nix develop .#full --command ./scripts/engine-guard-client-window.sh
+            nix develop .#full --command packages/domicile-engine/scripts/run-checks.sh guard-client-window
 
       - name: Publish
         env:

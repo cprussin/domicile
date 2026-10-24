@@ -178,7 +178,7 @@ echo
 echo "measured: $MEASURED"
 echo "  (mode answered mains narrow app-hello replied fetched)"
 
-# Which end to blame. `scripts/test-app-module-guard.sh` runs this block
+# Which end to blame. `packages/domicile-engine/tests/test-app-module-guard.sh` runs this block
 # directly. MEASURED is "<mode> <answered> <mains> <narrow> <hello>
 # <replied> <fetched>".
 FAILURE=""

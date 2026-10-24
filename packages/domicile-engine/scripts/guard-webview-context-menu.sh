@@ -236,7 +236,7 @@ echo "DevTools' front end drew: soft-menu=$SAW_SOFT_MENU"
 echo "closing the inspected window: asked=$SAW_CLOSING closed=$SAW_CLOSED engine-alive=$ALIVE"
 echo
 
-# Decided here, in a block `scripts/test-webview-context-menu-guard.sh` runs
+# Decided here, in a block `packages/domicile-engine/tests/test-webview-context-menu-guard.sh` runs
 # directly.
 FAILURE=""
 PASSED=""

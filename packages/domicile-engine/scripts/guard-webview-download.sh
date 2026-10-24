@@ -231,7 +231,7 @@ echo "everything in the home, for the record:"
 find "$HOME_DIR" -type f 2>/dev/null | sed 's/^/  /'
 echo
 
-# Turn the readings into a verdict. `scripts/test-webview-download-guard.sh`
+# Turn the readings into a verdict. `packages/domicile-engine/tests/test-webview-download-guard.sh`
 # tests this block.
 FAILURE=""
 PASSED=""
