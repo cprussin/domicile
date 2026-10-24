@@ -129,8 +129,8 @@ Understood and not scheduled.
 - **The session portal setup is only checked at evaluation.** Nothing here
   runs a user manager, an unclean exit leaves stale environment variables,
   and a nested desktop doesn't register.
-- **Wayland capture is monitors only.** No toplevel sources or cursor
-  sessions. [PORTALS.md](docs/PORTALS.md#wayland-capture).
+- **Wayland capture lists no browser windows.** The toplevel list names
+  Wayland windows only. [PORTALS.md](docs/PORTALS.md#wayland-capture).
 
 ### Shell reload
 

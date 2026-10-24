@@ -70,6 +70,7 @@ impl XdgShellHandler for DomicileCompositor {
                 (app_id.clone(), Role::Toplevel(surface.clone())),
             );
             self.unannounced.insert(app_id.clone());
+            self.foreign_toplevels.opened(&app_id);
             self.toplevels.push((app_id, surface));
         }
         self.the_running_apps_changed();
@@ -109,6 +110,8 @@ impl XdgShellHandler for DomicileCompositor {
         if let Some(titled) = titled {
             self.hub.broadcast(titled);
         }
+        self.foreign_toplevels
+            .titled(&app_id, title.as_deref().unwrap_or_default());
         self.cast_if_asked(&app_id, title.as_deref());
     }
 
@@ -128,6 +131,7 @@ impl XdgShellHandler for DomicileCompositor {
                     .clone()
             })
             .expect("Smithay calls this only after the client set an app id");
+            self.foreign_toplevels.named(&app_id, &desktop_id);
             // Separate `let` so the host guard drops before the broadcast, as
             // in `title_changed`.
             let named = self
@@ -182,6 +186,7 @@ impl XdgShellHandler for DomicileCompositor {
             .position(|(_, t)| t.wl_surface() == surface.wl_surface())
         {
             let (app_id, _) = self.toplevels.remove(pos);
+            self.foreign_toplevels.closed(&app_id);
             self.by_surface.remove(surface.wl_surface());
             self.forget(&app_id);
             self.the_running_apps_changed();

@@ -54,7 +54,7 @@ pub use pacing::Rect;
 pub use producer::{fourcc, BufferId, StreamFormat, Target, ToPipewire, ToWayland};
 pub use region::Screen;
 pub use shots::{Desk, Developed, DevelopedWindow, Shown};
-pub use streams::{Committed, Gpu, Streams};
+pub use streams::{Committed, Gpu, Over, Streams};
 pub use test_pattern::TestPattern;
 
 /// What a stream shows.

@@ -5,11 +5,14 @@
 //! Each session is a cast of its monitor (see [`crate::casting`]), which
 //! fills the client's shm or dmabuf buffers as it fills PipeWire's. A frame is
 //! ready once the monitor has damage the client has not seen (see
-//! [`taking`]). No toplevel sources and no cursor sessions: a cursor
-//! session's capture session stops at once. See `docs/PORTALS.md`.
+//! [`taking`]). A source is a monitor or, through `ext-foreign-toplevel-list`
+//! (see [`crate::foreign_toplevels`]), a window. Cursor sessions are
+//! [`cursors`]. See `docs/PORTALS.md`.
 
 mod buffer;
+mod cursors;
 mod frame;
+mod pointing;
 mod taking;
 mod wlr;
 
@@ -21,21 +24,24 @@ use smithay::output::Output;
 use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::{Interest, Mode, PostAction};
 use smithay::reexports::wayland_protocols::ext::image_capture_source::v1::server::{
+    ext_foreign_toplevel_image_capture_source_manager_v1::{
+        self, ExtForeignToplevelImageCaptureSourceManagerV1,
+    },
     ext_image_capture_source_v1::{self, ExtImageCaptureSourceV1},
     ext_output_image_capture_source_manager_v1::{self, ExtOutputImageCaptureSourceManagerV1},
 };
 use smithay::reexports::wayland_protocols::ext::image_copy_capture::v1::server::{
-    ext_image_copy_capture_cursor_session_v1::{self, ExtImageCopyCaptureCursorSessionV1},
     ext_image_copy_capture_frame_v1::{self, ExtImageCopyCaptureFrameV1, FailureReason},
     ext_image_copy_capture_manager_v1::{self, ExtImageCopyCaptureManagerV1, Options},
     ext_image_copy_capture_session_v1::{self, ExtImageCopyCaptureSessionV1},
 };
 use smithay::reexports::wayland_server::protocol::{wl_buffer::WlBuffer, wl_output};
 use smithay::reexports::wayland_server::{
-    backend::ClientId, Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource,
-    WEnum,
+    backend::{ClientId, ObjectId},
+    Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource, WEnum,
 };
 use smithay::wayland::dmabuf::get_dmabuf;
+use smithay::wayland::foreign_toplevel_list::ForeignToplevelHandle;
 use smithay::wayland::shm::with_buffer_contents_mut;
 use tracing::debug;
 
@@ -44,6 +50,7 @@ use crate::casting::{
     fourcc, BufferId, CursorMode, Rect, Source as CastSource, StreamId, Target, ToPipewire,
     ToWayland, MAX_FRAMERATE,
 };
+use crate::foreign_toplevels::Listed;
 use crate::{CalloopData, DomicileCompositor};
 use frame::{Frame, Misuse};
 use taking::{Constraints, Layout, Lending, Taking};
@@ -51,6 +58,10 @@ use taking::{Constraints, Layout, Lending, Taking};
 /// Advertises the ext capture globals and `wlr-screencopy`.
 pub fn advertise(display: &DisplayHandle) {
     display.create_global::<DomicileCompositor, ExtOutputImageCaptureSourceManagerV1, _>(1, ());
+    display.create_global::<DomicileCompositor, ExtForeignToplevelImageCaptureSourceManagerV1, _>(
+        1,
+        (),
+    );
     display.create_global::<DomicileCompositor, ExtImageCopyCaptureManagerV1, _>(1, ());
     wlr::advertise(display);
 }
@@ -61,6 +72,8 @@ pub struct Copies {
     casts: HashMap<StreamId, Copy>,
     /// The cast a `wlr-screencopy` client's frames of one source share.
     wlr: HashMap<wlr::Key, StreamId>,
+    /// Each cursor session, by its object.
+    cursors: HashMap<ObjectId, cursors::Cursor>,
 }
 
 /// One client's cast.
@@ -102,16 +115,34 @@ enum Unlent {
     Failed(String),
 }
 
-/// A capture source: the `wl_output` name of the monitor it shows. `None`
-/// for an output that was already gone.
-pub struct Source(Option<String>);
+/// A capture source: a monitor or a window. `None` for one that was
+/// already gone.
+pub struct Source(Option<CastSource>);
 
-/// A capture session: the cast of its monitor. `None` for a session that
-/// shows nothing, which stops at once.
+/// A capture session.
 pub struct Session {
-    stream: Option<StreamId>,
+    shows: Shows,
     /// Whether a frame of this session is alive. The protocol allows one.
     framing: Mutex<bool>,
+}
+
+/// What a capture session shows.
+enum Shows {
+    /// The cast of its source.
+    Cast(StreamId),
+    /// The pointer's image, for this cursor session.
+    Cursor(ObjectId),
+    /// Nothing: the session stopped as it was made.
+    Nothing,
+}
+
+impl Session {
+    fn new(shows: Shows) -> Self {
+        Self {
+            shows,
+            framing: Mutex::new(false),
+        }
+    }
 }
 
 /// A frame of a session.
@@ -356,6 +387,21 @@ impl DomicileCompositor {
     }
 }
 
+impl DomicileCompositor {
+    /// Lends ext `frame`'s buffer to `stream`, or fails the frame.
+    fn capture(&mut self, stream: StreamId, frame: &ExtImageCopyCaptureFrameV1, buffer: WlBuffer) {
+        match self.lend(stream, Taken::Ext(frame.clone()), buffer) {
+            Ok(()) => {}
+            Err(Unlent::Ended) => frame.failed(FailureReason::Stopped),
+            Err(Unlent::Unfit) => frame.failed(FailureReason::BufferConstraints),
+            Err(Unlent::Failed(why)) => {
+                debug!(%why, "a capture frame could not be lent");
+                frame.failed(FailureReason::Unknown);
+            }
+        }
+    }
+}
+
 /// A filled frame on its way to its client.
 struct Ready {
     taken: Taken,
@@ -479,7 +525,50 @@ impl Dispatch<ExtOutputImageCaptureSourceManagerV1, ()> for DomicileCompositor {
             output,
         } = request
         {
-            data_init.init(source, Source(monitor_of(&output)));
+            data_init.init(source, Source(monitor_of(&output).map(CastSource::Monitor)));
+        }
+    }
+}
+
+impl GlobalDispatch<ExtForeignToplevelImageCaptureSourceManagerV1, ()> for DomicileCompositor {
+    fn bind(
+        _: &mut Self,
+        _: &DisplayHandle,
+        _: &Client,
+        resource: New<ExtForeignToplevelImageCaptureSourceManagerV1>,
+        _: &(),
+        data_init: &mut DataInit<'_, Self>,
+    ) {
+        data_init.init(resource, ());
+    }
+
+    fn can_view(client: Client, _: &()) -> bool {
+        crate::clients::sees_privileged_globals(&client)
+    }
+}
+
+impl Dispatch<ExtForeignToplevelImageCaptureSourceManagerV1, ()> for DomicileCompositor {
+    fn request(
+        _: &mut Self,
+        _: &Client,
+        _: &ExtForeignToplevelImageCaptureSourceManagerV1,
+        request: ext_foreign_toplevel_image_capture_source_manager_v1::Request,
+        _: &(),
+        _: &DisplayHandle,
+        data_init: &mut DataInit<'_, Self>,
+    ) {
+        if let ext_foreign_toplevel_image_capture_source_manager_v1::Request::CreateSource {
+            source,
+            toplevel_handle,
+        } = request
+        {
+            let window = ForeignToplevelHandle::from_resource(&toplevel_handle)
+                .filter(|handle| !handle.is_closed())
+                .and_then(|handle| {
+                    let Listed(app_id) = handle.user_data().get::<Listed>()?;
+                    Some(CastSource::Window(app_id.clone()))
+                });
+            data_init.init(source, Source(window));
         }
     }
 }
@@ -540,7 +629,7 @@ impl Dispatch<ExtImageCopyCaptureManagerV1, ()> for DomicileCompositor {
                         return;
                     }
                 };
-                let Some(monitor) = source.data::<Source>().expect("a source").0.clone() else {
+                let Some(source) = source.data::<Source>().expect("a source").0.clone() else {
                     stopped_session(session, data_init);
                     return;
                 };
@@ -549,23 +638,17 @@ impl Dispatch<ExtImageCopyCaptureManagerV1, ()> for DomicileCompositor {
                 } else {
                     CursorMode::Hidden
                 };
-                let stream = state
-                    .screen_copying
-                    .start_for_client(CastSource::Monitor(monitor), cursor);
-                let session = data_init.init(
-                    session,
-                    Session {
-                        stream: Some(stream),
-                        framing: Mutex::new(false),
-                    },
-                );
+                let stream = state.screen_copying.start_for_client(source, cursor);
+                let session = data_init.init(session, Session::new(Shows::Cast(stream)));
                 state.taken_by(stream, Taker::Ext(session));
             }
             ext_image_copy_capture_manager_v1::Request::CreatePointerCursorSession {
                 session,
+                source,
                 ..
             } => {
-                data_init.init(session, ());
+                let source = source.data::<Source>().expect("a source").0.clone();
+                state.cursor_session(session, source, data_init);
             }
             ext_image_copy_capture_manager_v1::Request::Destroy => {}
             _ => unreachable!("version 1 has no other requests"),
@@ -578,33 +661,7 @@ fn stopped_session(
     new: New<ExtImageCopyCaptureSessionV1>,
     data_init: &mut DataInit<'_, DomicileCompositor>,
 ) {
-    data_init
-        .init(
-            new,
-            Session {
-                stream: None,
-                framing: Mutex::new(false),
-            },
-        )
-        .stopped();
-}
-
-impl Dispatch<ExtImageCopyCaptureCursorSessionV1, ()> for DomicileCompositor {
-    fn request(
-        _: &mut Self,
-        _: &Client,
-        _: &ExtImageCopyCaptureCursorSessionV1,
-        request: ext_image_copy_capture_cursor_session_v1::Request,
-        _: &(),
-        _: &DisplayHandle,
-        data_init: &mut DataInit<'_, Self>,
-    ) {
-        if let ext_image_copy_capture_cursor_session_v1::Request::GetCaptureSession { session } =
-            request
-        {
-            stopped_session(session, data_init);
-        }
-    }
+    data_init.init(new, Session::new(Shows::Nothing)).stopped();
 }
 
 impl Dispatch<ExtImageCopyCaptureSessionV1, Session> for DomicileCompositor {
@@ -638,7 +695,7 @@ impl Dispatch<ExtImageCopyCaptureSessionV1, Session> for DomicileCompositor {
     }
 
     fn destroyed(state: &mut Self, _: ClientId, _: &ExtImageCopyCaptureSessionV1, data: &Session) {
-        if let Some(stream) = data.stream {
+        if let Shows::Cast(stream) = data.shows {
             state.let_go(stream);
         }
     }
@@ -672,18 +729,11 @@ impl Dispatch<ExtImageCopyCaptureFrameV1, CaptureFrame> for DomicileCompositor {
         drop(held);
         match done {
             Ok(Some(buffer)) => {
-                let Some(stream) = data.session.data::<Session>().expect("a session").stream else {
-                    frame.failed(FailureReason::Stopped);
-                    return;
-                };
-                match state.lend(stream, Taken::Ext(frame.clone()), buffer) {
-                    Ok(()) => {}
-                    Err(Unlent::Ended) => frame.failed(FailureReason::Stopped),
-                    Err(Unlent::Unfit) => frame.failed(FailureReason::BufferConstraints),
-                    Err(Unlent::Failed(why)) => {
-                        debug!(%why, "a capture frame could not be lent");
-                        frame.failed(FailureReason::Unknown);
-                    }
+                let session = data.session.data::<Session>().expect("a session");
+                match &session.shows {
+                    Shows::Cast(stream) => state.capture(*stream, frame, buffer),
+                    Shows::Cursor(cursor) => state.capture_cursor(cursor, frame, buffer),
+                    Shows::Nothing => frame.failed(FailureReason::Stopped),
                 }
             }
             Ok(None) => {}
@@ -718,8 +768,10 @@ impl Dispatch<ExtImageCopyCaptureFrameV1, CaptureFrame> for DomicileCompositor {
             .data::<Session>()
             .expect("a frame's session is a session");
         *session.framing.lock().unwrap() = false;
-        if let Some(stream) = session.stream {
-            state.abandoned(stream, &Taken::Ext(frame.clone()));
+        match &session.shows {
+            Shows::Cast(stream) => state.abandoned(*stream, &Taken::Ext(frame.clone())),
+            Shows::Cursor(cursor) => state.cursor_frame_gone(cursor),
+            Shows::Nothing => {}
         }
     }
 }

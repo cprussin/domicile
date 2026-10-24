@@ -331,11 +331,14 @@ client that connects through that listener is sandboxed.
 ## Wayland capture
 
 The compositor also serves `ext-image-copy-capture-v1` (with
-`ext-image-capture-source-v1` output sources) and `zwlr_screencopy_manager_v1`
-v3, so `grim` and `wf-recorder` work. The code is `src/screencopy/`.
+`ext-image-capture-source-v1` output and toplevel sources),
+`ext-foreign-toplevel-list-v1` and `zwlr_screencopy_manager_v1` v3, so `grim`
+and `wf-recorder` work. The code is `src/screencopy/`.
 
-- **Each session is a cast** of its monitor (`Casting::start_for_client`),
-  at the monitor's density. The cast fills the client's buffers as it fills
+- **Each session is a cast** of its monitor or window
+  (`Casting::start_for_client`), at the monitor's density or the window's
+  buffer size. The toplevel list names each Wayland window; browser windows
+  are not on it. The cast fills the client's buffers as it fills
   PipeWire's, and its display capture runs until the session ends.
   `src/screencopy/taking.rs` lends a frame's buffer to the cast.
 - **A frame is ready once there is damage the client has not seen.** The
@@ -358,5 +361,8 @@ v3, so `grim` and `wf-recorder` work. The code is `src/screencopy/`.
   ([Sandboxed clients](#sandboxed-clients)). The portal refuses no capture
   while locked either: a
   running cast or a granted screenshot shows the lock screen.
-- Left out: toplevel sources and cursor sessions (a cursor session's
-  capture session stops at once).
+- **Cursor sessions** follow the pointer casts draw
+  (`Streams::pointer_over`): `position` is the hotspot in the source's
+  pixels, and the capture session copies the engine's pointer image at the
+  source's density, as shm `argb8888`. A frame waits for an image it has not
+  had. Until the pointer first enters, no buffer size is sent.

@@ -106,6 +106,7 @@ impl DomicileCompositor {
         let renderer = self.gpu.as_mut().map(Gpu::renderer);
         let due = self.casting.pointer_in_window(at, renderer, Instant::now());
         self.arm_the_cast_deadline(due);
+        self.pointers_moved();
     }
 
     /// The engine says the pointer is at `at` on the desktop, or off it, and
@@ -120,6 +121,7 @@ impl DomicileCompositor {
             .casting
             .pointer_on_desk(at, windows, renderer, Instant::now());
         self.arm_the_cast_deadline(due);
+        self.pointers_moved();
     }
 
     /// The pointer the engine draws, or `None` while it is hidden, for casts
@@ -143,6 +145,7 @@ impl DomicileCompositor {
         let renderer = self.gpu.as_mut().map(Gpu::renderer);
         let due = self.casting.pointer_image(sprite, renderer, Instant::now());
         self.arm_the_cast_deadline(due);
+        self.pointers_moved();
     }
 
     /// Hands a window's committed frame to its casts. `sampled` is the
