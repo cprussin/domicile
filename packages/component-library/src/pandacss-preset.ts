@@ -25,6 +25,13 @@ const quarterStepSpacing = Object.fromEntries(
   ),
 );
 
+// `LevelToast` holds, then fades out over the last fifth.
+const levelToastHold = {
+  "0%": { opacity: "1" },
+  "80%": { opacity: "1" },
+  "100%": { opacity: "0" },
+};
+
 export const domicilePreset = definePreset({
   conditions: {
     extend: {
@@ -153,6 +160,18 @@ export const domicilePreset = definePreset({
   theme: {
     extend: {
       keyframes: {
+        // `LevelToast`'s entrance, once per showing.
+        levelToastEnter: {
+          "0%": {
+            opacity: "0",
+            transform: "translateY({spacing.3}) scale(0.96)",
+          },
+          "100%": { opacity: "1", transform: "none" },
+        },
+        // `LevelToast`'s hold and fade-out. Two copies so a change can
+        // restart it by switching names.
+        levelToastHold,
+        levelToastHoldAgain: levelToastHold,
         // `Notice`: appears quickly, holds long enough to read, then fades
         // out on its own.
         noticeShown: {
@@ -405,6 +424,8 @@ export const domicilePreset = definePreset({
         durations: {
           // Wallpaper crossfade. Long because nothing waits on it.
           crossfade: { value: "2s" },
+          // How long a `LevelToast` stays up after its last change.
+          levelToast: { value: "2s" },
           // How long a `Notice` stays up. Longer than the scale above, which
           // is for control feedback, not reading.
           notice: { value: "1.5s" },

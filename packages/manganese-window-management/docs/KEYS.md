@@ -78,8 +78,9 @@ Manganese-only commands:
 - `volume`, `mic` and `brightness` use the sound server and backlight the
   bar's items read ([HOST-READOUTS.md](../../shell-manganese/docs/HOST-READOUTS.md)).
   They do nothing without a sound server or a backlight.
-- Each `volume`, `mic` and `brightness` press shows the new level in a notice
+- Each `volume`, `mic` and `brightness` press shows the new level in a toast
   at the bottom of the focused screen (`LevelNotice` in `shell-manganese`).
+  Presses while it is up update it in place.
 
 ## Key names
 

@@ -267,7 +267,6 @@ export const Desktop = ({
 
   const volumeKeys = useVolumeKeys(deskSound(domicile));
   const brightnessKeys = useBrightnessKeys(deskBacklight(domicile));
-  // The level the last media key set, counted so each press shows it again.
   // How many bar items' panels hold the keyboard; see `useKeepsKeyboard`.
   const [heldPanels, setHeldPanels] = useState(0);
   const holdKeyboard = useCallback(() => {
@@ -277,6 +276,7 @@ export const Desktop = ({
     };
   }, []);
 
+  // The level the last media key set, counted so each press keeps it up.
   const [levelPress, setLevelPress] = useState<LevelPress | undefined>();
   // Once for the desk, so a portal's sign-in page opens once, not per bar.
   const portal = useCaptivePortal(domicile);
