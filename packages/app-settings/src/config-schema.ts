@@ -139,6 +139,7 @@ const settingsSchema = z.strictObject({
         ])
         .optional(),
       font_name: z.string().optional(),
+      force_dark: z.array(z.string()).optional(),
       icon_theme: z.string().optional(),
       mode: z.enum(THEME_MODES).default("dark"),
       monospace_font_name: z.string().optional(),

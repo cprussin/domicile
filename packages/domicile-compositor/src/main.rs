@@ -960,6 +960,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         // Extensions, which the browser process installs. See
         // `docs/architecture/EXTENSIONS.md`.
         hand_over_the_extensions(&mut host, &config.extensions);
+        // Sites the browser draws dark while the theme is dark.
+        host.set_force_dark(config.theme.force_dark.clone());
         // The theme, so the page paints correctly the first time. Set, not
         // `take_up_the_theme`, since there is nobody to broadcast to yet.
         host.set_theme(theme_on_the_wire(config.theme.mode));

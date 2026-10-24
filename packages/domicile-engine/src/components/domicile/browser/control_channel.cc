@@ -76,6 +76,7 @@ ControlChannel::ControlChannel(
     ThemeSink theme_sink,
     ExtensionsSink extensions_sink,
     CursorThemeSink cursor_theme_sink,
+    ForceDarkSink force_dark_sink,
     const Page& page)
     : socket_path_(socket_path),
       keymap_sink_(std::move(keymap_sink)),
@@ -83,6 +84,7 @@ ControlChannel::ControlChannel(
       theme_sink_(std::move(theme_sink)),
       extensions_sink_(std::move(extensions_sink)),
       cursor_theme_sink_(std::move(cursor_theme_sink)),
+      force_dark_sink_(std::move(force_dark_sink)),
       receiver_(this, std::move(receiver)),
       read_buffer_(base::MakeRefCounted<net::IOBufferWithSize>(
           kReadBufferSize)) {
@@ -894,6 +896,20 @@ void ControlChannel::DispatchLine(const std::string& line,
     return;
   }
 
+  // For this process too, like `extensions`: the pages it draws dark. See
+  // components/domicile/browser/force_dark.h.
+  if (*type == "force_dark") {
+    std::optional<std::vector<std::string>> sites = Strings(message, "sites");
+    if (sites) {
+      force_dark_sink_.Run(std::move(*sites));
+    } else {
+      LOG(ERROR) << "domicile: the compositor sent a `force_dark` message "
+                    "whose `sites` is not a list of strings. Pages keep the "
+                    "sites they had.";
+    }
+    return;
+  }
+
   // Everything below is relayed to the page, so it waits for the page to give
   // this channel somewhere. Until then they are held: the compositor answers
   // `hello` with the desk's state, and that answer can arrive before the
@@ -1445,6 +1461,7 @@ void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
                         ThemeSink theme_sink,
                         ExtensionsSink extensions_sink,
                         CursorThemeSink cursor_theme_sink,
+                        ForceDarkSink force_dark_sink,
                         const Page& page) {
   const std::string socket_path =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
@@ -1463,7 +1480,7 @@ void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
   new ControlChannel(socket_path, std::move(receiver), std::move(keymap_sink),
                      std::move(warp_sink), std::move(theme_sink),
                      std::move(extensions_sink), std::move(cursor_theme_sink),
-                     page);
+                     std::move(force_dark_sink), page);
 }
 
 }  // namespace domicile

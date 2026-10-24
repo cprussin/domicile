@@ -92,6 +92,15 @@ impl DomicileCompositor {
                 told.expect("a host that has just been given extensions has them to state"),
             );
         }
+        if let Some(sites) = &restated.force_dark {
+            // Store then broadcast, like the extensions.
+            let told = {
+                let mut host = self.hub.host.lock().unwrap();
+                host.set_force_dark(sites.clone());
+                host.describe_force_dark()
+            };
+            self.hub.broadcast(told);
+        }
         if let Some(lockdown) = &restated.lockdown {
             self.hub.portals.lock_down(lockdown.clone());
         }
