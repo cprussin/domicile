@@ -15,7 +15,7 @@ import { InterfaceKind } from "@domicile-desktop/system-network/interfaces";
 import type { Network as Reading } from "@domicile-desktop/system-network/network";
 import { Connectivity, Link } from "@domicile-desktop/system-network/network";
 import type { Wifi } from "@domicile-desktop/system-network/wifi";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { css } from "../styled-system/css";
 import { heldWifiActions } from "./held-wifi-actions";
@@ -322,12 +322,20 @@ describe("Network", () => {
       expect(keyboard).toStrictEqual({ held: 1, released: 1 });
     });
 
-    it("opens on a click, and reads Wi-Fi only while open", async () => {
+    it("opens on a click, and reads Wi-Fi and the addresses only while open", async () => {
       const network = heldNetwork();
       const wifi = held<Result<Option<Wifi>, SystemError>>();
-      render(<Item network={network.watch} wifi={wifi.watch} />);
+      const addresses = held<Result<Map<string, Addressing>, SystemError>>();
+      render(
+        <Item
+          addresses={addresses.watch}
+          network={network.watch}
+          wifi={wifi.watch}
+        />,
+      );
       network.report(online(Link.Wifi("Home", 0.72)));
       expect(wifi.started).toBe(0);
+      expect(addresses.started).toBe(0);
 
       await userEvent.click(
         screen.getByRole("button", { name: "Wi-Fi, strong signal: Home" }),
@@ -339,13 +347,15 @@ describe("Network", () => {
         screen.queryByRole("region", { name: /^Wired/ }),
       ).not.toBeInTheDocument();
       expect(wifi.started).toBe(1);
+      expect(addresses.started).toBe(1);
 
       await userEvent.keyboard("{Escape}");
 
       expect(wifi.stopped).toBe(1);
+      expect(addresses.stopped).toBe(1);
     });
 
-    it("shows each wired port, with its addresses while open", async () => {
+    it("shows each wired port, with its addresses one a line while open", async () => {
       const network = heldNetwork();
       const interfaces = heldInterfaces();
       const addresses = held<Result<Map<string, Addressing>, SystemError>>();
@@ -365,7 +375,10 @@ describe("Network", () => {
           new Map([
             [
               "enp0s31f6",
-              { addresses: ["192.168.1.40/24"], gateway: "192.168.1.1" },
+              {
+                addresses: ["192.168.1.40/24", "fd00::8e16:45ff:fe5a:3e01/64"],
+                gateway: "192.168.1.1",
+              },
             ],
           ]),
         ),
@@ -375,7 +388,10 @@ describe("Network", () => {
         name: "Wired: enp0s31f6, connected",
       });
       expect(wired).toHaveTextContent("1000 Mbit/s");
-      expect(wired).toHaveTextContent("192.168.1.40/24");
+      expect(within(wired).getByText("192.168.1.40/24")).toBeVisible();
+      expect(
+        within(wired).getByText("fd00::8e16:45ff:fe5a:3e01/64"),
+      ).toBeVisible();
       expect(wired).toHaveTextContent("192.168.1.1");
       expect(wired).toHaveTextContent("8c:16:45:5a:3e:01");
       expect(addresses.started).toBe(1);

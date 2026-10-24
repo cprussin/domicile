@@ -4,6 +4,7 @@ import { Err, None, Ok, Some } from "@cprussin/option-result";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import { SystemErrorKind, system } from "@domicile-desktop/sdk/system";
+import type { Addressing } from "@domicile-desktop/system-network/interfaces";
 import type {
   Wifi,
   WifiConnection,
@@ -61,6 +62,22 @@ const WIFI: Wifi = {
   scanning: false,
 };
 
+/** What `ip` reads, which differs from the service's IPv4-only reading. */
+const ADDRESSES = Ok<Map<string, Addressing>, SystemError>(
+  new Map([
+    [
+      "wlan0",
+      {
+        addresses: [
+          "192.168.1.23/24",
+          "2601:646:8d00:1a50:5c3e:91ff:fe2a:8b11/64",
+        ],
+        gateway: "192.168.1.254",
+      },
+    ],
+  ]),
+);
+
 const REFUSED: SystemError = {
   kind: SystemErrorKind.Dbus,
   message: "org.freedesktop.NetworkManager.Device.NoSecrets: wrong passphrase",
@@ -70,9 +87,15 @@ const REFUSED: SystemError = {
 const shown = async (
   wifi: Result<Option<Wifi>, SystemError> | undefined,
   held = heldWifiActions(),
+  addresses: Result<Map<string, Addressing>, SystemError> = ADDRESSES,
 ) => {
   const rendered = render(
-    <WifiPanel actions={held.actions} host={NO_HOST} wifi={wifi} />,
+    <WifiPanel
+      actions={held.actions}
+      addresses={addresses}
+      host={NO_HOST}
+      wifi={wifi}
+    />,
   );
   await act(() => Promise.resolve());
   return { ...held, ...rendered };
@@ -88,6 +111,16 @@ const shownWith = (changes: Partial<WifiConnection>) => {
     );
   }
 };
+
+/** Each term and its value's lines. */
+const detailsIn = (within: ReturnType<typeof screen.getByRole>) =>
+  Array.from(within.querySelectorAll("dt"), (term) => [
+    term.textContent,
+    Array.from(
+      term.nextElementSibling?.childNodes ?? [],
+      (line) => line.textContent,
+    ),
+  ]);
 
 /** The list item that names `ssid`. */
 const row = (ssid: string) => {
@@ -185,28 +218,39 @@ describe("WifiPanel", () => {
   });
 
   describe("the connection", () => {
-    it("shows its details", async () => {
+    it("shows its details, with its addresses from ip, one a line", async () => {
       await shown(Ok(Some(WIFI)));
-      const connection = within(
-        screen.getByRole("region", { name: "Connected to Home" }),
-      );
 
       expect(
-        connection
-          .getAllByRole("term")
-          .map((term) => [
-            term.textContent,
-            term.nextElementSibling?.textContent,
-          ]),
+        detailsIn(screen.getByRole("region", { name: "Connected to Home" })),
       ).toStrictEqual([
-        ["Signal", "72%"],
-        ["Frequency", "5180 MHz (5 GHz)"],
-        ["Speed", "867 Mbit/s"],
-        ["Address", "192.168.1.23/24"],
-        ["Gateway", "192.168.1.1"],
-        ["DNS", "192.168.1.1, 1.1.1.1"],
-        ["Interface", "wlan0"],
-        ["Hardware address", "A4:C3:F0:85:AC:2D"],
+        ["Signal", ["72%"]],
+        ["Frequency", ["5180 MHz (5 GHz)"]],
+        ["Speed", ["867 Mbit/s"]],
+        [
+          "Address",
+          ["192.168.1.23/24", "2601:646:8d00:1a50:5c3e:91ff:fe2a:8b11/64"],
+        ],
+        ["Gateway", ["192.168.1.254"]],
+        ["DNS", ["192.168.1.1, 1.1.1.1"]],
+        ["Interface", ["wlan0"]],
+        ["Hardware address", ["A4:C3:F0:85:AC:2D"]],
+      ]);
+    });
+
+    it("shows its addresses when the service reports none, as iwd does", async () => {
+      await shownWith({ ip: undefined });
+
+      expect(
+        screen.getAllByRole("term").map((term) => term.textContent),
+      ).toStrictEqual([
+        "Signal",
+        "Frequency",
+        "Speed",
+        "Address",
+        "Gateway",
+        "Interface",
+        "Hardware address",
       ]);
     });
 
@@ -233,6 +277,8 @@ describe("WifiPanel", () => {
             },
           }),
         ),
+        heldWifiActions(),
+        Ok(new Map()),
       );
 
       expect(

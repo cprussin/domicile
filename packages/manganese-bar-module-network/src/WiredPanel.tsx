@@ -1,19 +1,16 @@
-import type { Result } from "@cprussin/option-result";
-import type { SystemError } from "@domicile-desktop/sdk/system";
-import type {
-  Addressing,
-  NetworkInterface,
-} from "@domicile-desktop/system-network/interfaces";
+import type { NetworkInterface } from "@domicile-desktop/system-network/interfaces";
 import { NetworkIcon } from "@phosphor-icons/react/dist/ssr/Network";
 import { css } from "../styled-system/css";
 import { flex, hstack } from "../styled-system/patterns";
+import type { Addresses } from "./addressing";
+import { addressRowsOf } from "./addressing";
+import type { Value } from "./Details";
 import { Details } from "./Details";
 
 type Props = {
   /** The wired ports. */
   ports: readonly NetworkInterface[];
-  /** Each interface's addresses, by name; `undefined` until `ip` answers. */
-  addresses: Result<Map<string, Addressing>, SystemError> | undefined;
+  addresses: Addresses;
 };
 
 /** Each wired port: whether a cable is in, its speed, addresses and hardware address. */
@@ -53,25 +50,14 @@ const Port = ({
 const detailsOf = (
   port: NetworkInterface,
   addresses: Props["addresses"],
-): (readonly [string, string])[] => {
-  const addressing = addresses?.match({
-    Err: () => undefined,
-    Ok: (byName) => byName.get(port.name),
-  });
-  return [
-    ...(port.speed === undefined
-      ? []
-      : [["Speed", `${port.speed} Mbit/s`] as const]),
-    ...(addressing === undefined || addressing.addresses.length === 0
-      ? []
-      : [["Address", addressing.addresses.join(", ")] as const]),
-    ...(addressing?.gateway === undefined
-      ? []
-      : [["Gateway", addressing.gateway] as const]),
-    ["Interface", port.name],
-    ["Hardware address", port.hardwareAddress],
-  ];
-};
+): (readonly [string, Value])[] => [
+  ...(port.speed === undefined
+    ? []
+    : [["Speed", `${port.speed} Mbit/s`] as const]),
+  ...addressRowsOf(addresses, port.name),
+  ["Interface", port.name],
+  ["Hardware address", port.hardwareAddress],
+];
 
 const panelStyles = flex({ direction: "column", gap: 2 });
 

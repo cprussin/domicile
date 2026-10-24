@@ -192,7 +192,10 @@ const WIRED: Link = { kind: LinkKind.Wired, name: "" };
 
 const NONE: Link = { kind: LinkKind.None };
 
-/** The panel, which watches Wi-Fi and the addresses while it is open. */
+/**
+ * The panel, which watches Wi-Fi and the addresses while it is open. Its
+ * width is fixed, so a long address wraps rather than widening it.
+ */
 const OpenPanel = ({
   actions,
   addresses,
@@ -205,21 +208,20 @@ const OpenPanel = ({
   host: System;
   wifi: Props["wifi"];
   wired: NetworkInterface[];
-}) => (
-  <div className={panelStyles}>
-    {wired.length > 0 && <Wired addresses={addresses} ports={wired} />}
-    <WifiPanel actions={actions} host={host} wifi={useSharedWatch(wifi)} />
-  </div>
-);
-
-/** The wired ports, which watch the addresses while shown. */
-const Wired = ({
-  addresses,
-  ports,
-}: {
-  addresses: Props["addresses"];
-  ports: NetworkInterface[];
-}) => <WiredPanel addresses={useSharedWatch(addresses)} ports={ports} />;
+}) => {
+  const addressing = useSharedWatch(addresses);
+  return (
+    <div className={panelStyles}>
+      {wired.length > 0 && <WiredPanel addresses={addressing} ports={wired} />}
+      <WifiPanel
+        actions={actions}
+        addresses={addressing}
+        host={host}
+        wifi={useSharedWatch(wifi)}
+      />
+    </div>
+  );
+};
 
 const LinkIcon = ({ label, link }: { label: string; link: Link }) => {
   switch (link.kind) {
@@ -237,7 +239,7 @@ const LinkIcon = ({ label, link }: { label: string; link: Link }) => {
   }
 };
 
-const panelStyles = flex({ direction: "column", gap: 3 });
+const panelStyles = flex({ direction: "column", gap: 3, inlineSize: 104 });
 
 // Matches the volume item's button.
 const triggerStyles = cva({
