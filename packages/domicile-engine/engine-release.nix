@@ -16,7 +16,7 @@
 # `identity` is that series — the pin, `patches/` and `src/` hashed by
 # content, the same value `engine-series-stamp.sh` uses to decide whether the
 # shared checkout needs rebuilding. It is here so that
-# `scripts/test-the-pinned-engine-is-this-series.sh` can ask, without
+# `packages/ci/tests/test-the-pinned-engine-is-this-series.sh` can ask, without
 # downloading anything, whether the engine this repository pins is the engine
 # this repository describes. Two commits that do not move the fork have the
 # same identity and so need no repin between them.

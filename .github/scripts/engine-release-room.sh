@@ -6,7 +6,7 @@
 # Run only after taking this tree's lock (engine-tree-lock.sh), since it
 # deletes files in the checkout. It takes each other tree's lock before
 # deleting in it and skips trees it cannot lock. Tested by
-# scripts/test-engine-release-room.sh.
+# packages/ci/tests/test-engine-release-room.sh.
 #
 # Never deletes this run's own `$OUT`, which would force a multi-hour cold
 # build. The compiler cache is trimmed by age, never cleared.
@@ -38,7 +38,7 @@ STAGED="$OUT-staged"
 FLOOR_GB=15
 
 # A temp directory is stale once its ctime is older than the longest job
-# timeout (engine.yml's 1200 minutes). scripts/test-engine-release-room.sh
+# timeout (engine.yml's 1200 minutes). packages/ci/tests/test-engine-release-room.sh
 # checks this against every workflow's `timeout-minutes`.
 STALE_TMP_MINUTES=1440
 

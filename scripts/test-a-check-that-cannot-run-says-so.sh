@@ -182,7 +182,7 @@ fi
 # The control runs by default. `pinned-engine.yml` and `engine-release.yml` opt
 # out with `DOMICILE_GUARD_CONTROL=0`, since `engine.yml` already runs each
 # control. Defaulting on means a caller that forgets still gets the control.
-# `scripts/test-the-workflows-delegate-their-checks.sh` checks `engine.yml`
+# `packages/ci/tests/test-the-workflows-delegate-their-checks.sh` checks `engine.yml`
 # never opts out.
 echo "whether the control runs"
 

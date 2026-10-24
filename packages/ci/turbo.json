@@ -1,0 +1,25 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "test:shell": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/.changeset/**",
+        "$TURBO_ROOT$/.github/**",
+        "$TURBO_ROOT$/bun.lock",
+        "$TURBO_ROOT$/examples/**",
+        "$TURBO_ROOT$/package.json",
+        "$TURBO_ROOT$/packages/*/package.json",
+        "$TURBO_ROOT$/packages/check-runner/**",
+        "$TURBO_ROOT$/packages/domicile-engine/**",
+        "$TURBO_ROOT$/scripts/**"
+      ],
+      "passThroughEnv": [
+        "DOMICILE_CHECK_LOG_DIR",
+        "DOMICILE_PR_BASE_SHA",
+        "DOMICILE_PR_HEAD_SHA",
+        "GITHUB_TOKEN"
+      ]
+    }
+  }
+}
