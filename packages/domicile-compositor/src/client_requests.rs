@@ -59,6 +59,11 @@ pub enum ClientRequest {
         at: Option<(f64, f64)>,
         windows: Vec<domicile_protocol::PointerOverWindow>,
     },
+    /// The pointer the engine draws; see
+    /// [`ChromeMessage::DeskCursor`](domicile_protocol::ChromeMessage::DeskCursor).
+    DeskCursor {
+        image: Option<domicile_protocol::CursorImage>,
+    },
     PointerButton {
         button: u32,
         pressed: bool,
@@ -378,6 +383,7 @@ impl DomicileCompositor {
             // Counted by `keep_the_desktop_awake` above, and for nobody else.
             ClientRequest::Activity => {}
             ClientRequest::DeskPointer { at, windows } => self.cast_desk_pointer(at, windows),
+            ClientRequest::DeskCursor { image } => self.cast_desk_cursor(image),
             ClientRequest::Lock => {
                 self.shut_the_desk("the shell asked for this desktop to be locked")
             }

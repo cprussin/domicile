@@ -1,7 +1,8 @@
 //! The pointer in a stream: drawn into each frame, sent beside it, or left out.
 //!
-//! The engine draws the desktop's pointer from its own theme, so the
-//! compositor has no pointer image. Streams use a built-in arrow.
+//! The engine draws the desktop's pointer, so the compositor has no pointer
+//! image of its own. Streams draw the one the engine reports
+//! (`desk_cursor`), and a built-in arrow until it has.
 
 /// How a stream shows the pointer, as the ScreenCast portal names it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -36,12 +37,48 @@ pub fn plan(mode: CursorMode, pointer: Option<(f64, f64)>) -> Plan {
     }
 }
 
-/// A premultiplied `Bgra` image with a hotspot.
-#[derive(Debug, PartialEq, Eq)]
+/// A premultiplied `Bgra` image with a hotspot. Empty while the pointer is
+/// hidden.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Sprite {
     pub size: (u32, u32),
     pub hotspot: (i32, i32),
+    /// Pixels per logical pixel.
+    pub scale: f64,
     pub pixels: Vec<u8>,
+}
+
+impl Sprite {
+    /// The engine's pointer: `bgra` holds `size` premultiplied `Bgra` pixels,
+    /// rows top to bottom. `None` when it holds some other number.
+    pub fn from_bgra(
+        size: (u32, u32),
+        hotspot: (i32, i32),
+        scale: f64,
+        bgra: Vec<u8>,
+    ) -> Option<Sprite> {
+        let fits = bgra.len() == size.0 as usize * size.1 as usize * 4;
+        (fits && scale > 0.0).then_some(Sprite {
+            size,
+            hotspot,
+            scale,
+            pixels: bgra,
+        })
+    }
+
+    /// A hidden pointer, which no stream draws.
+    pub fn hidden() -> Sprite {
+        Sprite {
+            size: (0, 0),
+            hotspot: (0, 0),
+            scale: 1.0,
+            pixels: Vec::new(),
+        }
+    }
+
+    pub fn is_hidden(&self) -> bool {
+        self.size.0 == 0 || self.size.1 == 0
+    }
 }
 
 /// The built-in arrow: white with a black outline, hotspot at the tip.
@@ -59,29 +96,76 @@ pub fn arrow() -> Sprite {
     Sprite {
         size: (rows[0].len() as u32, rows.len() as u32),
         hotspot: (0, 0),
+        scale: 1.0,
         pixels,
     }
 }
 
-/// `sprite` for a source of `density` frame pixels per logical pixel: each
-/// pixel grown to a block, `density` rounded up. The arrow is drawn for one
-/// frame pixel a logical pixel, so on a 2x screen it would be half a pointer.
+/// `sprite` for a source of `density` frame pixels per logical pixel, so it is
+/// the size it is on screen. Never below one frame pixel a logical pixel: a
+/// call that scales the stream down would make it a speck.
 pub fn at_density(sprite: &Sprite, density: f64) -> Sprite {
-    let factor = density.ceil().max(1.0) as u32;
-    let (width, height) = (sprite.size.0 * factor, sprite.size.1 * factor);
-    let pixels = (0..height)
-        .flat_map(|y| (0..width).map(move |x| (x / factor, y / factor)))
-        .flat_map(|(x, y)| {
-            let from = ((y * sprite.size.0 + x) * 4) as usize;
-            sprite.pixels[from..from + 4].iter().copied()
-        })
-        .collect();
+    let density = density.max(1.0);
+    let mut scaled = resampled(sprite, density / sprite.scale);
+    scaled.scale = density;
+    scaled
+}
+
+/// `sprite` shrunk to at most `most` pixels, for cursor metadata of a fixed
+/// size. As it is when it fits.
+pub fn within(sprite: &Sprite, most: usize) -> Sprite {
+    let mut factor = 1.0;
+    loop {
+        let fitted = resampled(sprite, factor);
+        if fitted.pixels.len() / 4 <= most || fitted.size == (1, 1) {
+            return fitted;
+        }
+        let area = f64::from(fitted.size.0) * f64::from(fitted.size.1);
+        // Shrinks at least a little each time round, whatever the rounding.
+        factor *= (most as f64 / area).sqrt().min(0.95);
+    }
+}
+
+/// `sprite` grown or shrunk by `factor`. Each new pixel is the mean of the old
+/// pixels under it, which for a whole factor above one is a block of one.
+fn resampled(sprite: &Sprite, factor: f64) -> Sprite {
+    if sprite.is_hidden() || (factor - 1.0).abs() < 1e-9 {
+        return sprite.clone();
+    }
+    let scale = |length: u32| ((f64::from(length) * factor).round() as u32).max(1);
+    let (width, height) = (scale(sprite.size.0), scale(sprite.size.1));
+    // The old pixels under new pixel `at` along one axis of `length`.
+    let under = |at: u32, length: u32| {
+        let from = ((f64::from(at) / factor).floor() as u32).min(length - 1);
+        let to = ((f64::from(at + 1) / factor).ceil() as u32).clamp(from + 1, length);
+        from..to
+    };
+    let mut pixels = Vec::with_capacity((width * height * 4) as usize);
+    for y in 0..height {
+        let rows = under(y, sprite.size.1);
+        for x in 0..width {
+            let columns = under(x, sprite.size.0);
+            let mut sum = [0u32; 4];
+            let mut count = 0;
+            for row in rows.clone() {
+                for column in columns.clone() {
+                    let from = ((row * sprite.size.0 + column) * 4) as usize;
+                    for (total, &byte) in sum.iter_mut().zip(&sprite.pixels[from..from + 4]) {
+                        *total += u32::from(byte);
+                    }
+                    count += 1;
+                }
+            }
+            pixels.extend(sum.map(|total| ((total + count / 2) / count) as u8));
+        }
+    }
     Sprite {
         size: (width, height),
         hotspot: (
-            sprite.hotspot.0 * factor as i32,
-            sprite.hotspot.1 * factor as i32,
+            (f64::from(sprite.hotspot.0) * factor).round() as i32,
+            (f64::from(sprite.hotspot.1) * factor).round() as i32,
         ),
+        scale: sprite.scale * factor,
         pixels,
     }
 }
@@ -133,7 +217,7 @@ pub fn embed(frame: &mut [u8], stride: usize, size: (u32, u32), sprite: &Sprite,
 
 #[cfg(test)]
 mod tests {
-    use super::{arrow, at_density, embed, plan, CursorMode, Plan, Sprite};
+    use super::{arrow, at_density, embed, plan, within, CursorMode, Plan, Sprite};
 
     const OPAQUE_RED: [u8; 4] = [0, 0, 255, 255];
     const CLEAR: [u8; 4] = [0, 0, 0, 0];
@@ -145,6 +229,7 @@ mod tests {
         Sprite {
             size: (2, 2),
             hotspot: (1, 0),
+            scale: 1.0,
             pixels: [OPAQUE_RED, CLEAR, HALF_WHITE, OPAQUE_RED].concat(),
         }
     }
@@ -223,11 +308,12 @@ mod tests {
 
     #[test]
     fn the_sprite_is_as_dense_as_its_source() {
-        let dense = at_density(&sprite(), 1.5);
+        let dense = at_density(&sprite(), 2.0);
 
-        // 1.5x rounds up to 2x: each pixel becomes a 2x2 block.
+        // Each pixel becomes a 2x2 block.
         assert_eq!(dense.size, (4, 4));
         assert_eq!(dense.hotspot, (2, 0));
+        assert_eq!(dense.scale, 2.0);
         let pixel = |x: usize, y: usize| -> [u8; 4] {
             let at = (y * 4 + x) * 4;
             dense.pixels[at..at + 4].try_into().expect("four bytes")
@@ -238,9 +324,58 @@ mod tests {
         assert_eq!(pixel(3, 3), OPAQUE_RED);
     }
 
+    /// A pointer the engine drew for a 2x screen is half as many pixels in a
+    /// 1x stream, and the same in a 2x one.
+    #[test]
+    fn a_dense_pointer_is_its_size_on_screen_in_any_stream() {
+        let dense = Sprite {
+            scale: 2.0,
+            ..at_density(&sprite(), 2.0)
+        };
+
+        let sparse = at_density(&dense, 1.0);
+        assert_eq!(sparse.size, (2, 2));
+        assert_eq!(sparse.hotspot, (1, 0));
+        assert_eq!(sparse.pixels, sprite().pixels);
+        assert_eq!(at_density(&dense, 2.0), dense);
+
+        let between = at_density(&dense, 1.5);
+        assert_eq!(between.size, (3, 3));
+        assert_eq!(between.hotspot, (2, 0));
+    }
+
     #[test]
     fn a_sparse_source_keeps_the_sprite_as_drawn() {
         assert_eq!(at_density(&sprite(), 1.0), sprite());
         assert_eq!(at_density(&sprite(), 0.5), sprite());
+    }
+
+    /// Cursor metadata has the room its consumer asked for, as WebRTC asks
+    /// for 64x64.
+    #[test]
+    fn a_pointer_too_big_for_the_metadata_is_shrunk_into_it() {
+        let big = at_density(&sprite(), 40.0);
+        assert_eq!(big.size, (80, 80));
+
+        let fitted = within(&big, 64 * 64);
+
+        assert!(
+            fitted.size.0 * fitted.size.1 <= 64 * 64,
+            "{:?}",
+            fitted.size
+        );
+        assert!(fitted.size.0 >= 60, "{:?}", fitted.size);
+        assert_eq!(within(&sprite(), 64 * 64), sprite());
+    }
+
+    #[test]
+    fn the_engines_pointer_is_whole_pixels() {
+        assert_eq!(
+            Sprite::from_bgra((2, 2), (1, 0), 1.0, sprite().pixels),
+            Some(sprite())
+        );
+        assert_eq!(Sprite::from_bgra((2, 2), (1, 0), 1.0, vec![0; 12]), None);
+        assert!(Sprite::hidden().is_hidden());
+        assert!(!sprite().is_hidden());
     }
 }

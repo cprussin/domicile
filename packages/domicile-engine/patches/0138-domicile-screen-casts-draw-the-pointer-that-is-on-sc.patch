@@ -1,0 +1,66 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sat, 24 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: screen casts draw the pointer that is on screen
+
+A screen cast drew a built-in arrow wherever the pointer was: over a link
+the screen showed a hand and the cast an arrow. The compositor has no
+pointer of its own; this process draws it.
+
+- `DrmCursor::SetCursor` sets each pointer it puts on screen on
+  `ui::DeskCursorImageSource` (`ui/base/cursor/domicile`): its first
+  frame as premultiplied BGRA, its hotspot and its scale. A hidden
+  pointer is an empty image.
+- Each control channel sends it to the compositor as `desk_cursor`, and
+  the casts draw it in place of the arrow.
+- The DRM platform links //ui/base/cursor/domicile:desk_cursor_image.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ ui/ozone/platform/drm/BUILD.gn           | 4 ++++
+ ui/ozone/platform/drm/host/drm_cursor.cc | 9 +++++++++
+ 2 files changed, 13 insertions(+)
+
+diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
+index 5b4cbd7..8d51249 100644
+--- a/ui/ozone/platform/drm/BUILD.gn
++++ b/ui/ozone/platform/drm/BUILD.gn
+@@ -184,6 +184,10 @@ source_set("gbm") {
+     "//ui/base",
+     "//ui/base/cursor",
+ 
++    # The pointer on screen, which `DrmCursor` hands the compositor's screen
++    # casts.
++    "//ui/base/cursor/domicile:desk_cursor_image",
++
+     # The desk's XCursor theme, which `DrmCursorFactory` draws the pointer
+     # from.
+     "//ui/base/cursor/domicile:desk_cursor_theme",
+diff --git a/ui/ozone/platform/drm/host/drm_cursor.cc b/ui/ozone/platform/drm/host/drm_cursor.cc
+index 411e68a..8d229f6 100644
+--- a/ui/ozone/platform/drm/host/drm_cursor.cc
++++ b/ui/ozone/platform/drm/host/drm_cursor.cc
+@@ -16,6 +16,7 @@
+ #include "base/threading/thread_checker.h"
+ #include "base/time/time.h"
+ #include "base/trace_event/trace_event.h"
++#include "ui/base/cursor/domicile/desk_cursor_image.h"
+ #include "ui/base/cursor/mojom/cursor_type.mojom.h"
+ #include "ui/gfx/geometry/point_conversions.h"
+ #include "ui/ozone/common/bitmap_cursor.h"
+@@ -100,6 +101,14 @@ void DrmCursor::SetCursor(gfx::AcceleratedWidget window,
+   cursor_ = platform_cursor;
+ 
+   SendCursorShowLocked();
++
++  // DOMICILE: the compositor's screen casts draw this pointer, which only
++  // this process has. An animated one is cast as its first frame. The
++  // source's listeners only post a task, so this may run under `lock_`.
++  const std::vector<SkBitmap>& bitmaps = cursor_->bitmaps();
++  DeskCursorImageSource::Get().Set(DeskCursorImageOf(
++      bitmaps.empty() ? SkBitmap() : bitmaps.front(), cursor_->hotspot(),
++      cursor_->cursor_image_scale_factor()));
+ }
+ 
+ void DrmCursor::OnWindowAdded(gfx::AcceleratedWidget window,

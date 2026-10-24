@@ -383,7 +383,8 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             // Reaches no client; it only stirs the idle clock.
             | ClientRequest::Activity
             // Reaches no client; a cast of the lock screen draws it.
-            | ClientRequest::DeskPointer { .. },
+            | ClientRequest::DeskPointer { .. }
+            | ClientRequest::DeskCursor { .. },
         )
         | Asked::OnTheConnection(ConnectionRequest::SetTheme { .. })
         | Asked::System(
@@ -964,6 +965,10 @@ mod tests {
                     at: Some((4.0, 8.0)),
                     windows: Vec::new(),
                 },
+            ),
+            (
+                "the pointer changing shape over the lock screen",
+                ClientRequest::DeskCursor { image: None },
             ),
         ] {
             assert_eq!(

@@ -20,6 +20,7 @@
 use std::collections::{HashMap, HashSet};
 use std::os::fd::OwnedFd;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Instant;
 
 use domicile_protocol::{PointerOverWindow, ShotWindow};
@@ -182,6 +183,8 @@ struct Cast {
     /// The part of a window shown, in its frame's pixels, or `None` for all
     /// of it.
     part: Option<Rect>,
+    /// The pointer's image for its metadata, with `cursor_plan`.
+    cursor_sprite: Option<Arc<Sprite>>,
 }
 
 /// What a stream's next frame is made of.
@@ -339,6 +342,7 @@ impl Streams {
                 asked: size,
                 cursor_plan: Plan::Nothing,
                 part,
+                cursor_sprite: None,
             },
         );
         self.send(ToPipewire::Start {
@@ -1005,6 +1009,7 @@ impl Streams {
                     buffer,
                     damage,
                     cursor: cast.cursor_plan,
+                    sprite: cast.cursor_sprite.clone(),
                     // Waited on when it was filled; see `gpu::draw`.
                     fence: None,
                 });
@@ -1049,6 +1054,34 @@ impl Streams {
         let engine_before = std::mem::replace(&mut self.engine_pointer, engine_now);
         let before = self.pointer.clone();
         self.pointer_moved(before, engine_before, renderer, now)
+    }
+
+    /// The engine drew a new pointer, or hid it. Every stream that shows the
+    /// pointer is damaged whole: the old image and the new may differ in
+    /// size, and a change is rare next to a move.
+    pub fn pointer_image(
+        &mut self,
+        sprite: Sprite,
+        mut renderer: Option<&mut GlesRenderer>,
+        now: Instant,
+    ) -> Option<Instant> {
+        if sprite == self.sprite {
+            return self.next_due();
+        }
+        self.sprite = sprite;
+        let touched: Vec<(StreamId, Vec<Rect>)> = self
+            .casts
+            .iter()
+            .filter(|(_, cast)| cast.cursor != CursorMode::Hidden)
+            .filter_map(|(&stream, cast)| {
+                let size = view_size(&cast.shows, &self.shots, &self.pages)?;
+                Some((stream, vec![(0, 0, size.0 as i32, size.1 as i32)]))
+            })
+            .collect();
+        for (stream, damage) in touched {
+            self.offer(stream, damage, renderer.as_deref_mut(), now);
+        }
+        self.next_due()
     }
 
     /// Damages the streams that show the pointer where it was, `before` in a
@@ -1469,18 +1502,22 @@ fn step(
         .targets
         .get(&buffer)
         .expect("PipeWire adds a buffer before lending it");
-    let cursor = plan(cast.cursor, view.pointer);
+    // A hidden pointer is off every source, as it is off the screen.
+    let cursor = plan(cast.cursor, view.pointer.filter(|_| !sprite.is_hidden()));
     let fence = match fill(target, format, &view.layers, cursor, sprite, renderer) {
         Ok(fence) => fence,
         Err(why) => return Outcome::Failed(why),
     };
     cast.cursor_plan = cursor;
+    cast.cursor_sprite =
+        matches!(cursor, Plan::Metadata { at: Some(_) }).then(|| Arc::new(sprite.clone()));
     match pacing.due(now) {
         Due::Send { buffer, damage } => Outcome::Send(ToPipewire::Filled {
             stream,
             buffer,
             damage,
             cursor,
+            sprite: cast.cursor_sprite.clone(),
             fence,
         }),
         Due::At(_) | Due::Nothing => Outcome::Nothing,
@@ -1538,7 +1575,7 @@ mod tests {
     use super::{cut, damage_in_view, density, view, Cast, EnginePointer, Shot, Shows, Streams};
     use crate::buffer_transform::Sampled;
     use crate::casting::captures::Capturer;
-    use crate::casting::cursor::{CursorMode, Plan};
+    use crate::casting::cursor::{CursorMode, Plan, Sprite};
     use crate::casting::gpu::Snapshot;
     use crate::casting::lifecycle::Ended;
     use crate::casting::pacing::Rect;
@@ -2075,6 +2112,20 @@ mod tests {
         assert!(heard.try_recv().expect("developed").is_err());
     }
 
+    /// The engine's pointer replaces the arrow, as a page changes it; a
+    /// hidden one is drawn nowhere.
+    #[test]
+    fn a_cast_draws_the_pointer_the_engine_draws() {
+        let mut streams = streams();
+        let hand = Sprite::from_bgra((1, 1), (0, 0), 2.0, vec![1, 2, 3, 255]).expect("a sprite");
+
+        streams.pointer_image(hand.clone(), None, Instant::now());
+        assert_eq!(streams.sprite, hand);
+
+        streams.pointer_image(Sprite::hidden(), None, Instant::now());
+        assert!(streams.sprite.is_hidden());
+    }
+
     /// The compositor cannot see the pointer over a page; the engine says
     /// where on each window's page it is.
     #[test]
@@ -2265,6 +2316,7 @@ mod tests {
             asked: (1, 1),
             cursor_plan: Plan::Nothing,
             part: None,
+            cursor_sprite: None,
         }
     }
 }
