@@ -6,6 +6,8 @@
 # - A failure keeps its whole log, and a failing cargo test's report reaches
 #   the summary.
 # - A skip reads as a skip, and one with no `SKIP:` reason fails.
+# - A passing check that is itself a run of checks (`turbo test:nix`) prints
+#   the skips inside it under its `ok`, so they are not hidden by its pass.
 # - The tally keeps its format, and a run that checked nothing fails.
 set -u
 
@@ -166,6 +168,20 @@ status=$?
 expect "a run that checked nothing fails" "1" "$status"
 expect "and says so" "yes" \
   "$(grep -qF 'nothing ran' "$WORK/out" && echo yes || echo no)"
+
+echo "check-runner, running a run of checks"
+
+# What `check.sh` sees from `turbo run test:nix` without nix: turbo prefixes
+# each line, and the inner run passes with every check skipped.
+rm -f "$WORK"/checks/*.sh
+standin check-8-runs-checks '
+echo "pkg:test:nix: \$ check-runner tests/nix-*.sh"
+echo "pkg:test:nix:   nix-one                  skipped (no nix)"
+echo "pkg:test:nix: == 0 passed, 0 failed, 1 skipped =="
+echo "pkg:test:nix:   skipped: nix-one — no nix"'
+check
+expect "a pass prints the skips inside it under its ok" \
+  "    skipped: nix-one — no nix" "$(under check-8-runs-checks)"
 
 echo "check-runner, with every check passing"
 

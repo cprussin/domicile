@@ -30,7 +30,8 @@ report_start() {
 
 # Runs one check. Its output goes to a file, shown only when it fails. A
 # passing check's `PASS:` lines are printed under its `ok`, so a pass says what
-# it established.
+# it established. So are the `skipped:` lines of a check that is itself a run
+# of checks, such as `turbo run test:nix`, so its pass does not hide them.
 run() { # name, command...
   local name="$1"; shift
   local log; log="$(mktemp)"
@@ -47,6 +48,7 @@ verdict() { # name, status, log
   if [ "$status" -eq 0 ]; then
     echo "ok"
     sed -n 's/^ *PASS: /    PASS: /p' "$log"
+    sed -n 's/^.*  skipped: /    skipped: /p' "$log"
     PASSED+=("$name")
   elif [ "$status" -eq "$SKIPPED_STATUS" ]; then
     reason="$(sed -n 's/^ *SKIP: *//p' "$log" | head -1)"

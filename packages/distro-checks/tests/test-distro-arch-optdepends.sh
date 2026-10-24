@@ -6,7 +6,7 @@
 # and checks the package's metadata and files.
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 OPTDEPENDS_SH="$ROOT/distro/arch-optdepends.sh"
 [ -x "$OPTDEPENDS_SH" ] || { echo "no $OPTDEPENDS_SH" >&2; exit 1; }
 

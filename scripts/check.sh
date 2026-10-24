@@ -58,10 +58,10 @@ echo "== environment =="
 # in ways that look like broken harnesses. `--frozen-lockfile` on a satisfied
 # tree is fast.
 #
-# Only for groups that read `node_modules`. `cargo-test.yml` and
-# `nix-build.yml` run without bun.
+# Only for groups that read `node_modules` or run turbo. `cargo-test.yml` runs
+# without bun.
 needs_node_modules() {
-  for group in typescript e2e shell; do wanted "$group" && return 0; done
+  for group in typescript e2e shell nix distro; do wanted "$group" && return 0; done
   return 1
 }
 if needs_node_modules; then
@@ -109,24 +109,20 @@ if wanted typescript; then
   run "turbo test" bun run turbo test
 fi
 
-# Every `nix-*.sh`. A separate group because these need `nix`, and the `shell`
-# group runs strict on `ubuntu-latest` without it.
+# `distro-checks`' `test:nix`. A separate group because these need `nix`, and
+# the `shell` group runs strict on `ubuntu-latest` without it.
 if wanted nix; then
   echo
   echo "== nix =="
-  for script in scripts/nix-*.sh; do
-    run "$(basename "$script" .sh)" "$script"
-  done
+  run "turbo test:nix" bun run turbo run test:nix --filter=@domicile-desktop/distro-checks
 fi
 
-# Every `distro-*.sh`. A separate group because these need the packages
-# `distro/build.sh` makes and docker; `distro-packages.yml` runs it.
+# `distro-checks`' `test:distro`. A separate group because these need the
+# packages `distro/build.sh` makes and docker; `distro-packages.yml` runs it.
 if wanted distro; then
   echo
   echo "== distro =="
-  for script in scripts/distro-*.sh; do
-    run "$(basename "$script" .sh)" "$script"
-  done
+  run "turbo test:distro" bun run turbo run test:distro --filter=@domicile-desktop/distro-checks
 fi
 
 if wanted e2e; then

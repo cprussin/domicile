@@ -241,7 +241,7 @@ does_not_trigger "an unrelated check does not build the engine" \
   scripts/test-american-english.sh "${patterns[@]}"
 
 does_not_trigger "a nix check does not build the engine" \
-  scripts/nix-the-shells-build.sh "${patterns[@]}"
+  packages/distro-checks/tests/nix-the-shells-build.sh "${patterns[@]}"
 
 # --- exactly as narrow as it says -------------------------------------------
 

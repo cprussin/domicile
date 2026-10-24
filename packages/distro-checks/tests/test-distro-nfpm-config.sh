@@ -3,7 +3,7 @@
 # package.
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 CONFIG_SH="$ROOT/distro/nfpm-config.sh"
 [ -x "$CONFIG_SH" ] || { echo "no $CONFIG_SH" >&2; exit 1; }
 
