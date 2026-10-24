@@ -42,7 +42,7 @@ use crate::uploads::Shape;
 
 /// A buffer of one stream, numbered as PipeWire adds it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct BufferId(u32);
+pub struct BufferId(pub u32);
 
 /// What a stream's buffers hold, once negotiated.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -88,6 +88,19 @@ pub enum ToPipewire {
     End { stream: StreamId, why: Ended },
 }
 
+impl ToPipewire {
+    /// The stream the request is for.
+    pub fn stream(&self) -> StreamId {
+        match self {
+            Self::Start { stream, .. }
+            | Self::Resize { stream, .. }
+            | Self::Filled { stream, .. }
+            | Self::Starved { stream }
+            | Self::End { stream, .. } => *stream,
+        }
+    }
+}
+
 /// News for the Wayland thread.
 pub enum ToWayland {
     /// The stream's buffers hold `format`. Frames of another size are dropped.
@@ -109,6 +122,11 @@ pub enum ToWayland {
     Lent {
         stream: StreamId,
         buffer: BufferId,
+    },
+    /// The consumer wants its lent buffer filled whether or not anything
+    /// changed. A Wayland capture client's `copy` asks this.
+    Wanted {
+        stream: StreamId,
     },
     /// Start or stop filling.
     Filling {

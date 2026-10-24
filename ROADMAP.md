@@ -113,9 +113,8 @@ Understood and not scheduled.
 - **The session portal setup is only checked at evaluation.** Nothing here
   runs a user manager, an unclean exit leaves stale environment variables,
   and a nested desktop doesn't register.
-- **Wayland capture is monitors only, into shm, one shot per frame.** No
-  toplevel sources, cursor sessions or dmabufs; `wf-recorder` is slow.
-  [PORTALS.md](docs/PORTALS.md).
+- **Wayland capture is monitors only.** No toplevel sources or cursor
+  sessions. [PORTALS.md](docs/PORTALS.md#wayland-capture).
 
 ### Shell reload
 

@@ -49,8 +49,9 @@ use crate::reply::{reply, Replier, Reply};
 pub use captures::Capturer;
 pub use cursor::{CursorMode, Sprite};
 pub use lifecycle::Ended;
+pub use negotiation::{Offered, Pixel, MAX_FRAMERATE};
 pub use pacing::Rect;
-pub use producer::ToWayland;
+pub use producer::{fourcc, BufferId, StreamFormat, Target, ToPipewire, ToWayland};
 pub use region::Screen;
 pub use shots::{Desk, Developed, DevelopedWindow, Shown};
 pub use streams::{Committed, Gpu, Streams};
@@ -107,6 +108,16 @@ pub enum Event {
     Ended(Ended),
 }
 
+/// Who takes a stream's frames.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Consumer {
+    /// A PipeWire node, which the stream's listener names.
+    Pipewire,
+    /// A Wayland capture client, through [`crate::screencopy`]. It lends
+    /// its own buffers, as PipeWire does, and the stream has no listener.
+    Client,
+}
+
 /// Hears a stream's events. Called on the Wayland or PipeWire thread, so it
 /// must not block.
 pub type Listener = Box<dyn FnMut(Event) + Send>;
@@ -119,6 +130,7 @@ pub enum Request {
         /// Part of a window's frame, in its pixels; see [`Candidate::part`].
         part: Option<Rect>,
         cursor: CursorMode,
+        consumer: Consumer,
         listener: Listener,
     },
     Stop {
@@ -131,15 +143,6 @@ pub enum Request {
     /// One frame of the whole desk, taken under `stream`.
     Shoot {
         stream: StreamId,
-        developed: Developed,
-    },
-    /// One frame of monitor `name` at its own density, taken under
-    /// `stream`. `region` is a part of it, in logical pixels from its
-    /// corner; `None` for all of it.
-    ShootMonitor {
-        stream: StreamId,
-        name: String,
-        region: Option<Region>,
         developed: Developed,
     },
     /// The last frame the window `app_id` showed, alone.
@@ -186,7 +189,23 @@ impl Casting {
             source,
             part,
             cursor,
+            consumer: Consumer::Pipewire,
             listener: listener(stream),
+        });
+        stream
+    }
+
+    /// Starts a stream of `source` for a Wayland capture client. Its
+    /// requests go to the queue the streams were made with for clients.
+    pub fn start_for_client(&self, source: Source, cursor: CursorMode) -> StreamId {
+        let stream = StreamId(self.next.fetch_add(1, Ordering::Relaxed));
+        self.send(Request::Start {
+            stream,
+            source,
+            part: None,
+            cursor,
+            consumer: Consumer::Client,
+            listener: Box::new(|_| {}),
         });
         stream
     }
@@ -210,18 +229,6 @@ impl Casting {
     pub fn shoot(&self, developed: Developed) {
         let stream = StreamId(self.next.fetch_add(1, Ordering::Relaxed));
         self.send(Request::Shoot { stream, developed });
-    }
-
-    /// Takes one frame of `region` of monitor `name`, or all of it, at the
-    /// monitor's density. `developed` hears it, or why there is none.
-    pub fn shoot_monitor(&self, name: String, region: Option<Region>, developed: Developed) {
-        let stream = StreamId(self.next.fetch_add(1, Ordering::Relaxed));
-        self.send(Request::ShootMonitor {
-            stream,
-            name,
-            region,
-            developed,
-        });
     }
 
     /// Takes the last frame window `app_id` showed. `developed` hears it, or

@@ -334,17 +334,29 @@ The compositor also serves `ext-image-copy-capture-v1` (with
 `ext-image-capture-source-v1` output sources) and `zwlr_screencopy_manager_v1`
 v3, so `grim` and `wf-recorder` work. The code is `src/screencopy/`.
 
-- **Each frame is a shot of one monitor** from the same display captures
-  (`Casting::shoot_monitor`), at that monitor's density. A wlr region is cut
-  at the monitor's edges.
-- **Shm only.** Buffers are `argb8888` or `xrgb8888` with packed rows. A
-  frame copies at once and reports the whole buffer damaged.
-- **A resized monitor** gets new constraints on the next ext capture, which
+- **Each session is a cast** of its monitor (`Casting::start_for_client`),
+  at the monitor's density. The cast fills the client's buffers as it fills
+  PipeWire's, and its display capture runs until the session ends.
+  `src/screencopy/taking.rs` lends a frame's buffer to the cast.
+- **A frame is ready once there is damage the client has not seen.** The
+  first frame is damaged whole. Damage is reported in buffer pixels.
+- **Buffers** are shm `xrgb8888` or `argb8888` with packed rows, or a dmabuf
+  of either on the render node, with a modifier the renderer draws to. The
+  cast draws a dmabuf on the GPU and an shm frame into a copy, which is
+  copied into the client's buffer when ready.
+- **The pointer** is drawn into the frame when the session asks for
+  `paint_cursors`, or the wlr frame for `overlay_cursor`.
+- **wlr frames** have no session. A client's frames of one monitor, region
+  and pointer choice share one cast, which stops once the client has copied
+  nothing for two seconds. `copy` fills the buffer at once;
+  `copy_with_damage` waits for damage. A wlr region is cut at the monitor's
+  edges. A wlr client may bring a dmabuf of any modifier.
+- **A resized monitor** gets new constraints, and the frame being captured
   fails with `buffer_constraints`. An unplugged one stops its sessions.
 - **No asking and no lock check.** Any unsandboxed client may capture, as it
   may use data control; a sandboxed one is offered neither
   ([Sandboxed clients](#sandboxed-clients)). The portal refuses no capture
   while locked either: a
   running cast or a granted screenshot shows the lock screen.
-- Left out: toplevel sources, the pointer and cursor sessions (a cursor
-  session's capture session stops at once), and dmabufs.
+- Left out: toplevel sources and cursor sessions (a cursor session's
+  capture session stops at once).
