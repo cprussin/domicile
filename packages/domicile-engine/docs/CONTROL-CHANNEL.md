@@ -36,7 +36,7 @@ The engine has two channels to the rest of Domicile:
   `app_urgent`, `app_inhibits_shortcuts`, `modifiers`, `found_files`,
   `clipboard`, `theme`,
   `windows_theme`, `appearance`, `focus_changed`, `focus_requested`,
-  `displays`, `keymap`, `extensions`, `tray`, `notifications`, `shell_config`,
+  `displays`, `keymap`, `extensions`, `force_dark`, `tray`, `notifications`, `shell_config`,
   `idle`, `locked`, `system`, `portal_requests`.
 - **Handled in the browser, never sent to the compositor:** `grab_shortcut`,
   `ungrab_shortcut`, `warp_pointer`.
@@ -81,6 +81,9 @@ The engine has two channels to the rest of Domicile:
   `[extensions]` list, installed into the profile by
   `chrome/browser/domicile/domicile_extension_installer.h`. See
   [EXTENSIONS.md](/docs/architecture/EXTENSIONS.md).
+- **`force_dark`** stops in the browser process. It is the desk's
+  `theme.force_dark`: hosts whose pages Chromium's auto dark mode draws dark
+  while the theme is dark. See `components/domicile/browser/force_dark.h`.
 - **`grab_shortcut`**: the browser holds the grabbed set and matches it in
   `WebViewGuest::PreHandleKeyboardEvent`. The compositor cannot do this: keys
   typed into a `<webview>` guest never reach it. A match comes back as a

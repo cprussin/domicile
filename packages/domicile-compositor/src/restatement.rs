@@ -18,6 +18,7 @@
 //! | `idle.blank_after_seconds`, `idle.warn_before_seconds` | idle clock restarted and timer re-armed (`reset_the_idle_clock`) |
 //! | `theme.mode` | sent to every chrome and the desk's clients, with the mode's own `cursor_theme` if it has one (`take_up_the_theme`) |
 //! | `theme.accent_color`, `contrast`, `reduced_motion`, `icon_theme`, `cursor_theme`, `cursor_size`, `font_name`, `monospace_font_name` | sent to the desk's clients (`Portals::restyle`); `icon_theme` also redraws tray and notification icons; `cursor_theme` and `cursor_size` also go to every chrome's browser, which draws the pointer (`Host::set_appearance`) |
+//! | `theme.force_dark` | sent to every chrome, whose browser draws those sites dark from their next load (`Host::set_force_dark`) |
 //! | `files.omit` | sent to the index, which rewalks the home (`omit_from_the_index`) |
 //! | `extensions.*` | sent to every chrome, whose browser installs them (`hand_over_the_extensions`) |
 //! | `lock.*` | the verifier replaced; the desktop stays as locked as it was (`rekey_the_lock`, `Lock::rekeyed`) |
@@ -67,9 +68,11 @@ pub struct Restatement {
     /// Just the mode, unlike `idle`: an absent `theme` means dark, so it needs
     /// no separate value.
     pub theme: Option<ThemeMode>,
-    /// The theme, or `None` if nothing but the mode changed. Clients read
-    /// the rest through the settings portal.
+    /// The theme, or `None` if nothing but the mode and `force_dark` changed.
+    /// Clients read the rest through the settings portal.
     pub appearance: Option<ThemeConfig>,
+    /// The sites the browser draws dark, or `None` if unchanged.
+    pub force_dark: Option<Vec<String>>,
     /// What the file index leaves out, or `None` if unchanged.
     pub omit: Option<Omit>,
     /// The extensions the browser process installs, or `None` if unchanged.
@@ -97,9 +100,12 @@ impl Restatement {
             theme: (was.theme.mode != now.theme.mode).then_some(now.theme.mode),
             appearance: (ThemeConfig {
                 mode: now.theme.mode,
+                force_dark: now.theme.force_dark.clone(),
                 ..was.theme.clone()
             } != now.theme)
                 .then(|| now.theme.clone()),
+            force_dark: (was.theme.force_dark != now.theme.force_dark)
+                .then(|| now.theme.force_dark.clone()),
             omit: (was.files.omit != now.files.omit).then(|| now.files.omit.clone()),
             extensions: (was.extensions != now.extensions).then(|| now.extensions.clone()),
             lockdown: (was.lockdown != now.lockdown).then(|| now.lockdown.clone()),
@@ -205,6 +211,18 @@ mod tests {
             !omit.omits(".config"),
             "the rule handed back is the new one, not the one being replaced"
         );
+    }
+
+    #[test]
+    fn sites_to_force_dark_that_moved_are_restated_without_the_look() {
+        // The browser reads them; the desk's clients have nothing to redraw.
+        let was = parsed(A_DVORAK_DESK);
+        let now = parsed(A_DESK_FORCING_A_SITE_DARK);
+
+        let restated = Restatement::between(&was, &now);
+
+        assert_eq!(restated.force_dark, Some(vec!["mail.google.com".into()]));
+        assert_eq!(restated.appearance, None);
     }
 
     #[test]
@@ -399,6 +417,16 @@ mod tests {
 "#;
 
     /// The same desk with an accent color, high contrast and less motion.
+    const A_DESK_FORCING_A_SITE_DARK: &str = r#"
+{
+  "input": {
+    "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:swapescape"] }
+  },
+  "theme": { "force_dark": ["mail.google.com"] },
+  "output": { "displays": [{ "name": "one", "size": [1024, 768] }] }
+}
+"#;
+
     const A_DVORAK_DESK_WITH_AN_ACCENT: &str = r##"
 {
   "input": {

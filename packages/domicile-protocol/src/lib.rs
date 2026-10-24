@@ -558,6 +558,12 @@ pub enum HostMessage {
         unpacked: Vec<String>,
     },
 
+    /// Host names of sites the browser draws dark while the theme is dark.
+    ///
+    /// The config's `theme.force_dark`. Always the full list. Sent with the
+    /// handshake and on reloads that change it.
+    ForceDark { sites: Vec<String> },
+
     /// Who holds the keyboard: an app, or the chrome (`None`).
     ///
     /// Focus also moves without `focus_app`, for example on a click or when a

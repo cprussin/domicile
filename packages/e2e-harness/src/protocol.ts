@@ -292,6 +292,14 @@ const extensionsSchema = z.looseObject({
   web_store: z.array(z.string()),
 });
 
+// Host names of sites the browser draws dark while the theme is dark: the
+// config's `theme.force_dark`. Sent with the handshake and on config reload.
+// The browser process reads it.
+const forceDarkSchema = z.looseObject({
+  sites: z.array(z.string()),
+  type: z.literal("force_dark"),
+});
+
 // The reply to `search_files`. `files` holds the first matches, relative to
 // home, in byte order, with directories ending in `/`. `matched` is the total
 // count. `indexing` is true while the home directory is still being indexed.
@@ -614,6 +622,7 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
   displaysSchema,
   keymapSchema,
   extensionsSchema,
+  forceDarkSchema,
   focusChangedSchema,
   focusRequestedSchema,
   modifiersSchema,
