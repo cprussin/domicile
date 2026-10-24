@@ -1,5 +1,5 @@
-//! Wayland capture tools copy a monitor from the same display captures as the
-//! Screenshot portal.
+//! Wayland capture tools copy a monitor from a cast of it, which keeps its
+//! display capture running between frames.
 //!
 //! No engine runs, so `DOMICILE_CAST_TEST_PATTERN` stands in for its display
 //! captures: every pixel is one color. `grim` copies through
@@ -123,7 +123,13 @@ fn a_wlr_screencopy_client_before_version_3_is_offered_one_buffer() {
 
         let manager = copier.wlr.clone().expect("zwlr_screencopy_manager_v1");
         manager.capture_output(0, copier.output(), &handle, ());
-        queue.roundtrip(&mut copier).expect("the frame described");
+        // Such a client waits for `buffer`; nothing says the list is done.
+        while copier.offers.is_empty() {
+            queue
+                .blocking_dispatch(&mut copier)
+                .expect("the frame described");
+        }
+        queue.roundtrip(&mut copier).expect("nothing more");
         assert_eq!(
             copier.offers,
             [(640, 480, 640 * 4)],
@@ -172,7 +178,7 @@ fn an_ext_capture_session_offers_the_monitors_size_and_follows_it() {
     assert_eq!(copier.sizes, [(640, 480)]);
     assert_eq!(
         copier.formats,
-        [wl_shm::Format::Argb8888, wl_shm::Format::Xrgb8888]
+        [wl_shm::Format::Xrgb8888, wl_shm::Format::Argb8888]
     );
 
     let (small, _) = copier.buffer((320, 240), &handle);
@@ -212,6 +218,82 @@ fn an_ext_capture_session_offers_the_monitors_size_and_follows_it() {
     assert_eq!(copier.sizes, [(640, 480), (800, 600)]);
 }
 
+/// An ext session's frames follow one another from its cast: the first is
+/// damaged whole, and each later one is ready once the monitor draws again.
+#[test]
+fn an_ext_session_captures_frame_after_frame() {
+    let compositor = started();
+    let (mut queue, mut copier) = connected(&compositor, 3);
+    let handle = queue.handle();
+    let source = copier
+        .sources
+        .clone()
+        .expect("the output source manager")
+        .create_source(copier.output(), &handle, ());
+    let session = copier
+        .ext
+        .clone()
+        .expect("ext_image_copy_capture_manager_v1")
+        .create_session(&source, Options::empty(), &handle, ());
+    while copier.sizes.is_empty() {
+        queue
+            .blocking_dispatch(&mut copier)
+            .expect("the session's constraints");
+    }
+    let (buffer, memory) = copier.buffer((640, 480), &handle);
+
+    for nth in 0..3 {
+        copier.ext_damage.clear();
+        let frame = session.create_frame(&handle, ());
+        frame.attach_buffer(&buffer);
+        frame.capture();
+        assert_eq!(
+            copier.outcome(&mut queue),
+            Outcome::Ready,
+            "frame {nth}; the compositor said:\n{}",
+            compositor.complaint()
+        );
+        assert!(!copier.ext_damage.is_empty(), "frame {nth} is damaged");
+        frame.destroy();
+    }
+    assert_eq!(center(&memory, (640, 480)), PATTERN);
+}
+
+/// A `zwlr_screencopy_manager_v1` client's frames of a monitor copy one
+/// after another, `copy` at once and `copy_with_damage` once there is damage.
+#[test]
+fn a_wlr_screencopy_client_copies_frame_after_frame() {
+    let compositor = started();
+    let (mut queue, mut copier) = connected(&compositor, 3);
+    let handle = queue.handle();
+    let manager = copier.wlr.clone().expect("zwlr_screencopy_manager_v1");
+    let (buffer, memory) = copier.buffer((640, 480), &handle);
+
+    for nth in 0..4 {
+        copier.described = false;
+        manager.capture_output(0, copier.output(), &handle, ());
+        while !copier.described {
+            queue
+                .blocking_dispatch(&mut copier)
+                .expect("the frame described");
+        }
+        let frame = copier.wlr_frame.clone().expect("the frame");
+        if nth % 2 == 0 {
+            frame.copy(&buffer);
+        } else {
+            frame.copy_with_damage(&buffer);
+        }
+        assert_eq!(
+            copier.outcome(&mut queue),
+            Outcome::Ready,
+            "frame {nth}; the compositor said:\n{}",
+            compositor.complaint()
+        );
+        frame.destroy();
+    }
+    assert_eq!(center(&memory, (640, 480)), PATTERN);
+}
+
 /// How a copy ended.
 #[derive(Debug, PartialEq)]
 enum Outcome {
@@ -241,6 +323,8 @@ struct Copier {
     /// Each buffer size an ext session offered, in order.
     sizes: Vec<(u32, u32)>,
     formats: Vec<wl_shm::Format>,
+    /// The damage the ext frame reported.
+    ext_damage: Vec<(i32, i32, i32, i32)>,
     outcome: Option<Outcome>,
 }
 
@@ -427,6 +511,12 @@ impl Dispatch<ExtImageCopyCaptureFrameV1, ()> for Copier {
     ) {
         match event {
             ext_image_copy_capture_frame_v1::Event::Ready => copier.outcome = Some(Outcome::Ready),
+            ext_image_copy_capture_frame_v1::Event::Damage {
+                x,
+                y,
+                width,
+                height,
+            } => copier.ext_damage.push((x, y, width, height)),
             ext_image_copy_capture_frame_v1::Event::Failed {
                 reason: WEnum::Value(reason),
             } => copier.outcome = Some(Outcome::Failed(reason)),

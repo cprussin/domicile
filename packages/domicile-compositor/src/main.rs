@@ -608,8 +608,11 @@ struct DomicileCompositor {
     turnover_deadline: Option<RegistrationToken>,
     /// Window, monitor and region streams. See [`crate::casting`].
     casting: casting::Streams,
-    /// Takes the shots Wayland capture clients copy. See [`crate::screencopy`].
+    /// Starts the casts Wayland capture clients take. See
+    /// [`crate::screencopy`].
     screen_copying: casting::Casting,
+    /// The casts Wayland capture clients take.
+    copies: screencopy::Copies,
     /// When the soonest superseded engine hold expires, if one is held. See
     /// [`crate::engine_buffers`].
     hold_deadline: Option<RegistrationToken>,
@@ -1104,6 +1107,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     });
     // News from the PipeWire thread.
     let (cast_news, heard_cast_news) = channel::<casting::ToWayland>();
+    // Requests for the casts Wayland capture clients take.
+    let (screen_copy_requests, heard_screen_copy_requests) = channel::<casting::ToPipewire>();
 
     let mut dmabuf_state = DmabufState::new();
     let dmabuf_global = gpu.as_mut().map(|gpu| {
@@ -1280,13 +1285,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         turnover: None,
         turnover_deadline: None,
         casting: {
-            let mut streams = casting::Streams::new(cast_news, casting_gpu);
+            let mut streams = casting::Streams::new(cast_news, screen_copy_requests, casting_gpu);
             streams.screens(cast_screens, None);
             streams
         },
         hold_deadline: None,
         cast_deadline: None,
         screen_copying: casting::Casting::new(cast_requests.clone()),
+        copies: screencopy::Copies::default(),
         cast_on_title: std::env::var("DOMICILE_CAST_WINDOW")
             .ok()
             .map(|title| (title, casting::Casting::new(cast_requests.clone()))),
@@ -1425,6 +1431,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             data.state.cast_news(news);
         }
     })?;
+    handle.insert_source(
+        heard_screen_copy_requests,
+        |event, _, data: &mut CalloopData| {
+            if let ChannelEvent::Msg(request) = event {
+                data.state.screen_copy_requested(request);
+            }
+        },
+    )?;
 
     // Passphrase verdicts, handled on the seat's thread where the lock can
     // open.

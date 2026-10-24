@@ -46,7 +46,7 @@ use crate::casting::region::{self, damage_in_stream, in_frame, Layout, Screen};
 use crate::casting::shots::{
     self, compose, desk_of, monitors, Desk, Developed, DevelopedWindow, Shown,
 };
-use crate::casting::{Candidate, Event, Listener, Region, Request, Source, StreamId};
+use crate::casting::{Candidate, Consumer, Event, Listener, Region, Request, Source, StreamId};
 use crate::engine::{CaptureId, CapturedFrame};
 
 /// A window's frame, as its commit brought it.
@@ -88,6 +88,11 @@ impl Gpu {
 /// Every stream, on the Wayland thread.
 pub struct Streams {
     news: Sender<ToWayland>,
+    /// Requests for the casts Wayland capture clients take, which
+    /// [`crate::screencopy`] answers in PipeWire's place.
+    to_clients: Sender<ToPipewire>,
+    /// The casts Wayland capture clients take.
+    clients: HashSet<StreamId>,
     gpu: Option<Gpu>,
     /// Started on the first cast, so a desktop that never casts runs no
     /// PipeWire thread.
@@ -205,11 +210,14 @@ enum Outcome {
 }
 
 impl Streams {
-    /// Streams whose news arrives through `news`. `gpu` is `None` without a
-    /// renderer and allocator, and streams then offer shm only.
-    pub fn new(news: Sender<ToWayland>, gpu: Option<Gpu>) -> Self {
+    /// Streams whose news arrives through `news`, and whose clients' casts
+    /// are asked through `to_clients`. `gpu` is `None` without a renderer and
+    /// allocator, and streams then offer shm only.
+    pub fn new(news: Sender<ToWayland>, to_clients: Sender<ToPipewire>, gpu: Option<Gpu>) -> Self {
         Self {
             news,
+            to_clients,
+            clients: HashSet::new(),
             gpu,
             to_pipewire: None,
             casts: HashMap::new(),
@@ -243,8 +251,12 @@ impl Streams {
                 source,
                 part,
                 cursor,
+                consumer,
                 listener,
             } => {
+                if consumer == Consumer::Client {
+                    self.clients.insert(stream);
+                }
                 let open = open();
                 let window_open = |app_id: &str| {
                     open.iter().any(
@@ -265,15 +277,6 @@ impl Streams {
             Request::Shoot { stream, developed } => {
                 let desk = desk_of(&self.screens).ok_or_else(|| "no monitor is plugged in".into());
                 self.shoot(stream, desk, open(), developed, renderer, capturer);
-            }
-            Request::ShootMonitor {
-                stream,
-                name,
-                region,
-                developed,
-            } => {
-                let part = self.monitor_part(&name, region);
-                self.shoot(stream, part, Vec::new(), developed, renderer, capturer);
             }
             Request::ShootBrowserWindow { id, developed } => {
                 self.shoot_browser_window(&id, developed, capturer);
@@ -308,6 +311,10 @@ impl Streams {
     ) {
         let shows = match self.shows(stream, source, window_open, capturer) {
             Ok(shows) => shows,
+            Err(why) if self.clients.contains(&stream) => {
+                self.send(ToPipewire::End { stream, why });
+                return;
+            }
             Err(why) => {
                 listener(Event::Ended(why));
                 return;
@@ -551,36 +558,27 @@ impl Streams {
         }
     }
 
-    /// The size of a shot of `region` of monitor `name`, or all of it.
-    pub fn monitor_shot_size(
-        &self,
-        name: &str,
-        region: Option<Region>,
-    ) -> Result<(u32, u32), String> {
-        let part = self.monitor_part(name, region)?;
-        let layout = region::layout(part, &self.screens).map_err(|why| why.to_string())?;
-        Ok(layout.size)
-    }
-
-    /// The desktop rectangle of `region` of monitor `name`, cut at the
-    /// monitor's edges, or all of the monitor.
-    fn monitor_part(&self, name: &str, region: Option<Region>) -> Result<Rect, String> {
+    /// The desktop rectangle of `region` of monitor `name`, in logical
+    /// pixels from its corner, cut at the monitor's edges.
+    pub fn monitor_region(&self, name: &str, region: Region) -> Result<Region, String> {
         let monitor = self
             .monitor(name)
             .ok_or_else(|| format!("monitor {name} is not plugged in"))?;
-        match region {
-            None => Ok(monitor),
-            Some(Region { position, size }) => region::intersection(
-                (
-                    monitor.0 + position.0,
-                    monitor.1 + position.1,
-                    size.0,
-                    size.1,
-                ),
-                monitor,
-            )
-            .ok_or_else(|| format!("the region is off monitor {name}")),
-        }
+        let Region { position, size } = region;
+        let (x, y, width, height) = region::intersection(
+            (
+                monitor.0 + position.0,
+                monitor.1 + position.1,
+                size.0,
+                size.1,
+            ),
+            monitor,
+        )
+        .ok_or_else(|| format!("the region is off monitor {name}"))?;
+        Ok(Region {
+            position: (x, y),
+            size: (width, height),
+        })
     }
 
     /// The desktop rectangle of the monitor named `name`.
@@ -738,12 +736,20 @@ impl Streams {
                 // Fill what is owed, if anything.
                 self.offer(stream, Vec::new(), renderer, now);
             }
+            ToWayland::Wanted { stream } => {
+                let format = self.casts.get(&stream).and_then(|cast| cast.format);
+                if let Some(StreamFormat { size, .. }) = format {
+                    let whole = (0, 0, size.0 as i32, size.1 as i32);
+                    self.offer(stream, vec![whole], renderer, now);
+                }
+            }
             ToWayland::Filling { stream, on } => {
                 if let Some(cast) = self.casts.get_mut(&stream) {
                     cast.filling = on;
                 }
             }
             ToWayland::Ended { stream } => {
+                self.clients.remove(&stream);
                 match self.casts.remove(&stream).map(|cast| cast.shows) {
                     Some(Shows::Window(app_id)) => {
                         let shown = self.casts.values().any(
@@ -1250,6 +1256,12 @@ impl Streams {
     }
 
     fn send(&mut self, request: ToPipewire) {
+        if self.clients.contains(&request.stream()) {
+            self.to_clients
+                .send(request)
+                .unwrap_or_else(|_| panic!("Wayland capture outlives the compositor's casts"));
+            return;
+        }
         let node = self.gpu.as_ref().map(|gpu| gpu.node.clone());
         let news = self.news.clone();
         self.to_pipewire
@@ -1564,9 +1576,9 @@ mod tests {
     use std::os::fd::{FromRawFd as _, OwnedFd};
     use std::sync::mpsc;
     use std::sync::Arc;
-    use std::time::Instant;
+    use std::time::{Duration, Instant};
 
-    use smithay::reexports::calloop::channel::channel;
+    use smithay::reexports::calloop::channel::{channel, Channel};
 
     use domicile_protocol::{PointerOverWindow, ShotWindow};
 
@@ -1578,12 +1590,14 @@ mod tests {
     use crate::casting::cursor::{CursorMode, Plan, Sprite};
     use crate::casting::gpu::Snapshot;
     use crate::casting::lifecycle::Ended;
+    use crate::casting::memory::Mapping;
+    use crate::casting::negotiation::Pixel;
     use crate::casting::pacing::Rect;
-    use crate::casting::producer::ToWayland;
+    use crate::casting::producer::{BufferId, StreamFormat, Target, ToPipewire, ToWayland};
     use crate::casting::region;
     use crate::casting::region::Screen;
     use crate::casting::shots::Desk;
-    use crate::casting::{Candidate, Region, Request, Source, StreamId};
+    use crate::casting::{Candidate, Consumer, Region, Request, Source, StreamId};
     use crate::engine::{CaptureId, CapturedFrame, CapturedPixels, SharedFd};
 
     /// An engine that numbers captures by display, captures browser windows
@@ -1668,7 +1682,7 @@ mod tests {
     }
 
     fn streams() -> Streams {
-        let mut streams = Streams::new(channel().0, None);
+        let mut streams = Streams::new(channel().0, channel().0, None);
         streams.screens(screens(), None);
         streams
     }
@@ -1908,18 +1922,15 @@ mod tests {
     }
 
     #[test]
-    fn a_shot_of_one_monitor_draws_from_its_capture_alone_at_its_density() {
+    fn a_shot_of_part_of_the_desk_draws_from_its_monitors_capture_alone_at_its_density() {
         let (mut streams, mut engine) = (streams(), Engine::default());
         let (developed, heard) = mpsc::channel();
 
-        streams.request(
-            Request::ShootMonitor {
-                stream: StreamId(9),
-                name: "drm-2".into(),
-                region: None,
-                developed: Box::new(move |desk| developed.send(desk).expect("heard")),
-            },
-            Vec::new,
+        streams.shoot(
+            StreamId(9),
+            Ok((1, 0, 1, 1)),
+            Vec::new(),
+            Box::new(move |desk| developed.send(desk).expect("heard")),
             None,
             Some(&mut engine),
         );
@@ -1942,7 +1953,7 @@ mod tests {
 
     #[test]
     fn a_rotated_monitors_shot_is_captured_upright() {
-        let mut streams = Streams::new(channel().0, None);
+        let mut streams = Streams::new(channel().0, channel().0, None);
         streams.screens(
             vec![Screen {
                 name: "drm-1".into(),
@@ -1955,14 +1966,11 @@ mod tests {
         let mut engine = Engine::default();
         let (developed, heard) = mpsc::channel();
 
-        streams.request(
-            Request::ShootMonitor {
-                stream: StreamId(9),
-                name: "drm-1".into(),
-                region: None,
-                developed: Box::new(move |desk| developed.send(desk).expect("heard")),
-            },
-            Vec::new,
+        streams.shoot(
+            StreamId(9),
+            Ok((0, 0, 1, 2)),
+            Vec::new(),
+            Box::new(move |desk| developed.send(desk).expect("heard")),
             None,
             Some(&mut engine),
         );
@@ -1985,25 +1993,20 @@ mod tests {
     }
 
     #[test]
-    fn a_monitor_shot_is_the_monitors_size_at_its_density_clipped_to_it() {
+    fn a_region_of_a_monitor_is_found_on_the_desktop_clipped_to_it() {
         let streams = streams();
-        let region = |x, y, width, height| {
-            Some(Region {
-                position: (x, y),
-                size: (width, height),
-            })
+        let region = |x, y, width, height| Region {
+            position: (x, y),
+            size: (width, height),
         };
 
-        assert_eq!(streams.monitor_shot_size("drm-2", None), Ok((2, 2)));
         assert_eq!(
-            streams.monitor_shot_size("drm-1", region(0, 0, 5, 5)),
-            Ok((1, 1)),
+            streams.monitor_region("drm-2", region(0, 0, 5, 5)),
+            Ok(region(1, 0, 1, 1)),
             "a region past the monitor's edge is cut at it"
         );
-        assert!(streams
-            .monitor_shot_size("drm-1", region(1, 0, 1, 1))
-            .is_err());
-        assert!(streams.monitor_shot_size("drm-3", None).is_err());
+        assert!(streams.monitor_region("drm-1", region(1, 0, 1, 1)).is_err());
+        assert!(streams.monitor_region("drm-3", region(0, 0, 1, 1)).is_err());
     }
 
     #[test]
@@ -2302,6 +2305,125 @@ mod tests {
             streams.windows(),
             HashSet::from(["term".to_string(), "editor".to_string()])
         );
+    }
+
+    /// A Wayland capture client's cast is offered to the client, and one that
+    /// cannot start ends there too. Neither reaches PipeWire.
+    #[test]
+    fn a_clients_cast_is_heard_by_the_client() {
+        let (to_clients, heard) = channel();
+        let mut streams = Streams::new(channel().0, to_clients, None);
+        streams.screens(screens(), None);
+        let mut engine = Engine::default();
+        let start = |stream, name: &str| Request::Start {
+            stream,
+            source: Source::Monitor(name.into()),
+            part: None,
+            cursor: CursorMode::Hidden,
+            consumer: Consumer::Client,
+            listener: Box::new(|_| panic!("a client's cast has no listener")),
+        };
+
+        streams.request(
+            start(StreamId(1), "drm-2"),
+            Vec::new,
+            None,
+            Some(&mut engine),
+        );
+        streams.request(
+            start(StreamId(2), "gone"),
+            Vec::new,
+            None,
+            Some(&mut engine),
+        );
+
+        assert!(matches!(
+            heard.try_recv(),
+            Ok(ToPipewire::Start {
+                stream: StreamId(1),
+                size: (2, 2),
+                ..
+            })
+        ));
+        assert!(matches!(
+            heard.try_recv(),
+            Ok(ToPipewire::End {
+                stream: StreamId(2),
+                ..
+            })
+        ));
+    }
+
+    /// A client's lent buffer is filled once there is damage it has not seen,
+    /// or at once when it wants a frame regardless.
+    #[test]
+    fn a_client_gets_a_frame_on_damage_or_when_it_wants_one() {
+        let (to_clients, heard) = channel();
+        let mut streams = Streams::new(channel().0, to_clients, None);
+        streams.screens(screens(), None);
+        let mut engine = Engine::default();
+        let stream = StreamId(1);
+        streams.request(
+            Request::Start {
+                stream,
+                source: Source::Monitor("drm-1".into()),
+                part: None,
+                cursor: CursorMode::Hidden,
+                consumer: Consumer::Client,
+                listener: Box::new(|_| {}),
+            },
+            Vec::new,
+            None,
+            Some(&mut engine),
+        );
+        heard.try_recv().expect("started");
+        let mapping = Mapping::new(c"test", 4).expect("a memfd");
+        let now = Instant::now();
+        for news in [
+            ToWayland::Format {
+                stream,
+                format: StreamFormat {
+                    pixel: Pixel::Bgrx,
+                    size: (1, 1),
+                    modifier: None,
+                },
+                framerate: 1000,
+            },
+            ToWayland::Added {
+                stream,
+                buffer: BufferId(0),
+                target: Target::Shm(Arc::new(mapping)),
+            },
+            ToWayland::Filling { stream, on: true },
+        ] {
+            streams.news(news, None, Some(&mut engine), now);
+        }
+        streams.captured(1, 1, Ok(frame((1, 1), 9)), None, &mut engine, now);
+        let lent = ToWayland::Lent {
+            stream,
+            buffer: BufferId(0),
+        };
+        // Skips `Starved`, which a frame with no buffer lent says.
+        let filled = |heard: &Channel<ToPipewire>| loop {
+            match heard.try_recv() {
+                Ok(ToPipewire::Filled { damage, .. }) => break Some(damage),
+                Ok(_) => {}
+                Err(_) => break None,
+            }
+        };
+
+        streams.news(lent, None, Some(&mut engine), now);
+        assert!(filled(&heard).is_some(), "the owed frame");
+
+        let later = now + Duration::from_secs(1);
+        let lent = ToWayland::Lent {
+            stream,
+            buffer: BufferId(0),
+        };
+        streams.news(lent, None, Some(&mut engine), later);
+        assert_eq!(filled(&heard), None, "nothing new to show");
+        streams.news(ToWayland::Wanted { stream }, None, Some(&mut engine), later);
+        assert_eq!(filled(&heard), Some(vec![(0, 0, 1, 1)]), "wanted");
     }
 
     /// A stream of `shows` that has not negotiated.

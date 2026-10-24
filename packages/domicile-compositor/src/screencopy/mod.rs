@@ -2,20 +2,24 @@
 //! `ext-image-capture-source-v1` output sources, and `wlr-screencopy` (see
 //! [`wlr`]) for tools that predate it.
 //!
-//! Each frame is one shot of a monitor from the display captures the
-//! Screenshot portal uses ([`crate::casting::Casting::shoot_monitor`]), copied
-//! into the client's shm buffer. No dmabufs, no toplevel sources and no
-//! cursor: a cursor session's capture session stops at once. See
-//! `docs/PORTALS.md`.
+//! Each session is a cast of its monitor (see [`crate::casting`]), which
+//! fills the client's shm or dmabuf buffers as it fills PipeWire's. A frame is
+//! ready once the monitor has damage the client has not seen (see
+//! [`taking`]). No toplevel sources and no cursor sessions: a cursor
+//! session's capture session stops at once. See `docs/PORTALS.md`.
 
 mod buffer;
 mod frame;
+mod taking;
 mod wlr;
 
-use std::sync::Mutex;
+use std::collections::HashMap;
+use std::os::fd::OwnedFd;
+use std::sync::{Arc, Mutex};
 
-use domicile_host::screenshot::Shot;
 use smithay::output::Output;
+use smithay::reexports::calloop::generic::Generic;
+use smithay::reexports::calloop::{Interest, Mode, PostAction};
 use smithay::reexports::wayland_protocols::ext::image_capture_source::v1::server::{
     ext_image_capture_source_v1::{self, ExtImageCaptureSourceV1},
     ext_output_image_capture_source_manager_v1::{self, ExtOutputImageCaptureSourceManagerV1},
@@ -23,7 +27,7 @@ use smithay::reexports::wayland_protocols::ext::image_capture_source::v1::server
 use smithay::reexports::wayland_protocols::ext::image_copy_capture::v1::server::{
     ext_image_copy_capture_cursor_session_v1::{self, ExtImageCopyCaptureCursorSessionV1},
     ext_image_copy_capture_frame_v1::{self, ExtImageCopyCaptureFrameV1, FailureReason},
-    ext_image_copy_capture_manager_v1::{self, ExtImageCopyCaptureManagerV1},
+    ext_image_copy_capture_manager_v1::{self, ExtImageCopyCaptureManagerV1, Options},
     ext_image_copy_capture_session_v1::{self, ExtImageCopyCaptureSessionV1},
 };
 use smithay::reexports::wayland_server::protocol::{wl_buffer::WlBuffer, wl_output};
@@ -31,12 +35,18 @@ use smithay::reexports::wayland_server::{
     backend::ClientId, Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource,
     WEnum,
 };
+use smithay::wayland::dmabuf::get_dmabuf;
 use smithay::wayland::shm::with_buffer_contents_mut;
 use tracing::debug;
 
-use crate::casting::Desk;
-use crate::DomicileCompositor;
+use crate::casting::memory::Mapping;
+use crate::casting::{
+    fourcc, BufferId, CursorMode, Rect, Source as CastSource, StreamId, Target, ToPipewire,
+    ToWayland, MAX_FRAMERATE,
+};
+use crate::{CalloopData, DomicileCompositor};
 use frame::{Frame, Misuse};
+use taking::{Constraints, Layout, Lending, Taking};
 
 /// Advertises the ext capture globals and `wlr-screencopy`.
 pub fn advertise(display: &DisplayHandle) {
@@ -45,23 +55,63 @@ pub fn advertise(display: &DisplayHandle) {
     wlr::advertise(display);
 }
 
+/// Every cast a Wayland capture client takes, on the Wayland thread.
+#[derive(Default)]
+pub struct Copies {
+    casts: HashMap<StreamId, Copy>,
+    /// The cast a `wlr-screencopy` client's frames of one source share.
+    wlr: HashMap<wlr::Key, StreamId>,
+}
+
+/// One client's cast.
+struct Copy {
+    taking: Taking<WlBuffer>,
+    taker: Taker,
+    /// The frame whose buffer the cast holds.
+    capturing: Option<Taken>,
+    /// Each shm buffer's copy in the compositor, which the cast fills and a
+    /// ready frame is copied from.
+    staged: HashMap<BufferId, Arc<Mapping>>,
+}
+
+/// Who takes a cast's frames.
+enum Taker {
+    Ext(ExtImageCopyCaptureSessionV1),
+    Wlr(wlr::Shared),
+    /// The client let go, and the cast is ending.
+    Gone,
+}
+
+/// A frame being captured.
+#[derive(Clone)]
+enum Taken {
+    Ext(ExtImageCopyCaptureFrameV1),
+    /// `damage` for `copy_with_damage`.
+    Wlr {
+        frame: wlr::Frame,
+        damage: bool,
+    },
+}
+
+/// Why a frame's buffer was not lent to its cast.
+enum Unlent {
+    /// The cast has ended.
+    Ended,
+    /// The buffer is not one the client was told it may use.
+    Unfit,
+    Failed(String),
+}
+
 /// A capture source: the `wl_output` name of the monitor it shows. `None`
 /// for an output that was already gone.
 pub struct Source(Option<String>);
 
-/// A capture session of one monitor.
+/// A capture session: the cast of its monitor. `None` for a session that
+/// shows nothing, which stops at once.
 pub struct Session {
-    /// The monitor's `wl_output` name. `None` for a session that shows
-    /// nothing, which stops at once.
-    monitor: Option<String>,
-    state: Mutex<SessionState>,
-}
-
-struct SessionState {
-    /// The buffer size last sent.
-    size: (u32, u32),
+    stream: Option<StreamId>,
     /// Whether a frame of this session is alive. The protocol allows one.
-    framing: bool,
+    framing: Mutex<bool>,
 }
 
 /// A frame of a session.
@@ -76,129 +126,310 @@ fn monitor_of(output: &wl_output::WlOutput) -> Option<String> {
 }
 
 impl DomicileCompositor {
-    /// Starts a session of `monitor`: sends its buffer constraints, or stops
-    /// it if there is nothing to capture.
-    fn open_session(
-        &self,
-        new: New<ExtImageCopyCaptureSessionV1>,
-        monitor: Option<String>,
-        data_init: &mut DataInit<'_, Self>,
-    ) {
-        let size = monitor
-            .as_deref()
-            .map(|name| self.casting.monitor_shot_size(name, None));
-        let session = data_init.init(
-            new,
-            Session {
-                monitor,
-                state: Mutex::new(SessionState {
-                    size: (0, 0),
-                    framing: false,
-                }),
-            },
-        );
-        match size {
-            Some(Ok(size)) => constrain(&session, size),
-            Some(Err(why)) => {
-                debug!(%why, "a capture session of a monitor with nothing to capture");
-                session.stopped();
+    /// A request for a client's cast, which this side answers in PipeWire's
+    /// place.
+    pub fn screen_copy_requested(&mut self, request: ToPipewire) {
+        let stream = request.stream();
+        match request {
+            ToPipewire::Start { offered, size, .. } => {
+                let device = self.render_device();
+                if let Some(copy) = self.copies.casts.get_mut(&stream) {
+                    let constraints = copy.taking.started(size, &offered);
+                    copy.taker.constrain(&constraints, device);
+                }
+                self.cast_news(ToWayland::Filling { stream, on: true });
             }
-            None => session.stopped(),
+            ToPipewire::Resize { size, .. } => {
+                let device = self.render_device();
+                let Some(copy) = self.copies.casts.get_mut(&stream) else {
+                    return;
+                };
+                let (constraints, failed) = copy.taking.resized(size);
+                copy.taker.constrain(&constraints, device);
+                if failed {
+                    if let Some(taken) = copy.capturing.take() {
+                        taken.failed(FailureReason::BufferConstraints);
+                    }
+                }
+            }
+            ToPipewire::Filled {
+                buffer,
+                damage,
+                fence,
+                ..
+            } => self.filled(stream, buffer, damage, fence),
+            ToPipewire::Starved { .. } => {}
+            ToPipewire::End { why, .. } => {
+                if let Some(copy) = self.copies.casts.remove(&stream) {
+                    debug!(?stream, ?why, "a Wayland capture client's cast ended");
+                    if let Some(taken) = copy.capturing {
+                        taken.failed(FailureReason::Stopped);
+                    }
+                    match copy.taker {
+                        Taker::Ext(session) => session.stopped(),
+                        Taker::Wlr(shared) => {
+                            self.copies.wlr.remove(&shared.key);
+                            shared.failed();
+                        }
+                        Taker::Gone => {}
+                    }
+                }
+                self.cast_news(ToWayland::Ended { stream });
+            }
         }
     }
 
-    /// Copies a shot of `frame`'s monitor into `buffer`, or fails the frame.
-    fn capture(&self, frame: &ExtImageCopyCaptureFrameV1, data: &CaptureFrame, buffer: WlBuffer) {
-        let session = data
-            .session
-            .data::<Session>()
-            .expect("a frame's session is a session");
-        let Some(monitor) = session.monitor.clone() else {
-            frame.failed(FailureReason::Stopped);
+    /// The node casts allocate dmabufs on, for clients to allocate on too.
+    fn render_device(&self) -> Option<u64> {
+        self.gpu.as_ref()?.importer.main_device()
+    }
+
+    /// Keeps `stream`, a client's cast, which `taker` takes.
+    fn taken_by(&mut self, stream: StreamId, taker: Taker) {
+        let checks_modifiers = matches!(taker, Taker::Ext(_));
+        self.copies.casts.insert(
+            stream,
+            Copy {
+                taking: Taking::new(checks_modifiers),
+                taker,
+                capturing: None,
+                staged: HashMap::new(),
+            },
+        );
+    }
+
+    /// The client let go of `stream`'s cast.
+    fn let_go(&mut self, stream: StreamId) {
+        if let Some(copy) = self.copies.casts.get_mut(&stream) {
+            copy.taker = Taker::Gone;
+            copy.capturing = None;
+            self.screen_copying.stop(stream);
+        }
+    }
+
+    /// Lends `stream`'s cast `buffer` for `taken`.
+    fn lend(&mut self, stream: StreamId, taken: Taken, buffer: WlBuffer) -> Result<(), Unlent> {
+        let copy = self.copies.casts.get_mut(&stream).ok_or(Unlent::Ended)?;
+        let layout = buffer::layout_of(&buffer).ok_or(Unlent::Unfit)?;
+        let lending = copy
+            .taking
+            .capture(buffer.clone(), layout)
+            .ok_or(Unlent::Unfit)?;
+        let mut news = Vec::new();
+        for lent in lending {
+            match lent {
+                Lending::Format(format) => {
+                    copy.staged.clear();
+                    news.push(ToWayland::Format {
+                        stream,
+                        format,
+                        framerate: MAX_FRAMERATE,
+                    });
+                }
+                Lending::Added(id) => {
+                    let target = match layout {
+                        Layout::Shm { size, .. } => {
+                            let length = (buffer::stride(size.0) * size.1) as usize;
+                            let mapping = Mapping::new(c"domicile-screencopy", length)
+                                .map(Arc::new)
+                                .map_err(|why| Unlent::Failed(why.to_string()))?;
+                            copy.staged.insert(id, mapping.clone());
+                            Target::Shm(mapping)
+                        }
+                        Layout::Dmabuf { .. } => Target::Dmabuf(
+                            get_dmabuf(&buffer)
+                                .expect("a dmabuf layout is a dmabuf's")
+                                .clone(),
+                        ),
+                    };
+                    news.push(ToWayland::Added {
+                        stream,
+                        buffer: id,
+                        target,
+                    });
+                }
+                Lending::Lent(id) => news.push(ToWayland::Lent { stream, buffer: id }),
+            }
+        }
+        copy.capturing = Some(taken);
+        for news in news {
+            self.cast_news(news);
+        }
+        Ok(())
+    }
+
+    /// `taken` is gone before its frame was filled. The cast gives its
+    /// buffer back.
+    fn abandoned(&mut self, stream: StreamId, taken: &Taken) {
+        let Some(copy) = self.copies.casts.get_mut(&stream) else {
             return;
         };
-        let size = match self.casting.monitor_shot_size(&monitor, None) {
-            Ok(size) => size,
-            Err(why) => {
-                debug!(%why, %monitor, "a captured monitor is gone");
-                data.session.stopped();
-                frame.failed(FailureReason::Stopped);
+        if copy.capturing.as_ref() != Some(taken) {
+            return;
+        }
+        copy.capturing = None;
+        if let Some(buffer) = copy.taking.abandoned() {
+            copy.staged.remove(&buffer);
+            self.cast_news(ToWayland::Removed { stream, buffer });
+        }
+    }
+
+    /// The cast filled `buffer`: once `fence` signals, the frame is ready.
+    fn filled(
+        &mut self,
+        stream: StreamId,
+        buffer: BufferId,
+        damage: Vec<Rect>,
+        fence: Option<OwnedFd>,
+    ) {
+        let Some(copy) = self.copies.casts.get_mut(&stream) else {
+            return;
+        };
+        let Some(client_buffer) = copy.taking.filled(buffer) else {
+            return;
+        };
+        let staged = copy.staged.get(&buffer).cloned();
+        let Some(taken) = copy.capturing.take() else {
+            return;
+        };
+        let ready = Ready {
+            taken,
+            buffer: client_buffer,
+            staged,
+            damage,
+        };
+        match fence {
+            None => self.ready(stream, ready),
+            Some(fence) => {
+                let mut ready = Some(ready);
+                self.loop_handle
+                    .insert_source(
+                        Generic::new(fence, Interest::READ, Mode::OneShot),
+                        move |_, _, data: &mut CalloopData| {
+                            if let Some(ready) = ready.take() {
+                                data.state.ready(stream, ready);
+                            }
+                            Ok(PostAction::Remove)
+                        },
+                    )
+                    .expect("the compositor's loop takes a fence");
+            }
+        }
+    }
+
+    /// Hands a filled frame to its client.
+    fn ready(&mut self, stream: StreamId, ready: Ready) {
+        let Ready {
+            taken,
+            buffer,
+            staged,
+            damage,
+        } = ready;
+        if let Some(staged) = staged {
+            if let Err(why) = unstaged(&staged, &buffer) {
+                debug!(%why, "a captured frame could not be copied");
+                taken.failed(FailureReason::Unknown);
                 return;
             }
-        };
-        if session.state.lock().unwrap().size != size {
-            constrain(&data.session, size);
-            frame.failed(FailureReason::BufferConstraints);
-            return;
         }
-        if !fits(&buffer, size) {
-            frame.failed(FailureReason::BufferConstraints);
-            return;
+        let (seconds_high, seconds_low, nanoseconds) = now();
+        match taken {
+            Taken::Ext(frame) => {
+                frame.transform(wl_output::Transform::Normal);
+                for (x, y, width, height) in damage {
+                    frame.damage(x, y, width, height);
+                }
+                frame.presentation_time(seconds_high, seconds_low, nanoseconds);
+                frame.ready();
+            }
+            Taken::Wlr {
+                frame,
+                damage: with_damage,
+            } => {
+                frame.ready(
+                    with_damage.then_some(damage.as_slice()),
+                    (seconds_high, seconds_low, nanoseconds),
+                );
+                self.copied_for_wlr(stream);
+            }
         }
-        let frame = frame.clone();
-        self.screen_copying.shoot_monitor(
-            monitor,
-            None,
-            Box::new(move |desk| match copied(&buffer, desk) {
-                Ok((width, height)) => {
-                    let (seconds_high, seconds_low, nanoseconds) = now();
-                    frame.transform(wl_output::Transform::Normal);
-                    frame.damage(0, 0, width as i32, height as i32);
-                    frame.presentation_time(seconds_high, seconds_low, nanoseconds);
-                    frame.ready();
-                }
-                Err(why) => {
-                    debug!(%why, "a capture frame could not be copied");
-                    frame.failed(FailureReason::Unknown);
-                }
-            }),
-        );
     }
 }
 
-/// Sends `session` a buffer size and the formats it takes.
-fn constrain(session: &ExtImageCopyCaptureSessionV1, size: (u32, u32)) {
-    session
-        .data::<Session>()
-        .expect("a session")
-        .state
-        .lock()
-        .unwrap()
-        .size = size;
-    session.buffer_size(size.0, size.1);
-    for format in buffer::FORMATS {
-        session.shm_format(format);
+/// A filled frame on its way to its client.
+struct Ready {
+    taken: Taken,
+    buffer: WlBuffer,
+    /// The compositor's copy of an shm buffer, which the cast filled.
+    staged: Option<Arc<Mapping>>,
+    damage: Vec<Rect>,
+}
+
+impl Taker {
+    /// Tells the client what it may capture into.
+    fn constrain(&mut self, constraints: &Constraints, device: Option<u64>) {
+        match self {
+            Taker::Ext(session) => constrain(session, constraints, device),
+            Taker::Wlr(shared) => shared.describe(constraints),
+            Taker::Gone => {}
+        }
+    }
+}
+
+/// The same frame, whatever it asked for.
+impl PartialEq for Taken {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Taken::Ext(one), Taken::Ext(other)) => one == other,
+            (Taken::Wlr { frame: one, .. }, Taken::Wlr { frame: other, .. }) => one == other,
+            _ => false,
+        }
+    }
+}
+
+impl Taken {
+    fn failed(&self, reason: FailureReason) {
+        match self {
+            Taken::Ext(frame) => frame.failed(reason),
+            Taken::Wlr { frame, .. } => frame.failed(),
+        }
+    }
+}
+
+/// Sends `session` what it may capture into.
+fn constrain(
+    session: &ExtImageCopyCaptureSessionV1,
+    constraints: &Constraints,
+    device: Option<u64>,
+) {
+    let (width, height) = constraints.size;
+    session.buffer_size(width, height);
+    for &pixel in &constraints.shm {
+        session.shm_format(buffer::shm_format(pixel));
+    }
+    if let Some(device) = device.filter(|_| !constraints.dmabufs.is_empty()) {
+        session.dmabuf_device(device.to_ne_bytes().to_vec());
+        for (pixel, modifiers) in &constraints.dmabufs {
+            let modifiers = modifiers.iter().flat_map(|modifier| modifier.to_ne_bytes());
+            session.dmabuf_format(fourcc(*pixel), modifiers.collect());
+        }
     }
     session.done();
 }
 
-/// Whether `buffer` is a shm buffer that takes a shot `size` big.
-fn fits(buffer: &WlBuffer, size: (u32, u32)) -> bool {
-    // A dmabuf, or shm the compositor cannot write, takes no shot. A bad map
-    // has already disconnected the client.
-    matches!(
-        with_buffer_contents_mut(buffer, |_, _, data| buffer::fits(&data, size)),
-        Ok(true)
-    )
-}
-
-/// Copies the shot in `desk` into `buffer`, and returns its size.
-fn copied(buffer: &WlBuffer, desk: Result<Desk, String>) -> Result<(u32, u32), String> {
-    let Shot {
-        width,
-        height,
-        bgra,
-    } = desk?.shot;
+/// Copies the frame in `staged` into the client's shm `buffer`.
+fn unstaged(staged: &Mapping, buffer: &WlBuffer) -> Result<(), String> {
     with_buffer_contents_mut(buffer, |pointer, length, data| {
-        if !buffer::fits(&data, (width, height)) {
-            return Err("the monitor changed size during the capture".to_string());
+        let offset = data.offset as usize;
+        if offset + staged.len() > length {
+            return Err("the buffer's pool shrank".to_string());
         }
         // SAFETY: Smithay maps the pool `length` bytes long at `pointer`
         // while this closure runs, and nothing else touches it meanwhile.
         let pool = unsafe { std::slice::from_raw_parts_mut(pointer, length) };
-        let offset = data.offset as usize;
-        pool[offset..offset + bgra.len()].copy_from_slice(&bgra);
-        Ok((width, height))
+        // SAFETY: the cast handed the buffer back, so nothing writes it.
+        pool[offset..offset + staged.len()].copy_from_slice(unsafe { staged.bytes() });
+        Ok(())
     })
     .map_err(|why| why.to_string())?
 }
@@ -299,15 +530,36 @@ impl Dispatch<ExtImageCopyCaptureManagerV1, ()> for DomicileCompositor {
                 source,
                 options,
             } => {
-                if let WEnum::Unknown(options) = options {
-                    manager.post_error(
-                        ext_image_copy_capture_manager_v1::Error::InvalidOption,
-                        format!("unknown capture options {options:#x}"),
-                    );
+                let options = match options {
+                    WEnum::Value(options) => options,
+                    WEnum::Unknown(options) => {
+                        manager.post_error(
+                            ext_image_copy_capture_manager_v1::Error::InvalidOption,
+                            format!("unknown capture options {options:#x}"),
+                        );
+                        return;
+                    }
+                };
+                let Some(monitor) = source.data::<Source>().expect("a source").0.clone() else {
+                    stopped_session(session, data_init);
                     return;
-                }
-                let monitor = source.data::<Source>().expect("a source").0.clone();
-                state.open_session(session, monitor, data_init);
+                };
+                let cursor = if options.contains(Options::PaintCursors) {
+                    CursorMode::Embedded
+                } else {
+                    CursorMode::Hidden
+                };
+                let stream = state
+                    .screen_copying
+                    .start_for_client(CastSource::Monitor(monitor), cursor);
+                let session = data_init.init(
+                    session,
+                    Session {
+                        stream: Some(stream),
+                        framing: Mutex::new(false),
+                    },
+                );
+                state.taken_by(stream, Taker::Ext(session));
             }
             ext_image_copy_capture_manager_v1::Request::CreatePointerCursorSession {
                 session,
@@ -321,9 +573,25 @@ impl Dispatch<ExtImageCopyCaptureManagerV1, ()> for DomicileCompositor {
     }
 }
 
+/// Makes `new` a session that shows nothing, and stops it.
+fn stopped_session(
+    new: New<ExtImageCopyCaptureSessionV1>,
+    data_init: &mut DataInit<'_, DomicileCompositor>,
+) {
+    data_init
+        .init(
+            new,
+            Session {
+                stream: None,
+                framing: Mutex::new(false),
+            },
+        )
+        .stopped();
+}
+
 impl Dispatch<ExtImageCopyCaptureCursorSessionV1, ()> for DomicileCompositor {
     fn request(
-        state: &mut Self,
+        _: &mut Self,
         _: &Client,
         _: &ExtImageCopyCaptureCursorSessionV1,
         request: ext_image_copy_capture_cursor_session_v1::Request,
@@ -334,7 +602,7 @@ impl Dispatch<ExtImageCopyCaptureCursorSessionV1, ()> for DomicileCompositor {
         if let ext_image_copy_capture_cursor_session_v1::Request::GetCaptureSession { session } =
             request
         {
-            state.open_session(session, None, data_init);
+            stopped_session(session, data_init);
         }
     }
 }
@@ -350,15 +618,15 @@ impl Dispatch<ExtImageCopyCaptureSessionV1, Session> for DomicileCompositor {
         data_init: &mut DataInit<'_, Self>,
     ) {
         if let ext_image_copy_capture_session_v1::Request::CreateFrame { frame } = request {
-            let mut state = data.state.lock().unwrap();
-            if state.framing {
+            let mut framing = data.framing.lock().unwrap();
+            if *framing {
                 session.post_error(
                     ext_image_copy_capture_session_v1::Error::DuplicateFrame,
                     "a session has one frame at a time",
                 );
                 return;
             }
-            state.framing = true;
+            *framing = true;
             data_init.init(
                 frame,
                 CaptureFrame {
@@ -366,6 +634,12 @@ impl Dispatch<ExtImageCopyCaptureSessionV1, Session> for DomicileCompositor {
                     frame: Mutex::new(Frame::new()),
                 },
             );
+        }
+    }
+
+    fn destroyed(state: &mut Self, _: ClientId, _: &ExtImageCopyCaptureSessionV1, data: &Session) {
+        if let Some(stream) = data.stream {
+            state.let_go(stream);
         }
     }
 }
@@ -397,7 +671,21 @@ impl Dispatch<ExtImageCopyCaptureFrameV1, CaptureFrame> for DomicileCompositor {
         };
         drop(held);
         match done {
-            Ok(Some(buffer)) => state.capture(frame, data, buffer),
+            Ok(Some(buffer)) => {
+                let Some(stream) = data.session.data::<Session>().expect("a session").stream else {
+                    frame.failed(FailureReason::Stopped);
+                    return;
+                };
+                match state.lend(stream, Taken::Ext(frame.clone()), buffer) {
+                    Ok(()) => {}
+                    Err(Unlent::Ended) => frame.failed(FailureReason::Stopped),
+                    Err(Unlent::Unfit) => frame.failed(FailureReason::BufferConstraints),
+                    Err(Unlent::Failed(why)) => {
+                        debug!(%why, "a capture frame could not be lent");
+                        frame.failed(FailureReason::Unknown);
+                    }
+                }
+            }
             Ok(None) => {}
             Err(misuse) => {
                 let (error, message) = match misuse {
@@ -419,13 +707,19 @@ impl Dispatch<ExtImageCopyCaptureFrameV1, CaptureFrame> for DomicileCompositor {
         }
     }
 
-    fn destroyed(_: &mut Self, _: ClientId, _: &ExtImageCopyCaptureFrameV1, data: &CaptureFrame) {
-        data.session
+    fn destroyed(
+        state: &mut Self,
+        _: ClientId,
+        frame: &ExtImageCopyCaptureFrameV1,
+        data: &CaptureFrame,
+    ) {
+        let session = data
+            .session
             .data::<Session>()
-            .expect("a frame's session is a session")
-            .state
-            .lock()
-            .unwrap()
-            .framing = false;
+            .expect("a frame's session is a session");
+        *session.framing.lock().unwrap() = false;
+        if let Some(stream) = session.stream {
+            state.abandoned(stream, &Taken::Ext(frame.clone()));
+        }
     }
 }
