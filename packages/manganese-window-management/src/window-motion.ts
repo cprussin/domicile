@@ -119,6 +119,34 @@ export const isSwitching = (motion: WindowMotion): boolean => {
   }
 };
 
+/** Whether the scratchpad is sliding the window down onto or up off its screen. */
+export const isScratchpadSlide = (motion: WindowMotion): boolean => {
+  switch (motion) {
+    case "dropping":
+    case "stowing": {
+      return true;
+    }
+    case "arriving-from-end":
+    case "arriving-from-start":
+    case "closing":
+    case "closing-tab":
+    case "concealing":
+    case "leaving-to-end":
+    case "leaving-to-start":
+    case "opening":
+    case "opening-tab":
+    case "restacking":
+    case "restacking-again":
+    case "resting":
+    case "revealing":
+    case "sending":
+    case "sending-tab":
+    case "uncovering": {
+      return false;
+    }
+  }
+};
+
 /**
  * The motion of a window's title bar.
  *

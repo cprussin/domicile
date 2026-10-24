@@ -64,7 +64,7 @@ export const WindowFrame = ({
       screen === undefined
         ? undefined
         : {
-            ...slidAcross(screen, frame, rewound),
+            ...slidAcross(screen, frame, motion, rewound),
             ...clippedTo(screen, motion),
           }
     }

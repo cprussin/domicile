@@ -1175,7 +1175,7 @@ const Sliding = ({
       on === undefined
         ? undefined
         : {
-            ...slidAcross(on.geometry.screen, frame, rewound),
+            ...slidAcross(on.geometry.screen, frame, motion, rewound),
             ...clippedTo(on.geometry.screen, motion),
           }
     }

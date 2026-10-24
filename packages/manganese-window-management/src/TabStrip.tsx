@@ -19,6 +19,7 @@ import type { WindowMotion } from "./window-motion";
 import { barMotion, isLeaving, isMoving } from "./window-motion";
 import {
   clickThroughStyles,
+  heldStyles,
   movingStyles,
   originOf,
   placedAt,
@@ -132,6 +133,7 @@ export const TabStrip = ({
         movingStyles({ motion: playing }),
         leaving && clickThroughStyles,
         settlingStyles({ lowered }),
+        dragging && heldStyles,
       )}
       data-motion={motion}
       data-strip

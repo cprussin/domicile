@@ -24,6 +24,7 @@ import {
   bottomCornerStyles,
   clickThroughStyles,
   edgeStyles,
+  heldStyles,
   movingStyles,
   originOf,
   placedAt,
@@ -297,6 +298,7 @@ export const AppWindow = ({
         // The client's box takes its new size at once; `useSettling` eases
         // it. Colors still ease; see `settlingStyles`.
         settlingStyles({ lowered }),
+        dragging && heldStyles,
       )}
       // Exposes the motion on the element for tests and debugging.
       data-motion={motion}

@@ -9,6 +9,7 @@ import { useSettling } from "../useSettling";
 import type { WindowMotion } from "../window-motion";
 import { isMoving } from "../window-motion";
 import {
+  heldStyles,
   movingStyles,
   originOf,
   placedAt,
@@ -70,6 +71,7 @@ export const FloatShadow = ({
         shadowStyles({ hanging }),
         movingStyles({ motion }),
         settlingStyles({ lowered }),
+        dragging && heldStyles,
       )}
       data-shadow
       ref={element}

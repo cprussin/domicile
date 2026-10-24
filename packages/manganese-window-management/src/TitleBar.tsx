@@ -32,6 +32,7 @@ import {
   clickThroughStyles,
   collapsedAlong,
   edgeStyles,
+  heldStyles,
   movingStyles,
   originAt,
   originOf,
@@ -198,6 +199,7 @@ export const TitleBar = ({
         movingStyles({ motion }),
         isLeaving(motion) && clickThroughStyles,
         settlingStyles({ lowered }),
+        dragging && heldStyles,
         // The bar holds pointer capture during a drag, so its cursor shows.
         dragging && grabCursorStyles[GrabCursor.Grabbing],
       )}

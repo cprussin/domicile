@@ -7,7 +7,7 @@ import type { Point } from "./settle";
 import type { TabLayout } from "./tree/frames";
 import { Layout } from "./tree/node";
 import type { WindowMotion } from "./window-motion";
-import { isSwitching } from "./window-motion";
+import { isScratchpadSlide, isSwitching } from "./window-motion";
 
 /**
  * Styles shared by every window.
@@ -163,17 +163,19 @@ export const rewoundBy = (rewound: number): Record<`--${string}`, string> => ({
  * - `--workspace-width`: the screen width, so the two workspaces of a switch
  *   stay side by side.
  * - `--lift`: how far up `frame` must move to clear the screen's top edge, for
- *   the scratchpad's slides. None for a window not drawn.
+ *   the scratchpad's slides. Only while `motion` is one: a float being dragged
+ *   would change it every frame, and that repaints every part of the window.
  * - `--motion-delay`: see {@link rewoundBy}.
  */
 export const slidAcross = (
   screen: Rect,
   frame: Rect | undefined,
+  motion: WindowMotion,
   rewound: number,
 ): Record<`--${string}`, string> => ({
   ...rewoundBy(rewound),
   "--workspace-width": `${screen.width.toString()}px`,
-  ...(frame === undefined
+  ...(frame === undefined || !isScratchpadSlide(motion)
     ? {}
     : { "--lift": `${(frame.y + frame.height - screen.y).toString()}px` }),
 });
@@ -338,6 +340,16 @@ export const movingStyles = cva({
     },
   },
 });
+
+/**
+ * Puts a part of a window being dragged or resized on a layer of its own, so
+ * moving it moves the layer and repaints nothing.
+ *
+ * Without it, Chromium squashes the parts over an `<app>` into shared layers
+ * and repaints them, blurred shadows and glows included, on every pointer
+ * move. Only while held: each layer costs memory.
+ */
+export const heldStyles = css({ willChange: "transform" });
 
 /**
  * Transitions for what a part of a window changes in place. Its box moves

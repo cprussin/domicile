@@ -33,6 +33,28 @@ describe("FloatShadow", () => {
     expect(globalThis.getComputedStyle(shadow(container)).opacity).toBe("");
   });
 
+  // A blurred shadow moved within a shared layer repaints every frame.
+  it("draws on a layer of its own while its window is dragged", () => {
+    const willChange = (dragging: boolean) => {
+      const { container, unmount } = render(
+        <FloatShadow
+          depth={0}
+          dragging={dragging}
+          frame={{ height: 300, width: 400, x: 20, y: 52 }}
+          motion="resting"
+        />,
+      );
+      const style = globalThis.getComputedStyle(shadow(container)).willChange;
+      unmount();
+      return style;
+    };
+
+    expect([willChange(true), willChange(false)]).toStrictEqual([
+      "transform",
+      "",
+    ]);
+  });
+
   it("moves with its window, following it exactly while it is dragged", () => {
     const frame = { height: 300, width: 400, x: 20, y: 52 };
     const played = (dragging: boolean) => {
