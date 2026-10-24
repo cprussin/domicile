@@ -31,7 +31,7 @@ export type NetworkInterface = {
 
 /** An interface's addresses, from `ip`. */
 export type Addressing = {
-  /** Global addresses with their prefix length, e.g. `192.168.1.40/24`. */
+  /** Global addresses in use with their prefix length, e.g. `192.168.1.40/24`. */
   addresses: string[];
   /** The default route's gateway through it. */
   gateway: string | undefined;
@@ -91,7 +91,7 @@ export const watchAddresses = (
 ): (() => void) => poll(() => readAddresses(system), onAddresses, every);
 
 /**
- * Each interface's global addresses and default gateway, by name, from
+ * Each interface's global addresses in use and default gateway, by name, from
  * `ip -j`. `ip` must be on the compositor's `PATH`.
  */
 export const readAddresses = async (
@@ -107,7 +107,10 @@ export const readAddresses = async (
             ifname,
             {
               addresses: info
-                .filter(({ scope }) => scope === "global")
+                .filter(
+                  ({ deprecated, scope }) =>
+                    scope === "global" && deprecated !== true,
+                )
                 .map(({ local, prefixlen }) => `${local}/${prefixlen}`),
               gateway: defaults.find(({ dev }) => dev === ifname)?.gateway,
             },
@@ -269,6 +272,8 @@ const addressesSchema = z.array(
   z.object({
     addr_info: z.array(
       z.object({
+        // An IPv6 address past its preferred lifetime, kept only for open connections.
+        deprecated: z.boolean().optional(),
         local: z.string(),
         prefixlen: z.number(),
         scope: z.string(),

@@ -15,6 +15,9 @@ import { LockSimpleIcon } from "@phosphor-icons/react/dist/ssr/LockSimple";
 import { useEffect, useState } from "react";
 import { css } from "../styled-system/css";
 import { flex, hstack } from "../styled-system/patterns";
+import type { Addresses } from "./addressing";
+import { addressRowsOf } from "./addressing";
+import type { Value } from "./Details";
 import { Details } from "./Details";
 import { signalOf } from "./signal";
 import { WifiSignalIcon } from "./WifiSignalIcon";
@@ -23,6 +26,8 @@ import type { WifiActions } from "./wifi-actions";
 type Props = {
   /** `undefined` until the service answers. */
   wifi: Result<Option<Wifi>, SystemError> | undefined;
+  /** Each interface's addresses, from `ip`, which every backend's machine has. */
+  addresses: Addresses;
   /** Where requests go. */
   host: System;
   actions: WifiActions;
@@ -35,7 +40,7 @@ type Props = {
  * Scans when shown. A refusal shows where it was asked; the service's state
  * shows the rest.
  */
-export const WifiPanel = ({ actions, host, wifi }: Props) => {
+export const WifiPanel = ({ actions, addresses, host, wifi }: Props) => {
   if (wifi === undefined) {
     return <span className={noteStyles}>Reading Wi-Fi…</span>;
   } else {
@@ -45,7 +50,12 @@ export const WifiPanel = ({ actions, host, wifi }: Props) => {
         found.match({
           None: () => <span className={noteStyles}>No Wi-Fi device</span>,
           Some: (device) => (
-            <Controls actions={actions} host={host} wifi={device} />
+            <Controls
+              actions={actions}
+              addresses={addresses}
+              host={host}
+              wifi={device}
+            />
           ),
         }),
     });
@@ -54,11 +64,12 @@ export const WifiPanel = ({ actions, host, wifi }: Props) => {
 
 type ControlsProps = {
   wifi: Wifi;
+  addresses: Addresses;
   host: System;
   actions: WifiActions;
 };
 
-const Controls = ({ actions, host, wifi }: ControlsProps) => {
+const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
   const requests = useRequests();
   const [asking, setAsking] = useState<string | undefined>(undefined);
   const { backend, device, interface: name } = wifi;
@@ -109,6 +120,7 @@ const Controls = ({ actions, host, wifi }: ControlsProps) => {
           <Failure error={requests.failed("scan")} />
           {wifi.connection !== undefined && (
             <Connection
+              addresses={addresses}
               connection={wifi.connection}
               failed={requests.failed("disconnect")}
               onDisconnect={() => {
@@ -173,6 +185,7 @@ const ScanOnShow = ({
 
 type ConnectionProps = {
   wifi: Wifi;
+  addresses: Addresses;
   connection: WifiConnection;
   pending: boolean;
   failed: SystemError | undefined;
@@ -180,6 +193,7 @@ type ConnectionProps = {
 };
 
 const Connection = ({
+  addresses,
   connection,
   failed,
   onDisconnect,
@@ -200,7 +214,7 @@ const Connection = ({
       </Button>
     </div>
     <Failure error={failed} />
-    <Details rows={detailsOf(wifi, connection)} />
+    <Details rows={detailsOf(wifi, connection, addresses)} />
   </section>
 );
 
@@ -291,11 +305,15 @@ const labelOf = (network: WifiNetwork): string =>
     `${signalOf(network.strength)} signal`,
   ].join(", ");
 
-/** The connection's details, leaving out what the service does not report. */
+/**
+ * The connection's details, leaving out what is unknown. The addresses come
+ * from `ip`, since iwd reports none and NetworkManager only IPv4's here.
+ */
 const detailsOf = (
   wifi: Wifi,
   connection: WifiConnection,
-): (readonly [string, string])[] => [
+  addresses: Addresses,
+): (readonly [string, Value])[] => [
   ["Signal", `${Math.round(connection.strength * 100)}%`],
   ...(connection.frequency === undefined
     ? []
@@ -303,15 +321,10 @@ const detailsOf = (
   ...(connection.bitrate === undefined
     ? []
     : [["Speed", `${Math.round(connection.bitrate)} Mbit/s`] as const]),
+  ...addressRowsOf(addresses, wifi.interface),
   ...(connection.ip === undefined
     ? []
-    : [
-        ["Address", connection.ip.addresses.join(", ")] as const,
-        ...(connection.ip.gateway === undefined
-          ? []
-          : [["Gateway", connection.ip.gateway] as const]),
-        ["DNS", connection.ip.dns.join(", ")] as const,
-      ]),
+    : [["DNS", connection.ip.dns.join(", ")] as const]),
   ["Interface", wifi.interface],
   ["Hardware address", wifi.hardwareAddress],
 ];
@@ -329,11 +342,7 @@ const bandOf = (mhz: number): string => {
   }
 };
 
-const panelStyles = flex({
-  direction: "column",
-  gap: 2,
-  inlineSize: 80,
-});
+const panelStyles = flex({ direction: "column", gap: 2 });
 
 const headStyles = hstack({
   gap: 2,

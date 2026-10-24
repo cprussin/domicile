@@ -194,6 +194,14 @@ const ADDRESSES = JSON.stringify([
         scope: "global",
       },
       {
+        deprecated: true,
+        family: "inet6",
+        local: "fd00::9a41:77c2:d0e3:15b8",
+        prefixlen: 64,
+        scope: "global",
+        temporary: true,
+      },
+      {
         family: "inet6",
         local: "fe80::8e16:45ff:fe5a:3e01",
         prefixlen: 64,
@@ -214,7 +222,7 @@ const ran = (stdout: string): Result<Ran, SystemError> =>
   Ok({ code: 0, signal: undefined, stderr: "", stdout });
 
 describe(readAddresses, () => {
-  it("reads each interface's global addresses and its gateway from ip", async () => {
+  it("reads each interface's current global addresses and its gateway from ip", async () => {
     const asked: (readonly string[])[] = [];
     const addresses = await readAddresses({
       run: (argv) => {
