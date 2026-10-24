@@ -560,6 +560,10 @@ pub struct ThemeConfig {
     /// The fixed-width font as a Pango description, such as `Iosevka 12`.
     /// Unset leaves clients their own.
     pub monospace_font_name: Option<String>,
+    /// Host names of sites the browser draws dark while the theme is dark,
+    /// for sites with no dark theme of their own. A host covers its
+    /// subdomains.
+    pub force_dark: Vec<String>,
 }
 
 impl ThemeConfig {
@@ -577,6 +581,16 @@ impl ThemeConfig {
             .into_iter()
             .chain(cursor_themes.map(|name| ("cursor_theme", name)))
             .find(|(_, name)| matches!(*name, "" | "." | "..") || name.contains('/'));
+        // A URL or a port here would never match a page's host.
+        if let Some(site) = self
+            .force_dark
+            .iter()
+            .find(|site| site.is_empty() || site.contains(['/', ':']))
+        {
+            return Err(ConfigError::Validation(format!(
+                "theme.force_dark {site:?} is not a host name, such as \"mail.google.com\""
+            )));
+        }
         match (not_a_directory, self.cursor_size) {
             (Some((key, name)), _) => Err(ConfigError::Validation(format!(
                 "theme.{key} {name:?} is not a theme's directory name"

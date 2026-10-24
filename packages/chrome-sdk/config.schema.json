@@ -439,6 +439,14 @@
           "description": "The interface font as a Pango description, such as `Inter 11`. Unset\nleaves clients their own.",
           "type": ["string", "null"]
         },
+        "force_dark": {
+          "default": [],
+          "description": "Host names of sites the browser draws dark while the theme is dark,\nfor sites with no dark theme of their own. A host covers its\nsubdomains.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "icon_theme": {
           "default": null,
           "description": "The freedesktop icon theme's directory name, such as `Papirus-Dark`.\nUnset leaves shells with `hicolor`.",

@@ -487,6 +487,31 @@ fn rejects_an_icon_or_cursor_theme_that_is_not_a_directory_name() {
 }
 
 #[test]
+fn a_desk_that_names_sites_to_force_dark_gets_them() {
+    let theme = Config::parse(r#"{ "theme": { "force_dark": ["mail.google.com"] } }"#)
+        .unwrap()
+        .theme;
+    assert_eq!(theme.force_dark, ["mail.google.com"]);
+}
+
+#[test]
+fn rejects_a_site_to_force_dark_that_is_not_a_host_name() {
+    for site in [
+        "",
+        "https://mail.google.com",
+        "mail.google.com/mail",
+        "mail.google.com:443",
+    ] {
+        let err = Config::parse(&format!(r#"{{ "theme": {{ "force_dark": ["{site}"] }} }}"#))
+            .unwrap_err();
+        assert!(
+            matches!(err, ConfigError::Validation(_)),
+            "{site:?}: got {err:?}"
+        );
+    }
+}
+
+#[test]
 fn rejects_a_cursor_size_of_zero() {
     let err = Config::parse(r#"{ "theme": { "cursor_size": 0 } }"#).unwrap_err();
     assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");

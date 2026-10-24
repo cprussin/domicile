@@ -174,6 +174,9 @@ pub struct Host {
     /// `None` until set. The browser uninstalls extensions missing from the
     /// list, so a host without a config must not send an empty one.
     extensions: Option<(Vec<String>, Vec<String>)>,
+    /// Host names of sites the browser draws dark, for
+    /// [`HostMessage::ForceDark`].
+    force_dark: Vec<String>,
     /// The keysyms the keymap types, with their keys, and the config's shell
     /// options as JSON text, for [`HostMessage::ShellConfig`]. `None` until
     /// set, as for `keymap`.
@@ -261,6 +264,19 @@ impl Host {
                 web_store,
                 unpacked,
             })
+    }
+
+    /// Replace the sites the browser draws dark, for chromes that connect
+    /// later.
+    pub fn set_force_dark(&mut self, sites: Vec<String>) {
+        self.force_dark = sites;
+    }
+
+    /// The message naming the sites the browser draws dark.
+    pub fn describe_force_dark(&self) -> HostMessage {
+        HostMessage::ForceDark {
+            sites: self.force_dark.clone(),
+        }
     }
 
     /// Replace the keysym-to-keycode map and the shell's options, for

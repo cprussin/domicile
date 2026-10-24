@@ -74,6 +74,12 @@ using ExtensionsSink = base::RepeatingCallback<void(const ExtensionList&)>;
 using CursorThemeSink =
     base::RepeatingCallback<void(std::optional<ui::DeskCursorTheme>)>;
 
+// How the sites the desk's config draws dark reach the process that draws
+// them. A callback for KeymapSink's reason: WebPreferences are computed on the
+// UI thread. See components/domicile/browser/force_dark.h.
+using ForceDarkSink =
+    base::RepeatingCallback<void(std::vector<std::string>)>;
+
 // The shell's control channel, in the browser process.
 //
 // Speaks newline-delimited JSON over the compositor's unix control socket --
@@ -100,6 +106,7 @@ class ControlChannel : public mojom::ControlChannel {
                  ThemeSink theme_sink,
                  ExtensionsSink extensions_sink,
                  CursorThemeSink cursor_theme_sink,
+                 ForceDarkSink force_dark_sink,
                  const Page& page);
 
   ControlChannel(const ControlChannel&) = delete;
@@ -224,6 +231,7 @@ class ControlChannel : public mojom::ControlChannel {
   const ThemeSink theme_sink_;
   const ExtensionsSink extensions_sink_;
   const CursorThemeSink cursor_theme_sink_;
+  const ForceDarkSink force_dark_sink_;
   mojo::Receiver<mojom::ControlChannel> receiver_;
   mojo::Remote<mojom::ControlChannelClient> client_;
 
@@ -287,6 +295,7 @@ void BindControlChannel(mojo::PendingReceiver<mojom::ControlChannel> receiver,
                         ThemeSink theme_sink,
                         ExtensionsSink extensions_sink,
                         CursorThemeSink cursor_theme_sink,
+                        ForceDarkSink force_dark_sink,
                         const Page& page);
 
 }  // namespace domicile
