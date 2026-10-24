@@ -14,7 +14,8 @@ bun run build:next
   Domicile, the preset's cyan for manganese.
 - **Code blocks:** highlighted at build time (`src/code/`).
 - **Screenshots and videos:** `public/media` links to `docs/media`, which
-  `scripts/docs-media.sh` captures on crux. A slot whose capture does not
+  `scripts/docs-media.sh` captures on crux. Vercel can't deploy a link out of
+  the root directory, so its build swaps the link for a copy. A slot whose capture does not
   exist yet says what it will show. See
   [docs/media/README.md](/docs/media/README.md).
 - **Docs links** point at the markdown on GitHub until the docs move into the
