@@ -4,8 +4,8 @@
 //! pinned because the JS client hard-codes them.
 
 use domicile_protocol::{
-    negotiate, AppFrame, Appearance, ChromeMessage, ClipboardEntry, CursorShape, CursorTheme,
-    DisplayInfo, DisplayTransform, HostMessage, Owner, Passphrase, PointerOverWindow,
+    negotiate, AppFrame, Appearance, ChromeMessage, ClipboardEntry, CursorImage, CursorShape,
+    CursorTheme, DisplayInfo, DisplayTransform, HostMessage, Owner, Passphrase, PointerOverWindow,
     PROTOCOL_VERSION,
 };
 
@@ -46,6 +46,15 @@ fn chrome_messages_round_trip() {
         at: None,
         windows: Vec::new(),
     });
+    chrome_round_trip(&ChromeMessage::DeskCursor {
+        image: Some(CursorImage {
+            size: (1, 1),
+            hotspot: (0, 0),
+            scale: 2.0,
+            bgra: "AQID/w==".into(),
+        }),
+    });
+    chrome_round_trip(&ChromeMessage::DeskCursor { image: None });
     chrome_round_trip(&ChromeMessage::CloseApp {
         app_id: "term".into(),
     });
@@ -608,5 +617,28 @@ fn the_desk_pointer_is_a_point_or_nothing_on_the_wire() {
                 at: (0.25, 0.5),
             }],
         }
+    );
+}
+
+/// The engine writes these lines itself (`ControlChannel::DeskCursorChanged`).
+#[test]
+fn the_desk_cursor_is_an_image_or_nothing_on_the_wire() {
+    assert_eq!(
+        serde_json::from_str::<ChromeMessage>(
+            r#"{"image":{"bgra":"AQID/w==","hotspot":[0,0],"scale":2.0,"size":[1,1]},"type":"desk_cursor"}"#
+        )
+        .expect("parsed"),
+        ChromeMessage::DeskCursor {
+            image: Some(CursorImage {
+                size: (1, 1),
+                hotspot: (0, 0),
+                scale: 2.0,
+                bgra: "AQID/w==".into(),
+            }),
+        }
+    );
+    assert_eq!(
+        serde_json::from_str::<ChromeMessage>(r#"{"type":"desk_cursor"}"#).expect("parsed"),
+        ChromeMessage::DeskCursor { image: None }
     );
 }

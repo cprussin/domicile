@@ -499,6 +499,10 @@ fn read_chrome_messages(
                 hub.send_request(ClientRequest::DeskPointer { at, windows });
                 Vec::new()
             }
+            Ok(ChromeMessage::DeskCursor { image }) => {
+                hub.send_request(ClientRequest::DeskCursor { image });
+                Vec::new()
+            }
             Ok(ChromeMessage::SyncFrames) => {
                 hub.chrome_syncs_frames(writer, true);
                 Vec::new()

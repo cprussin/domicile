@@ -47,7 +47,7 @@ use smithay::reexports::calloop::channel::Sender;
 use crate::reply::{reply, Replier, Reply};
 
 pub use captures::Capturer;
-pub use cursor::CursorMode;
+pub use cursor::{CursorMode, Sprite};
 pub use lifecycle::Ended;
 pub use pacing::Rect;
 pub use producer::ToWayland;
