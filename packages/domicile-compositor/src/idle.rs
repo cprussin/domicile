@@ -1200,6 +1200,7 @@ mod tests {
                 "the pointer's place on the desk, which comes with activity",
                 ClientRequest::DeskPointer {
                     at: Some((4.0, 8.0)),
+                    windows: Vec::new(),
                 },
             ),
             (

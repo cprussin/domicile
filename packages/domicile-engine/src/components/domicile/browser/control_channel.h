@@ -200,7 +200,7 @@ class ControlChannel : public mojom::ControlChannel {
   void SomebodyIsHere();
   // The pointer moved on the desk; see DeskPointer. Dropped while no
   // compositor is connected, like SomebodyIsHere.
-  void DeskPointerMoved(std::optional<gfx::PointF> at);
+  void DeskPointerMoved(const DeskPointerAt& at);
 
   void ReadLoop();
   void OnRead(int result);

@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -16,6 +17,26 @@
 #include "ui/gfx/geometry/point_f.h"
 
 namespace domicile {
+
+// Where the pointer is over one browser window's page: the window's id, and
+// the point as a fraction of the page's size from its top left.
+struct PointerOverWindow {
+  std::string id;
+  gfx::PointF fraction;
+
+  bool operator==(const PointerOverWindow&) const = default;
+};
+
+// Where the pointer is: on the desk in the shell page's CSS pixels, or
+// `std::nullopt` off it, and over each browser window whose page it is on. A
+// captured window hidden under another is laid out under it, so the pointer
+// can be over both.
+struct DeskPointerAt {
+  std::optional<gfx::PointF> at;
+  std::vector<PointerOverWindow> windows;
+
+  bool operator==(const DeskPointerAt&) const = default;
+};
 
 // Where the pointer is on the desk, for the compositor's screen casts.
 //
@@ -32,8 +53,8 @@ class DeskPointer {
  public:
   // Handle for removing a listener. Never zero.
   using ListenerId = uint64_t;
-  // Where the pointer is, or `std::nullopt` off the desk.
-  using Moved = base::RepeatingCallback<void(std::optional<gfx::PointF>)>;
+  // Where the pointer is.
+  using Moved = base::RepeatingCallback<void(const DeskPointerAt&)>;
 
   // The process-wide one. Tests build their own instead.
   static DeskPointer& Get();
@@ -49,13 +70,13 @@ class DeskPointer {
 
   // The pointer is at `at`, or left the desk. A place it is already at tells
   // nobody: aura restates a still pointer after a window changes.
-  void MovedTo(std::optional<gfx::PointF> at);
+  void MovedTo(const DeskPointerAt& at);
 
  private:
   base::Lock lock_;
   ListenerId next_id_ GUARDED_BY(lock_) = 1;
   std::vector<std::pair<ListenerId, Moved>> listeners_ GUARDED_BY(lock_);
-  std::optional<gfx::PointF> at_ GUARDED_BY(lock_);
+  DeskPointerAt at_ GUARDED_BY(lock_);
 };
 
 }  // namespace domicile

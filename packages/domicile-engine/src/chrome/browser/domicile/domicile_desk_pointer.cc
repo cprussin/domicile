@@ -4,6 +4,7 @@
 #include "chrome/browser/domicile/domicile_desk_pointer.h"
 
 #include <optional>
+#include <vector>
 
 #include "base/no_destructor.h"
 #include "chrome/browser/domicile/domicile_browser_windows.h"
@@ -49,7 +50,9 @@ class DeskPointerReporter : public ui::EventObserver {
 
   // ui::EventObserver:
   void OnEvent(const ui::Event& event) override {
-    DeskPointer::Get().MovedTo(OnTheShell(*event.AsLocatedEvent()));
+    const std::optional<gfx::PointF> at = OnTheShell(*event.AsLocatedEvent());
+    DeskPointer::Get().MovedTo(DeskPointerAt{
+        at, at ? BrowserWindowsAt(*at) : std::vector<PointerOverWindow>()});
   }
 };
 
