@@ -1,0 +1,12 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "test:unit": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/scripts/*.sh",
+        "$TURBO_ROOT$/packages/*/tests/*.sh"
+      ]
+    }
+  }
+}

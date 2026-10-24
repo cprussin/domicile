@@ -5,7 +5,7 @@ How `scripts/*.sh` report failures, and what `src/verdicts.ts` checks.
 ## Exit codes
 
 - `0`: pass.
-- `77`: skip. The script must print `SKIP: <reason>` (checked by `src/skips.ts`).
+- `77`: skip. The script must print `SKIP: <reason>` (checked by [`check-runner`](/packages/check-runner/README.md)).
 - `99`: the script's own machinery failed.
 - Any other non-zero: the code under test failed.
 

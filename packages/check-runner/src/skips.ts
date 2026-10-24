@@ -1,12 +1,11 @@
-// Checks that every skip in `scripts/` prints a reason `check.sh` can read.
+// Checks that every skip in a check prints a reason `check-runner` can read.
 //
-// `check.sh` reads the reason with `sed -n 's/^ *SKIP: *//p'`. A script that
-// exits 77 without a `SKIP:` line reports an empty reason, which fails under
-// `DOMICILE_CHECK_STRICT=1`.
+// `check-runner` reads the reason with `sed -n 's/^ *SKIP: *//p'`, and fails a
+// skip with none. This scan also covers the skips a run never reaches.
 //
 // This is a text scan, not a shell parser, so the proximity window is
-// approximate. `turbo.json` lists `scripts/**` as an input to `test:unit` so
-// that a new script re-runs this check.
+// approximate. This package's `turbo.json` lists the checks as inputs to
+// `test:unit`, so a new check re-runs this.
 
 /** What a script exits with when a dependency it needs is not here. */
 const SKIP_EXIT = /(^|;|\|\||&&|\s)exit\s+["']?77["']?(\s|;|$)/;
@@ -15,7 +14,7 @@ const SKIP_EXIT = /(^|;|\|\||&&|\s)exit\s+["']?77["']?(\s|;|$)/;
 const REMARK = /^\s*#/;
 
 /**
- * A statement that prints a line `check.sh` can read the reason from.
+ * A statement that prints a line `check-runner` can read the reason from.
  *
  * `SKIP:` must open the printed string, so this matches command position, not
  * line position. That accepts `|| { echo "SKIP: …"; exit 77; }` and rejects
@@ -41,6 +40,8 @@ export const skipFaults = (script: string): string[] => {
     const near = lines.slice(from, index + 1);
     return near.some((candidate) => SKIP_LINE.test(candidate))
       ? []
-      : [`${index + 1}: exits 77 without a SKIP: line for check.sh to read`];
+      : [
+          `${index + 1}: exits 77 without a SKIP: line for check-runner to read`,
+        ];
   });
 };
