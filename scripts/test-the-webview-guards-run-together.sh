@@ -29,6 +29,8 @@ TOGETHER="webview-framing shell-local-network webview-content-script extension-i
 # records its start and end. `bun` is stubbed because the group installs.
 mkdir -p "$WORK/repo/scripts" "$WORK/repo/.github/scripts" "$WORK/bin"
 cp "$ROOT/scripts/check.sh" "$WORK/repo/scripts/"
+mkdir -p "$WORK/repo/packages/check-runner/src"
+cp "$ROOT/packages/check-runner/src/report.sh" "$WORK/repo/packages/check-runner/src/"
 cp "$ROOT/.github/scripts/engine-render-node-lock.sh" "$WORK/repo/.github/scripts/"
 export DOMICILE_RENDER_NODE_LOCK="$WORK/card" DOMICILE_RENDER_NODE_NOISE="$WORK/noise"
 printf '#!/bin/sh\nexit 0\n' >"$WORK/bin/bun"

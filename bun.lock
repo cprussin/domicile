@@ -68,6 +68,18 @@
         "vite": "catalog:",
       },
     },
+    "packages/check-runner": {
+      "name": "@domicile-desktop/check-runner",
+      "version": "0.0.1",
+      "bin": {
+        "check-runner": "./bin/check-runner.sh",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/chrome-sdk": {
       "name": "@domicile-desktop/sdk",
       "version": "1.0.0",
@@ -1190,6 +1202,8 @@
     "@domicile-desktop/app-settings": ["@domicile-desktop/app-settings@workspace:packages/app-settings"],
 
     "@domicile-desktop/builder": ["@domicile-desktop/builder@workspace:packages/domicile-builder"],
+
+    "@domicile-desktop/check-runner": ["@domicile-desktop/check-runner@workspace:packages/check-runner"],
 
     "@domicile-desktop/component-library": ["@domicile-desktop/component-library@workspace:packages/component-library"],
 
