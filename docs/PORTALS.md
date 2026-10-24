@@ -105,7 +105,8 @@ One request channel carries all dialogs. Each interface's backend builds on it.
     engine's window id: the engine captures its frame sink
     (`CaptureBrowserWindow`), as a browser window screenshot does. The
     capture keeps the page drawing while the shell hides it, so a hidden
-    tab still streams. The stream is the page's size; it has no pointer.
+    tab still streams. The stream is the page's size. Its pointer is where the engine puts it
+    over the page, as a fraction of it (`desk_pointer`'s `windows`).
   - The compositor does not list browser windows. The dialog says
     `browser_windows` when windows may be picked, and the shell offers
     `DomicileHost.browserWindows`. A pick of a closed window fails to start.

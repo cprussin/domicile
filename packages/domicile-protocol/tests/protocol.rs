@@ -5,7 +5,8 @@
 
 use domicile_protocol::{
     negotiate, AppFrame, Appearance, ChromeMessage, ClipboardEntry, CursorShape, CursorTheme,
-    DisplayInfo, DisplayTransform, HostMessage, Owner, Passphrase, PROTOCOL_VERSION,
+    DisplayInfo, DisplayTransform, HostMessage, Owner, Passphrase, PointerOverWindow,
+    PROTOCOL_VERSION,
 };
 
 fn chrome_round_trip(msg: &ChromeMessage) {
@@ -36,8 +37,15 @@ fn chrome_messages_round_trip() {
     chrome_round_trip(&ChromeMessage::Activity);
     chrome_round_trip(&ChromeMessage::DeskPointer {
         at: Some((12.5, 3.0)),
+        windows: vec![PointerOverWindow {
+            id: "4".into(),
+            at: (0.25, 0.5),
+        }],
     });
-    chrome_round_trip(&ChromeMessage::DeskPointer { at: None });
+    chrome_round_trip(&ChromeMessage::DeskPointer {
+        at: None,
+        windows: Vec::new(),
+    });
     chrome_round_trip(&ChromeMessage::CloseApp {
         app_id: "term".into(),
     });
@@ -577,11 +585,28 @@ fn the_desk_pointer_is_a_point_or_nothing_on_the_wire() {
         serde_json::from_str::<ChromeMessage>(r#"{"type":"desk_pointer","at":[12.5,3.0]}"#)
             .expect("parsed"),
         ChromeMessage::DeskPointer {
-            at: Some((12.5, 3.0))
+            at: Some((12.5, 3.0)),
+            windows: Vec::new(),
         }
     );
     assert_eq!(
         serde_json::from_str::<ChromeMessage>(r#"{"type":"desk_pointer"}"#).expect("parsed"),
-        ChromeMessage::DeskPointer { at: None }
+        ChromeMessage::DeskPointer {
+            at: None,
+            windows: Vec::new(),
+        }
+    );
+    assert_eq!(
+        serde_json::from_str::<ChromeMessage>(
+            r#"{"type":"desk_pointer","at":[12.5,3.0],"windows":[{"id":"4","at":[0.25,0.5]}]}"#
+        )
+        .expect("parsed"),
+        ChromeMessage::DeskPointer {
+            at: Some((12.5, 3.0)),
+            windows: vec![PointerOverWindow {
+                id: "4".into(),
+                at: (0.25, 0.5),
+            }],
+        }
     );
 }

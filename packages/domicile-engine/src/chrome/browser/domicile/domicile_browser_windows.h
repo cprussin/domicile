@@ -5,9 +5,12 @@
 #define CHROME_BROWSER_DOMICILE_DOMICILE_BROWSER_WINDOWS_H_
 
 #include <string>
+#include <vector>
 
+#include "components/domicile/browser/desk_pointer.h"
 #include "components/domicile/mojom/browser_windows.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "ui/gfx/geometry/point_f.h"
 
 class GURL;
 
@@ -53,6 +56,10 @@ bool OpenAppModuleWindow(const GURL& url, const std::string& app_host);
 
 // The shell's WebContents in any profile, or null while there is none.
 content::WebContents* DeskShellContents();
+
+// The browser windows whose pages `at`, a point in the shell page's CSS
+// pixels, is on, and where on each. Empty while there is no shell.
+std::vector<PointerOverWindow> BrowserWindowsAt(const gfx::PointF& at);
 
 // Binds BrowserWindows for `frame`. Sends the whole list on binding and on
 // every change, and takes the shell's opens and closes.

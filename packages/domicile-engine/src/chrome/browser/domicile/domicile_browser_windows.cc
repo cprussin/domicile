@@ -52,7 +52,11 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "ui/gfx/geometry/point_f.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/vector2d_f.h"
 #include "url/gurl.h"
 
 namespace domicile {
@@ -259,6 +263,28 @@ class DeskWindows final : public base::SupportsUserData::Data,
           window.app, window.captures > 0));
     }
     return list;
+  }
+
+  // The windows whose pages `on_screen` is on, and where on each. Both are
+  // in screen coordinates, which a guest's view bounds are in.
+  std::vector<PointerOverWindow> At(const gfx::PointF& on_screen) const {
+    std::vector<PointerOverWindow> over;
+    for (const Window& window : windows_) {
+      content::RenderWidgetHostView* view =
+          window.guest->contents().GetRenderWidgetHostView();
+      if (view == nullptr) {
+        continue;
+      }
+      const gfx::Rect bounds = view->GetViewBounds();
+      if (bounds.IsEmpty() || !gfx::RectF(bounds).Contains(on_screen)) {
+        continue;
+      }
+      over.push_back(PointerOverWindow{
+          window.id,
+          gfx::PointF((on_screen.x() - bounds.x()) / bounds.width(),
+                      (on_screen.y() - bounds.y()) / bounds.height())});
+    }
+    return over;
   }
 
   // Counts a capture of window `id` until the returned runner runs, and lists
@@ -625,6 +651,22 @@ bool OpenAppModuleWindow(const GURL& url, const std::string& app_host) {
 
 content::WebContents* DeskShellContents() {
   return ShellContentsIn(nullptr);
+}
+
+std::vector<PointerOverWindow> BrowserWindowsAt(const gfx::PointF& at) {
+  content::WebContents* shell = ShellContentsIn(nullptr);
+  if (shell == nullptr) {
+    return {};
+  }
+  content::RenderWidgetHostView* page = shell->GetRenderWidgetHostView();
+  if (page == nullptr) {
+    return {};
+  }
+  const gfx::PointF on_screen =
+      at + gfx::Vector2dF(page->GetViewBounds().OffsetFromOrigin());
+  return DeskWindows::For(
+             Profile::FromBrowserContext(shell->GetBrowserContext()))
+      .At(on_screen);
 }
 
 void BindBrowserWindows(content::RenderFrameHost* frame,

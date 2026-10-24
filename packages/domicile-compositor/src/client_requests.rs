@@ -57,6 +57,7 @@ pub enum ClientRequest {
     /// [`ChromeMessage::DeskPointer`](domicile_protocol::ChromeMessage::DeskPointer).
     DeskPointer {
         at: Option<(f64, f64)>,
+        windows: Vec<domicile_protocol::PointerOverWindow>,
     },
     PointerButton {
         button: u32,
@@ -376,7 +377,7 @@ impl DomicileCompositor {
             ClientRequest::HeldAwakeByThePortal { held } => self.held_awake_by_the_portal(held),
             // Counted by `keep_the_desktop_awake` above, and for nobody else.
             ClientRequest::Activity => {}
-            ClientRequest::DeskPointer { at } => self.cast_desk_pointer(at),
+            ClientRequest::DeskPointer { at, windows } => self.cast_desk_pointer(at, windows),
             ClientRequest::Lock => {
                 self.shut_the_desk("the shell asked for this desktop to be locked")
             }
