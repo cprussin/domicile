@@ -14,19 +14,12 @@ env:
   RUST_BACKTRACE: "1"
   # Everything is installed, so a skip means a check stopped running.
   DOMICILE_CHECK_STRICT: "1"
-  # Expected skips:
-  # - `e2e-dmabuf`: `ubuntu-latest` has no DRM render node, so no client can
-  #   allocate a dmabuf.
-  # - On pull requests, the pinned-engine check while engine.yml's write-back
-  #   is still pending. The script skips only while that run is going and the
-  #   pin matches the base's; see its header.
-  DOMICILE_CHECK_ALLOW_SKIP: ${{ github.event_name == 'pull_request' && 'e2e-dmabuf test-the-pinned-engine-is-this-series' || 'e2e-dmabuf' }}
+  # Expected skip: `e2e-dmabuf`. `ubuntu-latest` has no DRM render node, so no
+  # client can allocate a dmabuf.
+  DOMICILE_CHECK_ALLOW_SKIP: e2e-dmabuf
 
-# `actions: read` so the pinned-engine check can ask whether engine.yml's run
-# for this head is still going.
 permissions:
   contents: read
-  actions: read
 
 jobs:
   # Checks that need the pieces wired together: pixels through a real GLES
@@ -66,11 +59,8 @@ jobs:
       # `shell` holds the harness's own tests. It needs no graphics stack, and
       # no other job runs `check.sh`.
       #
-      # The pull request's head and base let the pinned-engine check tell a
-      # pending write-back from a missing one. They are empty on main, where
-      # that check stays strict.
+      # The pull request's base is what the dropped-config-field check compares
+      # against. It is empty on main.
       - run: ./scripts/check.sh shell e2e
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DOMICILE_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           DOMICILE_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}

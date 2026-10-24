@@ -15,7 +15,7 @@
 # is written back to the branch; see engine-release-publish.sh.
 #
 # A needless `build=true` costs hours on `crux`. A wrong `build=false` is
-# caught later by scripts/test-the-pinned-engine-is-this-series.sh.
+# caught later by packages/ci/tests/test-the-pinned-engine-is-this-series.sh.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -27,7 +27,7 @@ say "identity=$IDENTITY"
 say "tag=$TAG"
 
 # Reuse the check that fails the pull request, so the two cannot disagree.
-if "$ROOT/scripts/test-the-pinned-engine-is-this-series.sh" >/dev/null 2>&1; then
+if "$ROOT/packages/ci/tests/test-the-pinned-engine-is-this-series.sh" >/dev/null 2>&1; then
   echo "engine-release.nix already names this series ($TAG); nothing to build and nothing to write"
   say "build=false"
   say "write=false"

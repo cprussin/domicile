@@ -11,7 +11,7 @@
 # A script rather than an inline `run:` block, because GitHub echoes inline
 # scripts into the log and a long one hides the failure.
 #
-# Tested by scripts/test-engine-drm-probe-report.sh.
+# Tested by packages/ci/tests/test-engine-drm-probe-report.sh.
 set -u
 
 LOG="${1:-}"

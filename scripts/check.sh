@@ -6,7 +6,7 @@
 #
 # Groups: `shell`, `rust`, `typescript`, `e2e`, `nix` and `distro`.
 # Workflows run groups only;
-# `scripts/test-the-workflows-delegate-their-checks.sh` asserts that. `nix`
+# `packages/ci/tests/test-the-workflows-delegate-their-checks.sh` asserts that. `nix`
 # needs `nix` on PATH and `distro` needs packages from `distro/build.sh` and
 # docker; without them they skip. The engine's checks are its package's
 # `test:engine`.

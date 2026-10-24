@@ -13,8 +13,16 @@ concurrency:
 
 env:
   # Nothing in this group may skip: bun is set up below and turbo needs nothing
-  # else.
+  # else. On a pull request that changes the fork, the pinned-engine check skips
+  # until `engine.yml` writes the new pin back.
   DOMICILE_CHECK_STRICT: "1"
+  DOMICILE_CHECK_ALLOW_SKIP: ${{ github.event_name == 'pull_request' && 'test-the-pinned-engine-is-this-series' || '' }}
+
+# `actions: read` so the pinned-engine check can ask whether engine.yml's run
+# for this head is still going.
+permissions:
+  contents: read
+  actions: read
 
 jobs:
   build:
@@ -31,9 +39,14 @@ jobs:
             turbo-${{ runner.os }}-
 
       # Through `check.sh` so CI and `./scripts/check.sh typescript` run the
-      # same list. `TURBO_CACHE_DIR` points turbo at the restored cache.
+      # same list. `TURBO_CACHE_DIR` points turbo at the restored cache. The
+      # pull request's head and base let the pinned-engine check tell a pending
+      # write-back from a missing one; on main they are empty and it is strict.
       - env:
           TURBO_CACHE_DIR: .turbo/cache
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOMICILE_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          DOMICILE_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: ./scripts/check.sh typescript
 
       - name: Save turbo cache

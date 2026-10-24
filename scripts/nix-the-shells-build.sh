@@ -7,7 +7,7 @@
 # It also verifies a repin: the build fetches the engine at the url and hash in
 # `packages/domicile-engine/engine-release.nix`, so a deleted tag or wrong hash
 # fails here. That is why `engine.yml` can exclude that file from its path
-# filter, and why `scripts/test-engine-path-filter.sh` requires `nix-build.yml`
+# filter, and why `packages/ci/tests/test-engine-path-filter.sh` requires `nix-build.yml`
 # to run on every change.
 set -euo pipefail
 

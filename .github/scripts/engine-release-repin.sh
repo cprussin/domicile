@@ -11,7 +11,7 @@
 # branch tip instead.
 #
 # If main changed the fork during the run, the identity written is the
-# merge's. `scripts/test-the-pinned-engine-is-this-series.sh` then fails and
+# merge's. `packages/ci/tests/test-the-pinned-engine-is-this-series.sh` then fails and
 # the next run fixes it.
 set -euo pipefail
 

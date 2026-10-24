@@ -1,0 +1,18 @@
+{
+  "description": "Tests of the CI workflows and the scripts under .github/scripts.",
+  "devDependencies": {
+    "@domicile-desktop/check-runner": "workspace:*"
+  },
+  "engines": {
+    "bun": ">=1.4.2",
+    "node": ">=24"
+  },
+  "license": "MIT",
+  "name": "@domicile-desktop/ci",
+  "private": true,
+  "scripts": {
+    "test:shell": "check-runner tests/*.sh"
+  },
+  "type": "module",
+  "version": "0.0.1"
+}
