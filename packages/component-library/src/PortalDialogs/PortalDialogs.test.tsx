@@ -1401,7 +1401,7 @@ describe("PortalDialogs", () => {
       expect(screen.getByRole("dialog")).toHaveTextContent(
         "org.example.Shooter asks",
       );
-      expect(screen.getByRole("radio", { name: "Whole desk" })).toBeChecked();
+      expect(screen.getByRole("radio", { name: "Everything" })).toBeChecked();
       // A screen by its make and model, else its output's name.
       const screens = radiosNamed("Screens", ["BOE NE135A1M-NY1", "HDMI-A-1"]);
       expect(screens.actual).toEqual(screens.expected);
@@ -1423,7 +1423,7 @@ describe("PortalDialogs", () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} />);
       host.push([frozen(1, "screenshot")]);
-      screen.getByRole("radio", { name: "Whole desk" }).focus();
+      screen.getByRole("radio", { name: "Everything" }).focus();
       await userEvent.keyboard("{ArrowDown}{ArrowDown}");
       await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -1531,7 +1531,7 @@ describe("PortalDialogs", () => {
       expect(
         await screen.findByRole("img", { name: "Browser: Hidden" }),
       ).toHaveAttribute("src", "data:image/png;base64,2");
-      await userEvent.click(screen.getByRole("radio", { name: "Whole desk" }));
+      await userEvent.click(screen.getByRole("radio", { name: "Everything" }));
       expect(screen.getByRole("img", { name: "The desk" })).toBeInTheDocument();
     });
 
@@ -1666,7 +1666,7 @@ describe("PortalDialogs", () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} />);
       host.push([frozen(1, "screenshot")]);
-      await userEvent.click(screen.getByRole("radio", { name: "Whole desk" }));
+      await userEvent.click(screen.getByRole("radio", { name: "Everything" }));
       await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
       expect(host.answers).toEqual([
@@ -2230,7 +2230,7 @@ describe("screen cast", () => {
         }),
       ]);
 
-      expect(screen.getByRole("radio", { name: "Whole desk" })).toBeChecked();
+      expect(screen.getByRole("radio", { name: "Everything" })).toBeChecked();
       await userEvent.click(screen.getByRole("button", { name: "Share" }));
       expect(host.answers).toEqual([
         [
@@ -2253,7 +2253,7 @@ describe("screen cast", () => {
       ]);
 
       expect(
-        screen.queryByRole("radio", { name: "Whole desk" }),
+        screen.queryByRole("radio", { name: "Everything" }),
       ).not.toBeInTheDocument();
     });
 

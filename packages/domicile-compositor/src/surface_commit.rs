@@ -92,6 +92,16 @@ impl Mapping {
             transform: self.buffer_transform,
         }
     }
+
+    /// How many pixels of a `buffer`-pixel buffer, upright, span one of the
+    /// surface's points across and down.
+    pub fn pixels_a_point(&self, buffer: (u32, u32)) -> (f64, f64) {
+        let size = upright_size(buffer, self.buffer_transform);
+        let (width, height) = surface_size(size, self.buffer_scale, self.viewport.size);
+        let (_, _, across, down) = source_pixels(size, self.buffer_scale, self.viewport.source)
+            .unwrap_or((0.0, 0.0, f64::from(size.0), f64::from(size.1)));
+        (across / f64::from(width), down / f64::from(height))
+    }
 }
 
 /// What a commit answers. See [`crate::configure_answers`].
@@ -390,7 +400,9 @@ impl DomicileCompositor {
                         |size| mapping.sampled(size, configured),
                     );
                     let crop = sampled.crop;
-                    self.cast_frame(app_id, &buffer, sampled, buffer_scale, damage);
+                    let pixels_a_point =
+                        buffer_size.map_or((1.0, 1.0), |size| mapping.pixels_a_point(size));
+                    self.cast_frame(app_id, &buffer, sampled, pixels_a_point, damage);
                     // Surface damage maps to buffer pixels by the scale alone
                     // only when nothing turns or scales the buffer.
                     let upright =
@@ -764,6 +776,32 @@ mod tests {
             (16, 8, 1272, 1508),
             "a source is in logical units, so scale 2 doubles it"
         );
+    }
+
+    #[test]
+    fn a_fractionally_scaled_window_has_that_many_pixels_a_point() {
+        // wp_fractional_scale at 1.75: a scale-1 buffer shown at a
+        // destination 1.75 times smaller.
+        let viewport = |dst: (i32, i32)| Mapping {
+            buffer_scale: 1,
+            buffer_transform: Transform::Normal,
+            viewport: Viewport::from(&ViewportCachedState {
+                src: None,
+                dst: Some(dst.into()),
+            }),
+            geometry: None,
+        };
+        let scaled = Mapping {
+            buffer_scale: 2,
+            viewport: Viewport::default(),
+            ..viewport((1, 1))
+        };
+
+        assert_eq!(
+            viewport((1000, 600)).pixels_a_point((1750, 1050)),
+            (1.75, 1.75)
+        );
+        assert_eq!(scaled.pixels_a_point((800, 600)), (2.0, 2.0));
     }
 
     #[test]

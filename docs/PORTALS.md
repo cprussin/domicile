@@ -97,7 +97,9 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   engine last saw it (`desk_pointer`), so it shows over pages and windows
   alike. Drawn in, the arrow is grown to the source's density, rounded up:
   on a 2x screen each of its pixels is a 2x2 block, or it would be half a
-  pointer, and a speck once a call scales the stream down. As metadata, the
+  pointer, and a speck once a call scales the stream down. A window's density
+  is its buffer pixels a surface point, which `wp_viewport` makes fractional
+  under `wp_fractional_scale`. As metadata, the
   cursor's meta size is a range up to 384×384, as Mutter's is: a consumer
   makes room for its own largest cursor (WebRTC asks for 64×64), and
   PipeWire drops a meta whose sizes do not meet.
@@ -117,6 +119,8 @@ One request channel carries all dialogs. Each interface's backend builds on it.
     `FrozenDesk`), which outlines each pick. Several picks are checkboxes.
     Without a shot it says there is no preview. A window not on screen is
     drawn alone instead (`previewWindow`).
+  - When the application may have a region, the list starts with
+    "Everything", the whole desk as a region, picked as it opens.
 - **Input uses EIS.** RemoteDesktop and InputCapture hand out a libei socket
   (`ConnectToEIS`) served by the compositor (`reis`). Emulated input takes the
   engine's input injection path, so the lock screen still blocks it.
@@ -170,9 +174,9 @@ One request channel carries all dialogs. Each interface's backend builds on it.
     becomes a clipboard history row. An application that asked still gets
     its file; the shell's own screenshot is not saved
     (`SystemReply::Copied`).
-  - The picker lists the whole desk, then screens, then windows, beside the
-    frozen desk. The desk outlines the pick with its size; arrow keys move
-    through the list. A screen is named by its make and model, a window by
+  - The picker lists "Everything" (the whole desk), then screens, then
+    windows, beside the frozen desk. The desk outlines the pick with its
+    size; arrow keys move through the list. A screen is named by its make and model, a window by
     its title over its application's desktop entry.
   - A window is answered `screenshot_window` and saved from the last frame
     it showed, which the engine still holds. What is over it, such as a

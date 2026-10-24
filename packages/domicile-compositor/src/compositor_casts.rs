@@ -128,7 +128,7 @@ impl DomicileCompositor {
         app_id: &str,
         buffer: &wl_buffer::WlBuffer,
         sampled: Sampled,
-        scale: i32,
+        pixels_a_point: (f64, f64),
         damage: Option<Region>,
     ) {
         let crop = match (sampled.crop, committed_buffer(buffer)) {
@@ -144,7 +144,7 @@ impl DomicileCompositor {
                 app_id,
                 buffer,
                 sampled: Sampled { crop, ..sampled },
-                scale,
+                pixels_a_point,
                 damage: damage.map(|region| {
                     (
                         region.x as i32,

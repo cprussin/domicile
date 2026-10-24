@@ -55,8 +55,9 @@ pub struct Committed<'a> {
     /// The part of the buffer that is the window, in buffer pixels, and the
     /// turn that makes it upright.
     pub sampled: Sampled,
-    /// The buffer's scale, for the pointer's position.
-    pub scale: i32,
+    /// How many buffer pixels span one of the surface's points across and
+    /// down, for the pointer's position.
+    pub pixels_a_point: (f64, f64),
     /// The bounding box of the commit's damage, in buffer pixels.
     pub damage: Option<Rect>,
 }
@@ -130,7 +131,7 @@ struct Shooting {
 struct Shot {
     snapshot: Snapshot,
     sampled: Sampled,
-    scale: i32,
+    pixels_a_point: (f64, f64),
 }
 
 /// What one stream shows.
@@ -775,7 +776,7 @@ impl Streams {
                     Shot {
                         snapshot,
                         sampled: frame.sampled,
-                        scale: frame.scale,
+                        pixels_a_point: frame.pixels_a_point,
                     },
                 );
             }
@@ -1052,7 +1053,7 @@ impl Streams {
                             .into_iter()
                             .flatten()
                             .filter(|(id, _)| id == app_id)
-                            .map(|(_, point)| in_window(*point, shot.scale))
+                            .map(|(_, point)| in_window(*point, shot.pixels_a_point))
                             .collect::<Vec<_>>()
                     }
                     Shows::BrowserWindow(capture) => {
@@ -1231,15 +1232,15 @@ fn capture_size(screen: &Screen) -> (u32, u32) {
 }
 
 /// A point in a window's box, in frame pixels.
-fn in_window(point: (f64, f64), scale: i32) -> (f64, f64) {
-    (point.0 * f64::from(scale), point.1 * f64::from(scale))
+fn in_window(point: (f64, f64), pixels_a_point: (f64, f64)) -> (f64, f64) {
+    (point.0 * pixels_a_point.0, point.1 * pixels_a_point.1)
 }
 
 /// How many stream pixels a logical pixel of what `shows` shows is. A
 /// browser window's page is in CSS pixels, which its stream is the size of.
 fn density(shows: &Shows, shots: &HashMap<String, Shot>) -> f64 {
     match shows {
-        Shows::Window(app_id) => shots.get(app_id).map_or(1.0, |shot| f64::from(shot.scale)),
+        Shows::Window(app_id) => shots.get(app_id).map_or(1.0, |shot| shot.pixels_a_point.0),
         Shows::BrowserWindow(_) => 1.0,
         Shows::Desk { target, layout, .. } => f64::from(layout.size.0) / f64::from(target.2),
     }
@@ -1312,7 +1313,7 @@ fn view<'a>(
                 layers: vec![Layer::upright(&shot.snapshot, shot.sampled)],
                 pointer: pointer
                     .filter(|(id, _)| id == app_id)
-                    .map(|(_, point)| in_window(*point, shot.scale)),
+                    .map(|(_, point)| in_window(*point, shot.pixels_a_point)),
             })
         }
         Shows::BrowserWindow(capture) => {
@@ -1455,10 +1456,11 @@ mod tests {
 
     use smithay::utils::Transform;
 
-    use super::{damage_in_view, density, view, Cast, EnginePointer, Shows, Streams};
+    use super::{damage_in_view, density, view, Cast, EnginePointer, Shot, Shows, Streams};
     use crate::buffer_transform::Sampled;
     use crate::casting::captures::Capturer;
     use crate::casting::cursor::{CursorMode, Plan};
+    use crate::casting::gpu::Snapshot;
     use crate::casting::lifecycle::Ended;
     use crate::casting::pacing::Rect;
     use crate::casting::producer::ToWayland;
@@ -1570,6 +1572,43 @@ mod tests {
         assert_eq!(density(&desk((0, 0, 1, 1)), &HashMap::new()), 1.0);
         assert_eq!(density(&desk((1, 0, 1, 1)), &HashMap::new()), 2.0);
         assert_eq!(density(&Shows::BrowserWindow(1), &HashMap::new()), 1.0);
+    }
+
+    /// A fractionally scaled window's buffer has a fractional number of
+    /// pixels a point, so the pointer and the arrow scale by it.
+    #[test]
+    fn a_window_cast_puts_the_pointer_at_its_buffers_pixels_a_point() {
+        let mut streams = streams();
+        streams.shots.insert(
+            "app-1".into(),
+            Shot {
+                snapshot: Snapshot::Pixels {
+                    bytes: vec![0; 175 * 105 * 4],
+                    stride: 175 * 4,
+                    alpha: false,
+                    size: (175, 105),
+                },
+                sampled: Sampled {
+                    crop: (0, 0, 175, 105),
+                    transform: Transform::Normal,
+                },
+                pixels_a_point: (1.75, 1.75),
+            },
+        );
+        let shows = Shows::Window("app-1".into());
+
+        let shown = view(
+            &shows,
+            &streams.shots,
+            &streams.captures,
+            &streams.pages,
+            &streams.screens,
+            Some(&("app-1".into(), (10.0, 20.0))),
+            &EnginePointer::default(),
+        )
+        .expect("a frame to show");
+        assert_eq!(shown.pointer, Some((17.5, 35.0)));
+        assert_eq!(density(&shows, &streams.shots), 1.75);
     }
 
     #[test]
