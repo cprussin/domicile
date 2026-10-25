@@ -137,6 +137,16 @@
         "react-dom": "catalog:",
       },
     },
+    "packages/dev-shell": {
+      "name": "@domicile-desktop/dev-shell",
+      "version": "0.0.1",
+      "bin": {
+        "dev-shell": "./bin/dev-shell.sh",
+      },
+      "devDependencies": {
+        "@domicile-desktop/check-runner": "workspace:*",
+      },
+    },
     "packages/distro-checks": {
       "name": "@domicile-desktop/distro-checks",
       "version": "0.0.1",
@@ -937,6 +947,7 @@
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/dev-shell": "workspace:*",
         "@domicile-desktop/test-support": "workspace:*",
         "@pandacss/preset-panda": "catalog:",
         "@testing-library/react": "catalog:",
@@ -961,6 +972,7 @@
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/dev-shell": "workspace:*",
         "@domicile-desktop/test-support": "workspace:*",
         "@pandacss/dev": "catalog:",
         "@pandacss/preset-panda": "catalog:",
@@ -1013,6 +1025,7 @@
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/check-runner": "workspace:*",
         "@domicile-desktop/test-support": "workspace:*",
         "@pandacss/dev": "catalog:",
         "@pandacss/preset-panda": "catalog:",
@@ -1283,6 +1296,8 @@
     "@domicile-desktop/ci": ["@domicile-desktop/ci@workspace:packages/ci"],
 
     "@domicile-desktop/component-library": ["@domicile-desktop/component-library@workspace:packages/component-library"],
+
+    "@domicile-desktop/dev-shell": ["@domicile-desktop/dev-shell@workspace:packages/dev-shell"],
 
     "@domicile-desktop/distro-checks": ["@domicile-desktop/distro-checks@workspace:packages/distro-checks"],
 

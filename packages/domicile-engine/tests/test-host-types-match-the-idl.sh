@@ -7,7 +7,7 @@
 # Fix with `bun run generate` in `packages/chrome-sdk`.
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SDK="$ROOT/packages/chrome-sdk"
 CHECKED_IN="$SDK/src/domicile-host.ts"
 [ -f "$CHECKED_IN" ] || { echo "no $CHECKED_IN" >&2; exit 1; }

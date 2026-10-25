@@ -1,4 +1,4 @@
-# Helpers for docs media scenes. Sourced by `scripts/docs-media.sh` before it
+# Helpers for docs media scenes. Sourced by `packages/site/scripts/docs-media.sh` before it
 # runs a scene, inside a nested sway on the GPU (`under-wayland.sh`).
 #
 #   desktop <shell>       start a desktop on a shell, as a user runs one

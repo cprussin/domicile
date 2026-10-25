@@ -19,7 +19,8 @@ nix develop .#full           # adds wayland, mesa, weston, kitty
 - Each package's `tests/*.sh` runs in its turbo `test:shell`, or `test:e2e`
   for `e2e-harness`. `check.sh shell` runs every `scripts/test-*.sh`. A new
   script in either place runs automatically.
-- `scripts/smoke-compositor.sh` is not in `check.sh`. Run it by hand.
+- `packages/e2e-harness/bin/smoke-compositor.sh` is not in `check.sh`. Run it
+  by hand.
 - No test needs a display.
 - The flake has no app for running checks; use a checkout.
 - For what a green run does not cover, see `AGENTS.md`,
@@ -32,10 +33,11 @@ On a machine with a screen:
 ```sh
 nix run 'github:cprussin/domicile#manganese'            # the reference shell
 nix run 'github:cprussin/domicile' -- ./dist/shell.js   # your own shell
-./scripts/dev-shell.sh manganese                        # rebuild and reload on edit
+bun run --filter @domicile-desktop/manganese start:dev  # rebuild and reload on edit
 ```
 
-`dev-shell.sh` sends each finished build to its running desktop with
+`start:dev` runs [`dev-shell`](/packages/dev-shell/README.md), which sends each
+finished build to its running desktop with
 `domicile load-shell`. Windows stay open across reloads. If the engine rejects
 a build (for example, a syntax error), it prints the error and keeps the
 previous shell.
