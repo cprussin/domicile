@@ -1,6 +1,6 @@
 // Display rotations: the four `wl_output.transform` rotations, named as the
 // config file writes them. Mirrors `domicile_protocol::DisplayTransform`;
-// `scripts/test-display-transforms-agree.sh` checks that all copies match in
+// `packages/domicile-engine/tests/test-display-transforms-agree.sh` checks that all copies match in
 // membership and order.
 //
 // Rotations count counterclockwise, as in `wl_output`, kanshi and sway:

@@ -63,7 +63,7 @@ fi
 NEGATIVE="${NEGATIVE:-0}"
 
 # The color for the fixture's answer. Not overridable:
-# `scripts/test-webview-passkey-extension-guard.sh` checks it against the page.
+# `packages/domicile-engine/tests/test-webview-passkey-extension-guard.sh` checks it against the page.
 readonly COLOR="5E35B1"
 # The shell's background, then the page's colors before an answer, for a
 # refusal, for no API and for an unheld conditional get(). Distinct from other
@@ -205,7 +205,7 @@ echo "measured: $MEASURED"
 echo "what the page and the fixture said:"
 grep -F '"GUARD ' "$ENGINE_LOG" | tail -5 || true
 
-# The verdict. `scripts/test-webview-passkey-extension-guard.sh` runs this
+# The verdict. `packages/domicile-engine/tests/test-webview-passkey-extension-guard.sh` runs this
 # block directly. The probe exits 0 for the color seen, 1 for the witness only,
 # 2 for neither; 124 is `timeout`'s.
 FAILURE=""

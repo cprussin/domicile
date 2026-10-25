@@ -186,7 +186,7 @@ echo "window: listed=$SAW_WINDOW partition=$WINDOW_PARTITION keys=$WINDOW_KEYS"
 echo "restart: shell=$SAW_RESTART persist=$RESTARTED_KEYS memory=$RESTARTED_MEMORY_KEYS"
 echo
 
-# The verdict. `scripts/test-webview-partition-guard.sh` runs this block
+# The verdict. `packages/domicile-engine/tests/test-webview-partition-guard.sh` runs this block
 # directly.
 FAILURE=""
 PASSED=""

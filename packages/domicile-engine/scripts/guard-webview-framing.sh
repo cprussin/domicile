@@ -205,7 +205,7 @@ fi
 echo
 echo "measured: $MEASURED"
 
-# Turn the statuses into a verdict. `scripts/test-webview-framing-guard.sh`
+# Turn the statuses into a verdict. `packages/domicile-engine/tests/test-webview-framing-guard.sh`
 # tests this block. One `case` over both control statuses, because the second
 # means nothing without the first.
 FAILURE=""

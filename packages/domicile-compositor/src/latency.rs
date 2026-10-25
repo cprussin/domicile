@@ -90,7 +90,7 @@ impl Spread {
     /// The log line for this spread.
     ///
     /// `lib-latency.sh` parses this format, and
-    /// `scripts/test-latency-report.sh` tests it from that side.
+    /// `packages/domicile-engine/tests/test-latency-report.sh` tests it from that side.
     pub fn line(&self, what: &str, interval: Duration) -> String {
         let frames = self
             .median_frames(interval)

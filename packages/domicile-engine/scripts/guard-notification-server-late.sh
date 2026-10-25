@@ -196,7 +196,7 @@ fi
 echo
 echo "measured: $MEASURED"
 
-# scripts/test-notification-server-late-guard.sh runs this block directly.
+# packages/domicile-engine/tests/test-notification-server-late-guard.sh runs this block directly.
 FAILURE=""
 PASSED=""
 case "$MEASURED" in

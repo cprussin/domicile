@@ -129,7 +129,7 @@ lists two undocumented transport constraints.
   `guard-two-windows.html` use it.
 - A fork element must override `Node::GetElementType`. Without it, casts to
   the element return null and `<app>` never embeds.
-  `scripts/test-fork-elements-know-their-type.sh` checks this.
+  `packages/domicile-engine/tests/test-fork-elements-know-their-type.sh` checks this.
 
 Two mojo interfaces carry the ids:
 
@@ -211,7 +211,7 @@ on other Wayland compositors.
   out-of-process `<iframe>` does.
 - **Cost:** a client slower than the deadline slows the whole desktop during a
   resize without `resizing`. Past the deadline, viz shows the window's last frame stretched.
-- `scripts/test-a-resized-window-holds-the-shell-until-it-draws.sh` checks
+- `packages/domicile-engine/tests/test-a-resized-window-holds-the-shell-until-it-draws.sh` checks
   this.
 
 ## The C ABI

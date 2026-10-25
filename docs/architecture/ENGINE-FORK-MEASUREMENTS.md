@@ -96,7 +96,7 @@ rasterization.
   - The last cell's control uses a color the producer never submits, so a diff
     that cannot see differences fails there.
 - `spike-css-page.html` and `spike-resize-page.html` use `<app app-id="…">`.
-  `scripts/test-parity-page-uses-the-native-tag.sh` keeps them that way. It
+  `packages/domicile-engine/tests/test-parity-page-uses-the-native-tag.sh` keeps them that way. It
   runs in the shell group, because a page back on the canvas path would
   measure the wrong element and still pass.
 - The canvas path (`embedExternalSurface()`) gives the same numbers in both
@@ -181,7 +181,7 @@ that compositor's. `PLATFORM=drm` runs on the scanout platform:
 - The run refuses `drm` inside a session (no DRM master) and `wayland` outside
   one (no compositor).
 - `latency_window_flags` and `latency_platform_refusal` in `lib-latency.sh`
-  implement this. `scripts/test-the-latency-run-picks-its-platform.sh` tests
+  implement this. `packages/domicile-engine/tests/test-the-latency-run-picks-its-platform.sh` tests
   it.
 - It still does not measure presentation.
 

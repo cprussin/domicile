@@ -295,7 +295,7 @@ echo
 echo "measured: $MEASURED"
 echo "  (mode first joined closed ended replaced heard looked fresh)"
 
-# Which end to blame. `scripts/test-app-survives-compositor-restart-guard.sh`
+# Which end to blame. `packages/domicile-engine/tests/test-app-survives-compositor-restart-guard.sh`
 # runs this block directly. MEASURED is "<mode> <first> <joined> <closed>
 # <ended> <replaced> <heard> <looked> <fresh>".
 FAILURE=""

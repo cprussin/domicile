@@ -165,7 +165,7 @@ echo
 echo "loaded=$SAW_LOADED heard=$HEARD/${#CHORDS[@]} after=$PRESSED_AFTER loads=$LOADS moved=$MOVED"
 echo
 
-# scripts/test-shell-shortcuts-guard.sh runs this block directly.
+# packages/domicile-engine/tests/test-shell-shortcuts-guard.sh runs this block directly.
 FAILURE=""
 PASSED=""
 if [ "$SAW_LOADED" != "1" ]; then
