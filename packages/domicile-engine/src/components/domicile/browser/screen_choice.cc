@@ -14,15 +14,22 @@
 
 namespace domicile {
 
-ScreenChoice::ScreenChoice(std::unique_ptr<webrtc::DesktopCapturer> capturer,
+ScreenChoice::ScreenChoice(std::unique_ptr<PortalPicker> picker,
+                           bool audio,
+                           Ask ask,
+                           CaptureBrowserWindow capture_browser_window,
                            Answer answer)
-    : capturer_(std::move(capturer)), answer_(std::move(answer)) {
+    : picker_(std::move(picker)),
+      audio_(audio),
+      ask_(std::move(ask)),
+      capture_browser_window_(std::move(capture_browser_window)),
+      answer_(std::move(answer)) {
   webrtc::DelegatedSourceListController* const list =
-      capturer_->GetDelegatedSourceListController();
+      picker_->capturer().GetDelegatedSourceListController();
   CHECK(list);
   list->Observe(this);
   // webrtc's PipeWire capturer opens the portal as it starts.
-  capturer_->Start(this);
+  picker_->capturer().Start(this);
 }
 
 ScreenChoice::~ScreenChoice() = default;
@@ -35,9 +42,29 @@ void ScreenChoice::OnCaptureResult(
 
 void ScreenChoice::OnSelection() {
   webrtc::DesktopCapturer::SourceList sources;
-  CHECK(capturer_->GetSourceList(&sources));
+  CHECK(picker_->capturer().GetSourceList(&sources));
   CHECK_EQ(sources.size(), 1u);
-  Reply(PortalScreenCapture(sources[0].id),
+  // The portal answers a request once.
+  CHECK(ask_);
+  std::move(ask_).Run(
+      picker_->node(),
+      base::BindOnce(&ScreenChoice::Told, weak_factory_.GetWeakPtr(),
+                     sources[0].id));
+}
+
+void ScreenChoice::Told(webrtc::DesktopCapturer::SourceId source,
+                        std::optional<PortalPick> pick) {
+  if (pick.has_value() && !pick->browser_window.empty()) {
+    blink::mojom::StreamDevicesSetPtr tab =
+        std::move(capture_browser_window_).Run(pick->browser_window);
+    if (tab) {
+      Reply(std::move(tab), blink::mojom::MediaStreamRequestResult::OK);
+      return;
+    }
+  }
+  // A desktop that cannot say is answered as before it could: a monitor,
+  // with no sound.
+  Reply(PortalScreenCapture(source, pick.value_or(PortalPick()), audio_),
         blink::mojom::MediaStreamRequestResult::OK);
 }
 

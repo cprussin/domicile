@@ -243,6 +243,10 @@ const mediaKindOf = (
     case "notifications":
     case "clipboard":
     case "midi":
+    case "window-management":
+    case "local-fonts":
+    case "idle-detection":
+    case "automatic-downloads":
       return undefined;
   }
 };

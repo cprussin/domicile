@@ -12,8 +12,8 @@
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/task/single_thread_task_runner.h"
 #include "components/domicile/browser/file_choice.h"
+#include "components/domicile/browser/portal_file_chooser.h"
 #include "components/domicile/browser/web_view_guest.h"
 #include "components/domicile/mojom/web_view_guest.mojom.h"
 #include "content/public/browser/web_contents.h"
@@ -69,14 +69,14 @@ class ShellFileDialog : public ui::SelectFileDialog {
                         ? nullptr
                         : select_file_policy()->GetSourceContents());
     if (guest == nullptr) {
-      LOG(WARNING) << "domicile: refused a file dialog for a page in no "
-                      "<webview>; a desk draws no dialog of its own.";
-      // Post so the listener hears after SelectFile returns, as Chromium's
-      // own refusal in SelectFileDialog::SelectFile does.
-      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-          FROM_HERE,
-          base::BindOnce(&ShellFileDialog::Answered, base::WrapRefCounted(this),
-                         mode, std::nullopt));
+      // The shell's own page: no element to ask, so the desktop's file
+      // picker is. It answers after SelectFile returns, as a dialog must.
+      LOG(INFO) << "domicile: a file dialog for a page in no <webview> asked "
+                   "the desktop's FileChooser portal.";
+      asking_ = true;
+      AskThePortalForFiles(mode, DialogExtensions(file_types), default_path,
+                           base::BindOnce(&ShellFileDialog::Answered,
+                                          base::WrapRefCounted(this), mode));
       return;
     }
     // Logged before asking so it appears even if the shell never answers.

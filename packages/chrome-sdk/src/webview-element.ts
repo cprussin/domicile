@@ -377,6 +377,11 @@ export const WEBVIEW_SITE_PERMISSIONS_CHANGE_EVENT =
  * - `notifications`: allowed by default (see `NOTIFICATIONS.md`).
  * - `clipboard`: reading the clipboard.
  * - `midi`: Web MIDI with system exclusive messages.
+ * - `window-management`: the Window Management API's screen details and
+ *   placement.
+ * - `local-fonts`: `queryLocalFonts()`.
+ * - `idle-detection`: the Idle Detection API.
+ * - `automatic-downloads`: several downloads without a click for each.
  */
 export const WEBVIEW_PERMISSIONS = [
   "camera",
@@ -385,6 +390,10 @@ export const WEBVIEW_PERMISSIONS = [
   "notifications",
   "clipboard",
   "midi",
+  "window-management",
+  "local-fonts",
+  "idle-detection",
+  "automatic-downloads",
 ] as const;
 
 export type WebViewPermission = (typeof WEBVIEW_PERMISSIONS)[number];

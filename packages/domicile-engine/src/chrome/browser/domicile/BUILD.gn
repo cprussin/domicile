@@ -116,6 +116,8 @@ source_set("domicile") {
     "//components/sessions:session_id",
     # File dialogs, answered by the shell.
     "//components/domicile:file_choice",
+    # The shell's own page's file dialogs, asked of the desktop's portal.
+    "//components/domicile:portal_file_chooser",
     "//ui/shell_dialogs",
     # Permission prompts the shell answers, and guests' cameras and
     # microphones through Chrome's dispatcher.

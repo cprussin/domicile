@@ -650,6 +650,13 @@ class WebViewGuest : public mojom::WebViewGuest,
                       scoped_refptr<content::FileSelectListener> listener,
                       const blink::mojom::FileChooserParams& params) override;
 
+  // Lists the files under a folder dropped on a `webkitdirectory` input, as a
+  // folder upload of it. Content's default refuses. Content has checked the
+  // page may read `path`, which the drop granted.
+  void EnumerateDirectory(content::WebContents* web_contents,
+                          scoped_refptr<content::FileSelectListener> listener,
+                          const base::FilePath& path) override;
+
   // Closes the window when the page agreed to AskToClose. A page that stayed
   // keeps its window, and a beforeunload AskToClose did not start, such as a
   // discard's, closes nothing. WebContentsObserver's one-argument
@@ -666,11 +673,12 @@ class WebViewGuest : public mojom::WebViewGuest,
   void CloseContents(content::WebContents* source) override;
 
   // Camera and microphone requests go through MediaAccess, so they ask the
-  // shell like any other permission. getDisplayMedia asks the desktop's
-  // ScreenCast portal, in a picker the shell draws, and is answered once the
-  // user picks or cancels (see ScreenChoice). Chrome's own screen picker is a
-  // dialog the shell cannot place. Other capture, such as of a tab, is refused
-  // as content's default does.
+  // shell like any other permission. getDisplayMedia, with or without
+  // `preferCurrentTab`, asks the desktop's ScreenCast portal, in a picker the
+  // shell draws, and is answered once the user picks or cancels (see
+  // ScreenChoice). Chrome's own screen picker is a dialog the shell cannot
+  // place. Other capture, such as an extension's `chrome.tabCapture`, is
+  // refused as content's default does.
   void RequestMediaAccessPermission(
       content::WebContents* web_contents,
       const content::MediaStreamRequest& request,

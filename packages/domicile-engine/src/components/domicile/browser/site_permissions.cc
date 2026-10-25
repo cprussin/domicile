@@ -23,6 +23,14 @@ std::optional<mojom::WebViewPermission> PermissionForRequest(
       return mojom::WebViewPermission::kClipboard;
     case permissions::RequestType::kMidiSysex:
       return mojom::WebViewPermission::kMidi;
+    case permissions::RequestType::kWindowManagement:
+      return mojom::WebViewPermission::kWindowManagement;
+    case permissions::RequestType::kLocalFonts:
+      return mojom::WebViewPermission::kLocalFonts;
+    case permissions::RequestType::kIdleDetection:
+      return mojom::WebViewPermission::kIdleDetection;
+    case permissions::RequestType::kMultipleDownloads:
+      return mojom::WebViewPermission::kAutomaticDownloads;
     default:
       // Many types, some per platform; none of the rest is offered.
       return std::nullopt;
@@ -44,6 +52,14 @@ ContentSettingsType SettingsTypeFor(mojom::WebViewPermission permission) {
       return ContentSettingsType::CLIPBOARD_READ_WRITE;
     case mojom::WebViewPermission::kMidi:
       return ContentSettingsType::MIDI_SYSEX;
+    case mojom::WebViewPermission::kWindowManagement:
+      return ContentSettingsType::WINDOW_MANAGEMENT;
+    case mojom::WebViewPermission::kLocalFonts:
+      return ContentSettingsType::LOCAL_FONTS;
+    case mojom::WebViewPermission::kIdleDetection:
+      return ContentSettingsType::IDLE_DETECTION;
+    case mojom::WebViewPermission::kAutomaticDownloads:
+      return ContentSettingsType::AUTOMATIC_DOWNLOADS;
   }
 }
 
@@ -92,6 +108,14 @@ std::string_view PermissionName(mojom::WebViewPermission permission) {
       return "clipboard";
     case mojom::WebViewPermission::kMidi:
       return "midi";
+    case mojom::WebViewPermission::kWindowManagement:
+      return "window-management";
+    case mojom::WebViewPermission::kLocalFonts:
+      return "local-fonts";
+    case mojom::WebViewPermission::kIdleDetection:
+      return "idle-detection";
+    case mojom::WebViewPermission::kAutomaticDownloads:
+      return "automatic-downloads";
   }
 }
 

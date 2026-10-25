@@ -162,6 +162,15 @@ enum WebViewPermission {
   kClipboard,
   // Web MIDI with system exclusive messages.
   kMidi,
+  // The Window Management API: the screens' details, and placing windows on
+  // them.
+  kWindowManagement,
+  // The Local Font Access API: `queryLocalFonts()`.
+  kLocalFonts,
+  // The Idle Detection API.
+  kIdleDetection,
+  // Downloading several files without a click for each.
+  kAutomaticDownloads,
 };
 
 // A site's stored choice for a permission.

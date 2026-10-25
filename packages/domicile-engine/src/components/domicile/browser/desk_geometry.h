@@ -83,6 +83,18 @@ display::ScreenInfos DeskScreenInfos(const DeskGeometry& desk,
                                      const std::vector<DeskPlace>& lit,
                                      const display::ScreenInfo& like);
 
+// The screens reported to a popup the page opens, such as a <select>'s list:
+// `infos` with the current screen narrowed to the monitor the popup opens on,
+// so the popup fits itself on that monitor rather than across the desk.
+//
+// `infos` are `DeskScreenInfos` placed in screen coordinates, and `popup` is
+// the popup's bounds there. It opens on the monitor holding its top left
+// corner, where Blink first puts it beside its anchor, else the one it
+// overlaps most. The current screen keeps its id and scale: the popup is
+// drawn in the desk's window. `infos` are unchanged when no monitor fits.
+display::ScreenInfos PopupScreenInfos(display::ScreenInfos infos,
+                                      const gfx::Rect& popup);
+
 // The display in `lit` containing `at` (in `host`'s logical pixels), or `host`
 // if none does. `std::nullopt` if `host` is not on the desk.
 //

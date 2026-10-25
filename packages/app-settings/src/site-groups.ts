@@ -42,12 +42,16 @@ export const sites = (settings: SiteSettings, names: ExtensionNames): Site[] =>
         origin,
         own: own.length,
         settings: {
+          "automatic-downloads": settingFor("automatic-downloads"),
           camera: settingFor("camera"),
           clipboard: settingFor("clipboard"),
+          "idle-detection": settingFor("idle-detection"),
+          "local-fonts": settingFor("local-fonts"),
           location: settingFor("location"),
           microphone: settingFor("microphone"),
           midi: settingFor("midi"),
           notifications: settingFor("notifications"),
+          "window-management": settingFor("window-management"),
         },
       };
     })

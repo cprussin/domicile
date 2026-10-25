@@ -192,6 +192,46 @@ TEST(DeskGeometryTest, ThePageIsToldEveryMonitorItIsShownOn) {
   EXPECT_NE(shows_left.display_id, shows_right.display_id);
 }
 
+TEST(DeskGeometryTest, APopupFitsTheMonitorItOpensOn) {
+  // A <select> near the right edge of the laptop opens its list there, not
+  // across the seam onto the monitor beside it.
+  const DeskGeometry desk = *DeskGeometryOf({kLaptop, kCenter, kRight});
+  const display::ScreenInfos infos =
+      DeskScreenInfos(desk, {kLaptop, kCenter, kRight}, {});
+
+  const display::ScreenInfos told =
+      PopupScreenInfos(infos, gfx::Rect(1800, 2000, 300, 400));
+
+  EXPECT_EQ(told.current().rect, gfx::Rect(0, 1920, 1920, 1280));
+  EXPECT_EQ(told.current().available_rect, gfx::Rect(0, 1920, 1920, 1280));
+  // Still the desk's screen, drawn at the desk's scale.
+  EXPECT_EQ(told.current_display_id, infos.current_display_id);
+  EXPECT_EQ(told.current().device_scale_factor, 1.5f);
+  EXPECT_EQ(told.screen_infos.size(), infos.screen_infos.size());
+}
+
+TEST(DeskGeometryTest, APopupOffEveryMonitorFitsTheOneItOverlapsMost) {
+  // The desk's gap above the laptop is on no monitor.
+  const display::ScreenInfos infos = DeskScreenInfos(
+      *DeskGeometryOf({kLaptop, kCenter, kRight}), {kLaptop, kCenter, kRight},
+      {});
+
+  const display::ScreenInfos told =
+      PopupScreenInfos(infos, gfx::Rect(1700, 1800, 300, 400));
+
+  EXPECT_EQ(told.current().rect, gfx::Rect(0, 1920, 1920, 1280));
+}
+
+TEST(DeskGeometryTest, APopupOnNoMonitorKeepsTheDesk) {
+  const display::ScreenInfos infos =
+      DeskScreenInfos(*DeskGeometryOf({kLaptop}), {kLaptop}, {});
+
+  const display::ScreenInfos told =
+      PopupScreenInfos(infos, gfx::Rect(-500, -500, 10, 10));
+
+  EXPECT_EQ(told.current().rect, infos.current().rect);
+}
+
 TEST(DeskGeometryTest, AWarpOnTheHostLandsOnTheHost) {
   EXPECT_EQ(WarpLandsOn({kLaptop, kCenter, kRight}, kLaptop.id,
                         gfx::Point(100, 100)),

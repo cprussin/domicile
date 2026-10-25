@@ -232,7 +232,13 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   application does, through webrtc's PipeWire capturer. The page gets the
   same picker and indicator. The engine asks before it answers the page, so a
   cancel rejects `getDisplayMedia()`; the capture then restores the pick from
-  the picker session's restore token (`persist_mode` 1). See
+  the picker session's restore token (`persist_mode` 1). The engine then
+  asks the compositor's `org.domicile.ScreenCast.Pick(node)`, on this
+  backend's bus name and path, what the picker stream's node shows: its
+  source type, the browser window, and its sound node. The page's
+  `displaySurface` is the source's, and asking for audio gets the sound
+  node. A browser window is captured as a tab instead, with the tab's sound,
+  `cropTo()` and capture handle. See
   [SHELL-BROWSER-WINDOWS.md](SHELL-BROWSER-WINDOWS.md#permissions).
 - **A cast carries its source's sound.** A window's cast holds a PipeWire
   `Audio/Source/Virtual` node, `domicile-sound-window-<stream id>`, into
@@ -243,7 +249,7 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   playing where they were. A node outlives its last cast and consumer by 5
   s, so a page capture that restores its pick in a new session finds it.
   The ScreenCast interface has no audio, so only the engine reads the node,
-  by name. An app in its own PID namespace, as Flatpak's are, may report a
+  by the name `Pick` gives, through PipeWire's PulseAudio server. An app in its own PID namespace, as Flatpak's are, may report a
   pid the compositor does not know, and is then not heard. The code is
   `src/casting/audio.rs`.
 - **The shell shows active sharing.** `portal_requests` carries `capturing`:
