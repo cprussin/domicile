@@ -1138,6 +1138,132 @@ mod window_states {
     }
 }
 
+/// The keymaps, which the compositor lists and switches between.
+mod keymaps {
+    use domicile_host::keymaps::{Keymaps, Listed};
+    use domicile_protocol::{KeymapChoice, ListedKeymap, SystemError};
+
+    use super::*;
+
+    fn listed(names: &[&str], active: &str) -> Listed {
+        Listed {
+            keymaps: names
+                .iter()
+                .map(|name| ListedKeymap {
+                    name: name.to_string(),
+                    description: None,
+                })
+                .collect(),
+            active: active.into(),
+        }
+    }
+
+    fn heard_keymaps(heard: &Receiver<HostMessage>, id: u32) -> Listed {
+        match next(heard) {
+            HostMessage::SystemEvent {
+                id: from,
+                event: SystemEvent::Keymaps { keymaps, active },
+            } if from == id => Listed { keymaps, active },
+            other => panic!("expected keymaps for {id}, heard {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_page_listening_hears_the_keymaps_at_once_and_each_change() {
+        let keymaps = Keymaps::default();
+        keymaps.list(listed(&["dvp", "us"], "dvp"));
+        let (system, heard) = system_in(&std::env::temp_dir());
+        let page = system.sharing_keymaps(keymaps.clone());
+
+        page.handle(7, SystemRequest::Keymaps);
+        assert_eq!(reply(&heard, 7), SystemReply::Started);
+        assert_eq!(heard_keymaps(&heard, 7), listed(&["dvp", "us"], "dvp"));
+
+        keymaps.list(listed(&["dvp", "us"], "us"));
+        assert_eq!(heard_keymaps(&heard, 7), listed(&["dvp", "us"], "us"));
+
+        keymaps.list(listed(&["dvp", "us"], "us"));
+        page.handle(7, SystemRequest::Unwatch);
+        assert_eq!(
+            next(&heard),
+            HostMessage::SystemEnd {
+                id: 7,
+                end: SystemEnd::Stopped,
+            },
+            "an unchanged list is not told again"
+        );
+        keymaps.list(listed(&["dvp", "us"], "dvp"));
+        assert!(heard.recv_timeout(Duration::from_millis(100)).is_err());
+    }
+
+    #[test]
+    fn selecting_a_keymap_hands_the_choice_to_the_compositor() {
+        let (told, asked) = channel();
+        let (system, heard) = system_in(&std::env::temp_dir());
+        let system = system.selecting_keymaps_with(move |choice| {
+            told.send(choice).unwrap();
+            Ok(())
+        });
+
+        system.handle(
+            1,
+            SystemRequest::SelectKeymap {
+                keymap: KeymapChoice::Next,
+            },
+        );
+
+        assert_eq!(reply(&heard, 1), SystemReply::Set);
+        assert_eq!(asked.recv().unwrap(), KeymapChoice::Next);
+    }
+
+    #[test]
+    fn a_keymap_the_compositor_refused_says_why() {
+        let (system, heard) = system_in(&std::env::temp_dir());
+        let system = system.selecting_keymaps_with(|_| {
+            Err(SystemError {
+                kind: SystemErrorKind::NotFound,
+                message: "no keymap de".into(),
+            })
+        });
+
+        system.handle(
+            1,
+            SystemRequest::SelectKeymap {
+                keymap: KeymapChoice::Named { name: "de".into() },
+            },
+        );
+
+        assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::NotFound);
+    }
+
+    #[test]
+    fn a_system_that_selects_no_keymaps_says_so() {
+        let (system, heard) = system_in(&std::env::temp_dir());
+
+        system.handle(
+            1,
+            SystemRequest::SelectKeymap {
+                keymap: KeymapChoice::Next,
+            },
+        );
+
+        assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::Other);
+    }
+
+    /// A lock screen shows the keymap and switches it, so the passphrase is
+    /// typed on the right one.
+    #[test]
+    fn listing_listens_and_selecting_retypes() {
+        assert_eq!(reach(&SystemRequest::Keymaps), Reach::Listens);
+        assert_eq!(
+            reach(&SystemRequest::SelectKeymap {
+                keymap: KeymapChoice::Next
+            }),
+            Reach::Retypes
+        );
+    }
+}
+
 /// What a refused request gets while the desktop is locked.
 mod locked {
     use super::*;
@@ -1220,6 +1346,10 @@ mod apps {
             SystemRequest::SetWindowStates {
                 app_id: "app-1".into(),
                 states: Vec::new(),
+            },
+            SystemRequest::Keymaps,
+            SystemRequest::SelectKeymap {
+                keymap: domicile_protocol::KeymapChoice::Next,
             },
         ] {
             let Some(HostMessage::SystemReply {

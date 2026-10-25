@@ -1808,6 +1808,36 @@ pub enum SystemRequest {
         height: u32,
         refresh_mhz: u32,
     },
+    /// Report the keymaps the desktop switches between and which it types
+    /// on. Answered with [`SystemReply::Started`], then a
+    /// [`SystemEvent::Keymaps`] at once and on each change.
+    /// [`SystemRequest::Unwatch`] ends it.
+    Keymaps,
+    /// Switch every keyboard to `keymap`, one of `input.keyboard`'s keymaps.
+    /// Answered with [`SystemReply::Set`], or [`SystemErrorKind::NotFound`]
+    /// for a name the config does not have. Lasts until the desktop restarts.
+    SelectKeymap { keymap: KeymapChoice },
+}
+
+/// Which keymap [`SystemRequest::SelectKeymap`] switches to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum KeymapChoice {
+    /// The one after the active keymap, or the first after the last.
+    Next,
+    /// The keymap with this name.
+    Named { name: String },
+}
+
+/// One of the keymaps [`SystemEvent::Keymaps`] lists.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ListedKeymap {
+    /// The config's name for it.
+    pub name: String,
+    /// xkb's name for its layouts, such as `English (programmer Dvorak)`,
+    /// or `None` when xkb names none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 /// An `xdg_toplevel` state the shell sets with
@@ -1953,6 +1983,12 @@ pub enum SystemEvent {
     WindowRequest {
         app_id: String,
         request: WindowRequest,
+    },
+    /// The keymaps the desktop switches between, in the config's order, and
+    /// the name of the one it types on.
+    Keymaps {
+        keymaps: Vec<ListedKeymap>,
+        active: String,
     },
     /// A D-Bus signal a match named, its body written as
     /// [`SystemReply::Returned`]'s is.

@@ -22,6 +22,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `Avatar` | Avatar with an initials or gradient fallback. |
 | `Button` | Button or link, with variants and sizes. |
 | `Card` | Raised surface with optional title and footer. |
+| `ChoiceRow` | Rows of a pick list, with icon, name and detail, framed while picked: `RadioRow` in `ChoiceList` for one, `CheckboxRow` for several. Take the panel's white text in an `overPhoto` popover. |
 | `Drilldown` | View that slides a second panel in from the side, with a back button. |
 | `Field` | Label, control and validation message. |
 | `FilePicker` | Keyboard-first file picker over its positioned parent. |

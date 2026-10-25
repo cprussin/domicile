@@ -16,6 +16,7 @@ package's default export path:
 | `Tray` | `@domicile-desktop/manganese-bar-module-tray` |
 | `WorkspaceSwitcher` | `@domicile-desktop/manganese-bar-module-workspace-switcher` |
 | `Clock` | `@domicile-desktop/manganese-bar-module-clock` |
+| `Keymap` | `@domicile-desktop/manganese-bar-module-keymap` |
 | `ThemeSwitch` | `@domicile-desktop/manganese-bar-module-theme-switch` |
 | `IdleInhibitor` | `@domicile-desktop/manganese-bar-module-idle-inhibitor` |
 | `Network` | `@domicile-desktop/manganese-bar-module-network` |
@@ -73,20 +74,20 @@ Every bar and the lock screen share one watch per system readout. See
 - **left**: launcher button, tray, workspaces
 - **center**: clock
 - **right**: sharing indicator (while recorded), Cast (while a TV is near or
-  cast to), theme selector, idle
+  cast to), keymap (with several keymaps), theme selector, idle
   inhibitor, brightness, volume, Bluetooth, network, battery, notification
   bell
 
 ## On the lock screen
 
-- The lock screen draws the same bar on every screen, with only brightness,
-  volume, Bluetooth and battery (`LOCK_BAR`, `src/default-bars.tsx`). The
+- The lock screen draws the same bar on every screen, with only the keymap,
+  brightness, volume, Bluetooth and battery (`LOCK_BAR`, `src/default-bars.tsx`). The
   `bar` option does not change it.
 - Each item offers only what a locked desktop allows
   ([LOCK.md](../../../docs/LOCK.md#lock-screen-readouts)):
   - Bluetooth: the icon, named as on the desktop; not a button.
   - Volume: the default output's slider and mute; no mixer.
-  - Brightness and battery: as on the desktop.
+  - Keymap, brightness and battery: as on the desktop.
 - Panels draw over the lock screen and keep the keyboard until they close.
   Then it goes back to the passphrase.
 
@@ -210,6 +211,18 @@ Every bar and the lock screen share one watch per system readout. See
   surface ([IDLE.md](../../../docs/IDLE.md#idle-inhibitors)).
 - A shell reload lets go of it, and the eye starts closed.
 - Not on the lock screen.
+
+## Keymap
+
+- The keymap the desktop types on, by its name in `input.keyboard.keymaps`
+  ([SHELL-CONFIG.md](../../../docs/SHELL-CONFIG.md#keyboard)).
+- Shows only with several keymaps. With `keymap.hideDefault`, hidden too
+  while the first keymap is active.
+- Click for the list in a popover, each keymap with xkb's name for its
+  layout (such as "English (programmer Dvorak)"). Picking one switches every
+  keyboard.
+- Works on the lock screen, so the passphrase is typed on the right keymap.
+- The `keymap` command switches too ([KEYS.md](../../manganese-window-management/docs/KEYS.md#commands)).
 
 ## Brightness
 

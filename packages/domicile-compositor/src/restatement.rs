@@ -10,7 +10,7 @@
 //!
 //! | field | on a reload |
 //! |---|---|
-//! | `input.keyboard.*` | recompiled and sent to the seat and chrome (`retype_the_desktop`) |
+//! | `input.keyboard.*` | every keymap recompiled; the active one, or the first if the config dropped it, sent to the seat and chrome (`take_up_the_keymaps`) |
 //! | `input.pointers` | sent to the engine, resolved against the monitors it last reported (`bind_the_pointers`) |
 //! | `output.max_scale` | applied to the running desktop (`cap_the_scale_at`) |
 //! | `output.displays` | applied (`Screens::reloaded_into`, `adopt_the_desktop`) |
@@ -34,7 +34,7 @@
 //! - `output.max_scale` only affects the output that follows Domicile's own
 //!   window. A described display sets its own scale.
 //! - A keyboard xkb cannot compile, or a keysym it cannot type, is refused
-//!   (see `retype_the_desktop` and `rebind_the_keys`).
+//!   (see `take_up_the_keymaps` and `rebind_the_keys`).
 //! - A `lock.pam_service` on a machine without libpam is refused (see
 //!   `rekey_the_lock`).
 //! - Changing the idle timeout wakes blanked screens (see

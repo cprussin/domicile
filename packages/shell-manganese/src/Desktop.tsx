@@ -12,6 +12,9 @@ import { useBrightnessKeys } from "@domicile-desktop/manganese-bar-module-bright
 import type { ClockOptions } from "@domicile-desktop/manganese-bar-module-clock/clock-options";
 import { ClockOptionsContext } from "@domicile-desktop/manganese-bar-module-clock/clock-options";
 import { deskIdleInhibitor } from "@domicile-desktop/manganese-bar-module-idle-inhibitor/desk-idle-inhibitor";
+import { deskKeymaps } from "@domicile-desktop/manganese-bar-module-keymap/desk-keymaps";
+import type { KeymapOptions } from "@domicile-desktop/manganese-bar-module-keymap/keymap-options";
+import { KeymapOptionsContext } from "@domicile-desktop/manganese-bar-module-keymap/keymap-options";
 import { PortalSignIn } from "@domicile-desktop/manganese-bar-module-network/PortalSignIn";
 import { useCaptivePortal } from "@domicile-desktop/manganese-bar-module-network/useCaptivePortal";
 import { popupShown } from "@domicile-desktop/manganese-bar-module-tray/extensions/shown";
@@ -27,6 +30,7 @@ import { Clipboard } from "@domicile-desktop/manganese-clipboard/Clipboard";
 import { useClipboard } from "@domicile-desktop/manganese-clipboard/useClipboard";
 import { DomicileContext } from "@domicile-desktop/manganese-host/domicile-context";
 import { sharedIconTheme } from "@domicile-desktop/manganese-host/followed-icon-theme";
+import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
 import { useShellOptions } from "@domicile-desktop/manganese-host/useShellOptions";
 import { appSearch } from "@domicile-desktop/manganese-launcher/app-search";
 import type { ApplicationsConfig } from "@domicile-desktop/manganese-launcher/applications-config";
@@ -87,6 +91,7 @@ import { system } from "@domicile-desktop/sdk/system";
 import type { ReactNode } from "react";
 import { useCallback, useMemo, useState } from "react";
 import { LOCK_BAR } from "./default-bars";
+import { KeymapNotice } from "./KeymapNotice";
 import type { LevelPress } from "./LevelNotice";
 import { LevelNotice } from "./LevelNotice";
 import { pressMediaKey } from "./media-keys";
@@ -284,17 +289,35 @@ export const Desktop = ({
 
   // The level the last media key set, counted so each press keeps it up.
   const [levelPress, setLevelPress] = useState<LevelPress | undefined>();
+  // How many `keymap` commands switched the keymap, so each keeps its notice
+  // up. The notice names the keymap the desktop reports.
+  const [keymapSwitches, setKeymapSwitches] = useState(0);
+  const keymaps = useSharedWatch(deskKeymaps(domicile));
   // Once for the desk, so a portal's sign-in page opens once, not per bar.
   const portal = useCaptivePortal(domicile);
 
   // Shift is spent whether or not a window was floated: the user pressed it
   // for the chord, so it should not carry over to the next window. Both the
   // page's keydown and the compositor's forwarded chords come through here.
-  // A media key changes no window, so it neither spends Shift nor moves the
-  // pointer.
+  // A media key or a keymap changes no window, so neither spends Shift nor
+  // moves the pointer.
   const onAction = useCallback(
     (action: WindowAction) => {
       switch (action.kind) {
+        case WindowActionKind.KeymapSelected: {
+          system(domicile)
+            .selectKeymap(action.choice)
+            .then((result) => {
+              result.match({
+                Err: logKeymapFailure,
+                Ok: () => {
+                  setKeymapSwitches((switches) => switches + 1);
+                },
+              });
+            })
+            .catch(logKeymapFailure);
+          break;
+        }
         case WindowActionKind.MediaKeyPressed: {
           const level = pressMediaKey(
             { brightness: brightnessKeys, volume: volumeKeys },
@@ -464,6 +487,7 @@ export const Desktop = ({
       domicile={domicile}
       drawer={drawer}
       holdKeyboard={holdKeyboard}
+      keymap={shellOptions.keymap}
       launcher={launcherControl}
       tray={trayState}
       workspaces={shownWorkspaces}
@@ -568,6 +592,20 @@ export const Desktop = ({
       />
       {/* Like the toasts, on the screen with the keyboard. */}
       <LevelNotice press={levelPress} screen={windows.focused} />
+      <KeymapNotice
+        press={
+          keymapSwitches === 0 || keymaps === undefined
+            ? undefined
+            : {
+                count: keymapSwitches,
+                description: keymaps.keymaps.find(
+                  ({ name }) => name === keymaps.active,
+                )?.description,
+                keymap: keymaps.active,
+              }
+        }
+        screen={windows.focused}
+      />
       {/* Over the whole desktop, like the clipboard. */}
       <NotificationDrawer
         items={notifications.items}
@@ -614,6 +652,11 @@ export const Desktop = ({
   );
 };
 
+const logKeymapFailure = (error: unknown): void => {
+  // biome-ignore lint/suspicious/noConsole: the desktop keeps the keymap it had
+  console.error("could not switch the keymap", error);
+};
+
 /** The lock screen's bar on monitor `screen`. */
 const lockBar = (screen: string) => (
   <LockBar layout={LOCK_BAR} screen={screen} />
@@ -626,6 +669,7 @@ const BarProviders = ({
   domicile,
   drawer,
   holdKeyboard,
+  keymap,
   launcher,
   tray,
   workspaces,
@@ -635,6 +679,7 @@ const BarProviders = ({
   domicile: DomicileHost;
   drawer: NotificationsDrawer;
   holdKeyboard: HoldKeyboard;
+  keymap: KeymapOptions;
   launcher: LauncherControl;
   tray: TrayState;
   workspaces: Workspaces;
@@ -646,7 +691,9 @@ const BarProviders = ({
           <TrayContext value={tray}>
             <PanelKeyboardContext value={holdKeyboard}>
               <ClockOptionsContext value={clock}>
-                {children}
+                <KeymapOptionsContext value={keymap}>
+                  {children}
+                </KeymapOptionsContext>
               </ClockOptionsContext>
             </PanelKeyboardContext>
           </TrayContext>

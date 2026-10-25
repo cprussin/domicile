@@ -37,6 +37,7 @@ pub mod index_file;
 pub mod index_location;
 pub mod ipc;
 pub mod ipp;
+pub mod keymaps;
 pub mod launcher_icon;
 mod lock_screen_readouts;
 pub mod mime_apps;

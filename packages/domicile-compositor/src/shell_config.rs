@@ -8,17 +8,17 @@
 
 use std::collections::BTreeMap;
 
-use domicile_config::Config;
+use domicile_config::{Config, Keymap};
 
 use crate::keymap::{Keyboard, UnknownLayout};
 
-/// Every keysym `config`'s keyboard can type, mapped to the key it is on.
+/// Every keysym `keymap` can type, mapped to the key it is on.
 ///
-/// Compiles `input.keyboard` itself because this runs before the compositor
-/// state, which owns the seat's keymap, exists. The same config always
-/// compiles to the same keymap.
-pub fn keys(config: &Config) -> Result<BTreeMap<String, u32>, UnknownLayout> {
-    Keyboard::compiled(&config.input.keyboard).map(|keyboard| keyboard.keys())
+/// Compiles the keymap itself because this runs before the compositor state,
+/// which owns the seat's keymap, exists. The same keymap always compiles the
+/// same.
+pub fn keys(keymap: &Keymap) -> Result<BTreeMap<String, u32>, UnknownLayout> {
+    Keyboard::compiled(keymap).map(|keyboard| keyboard.keys())
 }
 
 /// The config's `shell_options` as JSON text. The compositor does not read
@@ -41,9 +41,12 @@ mod tests {
 
     #[test]
     fn every_keysym_the_keyboard_types_goes_out_for_a_shell_s_chords() {
-        let keys = keys(&parsed(
-            r#"{ "input": { "keyboard": { "xkb_variant": "dvp" } } }"#,
-        ))
+        let keys = keys(
+            &parsed(r#"{ "input": { "keyboard": { "xkb_variant": "dvp" } } }"#)
+                .input
+                .keyboard
+                .keymaps()[0],
+        )
         .expect("the layout compiles");
         assert_eq!(keys.get("l"), Some(&KEY_P));
         assert_eq!(keys.get("Escape"), Some(&KEY_ESC));
@@ -62,11 +65,12 @@ mod tests {
 
     #[test]
     fn a_keyboard_xkb_cannot_compile_has_no_keys() {
-        assert!(keys(&parsed(
-            r#"
-{ "input": { "keyboard": { "xkb_rules": "no-such-rules" } } }
-"#,
-        ))
+        assert!(keys(
+            &parsed(r#"{ "input": { "keyboard": { "xkb_rules": "no-such-rules" } } }"#)
+                .input
+                .keyboard
+                .keymaps()[0]
+        )
         .is_err());
     }
 }

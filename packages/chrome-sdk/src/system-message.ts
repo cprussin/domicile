@@ -62,7 +62,8 @@ const systemReplySchema = z.looseObject({
 
 // Output from a running process, a change a watch saw, a signal a D-Bus match
 // heard, a command `domicile send-shell` sent, an idle warning, or a
-// passphrase the lock did not take, or a client's window request.
+// passphrase the lock did not take, a client's window request, or the
+// keymaps.
 const systemEventSchema = z.looseObject({
   event: z.discriminatedUnion("kind", [
     z.looseObject({
@@ -107,6 +108,16 @@ const systemEventSchema = z.looseObject({
         }),
         z.looseObject({ kind: z.literal("unfullscreen") }),
       ]),
+    }),
+    z.looseObject({
+      active: z.string(),
+      keymaps: z.array(
+        z.looseObject({
+          description: z.string().optional(),
+          name: z.string(),
+        }),
+      ),
+      kind: z.literal("keymaps"),
     }),
   ]),
   id: z.number(),

@@ -128,7 +128,7 @@ An edit applies to the running desktop, and windows stay open:
 
 | Section | Effect of an edit |
 |---|---|
-| `input.keyboard` | New layout; moves the keys a shell bound ([Keybindings](WRITING-A-SHELL.md#keybindings)) |
+| `input.keyboard` | New layout; moves the keys a shell bound ([Keybindings](WRITING-A-SHELL.md#keybindings)). The desktop stays on the active keymap if `keymaps` still names it, else goes to the first |
 | `input.pointers` | Tablets, touchscreens and absolute mice rebound |
 | `output.max_scale` | Re-advertised to clients |
 | `output.displays`, `output.profiles` | Displays rearranged |
@@ -153,8 +153,8 @@ An edit applies to the running desktop, and windows stay open:
   commands.
 - A file that fails to parse is rejected and logged. The last good config
   stays.
-- A keyboard xkb cannot compile is rejected and logged. The current layout
-  stays.
+- A keyboard xkb cannot compile, any of its keymaps included, is rejected
+  and logged. The current layout stays.
 - A `lock.pam_service` the machine does not declare is taken, and logged:
   nothing unlocks the desktop until the file is added
   ([LOCK.md](LOCK.md#failures-fail-closed)).
@@ -177,6 +177,35 @@ An edit applies to the running desktop, and windows stay open:
 `input.keyboard` takes sway's `xkb_*` fields: `xkb_layout`, `xkb_variant`,
 `xkb_options` and the rest. The default is plain `us`, no variant, no options.
 A shell for users of other layouts must set them here; nothing else does.
+
+To switch between layouts, list them in `keymaps` instead:
+
+```json
+{
+  "input": {
+    "keyboard": {
+      "keymaps": [
+        { "name": "dvp", "xkb_variant": "dvp", "xkb_options": ["caps:escape"] },
+        { "name": "us" }
+      ]
+    }
+  }
+}
+```
+
+- Each entry is a whole keymap with the same `xkb_*` fields and defaults. It
+  takes nothing from the fields beside `keymaps`, which must stay unset.
+- `name` is what the shell shows and selects. Each is unique, and none is
+  `next`. A keyboard without `keymaps` is one keymap, named for its variant,
+  or its layout when it has none.
+- The desktop starts on the first. A switch reaches every window, the
+  browser and the shell's keybindings, and lasts until the desktop
+  restarts.
+- A shell lists them, each with xkb's name for its layouts (such as
+  `English (programmer Dvorak)`), with `system(domicile).keymaps()` and
+  switches with
+  `selectKeymap()` ([SHELL-SYSTEM-ACCESS.md](SHELL-SYSTEM-ACCESS.md)). Both
+  work while locked.
 
 ## Tablets and touchscreens
 

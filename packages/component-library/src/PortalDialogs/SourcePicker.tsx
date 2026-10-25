@@ -1,6 +1,4 @@
-import { Checkbox } from "@base-ui/react/checkbox";
 import { CheckboxGroup } from "@base-ui/react/checkbox-group";
-import { Radio } from "@base-ui/react/radio";
 import { RadioGroup } from "@base-ui/react/radio-group";
 import type { Result } from "@cprussin/option-result";
 import type { FrozenDesk, ShotRect } from "@domicile-desktop/sdk/portal";
@@ -10,6 +8,7 @@ import type { CSSProperties, PointerEvent, ReactNode } from "react";
 import { useState } from "react";
 import { css } from "../../styled-system/css";
 import { center, flex } from "../../styled-system/patterns";
+import { CheckboxRow, RadioRow } from "../ChoiceRow/ChoiceRow";
 import type { FramePoint } from "./frame-point";
 import { draggedArea, framePoint } from "./frame-point";
 import type { DrawPreview } from "./useWindowPreview";
@@ -254,32 +253,24 @@ const Row = ({
   choice: Choice;
   index: number;
   multiple: boolean;
-}) => {
-  const content = (
-    <>
-      {choice.icon}
-      <span className={rowTextStyles}>
-        <span className={rowNameStyles}>{choice.name}</span>
-        {choice.detail !== undefined && (
-          <span className={rowDetailStyles}>{choice.detail}</span>
-        )}
-      </span>
-    </>
-  );
-  return multiple ? (
-    <Checkbox.Root
+}) =>
+  multiple ? (
+    <CheckboxRow
       aria-label={choice.label}
-      className={rowStyles}
+      detail={choice.detail}
+      icon={choice.icon}
+      name={choice.name}
       value={String(index)}
-    >
-      {content}
-    </Checkbox.Root>
+    />
   ) : (
-    <Radio.Root aria-label={choice.label} className={rowStyles} value={index}>
-      {content}
-    </Radio.Root>
+    <RadioRow
+      aria-label={choice.label}
+      detail={choice.detail}
+      icon={choice.icon}
+      name={choice.name}
+      value={index}
+    />
   );
-};
 
 /**
  * A window drawn alone from `src`, fitted in `box`. With `onDrag`, a part of
@@ -473,54 +464,6 @@ const sectionLabelStyles = css({
   paddingBlockEnd: 1,
   paddingInline: 2.5,
   textTransform: "uppercase",
-});
-
-const rowStyles = css({
-  _checked: {
-    backgroundColor: "color-mix(in oklab, {colors.accent} 20%, transparent)",
-    borderColor: "accent",
-  },
-  _hoverEnabled: {
-    backgroundColor: "color-mix(in oklab, {colors.foreground} 6%, transparent)",
-  },
-  "& > :is(svg, img)": {
-    blockSize: 5,
-    color: "muted",
-    flexShrink: 0,
-    inlineSize: 5,
-  },
-  alignItems: "center",
-  backgroundColor: "transparent",
-  border: "1px solid transparent",
-  borderRadius: "md",
-  color: "foreground",
-  cursor: "pointer",
-  display: "flex",
-  flexShrink: 0,
-  font: "inherit",
-  gap: 2.5,
-  minInlineSize: 0,
-  paddingBlock: 1.5,
-  paddingInline: 2.5,
-  textAlign: "start",
-  transition: "background-color {durations.fast} {easings.out}",
-});
-
-const rowTextStyles = flex({ direction: "column", minInlineSize: 0 });
-
-const rowNameStyles = css({
-  fontSize: "sm",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-});
-
-const rowDetailStyles = css({
-  color: "muted",
-  fontSize: "xs",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
 });
 
 const stageStyles = flex({

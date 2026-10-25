@@ -9,6 +9,7 @@
 
 import type { CursorShape } from "@domicile-desktop/sdk/cursor-shape";
 import type { DomicileBrowserWindow } from "@domicile-desktop/sdk/domicile-host";
+import type { KeymapChoice } from "@domicile-desktop/sdk/keymap-choice";
 import type { Axis, Direction } from "./direction";
 import type { Float } from "./floating/float";
 import { floatHolds, limitedTo, movedTo } from "./floating/float";
@@ -364,6 +365,7 @@ export enum WindowActionKind {
   GroupFullscreened,
   GroupGrabbed,
   IdleInhibitorToggled,
+  KeymapSelected,
   KeyPressed,
   LauncherDismissed,
   LauncherToggled,
@@ -705,6 +707,12 @@ export const WindowAction = {
   /** `idle-inhibitor`. The shell holds or lets go of the screens. */
   IdleInhibitorToggled: () => ({
     kind: WindowActionKind.IdleInhibitorToggled as const,
+  }),
+
+  /** `keymap next` or `keymap <name>`. The shell switches the keymap. */
+  KeymapSelected: (choice: KeymapChoice) => ({
+    choice,
+    kind: WindowActionKind.KeymapSelected as const,
   }),
 
   /**
@@ -1245,6 +1253,10 @@ const reduceAction = (
     case WindowActionKind.NotificationsCleared:
     case WindowActionKind.IdleInhibitorToggled: {
       // The shell carries these out; no window changes.
+      return state;
+    }
+    case WindowActionKind.KeymapSelected: {
+      // The shell switches the keymap; no window changes.
       return state;
     }
     case WindowActionKind.CommandExecuted: {

@@ -63,6 +63,17 @@ const profileSchema = z.strictObject({
   name: z.string(),
 });
 
+/** How xkb compiles a keymap, as `input.keyboard` and each keymap set it. */
+const xkbFields = {
+  xkb_layout: z.string().default("us"),
+  xkb_model: z.string().default(""),
+  xkb_options: z.array(z.string()).default([]),
+  xkb_rules: z.string().default(""),
+  xkb_variant: z.string().default(""),
+};
+
+const keymapSchema = z.strictObject({ ...xkbFields, name: z.string() });
+
 const settingsSchema = z.strictObject({
   extensions: z
     .strictObject({
@@ -84,11 +95,8 @@ const settingsSchema = z.strictObject({
     .strictObject({
       keyboard: z
         .strictObject({
-          xkb_layout: z.string().default("us"),
-          xkb_model: z.string().default(""),
-          xkb_options: z.array(z.string()).default([]),
-          xkb_rules: z.string().default(""),
-          xkb_variant: z.string().default(""),
+          ...xkbFields,
+          keymaps: z.array(keymapSchema).default([]),
         })
         .prefault({}),
       pointers: z
@@ -153,6 +161,9 @@ export type Settings = z.infer<typeof settingsSchema>;
 
 /** A profile, which arranges the monitors that are plugged in. */
 export type Profile = z.infer<typeof profileSchema>;
+
+/** One of `input.keyboard.keymaps`, with xkb's defaults filled in. */
+export type Keymap = z.infer<typeof keymapSchema>;
 
 /** A display a profile places. */
 export type Placement = z.infer<typeof placementSchema>;

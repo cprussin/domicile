@@ -98,7 +98,7 @@ fn joins_xkb_options_for_xkb() {
     .input
     .keyboard;
     assert_eq!(
-        keyboard.xkb_options_string(),
+        keyboard.keymaps()[0].xkb_options_string(),
         "caps:swapescape,compose:ralt"
     );
 }
@@ -114,7 +114,7 @@ fn empty_xkb_options_disable_every_option() {
     .unwrap()
     .input
     .keyboard;
-    assert_eq!(keyboard.xkb_options_string(), "");
+    assert_eq!(keyboard.keymaps()[0].xkb_options_string(), "");
 }
 
 #[test]
@@ -138,6 +138,121 @@ fn rejects_blank_keyboard_option() {
     )
     .unwrap_err();
     assert!(matches!(err, ConfigError::Validation(_)), "got {err:?}");
+}
+
+// ---- keymaps ----------------------------------------------------------------
+
+/// The keymap names `text`'s keyboard switches between, first the default.
+fn keymap_names(text: &str) -> Vec<String> {
+    Config::parse(text)
+        .expect("the fixture is a config a desk could run")
+        .input
+        .keyboard
+        .keymaps()
+        .into_iter()
+        .map(|keymap| keymap.name)
+        .collect()
+}
+
+/// The validation message `text` is refused with.
+fn refusal(text: &str) -> String {
+    match Config::parse(text) {
+        Err(ConfigError::Validation(message)) => message,
+        other => panic!("{text} should be refused, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_keyboard_without_keymaps_is_one_keymap_named_for_its_layout() {
+    assert_eq!(keymap_names("{}"), vec!["us"]);
+    // The variant names it when there is one, as `dvp` is better known than
+    // `us(dvp)`.
+    let keymaps = Config::parse(
+        r#"{ "input": { "keyboard": { "xkb_variant": "dvp", "xkb_options": ["caps:escape"] } } }"#,
+    )
+    .unwrap()
+    .input
+    .keyboard
+    .keymaps();
+    let [keymap] = keymaps.as_slice() else {
+        panic!("one keymap, got {keymaps:?}");
+    };
+    assert_eq!(keymap.name, "dvp");
+    assert_eq!(keymap.xkb_layout, "us");
+    assert_eq!(keymap.xkb_variant, "dvp");
+    assert_eq!(keymap.xkb_options_string(), "caps:escape");
+}
+
+#[test]
+fn each_keymap_is_a_whole_keymap_with_the_keyboard_s_defaults() {
+    let keymaps = Config::parse(
+        r#"
+{ "input": { "keyboard": { "keymaps": [
+  { "name": "dvp", "xkb_variant": "dvp", "xkb_options": ["caps:escape"] },
+  { "name": "us" },
+  { "name": "de", "xkb_layout": "de", "xkb_model": "pc105", "xkb_rules": "evdev" }
+] } } }
+"#,
+    )
+    .unwrap()
+    .input
+    .keyboard
+    .keymaps();
+    let names: Vec<&str> = keymaps.iter().map(|keymap| keymap.name.as_str()).collect();
+    assert_eq!(names, ["dvp", "us", "de"], "in the config's order");
+    assert_eq!(keymaps[0].xkb_options_string(), "caps:escape");
+    assert_eq!(
+        keymaps[1].xkb_options_string(),
+        "",
+        "options are the keymap's own, not another's"
+    );
+    assert_eq!(keymaps[1].xkb_layout, "us", "layout defaults to us");
+    assert_eq!(keymaps[2].xkb_layout, "de");
+    assert_eq!(keymaps[2].xkb_model, "pc105");
+    assert_eq!(keymaps[2].xkb_rules, "evdev");
+}
+
+#[test]
+fn a_keyboard_with_keymaps_and_its_own_layout_is_refused() {
+    // Which one would be the default is unclear.
+    let message = refusal(
+        r#"{ "input": { "keyboard": { "xkb_variant": "dvp", "keymaps": [{ "name": "us" }] } } }"#,
+    );
+    assert!(message.contains("input.keyboard.keymaps"), "{message}");
+}
+
+#[test]
+fn a_keymap_needs_a_name_it_alone_has() {
+    for keymaps in [
+        r#"[{ "name": "" }]"#,
+        r#"[{ "name": " us" }]"#,
+        r#"[{ "name": "us" }, { "name": "us", "xkb_variant": "dvp" }]"#,
+        // `keymap next` is the command that cycles.
+        r#"[{ "name": "next" }]"#,
+    ] {
+        let message = refusal(&format!(
+            r#"{{ "input": {{ "keyboard": {{ "keymaps": {keymaps} }} }} }}"#
+        ));
+        assert!(
+            message.contains("input.keyboard.keymaps[0]")
+                || message.contains("input.keyboard.keymaps[1]"),
+            "{message}"
+        );
+    }
+    assert!(Config::parse(r#"{ "input": { "keyboard": { "keymaps": [{}] } } }"#).is_err());
+}
+
+#[test]
+fn a_keymap_is_checked_as_the_keyboard_is() {
+    for keymap in [
+        r#"{ "name": "x", "xkb_layout": "" }"#,
+        r#"{ "name": "x", "xkb_options": [""] }"#,
+    ] {
+        let message = refusal(&format!(
+            r#"{{ "input": {{ "keyboard": {{ "keymaps": [{keymap}] }} }} }}"#
+        ));
+        assert!(message.contains("input.keyboard.keymaps[0]"), "{message}");
+    }
 }
 
 // ---- idle -----------------------------------------------------------------

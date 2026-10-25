@@ -57,6 +57,8 @@ pub enum ConfigError {
 /// The string fields go to xkb verbatim, so sway's multi-layout form
 /// (`xkb_layout = "us,de"`) works. Empty `xkb_rules` and `xkb_model` use the
 /// libxkbcommon defaults. The default layout is `us`.
+///
+/// To switch between layouts, list them in `keymaps` instead.
 // `PartialEq` lets a reload detect a change; see the compositor's
 // `Restatement`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
@@ -67,11 +69,122 @@ pub struct KeyboardConfig {
     pub xkb_layout: String,
     pub xkb_variant: String,
     pub xkb_options: Vec<String>,
+    /// Keymaps to switch between, the first the one the desktop starts on.
+    ///
+    /// Each is a whole keymap: an entry's unset fields take the defaults, not
+    /// the fields above, which must stay unset. The shell switches with
+    /// `keymap next` or `keymap <name>`. See `docs/SHELL-CONFIG.md`.
+    pub keymaps: Vec<Keymap>,
 }
 
 impl Default for KeyboardConfig {
     fn default() -> Self {
+        let Keymap {
+            xkb_rules,
+            xkb_model,
+            xkb_layout,
+            xkb_variant,
+            xkb_options,
+            ..
+        } = Keymap::default();
         KeyboardConfig {
+            xkb_rules,
+            xkb_model,
+            xkb_layout,
+            xkb_variant,
+            xkb_options,
+            keymaps: Vec::new(),
+        }
+    }
+}
+
+impl KeyboardConfig {
+    /// The keymaps the desktop switches between, the first its default.
+    ///
+    /// A keyboard without `keymaps` is one keymap, named for its variant, or
+    /// its layout when it has none.
+    pub fn keymaps(&self) -> Vec<Keymap> {
+        match self.keymaps.is_empty() {
+            false => self.keymaps.clone(),
+            true => vec![Keymap {
+                name: match self.xkb_variant.is_empty() {
+                    true => self.xkb_layout.clone(),
+                    false => self.xkb_variant.clone(),
+                },
+                xkb_rules: self.xkb_rules.clone(),
+                xkb_model: self.xkb_model.clone(),
+                xkb_layout: self.xkb_layout.clone(),
+                xkb_variant: self.xkb_variant.clone(),
+                xkb_options: self.xkb_options.clone(),
+            }],
+        }
+    }
+
+    fn validate(&self) -> Result<(), ConfigError> {
+        if self.keymaps.is_empty() {
+            return self.keymaps()[0].validate("input.keyboard");
+        }
+        if *self
+            != (KeyboardConfig {
+                keymaps: self.keymaps.clone(),
+                ..KeyboardConfig::default()
+            })
+        {
+            return Err(ConfigError::Validation(
+                "input.keyboard sets xkb_* fields beside input.keyboard.keymaps; \
+                 put them in a keymap"
+                    .into(),
+            ));
+        }
+        for (index, keymap) in self.keymaps.iter().enumerate() {
+            let at = format!("input.keyboard.keymaps[{index}]");
+            keymap.validate(&at)?;
+            if keymap.name.trim().is_empty() || keymap.name.trim() != keymap.name {
+                return Err(ConfigError::Validation(format!(
+                    "{at} needs a name with no padding, got {:?}",
+                    keymap.name
+                )));
+            }
+            if keymap.name == "next" {
+                return Err(ConfigError::Validation(format!(
+                    "{at} is named \"next\", which `keymap next` takes to mean the next keymap"
+                )));
+            }
+            if self.keymaps[..index]
+                .iter()
+                .any(|earlier| earlier.name == keymap.name)
+            {
+                return Err(ConfigError::Validation(format!(
+                    "{at} is named {:?}, like an earlier keymap; `keymap <name>` needs one each",
+                    keymap.name
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// One keymap the desktop can switch to, in `input.keyboard.keymaps`.
+///
+/// The `xkb_*` fields are as in `input.keyboard`, with the same defaults.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct Keymap {
+    /// What the shell shows and `keymap <name>` selects, such as `dvp`.
+    ///
+    /// Unique, and not `next`.
+    pub name: String,
+    pub xkb_rules: String,
+    pub xkb_model: String,
+    pub xkb_layout: String,
+    pub xkb_variant: String,
+    pub xkb_options: Vec<String>,
+}
+
+impl Default for Keymap {
+    fn default() -> Self {
+        Keymap {
+            name: String::new(),
             xkb_rules: String::new(),
             xkb_model: String::new(),
             // `validate` refuses an empty layout: xkb would fall back to a
@@ -83,7 +196,7 @@ impl Default for KeyboardConfig {
     }
 }
 
-impl KeyboardConfig {
+impl Keymap {
     /// The options joined with commas, as xkb expects.
     ///
     /// An empty list yields `""`, which xkb reads as "no options".
@@ -91,16 +204,17 @@ impl KeyboardConfig {
         self.xkb_options.join(",")
     }
 
-    fn validate(&self) -> Result<(), ConfigError> {
+    /// Checks the `xkb_*` fields of the keymap at config path `at`.
+    fn validate(&self, at: &str) -> Result<(), ConfigError> {
         if self.xkb_layout.trim().is_empty() {
-            return Err(ConfigError::Validation(
-                "input.keyboard.xkb_layout must not be empty".into(),
-            ));
+            return Err(ConfigError::Validation(format!(
+                "{at}.xkb_layout must not be empty"
+            )));
         }
         if self.xkb_options.iter().any(|o| o.trim().is_empty()) {
-            return Err(ConfigError::Validation(
-                "input.keyboard.xkb_options must not contain an empty option".into(),
-            ));
+            return Err(ConfigError::Validation(format!(
+                "{at}.xkb_options must not contain an empty option"
+            )));
         }
         Ok(())
     }

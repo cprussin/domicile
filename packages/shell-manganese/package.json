@@ -10,6 +10,7 @@
     "@domicile-desktop/manganese-bar-module-gmail": "workspace:*",
     "@domicile-desktop/manganese-bar-module-google-messages": "workspace:*",
     "@domicile-desktop/manganese-bar-module-idle-inhibitor": "workspace:*",
+    "@domicile-desktop/manganese-bar-module-keymap": "workspace:*",
     "@domicile-desktop/manganese-bar-module-launcher-button": "workspace:*",
     "@domicile-desktop/manganese-bar-module-network": "workspace:*",
     "@domicile-desktop/manganese-bar-module-notifications": "workspace:*",

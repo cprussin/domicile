@@ -23,7 +23,8 @@ export const PAGES = [
     title: "Appearance",
   },
   {
-    description: "The keyboard layout, as xkb names it.",
+    description:
+      "The keyboard layout, as xkb names it, or the keymaps to switch between.",
     id: PageId.Keyboard,
     title: "Keyboard",
   },

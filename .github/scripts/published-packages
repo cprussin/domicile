@@ -27,6 +27,7 @@ manganese-bar-module-bluetooth
 manganese-bar-module-brightness
 manganese-bar-module-cast
 manganese-bar-module-idle-inhibitor
+manganese-bar-module-keymap
 manganese-bar-module-launcher-button
 manganese-bar-module-mode
 manganese-bar-module-network

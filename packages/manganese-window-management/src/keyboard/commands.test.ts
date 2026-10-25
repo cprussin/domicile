@@ -8,6 +8,7 @@ import {
   DEFAULT_KEYBINDINGS,
   exec,
   idleInhibitor,
+  keymap,
   micMute,
   notifications,
   screenshot,
@@ -97,5 +98,14 @@ describe("exec", () => {
       args: ["exec", "kitty", "--hold"],
       kind: KeyActionKind.SendShell,
     });
+  });
+});
+
+describe("keymap", () => {
+  it("names the next keymap, or one by name", () => {
+    expect([keymap("next"), keymap("us")]).toEqual([
+      { args: ["keymap", "next"], kind: KeyActionKind.SendShell },
+      { args: ["keymap", "us"], kind: KeyActionKind.SendShell },
+    ]);
   });
 });

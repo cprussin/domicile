@@ -227,8 +227,50 @@
     },
     "KeyboardConfig": {
       "additionalProperties": false,
-      "description": "Keyboard settings, named after SwayWM's `xkb_*` options.\n\nThe string fields go to xkb verbatim, so sway's multi-layout form\n(`xkb_layout = \"us,de\"`) works. Empty `xkb_rules` and `xkb_model` use the\nlibxkbcommon defaults. The default layout is `us`.",
+      "description": "Keyboard settings, named after SwayWM's `xkb_*` options.\n\nThe string fields go to xkb verbatim, so sway's multi-layout form\n(`xkb_layout = \"us,de\"`) works. Empty `xkb_rules` and `xkb_model` use the\nlibxkbcommon defaults. The default layout is `us`.\n\nTo switch between layouts, list them in `keymaps` instead.",
       "properties": {
+        "keymaps": {
+          "description": "Keymaps to switch between, the first the one the desktop starts on.\n\nEach is a whole keymap: an entry's unset fields take the defaults, not\nthe fields above, which must stay unset. The shell switches with\n`keymap next` or `keymap <name>`. See `docs/SHELL-CONFIG.md`.",
+          "items": {
+            "$ref": "#/$defs/Keymap"
+          },
+          "type": "array"
+        },
+        "xkb_layout": {
+          "default": "us",
+          "type": "string"
+        },
+        "xkb_model": {
+          "default": "",
+          "type": "string"
+        },
+        "xkb_options": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "xkb_rules": {
+          "default": "",
+          "type": "string"
+        },
+        "xkb_variant": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "Keymap": {
+      "additionalProperties": false,
+      "description": "One keymap the desktop can switch to, in `input.keyboard.keymaps`.\n\nThe `xkb_*` fields are as in `input.keyboard`, with the same defaults.",
+      "properties": {
+        "name": {
+          "default": "",
+          "description": "What the shell shows and `keymap <name>` selects, such as `dvp`.\n\nUnique, and not `next`.",
+          "type": "string"
+        },
         "xkb_layout": {
           "default": "us",
           "type": "string"

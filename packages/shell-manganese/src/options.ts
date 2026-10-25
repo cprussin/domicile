@@ -9,4 +9,7 @@ export const options = defineOptions({
     format: option.choice("Clock format", ["24h", "12h"], "24h"),
     seconds: option.toggle("Show seconds", true),
   },
+  keymap: {
+    hideDefault: option.toggle("Hide the keymap on the first one", false),
+  },
 });

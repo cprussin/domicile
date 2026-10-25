@@ -140,6 +140,41 @@
     };
   };
 
+  # A keymap to switch to, as `input.keyboard.keymaps` lists it.
+  keymap = lib.types.submodule {
+    options = {
+      name = lib.mkOption {
+        description = "What the `keymap` command and the bar call it, such as `dvp`. Unique, and not `next`.";
+        type = lib.types.str;
+      };
+      xkb_rules = lib.mkOption {
+        description = "Passed to xkb as is. Empty uses the libxkbcommon default.";
+        type = lib.types.str;
+        default = "";
+      };
+      xkb_model = lib.mkOption {
+        description = "Passed to xkb as is. Empty uses the libxkbcommon default.";
+        type = lib.types.str;
+        default = "";
+      };
+      xkb_layout = lib.mkOption {
+        description = "The layout, in sway's format.";
+        type = lib.types.str;
+        default = "us";
+      };
+      xkb_variant = lib.mkOption {
+        description = "The variant, e.g. `dvp`. Empty uses the layout's default.";
+        type = lib.types.str;
+        default = "";
+      };
+      xkb_options = lib.mkOption {
+        description = "xkb options, as a list.";
+        type = lib.types.listOf lib.types.str;
+        default = [];
+      };
+    };
+  };
+
   # A tablet or touchscreen and the monitor it covers.
   pointer = lib.types.submodule {
     options = {
@@ -645,6 +680,23 @@ in {
               type = lib.types.listOf lib.types.str;
               default = [];
               example = ["caps:escape"];
+            };
+            keymaps = lib.mkOption {
+              description = ''
+                Keymaps the desktop switches between, with the `keymap`
+                command or the bar. The first is the one it starts on. Set
+                these or the `xkb_*` fields above, not both. A switch lasts
+                until the desktop restarts.
+              '';
+              type = lib.types.listOf keymap;
+              default = [];
+              example = [
+                {
+                  name = "dvp";
+                  xkb_variant = "dvp";
+                }
+                {name = "us";}
+              ];
             };
           };
 
