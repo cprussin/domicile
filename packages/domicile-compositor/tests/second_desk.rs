@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 
 use zbus::blocking::fdo::DBusProxy;
 use zbus::blocking::MessageIterator;
+use zbus::{message, MatchRule};
 
 use crate::running::bus::Bus;
 use crate::running::Compositor;
@@ -105,16 +106,20 @@ fn a_desk_in_a_window_leaves_the_sessions_names_alone() {
 fn activation_calls(bus: &Bus) -> Receiver<(u32, Option<String>)> {
     let monitor = bus.client();
     let names = bus.client();
+    let rule = MatchRule::builder()
+        .msg_type(message::Type::MethodCall)
+        .interface("org.freedesktop.DBus")
+        .expect("an interface")
+        .member("UpdateActivationEnvironment")
+        .expect("a member")
+        .build();
     monitor
         .call_method(
             Some("org.freedesktop.DBus"),
             "/org/freedesktop/DBus",
             Some("org.freedesktop.DBus.Monitoring"),
             "BecomeMonitor",
-            &(
-                vec!["type='method_call',member='UpdateActivationEnvironment'"],
-                0u32,
-            ),
+            &(vec![rule.to_string()], 0u32),
         )
         .expect("the bus takes a monitor");
     let (heard, calls) = channel();
@@ -122,6 +127,11 @@ fn activation_calls(bus: &Bus) -> Receiver<(u32, Option<String>)> {
         let names = DBusProxy::new(&names).expect("the bus");
         for call in MessageIterator::from(monitor) {
             let call = call.expect("a message");
+            // The bus also sends a monitor its own messages, such as
+            // `NameLost` for the monitor's unique name.
+            if !rule.matches(&call).expect("a rule to match") {
+                continue;
+            }
             let sender = call.header().sender().expect("a caller").to_owned();
             // A caller that has since exited has no pid, and is not the
             // desk this waits for.
