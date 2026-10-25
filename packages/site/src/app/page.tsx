@@ -1,4 +1,5 @@
 import { css } from "../../styled-system/css";
+import { Cli } from "../domicile/Cli";
 import { CssStrip } from "../domicile/CssStrip";
 import { DomicileMark } from "../domicile/DomicileMark";
 import { DOCS } from "../domicile/docs";
@@ -37,6 +38,7 @@ const DomicilePage = () => (
       <CssStrip />
       <Platform />
       <Quickstart />
+      <Cli />
       <Npm />
       <ReferenceShell />
       <Section id="docs" title="Docs">
