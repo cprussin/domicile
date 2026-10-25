@@ -38,8 +38,11 @@ export type Sending = {
 
 /** Something that sends to TVs: the engine's Google Cast, or Miracast. */
 export type CastBackend = {
-  /** The app id its ScreenCast portal requests carry. */
-  appId: string;
+  /**
+   * The app id its ScreenCast portal requests carry, or `undefined` when it
+   * is not known: then a cast claims the next request from any app.
+   */
+  appId: string | undefined;
   /** Calls `listener` with every TV it finds now, and on each change. */
   watchTargets: (
     listener: (targets: readonly CastTarget[]) => void,
@@ -102,7 +105,7 @@ export type CastHost = SystemHost &
 
 /** A ScreenCast request a started cast waits on. */
 type Waiting = {
-  appId: string;
+  appId: string | undefined;
   claim: (
     request: Extract<PortalRequest, { kind: PortalKind.ScreenCast }>,
   ) => CastClaim;
@@ -145,13 +148,93 @@ export const claimCastRequest = (
     return undefined;
   }
   const index = desk.awaited.findIndex(
-    (awaited) => awaited.appId === request.appId,
+    (awaited) => awaited.appId === undefined || awaited.appId === request.appId,
   );
   if (index === -1) {
     return undefined;
   }
   const [awaited] = desk.awaited.splice(index, 1);
   return awaited?.claim(request);
+};
+
+/** What {@link engineCast} needs of the desktop `Shell` is handed. */
+export type EngineCastHost = Pick<
+  DomicileHost,
+  "castSinks" | "startCasting" | "stopCasting"
+> & {
+  addEventListener: (type: "castsinkschanged", listener: () => void) => void;
+  removeEventListener: (type: "castsinkschanged", listener: () => void) => void;
+};
+
+/**
+ * The mode an extended desk takes on a Google Cast TV: the Cast mirroring
+ * service sends at most 1080p.
+ */
+const GOOGLE_CAST_MODE = { height: 1080, refreshMhz: 60_000, width: 1920 };
+
+/**
+ * The engine's Google Cast: the receivers the browser finds, and casts of the
+ * desktop to them.
+ */
+export const engineCast = (host: EngineCastHost): CastBackend => ({
+  // The browser's own capture asks the portal, under an app id it does not
+  // choose.
+  appId: undefined,
+  send: async (targetId) => {
+    const started = await host.startCasting(targetId).then(
+      (route) => Ok<string, string>(route),
+      (error: unknown) =>
+        Err<string, string>(
+          error instanceof Error ? error.message : String(error),
+        ),
+    );
+    return started.map((route) => sendingTo(host, route));
+  },
+  watchTargets: (listener) => {
+    const send = () => {
+      listener(
+        (host.castSinks ?? []).map(({ id, name }) => ({
+          id,
+          mode: GOOGLE_CAST_MODE,
+          name,
+          unreachable: undefined,
+        })),
+      );
+    };
+    host.addEventListener("castsinkschanged", send);
+    send();
+    return () => {
+      host.removeEventListener("castsinkschanged", send);
+    };
+  },
+});
+
+/**
+ * Route `route` from {@link engineCast}. The list can name it before or after
+ * the cast resolves, so it ends when a list without it follows one with it,
+ * or follows a stop.
+ */
+const sendingTo = (host: EngineCastHost, route: string): Sending => {
+  const listed = () =>
+    (host.castSinks ?? []).some((sink) => sink.route === route);
+  const { promise: ended, resolve } = Promise.withResolvers<void>();
+  const seen = { stopped: false, value: listed() };
+  const check = () => {
+    if (listed()) {
+      seen.value = true;
+    } else if (seen.value || seen.stopped) {
+      host.removeEventListener("castsinkschanged", check);
+      resolve();
+    }
+  };
+  host.addEventListener("castsinkschanged", check);
+  return {
+    ended,
+    stop: () => {
+      seen.stopped = true;
+      host.stopCasting(route);
+    },
+  };
 };
 
 const deskOf = (

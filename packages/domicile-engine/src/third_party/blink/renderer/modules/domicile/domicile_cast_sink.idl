@@ -1,0 +1,23 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+// A TV the desktop can cast to: a Google Cast receiver the browser's Media
+// Router found. See components/domicile/mojom/cast_sinks.mojom.
+//
+// An interface for DomicileBrowserWindow's reason: these are read from the
+// desktop's `castSinks` attribute.
+
+[
+    Exposed=Window,
+    RuntimeEnabled=DomicileControlChannel
+] interface DomicileCastSink {
+  // The id startCasting() takes.
+  readonly attribute DOMString id;
+
+  // What the TV calls itself.
+  readonly attribute DOMString name;
+
+  // The cast to it from this browser, which stopCasting() takes. Null while
+  // none runs.
+  readonly attribute DOMString? route;
+};

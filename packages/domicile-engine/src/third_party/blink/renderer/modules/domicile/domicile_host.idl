@@ -335,6 +335,30 @@
   [CallWith=ScriptState, RaisesException] undefined closeBrowserWindow(
       DOMString id);
 
+  // The TVs the desktop can cast to: the Google Cast receivers the browser
+  // finds, by name. Null until the browser lists them, which it does as soon
+  // as this page listens; empty when the profile turns casting off. No
+  // [SameObject], for `displays`' reason. See
+  // components/domicile/mojom/cast_sinks.mojom.
+  readonly attribute FrozenArray<DomicileCastSink>? castSinks;
+
+  // Fires when a TV appears or goes, or a cast to one starts or ends. Read
+  // `castSinks` for the current list.
+  attribute EventHandler oncastsinkschanged;
+
+  // Casts the desktop to TV `id`: its picture is what the desktop's ScreenCast
+  // portal picks, which asks this page, and its sound is the desktop's.
+  // Resolves with the cast's route, which the TV's `route` shows from the
+  // next `castsinkschanged`, once the TV takes it. Rejects with an
+  // OperationError saying why, in words to show, when it does not.
+  [CallWith=ScriptState, RaisesException] Promise<DOMString> startCasting(
+      DOMString id);
+
+  // Stops cast `route`; its TV's `route` is null in the next
+  // `castsinkschanged`. An unknown route does nothing.
+  [CallWith=ScriptState, RaisesException] undefined stopCasting(
+      DOMString route);
+
   // Sends `method`, "GET" or "POST", to `url` from the browser process with
   // the cookies of the profile the ordinary browser windows use, so a bar
   // item can read a site the user is signed in to. A POST sends `body`, as a

@@ -238,6 +238,25 @@ export type DomicileBrowserWindow = {
 };
 
 /**
+ * A TV the desktop can cast to: a Google Cast receiver the browser's Media
+ * Router found. See components/domicile/mojom/cast_sinks.mojom.
+ *
+ * An interface for DomicileBrowserWindow's reason: these are read from the
+ * desktop's `castSinks` attribute.
+ */
+export type DomicileCastSink = {
+  /** The id startCasting() takes. */
+  readonly id: string;
+  /** What the TV calls itself. */
+  readonly name: string;
+  /**
+   * The cast to it from this browser, which stopCasting() takes. Null while
+   * none runs.
+   */
+  readonly route: string | null;
+};
+
+/**
  * One thing that was copied, as a row of the clipboard's history.
  *
  * An interface rather than a dictionary because WebIDL will not have a
@@ -402,6 +421,11 @@ export type DomicileHostEventMap = {
    * `browserWindows` for the current list.
    */
   browserwindowschanged: Event;
+  /**
+   * Fires when a TV appears or goes, or a cast to one starts or ends. Read
+   * `castSinks` for the current list.
+   */
+  castsinkschanged: Event;
   /**
    * An answer to callSystem(), as a MessageEvent whose `data` is the
    * compositor's `system_reply`, `system_event` or `system_end` line.
@@ -659,6 +683,19 @@ export type DomicileHost = {
    */
   closeBrowserWindow(id: string): void;
   /**
+   * Casts the desktop to TV `id`: its picture is what the desktop's ScreenCast
+   * portal picks, which asks this page, and its sound is the desktop's.
+   * Resolves with the cast's route, which the TV's `route` shows from the
+   * next `castsinkschanged`, once the TV takes it. Rejects with an
+   * OperationError saying why, in words to show, when it does not.
+   */
+  startCasting(id: string): Promise<string>;
+  /**
+   * Stops cast `route`; its TV's `route` is null in the next
+   * `castsinkschanged`. An unknown route does nothing.
+   */
+  stopCasting(route: string): void;
+  /**
    * Sends `method`, "GET" or "POST", to `url` from the browser process with
    * the cookies of the profile the ordinary browser windows use, so a bar
    * item can read a site the user is signed in to. A POST sends `body`, as a
@@ -762,6 +799,14 @@ export type DomicileHost = {
    * [SameObject], for `displays`' reason.
    */
   readonly browserWindows: readonly DomicileBrowserWindow[] | null;
+  /**
+   * The TVs the desktop can cast to: the Google Cast receivers the browser
+   * finds, by name. Null until the browser lists them, which it does as soon
+   * as this page listens; empty when the profile turns casting off. No
+   * [SameObject], for `displays`' reason. See
+   * components/domicile/mojom/cast_sinks.mojom.
+   */
+  readonly castSinks: readonly DomicileCastSink[] | null;
   /**
    * Typed by the event map rather than by inheriting `EventTarget`, whose
    * overloads take any name and type every listener's event as `Event`.
