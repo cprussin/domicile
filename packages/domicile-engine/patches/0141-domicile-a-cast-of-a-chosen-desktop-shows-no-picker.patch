@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sun, 25 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a cast of a chosen desktop shows no picker
+
+The engine casts the desktop to a TV with a desktop source it names
+itself: the ScreenCast portal asks the shell what the TV shows. The
+Media Router showed Chrome's screen picker for every desktop source,
+and there is no browser window to show it over.
+
+A desktop source that already names its desktop goes to its provider as
+a picked one does. Only browser code makes one: a page's
+PresentationRequest takes no desktop URL.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ .../media/router/mojo/media_router_desktop.cc        | 12 +++++++++++-
+ 1 file changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/chrome/browser/media/router/mojo/media_router_desktop.cc b/chrome/browser/media/router/mojo/media_router_desktop.cc
+index 7180783..fa47b55 100644
+--- a/chrome/browser/media/router/mojo/media_router_desktop.cc
++++ b/chrome/browser/media/router/mojo/media_router_desktop.cc
+@@ -206,7 +206,17 @@ void MediaRouterDesktop::CreateRoute(const MediaSource::Id& source_id,
+                                     weak_factory_.GetWeakPtr(), presentation_id,
+                                     provider_id, std::move(callback), false);
+ 
+-  if (source.IsDesktopMirroringSource()) {
++  if (source.IsDesktopMirroringSource() && source.DesktopStreamId()) {
++    // DOMICILE: a desktop already chosen goes to its provider as a picked one
++    // does. The engine's casts name the desktop, whose picture the ScreenCast
++    // portal asks the shell for, and there is no browser window to show a
++    // picker over. Only browser code makes such a source: a page's
++    // PresentationRequest takes no desktop URL. See
++    // chrome/browser/domicile/domicile_cast_sinks.cc.
++    media_route_providers_[provider_id]->CreateRoute(
++        source_id, sink_id, presentation_id, origin, kDefaultFrameTreeNodeId,
++        timeout, std::move(mr_callback));
++  } else if (source.IsDesktopMirroringSource()) {
+     desktop_picker_->Show(
+         MakeDesktopPickerParams(web_contents),
+         {DesktopMediaList::Type::kScreen},

@@ -13,6 +13,8 @@ source_set("domicile") {
   sources = [
     "domicile_browser_windows.cc",
     "domicile_browser_windows.h",
+    "domicile_cast_sinks.cc",
+    "domicile_cast_sinks.h",
     "domicile_command_socket.cc",
     "domicile_command_socket.h",
     "domicile_desk.cc",
@@ -59,6 +61,11 @@ source_set("domicile") {
 
   deps = [
     "//base",
+    # The TVs the shell casts the desktop to, through Chrome's Media Router.
+    "//chrome/browser/media/router:media_router_feature",
+    "//components/media_router/browser",
+    "//components/media_router/common",
+    "//third_party/webrtc_overrides:webrtc_component",
     "//chrome/browser/ui/browser_window",
     "//chrome/browser/web_applications",
     "//components/domicile:app_roots",

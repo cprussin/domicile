@@ -1,0 +1,78 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sun, 25 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the shell may cast the desktop to a TV
+
+The shell lists the TVs Chrome's Media Router finds and casts the
+desktop to them. Its browser side binds CastSinks for the shell's
+document only, as BrowserWindows does: a page that could reach it could
+put the desktop on any TV in the house. Blink builds the TV interface
+that `domicile.castSinks` lists.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ .../browser/chrome_browser_interface_binders.cc  | 16 ++++++++++++++++
+ .../renderer/bindings/generated_in_modules.gni   |  2 ++
+ .../blink/renderer/bindings/idl_in_modules.gni   |  1 +
+ 3 files changed, 19 insertions(+)
+
+diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
+index abc0016..8a5a575 100644
+--- a/chrome/browser/chrome_browser_interface_binders.cc
++++ b/chrome/browser/chrome_browser_interface_binders.cc
+@@ -7,6 +7,7 @@
+ #include "base/task/bind_post_task.h"
+ #include "chrome/browser/domicile/domicile_extension_installer.h"
+ #include "chrome/browser/domicile/domicile_browser_windows.h"
++#include "chrome/browser/domicile/domicile_cast_sinks.h"
+ #include "chrome/browser/domicile/domicile_extension_tray.h"
+ #include "chrome/browser/domicile/domicile_pointer_warp.h"
+ #include "chrome/browser/domicile/domicile_shell_fetch.h"
+@@ -656,6 +657,21 @@ void PopulateChromeFrameBinders(
+         domicile::BindBrowserWindows(frame, std::move(receiver));
+       }));
+ 
++  // Domicile's engine fork: the TVs to cast the desktop to, for the shell.
++  //
++  // Gated at BIND time like the browser windows: a page that could reach this
++  // could put the desktop on any TV in the house.
++  map->Add<domicile::mojom::CastSinks>(base::BindRepeating(
++      [](content::RenderFrameHost* frame,
++         mojo::PendingReceiver<domicile::mojom::CastSinks> receiver) {
++        if (!domicile::IsShellOrigin(frame->GetLastCommittedOrigin())) {
++          mojo::ReportBadMessage(
++              "domicile: only the shell may cast the desktop.");
++          return;
++        }
++        domicile::BindCastSinks(frame, std::move(receiver));
++      }));
++
+   // Domicile's engine fork: GETs with the profile's cookies, for the shell.
+   //
+   // Gated at BIND time like the browser windows, and for their reason: a page
+diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
+index ee04f71..c6024e9 100644
+--- a/third_party/blink/renderer/bindings/generated_in_modules.gni
++++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
+@@ -2369,6 +2369,8 @@ generated_interface_sources_in_modules = [
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_extension.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_browser_window.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_browser_window.h",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_cast_sink.cc",
++  "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_cast_sink.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_display.cc",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_display.h",
+   "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.cc",
+diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
+index a59fcba..adc2c54 100644
+--- a/third_party/blink/renderer/bindings/idl_in_modules.gni
++++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
+@@ -292,6 +292,7 @@ static_idl_files_in_modules = [
+   "//third_party/blink/renderer/modules/domicile/domicile_fetch_header.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_fetch_response.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_browser_window.idl",
++  "//third_party/blink/renderer/modules/domicile/domicile_cast_sink.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_host.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_display.idl",
+   "//third_party/blink/renderer/modules/domicile/domicile_shortcut_event.idl",
