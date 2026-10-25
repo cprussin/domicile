@@ -13,7 +13,7 @@ const FEATURES: readonly {
   {
     body: "Split, tab, stack, float and the scratchpad, with Sway's layout.",
     media: "tour-tiling",
-    shows: "Three terminals opened, tabbed, and one floated",
+    shows: "Three terminals tabbed, then split, then one floated",
     title: "Tiling, Sway-style",
   },
   {
@@ -31,7 +31,7 @@ const FEATURES: readonly {
   {
     body: "Apps, files in your home and bookmarks in one search. Meta+Space.",
     media: "tour-launcher",
-    shows: "Meta+Space, three letters typed, Enter",
+    shows: "The launcher opening, then a search for Settings",
     title: "The launcher",
   },
   {
@@ -61,7 +61,7 @@ const FEATURES: readonly {
   {
     body: "Press Print, pick an area, then save it or copy it.",
     media: "tour-screenshots",
-    shows: "The screenshot dialog mid-selection",
+    shows: "The screenshot dialog open over a terminal and a browser",
     title: "Screenshots",
   },
   {
