@@ -28,7 +28,8 @@
   },
   "exports": {
     ".": "./src/bar-item.tsx",
-    "./desk-idle-inhibitor": "./src/desk-idle-inhibitor.ts"
+    "./desk-idle-inhibitor": "./src/desk-idle-inhibitor.ts",
+    "./portal-inhibit": "./src/portal-inhibit.ts"
   },
   "files": [
     "src/**",

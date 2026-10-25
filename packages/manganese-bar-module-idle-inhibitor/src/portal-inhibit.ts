@@ -19,16 +19,16 @@ const PORTAL = "org.freedesktop.portal.Desktop";
 /** Lets go of a held inhibitor. */
 export type Release = () => Promise<Result<"released", SystemError>>;
 
-/** Holds an idle inhibitor, and resolves with what lets go of it. */
+/**
+ * Holds an idle inhibitor, and resolves with what lets go of it. `reason` is
+ * what the portal is told it is for.
+ */
 export const inhibitIdle = async (
   bus: Pick<Dbus, "call">,
+  reason: string,
 ): Promise<Result<Release, SystemError>> => {
   const held = await bus.call({
-    body: [
-      "",
-      IDLE,
-      { reason: { signature: "s", value: "Kept awake from the bar" } },
-    ],
+    body: ["", IDLE, { reason: { signature: "s", value: reason } }],
     bus: Bus.Session,
     destination: PORTAL,
     interface: "org.freedesktop.portal.Inhibit",

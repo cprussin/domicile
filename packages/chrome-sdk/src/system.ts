@@ -349,7 +349,7 @@ export type System = {
    * until removed, or until the page goes away. Fails
    * {@link SystemErrorKind.Other} on a desk whose monitors the engine does
    * not report: nested, or described by `output.displays`. See
-   * docs/architecture/CASTING-TO-TVS.md.
+   * docs/CASTING-TO-TVS.md.
    */
   addVirtualMonitor: (
     mode: VirtualMonitorMode,

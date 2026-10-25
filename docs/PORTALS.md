@@ -275,7 +275,7 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   started is claimed with `claimCastRequest` (`@domicile-desktop/sdk/cast`):
   extending the desk answers it with the TV's virtual monitor and shows
   nothing; otherwise the picker is titled "Cast to <TV>". See
-  [CASTING-TO-TVS.md](architecture/CASTING-TO-TVS.md).
+  [CASTING-TO-TVS.md](CASTING-TO-TVS.md).
 - **The wallpaper rides the same push.** `PortalRequests` carries `wallpaper`:
   the background and lock-screen pictures applications set, as paths the shell
   reads with `read_file`. The engine relays that line untyped, so no engine

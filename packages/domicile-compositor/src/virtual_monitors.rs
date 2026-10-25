@@ -1,5 +1,5 @@
 //! Monitors with no connector, which the shell adds to extend the desk onto a
-//! TV it casts to. See `docs/architecture/CASTING-TO-TVS.md`.
+//! TV it casts to. See `docs/CASTING-TO-TVS.md`.
 //!
 //! A page's connection numbers each one ([`VirtualMonitors::add`]) and queues
 //! a [`ClientRequest::AddVirtualMonitor`]. Its lease queues

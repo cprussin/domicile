@@ -1,5 +1,5 @@
 // Casting to TVs for a shell: the TVs each backend finds, and the casts the
-// user started. See docs/architecture/CASTING-TO-TVS.md.
+// user started. See docs/CASTING-TO-TVS.md.
 //
 // A backend sends a picture it asks the ScreenCast portal for. To extend the
 // desk, the shell adds a virtual monitor and answers that request with it
