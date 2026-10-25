@@ -31,6 +31,12 @@ export type Displays = {
    * docs/CASTING-TO-TVS.md.
    */
   addVirtual: System["addVirtualMonitor"];
+  /**
+   * Draw every monitor as if its white were a light of `kelvin` (1000 to
+   * 6500), as a night light does; 6500 draws colors as they are. Allowed while
+   * the desktop is locked. Changes nothing on a nested desktop.
+   */
+  setColorTemperature: System["setColorTemperature"];
   on: On<DisplaysListeners>;
 };
 
@@ -41,7 +47,7 @@ export type DisplaysHost = Pick<
 
 export const displays = (
   host: DisplaysHost,
-  calls: Pick<System, "addVirtualMonitor">,
+  calls: Pick<System, "addVirtualMonitor" | "setColorTemperature">,
 ): Displays => {
   const listOf = memoizeLast((list: readonly DomicileDisplay[] | null) =>
     list?.map(displayOf),
@@ -55,6 +61,7 @@ export const displays = (
       change: (listener) =>
         hostEvent(host, "displayschanged", () => listener()),
     }),
+    setColorTemperature: (kelvin) => calls.setColorTemperature(kelvin),
   };
 };
 

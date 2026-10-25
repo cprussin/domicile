@@ -382,6 +382,7 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         | ClientRequest::RemoveVirtualMonitor { .. }
         // A key or a click, which already counted.
         | ClientRequest::SelectKeymap { .. }
+        | ClientRequest::SetWhitePoint { .. }
         | ClientRequest::CloseApp { .. }
         | ClientRequest::Spawn { .. }
         | ClientRequest::ChromeHello { .. }
@@ -1256,6 +1257,12 @@ mod tests {
                 ClientRequest::SetWindowStates {
                     app_id: "app-1".into(),
                     states: vec![domicile_protocol::WindowState::TiledLeft],
+                },
+            ),
+            (
+                "the page warming the monitors",
+                ClientRequest::SetWhitePoint {
+                    white_point: domicile_host::white_point::white_point(3400),
                 },
             ),
             (

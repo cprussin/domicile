@@ -76,3 +76,24 @@ describe("addVirtual", () => {
     ]);
   });
 });
+
+describe("setColorTemperature", () => {
+  it("asks the compositor to warm every monitor", async () => {
+    const fake = new FakeDomicileHost();
+    desktop(fake.host)
+      .displays.setColorTemperature(3400)
+      .catch(() => {
+        /* never answered */
+      });
+    await Promise.resolve();
+
+    expect(
+      fake.calls.map(([method, , request]) => [
+        method,
+        JSON.parse(String(request)),
+      ]),
+    ).toStrictEqual([
+      ["callSystem", { call: "set_color_temperature", kelvin: 3400 }],
+    ]);
+  });
+});
