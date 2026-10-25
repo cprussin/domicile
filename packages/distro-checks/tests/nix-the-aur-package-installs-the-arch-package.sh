@@ -12,8 +12,8 @@
 # runs.
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-. "$ROOT/scripts/lib/nix-check.sh"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+. "$ROOT/packages/distro-checks/lib/nix-check.sh"
 require_nix
 
 if [ "${DOMICILE_AUR_TOOLS:-}" != 1 ]; then

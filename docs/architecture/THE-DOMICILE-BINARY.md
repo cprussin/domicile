@@ -144,7 +144,7 @@ whole file (see Config file) and the desk does not start. So:
 
 Checks:
 
-- `scripts/test-the-home-manager-module-agrees.sh` compares option names to
+- `packages/distro-checks/tests/test-the-home-manager-module-agrees.sh` compares option names to
   the Rust structs, without Nix.
 - `scripts/test-a-dropped-config-field-is-removed-here.sh` fails when a
   config field at any depth is gone since the base commit and

@@ -1,0 +1,27 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "test:distro": {
+      "cache": false,
+      "passThroughEnv": ["*"]
+    },
+    "test:nix": {
+      "cache": false,
+      "passThroughEnv": ["*"]
+    },
+    "test:shell": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/bun.lock",
+        "$TURBO_ROOT$/bunfig.toml",
+        "$TURBO_ROOT$/distro/**",
+        "$TURBO_ROOT$/flake.nix",
+        "$TURBO_ROOT$/package.json",
+        "$TURBO_ROOT$/packages/*/package.json",
+        "$TURBO_ROOT$/packages/check-runner/**",
+        "$TURBO_ROOT$/packages/domicile-config/src/**",
+        "$TURBO_ROOT$/scripts/**"
+      ]
+    }
+  }
+}

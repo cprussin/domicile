@@ -13,7 +13,7 @@ set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ENGINE_LIB="$ROOT/packages/domicile-engine/scripts/lib-engine-guard.sh"
-NIX_LIB="$ROOT/scripts/lib/nix-check.sh"
+NIX_LIB="$ROOT/packages/distro-checks/lib/nix-check.sh"
 RUST_LIB="$ROOT/scripts/lib/rust-check.sh"
 [ -f "$ENGINE_LIB" ] || { echo "no $ENGINE_LIB" >&2; exit 1; }
 [ -f "$NIX_LIB" ] || { echo "no $NIX_LIB" >&2; exit 1; }
