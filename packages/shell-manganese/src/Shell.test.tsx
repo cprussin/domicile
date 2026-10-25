@@ -354,6 +354,7 @@ const MANGANESE_KEYS: ShellKeybindings = {
     line("n", false, "send-shell notifications"),
     line("n", true, "send-shell notifications clear"),
     line("i", false, "send-shell idle-inhibitor"),
+    line("t", true, "send-shell night-light"),
     ...DIRECTIONS.map(([keysym, way]) =>
       line(keysym, false, `send-shell focus ${way}`),
     ),
@@ -1067,6 +1068,21 @@ describe("Shell", () => {
       press("i");
 
       expect(screen.getByRole("button", { name: /Screens/ })).toBeDisabled();
+    });
+  });
+
+  describe("the night light", () => {
+    it("is toggled from `night-light`, as from the bar's switch", () => {
+      renderShell();
+      const label = () =>
+        screen
+          .getByRole("button", { name: /^Night light/ })
+          .getAttribute("aria-label");
+      const before = label();
+
+      press("t", true);
+
+      expect(label()).not.toBe(before);
     });
   });
 

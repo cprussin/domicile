@@ -3,8 +3,8 @@
 // - Commands use sway's syntax where sway has one (`focus left`, `layout
 //   tabbed`), so sway bindings can be copied over. `lock`, `launcher`,
 //   `clipboard`, `search-clipboard`, `screenshot`, `volume`, `mic`,
-//   `brightness`, `keymap`, `notifications`, `idle-inhibitor` and
-//   `resize grow <direction>` are manganese's own.
+//   `brightness`, `keymap`, `notifications`, `idle-inhibitor`,
+//   `night-light` and `resize grow <direction>` are manganese's own.
 // - `exec <argv…>` runs the argv directly, not through `sh -c` as sway does.
 // - An unknown command is a config error, so it returns an `Err`, not a throw.
 //
@@ -50,6 +50,8 @@ const COMMANDS: ReadonlyMap<string, Action> = new Map<string, Action>([
   ["notifications clear", WindowAction.NotificationsCleared()],
   // The bar's eye; a toggle.
   ["idle-inhibitor", WindowAction.IdleInhibitorToggled()],
+  // The brightness popover's switch; a toggle.
+  ["night-light", WindowAction.NightLightToggled()],
   ["volume up", WindowAction.MediaKeyPressed(MediaKey.VolumeUp)],
   ["volume down", WindowAction.MediaKeyPressed(MediaKey.VolumeDown)],
   ["volume mute", WindowAction.MediaKeyPressed(MediaKey.VolumeMute)],

@@ -23,6 +23,7 @@ describe("parseCommand", () => {
     ["notifications", WindowAction.NotificationsToggled()],
     ["notifications clear", WindowAction.NotificationsCleared()],
     ["idle-inhibitor", WindowAction.IdleInhibitorToggled()],
+    ["night-light", WindowAction.NightLightToggled()],
     ["volume up", WindowAction.MediaKeyPressed(MediaKey.VolumeUp)],
     ["volume down", WindowAction.MediaKeyPressed(MediaKey.VolumeDown)],
     ["volume mute", WindowAction.MediaKeyPressed(MediaKey.VolumeMute)],

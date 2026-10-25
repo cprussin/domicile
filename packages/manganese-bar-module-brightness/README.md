@@ -54,6 +54,9 @@ useNightLight(domicile, {
   - Warmth 0 to 100 is 6000K to 2000K, even in mireds.
   - The bar's switch overrides the schedule until its next change. See
     [TOP-BAR.md](../shell-manganese/docs/TOP-BAR.md#brightness).
+  - The `night-light` command does the same from a key or a terminal:
+    `domicile send-shell night-light`. The shell reaches it through
+    `deskNightLight` in `./desk-night-light`.
 
 ## Test
 
