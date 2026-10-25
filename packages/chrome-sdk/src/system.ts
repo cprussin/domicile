@@ -229,6 +229,27 @@ export type ScreenshotKept = ReturnType<
 /** A watch's `items` hear the absolute path of each change. */
 export type Watch = Listening<Listened<string>>;
 
+/** A monitor for {@link System.addVirtualMonitor} to add. */
+export type VirtualMonitorMode = {
+  /** Its description, such as the TV it is cast to. */
+  name: string;
+  width: number;
+  height: number;
+  refreshMhz: number;
+};
+
+/** A monitor with no connector, which the desk extends onto. */
+export type VirtualMonitor = {
+  /** Its `wl_output` name, as `domicile.displays` names it. */
+  output: string;
+  remove: () => void;
+  /**
+   * `Ok` after {@link VirtualMonitor.remove}. `Err` when it went with its
+   * compositor; the next one does not have it.
+   */
+  ended: Promise<Result<"removed", SystemError>>;
+};
+
 /**
  * The calls. A relative path starts at the home. The compositor runs each in
  * the desktop's environment and refuses most of them while the desktop is
@@ -320,6 +341,17 @@ export type System = {
    * the desktop is locked.
    */
   windowRequests: () => Promise<Result<Listening<WindowRequest>, SystemError>>;
+  /**
+   * Add a monitor with no connector, which the desk extends onto and only a
+   * capture shows: casting to a TV. A later `displays` lists it. It lasts
+   * until removed, or until the page goes away. Fails
+   * {@link SystemErrorKind.Other} on a desk whose monitors the engine does
+   * not report: nested, or described by `output.displays`. See
+   * docs/architecture/CASTING-TO-TVS.md.
+   */
+  addVirtualMonitor: (
+    mode: VirtualMonitorMode,
+  ) => Promise<Result<VirtualMonitor, SystemError>>;
 };
 
 /** What {@link system} needs of the desktop `Shell` is handed. */
@@ -334,6 +366,7 @@ export type SystemHost = Pick<DomicileHost, "callSystem"> & {
 export const system = (host: SystemHost): System => {
   const calls = callsOn(host);
   return {
+    addVirtualMonitor: (mode) => addVirtualMonitor(calls, mode),
     createDir: (path) =>
       oneShot(calls, { call: "create_dir", path }, (reply) =>
         reply.kind === "created" ? "created" : unexpected(reply),
@@ -651,6 +684,51 @@ const spawn = (
                       calls.host.callSystem(
                         id,
                         JSON.stringify({ call: "stdin", data: toBase64(data) }),
+                      );
+                    },
+                  })
+                : unexpected(reply),
+            );
+          }
+        },
+      },
+    );
+  });
+
+const addVirtualMonitor = (
+  calls: Calls,
+  mode: VirtualMonitorMode,
+): Promise<Result<VirtualMonitor, SystemError>> =>
+  new Promise((resolve) => {
+    const ended = settled<Result<"removed", SystemError>>();
+    const id = call(
+      calls,
+      {
+        call: "virtual_monitor",
+        height: mode.height,
+        name: mode.name,
+        refresh_mhz: mode.refreshMhz,
+        width: mode.width,
+      },
+      {
+        end: (end) => {
+          ended.settle(stopOf(end).map(() => "removed" as const));
+        },
+        event: unexpected,
+        reply: (reply) => {
+          if (reply.kind === "failed") {
+            calls.running.delete(id);
+            resolve(Err(systemError(reply.error)));
+          } else {
+            resolve(
+              reply.kind === "virtual_monitor"
+                ? Ok({
+                    ended: ended.promise,
+                    output: reply.output,
+                    remove: () => {
+                      calls.host.callSystem(
+                        id,
+                        JSON.stringify({ call: "unwatch" }),
                       );
                     },
                   })

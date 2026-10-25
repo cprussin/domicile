@@ -230,6 +230,40 @@ pub struct Display {
     pub refresh_mhz: i32,
 }
 
+impl Display {
+    /// Whether the compositor asked for it with
+    /// [`Engine::configure_virtual_displays`], rather than a connector backing
+    /// it.
+    pub fn is_virtual(&self) -> bool {
+        self.id & VirtualDisplay::ID_BIT != 0
+    }
+}
+
+/// A monitor with no connector, which the desk extends onto and only a capture
+/// shows. See `docs/architecture/CASTING-TO-TVS.md`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VirtualDisplay {
+    /// Its [`Display::id`]; see [`VirtualDisplay::id_of`].
+    pub id: i64,
+    /// Its mode, in physical pixels.
+    pub mode: (u32, u32),
+    pub refresh_mhz: u32,
+    /// Its name, such as the TV it is cast to. Becomes the display's
+    /// description.
+    pub name: String,
+}
+
+impl VirtualDisplay {
+    /// The bit that tells a virtual display's id from a connector's.
+    const ID_BIT: i64 = i64::MIN;
+
+    /// The id of virtual display `number`, which the engine reports on
+    /// connector `virtual-<number>`.
+    pub fn id_of(number: u32) -> i64 {
+        Self::ID_BIT | i64::from(number)
+    }
+}
+
 /// How the compositor wants a connector driven: the config's answer to a
 /// [`Display`].
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -563,6 +597,18 @@ struct RawLayout {
     desk_y: i32,
     desk_width: i32,
     desk_height: i32,
+}
+
+/// `DomicileVirtualDisplay`, laid out as in the C header. 32 bytes, with four
+/// of padding before `name`.
+#[repr(C)]
+struct RawVirtualDisplay {
+    id: i64,
+    width: i32,
+    height: i32,
+    refresh_mhz: i32,
+    /// The name, borrowed for the call.
+    name: *const c_char,
 }
 
 /// `DomicilePointerTarget`, laid out as in the C header. 16 bytes, no padding.
@@ -1218,6 +1264,44 @@ impl Engine {
         };
         let raw = layouts_from(connectors);
         // SAFETY: as above, and `raw` outlives the call; the engine copies it.
+        unsafe { f(self.handle, raw.as_ptr(), raw.len() as u32) };
+    }
+
+    /// Tells the browser which monitors with no connector to add, replacing the
+    /// last list.
+    ///
+    /// Each joins the next [`Event::Displays`], to be laid out with
+    /// [`Engine::configure_displays`] like a connector. Off a tty the engine
+    /// ignores it.
+    pub fn configure_virtual_displays(&self, displays: &[VirtualDisplay]) {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, *const RawVirtualDisplay, u32)> = match self
+            .symbol(
+                b"domicile_virtual_displays_configure\0",
+                "domicile_virtual_displays_configure",
+            ) {
+            Ok(symbol) => symbol,
+            Err(_) => return,
+        };
+        let names: Vec<CString> = displays
+            .iter()
+            .map(|display| {
+                CString::new(display.name.as_str()).expect("a display's name has no NUL")
+            })
+            .collect();
+        let raw: Vec<RawVirtualDisplay> = displays
+            .iter()
+            .zip(&names)
+            .map(|(display, name)| RawVirtualDisplay {
+                id: display.id,
+                width: logical(display.mode.0),
+                height: logical(display.mode.1),
+                refresh_mhz: i32::try_from(display.refresh_mhz)
+                    .expect("a refresh rate fits an int32_t"),
+                name: name.as_ptr(),
+            })
+            .collect();
+        // SAFETY: as above; `raw` and `names` outlive the call, and the engine
+        // copies both.
         unsafe { f(self.handle, raw.as_ptr(), raw.len() as u32) };
     }
 
@@ -2193,6 +2277,28 @@ mod tests {
         // 8 (id) + 16 (three `int32_t`, one `uint32_t`) + 8 (`double`) + 16
         // (desk). No padding: the `double` is already aligned.
         assert_eq!(std::mem::size_of::<RawLayout>(), 48);
+    }
+
+    #[test]
+    fn a_virtual_display_is_the_record_the_c_header_declares() {
+        // 8 (id) + 3 * 4 (mode, rate) + 4 padding + 8 (name).
+        assert_eq!(std::mem::size_of::<RawVirtualDisplay>(), 32);
+    }
+
+    #[test]
+    fn a_virtual_display_is_told_from_a_connector_by_its_id() {
+        let display = |id| Display {
+            id,
+            description: String::new(),
+            connector: String::new(),
+            position: (0, 0),
+            size: (1920, 1080),
+            physical_mm: (0, 0),
+            refresh_mhz: 0,
+        };
+        assert!(display(VirtualDisplay::id_of(1)).is_virtual());
+        // EDID-derived ids are positive.
+        assert!(!display(1).is_virtual());
     }
 
     #[test]

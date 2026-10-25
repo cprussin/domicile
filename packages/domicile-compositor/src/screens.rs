@@ -13,7 +13,7 @@
 //! See `docs/DISPLAYS.md`. Kept free of Smithay so it can be unit tested.
 
 use domicile_config::{
-    ConfigError, Connected, Desktop, InputConfig, Layout, OutputConfig, Transform,
+    ConfigError, Connected, Desk, Desktop, InputConfig, Layout, OutputConfig, Transform,
 };
 use domicile_protocol::{DisplayInfo, DisplayTransform};
 use domicile_scene::{Bounds, Point};
@@ -309,9 +309,10 @@ impl Screens {
     /// The outputs a matched profile makes of the engine's displays.
     ///
     /// The profile sets position, scale and rotation. The panel's own
-    /// properties come from the engine's reading.
+    /// properties come from the engine's reading. Virtual displays, which no
+    /// profile names, extend the desk; see [`Screens::extended_onto`].
     pub fn from_the_layout(layout: &Layout, displays: &[Display], vendors: &Vendors) -> Screens {
-        Screens {
+        let profiled = Screens {
             follows_the_window: false,
             // By the engine's id: an output name is this compositor's naming,
             // which the engine does not know.
@@ -356,7 +357,59 @@ impl Screens {
                 as_coordinate(layout.size().0),
                 as_coordinate(layout.size().1),
             ),
+        };
+        profiled.extended_onto(displays)
+    }
+
+    /// This profile's desktop with each virtual display in `displays` added
+    /// right of it, top-aligned, at scale 1.
+    ///
+    /// On the engine's desktop each goes past the end of the connectors' row,
+    /// where the engine places a display the layout does not name.
+    fn extended_onto(mut self, displays: &[Display]) -> Screens {
+        let mode_of = |id: i64| {
+            displays
+                .iter()
+                .find(|display| display.id == id)
+                .expect("a layout only names displays the engine reported")
+                .size
+        };
+        let mut row_end = self
+            .scanout
+            .iter()
+            .map(|connector| connector.origin.0 + as_coordinate(mode_of(connector.id).0))
+            .max()
+            .unwrap_or(0);
+        for display in displays.iter().filter(|display| display.is_virtual()) {
+            let size = (as_coordinate(display.size.0), as_coordinate(display.size.1));
+            let position = (self.size.0, 0);
+            self.scanout.push(Connector {
+                id: display.id,
+                enabled: true,
+                origin: (row_end, 0),
+                transform: Transform::Normal,
+                scale: 1.0,
+                desk: Some(Desk {
+                    position,
+                    size: display.size,
+                }),
+            });
+            self.outputs.push(Advertised {
+                logical: size,
+                mode: size,
+                name: name_of(display),
+                position,
+                scale: 1.0,
+                transform: Transform::Normal,
+                description: display.description.clone(),
+                display: Some(display.id),
+                physical_mm: display.physical_mm,
+                refresh_mhz: display.refresh_mhz,
+            });
+            row_end += size.0;
+            self.size = (self.size.0 + size.0, self.size.1.max(size.1));
         }
+        self
     }
 
     /// The outputs, in the order the config wrote them.
@@ -648,19 +701,22 @@ fn overlap_area(a: &Bounds, b: &Bounds) -> f64 {
 /// `drm-<id>` for a monitor with an EDID name: ozone derives the id from the
 /// EDID, so it survives a replug, and profiles already name it. A monitor with
 /// none is named after its connector, as sway names it. `drm-<id>` again from
-/// an engine that reports no connector.
+/// an engine that reports no connector. A virtual display is named after its
+/// connector, `virtual-<n>`, since its description is a TV's name.
 fn name_of(display: &Display) -> String {
-    if display.description.is_empty() && !display.connector.is_empty() {
+    if display.is_virtual() || (display.description.is_empty() && !display.connector.is_empty()) {
         display.connector.clone()
     } else {
         format!("drm-{}", display.id)
     }
 }
 
-/// The engine's displays under the names a config matches.
+/// The engine's displays under the names a config matches. A virtual display
+/// is none of them: it lives only as long as its cast.
 fn connected(displays: &[Display], vendors: &Vendors) -> Vec<Connected> {
     displays
         .iter()
+        .filter(|display| !display.is_virtual())
         .map(|display| Connected {
             name: name_of(display),
             description: display.description.clone(),
@@ -732,6 +788,7 @@ fn as_measure(coordinate: i32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::VirtualDisplay;
     use domicile_config::{Config, Desk};
 
     fn desktop(text: &str) -> Desktop {
@@ -1801,6 +1858,91 @@ mod tests {
   }
 }
 "#;
+
+    /// A TV the desk extends onto, as the engine reports it: past the right
+    /// edge of `two_plugged_in`'s connectors.
+    fn a_tv() -> Display {
+        Display {
+            id: VirtualDisplay::id_of(1),
+            description: "Living Room TV".into(),
+            connector: "virtual-1".into(),
+            position: (4800, 0),
+            size: (1920, 1080),
+            physical_mm: UNKNOWN_PHYSICAL_MM,
+            refresh_mhz: 60_000,
+        }
+    }
+
+    #[test]
+    fn a_virtual_monitor_is_named_after_its_connector() {
+        // Its description is the TV's name, which is no EDID to name it by.
+        let mut displays = plugged_in();
+        displays.push(a_tv());
+
+        let screens = Screens::from_the_engine(&displays, &unspelled());
+
+        let tv = screens.outputs().last().expect("the TV is advertised");
+        assert_eq!(tv.name, "virtual-1");
+        assert_eq!(tv.description, "Living Room TV");
+    }
+
+    #[test]
+    fn a_profile_extends_the_desk_onto_a_virtual_monitor() {
+        // The profile still matches with the TV there, and the TV goes right
+        // of the desk the profile laid out, at its mode.
+        let mut displays = two_plugged_in();
+        displays.push(a_tv());
+
+        let placed = Screens::nested()
+            .replugged_into(&displays, &output(HOME_OFFICE), &unspelled())
+            .expect("the profile should be applicable")
+            .expect("a matched profile defines the desktop");
+
+        assert_eq!(
+            placed.outputs().last(),
+            Some(&Advertised {
+                logical: (1920, 1080),
+                mode: (1920, 1080),
+                name: "virtual-1".into(),
+                position: (1920, 0),
+                scale: 1.0,
+                transform: Transform::Normal,
+                description: "Living Room TV".into(),
+                display: Some(VirtualDisplay::id_of(1)),
+                physical_mm: UNKNOWN_PHYSICAL_MM,
+                refresh_mhz: 60_000,
+            })
+        );
+        assert_eq!(placed.size(), (3840, 3200));
+        assert_eq!(
+            placed.scanout().last(),
+            Some(&Connector {
+                id: VirtualDisplay::id_of(1),
+                enabled: true,
+                // Past the connectors' row, which ends at 1920 + 2880.
+                origin: (4800, 0),
+                transform: Transform::Normal,
+                scale: 1.0,
+                desk: Some(Desk {
+                    position: (1920, 0),
+                    size: (1920, 1080),
+                }),
+            })
+        );
+    }
+
+    #[test]
+    fn a_profile_cannot_name_a_virtual_monitor() {
+        // Profiles describe the monitors on the desk. A TV comes and goes
+        // with its cast, so naming one would make the profile match only
+        // while casting.
+        let mut displays = plugged_in();
+        displays.push(a_tv());
+
+        assert!(connected(&displays, &unspelled())
+            .iter()
+            .all(|connected| connected.name != "virtual-1"));
+    }
 
     #[test]
     #[should_panic(expected = "the engine reports at least one display")]

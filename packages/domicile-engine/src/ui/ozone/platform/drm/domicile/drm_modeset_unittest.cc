@@ -3,6 +3,7 @@
 
 #include "ui/ozone/platform/drm/domicile/drm_modeset.h"
 
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -16,6 +17,7 @@
 #include "ui/display/types/display_mode.h"
 #include "ui/display/types/display_snapshot.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace ui {
@@ -335,6 +337,9 @@ class FakeDelegate : public display::NativeDisplayDelegate {
 
   bool was_asked() const { return !pending_.is_null(); }
   size_t asks() const { return asked_.size(); }
+  const std::vector<display::DisplayConfigurationParams>& last_ask() const {
+    return asked_.back();
+  }
 
   void SetSnapshots(
       std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>> s) {
@@ -538,6 +543,79 @@ TEST(DrmModesetTest, ARelitScreenStillSuppressesTheHotplugItCauses) {
   EXPECT_EQ(fake->asks(), 2u)
       << "the CHANGE the relight's own Configure emits is still this driver's "
          "own echo";
+}
+
+// A virtual display's id has the top bit set, as the compositor picks it.
+constexpr int64_t kVirtualId = std::numeric_limits<int64_t>::min() | 1;
+
+TEST(DrmModesetTest, AVirtualDisplayIsANetworkDisplayAtItsMode) {
+  const std::unique_ptr<display::DisplaySnapshot> snapshot =
+      VirtualSnapshot({.id = kVirtualId,
+                       .mode = gfx::Size(1920, 1080),
+                       .refresh_mhz = 60000,
+                       .name = "Living Room TV"});
+
+  EXPECT_EQ(snapshot->display_id(), kVirtualId);
+  EXPECT_EQ(snapshot->type(), display::DISPLAY_CONNECTION_TYPE_NETWORK);
+  ASSERT_NE(snapshot->native_mode(), nullptr);
+  EXPECT_EQ(snapshot->native_mode()->size(), gfx::Size(1920, 1080));
+  EXPECT_EQ(snapshot->native_mode()->refresh_rate(), 60.f);
+  EXPECT_EQ(snapshot->current_mode(), snapshot->native_mode());
+  EXPECT_EQ(DisplayNameFromSnapshot(*snapshot), "Living Room TV");
+  EXPECT_EQ(snapshot->domicile_connector(), "virtual-1");
+}
+
+// No CRTC drives a virtual display, so asking for one would fail the whole
+// modeset.
+TEST(DrmModesetTest, AVirtualDisplayLightsNoCrtc) {
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
+  owned.push_back(SnapshotBuilder().Id(1).Build());
+  owned.push_back(VirtualSnapshot({.id = kVirtualId,
+                                   .mode = gfx::Size(1920, 1080),
+                                   .refresh_mhz = 60000,
+                                   .name = "TV"}));
+
+  const auto params = ModesetParamsFromSnapshots(
+      Pointers(owned),
+      {{.id = 1, .enabled = true, .origin = gfx::Point(0, 0)},
+       {.id = kVirtualId, .enabled = true, .origin = gfx::Point(1920, 0)}});
+
+  ASSERT_EQ(params.size(), 1u);
+  EXPECT_EQ(params[0].id, 1);
+}
+
+// The desk extends onto it, so the screen lists it beside the connectors.
+TEST(DrmModesetTest, VirtualDisplaysJoinEveryReading) {
+  auto owned = std::make_unique<FakeDelegate>();
+  FakeDelegate* fake = owned.get();
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(
+      SnapshotBuilder().Id(11).NativeMode(gfx::Size(2880, 1920), 120.f).Build());
+  fake->SetSnapshots(Pointers(snapshots));
+
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager, nullptr);
+  DrmModeset modeset(std::move(owned), &screen);
+  modeset.Start();
+  fake->Answer(true);
+
+  modeset.SetVirtualDisplays({{.id = kVirtualId,
+                               .mode = gfx::Size(1920, 1080),
+                               .refresh_mhz = 60000,
+                               .name = "TV"}});
+
+  ASSERT_EQ(screen.GetAllDisplays().size(), 2u);
+  EXPECT_EQ(screen.GetAllDisplays()[1].id(), kVirtualId);
+  EXPECT_EQ(screen.GetAllDisplays()[1].bounds(),
+            gfx::Rect(2880, 0, 1920, 1080))
+      << "placed past the connectors, as an unnamed connector is";
+  EXPECT_EQ(screen.connectors().at(kVirtualId), "virtual-1");
+  EXPECT_EQ(fake->asks(), 1u)
+      << "the connectors read the same, so nothing is modeset again";
+
+  modeset.SetVirtualDisplays({});
+
+  EXPECT_EQ(screen.GetAllDisplays().size(), 1u);
 }
 
 }  // namespace

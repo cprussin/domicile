@@ -137,6 +137,7 @@ mod tray;
 mod unlock_backoff;
 mod uploads;
 mod viewport;
+mod virtual_monitors;
 mod which_engine;
 mod window_geometry;
 mod windows;
@@ -311,6 +312,9 @@ struct DomicileCompositor {
     /// Kept so a config reload can be matched against the current monitors, not
     /// only a hotplug.
     engine_displays: Vec<engine::Display>,
+    /// The virtual monitors pages added, in the order they were. See
+    /// [`virtual_monitors`].
+    virtual_displays: Vec<engine::VirtualDisplay>,
     /// hwdata's `pnp.ids`, mapping EDID vendor codes to vendor names.
     ///
     /// Read once at startup; it cannot change between hotplugs. Empty if the
@@ -1218,6 +1222,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         outputs,
         config: ConfigStore::new(config.clone()),
         engine_displays: Vec::new(),
+        virtual_displays: Vec::new(),
         vendors,
         // Toolkits request cursors by name here, which map onto CSS cursor
         // keywords.
