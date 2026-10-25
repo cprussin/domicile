@@ -203,10 +203,14 @@ on other Wayland compositors.
   acked (`configure_box`, `domicile_surface_submit_for_box`,
   `configure_answers.rs`). An old buffer stays at its old surface instead of
   meeting the new box stretched.
-- **Pacing:** each toplevel has at most one unanswered size configure. Newer
-  boxes wait; the newest goes out when the client commits after acking, or
-  after 500 ms (`PATIENCE`) for a client that never answers. A slow client
-  skips the sizes it could not draw instead of queueing them.
+- **Pacing:** each toplevel has at most three unanswered size configures.
+  Newer boxes wait; the newest goes out when the client commits after acking
+  one, or after 500 ms (`PATIENCE`) for a client that never answers. A slow
+  client skips the sizes it could not draw instead of queueing them.
+  - Three: Chromium (and so Electron) draws up to three sizes at once and acks
+    each when its frame is ready, so it needs three to draw a new size every
+    frame of a drag. KWin sets no limit.
+  - A client that never answers gets at most three sizes each `PATIENCE`.
 - **`<webview>`:** the guest keeps upstream's default deadline, as an
   out-of-process `<iframe>` does.
 - **Cost:** a client slower than the deadline slows the whole desktop during a
