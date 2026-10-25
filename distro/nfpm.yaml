@@ -6,6 +6,8 @@
 # - `@pam@`: which `pam/` file is `/etc/pam.d/domicile`.
 # - `@version@`: `distro/version.sh`'s.
 # - `@glibc@`: the newest glibc symbol version any staged binary uses.
+# - `@rpm-gstreamer@`: the recorder's GStreamer plugin packages, which Fedora
+#   and openSUSE name differently.
 #
 # `distro/nfpm-config.sh` fills them in. Its `--without-apparmor` drops the
 # lines between `# AppArmor 4 {` and `# AppArmor 4 }`.
@@ -102,6 +104,11 @@ overrides:
       - libwayland-client0
       - libwayland-egl1
       - libpam0g
+      # The recorder, and the plugins its pipeline names.
+      - libgstreamer1.0-0
+      - gstreamer1.0-plugins-base
+      - gstreamer1.0-plugins-good
+      - gstreamer1.0-pipewire
       # logind, `systemd-run`, `busctl` and `udevadm`.
       - systemd
     recommends:
@@ -157,6 +164,8 @@ overrides:
       - libwayland-client.so.0()(64bit)
       - libwayland-egl.so.1()(64bit)
       - libpam.so.0()(64bit)
+      - libgstreamer-1.0.so.0()(64bit)
+      - "@rpm-gstreamer@"
       - systemd
     recommends:
       - upower
@@ -200,6 +209,10 @@ overrides:
       - libglvnd
       - wayland
       - pam
+      - gstreamer
+      - gst-plugins-base
+      - gst-plugins-good
+      - gst-plugin-pipewire
       - systemd
 
 deb:

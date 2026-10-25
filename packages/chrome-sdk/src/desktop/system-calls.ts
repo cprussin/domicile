@@ -98,6 +98,13 @@ export type System = {
    */
   screenshot: () => Promise<Result<ScreenshotKept, SystemError>>;
   /**
+   * Record the screen: `<PortalDialogs />` draws the screen cast picker, and
+   * what is picked is recorded, with its sound, until its toolbar stops it.
+   * Resolves with the WebM under `$XDG_VIDEOS_DIR/Screen recordings/`, or
+   * fails `Canceled` when the picker is dismissed or the recording discarded.
+   */
+  screenRecord: () => Promise<Result<string, SystemError>>;
+  /**
    * Draw `window` as it last drew itself, as a `data:` URL of a PNG, for a
    * picker to preview a window that is not on screen. A browser window's page
    * draws while it is captured, so a hidden one draws too.
@@ -273,6 +280,10 @@ export const system = (host: SystemHost): System => {
         ]);
         return exited.map((exit) => ({ ...exit, stderr, stdout }));
       }),
+    screenRecord: () =>
+      oneShot(calls, { call: "screen_record" }, (reply) =>
+        reply.kind === "saved" ? reply.path : unexpected(reply),
+      ),
     screenshot: () =>
       oneShot(calls, { call: "screenshot" }, (reply) => keptOf(reply)),
     selectKeymap: (choice) =>

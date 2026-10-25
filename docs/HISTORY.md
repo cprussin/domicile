@@ -60,6 +60,7 @@ Times are milliseconds since the epoch, fractional, on every hop.
 | `domicile-history.desktop` | `domicile-history` |
 | `domicile-settings.desktop` | `domicile-settings` ([SETTINGS.md](SETTINGS.md)) |
 | `domicile-screenshot.desktop` | `domicile screenshot` |
+| `domicile-screen-record.desktop` | `domicile screen-record` ([PORTALS.md](PORTALS.md#screen-recording)) |
 | `domicile-shutdown.desktop` | `domicile power-off`: `systemctl poweroff` after a yes in Domicile's Access dialog |
 | `domicile-reboot.desktop` | `domicile reboot`: `systemctl reboot` after the same |
 | `domicile-logout.desktop` | `domicile log-out`: `loginctl terminate-session` after the same |

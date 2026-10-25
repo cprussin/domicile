@@ -5,7 +5,10 @@
 //! object and who hears each change.
 //!
 //! A session that controls or captures input is listed with [`Queue::begin`]
-//! until it ends, and the shell stops it with [`PortalAnswer::Stop`].
+//! until it ends, and the shell stops it with [`PortalAnswer::Stop`]. A screen
+//! recording, listed with [`Queue::begin_controlled`], also takes
+//! [`PortalAnswer::Pause`], [`PortalAnswer::Resume`] and
+//! [`PortalAnswer::Discard`].
 
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -29,8 +32,8 @@ struct Listener {
 /// Hears the dialogs and the sessions on each change.
 type Publish = dyn Fn(Vec<PortalRequest>, Vec<Capturing>) + Send + Sync;
 
-/// Ends a session the shell stopped.
-type Stopper = Box<dyn FnOnce() + Send>;
+/// Takes the shell's stop, or a recording's pause, resume or discard.
+type Controller = Arc<dyn Fn(&PortalAnswer) + Send + Sync>;
 
 /// Resolves a `parent_window` to an app id.
 type Resolve = dyn Fn(&str) -> Option<String> + Send + Sync;
@@ -38,7 +41,7 @@ type Resolve = dyn Fn(&str) -> Option<String> + Send + Sync;
 /// The pending requests and their listener.
 #[derive(Default)]
 pub struct Queue {
-    held: Mutex<Portals<Replier<PortalAnswer>, Stopper>>,
+    held: Mutex<Portals<Replier<PortalAnswer>, Controller>>,
     listener: OnceLock<Listener>,
 }
 
@@ -68,12 +71,15 @@ impl Queue {
     /// stop ends a running session; one for a session already ended is
     /// dropped.
     pub fn answer(&self, id: u32, answer: PortalAnswer) {
-        if answer == PortalAnswer::Stop {
-            // Outside the lock: stopping a session ends it, which changes the
-            // queue again.
-            match self.change(|held| held.end(id)) {
-                Some(stop) => stop(),
-                None => debug!(%id, "a stop came for a session that has ended"),
+        if matches!(
+            answer,
+            PortalAnswer::Stop | PortalAnswer::Pause | PortalAnswer::Resume | PortalAnswer::Discard
+        ) {
+            // Outside the lock: controlling a session changes the queue
+            // again.
+            match self.change(|held| held.control(id, &answer)) {
+                Ok(control) => control(&answer),
+                Err(why) => debug!(%id, %why, ?answer, "a session control was dropped"),
             }
         } else {
             match self.change(|held| held.answer(id, &answer)) {
@@ -116,7 +122,34 @@ impl Queue {
         kind: CapturingKind,
         stop: impl FnOnce() + Send + 'static,
     ) -> u32 {
-        self.change(|held| held.begin(app_id, kind, Box::new(stop)))
+        // Only a stop reaches a session that is not a recording, and it
+        // takes the session off the list, so it comes once.
+        let stop = Mutex::new(Some(stop));
+        self.begin_controlled(app_id, kind, move |_| {
+            if let Some(stop) = stop.lock().unwrap().take() {
+                stop();
+            }
+        })
+    }
+
+    /// List a running session until [`Queue::end`]. `control` takes each
+    /// stop, pause, resume or discard the shell sends it.
+    pub fn begin_controlled(
+        &self,
+        app_id: String,
+        kind: CapturingKind,
+        control: impl Fn(&PortalAnswer) + Send + Sync + 'static,
+    ) -> u32 {
+        self.change(|held| held.begin(app_id, kind, Arc::new(control)))
+    }
+
+    /// Change session `id`'s listing while it runs. `Unknown` once it ended.
+    pub fn revise_session(
+        &self,
+        id: u32,
+        revise: impl FnOnce(&mut CapturingKind),
+    ) -> Result<(), Unknown> {
+        self.change(|held| held.revise_session(id, revise))
     }
 
     /// Take session `id` off the list. Its stopper does not run.
@@ -152,7 +185,7 @@ impl Queue {
     /// changes in order.
     fn change<T>(
         &self,
-        change: impl FnOnce(&mut Portals<Replier<PortalAnswer>, Stopper>) -> T,
+        change: impl FnOnce(&mut Portals<Replier<PortalAnswer>, Controller>) -> T,
     ) -> T {
         let mut held = self.held.lock().unwrap();
         let changed = change(&mut held);

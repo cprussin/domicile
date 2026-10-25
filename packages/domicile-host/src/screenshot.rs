@@ -4,11 +4,13 @@
 //! Frames are premultiplied `Bgra`, rows packed, as the compositor composes
 //! them. See `docs/PORTALS.md`.
 
-use std::fs::OpenOptions;
-use std::io::{ErrorKind, Write as _};
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use domicile_protocol::ShotRect;
+
+use crate::fresh_file::fresh_file;
+use crate::user_dirs::user_dir;
 
 /// A frame of the desk: premultiplied `Bgra`, rows packed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -99,19 +101,7 @@ pub fn encode(shot: &Shot) -> Vec<u8> {
 /// `Screenshots` in the pictures folder `user_dirs` (the contents of
 /// `user-dirs.dirs`) names, else in `~/Pictures`.
 pub fn screenshots_dir(user_dirs: Option<&str>, home: &Path) -> PathBuf {
-    let named = user_dirs.and_then(|dirs| {
-        dirs.lines().find_map(|line| {
-            let value = line.trim().strip_prefix("XDG_PICTURES_DIR=")?;
-            let value = value.trim_matches('"');
-            Some(match value.strip_prefix("$HOME") {
-                Some(rest) => home.join(rest.trim_start_matches('/')),
-                None => PathBuf::from(value),
-            })
-        })
-    });
-    named
-        .unwrap_or_else(|| home.join("Pictures"))
-        .join("Screenshots")
+    user_dir(user_dirs, "XDG_PICTURES_DIR", home, "Pictures").join("Screenshots")
 }
 
 /// A screenshot's file name, without its extension.
@@ -125,22 +115,9 @@ pub fn file_name(taken: Taken) -> String {
 /// Writes `bytes` to `<name>.png` in `dir`, made if missing. A taken name gets
 /// ` (2)`, ` (3)` and so on. Returns the path written.
 pub fn save(dir: &Path, name: &str, bytes: &[u8]) -> std::io::Result<PathBuf> {
-    std::fs::create_dir_all(dir)?;
-    let mut copy = 1;
-    loop {
-        let path = match copy {
-            1 => dir.join(format!("{name}.png")),
-            _ => dir.join(format!("{name} ({copy}).png")),
-        };
-        match OpenOptions::new().write(true).create_new(true).open(&path) {
-            Ok(mut file) => {
-                file.write_all(bytes)?;
-                return Ok(path);
-            }
-            Err(why) if why.kind() == ErrorKind::AlreadyExists => copy += 1,
-            Err(why) => return Err(why),
-        }
-    }
+    let (path, mut file) = fresh_file(dir, name, "png")?;
+    file.write_all(bytes)?;
+    Ok(path)
 }
 
 #[cfg(test)]

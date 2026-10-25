@@ -12,6 +12,7 @@ under `src/`. Design: [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md).
 | `components/domicile/browser/frame_sink_broker.{h,cc}` | the broker. Takes its `HostFrameSinkManager` and `FrameSinkId` allocator from the embedder, so tests need no browser |
 | `components/domicile/browser/brokered_frame_sink.{h,cc}` | one registered `FrameSinkId`; also code ported from `exo::Buffer` that turns a dmabuf into a `SharedImage` and `TransferableResource` |
 | `components/domicile/browser/display_capture.{h,cc}` | one display capture: a viz `FrameSinkVideoCapturer` whose frames go to the producer |
+| `components/viz/service/display/domicile/hidden_from_captures.{h,cc}` | leaves what the shell marked with `RestrictionTarget.fromElement`, such as a recording's toolbar, out of every display capture; `SurfaceAggregator` calls it, and the shell's restriction targets all get the id in `hidden_from_captures_id.h` |
 | `components/domicile/browser/display_capture_target.{h,cc}` | which browser window's root frame sink shows a display |
 | `components/domicile/browser/browser_window_capture_target.{h,cc}` | a browser window's own frame sink and size, for capturing it alone; //chrome sets the finder |
 | `components/domicile/browser/external_surface_provider.{h,cc}` | the renderer-facing wrapper over the broker; refuses a parent frame sink outside the calling renderer |
@@ -61,6 +62,6 @@ Test-only. `spike.sh` runs it, and `guard-css-and-resize.sh` runs `spike.sh`.
   `browser_window_capture_target_unittest.cc`, `window_diff_unittest.cc`,
   `engine_event_queue_unittest.cc`, `surface_frames_unittest.cc`,
   `surface_submits_unittest.cc`, `synced_frame_unittest.cc`,
-  `probe_wait_unittest.cc`.
+  `probe_wait_unittest.cc`, `hidden_from_captures_unittest.cc`.
 - The Blink side and the probe have no unit tests. They need a display
   compositor. `spike.sh` and `guard-css-and-resize.sh` cover them.

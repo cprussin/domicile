@@ -34,6 +34,8 @@ import { InputCaptureDialog } from "./InputCaptureDialog";
 import { LauncherDialog } from "./LauncherDialog";
 import { PickColorDialog } from "./PickColorDialog";
 import { PrintDialog } from "./PrintDialog";
+import type { Recording } from "./RecordingToolbar";
+import { RecordingToolbar } from "./RecordingToolbar";
 import { RemoteDesktopDialog } from "./RemoteDesktopDialog";
 import { ScreenCastDialog } from "./ScreenCastDialog";
 import { ScreenshotDialog } from "./ScreenshotDialog";
@@ -57,7 +59,14 @@ export type PortalDialogsDesktop = DialogDesktop &
     readonly browser: Pick<Browser, "windows">;
     readonly portals: Pick<
       Portals,
-      "answer" | "capturing" | "on" | "requests" | "stopCapturing"
+      | "answer"
+      | "capturing"
+      | "discardRecording"
+      | "on"
+      | "pauseRecording"
+      | "requests"
+      | "resumeRecording"
+      | "stopCapturing"
     >;
   };
 
@@ -96,7 +105,9 @@ type Props = {
  * Every dialog applications ask for through `xdg-desktop-portal`, one at a
  * time, oldest first, with a screenshot, color pick or screen cast stacked
  * over it so the user can capture it, and an indicator for each session that
- * controls or captures input. Requests of a kind it has no dialog for are refused.
+ * controls or captures input. The shell's own screen recording gets a toolbar
+ * instead, left out of the recording. Requests of a kind it has no dialog for
+ * are refused.
  * Inhibitors are not questions, so it leaves them be. It also fires the
  * chords applications hold through the GlobalShortcuts portal. See
  * docs/PORTALS.md.
@@ -139,22 +150,40 @@ export const PortalDialogs = memo(
       }
     }, [portals, requests]);
 
+    const recordings = sessions.filter(isRecording);
     return (
       <>
         <CapturingIndicator
           apps={apps}
           screen={screen}
-          sessions={
-            omitScreenCasts
-              ? sessions.filter(
-                  (session) => session.kind !== CapturingKind.ScreenCast,
-                )
-              : sessions
-          }
+          sessions={sessions.filter(
+            (session) =>
+              !isRecording(session) &&
+              !(omitScreenCasts && session.kind === CapturingKind.ScreenCast),
+          )}
           stop={(id) => {
             portals.stopCapturing(id);
           }}
         />
+        {recordings.map((recording) => (
+          <RecordingToolbar
+            discard={() => {
+              portals.discardRecording(recording.id);
+            }}
+            key={recording.id}
+            pause={() => {
+              portals.pauseRecording(recording.id);
+            }}
+            recording={recording}
+            resume={() => {
+              portals.resumeRecording(recording.id);
+            }}
+            screen={screen}
+            stop={() => {
+              portals.stopCapturing(recording.id);
+            }}
+          />
+        ))}
         {stacked(
           requests.filter(
             (request) =>
@@ -185,6 +214,9 @@ export const PortalDialogs = memo(
 
 /** The windows this page draws. */
 const drawnOnPage = () => drawnWindows(document);
+
+const isRecording = (session: Capturing): session is Recording =>
+  session.kind === CapturingKind.Recording;
 
 /** The dialog for `request`'s kind. */
 const Dialog = ({
@@ -319,6 +351,7 @@ const Dialog = ({
           browserWindows={browserWindows}
           castTo={claim?.kind === CastClaimKind.Pick ? claim.to : undefined}
           previewWindow={domicile.capture.preview}
+          record={request.appId === SHELL_APP_ID}
           screen={screen}
           shownWindows={shownWindows}
         />

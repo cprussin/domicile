@@ -12,6 +12,9 @@ import type {
 } from "../portal";
 import {
   answerPortalRequest,
+  discardRecording,
+  pauseRecording,
+  resumeRecording,
   stopCapturing,
   watchBoundShortcuts,
   watchCapturing,
@@ -40,6 +43,12 @@ export type Portals = {
   answer: (id: number, answer: PortalAnswer) => void;
   /** End capturing session `id`. */
   stopCapturing: (id: number) => void;
+  /** Pause the shell's screen recording `id`. */
+  pauseRecording: (id: number) => void;
+  /** Resume the shell's paused screen recording `id`. */
+  resumeRecording: (id: number) => void;
+  /** End the shell's screen recording `id` and delete its file. */
+  discardRecording: (id: number) => void;
   /**
    * Tell the application holding bound shortcut `id` its chord went down or
    * up. See {@link Portals.boundShortcuts}.
@@ -83,14 +92,23 @@ export const portals = (host: PortalsHost): Portals => {
     get capturing() {
       return latest.capturing;
     },
+    discardRecording: (id) => {
+      discardRecording(host, id);
+    },
     fireShortcut: (id, kind) => {
       host.answerPortalRequest(id, JSON.stringify({ kind }));
     },
     on: on<PortalsListeners>({
       change: (listener) => hostEvent(host, "portalrequests", () => listener()),
     }),
+    pauseRecording: (id) => {
+      pauseRecording(host, id);
+    },
     get requests() {
       return latest.requests;
+    },
+    resumeRecording: (id) => {
+      resumeRecording(host, id);
     },
     stopCapturing: (id) => {
       stopCapturing(host, id);

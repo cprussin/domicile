@@ -171,7 +171,9 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
   shell's own, which a review flags as taken.
 - Without React, `domicile.portals` has the requests, parsed (`requests`),
   and sends answers (`answer`). `capturing` and `stopCapturing` do the same
-  for running sessions. `fireGlobalShortcuts` in `@domicile-desktop/sdk/global-shortcuts` fires the
+  for running sessions. The shell's own screen recording also takes
+  `pauseRecording`, `resumeRecording` and `discardRecording`; see
+  [PORTALS.md](PORTALS.md#screen-recording). `fireGlobalShortcuts` in `@domicile-desktop/sdk/global-shortcuts` fires the
   chords.
 - A shell must answer every request. One left unanswered keeps its application
   waiting until it gives up.
