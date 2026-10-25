@@ -18,10 +18,10 @@
 //   GUARD still-open                   the window was listed after Cancel
 //   GUARD window-closed                the window left the list
 //
-// Everything is inside `Shell`, which Domicile's document calls once the module
+// Everything is inside `HostShell`, which Domicile's document calls once the module
 // loads.
 
-export const Shell = (_root, desktop) => {
+export const HostShell = (_root, desktop) => {
   /**
    * Reads a required query parameter. Throws when missing: a default would
    * measure a setup the guard did not ask for.

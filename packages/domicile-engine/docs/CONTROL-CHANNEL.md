@@ -9,9 +9,11 @@ The engine has two channels to the rest of Domicile:
 ## Control channel
 
 - `DomicileHost` is the shell's API. No page script can find it:
-  `DomicileShell` runs the module the shell document names and passes the
-  host into `Shell(root, domicile)`. There is no `navigator.domicile` or
-  `window.domicile`.
+  `DomicileShell` runs the module the shell document names, builds the
+  SDK's `Domicile` over the host with the bundled layer (`domicile_layer.js`)
+  and passes it into `Shell(root, domicile)`. There is no
+  `navigator.domicile` or `window.domicile`. A guard exports `HostShell` to
+  be handed the host itself ([GUARDS.md](GUARDS.md)).
 - The browser process speaks the wire protocol (JSON lines to the
   compositor). The page sees typed WebIDL values, so it cannot send a
   malformed message.

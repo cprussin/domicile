@@ -17,7 +17,7 @@ import {
   watchCapturing,
   watchPortalRequests,
   watchPortalWallpaper,
-} from "../portal";
+} from "./portal-wire";
 import type { On } from "./subscribe";
 import { hostEvent, on } from "./subscribe";
 

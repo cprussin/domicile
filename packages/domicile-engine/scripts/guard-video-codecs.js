@@ -12,7 +12,7 @@ const CODECS = {
   vp9: 'video/webm; codecs="vp9"',
 };
 
-export const Shell = () => {
+export const HostShell = () => {
   const video = document.createElement("video");
   console.log(
     `GUARD codecs ${Object.entries(CODECS)

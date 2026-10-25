@@ -3,7 +3,7 @@
 A shell's mixer: devices, streams, cards, volume, mute and level meters, read
 from PulseAudio or PipeWire through `pactl` and `parec`.
 
-- Runs them with `desktop(domicile).processes`' `spawn` and `run`, in the C
+- Runs them with `domicile.processes`' `spawn` and `run`, in the C
   locale. They must be on the compositor's `PATH`; the flake's wrapper adds
   PulseAudio's.
 - Published to npm. Ships built JavaScript and `.d.ts` from `dist/`.
@@ -11,10 +11,9 @@ from PulseAudio or PipeWire through `pactl` and `parec`.
 ## Usage
 
 ```ts
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import { soundServer } from "@domicile-desktop/system-audio/sound-server";
 
-const server = soundServer(desktop(domicile));
+const server = soundServer(domicile);
 const stop = server.watch((audio) => draw(audio));
 await server.setVolume(audio.outputs[0].id, 0.5);
 const meters = server.meters((levels) => drawLevels(levels));

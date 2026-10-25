@@ -1,7 +1,7 @@
 // D-Bus, which the compositor speaks for the shell on either bus. See
 // docs/SHELL-SYSTEM-ACCESS.md.
 
-import type { System } from "../system";
+import type { System } from "./system-calls";
 
 export type Dbus = {
   call: System["dbusCall"];

@@ -19,7 +19,7 @@
 // Must match WATCHED in the guard.
 const WATCHED = "/tmp/domicile-app-survives-compositor-restart-watched";
 
-export const Shell = (_root, desktop) => {
+export const HostShell = (_root, desktop) => {
   const say = (what) => {
     console.log(`GUARD ${what}`);
   };

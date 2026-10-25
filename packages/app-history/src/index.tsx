@@ -8,7 +8,6 @@ import {
 import { ThemeProvider } from "@domicile-desktop/component-library/ThemeProvider";
 import { applyTheme } from "@domicile-desktop/component-library/theme-core";
 import type { AppMain } from "@domicile-desktop/sdk/app";
-import { appDesktop } from "@domicile-desktop/sdk/desktop/app-desktop";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -18,7 +17,7 @@ import { spawnedHost } from "./host";
 
 import "./global.css";
 
-export const main: AppMain = (root, host) => {
+export const main: AppMain = (root, domicile) => {
   const themes = mediaThemeSource();
   // Before the first paint, so the window never flashes the other theme.
   applyTheme(themes.theme ?? "dark");
@@ -27,7 +26,7 @@ export const main: AppMain = (root, host) => {
   createRoot(root).render(
     <StrictMode>
       <ThemeProvider source={themes}>
-        <App browser={hostBrowser(spawnedHost(appDesktop(host).processes))} />
+        <App browser={hostBrowser(spawnedHost(domicile.processes))} />
       </ThemeProvider>
     </StrictMode>,
   );

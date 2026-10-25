@@ -14,9 +14,9 @@
 // may get no key events in the page. The guard reads `guest-loaded` from
 // guard-webview-guest-page.py to know the shell is an embedder.
 //
-// Domicile calls `Shell` once the module loads.
+// Domicile calls `HostShell` once the module loads.
 
-export const Shell = () => {
+export const HostShell = () => {
   /**
    * Reads a required query parameter. No default, so a misconfigured run fails.
    */

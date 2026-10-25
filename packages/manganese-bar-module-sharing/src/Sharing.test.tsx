@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { PortalsHost } from "@domicile-desktop/sdk/desktop/portals";
 import { portals } from "@domicile-desktop/sdk/desktop/portals";
-import type { PortalHost } from "@domicile-desktop/sdk/portal";
 import { fakeDesktop } from "@domicile-desktop/system-apps/fake-desktop";
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -21,7 +20,7 @@ const DOMICILE = fakeDesktop(
 );
 
 /** A desktop that pushes `portal_requests` lines and records answers. */
-class FakeHost implements PortalHost {
+class FakeHost {
   readonly answers: [id: number, answer: unknown][] = [];
   readonly #listeners = new Set<(event: MessageEvent<string>) => void>();
 

@@ -14,7 +14,7 @@
 // `?prefer=last` prefers the last camera listed; any other value is an id
 // sent as is, which the control uses for one no camera has.
 
-export const Shell = () => {
+export const HostShell = () => {
   const say = (what) => {
     console.log(`GUARD ${what}`);
   };
