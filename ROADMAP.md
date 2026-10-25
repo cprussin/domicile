@@ -78,7 +78,6 @@ Understood and not scheduled.
   performance problem. [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#plan).
 - **A monitor profile can require a mode but not set it.** Same for refresh
   rate. [A-DESKTOP-ON-A-TTY.md](docs/architecture/A-DESKTOP-ON-A-TTY.md).
-- **Filter quality on lower-density displays is unmeasured.**
 - **The desk rasters what no monitor shows.**
   [DISPLAY-TILINGS.md](docs/architecture/DISPLAY-TILINGS.md#cost).
 
