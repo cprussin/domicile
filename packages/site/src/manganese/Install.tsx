@@ -6,8 +6,7 @@ import { repoFile } from "../page/repo";
 import { Section } from "../page/Section";
 import { Tabs } from "../page/Tabs";
 
-// The apt and rpm repositories at packages.domicile-desktop.com are not up
-// yet (cprussin/domicile#1399); their lines say so.
+// The repository setup, as cprussin/domicile#1399 documents it.
 const DISTROS: readonly {
   id: string;
   name: string;
@@ -30,21 +29,21 @@ const DISTROS: readonly {
     note: "Adds the login session, PAM and the domicile group. homeManagerModules.default writes your config.",
   },
   {
-    code: "# add the packages.domicile-desktop.com apt source\nsudo apt install domicile",
+    code: 'sudo curl -fsSL -o /etc/apt/keyrings/domicile.asc https://packages.domicile-desktop.com/domicile.asc\necho "deb [signed-by=/etc/apt/keyrings/domicile.asc] https://packages.domicile-desktop.com/apt current main" |\n  sudo tee /etc/apt/sources.list.d/domicile.list\nsudo apt update && sudo apt install domicile',
     id: "deb",
     language: "bash",
     name: "Debian / Ubuntu",
-    note: "For Debian 13+ and Ubuntu 24.04+. Then join the domicile group and pick the Domicile session at login.",
+    note: "For Debian 13+ and Ubuntu 24.04+; use legacy for current on Debian 12 and Ubuntu 22.04. Then join the domicile group and pick the Domicile session at login.",
   },
   {
-    code: "# add the packages.domicile-desktop.com .repo file\nsudo dnf install domicile",
+    code: "sudo tee /etc/yum.repos.d/domicile.repo <<'REPO'\n[domicile]\nname=Domicile\nbaseurl=https://packages.domicile-desktop.com/rpm/fedora\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=https://packages.domicile-desktop.com/domicile.asc\nREPO\nsudo dnf install domicile",
     id: "fedora",
     language: "bash",
     name: "Fedora",
     note: "For Fedora and RHEL 10+. Then join the domicile group and pick the Domicile session at login.",
   },
   {
-    code: "# add the packages.domicile-desktop.com .repo file\nsudo zypper install domicile",
+    code: "sudo rpm --import https://packages.domicile-desktop.com/domicile.asc\nsudo zypper addrepo --gpgcheck https://packages.domicile-desktop.com/rpm/opensuse domicile\nsudo zypper install domicile",
     id: "suse",
     language: "bash",
     name: "openSUSE",
