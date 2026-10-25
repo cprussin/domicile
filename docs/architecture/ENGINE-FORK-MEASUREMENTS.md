@@ -21,7 +21,7 @@ it reads. Nothing measures presentation on a lit screen yet.
 | A real Wayland client's window is on the page | yes, exact color | `guard-client-window.sh` |
 | A dmabuf is imported and released | yes | `spike-dmabuf.sh` |
 | The host honors the shortcut inhibitor | yes, on sway | `guard-shortcuts-inhibitor-chord.sh` |
-| Tab strip, NTP, settings, sign-in and sync are large | 19.6 MB of a 737 MB install; 5.4 MB of code | [below](#engine-size-by-subsystem) |
+| Chrome's own UI is a large part of the install | 19.6 MB in five subsystems; 22.4 MB of foreign-locale strings | [below](#engine-size-by-subsystem) |
 
 ## Getting a surface on screen
 
@@ -303,9 +303,10 @@ covers it.
 
 ## Engine size by subsystem
 
-What the [strip item](/ROADMAP.md#in-the-engine-fork-the-agent-on-crux) would
-remove, measured on the official release `engine-official-s59435c440ec2`
-(Chromium `d02281c376e4`, PGO and ThinLTO).
+The subsystems a desk never runs, measured on the official release
+`engine-official-s59435c440ec2` (Chromium `d02281c376e4`, PGO and ThinLTO),
+before patches `0146` and `0147` and `domicile_trim.gn` removed most of them
+([ENGINE-BROWSER-BEHAVIOR.md](ENGINE-BROWSER-BEHAVIOR.md#chromes-own-pages-and-strings)).
 
 | Subsystem | Code and data in `chrome` | `resources.pak` | Locale strings, 220 paks | Total | C++ files | Lines | GN targets |
 |---|---|---|---|---|---|---|---|
@@ -316,6 +317,20 @@ remove, measured on the official release `engine-official-s59435c440ec2`
 | Sync | 2.21 MB (2.49) | 0.03 MB | 1.00 MB | 3.24 MB | 298 | 71.8k | 56 |
 | All five | 5.36 MB (6.23) | 2.00 MB | 12.29 MB | 19.64 MB | 946 | 269.5k | 379 |
 | PDFium, kept | 2.96 MB (3.04) | 0.17 MB | 0.24 MB | 3.37 MB | n/a | n/a | n/a |
+
+Beyond the five, by what removed them:
+
+| Part | Size | Removed by |
+|---|---|---|
+| Chrome-UI strings in the 54 locales other than en-US | 22.4 MB of their 46.4 MB | `0147`, `foreign_allowlist.py` |
+| WebUI V8 code caches in `resources.pak` | 3.5 MB | `enable_webui_generate_code_cache` |
+| Kept: extensions, which `<webview>` is built on | 5.2 MB of code | |
+| Kept: autofill, wired through content and the renderer | 4.1 MB of code | |
+
+- Blink, V8, content, mojo, net, WebRTC and the GPU stack are 70% of
+  `chrome`'s sized symbols.
+- The locale figure runs `foreign_allowlist.py` over the release's
+  `locales/en-US.pak.info` and sums the dropped ids in every other locale.
 
 The whole for scale:
 

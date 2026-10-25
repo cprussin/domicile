@@ -20,6 +20,7 @@ SCRIPTS="$ROOT/packages/domicile-engine/scripts"
 # Run one at a time, before the rest.
 FIRST=(
   build-produced-what-the-guards-load
+  locales-are-trimmed
   unit-tests
   drm-unit-tests
   build-the-compositor
