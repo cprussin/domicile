@@ -17,7 +17,7 @@ DOMICILE_BIN="$(nix build --no-link --print-out-paths "$ROOT#domicile")/bin/domi
 # Tools the scenes use, fetched once so a scene's timing does not include a
 # download.
 TOOLS="$(nix build --no-link --print-out-paths \
-  nixpkgs#foot nixpkgs#neovim nixpkgs#btop nixpkgs#wtype \
+  nixpkgs#foot nixpkgs#neovim nixpkgs#btop nixpkgs#wtype nixpkgs#wl-clipboard nixpkgs#grim \
   nixpkgs#wf-recorder nixpkgs#ffmpeg nixpkgs#jetbrains-mono |
   sed 's#$#/bin#' | paste -sd:)"
 export PATH="$TOOLS:$PATH"
