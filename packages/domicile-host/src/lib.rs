@@ -61,6 +61,7 @@ pub mod unlock_refusals;
 pub mod usb_names;
 pub mod user_dirs;
 pub mod wallpaper;
+pub mod white_point;
 pub mod window_requests;
 pub mod xdg_foreign;
 use domicile_scene::{KeyboardTarget, Scene};

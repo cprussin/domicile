@@ -34,6 +34,10 @@ The page reads both itself through libraries, as it does the battery; see
   on the shell's system calls, which has the rules.
 - `manganese-bar-module-brightness/src/host-backlight.ts` wires it to the bar and logs failures to
   the console.
+- Automatic brightness reads iio-sensor-proxy's ambient light through the same
+  library (`watchAmbientLight`), only while the desktop runs it
+  (`useAutoBrightness`). See the
+  [module's README](/packages/manganese-bar-module-brightness/README.md).
 
 ## Volume
 

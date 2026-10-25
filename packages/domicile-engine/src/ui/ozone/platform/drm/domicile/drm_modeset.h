@@ -5,6 +5,7 @@
 #define UI_OZONE_PLATFORM_DRM_DOMICILE_DRM_MODESET_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -118,6 +119,12 @@ class DrmModeset : public display::NativeDisplayObserver {
   // `DrmVtSwitcher`.
   void Relight();
 
+  // Sets the white point every display draws with, as a gamma ramp per CRTC,
+  // for a night light. Kept and set again after each confirmed modeset, since
+  // a resume or a console switch back can leave another process's ramp on the
+  // CRTCs.
+  void SetWhitePoint(const DomicileWhitePoint& white_point);
+
   // display::NativeDisplayObserver:
   void OnConfigurationChanged() override;
   void OnDisplaySnapshotsInvalidated() override;
@@ -126,6 +133,8 @@ class DrmModeset : public display::NativeDisplayObserver {
   void OnDisplaysReceived(
       const std::vector<raw_ptr<display::DisplaySnapshot,
                                 VectorExperimental>>& snapshots);
+  // Sends `white_point_` to every display in `display_ids_`.
+  void ApplyWhitePoint();
 
   const std::unique_ptr<display::NativeDisplayDelegate> delegate_;
   const raw_ptr<DrmScreen> screen_;  // Not owned; outlives this.
@@ -136,6 +145,12 @@ class DrmModeset : public display::NativeDisplayObserver {
   std::vector<DomicileDisplayLayout> layout_;
   // The compositor's virtual displays, as snapshots. See `VirtualSnapshot`.
   std::vector<std::unique_ptr<display::DisplaySnapshot>> virtual_;
+  // The connectors of the last reading. Emptied when their snapshots are
+  // invalidated, because the delegate's hosts for them go too.
+  std::vector<int64_t> display_ids_;
+  // The compositor's last white point. Until it sends one, the ramps are left
+  // as they are.
+  std::optional<DomicileWhitePoint> white_point_;
   // Whether `delegate_->Configure` is still running. A real modeset is
   // answered on a later task, so an answer that arrives while this is true
   // came from this process, not the hardware. See `OnDisplaysReceived`.

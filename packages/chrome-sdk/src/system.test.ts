@@ -693,6 +693,30 @@ describe("unlock refusals", () => {
   });
 });
 
+describe("color temperature", () => {
+  it("warms every monitor", async () => {
+    const host = new FakeHost();
+    const setting = system(host).setColorTemperature(3400);
+    host.reply(1, { kind: "set" });
+
+    expect(host.calls).toStrictEqual([
+      [1, { call: "set_color_temperature", kelvin: 3400 }],
+    ]);
+    expect(await setting).toStrictEqual(Ok("set"));
+  });
+
+  it("sends a whole number of kelvin", () => {
+    const host = new FakeHost();
+    system(host)
+      .setColorTemperature(3400.4)
+      .catch(() => undefined);
+
+    expect(host.calls).toStrictEqual([
+      [1, { call: "set_color_temperature", kelvin: 3400 }],
+    ]);
+  });
+});
+
 describe("window states", () => {
   it("replaces the states the shell set on a window", async () => {
     const host = new FakeHost();
