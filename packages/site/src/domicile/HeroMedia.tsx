@@ -3,7 +3,7 @@ import { flex } from "../../styled-system/patterns";
 import { CodeBlock } from "../code/CodeBlock";
 import { Media } from "../media/Media";
 
-// The shell in `scripts/docs-media/scenes/hero/shell.js`, as a reader would
+// The shell in `packages/site/scripts/docs-media/scenes/hero/shell.js`, as a reader would
 // write it, beside what it draws.
 const SHELL = `// shell.tsx
 const Shell = ({ windows: [left, right] }) => (

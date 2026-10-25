@@ -50,7 +50,7 @@ if [ -z "$got" ]; then
   {
     echo "  FAIL  $RELEASE records no series identity"
     echo "        It is generated, and the generator writes that field now:"
-    echo "          ./scripts/update-engine-release.sh"
+    echo "          packages/domicile-engine/scripts/update-engine-release.sh"
   } >&2
   exit 1
 fi
@@ -110,7 +110,7 @@ if [ "$got" != "$want" ]; then
     echo "        request."
     echo
     echo "        By hand, once a release for this series exists:"
-    echo "          ./scripts/update-engine-release.sh"
+    echo "          packages/domicile-engine/scripts/update-engine-release.sh"
   } >&2
   exit 1
 fi
