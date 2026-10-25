@@ -1,8 +1,6 @@
 import { watchHost } from "@domicile-desktop/manganese-host/watch-host";
-import type {
-  DomicileClipboardEntry,
-  DomicileHost,
-} from "@domicile-desktop/sdk/domicile-host";
+import type { ClipboardEntry } from "@domicile-desktop/sdk/desktop/clipboard";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import { useEffect, useState } from "react";
 
 /**
@@ -16,19 +14,18 @@ import { useEffect, useState } from "react";
  * the history is kept only in memory.
  */
 export const useClipboard = (
-  domicile: DomicileHost,
-): readonly DomicileClipboardEntry[] => {
-  const [entries, setEntries] = useState<readonly DomicileClipboardEntry[]>([]);
+  domicile: Pick<Domicile, "clipboard">,
+): readonly ClipboardEntry[] => {
+  const [entries, setEntries] = useState<readonly ClipboardEntry[]>([]);
 
-  useEffect(
-    () => watchHost(domicile, "clipboardchanged", entriesOf, setEntries),
-    [domicile],
-  );
+  useEffect(() => {
+    const { clipboard } = domicile;
+    return watchHost(
+      (changed) => clipboard.on("change", changed),
+      () => clipboard.entries,
+      setEntries,
+    );
+  }, [domicile]);
 
   return entries;
 };
-
-const entriesOf = ({
-  clipboard,
-}: DomicileHost): readonly DomicileClipboardEntry[] | undefined =>
-  clipboard ?? undefined;

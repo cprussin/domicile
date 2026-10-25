@@ -1,39 +1,25 @@
-import type {
-  DomicileHost,
-  DomicileHostEventMap,
-} from "@domicile-desktop/sdk/domicile-host";
-
-/** The bare events that say an attribute of the desktop changed. */
-export type HostChange = {
-  [T in keyof DomicileHostEventMap]: DomicileHostEventMap[T] extends Event
-    ? Event extends DomicileHostEventMap[T]
-      ? T
-      : never
-    : never;
-}[keyof DomicileHostEventMap];
+import type { Unsubscribe } from "@domicile-desktop/sdk/desktop/subscribe";
 
 /**
- * Watches an attribute: calls `onValue` with `read(domicile)` now and on every
- * `change`, and returns a function that stops watching.
+ * Watches an attribute of the desktop: calls `onValue` with `read()` now and
+ * each time `subscribe` hears it change, and returns a function that stops
+ * watching. For example
+ * `watchHost((heard) => domicile.session.on("lockchange", heard), () => domicile.session.locked, onLocked)`.
  *
- * `read` returns `undefined` while the attribute is `null`; `onValue` is not
- * called then.
+ * `read` returns `undefined` while the compositor has not said; `onValue` is
+ * not called then.
  */
 export const watchHost = <T>(
-  domicile: DomicileHost,
-  change: HostChange,
-  read: (domicile: DomicileHost) => T | undefined,
+  subscribe: (heard: () => void) => Unsubscribe,
+  read: () => T | undefined,
   onValue: (value: T) => void,
-): (() => void) => {
+): Unsubscribe => {
   const changed = () => {
-    const value = read(domicile);
+    const value = read();
     if (value !== undefined) {
       onValue(value);
     }
   };
   changed();
-  domicile.addEventListener(change, changed);
-  return () => {
-    domicile.removeEventListener(change, changed);
-  };
+  return subscribe(changed);
 };

@@ -1,7 +1,7 @@
 import { perHost } from "@domicile-desktop/manganese-host/per-host";
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 
 import type { GoogleClient } from "./consent";
 import { watchGmailWindows } from "./gmail-windows";
@@ -42,7 +42,7 @@ export const deskInbox = perHost((domicile) => {
 });
 
 const watchedAccount = (
-  domicile: DomicileHost,
+  domicile: Domicile,
   email: string,
   client: GoogleClient,
 ): DeskAccount => {
@@ -50,7 +50,11 @@ const watchedAccount = (
   const running: { watch: InboxWatch | undefined } = { watch: undefined };
   return {
     inbox: sharedWatch((onInbox: (inbox: Inbox) => void) => {
-      const watch = watchInbox(read, onInbox, () => domicile.locked === true);
+      const watch = watchInbox(
+        read,
+        onInbox,
+        () => domicile.session.locked === true,
+      );
       const stopGmail = watchGmailWindows(domicile, watch.readSoon);
       running.watch = watch;
       return () => {

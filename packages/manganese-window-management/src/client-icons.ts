@@ -5,8 +5,7 @@ import type { Option, Result } from "@cprussin/option-result";
 import { None, Ok } from "@cprussin/option-result";
 import type { IconTheme } from "@domicile-desktop/manganese-host/followed-icon-theme";
 import { sharedIconTheme } from "@domicile-desktop/manganese-host/followed-icon-theme";
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import type { IconLookup } from "@domicile-desktop/system-apps/app-icons";
 import { appIcons } from "@domicile-desktop/system-apps/app-icons";
@@ -23,12 +22,12 @@ const SIZE = 16;
  * app id). Reads the installed entries once; make another to see new ones.
  */
 export type ClientIcons = (
-  domicile: DomicileHost,
+  domicile: Domicile,
 ) => Promise<Result<IconLookup, SystemError>>;
 
 /** {@link clientIcons} on `domicile`, in the theme its shell follows. */
 export const desktopClientIcons: ClientIcons = (domicile) =>
-  clientIcons(desktop(domicile), sharedIconTheme(domicile));
+  clientIcons(domicile, sharedIconTheme(domicile));
 
 /**
  * A lookup of client icons in the desktop's data directories, in `iconTheme`.

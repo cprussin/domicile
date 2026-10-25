@@ -38,7 +38,7 @@ describe("mountManganese", () => {
     // Not attached to the document, so it can't leak into later tests.
     const root = document.createElement("div");
     const mounted = await act(() =>
-      mountManganese(root, fake.host, {
+      mountManganese(root, fake.domicile, {
         applications,
         bar: {
           center: [],
@@ -63,7 +63,7 @@ describe("mountManganese", () => {
     const fake = onADesk();
     const root = document.createElement("div");
     act(() => {
-      const mounted = mountManganese(root, fake.host, {
+      const mounted = mountManganese(root, fake.domicile, {
         applications,
         bar: { center: [], left: [<span key="mail">mail</span>], right: [] },
         floating,
@@ -77,7 +77,7 @@ describe("mountManganese", () => {
   it("binds the keys it is given rather than its own", async () => {
     const fake = onADesk();
     const mounted = await act(() =>
-      mountManganese(document.createElement("div"), fake.host, {
+      mountManganese(document.createElement("div"), fake.domicile, {
         applications,
         floating,
         keybindings: { keybindings: { "Meta+x": exec("kitty") }, modes: {} },
@@ -97,7 +97,7 @@ describe("mountManganese", () => {
   it("follows the config's contrast and motion", async () => {
     const fake = onADesk();
     const mounted = await act(() =>
-      mountManganese(document.createElement("div"), fake.host, {
+      mountManganese(document.createElement("div"), fake.domicile, {
         applications,
         floating,
       }),

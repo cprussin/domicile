@@ -1,27 +1,23 @@
 import type { CastClaim } from "@domicile-desktop/sdk/cast";
 import { CastClaimKind } from "@domicile-desktop/sdk/cast";
+import type {
+  Browser,
+  BrowserWindow,
+} from "@domicile-desktop/sdk/desktop/browser";
 import type { Capture } from "@domicile-desktop/sdk/desktop/capture";
 import type { Dbus } from "@domicile-desktop/sdk/desktop/dbus";
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import type { Files } from "@domicile-desktop/sdk/desktop/files";
+import type { Portals } from "@domicile-desktop/sdk/desktop/portals";
 import type { Processes } from "@domicile-desktop/sdk/desktop/processes";
-import type {
-  DomicileBrowserWindow,
-  DomicileHost,
-} from "@domicile-desktop/sdk/domicile-host";
-import type { GlobalShortcutsHost } from "@domicile-desktop/sdk/global-shortcuts";
+import type { GlobalShortcutsDesktop } from "@domicile-desktop/sdk/global-shortcuts";
 import { fireGlobalShortcuts } from "@domicile-desktop/sdk/global-shortcuts";
 import type { Capturing, PortalRequest } from "@domicile-desktop/sdk/portal";
 import {
-  answerPortalRequest,
   CapturingKind,
   CastSourceKind,
   PortalAnswer,
   PortalKind,
   SHELL_APP_ID,
-  stopCapturing,
-  watchCapturing,
-  watchPortalRequests,
 } from "@domicile-desktop/sdk/portal";
 import { memo, useEffect, useMemo, useState } from "react";
 import type { Folders } from "../FilePicker/folders";
@@ -55,12 +51,22 @@ export type DialogDesktop = {
   readonly processes: Pick<Processes, "run" | "spawn">;
 };
 
+/** What {@link PortalDialogs} needs of the desktop. */
+export type PortalDialogsDesktop = DialogDesktop &
+  GlobalShortcutsDesktop & {
+    readonly browser: Pick<Browser, "windows">;
+    readonly portals: Pick<
+      Portals,
+      "answer" | "capturing" | "on" | "requests" | "stopCapturing"
+    >;
+  };
+
 /** No shell chords; one array, so the default is stable across renders. */
 const NONE: readonly string[] = [];
 
 type Props = {
   /** The desktop `Shell` is handed. */
-  host: GlobalShortcutsHost & DomicileHost;
+  domicile: PortalDialogsDesktop;
   /**
    * The display to show a dialog on when it has no parent window. Needs a
    * `DisplayProvider`; without it, a dialog is centered on the whole page.
@@ -77,8 +83,6 @@ type Props = {
    * boxes. See {@link drawnWindows}.
    */
   shownWindows?: (() => readonly ShownWindow[]) | undefined;
-  /** How dialogs reach the desktop, for tests. */
-  desktopOf?: ((host: DomicileHost) => DialogDesktop) | undefined;
   /**
    * The display showing the `<app>` with this id, for a dialog modal over
    * it. `undefined` uses `screen`.
@@ -99,16 +103,14 @@ type Props = {
  */
 export const PortalDialogs = memo(
   ({
-    host,
+    domicile,
     omitScreenCasts = false,
     screen,
     screenOf,
     shellChords = NONE,
     shownWindows = drawnOnPage,
-    desktopOf = desktop,
   }: Props) => {
     const [requests, setRequests] = useState<readonly PortalRequest[]>([]);
-    const domicile = useMemo(() => desktopOf(host), [desktopOf, host]);
     const folders = useMemo(() => desktopFolders(domicile.files), [domicile]);
     const [sessions, setSessions] = useState<readonly Capturing[]>([]);
     const apps = useApps(domicile, [
@@ -116,19 +118,26 @@ export const PortalDialogs = memo(
       ...sessions.map((session) => session.appId),
     ]);
 
-    const claims = useCastClaims(host, requests);
+    const { portals } = domicile;
+    const claims = useCastClaims(domicile, requests);
 
-    useEffect(() => watchPortalRequests(host, setRequests), [host]);
-    useEffect(() => watchCapturing(host, setSessions), [host]);
-    useEffect(() => fireGlobalShortcuts(host), [host]);
+    useEffect(() => {
+      const heard = () => {
+        setRequests(portals.requests ?? []);
+        setSessions(portals.capturing ?? []);
+      };
+      heard();
+      return portals.on("change", heard);
+    }, [portals]);
+    useEffect(() => fireGlobalShortcuts(domicile), [domicile]);
 
     useEffect(() => {
       for (const request of requests) {
         if (request.kind === PortalKind.Unknown) {
-          answerPortalRequest(host, request.id, PortalAnswer.Refused());
+          portals.answer(request.id, PortalAnswer.Refused());
         }
       }
-    }, [host, requests]);
+    }, [portals, requests]);
 
     return (
       <>
@@ -143,7 +152,7 @@ export const PortalDialogs = memo(
               : sessions
           }
           stop={(id) => {
-            stopCapturing(host, id);
+            portals.stopCapturing(id);
           }}
         />
         {stacked(
@@ -154,11 +163,11 @@ export const PortalDialogs = memo(
         ).map((shown) => (
           <Dialog
             answer={(answer) => {
-              answerPortalRequest(host, shown.id, answer);
+              portals.answer(shown.id, answer);
             }}
             apps={apps}
             asker={apps(shown.appId).name}
-            browserWindows={host.browserWindows ?? []}
+            browserWindows={domicile.browser.windows ?? []}
             claim={claims.get(shown.id)}
             domicile={domicile}
             folders={folders}
@@ -194,7 +203,7 @@ const Dialog = ({
   answer: (answer: PortalAnswer) => void;
   apps: (appId: string) => App;
   asker: string;
-  browserWindows: readonly DomicileBrowserWindow[];
+  browserWindows: readonly BrowserWindow[];
   /** What a cast to a TV that asked for `request` makes of it. */
   claim: CastClaim | undefined;
   folders: Folders;

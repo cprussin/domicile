@@ -25,7 +25,7 @@ export const Gmail = ({ client, email, nickname }: Props) => {
       inbox={account.inbox}
       nickname={nickname}
       onOpen={(url) => {
-        domicile.openBrowserWindow(url);
+        domicile.browser.open(url);
       }}
       onSignIn={account.signIn}
     />

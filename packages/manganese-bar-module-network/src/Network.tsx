@@ -4,8 +4,6 @@ import { useKeepsKeyboard } from "@domicile-desktop/manganese-bar/panel-keyboard
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import type {
   Addressing,
@@ -23,7 +21,7 @@ import {
 import type { Wifi } from "@domicile-desktop/system-network/wifi";
 import { NetworkIcon } from "@phosphor-icons/react/dist/ssr/Network";
 import { WifiSlashIcon } from "@phosphor-icons/react/dist/ssr/WifiSlash";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { cva } from "../styled-system/css";
 import { flex } from "../styled-system/patterns";
 import { signalOf } from "./signal";
@@ -43,7 +41,7 @@ type Props = {
   /** The Wi-Fi device, read while the panel is open. */
   wifi: SharedWatch<Result<Option<Wifi>, SystemError>>;
   /** The host whose system calls reach the Wi-Fi service. */
-  domicile: DomicileHost;
+  domicile: Domicile;
   /** Injectable so tests can see what the panel asks for. */
   actions?: WifiActions | undefined;
 };
@@ -67,7 +65,6 @@ export const Network = ({
   network,
   wifi,
 }: Props) => {
-  const host = useMemo(() => desktop(domicile), [domicile]);
   const reading = useSharedWatch(network);
   const hardware = useSharedWatch(interfaces);
   const ports = hardware?.match({ Err: () => undefined, Ok: (found) => found });
@@ -81,7 +78,7 @@ export const Network = ({
       <Item
         actions={actions}
         addresses={addresses}
-        host={host}
+        host={domicile}
         reading={reading}
         wifi={wifi}
         wired={(ports ?? []).filter(({ kind }) => kind === InterfaceKind.Wired)}

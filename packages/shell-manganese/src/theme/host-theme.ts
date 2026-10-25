@@ -1,7 +1,6 @@
-import type { Theme } from "@domicile-desktop/component-library/theme-core";
 import type { ThemeSource } from "@domicile-desktop/component-library/theme-source";
 import { watchHost } from "@domicile-desktop/manganese-host/watch-host";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import { rememberedTheme, rememberTheme } from "./remembered-theme";
 
 /**
@@ -23,11 +22,11 @@ const SITES_REPAINT_WITHIN_MS = 300;
  * Build once per host, not per render: `ThemeProvider` re-registers whenever
  * the source's identity changes.
  */
-export const hostTheme = (domicile: DomicileHost): ThemeSource => {
+export const hostTheme = ({ theme }: Pick<Domicile, "theme">): ThemeSource => {
   const turning: (() => void)[] = [];
   // Registered up front so any answer settles every waiting wipe, since only
   // the newest request is answered.
-  domicile.addEventListener("windowsthemechanged", () => {
+  theme.on("windowschange", () => {
     for (const settle of turning.splice(0)) {
       // Sites in browser windows are drawn by this engine, which receives the
       // same message and repaints them a frame or two later.
@@ -37,27 +36,28 @@ export const hostTheme = (domicile: DomicileHost): ThemeSource => {
   return {
     // The theme is remembered here because this is the only place it arrives.
     onTheme: (handler) =>
-      watchHost(domicile, "themechanged", themeOf, (theme) => {
-        rememberTheme(theme);
-        handler(theme);
-      }),
-    setTheme: (theme) => {
-      domicile.setTheme(theme);
+      watchHost(
+        (heard) => theme.on("change", heard),
+        () => theme.current,
+        (current) => {
+          rememberTheme(current);
+          handler(current);
+        },
+      ),
+    setTheme: (next) => {
+      theme.set(next);
     },
     /**
      * The host's theme, or the remembered guess (see `remembered-theme.ts`)
      * until the host has one. The page paints with the guess until then.
      */
     get theme() {
-      return themeOf(domicile) ?? rememberedTheme();
+      return theme.current ?? rememberedTheme();
     },
-    turnWindows: (theme) =>
+    turnWindows: (next) =>
       new Promise((resolve) => {
         turning.push(resolve);
-        domicile.themeCaptured(theme);
+        theme.captured(next);
       }),
   };
 };
-
-const themeOf = ({ theme }: DomicileHost): Theme | undefined =>
-  theme ?? undefined;

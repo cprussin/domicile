@@ -7,8 +7,8 @@ import { useCaptured } from "./useCaptured";
 describe("useCaptured", () => {
   it("follows the engine's capture of a browser window's page", () => {
     const fake = new FakeDomicileHost();
-    fake.host.openBrowserWindow("https://example.com");
-    const { result } = renderHook(() => useCaptured(fake.host, "1"));
+    fake.domicile.browser.open("https://example.com");
+    const { result } = renderHook(() => useCaptured(fake.domicile, "1"));
     expect(result.current).toBe(false);
 
     act(() => {
@@ -24,10 +24,10 @@ describe("useCaptured", () => {
 
   it("is false for an app window, which the engine does not capture", () => {
     const fake = new FakeDomicileHost();
-    fake.host.openBrowserWindow("https://example.com");
+    fake.domicile.browser.open("https://example.com");
     fake.captureBrowser("1");
 
-    const { result } = renderHook(() => useCaptured(fake.host, undefined));
+    const { result } = renderHook(() => useCaptured(fake.domicile, undefined));
 
     expect(result.current).toBe(false);
   });

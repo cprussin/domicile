@@ -24,7 +24,7 @@ describe(watchAcrossLocks, () => {
     const heard: number[] = [];
 
     const stop = watchAcrossLocks(
-      fake.host,
+      fake.domicile,
       start,
     )((value) => {
       heard.push(value);
@@ -48,7 +48,7 @@ describe(watchAcrossLocks, () => {
     fake.set({ locked: true });
     const { runs, start } = counted();
 
-    watchAcrossLocks(fake.host, start)(() => undefined);
+    watchAcrossLocks(fake.domicile, start)(() => undefined);
     fake.set({ locked: false });
 
     expect(runs).toEqual({ started: 2, stopped: 1 });

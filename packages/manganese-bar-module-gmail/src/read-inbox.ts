@@ -1,8 +1,6 @@
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
-
 import type { GoogleClient } from "./consent";
 import { inboxCounts } from "./gmail-api";
-import type { TokenRefusal } from "./google-token";
+import type { Fetch, TokenRefusal } from "./google-token";
 import { refreshAccess, TokenRefusalKind } from "./google-token";
 import { Inbox } from "./inbox";
 import { forgetToken, storedToken } from "./stored-token";
@@ -20,7 +18,7 @@ type Held = { token: string; expiresAt: number };
  * A read rejects when Google gives no access token, or Gmail no counts.
  */
 export const inboxReader = (
-  domicile: Pick<DomicileHost, "fetchWithCookies">,
+  domicile: Fetch,
   client: GoogleClient,
   email: string,
   storage?: Parameters<typeof storedToken>[1],

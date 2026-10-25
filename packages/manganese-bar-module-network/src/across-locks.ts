@@ -1,5 +1,5 @@
 import { watchHost } from "@domicile-desktop/manganese-host/watch-host";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 
 /**
  * `start`, begun again each time the desktop unlocks.
@@ -10,15 +10,15 @@ import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
  */
 export const watchAcrossLocks =
   <T>(
-    domicile: DomicileHost,
+    domicile: Pick<Domicile, "session">,
     start: (onValue: (value: T) => void) => () => void,
   ) =>
   (onValue: (value: T) => void): (() => void) => {
     const watch = { locked: false, stop: start(onValue) };
+    const { session } = domicile;
     const stopHearing = watchHost(
-      domicile,
-      "lockedchanged",
-      lockedOf,
+      (changed) => session.on("lockchange", changed),
+      () => session.locked,
       (locked) => {
         if (watch.locked && !locked) {
           watch.stop();
@@ -32,6 +32,3 @@ export const watchAcrossLocks =
       watch.stop();
     };
   };
-
-const lockedOf = ({ locked }: DomicileHost): boolean | undefined =>
-  locked ?? undefined;

@@ -16,7 +16,7 @@ describe("IdleInhibitor", () => {
   it("asks the desk's Inhibit portal, once for every bar", async () => {
     const fake = new FakeDomicileHost();
     render(
-      <DomicileContext value={fake.host}>
+      <DomicileContext value={fake.domicile}>
         <IdleInhibitor />
         <IdleInhibitor />
       </DomicileContext>,

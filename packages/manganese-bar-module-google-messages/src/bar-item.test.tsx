@@ -30,7 +30,7 @@ const onBars = (
   screens: readonly string[],
   hold: () => () => void = ignoreKeyboard,
 ) => (
-  <DomicileContext value={fake.host}>
+  <DomicileContext value={fake.domicile}>
     <PanelKeyboardContext value={hold}>
       {screens.map((name) => (
         <Bar key={name} screen={name}>

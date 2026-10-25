@@ -8,7 +8,7 @@ import { PermissionAsk } from "@domicile-desktop/manganese-page-requests/Permiss
 import { useDeviceRequest } from "@domicile-desktop/manganese-page-requests/useDeviceRequest";
 import { useDialogRequest } from "@domicile-desktop/manganese-page-requests/useDialogRequest";
 import { usePermissionRequest } from "@domicile-desktop/manganese-page-requests/usePermissionRequest";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { Extension } from "@domicile-desktop/sdk/extension";
 import { WEBVIEW_CLOSE_EVENT } from "@domicile-desktop/sdk/webview-element";
 import { useEffect, useState } from "react";
@@ -17,7 +17,7 @@ import { useContentSize } from "./useContentSize";
 
 type Props = {
   /** Host every click goes through. */
-  domicile: DomicileHost;
+  domicile: Domicile;
   /** Extension this action belongs to. */
   extension: Extension;
   /**
@@ -33,7 +33,7 @@ type Props = {
 /**
  * An extension's toolbar action, drawn in the bar's tray.
  *
- * Every click calls `activateExtension`, which grants `activeTab` on the
+ * Every click calls `extensions.activate`, which grants `activeTab` on the
  * focused browser window. An action with a popup then opens it in a
  * `<webview>` panel; the engine dispatches `action.onClicked` for one without.
  *
@@ -52,7 +52,7 @@ export const ExtensionAction = ({
     <Button
       label={extension.title}
       onClick={() => {
-        domicile.activateExtension(id);
+        domicile.extensions.activate(id);
       }}
       size="sm"
       variant="ghost"
@@ -65,7 +65,7 @@ export const ExtensionAction = ({
       flush
       onOpenChange={(open) => {
         if (open) {
-          domicile.activateExtension(id);
+          domicile.extensions.activate(id);
         }
         onOpen(open ? id : undefined);
       }}

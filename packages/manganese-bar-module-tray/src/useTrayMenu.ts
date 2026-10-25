@@ -4,8 +4,7 @@ import type {
   WatchedMenu,
   watchMenu,
 } from "@domicile-desktop/sdk/dbusmenu";
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import { useEffect, useState } from "react";
 
@@ -25,9 +24,9 @@ export type OpenTrayMenu = {
  * first. A refused request is logged.
  */
 export const useTrayMenu = (
-  domicile: DomicileHost,
+  domicile: Domicile,
   bus: string,
-  path: string,
+  path: string | undefined,
   open: boolean,
   watch: typeof watchMenu,
 ): OpenTrayMenu | undefined => {
@@ -37,8 +36,8 @@ export const useTrayMenu = (
   const [requests, setRequests] = useState<WatchedMenu | undefined>(undefined);
 
   useEffect(() => {
-    if (open) {
-      const watched = watch(desktop(domicile), { bus, path }, setMenu);
+    if (open && path !== undefined) {
+      const watched = watch(domicile, { bus, path }, setMenu);
       setRequests(watched);
       sent(watched.aboutToShow(0));
       return () => {

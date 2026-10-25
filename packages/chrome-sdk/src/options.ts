@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 
-import type { DomicileHost } from "./domicile-host";
+import type { ShellNamespace } from "./desktop/shell";
 
 const label = z.string().min(1);
 
@@ -252,11 +252,10 @@ export const optionProblem = (
   }
 };
 
-/** What `watchShellOptions` needs of the desktop `Shell` is handed. */
-export type ShellOptionsHost = Pick<
-  DomicileHost,
-  "addEventListener" | "removeEventListener" | "shellOptions"
->;
+/** What `watchShellOptions` needs of the desktop. */
+export type ShellOptionsDesktop = {
+  readonly shell: Pick<ShellNamespace, "on" | "options">;
+};
 
 /**
  * Call `listener` with the values of `declared` now and each time the config
@@ -267,28 +266,21 @@ export type ShellOptionsHost = Pick<
  * says.
  */
 export const watchShellOptions = <T extends Options>(
-  host: ShellOptionsHost,
+  { shell }: ShellOptionsDesktop,
   declared: T,
   listener: (values: OptionValues<T>) => void,
   report: (dropped: string) => void = reportToConsole,
 ): (() => void) => {
   const heard = () => {
-    const { dropped, values } = readOptions(
-      declared,
-      host.shellOptions === null
-        ? undefined
-        : recordSchema.parse(JSON.parse(host.shellOptions)),
-    );
+    const { dropped, values } = readOptions(declared, shell.options);
     for (const line of dropped) {
       report(line);
     }
     listener(values);
   };
-  host.addEventListener("shelloptionschanged", heard);
+  const stop = shell.on("optionschange", heard);
   heard();
-  return () => {
-    host.removeEventListener("shelloptionschanged", heard);
-  };
+  return stop;
 };
 
 /** `input` with each plain object made a group. */

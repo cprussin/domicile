@@ -9,7 +9,7 @@ import { useExtensions } from "./useExtensions";
 const client = () => {
   const fake = new FakeDomicileHost();
   return {
-    domicile: fake.host,
+    domicile: fake.domicile,
     says: (extensions: readonly Extension[]) => {
       act(() => {
         fake.set({

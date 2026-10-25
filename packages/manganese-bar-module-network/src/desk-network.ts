@@ -2,7 +2,6 @@ import type { Option, Result } from "@cprussin/option-result";
 import { perHost } from "@domicile-desktop/manganese-host/per-host";
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import type {
   Addressing,
@@ -34,21 +33,22 @@ export type DeskNetwork = {
  * watches start again on unlock.
  */
 export const deskNetwork = perHost((domicile): DeskNetwork => {
-  const host = desktop(domicile);
   return {
     addresses: sharedWatch(
       watchAcrossLocks(domicile, (onAddresses) =>
-        watchAddresses(host, onAddresses),
+        watchAddresses(domicile, onAddresses),
       ),
     ),
     interfaces: sharedWatch((onInterfaces) =>
-      watchInterfaces(host, onInterfaces),
+      watchInterfaces(domicile, onInterfaces),
     ),
     network: sharedWatch(
-      watchAcrossLocks(domicile, (onNetwork) => watchNetwork(host, onNetwork)),
+      watchAcrossLocks(domicile, (onNetwork) =>
+        watchNetwork(domicile, onNetwork),
+      ),
     ),
     wifi: sharedWatch(
-      watchAcrossLocks(domicile, (onWifi) => watchWifi(host, onWifi)),
+      watchAcrossLocks(domicile, (onWifi) => watchWifi(domicile, onWifi)),
     ),
   };
 });

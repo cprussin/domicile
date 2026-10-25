@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Option, Result } from "@cprussin/option-result";
 import { Err, None, Ok, Some } from "@cprussin/option-result";
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
@@ -19,7 +18,7 @@ import { heldWifiActions } from "./held-wifi-actions";
 import { WifiPanel } from "./WifiPanel";
 
 /** A host the panel never calls, since the library is injected. */
-const NO_HOST = desktop(new FakeDomicileHost().host);
+const NO_HOST = new FakeDomicileHost().domicile;
 
 const DEVICE = "/org/freedesktop/NetworkManager/Devices/3";
 

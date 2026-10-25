@@ -1,20 +1,17 @@
 import type { Result } from "@cprussin/option-result";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Browser } from "@domicile-desktop/sdk/desktop/browser";
 
 import type { GoogleClient } from "./consent";
 import { consentAddress, redirectCode } from "./consent";
 import { exchangeCode } from "./google-token";
 import { storeToken } from "./stored-token";
 
-type Desk = Pick<
-  DomicileHost,
-  | "addEventListener"
-  | "browserWindows"
-  | "closeBrowserWindow"
-  | "fetchWithCookies"
-  | "openBrowserWindow"
-  | "removeEventListener"
->;
+type Desk = {
+  readonly browser: Pick<
+    Browser,
+    "close" | "fetch" | "on" | "open" | "windows"
+  >;
+};
 
 /**
  * Signs the account in: opens Google's consent page in a browser window,
@@ -31,24 +28,22 @@ export const signIn = async (
   storage?: Parameters<typeof storeToken>[2],
   state: string = randomState(),
 ): Promise<void> => {
+  const { browser } = domicile;
   const code = await new Promise<Result<string, string>>((resolve) => {
     const windowsChanged = () => {
-      for (const window of domicile.browserWindows ?? []) {
+      for (const window of browser.windows ?? []) {
         redirectCode(window.url, state).match({
           None: () => undefined,
           Some: (redirected) => {
-            domicile.removeEventListener(
-              "browserwindowschanged",
-              windowsChanged,
-            );
-            domicile.closeBrowserWindow(window.id);
+            stop();
+            browser.close(window.id);
             resolve(redirected);
           },
         });
       }
     };
-    domicile.addEventListener("browserwindowschanged", windowsChanged);
-    domicile.openBrowserWindow(consentAddress(client, email, state));
+    const stop = browser.on("change", windowsChanged);
+    browser.open(consentAddress(client, email, state));
   });
   const refreshToken = await code.match({
     Err: (why) => {

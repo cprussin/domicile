@@ -22,7 +22,7 @@ describe("hostKeymaps", () => {
   it("hears the keymaps until the watch stops", async () => {
     const fake = new FakeDomicileHost();
     const heard: Keymaps[] = [];
-    const stop = hostKeymaps(fake.host).watch((keymaps) => {
+    const stop = hostKeymaps(fake.domicile).watch((keymaps) => {
       heard.push(keymaps);
     });
     say(fake, 1, { reply: { kind: "started" }, type: "system_reply" });

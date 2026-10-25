@@ -3,10 +3,8 @@ import type {
   DisplaySource,
 } from "@domicile-desktop/component-library/display-source";
 import { watchHost } from "@domicile-desktop/manganese-host/watch-host";
-import type {
-  DomicileDisplay,
-  DomicileHost,
-} from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
+import type { Display as DomicileDisplay } from "@domicile-desktop/sdk/desktop/displays";
 
 /**
  * Adapts the host's desktop description to the component library's
@@ -18,14 +16,20 @@ import type {
  * Build once per host, not per render: `DisplayProvider` re-registers
  * whenever the source's identity changes.
  */
-export const hostDisplays = (domicile: DomicileHost): DisplaySource => ({
+export const hostDisplays = ({
+  displays,
+}: Pick<Domicile, "displays">): DisplaySource => ({
   get displays() {
     // A getter, not a snapshot: the provider reads this on mount and on source
     // change, and the desktop may have changed since construction.
-    return displaysOf(domicile);
+    return displays.list?.map(asDisplay);
   },
   onDisplays: (handler) =>
-    watchHost(domicile, "displayschanged", displaysOf, handler),
+    watchHost(
+      (changed) => displays.on("change", changed),
+      () => displays.list?.map(asDisplay),
+      handler,
+    ),
 });
 
 /**
@@ -44,9 +48,3 @@ const asDisplay = (display: DomicileDisplay): Display => ({
   scale: display.scale,
   size: [display.width, display.height],
 });
-
-/** The host's displays, or `undefined` before it has described any. */
-const displaysOf = ({
-  displays,
-}: DomicileHost): readonly Display[] | undefined =>
-  displays === null ? undefined : displays.map(asDisplay);

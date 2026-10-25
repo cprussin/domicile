@@ -1,10 +1,8 @@
 import { Button } from "@domicile-desktop/component-library/Button";
 import type { Point } from "@domicile-desktop/component-library/ContextMenu";
 import { watchMenu } from "@domicile-desktop/sdk/dbusmenu";
-import type {
-  DomicileHost,
-  DomicileTrayItem,
-} from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
+import type { TrayItem } from "@domicile-desktop/sdk/tray";
 import { useState } from "react";
 
 import { css } from "../styled-system/css";
@@ -20,9 +18,9 @@ const MIDDLE_BUTTON = 1;
 
 type Props = {
   /** Where clicks are sent. */
-  domicile: DomicileHost;
+  domicile: Domicile;
   /** The icon, as the compositor last described it. */
-  item: DomicileTrayItem;
+  item: TrayItem;
   /** Injectable so tests can answer for the application's menu. */
   watch?: typeof watchMenu | undefined;
   /** Injectable so tests can answer for the menu's icons. */
@@ -52,8 +50,8 @@ export const TrayIcon = ({
   const opened = useTrayMenu(domicile, bus, menu, at !== undefined, watch);
   const pictures = useMenuIcons(domicile, opened?.menu, icons);
   const showMenu = (button: HTMLElement) => {
-    if (menu === "") {
-      domicile.activateTrayItem(id, "context");
+    if (menu === undefined) {
+      domicile.tray.activate(id, "context");
     } else {
       const box = button.getBoundingClientRect();
       setAt({ x: box.left, y: box.bottom });
@@ -65,14 +63,14 @@ export const TrayIcon = ({
         label={title}
         onAuxClick={(event) => {
           if (event.button === MIDDLE_BUTTON) {
-            domicile.activateTrayItem(id, "secondary");
+            domicile.tray.activate(id, "secondary");
           }
         }}
         onClick={(event) => {
           if (itemIsMenu) {
             showMenu(event.currentTarget);
           } else {
-            domicile.activateTrayItem(id, "primary");
+            domicile.tray.activate(id, "primary");
           }
         }}
         onContextMenu={(event) => {
@@ -82,7 +80,7 @@ export const TrayIcon = ({
         size="sm"
         variant="ghost"
       >
-        {icon === "" ? (
+        {icon === undefined ? (
           <span className={letterStyles}>{title.slice(0, 1)}</span>
         ) : (
           <img

@@ -1,7 +1,7 @@
 import type {
   Options,
   OptionValues,
-  ShellOptionsHost,
+  ShellOptionsDesktop,
 } from "@domicile-desktop/sdk/options";
 import { readOptions, watchShellOptions } from "@domicile-desktop/sdk/options";
 import { useEffect, useState } from "react";
@@ -15,14 +15,14 @@ import { useEffect, useState } from "react";
  * `declared` should be a constant: a new one reads the options again.
  */
 export const useShellOptions = <T extends Options>(
-  host: ShellOptionsHost,
+  domicile: ShellOptionsDesktop,
   declared: T,
 ): OptionValues<T> => {
   const [values, setValues] = useState<OptionValues<T> | undefined>(undefined);
 
   useEffect(
-    () => watchShellOptions(host, declared, setValues),
-    [host, declared],
+    () => watchShellOptions(domicile, declared, setValues),
+    [domicile, declared],
   );
 
   return values ?? readOptions(declared, undefined).values;

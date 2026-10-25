@@ -68,7 +68,7 @@ const windowProps = {
   clickThrough: false,
   cursor: undefined,
   depth: 0,
-  domicile: host.host,
+  domicile: host.domicile,
   dragging: false,
   floating: false,
   frame: FRAME,

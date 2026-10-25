@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { desktop } from "./desktop/desktop";
 import { FakeDomicileHost } from "./fake-host";
 import { fireGlobalShortcuts } from "./global-shortcuts";
 
@@ -25,7 +26,7 @@ const recorded = (fake: FakeDomicileHost, name: string) =>
 describe("fireGlobalShortcuts", () => {
   it("grabs each bound chord once and reports a press under its id", () => {
     const fake = new FakeDomicileHost();
-    fireGlobalShortcuts(fake.host);
+    fireGlobalShortcuts(desktop(fake.host));
     bind(fake, [TALK]);
     bind(fake, [TALK, { ...TALK, chord: "Ctrl+Alt+m", id: 4 }]);
 
@@ -43,7 +44,7 @@ describe("fireGlobalShortcuts", () => {
 
   it("reports a release under its id", () => {
     const fake = new FakeDomicileHost();
-    fireGlobalShortcuts(fake.host);
+    fireGlobalShortcuts(desktop(fake.host));
     bind(fake, [TALK]);
 
     press(fake, "Ctrl+Alt+t");
@@ -57,7 +58,7 @@ describe("fireGlobalShortcuts", () => {
 
   it("gives back a chord no longer bound, and reports nothing for it", () => {
     const fake = new FakeDomicileHost();
-    fireGlobalShortcuts(fake.host);
+    fireGlobalShortcuts(desktop(fake.host));
     bind(fake, [TALK]);
     bind(fake, []);
 
@@ -69,7 +70,7 @@ describe("fireGlobalShortcuts", () => {
 
   it("stops, and gives back its chords, when the returned function is called", () => {
     const fake = new FakeDomicileHost();
-    const stop = fireGlobalShortcuts(fake.host);
+    const stop = fireGlobalShortcuts(desktop(fake.host));
     bind(fake, [TALK]);
     stop();
 

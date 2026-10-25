@@ -4,6 +4,7 @@ import { Err, Ok } from "@cprussin/option-result";
 
 import type { Cast, CastBackend, CastTarget, Sending } from "./cast";
 import { CastClaimKind, CastMode, casting, claimCastRequest } from "./cast";
+import { desktop } from "./desktop/desktop";
 import type { DomicileDisplay } from "./domicile-host";
 import { FakeDomicileHost } from "./fake-host";
 import type { PortalRequest } from "./portal";
@@ -86,7 +87,7 @@ class FakeMonitors {
     (end: Result<"removed", SystemError>) => void
   >();
 
-  addVirtualMonitor = (
+  addVirtual = (
     mode: VirtualMonitorMode,
   ): Promise<Result<VirtualMonitor, SystemError>> => {
     if (this.refusal !== undefined) {
@@ -150,14 +151,14 @@ const desk = () => {
   const fake = new FakeDomicileHost();
   fake.set({ displays: [display("left")] });
   const monitors = new FakeMonitors();
-  return { cast: casting(fake.host, monitors), fake, monitors };
+  return { cast: casting(desktop(fake.host), monitors), fake, monitors };
 };
 
 describe("casting", () => {
   it("is the same casts for every caller with the host", () => {
     const { cast, fake } = desk();
 
-    expect(casting(fake.host)).toBe(cast);
+    expect(casting(desktop(fake.host))).toBe(cast);
   });
 
   describe("to pick what to show", () => {
@@ -168,7 +169,9 @@ describe("casting", () => {
       await settle();
 
       expect(backend.sent).toEqual(["tv-1"]);
-      expect(claimCastRequest(fake.host, screenCast("", ["left"]))).toEqual({
+      expect(
+        claimCastRequest(desktop(fake.host), screenCast("", ["left"])),
+      ).toEqual({
         kind: CastClaimKind.Pick,
         to: "Living Room TV",
       });
@@ -178,10 +181,10 @@ describe("casting", () => {
       const { cast, fake } = desk();
       void cast.start(new FakeBackend(), TV, CastMode.Pick);
       await settle();
-      claimCastRequest(fake.host, screenCast("", ["left"]));
+      claimCastRequest(desktop(fake.host), screenCast("", ["left"]));
 
       expect(
-        claimCastRequest(fake.host, screenCast("", ["left"])),
+        claimCastRequest(desktop(fake.host), screenCast("", ["left"])),
       ).toBeUndefined();
     });
 
@@ -191,7 +194,10 @@ describe("casting", () => {
       await settle();
 
       expect(
-        claimCastRequest(fake.host, screenCast("us.zoom.Zoom", ["left"])),
+        claimCastRequest(
+          desktop(fake.host),
+          screenCast("us.zoom.Zoom", ["left"]),
+        ),
       ).toBeUndefined();
     });
 
@@ -219,7 +225,7 @@ describe("casting", () => {
 
       expect(await started).toStrictEqual(Err("The TV is busy"));
       expect(
-        claimCastRequest(fake.host, screenCast("", ["left"])),
+        claimCastRequest(desktop(fake.host), screenCast("", ["left"])),
       ).toBeUndefined();
     });
   });
@@ -252,7 +258,10 @@ describe("casting", () => {
 
       expect(backend.sent).toEqual(["tv-1"]);
       expect(
-        claimCastRequest(fake.host, screenCast("", ["left", "virtual-1"])),
+        claimCastRequest(
+          desktop(fake.host),
+          screenCast("", ["left", "virtual-1"]),
+        ),
       ).toEqual({
         answer: PortalAnswer.ScreenCast([
           CastSource.Monitor({
@@ -271,7 +280,9 @@ describe("casting", () => {
       void cast.start(new FakeBackend(), TV, CastMode.Extend);
       await settle();
 
-      expect(claimCastRequest(fake.host, screenCast("", ["left"]))).toEqual({
+      expect(
+        claimCastRequest(desktop(fake.host), screenCast("", ["left"])),
+      ).toEqual({
         answer: PortalAnswer.Canceled(),
         kind: CastClaimKind.Answered,
       });

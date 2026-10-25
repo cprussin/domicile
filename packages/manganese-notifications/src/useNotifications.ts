@@ -1,10 +1,9 @@
 import type { ToastManager } from "@domicile-desktop/component-library/Toaster";
 import { watchHost } from "@domicile-desktop/manganese-host/watch-host";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { Notification } from "@domicile-desktop/sdk/notification";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { arrivals } from "./arrivals";
-import { notificationOf } from "./notification-of";
 import { toastTimeout } from "./toast-timeout";
 
 export type NotificationCenter = {
@@ -46,7 +45,7 @@ type Desk = {
  * removes the toast too. See docs/architecture/NOTIFICATIONS.md.
  */
 export const useNotifications = (
-  domicile: DomicileHost,
+  domicile: Pick<Domicile, "notifications">,
   toasts: ToastManager,
 ): NotificationCenter => {
   const [desk, setDesk] = useState<Desk>({
@@ -80,7 +79,12 @@ export const useNotifications = (
         readUpTo: previous.readUpTo ?? latest(items),
       }));
     };
-    return watchHost(domicile, "notificationschanged", itemsOf, heard);
+    const { notifications } = domicile;
+    return watchHost(
+      (changed) => notifications.on("change", changed),
+      () => notifications.list,
+      heard,
+    );
   }, [domicile, toasts]);
 
   const read = useCallback(() => {
@@ -89,21 +93,21 @@ export const useNotifications = (
 
   const dismiss = useCallback(
     (ids: readonly number[]) => {
-      domicile.dismissNotifications(ids);
+      domicile.notifications.dismiss(ids);
     },
     [domicile],
   );
 
   const invoke = useCallback(
     (id: number, action: string) => {
-      domicile.invokeNotificationAction(id, action);
+      domicile.notifications.invoke(id, action);
     },
     [domicile],
   );
 
   const reply = useCallback(
     (id: number, text: string) => {
-      domicile.replyToNotification(id, text);
+      domicile.notifications.reply(id, text);
     },
     [domicile],
   );
@@ -121,8 +125,3 @@ export const useNotifications = (
 /** The newest `time` in `items`, or `0` for none. */
 const latest = (items: readonly Notification[]): number =>
   Math.max(0, ...items.map(({ time }) => time));
-
-const itemsOf = ({
-  notifications,
-}: DomicileHost): readonly Notification[] | undefined =>
-  notifications?.map(notificationOf) ?? undefined;

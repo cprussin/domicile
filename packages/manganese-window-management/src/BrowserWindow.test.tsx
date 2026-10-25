@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import {
   WEBVIEW_CONTEXT_MENU_EVENT,
   WEBVIEW_DEVICE_REQUEST_EVENT,
@@ -35,21 +36,28 @@ import { css } from "../styled-system/css";
 import { BrowserWindow } from "./BrowserWindow";
 import { recordedSettles } from "./recorded-settles";
 
-const silentDomicile = {
-  // Taken by the window's system calls, which these tests never answer.
-  addEventListener: () => undefined,
-  focusApp: () => undefined,
-  focusChrome: () => undefined,
-} as unknown as DomicileHost;
+/** A desktop whose system calls these tests never answer. */
+const fakeDesk = new FakeDomicileHost().domicile;
+
+const silentDomicile: Domicile = {
+  ...fakeDesk,
+  windows: {
+    ...fakeDesk.windows,
+    focus: () => undefined,
+    focusShell: () => undefined,
+  },
+};
 
 /** Records the window's host calls, in order. */
-const recordingDomicile = (calls: string[]): DomicileHost =>
-  ({
-    ...silentDomicile,
-    focusChrome: () => {
-      calls.push("focusChrome");
+const recordingDomicile = (calls: string[]): Domicile => ({
+  ...silentDomicile,
+  windows: {
+    ...silentDomicile.windows,
+    focusShell: () => {
+      calls.push("focusShell");
     },
-  }) as unknown as DomicileHost;
+  },
+});
 
 const view = (container: HTMLElement): HTMLWebViewElement => {
   const element = container.querySelector("webview");
@@ -1058,7 +1066,7 @@ describe("BrowserWindow", () => {
           window="1"
         />,
       );
-      expect(calls).toStrictEqual(["focusChrome"]);
+      expect(calls).toStrictEqual(["focusShell"]);
     });
 
     it("says nothing while the user is working somewhere else", () => {
@@ -2224,13 +2232,14 @@ describe("BrowserWindow", () => {
           clickThrough={false}
           covered={false}
           depth={0}
-          domicile={
-            {
-              ...silentDomicile,
-              openBrowserWindow: opens,
-              openPrivateBrowserWindow: opensPrivately,
-            } as unknown as DomicileHost
-          }
+          domicile={{
+            ...silentDomicile,
+            browser: {
+              ...silentDomicile.browser,
+              open: opens,
+              openPrivate: opensPrivately,
+            },
+          }}
           dragging={false}
           focused
           frame={FRAME}

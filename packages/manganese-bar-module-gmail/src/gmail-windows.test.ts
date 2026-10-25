@@ -30,7 +30,7 @@ describe("watchGmailWindows", () => {
     const fake = new FakeDomicileHost();
     const changes = { count: 0 };
 
-    const stop = watchGmailWindows(fake.host, () => {
+    const stop = watchGmailWindows(fake.domicile, () => {
       changes.count += 1;
     });
     fake.set({ browserWindows: [browser("1", INBOX, "Inbox (2)")] });
@@ -47,7 +47,7 @@ describe("watchGmailWindows", () => {
     const changes = { count: 0 };
     const gmail = browser("1", INBOX, "Inbox (2)");
 
-    const stop = watchGmailWindows(fake.host, () => {
+    const stop = watchGmailWindows(fake.domicile, () => {
       changes.count += 1;
     });
     fake.set({ browserWindows: [gmail] });

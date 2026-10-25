@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-
+import { desktop } from "./desktop/desktop";
 import { FakeDomicileHost } from "./fake-host";
 import {
   defineOptions,
@@ -116,7 +116,7 @@ describe("watchShellOptions", () => {
     const fake = new FakeDomicileHost();
     expect(
       await new Promise<unknown>((resolve) => {
-        watchShellOptions(fake.host, CLOCK, resolve);
+        watchShellOptions(desktop(fake.host), CLOCK, resolve);
       }),
     ).toEqual({ format: "24h" });
   });
@@ -126,7 +126,7 @@ describe("watchShellOptions", () => {
     const heard: unknown[] = [];
     const reported: string[] = [];
     const stop = watchShellOptions(
-      fake.host,
+      desktop(fake.host),
       CLOCK,
       (values) => heard.push(values),
       (dropped) => reported.push(dropped),

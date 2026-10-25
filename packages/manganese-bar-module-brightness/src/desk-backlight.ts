@@ -3,7 +3,6 @@ import { perHost } from "@domicile-desktop/manganese-host/per-host";
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { watchPresence } from "@domicile-desktop/manganese-host/watch-presence";
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import { readBacklight } from "@domicile-desktop/system-backlight/read-backlight";
 import { hostBacklight } from "./host-backlight";
@@ -28,9 +27,7 @@ export const deskBacklightHardware = perHost(
     sharedWatch((onPresent) =>
       watchPresence(
         async () =>
-          (await readBacklight(desktop(domicile))).map((found) =>
-            found.isSome(),
-          ),
+          (await readBacklight(domicile)).map((found) => found.isSome()),
         onPresent,
       ),
     ),

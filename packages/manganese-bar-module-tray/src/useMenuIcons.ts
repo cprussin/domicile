@@ -1,7 +1,7 @@
 import type { Result } from "@cprussin/option-result";
 import type { MenuEntry } from "@domicile-desktop/sdk/dbusmenu";
 import { MenuEntryKind } from "@domicile-desktop/sdk/dbusmenu";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import type { ThemedIcon } from "@domicile-desktop/system-apps/app-icons";
 import { useEffect, useState } from "react";
@@ -14,7 +14,7 @@ import type { MenuIcons } from "./menu-icons";
  * logged.
  */
 export const useMenuIcons = (
-  domicile: DomicileHost,
+  domicile: Domicile,
   menu: Result<readonly MenuEntry[], SystemError> | undefined,
   icons: MenuIcons,
 ): ReadonlyMap<string, ThemedIcon> => {
@@ -72,7 +72,7 @@ const namesIn = (entries: readonly MenuEntry[]): string[] =>
 
 /** `names` that have an icon, each with its icon. */
 const pictures = async (
-  domicile: DomicileHost,
+  domicile: Domicile,
   names: readonly string[],
   icons: MenuIcons,
 ): Promise<ReadonlyMap<string, ThemedIcon>> => {

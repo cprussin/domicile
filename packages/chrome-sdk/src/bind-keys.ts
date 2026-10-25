@@ -9,12 +9,12 @@
 // event and runs as its `SendShell` binding would. See
 // docs/architecture/KEYBINDINGS.md.
 
-import type { DomicileHost } from "./domicile-host";
+import type { Keyboard } from "./desktop/keyboard";
+import type { ShellNamespace } from "./desktop/shell";
 import { KeyActionKind } from "./key-action";
 import type { KeybindingsByMode, ShellKeybindings } from "./own-keybindings";
 import { ownKeybindings } from "./own-keybindings";
 import type { Listening, SystemError } from "./system";
-import { system } from "./system";
 
 /** The initial binding mode. */
 const DEFAULT_MODE = "default";
@@ -41,14 +41,10 @@ export type KeyBinding = {
 };
 
 /** The part of the desktop that `bindKeys` uses. */
-export type KeyHost = Pick<
-  DomicileHost,
-  | "addEventListener"
-  | "callSystem"
-  | "grabShortcut"
-  | "removeEventListener"
-  | "ungrabShortcut"
->;
+export type KeyDesktop = {
+  readonly keyboard: Pick<Keyboard, "grab" | "on" | "ungrab">;
+  readonly shell: Pick<ShellNamespace, "commands">;
+};
 
 /**
  * Handle the keybindings `own` for a shell.
@@ -63,7 +59,7 @@ export type KeyHost = Pick<
  *   still work.
  */
 export const bindKeys = (
-  domicile: KeyHost,
+  domicile: KeyDesktop,
   own: ShellKeybindings,
   { onCommand, onModeChanged, report = reportToConsole }: KeyHandlers,
 ): KeyBinding => {
@@ -95,11 +91,11 @@ export const bindKeys = (
   };
 
   const grabbed = grabEach(
-    domicile,
+    domicile.keyboard,
     new Set([...bindings.values()].flatMap((byChord) => [...byChord.keys()])),
   );
-  domicile.addEventListener("shortcut", onShortcut);
-  const commands = hearCommands(domicile, onCommand, report);
+  const stopShortcuts = domicile.keyboard.on("shortcut", onShortcut);
+  const commands = hearCommands(domicile.shell, onCommand, report);
   return {
     setMode: (name) => {
       if (bindings.has(name)) {
@@ -109,11 +105,11 @@ export const bindKeys = (
       }
     },
     unbind: () => {
-      domicile.removeEventListener("shortcut", onShortcut);
+      stopShortcuts();
       commands.stop();
       // Emptied, so a second unbind does not answer somebody else's grab.
       for (const chord of grabbed.splice(0)) {
-        domicile.ungrabShortcut(chord);
+        domicile.keyboard.ungrab(chord);
       }
     },
   };
@@ -123,10 +119,13 @@ export const bindKeys = (
  * Grab each of `chords`, and return those the engine took. A keysym the
  * layout cannot type is logged.
  */
-const grabEach = (domicile: KeyHost, chords: Iterable<string>): string[] =>
+const grabEach = (
+  keyboard: Pick<Keyboard, "grab">,
+  chords: Iterable<string>,
+): string[] =>
   [...chords].filter((chord) => {
     try {
-      domicile.grabShortcut(chord);
+      keyboard.grab(chord);
       return true;
     } catch (error) {
       // biome-ignore lint/suspicious/noConsole: the user fixes a keysym the layout cannot type, so the shell reports it
@@ -146,7 +145,7 @@ const reportToConsole = (error: SystemError): void => {
  * `stop`. A stop before listening starts ends it once it does.
  */
 const hearCommands = (
-  domicile: KeyHost,
+  shell: Pick<ShellNamespace, "commands">,
   onCommand: (args: readonly string[]) => void,
   report: (error: SystemError) => void,
 ): { stop: () => void } => {
@@ -154,8 +153,8 @@ const hearCommands = (
     stopped: boolean;
     listening: Listening<readonly string[]> | undefined;
   } = { listening: undefined, stopped: false };
-  system(domicile)
-    .shellCommands()
+  shell
+    .commands()
     .then((result) => {
       result.match({
         Err: report,

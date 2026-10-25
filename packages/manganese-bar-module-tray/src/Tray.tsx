@@ -1,8 +1,6 @@
-import type {
-  DomicileHost,
-  DomicileTrayItem,
-} from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { Extension } from "@domicile-desktop/sdk/extension";
+import type { TrayItem } from "@domicile-desktop/sdk/tray";
 import { useEffect, useRef, useState } from "react";
 
 import { css } from "../styled-system/css";
@@ -17,11 +15,11 @@ const PRIMARY_BUTTON = 0;
 
 type Props = {
   /** Where clicks are sent. */
-  domicile: DomicileHost;
+  domicile: Domicile;
   /** Every extension with an action, as the engine last described them. */
   extensions: readonly Extension[];
   /** The applications' icons, as the compositor last described them. */
-  items: readonly DomicileTrayItem[];
+  items: readonly TrayItem[];
   /** Move `dragged` onto `target` among the `shown` keys; see `moveTo`. */
   onMove: (shown: readonly string[], dragged: string, target: string) => void;
   /** Open an extension's popup, or close the open one with `undefined`. */

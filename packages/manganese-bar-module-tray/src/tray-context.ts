@@ -1,8 +1,8 @@
 // The tray's state, held once for every bar's tray.
 
 import { useProvided } from "@domicile-desktop/manganese-host/use-provided";
-import type { DomicileTrayItem } from "@domicile-desktop/sdk/domicile-host";
 import type { Extension } from "@domicile-desktop/sdk/extension";
+import type { TrayItem } from "@domicile-desktop/sdk/tray";
 import { createContext } from "react";
 import type { TrayOrder } from "./useTrayOrder";
 
@@ -10,7 +10,7 @@ export type TrayState = {
   /** The extensions with an action. */
   extensions: readonly Extension[];
   /** The applications' tray icons. */
-  items: readonly DomicileTrayItem[];
+  items: readonly TrayItem[];
   /** Open an extension's popup on `screen`, or close it with `undefined`. */
   open: (screen: string, extension: string | undefined) => void;
   /** The open extension popup and the screen it is on. */

@@ -26,7 +26,7 @@ const KEYS: ShellKeybindings = {
 const client = () => {
   const fake = new FakeDomicileHost();
   return {
-    domicile: fake.host,
+    domicile: fake.domicile,
     presses: (chord: string) => {
       act(() => {
         fake.dispatch("shortcut", { chord });

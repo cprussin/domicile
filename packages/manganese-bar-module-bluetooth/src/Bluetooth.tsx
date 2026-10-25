@@ -4,8 +4,6 @@ import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch"
 import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
 import { isAbsent } from "@domicile-desktop/manganese-host/watch-presence";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import type {
   Device,
@@ -14,7 +12,6 @@ import type {
 import { BluetoothIcon } from "@phosphor-icons/react/dist/ssr/Bluetooth";
 import { BluetoothConnectedIcon } from "@phosphor-icons/react/dist/ssr/BluetoothConnected";
 import { BluetoothSlashIcon } from "@phosphor-icons/react/dist/ssr/BluetoothSlash";
-import { useMemo } from "react";
 import { cva } from "../styled-system/css";
 import { BluetoothPanel } from "./BluetoothPanel";
 import type { BluetoothActions } from "./bluetooth-actions";
@@ -26,7 +23,7 @@ type Props = {
   /** Whether the machine has Bluetooth hardware, from `/sys`. */
   hardware: SharedWatch<Result<boolean, SystemError>>;
   /** The host whose system calls reach BlueZ. */
-  domicile: DomicileHost;
+  domicile: Domicile;
   /**
    * Whether the desktop is locked. A locked desktop refuses power, pairing and
    * connecting, so the icon only shows the state.
@@ -52,7 +49,6 @@ export const Bluetooth = ({
   hardware,
   locked = false,
 }: Props) => {
-  const host = useMemo(() => desktop(domicile), [domicile]);
   const reading = useSharedWatch(bluetooth);
   const present = useSharedWatch(hardware);
   const usable = reading?.match({
@@ -63,7 +59,7 @@ export const Bluetooth = ({
     return locked ? (
       <Status reading={usable} />
     ) : (
-      <Item actions={actions} host={host} reading={usable} />
+      <Item actions={actions} host={domicile} reading={usable} />
     );
   } else if (isAbsent(present)) {
     return undefined;

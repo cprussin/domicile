@@ -6,7 +6,7 @@ import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
 import type { ApplicationsConfig } from "@domicile-desktop/manganese-launcher/applications-config";
 import type { FloatingRules } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
 import { DEFAULT_KEYBINDINGS } from "@domicile-desktop/manganese-window-management/keyboard/commands";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { Desktop } from "./Desktop";
 import { DEFAULT_BAR } from "./default-bars";
@@ -25,7 +25,7 @@ type Props = {
    * Must be stable: the provider re-registers when its identity changes.
    */
   displays: DisplaySource;
-  domicile: DomicileHost;
+  domicile: Domicile;
   /** Which client windows open floating, besides dialogs. Defaults to none. */
   floating?: FloatingRules | undefined;
   /** The keys this desktop binds, under the config's. Defaults to sway's. */

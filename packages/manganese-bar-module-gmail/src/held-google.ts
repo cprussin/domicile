@@ -2,9 +2,10 @@
 // a store for its tokens.
 
 import type {
-  DomicileFetchHeader,
-  DomicileFetchResponse,
-} from "@domicile-desktop/sdk/domicile-host";
+  FetchHeader,
+  FetchInit,
+  FetchResponse,
+} from "@domicile-desktop/sdk/desktop/browser";
 
 export const EMAIL = "me@example.com";
 
@@ -19,10 +20,7 @@ export const INBOX =
   "https://gmail.googleapis.com/gmail/v1/users/me/labels/INBOX";
 
 /** Google's answer to a token request: `fields` as JSON. */
-export const json = (
-  status: number,
-  fields: object,
-): DomicileFetchResponse => ({
+export const json = (status: number, fields: object): FetchResponse => ({
   body: JSON.stringify(fields),
   status,
   url: "",
@@ -31,11 +29,11 @@ export const json = (
 type Fetched = {
   url: string;
   method: string;
-  headers: readonly DomicileFetchHeader[];
+  headers: readonly FetchHeader[];
   body: string | null;
 };
 
-type Answer = DomicileFetchResponse | Error;
+type Answer = FetchResponse | Error;
 
 /**
  * A desktop whose fetches answer from `answers` by address, each address's
@@ -48,23 +46,23 @@ export const answering = (
   const fetched: Fetched[] = [];
   return {
     domicile: {
-      fetchWithCookies: (
-        url: string,
-        method: string,
-        headers: readonly DomicileFetchHeader[],
-        body: string | null,
-      ): Promise<DomicileFetchResponse> => {
-        const asked = fetched.filter((one) => one.url === url).length;
-        fetched.push({ body, headers, method, url });
-        const all = answers[url] ?? [];
-        const answer = all[Math.min(asked, all.length - 1)];
-        if (answer === undefined) {
-          throw new Error(`test: nothing answers ${url}`);
-        } else {
-          return answer instanceof Error
-            ? Promise.reject(answer)
-            : Promise.resolve(answer);
-        }
+      browser: {
+        fetch: (
+          url: string,
+          { method = "GET", headers = [], body }: FetchInit = {},
+        ): Promise<FetchResponse> => {
+          const asked = fetched.filter((one) => one.url === url).length;
+          fetched.push({ body: body ?? null, headers, method, url });
+          const all = answers[url] ?? [];
+          const answer = all[Math.min(asked, all.length - 1)];
+          if (answer === undefined) {
+            throw new Error(`test: nothing answers ${url}`);
+          } else {
+            return answer instanceof Error
+              ? Promise.reject(answer)
+              : Promise.resolve(answer);
+          }
+        },
       },
     },
     fetched,

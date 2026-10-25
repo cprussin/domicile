@@ -10,7 +10,7 @@ const HELD = { altKey: false, ctrlKey: false, metaKey: true, shiftKey: false };
 const client = () => {
   const fake = new FakeDomicileHost();
   return {
-    domicile: fake.host,
+    domicile: fake.domicile,
     /** Set the held modifiers. */
     says: (held: typeof HELD) => {
       act(() => {

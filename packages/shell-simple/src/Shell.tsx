@@ -4,10 +4,8 @@
 import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs";
 import { APP_TAG_NAME } from "@domicile-desktop/sdk/app-element";
 import { bindKeys } from "@domicile-desktop/sdk/bind-keys";
-import type {
-  DomicileHost,
-  DomicileWindow,
-} from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
+import type { ClientWindow } from "@domicile-desktop/sdk/desktop/windows";
 import { KeyAction } from "@domicile-desktop/sdk/key-action";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { ownedChords } from "@domicile-desktop/sdk/own-keybindings";
@@ -120,7 +118,7 @@ export const Shell = ({
   keybindings = SIMPLE_KEYS,
   report = logToConsole,
 }: {
-  domicile: DomicileHost;
+  domicile: Domicile;
   /** Key bindings. Defaults to Alt+Enter for a terminal. */
   keybindings?: ShellKeybindings | undefined;
   /** Reports unknown commands. Injectable for tests. */
@@ -135,7 +133,7 @@ export const Shell = ({
   // without rebinding the keys.
   const onCommand = useEffectEvent((args: readonly string[]) => {
     if (args.join(" ") === "terminal") {
-      domicile.spawn(TERMINAL_COMMAND);
+      domicile.processes.launch(TERMINAL_COMMAND);
     } else {
       report(`${SHELL}: no command \`${args.join(" ")}\``);
     }
@@ -150,13 +148,13 @@ export const Shell = ({
     const open = new Set<string>();
 
     const listed = () => {
-      const all = domicile.windows;
-      const toplevels = all.filter((window) => window.parent === null);
+      const all = domicile.windows.list ?? [];
+      const toplevels = all.filter((window) => window.parent === undefined);
       for (const window of toplevels) {
         if (!open.has(window.appId)) {
           open.add(window.appId);
           if (caughtUp) {
-            domicile.focusApp(window.appId);
+            domicile.windows.focus(window.appId);
           }
         }
       }
@@ -173,8 +171,8 @@ export const Shell = ({
     };
 
     listed();
-    domicile.addEventListener("windowschanged", listed);
-    domicile.addEventListener("focusedwindowchanged", focused);
+    const unlisten = domicile.windows.on("change", listed);
+    const unfocus = domicile.windows.on("focuschange", focused);
     // The engine finds the chord's key and sends its press whether it reaches
     // the page or a `<webview>`.
     const keys = bindKeys(domicile, keybindings, {
@@ -183,8 +181,8 @@ export const Shell = ({
       onModeChanged: () => undefined,
     });
     return () => {
-      domicile.removeEventListener("windowschanged", listed);
-      domicile.removeEventListener("focusedwindowchanged", focused);
+      unlisten();
+      unfocus();
       keys.unbind();
     };
   }, [domicile, keybindings]);
@@ -256,7 +254,7 @@ export const Shell = ({
           <app app-id={popup.appId} key={popup.appId} style={style} />
         );
       })}
-      <PortalDialogs host={domicile} shellChords={shellChords} />
+      <PortalDialogs domicile={domicile} shellChords={shellChords} />
     </div>
   );
 };
@@ -279,11 +277,11 @@ const Keys = () => (
  */
 const kept = (
   shown: readonly ShellWindow[],
-  listed: readonly DomicileWindow[],
+  listed: readonly ClientWindow[],
 ): readonly ShellWindow[] =>
   listed.reduce<readonly ShellWindow[]>((all, window) => {
     const was = shown.find((candidate) => candidate.appId === window.appId);
-    const drawn = window.width !== null;
+    const drawn = window.width !== undefined;
     return [
       ...all,
       was === undefined
@@ -293,8 +291,8 @@ const kept = (
   }, []);
 
 /** `window` as a popup, or none for a toplevel. */
-const popupOf = (window: DomicileWindow): readonly Popup[] =>
-  window.parent === null
+const popupOf = (window: ClientWindow): readonly Popup[] =>
+  window.parent === undefined
     ? []
     : [
         {
@@ -313,18 +311,18 @@ const popupOf = (window: DomicileWindow): readonly Popup[] =>
  * reconnecting chrome.
  */
 const opened = (
-  { appId, cursor, height: drawnHeight, width: drawnWidth }: DomicileWindow,
+  { appId, cursor, height: drawnHeight, width: drawnWidth }: ClientWindow,
   windows: readonly ShellWindow[],
 ): ShellWindow => {
   const step = CASCADE_STEP * (windows.length % CASCADE_LENGTH);
   const [width, height] =
-    drawnWidth === null || drawnHeight === null
+    drawnWidth === undefined || drawnHeight === undefined
       ? OPENING_SIZE
       : [drawnWidth, drawnHeight];
   return {
     appId,
     cursor,
-    drawn: drawnWidth !== null,
+    drawn: drawnWidth !== undefined,
     height,
     left: step,
     top: step,

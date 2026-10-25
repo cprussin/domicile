@@ -1,14 +1,16 @@
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
+import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
+import type { PortalsHost } from "@domicile-desktop/sdk/desktop/portals";
 import type {
   DomicileBrowserWindow,
   DomicileHost,
 } from "@domicile-desktop/sdk/domicile-host";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
-import type { GlobalShortcutsHost } from "@domicile-desktop/sdk/global-shortcuts";
 import type { FakeDesktop } from "@domicile-desktop/system-apps/fake-desktop";
 import { fakeDesktop } from "@domicile-desktop/system-apps/fake-desktop";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import type { DialogDesktop } from "./PortalDialogs";
+import type { DialogDesktop, PortalDialogsDesktop } from "./PortalDialogs";
 import { PortalDialogs } from "./PortalDialogs";
 import { ShownWindow } from "./shown-windows";
 
@@ -32,10 +34,11 @@ const pushing = (
   items: readonly object[],
   capturing: readonly object[] = [],
   browserWindows: readonly DomicileBrowserWindow[] | null = null,
-): DomicileHost => {
+): Domicile => {
   const fake = new FakeDomicileHost();
   const data = JSON.stringify({ capturing, items, type: "portal_requests" });
-  const host: GlobalShortcutsHost = {
+  const host: PortalsHost &
+    Pick<DomicileHost, "grabShortcut" | "ungrabShortcut"> = {
     addEventListener: (type, listener) => {
       fake.host.addEventListener(type, listener);
       // The engine replays the requests to a late listener.
@@ -55,8 +58,22 @@ const pushing = (
     },
     ungrabShortcut: () => undefined,
   };
-  return { ...fake.host, ...host, browserWindows, callSystem: () => undefined };
+  return desktop({
+    ...fake.host,
+    ...host,
+    browserWindows,
+    callSystem: () => undefined,
+  });
 };
+
+/** `domicile` reading its files and drawing its previews through `dialogs`. */
+const reading = (
+  domicile: Domicile,
+  dialogs: () => DialogDesktop,
+): PortalDialogsDesktop => ({
+  ...domicile,
+  ...dialogs(),
+});
 
 const access = {
   app_id: "org.example.Camera",
@@ -416,19 +433,14 @@ const pickColor = {
 
 const meta = {
   args: {
-    desktopOf: undefined,
-    host: pushing([access]),
+    domicile: pushing([access]),
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
     shownWindows: undefined,
   },
   argTypes: {
-    desktopOf: {
-      control: false,
-      table: { category: "Behavior" },
-    },
-    host: {
+    domicile: {
       control: false,
       table: { category: "Behavior" },
     },
@@ -468,8 +480,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Access: Story = {
   args: {
-    desktopOf: undefined,
-    host: pushing([access]),
+    domicile: pushing([access]),
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
@@ -479,8 +490,7 @@ export const Access: Story = {
 
 export const AppChooser: Story = {
   args: {
-    desktopOf: installed,
-    host: pushing([appChooser]),
+    domicile: reading(pushing([appChooser]), installed),
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
@@ -490,8 +500,7 @@ export const AppChooser: Story = {
 
 export const FileChooser: Story = {
   args: {
-    desktopOf: home,
-    host: pushing([fileChooser]),
+    domicile: reading(pushing([fileChooser]), home),
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
@@ -505,8 +514,7 @@ export const FileChooser: Story = {
  */
 export const ScreenCast: Story = {
   args: {
-    desktopOf: installed,
-    host: pushing([screenCast]),
+    domicile: reading(pushing([screenCast]), installed),
     screen: undefined,
     screenOf: undefined,
   },
@@ -519,11 +527,13 @@ export const ScreenCast: Story = {
  */
 export const ScreenCastPreviews: Story = {
   args: {
-    desktopOf: installed,
-    host: pushing(
-      [screenCastOnDesk],
-      [],
-      [browserWindow("1", "Pull requests"), browserWindow("2", "Docs")],
+    domicile: reading(
+      pushing(
+        [screenCastOnDesk],
+        [],
+        [browserWindow("1", "Pull requests"), browserWindow("2", "Docs")],
+      ),
+      installed,
     ),
     screen: undefined,
     screenOf: undefined,
@@ -537,8 +547,7 @@ export const ScreenCastPreviews: Story = {
 
 export const RemoteDesktop: Story = {
   args: {
-    desktopOf: undefined,
-    host: pushing([remoteDesktop]),
+    domicile: pushing([remoteDesktop]),
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
@@ -548,8 +557,7 @@ export const RemoteDesktop: Story = {
 
 export const InputCapture: Story = {
   args: {
-    desktopOf: undefined,
-    host: pushing([inputCapture]),
+    domicile: pushing([inputCapture]),
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
@@ -559,8 +567,7 @@ export const InputCapture: Story = {
 
 export const Account: Story = {
   args: {
-    desktopOf: undefined,
-    host: pushing([account]),
+    domicile: pushing([account]),
     screen: undefined,
     screenOf: undefined,
   },
@@ -568,8 +575,7 @@ export const Account: Story = {
 
 export const DynamicLauncher: Story = {
   args: {
-    desktopOf: undefined,
-    host: pushing([launcher]),
+    domicile: pushing([launcher]),
     screen: undefined,
     screenOf: undefined,
   },
@@ -577,8 +583,7 @@ export const DynamicLauncher: Story = {
 
 export const Usb: Story = {
   args: {
-    desktopOf: undefined,
-    host: pushing([usb]),
+    domicile: pushing([usb]),
     screen: undefined,
     screenOf: undefined,
   },
@@ -586,8 +591,7 @@ export const Usb: Story = {
 
 export const Print: Story = {
   args: {
-    desktopOf: undefined,
-    host: pushing([print([officePrinter])]),
+    domicile: pushing([print([officePrinter])]),
     screen: undefined,
     screenOf: undefined,
   },
@@ -595,8 +599,7 @@ export const Print: Story = {
 
 export const NoPrinters: Story = {
   args: {
-    desktopOf: undefined,
-    host: pushing([print([])]),
+    domicile: pushing([print([])]),
     screen: undefined,
     screenOf: undefined,
   },
@@ -604,8 +607,7 @@ export const NoPrinters: Story = {
 
 export const Capturing: Story = {
   args: {
-    desktopOf: undefined,
-    host: pushing(
+    domicile: pushing(
       [],
       [
         { ...remoteDesktop, id: 6 },
@@ -632,8 +634,7 @@ export const Capturing: Story = {
 
 export const GlobalShortcuts: Story = {
   args: {
-    desktopOf: undefined,
-    host: pushing([globalShortcuts]),
+    domicile: pushing([globalShortcuts]),
     screen: undefined,
     screenOf: undefined,
     shellChords: ["Meta+Return"],
@@ -643,8 +644,7 @@ export const GlobalShortcuts: Story = {
 
 export const Wallpaper: Story = {
   args: {
-    desktopOf: withPicture,
-    host: pushing([wallpaper]),
+    domicile: reading(pushing([wallpaper]), withPicture),
     screen: undefined,
     screenOf: undefined,
   },
@@ -652,8 +652,7 @@ export const Wallpaper: Story = {
 
 export const Screenshot: Story = {
   args: {
-    desktopOf: undefined,
-    host: pushing([screenshot]),
+    domicile: pushing([screenshot]),
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
@@ -666,8 +665,7 @@ export const Screenshot: Story = {
 
 export const PickColor: Story = {
   args: {
-    desktopOf: undefined,
-    host: pushing([pickColor]),
+    domicile: pushing([pickColor]),
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,

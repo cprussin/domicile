@@ -1,6 +1,5 @@
 import type { Option } from "@cprussin/option-result";
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { Listening } from "@domicile-desktop/sdk/system";
 import type { Battery } from "@domicile-desktop/system-battery/battery";
 import { watchBattery as watchUPower } from "@domicile-desktop/system-battery/battery";
@@ -16,7 +15,7 @@ type Dependencies = {
  * reading and each change, and returns a function that stops watching.
  */
 export const watchBattery = (
-  domicile: DomicileHost,
+  domicile: Domicile,
   onReading: (reading: Option<Battery>) => void,
   { fail = logFailure, watch = watchUPower }: Dependencies = {},
 ): (() => void) => {
@@ -24,7 +23,7 @@ export const watchBattery = (
     stop: () => undefined,
     stopped: false,
   };
-  watch(desktop(domicile))
+  watch(domicile)
     .then((result) => {
       if (now.stopped) {
         result.map(stopNow);

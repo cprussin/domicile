@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
-import type { KeyHost } from "./bind-keys";
+import type { KeyDesktop } from "./bind-keys";
 import { bindKeys } from "./bind-keys";
+import { keyboard } from "./desktop/keyboard";
+import { shell } from "./desktop/shell";
+import type { DomicileHost } from "./domicile-host";
 import { KeyAction } from "./key-action";
 import type { ShellKeybindings } from "./own-keybindings";
-import { SystemErrorKind } from "./system";
+import { SystemErrorKind, system } from "./system";
 
 /** The shell's keybindings. */
 const DESK: ShellKeybindings = {
@@ -60,6 +63,13 @@ class FakeHost extends EventTarget {
   }
 }
 
+/** The desktop's keys and shell commands, as `desktop` makes them. */
+const keysOf = (fake: FakeHost): KeyDesktop => {
+  const host = fake as unknown as DomicileHost;
+  const calls = system(host);
+  return { keyboard: keyboard(host, calls), shell: shell(host, calls) };
+};
+
 /** The handler calls, in order. */
 type Heard =
   | readonly ["command", readonly string[]]
@@ -75,7 +85,7 @@ afterEach(() => {
 const bound = (own: ShellKeybindings = DESK) => {
   const host = new FakeHost();
   const heard: Heard[] = [];
-  const binding = bindKeys(host as unknown as KeyHost, own, {
+  const binding = bindKeys(keysOf(host), own, {
     onCommand: (args) => {
       heard.push(["command", args]);
     },
@@ -104,7 +114,7 @@ describe("bindKeys", () => {
     const host = new FakeHost();
     expect(() =>
       bindKeys(
-        host as unknown as KeyHost,
+        keysOf(host),
         { keybindings: { "Hyper+l": KeyAction.Mode("x") } },
         {
           onCommand: () => undefined,

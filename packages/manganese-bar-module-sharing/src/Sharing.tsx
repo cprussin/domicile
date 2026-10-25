@@ -3,17 +3,9 @@ import { Popover } from "@domicile-desktop/component-library/Popover";
 import { sourceName } from "@domicile-desktop/component-library/source-name";
 import type { App } from "@domicile-desktop/component-library/useApps";
 import { useApps } from "@domicile-desktop/component-library/useApps";
-import type {
-  Captured,
-  Capturing,
-  PortalHost,
-} from "@domicile-desktop/sdk/portal";
-import {
-  CapturedKind,
-  CapturingKind,
-  stopCapturing,
-  watchCapturing,
-} from "@domicile-desktop/sdk/portal";
+import type { Portals } from "@domicile-desktop/sdk/desktop/portals";
+import type { Captured, Capturing } from "@domicile-desktop/sdk/portal";
+import { CapturedKind, CapturingKind } from "@domicile-desktop/sdk/portal";
 import type { AppsDesktop } from "@domicile-desktop/system-apps/apps-desktop";
 import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import { GlobeIcon } from "@phosphor-icons/react/dist/ssr/Globe";
@@ -27,11 +19,14 @@ import { useEffect, useState } from "react";
 import { css } from "../styled-system/css";
 import { center, flex, hstack } from "../styled-system/patterns";
 
+/** What the indicator reads: captures, and applications' desktop entries. */
+export type SharingDesktop = AppsDesktop & {
+  readonly portals: Pick<Portals, "capturing" | "on" | "stopCapturing">;
+};
+
 type Props = {
   /** The desktop whose captures to show. */
-  host: PortalHost;
-  /** How it reads applications' desktop entries. */
-  domicile: AppsDesktop;
+  domicile: SharingDesktop;
 };
 
 /** A running screen cast. */
@@ -43,20 +38,23 @@ type ScreenCast = Extract<Capturing, { kind: CapturingKind.ScreenCast }>;
  * lists each application, what it records and a button that stops it. Input
  * sessions are left to `<PortalDialogs />`.
  */
-export const Sharing = ({ host, domicile }: Props) => {
+export const Sharing = ({ domicile }: Props) => {
   const [capturing, setCapturing] = useState<readonly ScreenCast[]>([]);
   const apps = useApps(domicile, [
     ...capturing.map((capture) => capture.appId),
     ...capturing.flatMap((capture) => windowAppIds(capture.sources)),
   ]);
 
-  useEffect(
-    () =>
-      watchCapturing(host, (sessions) => {
-        setCapturing(sessions.filter((session) => isScreenCast(session)));
-      }),
-    [host],
-  );
+  useEffect(() => {
+    const { portals } = domicile;
+    const heard = () => {
+      setCapturing(
+        (portals.capturing ?? []).filter((session) => isScreenCast(session)),
+      );
+    };
+    heard();
+    return portals.on("change", heard);
+  }, [domicile]);
 
   return capturing.length === 0 ? undefined : (
     <Popover
@@ -82,7 +80,7 @@ export const Sharing = ({ host, domicile }: Props) => {
             capture={capture}
             key={capture.id}
             stop={() => {
-              stopCapturing(host, capture.id);
+              domicile.portals.stopCapturing(capture.id);
             }}
           />
         ))}

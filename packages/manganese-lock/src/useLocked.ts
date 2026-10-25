@@ -1,6 +1,5 @@
 import { watchHost } from "@domicile-desktop/manganese-host/watch-host";
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type {
   Listening,
   UnlockRefusal,
@@ -47,7 +46,7 @@ type LockState = {
  * refused arrives just before, from the compositor's `unlockRefusals`.
  */
 export const useLocked = (
-  domicile: DomicileHost,
+  domicile: Pick<Domicile, "session">,
   now: typeof uptime = uptime,
 ): LockState & { unlock: (passphrase: string) => void } => {
   const [state, setState] = useState<LockState>({
@@ -59,18 +58,21 @@ export const useLocked = (
 
   // The engine sends `lockedchanged` on every answer, not only on a change: a
   // refusal leaves the desk locked.
-  useEffect(
-    () =>
-      watchHost(domicile, "lockedchanged", lockedOf, (locked) => {
+  useEffect(() => {
+    const { session } = domicile;
+    return watchHost(
+      (changed) => session.on("lockchange", changed),
+      () => session.locked,
+      (locked) => {
         setState((was) => ({
           checking: false,
           locked,
           refusals: refusalsAfter(was, locked),
           refused: locked ? was.refused : undefined,
         }));
-      }),
-    [domicile],
-  );
+      },
+    );
+  }, [domicile]);
 
   useEffect(
     () =>
@@ -85,7 +87,7 @@ export const useLocked = (
 
   const unlock = useCallback(
     (passphrase: string) => {
-      domicile.unlock(passphrase);
+      domicile.session.unlock(passphrase);
       setState((was) => ({ ...was, checking: true }));
     },
     [domicile],
@@ -93,9 +95,6 @@ export const useLocked = (
 
   return { ...state, unlock };
 };
-
-const lockedOf = ({ locked }: DomicileHost): boolean | undefined =>
-  locked ?? undefined;
 
 /**
  * The refusal count after the compositor says `locked`. Unlocking resets it,
@@ -115,15 +114,15 @@ const refusalsAfter = (was: LockState, locked: boolean): number => {
  * it does.
  */
 const hearRefusals = (
-  domicile: DomicileHost,
+  domicile: Pick<Domicile, "session">,
   onRefused: (refused: UnlockRefused) => void,
 ): (() => void) => {
   const state: {
     stopped: boolean;
     listening: Listening<UnlockRefused> | undefined;
   } = { listening: undefined, stopped: false };
-  desktop(domicile)
-    .session.unlockRefusals()
+  domicile.session
+    .unlockRefusals()
     .then((result) => {
       result.match({
         Err: reportToConsole,

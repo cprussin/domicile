@@ -1,4 +1,4 @@
-import type { DomicileBrowserWindow } from "@domicile-desktop/sdk/domicile-host";
+import type { BrowserWindow } from "@domicile-desktop/sdk/desktop/browser";
 import type {
   CastSource,
   PortalAnswer,
@@ -37,7 +37,7 @@ type Props = {
   asker: string;
   body: ScreenCastBody;
   /** The desktop's browser windows, as the engine lists them. */
-  browserWindows: readonly DomicileBrowserWindow[];
+  browserWindows: readonly BrowserWindow[];
   /** The TV a cast that asked shows the pick on, titling the dialog for it. */
   castTo?: string | undefined;
   screen: string | undefined;

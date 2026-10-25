@@ -7,7 +7,7 @@ describe(followTheme, () => {
   it("applies the desktop's theme now and on each change", () => {
     const fake = new FakeDomicileHost();
     fake.set({ theme: "light" });
-    const stop = followTheme(fake.host);
+    const stop = followTheme(fake.domicile);
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
     fake.set({ theme: "dark" });
     expect(document.documentElement.getAttribute("data-theme")).toBeNull();

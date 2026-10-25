@@ -1,4 +1,4 @@
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { ReactNode } from "react";
 import { Fragment, memo, useCallback, useMemo, useState } from "react";
 import { AppPopup } from "./AppPopup";
@@ -67,7 +67,7 @@ type Props = {
    * and holds the keyboard.
    */
   behindPanel: boolean;
-  domicile: DomicileHost;
+  domicile: Domicile;
   /** The floating window being dragged, if any. */
   draggingId: string | undefined;
   /**
@@ -768,7 +768,7 @@ const deskOf = (screens: readonly StageScreen[]): Desk => {
 type WindowContentsProps = {
   behindPanel: boolean;
   clickThrough: boolean;
-  domicile: DomicileHost;
+  domicile: Domicile;
   dragging: boolean;
   floating: boolean;
   focused: boolean;

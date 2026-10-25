@@ -53,7 +53,7 @@ const listed = (
   isCaptured: false,
   isPrivate: false,
   partition: "",
-  popupWindow: popup.popupWindow === 0 ? null : popup.popupWindow,
+  popupWindow: popup.popupWindow === 0 ? undefined : popup.popupWindow,
   title: "",
   url,
   width: popup.width,

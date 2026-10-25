@@ -13,7 +13,9 @@ describe("useShellOptions", () => {
   it("is the defaults while the config sets none", () => {
     const fake = new FakeDomicileHost();
 
-    const { result } = renderHook(() => useShellOptions(fake.host, OPTIONS));
+    const { result } = renderHook(() =>
+      useShellOptions(fake.domicile, OPTIONS),
+    );
 
     expect(result.current).toEqual({ clock: { format: "24h" } });
   });
@@ -22,7 +24,9 @@ describe("useShellOptions", () => {
     const fake = new FakeDomicileHost();
     fake.set({ shellOptions: '{"clock":{"format":"12h"}}' });
 
-    const { result } = renderHook(() => useShellOptions(fake.host, OPTIONS));
+    const { result } = renderHook(() =>
+      useShellOptions(fake.domicile, OPTIONS),
+    );
     expect(result.current).toEqual({ clock: { format: "12h" } });
 
     act(() => {

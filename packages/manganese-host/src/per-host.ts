@@ -1,4 +1,4 @@
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 
 /**
  * `make`, run once per desktop: every caller with the same `domicile` gets the
@@ -6,9 +6,9 @@ import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
  * screen share without a provider passing them down.
  */
 export const perHost = <T>(
-  make: (domicile: DomicileHost) => T,
-): ((domicile: DomicileHost) => T) => {
-  const made = new WeakMap<DomicileHost, T>();
+  make: (domicile: Domicile) => T,
+): ((domicile: Domicile) => T) => {
+  const made = new WeakMap<Domicile, T>();
   return (domicile) => {
     const known = made.get(domicile);
     if (known === undefined) {

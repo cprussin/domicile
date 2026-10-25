@@ -11,7 +11,7 @@ const connected = () => {
   const called = (method: string) =>
     fake.calls.filter(([name]) => name === method).map(([, theme]) => theme);
   return [
-    fake.host,
+    fake.domicile,
     {
       get asked() {
         return called("setTheme");

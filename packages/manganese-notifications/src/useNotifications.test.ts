@@ -12,7 +12,7 @@ const client = () => {
   const fake = new FakeDomicileHost();
   return {
     asked: fake.calls,
-    domicile: fake.host,
+    domicile: fake.domicile,
     says: (items: readonly Notification[]) => {
       act(() => {
         fake.set({

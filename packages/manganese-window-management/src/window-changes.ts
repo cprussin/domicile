@@ -1,4 +1,4 @@
-import type { DomicileWindow } from "@domicile-desktop/sdk/domicile-host";
+import type { ClientWindow } from "@domicile-desktop/sdk/desktop/windows";
 
 import type { FloatingRules } from "./floating/floating-rules";
 import { opensFloating } from "./floating/floating-rules";
@@ -17,8 +17,8 @@ import { WindowAction } from "./window-state";
  */
 export const windowChanges = (
   rules: FloatingRules,
-  before: readonly DomicileWindow[],
-  after: readonly DomicileWindow[],
+  before: readonly ClientWindow[],
+  after: readonly ClientWindow[],
 ): readonly Action[] => {
   // Keyed once: the host lists every window on every change.
   const was = new Map(before.map((window) => [window.appId, window]));
@@ -36,17 +36,17 @@ export const windowChanges = (
 /** The changes to one window. `was` is `undefined` for a new one. */
 const changesOf = (
   rules: FloatingRules,
-  was: DomicileWindow | undefined,
-  window: DomicileWindow,
+  was: ClientWindow | undefined,
+  window: ClientWindow,
 ): readonly Action[] =>
-  window.parent === null
+  window.parent === undefined
     ? toplevelChanges(rules, was, window)
     : popupChanges(was, window, window.parent);
 
 const toplevelChanges = (
   rules: FloatingRules,
-  was: DomicileWindow | undefined,
-  window: DomicileWindow,
+  was: ClientWindow | undefined,
+  window: ClientWindow,
 ): readonly Action[] => {
   const { appId } = window;
   const before = was ?? { ...window, ...UNSAID };
@@ -76,8 +76,8 @@ const toplevelChanges = (
 };
 
 const popupChanges = (
-  was: DomicileWindow | undefined,
-  window: DomicileWindow,
+  was: ClientWindow | undefined,
+  window: ClientWindow,
   parent: string,
 ): readonly Action[] =>
   was !== undefined &&
@@ -95,18 +95,18 @@ const UNSAID = {
   cursor: "default",
   desktopId: "",
   frame: 0,
-  maxHeight: null,
-  maxWidth: null,
-  minHeight: null,
-  minWidth: null,
+  maxHeight: undefined,
+  maxWidth: undefined,
+  minHeight: undefined,
+  minWidth: undefined,
 } as const;
 
 /** The action that opens a new window, tiled or floating. */
-const appeared = (rules: FloatingRules, window: DomicileWindow): Action => {
+const appeared = (rules: FloatingRules, window: ClientWindow): Action => {
   const { appId, clientFrame, height, title, width } = window;
   if (!opensFloating(rules, window)) {
     return WindowAction.AppAppeared(appId, named(title));
-  } else if (width === null || height === null) {
+  } else if (width === undefined || height === undefined) {
     throw new Error(`windows: ${appId} is listed before it drew`);
   } else {
     return WindowAction.AppAppearedFloating(
@@ -119,9 +119,14 @@ const appeared = (rules: FloatingRules, window: DomicileWindow): Action => {
 };
 
 /** A popup's placement. */
-const popupOf = (window: DomicileWindow, parent: string): Popup => {
+const popupOf = (window: ClientWindow, parent: string): Popup => {
   const { height, width, x, y } = window;
-  if (x === null || y === null || width === null || height === null) {
+  if (
+    x === undefined ||
+    y === undefined ||
+    width === undefined ||
+    height === undefined
+  ) {
     throw new Error(`shell: popup ${window.appId} is listed with no place`);
   } else {
     return {
@@ -134,10 +139,10 @@ const popupOf = (window: DomicileWindow, parent: string): Popup => {
   }
 };
 
-const limitOf = (width: number | null, height: number | null): SizeLimit => [
-  width ?? undefined,
-  height ?? undefined,
-];
+const limitOf = (
+  width: number | undefined,
+  height: number | undefined,
+): SizeLimit => [width, height];
 
 const sameLimit = (a: SizeLimit, b: SizeLimit): boolean =>
   a[0] === b[0] && a[1] === b[1];

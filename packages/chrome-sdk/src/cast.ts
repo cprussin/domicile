@@ -8,11 +8,10 @@
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
 
-import type { DomicileHost } from "./domicile-host";
+import type { Displays } from "./desktop/displays";
 import type { CastSource, PortalAnswer, PortalRequest } from "./portal";
 import { PortalAnswer as Answer, CastSourceKind, PortalKind } from "./portal";
-import type { System, SystemHost, VirtualMonitorMode } from "./system";
-import { system } from "./system";
+import type { VirtualMonitorMode } from "./system";
 
 /** A TV a backend found. */
 export type CastTarget = {
@@ -90,15 +89,10 @@ export type Casting = {
   watch: (listener: (casts: readonly Cast[]) => void) => () => void;
 };
 
-/** What {@link casting} needs of the desktop `Shell` is handed. */
-export type CastHost = SystemHost &
-  Pick<DomicileHost, "displays"> & {
-    addEventListener: (type: "displayschanged", listener: () => void) => void;
-    removeEventListener: (
-      type: "displayschanged",
-      listener: () => void,
-    ) => void;
-  };
+/** What {@link casting} needs of the desktop. */
+export type CastDesktop = {
+  readonly displays: Pick<Displays, "addVirtual" | "list" | "on">;
+};
 
 /** A ScreenCast request a started cast waits on. */
 type Waiting = {
@@ -114,18 +108,18 @@ type Desk = Casting & { awaited: Waiting[] };
 const desks = new WeakMap<object, Desk>();
 
 /**
- * The casts on `host`'s desktop. Every caller with the same host shares them,
- * so the bar and the portal dialogs see the same casts. `files`, for tests,
+ * The casts on `domicile`. Every caller with the same desktop shares them, so
+ * the bar and the portal dialogs see the same casts. `monitors`, for tests,
  * is the first caller's.
  */
 export const casting = (
-  host: CastHost,
-  files: Pick<System, "addVirtualMonitor"> = system(host),
+  domicile: CastDesktop,
+  monitors: Pick<Displays, "addVirtual"> = domicile.displays,
 ): Casting => {
-  const known = desks.get(host);
+  const known = desks.get(domicile);
   if (known === undefined) {
-    const desk = deskOf(host, files);
-    desks.set(host, desk);
+    const desk = deskOf(domicile, monitors);
+    desks.set(domicile, desk);
     return desk;
   } else {
     return known;
@@ -133,14 +127,14 @@ export const casting = (
 };
 
 /**
- * What the shell does with `request` on `host`'s desktop: `undefined` when no
- * cast asked for it, so it is an application's. Each cast claims one request.
+ * What the shell does with `request` on `domicile`: `undefined` when no cast
+ * asked for it, so it is an application's. Each cast claims one request.
  */
 export const claimCastRequest = (
-  host: object,
+  domicile: object,
   request: PortalRequest,
 ): CastClaim | undefined => {
-  const desk = desks.get(host);
+  const desk = desks.get(domicile);
   if (desk === undefined || request.kind !== PortalKind.ScreenCast) {
     return undefined;
   }
@@ -155,8 +149,8 @@ export const claimCastRequest = (
 };
 
 const deskOf = (
-  host: CastHost,
-  files: Pick<System, "addVirtualMonitor">,
+  domicile: CastDesktop,
+  monitors: Pick<Displays, "addVirtual">,
 ): Desk => {
   const awaited: Waiting[] = [];
   let casts: readonly Cast[] = [];
@@ -220,14 +214,14 @@ const deskOf = (
           );
         }
         case CastMode.Extend: {
-          const added = await files.addVirtualMonitor({
+          const added = await monitors.addVirtual({
             ...target.mode,
             name: target.name,
           });
           return added
             .mapErr((error) => error.message)
             .andThenAsync(async (monitor) => {
-              if (!(await shown(host, monitor.output, monitor.ended))) {
+              if (!(await shown(domicile, monitor.output, monitor.ended))) {
                 return Err(`${target.name} went away before it was shown`);
               }
               const started = await send(
@@ -284,24 +278,24 @@ const answerWith = (
 };
 
 /**
- * Whether `output` is among `host`'s displays, now or once the compositor
+ * Whether `output` is among the desktop's displays, now or once the compositor
  * says so, rather than `ended` first.
  */
 const shown = (
-  host: CastHost,
+  { displays }: CastDesktop,
   output: string,
   ended: Promise<unknown>,
 ): Promise<boolean> =>
   new Promise((resolve) => {
     const check = () => {
-      if (host.displays?.some((display) => display.name === output)) {
-        host.removeEventListener("displayschanged", check);
+      if (displays.list?.some((display) => display.name === output)) {
+        stop();
         resolve(true);
       }
     };
-    host.addEventListener("displayschanged", check);
+    const stop = displays.on("change", check);
     void ended.then(() => {
-      host.removeEventListener("displayschanged", check);
+      stop();
       resolve(false);
     });
     check();
