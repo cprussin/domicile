@@ -1,7 +1,8 @@
 // The Wi-Fi device as every backend reports it: its networks and its
 // connection. See docs/SHELL-SYSTEM-ACCESS.md.
 
-import type { System } from "@domicile-desktop/sdk/system";
+import type { Dbus } from "@domicile-desktop/sdk/desktop/dbus";
+import type { Processes } from "@domicile-desktop/sdk/desktop/processes";
 
 /** The service that manages the Wi-Fi device. */
 export enum WifiBackend {
@@ -61,4 +62,7 @@ export type Wifi = {
 export type WifiDevice = Pick<Wifi, "backend" | "device" | "interface">;
 
 /** The calls this library makes for Wi-Fi. */
-export type WifiSystem = Pick<System, "dbusCall" | "dbusMatch" | "run">;
+export type WifiDesktop = {
+  readonly dbus: Pick<Dbus, "call" | "match">;
+  readonly processes: Pick<Processes, "run">;
+};

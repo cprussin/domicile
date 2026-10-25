@@ -28,7 +28,7 @@ const busWith = (owned: readonly string[]) => {
       ? Ok({ body: [owned.includes(String(call.body?.[0]))], signature: "b" })
       : Err(SERVICE_UNKNOWN),
   );
-  return { ...bus, system: { ...bus.system, run: NO_RUN } };
+  return { ...bus, domicile: { ...bus.domicile, processes: { run: NO_RUN } } };
 };
 
 /** Never called: nothing here joins a new secured network on iwd. */
@@ -44,7 +44,7 @@ describe("watchWifi", () => {
     const bus = busWith(owned);
     const seen = reports<Option<Wifi>>();
 
-    watchWifi(bus.system, seen.on);
+    watchWifi(bus.domicile, seen.on);
 
     expect(await seen.next()).toStrictEqual(Err(SERVICE_UNKNOWN));
     expect(bus.matches.map(({ sender }) => sender)).toStrictEqual([watched]);
@@ -56,7 +56,7 @@ describe("watchWifi", () => {
       const bus = busWith(owned);
       const seen = reports<Option<Wifi>>();
 
-      watchWifi(bus.system, seen.on);
+      watchWifi(bus.domicile, seen.on);
 
       expect(await seen.next()).toStrictEqual(Ok(None()));
       expect(bus.matches).toStrictEqual([]);
@@ -67,7 +67,7 @@ describe("watchWifi", () => {
     const bus = fakeBus(() => Err(SERVICE_UNKNOWN));
     const seen = reports<Option<Wifi>>();
 
-    watchWifi({ ...bus.system, run: NO_RUN }, seen.on);
+    watchWifi({ ...bus.domicile, processes: { run: NO_RUN } }, seen.on);
 
     expect(await seen.next()).toStrictEqual(Err(SERVICE_UNKNOWN));
   });
@@ -76,7 +76,7 @@ describe("watchWifi", () => {
     const bus = busWith([IWD]);
     const seen = reports<Option<Wifi>>();
 
-    watchWifi(bus.system, seen.on)();
+    watchWifi(bus.domicile, seen.on)();
     await Bun.sleep(0);
 
     expect(bus.matches).toStrictEqual([]);
@@ -128,7 +128,7 @@ describe("Wi-Fi requests", () => {
     "%s on backend %d calls %s on %s",
     async (name, backend, member, destination) => {
       const bus = fakeBus(() => Ok(DONE));
-      const system = { ...bus.system, run: NO_RUN };
+      const system = { ...bus.domicile, processes: { run: NO_RUN } };
       const asks = {
         connectWifi: () =>
           connectWifi(system, wifi(backend), network, undefined),

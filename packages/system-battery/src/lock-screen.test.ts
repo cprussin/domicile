@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { system } from "@domicile-desktop/sdk/system";
+import { appDesktop } from "@domicile-desktop/sdk/desktop/app-desktop";
 import {
   lockScreenReadouts,
   recordingHost,
@@ -11,7 +11,7 @@ describe("on a lock screen", () => {
   it("sends only the recorded readouts", async () => {
     const { host, sent } = recordingHost();
 
-    await watchBattery(system(host));
+    await watchBattery(appDesktop(host));
 
     expect(sent).toEqual(lockScreenReadouts("system-battery"));
   });

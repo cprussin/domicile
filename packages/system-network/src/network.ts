@@ -8,11 +8,11 @@ import { Err, Ok } from "@cprussin/option-result";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import { hasOwner } from "./has-owner";
 import { watchIwd } from "./iwd";
-import type { Network, NetworkSystem } from "./network-state";
+import type { Network, NetworkDesktop } from "./network-state";
 import { watchNetworkManager } from "./networkmanager";
 import { watchWpaSupplicant } from "./wpa-supplicant";
 
-export type { Network, NetworkSystem } from "./network-state";
+export type { Network, NetworkDesktop } from "./network-state";
 export { Connectivity, Link, LinkKind } from "./network-state";
 
 /** A backend's watch; each has {@link watchNetwork}'s contract. */
@@ -35,11 +35,11 @@ const BACKENDS: readonly (readonly [string, WatchBackend])[] = [
  * bus cannot say which runs, the watch reports that `Err` and ends.
  */
 export const watchNetwork = (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   onNetwork: (network: Result<Network, SystemError>) => void,
 ): (() => void) => {
   const watch: Watch = { stop: undefined, stopped: false };
-  detect(system, BACKENDS)
+  detect(domicile, BACKENDS)
     .then((found) => {
       if (!watch.stopped) {
         found.match({
@@ -47,7 +47,7 @@ export const watchNetwork = (
             onNetwork(Err(error));
           },
           Ok: (backend) => {
-            watch.stop = backend(system, onNetwork);
+            watch.stop = backend(domicile, onNetwork);
           },
         });
       }
@@ -67,7 +67,7 @@ type Watch = { stop: (() => void) | undefined; stopped: boolean };
 
 /** The first backend whose service has an owner on the bus. */
 const detect = async (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   backends: readonly (readonly [string, WatchBackend])[],
 ): Promise<Result<WatchBackend, SystemError>> => {
   const [first, ...rest] = backends;
@@ -75,10 +75,11 @@ const detect = async (
     return Ok(watchNetworkManager);
   } else {
     const [name, backend] = first;
-    const owned = await hasOwner(system, name);
+    const owned = await hasOwner(domicile, name);
     return owned.match({
       Err: (error) => Promise.resolve(Err(error)),
-      Ok: (has) => (has ? Promise.resolve(Ok(backend)) : detect(system, rest)),
+      Ok: (has) =>
+        has ? Promise.resolve(Ok(backend)) : detect(domicile, rest),
     });
   }
 };

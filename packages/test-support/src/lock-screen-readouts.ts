@@ -54,6 +54,7 @@ export const recordingHost = () => {
         });
       }
     },
+    removeEventListener: () => undefined,
   };
   return { host, sent };
 };

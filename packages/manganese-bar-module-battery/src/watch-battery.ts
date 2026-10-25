@@ -1,7 +1,7 @@
 import type { Option } from "@cprussin/option-result";
+import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { Listening } from "@domicile-desktop/sdk/system";
-import { system } from "@domicile-desktop/sdk/system";
 import type { Battery } from "@domicile-desktop/system-battery/battery";
 import { watchBattery as watchUPower } from "@domicile-desktop/system-battery/battery";
 
@@ -24,7 +24,7 @@ export const watchBattery = (
     stop: () => undefined,
     stopped: false,
   };
-  watch(system(domicile))
+  watch(desktop(domicile))
     .then((result) => {
       if (now.stopped) {
         result.map(stopNow);

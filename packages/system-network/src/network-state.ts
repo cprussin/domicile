@@ -1,7 +1,7 @@
 // The network as every backend reports it: connectivity and the primary
 // connection. See docs/SHELL-SYSTEM-ACCESS.md.
 
-import type { System } from "@domicile-desktop/sdk/system";
+import type { Dbus } from "@domicile-desktop/sdk/desktop/dbus";
 
 /** Whether the host reaches the internet. */
 export enum Connectivity {
@@ -40,4 +40,4 @@ export type Link = ReturnType<(typeof Link)[keyof typeof Link]>;
 export type Network = { connectivity: Connectivity; link: Link };
 
 /** The calls this library makes. */
-export type NetworkSystem = Pick<System, "dbusCall" | "dbusMatch">;
+export type NetworkDesktop = { readonly dbus: Pick<Dbus, "call" | "match"> };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { system } from "@domicile-desktop/sdk/system";
+import { appDesktop } from "@domicile-desktop/sdk/desktop/app-desktop";
 import {
   lockScreenReadouts,
   recordingHost,
@@ -12,7 +12,7 @@ describe("on a lock screen", () => {
     const { host, sent } = recordingHost();
     const read = Promise.withResolvers<void>();
 
-    const stop = watchBluetooth(system(host), () => {
+    const stop = watchBluetooth(appDesktop(host), () => {
       read.resolve();
     });
     await read.promise;

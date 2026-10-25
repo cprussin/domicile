@@ -41,7 +41,7 @@ describe("watchNetwork", () => {
     const bus = busWith(owned);
     const seen = reports();
 
-    watchNetwork(bus.system, seen.on);
+    watchNetwork(bus.domicile, seen.on);
 
     expect(await seen.next()).toStrictEqual(Err(SERVICE_UNKNOWN));
     expect(bus.matches.map(({ sender }) => sender)).toStrictEqual([watched]);
@@ -52,7 +52,7 @@ describe("watchNetwork", () => {
     const bus = busWith([NETWORK_MANAGER]);
     const seen = reports();
 
-    watchNetwork(bus.system, seen.on);
+    watchNetwork(bus.domicile, seen.on);
     await seen.next();
 
     expect(bus.calls[0]).toStrictEqual({
@@ -70,7 +70,7 @@ describe("watchNetwork", () => {
     const bus = fakeBus(() => Err(SERVICE_UNKNOWN));
     const seen = reports();
 
-    watchNetwork(bus.system, seen.on);
+    watchNetwork(bus.domicile, seen.on);
 
     expect(await seen.next()).toStrictEqual(Err(SERVICE_UNKNOWN));
     expect(bus.matches).toStrictEqual([]);
@@ -80,7 +80,7 @@ describe("watchNetwork", () => {
     const bus = busWith([IWD]);
     const seen = reports();
 
-    watchNetwork(bus.system, seen.on)();
+    watchNetwork(bus.domicile, seen.on)();
     await Bun.sleep(0);
 
     expect(bus.matches).toStrictEqual([]);
@@ -90,7 +90,7 @@ describe("watchNetwork", () => {
   it("stops the watch it started", async () => {
     const bus = busWith([IWD]);
     const seen = reports();
-    const stop = watchNetwork(bus.system, seen.on);
+    const stop = watchNetwork(bus.domicile, seen.on);
     await seen.next();
 
     stop();

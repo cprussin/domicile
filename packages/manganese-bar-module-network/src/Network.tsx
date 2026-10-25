@@ -3,9 +3,10 @@ import { Popover } from "@domicile-desktop/component-library/Popover";
 import { useKeepsKeyboard } from "@domicile-desktop/manganese-bar/panel-keyboard";
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
+import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
-import type { System, SystemError } from "@domicile-desktop/sdk/system";
-import { system } from "@domicile-desktop/sdk/system";
+import type { SystemError } from "@domicile-desktop/sdk/system";
 import type {
   Addressing,
   NetworkInterface,
@@ -66,7 +67,7 @@ export const Network = ({
   network,
   wifi,
 }: Props) => {
-  const host = useMemo(() => system(domicile), [domicile]);
+  const host = useMemo(() => desktop(domicile), [domicile]);
   const reading = useSharedWatch(network);
   const hardware = useSharedWatch(interfaces);
   const ports = hardware?.match({ Err: () => undefined, Ok: (found) => found });
@@ -106,7 +107,7 @@ const Item = ({
 }: {
   actions: WifiActions;
   addresses: Props["addresses"];
-  host: System;
+  host: Domicile;
   reading: Result<Reading, SystemError> | undefined;
   wifi: Props["wifi"];
   wired: NetworkInterface[];
@@ -205,7 +206,7 @@ const OpenPanel = ({
 }: {
   actions: WifiActions;
   addresses: Props["addresses"];
-  host: System;
+  host: Domicile;
   wifi: Props["wifi"];
   wired: NetworkInterface[];
 }) => {

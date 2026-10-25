@@ -5,10 +5,10 @@
 
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
+import type { Processes } from "@domicile-desktop/sdk/desktop/processes";
 import type {
   Exit,
   Subprocess,
-  System,
   SystemError,
 } from "@domicile-desktop/sdk/system";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
@@ -28,7 +28,9 @@ const UDEVADM = [
 const BACKSTOP_MS = 120_000;
 
 /** The calls {@link watchBrightness} makes. */
-export type WatchHost = SysfsHost & Pick<System, "spawn">;
+export type WatchHost = SysfsHost & {
+  readonly processes: Pick<Processes, "spawn">;
+};
 
 export type BrightnessWatch = {
   stop: () => void;
@@ -54,7 +56,7 @@ export const watchBrightness = async (
   onLevel: (level: number) => void,
   every: typeof everyInterval = everyInterval,
 ): Promise<Result<BrightnessWatch, SystemError>> =>
-  (await host.spawn(UDEVADM)).map((udevadm) => {
+  (await host.processes.spawn(UDEVADM)).map((udevadm) => {
     const watch: Watching = {
       failure: undefined,
       reading: Promise.resolve(),
@@ -203,7 +205,7 @@ const respawn = async (
   host: WatchHost,
 ): Promise<Result<Subprocess, SystemError>> => {
   for (;;) {
-    const next = await host.spawn(UDEVADM);
+    const next = await host.processes.spawn(UDEVADM);
     if (!isGone(next)) {
       return next;
     }

@@ -12,7 +12,7 @@ import type {
 } from "@domicile-desktop/sdk/system";
 import { ListenedKind } from "@domicile-desktop/sdk/system";
 
-import type { NetworkSystem } from "./network-state";
+import type { NetworkDesktop } from "./network-state";
 
 /** What one read found, and which signals can change it. */
 export type Reading<T extends NonNullable<unknown>> = {
@@ -25,7 +25,7 @@ export type Reading<T extends NonNullable<unknown>> = {
  * matters, and returns a function that stops watching.
  */
 export const followBus = <T extends NonNullable<unknown>>(
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   match: DbusMatch,
   read: () => Promise<Reading<T>>,
   onValue: (value: Result<T, SystemError>) => void,
@@ -36,7 +36,7 @@ export const followBus = <T extends NonNullable<unknown>>(
       onValue(value);
     }
   };
-  follow(system, match, read, watch, report).catch((error: unknown) => {
+  follow(domicile, match, read, watch, report).catch((error: unknown) => {
     // biome-ignore lint/suspicious/noConsole: surfacing a background failure
     console.error("Failed to watch the network", error);
   });
@@ -53,13 +53,13 @@ type Watch = {
 };
 
 const follow = async <T extends NonNullable<unknown>>(
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   match: DbusMatch,
   read: () => Promise<Reading<T>>,
   watch: Watch,
   report: (value: Result<T, SystemError>) => void,
 ): Promise<void> => {
-  const matched = await system.dbusMatch(match);
+  const matched = await domicile.dbus.match(match);
   await matched.match({
     Err: (error) => {
       report(Err(error));

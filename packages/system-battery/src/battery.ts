@@ -3,11 +3,11 @@
 
 import type { Option, Result } from "@cprussin/option-result";
 import { Err, None, Ok, Some } from "@cprussin/option-result";
+import type { Dbus } from "@domicile-desktop/sdk/desktop/dbus";
 import type {
   DbusSignal,
   Listened,
   Listening,
-  System,
   SystemError,
 } from "@domicile-desktop/sdk/system";
 import {
@@ -25,6 +25,9 @@ const PROPERTIES = "org.freedesktop.DBus.Properties";
 /** UPower's `State`s in which the battery drains: discharging, empty, pending discharge. */
 const DRAINING: readonly number[] = [2, 3, 6];
 
+/** The D-Bus calls a reading makes. */
+type BusDesktop<K extends keyof Dbus> = { readonly dbus: Pick<Dbus, K> };
+
 export type Battery = {
   /** 0 through 1. */
   charge: number;
@@ -37,9 +40,9 @@ export type Battery = {
  * desktop is locked.
  */
 export const readBattery = async (
-  bus: Pick<System, "dbusCall">,
+  domicile: BusDesktop<"call">,
 ): Promise<Result<Option<Battery>, SystemError>> =>
-  (await readProperties(bus)).map(batteryOf);
+  (await readProperties(domicile)).map(batteryOf);
 
 /**
  * The battery now as the first item, then after each change.
@@ -48,10 +51,10 @@ export const readBattery = async (
  * compositor restart. Works while the desktop is locked.
  */
 export const watchBattery = async (
-  bus: Pick<System, "dbusCall" | "dbusMatch">,
+  domicile: BusDesktop<"call" | "match">,
 ): Promise<Result<Listening<Option<Battery>>, SystemError>> =>
   (
-    await bus.dbusMatch({
+    await domicile.dbus.match({
       bus: Bus.System,
       interface: PROPERTIES,
       member: "PropertiesChanged",
@@ -59,7 +62,7 @@ export const watchBattery = async (
       sender: UPOWER,
     })
   ).andThenAsync(async (changes) =>
-    (await readProperties(bus)).match({
+    (await readProperties(domicile)).match({
       Err: (error) => {
         changes.stop();
         return Err(error);
@@ -67,7 +70,7 @@ export const watchBattery = async (
       Ok: (properties) =>
         Ok({
           ended: changes.ended,
-          items: changes.items.pipeThrough(readings(bus, properties)),
+          items: changes.items.pipeThrough(readings(domicile, properties)),
           stop: changes.stop,
         }),
     }),
@@ -94,10 +97,10 @@ const deviceSchema = z.looseObject({
 });
 
 const readProperties = async (
-  bus: Pick<System, "dbusCall">,
+  domicile: BusDesktop<"call">,
 ): Promise<Result<Properties, SystemError>> =>
   (
-    await bus.dbusCall({
+    await domicile.dbus.call({
       body: [DEVICE],
       bus: Bus.System,
       destination: UPOWER,
@@ -113,7 +116,7 @@ const readProperties = async (
  * device's own interface. After a compositor restart, the properties are read
  * again; a read the next restart ends waits for the restart after it.
  */
-const readings = (bus: Pick<System, "dbusCall">, properties: Properties) => {
+const readings = (domicile: BusDesktop<"call">, properties: Properties) => {
   let current = properties;
   return new TransformStream<Listened<DbusSignal>, Option<Battery>>({
     start: (controller) => {
@@ -132,7 +135,7 @@ const readings = (bus: Pick<System, "dbusCall">, properties: Properties) => {
           break;
         }
         case ListenedKind.Missed: {
-          (await readProperties(bus)).match({
+          (await readProperties(domicile)).match({
             Err: (error) => {
               if (error.kind !== SystemErrorKind.CompositorGone) {
                 controller.error(error);

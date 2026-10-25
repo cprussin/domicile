@@ -1,6 +1,6 @@
+import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { SystemError } from "@domicile-desktop/sdk/system";
-import { system } from "@domicile-desktop/sdk/system";
 import { checkPortal } from "@domicile-desktop/system-network/portal";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -25,7 +25,7 @@ export const useCaptivePortal = (domicile: DomicileHost): CaptivePortal => {
   const watch = useRef<PortalWatch | undefined>(undefined);
 
   useEffect(() => {
-    const host = system(domicile);
+    const host = desktop(domicile);
     const followed = followPortals({
       check: () => checkPortal(host),
       network: deskNetwork(domicile).network,

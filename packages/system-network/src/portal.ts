@@ -5,7 +5,8 @@
 
 import type { Option, Result } from "@cprussin/option-result";
 import { Err, None, Ok, Some } from "@cprussin/option-result";
-import type { System, SystemError } from "@domicile-desktop/sdk/system";
+import type { Processes } from "@domicile-desktop/sdk/desktop/processes";
+import type { SystemError } from "@domicile-desktop/sdk/system";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 
 /** Chrome's portal probe: `204 No Content` on the open internet. Plain http, so a portal can intercept it. */
@@ -22,11 +23,11 @@ const RETRIES = "3";
  * Retries a probe that gets no answer, since an address or a route can arrive
  * a moment after the network does. An `Err` is a probe that never got one.
  */
-export const checkPortal = async (
-  system: Pick<System, "run">,
-): Promise<Result<Option<string>, SystemError>> =>
+export const checkPortal = async (domicile: {
+  readonly processes: Pick<Processes, "run">;
+}): Promise<Result<Option<string>, SystemError>> =>
   (
-    await system.run([
+    await domicile.processes.run([
       "curl",
       "--silent",
       "--output",

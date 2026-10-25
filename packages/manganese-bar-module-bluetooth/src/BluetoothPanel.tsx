@@ -2,7 +2,7 @@ import { Result } from "@cprussin/option-result";
 import { Button } from "@domicile-desktop/component-library/Button";
 import { Switch } from "@domicile-desktop/component-library/Switch";
 import { useRequests } from "@domicile-desktop/manganese-host/useRequests";
-import type { System } from "@domicile-desktop/sdk/system";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type {
   Bluetooth,
   Device,
@@ -16,7 +16,7 @@ import type { BluetoothActions } from "./bluetooth-actions";
 type Props = {
   bluetooth: Bluetooth;
   /** Where requests go. */
-  host: System;
+  host: Domicile;
   actions: BluetoothActions;
 };
 
@@ -93,7 +93,7 @@ const Discovery = ({
 }: {
   actions: BluetoothActions;
   adapter: string;
-  host: System;
+  host: Domicile;
 }) => {
   useEffect(() => {
     report("start scanning", actions.startDiscovery(host, adapter));
@@ -106,7 +106,7 @@ const Discovery = ({
 
 /** A request a row makes, given where it goes. */
 type Request = (
-  host: System,
+  host: Domicile,
   actions: BluetoothActions,
 ) => ReturnType<BluetoothActions["connect"]>;
 

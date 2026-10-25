@@ -91,22 +91,26 @@ const machine = (devices: Devices | undefined) => {
       exited.resolve(result);
     },
     host: {
-      ...sysfs.host,
-      readDir: async (path: string) => {
-        const listing = await sysfs.host.readDir(path);
-        listed += 1;
-        for (const waiting of listings.splice(0)) {
-          waiting();
-        }
-        return listing;
+      files: {
+        ...sysfs.host.files,
+        readDir: async (path: string) => {
+          const listing = await sysfs.host.files.readDir(path);
+          listed += 1;
+          for (const waiting of listings.splice(0)) {
+            waiting();
+          }
+          return listing;
+        },
       },
-      spawn: (argv: readonly string[], _options?: SpawnOptions) => {
-        spawned.push(argv);
-        const process = udevadm();
-        for (const waiting of respawned.splice(0)) {
-          waiting();
-        }
-        return Promise.resolve(Ok<Subprocess, SystemError>(process));
+      processes: {
+        spawn: (argv: readonly string[], _options?: SpawnOptions) => {
+          spawned.push(argv);
+          const process = udevadm();
+          for (const waiting of respawned.splice(0)) {
+            waiting();
+          }
+          return Promise.resolve(Ok<Subprocess, SystemError>(process));
+        },
       },
     },
     killed,
@@ -248,7 +252,7 @@ describe("watchBrightness", () => {
 
     expect(
       await watchBrightness(
-        { ...desk.host, spawn: async () => Err(LOCKED) },
+        { ...desk.host, processes: { spawn: async () => Err(LOCKED) } },
         desk.onLevel,
         desk.every,
       ),
@@ -309,9 +313,12 @@ describe("watchBrightness", () => {
     let reads = 0;
     const watch = await watching(desk, {
       ...desk.host,
-      readDir: async (path) => {
-        reads += 1;
-        return reads === 2 ? Err(GONE) : await desk.host.readDir(path);
+      files: {
+        ...desk.host.files,
+        readDir: async (path) => {
+          reads += 1;
+          return reads === 2 ? Err(GONE) : await desk.host.files.readDir(path);
+        },
       },
     });
     await desk.until(1);
@@ -332,7 +339,7 @@ describe("watchBrightness", () => {
     const desk = machine(THINKPAD);
     const watch = await watching(desk, {
       ...desk.host,
-      readDir: async () => Err(LOCKED),
+      files: { ...desk.host.files, readDir: async () => Err(LOCKED) },
     });
 
     await desk.killing;

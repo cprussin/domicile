@@ -10,7 +10,7 @@ import { MeterKind } from "./audio";
 import { C_LOCALE } from "./pactl";
 import { peak } from "./peak";
 import { METER_APPLICATION } from "./reading";
-import type { AudioSystem, Levels, Meters, Report } from "./sound-server";
+import type { AudioDesktop, Levels, Meters, Report } from "./sound-server";
 
 /** High enough to catch transients, low enough to run one per device. */
 const RATE = 1000;
@@ -27,7 +27,7 @@ type Recording = {
 
 /** See `SoundServer.meters`. */
 export const meters = (
-  system: AudioSystem,
+  domicile: AudioDesktop,
   onLevels: (levels: Levels) => void,
   tickMs: number,
   report: Report,
@@ -53,7 +53,7 @@ export const meters = (
       }
       for (const [id, meter] of wanted) {
         if (!running.has(id)) {
-          running.set(id, record(system, meter, report, said));
+          running.set(id, record(domicile, meter, report, said));
         }
       }
     },
@@ -83,7 +83,7 @@ const argv = (meter: Meter): string[] => [
 
 /** Starts a `parec` for `meter`. One that cannot start stays silent. */
 const record = (
-  system: AudioSystem,
+  domicile: AudioDesktop,
   meter: Meter,
   report: Report,
   said: { cannotRecord: boolean },
@@ -94,7 +94,7 @@ const record = (
     process: undefined,
     stopped: false,
   };
-  system
+  domicile.processes
     .spawn(argv(meter), C_LOCALE)
     .then(async (started) => {
       await started.match({

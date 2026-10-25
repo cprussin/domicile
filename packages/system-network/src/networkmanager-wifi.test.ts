@@ -190,7 +190,7 @@ describe("watchNetworkManagerWifi", () => {
     const bus = fakeBus(byKey(recorded(true, HOME)));
     const seen = reports<Option<Wifi>>();
 
-    watchNetworkManagerWifi(bus.system, seen.on);
+    watchNetworkManagerWifi(bus.domicile, seen.on);
 
     expect(await seen.next()).toStrictEqual(Ok(Some(CONNECTED)));
     expect(bus.matches).toStrictEqual([{ bus: Bus.System, sender: NM }]);
@@ -200,7 +200,7 @@ describe("watchNetworkManagerWifi", () => {
     const bus = fakeBus(byKey(recorded(true, "/")));
     const seen = reports<Option<Wifi>>();
 
-    watchNetworkManagerWifi(bus.system, seen.on);
+    watchNetworkManagerWifi(bus.domicile, seen.on);
 
     expect(await seen.next()).toStrictEqual(
       Ok(
@@ -228,7 +228,7 @@ describe("watchNetworkManagerWifi", () => {
     const bus = fakeBus(byKey(replies));
     const seen = reports<Option<Wifi>>();
 
-    watchNetworkManagerWifi(bus.system, seen.on);
+    watchNetworkManagerWifi(bus.domicile, seen.on);
 
     expect(await seen.next()).toStrictEqual(
       Ok(
@@ -249,7 +249,7 @@ describe("watchNetworkManagerWifi", () => {
     const bus = fakeBus(byKey(replies));
     const seen = reports<Option<Wifi>>();
 
-    watchNetworkManagerWifi(bus.system, seen.on);
+    watchNetworkManagerWifi(bus.domicile, seen.on);
 
     expect(await seen.next()).toStrictEqual(Ok(None()));
   });
@@ -260,7 +260,7 @@ describe("watchNetworkManagerWifi", () => {
     const bus = fakeBus(byKey(replies));
     const seen = reports<Option<Wifi>>();
 
-    watchNetworkManagerWifi(bus.system, seen.on);
+    watchNetworkManagerWifi(bus.domicile, seen.on);
 
     expect(await seen.next()).toStrictEqual(Err(SERVICE_UNKNOWN));
   });
@@ -270,7 +270,7 @@ describe("watchNetworkManagerWifi", () => {
       const replies = recorded(true, HOME);
       const bus = fakeBus(byKey(replies));
       const seen = reports<Option<Wifi>>();
-      watchNetworkManagerWifi(bus.system, seen.on);
+      watchNetworkManagerWifi(bus.domicile, seen.on);
       await seen.next();
 
       replies.set(
@@ -297,7 +297,7 @@ describe("watchNetworkManagerWifi", () => {
     it("reads again when an access point comes", async () => {
       const bus = fakeBus(byKey(recorded(true, HOME)));
       const seen = reports<Option<Wifi>>();
-      watchNetworkManagerWifi(bus.system, seen.on);
+      watchNetworkManagerWifi(bus.domicile, seen.on);
       await seen.next();
 
       await bus.send({
@@ -335,7 +335,7 @@ describe("NetworkManager Wi-Fi requests", () => {
     const bus = fakeBus(() => Ok(DONE));
 
     expect(
-      await setNetworkManagerWifiEnabled(bus.system, CONNECTED, false),
+      await setNetworkManagerWifiEnabled(bus.domicile, CONNECTED, false),
     ).toStrictEqual(Ok("done"));
     expect(bus.calls).toStrictEqual([
       request(ROOT, "org.freedesktop.DBus.Properties", "Set", "ssv", [
@@ -349,7 +349,7 @@ describe("NetworkManager Wi-Fi requests", () => {
   it("scans", async () => {
     const bus = fakeBus(() => Ok(DONE));
 
-    expect(await scanNetworkManagerWifi(bus.system, CONNECTED)).toStrictEqual(
+    expect(await scanNetworkManagerWifi(bus.domicile, CONNECTED)).toStrictEqual(
       Ok("done"),
     );
     expect(bus.calls).toStrictEqual([
@@ -361,7 +361,7 @@ describe("NetworkManager Wi-Fi requests", () => {
     const bus = fakeBus(() => Ok(DONE));
 
     expect(
-      await disconnectNetworkManagerWifi(bus.system, CONNECTED),
+      await disconnectNetworkManagerWifi(bus.domicile, CONNECTED),
     ).toStrictEqual(Ok("done"));
     expect(bus.calls).toStrictEqual([
       {
@@ -381,7 +381,12 @@ describe("NetworkManager Wi-Fi requests", () => {
       );
 
       expect(
-        await connectNetworkManagerWifi(bus.system, CONNECTED, home, undefined),
+        await connectNetworkManagerWifi(
+          bus.domicile,
+          CONNECTED,
+          home,
+          undefined,
+        ),
       ).toStrictEqual(Ok("done"));
       expect(bus.calls).toStrictEqual([
         request(ROOT, NM, "ActivateConnection", "ooo", [
@@ -395,7 +400,7 @@ describe("NetworkManager Wi-Fi requests", () => {
     it("adds a profile for an open network", async () => {
       const bus = fakeBus(() => Ok(DONE));
 
-      await connectNetworkManagerWifi(bus.system, CONNECTED, cafe, undefined);
+      await connectNetworkManagerWifi(bus.domicile, CONNECTED, cafe, undefined);
 
       expect(bus.calls).toStrictEqual([
         request(ROOT, NM, "AddAndActivateConnection", "a{sa{sv}}oo", [
@@ -410,7 +415,7 @@ describe("NetworkManager Wi-Fi requests", () => {
       const bus = fakeBus(() => Ok(DONE));
 
       await connectNetworkManagerWifi(
-        bus.system,
+        bus.domicile,
         CONNECTED,
         { ...home, profile: undefined },
         "hunter22",
@@ -439,7 +444,12 @@ describe("NetworkManager Wi-Fi requests", () => {
       const bus = fakeBus(() => Err(refused));
 
       expect(
-        await connectNetworkManagerWifi(bus.system, CONNECTED, home, undefined),
+        await connectNetworkManagerWifi(
+          bus.domicile,
+          CONNECTED,
+          home,
+          undefined,
+        ),
       ).toStrictEqual(Err(refused));
     });
 
@@ -448,7 +458,7 @@ describe("NetworkManager Wi-Fi requests", () => {
 
       expect(
         connectNetworkManagerWifi(
-          bus.system,
+          bus.domicile,
           CONNECTED,
           { ...home, profile: undefined },
           undefined,

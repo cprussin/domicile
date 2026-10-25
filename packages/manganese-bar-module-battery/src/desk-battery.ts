@@ -3,8 +3,8 @@ import { perHost } from "@domicile-desktop/manganese-host/per-host";
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { watchPresence } from "@domicile-desktop/manganese-host/watch-presence";
+import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import type { SystemError } from "@domicile-desktop/sdk/system";
-import { system } from "@domicile-desktop/sdk/system";
 import type { Battery } from "@domicile-desktop/system-battery/battery";
 import { hasBattery } from "@domicile-desktop/system-battery/hardware";
 import { watchBattery } from "./watch-battery";
@@ -19,6 +19,6 @@ export const deskBattery = perHost(
 export const deskBatteryHardware = perHost(
   (domicile): SharedWatch<Result<boolean, SystemError>> =>
     sharedWatch((onPresent) =>
-      watchPresence(() => hasBattery(system(domicile)), onPresent),
+      watchPresence(() => hasBattery(desktop(domicile)), onPresent),
     ),
 );

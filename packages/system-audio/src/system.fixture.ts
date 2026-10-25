@@ -3,6 +3,7 @@
 
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
+import type { Processes } from "@domicile-desktop/sdk/desktop/processes";
 import type {
   Exit,
   Ran,
@@ -12,8 +13,6 @@ import type {
   SystemError,
 } from "@domicile-desktop/sdk/system";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
-
-import type { AudioSystem } from "./sound-server";
 
 /** A spawned process a test drives. */
 export type FakeProcess = {
@@ -30,7 +29,7 @@ export type FakeProcess = {
 /** What `run` answers for an argv: output and exit code. */
 export type Answer = { stdout: string; stderr?: string; code?: number };
 
-export class FakeSystem implements AudioSystem {
+export class FakeSystem implements Pick<Processes, "run" | "spawn"> {
   /** Every argv run, in order, with its options. */
   readonly ran: [argv: readonly string[], options: unknown][] = [];
   readonly spawned: FakeProcess[] = [];

@@ -70,27 +70,31 @@ const upower = (
       queued.push(...next);
     },
     asked,
-    dbusCall: (call: DbusCall) => {
-      asked.push(call);
-      const answer = queued.shift() ?? reply;
-      return Promise.resolve(
-        "kind" in answer
-          ? Err<{ body: unknown[]; signature: string }, SystemError>(answer)
-          : Ok<{ body: unknown[]; signature: string }, SystemError>(answer),
-      );
-    },
-    dbusMatch: (match: DbusMatch) => {
-      asked.push(match);
-      const items = new ReadableStream<Listened<DbusSignal>>({ start: listen });
-      return Promise.resolve(
-        Ok<Listening<Listened<DbusSignal>>, SystemError>({
-          ended: Promise.resolve(Ok("stopped")),
-          items,
-          stop: () => {
-            stops.count += 1;
-          },
-        }),
-      );
+    dbus: {
+      call: (call: DbusCall) => {
+        asked.push(call);
+        const answer = queued.shift() ?? reply;
+        return Promise.resolve(
+          "kind" in answer
+            ? Err<{ body: unknown[]; signature: string }, SystemError>(answer)
+            : Ok<{ body: unknown[]; signature: string }, SystemError>(answer),
+        );
+      },
+      match: (match: DbusMatch) => {
+        asked.push(match);
+        const items = new ReadableStream<Listened<DbusSignal>>({
+          start: listen,
+        });
+        return Promise.resolve(
+          Ok<Listening<Listened<DbusSignal>>, SystemError>({
+            ended: Promise.resolve(Ok("stopped")),
+            items,
+            stop: () => {
+              stops.count += 1;
+            },
+          }),
+        );
+      },
     },
     miss: async () => {
       (await listening).enqueue(Listened.Missed());

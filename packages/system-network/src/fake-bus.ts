@@ -93,6 +93,36 @@ export const fakeBus = (
       ended.resolve(Err(error));
     },
     calls,
+    domicile: {
+      dbus: {
+        call: (call: DbusCall) => {
+          calls.push(call);
+          return Promise.resolve(answer(call));
+        },
+        match: (match: DbusMatch) => {
+          matches.push(match);
+          return Promise.resolve(
+            refused === undefined
+              ? Ok<Listening<Listened<DbusSignal>>, SystemError>({
+                  ended: ended.promise,
+                  items,
+                  stop: () => {
+                    state.stopped += 1;
+                    signals.promise
+                      .then((controller) => {
+                        controller.close();
+                        ended.resolve(Ok("stopped"));
+                      })
+                      .catch(() => {
+                        /* the test fails on the missing report instead */
+                      });
+                  },
+                })
+              : Err<Listening<Listened<DbusSignal>>, SystemError>(refused),
+          );
+        },
+      },
+    },
     matches,
     /** Says the compositor restarted under the match. */
     miss: async () => {
@@ -103,34 +133,6 @@ export const fakeBus = (
     },
     get stopped() {
       return state.stopped;
-    },
-    system: {
-      dbusCall: (call: DbusCall) => {
-        calls.push(call);
-        return Promise.resolve(answer(call));
-      },
-      dbusMatch: (match: DbusMatch) => {
-        matches.push(match);
-        return Promise.resolve(
-          refused === undefined
-            ? Ok<Listening<Listened<DbusSignal>>, SystemError>({
-                ended: ended.promise,
-                items,
-                stop: () => {
-                  state.stopped += 1;
-                  signals.promise
-                    .then((controller) => {
-                      controller.close();
-                      ended.resolve(Ok("stopped"));
-                    })
-                    .catch(() => {
-                      /* the test fails on the missing report instead */
-                    });
-                },
-              })
-            : Err<Listening<Listened<DbusSignal>>, SystemError>(refused),
-        );
-      },
     },
   };
 };

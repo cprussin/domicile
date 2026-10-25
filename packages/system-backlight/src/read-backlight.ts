@@ -2,7 +2,8 @@
 
 import type { Option, Result } from "@cprussin/option-result";
 import { Err, None, Ok, Some } from "@cprussin/option-result";
-import type { System, SystemError } from "@domicile-desktop/sdk/system";
+import type { Files } from "@domicile-desktop/sdk/desktop/files";
+import type { SystemError } from "@domicile-desktop/sdk/system";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import { z } from "zod";
 
@@ -19,7 +20,7 @@ const KINDS = ["firmware", "platform", "raw"] as const;
 const FILES = ["type", "max_brightness", "brightness"];
 
 /** The calls {@link readBacklight} makes. */
-export type SysfsHost = Pick<System, "readDir" | "readTextFile">;
+export type SysfsHost = { readonly files: Pick<Files, "readDir" | "readText"> };
 
 /** One backlight device's current and maximum raw brightness. */
 export type Backlight = {
@@ -39,7 +40,7 @@ export type Backlight = {
 export const readBacklight = async (
   host: SysfsHost,
 ): Promise<Result<Option<Backlight>, SystemError>> =>
-  (await host.readDir(BACKLIGHT)).match({
+  (await host.files.readDir(BACKLIGHT)).match({
     Err: async (error) =>
       error.kind === SystemErrorKind.NotFound ? Ok(None()) : Err(error),
     Ok: async (entries) =>
@@ -100,7 +101,7 @@ const readFile = async (
   device: string,
   file: string,
 ): Promise<Result<Option<string>, SystemError>> =>
-  (await host.readTextFile(`${BACKLIGHT}/${device}/${file}`)).match({
+  (await host.files.readText(`${BACKLIGHT}/${device}/${file}`)).match({
     Err: (error) =>
       error.kind === SystemErrorKind.NotFound ? Ok(None()) : Err(error),
     Ok: (text) => Ok(Some(text.trim())),

@@ -3,11 +3,11 @@
 
 import type { Result } from "@cprussin/option-result";
 import { Err } from "@cprussin/option-result";
+import type { Dbus } from "@domicile-desktop/sdk/desktop/dbus";
 import type {
   DbusSignal,
   Listened,
   Listening,
-  System,
   SystemError,
 } from "@domicile-desktop/sdk/system";
 import { Bus, ListenedKind } from "@domicile-desktop/sdk/system";
@@ -49,7 +49,7 @@ export type Device = {
 export type Bluetooth = { adapters: Adapter[]; devices: Device[] };
 
 /** The calls this library makes. */
-export type BluetoothSystem = Pick<System, "dbusCall" | "dbusMatch">;
+export type BluetoothDesktop = { readonly dbus: Pick<Dbus, "call" | "match"> };
 
 /**
  * Calls `onBluetooth` with the adapters and connected devices now and after
@@ -59,7 +59,7 @@ export type BluetoothSystem = Pick<System, "dbusCall" | "dbusMatch">;
  * listening after one, so a later change reads again.
  */
 export const watchBluetooth = (
-  system: BluetoothSystem,
+  domicile: BluetoothDesktop,
   onBluetooth: (bluetooth: Result<Bluetooth, SystemError>) => void,
 ): (() => void) => {
   const watch: Watch = { listening: undefined, stopped: false };
@@ -68,7 +68,7 @@ export const watchBluetooth = (
       onBluetooth(bluetooth);
     }
   };
-  follow(system, watch, report).catch((error: unknown) => {
+  follow(domicile, watch, report).catch((error: unknown) => {
     // biome-ignore lint/suspicious/noConsole: surfacing a background failure
     console.error("Failed to watch Bluetooth", error);
   });
@@ -80,12 +80,12 @@ export const watchBluetooth = (
 
 /** Turn the adapter at `adapter` on or off. */
 export const setPowered = async (
-  system: Pick<System, "dbusCall">,
+  domicile: { readonly dbus: Pick<Dbus, "call"> },
   adapter: string,
   powered: boolean,
 ): Promise<Result<"set", SystemError>> =>
   (
-    await system.dbusCall({
+    await domicile.dbus.call({
       body: [ADAPTER, "Powered", { signature: "b", value: powered }],
       bus: Bus.System,
       destination: SERVICE,
@@ -98,41 +98,41 @@ export const setPowered = async (
 
 /** Start scanning for devices. BlueZ stops when every scanner has asked. */
 export const startDiscovery = (
-  system: Pick<System, "dbusCall">,
+  domicile: { readonly dbus: Pick<Dbus, "call"> },
   adapter: string,
 ): Promise<Result<"done", SystemError>> =>
-  call(system, adapter, ADAPTER, "StartDiscovery");
+  call(domicile, adapter, ADAPTER, "StartDiscovery");
 
 export const stopDiscovery = (
-  system: Pick<System, "dbusCall">,
+  domicile: { readonly dbus: Pick<Dbus, "call"> },
   adapter: string,
 ): Promise<Result<"done", SystemError>> =>
-  call(system, adapter, ADAPTER, "StopDiscovery");
+  call(domicile, adapter, ADAPTER, "StopDiscovery");
 
 /** Connect a paired device's profiles. */
 export const connect = (
-  system: Pick<System, "dbusCall">,
+  domicile: { readonly dbus: Pick<Dbus, "call"> },
   device: string,
 ): Promise<Result<"done", SystemError>> =>
-  call(system, device, DEVICE, "Connect");
+  call(domicile, device, DEVICE, "Connect");
 
 export const disconnect = (
-  system: Pick<System, "dbusCall">,
+  domicile: { readonly dbus: Pick<Dbus, "call"> },
   device: string,
 ): Promise<Result<"done", SystemError>> =>
-  call(system, device, DEVICE, "Disconnect");
+  call(domicile, device, DEVICE, "Disconnect");
 
 /**
  * Pair with a device, then trust it so it can reconnect on its own. With no
  * agent registered, BlueZ pairs only devices that need no code.
  */
 export const pair = async (
-  system: Pick<System, "dbusCall">,
+  domicile: { readonly dbus: Pick<Dbus, "call"> },
   device: string,
 ): Promise<Result<"done", SystemError>> =>
-  (await call(system, device, DEVICE, "Pair")).andThenAsync(async () =>
+  (await call(domicile, device, DEVICE, "Pair")).andThenAsync(async () =>
     (
-      await system.dbusCall({
+      await domicile.dbus.call({
         body: [DEVICE, "Trusted", { signature: "b", value: true }],
         bus: Bus.System,
         destination: SERVICE,
@@ -146,11 +146,11 @@ export const pair = async (
 
 /** Remove a device and its pairing. */
 export const forget = async (
-  system: Pick<System, "dbusCall">,
+  domicile: { readonly dbus: Pick<Dbus, "call"> },
   device: Pick<Device, "adapter" | "path">,
 ): Promise<Result<"done", SystemError>> =>
   (
-    await system.dbusCall({
+    await domicile.dbus.call({
       body: [device.path],
       bus: Bus.System,
       destination: SERVICE,
@@ -163,13 +163,13 @@ export const forget = async (
 
 /** A BlueZ method that takes no arguments. */
 const call = async (
-  system: Pick<System, "dbusCall">,
+  domicile: { readonly dbus: Pick<Dbus, "call"> },
   path: string,
   iface: string,
   member: string,
 ): Promise<Result<"done", SystemError>> =>
   (
-    await system.dbusCall({
+    await domicile.dbus.call({
       bus: Bus.System,
       destination: SERVICE,
       interface: iface,
@@ -186,11 +186,14 @@ type Watch = {
 
 /** Listen, read, then read again on each change until the match ends. */
 const follow = async (
-  system: BluetoothSystem,
+  domicile: BluetoothDesktop,
   watch: Watch,
   report: (bluetooth: Result<Bluetooth, SystemError>) => void,
 ): Promise<void> => {
-  const matched = await system.dbusMatch({ bus: Bus.System, sender: SERVICE });
+  const matched = await domicile.dbus.match({
+    bus: Bus.System,
+    sender: SERVICE,
+  });
   await matched.match({
     Err: (error) => {
       report(Err(error));
@@ -201,7 +204,7 @@ const follow = async (
       if (watch.stopped) {
         listening.stop();
       }
-      await changes(system, listening, report);
+      await changes(domicile, listening, report);
       const ended = await listening.ended;
       ended.match({
         Err: (error) => {
@@ -220,15 +223,15 @@ const follow = async (
  * compositor restart.
  */
 const changes = async (
-  system: BluetoothSystem,
+  domicile: BluetoothDesktop,
   listening: Listening<Listened<DbusSignal>>,
   report: (bluetooth: Result<Bluetooth, SystemError>) => void,
 ): Promise<void> => {
   const reader = listening.items.getReader();
-  report(await read(system));
+  report(await read(domicile));
   for (let next = await reader.read(); !next.done; next = await reader.read()) {
     if (next.value.kind === ListenedKind.Missed || matters(next.value.item)) {
-      report(await read(system));
+      report(await read(domicile));
     }
   }
 };
@@ -255,10 +258,10 @@ const matters = (signal: DbusSignal): boolean => {
 };
 
 const read = async (
-  system: BluetoothSystem,
+  domicile: BluetoothDesktop,
 ): Promise<Result<Bluetooth, SystemError>> =>
   (
-    await system.dbusCall({
+    await domicile.dbus.call({
       bus: Bus.System,
       destination: SERVICE,
       interface: "org.freedesktop.DBus.ObjectManager",

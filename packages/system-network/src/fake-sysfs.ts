@@ -1,11 +1,11 @@
-// A `/sys/class/net` for tests, answered through the system calls the library
+// A `/sys/class/net` for tests, answered through the file calls the library
 // makes, laid out as on a laptop with a cable port, Wi-Fi and a VPN.
 
 import { Err, Ok } from "@cprussin/option-result";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import { FileType, SystemErrorKind } from "@domicile-desktop/sdk/system";
 
-import type { InterfaceSystem } from "./interfaces";
+import type { InterfaceDesktop } from "./interfaces";
 
 /** Each interface's files and their contents, as `cat` prints them; `null` is a directory or link. */
 export type Interfaces = Readonly<
@@ -48,42 +48,44 @@ export const fakeSysfs = (interfaces: Interfaces) => {
       ? undefined
       : now[name]?.[file];
   };
-  const system: InterfaceSystem = {
-    readDir: (path) =>
-      Promise.resolve(
-        path === "/sys/class/net"
-          ? Ok(
-              // The kernel lists them unsorted.
-              Object.keys(now)
-                .toReversed()
-                .map((name) => ({ fileType: FileType.Symlink, name })),
-            )
-          : Err(notFound(path)),
-      ),
-    readTextFile: (path) => {
-      const contents = fileOf(path);
-      return Promise.resolve(
-        typeof contents === "string"
-          ? Ok(contents)
-          : Err(
-              contents === null
-                ? { kind: SystemErrorKind.IsADirectory, message: path }
-                : notFound(path),
-            ),
-      );
+  const domicile: InterfaceDesktop = {
+    files: {
+      readDir: (path) =>
+        Promise.resolve(
+          path === "/sys/class/net"
+            ? Ok(
+                // The kernel lists them unsorted.
+                Object.keys(now)
+                  .toReversed()
+                  .map((name) => ({ fileType: FileType.Symlink, name })),
+              )
+            : Err(notFound(path)),
+        ),
+      readText: (path) => {
+        const contents = fileOf(path);
+        return Promise.resolve(
+          typeof contents === "string"
+            ? Ok(contents)
+            : Err(
+                contents === null
+                  ? { kind: SystemErrorKind.IsADirectory, message: path }
+                  : notFound(path),
+              ),
+        );
+      },
+      stat: (path) =>
+        Promise.resolve(
+          fileOf(path) === undefined
+            ? Err(notFound(path))
+            : Ok({ fileType: FileType.Directory, modifiedMs: 0, size: 0 }),
+        ),
     },
-    stat: (path) =>
-      Promise.resolve(
-        fileOf(path) === undefined
-          ? Err(notFound(path))
-          : Ok({ fileType: FileType.Directory, modifiedMs: 0, size: 0 }),
-      ),
   };
   return {
+    domicile,
     set: (next: Interfaces) => {
       now = next;
     },
-    system,
   };
 };
 

@@ -9,7 +9,7 @@ import { z } from "zod";
 
 import type { Reading } from "./follow";
 import { followBus } from "./follow";
-import type { Network, NetworkSystem } from "./network-state";
+import type { Network, NetworkDesktop } from "./network-state";
 import { Connectivity, Link } from "./network-state";
 import { variant } from "./variant";
 
@@ -26,24 +26,24 @@ const NO_OBJECT = "/";
  * keeps listening after one, so a later change reads again.
  */
 export const watchNetworkManager = (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   onNetwork: (network: Result<Network, SystemError>) => void,
 ): (() => void) =>
   followBus(
-    system,
+    domicile,
     {
       bus: Bus.System,
       interface: "org.freedesktop.DBus.Properties",
       member: "PropertiesChanged",
       sender: SERVICE,
     },
-    () => read(system),
+    () => read(domicile),
     onNetwork,
   );
 
 /** Read the network; a change to any object read for it matters. */
-const read = async (system: NetworkSystem): Promise<Reading<Network>> => {
-  const root = await properties(system, ROOT, SERVICE, rootSchema);
+const read = async (domicile: NetworkDesktop): Promise<Reading<Network>> => {
+  const root = await properties(domicile, ROOT, SERVICE, rootSchema);
   return root.match({
     Err: (error) =>
       Promise.resolve({
@@ -51,7 +51,7 @@ const read = async (system: NetworkSystem): Promise<Reading<Network>> => {
         value: Err(error),
       }),
     Ok: async ({ Connectivity: connectivity, PrimaryConnection: primary }) => {
-      const link = await linkOf(system, primary);
+      const link = await linkOf(domicile, primary);
       const paths = new Set([ROOT, ...link.paths]);
       return {
         matters: ({ path }) => paths.has(path),
@@ -69,14 +69,14 @@ type FoundLink = { result: Result<Link, SystemError>; paths: string[] };
 
 /** The primary connection at `path`. */
 const linkOf = async (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   path: string,
 ): Promise<FoundLink> => {
   if (path === NO_OBJECT) {
     return { paths: [], result: Ok(Link.None()) };
   } else {
     const active = await properties(
-      system,
+      domicile,
       path,
       `${SERVICE}.Connection.Active`,
       activeSchema,
@@ -91,7 +91,7 @@ const linkOf = async (
         switch (type) {
           case "802-11-wireless": {
             const point = await properties(
-              system,
+              domicile,
               specific,
               `${SERVICE}.AccessPoint`,
               accessPointSchema,
@@ -120,13 +120,13 @@ const linkOf = async (
 
 /** `Properties.GetAll` on one of NetworkManager's objects, parsed. */
 const properties = async <T extends NonNullable<unknown>>(
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   path: string,
   interfaceName: string,
   schema: z.ZodType<T>,
 ): Promise<Result<T, SystemError>> =>
   (
-    await system.dbusCall({
+    await domicile.dbus.call({
       body: [interfaceName],
       bus: Bus.System,
       destination: SERVICE,
