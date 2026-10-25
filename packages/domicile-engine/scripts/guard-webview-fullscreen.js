@@ -14,7 +14,7 @@
 //   `exitPageFullscreen()`, as a shell does when the user takes the window out
 //   of fullscreen. The guard leaves the first with Escape.
 
-export const Shell = () => {
+export const HostShell = () => {
   /**
    * Reads a required query parameter. Throws when missing: a default would
    * measure a setup the guard did not ask for.

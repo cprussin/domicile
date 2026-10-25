@@ -31,9 +31,9 @@
 //   GUARD zoom factor=…           the zoom the browser reports after the first
 //                                 guest chord set 150%
 //
-// The engine's document calls `Shell` once the module loads.
+// The engine's document calls `HostShell` once the module loads.
 
-export const Shell = (_root, desktop) => {
+export const HostShell = (_root, desktop) => {
   /**
    * Reads a required query parameter. No default, so a misconfigured guard
    * fails instead of measuring the wrong thing.

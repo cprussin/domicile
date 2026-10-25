@@ -5,9 +5,9 @@
 //   GUARD shell element=<app|unknown> interface=<defined|undefined>
 //               embed=<defined|undefined>
 //
-// Domicile calls `Shell` once the module loads.
+// Domicile calls `HostShell` once the module loads.
 
-export const Shell = (root) => {
+export const HostShell = (root) => {
   const app = document.createElement("app");
   console.log(
     "GUARD shell" +

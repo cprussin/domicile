@@ -11,10 +11,10 @@ application ── RegisterStatusNotifierItem ──▶ compositor (org.kde.Stat
                                                    ▼
                                     engine: `tray` attribute, DomicileTrayItem
                                                    ▼
-                                   shell: domicile.tray, traychanged → icons
-shell click ─ activateTrayItem(id, action) ─▶ engine ─ activate_tray_item ─▶ compositor
+                                   shell: domicile.tray.items, "change" → icons
+shell click ─ tray.activate(id, action) ─▶ engine ─ activate_tray_item ─▶ compositor
             ─▶ Activate / SecondaryActivate / ContextMenu on the item
-shell menu ─ dbusCall / dbusMatch (callSystem) ─▶ compositor ─▶ com.canonical.dbusmenu on `bus`
+shell menu ─ domicile.dbus.call / match ──────▶ compositor ─▶ com.canonical.dbusmenu on `bus`
 ```
 
 | Piece | Where |

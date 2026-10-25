@@ -10,9 +10,9 @@ pixels. Each display is a rectangle in it.
 
 ```ts
 // DomicileDisplay: { name, x, y, width, height, scale, modeWidth, modeHeight, transform }
-const show = () => layOut(domicile.displays); // null until described
+const show = () => layOut(domicile.displays.list); // undefined until described
 show();
-domicile.addEventListener("displayschanged", show);
+domicile.displays.on("change", show);
 ```
 
 - On a tty the engine shows the page on every monitor, rotated and scaled per
@@ -28,14 +28,14 @@ domicile.addEventListener("displayschanged", show);
 
 `theme.mode` in the config is `"dark"` or `"light"`.
 
-- The shell reads `domicile.theme`; `themechanged` reports changes.
+- The shell reads `domicile.theme.current`; `theme.on("change")` reports
+  changes.
 - The compositor also publishes it to the settings portal
   (`org.freedesktop.appearance` `color-scheme`, followed by GTK4, Qt6,
   Electron and Firefox) and applies it to browser windows.
 - `theme.accent_color`, `contrast` and `reduced_motion` go to the settings
-  portal and to the shell, as `domicile.accentColor`, `highContrast` and
-  `reducedMotion` with an `appearancechanged` event. `watchAppearance` in
-  `@domicile-desktop/sdk/appearance` reads them now and on each change. `applyAppearance` in
+  portal and to the shell, as `domicile.appearance`'s `accentColor`,
+  `highContrast` and `reducedMotion`, with a `change` event. `applyAppearance` in
   `@domicile-desktop/component-library/appearance` applies them to the preset:
   the `accent` token, the `_contrastHigh` condition and shortened animations.
 - `theme.icon_theme` goes to the settings portal, and draws the tray's and
@@ -43,22 +43,22 @@ domicile.addEventListener("displayschanged", show);
   `watchIconTheme` in `@domicile-desktop/sdk/icon-theme` read it from there,
   `watchIconTheme` again on each `SettingChanged`.
 - `prefers-color-scheme` in the shell's page follows it.
-- `domicile.setTheme("light")` changes it until the desktop exits. It does not
+- `domicile.theme.set("light")` changes it until the desktop exits. It does not
   write the config. A later config edit overrides it.
 
 Windows change theme after the shell has captured its old frame, so a shell
 can animate the switch:
 
-1. `themechanged` fires.
+1. `theme.on("change")` fires.
 2. The shell captures its old frame (for example, starts a view transition)
-   and calls `domicile.themeCaptured(theme)`. With no animation, it calls it
+   and calls `domicile.theme.captured(theme)`. With no animation, it calls it
    at once.
 3. Once every shell has called it, the compositor repaints the windows and
-   sets `windowsTheme` and fires `windowsthemechanged`.
+   sets `theme.windows` and fires `windowschange`.
 4. If no shell calls it, windows switch after about a second.
 
-In a view transition, call `themeCaptured` once `transition.ready` resolves,
-and pause the animation until `windowsthemechanged`. Calling it from the
+In a view transition, call `theme.captured` once `transition.ready` resolves,
+and pause the animation until `windowschange`. Calling it from the
 update callback is too early:
 
 - The engine runs the update callback before it has drawn the capture.
@@ -67,19 +67,20 @@ update callback is too early:
 
 `ThemeProvider` in `@domicile-desktop/component-library` runs the view
 transition. Implement its `ThemeSource.turnWindows` to call
-`domicile.themeCaptured(theme)` and resolve on `windowsthemechanged` (see
+`domicile.theme.captured(theme)` and resolve on `windowschange` (see
 manganese's `theme/host-theme.ts`).
 
 ## System tray
 
 Apps' tray icons (StatusNotifierItem, hosted by the compositor on the session
-bus) are `domicile.tray`, the full list; `traychanged` reports changes.
+bus) are `domicile.tray.items`, the full list; `tray.on("change")` reports
+changes.
 
 ```ts
-domicile.addEventListener("traychanged", () => {
-  drawTray(domicile.tray ?? []); // { id, title, icon, bus, menu, itemIsMenu }
+domicile.tray.on("change", () => {
+  drawTray(domicile.tray.items ?? []); // { id, title, icon, bus, menu, itemIsMenu }
 });
-domicile.activateTrayItem(id, "primary"); // or "secondary", "context"
+domicile.tray.activate(id, "primary"); // or "secondary", "context"
 ```
 
 - The app decides what a click does.
@@ -94,17 +95,17 @@ domicile.activateTrayItem(id, "primary"); // or "secondary", "context"
 ## Notifications
 
 App notifications, and sites' Web Notifications, are
-`domicile.notifications`: every uncleared notification, oldest first.
-`notificationschanged` reports changes.
+`domicile.notifications.list`: every uncleared notification, oldest first.
+`notifications.on("change")` reports changes.
 
 ```ts
-domicile.addEventListener("notificationschanged", () => {
+domicile.notifications.on("change", () => {
   // { id, appName, summary, body, icon, urgency, actions, clickable, timeoutMs, time }
-  draw(domicile.notifications ?? []);
+  draw(domicile.notifications.list ?? []);
 });
-domicile.invokeNotificationAction(id, "default"); // a click (if clickable), or an action's key
-domicile.replyToNotification(id, "On my way");    // the text of an "inline-reply" action's field
-domicile.dismissNotifications([id]);              // clear; the app is told
+domicile.notifications.invoke(id, "default"); // a click (if clickable), or an action's key
+domicile.notifications.reply(id, "On my way"); // the text of an "inline-reply" action's field
+domicile.notifications.dismiss([id]);          // clear; the app is told
 ```
 
 - The shell decides which are new. The first list is history.
@@ -125,7 +126,7 @@ is its backend. The shell draws each one. See
 import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs";
 
 <PortalDialogs
-  host={domicile}
+  domicile={domicile}
   screen={focusedScreen}
   screenOf={(appId) => screenShowing(appId)}
   shellChords={ownedChords(keybindings)}
@@ -150,9 +151,8 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
   `Account`, `Wallpaper` and `Usb` with `PortalAnswer.Access()` to allow, and
   `DynamicLauncher` with `PortalAnswer.DynamicLauncher(name)`.
 - The app list, the file picker, the account picture and the wallpaper
-  preview read the system through `@domicile-desktop/sdk/system` (desktop
-  entries, `mimeapps.list`, `readDir`, `readFile`), so `host` must take system
-  calls. `domicile` does.
+  preview read the system through `domicile.files` (desktop entries,
+  `mimeapps.list`, directories, pictures).
 - A dialog goes on the screen `screenOf` names for the window that asked, or
   on `screen` when the application named no window.
 - An `Inhibit` request is an application holding off logout, user switching
@@ -169,15 +169,14 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
   sources.
 - `PortalDialogs` also fires the chords apps hold. `shellChords` are the
   shell's own, which a review flags as taken.
-- Without React, `watchPortalRequests` and `answerPortalRequest` in
-  `@domicile-desktop/sdk/portal` give the requests, parsed, and send answers.
-  `watchCapturing` and `stopCapturing` do the same for running sessions.
-  `fireGlobalShortcuts` in `@domicile-desktop/sdk/global-shortcuts` fires the
+- Without React, `domicile.portals` has the requests, parsed (`requests`),
+  and sends answers (`answer`). `capturing` and `stopCapturing` do the same
+  for running sessions. `fireGlobalShortcuts` in `@domicile-desktop/sdk/global-shortcuts` fires the
   chords.
 - A shell must answer every request. One left unanswered keeps its application
   waiting until it gives up.
 - The compositor refuses answers while the desktop is locked.
-- `watchPortalWallpaper` gives the pictures applications set for the
+- `portals.wallpaper` is the pictures applications set for the
   background and the lock screen, as paths; `usePortalWallpaper` in
   `@domicile-desktop/component-library/usePortalWallpaper` is the hook.
   `usePictureUrl` in

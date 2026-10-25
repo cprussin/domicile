@@ -8,7 +8,7 @@
 const ran = new Set();
 window.guardRan = (which) => ran.add(which);
 
-export const Shell = async (root) => {
+export const HostShell = async (root) => {
   // An inline script runs as it is inserted, if it runs at all.
   const inline = document.createElement("script");
   inline.textContent = 'guardRan("inline");';

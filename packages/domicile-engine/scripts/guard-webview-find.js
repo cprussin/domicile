@@ -17,9 +17,9 @@
 //   GUARD done                 the schedule finished
 //
 // The pages log `GUARD guest-shown path=…`; see the fixture server. Domicile
-// calls `Shell` once the module loads.
+// calls `HostShell` once the module loads.
 
-export const Shell = () => {
+export const HostShell = () => {
   /**
    * Reads a required query parameter. No default, so a misconfigured run fails.
    */

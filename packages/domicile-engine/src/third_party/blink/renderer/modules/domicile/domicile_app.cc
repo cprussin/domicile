@@ -20,6 +20,7 @@
 #include "third_party/blink/renderer/core/html/html_meta_element.h"
 #include "third_party/blink/renderer/core/script/classic_script.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_app_host.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_layer_script.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
@@ -33,10 +34,12 @@ namespace {
 // ShellURLLoaderFactory::AppDocument, which writes it.
 constexpr char kModuleMetaName[] = "domicile-app-module";
 
-// What runs the app, as JavaScript: a function of the module's URL and the
-// host. Reports a module that does not load, has no `main`, or whose `main`
-// throws, on the page and the console, as DomicileShell's does for a shell.
-constexpr char kRunApp[] = R"js((async (module, host) => {
+// What runs the app, as JavaScript: a function of the module's URL, the host
+// and the desktop layer, which makes the host the typed `AppDomicile` that
+// `main` is handed. Reports a module that does not load, has no `main`, or
+// whose `main` throws, on the page and the console, as DomicileShell's does
+// for a shell.
+constexpr char kRunApp[] = R"js((async (module, host, layer) => {
   const say = (what) => {
     console.error("domicile: " + what);
     const said = document.createElement("pre");
@@ -55,11 +58,18 @@ constexpr char kRunApp[] = R"js((async (module, host) => {
   if (typeof app.main !== "function") {
     say("the app module at " + module + " has no main export. An app is " +
       "a module whose main export is a function, which Domicile calls with " +
-      "the element to draw in and the host.");
+      "the element to draw in and the desktop.");
+    return;
+  }
+  let domicile;
+  try {
+    domicile = layer.appDesktop(host);
+  } catch (failure) {
+    say("the engine could not build the desktop to hand the app: " + failure);
     return;
   }
   try {
-    await app.main(document.body, host);
+    await app.main(document.body, domicile);
   } catch (failure) {
     say("the app's main threw: " + failure);
   }
@@ -145,9 +155,12 @@ void DomicileApp::Run() {
   }
 
   host_ = MakeGarbageCollected<DomicileAppHost>(*window);
+  // Undefined if the layer threw, which kRunApp reports.
+  v8::Local<v8::Value> layer = EvaluateDomicileLayer(*window);
   v8::Local<v8::Value> arguments[] = {
       V8String(isolate, module.GetString()),
       ToV8Traits<DomicileAppHost>::ToV8(script_state, host_.Get()),
+      layer.IsEmpty() ? v8::Undefined(isolate).As<v8::Value>() : layer,
   };
   std::ignore = V8ScriptRunner::CallFunction(
       run.As<v8::Function>(), window, v8::Undefined(isolate),
