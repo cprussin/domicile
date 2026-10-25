@@ -7,11 +7,11 @@ export const DOCS: readonly LinkColumn[] = [
     links: [
       { href: "#install", label: "Install" },
       {
-        href: repoFile("docs/RUNNING-A-DESKTOP.md"),
+        href: "/docs/manganese/install",
         label: "Your first five minutes",
       },
       {
-        href: repoFile("packages/manganese-window-management/docs/KEYS.md"),
+        href: "/docs/manganese/keys",
         label: "Keys cheat sheet",
       },
     ],
@@ -21,20 +21,18 @@ export const DOCS: readonly LinkColumn[] = [
   {
     links: [
       {
-        href: repoFile(
-          "packages/manganese-window-management/docs/WINDOW-MANAGEMENT.md",
-        ),
+        href: "/docs/manganese/windows",
         label: "Windows and workspaces",
       },
       {
-        href: repoFile("packages/manganese-launcher/docs/LAUNCHER.md"),
+        href: "/docs/manganese/launcher",
         label: "The launcher",
       },
       {
         href: repoFile("docs/architecture/WEB-APPS.md"),
         label: "Web apps and extensions",
       },
-      { href: repoFile("docs/DISPLAYS.md"), label: "Several monitors" },
+      { href: "/docs/manganese/displays", label: "Several monitors" },
     ],
     title: "Use it",
     tone: "accent",
@@ -43,15 +41,15 @@ export const DOCS: readonly LinkColumn[] = [
     links: [
       { href: "#configure", label: "Configure" },
       {
-        href: repoFile("packages/manganese-window-management/docs/KEYS.md"),
+        href: "/docs/manganese/keys",
         label: "Keybindings",
       },
       {
-        href: repoFile("packages/shell-manganese/docs/TOP-BAR.md"),
+        href: "/docs/manganese/top-bar",
         label: "The top bar",
       },
       {
-        href: repoFile("packages/manganese-wallpaper/docs/WALLPAPER.md"),
+        href: "/docs/manganese/wallpaper",
         label: "Theme and wallpaper",
       },
     ],
@@ -60,9 +58,9 @@ export const DOCS: readonly LinkColumn[] = [
   },
   {
     links: [
-      { href: repoFile("docs/RUNNING-A-DESKTOP.md"), label: "Troubleshooting" },
+      { href: "/docs/manganese/install", label: "Troubleshooting" },
       {
-        href: repoFile("docs/TTY-DEBUGGING.md"),
+        href: "/docs/manganese/gpu-and-displays",
         label: "GPU and display issues",
       },
       { href: `${REPO}/issues`, label: "Report a bug" },

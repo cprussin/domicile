@@ -9,20 +9,14 @@ item when it ships.
 
 ## In this repository
 
-1. **Revisit the docs for users.** Start with the README.
-   - A clearer reading path through the docs.
-   - Screenshots and videos of manganese.
+1. **Revisit the docs for users.** The site's docs pages
+   (`packages/site/src/docs/`) render today's markdown with a sidebar, and the
+   landing pages carry captures (`docs/media/`). Left:
+   - Rewrite the pages for users. Most still mix in how it works inside.
    - A short getting started guide: installing and setup.
-   - A short tour of the features:
-     - Window management.
-     - The built-in browser.
-     - Chrome extensions.
-     - The launcher.
-     - Web apps ([WEB-APPS.md](docs/architecture/WEB-APPS.md)).
-     - Top bar, system tray, notifications, clipboard history, wallpaper,
-       screen lock, several monitors, and the Settings and History apps.
+   - Captures for the rest of the tour: web apps, extensions, the bar,
+     notifications, several monitors, Settings, and configuring.
    - A short guide to customizing:
-     - Configuring manganese.
      - Composing manganese's packages into a custom desktop.
      - Writing a desktop from scratch
        ([WRITING-A-SHELL.md](docs/WRITING-A-SHELL.md)).

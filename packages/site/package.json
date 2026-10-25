@@ -3,6 +3,9 @@
     "@domicile-desktop/component-library": "workspace:*",
     "@phosphor-icons/react": "catalog:",
     "lowlight": "catalog:",
+    "mdast-util-from-markdown": "catalog:",
+    "mdast-util-gfm": "catalog:",
+    "micromark-extension-gfm": "catalog:",
     "next": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:"
@@ -16,6 +19,7 @@
     "@pandacss/preset-panda": "catalog:",
     "@testing-library/react": "catalog:",
     "@types/bun": "catalog:",
+    "@types/mdast": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
