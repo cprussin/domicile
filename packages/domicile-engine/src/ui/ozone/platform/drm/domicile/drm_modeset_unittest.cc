@@ -200,8 +200,29 @@ TEST(DrmModesetTest, ALayoutCanLeaveAConnectorDark) {
       Pointers(owned), {{.id = 1, .enabled = false, .origin = gfx::Point()},
                         {.id = 2, .enabled = true, .origin = gfx::Point()}});
 
-  ASSERT_EQ(params.size(), 1u);
-  EXPECT_EQ(params[0].id, 2);
+  ASSERT_EQ(params.size(), 2u);
+  EXPECT_EQ(params[0].id, 1);
+  EXPECT_EQ(params[0].mode, nullptr)
+      << "a connector left out of the modeset keeps scanning out its last "
+         "frame, so it must be asked for with no mode to turn it off";
+  EXPECT_EQ(params[1].id, 2);
+  EXPECT_NE(params[1].mode, nullptr);
+}
+
+TEST(DrmModesetTest, ABlankTurnsEveryConnectorOff) {
+  // An idle blank lists every connector with `enabled: false`.
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> owned;
+  owned.push_back(SnapshotBuilder().Id(1).Build());
+  owned.push_back(SnapshotBuilder().Id(2).Build());
+
+  const auto params = ModesetParamsFromSnapshots(
+      Pointers(owned), {{.id = 1, .enabled = false, .origin = gfx::Point()},
+                        {.id = 2, .enabled = false, .origin = gfx::Point()}});
+
+  ASSERT_EQ(params.size(), 2u)
+      << "an empty request is no modeset at all, and the screens stay lit";
+  EXPECT_EQ(params[0].mode, nullptr);
+  EXPECT_EQ(params[1].mode, nullptr);
 }
 
 TEST(DrmModesetTest, AConnectorNoLayoutNamesIsLeftDark) {
@@ -214,8 +235,11 @@ TEST(DrmModesetTest, AConnectorNoLayoutNamesIsLeftDark) {
   const auto params = ModesetParamsFromSnapshots(
       Pointers(owned), {{.id = 1, .enabled = true, .origin = gfx::Point()}});
 
-  ASSERT_EQ(params.size(), 1u);
+  ASSERT_EQ(params.size(), 2u);
   EXPECT_EQ(params[0].id, 1);
+  EXPECT_NE(params[0].mode, nullptr);
+  EXPECT_EQ(params[1].id, 8);
+  EXPECT_EQ(params[1].mode, nullptr);
 }
 
 TEST(DrmModesetTest, ALayoutStillDoesNotInventAModeForAConnectorWithNone) {

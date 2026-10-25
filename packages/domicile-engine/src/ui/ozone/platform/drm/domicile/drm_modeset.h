@@ -46,9 +46,10 @@ std::unique_ptr<display::DisplaySnapshot> VirtualSnapshot(
 // `layout` is the compositor's display config, which arrives over the
 // engine's C ABI because this process holds DRM master. When it is empty,
 // every readable connector lights, placed by `OriginsForLayout`. When it is
-// not, connectors it does not name stay dark; a newly plugged monitor lights
-// once the compositor answers the hotplug this modeset triggers. See
-// docs/DISPLAYS.md#which-connectors-light.
+// not, a connector it turns off or does not name is asked for with no mode,
+// which turns its CRTC off; a newly plugged monitor lights once the compositor
+// answers the hotplug this modeset triggers. An idle blank turns every
+// connector off this way. See docs/DISPLAYS.md#which-connectors-light.
 std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
     const std::vector<raw_ptr<display::DisplaySnapshot,
                               VectorExperimental>>& snapshots,
