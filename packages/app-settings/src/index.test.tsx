@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileAppHost } from "@domicile-desktop/sdk/app";
+import { appDesktop } from "@domicile-desktop/sdk/desktop/app-desktop";
+import type { DomicileAppHost } from "@domicile-desktop/sdk/domicile-host";
 import { act, within } from "@testing-library/react";
 
 import { main } from "./index";
@@ -21,7 +22,7 @@ describe(main, () => {
     const root = document.createElement("div");
     document.body.append(root);
     await act(async () => {
-      await main(root, host);
+      await main(root, appDesktop(host));
     });
     expect(document.title).toBe("Settings");
     expect(

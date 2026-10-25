@@ -11,7 +11,7 @@
 // - It logs each `domicile-target-url-change` with the element's `targetUrl`
 //   in brackets, so an empty one reads `url=[]`.
 
-export const Shell = () => {
+export const HostShell = () => {
   /**
    * Reads a required query parameter. Throws when missing: a default would
    * measure a setup the guard did not ask for.

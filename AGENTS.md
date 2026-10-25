@@ -178,7 +178,7 @@ How to use, configure and debug Domicile. No authority level.
 | [/docs/LAUNCHER.md](/docs/LAUNCHER.md) | Launcher config: `files.omit`, `applications.omit`, `X-Domicile-Preview`, bookmarks and their icons. |
 | [/docs/WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md) | Writing a shell outside this repo. Read before changing anything a shell can see (module name, document, SDK surface). Example: `examples/minimal-shell`. |
 | [/docs/SHELL-BROWSER-WINDOWS.md](/docs/SHELL-BROWSER-WINDOWS.md) | `<webview>` for shell authors: state properties and events, focus, keyboard, new windows, close requests, file pickers. |
-| [/docs/SHELL-EXTENSIONS.md](/docs/SHELL-EXTENSIONS.md) | Extensions for shell authors: the extensions list, `activateExtension`, popups, the tab/window mapping. |
+| [/docs/SHELL-EXTENSIONS.md](/docs/SHELL-EXTENSIONS.md) | Extensions for shell authors: the extensions list, `extensions.activate`, popups, the tab/window mapping. |
 | [/docs/SHELL-DESKTOP-EVENTS.md](/docs/SHELL-DESKTOP-EVENTS.md) | Desktop events for shell authors: displays, theme, system tray, notifications. |
 | [/docs/PORTALS.md](/docs/PORTALS.md) | Domicile as the only `xdg-desktop-portal` backend: the request channel, the shell's dialogs, each interface and the decisions behind it. |
 | [/docs/SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md) | Files, processes and D-Bus for shell authors: the page API, the system libraries, the wire and the security rules. |

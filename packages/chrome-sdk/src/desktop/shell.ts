@@ -4,10 +4,10 @@
 import { z } from "zod";
 
 import type { DomicileHost } from "../domicile-host";
-import type { System } from "../system";
 import { memoizeLast } from "./memoize-last";
 import type { On } from "./subscribe";
 import { hostEvent, on } from "./subscribe";
+import type { System } from "./system-calls";
 
 export type ShellListeners = {
   optionschange: () => void;

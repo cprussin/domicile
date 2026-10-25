@@ -2,10 +2,10 @@
 // showing a page that asks for a permission.
 //
 // A module on the shell's origin, since only that origin may ask for a guest
-// (see guard-webview-framing.js). The shell document calls `Shell` once the
+// (see guard-webview-framing.js). The shell document calls `HostShell` once the
 // module loads.
 
-export const Shell = () => {
+export const HostShell = () => {
   /** Reads a required query parameter. */
   const required = (parameters, name) => {
     const value = parameters.get(name);

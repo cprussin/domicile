@@ -3,13 +3,8 @@
 // Domicile calls the `Shell` export with the element to draw `<app>` elements
 // in. See /docs/WRITING-A-SHELL.md.
 
-import type { DomicileWindow } from "@domicile-desktop/sdk/domicile-host";
-import {
-  answerPortalRequest,
-  PortalAnswer,
-  PortalKind,
-  watchPortalRequests,
-} from "@domicile-desktop/sdk/portal";
+import type { ClientWindow } from "@domicile-desktop/sdk/desktop/windows";
+import { PortalAnswer, PortalKind } from "@domicile-desktop/sdk/portal";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 
 /** Draws the desktop into `root`, Domicile's empty `<body>`. */
@@ -20,9 +15,9 @@ export const Shell: ShellModule = (root, domicile) => {
   /** Mounted `<app>` elements by app id. */
   const mounted = new Map<string, HTMLElement>();
 
-  /** Shows what `domicile.windows` lists, in its order. */
+  /** Shows what `domicile.windows.list` holds, in its order. */
   const show = () => {
-    const windows = domicile.windows;
+    const windows = domicile.windows.list;
     for (const [appId, element] of mounted) {
       if (!windows.some((window) => window.appId === appId)) {
         element.remove();
@@ -39,26 +34,28 @@ export const Shell: ShellModule = (root, domicile) => {
         root.append(element);
         mounted.set(window.appId, element);
       }
-      if (window.parent !== null) {
+      if (window.parent !== undefined) {
         placePopup(element, window, windows);
       }
     }
   };
 
   show();
-  domicile.addEventListener("windowschanged", show);
+  domicile.windows.on("change", show);
 
   // This shell draws no dialogs, so it refuses what applications ask through
   // the desktop portal rather than leave them waiting. Inhibitors ask nothing.
   // A React shell mounts `PortalDialogs` from
   // `@domicile-desktop/component-library` instead.
-  watchPortalRequests(domicile, (requests) => {
-    for (const request of requests) {
+  const refuse = () => {
+    for (const request of domicile.portals.requests ?? []) {
       if (request.kind !== PortalKind.Inhibit) {
-        answerPortalRequest(domicile, request.id, PortalAnswer.Refused());
+        domicile.portals.answer(request.id, PortalAnswer.Refused());
       }
     }
-  });
+  };
+  refuse();
+  domicile.portals.on("change", refuse);
 };
 
 /**
@@ -68,8 +65,8 @@ export const Shell: ShellModule = (root, domicile) => {
  */
 const placePopup = (
   element: HTMLElement,
-  popup: DomicileWindow,
-  windows: readonly DomicileWindow[],
+  popup: ClientWindow,
+  windows: readonly ClientWindow[],
 ): void => {
   const [x, y] = originOf(popup, windows);
   Object.assign(element.style, {
@@ -82,8 +79,8 @@ const placePopup = (
 
 /** The absolute origin of `window`'s box. */
 const originOf = (
-  window: DomicileWindow,
-  windows: readonly DomicileWindow[],
+  window: ClientWindow,
+  windows: readonly ClientWindow[],
 ): readonly [x: number, y: number] => {
   const parent = windows.find((candidate) => candidate.appId === window.parent);
   const [x, y] = parent === undefined ? [0, 0] : originOf(parent, windows);

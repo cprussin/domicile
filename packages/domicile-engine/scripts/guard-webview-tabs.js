@@ -21,7 +21,7 @@
 // The guard runs twice, focusing each window, so an active tab picked by
 // creation order gives a wrong answer in one of the runs.
 
-export const Shell = (_root, desktop) => {
+export const HostShell = (_root, desktop) => {
   const say = (what) => {
     console.log(`GUARD ${what}`);
   };

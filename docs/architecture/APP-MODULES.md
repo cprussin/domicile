@@ -1,7 +1,7 @@
 # App modules
 
 An app is a JavaScript module whose `main` export Domicile calls with a root
-element and a host, as it calls a shell's `Shell`. `domicile run-app
+element and the desktop, as it calls a shell's `Shell`. `domicile run-app
 /path/to/entry.js` opens it in an app window. History and Settings are app
 modules ([HISTORY.md](/docs/HISTORY.md), [SETTINGS.md](/docs/SETTINGS.md)),
 so Domicile installs no extensions of its own.
@@ -14,18 +14,17 @@ domicile run-app ./dist/history.js
   ─▶ engine      {"type":"run_app","version":1,"root":"/abs/dist","module":"history.js"}  command socket
        registers app-<id> → /abs/dist
        opens an app window, pinned to app-<id>, at domicile://app-<id>/
-  ─▶ app page    main(document.body, host)
-       host.callSystem() ─▶ engine (opaque relay) ─▶ compositor, as an app connection
+  ─▶ app page    main(document.body, domicile)
+       domicile.files, … ─▶ engine (opaque relay) ─▶ compositor, as an app connection
 ```
 
 ### The module
 
 ```ts
-import { system } from "@domicile-desktop/sdk/system";
+import type { AppMain } from "@domicile-desktop/sdk/app";
 
-export const main = async (root: HTMLElement, host: DomicileAppHost) => {
-  const files = system(host);
-  const notes = await files.readTextFile("/home/me/notes.txt");
+export const main: AppMain = async (root, domicile) => {
+  const notes = await domicile.files.readText("/home/me/notes.txt");
   root.textContent = notes.unwrapOr("no notes");
 };
 ```
@@ -65,9 +64,10 @@ export const main = async (root: HTMLElement, host: DomicileAppHost) => {
 
 ### The host
 
-`DomicileAppHost` has `callSystem()` and the `system` event, the shell's
-system access ([SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md)) and
-nothing else. `system(host)` from the SDK takes either host.
+`main` gets an `AppDomicile`: the shell's `files`, `processes` and `dbus`
+([SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md)) and nothing else.
+The engine builds it with the SDK's layer over a `DomicileAppHost`, which has
+`callSystem()` and the `system` event only.
 
 | An app may | An app may not |
 |---|---|

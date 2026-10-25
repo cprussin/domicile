@@ -9,28 +9,28 @@ What a shell does when the screens blank and when the desktop locks. Part of
 ## Idle
 
 After `idle.blank_after_seconds` without input, the screens turn off and
-`domicile.idle` becomes `true`:
+`domicile.session.idle` becomes `true`:
 
 ```ts
 const idle = () => {
   // true: the screens are off. false: input turned them back on.
-  document.body.classList.toggle("idle", domicile.idle === true);
+  document.body.classList.toggle("idle", domicile.session.idle === true);
 };
 idle();
-domicile.addEventListener("idlechanged", idle);
+domicile.session.on("idlechange", idle);
 ```
 
 - Use this attribute to detect idle. Only the compositor sees all input. The
   page stays visible while the screens are off, so `visibilityState` and idle
   detectors are wrong.
 - A newly loaded page reads the current state.
-- `idlechanged` fires as the screens go dark. To act before that, listen for
+- `idlechange` fires as the screens go dark. To act before that, listen for
   the [warning](#warning-before-blanking).
 - Undo idle changes when `idle` is `false`. The repaint finishes before the screens
   relight.
 - Input still reaches clients while blanked. Blanking does not lock; see
   [Locking](#locking).
-- With no timeout configured, `idle` stays `null`.
+- With no timeout configured, `idle` stays `undefined`.
 
 ### Warning before blanking
 
@@ -38,10 +38,8 @@ With `idle.warn_before_seconds` set, the compositor warns the shell before the
 screens go dark:
 
 ```ts
-import { system } from "@domicile-desktop/sdk/system";
-
 // Awaited: both arms return a promise.
-await (await system(domicile).idleWarnings()).match({
+await (await domicile.session.idleWarnings()).match({
   Err: async (error) => {
     console.error("no idle warnings", error);
   },
@@ -65,26 +63,26 @@ await (await system(domicile).idleWarnings()).match({
 
 The compositor locks the desktop after `idle.lock_after_seconds` without
 input, before the machine sleeps, when logind locks the session, or when the
-shell calls `lock()`. That timeout is separate from
+shell calls `session.lock()`. That timeout is separate from
 blanking. The user's password unlocks it, checked by PAM.
 
 ```ts
-domicile.addEventListener("lockedchanged", () => {
-  setLocked(domicile.locked === true);
+domicile.session.on("lockchange", () => {
+  setLocked(domicile.session.locked === true);
 });
 
-domicile.unlock(typed); // submit a passphrase
-domicile.lock();        // lock now; the lock screen goes up when `locked` is true
+domicile.session.unlock(typed); // submit a passphrase
+domicile.session.lock();        // lock now; the lock screen goes up when `locked` is true
 ```
 
 The compositor enforces the lock. While `locked` is `true`:
 
 - No client receives any key, click, scroll or pointer motion.
-- `closeApp`, `spawn` and `copyClipboardEntry` do nothing and log a warning.
-- `searchFiles` never settles. Retry once `locked` is `false`.
-- `fetchWithCookies` rejects. The engine refuses it, from the compositor's
+- `windows.close`, `processes.launch` and `clipboard.copy` do nothing and log a warning.
+- `files.search` never settles. Retry once `locked` is `false`.
+- `browser.fetch` rejects. The engine refuses it, from the compositor's
   `locked` message.
-- `setTheme` still works.
+- `theme.set` still works.
 - System calls fail with `locked`, except reads under `/sys`, the calls
   `system-battery`, `system-backlight` and `system-audio` make for the
   battery, brightness and output volume, and `system-bluetooth`'s watch
@@ -98,12 +96,11 @@ the page in devtools does not unlock the desktop.
 - Your page still receives keys, so it can take a passphrase in a field.
 - `unlock` sends it to the compositor. On success, `locked` becomes `false` on
   every shell. Clear the lock screen then, not on your own submit.
-- A passphrase that did not unlock fires `lockedchanged` with `locked` still
+- A passphrase that did not unlock fires `lockchange` with `locked` still
   `true`. Treat that while a passphrase is pending as a rejection: clear the
   field.
-- To say why, listen with `unlockRefusals()` from
-  `@domicile-desktop/sdk/system`. Each refusal arrives before its
-  `lockedchanged`:
+- To say why, listen with `session.unlockRefusals()`. Each refusal arrives
+  before its `lockchange`:
 
   ```ts
   const hear = async (items: ReadableStream<UnlockRefused>) => {
@@ -113,7 +110,7 @@ the page in devtools does not unlock the desktop.
     }
   };
 
-  (await system(domicile).unlockRefusals()).match({
+  (await domicile.session.unlockRefusals()).match({
     Err: (error) => console.error(error),
     Ok: ({ items }) => {
       hear(items).catch((error: unknown) => console.error(error));

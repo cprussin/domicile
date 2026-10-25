@@ -14,9 +14,9 @@
 // The guard's probe reads the color the extension paints. Only a tab the click
 // granted activeTab can be painted.
 //
-// Domicile's document calls `Shell` once the module has loaded.
+// Domicile's document calls `HostShell` once the module has loaded.
 
-export const Shell = (_root, desktop) => {
+export const HostShell = (_root, desktop) => {
   const say = (what) => {
     console.log(`GUARD ${what}`);
   };

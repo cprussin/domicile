@@ -24,6 +24,7 @@
 #include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
 #include "third_party/blink/renderer/core/script/classic_script.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_host.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_layer_script.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
@@ -38,8 +39,13 @@ namespace {
 constexpr char kModuleMetaName[] = "domicile-shell-module";
 
 // What runs the shell, as JavaScript: a function of the module's URL, the
-// desktop and `drawn`, evaluated without binding it to any name -- see
-// DomicileShell.
+// host, the desktop layer and `drawn`, evaluated without binding it to any
+// name -- see DomicileShell. The layer makes the host the typed `Domicile`
+// that `Shell` is handed; see EvaluateDomicileLayer.
+//
+// A module with no `Shell` but a `HostShell` is handed the host itself. Only
+// the engine's guards (`scripts/guard-*.js`) export one: they test the host,
+// and the layer over it is the SDK's to test.
 //
 // It calls `drawn` however it ends: once `Shell` returns, or once it has said
 // why the shell did not run. The document draws nothing until then, and the
@@ -57,7 +63,7 @@ constexpr char kModuleMetaName[] = "domicile-shell-module";
 // ONLY UNTIL `Shell` RETURNS. After that the page belongs to the shell, and a
 // report painted over a working desktop would be worse than the blank window
 // this exists to replace.
-constexpr char kRunShell[] = R"js((async (module, desktop, drawn) => {
+constexpr char kRunShell[] = R"js((async (module, host, layer, drawn) => {
   const say = (what) => {
     console.error("domicile: " + what);
     const said = document.createElement("pre");
@@ -78,16 +84,30 @@ constexpr char kRunShell[] = R"js((async (module, desktop, drawn) => {
     if (shell === undefined) {
       return;
     }
-    if (typeof shell.Shell !== "function") {
+    if (typeof shell.Shell === "function") {
+      let desktop;
+      try {
+        desktop = layer.desktop(host);
+      } catch (failure) {
+        say("the engine could not build the desktop to hand the shell: " +
+          failure);
+        return;
+      }
+      try {
+        shell.Shell(document.body, desktop);
+      } catch (failure) {
+        say("the shell's Shell threw: " + failure);
+      }
+    } else if (typeof shell.HostShell === "function") {
+      try {
+        shell.HostShell(document.body, host);
+      } catch (failure) {
+        say("the shell's HostShell threw: " + failure);
+      }
+    } else {
       say("the shell module at " + module + " has no Shell export. A shell " +
         "is a module whose Shell export is a function, which Domicile calls " +
         "with the element to draw in and the desktop.");
-      return;
-    }
-    try {
-      shell.Shell(document.body, desktop);
-    } catch (failure) {
-      say("the shell's Shell threw: " + failure);
     }
   } finally {
     drawn();
@@ -221,9 +241,12 @@ void DomicileShell::Run() {
   desktop_ = MakeGarbageCollected<DomicileHost>(*window);
   // Before the shell runs, so the desktop's listeners come before its own.
   desktop_->RouteInput();
+  // Undefined if the layer threw, which kRunShell reports.
+  v8::Local<v8::Value> layer = EvaluateDomicileLayer(*window);
   v8::Local<v8::Value> arguments[] = {
       V8String(isolate, module.GetString()),
       ToV8Traits<DomicileHost>::ToV8(script_state, desktop_.Get()),
+      layer.IsEmpty() ? v8::Undefined(isolate).As<v8::Value>() : layer,
       MakeGarbageCollected<ShellDrawn>(*this)->ToV8Function(script_state),
   };
   std::ignore = V8ScriptRunner::CallFunction(

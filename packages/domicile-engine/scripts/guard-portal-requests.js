@@ -17,7 +17,7 @@ const answer = (host, event) => {
   );
 };
 
-export const Shell = (_root, desktop) => {
+export const HostShell = (_root, desktop) => {
   const host = desktop;
   if (host === null || host === undefined) {
     throw new Error(

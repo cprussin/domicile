@@ -14,7 +14,7 @@
 //   may never list them, and the claim is that the request and the answer
 //   cross, whatever is plugged in.
 
-export const Shell = () => {
+export const HostShell = () => {
   /**
    * Reads a required query parameter. Throws when missing: a default would
    * measure a setup the guard did not ask for.

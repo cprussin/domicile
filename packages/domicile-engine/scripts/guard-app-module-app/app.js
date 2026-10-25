@@ -1,27 +1,36 @@
 // The app module guard-app-module.sh runs with `run_app`. Domicile calls
-// `main` with the document's body and a DomicileAppHost.
+// `main` with the document's body and the `AppDomicile` the SDK's layer
+// builds over a DomicileAppHost.
 //
-//   GUARD app-main narrow=<bool>   main ran; narrow when the host has no
-//                                  `spawn`, so it is not the shell's
-//   GUARD app-answered data=…      the stand-in compositor's answer to the
-//                                  call reached the app
+//   GUARD app-main narrow=<bool>   main ran; narrow when the desktop has no
+//                                  `windows`, so it is not the shell's
+//   GUARD app-answered written=<bool>  the stand-in compositor's answer to
+//                                  the call reached the app, through the
+//                                  layer
 //   GUARD app-fetch own=… shell=…  whether fetch() read the app's own
 //                                  file and the shell's: read, empty or
 //                                  refused
 
-export const main = (root, host) => {
+export const main = (root, domicile) => {
   const say = (what) => {
     console.log(`GUARD ${what}`);
   };
   root.textContent = "app module";
-  host.addEventListener("system", (event) => {
-    say(`app-answered data=${event.data}`);
-  });
-  say(`app-main narrow=${host.spawn === undefined}`);
-  host.callSystem(1, JSON.stringify({ call: "stat", path: "/" }));
+  say(
+    `app-main narrow=${domicile.windows === undefined && typeof domicile.files?.write === "function"}`,
+  );
+  // The stand-in compositor answers every call `written`.
+  domicile.files
+    .write("/guard-app-module", "")
+    .then((written) => {
+      say(`app-answered written=${written.isOk()}`);
+    })
+    .catch((error) => {
+      console.error("guard-app-module: the app's call failed", error);
+    });
   Promise.all([
     reading("app.js", "export const main"),
-    reading("domicile://shell/guard-app-module.js", "export const Shell"),
+    reading("domicile://shell/guard-app-module.js", "export const HostShell"),
   ])
     .then(([own, shell]) => {
       say(`app-fetch own=${own} shell=${shell}`);

@@ -7,7 +7,7 @@
 const settled = (promise, read) =>
   promise.then(read, (error) => error?.name ?? String(error));
 
-export const Shell = (_root, desktop) => {
+export const HostShell = (_root, desktop) => {
   const host = desktop;
   if (host === null || host === undefined) {
     throw new Error(

@@ -54,7 +54,7 @@ const EVENT_NAMES = [
 // Under guard-windows-state.sh's 60-second wait for this page's last line.
 const READ_DEADLINE_MS = 30_000;
 
-export const Shell = (_root, desktop) => {
+export const HostShell = (_root, desktop) => {
   const host = desktop;
   if (host === null || host === undefined) {
     throw new Error(

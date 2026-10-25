@@ -13,9 +13,9 @@
 //   GUARD shell-loaded                  this module ran
 //   GUARD window id=… app=… url=…       a listed window, with its `isApp`
 //
-// The engine's document calls `Shell` once the module loads.
+// The engine's document calls `HostShell` once the module loads.
 
-export const Shell = (_root, desktop) => {
+export const HostShell = (_root, desktop) => {
   const say = (what) => {
     console.log(`GUARD ${what}`);
   };

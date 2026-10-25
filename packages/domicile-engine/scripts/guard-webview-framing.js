@@ -7,9 +7,9 @@
 // The control is not here: an <iframe> on a domicile:// page never loads http
 // pages. See guard-webview-framing-server.py.
 //
-// Domicile calls `Shell` once the module loads.
+// Domicile calls `HostShell` once the module loads.
 
-export const Shell = () => {
+export const HostShell = () => {
   /**
    * Reads a required query parameter. No default, so a misconfigured run fails.
    */

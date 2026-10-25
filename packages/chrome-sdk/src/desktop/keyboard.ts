@@ -2,9 +2,9 @@
 // modifiers. See docs/architecture/KEYBINDINGS.md.
 
 import type { DomicileHost, DomicileShortcutEvent } from "../domicile-host";
-import type { System } from "../system";
 import type { On } from "./subscribe";
 import { hostEvent, on } from "./subscribe";
+import type { System } from "./system-calls";
 
 /** A grabbed chord, pressed or let go. `keycode` is an evdev code. */
 export type Shortcut = {

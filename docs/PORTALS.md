@@ -15,8 +15,8 @@ app ──org.freedesktop.portal.*──▶ xdg-desktop-portal ──impl.portal
                                     HostMessage::PortalRequests { items } ▼
                                          engine: `portalrequests` event (all kinds)
                                                                          ▼
-                        shell: domicile.addEventListener("portalrequests") → <PortalDialogs>
-                        ◀── answerPortalRequest(id, answer) ── engine ── compositor ──▶ Response
+                        shell: domicile.portals.on("change") → <PortalDialogs>
+                        ◀── portals.answer(id, answer) ──── engine ── compositor ──▶ Response
 ```
 
 One request channel carries all dialogs. Each interface's backend builds on it.
@@ -161,9 +161,9 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   under `$XDG_STATE_HOME/domicile/`.
 - **Global shortcuts are the shell's grabs.** Only the engine sees keys, so the
   compositor lists each bound chord in the `PortalRequests` push
-  (`shortcuts`); `<PortalDialogs />` grabs it with `grabShortcut` and answers
+  (`shortcuts`); `<PortalDialogs />` grabs it with `keyboard.grab` and answers
   `pressed` under its id on `shortcut`, and `released` on `shortcutrelease`.
-  It gives a chord back with `ungrabShortcut` once no app holds it.
+  It gives a chord back with `keyboard.ungrab` once no app holds it.
   The compositor signals `Activated` and `Deactivated` for them. A locked desk
   refuses both answers.
   - The review dialog spells each chord as `bindKeys` does and flags one the

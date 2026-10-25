@@ -27,6 +27,7 @@
       "!**/coverage/**/*",
       "!**/target/**/*",
       "!**/node_modules/**/*",
+      "!packages/domicile-engine/src/third_party/blink/renderer/modules/domicile/domicile_layer.js",
       "!**/*.tsbuildinfo"
     ]
   },

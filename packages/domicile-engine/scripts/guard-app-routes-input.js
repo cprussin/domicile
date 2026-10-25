@@ -28,7 +28,7 @@ const place = (appId, style) => {
   return element;
 };
 
-export const Shell = (_root, desktop) => {
+export const HostShell = (_root, desktop) => {
   if (desktop === null || desktop === undefined) {
     throw new Error(
       "guard-app-routes-input: no desktop was handed to Shell, so this" +

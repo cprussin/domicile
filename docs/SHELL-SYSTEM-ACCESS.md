@@ -5,7 +5,7 @@ D-Bus client. Desktop features (battery, audio, network, apps) are TypeScript
 libraries on them, so a shell adds a feature without a change to Domicile.
 
 ```
-shell page ─ domicile.callSystem() ─▶ engine (opaque relay) ─────▶ compositor
+shell page ─ domicile.files, … ────▶ engine (opaque relay) ─────▶ compositor
                                                                   ├─ files
                                                                   ├─ processes
                                                                   └─ D-Bus (session, system)
@@ -14,40 +14,41 @@ shell page ─ domicile.callSystem() ─▶ engine (opaque relay) ────�
 ## Page API
 
 ```ts
-import { system } from "@domicile-desktop/sdk/system";
+import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 
-export const Shell = async (root, domicile) => {
-  const host = system(domicile);
-  const charge = await host.readTextFile("/sys/class/power_supply/BAT0/capacity");
-  const changes = await host.spawn(["pactl", "subscribe"]);
+export const Shell: ShellModule = async (root, domicile) => {
+  const charge = await domicile.files.readText(
+    "/sys/class/power_supply/BAT0/capacity",
+  );
+  const changes = await domicile.processes.spawn(["pactl", "subscribe"]);
 };
 ```
 
 - Each call resolves a `Result<T, SystemError>`. A process's output and a
   watch's changes are `ReadableStream`s. The SDK's types are the reference.
-- `dbusCall()` and `dbusMatch()` reach the session and system buses. A body is
+- `dbus.call()` and `dbus.match()` reach the session and system buses. A body is
   JSON read against its D-Bus signature; `domicile_host::dbus_json` documents
   the mapping.
-- `screenshot()` takes an interactive Screenshot portal screenshot as if the
+- `capture.screenshot()` takes an interactive Screenshot portal screenshot as if the
   shell were the app: `<PortalDialogs />` draws the dialog, and the call
   resolves with `ScreenshotKept.Saved(path)`, `ScreenshotKept.Copied()` when
   the user pressed Ctrl+C, or fails `canceled`.
-- `previewWindow()` draws a window as it last drew itself, or a browser
+- `capture.preview()` draws a window as it last drew itself, or a browser
   window's page, as a PNG `data:` URL. The pickers preview a window that is
   not on screen with it.
-- `setWindowStates()` and `windowRequests()` set a window's tiled,
+- `windows.setStates()` and `windows.requests()` set a window's tiled,
   maximized and fullscreen states and hear clients ask for them; see
   [WRITING-A-SHELL.md](WRITING-A-SHELL.md#window-states).
-- `addVirtualMonitor()` adds a monitor with no connector, which the desk
+- `displays.addVirtual()` adds a monitor with no connector, which the desk
   extends onto, until `remove()` or the page goes away. Casting to a TV uses
   it; see [CASTING-TO-TVS.md](CASTING-TO-TVS.md).
-- `keymaps()` streams the config's keymaps and the active one;
-  `selectKeymap()` switches to another
+- `keyboard.keymaps()` streams the config's keymaps and the active one;
+  `keyboard.selectKeymap()` switches to another
   ([SHELL-CONFIG.md](SHELL-CONFIG.md#keyboard)).
-- `shellCommands()` streams each command `domicile send-shell` sends.
+- `shell.commands()` streams each command `domicile send-shell` sends.
   `bindKeys` listens for you and passes them to `onCommand`; see
   [KEYBINDINGS.md](architecture/KEYBINDINGS.md#commands-from-a-terminal).
-- `unlockRefusals()` streams why each passphrase did not unlock the desktop
+- `session.unlockRefusals()` streams why each passphrase did not unlock the desktop
   ([SHELL-IDLE-AND-LOCK.md](SHELL-IDLE-AND-LOCK.md#drawing-the-lock-screen)).
 - Spawned programs are found on the compositor's `PATH`. The Nix wrapper
   appends `pactl`, `parec` and `curl`, so a user's own copies win.
@@ -65,18 +66,14 @@ export const Shell = async (root, domicile) => {
 
 ## The browser's cookies
 
-`fetchWithCookies(url, method, headers, body, sapisidHashOrigin)` sends a
+`browser.fetch(url, { method, headers, body, sapisidHashOrigin })` sends a
 GET or a POST to an https address from the engine's browser process with the
 cookies of the profile the ordinary browser windows use. A bar item reads a site the user signed in to
 in a browser window, with no sign-in of its own.
 
 ```ts
-const inbox = await domicile.fetchWithCookies(
+const inbox = await domicile.browser.fetch(
   "https://mail.google.com/mail/?authuser=me%40gmail.com",
-  "GET",
-  [],
-  null,
-  null,
 );
 // { status: 200, url: "https://mail.google.com/mail/u/0/", body: "<!doctype…" }
 ```
@@ -84,7 +81,7 @@ const inbox = await domicile.fetchWithCookies(
 - Resolves with `status`, the final `url` after redirects, and the `body` as
   text, whatever the status. Rejects with a `NetworkError` for a network
   failure, a refusal, or an answer over 8 MiB.
-- `method` is `"GET"` or `"POST"`. A GET sends no body, and comes from no
+- `method` is `"GET"` (the default) or `"POST"`. A GET sends no body, and comes from no
   origin (`Sec-Fetch-Site: none`). A POST sends `body` with the page's
   `Content-Type`, as a same-origin CORS request from the address's own
   origin: that `Origin`, `Sec-Fetch-Site: same-origin`, `Sec-Fetch-Mode:
@@ -148,8 +145,8 @@ recorded output.
 - Types: `domicile_protocol::SystemRequest` and its neighbors. The executor is
   `domicile_host::system`, one per chrome connection, on the connection's
   thread.
-- The engine relays both as opaque strings: `callSystem(id, request)` and the
-  `system` event, a `MessageEvent` whose `data` is the line. Only the engine
+- The engine relays both as opaque strings: the host's
+  `callSystem(id, request)` and its `system` event, a `MessageEvent` whose `data` is the line. Only the engine
   writes `compositor_gone`, for the calls of a compositor that hung up. A new request
   type changes `domicile-protocol`, the compositor and the SDK, not the
   engine.
@@ -162,10 +159,10 @@ The shell is trusted code: it can already spawn any argv. These rules keep
 that trust from reaching anything else.
 
 - **Binding:** only the `domicile` that the engine hands to `Shell` in a
-  `domicile://shell` document has `callSystem()`, through the control
+  `domicile://shell` document reaches the system, through the control
   channel's own binding. `<webview>` guests, extensions and `domicile://home`
-  never do. An app module's `DomicileAppHost` has it too, for files,
-  processes and D-Bus only
+  never do. An app module's `AppDomicile` does too, for files, processes
+  and D-Bus only
   ([APP-MODULES.md](architecture/APP-MODULES.md#the-host)).
 - **Content Security Policy:** `domicile://shell` serves `script-src 'self'`.
   A script injected through a notification body, window title or file name
@@ -183,7 +180,7 @@ that trust from reaching anything else.
       locked hears them after unlock
     - `idle_warnings`, so a lock screen can dim
     - `unlock_refusals`, which a lock screen needs while locked
-    - `set_window_states`, like `setAppBounds`
+    - `set_window_states`, like `windows.setBounds`
     - `keymaps` and `select_keymap`, so a lock screen shows and switches the
       keymap the passphrase is typed on
   - `stdin` is dropped; `unwatch`, `close_stdin` and `kill` are allowed

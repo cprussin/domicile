@@ -7,7 +7,7 @@
 //   GUARD focus-request target=…   the request reached this document, and from
 //                                  which element
 
-export const Shell = () => {
+export const HostShell = () => {
   const say = (what) => {
     console.log(`GUARD ${what}`);
   };

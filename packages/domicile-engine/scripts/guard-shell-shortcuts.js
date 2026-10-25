@@ -9,7 +9,7 @@
 //   GUARD popstate         history moved (Alt+Left)
 //   GUARD resized          the viewport changed (F11 or zoom)
 
-export const Shell = () => {
+export const HostShell = () => {
   const say = (what) => {
     console.log(`GUARD ${what}`);
   };
