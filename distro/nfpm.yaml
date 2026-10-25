@@ -114,6 +114,15 @@ overrides:
       - libgl1-mesa-dri
       - libgtk-3-0
       - libpulse0
+      # Miracast casts: Wi-Fi Direct, LAN TVs, and the encoding pipeline.
+      - network-manager
+      - avahi-daemon
+      - gstreamer1.0-tools
+      - gstreamer1.0-plugins-good
+      - gstreamer1.0-plugins-bad
+      - gstreamer1.0-plugins-ugly
+      - gstreamer1.0-libav
+      - gstreamer1.0-pipewire
     # AppArmor 4 {
     scripts:
       postinstall: "@distro@/postinstall-deb.sh"
@@ -158,6 +167,14 @@ overrides:
       - gsettings-desktop-schemas
       - libgtk-3.so.0()(64bit)
       - libpulse.so.0()(64bit)
+      # Miracast casts: Wi-Fi Direct, LAN TVs, and the encoding pipeline.
+      - NetworkManager
+      - avahi
+      - gstreamer1
+      - gstreamer1-plugins-good
+      - gstreamer1-plugins-bad-free
+      - gstreamer1-plugin-libav
+      - pipewire-gstreamer
 
   # nfpm writes no `optdepend`; `distro/arch-optdepends.sh` adds the list in
   # `distro/arch-optdepends`.

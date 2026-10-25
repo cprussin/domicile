@@ -7,3 +7,10 @@ libpulse: pactl, for the volume readout
 curl: bookmark icons and the captive portal check
 xdg-desktop-portal: portals for apps
 gsettings-desktop-schemas: the engine's GSettings schemas, without which it logs errors
+networkmanager: Miracast casts to TVs over Wi-Fi Direct
+avahi: Miracast casts to TVs on the LAN
+gst-plugins-good: Miracast casts
+gst-plugins-bad: Miracast casts
+gst-plugins-ugly: Miracast casts without a hardware H.264 encoder
+gst-libav: sound in Miracast casts
+gst-plugin-pipewire: Miracast casts

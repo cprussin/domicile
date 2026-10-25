@@ -127,6 +127,9 @@ launcher shutdown "$ROOT/distro/nix/launcher"
 launcher reboot "$ROOT/distro/nix/launcher"
 launcher logout "$ROOT/distro/nix/launcher"
 
+fill "$ROOT/distro/nix/net.domicile.Miracast.service" \
+  "$USR/share/dbus-1/services/net.domicile.Miracast.service"
+
 install -D -m 644 "$ROOT/distro/nix/domicile.portal" \
   "$USR/share/xdg-desktop-portal/portals/domicile.portal"
 install -D -m 644 "$ROOT/distro/nix/domicile-portals.conf" \

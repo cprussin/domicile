@@ -109,6 +109,10 @@ engine or Smithay:
 - `domicile-launch`: the `domicile` binary. Decides which page to serve, which
   Ozone platform to use, where the components are and how to start them. The
   `[[bin]]` only does I/O; all decisions live in tested modules.
+- `domicile-miracast`: the Miracast service, which D-Bus starts for the
+  shell's `Cast` bar item. Its RTSP session and format negotiation are pure
+  and tested; NetworkManager, Avahi, the portal and GStreamer are reached at
+  run time. See [CASTING-TO-TVS.md](CASTING-TO-TVS.md).
 - `domicile-test-chrome`, `domicile-test-client`: a chrome and a Wayland client
   for integration tests.
 
