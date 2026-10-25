@@ -31,6 +31,7 @@ const EVENT_NAMES = [
   "shortcutrelease",
   "focusrequested",
   "browserwindowschanged",
+  "castsinkschanged",
   "displayschanged",
   "windowschanged",
   "focusedwindowchanged",

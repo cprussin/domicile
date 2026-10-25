@@ -90,6 +90,10 @@
       "types": "./dist/desktop/files.d.ts",
       "default": "./dist/desktop/files.js"
     },
+    "./desktop/google-cast": {
+      "types": "./dist/desktop/google-cast.d.ts",
+      "default": "./dist/desktop/google-cast.js"
+    },
     "./desktop/keyboard": {
       "types": "./dist/desktop/keyboard.d.ts",
       "default": "./dist/desktop/keyboard.js"

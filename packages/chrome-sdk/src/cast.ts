@@ -9,6 +9,7 @@ import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
 
 import type { Displays } from "./desktop/displays";
+import type { GoogleCast } from "./desktop/google-cast";
 import type { CastSource, PortalAnswer, PortalRequest } from "./portal";
 import { PortalAnswer as Answer, CastSourceKind, PortalKind } from "./portal";
 import type { VirtualMonitorMode } from "./system";
@@ -37,8 +38,11 @@ export type Sending = {
 
 /** Something that sends to TVs: the engine's Google Cast, or Miracast. */
 export type CastBackend = {
-  /** The app id its ScreenCast portal requests carry. */
-  appId: string;
+  /**
+   * The app id its ScreenCast portal requests carry, or `undefined` when it
+   * is not known: then a cast claims the next request from any app.
+   */
+  appId: string | undefined;
   /** Calls `listener` with every TV it finds now, and on each change. */
   watchTargets: (
     listener: (targets: readonly CastTarget[]) => void,
@@ -96,7 +100,7 @@ export type CastDesktop = {
 
 /** A ScreenCast request a started cast waits on. */
 type Waiting = {
-  appId: string;
+  appId: string | undefined;
   claim: (
     request: Extract<PortalRequest, { kind: PortalKind.ScreenCast }>,
   ) => CastClaim;
@@ -139,13 +143,69 @@ export const claimCastRequest = (
     return undefined;
   }
   const index = desk.awaited.findIndex(
-    (awaited) => awaited.appId === request.appId,
+    (awaited) => awaited.appId === undefined || awaited.appId === request.appId,
   );
   if (index === -1) {
     return undefined;
   }
   const [awaited] = desk.awaited.splice(index, 1);
   return awaited?.claim(request);
+};
+
+/**
+ * The mode an extended desk takes on a Google Cast TV: the Cast mirroring
+ * service sends at most 1080p.
+ */
+const GOOGLE_CAST_MODE = { height: 1080, refreshMhz: 60_000, width: 1920 };
+
+/** The engine's Google Cast, as a backend: `domicile.googleCast`. */
+export const engineCast = (cast: GoogleCast): CastBackend => ({
+  // The browser's own capture asks the portal, under an app id it does not
+  // choose.
+  appId: undefined,
+  send: async (targetId) =>
+    (await cast.cast(targetId)).map((route) => sendingTo(cast, route)),
+  watchTargets: (listener) => {
+    const send = () => {
+      listener(
+        cast.receivers.map(({ id, name }) => ({
+          id,
+          mode: GOOGLE_CAST_MODE,
+          name,
+          unreachable: undefined,
+        })),
+      );
+    };
+    const unsubscribe = cast.on("change", send);
+    send();
+    return unsubscribe;
+  },
+});
+
+/**
+ * Route `route` from {@link engineCast}. The list can name it before or after
+ * the cast resolves, so it ends when a list without it follows one with it,
+ * or follows a stop.
+ */
+const sendingTo = (cast: GoogleCast, route: string): Sending => {
+  const listed = () => cast.receivers.some((tv) => tv.route === route);
+  const { promise: ended, resolve } = Promise.withResolvers<void>();
+  const seen = { stopped: false, value: listed() };
+  const unsubscribe = cast.on("change", () => {
+    if (listed()) {
+      seen.value = true;
+    } else if (seen.value || seen.stopped) {
+      unsubscribe();
+      resolve();
+    }
+  });
+  return {
+    ended,
+    stop: () => {
+      seen.stopped = true;
+      cast.stop(route);
+    },
+  };
 };
 
 const deskOf = (
