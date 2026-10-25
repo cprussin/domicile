@@ -84,7 +84,9 @@ Rules:
   `Screens::from_the_engine` advertises it.
 - **Blank:** every connector listed with `enabled: false`. The desk stays as it
   was ([IDLE.md](IDLE.md)).
-- **Non-empty layout:** a connector the layout does not name stays dark. This
+- **A connector turned off is modeset with no mode**, which turns its CRTC off.
+  Left out of the modeset, it would keep scanning out its last frame.
+- **Non-empty layout:** a connector the layout does not name is turned off. This
   happens only to a monitor plugged in after the compositor built the layout.
   The next layout lights it.
 - **Every connector gets its own origin.** Unnamed connectors go past the right
