@@ -25,7 +25,10 @@ domicile send-shell <word>…
 domicile theme toggle
 
 # write a PNG of the desktop
-domicile screenshot <file>`;
+domicile screenshot <file>
+
+# and every other command
+domicile --help`;
 
 /** The commands the running desktop takes, led by `load-shell`. */
 export const Cli = () => (
