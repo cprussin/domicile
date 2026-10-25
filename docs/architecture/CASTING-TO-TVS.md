@@ -105,17 +105,28 @@ bar item ──casting(host).start(target, Extend | Pick)──▶ backend (engi
 
 ### Miracast, `domicile-miracast`
 
-- A Rust D-Bus service (`net.domicile.Miracast`), started by the desktop's
-  systemd user units. The shell reaches it with `SystemRequest::DbusCall` and
-  `DbusMatch`, so it needs no protocol frames.
+- `packages/domicile-miracast`: a Rust D-Bus service, `net.domicile.Miracast`
+  on the session bus, which D-Bus starts on the shell's first call. The SDK's
+  `miracastCast(domicile)` reaches it through `domicile.dbus`, so it needs no
+  protocol frames.
+- **API** (`net.domicile.Miracast1` at `/net/domicile/Miracast`): `Sinks()`
+  and `SinksChanged`; `Cast(id)`, which returns a cast id at once, then
+  `Started(cast)` once the TV plays or `Ended(cast, reason)`; `Stop(cast)`.
 - **Discovery and links:** NetworkManager's `WifiP2P` D-Bus API for Wi-Fi
-  Direct; mDNS `_display._tcp` for MICE.
-- **Session:** the WFD source side of RTSP (M1 to M16), then RTP carrying
-  MPEG-TS.
-- **Media:** GStreamer, `pipewiresrc` to H.264 (VA-API, else x264) and AAC,
-  into `mpegtsmux`.
-- **Failures shown, not hidden:** no P2P-capable card, `iwd` in place of
-  `wpa_supplicant`, a closed firewall port. Each makes the target say why.
+  Direct, connecting with the source's WFD IEs; Avahi browsing
+  `_display._tcp` for MICE, which is told `SOURCE_READY` over TCP 7250.
+- **Order of a cast:** the portal's picture first, so a cancel in the share
+  picker touches no Wi-Fi; then the link; then the TV opens RTSP to TCP 7236.
+- **Session:** the WFD source side of RTSP (M1 to M8, M16 keepalives), then
+  RTP carrying MPEG-TS. 1080p30, 720p30, 720p60 or 640x480p60, whichever the
+  TV plays first.
+- **Media:** `gst-launch-1.0`, `pipewiresrc` to H.264 (VA-API, else x264) and
+  AAC from the default sink's monitor, into `mpegtsmux`. A separate process,
+  so a broken plugin ends only the cast.
+- **Failures say why:** a TV that never connects back names the firewall
+  port; a TV that does not accept, or refuses RTSP, says so. Under `iwd`, or
+  without a P2P-capable card, NetworkManager has no Wi-Fi Direct device, so
+  only LAN TVs are listed and the service logs why.
 - GNOME Network Displays is the reference. It is GPL-3, so nothing is copied.
 
 ## Key decisions
@@ -136,5 +147,5 @@ bar item ──casting(host).start(target, Extend | Pick)──▶ backend (engi
       shell answers Extend's portal request
 - [x] engine: Media Router sinks and mirroring routes for the shell
       (`CastSinks`), wired to the bar item
-- [ ] `domicile-miracast`: Wi-Fi Direct, MICE, WFD session, encoder
+- [x] `domicile-miracast`: Wi-Fi Direct, MICE, WFD session, encoder
 - [ ] blanking hold, notification hold, launcher command

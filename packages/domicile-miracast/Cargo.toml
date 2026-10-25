@@ -1,0 +1,15 @@
+[package]
+name = "domicile-miracast"
+description = "Casts the desktop to Miracast TVs: finds them over Wi-Fi Direct and the LAN, and runs the Wi-Fi Display source side of each cast"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+libc.workspace = true
+thiserror.workspace = true
+# NetworkManager, Avahi and the ScreenCast portal, and the service it serves.
+serde.workspace = true
+zbus.workspace = true
+

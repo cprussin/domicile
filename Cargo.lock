@@ -470,6 +470,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "domicile-miracast"
+version = "0.0.0"
+dependencies = [
+ "libc",
+ "serde",
+ "thiserror",
+ "zbus",
+]
+
+[[package]]
 name = "domicile-protocol"
 version = "0.0.0"
 dependencies = [

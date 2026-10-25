@@ -433,6 +433,13 @@
         # The host Domicile's apps spawn, which asks the desktop over
         # `DOMICILE_SOCK`. Copied for the same reason.
         cp ${domicileBinaries}/bin/domicile-app-host "$out/bin/domicile-app-host"
+        # The Miracast service, which D-Bus starts. Copied for the same
+        # reason.
+        cp ${domicileBinaries}/bin/domicile-miracast "$out/bin/domicile-miracast"
+        mkdir -p "$out/share/dbus-1/services"
+        substitute ${./distro/nix/net.domicile.Miracast.service} \
+          "$out/share/dbus-1/services/net.domicile.Miracast.service" \
+          --subst-var-by bin "$out/bin"
         # The web link handler and the file making it the default.
         mkdir -p "$out/share/applications"
         substitute ${./distro/nix/domicile-open-url.desktop} \
@@ -585,6 +592,7 @@
         cargoBuildFlags = [
           "-p" "domicile-compositor" "--bin" "domicile-compositor"
           "-p" "domicile-launch" "--bin" "domicile" "--bin" "domicile-open-url" "--bin" "domicile-xdg-open" "--bin" "domicile-history" "--bin" "domicile-settings" "--bin" "domicile-app-host"
+          "-p" "domicile-miracast" "--bin" "domicile-miracast"
         ];
 
         # CI's `cargo-test` job runs the tests on every push; repeating them
@@ -617,6 +625,13 @@
             --prefix LD_LIBRARY_PATH : "/run/opengl-driver/lib" \
             --set-default DOMICILE_PNP_IDS "${pkgs.hwdata}/share/hwdata/pnp.ids" \
             --suffix PATH : "${pkgs.lib.makeBinPath [ pkgs.pulseaudio pkgs.curl pkgs.iproute2 ]}"
+          # `gst-launch-1.0` and the plugins a Miracast cast's pipeline uses
+          # (`packages/domicile-miracast/src/stream.rs`).
+          wrapProgram "$out/bin/domicile-miracast" \
+            --suffix PATH : "${pkgs.lib.makeBinPath [ pkgs.gst_all_1.gstreamer ]}" \
+            --set-default GST_PLUGIN_SYSTEM_PATH_1_0 "${pkgs.lib.makeSearchPathOutput "lib" "lib/gstreamer-1.0" (with pkgs.gst_all_1; [
+              gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav pkgs.pipewire
+            ])}"
         '';
       };
 
@@ -699,7 +714,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-gH4oV/mrdWtOnDRmISA1Wqp9EeLXMTH677NYiecRWxg=";
+        outputHash = "sha256-3Z3MTnx5Z97Uf2SYQb1db3/CKjl+yyD//MNKVlg6j8o=";
       };
 
 

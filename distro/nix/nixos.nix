@@ -39,6 +39,16 @@ in {
       default = domicilePackages.domicile;
       defaultText = lib.literalExpression "domicile.packages.\${system}.domicile";
     };
+
+    miracast = lib.mkOption {
+      description = ''
+        Whether to set up casting to Miracast TVs: open TCP port 7236, which
+        a TV connects back to as a cast starts, and run Avahi, which finds TVs
+        on the LAN.
+      '';
+      type = lib.types.bool;
+      default = true;
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -56,6 +66,11 @@ in {
     # Read by `@domicile-desktop/system-battery`, so manganese's bar and lock
     # screen show the battery. NixOS enables it only for desktops that ask.
     services.upower.enable = lib.mkDefault true;
+
+    # `domicile-miracast`: the TV opens RTSP to this computer, and LAN TVs are
+    # found over mDNS.
+    networking.firewall.allowedTCPPorts = lib.mkIf cfg.miracast [7236];
+    services.avahi.enable = lib.mkIf cfg.miracast (lib.mkDefault true);
 
     # The PAM service that unlocks a desk unless `lock.pam_service` names
     # another. Without it, a locked desk opens to nothing.

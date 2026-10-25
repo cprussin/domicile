@@ -312,6 +312,10 @@ It provides:
   `users.users.<you>.extraGroups = ["domicile"]` and log in again.
 - **UPower**, which the battery readout reads. Without it, manganese shows no
   battery. Set `services.upower.enable = false` to opt out.
+- **Casting to Miracast TVs**: TCP port 7236 open, which a TV connects back
+  to, and Avahi, which finds TVs on the LAN. TVs over Wi-Fi Direct also need
+  NetworkManager with `wpa_supplicant`, NixOS's default. Set
+  `programs.domicile.miracast = false` to opt out.
 - **`domicile-session.target`**, started by a desktop that is the session. User
   services bound to `graphical-session.target` and `~/.config/autostart`
   entries start with it. The package is also on the system profile, so the

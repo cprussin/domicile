@@ -24,7 +24,7 @@ mapfile -t PROGRAMS < <(grep -v '^#' distro/programs)
 
 # `domicile-compositor` is named because `default-members` omits it. Each
 # binary is named so the test-only ones are not built, as in `flake.nix`.
-args=(-p domicile-compositor -p domicile-launch)
+args=(-p domicile-compositor -p domicile-launch -p domicile-miracast)
 for program in "${PROGRAMS[@]}"; do
   args+=(--bin "$program")
 done
