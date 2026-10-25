@@ -3,6 +3,9 @@
 
 #include "components/domicile/engine/surface_frames.h"
 
+#include <algorithm>
+#include <iterator>
+
 #include "ui/gfx/presentation_feedback.h"
 
 namespace domicile {
@@ -35,6 +38,7 @@ std::optional<uint64_t> SurfaceFrames::Acked() {
 }
 
 std::optional<uint64_t> SurfaceFrames::Presented(uint32_t frame_token) {
+  newest_reported_ = std::max(newest_reported_, frame_token);
   auto iter = unpresented_.find(frame_token);
   if (iter == unpresented_.end()) {
     return std::nullopt;
@@ -42,6 +46,11 @@ std::optional<uint64_t> SurfaceFrames::Presented(uint32_t frame_token) {
   const uint64_t number = iter->second;
   unpresented_.erase(iter);
   return number;
+}
+
+size_t SurfaceFrames::InViz() const {
+  return static_cast<size_t>(std::distance(
+      unpresented_.upper_bound(newest_reported_), unpresented_.end()));
 }
 
 uint32_t PresentedFlagsOf(uint32_t feedback_flags) {

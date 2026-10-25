@@ -44,8 +44,14 @@ class SurfaceFrames {
   // `nullopt` for a token this did not send or already reported.
   std::optional<uint64_t> Presented(uint32_t frame_token);
 
+  // Frames sent after the newest one viz reported. Viz reports in the order it
+  // draws, so an older frame it never reported is not counted.
+  size_t InViz() const;
+
  private:
   uint64_t last_ = 0;
+  // Zero until viz reports a frame. Tokens start at 1.
+  uint32_t newest_reported_ = 0;
   base::circular_deque<uint64_t> unacked_;
   base::flat_map<uint32_t, uint64_t> unpresented_;
 };

@@ -49,6 +49,27 @@ TEST(SurfaceFramesTest, OnlyTheNewestUnpresentedFramesAreKept) {
   EXPECT_EQ(frames.Presented(2), 2u);
 }
 
+TEST(SurfaceFramesTest, FramesVizHasNotReportedAreInViz) {
+  SurfaceFrames frames;
+  frames.Sent(/*frame_token=*/1);
+  frames.Dropped();
+  frames.Sent(/*frame_token=*/2);
+  frames.Sent(/*frame_token=*/3);
+  EXPECT_EQ(frames.InViz(), 3u);
+  frames.Presented(1);
+  EXPECT_EQ(frames.InViz(), 2u);
+}
+
+// Viz reports frames in the order it draws them, so one it skipped is gone.
+TEST(SurfaceFramesTest, AFrameVizNeverReportedLeavesWhenANewerOneIsReported) {
+  SurfaceFrames frames;
+  frames.Sent(/*frame_token=*/1);
+  frames.Sent(/*frame_token=*/2);
+  frames.Sent(/*frame_token=*/3);
+  frames.Presented(2);
+  EXPECT_EQ(frames.InViz(), 1u);
+}
+
 // The values are wp_presentation_feedback.kind's, so the compositor passes
 // them on unchanged.
 TEST(SurfaceFramesTest, FeedbackFlagsBecomeTheAbisFlags) {

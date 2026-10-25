@@ -34,7 +34,7 @@ under `src/`. Design: [ENGINE-FORK.md](/docs/architecture/ENGINE-FORK.md).
 | `components/domicile/engine/domicile_engine.{h,cc}` | `libdomicile_engine.so`: the C ABI, the broker pipe and the pollable fd |
 | `components/domicile/engine/engine_event_queue.{h,cc}` | queue from mojo's thread to the compositor's thread; an eventfd tells the compositor when to drain it |
 | `components/domicile/engine/surface_frames.{h,cc}` | numbers a window's frames and matches viz's acks and presentation feedback to them, for `frame_done` and `presented` |
-| `components/domicile/engine/surface_submits.{h,cc}` | holds a window's submits in order behind one whose acquire fence the browser has not yet put in place (`FenceBuffer`) |
+| `components/domicile/engine/surface_submits.{h,cc}` | holds a window's submits in order behind one whose acquire fence the browser has not yet put in place (`FenceBuffer`), and its newest while viz has 16 frames to present (`SurfaceBacklog`) |
 | `components/domicile/engine/probe_wait.{h,cc}` | bounds a spike probe's wait for the browser; a probe never answered in 30s stops the producer with a fatal log naming it |
 | `components/domicile/engine/engine_smoke.c` | checks the C header compiles and the library works from C |
 | `components/domicile/engine/engine_capture_probe.cc` | captures the browser's window through the C ABI and reads the frames back |
