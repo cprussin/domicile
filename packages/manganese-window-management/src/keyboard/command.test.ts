@@ -65,6 +65,15 @@ describe("parseCommand", () => {
       "keymap us intl",
       WindowAction.KeymapSelected(KeymapChoice.Named("us intl")),
     ],
+    [
+      "virtual-monitor add",
+      WindowAction.VirtualMonitorAdded({ height: 1080, width: 1920 }),
+    ],
+    [
+      "virtual-monitor add 2560x1440",
+      WindowAction.VirtualMonitorAdded({ height: 1440, width: 2560 }),
+    ],
+    ["virtual-monitor remove", WindowAction.VirtualMonitorRemoved()],
   ])("reads `%s` as sway does", (command, action) => {
     expect(parsing(command)).toStrictEqual(Ok(action));
   });
@@ -72,6 +81,20 @@ describe("parseCommand", () => {
   it("refuses `keymap` with no keymap", () => {
     expect(parseCommand(["keymap"])).toStrictEqual(
       Err("manganese: `keymap` names no keymap"),
+    );
+  });
+
+  it.each([
+    "virtual-monitor",
+    "virtual-monitor add big",
+    "virtual-monitor add 0x1080",
+    "virtual-monitor add 1920x1080 now",
+    "virtual-monitor remove now",
+  ])("refuses `%s`, saying how to write it", (command) => {
+    expect(parsing(command)).toStrictEqual(
+      Err(
+        `manganese: no command \`${command}\`; write \`virtual-monitor add [<width>x<height>]\` or \`virtual-monitor remove\``,
+      ),
     );
   });
 

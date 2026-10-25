@@ -30,6 +30,22 @@ export const notifications = () => command("notifications");
 export const clearNotifications = () => command("notifications", "clear");
 /** Toggle keeping the screens on. */
 export const idleInhibitor = () => command("idle-inhibitor");
+/**
+ * Add a monitor with no connector, 1920x1080 unless `size` says otherwise.
+ */
+export const virtualMonitor = (size?: {
+  readonly width: number;
+  readonly height: number;
+}) =>
+  size === undefined
+    ? command("virtual-monitor", "add")
+    : command(
+        "virtual-monitor",
+        "add",
+        `${String(size.width)}x${String(size.height)}`,
+      );
+/** Remove the newest virtual monitor added. */
+export const removeVirtualMonitor = () => command("virtual-monitor", "remove");
 /** Toggle the night light. */
 export const nightLight = () => command("night-light");
 /** Take a screenshot, picking the area in a dialog. */

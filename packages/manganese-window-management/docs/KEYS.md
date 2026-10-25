@@ -36,7 +36,7 @@ There is no terminal key. Bind one with `exec`.
 Build commands with the exported helpers (`focus`, `move`, `workspace`,
 `moveToWorkspace`, `grow`, `mode`, `exec`, `searchClipboard`, `volume`,
 `micMute`, `brightness`, `keymap`, `notifications`, `clearNotifications`,
-`idleInhibitor`, `nightLight`, …). They use sway's names:
+`idleInhibitor`, `nightLight`, `virtualMonitor`, …). They use sway's names:
 
 | Command | Action |
 |---|---|
@@ -71,6 +71,8 @@ Manganese-only commands:
 | `notifications clear` | Clear every notification, as the drawer's "Clear all" does. Unbound by default. |
 | `idle-inhibitor` | Toggle keeping the screens on, as the bar's eye does. Unbound by default. |
 | `night-light` | Toggle the night light, as the brightness popover's switch does. Unbound by default. |
+| `virtual-monitor add [<width>x<height>]` | Add a monitor with no connector, 1920x1080 by default, which the desk extends onto. Lasts until removed or the shell reloads. Unbound by default. |
+| `virtual-monitor remove` | Remove the newest virtual monitor `virtual-monitor add` added. Unbound by default. |
 | `keymap next` / `keymap <name>` | Switch every keyboard to the next of `input.keyboard.keymaps`, wrapping, or to the one named. Unbound by default. |
 
 - `mode(name)` comes from the SDK's `bindKeys`. Each monitor's page keeps its
