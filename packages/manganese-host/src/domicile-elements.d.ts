@@ -14,10 +14,12 @@ declare module "react" {
   // `<webview>` attributes missing from React's Electron-era types: `window`
   // makes a view show a browser window (see `WEBVIEW_WINDOW_ATTRIBUTE`),
   // `extensionpopup`, by its presence, makes it an extension's action popup,
-  // and `private`, by its presence, makes its page private.
+  // `private`, by its presence, makes its page private, and `resizing`, by its
+  // presence, marks an interactive resize.
   interface WebViewHTMLAttributes<T> extends HTMLAttributes<T> {
     extensionpopup?: string | undefined;
     private?: string | undefined;
+    resizing?: string | undefined;
     window?: string | undefined;
   }
 

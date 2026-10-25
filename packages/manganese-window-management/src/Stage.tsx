@@ -903,6 +903,7 @@ const WindowContents = memo(
             onReach={reached}
             popupWindow={window.popupWindow}
             rect={contents?.rect}
+            resizing={resizing}
             restack={restack}
             url={window.url}
             window={engineWindowOf(id)}
