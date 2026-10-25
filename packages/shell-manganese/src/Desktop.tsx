@@ -89,6 +89,7 @@ import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { ownedChords } from "@domicile-desktop/sdk/own-keybindings";
 import type { ReactNode } from "react";
 import { useCallback, useMemo, useState } from "react";
+import { useCastHolds } from "./cast-holds";
 import { LOCK_BAR } from "./default-bars";
 import { KeymapNotice } from "./KeymapNotice";
 import type { LevelPress } from "./LevelNotice";
@@ -225,6 +226,10 @@ export const Desktop = ({
   // Lock state belongs to the compositor, which is what blocks input. The page
   // cannot set it, and reloading the page does not unlock the desk.
   const lock = useLocked(domicile);
+
+  // While a TV is cast to, idle blanking is held off and banners are held, so
+  // a notification does not show on the TV.
+  const casting = useCastHolds(domicile);
 
   const screens = useStageScreens(windows, displays);
 
@@ -578,8 +583,8 @@ export const Desktop = ({
       />
       {/*
         Over the windows and under every panel, so a toast never covers the
-        launcher. On the screen with the keyboard. Hidden while locked so
-        notifications are not shown on the lock screen.
+        launcher. On the screen with the keyboard. Hidden while locked or
+        casting so notifications are not shown on the lock screen or a TV.
       */}
       <NotificationToasts
         manager={toasts}
@@ -587,7 +592,7 @@ export const Desktop = ({
         onAction={notifications.invoke}
         onReply={notifications.reply}
         screen={windows.focused}
-        shown={!lock.locked}
+        shown={!(lock.locked || casting)}
       />
       {/* Like the toasts, on the screen with the keyboard. */}
       <LevelNotice press={levelPress} screen={windows.focused} />

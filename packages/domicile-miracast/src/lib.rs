@@ -1,4 +1,4 @@
-//! Casts the desktop to Miracast TVs. See docs/architecture/CASTING-TO-TVS.md.
+//! Casts the desktop to Miracast TVs. See docs/CASTING-TO-TVS.md.
 
 pub mod cast;
 pub mod mice;
