@@ -4,6 +4,7 @@ import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
 import { Battery } from "@domicile-desktop/manganese-bar-module-battery";
 import { Bluetooth } from "@domicile-desktop/manganese-bar-module-bluetooth";
 import { Brightness } from "@domicile-desktop/manganese-bar-module-brightness";
+import { Cast } from "@domicile-desktop/manganese-bar-module-cast";
 import { Clock } from "@domicile-desktop/manganese-bar-module-clock";
 import { IdleInhibitor } from "@domicile-desktop/manganese-bar-module-idle-inhibitor";
 import { LauncherButton } from "@domicile-desktop/manganese-bar-module-launcher-button";
@@ -19,7 +20,7 @@ import { WorkspaceSwitcher } from "@domicile-desktop/manganese-bar-module-worksp
  * Manganese's default bar.
  *
  * The launcher button is first, next to the tray. The sharing indicator leads
- * the right column, so it is seen. The bell is last because the drawer it
+ * the right column, so it is seen, with casting to TVs beside it. The bell is last because the drawer it
  * opens slides out from that edge.
  */
 export const DEFAULT_BAR: BarLayout = {
@@ -31,6 +32,7 @@ export const DEFAULT_BAR: BarLayout = {
   ],
   right: [
     <Sharing key="sharing" />,
+    <Cast key="cast" />,
     <ThemeSwitch key="theme" />,
     <IdleInhibitor key="idle-inhibitor" />,
     <Brightness key="brightness" />,

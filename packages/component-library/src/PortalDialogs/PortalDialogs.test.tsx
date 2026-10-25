@@ -1,10 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
+import type { CastBackend, CastTarget } from "@domicile-desktop/sdk/cast";
+import { CastMode, casting } from "@domicile-desktop/sdk/cast";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { SHELL_APP_ID } from "@domicile-desktop/sdk/portal";
 import type { PreviewedWindow } from "@domicile-desktop/sdk/previewed-window";
-import type { SystemError } from "@domicile-desktop/sdk/system";
+import type { SystemError, VirtualMonitor } from "@domicile-desktop/sdk/system";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import type { Node } from "@domicile-desktop/system-apps/fake-system";
 import { fakeSystem } from "@domicile-desktop/system-apps/fake-system";
@@ -2453,6 +2455,105 @@ describe("screen cast", () => {
       fireEvent.pointerUp(desk, { clientX: 300, clientY: 200 });
 
       expect(host.answers).toEqual([]);
+    });
+  });
+
+  describe("cast to a TV", () => {
+    const TV: CastTarget = {
+      id: "tv",
+      mode: { height: 1080, refreshMhz: 60_000, width: 1920 },
+      name: "Living Room TV",
+      unreachable: undefined,
+    };
+
+    /** A backend whose casts wait on the portal; the TV never answers. */
+    const backend: CastBackend = {
+      appId: "",
+      send: () => new Promise(() => undefined),
+      watchTargets: () => () => undefined,
+    };
+
+    const castRequest = (sources: readonly object[]) => ({
+      ...screenCast(false, sources),
+      app_id: "",
+    });
+
+    it("titles the picker for the TV a cast picks for", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      void casting(host.host).start(backend, TV, CastMode.Pick);
+      await Promise.resolve();
+      host.push([castRequest(MONITORS)]);
+
+      expect(
+        screen.getByRole("dialog", { name: "Cast to Living Room TV" }),
+      ).not.toHaveTextContent("wants to record");
+      expect(screen.getByRole("button", { name: "Cast" })).toBeInTheDocument();
+    });
+
+    it("answers an extended desk's request with its monitor, showing nothing", async () => {
+      const host = new FakeHost();
+      host.fake.set({
+        displays: [
+          {
+            height: 1080,
+            modeHeight: 1080,
+            modeWidth: 1920,
+            name: "drm-2",
+            scale: 1,
+            transform: "normal",
+            width: 1920,
+            x: 0,
+            y: 0,
+          },
+        ],
+      });
+      const monitor = {
+        addVirtualMonitor: () =>
+          Promise.resolve(
+            Ok<VirtualMonitor, SystemError>({
+              ended: new Promise<never>(() => undefined),
+              output: "drm-2",
+              remove: () => undefined,
+            }),
+          ),
+      };
+      const sent = Promise.withResolvers<void>();
+      render(<PortalDialogs host={host.host} />);
+      void casting(host.host, monitor).start(
+        {
+          ...backend,
+          send: () => {
+            sent.resolve();
+            return new Promise(() => undefined);
+          },
+        },
+        TV,
+        CastMode.Extend,
+      );
+      await sent.promise;
+      host.push([castRequest(MONITORS)]);
+
+      expect(host.answers).toEqual([
+        [
+          5,
+          {
+            kind: "screen_cast",
+            sources: [{ name: "drm-2", type: "monitor" }],
+          },
+        ],
+      ]);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    it("leaves an application's request to its own picker", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      void casting(host.host).start(backend, TV, CastMode.Pick);
+      await Promise.resolve();
+      host.push([screenCast(false, MONITORS)]);
+
+      expect(screen.getByRole("dialog")).toHaveTextContent("Share a screen");
     });
   });
 });

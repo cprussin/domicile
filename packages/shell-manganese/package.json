@@ -5,6 +5,7 @@
     "@domicile-desktop/manganese-bar-module-battery": "workspace:*",
     "@domicile-desktop/manganese-bar-module-bluetooth": "workspace:*",
     "@domicile-desktop/manganese-bar-module-brightness": "workspace:*",
+    "@domicile-desktop/manganese-bar-module-cast": "workspace:*",
     "@domicile-desktop/manganese-bar-module-clock": "workspace:*",
     "@domicile-desktop/manganese-bar-module-gmail": "workspace:*",
     "@domicile-desktop/manganese-bar-module-google-messages": "workspace:*",

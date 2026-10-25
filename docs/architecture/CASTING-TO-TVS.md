@@ -46,7 +46,7 @@ Both backends take their picture from the ScreenCast portal. Neither touches
 the compositor's casting code.
 
 ```
-bar item ──startCast(target, Extend | Pick)──▶ backend (engine Cast / domicile-miracast)
+bar item ──casting(host).start(target, Extend | Pick)──▶ backend (engine Cast / domicile-miracast)
                                                   │ ScreenCast portal
                                 Pick: share picker │ Extend: shell answers with virtual-N
                                                   ▼
@@ -60,9 +60,13 @@ bar item ──startCast(target, Extend | Pick)──▶ backend (engine Cast / 
   shows. Restore tokens are per app, so they can't do this. Stopping the cast
   removes the monitor.
 - **Cast…** starts the cast and the share picker asks.
-- **Targets** from both backends merge in the SDK: `useCastTargets()`,
-  `startCast(target, CastSource.Extend() | CastSource.Pick())`,
-  `stopCast(cast)`, `useCasts()`.
+- **The SDK** (`@domicile-desktop/sdk/cast`): each backend is a
+  `CastBackend` (`watchTargets`, `send`, and the app id its portal requests
+  carry). `casting(host).start(backend, target, CastMode.Extend |
+  CastMode.Pick)` starts a cast and `watch` lists them. `<PortalDialogs />`
+  asks `claimCastRequest` of each ScreenCast request: Extend's is answered
+  with its monitor, Pick's picker is titled for the TV. The bar item merges
+  every backend's TVs.
 
 ### Virtual monitors
 
@@ -123,9 +127,9 @@ bar item ──startCast(target, Extend | Pick)──▶ backend (engine Cast / 
 
 ## Plan
 
-- [ ] virtual monitors: engine ABI and `DrmModeset`, `Screens`, `SystemRequest::VirtualMonitor` (#1524)
-- [ ] protocol frames, SDK hooks and the `Cast` bar item, against a fake
-      backend; the shell answers Extend's portal request
+- [x] virtual monitors: engine ABI and `DrmModeset`, `Screens`, `SystemRequest::VirtualMonitor` (#1524)
+- [x] the SDK's casts and the `Cast` bar item, against a fake backend; the
+      shell answers Extend's portal request
 - [ ] engine: Media Router and mirroring wired to the control channel and the
       portal
 - [ ] `domicile-miracast`: Wi-Fi Direct, MICE, WFD session, encoder

@@ -25,6 +25,7 @@ package's default export path:
 | `Battery` | `@domicile-desktop/manganese-bar-module-battery` |
 | `Notifications` | `@domicile-desktop/manganese-bar-module-notifications` |
 | `Sharing` | `@domicile-desktop/manganese-bar-module-sharing` |
+| `Cast` | `@domicile-desktop/manganese-bar-module-cast` |
 
 Items no default bar has:
 
@@ -71,7 +72,8 @@ Every bar and the lock screen share one watch per system readout. See
 
 - **left**: launcher button, tray, workspaces
 - **center**: clock
-- **right**: sharing indicator (while recorded), theme selector, idle
+- **right**: sharing indicator (while recorded), Cast (while a TV is near or
+  cast to), theme selector, idle
   inhibitor, brightness, volume, Bluetooth, network, battery, notification
   bell
 

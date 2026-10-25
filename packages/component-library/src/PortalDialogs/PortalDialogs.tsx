@@ -1,3 +1,5 @@
+import type { CastClaim } from "@domicile-desktop/sdk/cast";
+import { CastClaimKind } from "@domicile-desktop/sdk/cast";
 import type {
   DomicileBrowserWindow,
   DomicileHost,
@@ -39,6 +41,7 @@ import { ScreenshotDialog } from "./ScreenshotDialog";
 import type { ShownWindow } from "./shown-windows";
 import { drawnWindows } from "./shown-windows";
 import { UsbDialog } from "./UsbDialog";
+import { useCastClaims } from "./useCastClaims";
 import { WallpaperDialog } from "./WallpaperDialog";
 
 /** No shell chords; one array, so the default is stable across renders. */
@@ -101,6 +104,8 @@ export const PortalDialogs = memo(
       ...sessions.map((session) => session.appId),
     ]);
 
+    const claims = useCastClaims(host, requests);
+
     useEffect(() => watchPortalRequests(host, setRequests), [host]);
     useEffect(() => watchCapturing(host, setSessions), [host]);
     useEffect(() => fireGlobalShortcuts(host), [host]);
@@ -113,7 +118,11 @@ export const PortalDialogs = memo(
       }
     }, [host, requests]);
 
-    const shown = requests.find(isAsked);
+    const shown = requests.find(
+      (request) =>
+        isAsked(request) &&
+        claims.get(request.id)?.kind !== CastClaimKind.Answered,
+    );
     return (
       <>
         <CapturingIndicator
@@ -138,6 +147,7 @@ export const PortalDialogs = memo(
             apps={apps}
             asker={apps(shown.appId).name}
             browserWindows={host.browserWindows ?? []}
+            claim={claims.get(shown.id)}
             folders={folders}
             key={shown.id}
             request={shown}
@@ -161,6 +171,7 @@ const Dialog = ({
   apps,
   asker,
   browserWindows,
+  claim,
   folders,
   request,
   screen,
@@ -172,6 +183,8 @@ const Dialog = ({
   apps: (appId: string) => App;
   asker: string;
   browserWindows: readonly DomicileBrowserWindow[];
+  /** What a cast to a TV that asked for `request` makes of it. */
+  claim: CastClaim | undefined;
   folders: Folders;
   request: PortalRequest;
   screen: string | undefined;
@@ -283,6 +296,7 @@ const Dialog = ({
           asker={asker}
           body={request.body}
           browserWindows={browserWindows}
+          castTo={claim?.kind === CastClaimKind.Pick ? claim.to : undefined}
           previewWindow={files.previewWindow}
           screen={screen}
           shownWindows={shownWindows}
