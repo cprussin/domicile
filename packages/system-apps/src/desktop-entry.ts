@@ -37,12 +37,14 @@ export type DesktopEntry = {
  * Entry `text` as `id`, or nothing if a launcher should not offer it.
  *
  * Reads only unlocalized keys in `[Desktop Entry]`. Rejects non-applications,
- * `Hidden` or `NoDisplay` entries, entries without a `Name` or a readable
- * `Exec`, and `Terminal` entries, since no terminal is configured.
+ * `Hidden` entries, entries without a `Name` or a readable `Exec`, and
+ * `Terminal` entries, since no terminal is configured. Rejects `NoDisplay`
+ * entries too, unless `shown` is false: such an entry still opens files.
  */
 export const parseDesktopEntry = (
   id: string,
   text: string,
+  shown = true,
 ): Option<DesktopEntry> => {
   const keys = keysOf(text);
   const flag = (key: string) => keys.get(key) === "true";
@@ -50,7 +52,7 @@ export const parseDesktopEntry = (
   const exec = keys.get("Exec");
   return keys.get("Type") !== "Application" ||
     flag("Hidden") ||
-    flag("NoDisplay") ||
+    (shown && flag("NoDisplay")) ||
     flag("Terminal") ||
     name === undefined ||
     exec === undefined

@@ -46,16 +46,15 @@ Browser address bars use the same rule.
   app would: see [docs/LAUNCHER.md](../../../docs/LAUNCHER.md#opening-files).
 - **Shift+Enter** asks which to open it with, in the AppChooser portal's dialog
   (`launcher/OpenWith.tsx`). Shift+Enter on any other row acts as Enter.
-- The dialog lists what `@domicile-desktop/system-apps/openers` offers, in the
-  order `domicile open` picks from: every type's defaults from
-  `mimeapps.list`, `domicile-mimeapps.list` first, the type's own before its
-  supertypes' (`mime/subclasses`, and `text/plain` for every `text/*`); then
-  installed entries whose `MimeType` lists one. The type comes from
-  shared-mime-info's `mime/globs2`, by name; a directory is
-  `inode/directory`. `NoDisplay` and `Terminal` entries are never offered.
-- The dialog does not read aliases, `[Added Associations]` or
-  `[Removed Associations]`, nor guess the type of a file no glob matches, as
-  `domicile open` does. So its first entry can differ from what Enter opens.
+- The dialog lists what `@domicile-desktop/system-apps/openers` offers. First
+  is the app Enter would open it with, as `domicile open --which` says, even
+  a `NoDisplay` one, so the dialog and Enter always agree. Then every type's
+  defaults from `mimeapps.list`, `domicile-mimeapps.list` first, the type's
+  own before its supertypes' (`mime/subclasses`, and `text/plain` for every
+  `text/*`); then installed entries whose `MimeType` lists one. The type
+  comes from shared-mime-info's `mime/globs2`, by name; a directory is
+  `inode/directory`. `NoDisplay` and `Terminal` entries are not offered
+  otherwise.
 - URLs and searches open as a page.
 
 ## Preview

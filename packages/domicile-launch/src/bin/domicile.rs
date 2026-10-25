@@ -46,7 +46,7 @@ use domicile_launch::history::CLEAR_WITHIN;
 use domicile_launch::install_app::{data_home, install_app, Fetched};
 use domicile_launch::milestones::{reach, Milestone};
 use domicile_launch::notification;
-use domicile_launch::open::{app_opening, opening, AppOpening, Opening, Places, DESKTOP};
+use domicile_launch::open::{app_opening, opener, opening, AppOpening, Opening, Places, DESKTOP};
 use domicile_launch::platform::platform;
 use domicile_launch::power::{confirmed, Power};
 use domicile_launch::profile_claim::claim;
@@ -111,6 +111,13 @@ fn run() -> Result<ExitCode, String> {
         Invocation::Ask { request } => asked(&request),
         Invocation::Load { shell } => asked(&shell_to_load(&shell)?),
         Invocation::Open { target } => opened(&target),
+        Invocation::Opener { target } => {
+            let id = opener(&target, &typed_in()?, &places()).map_err(|why| why.to_string())?;
+            if let Some(id) = id {
+                println!("{id}");
+            }
+            Ok(ExitCode::SUCCESS)
+        }
         Invocation::OpenAsApp { target } => {
             let here = typed_in()?;
             match app_opening(&target, &here).map_err(|why| why.to_string())? {
@@ -142,27 +149,7 @@ fn run() -> Result<ExitCode, String> {
 /// Opens `target` with what opens its type, in this process's place, or in a
 /// browser window of the running desktop; see `domicile_launch::open`.
 fn opened(target: &str) -> Result<ExitCode, String> {
-    let home = std::env::var_os("HOME").map(PathBuf::from);
-    let data_dirs = data_dirs(
-        std::env::var_os("XDG_DATA_HOME"),
-        std::env::var_os("XDG_DATA_DIRS"),
-        home.as_deref(),
-    );
-    let applications: Vec<PathBuf> = data_dirs
-        .iter()
-        .map(|dir| dir.join("applications"))
-        .collect();
-    let places = Places {
-        lists: lists(
-            std::env::var_os("XDG_CONFIG_HOME"),
-            std::env::var_os("XDG_CONFIG_DIRS"),
-            &applications,
-            home.as_deref(),
-            DESKTOP,
-        ),
-        data_dirs,
-    };
-    match opening(target, &typed_in()?, &places).map_err(|why| why.to_string())? {
+    match opening(target, &typed_in()?, &places()).map_err(|why| why.to_string())? {
         Opening::Browse(url) => asked(&Request::OpenUrl { url }),
         Opening::Run(argv) => {
             let (program, args) = argv
@@ -173,6 +160,30 @@ fn opened(target: &str) -> Result<ExitCode, String> {
                 Command::new(program).args(args).exec()
             ))
         }
+    }
+}
+
+/// Where this desk's types and defaults are, from the XDG environment.
+fn places() -> Places {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let data_dirs = data_dirs(
+        std::env::var_os("XDG_DATA_HOME"),
+        std::env::var_os("XDG_DATA_DIRS"),
+        home.as_deref(),
+    );
+    let applications: Vec<PathBuf> = data_dirs
+        .iter()
+        .map(|dir| dir.join("applications"))
+        .collect();
+    Places {
+        lists: lists(
+            std::env::var_os("XDG_CONFIG_HOME"),
+            std::env::var_os("XDG_CONFIG_DIRS"),
+            &applications,
+            home.as_deref(),
+            DESKTOP,
+        ),
+        data_dirs,
     }
 }
 
@@ -614,6 +625,9 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
         "xdg-open",
         &binary.with_file_name("domicile-xdg-open"),
     )?;
+    // This desktop's own `domicile`, whatever is installed: the launcher
+    // asks it what `open` would run.
+    shim(&places.shims, "domicile", &binary)?;
     // Domicile's apps spawn their host by name.
     shim(
         &places.shims,

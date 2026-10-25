@@ -1,6 +1,6 @@
 // Every application installed in the XDG data directories.
 
-import type { Result } from "@cprussin/option-result";
+import type { Option, Result } from "@cprussin/option-result";
 import { None, Ok, Some } from "@cprussin/option-result";
 import type { DirEntry, SystemError } from "@domicile-desktop/sdk/system";
 import { FileType } from "@domicile-desktop/sdk/system";
@@ -45,6 +45,27 @@ export const installedApps = async (
   );
 };
 
+/**
+ * The application whose ID is `id`, `NoDisplay` or not, or nothing if none
+ * is usable. As `installedApps`, an ID in an earlier directory hides later
+ * ones.
+ */
+export const installedApp = async (
+  domicile: AppsDesktop,
+  dataDirs: readonly string[],
+  id: string,
+): Promise<Result<Option<DesktopEntry>, SystemError>> =>
+  await allOk(
+    await Promise.all(
+      dataDirs.map((dir) => entryFiles(domicile, `${dir}/applications`, "")),
+    ),
+  ).andThenAsync((dirs) => {
+    const file = firstOfEach(dirs.flat()).find((each) => each.id === id);
+    return file === undefined
+      ? Promise.resolve(Ok(None<DesktopEntry>()))
+      : read(domicile, file, false);
+  });
+
 /** Each ID's first file, in priority order. */
 const firstOfEach = (files: readonly EntryFile[]): EntryFile[] => {
   const seen = new Set<string>();
@@ -56,10 +77,14 @@ const firstOfEach = (files: readonly EntryFile[]): EntryFile[] => {
 };
 
 /** `file` parsed, or nothing for an unreadable file or one not to offer. */
-const read = async (domicile: AppsDesktop, { id, path }: EntryFile) =>
+const read = async (
+  domicile: AppsDesktop,
+  { id, path }: EntryFile,
+  shown = true,
+) =>
   orAbsent(
     (await domicile.files.readText(path)).map((text) =>
-      parseDesktopEntry(id, text),
+      parseDesktopEntry(id, text, shown),
     ),
     None<DesktopEntry>(),
   );

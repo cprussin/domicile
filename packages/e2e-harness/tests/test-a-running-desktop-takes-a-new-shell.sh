@@ -423,6 +423,14 @@ else
   FAILED=1
 fi
 
+if [ "$(readlink "$SHIMS/domicile")" = "$TARGET/debug/domicile" ]; then
+  echo "PASS: $SHIMS/domicile, which the launcher asks what opens a file"
+else
+  echo "FAIL: the first directory on the apps' PATH, '$SHIMS', has no"
+  echo "      domicile of this desktop's own"
+  FAILED=1
+fi
+
 echo "== a link handed to that xdg-open reaches the engine =="
 if ! env DOMICILE_SOCK="$SOCK" PATH="$APP_PATH" xdg-open "https://example.com/" \
        >"$WORK/xdg-opened.log" 2>&1; then
@@ -461,6 +469,18 @@ if [ "$(cat "$WORK/viewer-heard" 2>/dev/null)" = "$WORK/notes.pdf" ]; then
 else
   echo "FAIL: notes.pdf did not open in its type's default:"
   sed 's/^/    /' "$WORK/file.log"
+  FAILED=1
+fi
+
+echo "== and open --which names that application =="
+WHICH="$( cd "$WORK" && env PATH="$SHIMS:$APP_PATH" \
+    XDG_DATA_HOME="$WORK/desk" XDG_DATA_DIRS="$WORK/none" \
+    XDG_CONFIG_HOME="$WORK/desk-config" XDG_CONFIG_DIRS="$WORK/none" \
+    domicile open --which notes.pdf 2>&1 )"
+if [ "$WHICH" = "viewer.desktop" ]; then
+  echo "PASS: open --which said $WHICH"
+else
+  echo "FAIL: open --which said '$WHICH', not viewer.desktop"
   FAILED=1
 fi
 
