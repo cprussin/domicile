@@ -1,0 +1,52 @@
+// Copyright 2026 Connor Prussin
+// SPDX-License-Identifier: MIT
+
+module domicile.mojom;
+
+// The TVs the engine casts the desktop to: the Google Cast receivers Chrome's
+// Media Router finds. See docs/architecture/CASTING-TO-TVS.md in the Domicile
+// repository.
+//
+// - A cast mirrors the desktop: its picture is what the desktop's ScreenCast
+//   portal picks, and its sound is the desktop's. The shell answers that
+//   portal request, so it decides what the TV shows.
+// - Discovery starts when the shell listens, as Chrome's starts when its Cast
+//   dialog opens.
+// - A separate pipe, as for BrowserWindows: the Media Router is browser
+//   state, and ControlChannel relays the compositor's socket.
+//
+// Access control is the binder's, as for ControlChannel: the browser binds
+// this only for a document with the shell's origin.
+
+// One TV.
+struct CastSink {
+  // The Media Router's id for it, which Cast takes.
+  string id;
+  // What the TV calls itself.
+  string name;
+  // The route casting to it from this browser, which Stop takes. Empty while
+  // none is.
+  string route;
+};
+
+// Renderer -> browser, bound per document.
+interface CastSinks {
+  // Sets the list's receiver and starts discovery. The list is sent
+  // immediately and on every change. A second client is a bad message.
+  SetClient(pending_remote<CastSinksClient> client);
+
+  // Casts the desktop to TV `id`, once the TV takes it. `route` is the route
+  // Stop takes, or empty with `error` saying why, in words to show.
+  Cast(string id) => (string route, string error);
+
+  // Stops route `route`; its TV's `route` empties in the next list. An unknown
+  // route is a stop that raced the route's end, and does nothing.
+  Stop(string route);
+};
+
+// Browser -> renderer.
+interface CastSinksClient {
+  // The whole list, by name, on every change. Deltas would leave a page wrong
+  // for good after one missed message.
+  SinksChanged(array<CastSink> sinks);
+};

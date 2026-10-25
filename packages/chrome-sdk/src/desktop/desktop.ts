@@ -19,6 +19,8 @@ import type { Extensions } from "./extensions";
 import { extensions } from "./extensions";
 import type { Files } from "./files";
 import { files } from "./files";
+import type { GoogleCast } from "./google-cast";
+import { googleCast } from "./google-cast";
 import type { Keyboard } from "./keyboard";
 import { keyboard } from "./keyboard";
 import type { Notifications } from "./notifications";
@@ -63,6 +65,7 @@ export type Domicile = {
   readonly displays: Displays;
   readonly extensions: Extensions;
   readonly files: Files;
+  readonly googleCast: GoogleCast;
   readonly keyboard: Keyboard;
   readonly notifications: Notifications;
   readonly pointer: Pointer;
@@ -103,6 +106,7 @@ const build = (host: DomicileHost): Domicile => {
     displays: displays(host, calls),
     extensions: extensions(host),
     files: files(host, calls),
+    googleCast: googleCast(host),
     keyboard: keyboard(host, calls),
     notifications: notifications(host),
     on: on<DomicileListeners>({
