@@ -888,8 +888,8 @@ impl PortalKind {
             (PortalKind::PickColor(desk), PortalAnswer::PickColor { x, y }) => {
                 *x < desk.width && *y < desk.height
             }
-            // A stop answers a running session and a press or release a bound
-            // shortcut, never a request.
+            // A stop, pause, resume or discard answers a running session and
+            // a press or release a bound shortcut, never a request.
             (
                 _,
                 PortalAnswer::Access
@@ -907,6 +907,9 @@ impl PortalKind {
                 | PortalAnswer::ScreenshotBrowserWindow { .. }
                 | PortalAnswer::PickColor { .. }
                 | PortalAnswer::Stop
+                | PortalAnswer::Pause
+                | PortalAnswer::Resume
+                | PortalAnswer::Discard
                 | PortalAnswer::Pressed
                 | PortalAnswer::Released,
             ) => false,
@@ -1045,6 +1048,21 @@ pub enum CapturingKind {
     InputCapture { devices: Devices },
     /// What a screen cast records.
     ScreenCast { sources: Vec<Captured> },
+    /// A screen recording the shell started, into `file`. The shell pauses,
+    /// resumes, stops and discards it with [`PortalAnswer::Pause`],
+    /// [`PortalAnswer::Resume`], [`PortalAnswer::Stop`] and
+    /// [`PortalAnswer::Discard`].
+    Recording {
+        sources: Vec<Captured>,
+        /// The absolute path of the WebM it records into.
+        file: String,
+        /// How long it recorded until `running_since_ms`, or until it paused.
+        recorded_ms: u64,
+        /// When it last started or resumed, in milliseconds since the Unix
+        /// epoch. `None` while it is paused.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        running_since_ms: Option<u64>,
+    },
 }
 
 /// An `AccessDialog`'s texts.
@@ -1605,6 +1623,15 @@ pub enum PortalAnswer {
     },
     /// The pixel of a [`PortalKind::PickColor`] the user picked.
     PickColor { x: u32, y: u32 },
+    /// Pause the [`CapturingKind::Recording`] with this id. Answers no
+    /// request.
+    Pause,
+    /// Resume the paused [`CapturingKind::Recording`] with this id. Answers
+    /// no request.
+    Resume,
+    /// Stop the [`CapturingKind::Recording`] with this id and delete its
+    /// file. Answers no request.
+    Discard,
     /// The [`BoundShortcut`] with this id fired. Answers no request.
     Pressed,
     /// The [`BoundShortcut`] with this id was let go. Answers no request.
@@ -1636,7 +1663,12 @@ impl PortalAnswer {
             | PortalAnswer::PickColor { .. }
             | PortalAnswer::Stop => 0,
             PortalAnswer::Canceled => 1,
-            PortalAnswer::Refused | PortalAnswer::Pressed | PortalAnswer::Released => 2,
+            PortalAnswer::Refused
+            | PortalAnswer::Pause
+            | PortalAnswer::Resume
+            | PortalAnswer::Discard
+            | PortalAnswer::Pressed
+            | PortalAnswer::Released => 2,
         }
     }
 }
@@ -1756,6 +1788,13 @@ pub enum SystemRequest {
         #[serde(default)]
         file: Option<String>,
     },
+    /// Record what the user picks in the shell's [`PortalKind::ScreenCast`]
+    /// picker, asked by [`SHELL_APP_ID`], to a WebM in the videos directory.
+    /// Listed as a [`CapturingKind::Recording`] while it runs. Answered with
+    /// [`SystemReply::Saved`] once the user stops it, or
+    /// [`SystemErrorKind::Canceled`] when the picker is dismissed or the
+    /// recording discarded. `domicile screen-record` sends this.
+    ScreenRecord,
     /// Draw `window` as it last drew itself, for a picker to preview one it
     /// cannot see on the frozen desk. Answered with [`SystemReply::Preview`].
     PreviewWindow { window: PreviewedWindow },

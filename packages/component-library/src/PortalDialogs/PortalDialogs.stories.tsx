@@ -632,6 +632,73 @@ export const Capturing: Story = {
   },
 };
 
+/** The shell's own source picker, for a screen recording. */
+export const RecordPicker: Story = {
+  args: {
+    domicile: reading(
+      pushing([{ ...screenCast, app_id: "domicile:shell" }]),
+      installed,
+    ),
+    screen: undefined,
+    screenOf: undefined,
+  },
+};
+
+/** The toolbar over the shell's own screen recording, a minute in. */
+export const Recording: Story = {
+  args: {
+    domicile: pushing(
+      [],
+      [
+        {
+          app_id: "domicile:shell",
+          body: {
+            file: "/home/me/Videos/Screen recordings/a.webm",
+            recorded_ms: 0,
+            running_since_ms: Date.now() - 61_000,
+            sources: [
+              { description: "Dell U3219Q", name: "drm-1", type: "monitor" },
+            ],
+          },
+          id: 9,
+          kind: "recording",
+        },
+      ],
+    ),
+    screen: undefined,
+    screenOf: undefined,
+    shellChords: undefined,
+    shownWindows: undefined,
+  },
+};
+
+/** A paused recording's toolbar. */
+export const RecordingPaused: Story = {
+  args: {
+    domicile: pushing(
+      [],
+      [
+        {
+          app_id: "domicile:shell",
+          body: {
+            file: "/home/me/Videos/Screen recordings/a.webm",
+            recorded_ms: 754_000,
+            sources: [
+              { description: "Dell U3219Q", name: "drm-1", type: "monitor" },
+            ],
+          },
+          id: 9,
+          kind: "recording",
+        },
+      ],
+    ),
+    screen: undefined,
+    screenOf: undefined,
+    shellChords: undefined,
+    shownWindows: undefined,
+  },
+};
+
 export const GlobalShortcuts: Story = {
   args: {
     domicile: pushing([globalShortcuts]),

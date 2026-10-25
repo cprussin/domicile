@@ -93,15 +93,16 @@ describe("dbus", () => {
 });
 
 describe("capture", () => {
-  it("takes a screenshot and previews a window through the compositor", async () => {
+  it("takes a screenshot, previews a window and records the screen through the compositor", async () => {
     const fake = new FakeDomicileHost();
     const { capture } = desktop(fake.host);
     capture.screenshot().catch(never);
     capture.preview(PreviewedWindow.App("1")).catch(never);
+    capture.screenRecord().catch(never);
     await Promise.resolve();
 
     expect(requests(fake).map((request) => Object(request).call)).toStrictEqual(
-      ["screenshot", "preview_window"],
+      ["screenshot", "preview_window", "screen_record"],
     );
   });
 });

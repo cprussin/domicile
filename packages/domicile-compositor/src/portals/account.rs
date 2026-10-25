@@ -90,6 +90,9 @@ impl Account {
             | PortalAnswer::ScreenshotBrowserWindow { .. }
             | PortalAnswer::PickColor { .. }
             | PortalAnswer::Stop
+            | PortalAnswer::Pause
+            | PortalAnswer::Resume
+            | PortalAnswer::Discard
             | PortalAnswer::Pressed
             | PortalAnswer::Released => (2, HashMap::new()),
         }

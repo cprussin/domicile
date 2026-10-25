@@ -28,6 +28,7 @@ Ask the running desktop:
   domicile open-app <url>               Open a site as an app: no address bar
   domicile run-app <module>             Run an app module in an app window
   domicile screenshot [file]            Take the shell's screenshot, or write a PNG
+  domicile screen-record                Record the screen until the toolbar stops it
   domicile send-shell <word>...         Run a shell command, as a keybinding does
   domicile theme [light|dark|toggle]    Set the theme, or print it
   domicile disable-while-typing [on|off|toggle]
@@ -421,6 +422,7 @@ fn verb(word: &str) -> Option<Verb> {
         "install-app" => Some(Verb::Installing),
         "uninstall-app" => Some(Verb::Uninstalling),
         "screenshot" => Some(Verb::Capturing),
+        "screen-record" => Some(Verb::Asking(Request::ScreenRecord)),
         "send-shell" => Some(Verb::Sending),
         "check-config" => Some(Verb::Checking),
         "disable-while-typing" => Some(Verb::Switching),

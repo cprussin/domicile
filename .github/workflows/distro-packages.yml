@@ -78,7 +78,7 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends ca-certificates curl git \
             build-essential pkg-config libxkbcommon-dev libwayland-dev \
-            libpipewire-0.3-dev libclang-dev
+            libpipewire-0.3-dev libclang-dev libgstreamer1.0-dev
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}

@@ -2,6 +2,9 @@ import { describe, expect, it } from "bun:test";
 import type { PortalHost } from "./desktop/portal-wire";
 import {
   answerPortalRequest,
+  discardRecording,
+  pauseRecording,
+  resumeRecording,
   stopCapturing,
   watchBoundShortcuts,
   watchCapturing,
@@ -21,12 +24,14 @@ import {
   CastSource,
   ColorMode,
   FileChooserMode,
+  hideFromCaptures,
   Inhibited,
   LauncherType,
   Orientation,
   PortalAnswer,
   PortalKind,
   PrintQuality,
+  SHELL_APP_ID,
   Sides,
   WallpaperTarget,
 } from "./portal";
@@ -962,6 +967,55 @@ describe("watchCapturing", () => {
     ]);
   });
 
+  it("parses a screen recording, paused and running", async () => {
+    const host = new FakeHost();
+    const sessions = new Promise<readonly Capturing[]>((resolve) => {
+      watchCapturing(host, resolve);
+    });
+    const recording = {
+      file: "/home/me/Videos/Screen recordings/a.webm",
+      recorded_ms: 2500,
+      sources: [{ description: "Dell U3219Q", name: "drm-1", type: "monitor" }],
+    };
+    host.push(
+      [],
+      [
+        {
+          app_id: SHELL_APP_ID,
+          body: { ...recording, running_since_ms: 9000 },
+          id: 5,
+          kind: "recording",
+        },
+        { app_id: SHELL_APP_ID, body: recording, id: 6, kind: "recording" },
+      ],
+    );
+
+    expect(await sessions).toEqual([
+      {
+        appId: SHELL_APP_ID,
+        file: "/home/me/Videos/Screen recordings/a.webm",
+        id: 5,
+        kind: CapturingKind.Recording,
+        recordedMs: 2500,
+        runningSinceMs: 9000,
+        sources: [
+          Captured.Monitor({ description: "Dell U3219Q", name: "drm-1" }),
+        ],
+      },
+      {
+        appId: SHELL_APP_ID,
+        file: "/home/me/Videos/Screen recordings/a.webm",
+        id: 6,
+        kind: CapturingKind.Recording,
+        recordedMs: 2500,
+        runningSinceMs: undefined,
+        sources: [
+          Captured.Monitor({ description: "Dell U3219Q", name: "drm-1" }),
+        ],
+      },
+    ]);
+  });
+
   it("reads a push without sessions as none", async () => {
     const host = new FakeHost();
     const sessions = capturing(host);
@@ -1300,6 +1354,40 @@ describe("stopCapturing", () => {
     stopCapturing(host, 5);
 
     expect(host.answers).toEqual([[5, { kind: "stop" }]]);
+  });
+});
+
+describe("a recording's controls", () => {
+  it("pause, resume and discard it", () => {
+    const host = new FakeHost();
+    pauseRecording(host, 5);
+    resumeRecording(host, 5);
+    discardRecording(host, 5);
+
+    expect(host.answers).toEqual([
+      [5, { kind: "pause" }],
+      [5, { kind: "resume" }],
+      [5, { kind: "discard" }],
+    ]);
+  });
+});
+
+describe("hideFromCaptures", () => {
+  it("makes the element a restriction target", async () => {
+    const marked: unknown[] = [];
+    const element = { tagName: "DIV" } as unknown as Element;
+    await hideFromCaptures(element, {
+      fromElement: (target) => {
+        marked.push(target);
+        return Promise.resolve({});
+      },
+    });
+
+    expect(marked).toEqual([element]);
+  });
+
+  it("does nothing where there is no Element Capture", async () => {
+    await hideFromCaptures({} as Element, undefined);
   });
 });
 
