@@ -54,6 +54,17 @@ for kept in 'name: domicile' 'dst: /etc/pam.d/domicile' 'libc6 (>= 2.34)' \
 done
 has "the group is still made" "$older" '/distro/postinstall.sh'
 
+echo "each RPM distribution gets the recorder's plugins by its own names"
+fedora="$(config fedora)" || fail "nfpm-config.sh succeeds for Fedora" "$fedora"
+opensuse="$(config opensuse)" || fail "nfpm-config.sh succeeds for openSUSE" "$opensuse"
+has "Fedora's pipewire plugin" "$fedora" '- pipewire-gstreamer'
+has "Fedora's good plugins" "$fedora" '- gstreamer1-plugins-good'
+has "openSUSE's pipewire plugin" "$opensuse" '- gstreamer-plugin-pipewire'
+has "openSUSE's good plugins" "$opensuse" '- gstreamer-plugins-good'
+opensuse_depends="$(sed -n '/^  rpm:/,/^    recommends:/p' <<<"$opensuse")"
+lacks "no Fedora names in openSUSE's dependencies" "$opensuse_depends" 'gstreamer1-'
+lacks "every placeholder on openSUSE" "$opensuse" '"@rpm-gstreamer@"'
+
 echo "Arch requires only what the desktop needs"
 arch_depends="$(config archlinux | sed -n '/^  archlinux:/,/^[a-z]/p')"
 while IFS=: read -r optional _; do

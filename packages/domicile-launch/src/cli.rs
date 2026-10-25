@@ -22,7 +22,7 @@ pub enum CliError {
          Or a command for the desktop already running: which-shell, \
          load-shell <shell>, open-url <url>, open-app <url>, run-app \
          <module>, screenshot \
-         [file], or \
+         [file], screen-record, or \
          send-shell <command>…, or \
          disable-while-typing [on|off|toggle], or \
          theme [light|dark|toggle]. Or \
@@ -380,6 +380,7 @@ fn verb(word: &str) -> Option<Verb> {
         "install-app" => Some(Verb::Installing),
         "uninstall-app" => Some(Verb::Uninstalling),
         "screenshot" => Some(Verb::Capturing),
+        "screen-record" => Some(Verb::Asking(Request::ScreenRecord)),
         "send-shell" => Some(Verb::Sending),
         "check-config" => Some(Verb::Checking),
         "disable-while-typing" => Some(Verb::Switching),

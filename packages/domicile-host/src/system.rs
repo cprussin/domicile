@@ -76,6 +76,8 @@ pub struct System {
     buses: Arc<Mutex<HashMap<Bus, Connection>>>,
     /// Takes screenshots; `None` on a system that takes none.
     screenshot: Option<Screenshot>,
+    /// Records the screen; `None` on a system that records nothing.
+    screen_record: Option<ScreenRecord>,
     /// Draws window previews; `None` on a system that draws none.
     preview: Option<Preview>,
     /// The pages that hear a `SystemRequest::SendShell`.
@@ -127,6 +129,10 @@ pub type SetWindowStates =
 /// Takes a screenshot, into the file if one is given, and returns where it
 /// went. Blocks until it is kept, the dialog included.
 pub type Screenshot = Arc<dyn Fn(Option<PathBuf>) -> Result<Kept, SystemError> + Send + Sync>;
+
+/// Records what the user picks until they stop it, and returns the file.
+/// Blocks until then, the picker included.
+pub type ScreenRecord = Arc<dyn Fn() -> Result<PathBuf, SystemError> + Send + Sync>;
 
 /// Draws a window as it last drew itself, as a `data:` URL of a PNG. Blocks
 /// until it is drawn.
@@ -244,6 +250,7 @@ pub fn reach(request: &SystemRequest) -> Reach {
         | SystemRequest::CreateDir { .. }
         | SystemRequest::Stdin { .. }
         | SystemRequest::Screenshot { .. }
+        | SystemRequest::ScreenRecord
         | SystemRequest::PreviewWindow { .. }
         | SystemRequest::SendShell { .. }
         | SystemRequest::VirtualMonitor { .. } => Reach::Acts,
@@ -268,6 +275,7 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::DbusCall { .. }
         | SystemRequest::DbusMatch { .. }
         | SystemRequest::Screenshot { .. }
+        | SystemRequest::ScreenRecord
         | SystemRequest::PreviewWindow { .. }
         | SystemRequest::ShellCommands
         | SystemRequest::IdleWarnings
@@ -314,6 +322,7 @@ pub fn refused_to_an_app(id: u32, request: &SystemRequest) -> Option<HostMessage
         | SystemRequest::DbusCall { .. }
         | SystemRequest::DbusMatch { .. } => None,
         SystemRequest::Screenshot { .. }
+        | SystemRequest::ScreenRecord
         | SystemRequest::PreviewWindow { .. }
         | SystemRequest::ShellCommands
         | SystemRequest::SendShell { .. }
@@ -358,6 +367,7 @@ impl System {
             }),
             buses: Arc::default(),
             screenshot: None,
+            screen_record: None,
             preview: None,
             shell_commands: ShellCommands::default(),
             idle_warnings: IdleWarnings::default(),
@@ -386,6 +396,15 @@ impl System {
         screenshot: impl Fn(Option<PathBuf>) -> Result<Kept, SystemError> + Send + Sync + 'static,
     ) -> System {
         self.screenshot = Some(Arc::new(screenshot));
+        self
+    }
+
+    /// This system, recording the screen through `screen_record`.
+    pub fn recording_with(
+        mut self,
+        screen_record: impl Fn() -> Result<PathBuf, SystemError> + Send + Sync + 'static,
+    ) -> System {
+        self.screen_record = Some(Arc::new(screen_record));
         self
     }
 
@@ -724,6 +743,18 @@ impl System {
                             path: path.display().to_string(),
                         },
                         Kept::Copied => SystemReply::Copied,
+                    })
+                })
+            }
+            SystemRequest::ScreenRecord => {
+                let screen_record = self.screen_record.clone();
+                self.on_a_thread(id, move |_| -> Result<SystemReply, SystemError> {
+                    let screen_record = screen_record.ok_or_else(|| SystemError {
+                        kind: SystemErrorKind::Other,
+                        message: "this desktop records no screens".into(),
+                    })?;
+                    Ok(SystemReply::Saved {
+                        path: screen_record()?.display().to_string(),
                     })
                 })
             }

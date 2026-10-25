@@ -332,6 +332,9 @@ impl Shortcuts {
             | PortalAnswer::ScreenshotBrowserWindow { .. }
             | PortalAnswer::PickColor { .. }
             | PortalAnswer::Stop
+            | PortalAnswer::Pause
+            | PortalAnswer::Resume
+            | PortalAnswer::Discard
             | PortalAnswer::Refused
             | PortalAnswer::Pressed
             | PortalAnswer::Released => Err(2),
@@ -495,6 +498,7 @@ mod tests {
             portals: Portals {
                 backends,
                 shots: crate::portals::Shots::none(),
+                recordings: None,
             },
             dialogs,
             bound,

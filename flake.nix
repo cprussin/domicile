@@ -99,6 +99,11 @@
         # libpipewire for screen casting, and the daemon
         # `e2e-a-window-casts-to-pipewire.sh` starts.
         pipewire
+        # libgstreamer, which `domicile-recorder` links, and the plugins its
+        # tests' pipelines name.
+        gst_all_1.gstreamer
+        gst_all_1.gst-plugins-base
+        gst_all_1.gst-plugins-good
         # libclang, which the `pipewire` crate's bindings are generated with.
         rustPlatform.bindgenHook
       ];
@@ -391,6 +396,8 @@
       #   bin/domicile-settings       opens the Settings app
       #   bin/domicile-app-host       what Domicile's apps spawn for the
       #                               desktop's state
+      #   bin/domicile-recorder       what the compositor records the
+      #                               screen with
       #   libexec/domicile/engine     the Chromium tree, `chrome` inside it
       #   libexec/domicile/builder    builds a shell from an entry or a package
       #   libexec/domicile/shells/    Domicile's prebuilt shells, which
@@ -400,8 +407,8 @@
       #                               Domicile's own app modules, which
       #                               `domicile-<name>` runs
       #   share/applications/         launcher entries for History,
-      #                               Settings, Screenshot, Shutdown,
-      #                               Reboot and Logout
+      #                               Settings, Screenshot, Screen Record,
+      #                               Shutdown, Reboot and Logout
       #
       # The binaries are copied, not symlinked. `domicile` finds its siblings
       # from `current_exe`, which resolves symlinks, so a symlink would point
@@ -440,6 +447,9 @@
         substitute ${./distro/nix/net.domicile.Miracast.service} \
           "$out/share/dbus-1/services/net.domicile.Miracast.service" \
           --subst-var-by bin "$out/bin"
+        # Records the screen for the compositor, which finds it beside
+        # itself. Copied for the same reason.
+        cp ${domicileBinaries}/bin/domicile-recorder "$out/bin/domicile-recorder"
         # The web link handler and the file making it the default.
         mkdir -p "$out/share/applications"
         substitute ${./distro/nix/domicile-open-url.desktop} \
@@ -472,6 +482,11 @@
           id = "screenshot";
           icon = ./distro/nix/launcher/screenshot.svg;
           preview = ./distro/nix/launcher/screenshot-preview.svg;
+        }}
+        ${launcherFile {
+          id = "screen-record";
+          icon = ./distro/nix/launcher/screen-record.svg;
+          preview = ./distro/nix/launcher/screen-record-preview.svg;
         }}
         ${launcherFile {
           id = "shutdown";
@@ -584,13 +599,15 @@
         # libxkbcommon and libpipewire are linked. Smithay's winit and EGL code
         # probes for the rest at build time; `postFixup` makes them loadable at
         # run time.
-        buildInputs = with pkgs; [ libxkbcommon wayland libGL libgbm pipewire ];
+        # GStreamer is linked by `domicile-recorder`.
+        buildInputs = with pkgs; [ libxkbcommon wayland libGL libgbm pipewire gst_all_1.gstreamer ];
 
-        # `domicile-compositor` must be named because `default-members` omits
-        # it. Binaries are named too, so the test-only `domicile-test-client`
-        # binary is not installed.
+        # `domicile-compositor` and `domicile-recorder` must be named because
+        # `default-members` omits them. Binaries are named too, so the
+        # test-only `domicile-test-client` binary is not installed.
         cargoBuildFlags = [
           "-p" "domicile-compositor" "--bin" "domicile-compositor"
+          "-p" "domicile-recorder" "--bin" "domicile-recorder"
           "-p" "domicile-launch" "--bin" "domicile" "--bin" "domicile-open-url" "--bin" "domicile-xdg-open" "--bin" "domicile-history" "--bin" "domicile-settings" "--bin" "domicile-app-host"
           "-p" "domicile-miracast" "--bin" "domicile-miracast"
         ];
@@ -631,6 +648,12 @@
             --suffix PATH : "${pkgs.lib.makeBinPath [ pkgs.gst_all_1.gstreamer ]}" \
             --set-default GST_PLUGIN_SYSTEM_PATH_1_0 "${pkgs.lib.makeSearchPathOutput "lib" "lib/gstreamer-1.0" (with pkgs.gst_all_1; [
               gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav pkgs.pipewire
+            ])}"
+          # The plugins the recorder's pipeline names: `pipewiresrc`, VP8,
+          # Opus and WebM.
+          wrapProgram "$out/bin/domicile-recorder" \
+            --prefix GST_PLUGIN_SYSTEM_PATH_1_0 : "${pkgs.lib.makeSearchPath "lib/gstreamer-1.0" (with pkgs; [
+              gst_all_1.gstreamer.out gst_all_1.gst-plugins-base gst_all_1.gst-plugins-good pipewire
             ])}"
         '';
       };

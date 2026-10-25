@@ -107,8 +107,9 @@ pub struct StreamId(u64);
 /// What a stream's caller hears.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Event {
-    /// The stream's PipeWire node, for the consumer to connect to.
-    Ready { node: u32 },
+    /// The stream's PipeWire node, for the consumer to connect to, and the
+    /// name of the sound node that carries its sound, if it has one.
+    Ready { node: u32, sound: Option<String> },
     /// The stream is gone. Nothing follows.
     Ended(Ended),
 }
