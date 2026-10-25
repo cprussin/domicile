@@ -14,8 +14,9 @@
 #   the engine answered `opened`   the command reached the engine
 #   main ran once                  the app's document was served and DomicileApp
 #                                  called its `main`
-#   the host is narrow             `main` was handed a DomicileAppHost, which
-#                                  has no `spawn`, not the shell's DomicileHost
+#   the desktop is narrow          `main` was handed the SDK layer's
+#                                  AppDomicile, which has no `windows`, not
+#                                  the shell's Domicile
 #   the compositor heard app_hello the app's channel said it is an app
 #   the answer reached the app     the call crossed both ways
 #   the app fetched its own file   fetch() reads the app's origin (patch 0126)
@@ -169,7 +170,7 @@ grep -qE '"GUARD app-main narrow=true"' "$ENGINE_LOG" && NARROW=1
 HELLO=0
 grep -qx "app-hello" "$SOCKET_LOG" && HELLO=1
 REPLIED=0
-grep -qE '"GUARD app-answered data=\{"type": ?"system_reply"' "$ENGINE_LOG" && REPLIED=1
+grep -qE '"GUARD app-answered written=true"' "$ENGINE_LOG" && REPLIED=1
 FETCHED=0
 grep -qE '"GUARD app-fetch own=read shell=(empty|refused)"' "$ENGINE_LOG" && FETCHED=1
 
@@ -186,8 +187,8 @@ PASSED=""
 case "$MEASURED" in
 "pinned 1 1 1 1 1 1")
   PASSED="an app module ran: run_app opened its window, its main was handed \
-a DomicileAppHost, and its system call crossed to the compositor as an app's \
-and back"
+the layer's AppDomicile, and its system call crossed to the compositor as an \
+app's and back"
   ;;
 "unpinned 1 1 1 1 1 1")
   PASSED="the control is sharp: the app's address in a window no app was \

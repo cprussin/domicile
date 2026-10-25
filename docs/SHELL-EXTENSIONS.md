@@ -28,17 +28,18 @@ Part of [WRITING-A-SHELL.md](WRITING-A-SHELL.md). Design:
 
 ## The list
 
-`domicile.extensions` is the full list; `extensionschanged` reports changes:
+`domicile.extensions.list` is the full list; `extensions.on("change")`
+reports changes:
 
 ```ts
-domicile.addEventListener("extensionschanged", () => {
-  drawTray((domicile.extensions ?? []).filter(({ enabled }) => enabled));
+domicile.extensions.on("change", () => {
+  drawTray((domicile.extensions.list ?? []).filter(({ enabled }) => enabled));
 });
 ```
 
 | Field | What |
 |---|---|
-| `id` | What `activateExtension` takes |
+| `id` | What `extensions.activate` takes |
 | `name` | The extension's name |
 | `title` | The action's tooltip and the icon's accessible name |
 | `icon` | A `data:image/png` URL at the page's device pixel ratio |
@@ -51,7 +52,7 @@ The row type is `DomicileExtension`. `extensionSchema`, from
 
 ## A click
 
-Call `domicile.activateExtension(id)` on every click, with or without a popup.
+Call `domicile.extensions.activate(id)` on every click, with or without a popup.
 This grants `activeTab` on the focused browser window, as Chrome's toolbar
 does, so `scripting.executeScript` and `tab.url` work there. Then:
 
@@ -75,7 +76,7 @@ panel.append(view);
 - **Size:** size the view to `contentWidth` and `contentHeight` (0 until laid
   out), announced in `domicile-content-size-change`. Cap them at the panel's
   maximum. The width includes a vertical scrollbar's gutter.
-- **Keyboard:** take it with `focusChrome` while the panel is open, and give
+- **Keyboard:** take it with `windows.focusShell` while the panel is open, and give
   it back on close ([Who gets the keyboard](WRITING-A-SHELL.md#who-gets-the-keyboard)).
 - **Closing:** close the panel on `domicile-close` (the popup called
   `window.close()`), on a press outside it, and on Escape. Escape reaches you

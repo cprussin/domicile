@@ -117,8 +117,8 @@ setTimeout(() => {
   process.exit(0);
 }, Number(capMs));
 // The module does nothing on import; the document Domicile writes calls its
-// `Shell`, and so does this.
-(await import(modulePath)).Shell();
+// `HostShell`, and so does this.
+(await import(modulePath)).HostShell();
 EOF
 
 FAILED=0

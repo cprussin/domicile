@@ -17,10 +17,10 @@
 //
 // The page logs its visibility itself; see guard-webview-hidden-server.py.
 //
-// Everything is inside `Shell`, which Domicile's document calls once the module
+// Everything is inside `HostShell`, which Domicile's document calls once the module
 // loads.
 
-export const Shell = (_root, desktop) => {
+export const HostShell = (_root, desktop) => {
   const say = (what) => {
     console.log(`GUARD ${what}`);
   };

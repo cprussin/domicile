@@ -7,7 +7,7 @@
 //
 // The app logs its own lines; see guard-app-module-app/app.js.
 
-export const Shell = (_root, desktop) => {
+export const HostShell = (_root, desktop) => {
   const say = (what) => {
     console.log(`GUARD ${what}`);
   };

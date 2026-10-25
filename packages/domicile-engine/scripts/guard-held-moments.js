@@ -8,7 +8,7 @@
 //                                     many arrived inside its own
 //                                     `addEventListener` call: none should
 
-export const Shell = (_root, desktop) => {
+export const HostShell = (_root, desktop) => {
   const host = desktop;
   if (host === null || host === undefined) {
     throw new Error(

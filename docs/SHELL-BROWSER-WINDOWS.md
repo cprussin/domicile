@@ -18,7 +18,7 @@ form input, history and playing media intact.
 const drawn = new Map<string, HTMLElement>();
 
 const show = () => {
-  for (const { id } of domicile.browserWindows ?? []) {
+  for (const { id } of domicile.browser.windows ?? []) {
     if (!drawn.has(id)) {
       const view = document.createElement("webview");
       view.setAttribute("window", id); // before append
@@ -28,24 +28,24 @@ const show = () => {
   }
 };
 show();
-domicile.addEventListener("browserwindowschanged", show);
+domicile.browser.on("change", show);
 
 plus.addEventListener("click", () => {
-  domicile.openBrowserWindow("https://example.com");
+  domicile.browser.open("https://example.com");
 });
 ```
 
-- **`browserWindows`** is the whole list, oldest first, `null` until the
-  engine lists it. `browserwindowschanged` fires when a window opens, closes,
+- **`browser.windows`** is the whole list, oldest first, `undefined` until
+  the engine lists it. `browser.on("change")` fires when a window opens, closes,
   navigates or changes title. A window you have not drawn is new; a missing
   one was closed. Each has `id`, `url` and `title`. An extension's popup
   window also has `popupWindow`, `width` and `height`
   ([SHELL-EXTENSIONS.md](SHELL-EXTENSIONS.md)).
-- **`openBrowserWindow(url)` and `closeBrowserWindow(id)`** are for your own
+- **`browser.open(url)` and `browser.close(id)`** are for your own
   UI. The result arrives in the next list. Other windows open without you
   ([New windows](#new-windows)). A page may ask to stay before it closes
   ([Close requests](#close-requests)).
-- **`openAppWindow(url)`** opens an app window, as `domicile open-app` does,
+- **`browser.openApp(url)`** opens an app window, as `domicile open-app` does,
   for your own launcher. It is listed with `isApp: true`
   ([New windows](#new-windows)).
 - **Set `window` before the view enters the document.** The engine reads it
@@ -76,7 +76,7 @@ view.addEventListener(WEBVIEW_WILL_NAVIGATE_EVENT, (event) => {
 
 ## Private browsing
 
-- **`openPrivateBrowserWindow(url)`** opens a private window. It is listed with
+- **`browser.openPrivate(url)`** opens a private window. It is listed with
   `isPrivate: true`. Draw it so the user can tell.
 - **`<webview private>`** makes your own page private, such as a preview. Set
   `private` before the view enters the document.
@@ -96,14 +96,14 @@ user's and every other partition, like a separate browser profile:
   **Any other name** keeps it in memory until the engine exits. No
   `partition` is the user's own storage. Set it before the view enters the
   document.
-- **`openBrowserWindow(url, partition)`** opens a window in one. It is listed
+- **`browser.open(url, { partition })`** opens a window in one. It is listed
   with its `partition` (`""` for none).
 - Pages and windows with the same name share it. Their new windows keep it.
 - `private` with a partition is in memory, apart from other private pages.
 - A page in a partition cannot show notifications. Chromium denies them
   outside a site's own storage.
 - `persist:` with no name is refused: the view stays empty, and
-  `openBrowserWindow` throws a `TypeError`.
+  `browser.open` throws a `TypeError`.
 
 ## Basics
 
@@ -117,7 +117,7 @@ user's and every other partition, like a separate browser profile:
   `document.visibilityState` is `hidden`, timers slow and nothing paints.
   Showing the view shows the page.
 - **Lay out a hidden window while it `isCaptured`.** A screenshot, a picker's
-  preview or a screen cast of the page alone sets it, and `browserwindowschanged`
+  preview or a screen cast of the page alone sets it, and `browser.on("change")`
   fires. A page with no layout box draws nothing, so the capture would get no
   frame. Manganese draws a hidden tab under the shown one meanwhile.
 - `domicile://` addresses, and `blob:` URLs the shell created, show
@@ -204,13 +204,13 @@ frame.addEventListener(WEBVIEW_GUEST_FOCUS_EVENT, () => {
 The compositor does not know about browser windows, so the shell moves
 keyboard focus to and from them:
 
-- **Take it:** call `domicile.focusChrome()` when a browser window becomes
+- **Take it:** call `domicile.windows.focusShell()` when a browser window becomes
   active.
   Otherwise the last focused client keeps receiving keys. See
   [Taking the keyboard](WRITING-A-SHELL.md#taking-the-keyboard-for-your-own-ui).
 - **Give it back:** blur the focused element in the browser window when the
   user switches away. While a guest page has focus, keys never reach your
-  document, so `focusApp` cannot forward them and other windows get no keys.
+  document, so `windows.focus` cannot forward them and other windows get no keys.
 - **Keep the caret:** do not focus the page if the window already has focus.
   The click that activated the window may have been in the address bar.
 
@@ -247,7 +247,7 @@ Draw the context menu yourself:
   `save-link-as`, `copy-image`, `copy-media-address`, `save-media-as`, the
   edit commands (`cut`, `paste`, …) and `inspect`. A save asks
   `domicile-file-chooser` where. See `WEBVIEW_CONTEXT_MENU_ACTIONS`.
-- Back, reload and "open in new window" (`openBrowserWindow`) need no menu
+- Back, reload and "open in new window" (`browser.open`) need no menu
   action.
 - `view.inspect()` opens DevTools for the page in a new browser window. It
   arrives in the next `browser_windows`, like any other window. DevTools draws
@@ -255,7 +255,7 @@ Draw the context menu yourself:
 - Manganese's `browser/page-menu.ts` builds Chrome's menu from the event.
 
 Desktop chords from `bindKeys` still work while a guest has focus. They arrive
-as a `shortcut` event. `domicile.grabShortcut` grabs a chord by name without
+as a `keyboard.on("shortcut")` event. `domicile.keyboard.grab` grabs a chord by name without
 `bindKeys` ([Keybindings](WRITING-A-SHELL.md#keybindings)).
 
 ## New windows
@@ -271,7 +271,7 @@ The browser opens a window without you for:
 - an extension's `tabs.create` or `windows.create`
 - DevTools, from `view.inspect()` or a context menu's `inspect`
 
-The window arrives in the next `browserwindowschanged`. You decide where it goes.
+The window arrives in the next `browser.on("change")`. You decide where it goes.
 
 A page's new window is the window it asked for: `window.open` returns it, and
 the opener, the window name and a form's POST body are kept. It is listed once
@@ -325,10 +325,10 @@ retry.addEventListener("click", () => view.reload());
 ## Close requests
 
 `window.close()` in a browser window's page, or an extension's
-`chrome.tabs.remove`, closes the window. It leaves the next `browserwindowschanged`.
+`chrome.tabs.remove`, closes the window. It leaves the next `browser.on("change")`.
 `window.close()` works only when the page's history has a single entry.
 
-`closeBrowserWindow(id)` runs the page's `beforeunload` first, as closing a
+`browser.close(id)` runs the page's `beforeunload` first, as closing a
 Chrome tab does:
 
 - A page with no `beforeunload` handler closes at once.
@@ -374,8 +374,7 @@ frame.addEventListener(WEBVIEW_FILE_CHOOSER_EVENT, (event) => {
 - **`event.home`** is the absolute home directory.
 - **`event.currentFolder`** is the absolute folder to start in, or `""` for
   the home. A download starts in the download folder (`XDG_DOWNLOAD_DIR`).
-- **Listing directories:** `readDir` and `stat` from
-  `@domicile-desktop/sdk/system`
+- **Listing directories:** `domicile.files.readDir` and `files.stat`
   ([SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md)).
   They are refused while the desktop is locked.
 - **Paths** are absolute or relative to home (`""` is home). `..` throws a

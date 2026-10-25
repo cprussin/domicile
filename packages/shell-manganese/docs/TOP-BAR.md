@@ -374,7 +374,7 @@ extension with an action. See
   - Each entry's mnemonic is underlined. Pressing that letter chooses the
     entry, or opens its submenu. Other letters highlight the next entry
     starting with them.
-- **Extension icons**: every click calls `activateExtension(id)`, giving the
+- **Extension icons**: every click calls `extensions.activate(id)`, giving the
   extension `activeTab` on the focused browser window.
   - With a popup, the click opens the popup in a `<webview>` panel under the
     icon. An outside click or the popup's `window.close()` closes it.
