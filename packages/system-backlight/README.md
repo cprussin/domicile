@@ -25,6 +25,10 @@ await set(0.5);
   `org.freedesktop.login1.Session.SetBrightness`. Never sets zero, which turns
   most panels off. Sends one level at a time; a level superseded while waiting
   resolves `SetOutcome.Superseded`.
+- `watchAmbientLight` (`./watch-ambient-light`): the room's light in lux, now
+  and on each change, from iio-sensor-proxy (`net.hadess.SensorProxy`).
+  Claims the sensor until `stop`, and again after a compositor restart. `None`
+  without a sensor or without iio-sensor-proxy.
 - Every call resolves a `Result<…, SystemError>`. A level that is not a number
   throws.
 
@@ -32,6 +36,8 @@ await set(0.5);
 
 - `udevadm` on the compositor's `PATH` (systemd).
 - A logind session.
+- For ambient light, iio-sensor-proxy (`hardware.sensor.iio.enable` on
+  NixOS).
 - Watching and setting work while the desktop is locked, so a lock screen can
   adjust the brightness ([LOCK.md](/docs/LOCK.md)).
 

@@ -139,7 +139,7 @@ fn a_page_s_processes_end_with_its_connection() {
 }
 
 /// A locked desktop runs nothing for the page, but its lock screen can still
-/// read the kernel, for the battery.
+/// read the kernel, for the battery, and warm the monitors.
 #[test]
 fn a_locked_desk_runs_nothing_but_reads_the_kernel() {
     let compositor = Compositor::started_with(A_DESK);
@@ -182,6 +182,14 @@ fn a_locked_desk_runs_nothing_but_reads_the_kernel() {
         panic!("a command was sent while locked");
     };
     assert_eq!(error.kind, SystemErrorKind::Locked);
+
+    // A night light follows the clock whether or not anybody is at the desk.
+    call(
+        &mut chrome,
+        5,
+        SystemRequest::SetColorTemperature { kelvin: 3400 },
+    );
+    assert_eq!(reply(&mut chrome, 5), SystemReply::Set);
 }
 
 /// `domicile send-shell` writes one line on the chrome socket without saying

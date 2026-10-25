@@ -65,8 +65,7 @@ const OptionCards = ({ editor, options, path }: OptionCardsProps) => {
   const groups = entries.flatMap(([key, entry]) =>
     entry.kind === "group" ? [{ entry, key }] : [],
   );
-  const title =
-    path.length === 0 ? undefined : path.map(capitalized).join(" › ");
+  const title = path.length === 0 ? undefined : path.map(inWords).join(" › ");
   return (
     <>
       {own.length > 0 && (
@@ -205,7 +204,10 @@ const readDeclaration = (text: string): Result<Options, string> =>
     return read.success ? Ok(read.data) : Err(z.prettifyError(read.error));
   });
 
-const capitalized = (key: string): string =>
-  `${key.charAt(0).toUpperCase()}${key.slice(1)}`;
+/** A camelCase key as a title: `nightLight` is "Night light". */
+const inWords = (key: string): string => {
+  const words = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+};
 
 const hintStyles = css({ color: "muted", fontSize: "sm", margin: 0 });

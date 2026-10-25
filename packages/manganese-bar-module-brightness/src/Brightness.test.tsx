@@ -15,6 +15,17 @@ import userEvent from "@testing-library/user-event";
 import { css } from "../styled-system/css";
 import { Brightness } from "./Brightness";
 import { heldBacklight } from "./held-backlight";
+import { nightLight } from "./night-light";
+
+/** A night light that keeps its override in memory and tints nothing. */
+const testNightLight = () =>
+  nightLight({
+    every: () => () => undefined,
+    now: () => new Date("2026-10-25T15:00"),
+    store: () => undefined,
+    stored: () => undefined,
+    tint: () => undefined,
+  });
 
 /** A test-controlled check for a backlight. */
 const heldHardware = () => {
@@ -40,27 +51,49 @@ const heldHardware = () => {
 const UNCHECKED = heldHardware().hardware;
 
 const opened = async (backlight: ReturnType<typeof heldBacklight>) => {
-  render(<Brightness backlight={backlight.backlight} hardware={UNCHECKED} />);
+  render(
+    <Brightness
+      backlight={backlight.backlight}
+      hardware={UNCHECKED}
+      nightLight={testNightLight()}
+    />,
+  );
   backlight.report(0.42);
   await userEvent.click(screen.getByRole("button", { name: "Brightness 42%" }));
   return screen.getByRole("slider", { name: "Brightness" });
 };
 
 describe("Brightness", () => {
-  it("shows nothing on a machine without a backlight", () => {
+  it("opens the night light alone on a machine without a backlight", async () => {
     const backlight = heldBacklight();
     const hardware = heldHardware();
-
     render(
       <Brightness
         backlight={backlight.backlight}
         hardware={hardware.hardware}
+        nightLight={testNightLight()}
       />,
     );
     hardware.report(Ok(false));
 
-    expect(screen.queryByRole("img")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Night light off" }),
+    );
+    await userEvent.click(screen.getByRole("switch", { name: "Night light" }));
+
+    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Night light on" }),
+    ).toBeInTheDocument();
+  });
+
+  it("turns the night light on beside the slider", async () => {
+    const backlight = heldBacklight();
+    await opened(backlight);
+
+    await userEvent.click(screen.getByRole("switch", { name: "Night light" }));
+
+    expect(screen.getByRole("switch", { name: "Night light" })).toBeChecked();
   });
 
   it("says, dimmed, when a backlight has no level to show", () => {
@@ -71,6 +104,7 @@ describe("Brightness", () => {
       <Brightness
         backlight={backlight.backlight}
         hardware={hardware.hardware}
+        nightLight={testNightLight()}
       />,
     );
     hardware.report(Ok(true));
@@ -110,7 +144,13 @@ describe("Brightness", () => {
 
   it("steps by a twentieth from wherever the wheel left it", () => {
     const backlight = heldBacklight();
-    render(<Brightness backlight={backlight.backlight} hardware={UNCHECKED} />);
+    render(
+      <Brightness
+        backlight={backlight.backlight}
+        hardware={UNCHECKED}
+        nightLight={testNightLight()}
+      />,
+    );
     backlight.report(0.42);
     const icon = screen.getByRole("button", { name: "Brightness 42%" });
 
@@ -122,7 +162,13 @@ describe("Brightness", () => {
 
   it("never asks past either end", () => {
     const backlight = heldBacklight();
-    render(<Brightness backlight={backlight.backlight} hardware={UNCHECKED} />);
+    render(
+      <Brightness
+        backlight={backlight.backlight}
+        hardware={UNCHECKED}
+        nightLight={testNightLight()}
+      />,
+    );
     backlight.report(0.98);
 
     fireEvent.wheel(screen.getByRole("button"), { deltaY: -100 });
@@ -132,7 +178,13 @@ describe("Brightness", () => {
 
   it("draws a bulb that dims with the level", () => {
     const backlight = heldBacklight();
-    render(<Brightness backlight={backlight.backlight} hardware={UNCHECKED} />);
+    render(
+      <Brightness
+        backlight={backlight.backlight}
+        hardware={UNCHECKED}
+        nightLight={testNightLight()}
+      />,
+    );
     const icon = () => screen.getByRole("button", { name: /^Brightness/ });
 
     backlight.report(0.2);

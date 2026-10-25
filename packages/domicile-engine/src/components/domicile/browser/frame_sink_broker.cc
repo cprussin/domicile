@@ -51,7 +51,8 @@ FrameSinkBroker::FrameSinkBroker(
     BrowserWindowCaptureTargetGetter get_browser_window_capture_target,
     PointerTargetsSetter set_pointer_targets,
     SharedImageInterfaceGetter get_software_shared_image_interface,
-    VirtualDisplaysSetter set_virtual_displays)
+    VirtualDisplaysSetter set_virtual_displays,
+    WhitePointSetter set_white_point)
     : host_frame_sink_manager_(host_frame_sink_manager),
       allocate_frame_sink_id_(std::move(allocate_frame_sink_id)),
       get_shared_image_interface_(std::move(get_shared_image_interface)),
@@ -63,7 +64,8 @@ FrameSinkBroker::FrameSinkBroker(
       get_browser_window_capture_target_(
           std::move(get_browser_window_capture_target)),
       set_pointer_targets_(std::move(set_pointer_targets)),
-      set_virtual_displays_(std::move(set_virtual_displays)) {
+      set_virtual_displays_(std::move(set_virtual_displays)),
+      set_white_point_(std::move(set_white_point)) {
   CHECK(host_frame_sink_manager);
   CHECK(allocate_frame_sink_id_);
   receivers_.set_disconnect_handler(base::BindRepeating(
@@ -266,6 +268,14 @@ void FrameSinkBroker::ConfigureVirtualDisplays(
     return;
   }
   set_virtual_displays_.Run(std::move(displays));
+}
+
+void FrameSinkBroker::SetWhitePoint(float red, float green, float blue) {
+  if (!set_white_point_) {
+    // No CRTC outside a tty, as for ConfigureDisplays.
+    return;
+  }
+  set_white_point_.Run(red, green, blue);
 }
 
 void FrameSinkBroker::SetClipboard(mojom::Clipboard clipboard,
