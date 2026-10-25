@@ -1,7 +1,7 @@
 import type { CastClaim } from "@domicile-desktop/sdk/cast";
 import { CastClaimKind, claimCastRequest } from "@domicile-desktop/sdk/cast";
-import type { PortalHost, PortalRequest } from "@domicile-desktop/sdk/portal";
-import { answerPortalRequest } from "@domicile-desktop/sdk/portal";
+import type { Portals } from "@domicile-desktop/sdk/desktop/portals";
+import type { PortalRequest } from "@domicile-desktop/sdk/portal";
 import { useLayoutEffect, useRef, useState } from "react";
 
 /**
@@ -10,7 +10,7 @@ import { useLayoutEffect, useRef, useState } from "react";
  * docs/architecture/CASTING-TO-TVS.md.
  */
 export const useCastClaims = (
-  host: PortalHost,
+  domicile: { readonly portals: Pick<Portals, "answer"> },
   requests: readonly PortalRequest[],
 ): ReadonlyMap<number, CastClaim> => {
   // Every request seen, claimed or not: each is claimed once.
@@ -30,10 +30,10 @@ export const useCastClaims = (
     }
     for (const request of requests) {
       if (!known.has(request.id)) {
-        const claim = claimCastRequest(host, request);
+        const claim = claimCastRequest(domicile, request);
         known.set(request.id, claim);
         if (claim?.kind === CastClaimKind.Answered) {
-          answerPortalRequest(host, request.id, claim.answer);
+          domicile.portals.answer(request.id, claim.answer);
         }
       }
     }
@@ -44,7 +44,7 @@ export const useCastClaims = (
         ),
       ),
     );
-  }, [host, requests]);
+  }, [domicile, requests]);
 
   return claims;
 };

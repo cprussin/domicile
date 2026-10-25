@@ -10,7 +10,7 @@ describe("perHost", () => {
       made.push(domicile);
       return {};
     });
-    const { host } = new FakeDomicileHost();
+    const { domicile: host } = new FakeDomicileHost();
 
     expect(of(host)).toBe(of(host));
     expect(made).toEqual([host]);
@@ -19,8 +19,8 @@ describe("perHost", () => {
   it("makes a separate value for each desktop", () => {
     const of = perHost(() => ({}));
 
-    expect(of(new FakeDomicileHost().host)).not.toBe(
-      of(new FakeDomicileHost().host),
+    expect(of(new FakeDomicileHost().domicile)).not.toBe(
+      of(new FakeDomicileHost().domicile),
     );
   });
 });

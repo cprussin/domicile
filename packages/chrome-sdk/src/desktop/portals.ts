@@ -40,6 +40,11 @@ export type Portals = {
   answer: (id: number, answer: PortalAnswer) => void;
   /** End capturing session `id`. */
   stopCapturing: (id: number) => void;
+  /**
+   * Tell the application holding bound shortcut `id` its chord went down or
+   * up. See {@link Portals.boundShortcuts}.
+   */
+  fireShortcut: (id: number, kind: "pressed" | "released") => void;
   on: On<PortalsListeners>;
 };
 
@@ -77,6 +82,9 @@ export const portals = (host: PortalsHost): Portals => {
     },
     get capturing() {
       return latest.capturing;
+    },
+    fireShortcut: (id, kind) => {
+      host.answerPortalRequest(id, JSON.stringify({ kind }));
     },
     on: on<PortalsListeners>({
       change: (listener) => hostEvent(host, "portalrequests", () => listener()),

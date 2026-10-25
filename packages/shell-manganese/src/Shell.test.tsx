@@ -23,9 +23,10 @@ import { hostDisplays } from "@domicile-desktop/manganese-window-management/scre
 import { GrabCursor } from "@domicile-desktop/manganese-window-management/useGrabCursor";
 import { movingStyles } from "@domicile-desktop/manganese-window-management/window-styles";
 import { APP_TAG_NAME } from "@domicile-desktop/sdk/app-element";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
+import type { FileSearch } from "@domicile-desktop/sdk/desktop/files";
 import type {
   DomicileDisplay,
-  DomicileHost,
   DomicileHostEventMap,
   DomicileWindow,
 } from "@domicile-desktop/sdk/domicile-host";
@@ -107,7 +108,7 @@ const dialogBox = (): { left: string; width: string } => {
  */
 class Desk {
   readonly fake = new FakeDomicileHost();
-  readonly host: DomicileHost;
+  readonly domicile: Domicile;
 
   /** The files the host's index holds, or `undefined` until a test sets it. */
   #home: readonly string[] | undefined;
@@ -125,15 +126,16 @@ class Desk {
     const asked = this.#asked;
     const searchFiles = (query: string) => {
       this.fake.calls.push(["searchFiles", query]);
-      return new Promise((settle) => {
+      return new Promise<FileSearch>((settle) => {
         asked.push({ query, settle });
         this.#answer();
       });
     };
-    this.host = new Proxy(this.fake.host, {
-      get: (host, name) =>
-        name === "searchFiles" ? searchFiles : Reflect.get(host, name),
-    });
+    const { domicile } = this.fake;
+    this.domicile = {
+      ...domicile,
+      files: { ...domicile.files, search: searchFiles },
+    };
   }
 
   get calls() {
@@ -243,7 +245,7 @@ const renderingShell = (
   if (desktop !== undefined) {
     domicile.fake.set({ displays: desktop });
   }
-  const client = domicile.host;
+  const client = domicile.domicile;
   // A standalone theme, so these tests do not depend on the host theme
   // protocol; `host-theme.test.ts` covers that.
   const rendered = render(
@@ -2172,6 +2174,7 @@ describe("Shell", () => {
       expect(domicile.calls).toContainEqual([
         "openBrowserWindow",
         "https://example.com",
+        "",
       ]);
     });
 

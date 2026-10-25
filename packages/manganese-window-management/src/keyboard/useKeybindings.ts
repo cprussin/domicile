@@ -1,6 +1,6 @@
 import type { KeyBinding } from "@domicile-desktop/sdk/bind-keys";
 import { bindKeys } from "@domicile-desktop/sdk/bind-keys";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { useEffect, useEffectEvent, useRef } from "react";
 
@@ -15,7 +15,7 @@ const logToConsole = (error: string): void => {
 };
 
 type Options = {
-  domicile: DomicileHost;
+  domicile: Domicile;
   /** The shell's keybindings. */
   keybindings: ShellKeybindings;
   /** Whether the launcher is open, which blocks every key but its own. */

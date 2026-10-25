@@ -1,11 +1,8 @@
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Browser } from "@domicile-desktop/sdk/desktop/browser";
 
 import { GMAIL_ORIGIN } from "./addresses";
 
-type Desk = Pick<
-  DomicileHost,
-  "addEventListener" | "browserWindows" | "removeEventListener"
->;
+type Desk = { readonly browser: Pick<Browser, "on" | "windows"> };
 
 /**
  * Calls `onChange` when a Gmail browser window opens, closes, navigates or
@@ -24,16 +21,13 @@ export const watchGmailWindows = (
       onChange();
     }
   };
-  domicile.addEventListener("browserwindowschanged", windowsChanged);
-  return () => {
-    domicile.removeEventListener("browserwindowschanged", windowsChanged);
-  };
+  return domicile.browser.on("change", windowsChanged);
 };
 
 /** Every Gmail window's id, address and title, as one string to compare. */
 const gmailWindows = (domicile: Desk): string =>
   JSON.stringify(
-    (domicile.browserWindows ?? [])
+    (domicile.browser.windows ?? [])
       .filter((window) => URL.parse(window.url)?.origin === GMAIL_ORIGIN)
       .map((window) => [window.id, window.url, window.title]),
   );

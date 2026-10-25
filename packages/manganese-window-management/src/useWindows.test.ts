@@ -35,7 +35,7 @@ const client = () => {
     get closed() {
       return called("closeBrowserWindow");
     },
-    domicile: fake.host,
+    domicile: fake.domicile,
     fake,
     /** The window the compositor says has the keyboard. */
     focuses: (appId: string | null) => {

@@ -3,7 +3,7 @@
 
 import { DisplayProvider } from "@domicile-desktop/component-library/DisplayProvider";
 import { Screen } from "@domicile-desktop/component-library/Screen";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -26,7 +26,7 @@ const DRAW_MS = 1600;
 const ENDING_MS = 900;
 
 type Props = {
-  readonly domicile: DomicileHost;
+  readonly domicile: Domicile;
   /** Says the splash is ready to give way; see `writeEnded`. */
   readonly end?: typeof writeEnded;
   /** Delivers the build's progress; see `followProgress`. */
@@ -193,7 +193,7 @@ const Failure = ({ why }: { readonly why: string }) => (
  * the listener's teardown, or `undefined` while the build has not failed.
  */
 const loggingOutOnAKey = (
-  domicile: DomicileHost,
+  domicile: Domicile,
   progress: Progress,
 ): (() => void) | undefined =>
   progress.stage === Stage.Failed
@@ -201,11 +201,11 @@ const loggingOutOnAKey = (
     : undefined;
 
 const stoppingOnAKey = (
-  domicile: DomicileHost,
+  domicile: Domicile,
   supervisor: number,
 ): (() => void) => {
   const stop = () => {
-    domicile.spawn(["kill", "-TERM", String(supervisor)]);
+    domicile.processes.launch(["kill", "-TERM", String(supervisor)]);
   };
   window.addEventListener("keydown", stop);
   return () => {
@@ -219,7 +219,7 @@ const stoppingOnAKey = (
  * `undefined` while there is nothing to end.
  */
 const givingWay = (
-  domicile: DomicileHost,
+  domicile: Domicile,
   ended: string | undefined,
   shownAt: number | undefined,
   end: typeof writeEnded,

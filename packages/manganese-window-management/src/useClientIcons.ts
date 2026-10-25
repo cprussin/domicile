@@ -1,5 +1,5 @@
 import type { Result } from "@cprussin/option-result";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import { useEffect, useState } from "react";
 
@@ -11,7 +11,7 @@ import type { ClientIcons } from "./client-icons";
  * logged, and its windows keep their stand-in.
  */
 export const useClientIcons = (
-  domicile: DomicileHost,
+  domicile: Domicile,
   desktopIds: readonly string[],
   icons: ClientIcons,
 ): ReadonlyMap<string, string> => {
@@ -47,7 +47,7 @@ export const useClientIcons = (
 
 /** `desktopIds` that have an icon, each with its icon. */
 const pictures = async (
-  domicile: DomicileHost,
+  domicile: Domicile,
   desktopIds: readonly string[],
   icons: ClientIcons,
 ): Promise<ReadonlyMap<string, string>> => {

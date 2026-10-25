@@ -53,7 +53,7 @@ const shell = (keybindings?: ShellKeybindings) => {
   const reported: string[] = [];
   render(
     <Shell
-      domicile={fake.host}
+      domicile={fake.domicile}
       keybindings={keybindings}
       report={(error) => {
         reported.push(error);

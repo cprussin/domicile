@@ -1,4 +1,6 @@
 import { describe, expect, it } from "bun:test";
+import type { PortalsHost } from "@domicile-desktop/sdk/desktop/portals";
+import { portals } from "@domicile-desktop/sdk/desktop/portals";
 import type { PortalHost } from "@domicile-desktop/sdk/portal";
 import { fakeDesktop } from "@domicile-desktop/system-apps/fake-desktop";
 import { act, render, screen, within } from "@testing-library/react";
@@ -55,6 +57,12 @@ class FakeHost implements PortalHost {
   }
 }
 
+/** The desktop the indicator reads: `host`'s captures, `DOMICILE`'s entries. */
+const sharing = (host: FakeHost) => ({
+  ...DOMICILE,
+  portals: portals(host as unknown as PortalsHost),
+});
+
 const ZOOM = {
   app_id: "us.zoom.Zoom",
   body: {
@@ -108,7 +116,7 @@ const REMOTE = {
 describe("Sharing", () => {
   it("shows nothing while nothing records the desktop", () => {
     const host = new FakeHost();
-    render(<Sharing domicile={DOMICILE} host={host} />);
+    render(<Sharing domicile={sharing(host)} />);
     host.capture([]);
 
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
@@ -116,7 +124,7 @@ describe("Sharing", () => {
 
   it("leaves sessions that only take input to the dialogs' indicator", () => {
     const host = new FakeHost();
-    render(<Sharing domicile={DOMICILE} host={host} />);
+    render(<Sharing domicile={sharing(host)} />);
     host.capture([REMOTE]);
 
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
@@ -125,7 +133,7 @@ describe("Sharing", () => {
   describe("the bar button", () => {
     it("names what is shared and who shares it", async () => {
       const host = new FakeHost();
-      render(<Sharing domicile={DOMICILE} host={host} />);
+      render(<Sharing domicile={sharing(host)} />);
       host.capture([zoomSharing(DELL)]);
 
       const button = await screen.findByRole("button", {
@@ -137,7 +145,7 @@ describe("Sharing", () => {
 
     it("names a region over every screen as all of them", async () => {
       const host = new FakeHost();
-      render(<Sharing domicile={DOMICILE} host={host} />);
+      render(<Sharing domicile={sharing(host)} />);
       host.capture([zoomSharing({ type: "desk" })]);
 
       expect(
@@ -147,7 +155,7 @@ describe("Sharing", () => {
 
     it("counts several sources of a kind", async () => {
       const host = new FakeHost();
-      render(<Sharing domicile={DOMICILE} host={host} />);
+      render(<Sharing domicile={sharing(host)} />);
       host.capture([
         zoomSharing(
           { app_id: "", id: "app-3", title: "", type: "window" },
@@ -162,7 +170,7 @@ describe("Sharing", () => {
 
     it("counts sources of mixed kinds across applications", async () => {
       const host = new FakeHost();
-      render(<Sharing domicile={DOMICILE} host={host} />);
+      render(<Sharing domicile={sharing(host)} />);
       host.capture([
         zoomSharing(DELL),
         {
@@ -182,7 +190,7 @@ describe("Sharing", () => {
   describe("the panel", () => {
     it("names each source and how much of it is shared", async () => {
       const host = new FakeHost();
-      render(<Sharing domicile={DOMICILE} host={host} />);
+      render(<Sharing domicile={sharing(host)} />);
       host.capture([ZOOM]);
       await userEvent.click(
         await screen.findByRole("button", { name: "Sharing 8 things" }),
@@ -207,7 +215,7 @@ describe("Sharing", () => {
 
     it("shows the sharing application's icon", async () => {
       const host = new FakeHost();
-      render(<Sharing domicile={DOMICILE} host={host} />);
+      render(<Sharing domicile={sharing(host)} />);
       host.capture([zoomSharing(DELL)]);
       await userEvent.click(
         await screen.findByRole("button", { name: "Sharing screen" }),
@@ -220,7 +228,7 @@ describe("Sharing", () => {
 
     it("stops an application sharing", async () => {
       const host = new FakeHost();
-      render(<Sharing domicile={DOMICILE} host={host} />);
+      render(<Sharing domicile={sharing(host)} />);
       host.capture([zoomSharing(DELL)]);
       await userEvent.click(
         await screen.findByRole("button", { name: "Sharing screen" }),
@@ -235,7 +243,7 @@ describe("Sharing", () => {
 
   it("goes away when the capture ends", () => {
     const host = new FakeHost();
-    render(<Sharing domicile={DOMICILE} host={host} />);
+    render(<Sharing domicile={sharing(host)} />);
     host.capture([ZOOM]);
     host.capture([]);
 

@@ -3,12 +3,16 @@
 //
 // ```ts
 // const fake = new FakeDomicileHost();
-// render(<Desktop domicile={fake.host} />);
+// render(<Desktop domicile={fake.domicile} />);
 // fake.appear("term", { title: "Terminal" });
 // fake.dispatch("shortcut", { chord: "Meta+Return" });
 // expect(fake.calls).toContainEqual(["spawn", ["kitty"]]);
 // ```
 
+import { defined } from "./desktop/defined";
+import type { Domicile } from "./desktop/desktop";
+import { desktop } from "./desktop/desktop";
+import type { ClientWindow } from "./desktop/windows";
 import type {
   DomicileBrowserWindow,
   DomicileHost,
@@ -75,6 +79,12 @@ const UNDESCRIBED: DomicileState = {
   windowsTheme: null,
 };
 
+/** {@link describedWindow} as `Domicile.windows.list` reads it. */
+export const listedWindow = (
+  appId: string,
+  fields: Partial<ClientWindow> = {},
+): ClientWindow => ({ ...defined(describedWindow(appId)), ...fields });
+
 /** A window as the engine lists it before its client has sent anything. */
 export const describedWindow = (
   appId: string,
@@ -119,8 +129,13 @@ export class FakeDomicileHost {
   /** Every call the shell made, in order: the method's name, then its arguments. */
   readonly calls: (readonly [method: string, ...args: unknown[]])[] = [];
 
-  /** What the shell is handed as its desktop. */
+  /** The raw host the engine draws the desktop from. */
   readonly host: DomicileHost;
+
+  /** What the shell is handed as its desktop: {@link desktop} of `host`. */
+  get domicile(): Domicile {
+    return desktop(this.host);
+  }
 
   readonly #target = new EventTarget();
   readonly #state: DomicileState = { ...UNDESCRIBED };

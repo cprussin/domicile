@@ -7,8 +7,7 @@ import { PageDialog } from "@domicile-desktop/manganese-page-requests/PageDialog
 import { useDeviceRequest } from "@domicile-desktop/manganese-page-requests/useDeviceRequest";
 import { useDialogRequest } from "@domicile-desktop/manganese-page-requests/useDialogRequest";
 import { usePermissionRequest } from "@domicile-desktop/manganese-page-requests/usePermissionRequest";
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import {
   WEBVIEW_DIALOG_EVENT,
   WEBVIEW_FOCUS_REQUEST_EVENT,
@@ -80,7 +79,7 @@ type Props = {
    * directories for the file picker. The page lives in the shell's own window,
    * so focusing it takes focus from any client.
    */
-  domicile: DomicileHost;
+  domicile: Domicile;
   /** Whether the pointer passes through this window, as during a drag. */
   clickThrough: boolean;
   /**
@@ -268,7 +267,7 @@ export const BrowserWindow = ({
   // synchronously inside that call, so this marks them as not user reaches.
   const focusing = useRef(false);
   const folders = useMemo(
-    () => foldersOf(desktop(domicile).files),
+    () => foldersOf(domicile.files),
     [domicile, foldersOf],
   );
   // A pending file request from the page. The engine draws no dialog; see
@@ -474,7 +473,7 @@ export const BrowserWindow = ({
   //   since the page is waiting on it.
   useEffect(() => {
     if (holdsKeyboard && view !== null) {
-      domicile.focusChrome();
+      domicile.windows.focusShell();
       const waiting = pickerBox ?? dialogBox;
       if (waiting !== null) {
         focusOwn(waiting);
@@ -708,9 +707,9 @@ export const BrowserWindow = ({
                 browse: run,
                 openWindow: (url) => {
                   if (isPrivate) {
-                    domicile.openPrivateBrowserWindow(url);
+                    domicile.browser.openPrivate(url);
                   } else {
-                    domicile.openBrowserWindow(url);
+                    domicile.browser.open(url);
                   }
                 },
               });

@@ -1,8 +1,6 @@
 import { watchHost } from "@domicile-desktop/manganese-host/watch-host";
-import type {
-  DomicileHost,
-  DomicileTrayItem,
-} from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
+import type { TrayItem } from "@domicile-desktop/sdk/tray";
 import { useEffect, useState } from "react";
 
 /**
@@ -12,18 +10,18 @@ import { useEffect, useState } from "react";
  * desktop, and again on every change.
  */
 export const useTray = (
-  domicile: DomicileHost,
-): readonly DomicileTrayItem[] => {
-  const [items, setItems] = useState<readonly DomicileTrayItem[]>([]);
+  domicile: Pick<Domicile, "tray">,
+): readonly TrayItem[] => {
+  const [items, setItems] = useState<readonly TrayItem[]>([]);
 
-  useEffect(
-    () => watchHost(domicile, "traychanged", itemsOf, setItems),
-    [domicile],
-  );
+  useEffect(() => {
+    const { tray } = domicile;
+    return watchHost(
+      (changed) => tray.on("change", changed),
+      () => tray.items,
+      setItems,
+    );
+  }, [domicile]);
 
   return items;
 };
-
-const itemsOf = ({
-  tray,
-}: DomicileHost): readonly DomicileTrayItem[] | undefined => tray ?? undefined;

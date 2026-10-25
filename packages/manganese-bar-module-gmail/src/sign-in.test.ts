@@ -24,16 +24,17 @@ const desk = (
   fake: FakeDomicileHost,
   answers: Parameters<typeof answering>[0],
 ) => {
-  const { host } = fake;
+  const { browser } = fake.domicile;
   return {
-    addEventListener: host.addEventListener.bind(host),
-    get browserWindows() {
-      return host.browserWindows;
+    browser: {
+      close: browser.close,
+      fetch: answering(answers).domicile.browser.fetch,
+      on: browser.on,
+      open: browser.open,
+      get windows() {
+        return browser.windows;
+      },
     },
-    closeBrowserWindow: host.closeBrowserWindow.bind(host),
-    fetchWithCookies: answering(answers).domicile.fetchWithCookies,
-    openBrowserWindow: host.openBrowserWindow.bind(host),
-    removeEventListener: host.removeEventListener.bind(host),
   };
 };
 
@@ -63,7 +64,7 @@ describe("signIn", () => {
     await signedIn;
 
     expect(fake.calls).toStrictEqual([
-      ["openBrowserWindow", consentAddress(CLIENT, EMAIL, STATE)],
+      ["openBrowserWindow", consentAddress(CLIENT, EMAIL, STATE), ""],
       ["closeBrowserWindow", "1"],
     ]);
     expect(storedToken(EMAIL, storage)).toStrictEqual(Some("r"));

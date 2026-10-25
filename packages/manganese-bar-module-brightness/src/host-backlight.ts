@@ -1,5 +1,4 @@
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import { brightnessSetter } from "@domicile-desktop/system-backlight/set-brightness";
 import type { BrightnessWatch } from "@domicile-desktop/system-backlight/watch-brightness";
 import { watchBrightness } from "@domicile-desktop/system-backlight/watch-brightness";
@@ -17,9 +16,8 @@ export type Backlight = {
 };
 
 /** The backlight through `domicile`'s system calls. Failures are logged. */
-export const hostBacklight = (domicile: DomicileHost): Backlight => {
-  const host = desktop(domicile);
-  const set = brightnessSetter(host);
+export const hostBacklight = (domicile: Domicile): Backlight => {
+  const set = brightnessSetter(domicile);
   return {
     set: (level) => {
       set(level)
@@ -29,7 +27,7 @@ export const hostBacklight = (domicile: DomicileHost): Backlight => {
         .catch(logFailure("set"));
     },
     watch: (onLevel) => {
-      const started = watchBrightness(host, onLevel).then((result) =>
+      const started = watchBrightness(domicile, onLevel).then((result) =>
         result.match<BrightnessWatch | undefined>({
           Err: (error) => {
             logFailure("watch")(error);

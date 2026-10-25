@@ -1,10 +1,7 @@
 import type { Display } from "@domicile-desktop/component-library/display-source";
 import { typedAddress } from "@domicile-desktop/manganese-address/typed-address";
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
-import type {
-  DomicileHost,
-  DomicileWindow,
-} from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
+import type { ClientWindow } from "@domicile-desktop/sdk/desktop/windows";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import type { WindowRequest } from "@domicile-desktop/sdk/window-state";
 import { WindowRequestKind } from "@domicile-desktop/sdk/window-state";
@@ -59,14 +56,12 @@ export type Windows = WindowState & {
  * @param openFile - the argv that opens a file the launcher chose.
  */
 export const useWindows = (
-  domicile: DomicileHost,
+  domicile: Domicile,
   displays: readonly Display[] | undefined,
   floating: FloatingRules,
   openFile: typeof openFileCommand = openFileCommand,
 ): Windows => {
   const [state, dispatch] = useReducer(reduceWindows, NO_WINDOWS);
-  // One per host, so `act` keeps its identity.
-  const files = desktop(domicile);
   // The state as last drawn, for `act` to read without depending on it. A new
   // `act` would re-add every listener that runs commands.
   const drawn = useRef(state);
@@ -83,18 +78,18 @@ export const useWindows = (
     (action: WindowAction) => {
       dispatch(action);
       if (action.kind === WindowActionKind.CommandExecuted) {
-        domicile.spawn(action.argv);
+        domicile.processes.launch(action.argv);
       }
       if (action.kind === WindowActionKind.DeskLocked) {
-        domicile.lock();
+        domicile.session.lock();
       }
       if (action.kind === WindowActionKind.ScreenshotTaken) {
         takeScreenshot(domicile);
       }
       if (action.kind === WindowActionKind.FileOpened) {
-        openFile(files, action.path)
+        openFile(domicile, action.path)
           .then((argv) => {
-            domicile.spawn(argv);
+            domicile.processes.launch(argv);
           })
           .catch((error: unknown) => {
             // biome-ignore lint/suspicious/noConsole: surfacing a file that did not open
@@ -102,24 +97,24 @@ export const useWindows = (
           });
       }
       if (action.kind === WindowActionKind.AppLaunched) {
-        domicile.spawn(action.command);
+        domicile.processes.launch(action.command);
       }
       if (action.kind === WindowActionKind.ClipboardSearched) {
         // From a private window, the search stays private.
         const url = clipboardUrl(domicile);
         if (url !== undefined) {
           if (activeIsPrivate(drawn.current)) {
-            domicile.openPrivateBrowserWindow(url);
+            domicile.browser.openPrivate(url);
           } else {
-            domicile.openBrowserWindow(url);
+            domicile.browser.open(url);
           }
         }
       }
       if (action.kind === WindowActionKind.BrowserOpened) {
         if (action.isPrivate) {
-          domicile.openPrivateBrowserWindow(action.src);
+          domicile.browser.openPrivate(action.src);
         } else {
-          domicile.openBrowserWindow(action.src);
+          domicile.browser.open(action.src);
         }
       }
       if (action.kind === WindowActionKind.WindowClosed) {
@@ -133,56 +128,55 @@ export const useWindows = (
         closeWindows(domicile, windowsInGroup(drawn.current, action.group));
       }
     },
-    [domicile, files, openFile],
+    [domicile, openFile],
   );
 
   // The host's last window list, diffed against the next. A ref, not
   // effect-local, so a re-run effect does not announce every window again.
-  const listed = useRef<readonly DomicileWindow[]>([]);
+  const listed = useRef<readonly ClientWindow[]>([]);
 
   useEffect(() => {
+    const { browser, windows } = domicile;
     // A client's size places only a window that opens floating; the engine's
     // pointer scaling uses it too.
     const windowsChanged = () => {
-      const now = domicile.windows;
+      const now = windows.list;
       for (const action of windowChanges(floating, listed.current, now)) {
         dispatch(action);
       }
       listed.current = now;
     };
     const focusChanged = () => {
-      dispatch(Action.FocusChanged(domicile.focusedWindow ?? undefined));
+      dispatch(Action.FocusChanged(windows.focused));
     };
     // The compositor forwards the request without granting it;
     // `reduceWindows` decides.
-    const focusRequested = ({ appId }: { appId: string }) => {
+    const focusRequested = (appId: string) => {
       dispatch(Action.FocusRequested(appWindowId(appId)));
     };
     // Every browser window, from the engine. After `domicile load-shell` it
     // holds the previous shell's windows.
     const browserWindowsChanged = () => {
-      const windows = domicile.browserWindows;
-      if (windows !== null) {
-        dispatch(Action.BrowserWindowsListed(windows));
+      const listedBrowsers = browser.windows;
+      if (listedBrowsers !== undefined) {
+        dispatch(Action.BrowserWindowsListed(listedBrowsers));
       }
     };
     windowsChanged();
     focusChanged();
     browserWindowsChanged();
     // `AppWindow` and `AppPopup` render each window's `frame`.
-    domicile.syncFrames();
-    domicile.addEventListener("windowschanged", windowsChanged);
-    domicile.addEventListener("focusedwindowchanged", focusChanged);
-    domicile.addEventListener("focusrequested", focusRequested);
-    domicile.addEventListener("browserwindowschanged", browserWindowsChanged);
+    windows.syncFrames();
+    const stops = [
+      windows.on("change", windowsChanged),
+      windows.on("focuschange", focusChanged),
+      windows.on("focusrequest", focusRequested),
+      browser.on("change", browserWindowsChanged),
+    ];
     return () => {
-      domicile.removeEventListener("windowschanged", windowsChanged);
-      domicile.removeEventListener("focusedwindowchanged", focusChanged);
-      domicile.removeEventListener("focusrequested", focusRequested);
-      domicile.removeEventListener(
-        "browserwindowschanged",
-        browserWindowsChanged,
-      );
+      for (const stop of stops) {
+        stop();
+      }
     };
   }, [domicile, floating]);
 
@@ -238,9 +232,9 @@ const placedOf = (displays: readonly Display[]): readonly PlacedScreen[] =>
   }));
 
 /** Takes a screenshot, logging any failure but a dismissed dialog. */
-const takeScreenshot = (domicile: DomicileHost) => {
-  desktop(domicile)
-    .capture.screenshot()
+const takeScreenshot = (domicile: Pick<Domicile, "capture">) => {
+  domicile.capture
+    .screenshot()
     .then((taken) => {
       taken.match({
         Err: (error) => {
@@ -267,21 +261,26 @@ const takeScreenshot = (domicile: DomicileHost) => {
  * Reads the row's preview, so a copy longer than its first 160 characters is
  * cut short.
  */
-const clipboardUrl = (domicile: DomicileHost): string | undefined => {
-  const newest = domicile.clipboard?.[0];
+const clipboardUrl = (
+  domicile: Pick<Domicile, "clipboard">,
+): string | undefined => {
+  const newest = domicile.clipboard.entries?.[0];
   return newest === undefined ? undefined : typedAddress(newest.preview)?.url;
 };
 
 /** Asks the compositor or the engine to close each window in `ids`. */
-const closeWindows = (domicile: DomicileHost, ids: readonly string[]) => {
+const closeWindows = (
+  domicile: Pick<Domicile, "browser" | "windows">,
+  ids: readonly string[],
+) => {
   for (const id of ids) {
     const appId = appIdOf(id);
     if (appId !== undefined) {
-      domicile.closeApp(appId);
+      domicile.windows.close(appId);
     }
     const browser = browserIdOf(id);
     if (browser !== undefined) {
-      domicile.closeBrowserWindow(browser);
+      domicile.browser.close(browser);
     }
   }
 };

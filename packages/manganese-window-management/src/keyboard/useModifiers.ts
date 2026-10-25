@@ -1,4 +1,4 @@
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 /**
@@ -54,7 +54,9 @@ type HeldModifiers = {
  *   resize. The chord calls {@link HeldModifiers.spendShift} to ignore it until
  *   it is pressed again.
  */
-export const useModifiers = (domicile: DomicileHost): HeldModifiers => {
+export const useModifiers = (
+  domicile: Pick<Domicile, "keyboard">,
+): HeldModifiers => {
   const [held, setHeld] = useState(NOTHING_HELD);
 
   // Keep the same object when nothing changed, to avoid a re-render per
@@ -108,18 +110,15 @@ export const useModifiers = (domicile: DomicileHost): HeldModifiers => {
   }, [settle]);
 
   useEffect(() => {
-    const reported = () => {
+    const { keyboard } = domicile;
+    return keyboard.on("modifierschange", () => {
       if (guestHasKeyboard()) {
         settle({
-          meta: domicile.metaKey === true,
-          shift: domicile.shiftKey === true,
+          meta: keyboard.modifiers?.meta === true,
+          shift: keyboard.modifiers?.shift === true,
         });
       }
-    };
-    domicile.addEventListener("modifierschanged", reported);
-    return () => {
-      domicile.removeEventListener("modifierschanged", reported);
-    };
+    });
   }, [domicile, settle]);
 
   return useMemo(

@@ -36,7 +36,7 @@ const RIGHT_LAID_OUT: Display = {
 const connected = () => {
   const fake = new FakeDomicileHost();
   return [
-    fake.host,
+    fake.domicile,
     {
       describes: (displays: readonly DomicileDisplay[]) => {
         fake.set({ displays });

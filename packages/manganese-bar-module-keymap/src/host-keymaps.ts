@@ -1,5 +1,4 @@
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { Keymaps } from "@domicile-desktop/sdk/keymap-choice";
 import type { Listening } from "@domicile-desktop/sdk/system";
 
@@ -13,8 +12,9 @@ export type HostKeymaps = {
 };
 
 /** The keymaps through `domicile`'s keyboard. Failures are logged. */
-export const hostKeymaps = (domicile: DomicileHost): HostKeymaps => {
-  const { keyboard } = desktop(domicile);
+export const hostKeymaps = ({
+  keyboard,
+}: Pick<Domicile, "keyboard">): HostKeymaps => {
   return {
     watch: (onKeymaps) => {
       const started = keyboard.keymaps().then((result) =>

@@ -6,28 +6,23 @@ import type {
   Display,
   DisplaySource,
 } from "@domicile-desktop/component-library/display-source";
-import type {
-  DomicileDisplay,
-  DomicileHost,
-} from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
+import type { Display as DomicileDisplay } from "@domicile-desktop/sdk/desktop/displays";
 
 /** Build once per host: `DisplayProvider` re-registers on a new source. */
-export const hostDisplays = (domicile: DomicileHost): DisplaySource => ({
+export const hostDisplays = ({
+  displays,
+}: Pick<Domicile, "displays">): DisplaySource => ({
   get displays() {
-    return displaysOf(domicile);
+    return displays.list?.map(asDisplay);
   },
-  onDisplays: (handler) => {
-    const changed = () => {
-      const displays = displaysOf(domicile);
-      if (displays !== undefined) {
-        handler(displays);
+  onDisplays: (handler) =>
+    displays.on("change", () => {
+      const list = displays.list;
+      if (list !== undefined) {
+        handler(list.map(asDisplay));
       }
-    };
-    domicile.addEventListener("displayschanged", changed);
-    return () => {
-      domicile.removeEventListener("displayschanged", changed);
-    };
-  },
+    }),
 });
 
 const asDisplay = (display: DomicileDisplay): Display => ({
@@ -36,9 +31,3 @@ const asDisplay = (display: DomicileDisplay): Display => ({
   scale: display.scale,
   size: [display.width, display.height],
 });
-
-/** The host's displays, or `undefined` before it has described any. */
-const displaysOf = ({
-  displays,
-}: DomicileHost): readonly Display[] | undefined =>
-  displays === null ? undefined : displays.map(asDisplay);

@@ -39,7 +39,7 @@ const splash = (displays: typeof DISPLAYS | null = DISPLAYS) => {
   const ended: string[] = [];
   render(
     <Splash
-      domicile={fake.host}
+      domicile={fake.domicile}
       end={(_, path) => {
         ended.push(path);
         return Promise.resolve();

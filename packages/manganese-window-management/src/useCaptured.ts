@@ -1,4 +1,4 @@
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import { useCallback, useSyncExternalStore } from "react";
 
 /**
@@ -7,23 +7,18 @@ import { useCallback, useSyncExternalStore } from "react";
  * for a window that is not a browser window.
  */
 export const useCaptured = (
-  domicile: DomicileHost,
+  domicile: Pick<Domicile, "browser">,
   engineId: string | undefined,
 ): boolean => {
   const subscribe = useCallback(
-    (changed: () => void) => {
-      domicile.addEventListener("browserwindowschanged", changed);
-      return () => {
-        domicile.removeEventListener("browserwindowschanged", changed);
-      };
-    },
+    (changed: () => void) => domicile.browser.on("change", changed),
     [domicile],
   );
   return useSyncExternalStore(
     subscribe,
     () =>
       engineId !== undefined &&
-      (domicile.browserWindows?.some(
+      (domicile.browser.windows?.some(
         ({ id, isCaptured }) => id === engineId && isCaptured,
       ) ??
         false),

@@ -1,5 +1,4 @@
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import { checkPortal } from "@domicile-desktop/system-network/portal";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -20,14 +19,13 @@ export type CaptivePortal = {
  * The sign-in page of the captive portal on the desk's network, until the
  * portal lets the desk through. Call once for the desk, not per bar.
  */
-export const useCaptivePortal = (domicile: DomicileHost): CaptivePortal => {
+export const useCaptivePortal = (domicile: Domicile): CaptivePortal => {
   const [url, setUrl] = useState<string | undefined>();
   const watch = useRef<PortalWatch | undefined>(undefined);
 
   useEffect(() => {
-    const host = desktop(domicile);
     const followed = followPortals({
-      check: () => checkPortal(host),
+      check: () => checkPortal(domicile),
       network: deskNetwork(domicile).network,
       report: logFailedCheck,
       show: setUrl,

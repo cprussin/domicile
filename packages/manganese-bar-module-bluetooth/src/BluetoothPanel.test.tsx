@@ -1,6 +1,5 @@
 import { describe, expect, it, spyOn } from "bun:test";
 import { Err, Ok } from "@cprussin/option-result";
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
@@ -16,7 +15,7 @@ import type { Asked } from "./held-actions";
 import { heldActions } from "./held-actions";
 
 /** A host the panel never calls, since the library is injected. */
-const NO_HOST = desktop(new FakeDomicileHost().host);
+const NO_HOST = new FakeDomicileHost().domicile;
 
 const ADAPTER = "/org/bluez/hci0";
 

@@ -1,18 +1,19 @@
 import { describe, expect, it } from "bun:test";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 
 import { watchHost } from "./watch-host";
 
-const lockedOf = ({ locked }: DomicileHost): boolean | undefined =>
-  locked ?? undefined;
-
 /** Every state `fake` tells a watcher, and what stops it. */
 const watching = (fake: FakeDomicileHost) => {
   const states: boolean[] = [];
-  const stop = watchHost(fake.host, "lockedchanged", lockedOf, (locked) => {
-    states.push(locked);
-  });
+  const { session } = fake.domicile;
+  const stop = watchHost(
+    (heard) => session.on("lockchange", heard),
+    () => session.locked,
+    (locked) => {
+      states.push(locked);
+    },
+  );
   return { states, stop };
 };
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { DomicileTrayItem } from "@domicile-desktop/sdk/domicile-host";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
+import type { TrayItem } from "@domicile-desktop/sdk/tray";
 import { act, renderHook } from "@testing-library/react";
 
 import { useTray } from "./useTray";
@@ -9,7 +10,7 @@ import { useTray } from "./useTray";
 const client = () => {
   const fake = new FakeDomicileHost();
   return {
-    domicile: fake.host,
+    domicile: fake.domicile,
     says: (items: readonly DomicileTrayItem[]) => {
       act(() => {
         fake.set({ tray: items });
@@ -24,6 +25,16 @@ const icon = (id: string): DomicileTrayItem => ({
   id,
   itemIsMenu: false,
   menu: "",
+  title: id,
+});
+
+/** `icon(id)` as the tray reads it: no image and no menu. */
+const shown = (id: string): TrayItem => ({
+  bus: ":1.9",
+  icon: undefined,
+  id,
+  itemIsMenu: false,
+  menu: undefined,
   title: id,
 });
 
@@ -44,6 +55,6 @@ describe("useTray", () => {
     host.says([icon(":1.9/a"), icon(":1.42/b")]);
     host.says([icon(":1.42/b")]);
 
-    expect(result.current).toEqual([icon(":1.42/b")]);
+    expect(result.current).toEqual([shown(":1.42/b")]);
   });
 });

@@ -70,7 +70,7 @@ describe("watchBattery", () => {
 
     await new Promise<void>((resolve) => {
       watchBattery(
-        new FakeDomicileHost().host,
+        new FakeDomicileHost().domicile,
         (reading) => {
           readings.push(reading);
           if (readings.length === 2) {
@@ -86,10 +86,14 @@ describe("watchBattery", () => {
 
   it("stops the library's watch when stopped", async () => {
     const watch = watching([]);
-    const stop = watchBattery(new FakeDomicileHost().host, () => undefined, {
-      fail: neverFails,
-      watch: library(watch.answer).watch,
-    });
+    const stop = watchBattery(
+      new FakeDomicileHost().domicile,
+      () => undefined,
+      {
+        fail: neverFails,
+        watch: library(watch.answer).watch,
+      },
+    );
     await settle();
 
     stop();
@@ -100,7 +104,7 @@ describe("watchBattery", () => {
   it("stops a watch that starts after it was stopped", async () => {
     const watch = watching([]);
 
-    watchBattery(new FakeDomicileHost().host, () => undefined, {
+    watchBattery(new FakeDomicileHost().domicile, () => undefined, {
       fail: neverFails,
       watch: library(watch.answer).watch,
     })();
@@ -121,7 +125,7 @@ describe("watchBattery", () => {
     );
 
     for (let started = 0; started < 2; started += 1) {
-      watchBattery(new FakeDomicileHost().host, () => undefined, {
+      watchBattery(new FakeDomicileHost().domicile, () => undefined, {
         fail: (error) => failures.push(error),
         watch: battery.watch,
       });

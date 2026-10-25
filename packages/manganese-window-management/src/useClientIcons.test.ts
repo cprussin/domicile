@@ -21,7 +21,7 @@ const answering =
 
 describe("useClientIcons", () => {
   it("finds each client's icon", async () => {
-    const { host } = new FakeDomicileHost();
+    const { domicile: host } = new FakeDomicileHost();
     const { result } = renderHook(() =>
       useClientIcons(
         host,

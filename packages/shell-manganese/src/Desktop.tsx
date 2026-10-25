@@ -83,8 +83,7 @@ import {
 } from "@domicile-desktop/manganese-window-management/window-state";
 import type { Workspaces } from "@domicile-desktop/manganese-window-management/workspaces-context";
 import { WorkspacesContext } from "@domicile-desktop/manganese-window-management/workspaces-context";
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import { previewFile } from "@domicile-desktop/sdk/file-preview";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { ownedChords } from "@domicile-desktop/sdk/own-keybindings";
@@ -105,7 +104,7 @@ type Props = {
   applications: ApplicationsConfig;
   /** The layout of every monitor's bar. */
   bar: BarLayout;
-  domicile: DomicileHost;
+  domicile: Domicile;
   /** Which client windows open floating, besides dialogs. */
   floating: FloatingRules;
   /** The keys this desktop binds, merged under the config's. */
@@ -152,19 +151,19 @@ export const Desktop = ({
   // has no filesystem. Memoized because a new function would restart the
   // search.
   const search = useCallback(
-    (query: string) => domicile.searchFiles(query),
+    (query: string) => domicile.files.search(query),
     [domicile],
   );
   // The pictures applications set through the Wallpaper portal. `desktop`
   // answers the same object for a host, so they are not read again.
-  const { files } = desktop(domicile);
+  const { files } = domicile;
   const portalWallpaper = usePortalWallpaper(domicile);
   const backgroundPicture = usePictureUrl(files, portalWallpaper.background);
   const lockPicture = usePictureUrl(files, portalWallpaper.lockscreen);
   // Installed apps and bookmarks, read through the desktop.
   // Memoized because it holds what was read and the bookmarks' icons.
   const apps = useMemo(
-    () => appSearch(desktop(domicile), applications, sharedIconTheme(domicile)),
+    () => appSearch(domicile, applications, sharedIconTheme(domicile)),
     [applications, domicile],
   );
   // Read while the launcher is closed so its rows render with it rather than
@@ -177,7 +176,7 @@ export const Desktop = ({
   const [picked, setPicked] = useState<Launch | undefined>();
   // File previews, read through the desktop's files.
   const preview = useCallback(
-    (path: string) => previewFile(desktop(domicile), path),
+    (path: string) => previewFile(domicile, path),
     [domicile],
   );
 
@@ -305,8 +304,8 @@ export const Desktop = ({
     (action: WindowAction) => {
       switch (action.kind) {
         case WindowActionKind.KeymapSelected: {
-          desktop(domicile)
-            .keyboard.selectKeymap(action.choice)
+          domicile.keyboard
+            .selectKeymap(action.choice)
             .then((result) => {
               result.match({
                 Err: logKeymapFailure,
@@ -399,7 +398,7 @@ export const Desktop = ({
   );
   const copied = useCallback(
     (entry: number) => {
-      domicile.copyClipboardEntry(entry);
+      domicile.clipboard.copy(entry);
     },
     [domicile],
   );
@@ -551,7 +550,7 @@ export const Desktop = ({
       />
       {openingWith !== undefined && (
         <OpenWith
-          domicile={desktop(domicile)}
+          domicile={domicile}
           onClose={() => {
             setOpeningWith(undefined);
           }}
@@ -623,7 +622,7 @@ export const Desktop = ({
         Screen casts show in the bar's sharing item when it has one.
       */}
       <PortalDialogs
-        host={domicile}
+        domicile={domicile}
         omitScreenCasts={showsSharing(bar)}
         screen={windows.focused}
         screenOf={screenOf}
@@ -676,7 +675,7 @@ const BarProviders = ({
 }: {
   children: ReactNode;
   clock: ClockOptions;
-  domicile: DomicileHost;
+  domicile: Domicile;
   drawer: NotificationsDrawer;
   holdKeyboard: HoldKeyboard;
   keymap: KeymapOptions;

@@ -1,7 +1,7 @@
 // The `floating` option: which client windows open floating, as sway's
 // `for_window [app_id=…] floating enable`. Dialogs float without a rule.
 
-import type { DomicileWindow } from "@domicile-desktop/sdk/domicile-host";
+import type { ClientWindow } from "@domicile-desktop/sdk/desktop/windows";
 import { z } from "zod";
 
 /** A pattern as the config writes it, compiled when the config is built. */
@@ -36,7 +36,7 @@ export type FloatingOptions = z.input<typeof floatingRulesSchema>;
 /** Whether `window` opens floating: it is a dialog, or a rule names it. */
 export const opensFloating = (
   rules: FloatingRules,
-  window: DomicileWindow,
+  window: ClientWindow,
 ): boolean =>
   window.dialog ||
   rules.some(

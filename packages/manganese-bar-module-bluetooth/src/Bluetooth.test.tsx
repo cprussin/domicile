@@ -65,7 +65,7 @@ const heldHardware = () => {
 const UNCHECKED = heldHardware().hardware;
 
 /** A host the component never calls, since the library is injected. */
-const NO_HOST = new FakeDomicileHost().host;
+const NO_HOST = new FakeDomicileHost().domicile;
 
 const ADAPTER = "/org/bluez/hci0";
 

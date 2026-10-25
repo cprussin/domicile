@@ -15,7 +15,7 @@ describe("hostBacklight", () => {
     const fake = new FakeDomicileHost();
 
     const level = new Promise((resolve) => {
-      hostBacklight(fake.host).watch(resolve);
+      hostBacklight(fake.domicile).watch(resolve);
     });
     await answerSystemCalls(fake, THINKPAD_BACKLIGHT);
 
@@ -30,7 +30,7 @@ describe("hostBacklight", () => {
 
   it("stops udevadm when the watch stops", async () => {
     const fake = new FakeDomicileHost();
-    const stop = hostBacklight(fake.host).watch(() => undefined);
+    const stop = hostBacklight(fake.domicile).watch(() => undefined);
     await answerSystemCalls(fake, THINKPAD_BACKLIGHT);
 
     stop();
@@ -42,7 +42,7 @@ describe("hostBacklight", () => {
   it("sets the level through logind", async () => {
     const fake = new FakeDomicileHost();
 
-    hostBacklight(fake.host).set(0.5);
+    hostBacklight(fake.domicile).set(0.5);
     await answerSystemCalls(fake, THINKPAD_BACKLIGHT);
 
     expect(requests(fake)).toContainEqual(

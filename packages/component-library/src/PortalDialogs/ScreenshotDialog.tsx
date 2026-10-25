@@ -1,4 +1,4 @@
-import type { DomicileBrowserWindow } from "@domicile-desktop/sdk/domicile-host";
+import type { BrowserWindow } from "@domicile-desktop/sdk/desktop/browser";
 import type {
   FrozenDesk,
   PortalAnswer,
@@ -30,7 +30,7 @@ type Props = {
   asker: string | undefined;
   body: FrozenDesk;
   /** The desktop's browser windows, as the engine lists them. */
-  browserWindows: readonly DomicileBrowserWindow[];
+  browserWindows: readonly BrowserWindow[];
   screen: string | undefined;
   /** Draws a window that is not on screen. */
   previewWindow: DrawPreview;

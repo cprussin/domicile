@@ -1,7 +1,7 @@
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { z } from "zod";
+import type { Fetch } from "./google-token";
 
 import { jsonText } from "./json-text";
 
@@ -13,17 +13,13 @@ export type Counts = { total: number; unread: number };
 
 /** Asks the Gmail API for the inbox's conversation counts. */
 export const inboxCounts = (
-  domicile: Pick<DomicileHost, "fetchWithCookies">,
+  domicile: Fetch,
   accessToken: string,
 ): Promise<Result<Counts, string>> =>
-  domicile
-    .fetchWithCookies(
-      INBOX,
-      "GET",
-      [{ name: "Authorization", value: `Bearer ${accessToken}` }],
-      null,
-      null,
-    )
+  domicile.browser
+    .fetch(INBOX, {
+      headers: [{ name: "Authorization", value: `Bearer ${accessToken}` }],
+    })
     .then(
       (answer): Result<Counts, string> => {
         if (answer.status === 200) {

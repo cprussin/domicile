@@ -1,9 +1,9 @@
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
 import type {
-  DomicileFetchResponse,
-  DomicileHost,
-} from "@domicile-desktop/sdk/domicile-host";
+  Browser,
+  FetchResponse,
+} from "@domicile-desktop/sdk/desktop/browser";
 import { z } from "zod";
 
 import type { GoogleClient } from "./consent";
@@ -13,7 +13,8 @@ import { jsonText } from "./json-text";
 /** Google's OAuth token endpoint. */
 const TOKEN = "https://oauth2.googleapis.com/token";
 
-type Fetch = Pick<DomicileHost, "fetchWithCookies">;
+/** What asks Google: the browser, with the user's cookies. */
+export type Fetch = { readonly browser: Pick<Browser, "fetch"> };
 
 /** Trades a consent redirect's code for the account's refresh token. */
 export const exchangeCode = async (
@@ -93,26 +94,26 @@ export const refreshAccess = async (
 const askToken = (
   domicile: Fetch,
   form: Readonly<Record<string, string>>,
-): Promise<Result<DomicileFetchResponse, string>> =>
-  domicile
-    .fetchWithCookies(
-      TOKEN,
-      "POST",
-      [{ name: "Content-Type", value: "application/x-www-form-urlencoded" }],
-      new URLSearchParams(form).toString(),
-      null,
-    )
+): Promise<Result<FetchResponse, string>> =>
+  domicile.browser
+    .fetch(TOKEN, {
+      body: new URLSearchParams(form).toString(),
+      headers: [
+        { name: "Content-Type", value: "application/x-www-form-urlencoded" },
+      ],
+      method: "POST",
+    })
     .then(
       (answer) => Ok(answer),
       (error: unknown) =>
         Err(`the browser could not ask Google: ${String(error)}`),
     );
 
-const refused = (answer: DomicileFetchResponse): string =>
+const refused = (answer: FetchResponse): string =>
   `Google answered ${answer.status.toString()}: ${answer.body}`;
 
 const parsed = <T extends object>(
-  answer: DomicileFetchResponse,
+  answer: FetchResponse,
   schema: z.ZodType<T>,
 ): Result<T, string> => {
   const fields = jsonText.pipe(schema).safeParse(answer.body);

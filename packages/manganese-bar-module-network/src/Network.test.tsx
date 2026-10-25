@@ -55,7 +55,7 @@ const held = <T,>() => {
 const heldNetwork = () => held<Result<Reading, SystemError>>();
 
 /** A host the item never calls, since the library is injected. */
-const NO_HOST = new FakeDomicileHost().host;
+const NO_HOST = new FakeDomicileHost().domicile;
 
 const heldInterfaces = () => held<Result<NetworkInterface[], SystemError>>();
 

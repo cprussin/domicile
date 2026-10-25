@@ -1,5 +1,4 @@
 import { useDomicile } from "@domicile-desktop/manganese-host/domicile-context";
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import { Sharing as Casts } from "./Sharing";
 
 /**
@@ -8,5 +7,5 @@ import { Sharing as Casts } from "./Sharing";
  */
 export const Sharing = () => {
   const domicile = useDomicile();
-  return <Casts domicile={desktop(domicile)} host={domicile} />;
+  return <Casts domicile={domicile} />;
 };

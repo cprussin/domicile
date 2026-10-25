@@ -11,7 +11,7 @@ import { KeymapOptionsContext } from "./keymap-options";
 const onADesktopTyping = async (active: string, hideDefault: boolean) => {
   const fake = new FakeDomicileHost();
   render(
-    <DomicileContext value={fake.host}>
+    <DomicileContext value={fake.domicile}>
       <KeymapOptionsContext value={{ hideDefault }}>
         <Keymap />
       </KeymapOptionsContext>

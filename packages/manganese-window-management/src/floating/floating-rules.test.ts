@@ -1,13 +1,13 @@
 import { describe, expect, it } from "bun:test";
-import { describedWindow } from "@domicile-desktop/sdk/fake-host";
+import { listedWindow } from "@domicile-desktop/sdk/fake-host";
 
 import { floatingRulesSchema, opensFloating } from "./floating-rules";
 
-const PINENTRY = describedWindow("app-1", {
+const PINENTRY = listedWindow("app-1", {
   desktopId: "org.gnupg.pinentry-qt",
   title: "pinentry-qt",
 });
-const HUDDLE = describedWindow("app-2", {
+const HUDDLE = listedWindow("app-2", {
   desktopId: "Slack",
   title: "Huddle: #general",
 });

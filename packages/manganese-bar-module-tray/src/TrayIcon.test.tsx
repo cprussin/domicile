@@ -3,13 +3,10 @@ import type { Result } from "@cprussin/option-result";
 import { Err, None, Ok, Some } from "@cprussin/option-result";
 import type { MenuEntry, watchMenu } from "@domicile-desktop/sdk/dbusmenu";
 import { MenuEntry as Entry, ToggleKind } from "@domicile-desktop/sdk/dbusmenu";
-import type {
-  DomicileHost,
-  DomicileTrayItem,
-} from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
-import type { TrayAction } from "@domicile-desktop/sdk/tray";
+import type { TrayAction, TrayItem } from "@domicile-desktop/sdk/tray";
 import type { ThemedIcon } from "@domicile-desktop/system-apps/app-icons";
 import {
   fireEvent,
@@ -24,7 +21,7 @@ import type { MenuIcons } from "./menu-icons";
 import { TrayIcon } from "./TrayIcon";
 
 /** An application with an image and a menu. */
-const network: DomicileTrayItem = {
+const network: TrayItem = {
   bus: ":1.42",
   icon: "data:image/png;base64,iVBORw0KGgo=",
   id: ":1.42/org/ayatana/nm",
@@ -34,12 +31,12 @@ const network: DomicileTrayItem = {
 };
 
 /** An application whose image the compositor could not decode, with no menu. */
-const sync: DomicileTrayItem = {
+const sync: TrayItem = {
   bus: "org.kde.StatusNotifierItem-4071-1",
-  icon: "",
+  icon: undefined,
   id: "org.kde.StatusNotifierItem-4071-1/StatusNotifierItem",
   itemIsMenu: false,
-  menu: "",
+  menu: undefined,
   title: "Syncthing",
 };
 
@@ -82,7 +79,7 @@ const MENU: readonly MenuEntry[] = [
 
 /** A host that resolves with the first click the tray forwards. */
 const clicked = (): {
-  domicile: DomicileHost;
+  domicile: Domicile;
   click: Promise<[string, TrayAction]>;
 } => {
   let heard: (click: [string, TrayAction]) => void = () => undefined;
@@ -90,19 +87,19 @@ const clicked = (): {
     heard = resolve;
   });
   const domicile = {
-    activateTrayItem: (id: string, action: TrayAction) => {
-      heard([id, action]);
+    tray: {
+      activate: (id: string, action: TrayAction) => {
+        heard([id, action]);
+      },
     },
-    addEventListener: () => undefined,
-  } as unknown as DomicileHost;
+  } as unknown as Domicile;
   return { click, domicile };
 };
 
 /** A host for tests that ignore clicks. */
 const NO_DOMICILE = {
-  activateTrayItem: () => undefined,
-  addEventListener: () => undefined,
-} as unknown as DomicileHost;
+  tray: { activate: () => undefined },
+} as unknown as Domicile;
 
 /**
  * A `watchMenu` that reports `menu` at once, and the requests made of it.
@@ -134,12 +131,12 @@ const watching = (
   return { asked, stopped: stopped.promise, watch };
 };
 
-const renderIcon = (shown: DomicileTrayItem) => {
+const renderIcon = (shown: TrayItem) => {
   render(<TrayIcon domicile={NO_DOMICILE} item={shown} />);
 };
 
 /** Renders `shown`'s icon, resolving with the first click it forwards. */
-const iconOf = (shown: DomicileTrayItem, watch?: typeof watchMenu) => {
+const iconOf = (shown: TrayItem, watch?: typeof watchMenu) => {
   const { click, domicile } = clicked();
   render(<TrayIcon domicile={domicile} item={shown} watch={watch} />);
   return click;

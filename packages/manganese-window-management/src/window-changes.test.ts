@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { describedWindow } from "@domicile-desktop/sdk/fake-host";
+import { listedWindow } from "@domicile-desktop/sdk/fake-host";
 
 import { floatingRulesSchema } from "./floating/floating-rules";
 import { windowChanges } from "./window-changes";
 import { WindowAction } from "./window-state";
 
-const TERM = describedWindow("term", { title: "Terminal" });
+const TERM = listedWindow("term", { title: "Terminal" });
 const NO_RULES = floatingRulesSchema.parse([]);
 
 describe("windowChanges", () => {
@@ -17,9 +17,9 @@ describe("windowChanges", () => {
     });
 
     it("is announced unnamed while its client has not named it", () => {
-      expect(
-        windowChanges(NO_RULES, [], [describedWindow("term")]),
-      ).toStrictEqual([WindowAction.AppAppeared("term", undefined)]);
+      expect(windowChanges(NO_RULES, [], [listedWindow("term")])).toStrictEqual(
+        [WindowAction.AppAppeared("term", undefined)],
+      );
     });
 
     it("says the limits and the cursor its client already asked for", () => {
@@ -101,7 +101,7 @@ describe("windowChanges", () => {
           [TERM],
           [
             TERM,
-            describedWindow("menu", {
+            listedWindow("menu", {
               height: 200,
               parent: "term",
               width: 100,
@@ -175,7 +175,7 @@ describe("windowChanges", () => {
     });
 
     it("places a popup that moved", () => {
-      const menu = describedWindow("menu", {
+      const menu = listedWindow("menu", {
         height: 200,
         parent: "term",
         width: 100,
@@ -199,7 +199,7 @@ describe("windowChanges", () => {
     it("says the synced frames a move shows with, in the same changes", () => {
       // The compositor names them in the move's message, so a page that sets
       // them in one render shows the window's content and its bubble together.
-      const menu = describedWindow("menu", {
+      const menu = listedWindow("menu", {
         height: 200,
         parent: "term",
         width: 100,

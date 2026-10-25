@@ -16,7 +16,7 @@ const client = () => {
         await Promise.resolve();
       });
     },
-    domicile: fake.host,
+    domicile: fake.domicile,
     get offered() {
       return fake.calls
         .filter(([method]) => method === "unlock")

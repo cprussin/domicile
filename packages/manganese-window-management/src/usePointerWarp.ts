@@ -1,4 +1,4 @@
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { Focus, Shown, Spot } from "./pointer-warp";
@@ -26,7 +26,7 @@ const IN_FLIGHT = 4;
 const NEAR = 2;
 
 type Options = {
-  domicile: DomicileHost;
+  domicile: Pick<Domicile, "pointer">;
   /** The focused window and its box, or none. */
   focus: Focus | undefined;
   /**
@@ -165,7 +165,7 @@ export const usePointerWarp = ({
       // Keep duplicates in order: a spot sent twice is landed on twice, and
       // folding them would let the first landing clear both.
       sent.current = [...sent.current, to].slice(-IN_FLIGHT);
-      domicile.warpPointer(to[0], to[1]);
+      domicile.pointer.warp(to[0], to[1]);
     }
   }, [domicile, focus, pressed, shown, windows]);
 

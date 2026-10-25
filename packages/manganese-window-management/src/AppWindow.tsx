@@ -6,8 +6,7 @@ import {
   APP_FOCUS_REQUESTED_EVENT,
 } from "@domicile-desktop/sdk/app-element";
 import type { CursorShape } from "@domicile-desktop/sdk/cursor-shape";
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import { WindowState } from "@domicile-desktop/sdk/window-state";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -78,7 +77,7 @@ type Props = {
   /** The window's `z-index`, which the SDK reports to the host. */
   depth: number;
   /** Used to request keyboard focus. */
-  domicile: DomicileHost;
+  domicile: Domicile;
   /**
    * The box spanning the title bar and contents; the transform origin (see
    * {@link scaledAbout}). `undefined` when {@link Props.rect} is.
@@ -201,10 +200,10 @@ export const AppWindow = ({
   useEffect(() => {
     if (behindPanel) {
       if (hasKeyboard) {
-        domicile.focusChrome();
+        domicile.windows.focusShell();
       }
     } else if (focused && !hasKeyboard && !leaving) {
-      domicile.focusApp(appId);
+      domicile.windows.focus(appId);
     }
   }, [appId, behindPanel, domicile, focused, hasKeyboard, leaving]);
 
@@ -213,12 +212,12 @@ export const AppWindow = ({
   // object on every render.
   const { x, y, width, height } = rect ?? OFF_SCREEN;
   useEffect(() => {
-    domicile.setAppBounds(appId, x, y, width, height);
+    domicile.windows.setBounds(appId, { height, width, x, y });
   }, [appId, domicile, height, width, x, y]);
 
   // Tells the client how it is laid out, so a tiled window draws no shadow,
   // rounded corners or resize border of its own. Floats get none, as in sway.
-  const { windows } = desktop(domicile);
+  const { windows } = domicile;
   useEffect(() => {
     windows
       .setStates(appId, statesOf(fullscreen, floating))

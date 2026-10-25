@@ -8,7 +8,7 @@
 // `packages/manganese-window-management/docs/WINDOW-MANAGEMENT.md`.
 
 import type { CursorShape } from "@domicile-desktop/sdk/cursor-shape";
-import type { DomicileBrowserWindow } from "@domicile-desktop/sdk/domicile-host";
+import type { BrowserWindow as ListedBrowserWindow } from "@domicile-desktop/sdk/desktop/browser";
 import type { KeymapChoice } from "@domicile-desktop/sdk/keymap-choice";
 import type { Axis, Direction } from "./direction";
 import type { Float } from "./floating/float";
@@ -534,7 +534,7 @@ export const WindowAction = {
    * The engine sent the full browser window list. New windows open, missing
    * ones close, and the rest take their page's address and title.
    */
-  BrowserWindowsListed: (windows: readonly DomicileBrowserWindow[]) => ({
+  BrowserWindowsListed: (windows: readonly ListedBrowserWindow[]) => ({
     kind: WindowActionKind.BrowserWindowsListed as const,
     windows,
   }),
@@ -1482,7 +1482,7 @@ const openFloatingApp = (
 // windows tile in that order.
 const listBrowsers = (
   state: WindowState,
-  listed: readonly DomicileBrowserWindow[],
+  listed: readonly ListedBrowserWindow[],
 ): WindowState => {
   const browsers = listed.map((entry) => ({ entry, window: browserOf(entry) }));
   const ids = new Set(browsers.map(({ window }) => window.id));
@@ -1515,8 +1515,8 @@ const browserOf = ({
   popupWindow,
   title,
   url,
-}: DomicileBrowserWindow): BrowserRecord =>
-  Window.Browser(id, url, title, popupWindow ?? undefined, isPrivate, isApp);
+}: ListedBrowserWindow): BrowserRecord =>
+  Window.Browser(id, url, title, popupWindow, isPrivate, isApp);
 
 // Updates each browser window the shell has to its listed address and title,
 // keeping the icon and description its view reported.

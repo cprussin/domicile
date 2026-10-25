@@ -9,7 +9,7 @@ import { useClipboard } from "./useClipboard";
 const client = () => {
   const fake = new FakeDomicileHost();
   return {
-    domicile: fake.host,
+    domicile: fake.domicile,
     says: (entries: readonly DomicileClipboardEntry[]) => {
       act(() => {
         fake.set({ clipboard: entries });

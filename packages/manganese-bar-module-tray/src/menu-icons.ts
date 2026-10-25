@@ -3,8 +3,7 @@
 import type { Result } from "@cprussin/option-result";
 import type { IconTheme } from "@domicile-desktop/manganese-host/followed-icon-theme";
 import { sharedIconTheme } from "@domicile-desktop/manganese-host/followed-icon-theme";
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import type { ThemedIconLookup } from "@domicile-desktop/system-apps/app-icons";
 import { themedIcons } from "@domicile-desktop/system-apps/app-icons";
@@ -19,12 +18,12 @@ const SIZE = 16;
 
 /** A lookup of a desktop's menu icons. */
 export type MenuIcons = (
-  domicile: DomicileHost,
+  domicile: Domicile,
 ) => Promise<Result<ThemedIconLookup, SystemError>>;
 
 /** {@link menuIcons} on `domicile`, in the theme its shell follows. */
 export const desktopMenuIcons: MenuIcons = (domicile) =>
-  menuIcons(desktop(domicile), sharedIconTheme(domicile));
+  menuIcons(domicile, sharedIconTheme(domicile));
 
 /** A lookup of menu icons in the desktop's data directories, in `iconTheme`. */
 export const menuIcons = async (

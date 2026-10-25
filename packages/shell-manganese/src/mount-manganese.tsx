@@ -10,8 +10,7 @@ import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
 import type { ApplicationsConfig } from "@domicile-desktop/manganese-launcher/applications-config";
 import type { FloatingRules } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
 import { hostDisplays } from "@domicile-desktop/manganese-window-management/screens/host-displays";
-import { watchAppearance } from "@domicile-desktop/sdk/appearance";
-import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { flushSync } from "react-dom";
 import type { Root } from "react-dom/client";
@@ -32,7 +31,7 @@ type MountOptions = {
 /** Mount manganese into `root`. Returns the React root it rendered. */
 export const mountManganese = (
   root: HTMLElement,
-  domicile: DomicileHost,
+  domicile: Domicile,
   options: MountOptions,
 ): Root => {
   // Apply the last-seen theme before React mounts to avoid a theme flash on
@@ -43,7 +42,9 @@ export const mountManganese = (
   applyTheme(rememberedTheme() ?? DEFAULT_THEME);
   // The config's accent, contrast and motion, which the settings portal also
   // serves windows. Held for the page's life, as the theme is.
-  watchAppearance(domicile, (appearance) => {
+  const { appearance } = domicile;
+  applyAppearance(appearance);
+  appearance.on("change", () => {
     applyAppearance(appearance);
   });
 
