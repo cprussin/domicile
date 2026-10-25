@@ -650,6 +650,55 @@ describe("useWindowMotion", () => {
       ]);
     });
 
+    // A nested group's tab lies on its float's strip, so it moves with it.
+    it("shuffles the tabs of nested groups in it", () => {
+      const nested = (on: string, under: string): Shown => {
+        const shown = floating(on, under);
+        const { bar } = placementOf(TERMINAL.id);
+        return {
+          ...shown,
+          tabs: [
+            {
+              active: true,
+              depth: TERMINAL.id === on ? 2 : 1,
+              group: Layout.SplitH,
+              id: TERMINAL.id,
+              node: { id: TERMINAL.id, up: 1 },
+              rect: bar,
+              selected: false,
+              strip: {
+                at: 0,
+                box: bar,
+                divided: false,
+                end: undefined,
+                endDivided: false,
+                group: { node: { id: "", up: 2 }, wells: 0, windows: [] },
+                nested: false,
+                open: true,
+                tabs: 2,
+              },
+              tabbed: Layout.Tabbed,
+              well: undefined,
+              windows: [TERMINAL.id],
+            },
+          ],
+        };
+      };
+      const { rerender, result } = showing(nested(TERMINAL.id, EDITOR.id));
+
+      act(() => {
+        rerender(nested(EDITOR.id, TERMINAL.id));
+      });
+
+      expect(
+        result.current.tabs.map(({ motion, restack }) => [
+          motion,
+          restack?.from,
+          restack?.to,
+        ]),
+      ).toStrictEqual([["restacking", 2, 1]]);
+    });
+
     it("is done when it says it has shuffled", () => {
       const { rerender, result } = showing(floating(TERMINAL.id, EDITOR.id));
       act(() => {

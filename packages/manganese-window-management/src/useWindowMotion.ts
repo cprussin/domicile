@@ -53,6 +53,8 @@ export type DrawnWindow = {
 export type DrawnTab = {
   focused: boolean;
   motion: WindowMotion;
+  /** Its window's shuffle, or `undefined` when not shuffling. */
+  restack: Restack | undefined;
   /** The screen it is drawn on. */
   screen: string;
   tab: PlacedTab;
@@ -202,7 +204,7 @@ export const useWindowMotion = (
       drawnWindow(shown, playing, index, window),
     ),
     onPlayedOut,
-    tabs: drawnTabs(shown, playing.switching),
+    tabs: drawnTabs(shown, playing),
   };
 };
 
@@ -761,27 +763,35 @@ const leavingWindow = (index: Index, window: ShellWindow): DrawnWindow => {
 /**
  * The tabs on every screen, plus those of the workspace each screen is leaving.
  *
- * Tabs never open or close; they only slide with a workspace.
+ * Tabs never open or close; they only slide with a workspace, or shuffle with
+ * the float they are in, as the window naming them does.
  */
-const drawnTabs = (
-  shown: Desk,
-  switching: Playing["switching"],
-): readonly DrawnTab[] =>
+const drawnTabs = (shown: Desk, playing: Playing): readonly DrawnTab[] =>
   Object.entries(shown).flatMap(([screen, { activeId, tabs }]) => {
-    const left = switching[screen];
+    const left = playing.switching[screen];
     return [
-      ...tabs.map((tab) => ({
-        focused: activeId === tab.id,
-        motion:
-          left === undefined ? ("resting" as const) : arrivalFrom(left.towards),
-        screen,
-        tab,
-      })),
+      ...tabs.map((tab) => {
+        const shuffle =
+          left === undefined
+            ? playing.restacking.find(({ restack }) => restack.id === tab.id)
+            : undefined;
+        return {
+          focused: activeId === tab.id,
+          motion:
+            left === undefined
+              ? (shuffle?.motion ?? "resting")
+              : arrivalFrom(left.towards),
+          restack: shuffle?.restack,
+          screen,
+          tab,
+        };
+      }),
       ...(left === undefined
         ? []
         : left.tabs.map((tab) => ({
             focused: left.activeId === tab.id,
             motion: departureFor(left.towards),
+            restack: undefined,
             screen,
             tab,
           }))),

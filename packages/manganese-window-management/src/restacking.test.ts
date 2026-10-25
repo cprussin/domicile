@@ -48,6 +48,26 @@ describe("restacked", () => {
     ]);
   });
 
+  // A hidden tab's frame is only its tab, which may not overlap the other
+  // float, but the tab lies on its group's strip and must move with it.
+  it("moves a group's hidden tabs with its open tab", () => {
+    const hidden: Placement = {
+      ...placed("b", { height: 30, width: 300, x: 300, y: 0 }, 1),
+      surface: undefined,
+    };
+    const below: Rect = { height: 400, width: 600, x: 300, y: 100 };
+    const moves = restacked(
+      desktop([placed("a", LEFT, 1), hidden, placed("c", below, 3)]),
+      desktop([
+        placed("a", LEFT, 3),
+        { ...hidden, depth: 3 },
+        placed("c", below, 1),
+      ]),
+    );
+    expect(moves.map(({ id }) => id)).toStrictEqual(["a", "b", "c"]);
+    expect(moves[1]?.away).toStrictEqual(moves[0]?.away);
+  });
+
   // Windows that do not overlap show no change in order.
   it("leaves windows that do not overlap alone", () => {
     expect(

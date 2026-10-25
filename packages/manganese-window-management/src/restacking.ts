@@ -8,6 +8,7 @@
 import type { Placement } from "./placement";
 import { LEAVING, TILED } from "./placement";
 import type { Rect } from "./rect";
+import { spanning } from "./rect";
 import type { Shown } from "./shown";
 
 /**
@@ -33,6 +34,9 @@ export type Restack = {
  * Floating windows that swapped order with an overlapping float since
  * `before`, and which way each moves apart.
  *
+ * A float moves as one: every window in it, hidden tabs included, takes the
+ * float's whole box, so its parts stay together.
+ *
  * Tiled windows share a depth. Fullscreen changes and workspace switches have
  * their own animations, so they are skipped.
  */
@@ -49,8 +53,8 @@ export const restacked = (before: Shown, shown: Shown): readonly Restack[] =>
           : [
               {
                 away: awayFrom(
-                  placement.frame,
-                  passed.frame,
+                  floatBox(shown, placement.depth),
+                  floatBox(shown, passed.depth),
                   placement.depth > passed.depth,
                 ),
                 from: was.depth,
@@ -78,10 +82,23 @@ const passedBy = (
       [was, placement, otherWas, other].every(({ depth }) =>
         isFloating(depth),
       ) &&
-      overlaps(placement.frame, other.frame) &&
+      overlaps(
+        floatBox(shown, placement.depth),
+        floatBox(shown, other.depth),
+      ) &&
       placement.depth > other.depth !== was.depth > otherWas.depth
     );
   });
+
+/**
+ * The box of the float at `depth`: every frame it holds. Each float has a depth
+ * of its own (see `placement.ts`).
+ */
+const floatBox = (shown: Shown, depth: number): Rect =>
+  shown.placements
+    .filter((placement) => placement.depth === depth)
+    .map(({ frame }) => frame)
+    .reduce(spanning);
 
 /**
  * An offset of {@link SHUFFLE} away from the center of `other`, in whole

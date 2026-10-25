@@ -261,7 +261,7 @@ export const Stage = memo(
           Before every window and glow, so the windows of each group shown in
           a tab, and their glows, lie on its well.
         */}
-          {motions.tabs.map(({ motion, screen, tab }) =>
+          {motions.tabs.map(({ motion, restack, screen, tab }) =>
             tab.well === undefined ? undefined : (
               <Sliding
                 frame={tab.well}
@@ -281,6 +281,7 @@ export const Stage = memo(
                   motion={motion}
                   nested={tab.strip.nested}
                   rect={tab.well}
+                  restack={restack}
                 />
               </Sliding>
             ),
@@ -410,7 +411,7 @@ export const Stage = memo(
                 />
               ) : undefined,
           )}
-          {motions.tabs.map(({ motion, screen, tab }) =>
+          {motions.tabs.map(({ motion, restack, screen, tab }) =>
             tab.active && tab.strip.open ? (
               <GroupStrip
                 depth={tab.depth}
@@ -431,7 +432,7 @@ export const Stage = memo(
                 onGroupGrab={onGroupGrab}
                 onMove={onMove}
                 onNewTab={onNewTab}
-                restack={undefined}
+                restack={restack}
                 rewound={0}
                 strip={tab.strip}
                 targets={targets}
@@ -645,7 +646,7 @@ export const Stage = memo(
           Tabs of tabbed and stacking containers. Each tab is titled after, and
           selects, the window its container last focused.
         */}
-          {motions.tabs.map(({ focused, motion, screen, tab }) => {
+          {motions.tabs.map(({ focused, motion, restack, screen, tab }) => {
             const tabbed = windowNamed(named, tab.id);
             return (
               <ContainerTab
@@ -665,6 +666,7 @@ export const Stage = memo(
                 onFullscreen={onFullscreen}
                 onPlayedOut={onPlayedOut}
                 onSelect={onSelect}
+                restack={restack}
                 screen={screen}
                 tab={tab}
                 title={tabbed.title}
@@ -1072,6 +1074,7 @@ type ContainerTabProps = {
   onFullscreen: (id: string) => void;
   onPlayedOut: WindowMotions["onPlayedOut"];
   onSelect: (id: string) => void;
+  restack: Restack | undefined;
   screen: string;
   tab: PlacedTab;
   /** The title of the window the tab is named after. */
@@ -1094,6 +1097,7 @@ const ContainerTab = memo(
     onFullscreen,
     onPlayedOut,
     onSelect,
+    restack,
     screen,
     tab,
     title,
@@ -1142,6 +1146,7 @@ const ContainerTab = memo(
           onMotionEnded={ended}
           onPointerDown={pressed}
           rect={tab.rect}
+          restack={restack}
           strip={tab.strip}
           tabbed={tab.tabbed}
           title={title}

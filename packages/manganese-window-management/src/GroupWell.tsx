@@ -2,6 +2,7 @@ import { useRef } from "react";
 
 import { cva, cx } from "../styled-system/css";
 import type { Rect } from "./rect";
+import type { Restack } from "./restacking";
 import { useLowered } from "./useLowered";
 import { useSettling } from "./useSettling";
 import type { WindowMotion } from "./window-motion";
@@ -13,6 +14,7 @@ import {
   placedAt,
   scaledAbout,
   settlingStyles,
+  shuffledBy,
 } from "./window-styles";
 
 type Props = {
@@ -34,6 +36,8 @@ type Props = {
   nested: boolean;
   /** The box under the strip. See `Tab.well`. */
   rect: Rect;
+  /** Its tab's restack animation, which it plays too. */
+  restack?: Restack | undefined;
 };
 
 /**
@@ -50,6 +54,7 @@ export const GroupWell = ({
   motion,
   nested,
   rect,
+  restack,
 }: Props) => {
   const element = useRef<HTMLDivElement>(null);
   const lowered = useLowered(depth);
@@ -72,6 +77,7 @@ export const GroupWell = ({
       style={{
         ...placedAt(rect, depth),
         ...scaledAbout(rect, rect),
+        ...shuffledBy(restack),
       }}
     />
   );
