@@ -9,10 +9,12 @@
 #include "components/domicile/common/forwarded_keys.h"
 #include "components/domicile/common/held_chords.h"
 #include "components/domicile/mojom/browser_windows.mojom-blink.h"
+#include "components/domicile/mojom/cast_sinks.mojom-blink.h"
 #include "components/domicile/mojom/control_channel.mojom-blink.h"
 #include "components/domicile/mojom/extension_tray.mojom-blink.h"
 #include "components/domicile/mojom/shell_fetch.mojom-blink.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_chord.h"
+#include "third_party/blink/renderer/bindings/core/v8/idl_types.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme.h"
@@ -40,6 +42,7 @@ template <typename IDLType>
 class FrozenArray;
 
 class DomicileBrowserWindow;
+class DomicileCastSink;
 class DomicileDisplay;
 class DomicileClipboardEntry;
 class DomicileTrayItem;
@@ -76,6 +79,7 @@ class MODULES_EXPORT DomicileHost final
       public domicile::mojom::blink::ControlChannelClient,
       public domicile::mojom::blink::ExtensionTrayClient,
       public domicile::mojom::blink::BrowserWindowsClient,
+      public domicile::mojom::blink::CastSinksClient,
       public AppInputClient {
   DEFINE_WRAPPERTYPEINFO();
 
@@ -216,6 +220,18 @@ class MODULES_EXPORT DomicileHost final
                                 ExceptionState&);
   void openAppWindow(ScriptState*, const String& url, ExceptionState&);
   void closeBrowserWindow(ScriptState*, const String& id, ExceptionState&);
+
+  // The TVs, or null until the browser has listed them.
+  const FrozenArray<DomicileCastSink>* castSinks() const {
+    return cast_sinks_.Get();
+  }
+
+  // Starts or stops a cast of the desktop. The next `castsinkschanged`
+  // reflects it.
+  ScriptPromise<IDLString> startCasting(ScriptState*,
+                                        const String& id,
+                                        ExceptionState&);
+  void stopCasting(ScriptState*, const String& route, ExceptionState&);
   // Sends `method` to `url` with the profile's cookies, through the browser's
   // own pipe.
   // The browser refuses what the page may not send; see the IDL.
@@ -325,6 +341,10 @@ class MODULES_EXPORT DomicileHost final
   // domicile::mojom::blink::BrowserWindowsClient:
   void WindowsChanged(
       Vector<domicile::mojom::blink::BrowserWindowPtr> windows) override;
+
+  // domicile::mojom::blink::CastSinksClient:
+  void SinksChanged(
+      Vector<domicile::mojom::blink::CastSinkPtr> sinks) override;
 
   void Trace(Visitor*) const override;
 
@@ -497,6 +517,8 @@ class MODULES_EXPORT DomicileHost final
   std::optional<bool> reduced_motion_;
   // Replaced wholesale, like `displays_`, and for its reason.
   Member<FrozenArray<DomicileBrowserWindow>> browser_windows_;
+  // And `cast_sinks_`, for the same reason.
+  Member<FrozenArray<DomicileCastSink>> cast_sinks_;
   HeapMojoRemote<domicile::mojom::blink::ControlChannel> channel_;
   HeapMojoReceiver<domicile::mojom::blink::ControlChannelClient, DomicileHost>
       client_receiver_;
@@ -514,6 +536,10 @@ class MODULES_EXPORT DomicileHost final
   HeapMojoRemote<domicile::mojom::blink::BrowserWindows> windows_;
   HeapMojoReceiver<domicile::mojom::blink::BrowserWindowsClient, DomicileHost>
       windows_receiver_;
+  // The TVs' pipe, the browser's own too, bound beside the browser windows.
+  HeapMojoRemote<domicile::mojom::blink::CastSinks> cast_;
+  HeapMojoReceiver<domicile::mojom::blink::CastSinksClient, DomicileHost>
+      cast_receiver_;
   // The fetches with the profile's cookies, the browser's own pipe too. Bound
   // on the first fetch, since nothing arrives on it unasked.
   HeapMojoRemote<domicile::mojom::blink::ShellFetch> shell_fetch_;
