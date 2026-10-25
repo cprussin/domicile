@@ -685,6 +685,64 @@ describe("PortalDialogs", () => {
       expect(screen.getByText("Read only")).toBeInTheDocument();
     });
 
+    it("stacks a screenshot over the dialog before it, to shoot that dialog", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      host.push([chooser(1)]);
+      await named();
+      host.push([chooser(1), frozen(2, "screenshot")]);
+      await named();
+
+      expect(
+        screen
+          .getAllByRole("dialog", { hidden: true })
+          .map((dialog) => dialog.textContent),
+      ).toEqual([
+        expect.stringContaining("report.pdf"),
+        expect.stringContaining("Take a screenshot"),
+      ]);
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(host.answers).toEqual([
+        [
+          2,
+          {
+            area: { height: 100, width: 300, x: 0, y: 0 },
+            copy: false,
+            kind: "screenshot",
+          },
+        ],
+      ]);
+      host.push([chooser(1)]);
+      await waitFor(() => {
+        expect(screen.getByRole("dialog")).toHaveTextContent("report.pdf");
+      });
+    });
+
+    it.each([
+      ["color pick", frozen(2, "pick_color")],
+      ["screen cast", { ...screenCast(), id: 2 }],
+    ])("stacks a %s over the dialog before it", async (_, capture) => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      host.push([chooser(1)]);
+      await named();
+      host.push([chooser(1), capture]);
+      await named();
+
+      expect(screen.getAllByRole("dialog", { hidden: true })).toHaveLength(2);
+      expect(screen.getByRole("dialog")).not.toHaveTextContent("report.pdf");
+    });
+
+    it("holds a dialog asked for after a screenshot until it is answered", () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} />);
+      host.push([frozen(1, "screenshot"), access(2)]);
+
+      expect(
+        screen.getAllByRole("dialog").map((dialog) => dialog.textContent),
+      ).toEqual([expect.stringContaining("Take a screenshot")]);
+    });
+
     it("goes away when the request does", async () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} />);
