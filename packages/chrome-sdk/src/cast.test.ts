@@ -3,9 +3,16 @@ import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
 
 import type { Cast, CastBackend, CastTarget, Sending } from "./cast";
-import { CastClaimKind, CastMode, casting, claimCastRequest } from "./cast";
+import {
+  CastClaimKind,
+  CastMode,
+  casting,
+  claimCastRequest,
+  engineCast,
+} from "./cast";
 import { desktop } from "./desktop/desktop";
-import type { DomicileDisplay } from "./domicile-host";
+import type { GoogleCast } from "./desktop/google-cast";
+import type { DomicileCastSink, DomicileDisplay } from "./domicile-host";
 import { FakeDomicileHost } from "./fake-host";
 import type { PortalRequest } from "./portal";
 import { CastSource, PortalAnswer, PortalRequest as Request } from "./portal";
@@ -201,6 +208,21 @@ describe("casting", () => {
       ).toBeUndefined();
     });
 
+    it("claims any application's request for a backend that cannot say", async () => {
+      const { cast, fake } = desk();
+      const backend = new FakeBackend();
+      Object.defineProperty(backend, "appId", { value: undefined });
+      void cast.start(backend, TV, CastMode.Pick);
+      await settle();
+
+      expect(
+        claimCastRequest(
+          desktop(fake.host),
+          screenCast("org.chromium", ["left"]),
+        ),
+      ).toEqual({ kind: CastClaimKind.Pick, to: "Living Room TV" });
+    });
+
     it("lists the cast once the TV takes it, until it stops", async () => {
       const { cast } = desk();
       const backend = new FakeBackend();
@@ -365,5 +387,123 @@ describe("casting", () => {
         await cast.start(new FakeBackend(), TV, CastMode.Extend),
       ).toStrictEqual(Err("the config describes the desktop"));
     });
+  });
+});
+
+/** The engine's TVs, whose casts the test settles. */
+const engine = () => {
+  const fake = new FakeDomicileHost();
+  const { googleCast } = desktop(fake.host);
+  const started: string[] = [];
+  const stopped: string[] = [];
+  const replies: ((reply: Result<string, string>) => void)[] = [];
+  const cast: GoogleCast = {
+    cast: (id) => {
+      started.push(id);
+      const { promise, resolve } =
+        Promise.withResolvers<Result<string, string>>();
+      replies.push(resolve);
+      return promise;
+    },
+    on: googleCast.on,
+    get receivers() {
+      return googleCast.receivers;
+    },
+    stop: (route) => {
+      stopped.push(route);
+    },
+  };
+  const sinks = (...listed: DomicileCastSink[]) => {
+    fake.set({ castSinks: listed });
+  };
+  return { backend: engineCast(cast), replies, sinks, started, stopped };
+};
+
+const sink = (route: string | null = null): DomicileCastSink => ({
+  id: "tv-1",
+  name: "Living Room TV",
+  route,
+});
+
+describe("engineCast", () => {
+  it("lists the engine's TVs, at 1080p, as they change", () => {
+    const { backend, sinks } = engine();
+    const heard: (readonly CastTarget[])[] = [];
+    backend.watchTargets((targets) => {
+      heard.push(targets);
+    });
+    sinks(sink());
+
+    expect(heard).toEqual([[], [TV]]);
+  });
+
+  it("claims any app's request: the engine's capture names none it picks", () => {
+    expect(engine().backend.appId).toBeUndefined();
+  });
+
+  it("casts to the TV, and stops its route", async () => {
+    const { backend, replies, started, stopped } = engine();
+    const sending = backend.send("tv-1");
+    replies[0]?.(Ok("route-1"));
+    const sent = await sending;
+    sent.match({
+      Err: () => undefined,
+      Ok: ({ stop }) => {
+        stop();
+      },
+    });
+
+    expect(started).toEqual(["tv-1"]);
+    expect(stopped).toEqual(["route-1"]);
+  });
+
+  it("says why the TV refused", async () => {
+    const { backend, replies } = engine();
+    const sending = backend.send("tv-1");
+    replies[0]?.(Err("The TV did not take the cast"));
+
+    expect(await sending).toStrictEqual(Err("The TV did not take the cast"));
+  });
+
+  it("ends once the TV's route goes, whether listed before or after", async () => {
+    const { backend, replies, sinks } = engine();
+    const sending = backend.send("tv-1");
+    sinks(sink("route-1"));
+    replies[0]?.(Ok("route-1"));
+    let ended = false;
+    (await sending).match({
+      Err: () => undefined,
+      Ok: (sent) => {
+        void sent.ended.then(() => {
+          ended = true;
+        });
+      },
+    });
+    sinks(sink("route-1"));
+    await settle();
+    expect(ended).toBe(false);
+
+    sinks(sink());
+    await settle();
+    expect(ended).toBe(true);
+  });
+
+  it("does not end before the list first names the route", async () => {
+    const { backend, replies, sinks } = engine();
+    const sending = backend.send("tv-1");
+    replies[0]?.(Ok("route-1"));
+    let ended = false;
+    (await sending).match({
+      Err: () => undefined,
+      Ok: (sent) => {
+        void sent.ended.then(() => {
+          ended = true;
+        });
+      },
+    });
+    sinks(sink());
+    await settle();
+
+    expect(ended).toBe(false);
   });
 });
