@@ -1,7 +1,7 @@
+import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { Keymaps } from "@domicile-desktop/sdk/keymap-choice";
 import type { Listening } from "@domicile-desktop/sdk/system";
-import { system } from "@domicile-desktop/sdk/system";
 
 /** The keymaps as the bar's keymap item uses them. */
 export type HostKeymaps = {
@@ -12,12 +12,12 @@ export type HostKeymaps = {
   watch: (onKeymaps: (keymaps: Keymaps) => void) => () => void;
 };
 
-/** The keymaps through `domicile`'s system calls. Failures are logged. */
+/** The keymaps through `domicile`'s keyboard. Failures are logged. */
 export const hostKeymaps = (domicile: DomicileHost): HostKeymaps => {
-  const host = system(domicile);
+  const { keyboard } = desktop(domicile);
   return {
     watch: (onKeymaps) => {
-      const started = host.keymaps().then((result) =>
+      const started = keyboard.keymaps().then((result) =>
         result.match<Listening<Keymaps> | undefined>({
           Err: (error) => {
             logFailure(error);

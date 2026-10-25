@@ -1,6 +1,6 @@
 import { describe, expect, it, spyOn } from "bun:test";
 import { Err, Ok } from "@cprussin/option-result";
-import type { System } from "@domicile-desktop/sdk/system";
+import type { Files } from "@domicile-desktop/sdk/desktop/files";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import { act, renderHook } from "@testing-library/react";
 
@@ -9,8 +9,8 @@ import { usePictureUrl } from "./usePictureUrl";
 const SKY = new TextEncoder().encode("sky");
 
 // Each `files` is created outside render, since a new one reads again.
-const files: Pick<System, "readFile"> = {
-  readFile: (path) =>
+const files: Pick<Files, "read"> = {
+  read: (path) =>
     Promise.resolve(
       path === "/missing.jpg"
         ? Err({ kind: SystemErrorKind.NotFound, message: "gone" })

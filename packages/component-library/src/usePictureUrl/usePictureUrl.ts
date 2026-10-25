@@ -1,11 +1,11 @@
-import type { System } from "@domicile-desktop/sdk/system";
+import type { Files as FileCalls } from "@domicile-desktop/sdk/desktop/files";
 import { useEffect, useState } from "react";
 
-type Files = Pick<System, "readFile">;
+type Files = Pick<FileCalls, "read">;
 
 /**
- * A URL an `<img>` can show for the picture at `path`, read through the SDK's
- * `system`. `undefined` for no path, until it is read, or when it cannot be
+ * A URL an `<img>` can show for the picture at `path`, read through
+ * `domicile.files`. `undefined` for no path, until it is read, or when it cannot be
  * read (logged). The URL is revoked when the path changes or on unmount.
  */
 export const usePictureUrl = (
@@ -32,7 +32,7 @@ const showPicture = (
   let made: string | undefined;
   let current = true;
   files
-    .readFile(path)
+    .read(path)
     .then((read) => {
       read.match({
         Err: (error) => {

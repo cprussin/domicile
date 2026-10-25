@@ -1,17 +1,17 @@
 // A tray item's menu: `com.canonical.dbusmenu` on the session bus, read,
-// kept current and clicked through the shell's system calls. See
+// kept current and clicked through the shell's D-Bus calls. See
 // docs/architecture/SYSTEM-TRAY.md.
 
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
 import { z } from "zod";
+import type { Dbus } from "./desktop/dbus";
 
 import type {
   DbusCall,
   DbusSignal,
   Listened,
   Listening,
-  System,
   SystemError,
 } from "./system";
 import { Bus, ListenedKind } from "./system";
@@ -75,7 +75,7 @@ export type MenuEntry = ReturnType<(typeof MenuEntry)[keyof typeof MenuEntry]>;
 export type MenuAddress = { bus: string; path: string };
 
 /** The calls this module makes. */
-export type MenuSystem = Pick<System, "dbusCall" | "dbusMatch">;
+export type MenuDesktop = { readonly dbus: Pick<Dbus, "call" | "match"> };
 
 /** A menu being watched, and the requests it takes. */
 export type WatchedMenu = {
@@ -97,7 +97,7 @@ export type WatchedMenu = {
  * desktop being locked. The watch keeps listening after a failed read.
  */
 export const watchMenu = (
-  system: MenuSystem,
+  domicile: MenuDesktop,
   address: MenuAddress,
   onMenu: (menu: Result<readonly MenuEntry[], SystemError>) => void,
 ): WatchedMenu => {
@@ -114,17 +114,17 @@ export const watchMenu = (
   // Reads one at a time, so an older read never reports after a newer one.
   const reread = (): Promise<void> => {
     watch.reading = watch.reading.then(async () => {
-      report(await read(system, address));
+      report(await read(domicile, address));
     });
     return watch.reading;
   };
-  follow(system, address, watch, report, reread).catch((error: unknown) => {
+  follow(domicile, address, watch, report, reread).catch((error: unknown) => {
     // biome-ignore lint/suspicious/noConsole: surfacing a background failure
     console.error("Failed to watch a tray menu", error);
   });
   return {
     aboutToShow: async (id) =>
-      (await call(system, address, "AboutToShow", "i", [id])).andThenAsync(
+      (await call(domicile, address, "AboutToShow", "i", [id])).andThenAsync(
         async ({ body }) => {
           const [changed] = aboutToShowSchema.parse(body);
           if (changed) {
@@ -135,7 +135,7 @@ export const watchMenu = (
       ),
     click: async (id) =>
       (
-        await call(system, address, "Event", "isvu", [
+        await call(domicile, address, "Event", "isvu", [
           id,
           "clicked",
           { signature: "i", value: 0 },
@@ -159,13 +159,13 @@ type Watch = {
 
 /** Listen, read, then read again on each change until the match ends. */
 const follow = async (
-  system: MenuSystem,
+  domicile: MenuDesktop,
   address: MenuAddress,
   watch: Watch,
   report: (menu: Result<readonly MenuEntry[], SystemError>) => void,
   reread: () => Promise<void>,
 ): Promise<void> => {
-  const matched = await system.dbusMatch({
+  const matched = await domicile.dbus.match({
     bus: Bus.Session,
     interface: DBUSMENU,
     path: address.path,
@@ -217,21 +217,21 @@ const changes = async (
 
 /** The whole menu, from the top. */
 const read = async (
-  system: MenuSystem,
+  domicile: MenuDesktop,
   address: MenuAddress,
 ): Promise<Result<readonly MenuEntry[], SystemError>> =>
-  (await call(system, address, "GetLayout", "iias", [0, -1, []])).map(
+  (await call(domicile, address, "GetLayout", "iias", [0, -1, []])).map(
     ({ body }) => entriesOf(getLayoutSchema.parse(body)[1][2]),
   );
 
 const call = (
-  system: MenuSystem,
+  domicile: MenuDesktop,
   address: MenuAddress,
   member: string,
   signature: string,
   body: NonNullable<DbusCall["body"]>,
 ) =>
-  system.dbusCall({
+  domicile.dbus.call({
     body,
     bus: Bus.Session,
     destination: address.bus,

@@ -2,13 +2,13 @@ import { describe, expect, it } from "bun:test";
 import { None, Ok, Some } from "@cprussin/option-result";
 
 import { contentTypeOf } from "./content-type";
-import type { Node } from "./fake-system";
-import { fakeSystem } from "./fake-system";
+import type { Node } from "./fake-desktop";
+import { fakeDesktop } from "./fake-desktop";
 
 const DIRS = ["/data", "/share"];
 
 const desktop = (tree: Readonly<Record<string, Node>>) =>
-  fakeSystem({ "notes/todo.org": "", ...tree });
+  fakeDesktop({ "notes/todo.org": "", ...tree });
 
 describe("contentTypeOf", () => {
   it("is a directory's type for a directory", async () => {

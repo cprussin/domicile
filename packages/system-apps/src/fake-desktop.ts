@@ -1,14 +1,15 @@
-// A `System` over an in-memory tree, for a shell's tests.
+// A desktop's files, processes and D-Bus over an in-memory tree, for a
+// shell's tests.
 
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
+import type { AppDomicile } from "@domicile-desktop/sdk/desktop/app-desktop";
 import type {
   DbusBody,
   DirEntry,
   Ran,
   Stat,
   Subprocess,
-  System,
   SystemError,
 } from "@domicile-desktop/sdk/system";
 import { FileType, SystemErrorKind } from "@domicile-desktop/sdk/system";
@@ -30,7 +31,7 @@ export type Spawned = {
   code: number;
 };
 
-export type FakeSystem = System & {
+export type FakeDesktop = AppDomicile & {
   /** Every path read, listed or statted, in order. */
   touched: string[];
 };
@@ -41,15 +42,15 @@ type Tree = Readonly<Record<string, Node>>;
 const SETTINGS = "org.freedesktop.impl.portal.Settings";
 
 /**
- * A system whose files are `tree`, keyed by path, with the directories
+ * A desktop whose files are `tree`, keyed by path, with the directories
  * between them implied. `spawned` answers `spawn` and `run`. Its Settings
  * portal serves `iconTheme`, or no icon theme when `undefined`.
  */
-export const fakeSystem = (
+export const fakeDesktop = (
   tree: Tree,
   spawned: (argv: readonly string[]) => Spawned = unexpected,
   iconTheme: string | undefined = undefined,
-): FakeSystem => {
+): FakeDesktop => {
   const touched: string[] = [];
   const at = (path: string): Result<Found, SystemError> => {
     touched.push(path);
@@ -62,66 +63,62 @@ export const fakeSystem = (
         : Err({ kind: SystemErrorKind.IsADirectory, message: path }),
     );
   return {
-    addVirtualMonitor: unexpected,
-    createDir: unexpected,
-    dbusCall: (call) =>
-      call.interface === SETTINGS && call.member === "ReadAll"
-        ? Promise.resolve(Ok(settings(iconTheme)))
-        : unexpected(),
-    dbusMatch: unexpected,
-    idleWarnings: unexpected,
-    keymaps: unexpected,
-    previewWindow: unexpected,
-    readDir: (path) =>
-      Promise.resolve(
-        at(path).andThen((node) =>
-          typeof node === "string" || node instanceof Uint8Array
-            ? Err({ kind: SystemErrorKind.NotADirectory, message: path })
-            : Ok(listing(tree, node.directory)),
-        ),
-      ),
-    readFile: (path) => Promise.resolve(readFile(path)),
-    readTextFile: (path) =>
-      Promise.resolve(
-        readFile(path).map((bytes) => new TextDecoder().decode(bytes)),
-      ),
-    run: (argv) => {
-      const { code, stderr, stdout } = spawned(argv);
-      const ran: Ran = {
-        code,
-        signal: undefined,
-        stderr,
-        stdout: new TextDecoder().decode(bytesOf(stdout)),
-      };
-      return Promise.resolve(Ok(ran));
+    dbus: {
+      call: (call) =>
+        call.interface === SETTINGS && call.member === "ReadAll"
+          ? Promise.resolve(Ok(settings(iconTheme)))
+          : unexpected(),
+      match: unexpected,
     },
-    screenshot: unexpected,
-    selectKeymap: unexpected,
-    setWindowStates: unexpected,
-    shellCommands: unexpected,
-    spawn: (argv) => Promise.resolve(Ok(subprocess(spawned(argv)))),
-    stat: (path) =>
-      Promise.resolve(
-        at(path).map(
-          (node): Stat =>
+    files: {
+      createDir: unexpected,
+      read: (path) => Promise.resolve(readFile(path)),
+      readDir: (path) =>
+        Promise.resolve(
+          at(path).andThen((node) =>
             typeof node === "string" || node instanceof Uint8Array
-              ? {
-                  fileType: FileType.File,
-                  modifiedMs: undefined,
-                  size: bytesOf(node).byteLength,
-                }
-              : {
-                  fileType: FileType.Directory,
-                  modifiedMs: undefined,
-                  size: 0,
-                },
+              ? Err({ kind: SystemErrorKind.NotADirectory, message: path })
+              : Ok(listing(tree, node.directory)),
+          ),
         ),
-      ),
+      readText: (path) =>
+        Promise.resolve(
+          readFile(path).map((bytes) => new TextDecoder().decode(bytes)),
+        ),
+      stat: (path) =>
+        Promise.resolve(
+          at(path).map(
+            (node): Stat =>
+              typeof node === "string" || node instanceof Uint8Array
+                ? {
+                    fileType: FileType.File,
+                    modifiedMs: undefined,
+                    size: bytesOf(node).byteLength,
+                  }
+                : {
+                    fileType: FileType.Directory,
+                    modifiedMs: undefined,
+                    size: 0,
+                  },
+          ),
+        ),
+      watch: unexpected,
+      write: unexpected,
+    },
+    processes: {
+      run: (argv) => {
+        const { code, stderr, stdout } = spawned(argv);
+        const ran: Ran = {
+          code,
+          signal: undefined,
+          stderr,
+          stdout: new TextDecoder().decode(bytesOf(stdout)),
+        };
+        return Promise.resolve(Ok(ran));
+      },
+      spawn: (argv) => Promise.resolve(Ok(subprocess(spawned(argv)))),
+    },
     touched,
-    unlockRefusals: unexpected,
-    watch: unexpected,
-    windowRequests: unexpected,
-    writeFile: unexpected,
   };
 };
 

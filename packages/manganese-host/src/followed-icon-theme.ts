@@ -1,10 +1,10 @@
 // The config's icon theme, followed once per desktop and shared by the
 // launcher and tray menus.
 
+import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
-import type { IconThemeSystem } from "@domicile-desktop/sdk/icon-theme";
+import type { IconThemeDesktop } from "@domicile-desktop/sdk/icon-theme";
 import { watchIconTheme } from "@domicile-desktop/sdk/icon-theme";
-import { system } from "@domicile-desktop/sdk/system";
 
 import { perHost } from "./per-host";
 
@@ -13,7 +13,7 @@ export type IconTheme = () => Promise<string | undefined>;
 
 /** {@link followIconTheme} for `domicile`, started on first use. */
 export const sharedIconTheme: (domicile: DomicileHost) => IconTheme = perHost(
-  (domicile) => followIconTheme(system(domicile)),
+  (domicile) => followIconTheme(desktop(domicile)),
 );
 
 /**
@@ -23,7 +23,7 @@ export const sharedIconTheme: (domicile: DomicileHost) => IconTheme = perHost(
  * icons are cosmetic, and a launcher or menu should still open.
  */
 export const followIconTheme = (
-  host: IconThemeSystem,
+  host: IconThemeDesktop,
   watch: typeof watchIconTheme = watchIconTheme,
 ): IconTheme => {
   const first = Promise.withResolvers<string | undefined>();

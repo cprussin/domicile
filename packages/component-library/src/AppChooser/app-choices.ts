@@ -3,7 +3,8 @@
 
 import type { Result } from "@cprussin/option-result";
 import { Ok } from "@cprussin/option-result";
-import type { System, SystemError } from "@domicile-desktop/sdk/system";
+import type { SystemError } from "@domicile-desktop/sdk/system";
+import type { AppsDesktop } from "@domicile-desktop/system-apps/apps-desktop";
 import type { DescribedApp } from "@domicile-desktop/system-apps/describe-apps";
 import { describeApps } from "@domicile-desktop/system-apps/describe-apps";
 import { defaultApps } from "@domicile-desktop/system-apps/mime-apps";
@@ -20,15 +21,15 @@ export type DescribedChoices = {
  * when it is `undefined`.
  */
 export const describeChoices = async (
-  system: System,
+  domicile: AppsDesktop,
   choices: readonly string[],
   contentType: string | undefined,
 ): Promise<Result<DescribedChoices, SystemError>> => {
   const [apps, defaults] = await Promise.all([
-    describeApps(system, choices),
+    describeApps(domicile, choices),
     contentType === undefined
       ? Ok<string[], SystemError>([])
-      : defaultApps(system, contentType),
+      : defaultApps(domicile, contentType),
   ]);
   return apps.andThen((found) =>
     defaults.map((ids) => ({

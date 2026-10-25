@@ -3,8 +3,9 @@
 
 import type { Option, Result } from "@cprussin/option-result";
 import { None, Ok, Some } from "@cprussin/option-result";
-import type { System, SystemError } from "@domicile-desktop/sdk/system";
+import type { SystemError } from "@domicile-desktop/sdk/system";
 import { FileType } from "@domicile-desktop/sdk/system";
+import type { AppsDesktop } from "./apps-desktop";
 
 import { globOf } from "./glob";
 import { allOk, orAbsent } from "./results";
@@ -23,19 +24,20 @@ type Glob = { weight: number; type: string; pattern: string; glob: RegExp };
  * longest pattern, then the earliest directory.
  */
 export const contentTypeOf = async (
-  system: System,
+  domicile: AppsDesktop,
   dataDirs: readonly string[],
   path: string,
 ): Promise<Result<Option<string>, SystemError>> =>
-  (await system.stat(path)).andThenAsync(async ({ fileType }) =>
+  (await domicile.files.stat(path)).andThenAsync(async ({ fileType }) =>
     fileType === FileType.Directory
       ? Ok<Option<string>, SystemError>(Some(DIRECTORY))
       : allOk(
           await Promise.all(
             dataDirs.map(async (dir) =>
-              orAbsent(await system.readTextFile(`${dir}/mime/globs2`), "").map(
-                globsIn,
-              ),
+              orAbsent(
+                await domicile.files.readText(`${dir}/mime/globs2`),
+                "",
+              ).map(globsIn),
             ),
           ),
         ).map((globs) => matching(globs.flat(), nameOf(path))),

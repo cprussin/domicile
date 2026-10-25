@@ -1,5 +1,5 @@
 import { AppChooser } from "@domicile-desktop/component-library/AppChooser";
-import type { System } from "@domicile-desktop/sdk/system";
+import type { AppsDesktop } from "@domicile-desktop/system-apps/apps-desktop";
 import type { Openers } from "@domicile-desktop/system-apps/openers";
 import { openers } from "@domicile-desktop/system-apps/openers";
 import { useEffect, useState } from "react";
@@ -11,15 +11,21 @@ type Props = {
   /** The file, relative to home or absolute. */
   path: string;
   screen: string | undefined;
-  system: System;
+  domicile: AppsDesktop;
 };
 
 /**
  * Pick the application to open a file with, from those `openers` offers. The
  * one Enter opens it with starts picked.
  */
-export const OpenWith = ({ onClose, onOpen, path, screen, system }: Props) => {
-  const found = useOpeners(system, path);
+export const OpenWith = ({
+  onClose,
+  onOpen,
+  path,
+  screen,
+  domicile,
+}: Props) => {
+  const found = useOpeners(domicile, path);
   const apps = found?.apps ?? [];
   return (
     <AppChooser
@@ -28,6 +34,7 @@ export const OpenWith = ({ onClose, onOpen, path, screen, system }: Props) => {
         None: () => undefined,
         Some: (type) => type,
       })}
+      domicile={domicile}
       onCancel={onClose}
       onChoose={(id) => {
         const app = apps.find((each) => withoutSuffix(each.id) === id);
@@ -39,18 +46,20 @@ export const OpenWith = ({ onClose, onOpen, path, screen, system }: Props) => {
       }}
       opened={path.slice(path.lastIndexOf("/") + 1)}
       screen={screen}
-      system={system}
     />
   );
 };
 
 /** What opens `path`, or `undefined` until read. */
-const useOpeners = (system: System, path: string): Openers | undefined => {
+const useOpeners = (
+  domicile: AppsDesktop,
+  path: string,
+): Openers | undefined => {
   const [found, setFound] = useState<Openers | undefined>();
 
   useEffect(() => {
     let current = true;
-    openers(system, path)
+    openers(domicile, path)
       .then((result) => {
         result.match({
           Err: (error) => {
@@ -72,7 +81,7 @@ const useOpeners = (system: System, path: string): Openers | undefined => {
     return () => {
       current = false;
     };
-  }, [system, path]);
+  }, [domicile, path]);
 
   return found;
 };

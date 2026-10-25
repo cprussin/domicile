@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
-import { fakeSystem } from "@domicile-desktop/system-apps/fake-system";
+import { fakeDesktop } from "@domicile-desktop/system-apps/fake-desktop";
 
 import { openCommand } from "./open-command";
 import { openFileCommand } from "./open-file";
 
 /** A desktop with an editor that opens text, the default set in `defaults`. */
 const desktop = (defaults: string) =>
-  fakeSystem(
+  fakeDesktop(
     {
       "/config/domicile-mimeapps.list": `[Default Applications]\n${defaults}\n`,
       "/share/applications/editor.desktop":

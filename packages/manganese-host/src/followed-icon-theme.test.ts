@@ -4,7 +4,7 @@ import { Err, None, Ok, Some } from "@cprussin/option-result";
 import type { watchIconTheme } from "@domicile-desktop/sdk/icon-theme";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
-import { fakeSystem } from "@domicile-desktop/system-apps/fake-system";
+import { fakeDesktop } from "@domicile-desktop/system-apps/fake-desktop";
 
 import { followIconTheme } from "./followed-icon-theme";
 
@@ -25,7 +25,7 @@ const watching = () => {
 describe("followIconTheme", () => {
   it("answers with the theme as last reported, from one watch", async () => {
     const { report, state, watch } = watching();
-    const theme = followIconTheme(fakeSystem({}), watch);
+    const theme = followIconTheme(fakeDesktop({}), watch);
     const first = theme();
 
     (await report)(Ok(Some("Papirus")));
@@ -43,7 +43,7 @@ describe("followIconTheme", () => {
       logged.resolve(args);
     });
     const { report, watch } = watching();
-    const theme = followIconTheme(fakeSystem({}), watch);
+    const theme = followIconTheme(fakeDesktop({}), watch);
     const refused = { kind: SystemErrorKind.Dbus, message: "no portal" };
 
     (await report)(Err(refused));

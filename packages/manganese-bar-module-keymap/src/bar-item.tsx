@@ -1,6 +1,6 @@
 import { useDomicile } from "@domicile-desktop/manganese-host/domicile-context";
+import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import { KeymapChoice } from "@domicile-desktop/sdk/keymap-choice";
-import { system } from "@domicile-desktop/sdk/system";
 import { use, useCallback } from "react";
 
 import { deskKeymaps } from "./desk-keymaps";
@@ -17,8 +17,8 @@ export const Keymap = () => {
   const { hideDefault } = use(KeymapOptionsContext);
   const select = useCallback(
     (name: string) => {
-      system(domicile)
-        .selectKeymap(KeymapChoice.Named(name))
+      desktop(domicile)
+        .keyboard.selectKeymap(KeymapChoice.Named(name))
         .then((result) => {
           result.match({ Err: logFailure, Ok: () => undefined });
         })

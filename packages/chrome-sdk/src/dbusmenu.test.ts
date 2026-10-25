@@ -206,36 +206,38 @@ const fakeBus = (
       return state.stopped;
     },
     system: {
-      dbusCall: (call: DbusCall) => {
-        calls.push(call);
-        const reply = replies.shift();
-        if (reply === undefined) {
-          throw new Error(`test: no reply for ${call.member}`);
-        } else {
-          return Promise.resolve(reply);
-        }
-      },
-      dbusMatch: (match: DbusMatch) => {
-        matches.push(match);
-        return Promise.resolve(
-          refused === undefined
-            ? Ok<Listening<Listened<DbusSignal>>, SystemError>({
-                ended: ended.promise,
-                items,
-                stop: () => {
-                  state.stopped += 1;
-                  signals.promise
-                    .then((controller) => {
-                      controller.close();
-                      ended.resolve(Ok("stopped"));
-                    })
-                    .catch(() => {
-                      /* the test fails on the missing report instead */
-                    });
-                },
-              })
-            : Err<Listening<Listened<DbusSignal>>, SystemError>(refused),
-        );
+      dbus: {
+        call: (call: DbusCall) => {
+          calls.push(call);
+          const reply = replies.shift();
+          if (reply === undefined) {
+            throw new Error(`test: no reply for ${call.member}`);
+          } else {
+            return Promise.resolve(reply);
+          }
+        },
+        match: (match: DbusMatch) => {
+          matches.push(match);
+          return Promise.resolve(
+            refused === undefined
+              ? Ok<Listening<Listened<DbusSignal>>, SystemError>({
+                  ended: ended.promise,
+                  items,
+                  stop: () => {
+                    state.stopped += 1;
+                    signals.promise
+                      .then((controller) => {
+                        controller.close();
+                        ended.resolve(Ok("stopped"));
+                      })
+                      .catch(() => {
+                        /* the test fails on the missing report instead */
+                      });
+                  },
+                })
+              : Err<Listening<Listened<DbusSignal>>, SystemError>(refused),
+          );
+        },
       },
     },
   };

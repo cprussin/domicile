@@ -83,11 +83,11 @@ import {
 } from "@domicile-desktop/manganese-window-management/window-state";
 import type { Workspaces } from "@domicile-desktop/manganese-window-management/workspaces-context";
 import { WorkspacesContext } from "@domicile-desktop/manganese-window-management/workspaces-context";
+import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import { previewFile } from "@domicile-desktop/sdk/file-preview";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { ownedChords } from "@domicile-desktop/sdk/own-keybindings";
-import { system } from "@domicile-desktop/sdk/system";
 import type { ReactNode } from "react";
 import { useCallback, useMemo, useState } from "react";
 import { LOCK_BAR } from "./default-bars";
@@ -155,16 +155,16 @@ export const Desktop = ({
     (query: string) => domicile.searchFiles(query),
     [domicile],
   );
-  // The pictures applications set through the Wallpaper portal. Memoized
-  // because a new `system` would read them again.
-  const files = useMemo(() => system(domicile), [domicile]);
+  // The pictures applications set through the Wallpaper portal. `desktop`
+  // answers the same object for a host, so they are not read again.
+  const { files } = desktop(domicile);
   const portalWallpaper = usePortalWallpaper(domicile);
   const backgroundPicture = usePictureUrl(files, portalWallpaper.background);
   const lockPicture = usePictureUrl(files, portalWallpaper.lockscreen);
-  // Installed apps and bookmarks, read through the desktop's system calls.
+  // Installed apps and bookmarks, read through the desktop.
   // Memoized because it holds what was read and the bookmarks' icons.
   const apps = useMemo(
-    () => appSearch(system(domicile), applications, sharedIconTheme(domicile)),
+    () => appSearch(desktop(domicile), applications, sharedIconTheme(domicile)),
     [applications, domicile],
   );
   // Read while the launcher is closed so its rows render with it rather than
@@ -175,9 +175,9 @@ export const Desktop = ({
   // The launcher's pick, held until it has closed and the screen shows it
   // gone, so nothing it opens sees it. A screenshot app would shoot it.
   const [picked, setPicked] = useState<Launch | undefined>();
-  // File previews, read through the desktop's system calls.
+  // File previews, read through the desktop's files.
   const preview = useCallback(
-    (path: string) => previewFile(system(domicile), path),
+    (path: string) => previewFile(desktop(domicile), path),
     [domicile],
   );
 
@@ -305,8 +305,8 @@ export const Desktop = ({
     (action: WindowAction) => {
       switch (action.kind) {
         case WindowActionKind.KeymapSelected: {
-          system(domicile)
-            .selectKeymap(action.choice)
+          desktop(domicile)
+            .keyboard.selectKeymap(action.choice)
             .then((result) => {
               result.match({
                 Err: logKeymapFailure,
@@ -551,6 +551,7 @@ export const Desktop = ({
       />
       {openingWith !== undefined && (
         <OpenWith
+          domicile={desktop(domicile)}
           onClose={() => {
             setOpeningWith(undefined);
           }}
@@ -560,7 +561,6 @@ export const Desktop = ({
           }}
           path={openingWith}
           screen={windows.focused}
-          system={files}
         />
       )}
       {/* Over the windows, on the screen with the keyboard. */}

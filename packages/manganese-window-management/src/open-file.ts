@@ -1,7 +1,7 @@
 // The argv that opens a file the launcher found: the type's default
 // application, as the AppChooser dialog would pick it, else `xdg-open`.
 
-import type { System } from "@domicile-desktop/sdk/system";
+import type { AppsDesktop } from "@domicile-desktop/system-apps/apps-desktop";
 import { openers } from "@domicile-desktop/system-apps/openers";
 
 import { openCommand } from "./open-command";
@@ -15,10 +15,10 @@ import { openCommand } from "./open-command";
  * reads aliases, subclasses and contents.
  */
 export const openFileCommand = async (
-  system: System,
+  domicile: AppsDesktop,
   path: string,
 ): Promise<readonly string[]> =>
-  (await openers(system, path)).match({
+  (await openers(domicile, path)).match({
     Err: (error) => {
       throw new Error(`could not find what opens ${path}: ${error.message}`);
     },

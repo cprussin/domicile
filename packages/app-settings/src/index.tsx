@@ -8,7 +8,7 @@ import {
 import { ThemeProvider } from "@domicile-desktop/component-library/ThemeProvider";
 import { applyTheme } from "@domicile-desktop/component-library/theme-core";
 import type { AppMain } from "@domicile-desktop/sdk/app";
-import { system } from "@domicile-desktop/sdk/system";
+import { appDesktop } from "@domicile-desktop/sdk/desktop/app-desktop";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -24,7 +24,7 @@ export const main: AppMain = (root, host) => {
   applyTheme(themes.theme ?? "dark");
   followReducedMotion();
   document.title = "Settings";
-  const settings = spawnedHost(system(host));
+  const settings = spawnedHost(appDesktop(host).processes);
   createRoot(root).render(
     <StrictMode>
       <ThemeProvider source={themes}>

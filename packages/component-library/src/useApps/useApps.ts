@@ -1,5 +1,5 @@
-import type { System } from "@domicile-desktop/sdk/system";
 import { appIdName } from "@domicile-desktop/system-apps/app-id-name";
+import type { AppsDesktop } from "@domicile-desktop/system-apps/apps-desktop";
 import type { DescribedApp } from "@domicile-desktop/system-apps/describe-apps";
 import { describeApps } from "@domicile-desktop/system-apps/describe-apps";
 import { useCallback, useEffect, useState } from "react";
@@ -17,7 +17,7 @@ export type App = {
  * yet, is named by its readable form; the empty id is "An application".
  */
 export const useApps = (
-  system: System,
+  domicile: AppsDesktop,
   ids: readonly string[],
 ): ((appId: string) => App) => {
   const [described, setDescribed] = useState<ReadonlyMap<string, DescribedApp>>(
@@ -31,7 +31,7 @@ export const useApps = (
       return undefined;
     } else {
       let current = true;
-      describeApps(system, key.split("\n"))
+      describeApps(domicile, key.split("\n"))
         .then((result) => {
           result.match({
             Err: (error) => {
@@ -54,7 +54,7 @@ export const useApps = (
         current = false;
       };
     }
-  }, [system, key]);
+  }, [domicile, key]);
 
   return useCallback((appId) => app(described, appId), [described]);
 };

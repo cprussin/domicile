@@ -9,7 +9,7 @@ describe(writeEnded, () => {
   it("writes an empty file at the path", async () => {
     const written: [string, string | Uint8Array][] = [];
     await writeEnded(new FakeDomicileHost().host, "/run/splash/ended", () => ({
-      writeFile: (path, data) => {
+      write: (path, data) => {
         written.push([path, data]);
         return Promise.resolve(Ok("written" as const));
       },
@@ -20,7 +20,7 @@ describe(writeEnded, () => {
   it("rejects when the compositor refuses", async () => {
     await expect(
       writeEnded(new FakeDomicileHost().host, "/run/splash/ended", () => ({
-        writeFile: () =>
+        write: () =>
           Promise.resolve(
             Err({ kind: SystemErrorKind.Locked, message: "locked" }),
           ),

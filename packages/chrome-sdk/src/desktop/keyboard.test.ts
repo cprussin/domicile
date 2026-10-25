@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { FakeDomicileHost } from "../fake-host";
+import { KeymapChoice } from "../keymap-choice";
 import { desktop } from "./desktop";
 
 const pressed = {
@@ -77,5 +78,26 @@ describe("pointer", () => {
     desktop(fake.host).pointer.warp(10, 20);
 
     expect(fake.calls).toStrictEqual([["warpPointer", 10, 20]]);
+  });
+
+  it("hears the keymaps and switches them through the compositor", async () => {
+    const fake = new FakeDomicileHost();
+    const { keyboard } = desktop(fake.host);
+    keyboard.keymaps().catch(() => {
+      /* never answered */
+    });
+    keyboard.selectKeymap(KeymapChoice.Next()).catch(() => {
+      /* never answered */
+    });
+    await Promise.resolve();
+
+    expect(fake.calls).toStrictEqual([
+      ["callSystem", 1, JSON.stringify({ call: "keymaps" })],
+      [
+        "callSystem",
+        2,
+        JSON.stringify({ call: "select_keymap", keymap: { kind: "next" } }),
+      ],
+    ]);
   });
 });

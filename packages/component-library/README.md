@@ -52,7 +52,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `ThemeProvider` | Light/dark theme state. Sets `data-theme` on `<html>`. |
 | `ThemeSwitch` | Button that flips the theme. |
 | `useApps` | Hook: names and icons of applications by app id, from their desktop entries. |
-| `usePictureUrl` | Hook: a URL an `<img>` can show for a file read through the SDK's `system`. |
+| `usePictureUrl` | Hook: a URL an `<img>` can show for a file read through `domicile.files`. |
 | `usePortalWallpaper` | Hook: the pictures applications set through the Wallpaper portal, as paths. |
 | `theme-core`, `theme-source`, `standalone-theme-source` | Theme types and sources. Use the standalone source where there is no compositor, such as Storybook. |
 | `control-sizes` | `Size` type and `SIZES` array for sized controls. |

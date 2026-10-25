@@ -1,13 +1,14 @@
 // The desktop's environment, which a page cannot see.
 
 import type { Result } from "@cprussin/option-result";
-import type { System, SystemError } from "@domicile-desktop/sdk/system";
+import type { SystemError } from "@domicile-desktop/sdk/system";
+import type { AppsDesktop } from "./apps-desktop";
 
 /** The variables the shell's processes start with, read with `env -0`. */
 export const desktopEnvironment = async (
-  system: System,
+  domicile: AppsDesktop,
 ): Promise<Result<ReadonlyMap<string, string>, SystemError>> =>
-  (await system.run(["env", "-0"])).map((ran) => {
+  (await domicile.processes.run(["env", "-0"])).map((ran) => {
     if (ran.code === 0) {
       return environmentOf(ran.stdout);
     } else {

@@ -4,12 +4,24 @@ import type {
 } from "@domicile-desktop/sdk/domicile-host";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import type { GlobalShortcutsHost } from "@domicile-desktop/sdk/global-shortcuts";
-import type { SystemHost } from "@domicile-desktop/sdk/system";
-import { fakeSystem } from "@domicile-desktop/system-apps/fake-system";
+import type { FakeDesktop } from "@domicile-desktop/system-apps/fake-desktop";
+import { fakeDesktop } from "@domicile-desktop/system-apps/fake-desktop";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
+import type { DialogDesktop } from "./PortalDialogs";
 import { PortalDialogs } from "./PortalDialogs";
 import { ShownWindow } from "./shown-windows";
+
+/** `fake` with captures that never draw, for dialogs that preview nothing. */
+const dialogDesktop = (fake: FakeDesktop): DialogDesktop => ({
+  ...fake,
+  capture: {
+    preview: () =>
+      new Promise(() => {
+        /* never drawn */
+      }),
+  },
+});
 
 /**
  * A desktop that pushes `items` and `capturing` once, with
@@ -20,7 +32,7 @@ const pushing = (
   items: readonly object[],
   capturing: readonly object[] = [],
   browserWindows: readonly DomicileBrowserWindow[] | null = null,
-): GlobalShortcutsHost & SystemHost & Pick<DomicileHost, "browserWindows"> => {
+): DomicileHost => {
   const fake = new FakeDomicileHost();
   const data = JSON.stringify({ capturing, items, type: "portal_requests" });
   const host: GlobalShortcutsHost = {
@@ -43,7 +55,7 @@ const pushing = (
     },
     ungrabShortcut: () => undefined,
   };
-  return { ...host, browserWindows, callSystem: () => undefined };
+  return { ...fake.host, ...host, browserWindows, callSystem: () => undefined };
 };
 
 const access = {
@@ -92,11 +104,13 @@ const DUSK_PNG =
 
 /** A desktop holding the picture `wallpaper` names. */
 const withPicture = () =>
-  fakeSystem({
-    "/home/u/Pictures/dusk.png": Uint8Array.from(atob(DUSK_PNG), (c) =>
-      c.charCodeAt(0),
-    ),
-  });
+  dialogDesktop(
+    fakeDesktop({
+      "/home/u/Pictures/dusk.png": Uint8Array.from(atob(DUSK_PNG), (c) =>
+        c.charCodeAt(0),
+      ),
+    }),
+  );
 
 const launcher = {
   app_id: "org.example.Browser",
@@ -191,18 +205,21 @@ const entry = (name: string): string =>
 
 /** Two installed applications; the browser is the default for PDFs. */
 const installed = () =>
-  fakeSystem(
-    {
-      "/config/mimeapps.list":
-        "[Default Applications]\napplication/pdf=firefox.desktop\n",
-      "/share/applications/firefox.desktop": entry("Firefox"),
-      "/share/applications/org.gnome.Evince.desktop": entry("Document Viewer"),
-    },
-    () => ({
-      code: 0,
-      stderr: "",
-      stdout: "XDG_CONFIG_HOME=/config\0XDG_DATA_DIRS=/share\0",
-    }),
+  dialogDesktop(
+    fakeDesktop(
+      {
+        "/config/mimeapps.list":
+          "[Default Applications]\napplication/pdf=firefox.desktop\n",
+        "/share/applications/firefox.desktop": entry("Firefox"),
+        "/share/applications/org.gnome.Evince.desktop":
+          entry("Document Viewer"),
+      },
+      () => ({
+        code: 0,
+        stderr: "",
+        stdout: "XDG_CONFIG_HOME=/config\0XDG_DATA_DIRS=/share\0",
+      }),
+    ),
   );
 
 const fileChooser = {
@@ -237,13 +254,15 @@ const fileChooser = {
 
 /** A small home for the file chooser to list. */
 const home = () =>
-  fakeSystem({
-    "/home/me/Documents/letter.txt": "",
-    "/home/me/Documents/report.pdf": "",
-    "/home/me/notes.txt": "",
-    "/home/me/Pictures/cat.png": "",
-    "/home/me/todo.md": "",
-  });
+  dialogDesktop(
+    fakeDesktop({
+      "/home/me/Documents/letter.txt": "",
+      "/home/me/Documents/report.pdf": "",
+      "/home/me/notes.txt": "",
+      "/home/me/Pictures/cat.png": "",
+      "/home/me/todo.md": "",
+    }),
+  );
 
 const remoteDesktop = {
   app_id: "org.example.Remote",
@@ -397,14 +416,18 @@ const pickColor = {
 
 const meta = {
   args: {
+    desktopOf: undefined,
     host: pushing([access]),
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
     shownWindows: undefined,
-    systemOf: undefined,
   },
   argTypes: {
+    desktopOf: {
+      control: false,
+      table: { category: "Behavior" },
+    },
     host: {
       control: false,
       table: { category: "Behavior" },
@@ -422,10 +445,6 @@ const meta = {
       table: { category: "Behavior" },
     },
     shownWindows: {
-      control: false,
-      table: { category: "Behavior" },
-    },
-    systemOf: {
       control: false,
       table: { category: "Behavior" },
     },
@@ -449,34 +468,34 @@ type Story = StoryObj<typeof meta>;
 
 export const Access: Story = {
   args: {
+    desktopOf: undefined,
     host: pushing([access]),
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
     shownWindows: undefined,
-    systemOf: undefined,
   },
 };
 
 export const AppChooser: Story = {
   args: {
+    desktopOf: installed,
     host: pushing([appChooser]),
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
     shownWindows: undefined,
-    systemOf: installed,
   },
 };
 
 export const FileChooser: Story = {
   args: {
+    desktopOf: home,
     host: pushing([fileChooser]),
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
     shownWindows: undefined,
-    systemOf: home,
   },
 };
 
@@ -486,10 +505,10 @@ export const FileChooser: Story = {
  */
 export const ScreenCast: Story = {
   args: {
+    desktopOf: installed,
     host: pushing([screenCast]),
     screen: undefined,
     screenOf: undefined,
-    systemOf: installed,
   },
 };
 
@@ -500,6 +519,7 @@ export const ScreenCast: Story = {
  */
 export const ScreenCastPreviews: Story = {
   args: {
+    desktopOf: installed,
     host: pushing(
       [screenCastOnDesk],
       [],
@@ -512,79 +532,79 @@ export const ScreenCastPreviews: Story = {
       ShownWindow.App("app-1", { height: 360, width: 520, x: 80, y: 40 }),
       ShownWindow.Browser("1", { height: 260, width: 420, x: 1080, y: 120 }),
     ],
-    systemOf: installed,
   },
 };
 
 export const RemoteDesktop: Story = {
   args: {
+    desktopOf: undefined,
     host: pushing([remoteDesktop]),
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
     shownWindows: undefined,
-    systemOf: undefined,
   },
 };
 
 export const InputCapture: Story = {
   args: {
+    desktopOf: undefined,
     host: pushing([inputCapture]),
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
     shownWindows: undefined,
-    systemOf: undefined,
   },
 };
 
 export const Account: Story = {
   args: {
+    desktopOf: undefined,
     host: pushing([account]),
     screen: undefined,
     screenOf: undefined,
-    systemOf: undefined,
   },
 };
 
 export const DynamicLauncher: Story = {
   args: {
+    desktopOf: undefined,
     host: pushing([launcher]),
     screen: undefined,
     screenOf: undefined,
-    systemOf: undefined,
   },
 };
 
 export const Usb: Story = {
   args: {
+    desktopOf: undefined,
     host: pushing([usb]),
     screen: undefined,
     screenOf: undefined,
-    systemOf: undefined,
   },
 };
 
 export const Print: Story = {
   args: {
+    desktopOf: undefined,
     host: pushing([print([officePrinter])]),
     screen: undefined,
     screenOf: undefined,
-    systemOf: undefined,
   },
 };
 
 export const NoPrinters: Story = {
   args: {
+    desktopOf: undefined,
     host: pushing([print([])]),
     screen: undefined,
     screenOf: undefined,
-    systemOf: undefined,
   },
 };
 
 export const Capturing: Story = {
   args: {
+    desktopOf: undefined,
     host: pushing(
       [],
       [
@@ -607,32 +627,32 @@ export const Capturing: Story = {
     screenOf: undefined,
     shellChords: undefined,
     shownWindows: undefined,
-    systemOf: undefined,
   },
 };
 
 export const GlobalShortcuts: Story = {
   args: {
+    desktopOf: undefined,
     host: pushing([globalShortcuts]),
     screen: undefined,
     screenOf: undefined,
     shellChords: ["Meta+Return"],
     shownWindows: undefined,
-    systemOf: undefined,
   },
 };
 
 export const Wallpaper: Story = {
   args: {
+    desktopOf: withPicture,
     host: pushing([wallpaper]),
     screen: undefined,
     screenOf: undefined,
-    systemOf: withPicture,
   },
 };
 
 export const Screenshot: Story = {
   args: {
+    desktopOf: undefined,
     host: pushing([screenshot]),
     screen: undefined,
     screenOf: undefined,
@@ -641,17 +661,16 @@ export const Screenshot: Story = {
     shownWindows: () => [
       ShownWindow.App("app-1", { height: 360, width: 520, x: 80, y: 40 }),
     ],
-    systemOf: undefined,
   },
 };
 
 export const PickColor: Story = {
   args: {
+    desktopOf: undefined,
     host: pushing([pickColor]),
     screen: undefined,
     screenOf: undefined,
     shellChords: undefined,
     shownWindows: undefined,
-    systemOf: undefined,
   },
 };

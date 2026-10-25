@@ -6,10 +6,11 @@ import {
   APP_FOCUS_REQUESTED_EVENT,
 } from "@domicile-desktop/sdk/app-element";
 import type { CursorShape } from "@domicile-desktop/sdk/cursor-shape";
+import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
-import { SystemErrorKind, system } from "@domicile-desktop/sdk/system";
+import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import { WindowState } from "@domicile-desktop/sdk/window-state";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { css, cx } from "../styled-system/css";
 import type { Rect } from "./rect";
@@ -217,10 +218,10 @@ export const AppWindow = ({
 
   // Tells the client how it is laid out, so a tiled window draws no shadow,
   // rounded corners or resize border of its own. Floats get none, as in sway.
-  const host = useMemo(() => system(domicile), [domicile]);
+  const { windows } = desktop(domicile);
   useEffect(() => {
-    host
-      .setWindowStates(appId, statesOf(fullscreen, floating))
+    windows
+      .setStates(appId, statesOf(fullscreen, floating))
       .then((set) => {
         set.match({
           Err: (error) => {
@@ -234,10 +235,10 @@ export const AppWindow = ({
         });
       })
       .catch((error: unknown) => {
-        // biome-ignore lint/suspicious/noConsole: surfacing a broken system call
+        // biome-ignore lint/suspicious/noConsole: surfacing a broken desktop call
         console.error(`The states of ${appId} were not set`, error);
       });
-  }, [appId, floating, fullscreen, host]);
+  }, [appId, floating, fullscreen, windows]);
 
   // Cancels the engine's default focus-on-click. The shell owns focus:
   // `WindowFrame` reports the press and `focused` drives the effect above.

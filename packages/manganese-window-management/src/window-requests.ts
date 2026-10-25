@@ -1,8 +1,9 @@
 // Clients' maximize and fullscreen requests, which the compositor reports and
 // the shell grants. See docs/WRITING-A-SHELL.md.
 
-import type { Listening, SystemHost } from "@domicile-desktop/sdk/system";
-import { system } from "@domicile-desktop/sdk/system";
+import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
+import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
+import type { Listening } from "@domicile-desktop/sdk/system";
 import type { WindowRequest } from "@domicile-desktop/sdk/window-state";
 
 /**
@@ -10,15 +11,15 @@ import type { WindowRequest } from "@domicile-desktop/sdk/window-state";
  * stop before listening starts ends it once it does.
  */
 export const hearWindowRequests = (
-  domicile: SystemHost,
+  domicile: DomicileHost,
   onRequest: (request: WindowRequest) => void,
 ): { stop: () => void } => {
   const state: {
     stopped: boolean;
     listening: Listening<WindowRequest> | undefined;
   } = { listening: undefined, stopped: false };
-  system(domicile)
-    .windowRequests()
+  desktop(domicile)
+    .windows.requests()
     .then((result) => {
       result.match({
         Err: report,

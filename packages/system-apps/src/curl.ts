@@ -2,7 +2,7 @@
 // allow its origin to read their answers.
 
 import { None, Some } from "@cprussin/option-result";
-import type { System } from "@domicile-desktop/sdk/system";
+import type { AppsDesktop } from "./apps-desktop";
 
 import type { Fetch, Page } from "./favicon";
 
@@ -19,10 +19,10 @@ const USER_AGENT =
  * nothing.
  */
 export const curlFetch =
-  (system: System): Fetch =>
+  (domicile: AppsDesktop): Fetch =>
   async (url) =>
     (
-      await system.spawn([
+      await domicile.processes.spawn([
         "curl",
         "--silent",
         "--fail",

@@ -1,4 +1,4 @@
-import type { System } from "@domicile-desktop/sdk/system";
+import type { AppsDesktop } from "@domicile-desktop/system-apps/apps-desktop";
 import type { DescribedApp } from "@domicile-desktop/system-apps/describe-apps";
 import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import { useId, useState } from "react";
@@ -35,7 +35,7 @@ type Props = {
   opened: string;
   screen: string | undefined;
   /** Where the applications' desktop entries are read. */
-  system: System;
+  domicile: AppsDesktop;
 };
 
 /**
@@ -54,10 +54,10 @@ export const AppChooser = ({
   onChoose,
   opened,
   screen,
-  system,
+  domicile,
 }: Props) => {
   const listId = useId();
-  const described = useDescribedChoices(system, choices, contentType);
+  const described = useDescribedChoices(domicile, choices, contentType);
   const [picked, setPicked] = useState<string | undefined>();
   const apps = described?.apps ?? [];
   const first =

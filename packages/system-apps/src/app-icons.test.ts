@@ -5,7 +5,7 @@ import type { SystemError } from "@domicile-desktop/sdk/system";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 
 import { appIcons, themedIcons } from "./app-icons";
-import { fakeSystem } from "./fake-system";
+import { fakeDesktop } from "./fake-desktop";
 
 const found = (url: string): Result<Option<string>, SystemError> =>
   Ok(Some(url));
@@ -15,7 +15,7 @@ const missing: Result<Option<string>, SystemError> = Ok(None());
 describe("appIcons", () => {
   it("finds a themed icon in hicolor at the size a row wants", async () => {
     const icon = appIcons(
-      fakeSystem({
+      fakeDesktop({
         "/share/icons/hicolor/16x16/apps/editor.png": "small",
         "/share/icons/hicolor/48x48/apps/editor.png": "png",
       }),
@@ -29,7 +29,7 @@ describe("appIcons", () => {
 
   it("reads a scalable icon as an SVG", async () => {
     const icon = appIcons(
-      fakeSystem({ "/share/icons/hicolor/scalable/apps/editor.svg": "svg" }),
+      fakeDesktop({ "/share/icons/hicolor/scalable/apps/editor.svg": "svg" }),
       ["/share"],
     );
 
@@ -40,7 +40,7 @@ describe("appIcons", () => {
 
   it("prefers an earlier data directory, and uses pixmaps last", async () => {
     const icon = appIcons(
-      fakeSystem({
+      fakeDesktop({
         "/system/icons/hicolor/48x48/apps/editor.png": "system",
         "/system/pixmaps/clock.png": "png",
         "/user/icons/hicolor/48x48/apps/editor.png": "user",
@@ -59,7 +59,7 @@ describe("appIcons", () => {
 
   it("searches only the contexts it is given", async () => {
     const icon = appIcons(
-      fakeSystem({
+      fakeDesktop({
         "/share/icons/hicolor/16x16/status/exit.png": "status",
         "/share/icons/hicolor/48x48/apps/editor.png": "png",
         "/share/icons/hicolor/48x48/apps/exit.png": "app",
@@ -117,7 +117,7 @@ describe("appIcons", () => {
     };
 
     const themed = (theme: string, size: number) =>
-      themedIcons(fakeSystem(THEMED), ["/share"], ["actions"], {
+      themedIcons(fakeDesktop(THEMED), ["/share"], ["actions"], {
         size,
         theme,
       });
@@ -125,7 +125,7 @@ describe("appIcons", () => {
     it("picks the directory that suits the size wanted", async () => {
       const at = async (size: number) =>
         (
-          await appIcons(fakeSystem(THEMED), ["/share"], ["actions"], {
+          await appIcons(fakeDesktop(THEMED), ["/share"], ["actions"], {
             size,
             theme: "Papirus",
           })("exit")
@@ -166,7 +166,7 @@ describe("appIcons", () => {
   });
 
   it("reads an absolute icon as that file", async () => {
-    const icon = appIcons(fakeSystem({ "/opt/editor/icon.svg": "svg" }), [
+    const icon = appIcons(fakeDesktop({ "/opt/editor/icon.svg": "svg" }), [
       "/share",
     ]);
 
@@ -177,7 +177,7 @@ describe("appIcons", () => {
 
   it("finds nothing a page cannot draw, nothing too large, and nothing missing", async () => {
     const icon = appIcons(
-      fakeSystem({
+      fakeDesktop({
         "/share/icons/hicolor/48x48/apps/huge.png": new Uint8Array(
           128 * 1024 + 1,
         ),
@@ -192,7 +192,7 @@ describe("appIcons", () => {
   });
 
   it("looks each name up once", async () => {
-    const system = fakeSystem({
+    const system = fakeDesktop({
       "/share/icons/hicolor/48x48/apps/editor.png": "png",
     });
     const icon = appIcons(system, ["/share"]);
@@ -206,7 +206,7 @@ describe("appIcons", () => {
 
   it("fails when the desktop refuses to look", async () => {
     const icon = appIcons(
-      fakeSystem({
+      fakeDesktop({
         "/share/icons/hicolor": { fails: SystemErrorKind.Locked },
       }),
       ["/share"],

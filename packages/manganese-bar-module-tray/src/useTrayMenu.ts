@@ -4,9 +4,9 @@ import type {
   WatchedMenu,
   watchMenu,
 } from "@domicile-desktop/sdk/dbusmenu";
+import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type { SystemError } from "@domicile-desktop/sdk/system";
-import { system } from "@domicile-desktop/sdk/system";
 import { useEffect, useState } from "react";
 
 /** An open tray menu: what it holds, and the requests it takes. */
@@ -38,7 +38,7 @@ export const useTrayMenu = (
 
   useEffect(() => {
     if (open) {
-      const watched = watch(system(domicile), { bus, path }, setMenu);
+      const watched = watch(desktop(domicile), { bus, path }, setMenu);
       setRequests(watched);
       sent(watched.aboutToShow(0));
       return () => {

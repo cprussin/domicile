@@ -22,7 +22,7 @@ const portal = (failure?: SystemError) => {
   const asked: DbusCall[] = [];
   return {
     asked,
-    dbusCall: (call: DbusCall) => {
+    call: (call: DbusCall) => {
       asked.push(call);
       const body: DbusBody =
         call.member === "Inhibit"

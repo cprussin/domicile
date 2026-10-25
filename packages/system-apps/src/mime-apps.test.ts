@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { Ok } from "@cprussin/option-result";
 
-import type { Node } from "./fake-system";
-import { fakeSystem } from "./fake-system";
+import type { Node } from "./fake-desktop";
+import { fakeDesktop } from "./fake-desktop";
 import { defaultApps } from "./mime-apps";
 
 /** A desktop whose environment is `variables` and whose files are `tree`. */
@@ -10,7 +10,7 @@ const desktop = (
   variables: Readonly<Record<string, string>>,
   tree: Readonly<Record<string, Node>> = {},
 ) =>
-  fakeSystem(tree, () => ({
+  fakeDesktop(tree, () => ({
     code: 0,
     stderr: "",
     stdout: Object.entries(variables)

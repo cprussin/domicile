@@ -1,6 +1,6 @@
+import type { Files } from "@domicile-desktop/sdk/desktop/files";
 import type { AccountBody, PortalAnswer } from "@domicile-desktop/sdk/portal";
 import { PortalAnswer as Answer } from "@domicile-desktop/sdk/portal";
-import type { System } from "@domicile-desktop/sdk/system";
 import { css } from "../../styled-system/css";
 import { hstack } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
@@ -13,7 +13,7 @@ type Props = {
   asker: string;
   body: AccountBody;
   /** Reads the user's picture. */
-  files: Pick<System, "readFile">;
+  files: Pick<Files, "read">;
   screen: string | undefined;
 };
 

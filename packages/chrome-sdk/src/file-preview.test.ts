@@ -2,16 +2,16 @@ import { describe, expect, it } from "bun:test";
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
 
-import type { PreviewSystem } from "./file-preview";
+import type { PreviewDesktop } from "./file-preview";
 import { FilePreview, previewFile } from "./file-preview";
 import type { DirEntry, SystemError } from "./system";
 import { FileType, SystemErrorKind } from "./system";
 
-/** A system holding `files`, and directories of `entries`, by path. */
+/** A desktop holding `files`, and directories of `entries`, by path. */
 const holding = (
   files: Readonly<Record<string, Uint8Array | string>>,
   directories: Readonly<Record<string, readonly DirEntry[]>> = {},
-): PreviewSystem => {
+): PreviewDesktop => {
   const missing = (path: string): Result<never, SystemError> =>
     Err({ kind: SystemErrorKind.NotFound, message: path });
   const bytesAt = (path: string) => {
@@ -19,38 +19,42 @@ const holding = (
     return typeof file === "string" ? new TextEncoder().encode(file) : file;
   };
   return {
-    readDir: (path) => {
-      const entries = directories[path];
-      return Promise.resolve(
-        entries === undefined ? missing(path) : Ok([...entries]),
-      );
-    },
-    readFile: (path, range) => {
-      const bytes = bytesAt(path);
-      const offset = range?.offset ?? 0;
-      return Promise.resolve(
-        bytes === undefined
-          ? missing(path)
-          : Ok(
-              bytes.subarray(
-                offset,
-                range?.length === undefined ? undefined : offset + range.length,
+    files: {
+      read: (path, range) => {
+        const bytes = bytesAt(path);
+        const offset = range?.offset ?? 0;
+        return Promise.resolve(
+          bytes === undefined
+            ? missing(path)
+            : Ok(
+                bytes.subarray(
+                  offset,
+                  range?.length === undefined
+                    ? undefined
+                    : offset + range.length,
+                ),
               ),
-            ),
-      );
-    },
-    stat: (path) => {
-      const bytes = bytesAt(path);
-      const directory = directories[path] !== undefined;
-      return Promise.resolve(
-        bytes === undefined && !directory
-          ? missing(path)
-          : Ok({
-              fileType: directory ? FileType.Directory : FileType.File,
-              modifiedMs: undefined,
-              size: bytes?.length ?? 0,
-            }),
-      );
+        );
+      },
+      readDir: (path) => {
+        const entries = directories[path];
+        return Promise.resolve(
+          entries === undefined ? missing(path) : Ok([...entries]),
+        );
+      },
+      stat: (path) => {
+        const bytes = bytesAt(path);
+        const directory = directories[path] !== undefined;
+        return Promise.resolve(
+          bytes === undefined && !directory
+            ? missing(path)
+            : Ok({
+                fileType: directory ? FileType.Directory : FileType.File,
+                modifiedMs: undefined,
+                size: bytes?.length ?? 0,
+              }),
+        );
+      },
     },
   };
 };

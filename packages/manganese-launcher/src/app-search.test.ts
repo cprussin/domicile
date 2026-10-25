@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { None, Some } from "@cprussin/option-result";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
-import type { Spawned } from "@domicile-desktop/system-apps/fake-system";
-import { fakeSystem } from "@domicile-desktop/system-apps/fake-system";
+import type { Spawned } from "@domicile-desktop/system-apps/fake-desktop";
+import { fakeDesktop } from "@domicile-desktop/system-apps/fake-desktop";
 
 import { appSearch } from "./app-search";
 
@@ -42,7 +42,7 @@ const configured = (theme?: string) => () => Promise.resolve(theme);
 
 describe("appSearch", () => {
   it("offers what is installed and not omitted, with its pictures", async () => {
-    const system = fakeSystem(
+    const system = fakeDesktop(
       {
         "/home/applications/browser.desktop": entry("Browser"),
         "/home/applications/editor.desktop": entry(
@@ -77,7 +77,7 @@ describe("appSearch", () => {
   });
 
   it("draws icons from the config's icon theme", async () => {
-    const system = fakeSystem(
+    const system = fakeDesktop(
       {
         "/home/applications/editor.desktop": entry("Editor", "Icon=editor\n"),
         "/home/icons/hicolor/48x48/apps/editor.png": "png",
@@ -100,7 +100,7 @@ describe("appSearch", () => {
   });
 
   it("matches the query against applications and bookmarks", async () => {
-    const system = fakeSystem(
+    const system = fakeDesktop(
       {
         "/home/applications/calculator.desktop": entry("Calculator"),
         "/home/applications/editor.desktop": entry("Editor"),
@@ -135,7 +135,7 @@ describe("appSearch", () => {
   it("looks for every bookmark's icon on each search", async () => {
     const lookup = knownIcons({});
     const apps = appSearch(
-      fakeSystem({}, desktop),
+      fakeDesktop({}, desktop),
       {
         bookmarks: [{ name: "Mail", url: "https://mail.example" }],
         omit: [],
@@ -153,7 +153,7 @@ describe("appSearch", () => {
     const files: Record<string, string> = {
       "/home/applications/editor.desktop": entry("Editor"),
     };
-    const system = fakeSystem(files, desktop);
+    const system = fakeDesktop(files, desktop);
     const apps = appSearch(
       system,
       { bookmarks: [], omit: [] },
@@ -175,7 +175,7 @@ describe("appSearch", () => {
 
   it("fails when the desktop refuses to read", async () => {
     const apps = appSearch(
-      fakeSystem(
+      fakeDesktop(
         { "/home/applications": { fails: SystemErrorKind.Locked } },
         desktop,
       ),

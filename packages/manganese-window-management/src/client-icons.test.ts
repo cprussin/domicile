@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Result } from "@cprussin/option-result";
 import type { SystemError } from "@domicile-desktop/sdk/system";
-import { fakeSystem } from "@domicile-desktop/system-apps/fake-system";
+import { fakeDesktop } from "@domicile-desktop/system-apps/fake-desktop";
 
 import { clientIcons } from "./client-icons";
 
@@ -23,7 +23,7 @@ const iconFor = async (
   theme?: string,
 ): Promise<string | undefined> => {
   const lookup = succeeded(
-    await clientIcons(fakeSystem(tree, ENVIRONMENT), () =>
+    await clientIcons(fakeDesktop(tree, ENVIRONMENT), () =>
       Promise.resolve(theme),
     ),
   );

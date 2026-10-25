@@ -5,8 +5,9 @@ import type { Result } from "@cprussin/option-result";
 import type { MenuAddress, MenuEntry, WatchedMenu } from "../dbusmenu";
 import { watchMenu } from "../dbusmenu";
 import type { DomicileHost, DomicileTrayItem } from "../domicile-host";
-import type { System, SystemError } from "../system";
+import type { SystemError } from "../system";
 import type { TrayAction, TrayItem } from "../tray";
+import type { Dbus } from "./dbus";
 import { memoizeLast } from "./memoize-last";
 import type { On } from "./subscribe";
 import { hostEvent, on } from "./subscribe";
@@ -35,7 +36,7 @@ export type TrayHost = Pick<
 
 export const tray = (
   host: TrayHost,
-  calls: Pick<System, "dbusCall" | "dbusMatch">,
+  bus: Pick<Dbus, "call" | "match">,
 ): Tray => {
   const itemsOf = memoizeLast((list: readonly DomicileTrayItem[] | null) =>
     list?.map(itemOf),
@@ -47,7 +48,7 @@ export const tray = (
     get items() {
       return itemsOf(host.tray);
     },
-    menu: (address, onMenu) => watchMenu(calls, address, onMenu),
+    menu: (address, onMenu) => watchMenu({ dbus: bus }, address, onMenu),
     on: on<TrayListeners>({
       change: (listener) => hostEvent(host, "traychanged", () => listener()),
     }),

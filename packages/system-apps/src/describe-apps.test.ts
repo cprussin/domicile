@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { describeApps } from "./describe-apps";
-import { fakeSystem } from "./fake-system";
+import { fakeDesktop } from "./fake-desktop";
 
 const ENVIRONMENT = () => ({
   code: 0,
@@ -16,7 +16,7 @@ const entry = (name: string, icon?: string): string =>
 
 describe("describeApps", () => {
   it("names each id by its desktop entry, with its icon", async () => {
-    const system = fakeSystem(
+    const system = fakeDesktop(
       {
         "/share/applications/org.gnome.Evince.desktop": entry(
           "Document Viewer",
@@ -39,7 +39,7 @@ describe("describeApps", () => {
   });
 
   it("draws icons from the config's icon theme before hicolor", async () => {
-    const system = fakeSystem(
+    const system = fakeDesktop(
       {
         "/share/applications/org.gnome.Evince.desktop": entry(
           "Document Viewer",
@@ -66,7 +66,7 @@ describe("describeApps", () => {
   });
 
   it("names an id with no entry, or an entry with no icon found, as it can", async () => {
-    const system = fakeSystem(
+    const system = fakeDesktop(
       {
         "/share/applications/editor.desktop": entry("Editor", "missing"),
         "/share/applications/notes.desktop": entry("Notes"),
@@ -88,7 +88,7 @@ describe("describeApps", () => {
   });
 
   it("matches an id to an entry named differently", async () => {
-    const system = fakeSystem(
+    const system = fakeDesktop(
       {
         "/share/applications/chromium-browser.desktop": entry(
           "Chromium",

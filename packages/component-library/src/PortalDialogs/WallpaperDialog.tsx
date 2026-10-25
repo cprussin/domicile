@@ -1,9 +1,9 @@
+import type { Files } from "@domicile-desktop/sdk/desktop/files";
 import type { PortalAnswer, WallpaperBody } from "@domicile-desktop/sdk/portal";
 import {
   PortalAnswer as Answer,
   WallpaperTarget,
 } from "@domicile-desktop/sdk/portal";
-import type { System } from "@domicile-desktop/sdk/system";
 import { css } from "../../styled-system/css";
 import { Button } from "../Button/Button";
 import { ModalDialog } from "../ModalDialog/ModalDialog";
@@ -14,7 +14,7 @@ type Props = {
   /** Who asks, as the dialog names them. */
   asker: string;
   body: WallpaperBody;
-  files: Pick<System, "readFile">;
+  files: Pick<Files, "read">;
   screen: string | undefined;
 };
 

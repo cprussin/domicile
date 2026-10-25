@@ -2,20 +2,20 @@ import { describe, expect, it } from "bun:test";
 import { Err, Ok } from "@cprussin/option-result";
 import type {
   Listened as Heard,
-  System,
   SystemError,
   Watch,
 } from "@domicile-desktop/sdk/system";
 import { Listened, SystemErrorKind } from "@domicile-desktop/sdk/system";
-import { fakeSystem } from "@domicile-desktop/system-apps/fake-system";
+import { fakeDesktop } from "@domicile-desktop/system-apps/fake-desktop";
 
-import { systemFolders } from "./folders";
+import type { FolderFiles } from "./folders";
+import { desktopFolders } from "./folders";
 
-describe("systemFolders", () => {
+describe("desktopFolders", () => {
   it("creates a directory, and says why it could not", async () => {
     const made: string[] = [];
-    const system: System = {
-      ...fakeSystem({}),
+    const files: FolderFiles = {
+      ...fakeDesktop({}).files,
       createDir: (path) => {
         made.push(path);
         return Promise.resolve(
@@ -28,7 +28,7 @@ describe("systemFolders", () => {
         );
       },
     };
-    const folders = systemFolders(system);
+    const folders = desktopFolders(files);
 
     expect(await folders.create("/home/someone/new")).toStrictEqual(
       Ok("created"),
@@ -42,8 +42,8 @@ describe("systemFolders", () => {
   it("calls back on each change heard, or missed, until stopped", async () => {
     const watch = controlledWatch();
     const watched: string[] = [];
-    const system: System = {
-      ...fakeSystem({}),
+    const files: FolderFiles = {
+      ...fakeDesktop({}).files,
       watch: (path) => {
         watched.push(path);
         return Promise.resolve(Ok<Watch, SystemError>(watch.watch));
@@ -51,7 +51,7 @@ describe("systemFolders", () => {
     };
     const changes: string[] = [];
 
-    const stop = systemFolders(system).watch("/home/someone", () => {
+    const stop = desktopFolders(files).watch("/home/someone", () => {
       changes.push("changed");
     });
     await watch.hear(Listened.Heard("/home/someone/a"));
@@ -66,15 +66,15 @@ describe("systemFolders", () => {
   it("stops a watch that starts after it was stopped", async () => {
     const watch = controlledWatch();
     const starting = Promise.withResolvers<void>();
-    const system: System = {
-      ...fakeSystem({}),
+    const files: FolderFiles = {
+      ...fakeDesktop({}).files,
       watch: async () => {
         await starting.promise;
         return Ok<Watch, SystemError>(watch.watch);
       },
     };
 
-    const stop = systemFolders(system).watch("/home/someone", () => {
+    const stop = desktopFolders(files).watch("/home/someone", () => {
       throw new Error("heard a change after stopping");
     });
     stop();

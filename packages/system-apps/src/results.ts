@@ -1,4 +1,4 @@
-// Combining the `Result`s of system calls made side by side.
+// Combining the `Result`s of desktop calls made side by side.
 
 import type { Result } from "@cprussin/option-result";
 import { Ok } from "@cprussin/option-result";
