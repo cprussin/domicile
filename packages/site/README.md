@@ -1,7 +1,8 @@
 # @domicile-desktop/site
 
 domicile-desktop.com: the Domicile landing page for shell authors (`/`) and
-the manganese landing page for its users (`/manganese`). A Next.js app,
+the manganese landing page for its users (`/manganese`), and the docs
+(`/docs/…`). A Next.js app,
 hosted on Vercel and built from `stable`.
 
 ```sh
@@ -18,8 +19,11 @@ bun run build:next
   the root directory, so its build swaps the link for a copy. A slot whose capture does not
   exist yet says what it will show. See
   [docs/media/README.md](/docs/media/README.md).
-- **Docs links** point at the markdown on GitHub until the docs move into the
-  site.
+- **Docs pages** render the repository's markdown at build time
+  (`src/docs/`). `src/docs/pages.ts` lists which files the site renders,
+  under which routes and sidebar sections. A link to one of them goes to its
+  route; a link to any other file goes to it on GitHub. Headings get GitHub's
+  ids, so anchors written for GitHub still land.
 
 ## Vercel
 
