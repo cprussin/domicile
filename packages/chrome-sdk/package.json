@@ -31,6 +31,10 @@
       "types": "./dist/bind-keys.d.ts",
       "default": "./dist/bind-keys.js"
     },
+    "./cast": {
+      "types": "./dist/cast.d.ts",
+      "default": "./dist/cast.js"
+    },
     "./config": {
       "types": "./dist/config.d.ts",
       "default": "./dist/config.js"

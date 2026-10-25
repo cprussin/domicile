@@ -38,6 +38,8 @@ type Props = {
   body: ScreenCastBody;
   /** The desktop's browser windows, as the engine lists them. */
   browserWindows: readonly DomicileBrowserWindow[];
+  /** The TV a cast that asked shows the pick on, titling the dialog for it. */
+  castTo?: string | undefined;
   screen: string | undefined;
   /** Draws a window that is not on screen. */
   previewWindow: DrawPreview;
@@ -55,7 +57,8 @@ type Offered = Choice & { source: CastSource };
  * its page alone, from the engine. Picks one, or several when the
  * application asks for more, or, when it may have a region, an area dragged
  * over the desk shot as the screenshot picker's is. Without a desk shot, the
- * region is drawn over the page instead. Dismissing it cancels.
+ * region is drawn over the page instead. Dismissing it cancels. For a cast to a
+ * TV, it is titled for the TV rather than for who asks.
  */
 export const ScreenCastDialog = ({
   answer,
@@ -63,6 +66,7 @@ export const ScreenCastDialog = ({
   asker,
   body,
   browserWindows,
+  castTo,
   previewWindow,
   screen,
   shownWindows,
@@ -190,7 +194,7 @@ export const ScreenCastDialog = ({
               );
             }}
           >
-            Share
+            {castTo === undefined ? "Share" : "Cast"}
           </Button>
         </>
       }
@@ -202,9 +206,15 @@ export const ScreenCastDialog = ({
       open
       screen={screen}
       size="xl"
-      title={title(body.multiple, windows.length > 0, screens.length > 0)}
+      title={
+        castTo === undefined
+          ? title(body.multiple, windows.length > 0, screens.length > 0)
+          : `Cast to ${castTo}`
+      }
     >
-      <p className={askerStyles}>{`${asker} wants to record`}</p>
+      {castTo === undefined && (
+        <p className={askerStyles}>{`${asker} wants to record`}</p>
+      )}
       <SourcePicker
         caption={caption(offered, picked, dragged, part, body.region)}
         desk={desk}

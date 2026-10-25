@@ -321,6 +321,31 @@
         "zod": "catalog:",
       },
     },
+    "packages/manganese-bar-module-cast": {
+      "name": "@domicile-desktop/manganese-bar-module-cast",
+      "version": "0.0.0",
+      "dependencies": {
+        "@domicile-desktop/component-library": "workspace:*",
+        "@domicile-desktop/manganese-host": "workspace:*",
+        "@domicile-desktop/sdk": "workspace:*",
+        "@pandacss/dev": "catalog:",
+        "@phosphor-icons/react": "catalog:",
+        "react": "catalog:",
+      },
+      "devDependencies": {
+        "@cprussin/option-result": "catalog:",
+        "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/test-support": "workspace:*",
+        "@pandacss/preset-panda": "catalog:",
+        "@testing-library/react": "catalog:",
+        "@testing-library/user-event": "catalog:",
+        "@types/bun": "catalog:",
+        "@types/react": "catalog:",
+        "@types/react-dom": "catalog:",
+        "postcss": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/manganese-bar-module-clock": {
       "name": "@domicile-desktop/manganese-bar-module-clock",
       "version": "1.0.0",
@@ -857,6 +882,7 @@
         "@domicile-desktop/manganese-bar-module-battery": "workspace:*",
         "@domicile-desktop/manganese-bar-module-bluetooth": "workspace:*",
         "@domicile-desktop/manganese-bar-module-brightness": "workspace:*",
+        "@domicile-desktop/manganese-bar-module-cast": "workspace:*",
         "@domicile-desktop/manganese-bar-module-clock": "workspace:*",
         "@domicile-desktop/manganese-bar-module-gmail": "workspace:*",
         "@domicile-desktop/manganese-bar-module-google-messages": "workspace:*",
@@ -1248,6 +1274,8 @@
     "@domicile-desktop/manganese-bar-module-bluetooth": ["@domicile-desktop/manganese-bar-module-bluetooth@workspace:packages/manganese-bar-module-bluetooth"],
 
     "@domicile-desktop/manganese-bar-module-brightness": ["@domicile-desktop/manganese-bar-module-brightness@workspace:packages/manganese-bar-module-brightness"],
+
+    "@domicile-desktop/manganese-bar-module-cast": ["@domicile-desktop/manganese-bar-module-cast@workspace:packages/manganese-bar-module-cast"],
 
     "@domicile-desktop/manganese-bar-module-clock": ["@domicile-desktop/manganese-bar-module-clock@workspace:packages/manganese-bar-module-clock"],
 
