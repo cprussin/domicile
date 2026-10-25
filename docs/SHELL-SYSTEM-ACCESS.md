@@ -32,6 +32,10 @@ export const Shell = async (root, domicile) => {
   shell were the app: `<PortalDialogs />` draws the dialog, and the call
   resolves with `ScreenshotKept.Saved(path)`, `ScreenshotKept.Copied()` when
   the user pressed Ctrl+C, or fails `canceled`.
+- `screenRecord()` records the screen: `<PortalDialogs />` draws the screen
+  cast picker, then a toolbar until the user stops the recording. Resolves
+  with the WebM's path, or fails `canceled` when the picker is dismissed or
+  the recording discarded. See [PORTALS.md](PORTALS.md#screen-recording).
 - `previewWindow()` draws a window as it last drew itself, or a browser
   window's page, as a PNG `data:` URL. The pickers preview a window that is
   not on screen with it.
@@ -135,7 +139,7 @@ recorded output.
 
 - Page to compositor: `system_request { id, request }`. `request` starts a
   call (`read_file`, `write_file`, `create_dir`, `read_dir`, `stat`, `watch`, `spawn`,
-  `dbus_call`, `dbus_match`, `screenshot`, `preview_window`, `shell_commands`, `send_shell`,
+  `dbus_call`, `dbus_match`, `screenshot`, `screen_record`, `preview_window`, `shell_commands`, `send_shell`,
   `idle_warnings`, `unlock_refusals`, `set_window_states`, `window_requests`,
   `virtual_monitor`, `keymaps`, `select_keymap`)
   or

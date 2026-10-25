@@ -191,6 +191,10 @@ fn read_chrome_messages(
         let portals = hub.portals.clone();
         move |file| portals.screenshot(file)
     })
+    .recording_with({
+        let portals = hub.portals.clone();
+        move || portals.screen_record()
+    })
     .previewing_with({
         let portals = hub.portals.clone();
         move |window| portals.preview(window)

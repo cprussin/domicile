@@ -78,6 +78,24 @@ pub fn screenshot(
     }
 }
 
+/// Tells the compositor at `socket` to record the screen, and waits until the
+/// user stops the recording, however long that takes. `None` when the user
+/// dismissed the picker or discarded the recording.
+pub fn screen_record(socket: &Path) -> Result<Option<PathBuf>, CompositorError> {
+    let answer = called(socket, SystemRequest::ScreenRecord, None)?;
+    match answer.reply {
+        SystemReply::Saved { path } => Ok(Some(PathBuf::from(path))),
+        SystemReply::Failed {
+            error:
+                SystemError {
+                    kind: SystemErrorKind::Canceled,
+                    ..
+                },
+        } => Ok(None),
+        reply => Err(not_done(socket, reply, answer.said)),
+    }
+}
+
 /// Tells the compositor at `socket` to send `command` to every page listening
 /// for shell commands.
 pub fn send_shell(

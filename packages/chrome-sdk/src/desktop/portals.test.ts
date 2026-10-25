@@ -71,6 +71,20 @@ describe("portals", () => {
     ]);
   });
 
+  it("pauses, resumes and discards the shell's screen recording", () => {
+    const fake = new FakeDomicileHost();
+    const { portals } = desktop(fake.host);
+    portals.pauseRecording(3);
+    portals.resumeRecording(3);
+    portals.discardRecording(3);
+
+    expect(fake.calls).toStrictEqual([
+      ["answerPortalRequest", 3, JSON.stringify({ kind: "pause" })],
+      ["answerPortalRequest", 3, JSON.stringify({ kind: "resume" })],
+      ["answerPortalRequest", 3, JSON.stringify({ kind: "discard" })],
+    ]);
+  });
+
   it("says the requests changed, after reading them", async () => {
     const fake = new FakeDomicileHost();
     const { portals } = desktop(fake.host);

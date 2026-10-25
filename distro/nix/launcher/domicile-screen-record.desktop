@@ -1,0 +1,9 @@
+# The shell's picker, then a recording until its toolbar's Stop.
+[Desktop Entry]
+Type=Application
+Name=Screen Record
+Comment=Record a video of a monitor, a window or an area
+Exec=@bin@/domicile screen-record
+Icon=@icon@
+X-Domicile-Preview=@preview@
+Terminal=false

@@ -43,6 +43,9 @@ source_set("browser") {
     # Public for the same reason: //content binds a page to the broker only if
     # it is the shell.
     ":shell_origin",
+    # Public for the same reason: //content gives the shell's restriction
+    # targets the id captures of the desk leave out.
+    "//components/viz/service/display/domicile:hidden_from_captures_id",
     "//base",
     "//components/domicile/mojom",
     "//components/viz/common",
@@ -1171,6 +1174,9 @@ source_set("unit_tests") {
     # beside //ui/base/cursor for the same reason.
     "//ui/base/cursor/domicile:desk_cursor_theme",
     "//ui/base/cursor/domicile:unit_tests",
+    # What the shell hides from captures of the desk, beside the viz code
+    # that leaves it out.
+    "//components/viz/service/display/domicile:unit_tests",
   ]
 }
 

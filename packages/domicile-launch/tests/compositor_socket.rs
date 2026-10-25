@@ -6,7 +6,9 @@ use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use domicile_launch::compositor_socket::{screenshot, send_shell, theme, CompositorError};
+use domicile_launch::compositor_socket::{
+    screen_record, screenshot, send_shell, theme, CompositorError,
+};
 use domicile_launch::control::Shot;
 use domicile_protocol::Theme;
 
@@ -159,6 +161,44 @@ fn a_screenshot_with_no_file_is_the_shells_and_waits_for_the_user_to_pick() {
         "{\"type\":\"system_request\",\"id\":1,\"request\":{\"call\":\"screenshot\",\
          \"file\":null}}\n"
     );
+}
+
+#[test]
+fn a_screen_recording_waits_until_it_stops_and_answers_with_its_file() {
+    let (_scratch, path) = scratch();
+    let heard = a_compositor(
+        &path,
+        BRIEFLY * 2,
+        Some(
+            "{\"type\":\"system_reply\",\"id\":1,\"reply\":{\"kind\":\"saved\",\
+             \"path\":\"/home/me/Videos/rec.webm\"}}\n",
+        ),
+    );
+
+    assert_eq!(
+        screen_record(&path),
+        Ok(Some(PathBuf::from("/home/me/Videos/rec.webm")))
+    );
+    assert_eq!(
+        heard.join().expect("the compositor was listening"),
+        "{\"type\":\"system_request\",\"id\":1,\"request\":{\"call\":\"screen_record\"}}\n"
+    );
+}
+
+#[test]
+fn a_screen_recording_canceled_has_no_file() {
+    let (_scratch, path) = scratch();
+    let heard = a_compositor(
+        &path,
+        Duration::ZERO,
+        Some(
+            "{\"type\":\"system_reply\",\"id\":1,\"reply\":{\"kind\":\"failed\",\
+             \"error\":{\"kind\":\"canceled\",\"message\":\"discarded\"}}}\n",
+        ),
+    );
+
+    assert_eq!(screen_record(&path), Ok(None));
+    heard.join().expect("the compositor was listening");
 }
 
 #[test]

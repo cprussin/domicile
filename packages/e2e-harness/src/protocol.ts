@@ -383,7 +383,8 @@ const portalRequestSchema = z.looseObject({
 });
 
 // A session that controls or captures input. `body` is per `kind`; stop it by
-// answering its `id` with `{"kind":"stop"}`.
+// answering its `id` with `{"kind":"stop"}`. A `recording` also takes
+// `pause`, `resume` and `discard`.
 const portalCapturingSchema = z.looseObject({
   app_id: z.string(),
   body: z.unknown(),

@@ -43,6 +43,11 @@ type Props = {
   screen: string | undefined;
   /** Draws a window that is not on screen. */
   previewWindow: DrawPreview;
+  /**
+   * Whether the shell asks, for its own screen recording: the dialog then
+   * records rather than shares, and names nobody.
+   */
+  record?: boolean | undefined;
   /** The windows the shell draws on screen, read once as the dialog opens. */
   shownWindows: () => readonly ShownWindow[];
 };
@@ -58,7 +63,8 @@ type Offered = Choice & { source: CastSource };
  * application asks for more, or, when it may have a region, an area dragged
  * over the desk shot as the screenshot picker's is. Without a desk shot, the
  * region is drawn over the page instead. Dismissing it cancels. For a cast to a
- * TV, it is titled for the TV rather than for who asks.
+ * TV, it is titled for the TV rather than for who asks. For the shell's own
+ * screen recording, it offers to record instead.
  */
 export const ScreenCastDialog = ({
   answer,
@@ -68,6 +74,7 @@ export const ScreenCastDialog = ({
   browserWindows,
   castTo,
   previewWindow,
+  record = false,
   screen,
   shownWindows,
 }: Props) => {
@@ -194,7 +201,7 @@ export const ScreenCastDialog = ({
               );
             }}
           >
-            {castTo === undefined ? "Share" : "Cast"}
+            {action(castTo, record)}
           </Button>
         </>
       }
@@ -207,20 +214,19 @@ export const ScreenCastDialog = ({
       screen={screen}
       size="xl"
       title={
-        castTo === undefined
-          ? title(body.multiple, windows.length > 0, screens.length > 0)
-          : `Cast to ${castTo}`
+        heading(castTo, record) ??
+        title(body.multiple, windows.length > 0, screens.length > 0)
       }
     >
-      {castTo === undefined && (
+      {castTo === undefined && !record && (
         <p className={askerStyles}>{`${asker} wants to record`}</p>
       )}
       <SourcePicker
-        caption={caption(offered, picked, dragged, part, body.region)}
+        caption={caption(offered, picked, dragged, part, body.region, record)}
         desk={desk}
         dragged={dragged}
         draggedPart={part?.area}
-        label="What to share"
+        label={record ? "What to record" : "What to share"}
         multiple={body.multiple}
         onDrag={
           body.region
@@ -256,6 +262,25 @@ export const ScreenCastDialog = ({
 
 const askerStyles = css({ color: "muted", fontSize: "sm", margin: 0 });
 
+/** The confirm button's label: a cast to a TV, a recording or a share. */
+const action = (castTo: string | undefined, record: boolean): string => {
+  if (castTo !== undefined) {
+    return "Cast";
+  }
+  return record ? "Record" : "Share";
+};
+
+/** The title of a cast to a TV or a recording; others are titled by asker. */
+const heading = (
+  castTo: string | undefined,
+  record: boolean,
+): string | undefined => {
+  if (castTo !== undefined) {
+    return `Cast to ${castTo}`;
+  }
+  return record ? "Record your screen" : undefined;
+};
+
 /** The dialog's title for what it offers. */
 const title = (
   multiple: boolean,
@@ -286,6 +311,7 @@ const partOf = (source: CastSource, area: ShotRect): CastSource => {
 /**
  * What the desk says of the sources `picked` from `offered`, of the area
  * `dragged` or of a window's `part`, and whether a `region` may be dragged.
+ * Said of a recording when `record` is set.
  */
 const caption = (
   offered: readonly Offered[],
@@ -293,18 +319,20 @@ const caption = (
   dragged: ShotRect | undefined,
   part: { index: number; area: ShotRect } | undefined,
   region: boolean,
+  record: boolean,
 ): string => {
+  const [verb, done] = record ? ["record", "Recorded"] : ["share", "Shared"];
   if (dragged !== undefined) {
-    return "Shared live, as it changes.";
+    return `${done} live, as it changes.`;
   } else if (picked.length === 0) {
     return region
-      ? "Pick what to share, or drag over the desk for an area."
-      : "Pick what to share.";
+      ? `Pick what to ${verb}, or drag over the desk for an area.`
+      : `Pick what to ${verb}.`;
   } else if (part !== undefined) {
-    return "A part of the window, shared as it draws itself.";
+    return `A part of the window, ${done.toLowerCase()} as it draws itself.`;
   } else if (picked.some((index) => offered[index]?.area === undefined)) {
-    return "Not on screen: shared as it draws itself. Drag over it to pick a part.";
+    return `Not on screen: ${done.toLowerCase()} as it draws itself. Drag over it to pick a part.`;
   } else {
-    return "Shared live, as it changes.";
+    return `${done} live, as it changes.`;
   }
 };

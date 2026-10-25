@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, setSystemTime } from "bun:test";
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
 import type { CastBackend, CastTarget } from "@domicile-desktop/sdk/cast";
@@ -2062,6 +2062,98 @@ describe("PortalDialogs", () => {
 
       expect(host.answers).toEqual([[6, { kind: "stop" }]]);
     });
+  });
+});
+
+describe("screen recording", () => {
+  const recording = (id: number, more: object = {}) => ({
+    app_id: SHELL_APP_ID,
+    body: {
+      file: "/home/me/Videos/Screen recordings/a.webm",
+      recorded_ms: 65_000,
+      sources: [{ description: "Dell U3219Q", name: "drm-1", type: "monitor" }],
+      ...more,
+    },
+    id,
+    kind: "recording",
+  });
+
+  afterEach(() => {
+    setSystemTime();
+    delete (globalThis as { RestrictionTarget?: unknown }).RestrictionTarget;
+  });
+
+  it("asks the shell what to record in the screen cast picker", async () => {
+    const host = new FakeHost();
+    render(<PortalDialogs domicile={host.domicile} />);
+    host.push([{ ...screenCast(false, MONITORS, true), app_id: SHELL_APP_ID }]);
+
+    expect(screen.getByRole("dialog")).toHaveTextContent("Record your screen");
+    expect(screen.queryByText(/wants to record/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: "drm-2" }));
+    await userEvent.click(screen.getByRole("button", { name: "Record" }));
+
+    expect(host.answers).toEqual([
+      [
+        5,
+        { kind: "screen_cast", sources: [{ name: "drm-2", type: "monitor" }] },
+      ],
+    ]);
+  });
+
+  it("shows a toolbar timing the recording, not an indicator row", () => {
+    setSystemTime(new Date(100_000));
+    const host = new FakeHost();
+    render(<PortalDialogs domicile={host.domicile} />);
+    host.push([], [recording(7, { running_since_ms: 95_000 })]);
+
+    const toolbar = screen.getByRole("toolbar", { name: "Screen recording" });
+    expect(within(toolbar).getByRole("timer")).toHaveTextContent("1:10");
+    expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
+  });
+
+  it("leaves its toolbar out of captures of the desk", async () => {
+    const hidden: Element[] = [];
+    (globalThis as { RestrictionTarget?: unknown }).RestrictionTarget = {
+      fromElement: (element: Element) => {
+        hidden.push(element);
+        return Promise.resolve({});
+      },
+    };
+    const host = new FakeHost();
+    render(<PortalDialogs domicile={host.domicile} />);
+    host.push([], [recording(7, { running_since_ms: 95_000 })]);
+
+    await waitFor(() => {
+      expect(hidden).toEqual([screen.getByRole("toolbar")]);
+    });
+  });
+
+  it("pauses, stops and discards the recording", async () => {
+    const host = new FakeHost();
+    render(<PortalDialogs domicile={host.domicile} />);
+    host.push([], [recording(7, { running_since_ms: 95_000 })]);
+    await userEvent.click(screen.getByRole("button", { name: "Pause" }));
+    await userEvent.click(screen.getByRole("button", { name: "Stop" }));
+    await userEvent.click(screen.getByRole("button", { name: "Discard" }));
+
+    expect(host.answers).toEqual([
+      [7, { kind: "pause" }],
+      [7, { kind: "stop" }],
+      [7, { kind: "discard" }],
+    ]);
+  });
+
+  it("resumes a paused recording, whose time stands still", async () => {
+    setSystemTime(new Date(100_000));
+    const host = new FakeHost();
+    render(<PortalDialogs domicile={host.domicile} />);
+    host.push([], [recording(7)]);
+
+    expect(screen.getByRole("timer")).toHaveTextContent("1:05");
+    await userEvent.click(screen.getByRole("button", { name: "Resume" }));
+
+    expect(host.answers).toEqual([[7, { kind: "resume" }]]);
   });
 });
 

@@ -102,6 +102,9 @@ const summary = (session: Capturing, name: string): string => {
       return `Input capture: ${name} — ${deviceNames(session.devices).join(", ")}`;
     case CapturingKind.ScreenCast:
       return `Sharing: ${name} — ${session.sources.map((source) => sourceName(source)).join(", ")}`;
+    // `<PortalDialogs />` gives the shell's recording its own toolbar.
+    case CapturingKind.Recording:
+      return `Recording: ${session.sources.map((source) => sourceName(source)).join(", ")}`;
     case CapturingKind.Unknown:
       return `${session.wireKind}: ${name}`;
   }

@@ -236,6 +236,23 @@ fn screenshot_takes_one_file_and_the_extra_word_is_named() {
 }
 
 #[test]
+fn screen_record_is_a_verb_that_takes_nothing() {
+    assert_eq!(
+        run(&["screen-record"]).unwrap(),
+        Invocation::Ask {
+            request: Request::ScreenRecord
+        }
+    );
+    assert_eq!(
+        run(&["screen-record", "a.webm"]),
+        Err(CliError::Extra {
+            verb: "screen-record".to_string(),
+            extra: "a.webm".to_string()
+        })
+    );
+}
+
+#[test]
 fn power_off_and_reboot_are_verbs_that_take_nothing() {
     assert_eq!(
         run(&["power-off"]),

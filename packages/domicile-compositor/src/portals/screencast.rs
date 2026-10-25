@@ -96,7 +96,7 @@ struct CastSession {
 
 /// What an application asked for in `SelectSources`.
 #[derive(Clone)]
-struct Selected {
+pub(super) struct Selected {
     /// The source types asked for.
     types: u32,
     multiple: bool,
@@ -104,6 +104,20 @@ struct Selected {
     persist: Persist,
     /// The token the application came back with.
     restore: Option<String>,
+}
+
+impl Selected {
+    /// One source of any type, with the pointer drawn in, kept nowhere: what
+    /// the shell's own screen recording asks for.
+    pub(super) fn one_of_anything() -> Selected {
+        Selected {
+            types: SOURCE_TYPES,
+            multiple: false,
+            cursor: CursorMode::Embedded,
+            persist: Persist::No,
+            restore: None,
+        }
+    }
 }
 
 impl ScreenCast {
@@ -252,7 +266,7 @@ impl ScreenCast {
         let picked = match self.recalled(&selected, &open, &monitors) {
             Some(picked) => picked,
             None => {
-                let kind = self.dialog(&selected, &open, self.preview().await);
+                let kind = dialog(&selected, &open, preview(&self.shoot).await);
                 match ask(
                     &self.queue,
                     connection.object_server(),
@@ -406,53 +420,6 @@ impl ScreenCast {
                     })
             })
             .collect()
-    }
-
-    /// The frame of the desk the picker previews on. The picker draws
-    /// icons in its place when the desk cannot be shot.
-    async fn preview(&self) -> Option<FrozenDesk> {
-        match (self.shoot)().await {
-            Ok(desk) => Some(frozen(&desk)),
-            Err(why) => {
-                warn!(%why, "the desk could not be shot to preview a screen cast's sources");
-                None
-            }
-        }
-    }
-
-    /// The source picker for `open`, previewed on `desk`.
-    fn dialog(
-        &self,
-        selected: &Selected,
-        open: &[Candidate],
-        desk: Option<FrozenDesk>,
-    ) -> PortalKind {
-        PortalKind::ScreenCast(ScreenCastDialog {
-            multiple: selected.multiple,
-            sources: open
-                .iter()
-                .map(|candidate| match &candidate.source {
-                    Source::Window(id) => CastSource::Window {
-                        id: id.clone(),
-                        title: candidate.title.clone(),
-                        app_id: candidate.app_id.clone(),
-                    },
-                    Source::Monitor(name) => CastSource::Monitor {
-                        name: name.clone(),
-                        description: candidate.title.clone(),
-                        size: candidate.bounds.expect("a monitor has bounds").size,
-                    },
-                    Source::BrowserWindow(_) | Source::Region(_) => {
-                        unreachable!(
-                            "browser windows are the engine's to list, and regions are drawn"
-                        )
-                    }
-                })
-                .collect(),
-            region: selected.types & REGION_TYPES != 0,
-            browser_windows: selected.types & WINDOW != 0,
-            desk,
-        })
     }
 
     /// Start a stream of each of `picked` on the session and wait for its
@@ -652,12 +619,56 @@ impl Ending {
     }
 }
 
+/// The frame of the desk the picker previews on, taken by `shoot`. The
+/// picker draws icons in its place when the desk cannot be shot.
+pub(super) async fn preview(shoot: &Shoot) -> Option<FrozenDesk> {
+    match shoot().await {
+        Ok(desk) => Some(frozen(&desk)),
+        Err(why) => {
+            warn!(%why, "the desk could not be shot to preview a screen cast's sources");
+            None
+        }
+    }
+}
+
+/// The source picker for `open`, previewed on `desk`.
+pub(super) fn dialog(
+    selected: &Selected,
+    open: &[Candidate],
+    desk: Option<FrozenDesk>,
+) -> PortalKind {
+    PortalKind::ScreenCast(ScreenCastDialog {
+        multiple: selected.multiple,
+        sources: open
+            .iter()
+            .map(|candidate| match &candidate.source {
+                Source::Window(id) => CastSource::Window {
+                    id: id.clone(),
+                    title: candidate.title.clone(),
+                    app_id: candidate.app_id.clone(),
+                },
+                Source::Monitor(name) => CastSource::Monitor {
+                    name: name.clone(),
+                    description: candidate.title.clone(),
+                    size: candidate.bounds.expect("a monitor has bounds").size,
+                },
+                Source::BrowserWindow(_) | Source::Region(_) => {
+                    unreachable!("browser windows are the engine's to list, and regions are drawn")
+                }
+            })
+            .collect(),
+        region: selected.types & REGION_TYPES != 0,
+        browser_windows: selected.types & WINDOW != 0,
+        desk,
+    })
+}
+
 /// Stream `stream`'s listener: hands its node to `ready`, and tells `ending`
 /// when it ends.
 fn listener(stream: StreamId, ready: Replier<u32>, ending: Ending) -> crate::casting::Listener {
     let mut ready = Some(ready);
     Box::new(move |event| match event {
-        Event::Ready { node } => {
+        Event::Ready { node, .. } => {
             if let Some(ready) = ready.take() {
                 ready.send(node);
             }
@@ -728,7 +739,11 @@ fn restore_token(data: &OwnedValue) -> Option<String> {
 /// The sources the shell picked, or `None` for one not open, of a type not
 /// asked for, an empty region, or more than one when the application asked
 /// for one.
-fn chosen(picks: &[CastPick], open: &[Candidate], selected: &Selected) -> Option<Vec<Candidate>> {
+pub(super) fn chosen(
+    picks: &[CastPick],
+    open: &[Candidate],
+    selected: &Selected,
+) -> Option<Vec<Candidate>> {
     if picks.is_empty() || (picks.len() > 1 && !selected.multiple) {
         return None;
     }
@@ -870,7 +885,7 @@ fn placed(listed: &[Candidate]) -> Vec<Placed> {
 
 /// What the shell's indicator lists for `candidate`. A region is named by
 /// the monitors of `screens` it covers.
-fn captured(candidate: &Candidate, screens: &[Candidate]) -> Captured {
+pub(super) fn captured(candidate: &Candidate, screens: &[Candidate]) -> Captured {
     match &candidate.source {
         Source::Window(id) => Captured::Window {
             id: id.clone(),
@@ -1069,7 +1084,10 @@ mod tests {
                             .map(|part| format!(" part {part:?}"))
                             .unwrap_or_default();
                         let _ = told.send(format!("start {source:?} {cursor:?}{part}"));
-                        listener(Event::Ready { node: 42 });
+                        listener(Event::Ready {
+                            node: 42,
+                            sound: None,
+                        });
                         listeners.insert(stream, listener);
                     }
                     Heard::Msg(Request::Stop { stream }) => {

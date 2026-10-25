@@ -680,6 +680,58 @@ mod screenshots {
     }
 }
 
+/// Screen recordings, run by whatever the compositor hands the system.
+mod screen_recordings {
+    use std::path::PathBuf;
+
+    use domicile_protocol::SystemError;
+
+    use super::*;
+
+    #[test]
+    fn a_recording_is_answered_with_its_file_once_it_stops() {
+        let home = tempfile::tempdir().unwrap();
+        let (system, heard) = system_in(home.path());
+        let system =
+            system.recording_with(|| Ok(PathBuf::from("/videos/Screen recordings/a.webm")));
+
+        system.handle(1, SystemRequest::ScreenRecord);
+
+        assert_eq!(
+            reply(&heard, 1),
+            SystemReply::Saved {
+                path: "/videos/Screen recordings/a.webm".into()
+            }
+        );
+    }
+
+    #[test]
+    fn a_recording_the_user_called_off_says_so() {
+        let home = tempfile::tempdir().unwrap();
+        let (system, heard) = system_in(home.path());
+        let system = system.recording_with(|| {
+            Err(SystemError {
+                kind: SystemErrorKind::Canceled,
+                message: "discarded".into(),
+            })
+        });
+
+        system.handle(1, SystemRequest::ScreenRecord);
+
+        assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::Canceled);
+    }
+
+    #[test]
+    fn a_system_that_records_nothing_says_so() {
+        let home = tempfile::tempdir().unwrap();
+        let (system, heard) = system_in(home.path());
+
+        system.handle(1, SystemRequest::ScreenRecord);
+
+        assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::Other);
+    }
+}
+
 /// Window previews, drawn by whatever the compositor hands the system.
 mod previews {
     use domicile_protocol::SystemError;
@@ -1273,6 +1325,7 @@ mod locked {
         for starts in [
             spawn(&["true"]),
             SystemRequest::Screenshot { file: None },
+            SystemRequest::ScreenRecord,
             SystemRequest::PreviewWindow {
                 window: PreviewedWindow::App { id: "app-1".into() },
             },
@@ -1333,6 +1386,7 @@ mod apps {
     fn an_app_may_not_reach_the_desktop() {
         for refused in [
             SystemRequest::Screenshot { file: None },
+            SystemRequest::ScreenRecord,
             SystemRequest::PreviewWindow {
                 window: PreviewedWindow::App { id: "app-1".into() },
             },

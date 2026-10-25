@@ -451,6 +451,20 @@ export const Captured = {
 /** One source a running screen cast records. */
 export type Captured = ReturnType<(typeof Captured)[keyof typeof Captured]>;
 
+/** A {@link CapturingKind.Recording}: what it records, where, and for how long. */
+export type RecordingBody = {
+  sources: readonly Captured[];
+  /** The absolute path of the WebM it records into. */
+  file: string;
+  /** How long it recorded until `runningSinceMs`, or until it paused. */
+  recordedMs: number;
+  /**
+   * When it last started or resumed, in milliseconds since the Unix epoch, as
+   * `Date.now()` counts. Undefined while it is paused.
+   */
+  runningSinceMs: number | undefined;
+};
+
 /** IPP's `sides`. */
 export enum Sides {
   OneSided,
@@ -639,6 +653,12 @@ export enum PortalAnswerKind {
   ScreenCast,
   /** The user stopped a {@link Capturing} session. */
   Stop,
+  /** The user paused a {@link CapturingKind.Recording}. */
+  Pause,
+  /** The user resumed a paused {@link CapturingKind.Recording}. */
+  Resume,
+  /** The user stopped a {@link CapturingKind.Recording} and threw it away. */
+  Discard,
   /** The chords the user chose in a {@link PortalKind.GlobalShortcuts} review. */
   GlobalShortcuts,
   /** The name the user installs a {@link PortalKind.DynamicLauncher} under. */
@@ -675,6 +695,7 @@ export const PortalAnswer = {
     kind: PortalAnswerKind.AppChooser as const,
   }),
   Canceled: () => ({ kind: PortalAnswerKind.Canceled as const }),
+  Discard: () => ({ kind: PortalAnswerKind.Discard as const }),
   /** Not empty; the request's own name unless `editableName`. */
   DynamicLauncher: (name: string) => ({
     kind: PortalAnswerKind.DynamicLauncher as const,
@@ -689,6 +710,7 @@ export const PortalAnswer = {
     triggers,
   }),
   InputCapture: () => ({ kind: PortalAnswerKind.InputCapture as const }),
+  Pause: () => ({ kind: PortalAnswerKind.Pause as const }),
   /** A pixel inside the request's frame. */
   PickColor: (at: { x: number; y: number }) => ({
     at,
@@ -706,6 +728,7 @@ export const PortalAnswer = {
     devices,
     kind: PortalAnswerKind.RemoteDesktop as const,
   }),
+  Resume: () => ({ kind: PortalAnswerKind.Resume as const }),
   /** An absolute `path`; `options` within the request's `pdf`. */
   SaveToPdf: (path: string, options: PrintOptions) => ({
     kind: PortalAnswerKind.SaveToPdf as const,
@@ -768,6 +791,11 @@ export enum CapturingKind {
   InputCapture,
   /** An application records windows, monitors or a region. */
   ScreenCast,
+  /**
+   * The shell's own screen recording, which `System.screenRecord` started.
+   * Paused, resumed and discarded as well as stopped.
+   */
+  Recording,
   /** A kind this SDK cannot parse. It can still be stopped. */
   Unknown,
 }
@@ -785,6 +813,11 @@ export const Capturing = {
     ...base,
     ...body,
     kind: CapturingKind.InputCapture as const,
+  }),
+  Recording: (base: CapturingBase, body: RecordingBody) => ({
+    ...base,
+    ...body,
+    kind: CapturingKind.Recording as const,
   }),
   RemoteDesktop: (base: CapturingBase, body: RemoteDesktopBody) => ({
     ...base,
@@ -902,6 +935,45 @@ export const answerPortalRequest = (
 /** End capturing session `id`. */
 export const stopCapturing = (host: PortalHost, id: number): void => {
   answerPortalRequest(host, id, PortalAnswer.Stop());
+};
+
+/** Pause recording `id`. Its file leaves the pause out. */
+export const pauseRecording = (host: PortalHost, id: number): void => {
+  answerPortalRequest(host, id, PortalAnswer.Pause());
+};
+
+/** Resume paused recording `id`. */
+export const resumeRecording = (host: PortalHost, id: number): void => {
+  answerPortalRequest(host, id, PortalAnswer.Resume());
+};
+
+/** Stop recording `id` and delete its file. */
+export const discardRecording = (host: PortalHost, id: number): void => {
+  answerPortalRequest(host, id, PortalAnswer.Discard());
+};
+
+/** Element Capture's `RestrictionTarget`, which TypeScript's DOM lacks. */
+type RestrictionTargets = {
+  fromElement: (element: Element) => Promise<unknown>;
+};
+
+/**
+ * Leave `element` out of every capture of the desk: screen recordings, screen
+ * casts and screenshots. It still shows on screen. For the shell's page only;
+ * see `docs/PORTALS.md#screen-recording`.
+ *
+ * The element must be a stacking context and its own group, such as with
+ * `isolation: isolate`, or Element Capture ignores it. `targets` is
+ * `RestrictionTarget`, absent in an engine without Element Capture, where this
+ * does nothing.
+ */
+export const hideFromCaptures = async (
+  element: Element,
+  targets: RestrictionTargets | undefined = (
+    globalThis as { RestrictionTarget?: RestrictionTargets }
+  ).RestrictionTarget,
+): Promise<void> => {
+  await targets?.fromElement(element);
 };
 
 /** Each `portal_requests` push, parsed. */
@@ -1139,6 +1211,22 @@ const capturedSchema = z
   });
 
 const screenCastingSchema = z.object({ sources: z.array(capturedSchema) });
+
+const recordingSchema = z
+  .object({
+    file: z.string(),
+    recorded_ms: z.number(),
+    running_since_ms: z.number().optional(),
+    sources: z.array(capturedSchema),
+  })
+  .transform(
+    (recording): RecordingBody => ({
+      file: recording.file,
+      recordedMs: recording.recorded_ms,
+      runningSinceMs: recording.running_since_ms,
+      sources: recording.sources,
+    }),
+  );
 
 const shortcutsSchema = z
   .object({
@@ -1483,6 +1571,10 @@ const CAPTURING_KINDS: ReadonlyMap<string, ReadCapturing> = new Map<
     "screen_cast",
     (base, body) => Capturing.ScreenCast(base, screenCastingSchema.parse(body)),
   ],
+  [
+    "recording",
+    (base, body) => Capturing.Recording(base, recordingSchema.parse(body)),
+  ],
 ]);
 
 const itemSchema = z.object({
@@ -1577,6 +1669,12 @@ const wireAnswer = (answer: PortalAnswer): object => {
       };
     case PortalAnswerKind.Stop:
       return { kind: "stop" };
+    case PortalAnswerKind.Pause:
+      return { kind: "pause" };
+    case PortalAnswerKind.Resume:
+      return { kind: "resume" };
+    case PortalAnswerKind.Discard:
+      return { kind: "discard" };
     case PortalAnswerKind.Canceled:
       return { kind: "canceled" };
     case PortalAnswerKind.DynamicLauncher:
