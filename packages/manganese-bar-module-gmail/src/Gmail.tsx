@@ -1,3 +1,4 @@
+import { CountBadge } from "@domicile-desktop/component-library/CountBadge";
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimple";
@@ -63,11 +64,6 @@ const Reading = ({
       return inbox.total === 0 ? undefined : (
         <Count
           email={email}
-          figure={
-            inbox.unread === 0
-              ? inbox.total.toString()
-              : `${inbox.unread.toString()} / ${inbox.total.toString()}`
-          }
           label={
             inbox.unread === 0
               ? `${nickname}: ${inbox.total.toString()} conversations`
@@ -75,7 +71,8 @@ const Reading = ({
           }
           nickname={nickname}
           onOpen={onOpen}
-          unread={inbox.unread > 0}
+          total={inbox.total}
+          unread={inbox.unread}
         />
       );
     case InboxKind.Failed:
@@ -98,26 +95,30 @@ const Reading = ({
 };
 
 type CountProps = Omit<Props, "inbox" | "onSignIn"> & {
-  /** The count as the bar shows it. */
-  figure: string;
   /** The count in words, for the button's name and tooltip. */
   label: string;
-  unread: boolean;
+  /** How many conversations are in the inbox. */
+  total: number;
+  /** How many of them are unread. */
+  unread: number;
 };
 
-/** The count, as a button that opens the inbox. */
+/**
+ * The total, as a button that opens the inbox. The unread count sits in a
+ * badge on its end corner, as on the Messages and notification buttons.
+ */
 const Count = ({
   email,
-  figure,
   label,
   nickname,
   onOpen,
+  total,
   unread,
 }: CountProps) => (
   <button
     aria-label={label}
     className={itemStyles}
-    data-unread={unread}
+    data-unread={unread > 0}
     onClick={() => {
       onOpen(inboxAddress(email));
     }}
@@ -127,8 +128,9 @@ const Count = ({
     <EnvelopeSimpleIcon aria-hidden size={15} weight="bold" />
     <span className={textStyles}>{nickname}</span>
     <span className={figureStyles} data-figure="">
-      {figure}
+      {total}
     </span>
+    <CountBadge count={unread} />
   </button>
 );
 
@@ -140,6 +142,8 @@ const itemStyles = hstack({
   },
   "&[data-unread=true]": {
     backgroundColor: "color-mix(in oklab, white 24%, transparent)",
+    // Clears the total from the badge on the end corner.
+    paddingInlineEnd: 5,
   },
   "&[data-unread=true] [data-figure]": { fontWeight: "semibold" },
   backgroundColor: "transparent",
@@ -155,6 +159,8 @@ const itemStyles = hstack({
   paddingBlock: 0,
   // The ends' radius, so the text stays clear of the curve.
   paddingInline: 3,
+  // Anchors the unread badge.
+  position: "relative",
   transition: "background-color {durations.fast} {easings.default}",
 });
 

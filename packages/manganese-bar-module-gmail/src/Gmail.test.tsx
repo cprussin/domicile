@@ -124,13 +124,13 @@ describe("Gmail", () => {
       expect(button).toHaveAttribute("data-unread", "false");
     });
 
-    it("shows unread of total, lit, with something unread", () => {
+    it("shows the total with an unread badge, lit, with something unread", () => {
       shown(Inbox.Counted(12, 3));
 
       const button = screen.getByRole("button", {
         name: "Work: 3 unread of 12 conversations",
       });
-      expect(button).toHaveTextContent("Work3 / 12");
+      expect(button).toHaveTextContent("Work123");
       expect(button).toHaveAttribute("data-unread", "true");
     });
 
