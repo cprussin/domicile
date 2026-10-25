@@ -215,10 +215,45 @@ class Surface : public mojom::SurfaceObserver,
     return stamped;
   }
 
+  // Each ready submit goes to viz unless viz is behind (SurfaceBacklog).
   void Send(const std::vector<SurfaceSubmit>& ready) {
     for (const SurfaceSubmit& submit : ready) {
-      SubmitNow(submit);
+      const SurfaceBacklog::Offered offered =
+          backlog_.Offer(submit, frames_.InViz());
+      if (offered.replaced.has_value()) {
+        // Viz never had it, so nothing else gives it back, unless the client
+        // committed the same buffer again. Its callbacks wait for the next
+        // frame viz takes, which answers it too: answered now, the client
+        // would draw as fast as it can while viz is behind.
+        const bool release = !offered.send.has_value() ||
+                             offered.send->buffer != offered.replaced->buffer;
+        Drop(offered.replaced->buffer, release, /*answer=*/false);
+      }
+      if (offered.send.has_value()) {
+        SubmitNow(*offered.send);
+      }
     }
+  }
+
+  // Reports a frame viz never sees as discarded, and as done when `answer`,
+  // since nothing else reports it and the compositor counts every submit.
+  // Gives its buffer back when `release`.
+  void Drop(uint64_t buffer, bool release, bool answer) {
+    if (release) {
+      queue_->Push({.type = EngineEvent::Type::kReleased,
+                    .surface = id_,
+                    .buffer = buffer});
+    }
+    const uint64_t number = frames_.Dropped();
+    if (answer) {
+      queue_->Push({.type = EngineEvent::Type::kFrameDone,
+                    .surface = id_,
+                    .frame = number});
+    }
+    queue_->Push({.type = EngineEvent::Type::kPresented,
+                  .surface = id_,
+                  .frame = number,
+                  .flags = DOMICILE_PRESENTED_DISCARDED});
   }
 
   // Shows `submit.buffer` at the newest box numbered at most `submit.box`. A
@@ -231,22 +266,9 @@ class Surface : public mojom::SurfaceObserver,
       if (submit.fence_refused) {
         LOG(ERROR) << "domicile: the browser would not fence buffer "
                    << submit.buffer << ", so its frame is dropped";
-        // The buffer may be unfinished, so viz must not read it. Viz never
-        // had it, so nothing else gives it back.
-        queue_->Push({.type = EngineEvent::Type::kReleased,
-                      .surface = id_,
-                      .buffer = submit.buffer});
       }
-      // Viz never sees it, so nothing else reports it, and the compositor
-      // counts every submit.
-      const uint64_t number = frames_.Dropped();
-      queue_->Push({.type = EngineEvent::Type::kFrameDone,
-                    .surface = id_,
-                    .frame = number});
-      queue_->Push({.type = EngineEvent::Type::kPresented,
-                    .surface = id_,
-                    .frame = number,
-                    .flags = DOMICILE_PRESENTED_DISCARDED});
+      // A refused fence's buffer may be unfinished, so viz must not read it.
+      Drop(submit.buffer, /*release=*/submit.fence_refused, /*answer=*/true);
       return;
     }
     const gfx::Rect& crop = submit.crop;
@@ -356,6 +378,10 @@ class Surface : public mojom::SurfaceObserver,
       }
     }
     sink_->DidNotProduceFrame(viz::BeginFrameAck(args, /*has_damage=*/false));
+    const std::optional<SurfaceSubmit> held = backlog_.Take(frames_.InViz());
+    if (held.has_value()) {
+      SubmitNow(*held);
+    }
   }
   // Viz takes the next frame once it acks this one, so the compositor answers
   // the client's wl_surface.frame then.
@@ -442,6 +468,7 @@ class Surface : public mojom::SurfaceObserver,
   viz::FrameTokenGenerator next_frame_token_;
   SurfaceFrames frames_;
   SurfaceSubmits submits_;
+  SurfaceBacklog backlog_;
 };
 
 // The planes DomicileCapturedFrame carries.

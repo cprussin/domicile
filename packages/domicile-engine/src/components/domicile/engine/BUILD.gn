@@ -119,7 +119,7 @@ source_set("surface_frames_unit_tests") {
 }
 
 # Holds a window's submits in order behind any whose acquire fence the browser
-# has not yet put in place.
+# has not yet put in place, and its newest while viz is behind.
 source_set("surface_submits") {
   sources = [
     "surface_submits.cc",
