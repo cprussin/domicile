@@ -50,6 +50,90 @@
       "types": "./dist/dbusmenu.d.ts",
       "default": "./dist/dbusmenu.js"
     },
+    "./desktop/app-desktop": {
+      "types": "./dist/desktop/app-desktop.d.ts",
+      "default": "./dist/desktop/app-desktop.js"
+    },
+    "./desktop/appearance": {
+      "types": "./dist/desktop/appearance.d.ts",
+      "default": "./dist/desktop/appearance.js"
+    },
+    "./desktop/browser": {
+      "types": "./dist/desktop/browser.d.ts",
+      "default": "./dist/desktop/browser.js"
+    },
+    "./desktop/capture": {
+      "types": "./dist/desktop/capture.d.ts",
+      "default": "./dist/desktop/capture.js"
+    },
+    "./desktop/clipboard": {
+      "types": "./dist/desktop/clipboard.d.ts",
+      "default": "./dist/desktop/clipboard.js"
+    },
+    "./desktop/dbus": {
+      "types": "./dist/desktop/dbus.d.ts",
+      "default": "./dist/desktop/dbus.js"
+    },
+    "./desktop/desktop": {
+      "types": "./dist/desktop/desktop.d.ts",
+      "default": "./dist/desktop/desktop.js"
+    },
+    "./desktop/displays": {
+      "types": "./dist/desktop/displays.d.ts",
+      "default": "./dist/desktop/displays.js"
+    },
+    "./desktop/extensions": {
+      "types": "./dist/desktop/extensions.d.ts",
+      "default": "./dist/desktop/extensions.js"
+    },
+    "./desktop/files": {
+      "types": "./dist/desktop/files.d.ts",
+      "default": "./dist/desktop/files.js"
+    },
+    "./desktop/keyboard": {
+      "types": "./dist/desktop/keyboard.d.ts",
+      "default": "./dist/desktop/keyboard.js"
+    },
+    "./desktop/notifications": {
+      "types": "./dist/desktop/notifications.d.ts",
+      "default": "./dist/desktop/notifications.js"
+    },
+    "./desktop/pointer": {
+      "types": "./dist/desktop/pointer.d.ts",
+      "default": "./dist/desktop/pointer.js"
+    },
+    "./desktop/portals": {
+      "types": "./dist/desktop/portals.d.ts",
+      "default": "./dist/desktop/portals.js"
+    },
+    "./desktop/processes": {
+      "types": "./dist/desktop/processes.d.ts",
+      "default": "./dist/desktop/processes.js"
+    },
+    "./desktop/session": {
+      "types": "./dist/desktop/session.d.ts",
+      "default": "./dist/desktop/session.js"
+    },
+    "./desktop/shell": {
+      "types": "./dist/desktop/shell.d.ts",
+      "default": "./dist/desktop/shell.js"
+    },
+    "./desktop/subscribe": {
+      "types": "./dist/desktop/subscribe.d.ts",
+      "default": "./dist/desktop/subscribe.js"
+    },
+    "./desktop/theme": {
+      "types": "./dist/desktop/theme.d.ts",
+      "default": "./dist/desktop/theme.js"
+    },
+    "./desktop/tray": {
+      "types": "./dist/desktop/tray.d.ts",
+      "default": "./dist/desktop/tray.js"
+    },
+    "./desktop/windows": {
+      "types": "./dist/desktop/windows.d.ts",
+      "default": "./dist/desktop/windows.js"
+    },
     "./display-transform": {
       "types": "./dist/display-transform.d.ts",
       "default": "./dist/display-transform.js"
