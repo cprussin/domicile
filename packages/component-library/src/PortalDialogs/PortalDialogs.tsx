@@ -79,8 +79,9 @@ type Props = {
 
 /**
  * Every dialog applications ask for through `xdg-desktop-portal`, one at a
- * time, oldest first, and an indicator for each session that controls or
- * captures input. Requests of a kind it has no dialog for are refused.
+ * time, oldest first, with a screenshot, color pick or screen cast stacked
+ * over it so the user can capture it, and an indicator for each session that
+ * controls or captures input. Requests of a kind it has no dialog for are refused.
  * Inhibitors are not questions, so it leaves them be. It also fires the
  * chords applications hold through the GlobalShortcuts portal. See
  * docs/PORTALS.md.
@@ -118,11 +119,6 @@ export const PortalDialogs = memo(
       }
     }, [host, requests]);
 
-    const shown = requests.find(
-      (request) =>
-        isAsked(request) &&
-        claims.get(request.id)?.kind !== CastClaimKind.Answered,
-    );
     return (
       <>
         <CapturingIndicator
@@ -139,7 +135,12 @@ export const PortalDialogs = memo(
             stopCapturing(host, id);
           }}
         />
-        {shown !== undefined && (
+        {stacked(
+          requests.filter(
+            (request) =>
+              claims.get(request.id)?.kind !== CastClaimKind.Answered,
+          ),
+        ).map((shown) => (
           <Dialog
             answer={(answer) => {
               answerPortalRequest(host, shown.id, answer);
@@ -156,7 +157,7 @@ export const PortalDialogs = memo(
             shownWindows={shownWindows}
             system={files}
           />
-        )}
+        ))}
       </>
     );
   },
@@ -390,6 +391,43 @@ const otherAppIds = (request: PortalRequest): string[] => {
     case PortalKind.Inhibit:
     case PortalKind.Unknown:
       return [];
+  }
+};
+
+/**
+ * The dialogs to draw, bottom first: the oldest question and, over it, the
+ * oldest capture after it, so the user can capture the dialog under it.
+ * Anything asked after a capture waits for it.
+ */
+const stacked = (requests: readonly PortalRequest[]): PortalRequest[] => {
+  const asked = requests.filter(isAsked);
+  const capture = asked.find(isCapture);
+  return capture === undefined || capture === asked[0]
+    ? asked.slice(0, 1)
+    : [...asked.slice(0, 1), capture];
+};
+
+/** Whether `request` captures the desk, so it can capture other dialogs. */
+const isCapture = (request: PortalRequest): boolean => {
+  switch (request.kind) {
+    case PortalKind.Screenshot:
+    case PortalKind.PickColor:
+    case PortalKind.ScreenCast:
+      return true;
+    case PortalKind.Access:
+    case PortalKind.AppChooser:
+    case PortalKind.FileChooser:
+    case PortalKind.RemoteDesktop:
+    case PortalKind.InputCapture:
+    case PortalKind.DynamicLauncher:
+    case PortalKind.Usb:
+    case PortalKind.Account:
+    case PortalKind.GlobalShortcuts:
+    case PortalKind.Wallpaper:
+    case PortalKind.Print:
+    case PortalKind.Inhibit:
+    case PortalKind.Unknown:
+      return false;
   }
 };
 

@@ -71,6 +71,9 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   (`wayland:<handle>`) resolves through the compositor's `xdg_foreign` export
   to an app id. The shell draws the dialog over that `<app>`. A missing or
   unknown handle puts the dialog over the focused screen.
+- **Captures stack over other dialogs.** `<PortalDialogs />` shows the oldest
+  dialog, and a screenshot, color pick or screen cast over it, so the user can
+  capture that dialog. Anything asked after the capture waits for it.
 - **File filters become extensions.** The picker matches extensions, so the
   compositor turns each glob (`*.[pP][nN][gG]` is `png`) and MIME type (through
   shared-mime-info's `globs2`) into a list. A filter with no extension, such as
