@@ -57,24 +57,11 @@ item when it ships.
 
 ## In the engine fork (the agent on `crux`)
 
-1. **Measure presentation.** Nothing reads a lit CRTC, so overlay promotion,
-   damage and presentation latency are unmeasured.
-   [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#plan).
-
-2. **Overlay promotion under `backdrop-filter`.** Show that viz declines it
-   for an `<app>`. Needs a lit CRTC, like item 1.
-   [WINDOW-COMPOSITING.md](docs/architecture/WINDOW-COMPOSITING.md).
-
-3. **Strip what a desktop never runs.** Tab strip, New Tab page, settings,
+1. **Strip what a desktop never runs.** Tab strip, New Tab page, settings,
    sign-in and sync. Keep PDFium. Measured: 19.6 MB of a 418 MB install,
    5.4 MB of it code
    ([ENGINE-FORK-MEASUREMENTS.md](docs/architecture/ENGINE-FORK-MEASUREMENTS.md#engine-size-by-subsystem)).
    Which to cut is the maintainer's decision.
-
-4. **Shortcuts inhibitor (patch `0038`) beyond sway.**
-   [ENGINE-FORK-MEASUREMENTS.md](docs/architecture/ENGINE-FORK-MEASUREMENTS.md#host-shortcut-inhibitor).
-   - Untested on other hosts. mutter may show an unseen permission dialog.
-   - Untested with a physical keyboard.
 
 
 ## Known gaps
@@ -95,6 +82,11 @@ Understood and not scheduled.
 
 ### Displays
 
+- **Presentation is unmeasured.** Every measurement reads a
+  `CopyOutputRequest`; nothing reads a lit CRTC. So overlay promotion
+  (including that viz declines it under `backdrop-filter`), damage and
+  presentation latency are unmeasured. Revisit if real hardware shows a
+  performance problem. [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#plan).
 - **A monitor profile can require a mode but not set it.** Same for refresh
   rate. [A-DESKTOP-ON-A-TTY.md](docs/architecture/A-DESKTOP-ON-A-TTY.md).
 - **Filter quality on lower-density displays is unmeasured.**
@@ -105,6 +97,9 @@ Understood and not scheduled.
 
 ### Browser windows
 
+- **The shortcuts inhibitor (patch `0038`) is tested only on sway,** and
+  only with a virtual keyboard. mutter may show an unseen permission dialog.
+  [ENGINE-FORK-MEASUREMENTS.md](docs/architecture/ENGINE-FORK-MEASUREMENTS.md#host-shortcut-inhibitor).
 - **Some permission requests are refused,** such as storage access, an
   extension's `chrome.tabCapture`, and keyboard and pointer lock prompts.
 - **No `chrome://` pages,** so no Print Preview: printing goes straight to
