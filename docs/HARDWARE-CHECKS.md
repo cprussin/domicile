@@ -108,6 +108,8 @@ until its middle passes the edge.
 
 ## Monitors at different densities
 
+Passes in daily use on lyra with `home-office-right-two` (2026-10-25).
+
 With a less dense monitor beside the host (`home-office-right-two`), resize a
 window on it, then drag a float across onto it.
 
@@ -181,6 +183,8 @@ nix develop .#full --command env OUT=. PLATFORM=drm \
 `two-monitors-on-a-tty` in `flake.nix` checks the bars, wallpapers, focus,
 `mod+2` and `exec` items below on two QEMU heads, started cold. Hotplug,
 different refresh rates and MST hubs still need real monitors.
+
+Passes in daily use on lyra through a dock (2026-10-25).
 
 Plug in one monitor, then a second. Expect:
 
