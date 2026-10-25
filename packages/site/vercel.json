@@ -1,6 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "rm public/media && cp -R ../../docs/media public/media && next build",
+  "git": {
+    "deploymentEnabled": {
+      "*": false,
+      "stable": true
+    }
+  },
   "ignoreCommand": "bash vercel-ignore.sh",
   "installCommand": "cd ../.. && npx -y bun@1.4.3 install --frozen-lockfile --filter @domicile-desktop/site"
 }
