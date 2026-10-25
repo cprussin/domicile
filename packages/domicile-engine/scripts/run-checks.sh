@@ -37,8 +37,8 @@ FIRST=(
   guard-shell-shortcuts
 )
 
-# Run at once: they are headless and share no card, port, broker, profile or
-# log.
+# Run together: they are headless and share no card, port, broker, profile or
+# log. At most `CHECKS_AT_ONCE` at a time.
 TOGETHER=(
   guard-webview-framing
   guard-shell-local-network
@@ -143,6 +143,12 @@ UNDER_WAYLAND=(
 # Each check's timeout. The budget is a cold cargo build's.
 ENGINE_CHECK_TIMEOUT="${DOMICILE_ENGINE_CHECK_TIMEOUT:-1800}"
 
+# How many of TOGETHER run at once. Each starts a browser or two, and `crux`
+# runs two engine jobs: all of them at once starve the browsers of CPU and
+# memory until they miss their guards' deadlines. Half the cores, so both
+# jobs' batches together fill the machine.
+CHECKS_AT_ONCE="${DOMICILE_ENGINE_CHECKS_AT_ONCE:-$(( $(nproc) / 2 > 0 ? $(nproc) / 2 : 1 ))}"
+
 main() {
   if [ "$#" -gt 0 ]; then
     one "$@"
@@ -216,14 +222,19 @@ serial() { # names...
   return 0
 }
 
-# Runs checks at once as noise, then prints their verdicts in order.
+# Runs checks `CHECKS_AT_ONCE` at a time as noise, then prints their verdicts
+# in order.
 together() { # names...
-  local dir name pids=(); dir="$(mktemp -d)"
+  local dir name running=0; dir="$(mktemp -d)"
   for name in "$@"; do
+    if [ "$running" -ge "$CHECKS_AT_ONCE" ]; then
+      wait -n
+      running=$((running - 1))
+    fi
     ( noisy "$name" >"$dir/$name" 2>&1; echo $? >"$dir/$name.status" ) &
-    pids+=($!)
+    running=$((running + 1))
   done
-  wait "${pids[@]}"
+  wait
   for name in "$@"; do
     label "$name"
     verdict "$name" "$(cat "$dir/$name.status")" "$dir/$name"

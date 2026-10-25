@@ -28,6 +28,10 @@ This is `scripts/run-checks.sh`: the unit tests and every guard, in order,
 stopping at the first failure. `run-checks.sh <check>` runs one, such as
 `guard-client-window`. The guards: [GUARDS.md](GUARDS.md).
 
+- The headless guards run together, half the cores' worth at a time
+  (`DOMICILE_ENGINE_CHECKS_AT_ONCE`). `crux` runs two engine jobs, and more
+  at once starve the browsers past their guards' deadlines.
+
 The package's `tests/` hold the shell tests of the guards, their helpers and
 the patch series. They need no tree and run in `test:shell`, on every pull
 request.

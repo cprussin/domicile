@@ -4,6 +4,9 @@
 # (`test-the-webview-guards-take-free-ports.sh`). Other checks stay serial, and
 # the run still stops at the first failure.
 #
+# No more than `DOMICILE_ENGINE_CHECKS_AT_ONCE` run at once: every one starts a
+# browser, and all of them at once starve each other on `crux`.
+#
 # When the job sets `CARD_OWNER`, every check but latency runs as noise, so
 # another run's latency guard waits for it. Latency runs as none, or it would
 # wait for its own run.
@@ -40,9 +43,10 @@ date +%s.%N >"$WORK/\$1.end"
 STUB
 chmod +x "$WORK/repo/stand-in.sh"
 
+AT_ONCE=4
 check() { # FAIL=<check to fail>
   rm -f "$WORK"/*.start "$WORK"/*.end
-  DOMICILE_CHECK_LOG_DIR="$WORK/logs" \
+  DOMICILE_ENGINE_CHECKS_AT_ONCE="$AT_ONCE" DOMICILE_CHECK_LOG_DIR="$WORK/logs" \
     "$WORK/repo/packages/domicile-engine/scripts/run-checks.sh" >"$WORK/out" 2>&1
 }
 
@@ -62,14 +66,24 @@ for g in $TOGETHER; do
   starts="$starts $(cat "$WORK/guard-$g.start" 2>/dev/null)"
   ends="$ends $(cat "$WORK/guard-$g.end" 2>/dev/null)"
 done
-latest_start="$(printf '%s\n' $starts | sort -n | tail -1)"
-earliest_end="$(printf '%s\n' $ends | sort -n | head -1)"
-if [ -n "$latest_start" ] && [ -n "$earliest_end" ] &&
-   awk "BEGIN { exit !($latest_start < $earliest_end) }"; then
-  ok "the webview guards and windows-state run at the same time"
-else
-  fail "the webview guards and windows-state run at the same time" "$(cat "$WORK/out")"
-fi
+# The most checks running at any one start.
+most="$(for g in $TOGETHER; do
+  echo "$(cat "$WORK/guard-$g.start") $(cat "$WORK/guard-$g.end")"
+done | awk '{ start[NR] = $1; end[NR] = $2 }
+  END {
+    for (i = 1; i <= NR; i++) {
+      n = 0
+      for (j = 1; j <= NR; j++) if (start[j] <= start[i] && start[i] < end[j]) n++
+      if (n > most) most = n
+    }
+    print most + 0
+  }')"
+[ "$most" -gt 1 ] &&
+  ok "the webview guards and windows-state run at the same time" ||
+  fail "the webview guards and windows-state run at the same time" "at most $most at once: $(cat "$WORK/out")"
+[ "$most" -le "$AT_ONCE" ] &&
+  ok "but no more than $AT_ONCE at once" ||
+  fail "but no more than $AT_ONCE at once" "$most ran at once"
 
 missing=""
 for name in $(engine_checks); do
