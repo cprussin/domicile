@@ -38,8 +38,11 @@ const STEPS: readonly { title: string; code: string; note?: ReactNode }[] = [
     code: "domicile ./.vite/renderer/main_window/shell.js",
     note: (
       <>
-        It opens in a window on your current desktop. Rebuild, then run{" "}
-        <code className={codeStyles}>domicile load-shell</code> to reload it.
+        It opens in a window on your current desktop. Rebuild, then{" "}
+        <a className={linkStyles} href="#cli">
+          <code className={codeStyles}>domicile load-shell</code>
+        </a>{" "}
+        it.
       </>
     ),
     title: "Run it",
