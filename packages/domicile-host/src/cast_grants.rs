@@ -5,7 +5,8 @@
 //! A token names windows by their client's app id and title, since host ids
 //! do not survive a restart; monitors by `wl_output` name; regions by a
 //! rectangle on the monitor they are mostly on; and browser windows by the
-//! engine's id, which is only granted while the compositor runs. Tokens for `persist_mode` 2 are saved to a file
+//! engine's id, which is only granted while the compositor runs, as is a part
+//! of a window. Tokens for `persist_mode` 2 are saved to a file
 //! under `$XDG_STATE_HOME/domicile/`; tokens for mode 1 live as long as the
 //! compositor. See `docs/PORTALS.md`.
 
@@ -49,6 +50,9 @@ impl Persist {
     }
 }
 
+/// A part of a window, in pixels of its frame.
+pub type Part = (i32, i32, i32, i32);
+
 /// A source a grant names.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -57,14 +61,21 @@ pub enum Shared {
         /// The client's own app id (`xdg_toplevel.set_app_id`).
         app_id: String,
         title: String,
+        /// Only granted while the compositor runs.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        part: Option<Part>,
     },
     Monitor {
         /// Its `wl_output` name.
         name: String,
     },
     /// A browser window's page, by the engine's window id, and the title it
-    /// was picked with.
-    BrowserWindow { id: String, title: String },
+    /// was picked with, and the part of it picked.
+    BrowserWindow {
+        id: String,
+        title: String,
+        part: Option<Part>,
+    },
     /// A rectangle in logical pixels, kept relative to a monitor so it
     /// follows that monitor when the desktop is rearranged.
     Region {
@@ -98,12 +109,16 @@ pub enum Open {
 /// A source a grant matched.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Restored {
-    /// A window, by host id.
-    Window(String),
+    /// A window, by host id, and the part of it granted.
+    Window { id: String, part: Option<Part> },
     /// A monitor, by `wl_output` name.
     Monitor(String),
     /// A browser window's page, as [`Shared::BrowserWindow`] names it.
-    BrowserWindow { id: String, title: String },
+    BrowserWindow {
+        id: String,
+        title: String,
+        part: Option<Part>,
+    },
     /// A rectangle of the desktop, in logical pixels.
     Region {
         position: (i32, i32),
@@ -235,7 +250,11 @@ pub fn matched(shared: &[Shared], open: &[Open]) -> Option<Vec<Restored>> {
     let mut restored = Vec::new();
     for wanted in shared {
         match wanted {
-            Shared::Window { app_id, title } => {
+            Shared::Window {
+                app_id,
+                title,
+                part,
+            } => {
                 let free: Vec<(&String, &String)> = open
                     .iter()
                     .filter_map(|source| match source {
@@ -254,16 +273,22 @@ pub fn matched(shared: &[Shared], open: &[Open]) -> Option<Vec<Restored>> {
                     .find(|(_, open_title)| *open_title == title)
                     .or_else(|| free.first())?;
                 taken.push(id);
-                restored.push(Restored::Window(id.to_string()));
+                restored.push(Restored::Window {
+                    id: id.to_string(),
+                    part: *part,
+                });
             }
             Shared::Monitor { name } => {
                 monitor(open, name)?;
                 restored.push(Restored::Monitor(name.clone()));
             }
-            Shared::BrowserWindow { id, title } => restored.push(Restored::BrowserWindow {
-                id: id.clone(),
-                title: title.clone(),
-            }),
+            Shared::BrowserWindow { id, title, part } => {
+                restored.push(Restored::BrowserWindow {
+                    id: id.clone(),
+                    title: title.clone(),
+                    part: *part,
+                });
+            }
             Shared::Region {
                 monitor: name,
                 offset,
@@ -296,6 +321,7 @@ mod tests {
         Shared::Window {
             app_id: app_id.into(),
             title: title.into(),
+            part: None,
         }
     }
 
@@ -308,7 +334,10 @@ mod tests {
     }
 
     fn window(id: &str) -> Restored {
-        Restored::Window(id.into())
+        Restored::Window {
+            id: id.into(),
+            part: None,
+        }
     }
 
     /// A 1920x1080 monitor, and a 1280x800 one to its right.
@@ -374,6 +403,7 @@ mod tests {
         let page = Shared::BrowserWindow {
             id: "7".into(),
             title: "Meet".into(),
+            part: None,
         };
 
         assert_eq!(
@@ -381,6 +411,7 @@ mod tests {
             Some(vec![Restored::BrowserWindow {
                 id: "7".into(),
                 title: "Meet".into(),
+                part: None,
             }])
         );
     }
