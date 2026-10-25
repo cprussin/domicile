@@ -166,8 +166,8 @@ nix develop .#full --command env OUT=. PLATFORM=drm \
   ./packages/domicile-engine/scripts/guard-latency.sh "$ENGINE"
 ```
 
-- The verdict line compares `commit to pixel` with the run's `display frame`.
-  The ratio matters, not the milliseconds.
+- The verdict line compares `commit to pixel` with the probe's floor plus
+  the `display frame` viz reports.
 - `answered too late` above zero means fewer rounds were measured than
   planned.
 - `OUT=.` because `nix build .#engine` produces a store path that is itself
