@@ -19,7 +19,7 @@
 # Rules:
 # - `take` waits up to DOMICILE_COMPILE_SLOT_WAIT seconds (default 30 minutes),
 #   then fails. engine.yml waits longer to outlast a cold repin
-#   (scripts/test-the-engine-budget-holds-both-builds.sh).
+#   (packages/ci/tests/test-the-engine-budget-holds-both-builds.sh).
 # - Age never frees the slot: a cold build can take five hours.
 # - A runner clears a slot left by an earlier job on itself, since it runs one
 #   job at a time. A person's build records no runner and is never cleared.

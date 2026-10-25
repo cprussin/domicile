@@ -9,7 +9,7 @@ name: Engine release
 #   one is pinned (engine-pin.nix), so no merge needs its own build. The
 #   concurrency group keeps one running and one pending run, and a newer
 #   pending run replaces an older one, so a running build (maybe mid-publish)
-#   is never canceled. See scripts/test-engine-release-coalesces.sh.
+#   is never canceled. See packages/ci/tests/test-engine-release-coalesces.sh.
 # - Yields the compile slot to pull requests: engine-yielding-build.sh pauses
 #   the build while anyone waits and resumes it incrementally after.
 # - Publishes as `engine-official-`, beside engine.yml's releases, then opens
@@ -21,7 +21,7 @@ name: Engine release
 # Concurrency is per ref, not shared with engine.yml: `crux`'s single job slot
 # and the tree lock keep the two out of each other's trees, and a shared group
 # would let unrelated pushes evict a pending release. See
-# scripts/test-engine-concurrency.sh.
+# packages/ci/tests/test-engine-concurrency.sh.
 on:
   push:
     tags: [engine-v*]

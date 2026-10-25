@@ -9,7 +9,7 @@
 #   started or not. Started runs count only for pull requests from this
 #   repository, never pushes, so never main's.
 #
-# A filter rather than a canceler, so `scripts/test-crux-stale-runs.sh` can
+# A filter rather than a canceler, so `packages/ci/tests/test-crux-stale-runs.sh` can
 # test the decision without the API.
 #
 # Canceling a build is safe: lld and clang write through a temp file and

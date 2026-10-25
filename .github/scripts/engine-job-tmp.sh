@@ -12,7 +12,7 @@
 #
 # Each job makes one of these, sets it as TMPDIR through $GITHUB_ENV, and drops
 # it in an `if: always()` step. engine-release-room.sh removes those of jobs the
-# runner lost. Tested by scripts/test-engine-job-tmp.sh.
+# runner lost. Tested by packages/ci/tests/test-engine-job-tmp.sh.
 set -euo pipefail
 
 usage() {

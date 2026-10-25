@@ -5,7 +5,7 @@ Chromium trees.
 
 The engine job (`.github/workflows/engine.yml`) runs on any change to
 `packages/domicile-engine` except Markdown, `engine-release.nix` and
-`engine-official.nix`. `/scripts/test-engine-path-filter.sh` checks this.
+`engine-official.nix`. `/packages/ci/tests/test-engine-path-filter.sh` checks this.
 
 ## Sharing the checkout with CI
 

@@ -94,6 +94,13 @@
         "typescript": "catalog:",
       },
     },
+    "packages/ci": {
+      "name": "@domicile-desktop/ci",
+      "version": "0.0.1",
+      "devDependencies": {
+        "@domicile-desktop/check-runner": "workspace:*",
+      },
+    },
     "packages/component-library": {
       "name": "@domicile-desktop/component-library",
       "version": "1.0.0",
@@ -1211,6 +1218,8 @@
     "@domicile-desktop/builder": ["@domicile-desktop/builder@workspace:packages/domicile-builder"],
 
     "@domicile-desktop/check-runner": ["@domicile-desktop/check-runner@workspace:packages/check-runner"],
+
+    "@domicile-desktop/ci": ["@domicile-desktop/ci@workspace:packages/ci"],
 
     "@domicile-desktop/component-library": ["@domicile-desktop/component-library@workspace:packages/component-library"],
 

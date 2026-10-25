@@ -70,7 +70,7 @@ engine_guard_and_control() { # guard script name, args...
 #
 # `pinned-engine.yml` and `engine-release.yml` set `DOMICILE_GUARD_CONTROL=0`:
 # `engine.yml` already runs the controls, and a second run doubles the cost.
-# `scripts/test-the-workflows-delegate-their-checks.sh` asserts that
+# `packages/ci/tests/test-the-workflows-delegate-their-checks.sh` asserts that
 # `engine.yml` never opts out.
 wants_control() {
   [ "${DOMICILE_GUARD_CONTROL:-1}" != "0" ]

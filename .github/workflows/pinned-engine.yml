@@ -22,7 +22,7 @@ on:
   push:
     branches: [main]
 
-# Keyed by ref, as scripts/test-engine-concurrency.sh requires of every
+# Keyed by ref, as packages/ci/tests/test-engine-concurrency.sh requires of every
 # workflow on this machine.
 #
 # Unlike the others, this one cancels in progress. They must not because a
@@ -32,7 +32,7 @@ on:
 # run only delays newer runs of this job.
 #
 # Comments here must not name Chromium's build tools:
-# scripts/test-the-pinned-engine-meets-the-compositor.sh greps the whole file
+# packages/ci/tests/test-the-pinned-engine-meets-the-compositor.sh greps the whole file
 # for them.
 concurrency:
   group: pinned-engine-${{ github.ref }}
