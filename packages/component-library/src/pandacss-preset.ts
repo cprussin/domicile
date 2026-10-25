@@ -83,8 +83,9 @@ export const domicilePreset = definePreset({
       animationName: "themeSwipeFromBottom",
     },
     // Held at the start, so only the old frame shows, while windows repaint
-    // behind it (`flipThemeWithAnimation`).
-    "html[data-theme-holding]::view-transition-new(root)": {
+    // behind it (`flipThemeWithAnimation`). Scoped to the wipe, so a hold can
+    // never freeze another transition, such as the splash handover, partway.
+    "html[data-theme-flip-to][data-theme-holding]::view-transition-new(root)": {
       animationPlayState: "paused",
     },
     // Disable element transitions during a theme change. Otherwise they are

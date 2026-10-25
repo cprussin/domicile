@@ -395,12 +395,20 @@ impl DomicileCompositor {
                 self.arm_the_turnover_deadline(CAPTURE_WITHIN, Turnover::capture_deadline);
                 self.follow_the_turnover(step);
             }
-            ClientRequest::ThemeCaptured { chrome, theme } => {
-                if let Some(turnover) = &mut self.turnover {
+            ClientRequest::ThemeCaptured { chrome, theme } => match &mut self.turnover {
+                Some(turnover) => {
                     let step = turnover.captured(&chrome, theme);
                     self.follow_the_turnover(step);
                 }
-            }
+                // Nothing to turn, as when a shell wipes from its remembered
+                // theme to the one the desk came up in. The page holds its wipe
+                // until it hears the windows' theme, so tell it now: unanswered,
+                // the wipe and the page's input stay held for good.
+                None => {
+                    let windows = self.hub.host.lock().unwrap().describe_windows_theme();
+                    self.hub.broadcast(windows);
+                }
+            },
             ClientRequest::ChromeHello { served_by } => {
                 // A page started, so any keys the previous page held will never
                 // be released. Release them.
