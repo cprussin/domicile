@@ -25,57 +25,108 @@ const desktop = () =>
   );
 
 /** What the chooser answered: an application, or `undefined` on cancel. */
-const chosen = (description?: string): Promise<string | undefined> =>
+const chosen = (
+  choices: readonly string[] = ["editor", "viewer"],
+  asker?: string,
+): Promise<string | undefined> =>
   new Promise((resolve) => {
     render(
       <AppChooser
-        choices={["editor", "viewer"]}
+        address="claude://claude.ai/magic-link?token=secret"
+        asker={asker}
+        choices={choices}
         contentType="text/plain"
-        description={description}
         onCancel={() => {
           resolve(undefined);
         }}
         onChoose={resolve}
+        opened="this link"
         screen={undefined}
         system={desktop()}
-        title="Open notes.txt with"
       />,
     );
   });
 
 describe("AppChooser", () => {
-  it("names what it opens and why it asks", async () => {
-    const answer = chosen("Mail asks");
+  describe("with several applications", () => {
+    it("asks which one, and who wants it opened", async () => {
+      const answer = chosen(undefined, "Chromium");
 
-    expect(
-      await screen.findByRole("dialog", { name: "Open notes.txt with" }),
-    ).toHaveTextContent("Mail asks");
-    await userEvent.keyboard("{Escape}");
-    expect(await answer).toBeUndefined();
+      expect(
+        await screen.findByRole("dialog", {
+          name: "Choose an app to open this link",
+        }),
+      ).toHaveTextContent("Chromium wants to open this link.");
+      await userEvent.keyboard("{Escape}");
+      expect(await answer).toBeUndefined();
+    });
+
+    it("opens the type's default with Open", async () => {
+      const answer = chosen();
+      await screen.findByRole("option", { name: "Viewer", selected: true });
+      await userEvent.click(screen.getByRole("button", { name: "Open" }));
+
+      expect(await answer).toBe("viewer");
+    });
+
+    it("opens another application picked", async () => {
+      const answer = chosen();
+      await userEvent.dblClick(
+        await screen.findByRole("option", { name: "Editor" }),
+      );
+
+      expect(await answer).toBe("editor");
+    });
+
+    it("cancels", async () => {
+      const answer = chosen();
+      await screen.findByRole("option", { name: "Editor" });
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(await answer).toBeUndefined();
+    });
   });
 
-  it("opens the type's default with Open", async () => {
-    const answer = chosen();
-    await screen.findByRole("option", { name: "Viewer", selected: true });
-    await userEvent.click(screen.getByRole("button", { name: "Open" }));
+  describe("with one application", () => {
+    it("asks whether to open it, by name", async () => {
+      const answer = chosen(["editor"], "Chromium");
 
-    expect(await answer).toBe("viewer");
+      expect(
+        await screen.findByRole("dialog", { name: "Open Editor?" }),
+      ).toHaveTextContent("Chromium wants to open this link in Editor.");
+      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Open Editor" }),
+      );
+      expect(await answer).toBe("editor");
+    });
+
+    it("lists it when the user asked to choose", async () => {
+      const answer = chosen(["editor"]);
+      await screen.findByRole("option", { name: "Editor", selected: true });
+      await userEvent.click(screen.getByRole("button", { name: "Open" }));
+
+      expect(await answer).toBe("editor");
+    });
   });
 
-  it("opens another application picked", async () => {
-    const answer = chosen();
-    await userEvent.dblClick(
-      await screen.findByRole("option", { name: "Editor" }),
-    );
+  describe("with no application", () => {
+    it("says so and only closes", async () => {
+      const answer = chosen([], "Chromium");
 
-    expect(await answer).toBe("editor");
-  });
-
-  it("cancels", async () => {
-    const answer = chosen();
-    await screen.findByRole("option", { name: "Editor" });
-    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
-
-    expect(await answer).toBeUndefined();
+      expect(
+        await screen.findByRole("dialog", {
+          name: "No app can open this link",
+        }),
+      ).toHaveTextContent(
+        "Chromium wants to open this link, but no app on this computer can open it.",
+      );
+      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Open" }),
+      ).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Close" }));
+      expect(await answer).toBeUndefined();
+    });
   });
 });

@@ -37,9 +37,9 @@ export const OpenWith = ({ onClose, onOpen, path, screen, system }: Props) => {
           onOpen(found.command(app));
         }
       }}
+      opened={path.slice(path.lastIndexOf("/") + 1)}
       screen={screen}
       system={system}
-      title={`Open ${path.slice(path.lastIndexOf("/") + 1)} with`}
     />
   );
 };

@@ -534,9 +534,11 @@ describe("PortalDialogs", () => {
       render(<PortalDialogs host={host.host} systemOf={desktop()} />);
       host.push([chooser(1)]);
 
-      expect(screen.getByRole("dialog")).toHaveTextContent(
-        "Open report.pdf with",
-      );
+      expect(
+        screen.getByRole("dialog", {
+          name: "Choose an app to open report.pdf",
+        }),
+      ).toHaveTextContent("App wants to open report.pdf.");
       const firefox = await screen.findByRole("option", { name: "Firefox" });
       expect(firefox).toHaveAttribute("aria-selected", "true");
       expect(
@@ -569,11 +571,21 @@ describe("PortalDialogs", () => {
         }),
       ]);
 
-      expect(
-        await screen.findByRole("option", { name: "Gone" }),
-      ).toHaveAttribute("aria-selected", "true");
-      expect(screen.getByRole("dialog")).toHaveTextContent(
-        "Open https://example.com/ with",
+      const dialog = await screen.findByRole("dialog", { name: "Open Gone?" });
+      expect(dialog).toHaveTextContent("App wants to open this link in Gone.");
+      expect(dialog).toHaveTextContent("https://example.com/");
+    });
+
+    it("shows the one application's icon by its name", async () => {
+      const host = new FakeHost();
+      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      host.push([chooser(1, { choices: ["firefox"] })]);
+
+      const dialog = await screen.findByRole("dialog", {
+        name: "Open Firefox?",
+      });
+      expect(dialog.querySelector("img")?.getAttribute("src")).toStartWith(
+        "data:image/svg+xml",
       );
     });
 
@@ -581,7 +593,7 @@ describe("PortalDialogs", () => {
       const host = new FakeHost();
       render(<PortalDialogs host={host.host} systemOf={desktop()} />);
       host.push([chooser(1, { choices: ["org.gnome.Evince"] })]);
-      await screen.findByRole("option", { name: "Document Viewer" });
+      await screen.findByRole("dialog", { name: "Open Document Viewer?" });
       host.push([chooser(1)]);
 
       expect(
