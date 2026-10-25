@@ -175,6 +175,12 @@ impl DomicileCompositor {
                             .presented(app_id, frame)
                             .map(|presented| (app_id, presented))
                     });
+                    if let (Some(app_id), Some(shown)) = (&app_id, shown) {
+                        let took = presented
+                            .as_ref()
+                            .map(|(_, presented)| shown.time.saturating_sub(presented.committed));
+                        self.latency_presented(app_id, shown.refresh, took);
+                    }
                     if let Some((app_id, presented)) = presented {
                         self.present(app_id, presented, shown);
                     }

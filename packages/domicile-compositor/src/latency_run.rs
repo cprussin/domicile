@@ -11,13 +11,6 @@ use crate::latency::{Latency, Step as LatencyStep};
 use crate::spike_probes::parse_point;
 use crate::DomicileCompositor;
 
-/// The display refresh rate the latency run assumes, in mHz.
-///
-/// An assumption: viz's real interval is not reachable from here. `wl_output`'s
-/// rate is not used, since it may be
-/// [`UNKNOWN_REFRESH_MHZ`](crate::screens::UNKNOWN_REFRESH_MHZ).
-const SPIKE_REFRESH_MHZ: i32 = 60_000;
-
 /// Temporary, part of the spike. The key the latency run presses.
 ///
 /// Enter, since a line-buffered program in a terminal reliably redraws on it.
@@ -60,16 +53,55 @@ impl DomicileCompositor {
             return;
         }
         // Taken out and put back; a dropped run restarts from an empty floor.
-        let frame = self.display_interval();
-        let mut run = self
-            .latency
-            .take()
-            .unwrap_or_else(|| Latency::new(budget, frame));
+        let mut run = self.latency.take().unwrap_or_else(|| {
+            let mut run = Latency::new(budget);
+            // The window's first frame may be shown before the run starts, and
+            // a still client draws no other.
+            if let Some(frame) = self.latency_frame.or_else(spike_latency_frame) {
+                run.refreshes_every(frame);
+            }
+            run
+        });
         // Use the caller's timestamp from before `publish_frame`, so the import
         // and submit count in `commit_to_pixel`, not the client's time.
         run.committed(committed);
         self.latency = Some(run);
         // Sampling happens in `step_the_latency`, not here.
+    }
+
+    /// Give the latency run a presented frame of `app_id`: viz's display
+    /// frame, and how long after its commit the frame was shown, when known.
+    pub fn latency_presented(
+        &mut self,
+        app_id: &str,
+        refresh: Option<Duration>,
+        took: Option<Duration>,
+    ) {
+        // From any window: the measured one's first frame can be shown before
+        // the run picks it.
+        if let Some(refresh) = refresh {
+            // Logged once, so a run stuck before its first round shows why.
+            if self.latency_frame.is_none() {
+                tracing::info!(
+                    target: "domicile::engine::spike",
+                    "latency: viz reports a display frame of {:.2} ms",
+                    refresh.as_secs_f64() * 1000.0
+                );
+            }
+            self.latency_frame = Some(refresh);
+        }
+        if self.latency_app.as_deref() != Some(app_id) {
+            return;
+        }
+        let Some(run) = self.latency.as_mut() else {
+            return;
+        };
+        if let Some(refresh) = refresh {
+            run.refreshes_every(refresh);
+        }
+        if let Some(took) = took {
+            run.presented(took);
+        }
     }
 
     /// Run one step of the latency run, then return to the event loop.
@@ -141,14 +173,6 @@ impl DomicileCompositor {
         wants_more
     }
 
-    /// The display frame interval the latency run assumes.
-    ///
-    /// Assumed 60Hz; viz's real interval is not reachable from here. The
-    /// measured floor is reported alongside, for calibration.
-    fn display_interval(&self) -> Duration {
-        Duration::from_secs_f64(1000.0 / f64::from(SPIKE_REFRESH_MHZ))
-    }
-
     /// Log the run's results once, in the format the guard reads.
     fn report_latency(&mut self) {
         if self.latency_reported {
@@ -158,7 +182,8 @@ impl DomicileCompositor {
             return;
         };
         self.latency_reported = true;
-        let interval = self.display_interval();
+        // Zero makes `Spread::line` print `?` frames.
+        let interval = report.frame.unwrap_or_default();
         // Text comes from `Spread::line`, tested there because the guard greps
         // it.
         let say = |what: &str, spread: Option<&latency::Spread>| match spread {
@@ -173,14 +198,21 @@ impl DomicileCompositor {
                 "latency {what}: nothing measured"
             ),
         };
-        tracing::info!(
-            target: "domicile::engine::spike",
-            "latency: the display frame is {:.2} ms",
-            interval.as_secs_f64() * 1000.0
-        );
+        match report.frame {
+            Some(frame) => tracing::info!(
+                target: "domicile::engine::spike",
+                "latency: the display frame is {:.2} ms",
+                frame.as_secs_f64() * 1000.0
+            ),
+            None => tracing::info!(
+                target: "domicile::engine::spike",
+                "latency: viz never reported its display frame"
+            ),
+        }
         say("floor", report.floor.as_ref());
         say("key to commit", report.key_to_commit.as_ref());
         say("commit to pixel", report.commit_to_pixel.as_ref());
+        say("commit to present", report.commit_to_present.as_ref());
         say("key to pixel", report.key_to_pixel.as_ref());
         // Separate from how the run ended: a run that never settled has no
         // rounds, and "0 abandoned" alone would look clean.
@@ -263,6 +295,29 @@ pub fn spike_latency_point() -> Option<LatencyPoint> {
                 None
             }
         }
+    })
+}
+
+/// Temporary, part of the spike. The display frame from
+/// `DOMICILE_SPIKE_LATENCY_FRAME_MS`, for a display that presents nothing (a
+/// headless output), so viz reports no interval. Viz's interval wins when it
+/// reports one.
+///
+/// # Panics
+///
+/// On a value that is not a positive number of milliseconds. Only harness
+/// scripts set it.
+fn spike_latency_frame() -> Option<Duration> {
+    static FRAME: std::sync::OnceLock<Option<Duration>> = std::sync::OnceLock::new();
+    *FRAME.get_or_init(|| {
+        let raw = std::env::var("DOMICILE_SPIKE_LATENCY_FRAME_MS").ok()?;
+        let raw = raw.trim();
+        if raw.is_empty() {
+            return None;
+        }
+        Some(latency::frame_from_ms(raw).unwrap_or_else(|| {
+            panic!("DOMICILE_SPIKE_LATENCY_FRAME_MS={raw:?} is not a positive number of ms")
+        }))
     })
 }
 

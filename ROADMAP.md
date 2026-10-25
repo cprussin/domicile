@@ -9,14 +9,7 @@ item when it ships.
 
 ## In this repository
 
-1. **Latency on a 120 Hz panel** (#206). On lyra's 120 Hz panel, `commit to
-   pixel` is 2.5 real frames, but the run assumes 60 Hz and passes it at 1.2.
-   Its floor also reads about 60 Hz, though viz draws at 120 Hz there
-   (testufo.com in a browser window, 2026-10-24). Find out why the floor is
-   slow, and make the run read the real interval.
-   [ENGINE-FORK-MEASUREMENTS.md](docs/architecture/ENGINE-FORK-MEASUREMENTS.md#on-a-tty).
-
-2. **Revisit the docs for users.** Start with the README.
+1. **Revisit the docs for users.** Start with the README.
    - A clearer reading path through the docs.
    - Screenshots and videos of manganese.
    - A short getting started guide: installing and setup.
@@ -34,22 +27,22 @@ item when it ships.
      - Writing a desktop from scratch
        ([WRITING-A-SHELL.md](docs/WRITING-A-SHELL.md)).
 
-3. **Smithay from a fork.** `Cargo.toml` patches Smithay 0.7.0 with
+2. **Smithay from a fork.** `Cargo.toml` patches Smithay 0.7.0 with
    Smithay/smithay#2217, which sends keymaps as read-only fds. Drop the patch
    and `flake.nix`'s `outputHashes` once a Smithay release contains it.
 
-4. **Cast to TVs.** Extend the desktop onto, or cast a window, monitor or
+3. **Cast to TVs.** Extend the desktop onto, or cast a window, monitor or
    region to, a Google Cast or Miracast receiver, from a `Cast` bar item.
    [CASTING-TO-TVS.md](docs/architecture/CASTING-TO-TVS.md). Moonlight
    (Sunshine or similar) for low-latency play comes after.
 
-5. **Automatic brightness.** Set the backlight from the ambient light sensor,
+4. **Automatic brightness.** Set the backlight from the ambient light sensor,
    learning from manual changes (as wluma does).
 
-6. **Night light.** Warm the colors after sunset. Needs gamma control per
+5. **Night light.** Warm the colors after sunset. Needs gamma control per
    monitor: a DRM gamma ramp on a tty, `wlr-gamma-control` for clients.
 
-7. **Screen recording.** Record a monitor, a region or a window to a video
+6. **Screen recording.** Record a monitor, a region or a window to a video
    file from the shell, with a way to stop it.
 
 ## In the engine fork (the agent on `crux`)
