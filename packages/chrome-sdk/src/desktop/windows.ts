@@ -2,12 +2,12 @@
 // where the shell put them.
 
 import type { DomicileHost, DomicileWindow } from "../domicile-host";
-import type { System } from "../system";
 import type { Defined } from "./defined";
 import { defined } from "./defined";
 import { memoizeLast } from "./memoize-last";
 import type { On } from "./subscribe";
 import { hostEvent, on } from "./subscribe";
+import type { System } from "./system-calls";
 
 /** A client window, as the compositor last described it. */
 export type ClientWindow = Defined<DomicileWindow>;

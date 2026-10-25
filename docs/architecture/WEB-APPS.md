@@ -15,7 +15,7 @@ Exec=domicile open-app <url>
   ─▶ manganese    <BrowserWindow isApp>: no address bar on the app's origin
 ```
 
-A shell's own launcher calls `domicile.openAppWindow(url)` instead, which
+A shell's own launcher calls `domicile.browser.openApp(url)` instead, which
 opens the same window over the shell's `BrowserWindows` pipe
 ([SHELL-BROWSER-WINDOWS.md](/docs/SHELL-BROWSER-WINDOWS.md)).
 

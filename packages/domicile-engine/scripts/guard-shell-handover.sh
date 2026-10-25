@@ -6,10 +6,11 @@
 #     ./packages/domicile-engine/scripts/guard-shell-handover.sh /build/chromium/src
 #
 # WHY THIS EXISTS. A shell is `Shell(root, domicile)`, called by the engine's
-# DomicileShell with the body and a DomicileHost it made for the call -- so a
-# shell keeps the desktop however it likes and no global holds a second copy.
-# This page checks the three halves: it was called with the body, the desktop
-# it was handed answers (its `windows` is a list), and neither
+# DomicileShell with the body and the `Domicile` the SDK's layer builds over a
+# DomicileHost it made for the call -- so a shell keeps the desktop however it
+# likes and no global holds a second copy. This page checks the three halves:
+# it was called with the body, the desktop it was handed is the layer's (its
+# `windows` namespace answers, and it is not the bare host), and neither
 # `navigator.domicile` nor `window.domicile` exists. See
 # packages/chrome-sdk/README.md.
 #

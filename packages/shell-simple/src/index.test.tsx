@@ -11,7 +11,7 @@ describe("Shell", () => {
     const fake = new FakeDomicileHost();
     const root = document.createElement("div");
     act(() => {
-      Shell(root, fake.host);
+      Shell(root, fake.domicile);
       // The mount point, and the desktop's element in it.
       expect(root.firstElementChild?.firstElementChild).toBeInstanceOf(
         HTMLDivElement,

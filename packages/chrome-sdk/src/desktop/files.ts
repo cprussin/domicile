@@ -2,7 +2,7 @@
 // compositor reads and writes for the shell. See docs/SHELL-SYSTEM-ACCESS.md.
 
 import type { DomicileFileSearch, DomicileHost } from "../domicile-host";
-import type { System } from "../system";
+import type { System } from "./system-calls";
 
 export type FileSearch = DomicileFileSearch;
 

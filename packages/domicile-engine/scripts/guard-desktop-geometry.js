@@ -6,7 +6,7 @@
 //                                       what this page measures, at load and
 //                                       on every resize
 
-export const Shell = (_root, desktop) => {
+export const HostShell = (_root, desktop) => {
   const host = desktop;
   if (host === null || host === undefined) {
     throw new Error(

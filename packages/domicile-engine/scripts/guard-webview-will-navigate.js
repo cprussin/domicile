@@ -14,12 +14,12 @@
 //   GUARD page path=…                   the page the element reports
 //   GUARD done                          a second after /shell-set showed
 //
-// The engine's document calls `Shell` once the module loads.
+// The engine's document calls `HostShell` once the module loads.
 
 // Time after /shell-set for a late `domicile-will-navigate` to arrive.
 const LATE_MS = 1000;
 
-export const Shell = () => {
+export const HostShell = () => {
   /**
    * Reads a required query parameter. No default, so a misconfigured guard
    * fails instead of measuring the wrong thing.

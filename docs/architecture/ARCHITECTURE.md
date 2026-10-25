@@ -141,7 +141,7 @@ Web side:
   calls.
 - `packages/component-library`: shared components and the Panda preset.
 - `packages/system-apps`: installed applications and bookmarks for a
-  launcher, read through `@domicile-desktop/sdk/system`.
+  launcher, read through the desktop's `files`, `processes` and `dbus`.
 - `packages/system-audio`: the mixer's sound server, through `pactl` and
   `parec` on the SDK's system calls.
 - `packages/domicile-builder`: builds a shell from a user's TS/JS entry.

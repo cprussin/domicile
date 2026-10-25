@@ -23,9 +23,9 @@
 // `?name=0` is the negative control: it leaves that window undrawn and opens
 // its own at the same page, as a tab of the desk's own window.
 //
-// The engine's document calls `Shell` once the module loads.
+// The engine's document calls `HostShell` once the module loads.
 
-export const Shell = (_root, desktop) => {
+export const HostShell = (_root, desktop) => {
   const say = (what) => {
     console.log(`GUARD ${what}`);
   };

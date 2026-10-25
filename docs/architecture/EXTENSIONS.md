@@ -90,7 +90,8 @@ on.
 
 `components/domicile/mojom/extension_tray.mojom` carries action state from the
 browser process to the shell. It binds on the shell's origin only, like the
-control channel, and appears on the `DomicileHost` handed to `Shell`:
+control channel, and appears on the `DomicileHost`. The SDK layer gives a
+shell it as `domicile.extensions` (`list`, `activate`, `on("change")`):
 
 ```ts
 // DomicileHost

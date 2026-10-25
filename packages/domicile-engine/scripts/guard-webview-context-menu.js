@@ -13,9 +13,9 @@
 //   closes the window DevTools inspects.
 // - windows-closed: both windows left the desk's list.
 //
-// The document Domicile writes calls `Shell` once the module loads.
+// The document Domicile writes calls `HostShell` once the module loads.
 
-export const Shell = (_root, desktop) => {
+export const HostShell = (_root, desktop) => {
   const required = (parameters, name) => {
     const value = parameters.get(name);
     if (value === null) {

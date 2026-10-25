@@ -17,9 +17,9 @@
 //                            `code`: the virtual keyboard uploads its own
 //                            keymap, so `code` does not name the requested key
 //
-// The document Domicile writes calls `Shell` once the module loads.
+// The document Domicile writes calls `HostShell` once the module loads.
 
-export const Shell = () => {
+export const HostShell = () => {
   const say = (what) => {
     console.log(`GUARD ${what}`);
   };

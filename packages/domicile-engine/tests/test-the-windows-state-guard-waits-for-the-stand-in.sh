@@ -134,8 +134,8 @@ console.log = (line) => {
   }
 };
 
-const { Shell } = await import(modulePath);
-Shell(undefined, host);
+const { HostShell } = await import(modulePath);
+HostShell(undefined, host);
 while (timers.length > 0) {
   timers.sort((a, b) => a.at - b.at);
   const next = timers.shift();

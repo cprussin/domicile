@@ -22,13 +22,13 @@
 // guard-webview-private-server.py. Readers are `normal`, `private`, `window`
 // and `after`.
 //
-// The engine's document calls `Shell` once the module loads.
+// The engine's document calls `HostShell` once the module loads.
 
 // Time for the engine to end private browsing after its last page closes:
 // ProfileDestroyer waits up to a second for the pages' renderers.
 const END_MS = 3000;
 
-export const Shell = (_root, desktop) => {
+export const HostShell = (_root, desktop) => {
   /**
    * Reads a required query parameter. No default, so a misconfigured guard
    * fails instead of measuring the wrong thing.

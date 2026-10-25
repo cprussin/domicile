@@ -62,7 +62,7 @@ domicile send-shell ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor �
 | Verb | `domicile-launch` (`cli.rs`, `control.rs`) | `send-shell <word>…`; every word after it is the command |
 | Supervisor | `domicile-launch` (`compositor_socket::send_shell`) | Sends `send_shell` on the compositor's chrome socket without `hello`, as `domicile screenshot` does |
 | Fan-out | `domicile_host::shell_commands`, `domicile_host::system` | Tells every page listening with `shell_commands`; answers `sent`, or fails when none listens |
-| Listener | `@domicile-desktop/sdk/system` `shellCommands()`, `bindKeys` | `bindKeys` listens while bound and passes each command to `onCommand` |
+| Listener | `domicile.shell.commands()`, `bindKeys` | `bindKeys` listens while bound and passes each command to `onCommand` |
 
 ## Key decisions
 

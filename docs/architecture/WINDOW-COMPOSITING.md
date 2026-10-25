@@ -89,7 +89,7 @@ compositor names, and the page embeds that id in the same render as the move.
 - **Eviction:** viz garbage-collects only surfaces marked for destruction, and
   a sink's newest surface is not marked, so an unembedded frame lives until a
   newer one activates.
-- **Opt-in:** `ChromeMessage::SyncFrames` (`domicile.syncFrames()`), reset by
+- **Opt-in:** `ChromeMessage::SyncFrames` (`domicile.windows.syncFrames()`), reset by
   the page's next `hello`. The compositor syncs only while every connected
   chrome has asked (`ChromeHub::syncs_frames`) and the engine has
   `domicile_surface_sync`. Unsynced commits go up at the newest frame.

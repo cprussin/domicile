@@ -1,9 +1,9 @@
 // Idle and lock. See docs/SHELL-IDLE-AND-LOCK.md.
 
 import type { DomicileHost } from "../domicile-host";
-import type { System } from "../system";
 import type { On } from "./subscribe";
 import { hostEvent, on } from "./subscribe";
+import type { System } from "./system-calls";
 
 export type SessionListeners = {
   idlechange: () => void;
