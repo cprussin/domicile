@@ -82,6 +82,19 @@ describe("GroupWell", () => {
     ).not.toContain(strong);
   });
 
+  // Its float's windows and tabs shuffle away; it moves with them.
+  it("shuffles with its float", () => {
+    const { container } = render(
+      <GroupWell
+        {...wellProps}
+        motion="restacking"
+        restack={{ away: { x: 40, y: 0 }, from: 1, id: "app:term", to: 2 }}
+      />,
+    );
+
+    expect(well(container).style.getPropertyValue("--restack-to")).toBe("2");
+  });
+
   it("takes no pointer from the windows in it", () => {
     const { container } = render(<GroupWell {...wellProps} />);
 

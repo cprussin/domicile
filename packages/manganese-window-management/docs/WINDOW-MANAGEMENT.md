@@ -167,6 +167,8 @@ its own frame leaves out its shadow, rounded corners and resize border:
 - A window's open tab and popups draw one above the window (`raised`), so
   tabs that swap slide under the open one. Floats are two apart to leave room.
 - Raising a float over one it overlaps animates the two swapping places.
+  Every part of a float moves as one, hidden tabs and nested groups included
+  (`restacking.ts`).
 
 ### Opening floating
 
