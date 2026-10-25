@@ -1,5 +1,5 @@
 // Checks that every script in `scripts/` bails through the shared helpers in
-// `scripts/lib/harness.sh`.
+// `packages/e2e-harness/lib/harness.sh`.
 //
 // `exit 99` means the script's own machinery failed. If the compositor died,
 // that is a real failure, so `harness_fault` re-checks the compositor before
@@ -54,7 +54,7 @@ const calls = (name: string): RegExp =>
   new RegExp(`(${OPENS})[ \t]*${name}\\b`, "m");
 
 /** The only file the helpers may be defined in. */
-const LIB = "scripts/lib/harness.sh";
+const LIB = "packages/e2e-harness/lib/harness.sh";
 
 /**
  * What a script exits with when its own machinery failed.
@@ -83,7 +83,7 @@ const defines = (bail: string): RegExp =>
  * A substring test would accept a commented-out source line or the
  * `# shellcheck source=` directive.
  */
-const SOURCES = /^\s*(\.|source)\s+\S*scripts\/lib\/harness\.sh/m;
+const SOURCES = /^\s*(\.|source)\s+\S*packages\/e2e-harness\/lib\/harness\.sh/m;
 
 /** Every way `script` misuses the helpers, with line numbers where known. */
 export const bailFaults = (script: string): string[] => {

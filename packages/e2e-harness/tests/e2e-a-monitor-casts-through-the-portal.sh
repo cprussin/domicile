@@ -2,7 +2,7 @@
 # Checks the ScreenCast portal casts a monitor an application picks, restores
 # it from a token, and stops when the session closes.
 #
-#   nix develop .#full -c ./scripts/e2e-a-monitor-casts-through-the-portal.sh
+#   nix develop .#full -c packages/e2e-harness/tests/e2e-a-monitor-casts-through-the-portal.sh
 #
 # Starts its own session bus and headless `pipewire`, with no session manager,
 # so the check links the consumer with `pw-link`. `domicile-test-screencast`
@@ -11,9 +11,9 @@
 # `DOMICILE_CAST_TEST_PATTERN` stands in for its display captures: every
 # frame is one color, in shm.
 set -u
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# shellcheck source=scripts/lib/harness.sh
-. "$ROOT/scripts/lib/harness.sh"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+# shellcheck source=packages/e2e-harness/lib/harness.sh
+. "$ROOT/packages/e2e-harness/lib/harness.sh"
 
 for tool in pipewire pw-link dbus-daemon; do
   command -v "$tool" >/dev/null || {

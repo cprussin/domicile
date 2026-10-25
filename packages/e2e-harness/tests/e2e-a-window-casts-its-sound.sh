@@ -3,7 +3,7 @@
 # the window's sound node, and that the node goes a few seconds after the
 # cast ends.
 #
-#   nix develop .#full -c ./scripts/e2e-a-window-casts-its-sound.sh
+#   nix develop .#full -c packages/e2e-harness/tests/e2e-a-window-casts-its-sound.sh
 #
 # Starts its own headless `pipewire` daemon, with no session manager, so the
 # check configures the players' and the recorder's ports with `pw-cli` and
@@ -14,11 +14,11 @@
 # (0x4040). Another player, no kin of the client's, plays 8224 (0x2020). The
 # cast's sound holds the first alone: with both, samples would be 24672.
 set -u
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# shellcheck source=scripts/lib/harness.sh
-. "$ROOT/scripts/lib/harness.sh"
-# shellcheck source=scripts/lib/test-client.sh
-. "$ROOT/scripts/lib/test-client.sh"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+# shellcheck source=packages/e2e-harness/lib/harness.sh
+. "$ROOT/packages/e2e-harness/lib/harness.sh"
+# shellcheck source=packages/e2e-harness/lib/test-client.sh
+. "$ROOT/packages/e2e-harness/lib/test-client.sh"
 
 for tool in pipewire pw-cat pw-cli pw-link od; do
   command -v "$tool" >/dev/null || {

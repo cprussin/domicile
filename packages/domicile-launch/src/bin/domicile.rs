@@ -3,10 +3,10 @@
 //! Logic with decisions lives in `domicile_launch` with unit tests. This file
 //! only reads the environment and starts processes, which CI cannot test
 //! without a display. These scripts cover the wiring:
-//! - `scripts/test-the-control-socket.sh`
-//! - `scripts/test-a-desktop-that-fails-says-why.sh` (restart loop with real
+//! - `packages/e2e-harness/tests/test-the-control-socket.sh`
+//! - `packages/e2e-harness/tests/test-a-desktop-that-fails-says-why.sh` (restart loop with real
 //!   processes)
-//! - `scripts/test-a-running-desktop-takes-a-new-shell.sh` (`load-shell`
+//! - `packages/e2e-harness/tests/test-a-running-desktop-takes-a-new-shell.sh` (`load-shell`
 //!   end to end)
 
 use std::io::{BufRead, BufReader, IsTerminal, Write};

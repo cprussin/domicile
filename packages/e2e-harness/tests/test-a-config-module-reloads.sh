@@ -2,7 +2,7 @@
 # Checks a desktop running a config module re-evaluates, rebuilds and reloads
 # the shell when the config is edited.
 #
-#   ./scripts/test-a-config-module-reloads.sh
+#   packages/e2e-harness/tests/test-a-config-module-reloads.sh
 #
 # `tests/config_watch.rs` covers the watch and
 # `test-a-running-desktop-takes-a-new-shell.sh` the load. This covers the
@@ -14,7 +14,7 @@
 # has its own tests.
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 TARGET="${CARGO_TARGET_DIR:-$ROOT/target}"
 
 command -v cargo >/dev/null 2>&1 || { echo "SKIP: no cargo"; exit 77; }

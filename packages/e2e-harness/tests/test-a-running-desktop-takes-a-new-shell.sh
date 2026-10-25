@@ -5,7 +5,7 @@
 # `domicile-history`, the `xdg-open` shim on its apps' PATH, `domicile
 # screenshot` with and without a file, and `domicile send-shell`.
 #
-#   ./scripts/test-a-running-desktop-takes-a-new-shell.sh
+#   packages/e2e-harness/tests/test-a-running-desktop-takes-a-new-shell.sh
 #
 # Unit tests cover the parts: `tests/cli.rs` the arguments, `tests/command.rs`
 # the line sent, `tests/command_socket.rs` and `tests/compositor_socket.rs` the
@@ -20,7 +20,7 @@
 # tests.
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 TARGET="${CARGO_TARGET_DIR:-$ROOT/target}"
 
 command -v cargo >/dev/null 2>&1 || { echo "SKIP: no cargo"; exit 77; }

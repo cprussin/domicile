@@ -17,7 +17,6 @@
 # It sets up what the checks need (dependencies, tools, a display) and reports
 # any check it could not run as skipped, never as passed.
 #
-# Serial because the e2e scripts share fixed socket paths.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -133,11 +132,7 @@ fi
 if wanted e2e; then
 echo
 echo "== end to end =="
-# Every `e2e-*.sh`, so a new check cannot be left out.
-for script in scripts/e2e-*.sh; do
-  name="$(basename "$script" .sh)"
-  run "$name" "$script"
-done
+run "turbo test:e2e" bun run turbo run test:e2e --filter=@domicile-desktop/e2e-harness
 fi
 
 # ---- what happened --------------------------------------------------------

@@ -19,15 +19,15 @@ path = "src/main.rs"
 name = "domicile-test-client"
 path = "src/bin/domicile-test-client.rs"
 
-# A PipeWire consumer for `scripts/e2e-a-window-casts-to-pipewire.sh`. Here so
+# A PipeWire consumer for `packages/e2e-harness/tests/e2e-a-window-casts-to-pipewire.sh`. Here so
 # the check builds it with the compositor, and links nothing new.
 [[bin]]
 name = "domicile-test-cast-reader"
 path = "src/bin/domicile-test-cast-reader.rs"
 
 # An application and a shell for
-# `scripts/e2e-a-screen-cast-through-the-portal.sh` and
-# `scripts/e2e-a-monitor-casts-through-the-portal.sh`, which drive the
+# `packages/e2e-harness/tests/e2e-a-screen-cast-through-the-portal.sh` and
+# `packages/e2e-harness/tests/e2e-a-monitor-casts-through-the-portal.sh`, which drive the
 # ScreenCast portal over D-Bus and the chrome socket.
 [[bin]]
 name = "domicile-test-screencast"

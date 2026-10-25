@@ -1,6 +1,6 @@
 // biome-ignore-all lint/suspicious/noConsole: this harness's whole output is the frames it prints
 
-// Headless chrome for `scripts/e2e-dmabuf.sh`. It prints every frame the host
+// Headless chrome for `packages/e2e-harness/tests/e2e-dmabuf.sh`. It prints every frame the host
 // pushes so the script can assert on frames from a real GPU.
 
 import { setDevicePixelRatioMessage } from "./chrome-message";
