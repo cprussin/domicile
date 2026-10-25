@@ -1,0 +1,16 @@
+# Copyright 2026 Connor Prussin
+# SPDX-License-Identifier: MIT
+
+# Arguments every engine build imports, to leave out what a desk never runs.
+#
+# Under `src/` so a change to it changes the series identity and rebuilds the
+# release.
+
+# V8 code caches for Chrome's WebUI pages, 3.5 MB of resources.pak. They only
+# speed up a WebUI page's first load.
+enable_webui_generate_code_cache = false
+
+# Not here: `enable_compose`, `enable_on_device_translation` and
+# `use_on_device_model_service`. Only Android builds turn them off, and desktop
+# targets depend on their code unconditionally: with either of the first two
+# off, `gn gen` fails on an assert.
