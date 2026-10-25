@@ -178,6 +178,10 @@ nix develop .#full --command env OUT=. PLATFORM=drm \
 
 ## Several monitors
 
+`two-monitors-on-a-tty` in `flake.nix` checks the bars, wallpapers, focus,
+`mod+2` and `exec` items below on two QEMU heads, started cold. Hotplug,
+different refresh rates and MST hubs still need real monitors.
+
 Plug in one monitor, then a second. Expect:
 
 - `configuring N display(s)` for each.
