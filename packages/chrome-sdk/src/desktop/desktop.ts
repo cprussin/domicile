@@ -2,7 +2,6 @@
 // docs/WRITING-A-SHELL.md.
 
 import type { DomicileHost } from "../domicile-host";
-import { system } from "../system";
 import type { AppearanceNamespace } from "./appearance";
 import { appearance } from "./appearance";
 import type { Browser } from "./browser";
@@ -37,6 +36,7 @@ import type { ShellNamespace } from "./shell";
 import { shell } from "./shell";
 import type { On } from "./subscribe";
 import { hostEvent, on } from "./subscribe";
+import { system } from "./system-calls";
 import type { Theme } from "./theme";
 import { theme } from "./theme";
 import type { Tray } from "./tray";

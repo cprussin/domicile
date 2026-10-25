@@ -8,7 +8,6 @@ import type { ApplicationsOptions } from "@domicile-desktop/manganese-launcher/a
 import { applicationsConfigSchema } from "@domicile-desktop/manganese-launcher/applications-config";
 import type { FloatingOptions } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
 import { floatingRulesSchema } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 import { mountManganese } from "./mount-manganese";
@@ -51,12 +50,8 @@ export const runManganese = (options: ManganeseOptions = {}): ShellModule => {
   // Parsed when the config is built, so a bad bookmark or pattern fails it.
   const applications = applicationsConfigSchema.parse(options.applications);
   const floating = floatingRulesSchema.parse(options.floating);
-  return (root, host) => {
-    mountManganese(root, desktop(host), {
-      ...options,
-      applications,
-      floating,
-    });
+  return (root, domicile) => {
+    mountManganese(root, domicile, { ...options, applications, floating });
   };
 };
 

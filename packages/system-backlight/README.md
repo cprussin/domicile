@@ -1,19 +1,18 @@
 # @domicile-desktop/system-backlight
 
 Screen brightness for a Domicile shell, on the `files`, `processes` and `dbus`
-namespaces of [`desktop(domicile)`](/packages/chrome-sdk/src/desktop/desktop.ts). See
+namespaces of the [`Domicile`](/packages/chrome-sdk/src/desktop/desktop.ts) a
+shell is handed. See
 [SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md).
 
 ## Usage
 
 ```ts
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import { brightnessSetter } from "@domicile-desktop/system-backlight/set-brightness";
 import { watchBrightness } from "@domicile-desktop/system-backlight/watch-brightness";
 
-const host = desktop(domicile);
-const watch = await watchBrightness(host, (level) => show(level));
-const set = brightnessSetter(host);
+const watch = await watchBrightness(domicile, (level) => show(level));
+const set = brightnessSetter(domicile);
 await set(0.5);
 ```
 

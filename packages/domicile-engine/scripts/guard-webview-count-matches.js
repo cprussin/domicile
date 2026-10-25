@@ -12,7 +12,7 @@
 //
 // `?selector=` is the selector counted.
 
-export const Shell = () => {
+export const HostShell = () => {
   const say = (what) => {
     console.log(`GUARD ${what}`);
   };

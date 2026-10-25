@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { Ok } from "@cprussin/option-result";
-import type { DomicileAppHost } from "./app";
-import { FileType, system } from "./system";
+import { appDesktop } from "./desktop/app-desktop";
+import type { DomicileAppHost } from "./domicile-host";
+import { FileType } from "./system";
 
 /** An app's host that answers each call as the compositor would. */
 class FakeAppHost implements DomicileAppHost {
@@ -39,8 +40,8 @@ class FakeAppHost implements DomicileAppHost {
 }
 
 describe("an app's host", () => {
-  it("makes system calls through the SDK", async () => {
-    const stat = await system(new FakeAppHost()).stat("notes.txt");
+  it("makes system calls through its desktop", async () => {
+    const stat = await appDesktop(new FakeAppHost()).files.stat("notes.txt");
 
     expect(stat).toStrictEqual(
       Ok({ fileType: FileType.File, modifiedMs: undefined, size: 4 }),

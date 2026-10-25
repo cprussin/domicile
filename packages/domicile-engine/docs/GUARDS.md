@@ -15,6 +15,12 @@ Otherwise Chrome downloads components into `$TMPDIR`, and a guard stops it
 before the download finishes, leaving 85-195M per run in the runner's tmpfs
 `/tmp`. `/packages/domicile-engine/tests/test-the-guards-disable-component-updates.sh` checks this.
 
+A guard's page module exports `HostShell` rather than `Shell`: DomicileShell
+hands `HostShell` the `DomicileHost` itself, where it hands `Shell` the SDK
+layer's `Domicile` over it. The guards test the host; the layer is the SDK's
+to test. `guard-shell-handover.js` and `guard-app-module-app/app.js` are the
+exceptions, and check that the layer is what a shell and an app get.
+
 CI runs them through `run-checks.sh`, which lists each one. Run one by hand
 inside the toolchain shell ([BUILD-MACHINE.md](BUILD-MACHINE.md#toolchain-shell)).
 
@@ -51,7 +57,7 @@ Under `under-wayland.sh` unless marked headless.
 | `guard-css-and-resize.sh` | CSS parity of `<app>` against `<div>`, with and without `backdrop-filter`, plus resize and latency. Headless; `GPU=1` uses the GPU |
 | `guard-latency.sh` | keystroke to pixel with a real client, from the compositor's `latency` lines |
 | `guard-app-only-in-shell.sh` | `<app>`, `HTMLAppElement` and `canvas.embedExternalSurface()` exist in the shell and not in a site in its `<webview>`. Headless |
-| `guard-app-module.sh` | `run_app` runs an app module: its `main` gets a `DomicileAppHost` and its system call reaches the compositor after `app_hello`; it `fetch()`es its own file and not the shell's (patch 0126). Control: the app's address in an unpinned window runs nothing. Headless |
+| `guard-app-module.sh` | `run_app` runs an app module: its `main` gets the layer's `AppDomicile` (no `windows`) and its `files.write` reaches the compositor after `app_hello`; it `fetch()`es its own file and not the shell's (patch 0126). Control: the app's address in an unpinned window runs nothing. Headless |
 | `guard-app-routes-input.sh` | `<app>` sends the pointer, wheel and keys to its client through its whole CSS transform, with no page script; a `<div>` control gets nothing |
 | `guard-windows-state.sh` | `windows`, `focusedWindow` and the appearance attributes follow the compositor, every event name fires, and every CSS cursor keyword reaches the page; and that a system call and its answer cross the browser. Headless |
 | `guard-portal-requests.sh` | a shell that listens late for `portalrequests` hears them; `answerPortalRequest` reaches the compositor and a malformed answer does not. Headless |

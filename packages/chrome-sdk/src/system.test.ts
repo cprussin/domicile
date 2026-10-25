@@ -1,9 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
+import type { SystemHost } from "./desktop/system-calls";
+import { system } from "./desktop/system-calls";
 import { KeymapChoice } from "./keymap-choice";
 import { PreviewedWindow } from "./previewed-window";
-import type { SystemError, SystemHost } from "./system";
+import type { SystemError } from "./system";
 import {
   Bus,
   FileType,
@@ -11,7 +13,6 @@ import {
   ScreenshotKept,
   Signal,
   SystemErrorKind,
-  system,
   UnlockRefusal,
 } from "./system";
 import { WindowRequest, WindowState } from "./window-state";

@@ -39,9 +39,9 @@
 // `GUARD guest-mousedown` and the guest's focus come from the guest page; see
 // guard-webview-guest-page.py.
 //
-// The document Domicile writes calls `Shell` once the module loads.
+// The document Domicile writes calls `HostShell` once the module loads.
 
-export const Shell = () => {
+export const HostShell = () => {
   /**
    * Reads a required query parameter. No default, so a misconfigured guard
    * fails instead of measuring something else.

@@ -4,9 +4,8 @@ The smallest Domicile app module: it lists the files in your home directory.
 See [APP-MODULES.md](/docs/architecture/APP-MODULES.md).
 
 - `home.js` exports `main`, which Domicile calls with the window's root
-  element and the app's host. That file is the whole app.
-- It calls the system with the host directly. An app built with the SDK passes
-  the host to `system()` from `@domicile-desktop/sdk/system` instead, and
+  element and the app's desktop. That file is the whole app.
+- It needs no SDK: the desktop is a plain object. An app built with the SDK
   types `main` with `AppMain` from `@domicile-desktop/sdk/app`.
 
 ## Run

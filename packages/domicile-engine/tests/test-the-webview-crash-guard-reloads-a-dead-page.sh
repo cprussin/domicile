@@ -6,7 +6,7 @@
 # 15s on crux (CI run 38830528244). A reload sent while it still lived went to
 # the dying process and was lost with it, so the page never came back.
 #
-# Runs the guard's own `Shell` under bun, with a fake page and clock.
+# Runs the guard's own `HostShell` under bun, with a fake page and clock.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -24,7 +24,7 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 cp "$SHELL_JS" "$WORK/shell.mjs"
 cat >"$WORK/run.mjs" <<'JS'
-import { Shell } from "./shell.mjs";
+import { HostShell } from "./shell.mjs";
 
 const SETTLE = 4000;
 const SRC = "http://127.0.0.1:1/page";
@@ -69,7 +69,7 @@ const run = (crash) => {
   };
   globalThis.console = { log() {} };
 
-  Shell(null, new EventTarget());
+  HostShell(null, new EventTarget());
   view.url = SRC;
   view.dispatchEvent(new Event("domicile-loading-change"));
   return { view, advance };

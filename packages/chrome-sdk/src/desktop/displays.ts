@@ -3,10 +3,10 @@
 import type { DisplayTransform } from "../display-transform";
 import { asDisplayTransform } from "../display-transform";
 import type { DomicileDisplay, DomicileHost } from "../domicile-host";
-import type { System } from "../system";
 import { memoizeLast } from "./memoize-last";
 import type { On } from "./subscribe";
 import { hostEvent, on } from "./subscribe";
+import type { System } from "./system-calls";
 
 /** One screen. Sizes are whole CSS pixels; see `DomicileDisplay`. */
 export type Display = Omit<DomicileDisplay, "transform"> & {

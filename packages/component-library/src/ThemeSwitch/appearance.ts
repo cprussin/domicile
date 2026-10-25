@@ -1,4 +1,4 @@
-import type { Appearance } from "@domicile-desktop/sdk/appearance";
+import type { Appearance } from "@domicile-desktop/sdk/desktop/appearance";
 
 import { token } from "../../styled-system/tokens";
 

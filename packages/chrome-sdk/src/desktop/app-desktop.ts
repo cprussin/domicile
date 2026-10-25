@@ -2,13 +2,13 @@
 // window manager. See docs/architecture/APP-MODULES.md.
 
 import type { DomicileAppHost } from "../domicile-host";
-import { system } from "../system";
 import type { Dbus } from "./dbus";
 import { dbus } from "./dbus";
 import type { Files } from "./files";
 import { fileCalls } from "./files";
 import type { Processes } from "./processes";
 import { processCalls } from "./processes";
+import { system } from "./system-calls";
 
 /** What the compositor answers an app: anything else fails `permission_denied`. */
 export type AppDomicile = {

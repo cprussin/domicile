@@ -1,7 +1,7 @@
 // Pictures of the desk: a screenshot through the shell's dialog, and a
 // window's last frame for a picker.
 
-import type { System } from "../system";
+import type { System } from "./system-calls";
 
 export type Capture = {
   screenshot: System["screenshot"];

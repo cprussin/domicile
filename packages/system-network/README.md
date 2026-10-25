@@ -5,15 +5,14 @@ connectivity and the primary connection, with the Wi-Fi network's name and
 signal. The Wi-Fi device, from NetworkManager or iwd: its networks and
 connection, and the requests that change them. Built on
 the `dbus`, `files` and `processes` namespaces of
-[`desktop(domicile)`](../chrome-sdk/README.md).
+the [`Domicile`](../chrome-sdk/README.md) a shell is handed.
 
 ## Usage
 
 ```ts
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import { watchNetwork } from "@domicile-desktop/system-network/network";
 
-const stop = watchNetwork(desktop(domicile), (network) => {
+const stop = watchNetwork(domicile, (network) => {
   network.match({
     Err: () => hide(),
     Ok: ({ connectivity, link }) => show(connectivity, link),
@@ -45,13 +44,13 @@ const stop = watchNetwork(desktop(domicile), (network) => {
 ```ts
 import { connectWifi, watchWifi } from "@domicile-desktop/system-network/wifi";
 
-const stop = watchWifi(host, (wifi) => {
+const stop = watchWifi(domicile, (wifi) => {
   wifi.match({
     Err: () => hide(),
     Ok: (found) => found.match({ None: () => hide(), Some: (device) => show(device) }),
   });
 });
-await connectWifi(host, device, network, "passphrase");
+await connectWifi(domicile, device, network, "passphrase");
 ```
 
 - `watchWifi` watches the first Wi-Fi device of NetworkManager, else iwd, by
@@ -76,7 +75,7 @@ await connectWifi(host, device, network, "passphrase");
 ```ts
 import { watchAddresses, watchInterfaces } from "@domicile-desktop/system-network/interfaces";
 
-const stop = watchInterfaces(host, (interfaces) => interfaces.map(show));
+const stop = watchInterfaces(domicile, (interfaces) => interfaces.map(show));
 ```
 
 - `readInterfaces` lists `/sys/class/net`'s interfaces with a `device`:
@@ -93,7 +92,9 @@ const stop = watchInterfaces(host, (interfaces) => interfaces.map(show));
 ```ts
 import { checkPortal } from "@domicile-desktop/system-network/portal";
 
-(await checkPortal(host)).map((portal) => portal.map(openBrowserWindow));
+(await checkPortal(domicile)).map((portal) =>
+  portal.map((url) => domicile.browser.open(url)),
+);
 ```
 
 - `checkPortal` asks `curl` for `http://www.gstatic.com/generate_204`

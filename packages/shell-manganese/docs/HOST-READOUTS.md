@@ -38,7 +38,7 @@ The page reads both itself through libraries, as it does the battery; see
 ## Volume
 
 - `@domicile-desktop/system-audio` runs `pactl` and `parec` through
-  `@domicile-desktop/sdk/system`. See its
+  `domicile.processes`. See its
   [README](/packages/system-audio/README.md).
 - Holds `pactl -f json subscribe` open and rereads `pactl -f json info` and
   `list` once a burst of changes settles.

@@ -3,6 +3,19 @@
 
 import("//third_party/blink/renderer/modules/modules.gni")
 
+# The SDK's desktop layer, which DomicileShell and DomicileApp evaluate to
+# build the object they hand a module. `domicile_layer.js` is generated from
+# `packages/chrome-sdk/src/desktop/layer.ts`; this makes it a header.
+action("domicile_layer") {
+  script = "make_domicile_layer.py"
+  inputs = [ "domicile_layer.js" ]
+  outputs = [ "$target_gen_dir/domicile_layer.h" ]
+  args = [
+    rebase_path(inputs[0], root_build_dir),
+    rebase_path(outputs[0], root_build_dir),
+  ]
+}
+
 blink_modules_sources("domicile") {
   sources = [
     "domicile_app.cc",
@@ -39,9 +52,12 @@ blink_modules_sources("domicile") {
     "domicile_window.h",
     "domicile_host.cc",
     "domicile_host.h",
+    "domicile_layer_script.cc",
+    "domicile_layer_script.h",
   ]
 
   deps = [
+    ":domicile_layer",
     # The scheme and host DomicileShell runs the shell document on.
     "//components/domicile:common",
     # The wire names of the cursor shapes. `DomicileWindow.cursor` is a

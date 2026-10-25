@@ -1,8 +1,8 @@
 // Shell for guard-webview-content-script.sh: one <webview> on a witness color.
 // Loaded on a domicile:// page, the only origin WebViewGuestHost is bound for.
-// Domicile calls `Shell` once the module loads.
+// Domicile calls `HostShell` once the module loads.
 
-export const Shell = () => {
+export const HostShell = () => {
   /**
    * Reads a required query parameter. No default, so a misconfigured run fails.
    */

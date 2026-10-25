@@ -2,23 +2,21 @@
 
 Installed applications and bookmarks for a shell's launcher, read through the
 `files`, `processes` and `dbus` namespaces of
-[`desktop(domicile)`](../chrome-sdk/README.md). Manganese's launcher
+the [`Domicile`](../chrome-sdk/README.md) a shell is handed. Manganese's launcher
 uses it (`src/launcher/app-search.ts`), and the component library's portal
 dialogs name applications with it.
 
 ## Usage
 
 ```ts
-import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import { appIcons } from "@domicile-desktop/system-apps/app-icons";
 import { dataDirs } from "@domicile-desktop/system-apps/data-dirs";
 import { findApps } from "@domicile-desktop/system-apps/find-apps";
 import { installedApps } from "@domicile-desktop/system-apps/installed";
 
-const host = desktop(domicile);
-const dirs = (await dataDirs(host)).unwrapOr([]);
-const apps = (await installedApps(host, dirs)).unwrapOr([]);
-const icon = appIcons(host, dirs);
+const dirs = (await dataDirs(domicile)).unwrapOr([]);
+const apps = (await installedApps(domicile, dirs)).unwrapOr([]);
+const icon = appIcons(domicile, dirs);
 const editors = findApps(apps, "edit", 50);
 ```
 
@@ -26,7 +24,7 @@ const editors = findApps(apps, "edit", 50);
 
 | Module | What it is |
 | --- | --- |
-| `./apps-desktop` | `AppsDesktop`: the slice of `desktop(domicile)` the library calls. |
+| `./apps-desktop` | `AppsDesktop`: the slice of the `Domicile` the library calls. |
 | `./data-dirs` | The XDG data directories, from the desktop's environment (`env -0`). |
 | `./installed` | Every desktop entry under them; an earlier directory hides a later one's ID. |
 | `./desktop-entry` | One entry parsed: name, comment, argv, icon and `X-Domicile-Preview`. |

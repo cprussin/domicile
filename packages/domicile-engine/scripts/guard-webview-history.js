@@ -37,9 +37,9 @@
 // the first page commits) can still read them. The `two-pages` reading is
 // taken with no listener attached to prove that.
 //
-// Domicile calls `Shell` once the module loads.
+// Domicile calls `HostShell` once the module loads.
 
-export const Shell = () => {
+export const HostShell = () => {
   /**
    * Reads a required query parameter. No default, so a misconfigured run fails.
    */
