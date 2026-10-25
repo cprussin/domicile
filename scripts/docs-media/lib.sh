@@ -46,10 +46,18 @@ desktop() { # shell module or package
   local log="$SCENE_TMP/domicile.log"
   # An empty config, so the desktop runs on defaults whatever crux's user
   # configured. `--no-sandbox` as every guard runs; see
-  # packages/domicile-engine/docs/GUARDS.md.
+  # packages/domicile-engine/docs/GUARDS.md. `--window-size` the output's, as
+  # guard-shell.sh passes: without it manganese's window drew at 945x1180 in
+  # the corner of a 1920x1200 output.
+  local size="${OUTPUT_MODE%@*}"
+  # A made-up home, since the launcher lists the files in it.
+  mkdir -p "$SCENE_TMP/home"/{Documents,Downloads,Music,Pictures,Projects/my-shell/src}
+  echo "# Notes" >"$SCENE_TMP/home/Documents/notes.md"
+  echo "export const Shell = () => {};" >"$SCENE_TMP/home/Projects/my-shell/src/shell.tsx"
+  HOME="$SCENE_TMP/home" \
   XDG_CONFIG_HOME="$SCENE_TMP/config" \
   XDG_STATE_HOME="$SCENE_TMP/state" \
-  DOMICILE_ENGINE_ARGS="--no-sandbox --disable-component-update" \
+  DOMICILE_ENGINE_ARGS="--no-sandbox --disable-component-update --window-size=${size/x/,}" \
   RUST_LOG="info,domicile_compositor=debug" \
     "$DOMICILE_BIN" "$1" >"$log" 2>&1 &
   STARTED+=($!)

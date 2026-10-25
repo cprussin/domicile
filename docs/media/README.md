@@ -31,3 +31,4 @@ nested sway with these helpers (`scripts/docs-media/lib.sh`):
 | File | Scene | Shows |
 |---|---|---|
 | `hero.png`, `hero.webm`, `hero.mp4` | `hero` | The Domicile hero: nvim, a web page and btop in a three-pane shell. |
+| `manganese-hero.png`, `manganese-hero.webm`, `manganese-hero.mp4` | `manganese-hero` | The manganese hero: nvim and a browser tiled, then the launcher. |
