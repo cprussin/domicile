@@ -191,7 +191,7 @@ fn listed(list: &str, group: &str, mime: &str) -> Vec<String> {
 
 /// The unlocalized keys in `text`'s `[Desktop Entry]` group. The first of a
 /// repeated key wins.
-fn keys(text: &str) -> HashMap<&str, &str> {
+pub(crate) fn keys(text: &str) -> HashMap<&str, &str> {
     let mut group = "";
     let mut keys = HashMap::new();
     for line in text.lines().map(str::trim) {
@@ -207,7 +207,7 @@ fn keys(text: &str) -> HashMap<&str, &str> {
 }
 
 /// Every `.desktop` file under `dir`, with its id relative to `root`.
-fn entry_files(root: &Path, dir: &Path) -> Vec<(String, PathBuf)> {
+pub(crate) fn entry_files(root: &Path, dir: &Path) -> Vec<(String, PathBuf)> {
     let Ok(listed) = fs::read_dir(dir) else {
         return Vec::new();
     };
@@ -274,7 +274,7 @@ fn finish(words: &mut Vec<String>, word: &mut String) {
 }
 
 /// Resolves the desktop entry spec's string escapes.
-fn unescaped(value: &str) -> String {
+pub(crate) fn unescaped(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
     let mut chars = value.chars();
     while let Some(c) = chars.next() {

@@ -724,6 +724,10 @@ fn export<'a>(
     data_dirs: Vec<PathBuf>,
     home: String,
 ) -> zbus::Result<Builder<'a>> {
+    let applications = data_dirs
+        .iter()
+        .map(|dir| dir.join("applications"))
+        .collect();
     builder
         .serve_at(OBJECT_PATH, Settings { theme, appearance })?
         .serve_at(
@@ -809,6 +813,7 @@ fn export<'a>(
             Background {
                 apps: Arc::clone(&backends.apps),
                 config_home: backends.config_home.clone(),
+                applications,
             },
         )?
         .serve_at(

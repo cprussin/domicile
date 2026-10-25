@@ -36,7 +36,9 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key)
   over `org.freedesktop.Notifications`, so both arrive the same way.
 - **The notification portal joins the same history.** Its notifications
   (`portals/notification.rs`) get history ids; a press goes back to the portal
-  as `ActionInvoked` with the action's target, not over the bus. Mapping:
+  as `ActionInvoked` with the action's target, not over the bus. Each is
+  named and drawn by its app's desktop entry, matched as the dialogs match it
+  (see [PORTALS.md](/docs/PORTALS.md)). Mapping:
   `priority` `urgent` is critical and the rest normal; `display-hint`
   `persistent` keeps the toast up; buttons and `default-action` become actions
   and a click. `transient` and the lock-screen hints change nothing: the drawer

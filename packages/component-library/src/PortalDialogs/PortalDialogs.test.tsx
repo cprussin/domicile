@@ -423,7 +423,7 @@ describe("PortalDialogs", () => {
       host.push([access(1)]);
 
       expect(screen.getByRole("dialog")).toHaveTextContent("Use the camera?");
-      expect(screen.getByText("org.example.App asks")).toBeInTheDocument();
+      expect(screen.getByText("App asks")).toBeInTheDocument();
       expect(screen.getByText("Example wants the camera")).toBeInTheDocument();
       expect(screen.getByText("It will see you.")).toBeInTheDocument();
     });
@@ -477,7 +477,7 @@ describe("PortalDialogs", () => {
       expect(screen.getByRole("dialog")).toHaveTextContent(
         "Share your name and picture?",
       );
-      expect(screen.getByText("org.example.Mail asks")).toBeInTheDocument();
+      expect(screen.getByText("Mail asks")).toBeInTheDocument();
       expect(screen.getByText("To sign you in")).toBeInTheDocument();
       expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
       expect(
@@ -570,7 +570,7 @@ describe("PortalDialogs", () => {
       ]);
 
       expect(
-        await screen.findByRole("option", { name: "org.example.Gone" }),
+        await screen.findByRole("option", { name: "Gone" }),
       ).toHaveAttribute("aria-selected", "true");
       expect(screen.getByRole("dialog")).toHaveTextContent(
         "Open https://example.com/ with",
@@ -595,7 +595,7 @@ describe("PortalDialogs", () => {
       host.push([shortcuts(5)]);
 
       expect(screen.getByRole("dialog")).toHaveTextContent(
-        "org.example.App wants shortcuts that work in any window",
+        "App wants shortcuts that work in any window",
       );
       expect(screen.getByRole("textbox", { name: "Push to talk" })).toHaveValue(
         "CTRL+ALT+t",
@@ -608,9 +608,7 @@ describe("PortalDialogs", () => {
       render(<PortalDialogs host={host.host} shellChords={["Meta+Alt+d"]} />);
       host.push([shortcuts(5)]);
 
-      expect(
-        screen.getByText("org.example.Other uses this chord"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("Other uses this chord")).toBeInTheDocument();
       expect(
         screen.getByText("The desktop uses this chord"),
       ).toBeInTheDocument();
@@ -635,7 +633,7 @@ describe("PortalDialogs", () => {
       await act(() => Promise.resolve());
 
       expect(screen.getByRole("dialog")).toHaveTextContent(
-        "org.example.Photos wants to change the wallpaper",
+        "Photos wants to change the wallpaper",
       );
       expect(screen.getByText("Desktop and lock screen")).toBeInTheDocument();
       expect(
@@ -652,7 +650,7 @@ describe("PortalDialogs", () => {
       await named();
 
       expect(screen.getByRole("dialog")).toHaveTextContent(
-        "org.example.Browser wants to add an app",
+        "Browser wants to add an app",
       );
       expect(screen.getByLabelText("Name")).toHaveValue("Mail");
       expect(screen.getByText("https://mail.example.com")).toBeInTheDocument();
@@ -677,7 +675,7 @@ describe("PortalDialogs", () => {
       await named();
 
       expect(screen.getByRole("dialog")).toHaveTextContent(
-        "org.example.Keys wants to use USB devices",
+        "Keys wants to use USB devices",
       );
       expect(screen.getByText("Yubico.com YubiKey 5")).toBeInTheDocument();
       expect(screen.getByText("Unknown device")).toBeInTheDocument();
@@ -1128,7 +1126,7 @@ describe("PortalDialogs", () => {
       host.push([remoteDesktop(1, true)]);
 
       expect(screen.getByRole("dialog")).toHaveTextContent(
-        "org.example.Remote wants to control your computer",
+        "Remote wants to control your computer",
       );
       expect(
         screen.queryByRole("switch", { name: "Touchscreen" }),
@@ -1189,7 +1187,7 @@ describe("PortalDialogs", () => {
       host.push([inputCapture(1)]);
 
       expect(screen.getByRole("dialog")).toHaveTextContent(
-        "org.example.Barrier wants to capture your keyboard and pointer when the pointer leaves the screen.",
+        "Barrier wants to capture your keyboard and pointer when the pointer leaves the screen.",
       );
     });
 
@@ -1224,7 +1222,7 @@ describe("PortalDialogs", () => {
       host.push([print(1, twoPrinters)]);
 
       expect(screen.getByRole("dialog")).toHaveTextContent(
-        "org.example.Editor prints “Report”",
+        "Editor prints “Report”",
       );
       expect(
         screen.getByRole("combobox", { name: "Destination" }).textContent,
@@ -1405,14 +1403,12 @@ describe("PortalDialogs", () => {
         "src",
         "data:image/png;base64,AA==",
       );
-      expect(screen.getByRole("dialog")).toHaveTextContent(
-        "org.example.Shooter asks",
-      );
+      expect(screen.getByRole("dialog")).toHaveTextContent("Shooter asks");
       expect(screen.getByRole("radio", { name: "Everything" })).toBeChecked();
       // A screen by its make and model, else its output's name.
       const screens = radiosNamed("Screens", ["BOE NE135A1M-NY1", "HDMI-A-1"]);
       expect(screens.actual).toEqual(screens.expected);
-      const windows = radiosNamed("Windows", ["kitty: ~/src"]);
+      const windows = radiosNamed("Windows", ["Kitty: ~/src"]);
       expect(windows.actual).toEqual(windows.expected);
     });
 
@@ -1486,7 +1482,7 @@ describe("PortalDialogs", () => {
       );
       host.push([frozen(1, "screenshot")]);
       await userEvent.click(
-        screen.getByRole("radio", { name: "kitty: ~/src" }),
+        screen.getByRole("radio", { name: "Kitty: ~/src" }),
       );
       expect(screen.getByRole("dialog")).not.toHaveTextContent("Not on screen");
       await userEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -1502,7 +1498,7 @@ describe("PortalDialogs", () => {
       render(<PortalDialogs host={host.host} shownWindows={() => []} />);
       host.push([frozen(1, "screenshot")]);
       await userEvent.click(
-        screen.getByRole("radio", { name: "kitty: ~/src" }),
+        screen.getByRole("radio", { name: "Kitty: ~/src" }),
       );
 
       expect(screen.getByRole("dialog")).toHaveTextContent(
@@ -1525,9 +1521,9 @@ describe("PortalDialogs", () => {
       );
       host.push([frozen(1, "screenshot")]);
       await userEvent.click(
-        screen.getByRole("radio", { name: "kitty: ~/src" }),
+        screen.getByRole("radio", { name: "Kitty: ~/src" }),
       );
-      loaded200x100(await screen.findByRole("img", { name: "kitty: ~/src" }));
+      loaded200x100(await screen.findByRole("img", { name: "Kitty: ~/src" }));
       const preview = drawnAtHalfSize(
         screen.getByRole("group", {
           name: "Drag to pick a part of the window",
@@ -1567,11 +1563,11 @@ describe("PortalDialogs", () => {
       );
       host.push([frozen(1, "screenshot")]);
       await userEvent.click(
-        screen.getByRole("radio", { name: "kitty: ~/src" }),
+        screen.getByRole("radio", { name: "Kitty: ~/src" }),
       );
 
       expect(
-        await screen.findByRole("img", { name: "kitty: ~/src" }),
+        await screen.findByRole("img", { name: "Kitty: ~/src" }),
       ).toHaveAttribute("src", "data:image/png;base64,app-3");
       await userEvent.click(
         screen.getByRole("radio", { name: "Browser: Hidden" }),
@@ -1598,10 +1594,10 @@ describe("PortalDialogs", () => {
       const desk = box(screen.getByRole("img", { name: "The desk" }));
 
       await userEvent.click(
-        screen.getByRole("radio", { name: "kitty: ~/src" }),
+        screen.getByRole("radio", { name: "Kitty: ~/src" }),
       );
       const preview = box(
-        await screen.findByRole("img", { name: "kitty: ~/src" }),
+        await screen.findByRole("img", { name: "Kitty: ~/src" }),
       );
 
       expect(preview?.aspectRatio).toBe(desk?.aspectRatio);
@@ -1646,7 +1642,7 @@ describe("PortalDialogs", () => {
       );
       host.push([frozen(1, "screenshot")]);
       const listed = radiosNamed("Windows", [
-        "kitty: ~/src",
+        "Kitty: ~/src",
         "Browser: Pull requests",
         "Browser: Hidden",
       ]);
@@ -1680,12 +1676,12 @@ describe("PortalDialogs", () => {
       host.push([frozen(1, "screenshot")]);
       const windows = within(screen.getByRole("group", { name: "Windows" }));
       const listed = radiosNamed("Windows", [
-        "kitty: ~/src",
+        "Kitty: ~/src",
         "Browser: Pull requests",
       ]);
       expect(listed.actual).toEqual(listed.expected);
       await userEvent.click(
-        windows.getByRole("radio", { name: "kitty: ~/src" }),
+        windows.getByRole("radio", { name: "Kitty: ~/src" }),
       );
       expect(screen.getByRole("dialog")).not.toHaveTextContent("Not on screen");
       await userEvent.click(
@@ -1758,7 +1754,7 @@ describe("PortalDialogs", () => {
       render(<PortalDialogs host={host.host} shownWindows={() => []} />);
       host.push([frozen(1, "screenshot")]);
       await userEvent.click(
-        screen.getByRole("radio", { name: "kitty: ~/src" }),
+        screen.getByRole("radio", { name: "Kitty: ~/src" }),
       );
       await userEvent.keyboard("{Control>}c{/Control}");
 
@@ -1796,7 +1792,7 @@ describe("PortalDialogs", () => {
       render(<PortalDialogs host={host.host} shownWindows={() => []} />);
       host.push([frozen(1, "screenshot")]);
       await userEvent.click(
-        screen.getByRole("radio", { name: "kitty: ~/src" }),
+        screen.getByRole("radio", { name: "Kitty: ~/src" }),
       );
       await userEvent.click(screen.getByRole("button", { name: "Copy" }));
 
@@ -1902,9 +1898,9 @@ describe("PortalDialogs", () => {
           .getAllByRole("listitem")
           .map((item) => item.firstChild?.textContent),
       ).toEqual([
-        "Remote control: org.example.Remote — keyboard, pointer, clipboard",
-        "Input capture: org.example.Barrier — keyboard, pointer",
-        "Sharing: us.zoom.Zoom — Notes, Untitled window, Screen drm-1, Region",
+        "Remote control: Remote — keyboard, pointer, clipboard",
+        "Input capture: Barrier — keyboard, pointer",
+        "Sharing: Zoom — Notes, Untitled window, Screen drm-1, Region",
         "screenshot: An application",
       ]);
     });
@@ -1941,7 +1937,7 @@ describe("PortalDialogs", () => {
 
       expect(
         screen.getAllByRole("listitem").map((item) => item.textContent),
-      ).toEqual(["Input capture: org.example.Barrier — keyboard, pointerStop"]);
+      ).toEqual(["Input capture: Barrier — keyboard, pointerStop"]);
     });
 
     it("stops a session", async () => {
@@ -1972,9 +1968,7 @@ describe("screen cast", () => {
     ]);
 
     expect(screen.getByRole("dialog")).toHaveTextContent("Share a window");
-    expect(
-      screen.getByText("us.zoom.Zoom wants to record"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Zoom wants to record")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "The desk" })).toHaveAttribute(
       "src",
       "data:image/png;base64,AA==",
@@ -2003,7 +1997,7 @@ describe("screen cast", () => {
     render(<PortalDialogs host={host.host} />);
     host.push([screenCast()]);
     await userEvent.click(
-      screen.getByRole("radio", { name: "firefox: Notes" }),
+      screen.getByRole("radio", { name: "Firefox: Notes" }),
     );
     await userEvent.click(screen.getByRole("button", { name: "Share" }));
 
@@ -2017,7 +2011,7 @@ describe("screen cast", () => {
     render(<PortalDialogs host={host.host} />);
     host.push([screenCast(true)]);
     await userEvent.click(
-      screen.getByRole("checkbox", { name: "firefox: Notes" }),
+      screen.getByRole("checkbox", { name: "Firefox: Notes" }),
     );
     await userEvent.click(
       screen.getByRole("checkbox", { name: "Untitled window" }),
@@ -2059,7 +2053,7 @@ describe("screen cast", () => {
       render(<PortalDialogs host={host.host} shownWindows={() => []} />);
       host.push([screenCast(false, WINDOWS, false, { browser_windows: true })]);
       const windows = radiosNamed("Windows", [
-        "firefox: Notes",
+        "Firefox: Notes",
         "Untitled window",
         "Browser: Meet",
         "Browser: Docs",
@@ -2120,7 +2114,7 @@ describe("screen cast", () => {
       render(<PortalDialogs host={host.host} shownWindows={shown} />);
       host.push([withDesk()]);
       await userEvent.click(
-        screen.getByRole("checkbox", { name: "firefox: Notes" }),
+        screen.getByRole("checkbox", { name: "Firefox: Notes" }),
       );
       await userEvent.click(
         screen.getByRole("checkbox", { name: "Browser: Meet" }),
@@ -2233,7 +2227,7 @@ describe("screen cast", () => {
       render(<PortalDialogs host={host.host} />);
       host.push([screenCast(true, [...WINDOWS, ...MONITORS])]);
       await userEvent.click(
-        screen.getByRole("checkbox", { name: "firefox: Notes" }),
+        screen.getByRole("checkbox", { name: "Firefox: Notes" }),
       );
       await userEvent.click(screen.getByRole("checkbox", { name: "drm-2" }));
       await userEvent.click(screen.getByRole("button", { name: "Share" }));
@@ -2257,7 +2251,7 @@ describe("screen cast", () => {
       render(<PortalDialogs host={host.host} />);
       host.push([screenCast(false, [...WINDOWS, ...MONITORS])]);
       await userEvent.click(
-        screen.getByRole("radio", { name: "firefox: Notes" }),
+        screen.getByRole("radio", { name: "Firefox: Notes" }),
       );
       await userEvent.click(screen.getByRole("radio", { name: "drm-2" }));
       await userEvent.click(screen.getByRole("button", { name: "Share" }));

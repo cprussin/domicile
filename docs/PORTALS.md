@@ -79,7 +79,11 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 - **Dialogs name the app.** The frontend's `app_id`, and a ScreenCast
   window's Wayland `app_id`, resolve in the shell through
   `@domicile-desktop/system-apps` to a name and icon ("Zoom wants to share
-  your screen").
+  your screen"). An id with no entry of its own matches the first entry whose
+  id, `StartupWMClass` or `Name` is the id or its last reverse-DNS part,
+  ignoring case: `com.chromium.Chromium` finds `chromium-browser.desktop`.
+  With no match, the last part is the name (`org.example.my-app` is "My
+  app").
 - **Account shows what is shared.** The compositor looks the user up before
   asking; the dialog shows the name and picture.
 - **AppChooser offers the frontend's `choices`.** The shell names them from

@@ -11,6 +11,7 @@ import { Button } from "../Button/Button";
 import { Field } from "../Field/Field";
 import { Input } from "../Input/Input";
 import { ModalDialog } from "../ModalDialog/ModalDialog";
+import type { App } from "../useApps/useApps";
 import type { ChordCheck } from "./chord-check";
 import { ChordCheckKind, checkChord, holders } from "./chord-check";
 
@@ -19,6 +20,7 @@ type Row = { chord: string; shortcut: ProposedShortcut };
 
 type Props = {
   answer: (answer: PortalAnswer) => void;
+  apps: (appId: string) => App;
   /** Who asks, as the dialog names them. */
   asker: string;
   body: ShortcutsBody;
@@ -35,6 +37,7 @@ type Props = {
  */
 export const GlobalShortcutsDialog = ({
   answer,
+  apps,
   asker,
   body,
   screen,
@@ -110,7 +113,7 @@ export const GlobalShortcutsDialog = ({
       </p>
       {rows.map(({ check, chord, shortcut }) => (
         <Field
-          hint={note(check)}
+          hint={note(check, apps)}
           invalid={check.kind === ChordCheckKind.Invalid}
           key={shortcut.id}
           label={
@@ -153,14 +156,17 @@ const chosen = (check: ChordCheck): string | undefined => {
  * What the field says under the chord. In the hint, not an error popover, so
  * a chord half typed does not take focus.
  */
-const note = (check: ChordCheck): string | undefined => {
+const note = (
+  check: ChordCheck,
+  apps: (appId: string) => App,
+): string | undefined => {
   switch (check.kind) {
     case ChordCheckKind.Invalid:
       return check.message;
     case ChordCheckKind.Taken:
       return check.by === undefined
         ? "The desktop uses this chord"
-        : `${check.by} uses this chord`;
+        : `${apps(check.by).name} uses this chord`;
     case ChordCheckKind.Cleared:
     case ChordCheckKind.Free:
       return undefined;

@@ -17,6 +17,7 @@
   },
   "exports": {
     "./app-icons": "./src/app-icons.ts",
+    "./app-id-name": "./src/app-id-name.ts",
     "./bookmark": "./src/bookmark.ts",
     "./curl": "./src/curl.ts",
     "./data-dirs": "./src/data-dirs.ts",

@@ -8,6 +8,7 @@ import type { System, SystemError } from "@domicile-desktop/sdk/system";
 
 import type { IconLookup } from "./app-icons";
 import { appIcons } from "./app-icons";
+import { appIdName } from "./app-id-name";
 import { dataDirs } from "./data-dirs";
 import type { DesktopEntry } from "./desktop-entry";
 import { installedApps } from "./installed";
@@ -16,7 +17,7 @@ import { installedApps } from "./installed";
 export type DescribedApp = {
   /** Its desktop file ID without `.desktop`, as portals and windows name it. */
   id: string;
-  /** Its entry's `Name`, or `id` when it has no entry. */
+  /** Its entry's `Name`, or `id` made readable when it has no entry. */
   name: string;
   /** A `data:` URL, or `undefined` for none. */
   icon: string | undefined;
@@ -24,7 +25,8 @@ export type DescribedApp = {
 
 /**
  * Each of `ids`, in order, described by its installed desktop entry, with its
- * icon from the config's icon theme.
+ * icon from the config's icon theme. See {@link entryFor} for how an id finds
+ * its entry.
  */
 export const describeApps = async (
   system: System,
@@ -56,13 +58,39 @@ const describedIn = async (
   ids: readonly string[],
 ): Promise<Result<DescribedApp[], SystemError>> =>
   (await installedApps(system, dirs)).andThenAsync(async (installed) => {
-    const entries = new Map(
-      installed.map((entry) => [entry.id.replace(/\.desktop$/, ""), entry]),
-    );
     return Result.collect(
-      await Promise.all(ids.map((id) => described(icons, id, entries.get(id)))),
+      await Promise.all(
+        ids.map((id) => described(icons, id, entryFor(installed, id))),
+      ),
     );
   });
+
+/**
+ * The entry whose desktop file ID is `id`. Failing that, the first whose ID,
+ * `StartupWMClass` or `Name` is `id` or its last reverse-DNS part, ignoring
+ * case: a portal can name an application by an id its entry does not use,
+ * as `com.chromium.Chromium` for `chromium-browser.desktop`.
+ */
+const entryFor = (
+  installed: readonly DesktopEntry[],
+  id: string,
+): DesktopEntry | undefined => {
+  const wanted = new Set([
+    id.toLowerCase(),
+    (id.split(".").at(-1) ?? id).toLowerCase(),
+  ]);
+  return (
+    installed.find((entry) => desktopIdOf(entry) === id) ??
+    installed.find((entry) =>
+      [desktopIdOf(entry), entry.windowClass ?? "", entry.name].some((name) =>
+        wanted.has(name.toLowerCase()),
+      ),
+    )
+  );
+};
+
+const desktopIdOf = (entry: DesktopEntry): string =>
+  entry.id.replace(/\.desktop$/, "");
 
 /** App `id`, named and drawn by its `entry` when it has one. */
 const described = async (
@@ -71,7 +99,7 @@ const described = async (
   entry: DesktopEntry | undefined,
 ): Promise<Result<DescribedApp, SystemError>> =>
   entry === undefined
-    ? Ok({ icon: undefined, id, name: id })
+    ? Ok({ icon: undefined, id, name: appIdName(id) })
     : (entry.icon === undefined
         ? Ok<Option<string>, SystemError>(None())
         : await icons(entry.icon)

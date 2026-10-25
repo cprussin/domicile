@@ -240,6 +240,7 @@ const Dialog = ({
       return (
         <GlobalShortcutsDialog
           answer={answer}
+          apps={apps}
           asker={asker}
           body={request.body}
           screen={screen}
@@ -338,14 +339,20 @@ const screenFor = (
   return parents ?? screen;
 };
 
-/** The applications `request` names: who asks, and the windows it offers. */
+/**
+ * The applications `request` names: who asks, the windows it offers, and who
+ * holds the chords it asks for.
+ */
 const appIds = (request: PortalRequest): string[] => [
   request.appId,
-  ...windowAppIds(request),
+  ...otherAppIds(request),
 ];
 
-/** The applications of the windows `request` offers to record or shoot. */
-const windowAppIds = (request: PortalRequest): string[] => {
+/**
+ * The applications of the windows `request` offers to record or shoot, or
+ * that hold chords it asks for.
+ */
+const otherAppIds = (request: PortalRequest): string[] => {
   switch (request.kind) {
     case PortalKind.ScreenCast:
       return request.body.sources.flatMap((source) =>
@@ -353,6 +360,8 @@ const windowAppIds = (request: PortalRequest): string[] => {
       );
     case PortalKind.Screenshot:
       return request.body.windows.map((window) => window.appId);
+    case PortalKind.GlobalShortcuts:
+      return request.body.taken.map((held) => held.appId);
     case PortalKind.Access:
     case PortalKind.AppChooser:
     case PortalKind.FileChooser:
@@ -361,7 +370,6 @@ const windowAppIds = (request: PortalRequest): string[] => {
     case PortalKind.DynamicLauncher:
     case PortalKind.Usb:
     case PortalKind.Account:
-    case PortalKind.GlobalShortcuts:
     case PortalKind.Wallpaper:
     case PortalKind.Print:
     case PortalKind.PickColor:
