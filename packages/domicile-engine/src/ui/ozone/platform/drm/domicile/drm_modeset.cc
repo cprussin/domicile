@@ -96,7 +96,10 @@ std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
     const DomicileDisplayLayout* wanted =
         layout.empty() ? nullptr : WantedFor(layout, snapshot->display_id());
     if (!layout.empty() && (!wanted || !wanted->enabled)) {
-      // Turned off by the compositor, or not in its layout yet.
+      // Turned off by the compositor, or not in its layout yet. Asked for with
+      // no mode, which turns the CRTC off: left out, it keeps scanning out its
+      // last frame.
+      params.emplace_back(snapshot->display_id(), origins[index], nullptr);
       continue;
     }
     // Pass the mode borrowed: the params constructor clones it, so cloning
@@ -214,8 +217,7 @@ void DrmModeset::OnDisplaysReceived(
   std::vector<display::DisplayConfigurationParams> params =
       ModesetParamsFromSnapshots(snapshots, layout_);
   if (params.empty()) {
-    // Not an error: a machine with no panel reports this. The compositor
-    // rejects a layout that turns every connector off.
+    // Not an error: a machine with no panel reports this.
     VLOG(1) << "domicile: nothing readable is plugged in; not modesetting";
     return;
   }
