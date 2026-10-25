@@ -30,6 +30,8 @@ export const notifications = () => command("notifications");
 export const clearNotifications = () => command("notifications", "clear");
 /** Toggle keeping the screens on. */
 export const idleInhibitor = () => command("idle-inhibitor");
+/** Toggle the night light. */
+export const nightLight = () => command("night-light");
 /** Take a screenshot, picking the area in a dialog. */
 export const screenshot = () => command("screenshot");
 /** Switch to the next of the config's keymaps, or to the one named. */

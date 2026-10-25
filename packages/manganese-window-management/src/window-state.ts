@@ -374,6 +374,7 @@ export enum WindowActionKind {
   ModeSet,
   ModeSwapped,
   NewTabPressed,
+  NightLightToggled,
   NotificationsCleared,
   NotificationsToggled,
   PageFullscreened,
@@ -765,6 +766,11 @@ export const WindowAction = {
   NewTabPressed: (id: string) => ({
     id,
     kind: WindowActionKind.NewTabPressed as const,
+  }),
+
+  /** `night-light`. The shell turns the night light on or off. */
+  NightLightToggled: () => ({
+    kind: WindowActionKind.NightLightToggled as const,
   }),
 
   /** `notifications clear`. The shell clears the drawer. */
@@ -1251,7 +1257,8 @@ const reduceAction = (
     case WindowActionKind.MediaKeyPressed:
     case WindowActionKind.NotificationsToggled:
     case WindowActionKind.NotificationsCleared:
-    case WindowActionKind.IdleInhibitorToggled: {
+    case WindowActionKind.IdleInhibitorToggled:
+    case WindowActionKind.NightLightToggled: {
       // The shell carries these out; no window changes.
       return state;
     }

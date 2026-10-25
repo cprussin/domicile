@@ -8,6 +8,7 @@ import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
 import type { HoldKeyboard } from "@domicile-desktop/manganese-bar/panel-keyboard";
 import { PanelKeyboardContext } from "@domicile-desktop/manganese-bar/panel-keyboard";
 import { deskBacklight } from "@domicile-desktop/manganese-bar-module-brightness/desk-backlight";
+import { deskNightLight } from "@domicile-desktop/manganese-bar-module-brightness/desk-night-light";
 import { useAutoBrightness } from "@domicile-desktop/manganese-bar-module-brightness/useAutoBrightness";
 import { useBrightnessKeys } from "@domicile-desktop/manganese-bar-module-brightness/useBrightnessKeys";
 import { useNightLight } from "@domicile-desktop/manganese-bar-module-brightness/useNightLight";
@@ -354,6 +355,10 @@ export const Desktop = ({
         }
         case WindowActionKind.IdleInhibitorToggled: {
           deskIdleInhibitor(domicile).toggle();
+          break;
+        }
+        case WindowActionKind.NightLightToggled: {
+          deskNightLight(domicile).toggle();
           break;
         }
         default: {

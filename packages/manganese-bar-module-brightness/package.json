@@ -30,6 +30,7 @@
   "exports": {
     ".": "./src/bar-item.tsx",
     "./desk-backlight": "./src/desk-backlight.ts",
+    "./desk-night-light": "./src/desk-night-light.ts",
     "./fixture": "./src/fixture.ts",
     "./useAutoBrightness": "./src/useAutoBrightness.ts",
     "./useBrightnessKeys": "./src/useBrightnessKeys.ts",

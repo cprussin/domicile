@@ -10,6 +10,7 @@ import {
   idleInhibitor,
   keymap,
   micMute,
+  nightLight,
   notifications,
   screenshot,
   searchClipboard,
@@ -17,11 +18,17 @@ import {
 } from "./commands";
 
 describe("manganese's command builders", () => {
-  it("build the notification and idle commands manganese parses", () => {
-    expect([notifications(), clearNotifications(), idleInhibitor()]).toEqual([
+  it("build the notification, idle and night light commands manganese parses", () => {
+    expect([
+      notifications(),
+      clearNotifications(),
+      idleInhibitor(),
+      nightLight(),
+    ]).toEqual([
       { args: ["notifications"], kind: KeyActionKind.SendShell },
       { args: ["notifications", "clear"], kind: KeyActionKind.SendShell },
       { args: ["idle-inhibitor"], kind: KeyActionKind.SendShell },
+      { args: ["night-light"], kind: KeyActionKind.SendShell },
     ]);
   });
 });
