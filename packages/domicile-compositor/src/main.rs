@@ -472,6 +472,9 @@ struct DomicileCompositor {
     /// Whether the latency report was logged. Logged once, though the client
     /// keeps drawing.
     latency_reported: bool,
+    /// The display frame viz last reported, for a latency run that starts
+    /// after it.
+    latency_frame: Option<Duration>,
     /// The chrome's own toplevel, if it is our client.
     ///
     /// Kept apart from `toplevels` because it is the desktop, not an app: never
@@ -1254,6 +1257,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         latency: None,
         latency_app: None,
         latency_reported: false,
+        latency_frame: None,
         shm_refused: OncePerWindow::default(),
         uploads: Uploads::default(),
         software_compositing: arguments.software_compositing,

@@ -155,8 +155,12 @@ the pixel reaching the page. It uses a real Wayland client under
 | 3 | 28.18 ms | 16.67 ms | 1.69 |
 | 4 | 28.24 ms | 16.67 ms | 1.71 |
 
-- The limit is a count of display frames, `MOST_FRAMES=2`. A limit in
+- The limit is the probe's floor plus one display frame, with the floor
+  counted as at most two frames (`latency_allowance`). A limit in
   milliseconds would measure whatever else the runner was doing.
+- The frame is the interval viz reports with each presented frame. Headless
+  sway presents nothing, so there the run takes the frame of
+  `under-wayland.sh`'s output mode.
 - `guard-latency.sh`'s header has the full reasoning.
 
 Two rules keep each round tied to its keystroke. The negative control (a
@@ -183,7 +187,8 @@ that compositor's. `PLATFORM=drm` runs on the scanout platform:
 - `latency_window_flags` and `latency_platform_refusal` in `lib-latency.sh`
   implement this. `packages/domicile-engine/tests/test-the-latency-run-picks-its-platform.sh` tests
   it.
-- It still does not measure presentation.
+- `commit to present` comes from viz's presentation feedback. It is reported,
+  not asserted: nested, it includes the host compositor's own pass.
 
 One run on lyra (Framework 13, Radeon 890M, 2880x1920 panel modeset at
 120 Hz), 60 rounds, 2026-10-22:
@@ -196,12 +201,29 @@ One run on lyra (Framework 13, Radeon 890M, 2880x1920 panel modeset at
 | Key to pixel | 42.54 ms | 2.6 | 5.1 |
 
 - No round was abandoned, late, moved or undelivered.
-- The run passes, but only against `SPIKE_REFRESH_MHZ` (60 Hz) in
-  `latency_run.rs`. Against the panel's 120 Hz it would fail.
-- The floor's minimum is 10.50 ms, longer than a 120 Hz frame. viz does
-  draw at 120 Hz here: testufo.com in a browser window reads 120 fps at
-  120 Hz (2026-10-24). So the floor is slow for another reason. See
-  [ROADMAP.md](/ROADMAP.md).
+- The frames columns divide by 16.67 ms and 8.33 ms. The run divides by the
+  interval viz reports with each presented frame.
+- The floor is about two 120 Hz frames because of the probe, not the
+  display. viz draws at 120 Hz here (testufo.com reads 120 fps). Each probe
+  waits for the browser compositor's next BeginFrame, then for viz to draw
+  it. At 120 Hz the two land a frame apart. Window size does not matter:
+  1024x768 nested costs the same as the 2880x1920 panel (below).
+- `commit to pixel` is the floor plus 2.7 ms, so the compositor adds no
+  frame of its own.
+
+Nested in a domicile session on the same panel, 2026-10-25:
+
+| Stage | Median | Over 8.33 ms |
+|---|---|---|
+| Floor | 17.15 ms | 2.1 |
+| Key to commit | 17.10 ms | 2.1 |
+| Commit to pixel | 17.44 ms | 2.1 |
+| Commit to present | 21.83 ms | 2.6 |
+| Key to pixel | 34.93 ms | 4.2 |
+
+- `commit to pixel` is the floor plus 0.3 ms.
+- `commit to present` runs past `commit to pixel`, since it ends when the
+  host session presents.
 
 ## A client's window on the page
 
