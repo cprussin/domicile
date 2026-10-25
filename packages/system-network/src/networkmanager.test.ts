@@ -73,7 +73,7 @@ describe("watchNetworkManager", () => {
       const bus = nmBus(wifi(72));
       const seen = reports();
 
-      watchNetworkManager(bus.system, seen.on);
+      watchNetworkManager(bus.domicile, seen.on);
 
       expect(await seen.next()).toStrictEqual(
         Ok({ connectivity: Connectivity.Full, link: Link.Wifi("Home", 0.72) }),
@@ -108,7 +108,7 @@ describe("watchNetworkManager", () => {
       );
       const seen = reports();
 
-      watchNetworkManager(bus.system, seen.on);
+      watchNetworkManager(bus.domicile, seen.on);
 
       expect(await seen.next()).toStrictEqual(
         Ok({
@@ -127,7 +127,7 @@ describe("watchNetworkManager", () => {
       );
       const seen = reports();
 
-      watchNetworkManager(bus.system, seen.on);
+      watchNetworkManager(bus.domicile, seen.on);
 
       expect(await seen.next()).toStrictEqual(
         Ok({ connectivity: Connectivity.Limited, link: Link.Other("wg0") }),
@@ -142,7 +142,7 @@ describe("watchNetworkManager", () => {
       );
       const seen = reports();
 
-      watchNetworkManager(bus.system, seen.on);
+      watchNetworkManager(bus.domicile, seen.on);
 
       expect(await seen.next()).toStrictEqual(
         Ok({ connectivity: Connectivity.None, link: Link.None() }),
@@ -158,7 +158,7 @@ describe("watchNetworkManager", () => {
     );
     const seen = reports();
 
-    watchNetworkManager(bus.system, seen.on);
+    watchNetworkManager(bus.domicile, seen.on);
 
     expect(await seen.next()).toStrictEqual(Err(SERVICE_UNKNOWN));
   });
@@ -168,7 +168,7 @@ describe("watchNetworkManager", () => {
       const bus = nmBus(wifi(72));
       const seen = reports();
 
-      watchNetworkManager(bus.system, seen.on);
+      watchNetworkManager(bus.domicile, seen.on);
       await seen.next();
 
       expect(bus.matches).toStrictEqual([
@@ -185,7 +185,7 @@ describe("watchNetworkManager", () => {
       const objects = wifi(72);
       const bus = nmBus(objects);
       const seen = reports();
-      watchNetworkManager(bus.system, seen.on);
+      watchNetworkManager(bus.domicile, seen.on);
       await seen.next();
 
       objects.set(ACCESS_POINT, Ok(recorded.accessPoint(41)));
@@ -206,7 +206,7 @@ describe("watchNetworkManager", () => {
       const objects = wifi(72);
       const bus = nmBus(objects);
       const seen = reports();
-      watchNetworkManager(bus.system, seen.on);
+      watchNetworkManager(bus.domicile, seen.on);
       await seen.next();
 
       await bus.send(
@@ -233,7 +233,7 @@ describe("watchNetworkManager", () => {
       const bus = nmBus(wifi(72), SERVICE_UNKNOWN);
       const seen = reports();
 
-      watchNetworkManager(bus.system, seen.on);
+      watchNetworkManager(bus.domicile, seen.on);
 
       expect(await seen.next()).toStrictEqual(Err(SERVICE_UNKNOWN));
     });
@@ -241,7 +241,7 @@ describe("watchNetworkManager", () => {
     it("reports the error when the match breaks", async () => {
       const bus = nmBus(wifi(72));
       const seen = reports();
-      watchNetworkManager(bus.system, seen.on);
+      watchNetworkManager(bus.domicile, seen.on);
       await seen.next();
 
       await bus.break(SERVICE_UNKNOWN);
@@ -253,7 +253,7 @@ describe("watchNetworkManager", () => {
   it("stops listening, and reports nothing more, once stopped", async () => {
     const bus = nmBus(wifi(72));
     const seen = reports();
-    const stop = watchNetworkManager(bus.system, seen.on);
+    const stop = watchNetworkManager(bus.domicile, seen.on);
     await seen.next();
 
     // A change arrives, and the watch stops while it reads again.
@@ -275,7 +275,7 @@ describe("watchNetworkManager", () => {
     const bus = nmBus(wifi(72));
     const seen = reports();
 
-    watchNetworkManager(bus.system, seen.on)();
+    watchNetworkManager(bus.domicile, seen.on)();
     await Bun.sleep(0);
 
     expect(bus.stopped).toBe(1);

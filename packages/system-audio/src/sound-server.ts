@@ -7,7 +7,7 @@
 //   the one the server keeps.
 
 import type { Result } from "@cprussin/option-result";
-import type { System } from "@domicile-desktop/sdk/system";
+import type { Processes } from "@domicile-desktop/sdk/desktop/processes";
 
 import type { Asked } from "./asked";
 import type { Audio, Meter } from "./audio";
@@ -17,8 +17,10 @@ import { Request } from "./request";
 import { requestQueue } from "./request-queue";
 import { watchAudio } from "./watch-audio";
 
-/** The system calls this library uses. */
-export type AudioSystem = Pick<System, "run" | "spawn">;
+/** The calls this library makes. */
+export type AudioDesktop = {
+  readonly processes: Pick<Processes, "run" | "spawn">;
+};
 
 /** Each meter's loudest sample since the last report, 0 through 1, by id. */
 export type Levels = ReadonlyMap<string, number>;
@@ -71,22 +73,22 @@ export type Report = (message: string, detail: unknown) => void;
 
 const TIMING: Timing = { reopenMs: 5000, settleMs: 30, tickMs: 50 };
 
-/** The sound server, reached through `system`. */
+/** The sound server, reached through `domicile`'s processes. */
 export const soundServer = (
-  system: AudioSystem,
+  domicile: AudioDesktop,
   timing: Timing = TIMING,
   report: Report = warn,
 ): SoundServer => {
-  const ask = requestQueue(system);
+  const ask = requestQueue(domicile);
   return {
-    meters: (onLevels) => meters(system, onLevels, timing.tickMs, report),
+    meters: (onLevels) => meters(domicile, onLevels, timing.tickMs, report),
     moveStream: (id, device) => ask(Request.Move(id, device)),
     setDefault: (id) => ask(Request.Default(id)),
     setMuted: (id, muted) => ask(Request.Muted(id, muted)),
     setPort: (id, port) => ask(Request.Port(id, port)),
     setProfile: (card, profile) => ask(Request.Profile(card, profile)),
     setVolume: (id, volume) => ask(Request.Volume(id, volume)),
-    watch: (onAudio) => watchAudio(system, onAudio, timing, report),
+    watch: (onAudio) => watchAudio(domicile, onAudio, timing, report),
   };
 };
 

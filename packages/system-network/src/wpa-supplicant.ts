@@ -8,7 +8,7 @@ import { z } from "zod";
 
 import type { Reading } from "./follow";
 import { followBus } from "./follow";
-import type { Network, NetworkSystem } from "./network-state";
+import type { Network, NetworkDesktop } from "./network-state";
 import { Connectivity, Link } from "./network-state";
 import { strengthOfDbm } from "./signal-strength";
 import { variant } from "./variant";
@@ -27,13 +27,13 @@ const ROOT = "/fi/w1/wpa_supplicant1";
  * so a later change reads again.
  */
 export const watchWpaSupplicant = (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   onNetwork: (network: Result<Network, SystemError>) => void,
 ): (() => void) =>
   followBus(
-    system,
+    domicile,
     { bus: Bus.System, sender: SERVICE },
-    () => read(system),
+    () => read(domicile),
     onNetwork,
   );
 
@@ -41,8 +41,8 @@ export const watchWpaSupplicant = (
  * Read the network. An interface coming or going matters, as does a property
  * change on an object read for it.
  */
-const read = async (system: NetworkSystem): Promise<Reading<Network>> => {
-  const found = await readPaths(system);
+const read = async (domicile: NetworkDesktop): Promise<Reading<Network>> => {
+  const found = await readPaths(domicile);
   return {
     matters: (signal) => matters(found.paths, signal),
     value: found.network.map((link) => ({
@@ -80,8 +80,8 @@ type Read = {
   paths: ReadonlySet<string>;
 };
 
-const readPaths = async (system: NetworkSystem): Promise<Read> => {
-  const root = await properties(system, ROOT, SERVICE, rootSchema);
+const readPaths = async (domicile: NetworkDesktop): Promise<Read> => {
+  const root = await properties(domicile, ROOT, SERVICE, rootSchema);
   return root.match({
     Err: (error) => Promise.resolve({ network: Err(error), paths: new Set() }),
     Ok: async ({ Interfaces: paths }) => {
@@ -90,7 +90,7 @@ const readPaths = async (system: NetworkSystem): Promise<Read> => {
           paths.map(async (path) =>
             (
               await properties(
-                system,
+                domicile,
                 path,
                 `${SERVICE}.Interface`,
                 interfaceSchema,
@@ -107,7 +107,7 @@ const readPaths = async (system: NetworkSystem): Promise<Read> => {
           return connected === undefined
             ? { network: Ok(Link.None()), paths: new Set(paths) }
             : {
-                network: await linkOf(system, connected.CurrentBSS),
+                network: await linkOf(domicile, connected.CurrentBSS),
                 paths: new Set([...paths, connected.CurrentBSS]),
               };
         },
@@ -143,10 +143,10 @@ const isOnline = (state: InterfaceState): boolean => {
 
 /** The network at the BSS `path`. */
 const linkOf = async (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   path: string,
 ): Promise<Result<Link, SystemError>> =>
-  (await properties(system, path, `${SERVICE}.BSS`, bssSchema)).map(
+  (await properties(domicile, path, `${SERVICE}.BSS`, bssSchema)).map(
     ({ SSID: ssid, Signal: signal }) =>
       Link.Wifi(
         new TextDecoder().decode(new Uint8Array(ssid)),
@@ -156,13 +156,13 @@ const linkOf = async (
 
 /** `Properties.GetAll` on one of wpa_supplicant's objects, parsed. */
 const properties = async <T extends NonNullable<unknown>>(
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   path: string,
   interfaceName: string,
   schema: z.ZodType<T>,
 ): Promise<Result<T, SystemError>> =>
   (
-    await system.dbusCall({
+    await domicile.dbus.call({
       body: [interfaceName],
       bus: Bus.System,
       destination: SERVICE,

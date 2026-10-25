@@ -40,26 +40,28 @@ export const panel = (type: string, brightness: string) => ({
 export const fakeSysfs = (devices: Devices | undefined) => {
   let now = devices;
   const host: SysfsHost = {
-    readDir: async (path) =>
-      now === undefined || path !== "/sys/class/backlight"
-        ? Err(notFound(path))
-        : Ok(
-            // The kernel lists them unsorted.
-            Object.keys(now)
-              .toReversed()
-              .map((name) => ({ fileType: FileType.Symlink, name })),
-          ),
-    readTextFile: (path) => {
-      const [device, file] = path
-        .replace(/^\/sys\/class\/backlight\//, "")
-        .split("/");
-      const contents =
-        device === undefined || file === undefined
-          ? undefined
-          : now?.[device]?.[file];
-      return Promise.resolve(
-        contents === undefined ? Err(notFound(path)) : Ok(contents),
-      );
+    files: {
+      readDir: async (path) =>
+        now === undefined || path !== "/sys/class/backlight"
+          ? Err(notFound(path))
+          : Ok(
+              // The kernel lists them unsorted.
+              Object.keys(now)
+                .toReversed()
+                .map((name) => ({ fileType: FileType.Symlink, name })),
+            ),
+      readText: (path) => {
+        const [device, file] = path
+          .replace(/^\/sys\/class\/backlight\//, "")
+          .split("/");
+        const contents =
+          device === undefined || file === undefined
+            ? undefined
+            : now?.[device]?.[file];
+        return Promise.resolve(
+          contents === undefined ? Err(notFound(path)) : Ok(contents),
+        );
+      },
     },
   };
   return {

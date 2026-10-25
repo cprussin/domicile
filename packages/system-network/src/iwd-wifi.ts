@@ -12,15 +12,15 @@ import { Bus, SystemErrorKind } from "@domicile-desktop/sdk/system";
 import { z } from "zod";
 
 import { followBus } from "./follow";
-import type { NetworkSystem } from "./network-state";
+import type { NetworkDesktop } from "./network-state";
 import { strengthOfDbm } from "./signal-strength";
 import { variant } from "./variant";
 import type {
   Wifi,
   WifiConnection,
+  WifiDesktop,
   WifiDevice,
   WifiNetwork,
-  WifiSystem,
 } from "./wifi-state";
 import { WifiBackend } from "./wifi-state";
 
@@ -43,24 +43,24 @@ type Found = z.infer<typeof managedObjectsSchema>[0];
  * listening after one, so a later change reads again.
  */
 export const watchIwdWifi = (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   onWifi: (wifi: Result<Option<Wifi>, SystemError>) => void,
 ): (() => void) =>
   followBus(
-    system,
+    domicile,
     { bus: Bus.System, sender: SERVICE },
-    async () => ({ matters, value: await read(system) }),
+    async () => ({ matters, value: await read(domicile) }),
     onWifi,
   );
 
 /** Turn the device on or off. */
 export const setIwdWifiEnabled = async (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   wifi: WifiDevice,
   enabled: boolean,
 ): Promise<Result<"done", SystemError>> =>
   done(
-    await system.dbusCall({
+    await domicile.dbus.call({
       ...request(wifi.device, "org.freedesktop.DBus.Properties", "Set"),
       body: [DEVICE, "Powered", { signature: "b", value: enabled }],
       signature: "ssv",
@@ -69,10 +69,10 @@ export const setIwdWifiEnabled = async (
 
 /** Ask for a scan. Networks it finds arrive as changes. */
 export const scanIwdWifi = async (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   wifi: WifiDevice,
 ): Promise<Result<"done", SystemError>> =>
-  done(await system.dbusCall(request(wifi.device, STATION, "Scan")));
+  done(await domicile.dbus.call(request(wifi.device, STATION, "Scan")));
 
 /**
  * Join `network`. A known or open network joins over D-Bus. A new secured one
@@ -80,19 +80,19 @@ export const scanIwdWifi = async (
  * asks an agent for it, and a page cannot serve one.
  */
 export const connectIwdWifi = async (
-  system: WifiSystem,
+  domicile: WifiDesktop,
   wifi: WifiDevice,
   network: WifiNetwork,
   passphrase: string | undefined,
 ): Promise<Result<"done", SystemError>> => {
   if (network.profile !== undefined || !network.secured) {
     return done(
-      await system.dbusCall(request(network.path, NETWORK, "Connect")),
+      await domicile.dbus.call(request(network.path, NETWORK, "Connect")),
     );
   } else if (passphrase === undefined) {
     throw new Error(`joining ${network.ssid} needs a passphrase`);
   } else {
-    const ran = await system.run([
+    const ran = await domicile.processes.run([
       "iwctl",
       "--passphrase",
       passphrase,
@@ -114,10 +114,10 @@ export const connectIwdWifi = async (
 
 /** Leave the current network, until asked to join one. */
 export const disconnectIwdWifi = async (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   wifi: WifiDevice,
 ): Promise<Result<"done", SystemError>> =>
-  done(await system.dbusCall(request(wifi.device, STATION, "Disconnect")));
+  done(await domicile.dbus.call(request(wifi.device, STATION, "Disconnect")));
 
 const request = (path: string, iface: string, member: string): DbusCall => ({
   bus: Bus.System,
@@ -149,10 +149,10 @@ const matters = (signal: DbusSignal): boolean => {
 };
 
 const read = async (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
 ): Promise<Result<Option<Wifi>, SystemError>> =>
   (
-    await system.dbusCall({
+    await domicile.dbus.call({
       bus: Bus.System,
       destination: SERVICE,
       interface: "org.freedesktop.DBus.ObjectManager",
@@ -169,7 +169,7 @@ const read = async (
       ? Ok(None())
       : (
           await wifiOf(
-            system,
+            domicile,
             objects,
             station.path,
             station.device,
@@ -179,7 +179,7 @@ const read = async (
   });
 
 const wifiOf = async (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   objects: Found,
   path: string,
   device: NonNullable<Found[string][typeof DEVICE]>,
@@ -198,7 +198,7 @@ const wifiOf = async (
   const station = held[STATION];
   return station === undefined
     ? Ok(off)
-    : (await stationOf(system, objects, path, station, held[DIAGNOSTIC])).map(
+    : (await stationOf(domicile, objects, path, station, held[DIAGNOSTIC])).map(
         (found) => ({ ...off, ...found }),
       );
 };
@@ -207,14 +207,14 @@ const wifiOf = async (
 type StationFound = Pick<Wifi, "connection" | "networks" | "scanning">;
 
 const stationOf = async (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   objects: Found,
   path: string,
   station: Station,
   diagnostic: object | undefined,
 ): Promise<Result<StationFound, SystemError>> =>
   (
-    await system.dbusCall(request(path, STATION, "GetOrderedNetworks"))
+    await domicile.dbus.call(request(path, STATION, "GetOrderedNetworks"))
   ).andThenAsync(async ({ body }) => {
     const networks = orderedNetworksSchema
       .parse(body)[0]
@@ -223,7 +223,7 @@ const stationOf = async (
     const connection =
       connected === undefined
         ? Ok<Option<WifiConnection>, SystemError>(None())
-        : (await diagnosticsOf(system, path, diagnostic)).map((found) =>
+        : (await diagnosticsOf(domicile, path, diagnostic)).map((found) =>
             Some({
               ...found,
               ip: undefined,
@@ -265,18 +265,18 @@ type Diagnostics = Pick<WifiConnection, "bitrate" | "frequency">;
 
 /** The link's frequency and bitrate, when iwd offers diagnostics. */
 const diagnosticsOf = async (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   path: string,
   diagnostic: object | undefined,
 ): Promise<Result<Diagnostics, SystemError>> =>
   diagnostic === undefined
     ? Ok({ bitrate: undefined, frequency: undefined })
-    : (await system.dbusCall(request(path, DIAGNOSTIC, "GetDiagnostics"))).map(
-        ({ body }) => {
-          const [found] = diagnosticsSchema.parse(body);
-          return { bitrate: found.RxBitrate / 10, frequency: found.Frequency };
-        },
-      );
+    : (
+        await domicile.dbus.call(request(path, DIAGNOSTIC, "GetDiagnostics"))
+      ).map(({ body }) => {
+        const [found] = diagnosticsSchema.parse(body);
+        return { bitrate: found.RxBitrate / 10, frequency: found.Frequency };
+      });
 
 const stationSchema = z.object({ Scanning: variant(z.boolean()) });
 

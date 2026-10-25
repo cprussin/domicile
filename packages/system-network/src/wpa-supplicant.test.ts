@@ -69,7 +69,7 @@ describe("watchWpaSupplicant", () => {
       const bus = fakeBus(byPath(completed()));
       const seen = reports();
 
-      watchWpaSupplicant(bus.system, seen.on);
+      watchWpaSupplicant(bus.domicile, seen.on);
 
       expect(await seen.next()).toStrictEqual(
         Ok({
@@ -114,7 +114,7 @@ describe("watchWpaSupplicant", () => {
       const bus = fakeBus(byPath(objects));
       const seen = reports();
 
-      watchWpaSupplicant(bus.system, seen.on);
+      watchWpaSupplicant(bus.domicile, seen.on);
 
       expect(await seen.next()).toStrictEqual(
         Ok({ connectivity: Connectivity.Unknown, link }),
@@ -134,7 +134,7 @@ describe("watchWpaSupplicant", () => {
       );
       const seen = reports();
 
-      watchWpaSupplicant(bus.system, seen.on);
+      watchWpaSupplicant(bus.domicile, seen.on);
 
       expect(await seen.next()).toStrictEqual(
         Ok({
@@ -155,7 +155,7 @@ describe("watchWpaSupplicant", () => {
     );
     const seen = reports();
 
-    watchWpaSupplicant(bus.system, seen.on);
+    watchWpaSupplicant(bus.domicile, seen.on);
 
     expect(await seen.next()).toStrictEqual(Err(SERVICE_UNKNOWN));
   });
@@ -165,7 +165,7 @@ describe("watchWpaSupplicant", () => {
       const bus = fakeBus(byPath(completed()));
       const seen = reports();
 
-      watchWpaSupplicant(bus.system, seen.on);
+      watchWpaSupplicant(bus.domicile, seen.on);
       await seen.next();
 
       expect(bus.matches).toStrictEqual([
@@ -177,7 +177,7 @@ describe("watchWpaSupplicant", () => {
       const objects = completed();
       const bus = fakeBus(byPath(objects));
       const seen = reports();
-      watchWpaSupplicant(bus.system, seen.on);
+      watchWpaSupplicant(bus.domicile, seen.on);
       await seen.next();
 
       objects.set(BSS, Ok(recorded.bss(-52)));
@@ -199,7 +199,7 @@ describe("watchWpaSupplicant", () => {
       const objects = completed();
       const bus = fakeBus(byPath(objects));
       const seen = reports();
-      watchWpaSupplicant(bus.system, seen.on);
+      watchWpaSupplicant(bus.domicile, seen.on);
       await seen.next();
 
       objects.set(WLAN0, Ok(recorded.iface("group_handshake", BSS)));
@@ -220,7 +220,7 @@ describe("watchWpaSupplicant", () => {
     it("reads again when an interface is added", async () => {
       const bus = fakeBus(byPath(completed()));
       const seen = reports();
-      watchWpaSupplicant(bus.system, seen.on);
+      watchWpaSupplicant(bus.domicile, seen.on);
       await seen.next();
 
       await bus.send({
@@ -243,7 +243,7 @@ describe("watchWpaSupplicant", () => {
     it("ignores objects it did not read, and the old change signal", async () => {
       const bus = fakeBus(byPath(completed()));
       const seen = reports();
-      watchWpaSupplicant(bus.system, seen.on);
+      watchWpaSupplicant(bus.domicile, seen.on);
       await seen.next();
 
       await bus.send(

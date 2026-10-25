@@ -3,18 +3,18 @@ import type { SystemError } from "@domicile-desktop/sdk/system";
 import { Bus } from "@domicile-desktop/sdk/system";
 import { z } from "zod";
 
-import type { NetworkSystem } from "./network-state";
+import type { NetworkDesktop } from "./network-state";
 
 /**
  * Whether `name` has an owner on the system bus. `NameHasOwner` does not start
  * a service that D-Bus can activate, as a call to the service would.
  */
 export const hasOwner = async (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   name: string,
 ): Promise<Result<boolean, SystemError>> =>
   (
-    await system.dbusCall({
+    await domicile.dbus.call({
       body: [name],
       bus: Bus.System,
       destination: "org.freedesktop.DBus",

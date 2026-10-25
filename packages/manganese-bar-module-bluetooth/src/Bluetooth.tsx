@@ -3,9 +3,10 @@ import { Popover } from "@domicile-desktop/component-library/Popover";
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
 import { isAbsent } from "@domicile-desktop/manganese-host/watch-presence";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
+import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
-import type { System, SystemError } from "@domicile-desktop/sdk/system";
-import { system } from "@domicile-desktop/sdk/system";
+import type { SystemError } from "@domicile-desktop/sdk/system";
 import type {
   Device,
   Bluetooth as Reading,
@@ -51,7 +52,7 @@ export const Bluetooth = ({
   hardware,
   locked = false,
 }: Props) => {
-  const host = useMemo(() => system(domicile), [domicile]);
+  const host = useMemo(() => desktop(domicile), [domicile]);
   const reading = useSharedWatch(bluetooth);
   const present = useSharedWatch(hardware);
   const usable = reading?.match({
@@ -131,7 +132,7 @@ const Item = ({
   reading,
 }: {
   actions: BluetoothActions;
-  host: System;
+  host: Domicile;
   reading: Reading;
 }) => {
   const on = reading.adapters.some(({ powered }) => powered);

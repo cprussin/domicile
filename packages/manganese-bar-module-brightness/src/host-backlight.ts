@@ -1,5 +1,5 @@
+import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
-import { system } from "@domicile-desktop/sdk/system";
 import { brightnessSetter } from "@domicile-desktop/system-backlight/set-brightness";
 import type { BrightnessWatch } from "@domicile-desktop/system-backlight/watch-brightness";
 import { watchBrightness } from "@domicile-desktop/system-backlight/watch-brightness";
@@ -18,7 +18,7 @@ export type Backlight = {
 
 /** The backlight through `domicile`'s system calls. Failures are logged. */
 export const hostBacklight = (domicile: DomicileHost): Backlight => {
-  const host = system(domicile);
+  const host = desktop(domicile);
   const set = brightnessSetter(host);
   return {
     set: (level) => {

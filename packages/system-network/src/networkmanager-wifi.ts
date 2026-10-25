@@ -14,7 +14,7 @@ import { z } from "zod";
 
 import type { Reading } from "./follow";
 import { followBus } from "./follow";
-import type { NetworkSystem } from "./network-state";
+import type { NetworkDesktop } from "./network-state";
 import { variant } from "./variant";
 import type {
   Ip,
@@ -45,24 +45,24 @@ type Found = Result<Option<Wifi>, SystemError>;
  * keeps listening after one, so a later change reads again.
  */
 export const watchNetworkManagerWifi = (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   onWifi: (wifi: Found) => void,
 ): (() => void) =>
   followBus(
-    system,
+    domicile,
     { bus: Bus.System, sender: SERVICE },
-    () => read(system),
+    () => read(domicile),
     onWifi,
   );
 
 /** Turn the Wi-Fi radio on or off. */
 export const setNetworkManagerWifiEnabled = async (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   _wifi: WifiDevice,
   enabled: boolean,
 ): Promise<Result<"done", SystemError>> =>
   done(
-    await system.dbusCall(
+    await domicile.dbus.call(
       request(ROOT, "org.freedesktop.DBus.Properties", "Set", "ssv", [
         SERVICE,
         "WirelessEnabled",
@@ -73,11 +73,11 @@ export const setNetworkManagerWifiEnabled = async (
 
 /** Ask for a scan. Networks it finds arrive as changes. */
 export const scanNetworkManagerWifi = async (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   wifi: WifiDevice,
 ): Promise<Result<"done", SystemError>> =>
   done(
-    await system.dbusCall(
+    await domicile.dbus.call(
       request(wifi.device, WIRELESS, "RequestScan", "a{sv}", [{}]),
     ),
   );
@@ -87,13 +87,13 @@ export const scanNetworkManagerWifi = async (
  * profile, which needs `passphrase` when the network is secured.
  */
 export const connectNetworkManagerWifi = async (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   wifi: WifiDevice,
   network: WifiNetwork,
   passphrase: string | undefined,
 ): Promise<Result<"done", SystemError>> =>
   done(
-    await system.dbusCall(
+    await domicile.dbus.call(
       network.profile === undefined
         ? request(ROOT, SERVICE, "AddAndActivateConnection", "a{sa{sv}}oo", [
             newProfile(network, passphrase),
@@ -110,11 +110,11 @@ export const connectNetworkManagerWifi = async (
 
 /** Leave the current network, until asked to join one. */
 export const disconnectNetworkManagerWifi = async (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   wifi: WifiDevice,
 ): Promise<Result<"done", SystemError>> =>
   done(
-    await system.dbusCall({
+    await domicile.dbus.call({
       bus: Bus.System,
       destination: SERVICE,
       interface: DEVICE,
@@ -166,9 +166,11 @@ const newProfile = (
  * Read Wi-Fi. A property change on an object read for it matters, as does an
  * access point or a device coming or going.
  */
-const read = async (system: NetworkSystem): Promise<Reading<Option<Wifi>>> => {
+const read = async (
+  domicile: NetworkDesktop,
+): Promise<Reading<Option<Wifi>>> => {
   const paths = new Set([ROOT]);
-  const value = await readWifi(system, paths);
+  const value = await readWifi(domicile, paths);
   return { matters: (signal) => matters(paths, signal), value };
 };
 
@@ -194,12 +196,12 @@ const matters = (paths: ReadonlySet<string>, signal: DbusSignal): boolean => {
 
 /** Read Wi-Fi, adding each object read to `paths`. */
 const readWifi = async (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   paths: Set<string>,
 ): Promise<Found> =>
-  (await properties(system, ROOT, SERVICE, rootSchema)).andThenAsync(
+  (await properties(domicile, ROOT, SERVICE, rootSchema)).andThenAsync(
     async ({ WirelessEnabled: enabled }) =>
-      (await call(system, ROOT, SERVICE, "GetDevices")).andThenAsync(
+      (await call(domicile, ROOT, SERVICE, "GetDevices")).andThenAsync(
         async ({ body }) => {
           const listed = devicesSchema.parse(body)[0];
           for (const path of listed) {
@@ -208,7 +210,7 @@ const readWifi = async (
           const devices = Result.collect(
             await Promise.all(
               listed.map(async (path) =>
-                (await properties(system, path, DEVICE, deviceSchema)).map(
+                (await properties(domicile, path, DEVICE, deviceSchema)).map(
                   (device) => ({ device, path }),
                 ),
               ),
@@ -221,7 +223,13 @@ const readWifi = async (
             return found === undefined
               ? Ok<Option<Wifi>, SystemError>(None())
               : (
-                  await wifiOf(system, paths, found.path, found.device, enabled)
+                  await wifiOf(
+                    domicile,
+                    paths,
+                    found.path,
+                    found.device,
+                    enabled,
+                  )
                 ).map((wifi) => Some(wifi));
           });
         },
@@ -230,24 +238,24 @@ const readWifi = async (
 
 /** The Wi-Fi device at `path`. */
 const wifiOf = async (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   paths: Set<string>,
   path: string,
   device: Device,
   enabled: boolean,
 ): Promise<Result<Wifi, SystemError>> =>
-  (await properties(system, path, WIRELESS, wirelessSchema)).andThenAsync(
+  (await properties(domicile, path, WIRELESS, wirelessSchema)).andThenAsync(
     async (radio) => {
       for (const point of radio.AccessPoints) {
         paths.add(point);
       }
       paths.add(device.Ip4Config);
       const [points, profiles, ip] = await Promise.all([
-        accessPoints(system, radio.AccessPoints),
-        savedProfiles(system, device.AvailableConnections),
+        accessPoints(domicile, radio.AccessPoints),
+        savedProfiles(domicile, device.AvailableConnections),
         radio.ActiveAccessPoint === NO_OBJECT || device.Ip4Config === NO_OBJECT
           ? Promise.resolve(Ok<Option<Ip>, SystemError>(None()))
-          : ipOf(system, device.Ip4Config),
+          : ipOf(domicile, device.Ip4Config),
       ]);
       return points.andThen((read) =>
         profiles.andThen((saved) =>
@@ -270,7 +278,7 @@ const wifiOf = async (
 type Point = AccessPoint & { path: string };
 
 const accessPoints = async (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   listed: readonly string[],
 ): Promise<Result<Point[], SystemError>> =>
   Result.collect(
@@ -278,7 +286,7 @@ const accessPoints = async (
       listed.map(async (path) =>
         (
           await properties(
-            system,
+            domicile,
             path,
             `${SERVICE}.AccessPoint`,
             accessPointSchema,
@@ -290,7 +298,7 @@ const accessPoints = async (
 
 /** Each saved Wi-Fi profile's path, by its network's name. */
 const savedProfiles = async (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   listed: readonly string[],
 ): Promise<Result<Map<string, string>, SystemError>> =>
   Result.collect(
@@ -298,7 +306,7 @@ const savedProfiles = async (
       listed.map(async (path) =>
         (
           await call(
-            system,
+            domicile,
             path,
             `${SERVICE}.Settings.Connection`,
             "GetSettings",
@@ -320,10 +328,10 @@ const savedProfiles = async (
   );
 
 const ipOf = async (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   path: string,
 ): Promise<Result<Option<Ip>, SystemError>> =>
-  (await properties(system, path, `${SERVICE}.IP4Config`, ip4Schema)).map(
+  (await properties(domicile, path, `${SERVICE}.IP4Config`, ip4Schema)).map(
     (config) =>
       Some({
         addresses: config.AddressData.map(
@@ -385,12 +393,12 @@ const isSecured = (point: AccessPoint): boolean =>
   (point.Flags & 1) !== 0 || point.WpaFlags !== 0 || point.RsnFlags !== 0;
 
 const call = (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   path: string,
   iface: string,
   member: string,
 ) =>
-  system.dbusCall({
+  domicile.dbus.call({
     bus: Bus.System,
     destination: SERVICE,
     interface: iface,
@@ -400,13 +408,13 @@ const call = (
 
 /** `Properties.GetAll` on one of NetworkManager's objects, parsed. */
 const properties = async <T extends NonNullable<unknown>>(
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   path: string,
   interfaceName: string,
   schema: z.ZodType<T>,
 ): Promise<Result<T, SystemError>> =>
   (
-    await system.dbusCall({
+    await domicile.dbus.call({
       body: [interfaceName],
       bus: Bus.System,
       destination: SERVICE,

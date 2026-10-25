@@ -6,7 +6,7 @@ import type { AudioError } from "./audio-error";
 import { pactl } from "./pactl";
 import type { Request } from "./request";
 import { argv, coalesce } from "./request";
-import type { AudioSystem } from "./sound-server";
+import type { AudioDesktop } from "./sound-server";
 
 type Waiting = {
   request: Request;
@@ -18,7 +18,7 @@ type Waiting = {
  * Runs requests one at a time, in order. Requests that wait while another
  * runs are coalesced: see {@link coalesce}.
  */
-export const requestQueue = (system: AudioSystem) => {
+export const requestQueue = (domicile: AudioDesktop) => {
   const waiting: Waiting[] = [];
   const state = { running: false };
   return (request: Request): Promise<Result<Asked, AudioError>> =>
@@ -29,7 +29,7 @@ export const requestQueue = (system: AudioSystem) => {
           waiting.push({ answer, args, request });
           if (!state.running) {
             state.running = true;
-            drain(system, waiting, state).catch((error: unknown) => {
+            drain(domicile, waiting, state).catch((error: unknown) => {
               // biome-ignore lint/suspicious/noConsole: no caller is waiting on the queue itself
               console.error("the mixer's request queue broke", error);
             });
@@ -40,7 +40,7 @@ export const requestQueue = (system: AudioSystem) => {
 
 /** Runs what is waiting, then marks the queue idle in the same turn. */
 const drain = async (
-  system: AudioSystem,
+  domicile: AudioDesktop,
   waiting: Waiting[],
   state: { running: boolean },
 ) => {
@@ -50,7 +50,7 @@ const drain = async (
     for (const { answer, args, request } of batch) {
       answer(
         kept.includes(request)
-          ? (await pactl(system, args)).map(() => Asked.Done)
+          ? (await pactl(domicile, args)).map(() => Asked.Done)
           : Ok(Asked.Overtaken),
       );
     }

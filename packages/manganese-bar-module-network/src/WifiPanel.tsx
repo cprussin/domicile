@@ -3,7 +3,8 @@ import { Button } from "@domicile-desktop/component-library/Button";
 import { Input } from "@domicile-desktop/component-library/Input";
 import { Switch } from "@domicile-desktop/component-library/Switch";
 import { useRequests } from "@domicile-desktop/manganese-host/useRequests";
-import type { System, SystemError } from "@domicile-desktop/sdk/system";
+import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
+import type { SystemError } from "@domicile-desktop/sdk/system";
 import type {
   Wifi,
   WifiConnection,
@@ -29,7 +30,7 @@ type Props = {
   /** Each interface's addresses, from `ip`, which every backend's machine has. */
   addresses: Addresses;
   /** Where requests go. */
-  host: System;
+  host: Domicile;
   actions: WifiActions;
 };
 
@@ -65,7 +66,7 @@ export const WifiPanel = ({ actions, addresses, host, wifi }: Props) => {
 type ControlsProps = {
   wifi: Wifi;
   addresses: Addresses;
-  host: System;
+  host: Domicile;
   actions: WifiActions;
 };
 
@@ -171,7 +172,7 @@ const ScanOnShow = ({
   wifi: { backend, device, interface: name },
 }: {
   actions: WifiActions;
-  host: System;
+  host: Domicile;
   run: ReturnType<typeof useRequests>["run"];
   wifi: WifiDevice;
 }) => {

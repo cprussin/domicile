@@ -19,7 +19,7 @@ const C = { env: { LC_ALL: "C" } };
 const server = (answer: (argv: readonly string[]) => Answer = pactl) => {
   const system = new FakeSystem(answer);
   const reported: unknown[] = [];
-  const sound = soundServer(system, TIMING, (...said) => {
+  const sound = soundServer({ processes: system }, TIMING, (...said) => {
     reported.push(said);
   });
   return { reported, sound, system };

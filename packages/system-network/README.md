@@ -4,15 +4,16 @@ The network for a Domicile shell, from NetworkManager, iwd or wpa_supplicant:
 connectivity and the primary connection, with the Wi-Fi network's name and
 signal. The Wi-Fi device, from NetworkManager or iwd: its networks and
 connection, and the requests that change them. Built on
-[`@domicile-desktop/sdk/system`](../chrome-sdk/README.md).
+the `dbus`, `files` and `processes` namespaces of
+[`desktop(domicile)`](../chrome-sdk/README.md).
 
 ## Usage
 
 ```ts
-import { system } from "@domicile-desktop/sdk/system";
+import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import { watchNetwork } from "@domicile-desktop/system-network/network";
 
-const stop = watchNetwork(system(domicile), (network) => {
+const stop = watchNetwork(desktop(domicile), (network) => {
   network.match({
     Err: () => hide(),
     Ok: ({ connectivity, link }) => show(connectivity, link),
@@ -111,4 +112,4 @@ bun run turbo test --filter @domicile-desktop/system-network
 ```
 
 Tests replay D-Bus replies, in the compositor's JSON, through an injected
-`System`.
+`dbus` namespace.

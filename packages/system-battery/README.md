@@ -4,18 +4,17 @@ The battery for a Domicile shell, from UPower over the system bus.
 
 - Reads UPower's DisplayDevice: the combined charge of every battery and
   whether a charger is connected.
-- Built on [`@domicile-desktop/sdk/system`](../chrome-sdk/README.md)'s
-  `dbusCall` and `dbusMatch`. See
+- Built on the desktop's `dbus` namespace
+  ([`@domicile-desktop/sdk`](../chrome-sdk/README.md)). See
   [SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md).
 - Needs `upower` running. Without it, calls fail with a `Dbus` error.
 
 ## Usage
 
 ```ts
-import { system } from "@domicile-desktop/sdk/system";
 import { watchBattery } from "@domicile-desktop/system-battery/battery";
 
-const watched = await watchBattery(system(domicile));
+const watched = await watchBattery(domicile);
 watched.match({
   Err: (error) => console.error(error.message),
   Ok: async ({ items }) => {
@@ -26,8 +25,9 @@ watched.match({
 });
 ```
 
-- `readBattery(system)`: the reading now, `Result<Option<Battery>, SystemError>`.
-- `watchBattery(system)`: the reading now as the first item, then one per
+- `domicile` is the desktop, a `Domicile`; any object with its `dbus` works.
+- `readBattery(domicile)`: the reading now, `Result<Option<Battery>, SystemError>`.
+- `watchBattery(domicile)`: the reading now as the first item, then one per
   UPower change. `stop()` ends it.
 - `charge` is 0 through 1. `charging` is true unless the battery is draining
   (discharging, empty or pending discharge), so a full battery on AC counts.

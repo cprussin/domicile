@@ -3,8 +3,8 @@ import { perHost } from "@domicile-desktop/manganese-host/per-host";
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { watchPresence } from "@domicile-desktop/manganese-host/watch-presence";
+import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import type { SystemError } from "@domicile-desktop/sdk/system";
-import { system } from "@domicile-desktop/sdk/system";
 import type { Audio } from "@domicile-desktop/system-audio/audio";
 import { hasSoundCard } from "@domicile-desktop/system-audio/hardware";
 import type { SoundServer } from "@domicile-desktop/system-audio/sound-server";
@@ -22,7 +22,7 @@ export type DeskSound = {
 
 /** The sound server, watched once for every bar and the lock screen. */
 export const deskSound = perHost((domicile): DeskSound => {
-  const { watch, ...sound } = soundServer(system(domicile));
+  const { watch, ...sound } = soundServer(desktop(domicile));
   return {
     audio: sharedWatch(watch),
     sound: { ...sound, meters: sharedMeters(sound.meters) },
@@ -33,6 +33,6 @@ export const deskSound = perHost((domicile): DeskSound => {
 export const deskSoundHardware = perHost(
   (domicile): SharedWatch<Result<boolean, SystemError>> =>
     sharedWatch((onPresent) =>
-      watchPresence(() => hasSoundCard(system(domicile)), onPresent),
+      watchPresence(() => hasSoundCard(desktop(domicile)), onPresent),
     ),
 );

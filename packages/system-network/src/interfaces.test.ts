@@ -83,7 +83,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe(readInterfaces, () => {
   it("lists the hardware, wired and wireless, by name", async () => {
-    const { system } = fakeSysfs(LAPTOP);
+    const { domicile: system } = fakeSysfs(LAPTOP);
 
     expect(await readInterfaces(system)).toEqual(
       Ok([
@@ -107,7 +107,7 @@ describe(readInterfaces, () => {
 
   it("reads no speed from a port with no cable", async () => {
     const { speed: _, ...unplugged } = { ...ETHERNET, operstate: "down\n" };
-    const { system } = fakeSysfs({ enp0s31f6: unplugged });
+    const { domicile: system } = fakeSysfs({ enp0s31f6: unplugged });
 
     expect(await readInterfaces(system)).toEqual(
       Ok([
@@ -123,17 +123,16 @@ describe(readInterfaces, () => {
   });
 
   it("finds none on a machine with only virtual interfaces", async () => {
-    const { system } = fakeSysfs(VIRTUAL);
+    const { domicile: system } = fakeSysfs(VIRTUAL);
 
     expect(await readInterfaces(system)).toEqual(Ok([]));
   });
 
   it("fails when the kernel cannot be read", async () => {
-    const { system } = fakeSysfs(LAPTOP);
+    const { domicile: system } = fakeSysfs(LAPTOP);
 
     const failed = await readInterfaces({
-      ...system,
-      readDir: () => Promise.resolve(Err(LOCKED)),
+      files: { ...system.files, readDir: () => Promise.resolve(Err(LOCKED)) },
     });
 
     expect(failed).toEqual(Err(LOCKED));
@@ -145,7 +144,11 @@ describe(watchInterfaces, () => {
     const sysfs = fakeSysfs(LAPTOP);
     const clock = heldClock();
     const heard = reports();
-    const stop = watchInterfaces(sysfs.system, heard.onInterfaces, clock.every);
+    const stop = watchInterfaces(
+      sysfs.domicile,
+      heard.onInterfaces,
+      clock.every,
+    );
 
     expect(okOf(await heard.next())).toHaveLength(2);
 
@@ -167,7 +170,11 @@ describe(watchInterfaces, () => {
     const sysfs = fakeSysfs(LAPTOP);
     const clock = heldClock();
     const heard = reports();
-    const stop = watchInterfaces(sysfs.system, heard.onInterfaces, clock.every);
+    const stop = watchInterfaces(
+      sysfs.domicile,
+      heard.onInterfaces,
+      clock.every,
+    );
     stop();
 
     await settle();
@@ -225,11 +232,13 @@ describe(readAddresses, () => {
   it("reads each interface's current global addresses and its gateway from ip", async () => {
     const asked: (readonly string[])[] = [];
     const addresses = await readAddresses({
-      run: (argv) => {
-        asked.push(argv);
-        return Promise.resolve(
-          ran(argv.includes("route") ? ROUTES : ADDRESSES),
-        );
+      processes: {
+        run: (argv) => {
+          asked.push(argv);
+          return Promise.resolve(
+            ran(argv.includes("route") ? ROUTES : ADDRESSES),
+          );
+        },
       },
     });
 
@@ -249,10 +258,12 @@ describe(readAddresses, () => {
 
   it("fails when ip does", async () => {
     const addresses = await readAddresses({
-      run: () =>
-        Promise.resolve(
-          Ok({ code: 1, signal: undefined, stderr: "nope", stdout: "" }),
-        ),
+      processes: {
+        run: () =>
+          Promise.resolve(
+            Ok({ code: 1, signal: undefined, stderr: "nope", stdout: "" }),
+          ),
+      },
     });
 
     expect(addresses.isErr()).toBe(true);
@@ -266,8 +277,10 @@ describe(watchAddresses, () => {
     const heard: Result<Map<string, unknown>, SystemError>[] = [];
     watchAddresses(
       {
-        run: (argv) =>
-          Promise.resolve(ran(argv.includes("route") ? ROUTES : listed.now)),
+        processes: {
+          run: (argv) =>
+            Promise.resolve(ran(argv.includes("route") ? ROUTES : listed.now)),
+        },
       },
       (addresses) => {
         heard.push(addresses);

@@ -131,6 +131,41 @@ const fakeBus = (
       ended.resolve(Err(error));
     },
     calls,
+    domicile: {
+      dbus: {
+        call: (call: DbusCall) => {
+          calls.push(call);
+          const reply = replies.shift();
+          if (reply === undefined) {
+            throw new Error(`test: no reply for ${call.member}`);
+          } else {
+            return Promise.resolve(reply);
+          }
+        },
+        match: (match: DbusMatch) => {
+          matches.push(match);
+          return Promise.resolve(
+            refused === undefined
+              ? Ok<Listening<Listened<DbusSignal>>, SystemError>({
+                  ended: ended.promise,
+                  items,
+                  stop: () => {
+                    state.stopped += 1;
+                    signals.promise
+                      .then((controller) => {
+                        controller.close();
+                        ended.resolve(Ok("stopped"));
+                      })
+                      .catch(() => {
+                        /* the test fails on the missing report instead */
+                      });
+                  },
+                })
+              : Err<Listening<Listened<DbusSignal>>, SystemError>(refused),
+          );
+        },
+      },
+    },
     matches,
     /** Says the compositor restarted under the match. */
     miss: async () => {
@@ -141,39 +176,6 @@ const fakeBus = (
     },
     get stopped() {
       return state.stopped;
-    },
-    system: {
-      dbusCall: (call: DbusCall) => {
-        calls.push(call);
-        const reply = replies.shift();
-        if (reply === undefined) {
-          throw new Error(`test: no reply for ${call.member}`);
-        } else {
-          return Promise.resolve(reply);
-        }
-      },
-      dbusMatch: (match: DbusMatch) => {
-        matches.push(match);
-        return Promise.resolve(
-          refused === undefined
-            ? Ok<Listening<Listened<DbusSignal>>, SystemError>({
-                ended: ended.promise,
-                items,
-                stop: () => {
-                  state.stopped += 1;
-                  signals.promise
-                    .then((controller) => {
-                      controller.close();
-                      ended.resolve(Ok("stopped"));
-                    })
-                    .catch(() => {
-                      /* the test fails on the missing report instead */
-                    });
-                },
-              })
-            : Err<Listening<Listened<DbusSignal>>, SystemError>(refused),
-        );
-      },
     },
   };
 };
@@ -245,7 +247,7 @@ describe("watchBluetooth", () => {
     const bus = fakeBus([Ok(recorded(true, false))]);
     const seen = reports();
 
-    watchBluetooth(bus.system, seen.on);
+    watchBluetooth(bus.domicile, seen.on);
 
     expect(await seen.next()).toStrictEqual(Ok(MOUSE_AWAY));
     expect(bus.calls).toStrictEqual([
@@ -263,7 +265,7 @@ describe("watchBluetooth", () => {
     const bus = fakeBus([Err(SERVICE_UNKNOWN)]);
     const seen = reports();
 
-    watchBluetooth(bus.system, seen.on);
+    watchBluetooth(bus.domicile, seen.on);
 
     expect(await seen.next()).toStrictEqual(Err(SERVICE_UNKNOWN));
   });
@@ -273,7 +275,7 @@ describe("watchBluetooth", () => {
       const bus = fakeBus([Ok(recorded(true, false))]);
       const seen = reports();
 
-      watchBluetooth(bus.system, seen.on);
+      watchBluetooth(bus.domicile, seen.on);
       await seen.next();
 
       expect(bus.matches).toStrictEqual([
@@ -287,7 +289,7 @@ describe("watchBluetooth", () => {
         Ok(recorded(true, true)),
       ]);
       const seen = reports();
-      watchBluetooth(bus.system, seen.on);
+      watchBluetooth(bus.domicile, seen.on);
       await seen.next();
 
       await bus.send(
@@ -308,7 +310,7 @@ describe("watchBluetooth", () => {
         Ok(recorded(true, true)),
       ]);
       const seen = reports();
-      watchBluetooth(bus.system, seen.on);
+      watchBluetooth(bus.domicile, seen.on);
       await seen.next();
 
       await bus.miss();
@@ -324,7 +326,7 @@ describe("watchBluetooth", () => {
         Ok(recorded(false, false)),
       ]);
       const seen = reports();
-      watchBluetooth(bus.system, seen.on);
+      watchBluetooth(bus.domicile, seen.on);
       await seen.next();
 
       await bus.send(
@@ -358,7 +360,7 @@ describe("watchBluetooth", () => {
         Ok(recorded(true, false)),
       ]);
       const seen = reports();
-      watchBluetooth(bus.system, seen.on);
+      watchBluetooth(bus.domicile, seen.on);
       await seen.next();
 
       await bus.send(properties(iface, { [name]: value }));
@@ -372,7 +374,7 @@ describe("watchBluetooth", () => {
         Ok(recorded(true, false)),
       ]);
       const seen = reports();
-      watchBluetooth(bus.system, seen.on);
+      watchBluetooth(bus.domicile, seen.on);
       await seen.next();
 
       await bus.send({
@@ -391,7 +393,7 @@ describe("watchBluetooth", () => {
       const bus = fakeBus([Ok(recorded(true, false))], SERVICE_UNKNOWN);
       const seen = reports();
 
-      watchBluetooth(bus.system, seen.on);
+      watchBluetooth(bus.domicile, seen.on);
 
       expect(await seen.next()).toStrictEqual(Err(SERVICE_UNKNOWN));
     });
@@ -399,7 +401,7 @@ describe("watchBluetooth", () => {
     it("reports the error when the match breaks", async () => {
       const bus = fakeBus([Ok(recorded(true, false))]);
       const seen = reports();
-      watchBluetooth(bus.system, seen.on);
+      watchBluetooth(bus.domicile, seen.on);
       await seen.next();
 
       await bus.break(SERVICE_UNKNOWN);
@@ -415,7 +417,7 @@ describe("watchBluetooth", () => {
         Ok(recorded(true, true)),
       ]);
       const seen = reports();
-      const stop = watchBluetooth(bus.system, seen.on);
+      const stop = watchBluetooth(bus.domicile, seen.on);
       await seen.next();
 
       // A change arrives, and the watch stops while it reads again.
@@ -435,7 +437,7 @@ describe("watchBluetooth", () => {
       const bus = fakeBus([Ok(recorded(true, false))]);
       const seen = reports();
 
-      watchBluetooth(bus.system, seen.on)();
+      watchBluetooth(bus.domicile, seen.on)();
       await Bun.sleep(0);
 
       expect(bus.stopped).toBe(1);
@@ -448,7 +450,7 @@ describe("setPowered", () => {
   it("sets the adapter's Powered property", async () => {
     const bus = fakeBus([Ok({ body: [], signature: "" })]);
 
-    expect(await setPowered(bus.system, ADAPTER, false)).toStrictEqual(
+    expect(await setPowered(bus.domicile, ADAPTER, false)).toStrictEqual(
       Ok("set"),
     );
     expect(bus.calls).toStrictEqual([
@@ -475,7 +477,7 @@ describe("setPowered", () => {
     };
     const bus = fakeBus([Err(blocked)]);
 
-    expect(await setPowered(bus.system, ADAPTER, true)).toStrictEqual(
+    expect(await setPowered(bus.domicile, ADAPTER, true)).toStrictEqual(
       Err(blocked),
     );
   });
@@ -522,14 +524,14 @@ describe.each([
   it(`calls ${member}`, async () => {
     const bus = fakeBus([Ok({ body: [], signature: "" })]);
 
-    expect(await ask(bus.system, path)).toStrictEqual(Ok("done"));
+    expect(await ask(bus.domicile, path)).toStrictEqual(Ok("done"));
     expect(bus.calls).toStrictEqual([request(path, iface, member)]);
   });
 
   it("reports BlueZ's refusal", async () => {
     const bus = fakeBus([Err(FAILED)]);
 
-    expect(await ask(bus.system, path)).toStrictEqual(Err(FAILED));
+    expect(await ask(bus.domicile, path)).toStrictEqual(Err(FAILED));
   });
 });
 
@@ -540,7 +542,7 @@ describe("pair", () => {
       Ok({ body: [], signature: "" }),
     ]);
 
-    expect(await pair(bus.system, SPEAKER)).toStrictEqual(Ok("done"));
+    expect(await pair(bus.domicile, SPEAKER)).toStrictEqual(Ok("done"));
     expect(bus.calls).toStrictEqual([
       request(SPEAKER, "org.bluez.Device1", "Pair"),
       {
@@ -558,7 +560,7 @@ describe("pair", () => {
   it("does not trust a device that failed to pair", async () => {
     const bus = fakeBus([Err(FAILED)]);
 
-    expect(await pair(bus.system, SPEAKER)).toStrictEqual(Err(FAILED));
+    expect(await pair(bus.domicile, SPEAKER)).toStrictEqual(Err(FAILED));
     expect(bus.calls).toHaveLength(1);
   });
 });
@@ -567,7 +569,7 @@ describe("forget", () => {
   it("removes the device from its adapter", async () => {
     const bus = fakeBus([Ok({ body: [], signature: "" })]);
 
-    expect(await forget(bus.system, mouse(false))).toStrictEqual(Ok("done"));
+    expect(await forget(bus.domicile, mouse(false))).toStrictEqual(Ok("done"));
     expect(bus.calls).toStrictEqual([
       request(ADAPTER, "org.bluez.Adapter1", "RemoveDevice", [MOUSE]),
     ]);

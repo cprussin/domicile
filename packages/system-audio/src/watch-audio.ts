@@ -7,14 +7,14 @@ import type { Audio } from "./audio";
 import { AudioError } from "./audio-error";
 import { C_LOCALE, pactl } from "./pactl";
 import { reading } from "./reading";
-import type { AudioSystem, Report, Timing } from "./sound-server";
+import type { AudioDesktop, Report, Timing } from "./sound-server";
 import { announcesAChange } from "./subscription";
 
 const SUBSCRIBE = ["pactl", "-f", "json", "subscribe"];
 
 /** See `SoundServer.watch`. */
 export const watchAudio = (
-  system: AudioSystem,
+  domicile: AudioDesktop,
   onAudio: (audio: Audio) => void,
   timing: Timing,
   report: Report,
@@ -25,7 +25,7 @@ export const watchAudio = (
       onAudio(audio);
     }
   };
-  keepSubscribed(system, told, timing, report, stopping.signal).catch(
+  keepSubscribed(domicile, told, timing, report, stopping.signal).catch(
     (error: unknown) => {
       // biome-ignore lint/suspicious/noConsole: a broken watch has no caller to return to
       console.error("the sound server watch broke", error);
@@ -38,7 +38,7 @@ export const watchAudio = (
 
 /** Subscribes until stopped, saying once if there is no sound server. */
 const keepSubscribed = async (
-  system: AudioSystem,
+  domicile: AudioDesktop,
   onAudio: (audio: Audio) => void,
   timing: Timing,
   report: Report,
@@ -46,7 +46,7 @@ const keepSubscribed = async (
 ) => {
   let said = false;
   while (!signal.aborted) {
-    const ended = await subscribe(system, onAudio, timing, report, signal);
+    const ended = await subscribe(domicile, onAudio, timing, report, signal);
     if (!said) {
       said = ended.match({
         Err: (error) => {
@@ -68,13 +68,13 @@ const keepSubscribed = async (
  * changes, until `pactl` exits. Fails if the first read does.
  */
 const subscribe = async (
-  system: AudioSystem,
+  domicile: AudioDesktop,
   onAudio: (audio: Audio) => void,
   timing: Timing,
   report: Report,
   signal: AbortSignal,
 ): Promise<Result<"ended", AudioError>> =>
-  (await system.spawn(SUBSCRIBE, C_LOCALE))
+  (await domicile.processes.spawn(SUBSCRIBE, C_LOCALE))
     .mapErr((error): AudioError => AudioError.Refused(error.message))
     .andThenAsync(async (subscription) => {
       const kill = () => {
@@ -89,7 +89,7 @@ const subscribe = async (
         clearTimeout(settling.timer);
         settling.timer = setTimeout(() => {
           settling.reads = settling.reads.then(async () => {
-            (await readServer(system)).match({
+            (await readServer(domicile)).match({
               Err: (error) => {
                 report("the sound server could not be read", error);
               },
@@ -99,7 +99,7 @@ const subscribe = async (
         }, timing.settleMs);
       };
       // Read after subscribing, so no change in between is missed.
-      const first = await readServer(system);
+      const first = await readServer(domicile);
       first.match({
         // Returned below, once the subscription ends.
         Err: () => undefined,
@@ -118,10 +118,10 @@ const subscribe = async (
     });
 
 const readServer = async (
-  system: AudioSystem,
+  domicile: AudioDesktop,
 ): Promise<Result<Audio, AudioError>> => {
-  const info = await pactl(system, ["-f", "json", "info"]);
-  const list = await pactl(system, ["-f", "json", "list"]);
+  const info = await pactl(domicile, ["-f", "json", "info"]);
+  const list = await pactl(domicile, ["-f", "json", "list"]);
   return info.andThen((server) =>
     list.map((devices) => parsed(server, devices)),
   );

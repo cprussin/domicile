@@ -3,11 +3,14 @@
 
 import type { Option, Result } from "@cprussin/option-result";
 import { Err, None, Ok, Some } from "@cprussin/option-result";
-import type { System, SystemError } from "@domicile-desktop/sdk/system";
+import type { Files } from "@domicile-desktop/sdk/desktop/files";
+import type { SystemError } from "@domicile-desktop/sdk/system";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 
 /** The calls the check makes. Each works while the desktop is locked. */
-export type SysfsSystem = Pick<System, "readDir" | "readTextFile">;
+export type SysfsDesktop = {
+  readonly files: Pick<Files, "readDir" | "readText">;
+};
 
 /**
  * Whether there is a Bluetooth controller, or an rfkill switch for one. A
@@ -15,18 +18,18 @@ export type SysfsSystem = Pick<System, "readDir" | "readTextFile">;
  * stays.
  */
 export const hasBluetoothHardware = async (
-  system: SysfsSystem,
+  domicile: SysfsDesktop,
 ): Promise<Result<boolean, SystemError>> =>
-  (await entriesOf(system, "/sys/class/bluetooth")).match({
+  (await entriesOf(domicile, "/sys/class/bluetooth")).match({
     Err: (error) => Promise.resolve(Err(error)),
     Ok: async (controllers) =>
       controllers.length > 0
         ? Ok(true)
-        : (await entriesOf(system, "/sys/class/rfkill")).match({
+        : (await entriesOf(domicile, "/sys/class/rfkill")).match({
             Err: (error) => Promise.resolve(Err(error)),
             Ok: (switches) =>
               anyOf(switches, async (name) =>
-                (await lineOf(system, `/sys/class/rfkill/${name}/type`)).map(
+                (await lineOf(domicile, `/sys/class/rfkill/${name}/type`)).map(
                   (type) =>
                     type.match({
                       None: () => false,
@@ -39,10 +42,10 @@ export const hasBluetoothHardware = async (
 
 /** The names in `dir`; none when it does not exist, as when no driver made it. */
 const entriesOf = async (
-  system: SysfsSystem,
+  domicile: SysfsDesktop,
   dir: string,
 ): Promise<Result<string[], SystemError>> =>
-  (await system.readDir(dir)).match({
+  (await domicile.files.readDir(dir)).match({
     Err: (error) =>
       error.kind === SystemErrorKind.NotFound ? Ok([]) : Err(error),
     Ok: (entries) => Ok(entries.map(({ name }) => name)),
@@ -66,10 +69,10 @@ const anyOf = async (
 
 /** A one-line file under `/sys`, without its newline; `None` when missing. */
 const lineOf = async (
-  system: SysfsSystem,
+  domicile: SysfsDesktop,
   path: string,
 ): Promise<Result<Option<string>, SystemError>> =>
-  (await system.readTextFile(path)).match({
+  (await domicile.files.readText(path)).match({
     Err: (error) =>
       error.kind === SystemErrorKind.NotFound ? Ok(None()) : Err(error),
     Ok: (text) => Ok(Some(text.trim())),

@@ -75,10 +75,14 @@ describe("readBacklight", () => {
     const { host } = fakeSysfs(THINKPAD);
 
     expect(
-      await readBacklight({ ...host, readDir: async () => Err(refused) }),
+      await readBacklight({
+        files: { ...host.files, readDir: async () => Err(refused) },
+      }),
     ).toStrictEqual(Err(refused));
     expect(
-      await readBacklight({ ...host, readTextFile: async () => Err(refused) }),
+      await readBacklight({
+        files: { ...host.files, readText: async () => Err(refused) },
+      }),
     ).toStrictEqual(Err(refused));
   });
 });

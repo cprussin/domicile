@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { system } from "@domicile-desktop/sdk/system";
+import { appDesktop } from "@domicile-desktop/sdk/desktop/app-desktop";
 import {
   lockScreenReadouts,
   recordingHost,
@@ -12,7 +12,7 @@ describe("on a lock screen", () => {
     const { host, sent } = recordingHost();
     const failed = Promise.withResolvers<void>();
     const sound = soundServer(
-      system(host),
+      appDesktop(host),
       { reopenMs: 60_000, settleMs: 0, tickMs: 0 },
       () => {
         failed.resolve();

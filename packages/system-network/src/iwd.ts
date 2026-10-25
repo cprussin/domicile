@@ -8,7 +8,7 @@ import { Bus } from "@domicile-desktop/sdk/system";
 import { z } from "zod";
 
 import { followBus } from "./follow";
-import type { Network, NetworkSystem } from "./network-state";
+import type { Network, NetworkDesktop } from "./network-state";
 import { Connectivity, Link } from "./network-state";
 import { strengthOfDbm } from "./signal-strength";
 import { variant } from "./variant";
@@ -33,13 +33,13 @@ const WATCHED = ["ConnectedNetwork", "Scanning", "State"];
  * again.
  */
 export const watchIwd = (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   onNetwork: (network: Result<Network, SystemError>) => void,
 ): (() => void) =>
   followBus(
-    system,
+    domicile,
     { bus: Bus.System, sender: SERVICE },
-    async () => ({ matters, value: await read(system) }),
+    async () => ({ matters, value: await read(domicile) }),
     onNetwork,
   );
 
@@ -64,9 +64,9 @@ const matters = (signal: DbusSignal): boolean => {
 };
 
 const read = async (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
 ): Promise<Result<Network, SystemError>> => {
-  const objects = await system.dbusCall({
+  const objects = await domicile.dbus.call({
     bus: Bus.System,
     destination: SERVICE,
     interface: "org.freedesktop.DBus.ObjectManager",
@@ -76,7 +76,7 @@ const read = async (
   return objects.match({
     Err: (error) => Promise.resolve(Err(error)),
     Ok: async ({ body }) =>
-      (await linkOf(system, managedObjectsSchema.parse(body)[0])).map(
+      (await linkOf(domicile, managedObjectsSchema.parse(body)[0])).map(
         (link) => ({ connectivity: Connectivity.Unknown, link }),
       ),
   });
@@ -84,7 +84,7 @@ const read = async (
 
 /** The first connected station's network, or `None`. */
 const linkOf = async (
-  system: NetworkSystem,
+  domicile: NetworkDesktop,
   objects: ManagedObjects,
 ): Promise<Result<Link, SystemError>> => {
   const station = Object.entries(objects).flatMap(([path, held]) =>
@@ -95,7 +95,7 @@ const linkOf = async (
   if (station === undefined) {
     return Ok(Link.None());
   } else {
-    const ordered = await system.dbusCall({
+    const ordered = await domicile.dbus.call({
       bus: Bus.System,
       destination: SERVICE,
       interface: STATION,

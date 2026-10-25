@@ -6,7 +6,8 @@
 
 import type { Result } from "@cprussin/option-result";
 import { Ok } from "@cprussin/option-result";
-import type { System, SystemError } from "@domicile-desktop/sdk/system";
+import type { Dbus } from "@domicile-desktop/sdk/desktop/dbus";
+import type { SystemError } from "@domicile-desktop/sdk/system";
 import { Bus } from "@domicile-desktop/sdk/system";
 import { z } from "zod";
 
@@ -23,7 +24,7 @@ export enum SetOutcome {
 }
 
 /** The calls {@link brightnessSetter} makes. */
-export type SetterHost = SysfsHost & Pick<System, "dbusCall">;
+export type SetterHost = SysfsHost & { readonly dbus: Pick<Dbus, "call"> };
 
 /** Sets the backlight to a level from 0 to 1, and says how it went. */
 export type SetBrightness = (
@@ -95,7 +96,7 @@ const send = async (host: SetterHost, level: number): Promise<Settled> =>
       None: async () => Ok(SetOutcome.NoBacklight),
       Some: async (backlight) =>
         (
-          await host.dbusCall({
+          await host.dbus.call({
             body: ["backlight", backlight.device, rawFor(backlight, level)],
             bus: Bus.System,
             destination: "org.freedesktop.login1",

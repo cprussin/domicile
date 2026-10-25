@@ -160,7 +160,7 @@ const NO_RUN = () => {
 
 const iwdBus = (replies: Replies) => {
   const bus = fakeBus(byKey(replies));
-  return { ...bus, system: { ...bus.system, run: NO_RUN } };
+  return { ...bus, domicile: { ...bus.domicile, processes: { run: NO_RUN } } };
 };
 
 describe("watchIwdWifi", () => {
@@ -168,7 +168,7 @@ describe("watchIwdWifi", () => {
     const bus = iwdBus(recorded(true));
     const seen = reports<Option<Wifi>>();
 
-    watchIwdWifi(bus.system, seen.on);
+    watchIwdWifi(bus.domicile, seen.on);
 
     expect(await seen.next()).toStrictEqual(Ok(Some(CONNECTED)));
     expect(bus.matches).toStrictEqual([{ bus: Bus.System, sender: IWD }]);
@@ -180,7 +180,7 @@ describe("watchIwdWifi", () => {
     const bus = iwdBus(replies);
     const seen = reports<Option<Wifi>>();
 
-    watchIwdWifi(bus.system, seen.on);
+    watchIwdWifi(bus.domicile, seen.on);
 
     expect(await seen.next()).toStrictEqual(
       Ok(
@@ -202,7 +202,7 @@ describe("watchIwdWifi", () => {
     const bus = iwdBus(recorded(false));
     const seen = reports<Option<Wifi>>();
 
-    watchIwdWifi(bus.system, seen.on);
+    watchIwdWifi(bus.domicile, seen.on);
 
     expect(await seen.next()).toStrictEqual(
       Ok(
@@ -230,7 +230,7 @@ describe("watchIwdWifi", () => {
     );
     const seen = reports<Option<Wifi>>();
 
-    watchIwdWifi(bus.system, seen.on);
+    watchIwdWifi(bus.domicile, seen.on);
 
     expect(await seen.next()).toStrictEqual(Ok(None()));
   });
@@ -241,7 +241,7 @@ describe("watchIwdWifi", () => {
     );
     const seen = reports<Option<Wifi>>();
 
-    watchIwdWifi(bus.system, seen.on);
+    watchIwdWifi(bus.domicile, seen.on);
 
     expect(await seen.next()).toStrictEqual(Err(SERVICE_UNKNOWN));
   });
@@ -250,7 +250,7 @@ describe("watchIwdWifi", () => {
     const replies = recorded(true);
     const bus = iwdBus(replies);
     const seen = reports<Option<Wifi>>();
-    watchIwdWifi(bus.system, seen.on);
+    watchIwdWifi(bus.domicile, seen.on);
     await seen.next();
 
     await bus.send(
@@ -285,9 +285,9 @@ describe("iwd Wi-Fi requests", () => {
   it("turns the device off", async () => {
     const bus = iwdBus(new Map([[`${DEVICE} Set ${IWD}.Device`, Ok(DONE)]]));
 
-    expect(await setIwdWifiEnabled(bus.system, CONNECTED, false)).toStrictEqual(
-      Ok("done"),
-    );
+    expect(
+      await setIwdWifiEnabled(bus.domicile, CONNECTED, false),
+    ).toStrictEqual(Ok("done"));
     expect(bus.calls).toStrictEqual([
       request(DEVICE, "org.freedesktop.DBus.Properties", "Set", [
         `${IWD}.Device`,
@@ -300,7 +300,9 @@ describe("iwd Wi-Fi requests", () => {
   it("scans", async () => {
     const bus = iwdBus(new Map([[`${DEVICE} Scan`, Ok(DONE)]]));
 
-    expect(await scanIwdWifi(bus.system, CONNECTED)).toStrictEqual(Ok("done"));
+    expect(await scanIwdWifi(bus.domicile, CONNECTED)).toStrictEqual(
+      Ok("done"),
+    );
     expect(bus.calls).toStrictEqual([
       request(DEVICE, `${IWD}.Station`, "Scan"),
     ]);
@@ -309,7 +311,7 @@ describe("iwd Wi-Fi requests", () => {
   it("disconnects", async () => {
     const bus = iwdBus(new Map([[`${DEVICE} Disconnect`, Ok(DONE)]]));
 
-    expect(await disconnectIwdWifi(bus.system, CONNECTED)).toStrictEqual(
+    expect(await disconnectIwdWifi(bus.domicile, CONNECTED)).toStrictEqual(
       Ok("done"),
     );
     expect(bus.calls).toStrictEqual([
@@ -325,7 +327,7 @@ describe("iwd Wi-Fi requests", () => {
       const bus = iwdBus(new Map([[`${network.path} Connect`, Ok(DONE)]]));
 
       expect(
-        await connectIwdWifi(bus.system, CONNECTED, network, undefined),
+        await connectIwdWifi(bus.domicile, CONNECTED, network, undefined),
       ).toStrictEqual(Ok("done"));
       expect(bus.calls).toStrictEqual([
         request(network.path, `${IWD}.Network`, "Connect"),
@@ -340,7 +342,7 @@ describe("iwd Wi-Fi requests", () => {
       const bus = iwdBus(new Map([[`${HOME} Connect`, Err(refused)]]));
 
       expect(
-        await connectIwdWifi(bus.system, CONNECTED, home, undefined),
+        await connectIwdWifi(bus.domicile, CONNECTED, home, undefined),
       ).toStrictEqual(Err(refused));
     });
 
@@ -352,11 +354,13 @@ describe("iwd Wi-Fi requests", () => {
       });
       return {
         argv,
-        system: {
-          ...bus.system,
-          run: (args: readonly string[]) => {
-            argv.push(args);
-            return Promise.resolve(Ok<Ran, SystemError>(ran));
+        domicile: {
+          ...bus.domicile,
+          processes: {
+            run: (args: readonly string[]) => {
+              argv.push(args);
+              return Promise.resolve(Ok<Ran, SystemError>(ran));
+            },
           },
         },
       };
@@ -367,7 +371,7 @@ describe("iwd Wi-Fi requests", () => {
 
       expect(
         await connectIwdWifi(
-          run.system,
+          run.domicile,
           CONNECTED,
           { ...home, profile: undefined },
           "hunter22",
@@ -396,7 +400,7 @@ describe("iwd Wi-Fi requests", () => {
 
       expect(
         await connectIwdWifi(
-          run.system,
+          run.domicile,
           CONNECTED,
           { ...home, profile: undefined },
           "wrong",
@@ -411,7 +415,7 @@ describe("iwd Wi-Fi requests", () => {
 
       expect(
         connectIwdWifi(
-          bus.system,
+          bus.domicile,
           CONNECTED,
           { ...home, profile: undefined },
           undefined,

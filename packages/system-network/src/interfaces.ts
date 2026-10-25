@@ -4,7 +4,9 @@
 
 import type { Option, Result } from "@cprussin/option-result";
 import { Err, None, Ok, Some } from "@cprussin/option-result";
-import type { System, SystemError } from "@domicile-desktop/sdk/system";
+import type { Files } from "@domicile-desktop/sdk/desktop/files";
+import type { Processes } from "@domicile-desktop/sdk/desktop/processes";
+import type { SystemError } from "@domicile-desktop/sdk/system";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import { z } from "zod";
 
@@ -38,23 +40,25 @@ export type Addressing = {
 };
 
 /** The calls {@link readInterfaces} makes. Each works while the desktop is locked. */
-export type InterfaceSystem = Pick<System, "readDir" | "readTextFile" | "stat">;
+export type InterfaceDesktop = {
+  readonly files: Pick<Files, "readDir" | "readText" | "stat">;
+};
 
 /**
  * The interfaces with hardware behind them, by name. Virtual ones, such as
  * the loopback, a bridge or a VPN, have no `device` link and are left out.
  */
 export const readInterfaces = async (
-  system: InterfaceSystem,
+  domicile: InterfaceDesktop,
 ): Promise<Result<NetworkInterface[], SystemError>> =>
-  (await system.readDir(NET)).match({
+  (await domicile.files.readDir(NET)).match({
     Err: (error) => Promise.resolve(Err(error)),
     Ok: async (entries) => {
       const read = await Promise.all(
         entries
           .map(({ name }) => name)
           .toSorted()
-          .map((name) => interfaceOf(system, name)),
+          .map((name) => interfaceOf(domicile, name)),
       );
       return read.reduce<Result<NetworkInterface[], SystemError>>(
         (all, each) =>
@@ -73,32 +77,32 @@ export const readInterfaces = async (
  * changes, and returns a function that stops watching. Reads every 5 seconds.
  */
 export const watchInterfaces = (
-  system: InterfaceSystem,
+  domicile: InterfaceDesktop,
   onInterfaces: (interfaces: Result<NetworkInterface[], SystemError>) => void,
   every: typeof everyInterval = everyInterval,
-): (() => void) => poll(() => readInterfaces(system), onInterfaces, every);
+): (() => void) => poll(() => readInterfaces(domicile), onInterfaces, every);
 
 /**
  * Calls `onAddresses` with {@link readAddresses} now and whenever it changes,
  * and returns a function that stops watching. Reads every 5 seconds.
  */
 export const watchAddresses = (
-  system: Pick<System, "run">,
+  domicile: { readonly processes: Pick<Processes, "run"> },
   onAddresses: (
     addresses: Result<Map<string, Addressing>, SystemError>,
   ) => void,
   every: typeof everyInterval = everyInterval,
-): (() => void) => poll(() => readAddresses(system), onAddresses, every);
+): (() => void) => poll(() => readAddresses(domicile), onAddresses, every);
 
 /**
  * Each interface's global addresses in use and default gateway, by name, from
  * `ip -j`. `ip` must be on the compositor's `PATH`.
  */
-export const readAddresses = async (
-  system: Pick<System, "run">,
-): Promise<Result<Map<string, Addressing>, SystemError>> => {
-  const addresses = await ip(system, ["address", "show"], addressesSchema);
-  const routes = await ip(system, ["route", "show", "default"], routesSchema);
+export const readAddresses = async (domicile: {
+  readonly processes: Pick<Processes, "run">;
+}): Promise<Result<Map<string, Addressing>, SystemError>> => {
+  const addresses = await ip(domicile, ["address", "show"], addressesSchema);
+  const routes = await ip(domicile, ["route", "show", "default"], routesSchema);
   return addresses.andThen((listed) =>
     routes.map(
       (defaults) =>
@@ -178,32 +182,32 @@ const everyInterval = (ms: number, tick: () => void): (() => void) => {
 
 /** The interface `name`, or `None` for a virtual one. */
 const interfaceOf = async (
-  system: InterfaceSystem,
+  domicile: InterfaceDesktop,
   name: string,
 ): Promise<Result<Option<NetworkInterface>, SystemError>> => {
   const at = `${NET}/${name}`;
-  return (await exists(system, `${at}/device`)).match({
+  return (await exists(domicile, `${at}/device`)).match({
     Err: (error) => Promise.resolve(Err(error)),
     Ok: async (physical) =>
       physical
-        ? (await hardwareOf(system, name)).map(Some)
+        ? (await hardwareOf(domicile, name)).map(Some)
         : Ok<Option<NetworkInterface>, SystemError>(None()),
   });
 };
 
 /** The interface `name`, which has a `device`. */
 const hardwareOf = async (
-  system: InterfaceSystem,
+  domicile: InterfaceDesktop,
   name: string,
 ): Promise<Result<NetworkInterface, SystemError>> => {
   const at = `${NET}/${name}`;
-  const wireless = await exists(system, `${at}/wireless`);
-  const address = await line(system, `${at}/address`);
-  const state = await line(system, `${at}/operstate`);
+  const wireless = await exists(domicile, `${at}/wireless`);
+  const address = await line(domicile, `${at}/address`);
+  const state = await line(domicile, `${at}/operstate`);
   const up = state.map((operstate) => operstate === "up");
   const speed =
     up.unwrapOr(false) && !wireless.unwrapOr(true)
-      ? await speedOf(system, at)
+      ? await speedOf(domicile, at)
       : undefined;
   return wireless.andThen((isWireless) =>
     address.andThen((hardwareAddress) =>
@@ -220,10 +224,10 @@ const hardwareOf = async (
 
 /** Whether `path` exists. */
 const exists = async (
-  system: InterfaceSystem,
+  domicile: InterfaceDesktop,
   path: string,
 ): Promise<Result<boolean, SystemError>> =>
-  (await system.stat(path)).match({
+  (await domicile.files.stat(path)).match({
     Err: (error) =>
       error.kind === SystemErrorKind.NotFound ? Ok(false) : Err(error),
     Ok: () => Ok(true),
@@ -231,20 +235,20 @@ const exists = async (
 
 /** A one-line file under `/sys`, without its newline. */
 const line = async (
-  system: InterfaceSystem,
+  domicile: InterfaceDesktop,
   path: string,
 ): Promise<Result<string, SystemError>> =>
-  (await system.readTextFile(path)).map((text) => text.trim());
+  (await domicile.files.readText(path)).map((text) => text.trim());
 
 /**
  * A wired link's speed. The kernel fails the read, or answers `-1`, when the
  * driver does not know it, which is no speed to show.
  */
 const speedOf = async (
-  system: InterfaceSystem,
+  domicile: InterfaceDesktop,
   at: string,
 ): Promise<number | undefined> =>
-  (await line(system, `${at}/speed`)).match({
+  (await line(domicile, `${at}/speed`)).match({
     Err: () => undefined,
     Ok: (text) => {
       const mbits = Number.parseInt(text, 10);
@@ -254,11 +258,11 @@ const speedOf = async (
 
 /** `ip -j` with `argv`, parsed with `schema`. */
 const ip = async <T extends NonNullable<unknown>>(
-  system: Pick<System, "run">,
+  domicile: { readonly processes: Pick<Processes, "run"> },
   argv: readonly string[],
   schema: z.ZodType<T>,
 ): Promise<Result<T, SystemError>> =>
-  (await system.run(["ip", "-j", ...argv])).andThen(
+  (await domicile.processes.run(["ip", "-j", ...argv])).andThen(
     ({ code, stderr, stdout }) =>
       code === 0
         ? Ok(schema.parse(JSON.parse(stdout)))

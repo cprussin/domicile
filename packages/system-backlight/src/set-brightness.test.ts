@@ -27,12 +27,14 @@ const machine = (devices: Devices | undefined) => {
   const waiting: ((asked: Asked) => void)[] = [];
   const host = {
     ...sysfs.host,
-    dbusCall: (call: DbusCall) =>
-      new Promise<Result<DbusBody, SystemError>>((answer) => {
-        const next = { answer, call };
-        asked.push(next);
-        waiting.shift()?.(next);
-      }),
+    dbus: {
+      call: (call: DbusCall) =>
+        new Promise<Result<DbusBody, SystemError>>((answer) => {
+          const next = { answer, call };
+          asked.push(next);
+          waiting.shift()?.(next);
+        }),
+    },
   };
   /** The `index`th call logind gets, once the setter has read `/sys`. */
   const nextCall = (index: number): Promise<Asked> => {

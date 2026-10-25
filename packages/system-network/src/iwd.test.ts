@@ -103,7 +103,7 @@ describe("watchIwd", () => {
       const bus = iwd(connected);
       const seen = reports();
 
-      watchIwd(bus.system, seen.on);
+      watchIwd(bus.domicile, seen.on);
 
       expect(await seen.next()).toStrictEqual(
         Ok({
@@ -148,7 +148,7 @@ describe("watchIwd", () => {
       );
       const seen = reports();
 
-      watchIwd(bus.system, seen.on);
+      watchIwd(bus.domicile, seen.on);
 
       expect(await seen.next()).toStrictEqual(
         Ok({ connectivity: Connectivity.Unknown, link }),
@@ -168,7 +168,7 @@ describe("watchIwd", () => {
       );
       const seen = reports();
 
-      watchIwd(bus.system, seen.on);
+      watchIwd(bus.domicile, seen.on);
 
       expect(await seen.next()).toStrictEqual(
         Ok({
@@ -183,7 +183,7 @@ describe("watchIwd", () => {
     const bus = iwd(() => Err(SERVICE_UNKNOWN));
     const seen = reports();
 
-    watchIwd(bus.system, seen.on);
+    watchIwd(bus.domicile, seen.on);
 
     expect(await seen.next()).toStrictEqual(Err(SERVICE_UNKNOWN));
   });
@@ -193,7 +193,7 @@ describe("watchIwd", () => {
       const bus = iwd(connected);
       const seen = reports();
 
-      watchIwd(bus.system, seen.on);
+      watchIwd(bus.domicile, seen.on);
       await seen.next();
 
       expect(bus.matches).toStrictEqual([
@@ -205,7 +205,7 @@ describe("watchIwd", () => {
       const objects = { reply: connected() };
       const bus = iwd(() => objects.reply);
       const seen = reports();
-      watchIwd(bus.system, seen.on);
+      watchIwd(bus.domicile, seen.on);
       await seen.next();
 
       objects.reply = Ok(
@@ -227,7 +227,7 @@ describe("watchIwd", () => {
       const objects = { reply: connected() };
       const bus = iwd(() => objects.reply);
       const seen = reports();
-      watchIwd(bus.system, seen.on);
+      watchIwd(bus.domicile, seen.on);
       await seen.next();
 
       objects.reply = Ok(
@@ -243,7 +243,7 @@ describe("watchIwd", () => {
     it("reads again when an object comes or goes", async () => {
       const bus = iwd(connected);
       const seen = reports();
-      watchIwd(bus.system, seen.on);
+      watchIwd(bus.domicile, seen.on);
       await seen.next();
 
       await bus.send({
@@ -266,7 +266,7 @@ describe("watchIwd", () => {
     it("reads again after a scan, and ignores other changes", async () => {
       const bus = iwd(connected);
       const seen = reports();
-      watchIwd(bus.system, seen.on);
+      watchIwd(bus.domicile, seen.on);
       await seen.next();
 
       await bus.send(

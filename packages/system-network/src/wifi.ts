@@ -22,16 +22,16 @@ import {
   setNetworkManagerWifiEnabled,
   watchNetworkManagerWifi,
 } from "./networkmanager-wifi";
-import type { Wifi, WifiDevice, WifiNetwork, WifiSystem } from "./wifi-state";
+import type { Wifi, WifiDesktop, WifiDevice, WifiNetwork } from "./wifi-state";
 import { WifiBackend } from "./wifi-state";
 
 export type {
   Ip,
   Wifi,
   WifiConnection,
+  WifiDesktop,
   WifiDevice,
   WifiNetwork,
-  WifiSystem,
 } from "./wifi-state";
 export { WifiBackend } from "./wifi-state";
 
@@ -50,11 +50,11 @@ const BACKENDS: readonly (readonly [string, WifiBackend])[] = [
  * controlled. An `Err` is a D-Bus failure.
  */
 export const watchWifi = (
-  system: WifiSystem,
+  domicile: WifiDesktop,
   onWifi: (wifi: Result<Option<Wifi>, SystemError>) => void,
 ): (() => void) => {
   const watch: Watch = { stop: undefined, stopped: false };
-  detect(system, BACKENDS)
+  detect(domicile, BACKENDS)
     .then((found) => {
       if (!watch.stopped) {
         found.match({
@@ -67,7 +67,7 @@ export const watchWifi = (
                 onWifi(Ok(None()));
               },
               Some: (chosen) => {
-                watch.stop = watchBackend(chosen)(system, onWifi);
+                watch.stop = watchBackend(chosen)(domicile, onWifi);
               },
             });
           },
@@ -86,28 +86,28 @@ export const watchWifi = (
 
 /** Turn the radio on or off. */
 export const setWifiEnabled = (
-  system: WifiSystem,
+  domicile: WifiDesktop,
   wifi: WifiDevice,
   enabled: boolean,
 ): Promise<Result<"done", SystemError>> => {
   switch (wifi.backend) {
     case WifiBackend.NetworkManager:
-      return setNetworkManagerWifiEnabled(system, wifi, enabled);
+      return setNetworkManagerWifiEnabled(domicile, wifi, enabled);
     case WifiBackend.Iwd:
-      return setIwdWifiEnabled(system, wifi, enabled);
+      return setIwdWifiEnabled(domicile, wifi, enabled);
   }
 };
 
 /** Ask for a scan. Networks it finds arrive through the watch. */
 export const scanWifi = (
-  system: WifiSystem,
+  domicile: WifiDesktop,
   wifi: WifiDevice,
 ): Promise<Result<"done", SystemError>> => {
   switch (wifi.backend) {
     case WifiBackend.NetworkManager:
-      return scanNetworkManagerWifi(system, wifi);
+      return scanNetworkManagerWifi(domicile, wifi);
     case WifiBackend.Iwd:
-      return scanIwdWifi(system, wifi);
+      return scanIwdWifi(domicile, wifi);
   }
 };
 
@@ -116,29 +116,29 @@ export const scanWifi = (
  * the call throws without one.
  */
 export const connectWifi = (
-  system: WifiSystem,
+  domicile: WifiDesktop,
   wifi: WifiDevice,
   network: WifiNetwork,
   passphrase: string | undefined,
 ): Promise<Result<"done", SystemError>> => {
   switch (wifi.backend) {
     case WifiBackend.NetworkManager:
-      return connectNetworkManagerWifi(system, wifi, network, passphrase);
+      return connectNetworkManagerWifi(domicile, wifi, network, passphrase);
     case WifiBackend.Iwd:
-      return connectIwdWifi(system, wifi, network, passphrase);
+      return connectIwdWifi(domicile, wifi, network, passphrase);
   }
 };
 
 /** Leave the current network. */
 export const disconnectWifi = (
-  system: WifiSystem,
+  domicile: WifiDesktop,
   wifi: WifiDevice,
 ): Promise<Result<"done", SystemError>> => {
   switch (wifi.backend) {
     case WifiBackend.NetworkManager:
-      return disconnectNetworkManagerWifi(system, wifi);
+      return disconnectNetworkManagerWifi(domicile, wifi);
     case WifiBackend.Iwd:
-      return disconnectIwdWifi(system, wifi);
+      return disconnectIwdWifi(domicile, wifi);
   }
 };
 
@@ -156,7 +156,7 @@ const watchBackend = (backend: WifiBackend): typeof watchNetworkManagerWifi => {
 
 /** The first backend whose service has an owner on the bus, if any. */
 const detect = async (
-  system: WifiSystem,
+  domicile: WifiDesktop,
   backends: readonly (readonly [string, WifiBackend])[],
 ): Promise<Result<Option<WifiBackend>, SystemError>> => {
   const [first, ...rest] = backends;
@@ -164,11 +164,11 @@ const detect = async (
     return Ok(None());
   } else {
     const [name, backend] = first;
-    const owned = await hasOwner(system, name);
+    const owned = await hasOwner(domicile, name);
     return owned.match({
       Err: (error) => Promise.resolve(Err(error)),
       Ok: (has) =>
-        has ? Promise.resolve(Ok(Some(backend))) : detect(system, rest),
+        has ? Promise.resolve(Ok(Some(backend))) : detect(domicile, rest),
     });
   }
 };
