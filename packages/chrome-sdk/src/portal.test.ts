@@ -1,14 +1,21 @@
 import { describe, expect, it } from "bun:test";
+import type { PortalHost } from "./desktop/portal-wire";
+import {
+  answerPortalRequest,
+  stopCapturing,
+  watchBoundShortcuts,
+  watchCapturing,
+  watchPortalRequests,
+  watchPortalWallpaper,
+} from "./desktop/portal-wire";
 import type {
   BoundShortcut,
   Capturing,
   FrozenDesk,
-  PortalHost,
   PortalRequest,
   PortalWallpaper,
 } from "./portal";
 import {
-  answerPortalRequest,
   Captured,
   CapturingKind,
   CastSource,
@@ -21,12 +28,7 @@ import {
   PortalKind,
   PrintQuality,
   Sides,
-  stopCapturing,
   WallpaperTarget,
-  watchBoundShortcuts,
-  watchCapturing,
-  watchPortalRequests,
-  watchPortalWallpaper,
 } from "./portal";
 
 /** A desktop that pushes `portal_requests` lines and records answers. */

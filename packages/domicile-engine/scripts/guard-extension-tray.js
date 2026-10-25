@@ -26,10 +26,10 @@
 // Anything else is an address, opened as soon as any `extensionschanged`
 // arrives: the control's page, which never calls window.close().
 //
-// Everything is inside `Shell`, which the document Domicile writes calls once
+// Everything is inside `HostShell`, which the document Domicile writes calls once
 // the module has loaded.
 
-export const Shell = (_root, desktop) => {
+export const HostShell = (_root, desktop) => {
   const say = (what) => {
     console.log(`GUARD ${what}`);
   };

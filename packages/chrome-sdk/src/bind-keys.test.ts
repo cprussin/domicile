@@ -4,10 +4,11 @@ import type { KeyDesktop } from "./bind-keys";
 import { bindKeys } from "./bind-keys";
 import { keyboard } from "./desktop/keyboard";
 import { shell } from "./desktop/shell";
+import { system } from "./desktop/system-calls";
 import type { DomicileHost } from "./domicile-host";
 import { KeyAction } from "./key-action";
 import type { ShellKeybindings } from "./own-keybindings";
-import { SystemErrorKind, system } from "./system";
+import { SystemErrorKind } from "./system";
 
 /** The shell's keybindings. */
 const DESK: ShellKeybindings = {

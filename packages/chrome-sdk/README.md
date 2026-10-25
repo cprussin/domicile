@@ -16,29 +16,34 @@ import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
 
 export const Shell: ShellModule = (root, domicile) => {
   const show = () => {
-    // Render `domicile.windows` as `<app app-id="…">` elements into `root`.
+    // Render `domicile.windows.list` as `<app app-id="…">` elements into
+    // `root`.
   };
   show();
-  domicile.addEventListener("windowschanged", show);
+  domicile.windows.on("change", show);
 };
 ```
 
 - Domicile calls `Shell(root, domicile)` once. `domicile` is the only copy of
   the desktop; there is no global.
+- `domicile` is a `Domicile`: one typed object with a namespace per subject
+  (`windows`, `displays`, `keyboard`, `session`, `portals`, `files`, …).
 - Nothing to await. The first call on `domicile` binds the channel.
-- State is readonly attributes (`windows`, `browserWindows`, `displays`,
-  `theme`, …), each with a bare `<name>changed` event. Read, then listen.
-- Moments (`shortcut`, `focusrequested`, …) are events. The engine holds each
-  type until its first listener exists.
-- `searchFiles` returns a promise. A newer call rejects the older with an
-  `AbortError`.
+- State is readonly attributes (`windows.list`, `displays.list`,
+  `theme.current`, …), `undefined` until the compositor says. Each
+  namespace's `on(type, listener)` says when they change and returns a
+  function that stops listening. Read, then listen.
+- Moments (`keyboard.on("shortcut")`, `windows.on("focusrequest")`, …) are
+  events too. The engine holds each until its first listener exists.
+- A call the compositor answers resolves a `Result`. A newer `files.search`
+  rejects the older with an `AbortError`.
 - Only Domicile calls a shell. Develop against the real desktop with
   `packages/dev-shell/bin/dev-shell.sh <shell>`.
 - Render `<app app-id="…">` and `<webview window="…">` as normal DOM. CSS
   (rounding, blur, transforms, z-index) applies to the live surface.
 - The engine sends the pointer, wheel and keys over an `<app>` to its client,
-  through every CSS transform. `domicile.focusApp(appId)` and
-  `domicile.focusChrome()` move the keyboard without a click.
+  through every CSS transform. `domicile.windows.focus(appId)` and
+  `domicile.windows.focusShell()` move the keyboard without a click.
 - Both tags are the engine's built-in elements. In React, bind their events on
   a ref; React does not bind `on…` props for unknown events.
 - Errors follow [ERRORS.md](/docs/guidelines/ERRORS.md): bugs throw, absence
@@ -51,22 +56,21 @@ See [docs/ELEMENTS.md](docs/ELEMENTS.md) for `<app>` input and focus, and the
 
 | Module | What it is |
 | --- | --- |
-| `./desktop/desktop` | `desktop(domicile)`: the desktop as one typed object, a namespace per subject (`windows`, `browser`, `keyboard`, `files`, `portals`, …). State is attributes with a `change` event through `on`; a call that can fail resolves a `Result`. Each namespace's types are in `./desktop/<namespace>`. |
-| `./desktop/app-desktop` | `appDesktop(host)`: an app module's `files`, `processes` and `dbus`. |
-| `./domicile-host` | `DomicileHost`: the type of the desktop `Shell` is handed. Generated from the engine's IDL; see [Generated types](#generated-types). |
+| `./desktop/desktop` | `Domicile`, the type of the desktop `Shell` is handed: one typed object, a namespace per subject (`windows`, `browser`, `keyboard`, `files`, `portals`, …). State is attributes with events through `on`; a call that can fail resolves a `Result`. Each namespace's types are in `./desktop/<namespace>`. `desktop(host)` builds one over a host, as the engine does; see [The desktop layer](#the-desktop-layer). |
+| `./desktop/app-desktop` | `AppDomicile`, the desktop an app module's `main` is handed: its `files`, `processes` and `dbus`. |
+| `./domicile-host` | `DomicileHost`: the engine's host under the desktop. Generated from the engine's IDL; see [Generated types](#generated-types). |
 | `./config` | Types for the config file's sections, for a TypeScript config module. Generated; see [Generated types](#generated-types). `./config.schema.json` is the JSON Schema they come from. |
-| `./shell` | `Shell`: the export a shell module must provide. Domicile calls it once with the element to draw in. |
-| `./app` | `AppMain` and `DomicileAppHost`: an app module's `main` and the host it gets. Pass the host to `system()`. See [APP-MODULES.md](../../docs/architecture/APP-MODULES.md). |
+| `./shell` | `Shell`: the export a shell module must provide. Domicile calls it once with the element to draw in and the `Domicile`. |
+| `./app` | `AppMain`: an app module's `main`, which Domicile calls with the element to draw in and the `AppDomicile`. See [APP-MODULES.md](../../docs/architecture/APP-MODULES.md). |
 | `./app-element`, `./webview-element` | Types and event names for `<app>` and `<webview>`. |
 | `./bind-keys` | `bindKeys`: grab a shell's own chords by name and handle them by mode. `./key-action` and `./own-keybindings` are its parts. |
-| `./fake-host` | `FakeDomicileHost`: a desktop for a shell's tests. |
+| `./fake-host` | `FakeDomicileHost`: a desktop for a shell's tests. Hand its `domicile` to the shell. |
 | `./file-preview` | `previewFile(domicile, path)`: a launcher's preview of a path, read through `domicile.files`: a directory's entries, a song's tags and cover, or the start of a text file. |
 | `./dbusmenu` | `watchMenu(domicile, { bus, path })`: a tray item's `com.canonical.dbusmenu` menu, read again on each change, with `click` and `aboutToShow`. Hidden entries are left out; labels lose their mnemonic underscore, and `mnemonic` says where it was. `icon-data` comes as a PNG `data:` URL. See [SYSTEM-TRAY.md](/docs/architecture/SYSTEM-TRAY.md). |
-| `./system` | `system(domicile)`: files, watches, processes and D-Bus. Calls resolve a `Result`; the compositor refuses most while the desktop is locked. See [SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md). |
-| `./portal` | `watchPortalRequests` and `answerPortalRequest`: application dialogs from `xdg-desktop-portal`, parsed by kind. `watchCapturing` and `stopCapturing`: running sessions that record the screen or control or capture input. `<PortalDialogs />` in component-library draws them. See [PORTALS.md](/docs/PORTALS.md). |
+| `./system` | The types of the compositor's system calls: `SystemError`, `FileType`, `Listening`, … The calls are the desktop's `files`, `processes`, `dbus` and the rest; the compositor refuses most while the desktop is locked. See [SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md). |
+| `./portal` | The types of application dialogs from `xdg-desktop-portal` (`PortalRequest`, `PortalAnswer`, …) and of running sessions that record the screen or control or capture input (`Capturing`). The desktop's `portals` lists and answers them; `<PortalDialogs />` in component-library draws them. See [PORTALS.md](/docs/PORTALS.md). |
 | `./global-shortcuts` | `fireGlobalShortcuts`: grab the chords applications hold through the GlobalShortcuts portal and report each press and release. `<PortalDialogs />` calls it. |
 | `./options` | `defineOptions` and `option`: the options a shell declares as its `options` export, which the Settings app edits. `watchShellOptions` reads the config's values of them, live. See [WRITING-A-SHELL.md](/docs/WRITING-A-SHELL.md#options). |
-| `./appearance` | `watchAppearance`: the config's accent color, contrast and reduced motion, which the Settings portal also serves applications. See [SHELL-CONFIG.md](/docs/SHELL-CONFIG.md#theme). |
 | `./icon-theme` | `readIconTheme(domicile)`: the config's `theme.icon_theme`, read from the compositor's Settings portal, or `None` for `hicolor` only. `watchIconTheme` reads it and follows `SettingChanged`. `@domicile-desktop/system-apps/app-icons` takes it. |
 | `./extension`, `./tray`, `./notification`, `./theme`, `./display-transform` | Data types and Zod schemas for what the desktop holds. |
 
@@ -78,19 +82,40 @@ speaks it.
 
 ## Design
 
-- **State is attributes with a bare `<name>changed` event**, over events that
-  carry the value. The attribute is the one source of truth, and a late
-  listener misses nothing (`navigator.onLine` with `online` works the same).
-- **The engine holds moments** (`focusrequested`, `shortcut`) until the first
+- **One typed object, a namespace per subject.** If the desktop has it, it is
+  a member of `domicile`. SDK functions are for policy and composition
+  (`bindKeys`, `watchShellOptions`), not for reaching the desktop.
+- **State is attributes with a bare change event**, over events that carry
+  the value. The attribute is the one source of truth, and a late listener
+  misses nothing (`navigator.onLine` with `online` works the same).
+- **The engine holds moments** (`focusrequest`, `shortcut`) until the first
   listener of their type. Only the engine knows whether a listener exists.
-- **Asks return promises.** A newer `searchFiles` rejects the older.
+- **Asks return promises.** A newer `files.search` rejects the older.
 - **The desktop is handed to `Shell`**, not found on a global. There is no
   `navigator.domicile` or `window.domicile`; the shell's copy is the only one.
 - **The engine reports the desktop's size and density**, and `<app>` routes
   its own input ([docs/ELEMENTS.md](docs/ELEMENTS.md)). Chords are resolved by
   the engine ([KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md)).
-- **The SDK is types and pure helpers.** The host types are generated from the
-  IDL, below.
+- **The SDK is the desktop's types, the layer that builds it, and pure
+  helpers.** The host types under it are generated from the IDL, below.
+
+## The desktop layer
+
+The engine hands a shell the `Domicile` that `src/desktop/desktop.ts`'s
+`desktop(host)` builds, and an app the `AppDomicile` of `appDesktop(host)`.
+It does not build them itself: `codegen/generate-engine-layer.ts` bundles
+`src/desktop/layer.ts` into the engine as `domicile_layer.js`, which the
+engine evaluates on each shell and app page.
+
+```sh
+bun run generate    # after changing anything under src/desktop/
+```
+
+- A change to the layer is an engine change: it needs an engine release
+  ([RELEASES.md](/packages/domicile-engine/docs/RELEASES.md)).
+- `scripts/test-engine-layer-is-the-sdks.sh` fails when the file is stale.
+- The engine's guards export `HostShell` instead of `Shell` to be handed the
+  host itself; see [GUARDS.md](/packages/domicile-engine/docs/GUARDS.md).
 
 ## Generated types
 

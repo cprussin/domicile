@@ -2,7 +2,7 @@
 // See docs/SHELL-SYSTEM-ACCESS.md.
 
 import type { DomicileHost } from "../domicile-host";
-import type { System } from "../system";
+import type { System } from "./system-calls";
 
 export type Processes = {
   /** Run `argv` with its streams, as a {@link System.spawn}. */

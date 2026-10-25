@@ -2,7 +2,7 @@
 // own origin has notification permission and can read a cross-origin fetch,
 // as a bar widget such as a mail counter would need.
 
-export const Shell = (root) => {
+export const HostShell = (root) => {
   /** Reads a required query parameter. */
   const required = (parameters, name) => {
     const value = parameters.get(name);

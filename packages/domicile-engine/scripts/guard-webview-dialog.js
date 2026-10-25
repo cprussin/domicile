@@ -13,7 +13,7 @@
 //   once with text other than the prompt's default, so the page's reading
 //   shows the shell's answer rather than the default.
 
-export const Shell = () => {
+export const HostShell = () => {
   /**
    * Reads a required query parameter. Throws when missing: a default would
    * measure a setup the guard did not ask for.

@@ -1,6 +1,8 @@
 // The type of a shell module's entry point.
 
-import type { DomicileHost } from "./domicile-host";
+import type { Domicile } from "./desktop/desktop";
+
+export type { Domicile } from "./desktop/desktop";
 
 /**
  * The function a shell module exports as `Shell`.
@@ -14,4 +16,4 @@ import type { DomicileHost } from "./domicile-host";
  * desktop for the call, so there is no global. Keep it however the shell
  * likes (a React context, a variable) and pass it to what needs it.
  */
-export type Shell = (root: HTMLElement, domicile: DomicileHost) => void;
+export type Shell = (root: HTMLElement, domicile: Domicile) => void;

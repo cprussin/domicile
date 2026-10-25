@@ -2,7 +2,7 @@
 // server, like a launcher favicon for a bookmark on localhost. The control
 // page is served by guard-shell-local-network-server.py.
 
-export const Shell = () => {
+export const HostShell = () => {
   /** Reads a required query parameter. */
   const required = (parameters, name) => {
     const value = parameters.get(name);

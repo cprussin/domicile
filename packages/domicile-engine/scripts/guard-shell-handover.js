@@ -16,8 +16,11 @@ await new Promise((resolve) => {
 });
 
 export const Shell = (root, desktop) => {
+  // The SDK layer's `Domicile`, not the host under it: namespaced, with no
+  // `addEventListener` of its own.
   const answers =
-    desktop !== null && desktop !== undefined && Array.isArray(desktop.windows);
+    typeof desktop?.windows?.on === "function" &&
+    !("addEventListener" in desktop);
   console.log(
     "GUARD handover" +
       ` root=${root === document.body ? "body" : String(root)}` +

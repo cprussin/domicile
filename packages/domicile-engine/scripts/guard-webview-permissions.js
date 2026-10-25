@@ -8,9 +8,9 @@
 // - site-permissions: the camera's setting each time the site's settings are
 //   reported.
 //
-// The document Domicile writes calls `Shell` once the module loads.
+// The document Domicile writes calls `HostShell` once the module loads.
 
-export const Shell = () => {
+export const HostShell = () => {
   const required = (parameters, name) => {
     const value = parameters.get(name);
     if (value === null) {

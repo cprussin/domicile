@@ -9,7 +9,7 @@
 // The page itself logs `GUARD guest-loaded` (guard-webview-guest-page.py),
 // which only a trusted connection reaches.
 
-export const Shell = () => {
+export const HostShell = () => {
   const src = new URLSearchParams(location.search).get("src");
   if (src === null) {
     throw new Error("guard-webview-untrusted-cert: ?src= is required");

@@ -202,9 +202,9 @@ To switch between layouts, list them in `keymaps` instead:
   browser and the shell's keybindings, and lasts until the desktop
   restarts.
 - A shell lists them, each with xkb's name for its layouts (such as
-  `English (programmer Dvorak)`), with `system(domicile).keymaps()` and
+  `English (programmer Dvorak)`), with `domicile.keyboard.keymaps()` and
   switches with
-  `selectKeymap()` ([SHELL-SYSTEM-ACCESS.md](SHELL-SYSTEM-ACCESS.md)). Both
+  `keyboard.selectKeymap()` ([SHELL-SYSTEM-ACCESS.md](SHELL-SYSTEM-ACCESS.md)). Both
   work while locked.
 
 ## Tablets and touchscreens

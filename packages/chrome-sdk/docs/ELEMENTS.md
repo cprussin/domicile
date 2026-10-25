@@ -24,13 +24,14 @@ Event names and full types are in `src/app-element.ts` and
   element shows the newest frame the control channel named for the window, so
   a page that ignores frames never shows a stale one.
   Set it from `DomicileWindow.frame`, in the same render as a popup's move.
-  The compositor syncs frames only for a page that called `syncFrames()`; see
+  The compositor syncs frames only for a page that called `windows.syncFrames()`; see
   [Synced frames](/docs/architecture/WINDOW-COMPOSITING.md#synced-frames).
-- **Scale:** call `domicile.setAppBounds(appId, x, y, width, height)` with
+- **Scale:** call `domicile.windows.setBounds(appId, { x, y, width, height })` with
   the element's box in page pixels whenever it moves or resizes. The client
   draws at the scale of the monitor holding most of the box. An unreported
   window draws for the densest monitor.
-- **Hidden:** call `domicile.setAppBounds(appId, 0, 0, 0, 0)` for an `<app>`
+- **Hidden:** call `domicile.windows.setBounds(appId, { x: 0, y: 0, width: 0, height: 0 })`
+  for an `<app>`
   the page does not draw. The client gets a frame callback once a second and
   is `suspended` until the next box with an area, unless a cast shows it. It
   keeps its monitor and scale.
@@ -54,7 +55,7 @@ Event names and full types are in `src/app-element.ts` and
   `pointerdown` listener loses that capture to the element; call
   `preventDefault()` to keep the press.
 - **Keyboard:** the engine sends the keystrokes `document` hears to the window
-  that has the keyboard. `domicile.focusApp(appId)` and `domicile.focusChrome()`
+  that has the keyboard. `domicile.windows.focus(appId)` and `domicile.windows.focusShell()`
   move it in code, both in the compositor's seat and for the page's keys.
 - **Focus events** (both cancelable; call `preventDefault()` to decide focus
   yourself):
@@ -92,23 +93,23 @@ once, when the view connects. The SDK provides types only.
   - `domicile-render-process-change`: the page's renderer died or came back.
     `renderProcessGone` says why, or is `""`; `reload()` recovers it. See
     [Crashed pages](/docs/SHELL-BROWSER-WINDOWS.md#crashed-pages).
-- **Browser windows:** `domicile.browserWindows` is the desk's whole list;
-  `browserwindowschanged` reports changes. `openBrowserWindow(url)` and `closeBrowserWindow(id)` are
+- **Browser windows:** `domicile.browser.windows` is the desk's whole list;
+  `browser.on("change")` reports changes. `browser.open(url)` and `browser.close(id)` are
   for the shell's own UI. A link with `target="_blank"`, `domicile open-url`
   and an extension's `tabs.create` or `windows.create` open windows without
   the shell. See
   [SHELL-BROWSER-WINDOWS.md](/docs/SHELL-BROWSER-WINDOWS.md).
 - **Extension popups:** for a tray row with a `popup`, call
-  `activateExtension(id)` (which grants `activeTab`), then open a
+  `extensions.activate(id)` (which grants `activeTab`), then open a
   `<webview extensionpopup>` at the popup address. Set `extensionpopup` on
   first render.
 - **Private pages:** `<webview private>` puts a shell's own page in the
-  off-the-record profile, and `openPrivateBrowserWindow(url)` opens a private
+  off-the-record profile, and `browser.openPrivate(url)` opens a private
   window. Set `private` on first render. See
   [SHELL-BROWSER-WINDOWS.md](/docs/SHELL-BROWSER-WINDOWS.md#private-browsing).
 - **Partitions:** `<webview partition="persist:work">` gives a page storage of
   its own, kept on disk; any other name keeps it in memory.
-  `openBrowserWindow(url, partition)` opens a window in one. Set `partition`
+  `browser.open(url, { partition })` opens a window in one. Set `partition`
   on first render. See
   [SHELL-BROWSER-WINDOWS.md](/docs/SHELL-BROWSER-WINDOWS.md#partitions).
 - **Navigations:** `domicile-will-navigate` fires before the page navigates

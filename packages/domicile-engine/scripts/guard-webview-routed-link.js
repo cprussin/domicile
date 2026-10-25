@@ -11,7 +11,7 @@
 // - It logs the desk's browser-window list. A middle click on the link should
 //   add a window at the link's address.
 
-export const Shell = (_root, desktop) => {
+export const HostShell = (_root, desktop) => {
   /**
    * Reads a required query parameter. Throws when missing: a default would
    * measure a setup the guard did not ask for.
