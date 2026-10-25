@@ -10,7 +10,7 @@
 # - The alpha version is `scripts/stamp-version.sh`'s.
 #
 # DOMICILE_PUBLISH_DRY_RUN=<dir> packs into <dir> and publishes nothing, for
-# scripts/test-publish-packages.sh.
+# packages/ci/tests/test-publish-packages.sh.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"

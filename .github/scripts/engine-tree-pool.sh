@@ -250,7 +250,7 @@ case "$action" in
     #
     # The 45-minute wait comes out of the build job's budget, which must also
     # cover the compile slot's wait and a cold repin
-    # (scripts/test-the-engine-budget-holds-both-builds.sh).
+    # (packages/ci/tests/test-the-engine-budget-holds-both-builds.sh).
     WAIT="${DOMICILE_TREE_WAIT:-2700}"
     POLL="${DOMICILE_TREE_POLL:-15}"
     WAITER_STALE="${DOMICILE_TREE_WAITER_STALE:-120}"
