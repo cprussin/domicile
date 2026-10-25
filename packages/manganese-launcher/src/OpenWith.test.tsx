@@ -48,7 +48,7 @@ describe("OpenWith", () => {
     await screen.findByRole("option", { name: "Pager", selected: true });
 
     expect(
-      screen.getByRole("dialog", { name: "Open today.txt with" }),
+      screen.getByRole("dialog", { name: "Choose an app to open today.txt" }),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Open" }));
     expect(await answer).toStrictEqual(["pager", "/home/me/Notes/today.txt"]);

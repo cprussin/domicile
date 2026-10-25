@@ -89,7 +89,10 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 - **AppChooser offers the frontend's `choices`.** The shell names them from
   their desktop entries and picks `last_choice`, else the first default
   `mimeapps.list` gives the type (`domicile-mimeapps.list` first). The
-  compositor checks the answer is one of the current choices.
+  compositor checks the answer is one of the current choices. With one
+  choice the dialog asks "Open <app>?", as a browser does. With none, no
+  installed desktop entry lists the type in `MimeType` (for a link,
+  `x-scheme-handler/<scheme>`), and the dialog says no app can open it.
 - **The compositor owns PipeWire.** A window source is the client's buffer,
   which the compositor already has. A monitor source is the composited
   output, which only viz has: the engine runs a `FrameSinkVideoCapturer` on

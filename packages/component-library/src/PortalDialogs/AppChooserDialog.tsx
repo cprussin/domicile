@@ -25,9 +25,10 @@ export const AppChooserDialog = ({
   system,
 }: Props) => (
   <AppChooser
+    address={body.filename === undefined ? body.uri : undefined}
+    asker={asker}
     choices={body.choices}
     contentType={body.contentType}
-    description={`${asker} asks`}
     lastChoice={body.lastChoice}
     onCancel={() => {
       answer(Answer.Canceled());
@@ -35,14 +36,17 @@ export const AppChooserDialog = ({
     onChoose={(id) => {
       answer(Answer.AppChooser(id));
     }}
+    opened={openedOf(body)}
     screen={screen}
     system={system}
-    title={titleOf(body)}
   />
 );
 
-/** What the dialog opens, as its title names it. */
-const titleOf = ({ filename, uri }: AppChooserBody): string => {
-  const opened = filename ?? uri;
-  return opened === undefined ? "Open with" : `Open ${opened} with`;
+/** What the dialog opens, as a phrase. */
+const openedOf = ({ filename, uri }: AppChooserBody): string => {
+  if (filename === undefined) {
+    return uri === undefined ? "this file" : "this link";
+  } else {
+    return filename;
+  }
 };
