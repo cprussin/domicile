@@ -33,6 +33,7 @@
   "description": "Domicile's default desktop shell: runManganese() composes manganese's packages into a desktop.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/dev-shell": "workspace:*",
     "@domicile-desktop/test-support": "workspace:*",
     "@pandacss/preset-panda": "catalog:",
     "@testing-library/react": "catalog:",
@@ -90,7 +91,7 @@
   "scripts": {
     "build:vite": "vite build",
     "prepare": "panda codegen --silent && panda cssgen --silent",
-    "start:dev": "../../scripts/dev-shell.sh manganese",
+    "start:dev": "dev-shell manganese",
     "test:types": "tsc --noEmit",
     "test:unit": "bun test"
   },

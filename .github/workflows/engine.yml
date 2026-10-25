@@ -33,6 +33,7 @@ on:
       - "!packages/domicile-engine/engine-release.nix"
       - "!packages/domicile-engine/engine-official.nix"
       - "!packages/domicile-engine/tests/**"
+      - "!packages/domicile-engine/scripts/update-engine-release.sh"
       - .github/workflows/engine.yml
       - .github/scripts/engine-*.sh
       - packages/check-runner/src/report.sh
@@ -43,6 +44,7 @@ on:
       - "!packages/domicile-engine/engine-release.nix"
       - "!packages/domicile-engine/engine-official.nix"
       - "!packages/domicile-engine/tests/**"
+      - "!packages/domicile-engine/scripts/update-engine-release.sh"
       - .github/workflows/engine.yml
       - .github/scripts/engine-*.sh
       - packages/check-runner/src/report.sh

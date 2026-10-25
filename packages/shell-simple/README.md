@@ -56,7 +56,7 @@ nix shell nixpkgs#weston -c \
 ## Build and run from a checkout
 
 ```sh
-nix develop .#full -c ./scripts/dev-shell.sh simple
+nix develop .#full -c packages/dev-shell/bin/dev-shell.sh simple
 ```
 
 - `nix develop .#full` puts `weston-flower` and `kitty` on `PATH`.

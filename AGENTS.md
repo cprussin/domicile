@@ -202,7 +202,7 @@ How to use, configure and debug Domicile. No authority level.
 | [/packages/domicile-engine/docs/BUILD-MACHINE.md](/packages/domicile-engine/docs/BUILD-MACHINE.md) | `crux`: the shared checkout and tree lock, the toolchain shell, moving the pin, the tree pool, build cost. |
 | [/packages/domicile-engine/docs/RELEASES.md](/packages/domicile-engine/docs/RELEASES.md) | The pinned engines, release names, the write-back flow, `DOMICILE_WRITEBACK_TOKEN`. |
 | [/packages/domicile-engine/docs/CONTROL-CHANNEL.md](/packages/domicile-engine/docs/CONTROL-CHANNEL.md) | `DomicileHost` members, typed values, adding a message or event, the command socket and dev reload. |
-| [/packages/domicile-engine/docs/GUARDS.md](/packages/domicile-engine/docs/GUARDS.md) | One line per guard, helper and spike script in `scripts/`, by area. |
+| [/packages/domicile-engine/docs/GUARDS.md](/packages/domicile-engine/docs/GUARDS.md) | One line per guard, helper and spike script in the engine package's `scripts/`, by area. |
 | [/packages/domicile-engine/docs/SOURCE-MAP.md](/packages/domicile-engine/docs/SOURCE-MAP.md) | Where the surface-embedding code lives under `src/`. |
 | [/packages/domicile-engine/docs/TESTING.md](/packages/domicile-engine/docs/TESTING.md) | Engine unit test suites, their filters and minimum counts, and the command that runs what CI runs. |
 | [/packages/e2e-harness/docs/SCRIPT-VERDICTS.md](/packages/e2e-harness/docs/SCRIPT-VERDICTS.md) | Exit codes, `packages/e2e-harness/lib/harness.sh` helpers, required script structure, and the rules `src/verdicts.ts` enforces. |
@@ -221,13 +221,14 @@ How to use, configure and debug Domicile. No authority level.
 
 ```sh
 ./scripts/check.sh                 # everything
-./scripts/check.sh rust            # or one group: shell, rust, typescript, e2e
+./scripts/check.sh rust            # or one group: shell, rust, typescript, e2e, nix, distro
 ```
 
 That is the whole answer, and using it is not optional politeness — it is how
 you find the things the unit tests cannot. It runs `fmt`, `clippy`, `cargo
-test`, `biome`, `turbo test` and every `scripts/test-*.sh` and
-`scripts/e2e-*.sh` there is, and it arranges what they need rather than
+test`, `biome`, `turbo test` (each package's unit tests, types and
+`tests/*.sh`), `turbo test:e2e`, `turbo test:nix`, `turbo test:distro` and the
+repo-wide `scripts/test-*.sh`, and it arranges what they need rather than
 assuming it: a fresh worktree has no `node_modules`, and a display picked by
 number collides with the corpse a previous run left behind. Each of those has
 cost a session an hour and produced failures that looked like findings.
@@ -236,7 +237,8 @@ cost a session an hour and produced failures that looked like findings.
 run, which on a machine without a GPU is a fact rather than a verdict — but it is never evidence that the thing works. A script that cannot
 run says so by exiting **77**, which is the only thing that distinguishes it
 from one that ran and passed; before that existed, a green CI run reported ten
-suites where nine had run.
+suites where nine had run. A turbo task that passes prints the skips inside it
+under its `ok`.
 
 CI adds `DOMICILE_CHECK_STRICT=1`, where a skip *is* a failure, and names the
 one it expects (`DOMICILE_CHECK_ALLOW_SKIP=e2e-dmabuf`, because no runner has a

@@ -14,7 +14,7 @@ Starting a desktop means:
 
 This logic is easier to write and test in Rust than in bash. Scripts may
 build and start things. All launch logic lives in the binary.
-`scripts/dev-shell.sh` builds, then calls the binary.
+`packages/dev-shell/bin/dev-shell.sh` builds, then calls the binary.
 
 ## Design
 
@@ -206,13 +206,13 @@ domicile load-shell ./my-desktop/dist/shell.js
   windows, and the browser sends its browser windows.
 - The desktop needs no dev mode.
 
-`scripts/dev-shell.sh` is the watch script built on it:
+`packages/dev-shell/bin/dev-shell.sh` is the watch script built on it:
 
 - The script starts the supervisor itself, so it reads the socket path from
   the supervisor's `DOMICILE_SOCK=<path>` output line. It calls `load-shell`
   only after the supervisor reports the desktop is up. Earlier calls are
   refused because the socket exists before the engine does.
-- `scripts/dev-shell-reload.sh` waits for the bundle to stop changing (a quiet
+- `packages/dev-shell/bin/dev-shell-reload.sh` waits for the bundle to stop changing (a quiet
   period plus a cap). `vite build --watch` writes one build in several steps,
   and reloading mid-write would load a broken shell.
 - If the engine refuses a shell, the script prints the engine's `why` and

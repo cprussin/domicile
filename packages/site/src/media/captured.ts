@@ -1,5 +1,5 @@
 // Which docs media files exist, read at build time. The files are
-// `docs/media/`, captured on crux by `scripts/docs-media.sh` and served from
+// `docs/media/`, captured on crux by `packages/site/scripts/docs-media.sh` and served from
 // `public/media`.
 
 import { existsSync } from "node:fs";
