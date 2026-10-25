@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { Ok, Some } from "@cprussin/option-result";
-import type { Spawned } from "@domicile-desktop/system-apps/fake-system";
-import { fakeSystem } from "@domicile-desktop/system-apps/fake-system";
+import type { Spawned } from "@domicile-desktop/system-apps/fake-desktop";
+import { fakeDesktop } from "@domicile-desktop/system-apps/fake-desktop";
 
 import { menuIcons } from "./menu-icons";
 
@@ -30,7 +30,7 @@ const drawn = async (
 describe("menuIcons", () => {
   it("finds menu-sized action and status icons in hicolor, before apps", async () => {
     const icons = await menuIcons(
-      fakeSystem(
+      fakeDesktop(
         {
           "/home/icons/hicolor/16x16/actions/exit.png": "action",
           "/home/icons/hicolor/22x22/status/wired.png": "png",
@@ -51,7 +51,7 @@ describe("menuIcons", () => {
 
   it("finds icons in the config's icon theme, symbolic ones too", async () => {
     const icons = await menuIcons(
-      fakeSystem(
+      fakeDesktop(
         {
           "/home/icons/Adwaita/index.theme":
             "[Icon Theme]\nDirectories=symbolic/actions\n[symbolic/actions]\nSize=16\nContext=Actions\nType=Scalable\n",

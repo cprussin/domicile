@@ -5,10 +5,10 @@ import {
   encodeFrame,
   frameDecoder,
 } from "@domicile-desktop/component-library/app-host-frames";
+import type { Processes } from "@domicile-desktop/sdk/desktop/processes";
 import type {
   Exit,
   Subprocess,
-  System,
   SystemError,
 } from "@domicile-desktop/sdk/system";
 import { Signal, SystemErrorKind } from "@domicile-desktop/sdk/system";
@@ -31,9 +31,9 @@ type FakeProcess = {
  * A `spawn` that starts fake processes, or fails with each of `failures`
  * first.
  */
-const fakeSystem = (failures: SystemError[] = []) => {
+const fakeDesktop = (failures: SystemError[] = []) => {
   const processes: FakeProcess[] = [];
-  const system: Pick<System, "spawn"> = {
+  const system: Pick<Processes, "spawn"> = {
     spawn: (argv, options) => {
       expect(argv).toEqual(["domicile-app-host"]);
       expect(options).toEqual({ stdin: true });
@@ -117,9 +117,9 @@ const settled = () =>
     setTimeout(resolve, 0);
   });
 
-/** The host over a fake system, with what it already asked. */
+/** The host over fake processes, with what it already asked. */
 const started = async <T>(ask: (host: ReturnType<typeof spawnedHost>) => T) => {
-  const fake = fakeSystem();
+  const fake = fakeDesktop();
   const host = spawnedHost(fake.system);
   const asked = ask(host);
   await settled();
@@ -276,7 +276,7 @@ describe(spawnedHost, () => {
     );
 
     it("fails what was asked when it cannot start, and tries again for the next", async () => {
-      const { processes, system } = fakeSystem([
+      const { processes, system } = fakeDesktop([
         {
           kind: SystemErrorKind.NotFound,
           message: "No such file or directory",

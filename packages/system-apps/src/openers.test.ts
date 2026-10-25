@@ -2,8 +2,8 @@ import { describe, expect, it } from "bun:test";
 import type { Result } from "@cprussin/option-result";
 import { Some } from "@cprussin/option-result";
 
-import type { Node } from "./fake-system";
-import { fakeSystem } from "./fake-system";
+import type { Node } from "./fake-desktop";
+import { fakeDesktop } from "./fake-desktop";
 import { openers } from "./openers";
 
 const ENVIRONMENT = {
@@ -20,7 +20,7 @@ const app = (name: string, exec: string, types: string): string =>
   `[Desktop Entry]\nType=Application\nName=${name}\nExec=${exec}\nMimeType=${types}\n`;
 
 const desktop = (tree: Readonly<Record<string, Node>>) =>
-  fakeSystem(
+  fakeDesktop(
     {
       "/share/applications/editor.desktop": app(
         "Editor",

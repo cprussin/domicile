@@ -4,11 +4,11 @@
 import type { Option } from "@cprussin/option-result";
 import { None, Ok, Result } from "@cprussin/option-result";
 import { readIconTheme } from "@domicile-desktop/sdk/icon-theme";
-import type { System, SystemError } from "@domicile-desktop/sdk/system";
-
+import type { SystemError } from "@domicile-desktop/sdk/system";
 import type { IconLookup } from "./app-icons";
 import { appIcons } from "./app-icons";
 import { appIdName } from "./app-id-name";
+import type { AppsDesktop } from "./apps-desktop";
 import { dataDirs } from "./data-dirs";
 import type { DesktopEntry } from "./desktop-entry";
 import { installedApps } from "./installed";
@@ -29,19 +29,19 @@ export type DescribedApp = {
  * its entry.
  */
 export const describeApps = async (
-  system: System,
+  domicile: AppsDesktop,
   ids: readonly string[],
 ): Promise<Result<DescribedApp[], SystemError>> => {
   const [dirs, theme] = await Promise.all([
-    dataDirs(system),
-    readIconTheme(system),
+    dataDirs(domicile),
+    readIconTheme(domicile),
   ]);
   return dirs.andThenAsync((found) =>
     theme.andThenAsync((named) =>
       describedIn(
-        system,
+        domicile,
         found,
-        appIcons(system, found, ["apps"], {
+        appIcons(domicile, found, ["apps"], {
           theme: named.match({ None: () => undefined, Some: (name) => name }),
         }),
         ids,
@@ -52,12 +52,12 @@ export const describeApps = async (
 
 /** Each of `ids` described by its entry under `dirs`, drawn by `icons`. */
 const describedIn = async (
-  system: System,
+  domicile: AppsDesktop,
   dirs: readonly string[],
   icons: IconLookup,
   ids: readonly string[],
 ): Promise<Result<DescribedApp[], SystemError>> =>
-  (await installedApps(system, dirs)).andThenAsync(async (installed) => {
+  (await installedApps(domicile, dirs)).andThenAsync(async (installed) => {
     return Result.collect(
       await Promise.all(
         ids.map((id) => described(icons, id, entryFor(installed, id))),

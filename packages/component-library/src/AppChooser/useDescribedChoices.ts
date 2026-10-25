@@ -1,4 +1,4 @@
-import type { System } from "@domicile-desktop/sdk/system";
+import type { AppsDesktop } from "@domicile-desktop/system-apps/apps-desktop";
 import { useEffect, useState } from "react";
 
 import type { DescribedChoices } from "./app-choices";
@@ -10,7 +10,7 @@ import { describeChoices } from "./app-choices";
  * the choices have moved past.
  */
 export const useDescribedChoices = (
-  system: System,
+  domicile: AppsDesktop,
   choices: readonly string[],
   contentType: string | undefined,
 ): DescribedChoices | undefined => {
@@ -20,7 +20,7 @@ export const useDescribedChoices = (
 
   useEffect(() => {
     let current = true;
-    describeChoices(system, key === "" ? [] : key.split("\n"), contentType)
+    describeChoices(domicile, key === "" ? [] : key.split("\n"), contentType)
       .then((result) => {
         result.match({
           Err: (error) => {
@@ -42,7 +42,7 @@ export const useDescribedChoices = (
     return () => {
       current = false;
     };
-  }, [system, key, contentType]);
+  }, [domicile, key, contentType]);
 
   return described;
 };

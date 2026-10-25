@@ -3,7 +3,7 @@ import type {
   PortalAnswer,
 } from "@domicile-desktop/sdk/portal";
 import { PortalAnswer as Answer } from "@domicile-desktop/sdk/portal";
-import type { System } from "@domicile-desktop/sdk/system";
+import type { AppsDesktop } from "@domicile-desktop/system-apps/apps-desktop";
 import { AppChooser } from "../AppChooser/AppChooser";
 
 type Props = {
@@ -13,7 +13,7 @@ type Props = {
   body: AppChooserBody;
   screen: string | undefined;
   /** Where the applications' desktop entries are read. */
-  system: System;
+  domicile: AppsDesktop;
 };
 
 /** The AppChooser portal's {@link AppChooser}. Dismissing it cancels. */
@@ -22,13 +22,14 @@ export const AppChooserDialog = ({
   asker,
   body,
   screen,
-  system,
+  domicile,
 }: Props) => (
   <AppChooser
     address={body.filename === undefined ? body.uri : undefined}
     asker={asker}
     choices={body.choices}
     contentType={body.contentType}
+    domicile={domicile}
     lastChoice={body.lastChoice}
     onCancel={() => {
       answer(Answer.Canceled());
@@ -38,7 +39,6 @@ export const AppChooserDialog = ({
     }}
     opened={openedOf(body)}
     screen={screen}
-    system={system}
   />
 );
 

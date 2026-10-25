@@ -6,7 +6,8 @@
 // connection, so a shell reload lets go of the inhibitor. See docs/IDLE.md.
 
 import type { Result } from "@cprussin/option-result";
-import type { System, SystemError } from "@domicile-desktop/sdk/system";
+import type { Dbus } from "@domicile-desktop/sdk/desktop/dbus";
+import type { SystemError } from "@domicile-desktop/sdk/system";
 import { Bus } from "@domicile-desktop/sdk/system";
 import { z } from "zod";
 
@@ -20,9 +21,9 @@ export type Release = () => Promise<Result<"released", SystemError>>;
 
 /** Holds an idle inhibitor, and resolves with what lets go of it. */
 export const inhibitIdle = async (
-  bus: Pick<System, "dbusCall">,
+  bus: Pick<Dbus, "call">,
 ): Promise<Result<Release, SystemError>> => {
-  const held = await bus.dbusCall({
+  const held = await bus.call({
     body: [
       "",
       IDLE,
@@ -41,10 +42,10 @@ export const inhibitIdle = async (
 const handleSchema = z.tuple([z.string()]);
 
 const releaseOf =
-  (bus: Pick<System, "dbusCall">, handle: string): Release =>
+  (bus: Pick<Dbus, "call">, handle: string): Release =>
   async () =>
     (
-      await bus.dbusCall({
+      await bus.call({
         bus: Bus.Session,
         destination: PORTAL,
         interface: "org.freedesktop.portal.Request",

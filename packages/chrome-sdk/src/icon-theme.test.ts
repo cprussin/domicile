@@ -19,9 +19,11 @@ const answering = (answer: Result<DbusBody, SystemError>) => {
   return {
     calls,
     system: {
-      dbusCall: (call: DbusCall) => {
-        calls.push(call);
-        return Promise.resolve(answer);
+      dbus: {
+        call: (call: DbusCall) => {
+          calls.push(call);
+          return Promise.resolve(answer);
+        },
       },
     },
   };
@@ -121,22 +123,24 @@ const portal = (theme: string, refused?: SystemError) => {
     },
     state,
     system: {
-      dbusCall: () => Promise.resolve(readAll(theme)),
-      dbusMatch: (match: DbusMatch) => {
-        matches.push(match);
-        return Promise.resolve(
-          refused === undefined
-            ? Ok<Listening<Listened<DbusSignal>>, SystemError>({
-                ended: new Promise(() => {
-                  /* never ends on its own */
-                }),
-                items,
-                stop: () => {
-                  state.stopped = true;
-                },
-              })
-            : Err<Listening<Listened<DbusSignal>>, SystemError>(refused),
-        );
+      dbus: {
+        call: () => Promise.resolve(readAll(theme)),
+        match: (match: DbusMatch) => {
+          matches.push(match);
+          return Promise.resolve(
+            refused === undefined
+              ? Ok<Listening<Listened<DbusSignal>>, SystemError>({
+                  ended: new Promise(() => {
+                    /* never ends on its own */
+                  }),
+                  items,
+                  stop: () => {
+                    state.stopped = true;
+                  },
+                })
+              : Err<Listening<Listened<DbusSignal>>, SystemError>(refused),
+          );
+        },
       },
     },
   };

@@ -1,11 +1,11 @@
 import { watchHost } from "@domicile-desktop/manganese-host/watch-host";
+import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
 import type {
   Listening,
   UnlockRefusal,
   UnlockRefused,
 } from "@domicile-desktop/sdk/system";
-import { system } from "@domicile-desktop/sdk/system";
 import { useCallback, useEffect, useState } from "react";
 import { uptime } from "./uptime";
 
@@ -122,8 +122,8 @@ const hearRefusals = (
     stopped: boolean;
     listening: Listening<UnlockRefused> | undefined;
   } = { listening: undefined, stopped: false };
-  system(domicile)
-    .unlockRefusals()
+  desktop(domicile)
+    .session.unlockRefusals()
     .then((result) => {
       result.match({
         Err: reportToConsole,

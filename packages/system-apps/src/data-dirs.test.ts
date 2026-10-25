@@ -4,11 +4,11 @@ import { Ok } from "@cprussin/option-result";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 
 import { dataDirs } from "./data-dirs";
-import { fakeSystem } from "./fake-system";
+import { fakeDesktop } from "./fake-desktop";
 
 /** A desktop whose environment is `variables`. */
 const desktop = (variables: Readonly<Record<string, string>>) =>
-  fakeSystem({}, (argv) => {
+  fakeDesktop({}, (argv) => {
     expect(argv).toStrictEqual(["env", "-0"]);
     return {
       code: 0,
@@ -45,7 +45,7 @@ describe("dataDirs", () => {
   });
 
   it("throws when env fails", async () => {
-    const broken = fakeSystem({}, () => ({
+    const broken = fakeDesktop({}, () => ({
       code: 1,
       stderr: "no",
       stdout: "",

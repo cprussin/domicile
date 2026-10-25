@@ -1,7 +1,11 @@
-// A directory's entries for the file picker, read through the system calls.
+// A directory's entries for the file picker, read through the desktop's files.
 
-import type { DirEntry, System } from "@domicile-desktop/sdk/system";
+import type { Files } from "@domicile-desktop/sdk/desktop/files";
+import type { DirEntry } from "@domicile-desktop/sdk/system";
 import { FileType } from "@domicile-desktop/sdk/system";
+
+/** The calls a listing makes. */
+export type ListedFiles = Pick<Files, "readDir" | "stat">;
 
 /**
  * The entries of the directory at absolute `path`, as `FileRequest.list`
@@ -10,30 +14,30 @@ import { FileType } from "@domicile-desktop/sdk/system";
  * read.
  */
 export const listDirectory = async (
-  system: System,
+  files: ListedFiles,
   path: string,
 ): Promise<string[]> =>
-  (await system.readDir(path)).match({
+  (await files.readDir(path)).match({
     Err: (error) => {
       throw new DOMException(error.message, "NotReadableError");
     },
     Ok: (entries) =>
-      Promise.all(entries.map((entry) => shownName(system, path, entry))),
+      Promise.all(entries.map((entry) => shownName(files, path, entry))),
   });
 
 const shownName = async (
-  system: System,
+  files: ListedFiles,
   directory: string,
   { fileType, name }: DirEntry,
 ): Promise<string> =>
-  (await isDirectory(system, directory, name, fileType)) ? `${name}/` : name;
+  (await isDirectory(files, directory, name, fileType)) ? `${name}/` : name;
 
 /**
  * Whether the entry is a directory, following a link. A dangling link counts
  * as a file: the picker lists it, and picking it fails where it is read.
  */
 const isDirectory = async (
-  system: System,
+  files: ListedFiles,
   directory: string,
   name: string,
   fileType: FileType,
@@ -43,7 +47,7 @@ const isDirectory = async (
       return true;
     }
     case FileType.Symlink: {
-      const target = await system.stat(childOf(directory, name));
+      const target = await files.stat(childOf(directory, name));
       return target.match({
         Err: () => false,
         Ok: (stat) => stat.fileType === FileType.Directory,

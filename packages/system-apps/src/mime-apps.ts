@@ -2,7 +2,8 @@
 // https://specifications.freedesktop.org/mime-apps-spec/latest/.
 
 import type { Result } from "@cprussin/option-result";
-import type { System, SystemError } from "@domicile-desktop/sdk/system";
+import type { SystemError } from "@domicile-desktop/sdk/system";
+import type { AppsDesktop } from "./apps-desktop";
 
 import { desktopEnvironment, setVariable } from "./environment";
 import { allOk, orAbsent } from "./results";
@@ -19,14 +20,14 @@ const GROUP = "[Default Applications]";
  * skipped.
  */
 export const defaultApps = async (
-  system: System,
+  domicile: AppsDesktop,
   contentType: string,
 ): Promise<Result<string[], SystemError>> =>
-  (await desktopEnvironment(system)).andThenAsync(async (variables) =>
+  (await desktopEnvironment(domicile)).andThenAsync(async (variables) =>
     allOk(
       await Promise.all(
         listPaths(variables).map(async (path) =>
-          orAbsent(await system.readTextFile(path), "").map((text) =>
+          orAbsent(await domicile.files.readText(path), "").map((text) =>
             defaultsIn(text, contentType),
           ),
         ),

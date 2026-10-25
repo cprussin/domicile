@@ -1,9 +1,9 @@
 // A preview of a path's contents, as a launcher draws it, read through the
-// shell's system calls.
+// shell's file calls.
 
 import type { AudioContainer } from "./audio-tags/audio-tags";
 import { audioContainer, audioTags } from "./audio-tags/audio-tags";
-import type { System } from "./system";
+import type { Files } from "./desktop/files";
 import { FileType } from "./system";
 
 /** Bytes of a file read for its preview. */
@@ -50,8 +50,10 @@ export type FilePreview = ReturnType<
   (typeof FilePreview)[keyof typeof FilePreview]
 >;
 
-/** The system calls a preview makes. */
-export type PreviewSystem = Pick<System, "readDir" | "readFile" | "stat">;
+/** The file calls a preview makes. */
+export type PreviewDesktop = {
+  readonly files: Pick<Files, "read" | "readDir" | "stat">;
+};
 
 /**
  * Preview `path`: a directory's entries, a song's tags, or the start of a
@@ -59,23 +61,23 @@ export type PreviewSystem = Pick<System, "readDir" | "readFile" | "stat">;
  * contents, not their names.
  */
 export const previewFile = async (
-  system: PreviewSystem,
+  domicile: PreviewDesktop,
   path: string,
 ): Promise<FilePreview> =>
-  (await system.stat(path)).match({
+  (await domicile.files.stat(path)).match({
     Err: () => Promise.resolve(FilePreview.Unreadable()),
     Ok: ({ fileType }) =>
       fileType === FileType.Directory
-        ? listed(system, path)
-        : contents(system, path),
+        ? listed(domicile, path)
+        : contents(domicile, path),
   });
 
 /** A directory's entry names, sorted, with directories ending in `/`. */
 const listed = async (
-  system: PreviewSystem,
+  domicile: PreviewDesktop,
   path: string,
 ): Promise<FilePreview> =>
-  (await system.readDir(path)).match<FilePreview>({
+  (await domicile.files.readDir(path)).match<FilePreview>({
     Err: FilePreview.Unreadable,
     Ok: (entries) =>
       FilePreview.Directory(
@@ -89,27 +91,27 @@ const listed = async (
   });
 
 const contents = async (
-  system: PreviewSystem,
+  domicile: PreviewDesktop,
   path: string,
 ): Promise<FilePreview> =>
-  (await system.readFile(path, { length: PREVIEW_BYTES })).match({
+  (await domicile.files.read(path, { length: PREVIEW_BYTES })).match({
     Err: () => Promise.resolve(FilePreview.Unreadable()),
     Ok: (head) => {
       const container = audioContainer(head);
       return container === undefined
         ? Promise.resolve(textOf(head))
-        : song(system, path, container);
+        : song(domicile, path, container);
     },
   });
 
 const song = async (
-  system: PreviewSystem,
+  domicile: PreviewDesktop,
   path: string,
   container: AudioContainer,
 ): Promise<FilePreview> =>
   (
     await audioTags(container, (offset, length) =>
-      system.readFile(path, { length, offset }),
+      domicile.files.read(path, { length, offset }),
     )
   ).match<FilePreview>({
     Err: FilePreview.Unreadable,

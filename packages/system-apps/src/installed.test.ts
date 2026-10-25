@@ -3,7 +3,7 @@ import { Err } from "@cprussin/option-result";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 
 import type { DesktopEntry } from "./desktop-entry";
-import { fakeSystem } from "./fake-system";
+import { fakeDesktop } from "./fake-desktop";
 import { installedApps } from "./installed";
 
 const entry = (name: string, exec: string): string =>
@@ -16,7 +16,7 @@ const idsAndNames = (
 
 describe("installedApps", () => {
   it("names an entry by its path under applications, with dashes", async () => {
-    const system = fakeSystem({
+    const system = fakeDesktop({
       "/share/applications/kde/konsole.desktop": entry("Konsole", "konsole"),
     });
 
@@ -28,7 +28,7 @@ describe("installedApps", () => {
   });
 
   it("lets an earlier directory override a later one, even to hide it", async () => {
-    const system = fakeSystem({
+    const system = fakeDesktop({
       "/system/applications/clock.desktop": entry("Clock", "clock"),
       "/system/applications/editor.desktop": entry("Editor", "editor"),
       "/system/applications/notes.txt": "not an entry",
@@ -49,7 +49,7 @@ describe("installedApps", () => {
 
   it("follows symlinks to entries and to directories of them", async () => {
     // As in a Nix profile, where both point into the store.
-    const system = fakeSystem({
+    const system = fakeDesktop({
       "/profile/applications/editor.desktop": {
         linksTo: "/store/editor/editor.desktop",
       },
@@ -67,7 +67,7 @@ describe("installedApps", () => {
   });
 
   it("skips an entry it may not read, as the spec says", async () => {
-    const system = fakeSystem({
+    const system = fakeDesktop({
       "/share/applications/editor.desktop": entry("Editor", "editor"),
       "/share/applications/secret.desktop": {
         fails: SystemErrorKind.PermissionDenied,
@@ -82,7 +82,7 @@ describe("installedApps", () => {
   });
 
   it("fails when the desktop refuses to read", async () => {
-    const system = fakeSystem({
+    const system = fakeDesktop({
       "/share/applications/editor.desktop": { fails: SystemErrorKind.Locked },
     });
 

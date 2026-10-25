@@ -8,8 +8,11 @@ import { SHELL_APP_ID } from "@domicile-desktop/sdk/portal";
 import type { PreviewedWindow } from "@domicile-desktop/sdk/previewed-window";
 import type { SystemError, VirtualMonitor } from "@domicile-desktop/sdk/system";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
-import type { Node } from "@domicile-desktop/system-apps/fake-system";
-import { fakeSystem } from "@domicile-desktop/system-apps/fake-system";
+import type {
+  FakeDesktop,
+  Node,
+} from "@domicile-desktop/system-apps/fake-desktop";
+import { fakeDesktop } from "@domicile-desktop/system-apps/fake-desktop";
 import {
   act,
   fireEvent,
@@ -23,12 +26,24 @@ import userEvent from "@testing-library/user-event";
 import { Button } from "../Button/Button";
 import { DisplayProvider } from "../Screen/DisplayProvider";
 import type { DisplaySource } from "../Screen/display-source";
+import type { DialogDesktop } from "./PortalDialogs";
 import { PortalDialogs } from "./PortalDialogs";
 import { ShownWindow } from "./shown-windows";
 
+/** `fake` with captures that never draw, for dialogs that preview nothing. */
+const dialogDesktop = (fake: FakeDesktop): DialogDesktop => ({
+  ...fake,
+  capture: {
+    preview: () =>
+      new Promise(() => {
+        /* never drawn */
+      }),
+  },
+});
+
 /**
  * A desktop that pushes `portal_requests` lines and records answers. Its
- * system calls go to the `fakeSystem` each test passes as `systemOf`.
+ * calls go to the `fakeDesktop` each test passes as `desktopOf`.
  */
 class FakeHost {
   readonly fake = new FakeDomicileHost();
@@ -81,24 +96,26 @@ const entry = (name: string, icon: string): string =>
 const desktop =
   (tree: Readonly<Record<string, Node>> = {}) =>
   () =>
-    fakeSystem(
-      {
-        "/config/mimeapps.list":
-          "[Default Applications]\napplication/pdf=firefox.desktop\n",
-        "/share/applications/firefox.desktop": entry("Firefox", "firefox"),
-        "/share/applications/org.gnome.Evince.desktop": entry(
-          "Document Viewer",
-          "evince",
-        ),
-        "/share/icons/hicolor/48x48/apps/firefox.svg": "<svg/>",
-        ...tree,
-      },
-      () => ({
-        code: 0,
-        stderr: "",
-        stdout:
-          "XDG_CONFIG_HOME=/config\0XDG_DATA_HOME=/data\0XDG_DATA_DIRS=/share\0",
-      }),
+    dialogDesktop(
+      fakeDesktop(
+        {
+          "/config/mimeapps.list":
+            "[Default Applications]\napplication/pdf=firefox.desktop\n",
+          "/share/applications/firefox.desktop": entry("Firefox", "firefox"),
+          "/share/applications/org.gnome.Evince.desktop": entry(
+            "Document Viewer",
+            "evince",
+          ),
+          "/share/icons/hicolor/48x48/apps/firefox.svg": "<svg/>",
+          ...tree,
+        },
+        () => ({
+          code: 0,
+          stderr: "",
+          stdout:
+            "XDG_CONFIG_HOME=/config\0XDG_DATA_HOME=/data\0XDG_DATA_DIRS=/share\0",
+        }),
+      ),
     );
 
 /**
@@ -107,14 +124,14 @@ const desktop =
  */
 const previewing = () => () => ({
   ...desktop()(),
-  previewWindow: (
-    window: PreviewedWindow,
-  ): Promise<Result<string, SystemError>> =>
-    Promise.resolve(
-      window.id === "app-3" || window.id === "2"
-        ? Ok(`data:image/png;base64,${window.id}`)
-        : Err({ kind: SystemErrorKind.NotFound, message: window.id }),
-    ),
+  capture: {
+    preview: (window: PreviewedWindow): Promise<Result<string, SystemError>> =>
+      Promise.resolve(
+        window.id === "app-3" || window.id === "2"
+          ? Ok(`data:image/png;base64,${window.id}`)
+          : Err({ kind: SystemErrorKind.NotFound, message: window.id }),
+      ),
+  },
 });
 
 const chooser = (id: number, body: object = {}) => ({
@@ -464,8 +481,8 @@ describe("PortalDialogs", () => {
       const host = new FakeHost();
       render(
         <PortalDialogs
+          desktopOf={desktop({ "/home/ada/me.png": "png" })}
           host={host.host}
-          systemOf={desktop({ "/home/ada/me.png": "png" })}
         />,
       );
       host.push([
@@ -511,7 +528,7 @@ describe("PortalDialogs", () => {
 
     it("names the application by its desktop entry", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      render(<PortalDialogs desktopOf={desktop()} host={host.host} />);
       host.push([{ ...access(1), app_id: "firefox" }]);
 
       expect(await screen.findByText("Firefox asks")).toBeInTheDocument();
@@ -533,7 +550,7 @@ describe("PortalDialogs", () => {
 
     it("offers each choice by name and icon, the default picked", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      render(<PortalDialogs desktopOf={desktop()} host={host.host} />);
       host.push([chooser(1)]);
 
       expect(
@@ -553,7 +570,7 @@ describe("PortalDialogs", () => {
 
     it("picks the last choice over the default", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      render(<PortalDialogs desktopOf={desktop()} host={host.host} />);
       host.push([chooser(1, { last_choice: "org.gnome.Evince" })]);
 
       expect(
@@ -563,7 +580,7 @@ describe("PortalDialogs", () => {
 
     it("names a choice with no desktop entry by its id, and a URI", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      render(<PortalDialogs desktopOf={desktop()} host={host.host} />);
       host.push([
         chooser(1, {
           choices: ["org.example.Gone"],
@@ -580,7 +597,7 @@ describe("PortalDialogs", () => {
 
     it("shows the one application's icon by its name", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      render(<PortalDialogs desktopOf={desktop()} host={host.host} />);
       host.push([chooser(1, { choices: ["firefox"] })]);
 
       const dialog = await screen.findByRole("dialog", {
@@ -593,7 +610,7 @@ describe("PortalDialogs", () => {
 
     it("shows choices the application adds while it is up", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      render(<PortalDialogs desktopOf={desktop()} host={host.host} />);
       host.push([chooser(1, { choices: ["org.gnome.Evince"] })]);
       await screen.findByRole("dialog", { name: "Open Document Viewer?" });
       host.push([chooser(1)]);
@@ -642,7 +659,7 @@ describe("PortalDialogs", () => {
 
     it("previews a wallpaper, naming the application and where it goes", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={withPicture} />);
+      render(<PortalDialogs desktopOf={withPicture} host={host.host} />);
       host.push([wallpaper(1)]);
       await act(() => Promise.resolve());
 
@@ -659,7 +676,7 @@ describe("PortalDialogs", () => {
 
     it("shows a launcher's icon, name and address", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      render(<PortalDialogs desktopOf={desktop()} host={host.host} />);
       host.push([launcher(1)]);
       await named();
 
@@ -675,7 +692,7 @@ describe("PortalDialogs", () => {
 
     it("keeps a launcher's name when it may not be changed", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      render(<PortalDialogs desktopOf={desktop()} host={host.host} />);
       host.push([launcher(1, { editable_name: false })]);
       await named();
 
@@ -684,7 +701,7 @@ describe("PortalDialogs", () => {
 
     it("lists the USB devices an application asks for", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      render(<PortalDialogs desktopOf={desktop()} host={host.host} />);
       host.push([usb(1)]);
       await named();
 
@@ -699,7 +716,7 @@ describe("PortalDialogs", () => {
 
     it("stacks a screenshot over the dialog before it, to shoot that dialog", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      render(<PortalDialogs desktopOf={desktop()} host={host.host} />);
       host.push([chooser(1)]);
       await named();
       host.push([chooser(1), frozen(2, "screenshot")]);
@@ -735,7 +752,7 @@ describe("PortalDialogs", () => {
       ["screen cast", { ...screenCast(), id: 2 }],
     ])("stacks a %s over the dialog before it", async (_, capture) => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      render(<PortalDialogs desktopOf={desktop()} host={host.host} />);
       host.push([chooser(1)]);
       await named();
       host.push([chooser(1), capture]);
@@ -770,7 +787,7 @@ describe("PortalDialogs", () => {
   describe("file chooser", () => {
     it("asks for files under the application's title, in its folder", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={home()} />);
+      render(<PortalDialogs desktopOf={home()} host={host.host} />);
       host.push([
         fileChooser(1, {
           accept_label: "Attach",
@@ -792,7 +809,7 @@ describe("PortalDialogs", () => {
 
     it("gives the keyboard to the name when saving", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={home()} />);
+      render(<PortalDialogs desktopOf={home()} host={host.host} />);
       host.push([fileChooser(1, { current_name: "notes.txt", mode: "save" })]);
       await listed();
 
@@ -801,7 +818,7 @@ describe("PortalDialogs", () => {
 
     it("answers with the file chosen, the filter and each choice", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={home()} />);
+      render(<PortalDialogs desktopOf={home()} host={host.host} />);
       host.push([
         fileChooser(1, {
           choices: [
@@ -854,7 +871,7 @@ describe("PortalDialogs", () => {
 
     it("opens several files", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={home()} />);
+      render(<PortalDialogs desktopOf={home()} host={host.host} />);
       host.push([fileChooser(1, { multiple: true })]);
       await listed();
 
@@ -865,7 +882,7 @@ describe("PortalDialogs", () => {
 
     it("chooses a folder", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={home()} />);
+      render(<PortalDialogs desktopOf={home()} host={host.host} />);
       host.push([fileChooser(1, { directory: true })]);
       await listed();
       await userEvent.click(screen.getByRole("button", { name: "Choose" }));
@@ -877,7 +894,7 @@ describe("PortalDialogs", () => {
 
     it("saves under the name suggested", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={home()} />);
+      render(<PortalDialogs desktopOf={home()} host={host.host} />);
       host.push([fileChooser(1, { current_name: "draft.txt", mode: "save" })]);
       await listed();
       await userEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -892,7 +909,7 @@ describe("PortalDialogs", () => {
 
     it("saves several files into the folder chosen", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={home()} />);
+      render(<PortalDialogs desktopOf={home()} host={host.host} />);
       host.push([
         fileChooser(1, { files: ["a.txt", "b.txt"], mode: "save_files" }),
       ]);
@@ -907,7 +924,7 @@ describe("PortalDialogs", () => {
 
     it("cancels", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={home()} />);
+      render(<PortalDialogs desktopOf={home()} host={host.host} />);
       host.push([fileChooser(1)]);
       await listed();
       await userEvent.click(
@@ -924,10 +941,10 @@ describe("PortalDialogs", () => {
       render(
         <DisplayProvider source={TWO_SCREENS}>
           <PortalDialogs
+            desktopOf={home()}
             host={host.host}
             screen="left"
             screenOf={(appId) => (appId === "app-3" ? "right" : undefined)}
-            systemOf={home()}
           />
         </DisplayProvider>,
       );
@@ -1004,7 +1021,7 @@ describe("PortalDialogs", () => {
 
     it("opens the picked application", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      render(<PortalDialogs desktopOf={desktop()} host={host.host} />);
       host.push([chooser(1)]);
       await screen.findByRole("option", { name: "Firefox" });
       await userEvent.click(screen.getByRole("button", { name: "Open" }));
@@ -1016,7 +1033,7 @@ describe("PortalDialogs", () => {
 
     it("moves the pick with the arrows and opens it with Enter", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      render(<PortalDialogs desktopOf={desktop()} host={host.host} />);
       host.push([chooser(1)]);
       await screen.findByRole("option", { name: "Firefox" });
       await userEvent.keyboard("{ArrowUp}{Enter}");
@@ -1028,7 +1045,7 @@ describe("PortalDialogs", () => {
 
     it("opens an application double-clicked", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      render(<PortalDialogs desktopOf={desktop()} host={host.host} />);
       host.push([chooser(1)]);
       await userEvent.dblClick(
         await screen.findByRole("option", { name: "Document Viewer" }),
@@ -1041,7 +1058,7 @@ describe("PortalDialogs", () => {
 
     it("cancels a choice", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      render(<PortalDialogs desktopOf={desktop()} host={host.host} />);
       host.push([chooser(1)]);
       await screen.findByRole("option", { name: "Firefox" });
       await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -1051,7 +1068,7 @@ describe("PortalDialogs", () => {
 
     it("leaves an inhibitor alone and asks what comes after it", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      render(<PortalDialogs desktopOf={desktop()} host={host.host} />);
       host.push([
         {
           app_id: "org.example.Editor",
@@ -1135,7 +1152,7 @@ describe("PortalDialogs", () => {
 
     it("sets a wallpaper", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={withPicture} />);
+      render(<PortalDialogs desktopOf={withPicture} host={host.host} />);
       host.push([wallpaper(1)]);
       await userEvent.click(screen.getByRole("button", { name: "Set" }));
 
@@ -1144,7 +1161,7 @@ describe("PortalDialogs", () => {
 
     it("keeps the wallpaper", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={withPicture} />);
+      render(<PortalDialogs desktopOf={withPicture} host={host.host} />);
       host.push([wallpaper(1)]);
       await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
@@ -1153,7 +1170,7 @@ describe("PortalDialogs", () => {
 
     it("installs a launcher under the name typed", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      render(<PortalDialogs desktopOf={desktop()} host={host.host} />);
       host.push([launcher(1)]);
       await userEvent.clear(screen.getByLabelText("Name"));
       await userEvent.type(screen.getByLabelText("Name"), "Work mail");
@@ -1166,7 +1183,7 @@ describe("PortalDialogs", () => {
 
     it("cannot install a launcher with no name", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      render(<PortalDialogs desktopOf={desktop()} host={host.host} />);
       host.push([launcher(1)]);
       await userEvent.clear(screen.getByLabelText("Name"));
 
@@ -1175,7 +1192,7 @@ describe("PortalDialogs", () => {
 
     it("allows the USB devices", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      render(<PortalDialogs desktopOf={desktop()} host={host.host} />);
       host.push([usb(1)]);
       await userEvent.click(screen.getByRole("button", { name: "Allow" }));
 
@@ -1391,7 +1408,7 @@ describe("PortalDialogs", () => {
     it("saves a PDF where the user picks, with its paper and pages", async () => {
       const user = userEvent.setup();
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={home()} />);
+      render(<PortalDialogs desktopOf={home()} host={host.host} />);
       host.push([print(1, twoPrinters)]);
 
       await user.click(screen.getByRole("combobox", { name: "Destination" }));
@@ -1428,7 +1445,7 @@ describe("PortalDialogs", () => {
     it("goes back to its options when the PDF's picker is canceled", async () => {
       const user = userEvent.setup();
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={home()} />);
+      render(<PortalDialogs desktopOf={home()} host={host.host} />);
       host.push([print(1, twoPrinters)]);
 
       await user.click(screen.getByRole("combobox", { name: "Destination" }));
@@ -1516,7 +1533,7 @@ describe("PortalDialogs", () => {
 
     it("names each window by its application, with its icon", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      render(<PortalDialogs desktopOf={desktop()} host={host.host} />);
       const shot = frozen(1, "screenshot");
       host.push([
         {
@@ -1586,9 +1603,9 @@ describe("PortalDialogs", () => {
       const host = new FakeHost();
       render(
         <PortalDialogs
+          desktopOf={previewing()}
           host={host.host}
           shownWindows={() => []}
-          systemOf={previewing()}
         />,
       );
       host.push([frozen(1, "screenshot")]);
@@ -1628,9 +1645,9 @@ describe("PortalDialogs", () => {
       host.fake.set({ browserWindows: [browserWindow("2", "Hidden")] });
       render(
         <PortalDialogs
+          desktopOf={previewing()}
           host={host.host}
           shownWindows={() => []}
-          systemOf={previewing()}
         />,
       );
       host.push([frozen(1, "screenshot")]);
@@ -1656,9 +1673,9 @@ describe("PortalDialogs", () => {
       const host = new FakeHost();
       render(
         <PortalDialogs
+          desktopOf={previewing()}
           host={host.host}
           shownWindows={() => []}
-          systemOf={previewing()}
         />,
       );
       host.push([frozen(1, "screenshot")]);
@@ -1681,9 +1698,9 @@ describe("PortalDialogs", () => {
       host.fake.set({ browserWindows: [browserWindow("9", "Gone")] });
       render(
         <PortalDialogs
+          desktopOf={previewing()}
           host={host.host}
           shownWindows={() => []}
-          systemOf={previewing()}
         />,
       );
       host.push([frozen(1, "screenshot")]);
@@ -1991,7 +2008,7 @@ describe("PortalDialogs", () => {
 
     it("names a session's application by its desktop entry, with its icon", async () => {
       const host = new FakeHost();
-      render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+      render(<PortalDialogs desktopOf={desktop()} host={host.host} />);
       host.push([], [{ ...inputCapture(6), app_id: "firefox" }]);
 
       expect(
@@ -2044,7 +2061,7 @@ describe("PortalDialogs", () => {
 describe("screen cast", () => {
   it("lists the windows beside the desk, by title over application", async () => {
     const host = new FakeHost();
-    render(<PortalDialogs host={host.host} systemOf={desktop()} />);
+    render(<PortalDialogs desktopOf={desktop()} host={host.host} />);
     host.push([
       screenCast(false, WINDOWS, false, {
         desk: frozen(1, "screenshot").body,
@@ -2216,9 +2233,9 @@ describe("screen cast", () => {
       host.fake.set({ browserWindows: [browserWindow("2", "Docs")] });
       render(
         <PortalDialogs
+          desktopOf={previewing()}
           host={host.host}
           shownWindows={shown}
-          systemOf={previewing()}
         />,
       );
       host.push([withDesk()]);
@@ -2238,9 +2255,9 @@ describe("screen cast", () => {
       host.fake.set({ browserWindows: [browserWindow("2", "Docs")] });
       render(
         <PortalDialogs
+          desktopOf={previewing()}
           host={host.host}
           shownWindows={shown}
-          systemOf={previewing()}
         />,
       );
       host.push([withDesk()]);

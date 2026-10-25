@@ -1,11 +1,12 @@
-// The launcher's applications and bookmarks, read through the desktop's system
-// calls by `@domicile-desktop/system-apps`.
+// The launcher's applications and bookmarks, read through the desktop by
+// `@domicile-desktop/system-apps`.
 
 import type { Option, Result } from "@cprussin/option-result";
 import type { IconTheme } from "@domicile-desktop/manganese-host/followed-icon-theme";
-import type { System, SystemError } from "@domicile-desktop/sdk/system";
+import type { SystemError } from "@domicile-desktop/sdk/system";
 import type { IconLookup } from "@domicile-desktop/system-apps/app-icons";
 import { appIcons } from "@domicile-desktop/system-apps/app-icons";
+import type { AppsDesktop } from "@domicile-desktop/system-apps/apps-desktop";
 import { findBookmarks } from "@domicile-desktop/system-apps/bookmark";
 import { curlFetch } from "@domicile-desktop/system-apps/curl";
 import { dataDirs } from "@domicile-desktop/system-apps/data-dirs";
@@ -33,7 +34,7 @@ export type AppSearch = {
 type Installed = { entries: InstalledEntry[]; icon: IconLookup };
 
 /**
- * Searches the applications installed on the desktop `system` reaches, less
+ * Searches the applications installed on the desktop `domicile` reaches, less
  * those `config` omits, and `config`'s bookmarks. Application icons come from
  * the config's icon theme.
  *
@@ -42,10 +43,10 @@ type Installed = { entries: InstalledEntry[]; icon: IconLookup };
  * the background, so a later search has them.
  */
 export const appSearch = (
-  system: System,
+  domicile: AppsDesktop,
   config: ApplicationsConfig,
   iconTheme: IconTheme,
-  icons: Favicons = favicons((url) => favicon(url, curlFetch(system))),
+  icons: Favicons = favicons((url) => favicon(url, curlFetch(domicile))),
 ): AppSearch => {
   const omits = omitting(config.omit);
   let installed: Promise<Installed> | undefined;
@@ -56,7 +57,7 @@ export const appSearch = (
         // biome-ignore lint/suspicious/noConsole: surfacing a lookup that broke
         console.error("could not look for bookmarks' icons", error);
       });
-    installed ??= read(system, omits, iconTheme);
+    installed ??= read(domicile, omits, iconTheme);
     const { entries, icon } = await installed;
     return {
       apps: await Promise.all(
@@ -72,7 +73,7 @@ export const appSearch = (
   };
   return {
     opening: () => {
-      installed = read(system, omits, iconTheme);
+      installed = read(domicile, omits, iconTheme);
       return search("");
     },
     search,
@@ -80,17 +81,17 @@ export const appSearch = (
 };
 
 const read = async (
-  system: System,
+  domicile: AppsDesktop,
   omits: (id: string) => boolean,
   iconTheme: IconTheme,
 ): Promise<Installed> => {
-  const dirs = succeeded(await dataDirs(system));
+  const dirs = succeeded(await dataDirs(domicile));
   const theme = await iconTheme();
   return {
-    entries: succeeded(await installedApps(system, dirs)).filter(
+    entries: succeeded(await installedApps(domicile, dirs)).filter(
       ({ id }) => !omits(id),
     ),
-    icon: appIcons(system, dirs, ["apps"], { theme }),
+    icon: appIcons(domicile, dirs, ["apps"], { theme }),
   };
 };
 

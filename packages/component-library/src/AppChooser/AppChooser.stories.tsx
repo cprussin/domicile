@@ -1,4 +1,4 @@
-import { fakeSystem } from "@domicile-desktop/system-apps/fake-system";
+import { fakeDesktop } from "@domicile-desktop/system-apps/fake-desktop";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import { AppChooser as AppChooserComponent } from "./AppChooser";
@@ -14,7 +14,7 @@ const ICON =
  * Two installed applications, the browser with an icon; the browser is the
  * default for PDFs.
  */
-const installed = fakeSystem(
+const installed = fakeDesktop(
   {
     "/config/mimeapps.list":
       "[Default Applications]\napplication/pdf=firefox.desktop\n",
@@ -43,19 +43,19 @@ const meta = {
     asker: { control: "text", table: { category: "Contents" } },
     choices: { control: "object", table: { category: "Contents" } },
     contentType: { control: "text", table: { category: "Contents" } },
+    domicile: { control: false, table: { category: "Behavior" } },
     lastChoice: { control: "text", table: { category: "Behavior" } },
     onCancel: { control: false, table: { category: "Events" } },
     onChoose: { control: false, table: { category: "Events" } },
     opened: { control: "text", table: { category: "Contents" } },
     screen: { control: "text", table: { category: "Behavior" } },
-    system: { control: false, table: { category: "Behavior" } },
   },
   component: AppChooserComponent,
   parameters: {
     docs: {
       description: {
         component:
-          "A dialog that picks an application to open a file or URI with, read from the desktop entries `system` reaches. With one application and an asker, it asks whether to open that one.",
+          "A dialog that picks an application to open a file or URI with, read from the desktop entries `domicile` reaches. With one application and an asker, it asks whether to open that one.",
       },
     },
   },
@@ -73,10 +73,10 @@ export const Default: Story = {
     asker: undefined,
     choices: ["org.gnome.Evince", "firefox", "org.example.Unknown"],
     contentType: "application/pdf",
+    domicile: installed,
     lastChoice: undefined,
     opened: "invoice.pdf",
     screen: undefined,
-    system: installed,
   },
 };
 

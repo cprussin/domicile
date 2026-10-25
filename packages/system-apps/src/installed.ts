@@ -2,12 +2,9 @@
 
 import type { Result } from "@cprussin/option-result";
 import { None, Ok, Some } from "@cprussin/option-result";
-import type {
-  DirEntry,
-  System,
-  SystemError,
-} from "@domicile-desktop/sdk/system";
+import type { DirEntry, SystemError } from "@domicile-desktop/sdk/system";
 import { FileType } from "@domicile-desktop/sdk/system";
+import type { AppsDesktop } from "./apps-desktop";
 
 import type { DesktopEntry } from "./desktop-entry";
 import { parseDesktopEntry } from "./desktop-entry";
@@ -25,19 +22,19 @@ type EntryFile = { id: string; path: string };
  * directories and unreadable files are skipped.
  */
 export const installedApps = async (
-  system: System,
+  domicile: AppsDesktop,
   dataDirs: readonly string[],
 ): Promise<Result<DesktopEntry[], SystemError>> => {
   const listed = allOk(
     await Promise.all(
-      dataDirs.map((dir) => entryFiles(system, `${dir}/applications`, "")),
+      dataDirs.map((dir) => entryFiles(domicile, `${dir}/applications`, "")),
     ),
   );
   return (
     await listed.andThenAsync(async (dirs) =>
       allOk(
         await Promise.all(
-          firstOfEach(dirs.flat()).map((file) => read(system, file)),
+          firstOfEach(dirs.flat()).map((file) => read(domicile, file)),
         ),
       ),
     )
@@ -59,9 +56,9 @@ const firstOfEach = (files: readonly EntryFile[]): EntryFile[] => {
 };
 
 /** `file` parsed, or nothing for an unreadable file or one not to offer. */
-const read = async (system: System, { id, path }: EntryFile) =>
+const read = async (domicile: AppsDesktop, { id, path }: EntryFile) =>
   orAbsent(
-    (await system.readTextFile(path)).map((text) =>
+    (await domicile.files.readText(path)).map((text) =>
       parseDesktopEntry(id, text),
     ),
     None<DesktopEntry>(),
@@ -72,34 +69,35 @@ const read = async (system: System, { id, path }: EntryFile) =>
  * its path under `dir`, `/` read as `-`.
  */
 const entryFiles = async (
-  system: System,
+  domicile: AppsDesktop,
   dir: string,
   prefix: string,
 ): Promise<Result<EntryFile[], SystemError>> =>
-  orAbsent(await system.readDir(dir), []).andThenAsync(async (entries) =>
-    allOk(
-      await Promise.all(
-        entries.map((entry) => filesAt(system, dir, prefix, entry)),
-      ),
-    ).map((found) => found.flat()),
+  orAbsent(await domicile.files.readDir(dir), []).andThenAsync(
+    async (entries) =>
+      allOk(
+        await Promise.all(
+          entries.map((entry) => filesAt(domicile, dir, prefix, entry)),
+        ),
+      ).map((found) => found.flat()),
   );
 
 /** The entry files `entry` in `dir` holds: itself, or those under it. */
 const filesAt = async (
-  system: System,
+  domicile: AppsDesktop,
   dir: string,
   prefix: string,
   { fileType, name }: DirEntry,
 ): Promise<Result<EntryFile[], SystemError>> => {
   const path = `${dir}/${name}`;
-  const below = () => entryFiles(system, path, `${prefix}${name}-`);
+  const below = () => entryFiles(domicile, path, `${prefix}${name}-`);
   if (fileType === FileType.Directory) {
     return below();
   } else if (name.endsWith(".desktop")) {
     return Ok([{ id: `${prefix}${name}`, path }]);
   } else if (fileType === FileType.Symlink) {
     return orAbsent(
-      (await system.stat(path)).map(({ fileType: target }) =>
+      (await domicile.files.stat(path)).map(({ fileType: target }) =>
         target === FileType.Directory ? Some(target) : None<FileType>(),
       ),
       None<FileType>(),

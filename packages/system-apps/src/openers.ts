@@ -3,7 +3,8 @@
 
 import type { Option, Result } from "@cprussin/option-result";
 import { Ok } from "@cprussin/option-result";
-import type { System, SystemError } from "@domicile-desktop/sdk/system";
+import type { SystemError } from "@domicile-desktop/sdk/system";
+import type { AppsDesktop } from "./apps-desktop";
 
 import { contentTypeOf } from "./content-type";
 import { dataDirs } from "./data-dirs";
@@ -36,18 +37,18 @@ export type Openers = {
  * back to `xdg-open` when this offers nothing.
  */
 export const openers = async (
-  system: System,
+  domicile: AppsDesktop,
   path: string,
 ): Promise<Result<Openers, SystemError>> =>
-  (await desktopEnvironment(system)).andThenAsync(async (variables) => {
+  (await desktopEnvironment(domicile)).andThenAsync(async (variables) => {
     const file = path.startsWith("/") ? path : `${homeOf(variables)}/${path}`;
-    return (await dataDirs(system)).andThenAsync(async (dirs) =>
-      (await contentTypeOf(system, dirs, path)).andThenAsync(
+    return (await dataDirs(domicile)).andThenAsync(async (dirs) =>
+      (await contentTypeOf(domicile, dirs, path)).andThenAsync(
         async (contentType) =>
           (
             await contentType.match({
               None: () => Promise.resolve(Ok<DesktopEntry[], SystemError>([])),
-              Some: (type) => appsFor(system, dirs, type),
+              Some: (type) => appsFor(domicile, dirs, type),
             })
           ).map((apps) => ({
             apps,
@@ -60,12 +61,12 @@ export const openers = async (
 
 /** The installed applications for `contentType`, in `Openers.apps`'s order. */
 const appsFor = async (
-  system: System,
+  domicile: AppsDesktop,
   dirs: readonly string[],
   contentType: string,
 ): Promise<Result<DesktopEntry[], SystemError>> =>
-  (await installedApps(system, dirs)).andThenAsync(async (installed) =>
-    (await defaultApps(system, contentType)).map((defaults) => {
+  (await installedApps(domicile, dirs)).andThenAsync(async (installed) =>
+    (await defaultApps(domicile, contentType)).map((defaults) => {
       const byId = new Map(installed.map((app) => [app.id, app]));
       const first = [...new Set(defaults)].flatMap((id) => {
         const app = byId.get(id);

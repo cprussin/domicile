@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { fakeSystem } from "@domicile-desktop/system-apps/fake-system";
+import { fakeDesktop } from "@domicile-desktop/system-apps/fake-desktop";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -10,7 +10,7 @@ const entry = (name: string): string =>
 
 /** A desktop with an editor and a viewer installed, the viewer the default. */
 const desktop = () =>
-  fakeSystem(
+  fakeDesktop(
     {
       "/config/mimeapps.list":
         "[Default Applications]\ntext/plain=viewer.desktop\n",
@@ -36,13 +36,13 @@ const chosen = (
         asker={asker}
         choices={choices}
         contentType="text/plain"
+        domicile={desktop()}
         onCancel={() => {
           resolve(undefined);
         }}
         onChoose={resolve}
         opened="this link"
         screen={undefined}
-        system={desktop()}
       />,
     );
   });

@@ -2,6 +2,7 @@
 // modifiers. See docs/architecture/KEYBINDINGS.md.
 
 import type { DomicileHost, DomicileShortcutEvent } from "../domicile-host";
+import type { System } from "../system";
 import type { On } from "./subscribe";
 import { hostEvent, on } from "./subscribe";
 
@@ -45,6 +46,16 @@ export type Keyboard = {
   grab: (chord: string) => void;
   /** Answer one {@link Keyboard.grab}; the last gives the key back. */
   ungrab: (chord: string) => void;
+  /**
+   * Hear `input.keyboard`'s keymaps and the one the desktop types on, at once
+   * and on each switch or reload. Allowed while the desktop is locked.
+   */
+  keymaps: System["keymaps"];
+  /**
+   * Switch every keyboard to another of the config's keymaps, until the
+   * desktop restarts. Allowed while the desktop is locked.
+   */
+  selectKeymap: System["selectKeymap"];
   on: On<KeyboardListeners>;
 };
 
@@ -60,10 +71,14 @@ export type KeyboardHost = Pick<
   | "ungrabShortcut"
 >;
 
-export const keyboard = (host: KeyboardHost): Keyboard => ({
+export const keyboard = (
+  host: KeyboardHost,
+  calls: Pick<System, "keymaps" | "selectKeymap">,
+): Keyboard => ({
   grab: (chord) => {
     host.grabShortcut(chord);
   },
+  keymaps: () => calls.keymaps(),
   get modifiers() {
     return modifiersOf(host);
   },
@@ -77,6 +92,7 @@ export const keyboard = (host: KeyboardHost): Keyboard => ({
         listener(shortcutOf(event)),
       ),
   }),
+  selectKeymap: (choice) => calls.selectKeymap(choice),
   ungrab: (chord) => {
     host.ungrabShortcut(chord);
   },

@@ -14,7 +14,7 @@ import {
   stopCapturing,
   watchCapturing,
 } from "@domicile-desktop/sdk/portal";
-import type { System } from "@domicile-desktop/sdk/system";
+import type { AppsDesktop } from "@domicile-desktop/system-apps/apps-desktop";
 import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import { GlobeIcon } from "@phosphor-icons/react/dist/ssr/Globe";
 import { MonitorIcon } from "@phosphor-icons/react/dist/ssr/Monitor";
@@ -31,7 +31,7 @@ type Props = {
   /** The desktop whose captures to show. */
   host: PortalHost;
   /** How it reads applications' desktop entries. */
-  system: System;
+  domicile: AppsDesktop;
 };
 
 /** A running screen cast. */
@@ -43,9 +43,9 @@ type ScreenCast = Extract<Capturing, { kind: CapturingKind.ScreenCast }>;
  * lists each application, what it records and a button that stops it. Input
  * sessions are left to `<PortalDialogs />`.
  */
-export const Sharing = ({ host, system }: Props) => {
+export const Sharing = ({ host, domicile }: Props) => {
   const [capturing, setCapturing] = useState<readonly ScreenCast[]>([]);
-  const apps = useApps(system, [
+  const apps = useApps(domicile, [
     ...capturing.map((capture) => capture.appId),
     ...capturing.flatMap((capture) => windowAppIds(capture.sources)),
   ]);

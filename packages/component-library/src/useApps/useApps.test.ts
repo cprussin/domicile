@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { fakeSystem } from "@domicile-desktop/system-apps/fake-system";
+import { fakeDesktop } from "@domicile-desktop/system-apps/fake-desktop";
 import { renderHook, waitFor } from "@testing-library/react";
 
 import { useApps } from "./useApps";
 
 // Created outside render, since a new system reads again.
-const system = fakeSystem(
+const system = fakeDesktop(
   {
     "/share/applications/us.zoom.Zoom.desktop":
       "[Desktop Entry]\nType=Application\nName=Zoom\nExec=zoom\nIcon=zoom\n",

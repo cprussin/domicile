@@ -2,7 +2,8 @@
 // https://specifications.freedesktop.org/basedir-spec/latest/.
 
 import type { Result } from "@cprussin/option-result";
-import type { System, SystemError } from "@domicile-desktop/sdk/system";
+import type { SystemError } from "@domicile-desktop/sdk/system";
+import type { AppsDesktop } from "./apps-desktop";
 
 import { desktopEnvironment, setVariable } from "./environment";
 
@@ -18,9 +19,9 @@ const DEFAULT_DATA_DIRS = "/usr/local/share:/usr/share";
  * call's path is.
  */
 export const dataDirs = async (
-  system: System,
+  domicile: AppsDesktop,
 ): Promise<Result<string[], SystemError>> =>
-  (await desktopEnvironment(system)).map((variables) => [
+  (await desktopEnvironment(domicile)).map((variables) => [
     setVariable(variables, "XDG_DATA_HOME") ?? ".local/share",
     ...(setVariable(variables, "XDG_DATA_DIRS") ?? DEFAULT_DATA_DIRS).split(
       ":",

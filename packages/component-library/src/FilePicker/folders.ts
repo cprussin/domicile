@@ -1,7 +1,8 @@
-// The folders `FilePicker` browses, and the system calls behind them.
+// The folders `FilePicker` browses, and the desktop's file calls behind them.
 
 import type { Result } from "@cprussin/option-result";
-import type { System, SystemError } from "@domicile-desktop/sdk/system";
+import type { Files } from "@domicile-desktop/sdk/desktop/files";
+import type { SystemError } from "@domicile-desktop/sdk/system";
 
 import { listDirectory } from "./list-directory";
 
@@ -21,11 +22,17 @@ export type Folders = {
   watch: (path: string, changed: () => void) => () => void;
 };
 
-/** {@link Folders} through the compositor's system calls. */
-export const systemFolders = (system: System): Folders => ({
-  create: (path) => system.createDir(path),
-  list: (path) => listDirectory(system, path),
-  watch: (path, changed) => watchDirectory(system, path, changed),
+/** The calls {@link desktopFolders} makes. */
+export type FolderFiles = Pick<
+  Files,
+  "createDir" | "readDir" | "stat" | "watch"
+>;
+
+/** {@link Folders} through the desktop's files. */
+export const desktopFolders = (files: FolderFiles): Folders => ({
+  create: (path) => files.createDir(path),
+  list: (path) => listDirectory(files, path),
+  watch: (path, changed) => watchDirectory(files, path, changed),
 });
 
 /**
@@ -34,7 +41,7 @@ export const systemFolders = (system: System): Folders => ({
  * works, without live updates.
  */
 const watchDirectory = (
-  system: System,
+  files: FolderFiles,
   path: string,
   changed: () => void,
 ): (() => void) => {
@@ -42,7 +49,7 @@ const watchDirectory = (
     stop: undefined,
     stopped: false,
   };
-  follow(system, path, watching, changed).catch((error: unknown) => {
+  follow(files, path, watching, changed).catch((error: unknown) => {
     // biome-ignore lint/suspicious/noConsole: reports a watch that broke
     console.error("The file picker's directory watch broke", error);
   });
@@ -56,12 +63,12 @@ type Watching = { stop: (() => void) | undefined; stopped: boolean };
 
 /** Starts the watch, then calls `changed` for each item until it ends. */
 const follow = async (
-  system: System,
+  files: FolderFiles,
   path: string,
   watching: Watching,
   changed: () => void,
 ): Promise<void> => {
-  const watch = (await system.watch(path)).match({
+  const watch = (await files.watch(path)).match({
     Err: (error) => {
       // biome-ignore lint/suspicious/noConsole: reports a watch that could not start
       console.error("The file picker could not watch a directory", error);

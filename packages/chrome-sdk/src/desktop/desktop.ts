@@ -93,16 +93,17 @@ const built = new WeakMap<DomicileHost, Domicile>();
 
 const build = (host: DomicileHost): Domicile => {
   const calls = system(host);
+  const bus = dbus(calls);
   return {
     appearance: appearance(host),
     browser: browser(host),
     capture: capture(calls),
     clipboard: clipboard(host),
-    dbus: dbus(calls),
+    dbus: bus,
     displays: displays(host, calls),
     extensions: extensions(host),
     files: files(host, calls),
-    keyboard: keyboard(host),
+    keyboard: keyboard(host, calls),
     notifications: notifications(host),
     on: on<DomicileListeners>({
       compositorreplaced: (listener) =>
@@ -114,7 +115,7 @@ const build = (host: DomicileHost): Domicile => {
     session: session(host, calls),
     shell: shell(host, calls),
     theme: theme(host),
-    tray: tray(host, calls),
+    tray: tray(host, bus),
     windows: windows(host, calls),
   };
 };

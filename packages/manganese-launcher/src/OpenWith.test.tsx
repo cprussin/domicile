@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { fakeSystem } from "@domicile-desktop/system-apps/fake-system";
+import { fakeDesktop } from "@domicile-desktop/system-apps/fake-desktop";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -10,7 +10,7 @@ const app = (name: string, exec: string): string =>
 
 /** A desktop with two text applications, the pager the default. */
 const desktop = () =>
-  fakeSystem(
+  fakeDesktop(
     {
       "/config/mimeapps.list":
         "[Default Applications]\ntext/plain=pager.desktop\n",
@@ -31,13 +31,13 @@ const answered = (): Promise<readonly string[] | undefined> =>
   new Promise((resolve) => {
     render(
       <OpenWith
+        domicile={desktop()}
         onClose={() => {
           resolve(undefined);
         }}
         onOpen={resolve}
         path="Notes/today.txt"
         screen={undefined}
-        system={desktop()}
       />,
     );
   });

@@ -1,14 +1,14 @@
 /// <reference types="@domicile-desktop/manganese-host/domicile-elements" />
 
 import { FilePicker } from "@domicile-desktop/component-library/FilePicker";
-import { systemFolders } from "@domicile-desktop/component-library/folders";
+import { desktopFolders } from "@domicile-desktop/component-library/folders";
 import { DeviceAsk } from "@domicile-desktop/manganese-page-requests/DeviceAsk";
 import { PageDialog } from "@domicile-desktop/manganese-page-requests/PageDialog";
 import { useDeviceRequest } from "@domicile-desktop/manganese-page-requests/useDeviceRequest";
 import { useDialogRequest } from "@domicile-desktop/manganese-page-requests/useDialogRequest";
 import { usePermissionRequest } from "@domicile-desktop/manganese-page-requests/usePermissionRequest";
+import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
-import { system } from "@domicile-desktop/sdk/system";
 import {
   WEBVIEW_DIALOG_EVENT,
   WEBVIEW_FOCUS_REQUEST_EVENT,
@@ -105,7 +105,7 @@ type Props = {
   /** Whether this window is fullscreen, which removes its edge and corners. */
   fullscreen: boolean;
   /** Lists a directory for the file picker. */
-  folders?: typeof systemFolders;
+  folders?: typeof desktopFolders;
   /**
    * The window's current animation, if any.
    *
@@ -204,7 +204,7 @@ export const BrowserWindow = ({
   fullscreen,
   isApp = false,
   isPrivate = false,
-  folders: foldersOf = systemFolders,
+  folders: foldersOf = desktopFolders,
   motion,
   onDescription,
   onFocusRequest,
@@ -268,7 +268,7 @@ export const BrowserWindow = ({
   // synchronously inside that call, so this marks them as not user reaches.
   const focusing = useRef(false);
   const folders = useMemo(
-    () => foldersOf(system(domicile)),
+    () => foldersOf(desktop(domicile).files),
     [domicile, foldersOf],
   );
   // A pending file request from the page. The engine draws no dialog; see

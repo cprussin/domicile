@@ -1,10 +1,11 @@
 import type { Display } from "@domicile-desktop/component-library/display-source";
 import { typedAddress } from "@domicile-desktop/manganese-address/typed-address";
+import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import type {
   DomicileHost,
   DomicileWindow,
 } from "@domicile-desktop/sdk/domicile-host";
-import { SystemErrorKind, system } from "@domicile-desktop/sdk/system";
+import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import type { WindowRequest } from "@domicile-desktop/sdk/window-state";
 import { WindowRequestKind } from "@domicile-desktop/sdk/window-state";
 import {
@@ -64,8 +65,8 @@ export const useWindows = (
   openFile: typeof openFileCommand = openFileCommand,
 ): Windows => {
   const [state, dispatch] = useReducer(reduceWindows, NO_WINDOWS);
-  // Memoized so `act` keeps its identity.
-  const files = useMemo(() => system(domicile), [domicile]);
+  // One per host, so `act` keeps its identity.
+  const files = desktop(domicile);
   // The state as last drawn, for `act` to read without depending on it. A new
   // `act` would re-add every listener that runs commands.
   const drawn = useRef(state);
@@ -238,8 +239,8 @@ const placedOf = (displays: readonly Display[]): readonly PlacedScreen[] =>
 
 /** Takes a screenshot, logging any failure but a dismissed dialog. */
 const takeScreenshot = (domicile: DomicileHost) => {
-  system(domicile)
-    .screenshot()
+  desktop(domicile)
+    .capture.screenshot()
     .then((taken) => {
       taken.match({
         Err: (error) => {
@@ -254,7 +255,7 @@ const takeScreenshot = (domicile: DomicileHost) => {
       });
     })
     .catch((error: unknown) => {
-      // biome-ignore lint/suspicious/noConsole: surfacing a broken system call
+      // biome-ignore lint/suspicious/noConsole: surfacing a broken desktop call
       console.error("The screenshot was not taken", error);
     });
 };

@@ -5,11 +5,12 @@ import type { Option, Result } from "@cprussin/option-result";
 import { None, Ok } from "@cprussin/option-result";
 import type { IconTheme } from "@domicile-desktop/manganese-host/followed-icon-theme";
 import { sharedIconTheme } from "@domicile-desktop/manganese-host/followed-icon-theme";
+import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
 import type { DomicileHost } from "@domicile-desktop/sdk/domicile-host";
-import type { System, SystemError } from "@domicile-desktop/sdk/system";
-import { system } from "@domicile-desktop/sdk/system";
+import type { SystemError } from "@domicile-desktop/sdk/system";
 import type { IconLookup } from "@domicile-desktop/system-apps/app-icons";
 import { appIcons } from "@domicile-desktop/system-apps/app-icons";
+import type { AppsDesktop } from "@domicile-desktop/system-apps/apps-desktop";
 import { dataDirs } from "@domicile-desktop/system-apps/data-dirs";
 import type { DesktopEntry } from "@domicile-desktop/system-apps/desktop-entry";
 import { installedApps } from "@domicile-desktop/system-apps/installed";
@@ -27,7 +28,7 @@ export type ClientIcons = (
 
 /** {@link clientIcons} on `domicile`, in the theme its shell follows. */
 export const desktopClientIcons: ClientIcons = (domicile) =>
-  clientIcons(system(domicile), sharedIconTheme(domicile));
+  clientIcons(desktop(domicile), sharedIconTheme(domicile));
 
 /**
  * A lookup of client icons in the desktop's data directories, in `iconTheme`.
@@ -38,7 +39,7 @@ export const desktopClientIcons: ClientIcons = (domicile) =>
  * since some clients' app ids differ from their entry's name in case.
  */
 export const clientIcons = async (
-  host: System,
+  host: AppsDesktop,
   iconTheme: IconTheme,
 ): Promise<Result<IconLookup, SystemError>> => {
   const theme = await iconTheme();

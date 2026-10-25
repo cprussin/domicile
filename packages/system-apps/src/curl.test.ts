@@ -4,7 +4,7 @@ import { None, Ok, Some } from "@cprussin/option-result";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 
 import { curlFetch } from "./curl";
-import { fakeSystem } from "./fake-system";
+import { fakeDesktop } from "./fake-desktop";
 import type { Page } from "./favicon";
 
 const fetched = (page: Page): Result<Option<Page>, SystemError> =>
@@ -13,7 +13,7 @@ const fetched = (page: Page): Result<Option<Page>, SystemError> =>
 describe("curlFetch", () => {
   it("fetches a URL with curl, following redirects", async () => {
     const fetch = curlFetch(
-      fakeSystem({}, (argv) => {
+      fakeDesktop({}, (argv) => {
         expect(argv[0]).toBe("curl");
         expect(argv).toContain("--location");
         expect(argv.at(-1)).toBe("https://a.example/");
@@ -36,7 +36,7 @@ describe("curlFetch", () => {
 
   it("reads an answer with no type as untyped", async () => {
     const fetch = curlFetch(
-      fakeSystem({}, () => ({
+      fakeDesktop({}, () => ({
         code: 0,
         stderr: "https://a.example/favicon.ico\n",
         stdout: "ico",
@@ -55,7 +55,7 @@ describe("curlFetch", () => {
   it("is nothing when the site does not answer", async () => {
     // curl's code for a host it could not resolve.
     const fetch = curlFetch(
-      fakeSystem({}, () => ({ code: 6, stderr: "\n", stdout: "" })),
+      fakeDesktop({}, () => ({ code: 6, stderr: "\n", stdout: "" })),
     );
 
     expect(await fetch("https://nowhere.example/")).toStrictEqual(Ok(None()));

@@ -8,10 +8,10 @@ import {
   encodeFrame,
   frameDecoder,
 } from "@domicile-desktop/component-library/app-host-frames";
+import type { Processes } from "@domicile-desktop/sdk/desktop/processes";
 import type {
   Exit,
   Subprocess,
-  System,
   SystemError,
 } from "@domicile-desktop/sdk/system";
 import { z } from "zod";
@@ -169,7 +169,9 @@ export type SettingsHost = {
  * The host as a process the app spawns, speaking framed JSON on its stdin and
  * stdout. It starts on the first request, and again after it ends.
  */
-export const spawnedHost = (system: Pick<System, "spawn">): SettingsHost => {
+export const spawnedHost = (
+  processes: Pick<Processes, "spawn">,
+): SettingsHost => {
   const pending = new Map<number, Pending>();
   const changes = new Set<() => void>();
   let running: Promise<Subprocess> | undefined;
@@ -185,7 +187,7 @@ export const spawnedHost = (system: Pick<System, "spawn">): SettingsHost => {
 
   const connected = (): Promise<Subprocess> => {
     if (running === undefined) {
-      const starting = system.spawn(HOST, { stdin: true }).then((spawned) =>
+      const starting = processes.spawn(HOST, { stdin: true }).then((spawned) =>
         spawned.match({
           Err: (error) => {
             running = undefined;

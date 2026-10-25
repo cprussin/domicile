@@ -8,7 +8,8 @@
 
 import type { Option, Result } from "@cprussin/option-result";
 import { None, Ok, Some } from "@cprussin/option-result";
-import type { System, SystemError } from "@domicile-desktop/sdk/system";
+import type { SystemError } from "@domicile-desktop/sdk/system";
+import type { AppsDesktop } from "./apps-desktop";
 
 import { dataUrl } from "./data-url";
 import type { ThemeDirectory } from "./icon-theme-index";
@@ -62,12 +63,12 @@ export type IconOptions = {
 
 /** {@link themedIcons}' URLs alone, for pictures that keep their own colors. */
 export const appIcons = (
-  system: System,
+  domicile: AppsDesktop,
   dataDirs: readonly string[],
   contexts: readonly string[] = ["apps"],
   options: IconOptions = {},
 ): IconLookup => {
-  const lookup = themedIcons(system, dataDirs, contexts, options);
+  const lookup = themedIcons(domicile, dataDirs, contexts, options);
   return async (name) =>
     (await lookup(name)).map((icon) => icon.map(({ url }) => url));
 };
@@ -81,7 +82,7 @@ export const appIcons = (
  * lookup to see newly installed icons.
  */
 export const themedIcons = (
-  system: System,
+  domicile: AppsDesktop,
   dataDirs: readonly string[],
   contexts: readonly string[] = ["apps"],
   { size = 48, theme }: IconOptions = {},
@@ -94,11 +95,13 @@ export const themedIcons = (
   return (name) => {
     const known = looked.get(name);
     if (known === undefined) {
-      listed ??= listings(system, dataDirs, contexts, theme);
+      listed ??= listings(domicile, dataDirs, contexts, theme);
       const lookup = name.startsWith("/")
-        ? read(system, name)
+        ? read(domicile, name)
         : listed.then((themes) =>
-            themes.andThenAsync((each) => orSymbolic(system, each, size, name)),
+            themes.andThenAsync((each) =>
+              orSymbolic(domicile, each, size, name),
+            ),
           );
       looked.set(name, lookup);
       return lookup;
@@ -124,17 +127,17 @@ type Theme = { name: string; directories: readonly ThemeDirectory[] };
  * search them, then `pixmaps`.
  */
 const listings = async (
-  system: System,
+  domicile: AppsDesktop,
   dataDirs: readonly string[],
   contexts: readonly string[],
   theme: string | undefined,
 ): Promise<Result<Listed[][], SystemError>> => {
-  const themes = await chain(system, dataDirs, contexts, theme);
+  const themes = await chain(domicile, dataDirs, contexts, theme);
   return themes.andThenAsync(async (each) =>
     allOk(
       await Promise.all([
-        ...each.map((one) => themeListing(system, dataDirs, one)),
-        pixmaps(system, dataDirs),
+        ...each.map((one) => themeListing(domicile, dataDirs, one)),
+        pixmaps(domicile, dataDirs),
       ]),
     ),
   );
@@ -145,7 +148,7 @@ const listings = async (
  * `hicolor`. A theme installed nowhere is skipped.
  */
 const chain = async (
-  system: System,
+  domicile: AppsDesktop,
   dataDirs: readonly string[],
   contexts: readonly string[],
   theme: string | undefined,
@@ -156,7 +159,7 @@ const chain = async (
       return Ok([]);
     } else {
       seen.add(name);
-      const loaded = await loadTheme(system, dataDirs, contexts, name);
+      const loaded = await loadTheme(domicile, dataDirs, contexts, name);
       return loaded.andThenAsync((found) =>
         found.match({
           None: () => Promise.resolve(Ok<Theme[], SystemError>([])),
@@ -188,7 +191,7 @@ const chain = async (
  * `index.theme` found, or nothing if it is not installed.
  */
 const loadTheme = async (
-  system: System,
+  domicile: AppsDesktop,
   dataDirs: readonly string[],
   contexts: readonly string[],
   name: string,
@@ -200,7 +203,7 @@ const loadTheme = async (
 > => {
   for (const dir of dataDirs) {
     const text = orAbsent(
-      (await system.readTextFile(`${dir}/icons/${name}/index.theme`)).map(
+      (await domicile.files.readText(`${dir}/icons/${name}/index.theme`)).map(
         (read): Option<string> => Some(read),
       ),
       None(),
@@ -221,7 +224,7 @@ const loadTheme = async (
     }
   }
   return name === HICOLOR
-    ? (await laidOut(system, dataDirs, contexts)).map((directories) =>
+    ? (await laidOut(domicile, dataDirs, contexts)).map((directories) =>
         Some({ directories, inherits: [] }),
       )
     : Ok(None());
@@ -229,16 +232,17 @@ const loadTheme = async (
 
 /** `hicolor`'s `<size>/<context>` directories, read from its layout. */
 const laidOut = async (
-  system: System,
+  domicile: AppsDesktop,
   dataDirs: readonly string[],
   contexts: readonly string[],
 ): Promise<Result<ThemeDirectory[], SystemError>> =>
   allOk(
     await Promise.all(
       dataDirs.map(async (dir) =>
-        orAbsent(await system.readDir(`${dir}/icons/${HICOLOR}`), []).map(
-          (entries) => entries.map((entry) => entry.name),
-        ),
+        orAbsent(
+          await domicile.files.readDir(`${dir}/icons/${HICOLOR}`),
+          [],
+        ).map((entries) => entries.map((entry) => entry.name)),
       ),
     ),
   ).map((listed) => {
@@ -284,7 +288,7 @@ const sized = (name: string): Omit<ThemeDirectory, "context">[] => {
 
 /** `theme`'s directories that exist, each directory under every data directory. */
 const themeListing = async (
-  system: System,
+  domicile: AppsDesktop,
   dataDirs: readonly string[],
   { directories, name }: Theme,
 ): Promise<Result<Listed[], SystemError>> => {
@@ -292,10 +296,12 @@ const themeListing = async (
     await Promise.all(
       dataDirs.map(async (dir) => {
         const root = `${dir}/icons/${name}`;
-        return orAbsent(await system.readDir(root), []).map((entries) => ({
-          root,
-          tops: new Set(entries.map((entry) => entry.name)),
-        }));
+        return orAbsent(await domicile.files.readDir(root), []).map(
+          (entries) => ({
+            root,
+            tops: new Set(entries.map((entry) => entry.name)),
+          }),
+        );
       }),
     ),
   );
@@ -306,7 +312,7 @@ const themeListing = async (
           present
             .filter(({ tops }) => tops.has(directory.path.split("/")[0] ?? ""))
             .map(({ root }) =>
-              listing(system, `${root}/${directory.path}`, directory),
+              listing(domicile, `${root}/${directory.path}`, directory),
             ),
         ),
       ),
@@ -315,21 +321,21 @@ const themeListing = async (
 };
 
 const pixmaps = async (
-  system: System,
+  domicile: AppsDesktop,
   dataDirs: readonly string[],
 ): Promise<Result<Listed[], SystemError>> =>
   allOk(
     await Promise.all(
-      dataDirs.map((dir) => listing(system, `${dir}/pixmaps`, undefined)),
+      dataDirs.map((dir) => listing(domicile, `${dir}/pixmaps`, undefined)),
     ),
   );
 
 const listing = async (
-  system: System,
+  domicile: AppsDesktop,
   dir: string,
   directory: ThemeDirectory | undefined,
 ): Promise<Result<Listed, SystemError>> =>
-  orAbsent(await system.readDir(dir), []).map((entries) => ({
+  orAbsent(await domicile.files.readDir(dir), []).map((entries) => ({
     dir,
     directory,
     names: new Set(entries.map((entry) => entry.name)),
@@ -337,15 +343,15 @@ const listing = async (
 
 /** `name`'s icon, else its `-symbolic` one's. */
 const orSymbolic = async (
-  system: System,
+  domicile: AppsDesktop,
   themes: readonly Listed[][],
   size: number,
   name: string,
 ): Promise<Result<Option<ThemedIcon>, SystemError>> => {
-  const plain = await named(system, themes, size, name);
+  const plain = await named(domicile, themes, size, name);
   return plain.mapOr(true, (found) => found.isSome()) || name.endsWith(SYMBOLIC)
     ? plain
-    : named(system, themes, size, `${name}${SYMBOLIC}`);
+    : named(domicile, themes, size, `${name}${SYMBOLIC}`);
 };
 
 /**
@@ -353,7 +359,7 @@ const orSymbolic = async (
  * directory suits `size` best, earliest listed among equals.
  */
 const named = async (
-  system: System,
+  domicile: AppsDesktop,
   themes: readonly Listed[][],
   size: number,
   name: string,
@@ -372,7 +378,7 @@ const named = async (
       )
       .toSorted((a, b) => a.distance - b.distance);
     for (const { path } of candidates) {
-      const icon = await read(system, path);
+      const icon = await read(domicile, path);
       if (icon.mapOr(true, (found) => found.isSome())) {
         return icon;
       }
@@ -383,7 +389,7 @@ const named = async (
 
 /** The file at `path` as an icon, or nothing if it cannot be drawn. */
 const read = async (
-  system: System,
+  domicile: AppsDesktop,
   path: string,
 ): Promise<Result<Option<ThemedIcon>, SystemError>> => {
   const dot = path.lastIndexOf(".");
@@ -391,15 +397,16 @@ const read = async (
   return mime === undefined
     ? Ok(None())
     : orAbsent(
-        await (await system.stat(path)).andThenAsync(async ({ size }) =>
-          size > LARGEST
-            ? Ok(None<ThemedIcon>())
-            : (await system.readFile(path)).map((bytes) =>
-                Some({
-                  symbolic: path.slice(0, dot).endsWith(SYMBOLIC),
-                  url: dataUrl(mime, bytes),
-                }),
-              ),
+        await (await domicile.files.stat(path)).andThenAsync(
+          async ({ size }) =>
+            size > LARGEST
+              ? Ok(None<ThemedIcon>())
+              : (await domicile.files.read(path)).map((bytes) =>
+                  Some({
+                    symbolic: path.slice(0, dot).endsWith(SYMBOLIC),
+                    url: dataUrl(mime, bytes),
+                  }),
+                ),
         ),
         None(),
       );

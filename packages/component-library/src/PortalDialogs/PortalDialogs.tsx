@@ -1,5 +1,10 @@
 import type { CastClaim } from "@domicile-desktop/sdk/cast";
 import { CastClaimKind } from "@domicile-desktop/sdk/cast";
+import type { Capture } from "@domicile-desktop/sdk/desktop/capture";
+import type { Dbus } from "@domicile-desktop/sdk/desktop/dbus";
+import { desktop } from "@domicile-desktop/sdk/desktop/desktop";
+import type { Files } from "@domicile-desktop/sdk/desktop/files";
+import type { Processes } from "@domicile-desktop/sdk/desktop/processes";
 import type {
   DomicileBrowserWindow,
   DomicileHost,
@@ -18,11 +23,9 @@ import {
   watchCapturing,
   watchPortalRequests,
 } from "@domicile-desktop/sdk/portal";
-import type { System, SystemHost } from "@domicile-desktop/sdk/system";
-import { system } from "@domicile-desktop/sdk/system";
 import { memo, useEffect, useMemo, useState } from "react";
 import type { Folders } from "../FilePicker/folders";
-import { systemFolders } from "../FilePicker/folders";
+import { desktopFolders } from "../FilePicker/folders";
 import type { App } from "../useApps/useApps";
 import { useApps } from "../useApps/useApps";
 import { AccessDialog } from "./AccessDialog";
@@ -44,12 +47,20 @@ import { UsbDialog } from "./UsbDialog";
 import { useCastClaims } from "./useCastClaims";
 import { WallpaperDialog } from "./WallpaperDialog";
 
+/** What the dialogs read and draw through. */
+export type DialogDesktop = {
+  readonly capture: Pick<Capture, "preview">;
+  readonly dbus: Pick<Dbus, "call">;
+  readonly files: Omit<Files, "search">;
+  readonly processes: Pick<Processes, "run" | "spawn">;
+};
+
 /** No shell chords; one array, so the default is stable across renders. */
 const NONE: readonly string[] = [];
 
 type Props = {
   /** The desktop `Shell` is handed. */
-  host: GlobalShortcutsHost & SystemHost & Pick<DomicileHost, "browserWindows">;
+  host: GlobalShortcutsHost & DomicileHost;
   /**
    * The display to show a dialog on when it has no parent window. Needs a
    * `DisplayProvider`; without it, a dialog is centered on the whole page.
@@ -66,8 +77,8 @@ type Props = {
    * boxes. See {@link drawnWindows}.
    */
   shownWindows?: (() => readonly ShownWindow[]) | undefined;
-  /** How dialogs read the desktop's files, for tests. */
-  systemOf?: typeof system | undefined;
+  /** How dialogs reach the desktop, for tests. */
+  desktopOf?: ((host: DomicileHost) => DialogDesktop) | undefined;
   /**
    * The display showing the `<app>` with this id, for a dialog modal over
    * it. `undefined` uses `screen`.
@@ -94,13 +105,13 @@ export const PortalDialogs = memo(
     screenOf,
     shellChords = NONE,
     shownWindows = drawnOnPage,
-    systemOf = system,
+    desktopOf = desktop,
   }: Props) => {
     const [requests, setRequests] = useState<readonly PortalRequest[]>([]);
-    const files = useMemo(() => systemOf(host), [systemOf, host]);
-    const folders = useMemo(() => systemFolders(files), [files]);
+    const domicile = useMemo(() => desktopOf(host), [desktopOf, host]);
+    const folders = useMemo(() => desktopFolders(domicile.files), [domicile]);
     const [sessions, setSessions] = useState<readonly Capturing[]>([]);
-    const apps = useApps(files, [
+    const apps = useApps(domicile, [
       ...requests.flatMap(appIds),
       ...sessions.map((session) => session.appId),
     ]);
@@ -149,13 +160,13 @@ export const PortalDialogs = memo(
             asker={apps(shown.appId).name}
             browserWindows={host.browserWindows ?? []}
             claim={claims.get(shown.id)}
+            domicile={domicile}
             folders={folders}
             key={shown.id}
             request={shown}
             screen={screenFor(shown, screen, screenOf)}
             shellChords={shellChords}
             shownWindows={shownWindows}
-            system={files}
           />
         ))}
       </>
@@ -178,7 +189,7 @@ const Dialog = ({
   screen,
   shellChords,
   shownWindows,
-  system: files,
+  domicile,
 }: {
   answer: (answer: PortalAnswer) => void;
   apps: (appId: string) => App;
@@ -191,7 +202,7 @@ const Dialog = ({
   screen: string | undefined;
   shellChords: readonly string[];
   shownWindows: () => readonly ShownWindow[];
-  system: System;
+  domicile: DialogDesktop;
 }) => {
   switch (request.kind) {
     case PortalKind.Access:
@@ -227,8 +238,8 @@ const Dialog = ({
           answer={answer}
           asker={asker}
           body={request.body}
+          domicile={domicile}
           screen={screen}
-          system={files}
         />
       );
     case PortalKind.FileChooser:
@@ -246,7 +257,7 @@ const Dialog = ({
           answer={answer}
           asker={asker}
           body={request.body}
-          files={files}
+          files={domicile.files}
           screen={screen}
         />
       );
@@ -267,7 +278,7 @@ const Dialog = ({
           answer={answer}
           asker={asker}
           body={request.body}
-          files={files}
+          files={domicile.files}
           screen={screen}
         />
       );
@@ -298,7 +309,7 @@ const Dialog = ({
           body={request.body}
           browserWindows={browserWindows}
           castTo={claim?.kind === CastClaimKind.Pick ? claim.to : undefined}
-          previewWindow={files.previewWindow}
+          previewWindow={domicile.capture.preview}
           screen={screen}
           shownWindows={shownWindows}
         />
@@ -321,7 +332,7 @@ const Dialog = ({
           asker={request.appId === SHELL_APP_ID ? undefined : asker}
           body={request.body}
           browserWindows={browserWindows}
-          previewWindow={files.previewWindow}
+          previewWindow={domicile.capture.preview}
           screen={screen}
           shownWindows={shownWindows}
         />
