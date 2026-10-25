@@ -109,7 +109,7 @@ const inbox = await domicile.browser.fetch(
 | Package | Source |
 |---|---|
 | `@domicile-desktop/system-battery` | UPower over D-Bus |
-| `@domicile-desktop/system-backlight` | sysfs, `udevadm monitor`, logind `SetBrightness` |
+| `@domicile-desktop/system-backlight` | sysfs, `udevadm monitor`, logind `SetBrightness`; iio-sensor-proxy's ambient light over D-Bus |
 | `@domicile-desktop/system-audio` | `pactl` and `parec` |
 | `@domicile-desktop/system-network` | NetworkManager, iwd or wpa_supplicant over D-Bus; `iwctl` to join a new network on iwd |
 | `@domicile-desktop/system-bluetooth` | BlueZ over D-Bus |
@@ -131,6 +131,7 @@ recorded output.
 | The home file index and `searchFiles` | speed: only the matches cross to the page |
 | Launching apps (`spawn`) | a client outlives a shell reload and runs on the compositor's Wayland display |
 | Clipboard history (`copyClipboardEntry`) | the compositor serves the paste, so it outlives the client that copied; full text stays out of the page ([CLIPBOARD.md](../packages/manganese-clipboard/docs/CLIPBOARD.md)) |
+| The screen's color temperature (`set_color_temperature`) | only the engine reaches the display's gamma ramp ([Night light](DISPLAYS.md#night-light)) |
 | Theme (`theme`, `windowsTheme`) | clients read it from the portal's `Settings`; the compositor switches them only after every chrome captures its old frame |
 
 ## Wire
@@ -139,7 +140,7 @@ recorded output.
   call (`read_file`, `write_file`, `create_dir`, `read_dir`, `stat`, `watch`, `spawn`,
   `dbus_call`, `dbus_match`, `screenshot`, `screen_record`, `preview_window`, `shell_commands`, `send_shell`,
   `idle_warnings`, `unlock_refusals`, `set_window_states`, `window_requests`,
-  `virtual_monitor`, `keymaps`, `select_keymap`)
+  `virtual_monitor`, `keymaps`, `select_keymap`, `set_color_temperature`)
   or
   drives one running under the same `id` (`unwatch`, `stdin`, `close_stdin`,
   `kill`). `read_file` takes an
@@ -188,6 +189,7 @@ that trust from reaching anything else.
     - `set_window_states`, like `windows.setBounds`
     - `keymaps` and `select_keymap`, so a lock screen shows and switches the
       keymap the passphrase is typed on
+    - `set_color_temperature`, so the night light keeps its schedule
   - `stdin` is dropped; `unwatch`, `close_stdin` and `kill` are allowed
   - processes and watches started before the lock keep running
 - **Lifetime:** a page's processes, watches, matches and virtual monitors end
