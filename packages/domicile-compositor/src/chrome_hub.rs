@@ -23,6 +23,7 @@ use crate::lock::Seen;
 use crate::outbound::{outbound, Outbound, OutboundReceiver, OutboundSender};
 use crate::portals::Portals;
 use crate::theme_turnover::chrome_key;
+use crate::virtual_monitors::VirtualMonitors;
 use crate::{eis, notifications, tray};
 
 /// One connected chrome: where to write to it.
@@ -94,6 +95,8 @@ pub struct ChromeHub {
     /// connection's `System`. The writer thread sends to them; see
     /// [`Outbound::WindowRequest`].
     pub window_requests: WindowRequests,
+    /// The virtual monitors pages add. See [`crate::virtual_monitors`].
+    pub virtual_monitors: VirtualMonitors,
 }
 
 impl ChromeHub {
@@ -124,6 +127,7 @@ impl ChromeHub {
             idle_warnings: IdleWarnings::default(),
             unlock_refusals: UnlockRefusals::default(),
             window_requests: WindowRequests::default(),
+            virtual_monitors: VirtualMonitors::default(),
         });
         (hub, outbound_rx)
     }

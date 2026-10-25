@@ -6,10 +6,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <limits>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/strings/strcat.h"
@@ -19,6 +22,7 @@
 #include "ui/display/types/display_mode.h"
 #include "ui/display/types/display_snapshot.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/ozone/platform/drm/domicile/drm_screen.h"
 
 namespace ui {
@@ -38,6 +42,38 @@ const DomicileDisplayLayout* WantedFor(
 
 }  // namespace
 
+std::unique_ptr<display::DisplaySnapshot> VirtualSnapshot(
+    const DomicileVirtualDisplay& display) {
+  display::DisplaySnapshot::DisplayModeList modes;
+  modes.push_back(std::make_unique<display::DisplayMode>(
+      display.mode, /*interlaced=*/false,
+      static_cast<float>(display.refresh_mhz) / 1000.f));
+  const display::DisplayMode* mode = modes.back().get();
+  // No EDID, no physical size and no product code: a TV reached over the
+  // network reports none of them to this process.
+  std::unique_ptr<display::DisplaySnapshot> snapshot =
+      std::make_unique<display::DisplaySnapshot>(
+          display.id, display.id, display.id, /*connector_index=*/0u,
+          gfx::Point(), /*physical_size=*/gfx::Size(),
+          display::DISPLAY_CONNECTION_TYPE_NETWORK, /*base_connector_id=*/0u,
+          /*path_topology=*/std::vector<uint64_t>(),
+          /*is_aspect_preserving_scaling=*/false, /*has_overscan=*/false,
+          display::PrivacyScreenState::kNotSupported,
+          /*has_content_protection_key=*/false,
+          display::DisplaySnapshot::ColorInfo(), display.name,
+          base::FilePath(), std::move(modes),
+          display::PanelOrientation::kNormal, /*edid=*/std::vector<uint8_t>(),
+          /*current_mode=*/mode, /*native_mode=*/mode, /*product_code=*/0,
+          /*year_of_manufacture=*/0, /*maximum_cursor_size=*/gfx::Size(),
+          display::VariableRefreshRateState::kVrrNotCapable,
+          display::DrmFormatsAndModifiers());
+  snapshot->set_domicile_connector(
+      base::StrCat({"virtual-",
+                    base::NumberToString(
+                        display.id & std::numeric_limits<int64_t>::max())}));
+  return snapshot;
+}
+
 std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
     const std::vector<raw_ptr<display::DisplaySnapshot,
                               VectorExperimental>>& snapshots,
@@ -48,6 +84,10 @@ std::vector<display::DisplayConfigurationParams> ModesetParamsFromSnapshots(
   params.reserve(snapshots.size());
   for (size_t index = 0; index < snapshots.size(); ++index) {
     const display::DisplaySnapshot* snapshot = snapshots[index];
+    if (snapshot->type() == display::DISPLAY_CONNECTION_TYPE_NETWORK) {
+      // A virtual display. See the header.
+      continue;
+    }
     const display::DisplayMode* native_mode = snapshot->native_mode();
     if (!native_mode) {
       // No advertised mode, so none is invented. See the header.
@@ -115,6 +155,19 @@ void DrmModeset::SetLayout(std::vector<DomicileDisplayLayout> layout) {
       base::BindOnce(&DrmModeset::OnDisplaysReceived, base::Unretained(this)));
 }
 
+void DrmModeset::SetVirtualDisplays(
+    std::vector<DomicileVirtualDisplay> displays) {
+  VLOG(1) << "domicile: the compositor wants " << displays.size()
+          << " virtual display(s)";
+  virtual_.clear();
+  for (const DomicileVirtualDisplay& display : displays) {
+    virtual_.push_back(VirtualSnapshot(display));
+  }
+  // Re-read the displays; see `SetLayout`.
+  delegate_->GetDisplays(
+      base::BindOnce(&DrmModeset::OnDisplaysReceived, base::Unretained(this)));
+}
+
 void DrmModeset::Relight() {
   // The confirmation from before a resume or VT switch no longer describes
   // the hardware. See the header.
@@ -142,9 +195,17 @@ bool ModesetWouldChangeAnything(
 
 void DrmModeset::OnDisplaysReceived(
     const std::vector<raw_ptr<display::DisplaySnapshot,
-                              VectorExperimental>>& snapshots) {
+                              VectorExperimental>>& connectors) {
   // Log every reading, including its modes. See `DescribeSnapshots`.
-  VLOG(1) << "domicile: DRM reports " << DescribeSnapshots(snapshots);
+  VLOG(1) << "domicile: DRM reports " << DescribeSnapshots(connectors);
+
+  // The virtual displays go after the connectors, so they never take the
+  // primary from a lit connector when no layout names one.
+  std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>> snapshots =
+      connectors;
+  for (const std::unique_ptr<display::DisplaySnapshot>& snapshot : virtual_) {
+    snapshots.push_back(snapshot.get());
+  }
 
   // Update the screen first: a window needs somewhere to land even if the
   // modeset fails.

@@ -17,7 +17,7 @@ use smithay::reexports::wayland_server::Resource as _;
 
 use crate::engine::{
     BufferId, Capture, Clipboard, Connector, Dmabuf, Engine, EngineError, Event, Pointer, Request,
-    SurfaceId, LIBRARY, NEWEST_BOX,
+    SurfaceId, VirtualDisplay, LIBRARY, NEWEST_BOX,
 };
 use crate::engine_buffers::{HeldBuffers, Returned};
 use crate::engine_imports::{Imports, Route, Then};
@@ -329,6 +329,13 @@ impl EngineSession {
     /// empty list means.
     pub fn configure_displays(&self, connectors: &[Connector]) {
         self.engine.configure_displays(connectors);
+    }
+
+    /// Tells the browser which monitors with no connector to add.
+    ///
+    /// See [`crate::engine::Engine::configure_virtual_displays`].
+    pub fn configure_virtual_displays(&self, displays: &[VirtualDisplay]) {
+        self.engine.configure_virtual_displays(displays);
     }
 
     /// Tells the browser which display each tablet or touchscreen covers.

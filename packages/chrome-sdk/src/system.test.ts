@@ -752,6 +752,68 @@ describe("window states", () => {
   });
 });
 
+describe("virtual monitors", () => {
+  const aTv = {
+    height: 1080,
+    name: "Living Room TV",
+    refreshMhz: 60_000,
+    width: 1920,
+  };
+
+  it("adds a monitor until the shell removes it", async () => {
+    const host = new FakeHost();
+    const adding = system(host).addVirtualMonitor(aTv);
+    host.reply(1, { kind: "virtual_monitor", output: "virtual-1" });
+    const monitor = started(await adding);
+    monitor.remove();
+    host.end(1, { kind: "stopped" });
+
+    expect(host.calls).toStrictEqual([
+      [
+        1,
+        {
+          call: "virtual_monitor",
+          height: 1080,
+          name: "Living Room TV",
+          refresh_mhz: 60_000,
+          width: 1920,
+        },
+      ],
+      [1, { call: "unwatch" }],
+    ]);
+    expect(monitor.output).toBe("virtual-1");
+    expect(await monitor.ended).toStrictEqual(Ok("removed"));
+  });
+
+  it("says the desk cannot extend", async () => {
+    const host = new FakeHost();
+    const adding = system(host).addVirtualMonitor(aTv);
+    host.reply(1, {
+      error: { kind: "other", message: "nested" },
+      kind: "failed",
+    });
+
+    expect(await adding).toStrictEqual(
+      Err({ kind: SystemErrorKind.Other, message: "nested" }),
+    );
+  });
+
+  it("ends with the compositor, which takes the monitor with it", async () => {
+    const host = new FakeHost();
+    const adding = system(host).addVirtualMonitor(aTv);
+    host.reply(1, { kind: "virtual_monitor", output: "virtual-1" });
+    const monitor = started(await adding);
+    host.end(1, gone);
+
+    expect(await monitor.ended).toStrictEqual(
+      Err({
+        kind: SystemErrorKind.CompositorGone,
+        message: "the compositor exited",
+      }),
+    );
+  });
+});
+
 describe("ids", () => {
   // The compositor names calls per connection, and a page has one.
   it("are shared by every system on one host", () => {

@@ -1,0 +1,89 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sun, 25 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: the compositor can add monitors with no connector
+
+Casting the desktop to a TV extends the desk onto a monitor that only a
+capture shows. The compositor asks for these; DrmModeset lists them.
+
+- OzonePlatform::SetDomicileVirtualDisplays takes DomicileVirtualDisplay
+  records: an id with the top bit set, a mode, a refresh rate and a name.
+- The DRM platform hands them to DrmModeset, which reads them after the
+  connectors and lights no CRTC for them. The rest is new files in
+  ui/ozone/platform/drm/domicile/.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ ui/ozone/platform/drm/ozone_platform_drm.cc | 11 +++++++++++
+ ui/ozone/public/ozone_platform.h            | 21 +++++++++++++++++++++
+ 2 files changed, 32 insertions(+)
+
+diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
+index 646d426..4b6de12 100644
+--- a/ui/ozone/platform/drm/ozone_platform_drm.cc
++++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
+@@ -201,6 +201,17 @@ class OzonePlatformDrm : public OzonePlatform {
+     pointer_targets_->Set(std::move(targets));
+   }
+ 
++  // DOMICILE: the monitors a cast extends the desk onto. See
++  // ui/ozone/platform/drm/domicile/drm_modeset.h.
++  void SetDomicileVirtualDisplays(
++      std::vector<DomicileVirtualDisplay> displays) override {
++    // Nothing to keep before `InitScreen`: the compositor sends these only in
++    // answer to a request the shell makes once the desk is up.
++    if (modeset_) {
++      modeset_->SetVirtualDisplays(std::move(displays));
++    }
++  }
++
+   // DOMICILE: the desktop's clipboards, which without this the browser does
+   // not have -- `Clipboard::Create` falls back to `ClipboardNonBacked`, an
+   // in-process store nothing outside the browser can reach, so a copy made in
+diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
+index 7059045..63ea79f 100644
+--- a/ui/ozone/public/ozone_platform.h
++++ b/ui/ozone/public/ozone_platform.h
+@@ -24,6 +24,7 @@
+ #include "ui/gfx/buffer_types.h"
+ #include "ui/gfx/geometry/point.h"
+ #include "ui/gfx/geometry/rect.h"
++#include "ui/gfx/geometry/size.h"
+ #include "ui/gfx/native_ui_types.h"
+ #include "ui/platform_window/platform_window.h"
+ #include "ui/platform_window/platform_window_delegate.h"
+@@ -107,6 +108,21 @@ struct DomicilePointerTarget {
+   int64_t display_id;
+ };
+ 
++// DOMICILE: a monitor with no connector, from the compositor. The desk extends
++// onto it and only a capture shows it, as when the desktop is cast to a TV.
++// See ui/ozone/platform/drm/domicile/drm_modeset.h.
++struct DomicileVirtualDisplay {
++  // Its `display::Display::id()`, picked by the compositor with the top bit
++  // set so it never collides with an EDID-derived id.
++  int64_t id;
++  // Its mode, in physical pixels.
++  gfx::Size mode;
++  // Its refresh rate in mHz.
++  int32_t refresh_mhz;
++  // Its name, which becomes the display's label.
++  std::string name;
++};
++
+ // Base class for Ozone platform implementations.
+ //
+ // Ozone platforms must override this class and implement the virtual
+@@ -391,6 +407,11 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {
+   // layout above.
+   virtual void SetDomicilePointerTargets(
+       std::vector<DomicilePointerTarget> targets) {}
++  // DOMICILE: the monitors with no connector, replacing the last list. Each
++  // joins the display list like a connector but lights no CRTC. DRM only,
++  // like the layout above.
++  virtual void SetDomicileVirtualDisplays(
++      std::vector<DomicileVirtualDisplay> displays) {}
+   // DOMICILE: what the compositor says is on one of the desktop's clipboards.
+   //
+   // THE BROWSER IS TOLD RATHER THAN ASKED. The compositor reads every
