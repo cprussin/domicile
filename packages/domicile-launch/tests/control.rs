@@ -13,6 +13,7 @@ use domicile_launch::history::{BrowsingData, HistoryItem, HistoryQuery};
 use domicile_launch::media_devices::{MediaDevice, MediaDevices, MediaKind};
 use domicile_launch::site_data::SiteData;
 use domicile_launch::site_permissions::{Permission, Setting, SitePermission, SiteSettings};
+use domicile_protocol::Theme;
 
 #[test]
 fn a_desktop_says_which_shell_it_is_running() {
@@ -676,6 +677,81 @@ fn a_desktop_carries_back_why_the_engine_refused_disable_while_typing() {
     );
 }
 
+#[test]
+fn a_desktop_asked_its_theme_asks_the_compositor() {
+    let answered = reply_to(
+        "{\"type\":\"theme\"}",
+        &Desktop {
+            theme: &|to| {
+                assert_eq!(to, None, "a question sets nothing");
+                Ok(Theme::Dark)
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(answered, Response::Theme { theme: Theme::Dark });
+}
+
+#[test]
+fn a_desktop_told_to_go_light_tells_the_compositor() {
+    let answered = reply_to(
+        "{\"type\":\"theme\",\"to\":\"light\"}",
+        &Desktop {
+            theme: &|to| Ok(to.expect("light sets it")),
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(
+        answered,
+        Response::Theme {
+            theme: Theme::Light
+        }
+    );
+}
+
+#[test]
+fn a_desktop_told_to_toggle_the_theme_sets_the_other_one() {
+    let told = RefCell::new(Vec::new());
+    let answered = reply_to(
+        "{\"type\":\"theme\",\"to\":\"toggle\"}",
+        &Desktop {
+            theme: &|to| {
+                told.borrow_mut().push(to);
+                Ok(to.unwrap_or(Theme::Dark))
+            },
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(told.take(), vec![None, Some(Theme::Light)]);
+    assert_eq!(
+        answered,
+        Response::Theme {
+            theme: Theme::Light
+        }
+    );
+}
+
+#[test]
+fn a_desktop_carries_back_why_the_compositor_did_not_answer_the_theme() {
+    let answered = reply_to(
+        "{\"type\":\"theme\",\"to\":\"dark\"}",
+        &Desktop {
+            theme: &|_| Err("no compositor".to_string()),
+            ..nothing_dialed()
+        },
+    );
+
+    assert_eq!(
+        answered,
+        Response::Refused {
+            why: "no compositor".to_string()
+        }
+    );
+}
+
 /// A history row with a favicon.
 fn a_row() -> HistoryItem {
     HistoryItem {
@@ -754,6 +830,7 @@ fn nothing_dialed() -> Desktop<'static> {
         permissions: &|| panic!("only site_permissions lists site permissions"),
         send: &|_| panic!("only send_shell sends anything"),
         site_data: &|| panic!("only site_data lists site data"),
+        theme: &|_| panic!("only theme reads or sets the theme"),
         set_extension_enabled: &|_, _| panic!("only set_extension_enabled enables one"),
         set_media_device: &|_, _| panic!("only set_media_device prefers one"),
         set_permission: &|_| panic!("only set_site_permission sets one"),

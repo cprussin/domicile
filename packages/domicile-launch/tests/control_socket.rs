@@ -176,6 +176,7 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                     disable_while_typing: &|_| {
                         panic!("a question about this desktop reaches no engine")
                     },
+                    theme: &|_| panic!("a question about this desktop reaches no compositor"),
                     clear_browsing_data: &|_| {
                         panic!("a question about this desktop reaches no engine")
                     },

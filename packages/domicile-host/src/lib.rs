@@ -855,6 +855,7 @@ impl Host {
             | ChromeMessage::InvokeNotificationAction { .. }
             | ChromeMessage::ReplyToNotification { .. }
             | ChromeMessage::SetTheme { .. }
+            | ChromeMessage::WhichTheme
             | ChromeMessage::ThemeCaptured { .. }
             | ChromeMessage::PointerMotion { .. }
             | ChromeMessage::PointerLeave { .. }

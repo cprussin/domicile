@@ -37,6 +37,7 @@ domicile screenshot               # the shell's interactive screenshot (Print in
 domicile screenshot <file>        # write a PNG of the running desk
 domicile send-shell <word>…       # run a shell command, as a SendShell keybinding does
 domicile disable-while-typing [on|off|toggle]  # the touchpad's disable-while-typing (RUNNING-A-DESKTOP.md)
+domicile theme [light|dark|toggle]  # the desktop's theme, or print it (RUNNING-A-DESKTOP.md)
 domicile check-config <file>      # exit 1 with the reason if the compositor refuses this JSON config
 domicile power-off                # ask in the Access dialog, then `systemctl poweroff`
 domicile reboot                   # ask in the Access dialog, then `systemctl reboot`

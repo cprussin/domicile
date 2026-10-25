@@ -8,6 +8,7 @@
 
 use std::path::{Path, PathBuf};
 
+use domicile_protocol::Theme;
 use serde::{Deserialize, Serialize};
 
 use crate::extensions::InstalledExtension;
@@ -93,6 +94,12 @@ pub enum Request {
         #[serde(default)]
         to: Option<Switch>,
     },
+    /// Set the desktop's light or dark theme, or with no `to`, report it. The
+    /// compositor owns the theme, so this works with any shell.
+    Theme {
+        #[serde(default)]
+        to: Option<ThemeChange>,
+    },
 }
 
 /// How [`Request::DisableWhileTyping`] changes the setting.
@@ -101,6 +108,15 @@ pub enum Request {
 pub enum Switch {
     On,
     Off,
+    Toggle,
+}
+
+/// How [`Request::Theme`] changes the theme.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ThemeChange {
+    Light,
+    Dark,
     Toggle,
 }
 
@@ -191,6 +207,9 @@ pub enum Response {
 
     /// Whether the touchpads rest while a keyboard types, after the request.
     DisableWhileTyping { enabled: bool },
+
+    /// The desktop's theme, after the request.
+    Theme { theme: Theme },
 
     /// The request was unknown or could not be carried out.
     ///
@@ -328,6 +347,12 @@ pub type ClearSiteData<'a> = &'a dyn Fn(&str) -> Result<(), String>;
 /// tests.
 pub type DisableWhileTyping<'a> = &'a dyn Fn(Option<bool>) -> Result<bool, String>;
 
+/// Tells the compositor the theme, or with none only asks, and returns the
+/// theme.
+///
+/// [`crate::compositor_socket::theme`] in a desktop; a closure in tests.
+pub type Theming<'a> = &'a dyn Fn(Option<Theme>) -> Result<Theme, String>;
+
 /// What a request can learn about or do to the running desktop.
 ///
 /// The dials reach the engine and the compositor; they are injected so
@@ -358,6 +383,7 @@ pub struct Desktop<'a> {
     pub site_data: ListSiteData<'a>,
     pub clear_site_data: ClearSiteData<'a>,
     pub disable_while_typing: DisableWhileTyping<'a>,
+    pub theme: Theming<'a>,
 }
 
 /// How a screenshot the compositor took ended.
@@ -493,6 +519,10 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
                 Err(why) => Response::Refused { why },
             })
         }
+        Ok(Request::Theme { to }) => to_line(&match themed(to, desktop.theme) {
+            Ok(theme) => Response::Theme { theme },
+            Err(why) => Response::Refused { why },
+        }),
         Err(why) => to_line(&Response::Refused {
             why: format!(
                 "'{}' is not a request this desktop knows: {why}",
@@ -510,6 +540,20 @@ fn switched(to: Option<Switch>, set: DisableWhileTyping) -> Result<bool, String>
         Some(Switch::On) => set(Some(true)),
         Some(Switch::Off) => set(Some(false)),
         Some(Switch::Toggle) => set(Some(!set(None)?)),
+    }
+}
+
+/// Carries out `to` with `set`. A toggle asks first, since the compositor keeps
+/// the theme.
+fn themed(to: Option<ThemeChange>, set: Theming) -> Result<Theme, String> {
+    match to {
+        None => set(None),
+        Some(ThemeChange::Light) => set(Some(Theme::Light)),
+        Some(ThemeChange::Dark) => set(Some(Theme::Dark)),
+        Some(ThemeChange::Toggle) => set(Some(match set(None)? {
+            Theme::Light => Theme::Dark,
+            Theme::Dark => Theme::Light,
+        })),
     }
 }
 

@@ -10,6 +10,7 @@ mod running;
 
 use std::time::{Duration, Instant};
 
+use domicile_launch::compositor_socket::theme;
 use domicile_protocol::{Appearance, ChromeMessage, CursorTheme, HostMessage, Theme};
 
 use crate::running::Compositor;
@@ -21,6 +22,9 @@ const ONE_DISPLAY: &str = r#"
 /// `CAPTURE_WITHIN` less a margin for a loaded machine. A window theme that
 /// arrives sooner was not held for the capture.
 const HELD_AT_LEAST: Duration = Duration::from_millis(800);
+
+/// How long `domicile theme` waits for an answer.
+const PATIENCE: Duration = Duration::from_secs(5);
 
 fn windows_theme(theme: Theme) -> impl Fn(&HostMessage) -> bool {
     move |message| *message == HostMessage::WindowsTheme { theme }
@@ -62,6 +66,34 @@ fn the_windows_turn_when_the_chrome_has_captured() {
         "the windows turned on the capture, not on the deadline ({:?})",
         captured.elapsed()
     );
+}
+
+#[test]
+fn domicile_theme_sets_the_theme_every_chrome_hears_and_reads_it_back() {
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    chrome
+        .wait_for(windows_theme(Theme::Dark))
+        .expect("the windows' theme rides with the handshake");
+
+    assert_eq!(
+        theme(compositor.socket(), None, Some(PATIENCE)),
+        Ok(Theme::Dark),
+        "a question reads the theme"
+    );
+    assert_eq!(
+        theme(compositor.socket(), Some(Theme::Light), Some(PATIENCE)),
+        Ok(Theme::Light),
+        "a change answers with the new theme"
+    );
+    chrome
+        .wait_for(|message| {
+            *message
+                == HostMessage::Theme {
+                    theme: Theme::Light,
+                }
+        })
+        .expect("and the shell hears it, as from its own toggle");
 }
 
 #[test]
