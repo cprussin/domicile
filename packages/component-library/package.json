@@ -43,6 +43,7 @@
     "./Card": "./src/Card/Card.tsx",
     "./ChoiceRow": "./src/ChoiceRow/ChoiceRow.tsx",
     "./ContextMenu": "./src/ContextMenu/ContextMenu.tsx",
+    "./CountBadge": "./src/CountBadge/CountBadge.tsx",
     "./control-sizes": "./src/control-sizes.ts",
     "./DisplayProvider": "./src/Screen/DisplayProvider.tsx",
     "./Drilldown": "./src/Drilldown/Drilldown.tsx",

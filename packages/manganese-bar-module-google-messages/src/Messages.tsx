@@ -1,5 +1,6 @@
 /// <reference types="@domicile-desktop/manganese-host/domicile-elements" />
 
+import { CountBadge } from "@domicile-desktop/component-library/CountBadge";
 import type { createHandle } from "@domicile-desktop/component-library/Popover";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import { useKeepsKeyboard } from "@domicile-desktop/manganese-bar/panel-keyboard";
@@ -159,11 +160,7 @@ const count = (unread: number) => (
     type="button"
   >
     <ChatCircleTextIcon aria-hidden size={15} weight="bold" />
-    {unread > 0 && (
-      <span aria-hidden className={badgeStyles}>
-        {unread}
-      </span>
-    )}
+    <CountBadge count={unread} />
   </button>
 );
 
@@ -192,30 +189,6 @@ const itemStyles = css({
   padding: 0,
   position: "relative",
   transition: "background-color {durations.fast} {easings.default}",
-});
-
-// The count in a pill on the button's corner, as on the notification bell.
-// The bar's text shadow is removed because it smudges small figures.
-const badgeStyles = css({
-  alignItems: "center",
-  backgroundColor: "accent",
-  blockSize: 3.5,
-  borderRadius: "full",
-  boxShadow: "lifted",
-  color: "background",
-  display: "inline-flex",
-  fontSize: "0.5625rem",
-  fontVariantNumeric: "tabular-nums",
-  fontWeight: "bold",
-  insetBlockStart: 0,
-  insetInlineEnd: 0,
-  justifyContent: "center",
-  lineHeight: "none",
-  minInlineSize: 3.5,
-  paddingInline: 0.75,
-  pointerEvents: "none",
-  position: "absolute",
-  textShadow: "none",
 });
 
 // The panel is flush, so the request gets its own inset.

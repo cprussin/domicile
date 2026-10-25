@@ -1,9 +1,7 @@
+import { CountBadge } from "@domicile-desktop/component-library/CountBadge";
 import { BellSimpleIcon } from "@phosphor-icons/react/dist/ssr/BellSimple";
 
 import { css } from "../styled-system/css";
-
-/** The highest count the badge shows before it switches to "N+". */
-const MOST_COUNTED = 9;
 
 type Props = {
   /** How many arrived since the drawer was last opened. */
@@ -38,11 +36,7 @@ export const NotificationBell = ({ onOpen, unread }: Props) => {
       <span aria-hidden className={bellStyles} key={unread}>
         <BellSimpleIcon size={15} weight="fill" />
       </span>
-      {unread > 0 && (
-        <span aria-hidden className={badgeStyles}>
-          {unread > MOST_COUNTED ? `${MOST_COUNTED}+` : unread}
-        </span>
-      )}
+      <CountBadge count={unread} />
     </button>
   );
 };
@@ -78,33 +72,4 @@ const bellStyles = css({
   // Swings from the top. A physical property, since the swing does not depend
   // on text direction.
   transformOrigin: "top center",
-});
-
-// The count in an accent-colored pill. The bar's text shadow is removed because
-// it smudges small figures.
-const badgeStyles = css({
-  _starting: {
-    transform: "scale(0)",
-  },
-  alignItems: "center",
-  backgroundColor: "accent",
-  blockSize: 3.5,
-  borderRadius: "full",
-  boxShadow: "lifted",
-  color: "background",
-  display: "inline-flex",
-  fontSize: "0.5625rem",
-  fontVariantNumeric: "tabular-nums",
-  fontWeight: "bold",
-  insetBlockStart: 0,
-  insetInlineEnd: 0,
-  justifyContent: "center",
-  lineHeight: "none",
-  minInlineSize: 3.5,
-  paddingInline: 0.75,
-  pointerEvents: "none",
-  position: "absolute",
-  textShadow: "none",
-  transform: "scale(1)",
-  transition: "transform {durations.normal} {easings.outBack}",
 });

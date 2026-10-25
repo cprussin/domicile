@@ -23,6 +23,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `Button` | Button or link, with variants and sizes. |
 | `Card` | Raised surface with optional title and footer. |
 | `ChoiceRow` | Rows of a pick list, with icon, name and detail, framed while picked: `RadioRow` in `ChoiceList` for one, `CheckboxRow` for several. Take the panel's white text in an `overPhoto` popover. |
+| `CountBadge` | Unread count in an accent pill, pinned to the corner of its positioned parent. Shows "9+" past nine. |
 | `Drilldown` | View that slides a second panel in from the side, with a back button. |
 | `Field` | Label, control and validation message. |
 | `FilePicker` | Keyboard-first file picker over its positioned parent. |
