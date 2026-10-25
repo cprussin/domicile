@@ -51,6 +51,8 @@ See [docs/ELEMENTS.md](docs/ELEMENTS.md) for `<app>` input and focus, and the
 
 | Module | What it is |
 | --- | --- |
+| `./desktop/desktop` | `desktop(domicile)`: the desktop as one typed object, a namespace per subject (`windows`, `browser`, `keyboard`, `files`, `portals`, …). State is attributes with a `change` event through `on`; a call that can fail resolves a `Result`. Each namespace's types are in `./desktop/<namespace>`. |
+| `./desktop/app-desktop` | `appDesktop(host)`: an app module's `files`, `processes` and `dbus`. |
 | `./domicile-host` | `DomicileHost`: the type of the desktop `Shell` is handed. Generated from the engine's IDL; see [Generated types](#generated-types). |
 | `./config` | Types for the config file's sections, for a TypeScript config module. Generated; see [Generated types](#generated-types). `./config.schema.json` is the JSON Schema they come from. |
 | `./shell` | `Shell`: the export a shell module must provide. Domicile calls it once with the element to draw in. |
