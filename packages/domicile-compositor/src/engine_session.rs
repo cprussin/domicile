@@ -3,6 +3,7 @@
 //!
 //! [`crate::engine`] is the ABI; this module uses it.
 
+use domicile_host::white_point::WhitePoint;
 use std::collections::HashMap;
 use std::os::fd::{AsFd as _, OwnedFd};
 use std::path::Path;
@@ -343,6 +344,13 @@ impl EngineSession {
     /// See [`crate::engine::Engine::configure_pointers`].
     pub fn configure_pointers(&self, pointers: &[Pointer]) {
         self.engine.configure_pointers(pointers);
+    }
+
+    /// Sets the white point every monitor draws with.
+    ///
+    /// See [`crate::engine::Engine::set_white_point`].
+    pub fn set_white_point(&self, white_point: WhitePoint) {
+        self.engine.set_white_point(white_point);
     }
 
     /// Tells the browser what is on one of the desktop's two clipboards.

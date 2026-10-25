@@ -1856,6 +1856,12 @@ pub enum SystemRequest {
     /// Answered with [`SystemReply::Set`], or [`SystemErrorKind::NotFound`]
     /// for a name the config does not have. Lasts until the desktop restarts.
     SelectKeymap { keymap: KeymapChoice },
+    /// Draw every monitor as if its white were a light of `kelvin`, as a
+    /// night light does; `6500` draws colors as they are. Answered with
+    /// [`SystemReply::Set`], or [`SystemErrorKind::InvalidInput`] outside
+    /// 1000 to 6500. Changes nothing on a nested desktop. See
+    /// `docs/SHELL-SYSTEM-ACCESS.md`.
+    SetColorTemperature { kelvin: u32 },
 }
 
 /// Which keymap [`SystemRequest::SelectKeymap`] switches to.
@@ -1965,7 +1971,7 @@ pub enum SystemReply {
     Preview { frame: String },
     /// At least one page heard the command.
     Sent,
-    /// The window's states were replaced.
+    /// The window's states were replaced, or the color temperature set.
     Set,
     /// The virtual monitor was added, as the `wl_output` named `output`.
     VirtualMonitor { output: String },

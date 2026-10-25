@@ -325,6 +325,11 @@ interface FrameSinkBroker {
   // `ConfigureDisplays` like one, but lights no CRTC.
   ConfigureVirtualDisplays(array<VirtualDisplay> displays);
 
+  // Sets what each channel is multiplied by on every display, for a night
+  // light: 1 leaves a channel as it is. The browser keeps it and sets it again
+  // after each modeset. Ignored outside a tty, as `ConfigureDisplays` is.
+  SetWhitePoint(float red, float green, float blue);
+
   // Sets the contents of one of the desktop's clipboards.
   //
   // Pushed rather than fetched because the producer reads each selection as it

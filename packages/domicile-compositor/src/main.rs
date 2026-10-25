@@ -188,6 +188,7 @@ use domicile_host::data_dirs::data_dirs;
 use domicile_host::keymaps::Listed;
 use domicile_host::priority;
 use domicile_host::theme_turnover::Turnover;
+use domicile_host::white_point::{white_point, WhitePoint, NEUTRAL};
 use domicile_launch::arguments::arguments;
 use domicile_launch::handshake::{silence, Handshake, WAIT_FOR_A_PAGE};
 use domicile_launch::session::{publish, Session};
@@ -411,6 +412,10 @@ struct DomicileCompositor {
     /// keeps its last box here; input and casts read
     /// [`HeldFrames::shown`].
     app_bounds: HashMap<String, domicile_scene::Bounds>,
+    /// The white point the page last set (`SystemRequest::SetColorTemperature`),
+    /// sent again to an engine that reports its displays, since a new engine
+    /// starts neutral.
+    white_point: WhitePoint,
     /// Frame callbacks of the windows the page hides. See
     /// [`crate::held_frames`].
     held_frames: HeldFrames<WlCallback>,
@@ -1255,6 +1260,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         launched: launched.clone(),
         toplevels: Vec::new(),
         app_bounds: HashMap::new(),
+        white_point: white_point(NEUTRAL),
         held_frames: HeldFrames::new(),
         suspended: HashSet::new(),
         presentations: Presentations::new(),

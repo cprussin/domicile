@@ -2,6 +2,10 @@
 {"library":"system-battery","request":{"call":"dbus_call","bus":"system","destination":"org.freedesktop.UPower","path":"/org/freedesktop/UPower/devices/DisplayDevice","interface":"org.freedesktop.DBus.Properties","member":"GetAll","signature":"s","body":"[\"org.freedesktop.UPower.Device\"]"}}
 {"library":"system-backlight","request":{"call":"spawn","argv":["udevadm","monitor","--kernel","--subsystem-match=backlight"],"env":{},"stdin":false}}
 {"library":"system-backlight","request":{"call":"dbus_call","bus":"system","destination":"org.freedesktop.login1","path":"/org/freedesktop/login1/session/auto","interface":"org.freedesktop.login1.Session","member":"SetBrightness","signature":"ssu","body":"[\"backlight\",\"acpi_video0\",8]"}}
+{"library":"system-backlight","request":{"call":"dbus_match","bus":"system","sender":"net.hadess.SensorProxy","path":"/net/hadess/SensorProxy","interface":"org.freedesktop.DBus.Properties","member":"PropertiesChanged"}}
+{"library":"system-backlight","request":{"call":"dbus_call","bus":"system","destination":"net.hadess.SensorProxy","path":"/net/hadess/SensorProxy","interface":"org.freedesktop.DBus.Properties","member":"GetAll","signature":"s","body":"[\"net.hadess.SensorProxy\"]"}}
+{"library":"system-backlight","request":{"call":"dbus_call","bus":"system","destination":"net.hadess.SensorProxy","path":"/net/hadess/SensorProxy","interface":"net.hadess.SensorProxy","member":"ClaimLight","signature":"","body":"[]"}}
+{"library":"system-backlight","request":{"call":"dbus_call","bus":"system","destination":"net.hadess.SensorProxy","path":"/net/hadess/SensorProxy","interface":"org.freedesktop.DBus.Properties","member":"GetAll","signature":"s","body":"[\"net.hadess.SensorProxy\"]"}}
 {"library":"system-audio","request":{"call":"spawn","argv":["pactl","-f","json","subscribe"],"env":{"LC_ALL":"C"},"stdin":false}}
 {"library":"system-audio","request":{"call":"spawn","argv":["pactl","-f","json","info"],"env":{"LC_ALL":"C"},"stdin":false}}
 {"library":"system-audio","request":{"call":"spawn","argv":["pactl","-f","json","list"],"env":{"LC_ALL":"C"},"stdin":false}}

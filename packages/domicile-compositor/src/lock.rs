@@ -340,9 +340,10 @@ pub enum Asked<'a> {
 ///   (`Reach::Readout`), calls that stop what the shell already started, and
 ///   listening for shell commands and window requests (`Reach::Listens`), so
 ///   a page reloaded while locked hears them after unlock, and setting window
-///   states (`Reach::Arranges`), like `SetAppBounds`, and switching the
-///   keymap (`Reach::Retypes`), so the passphrase is typed on the right one.
-///   Sending a command is refused.
+///   states (`Reach::Arranges`), like `SetAppBounds`, switching the keymap
+///   (`Reach::Retypes`), so the passphrase is typed on the right one, and the
+///   monitors' color temperature (`Reach::Tints`), so a night light follows
+///   the clock. Sending a command is refused.
 ///   Processes and watches started before the lock keep running.
 pub fn refused(asked: Asked) -> Option<Refusal> {
     match asked {
@@ -374,6 +375,7 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::SetWindowStates { .. }
             // Changes what the passphrase is typed on, not what is on screen.
             | ClientRequest::SelectKeymap { .. }
+            | ClientRequest::SetWhitePoint { .. }
             | ClientRequest::ChromeHello { .. }
             | ClientRequest::ClipboardCopied { .. }
             | ClientRequest::Unlock { .. }
@@ -402,7 +404,8 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | Reach::Stops
             | Reach::Listens
             | Reach::Arranges
-            | Reach::Retypes,
+            | Reach::Retypes
+            | Reach::Tints,
         ) => None,
     }
 }
@@ -892,6 +895,11 @@ mod tests {
             "the lock screen switches the keymap the passphrase is typed on"
         );
         assert_eq!(
+            refused(Asked::System(Reach::Tints)),
+            None,
+            "a night light turns on at sunset whether or not anybody is at the desk"
+        );
+        assert_eq!(
             refused(Asked::System(Reach::Acts)),
             Some(Refusal::Command),
             "a file read, a write or a process is the desktop acting for \
@@ -942,6 +950,12 @@ mod tests {
                 "the lock screen switching the keymap",
                 ClientRequest::SelectKeymap {
                     keymap: domicile_protocol::KeymapChoice::Next,
+                },
+            ),
+            (
+                "the page warming the monitors",
+                ClientRequest::SetWhitePoint {
+                    white_point: domicile_host::white_point::white_point(3400),
                 },
             ),
             (
