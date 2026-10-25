@@ -3,7 +3,12 @@ import { describe, expect, it } from "bun:test";
 import { Direction } from "../direction";
 import { droppedOn } from "./drop";
 import { Layout, LayoutNode } from "./node";
-import { focusedIdOf, focusedNodeOf, withFocusOn } from "./tiling";
+import {
+  focusedIdOf,
+  focusedNodeOf,
+  focusedParent,
+  withFocusOn,
+} from "./tiling";
 
 const ROW = {
   depth: 1,
@@ -180,7 +185,7 @@ describe("droppedOn", () => {
     );
     const GROUP = { id: "a", up: 1 };
 
-    it("goes beside a window dropped on its edge, and stays selected", () => {
+    it("goes beside a window dropped on its edge", () => {
       const dropped = droppedOn(
         TABS_BESIDE,
         GROUP,
@@ -198,6 +203,27 @@ describe("droppedOn", () => {
         ],
         layout: Layout.SplitH,
       });
+    });
+
+    it("focuses its window alone when it was not selected", () => {
+      const dropped = droppedOn(
+        TABS_BESIDE,
+        GROUP,
+        { id: "c", up: 0 },
+        Direction.Right,
+      );
+
+      expect(focusedNodeOf(dropped)).toMatchObject({ id: "a" });
+    });
+
+    it("stays selected when it was selected", () => {
+      const dropped = droppedOn(
+        focusedParent(TABS_BESIDE),
+        GROUP,
+        { id: "c", up: 0 },
+        Direction.Right,
+      );
+
       expect(focusedNodeOf(dropped)).toMatchObject({ layout: Layout.Tabbed });
     });
 

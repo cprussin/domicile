@@ -22,12 +22,17 @@ import type { NodeRef, Path } from "./path";
 import { nodeAt, pathToRef, replacedAt } from "./path";
 import { withoutAt } from "./remove";
 import type { Tiling } from "./tiling";
-import { withCommandsOn } from "./tiling";
+import {
+  focusedWindowIn,
+  selects,
+  withCommandsOn,
+  withFocusOn,
+} from "./tiling";
 
 /**
  * The tiling with the node `moving` names dropped on the `edge` of the node
- * `target` names, or its middle when `edge` is `undefined`. Focus and commands
- * go to the moved node, so a dropped group stays selected.
+ * `target` names, or its middle when `edge` is `undefined`. Focus goes to the
+ * moved node, and commands stay on it only if it was selected (see `landed`).
  *
  * Unchanged when `target`'s window is inside `moving`. Throws if either is not
  * tiled here.
@@ -44,9 +49,10 @@ export const droppedOn = (
   if (windowsIn(node).includes(target.id)) {
     return tiling;
   } else {
-    return withCommandsOn(
+    return landed(
       { ...tiling, root: movedOnto(root, from, target, edge) },
       node,
+      selects(tiling, from),
     );
   }
 };
@@ -54,22 +60,35 @@ export const droppedOn = (
 /**
  * The tiling with `node`, dragged in from another workspace or layer, dropped
  * on the `edge` of the node `target` names, or its middle when `edge` is
- * `undefined`. Focus and commands go to `node`.
+ * `undefined`. Focus goes to `node`, and commands stay on it if it was
+ * `selected` where it came from (see `landed`).
  *
  * Throws if `target` is not tiled here.
  */
 export const arrivedOn = (
   tiling: Tiling,
   node: LayoutNode,
+  selected: boolean,
   target: NodeRef,
   edge: Direction | undefined,
 ): Tiling => {
   const root = tiledRoot(tiling);
-  return withCommandsOn(
+  return landed(
     { ...tiling, root: placed(root, pathToRef(root, target), node, edge) },
     node,
+    selected,
   );
 };
+
+/**
+ * Focuses `node`, just dropped. A `selected` node keeps the commands, so a
+ * dropped group selected before the drag stays selected; otherwise they go to
+ * its focused window alone.
+ */
+const landed = (tiling: Tiling, node: LayoutNode, selected: boolean): Tiling =>
+  selected
+    ? withCommandsOn(tiling, node)
+    : withFocusOn(tiling, focusedWindowIn(node));
 
 /**
  * Removes the node at `from` and drops it on the `edge` of `target`, or its
