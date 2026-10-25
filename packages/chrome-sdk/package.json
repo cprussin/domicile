@@ -23,10 +23,6 @@
       "types": "./dist/app-element.d.ts",
       "default": "./dist/app-element.js"
     },
-    "./appearance": {
-      "types": "./dist/appearance.d.ts",
-      "default": "./dist/appearance.js"
-    },
     "./bind-keys": {
       "types": "./dist/bind-keys.d.ts",
       "default": "./dist/bind-keys.js"
@@ -227,7 +223,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "generate": "bun codegen/generate-domicile-host.ts && bun codegen/generate-config.ts",
+    "generate": "bun codegen/generate-domicile-host.ts && bun codegen/generate-config.ts && bun codegen/generate-engine-layer.ts",
     "test:types": "tsc --noEmit",
     "test:unit": "bun test"
   },

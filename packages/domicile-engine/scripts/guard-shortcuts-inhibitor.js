@@ -13,8 +13,8 @@
 //   GUARD shell-loaded   the module ran. Diagnostic only; the guard measures
 //                        the browser-host wire, which the page cannot see
 //
-// The document Domicile writes calls `Shell` once the module loads.
+// The document Domicile writes calls `HostShell` once the module loads.
 
-export const Shell = () => {
+export const HostShell = () => {
   console.log("GUARD shell-loaded");
 };

@@ -26,7 +26,8 @@ const FEATURES: readonly {
   {
     body: "Every Wayland client is an element you place, size, clip and transform with CSS.",
     code: '<app app-id="…">',
-    example: "{domicile.windows.map((w) => (\n  <app app-id={w.appId} />\n))}",
+    example:
+      "{domicile.windows.list.map((w) => (\n  <app app-id={w.appId} />\n))}",
     icon: <AppWindowIcon />,
     title: "Native windows as elements",
   },
@@ -34,7 +35,7 @@ const FEATURES: readonly {
     body: "Full web pages in their own browsing context. Draw your own address bar over them.",
     code: '<webview src="…">',
     example:
-      "domicile.openBrowserWindow(url);\n\n// then, for each browser window:\n<webview window={tab.id} />",
+      "domicile.browser.open(url);\n\n// then, for each browser window:\n<webview window={tab.id} />",
     icon: <GlobeIcon />,
     title: "Browser windows",
   },
@@ -42,7 +43,7 @@ const FEATURES: readonly {
     body: "Choose who gets the keyboard: a window, your own UI, or focus follows the mouse.",
     code: "focus / keyboard",
     example:
-      "// focus follows the mouse\napp.onpointerenter = () =>\n  domicile.focusApp(appId);",
+      "// focus follows the mouse\napp.onpointerenter = () =>\n  domicile.windows.focus(appId);",
     icon: <CrosshairIcon />,
     title: "Keyboard and focus",
   },
@@ -58,7 +59,7 @@ const FEATURES: readonly {
     body: "One page spans all your screens. Hotplug, scale and rotation arrive as events.",
     code: "displays",
     example:
-      "domicile.displays?.forEach((d) =>\n  placeBar(d.x, d.y, d.width),\n);",
+      "domicile.displays.list?.forEach((d) =>\n  placeBar(d.x, d.y, d.width),\n);",
     icon: <MonitorIcon />,
     title: "Every monitor, one page",
   },
@@ -66,7 +67,7 @@ const FEATURES: readonly {
     body: "Screen sharing, file pickers, screenshots and app choosers all go through your shell.",
     code: "portals",
     example:
-      "watchPortalRequests(domicile,\n  (requests) => show(requests),\n);",
+      'domicile.portals.on("change", () =>\n  show(domicile.portals.requests),\n);',
     icon: <ExportIcon />,
     title: "Portals",
   },
@@ -74,7 +75,7 @@ const FEATURES: readonly {
     body: "Tray icons, notifications, theme changes and app dialogs, ready to render.",
     code: "tray / notifications",
     example:
-      'domicile.addEventListener(\n  "traychanged",\n  () => render(domicile.tray),\n);',
+      'domicile.tray.on("change", () =>\n  render(domicile.tray.items),\n);',
     icon: <BellIcon />,
     title: "Desktop events",
   },
@@ -82,7 +83,7 @@ const FEATURES: readonly {
     body: "Battery, audio, network and apps come as TypeScript packages over three primitives.",
     code: "files / processes / D-Bus",
     example:
-      'const sys = system(domicile);\nawait sys.readTextFile(path);\nawait sys.run(["brightnessctl"]);',
+      'await domicile.files.readText(path);\nawait domicile.processes.run(\n  ["brightnessctl"],\n);',
     icon: <CpuIcon />,
     title: "System access",
   },
@@ -90,7 +91,7 @@ const FEATURES: readonly {
     body: "The compositor blanks and locks the screens. Your shell draws the lock screen.",
     code: "idle / lock",
     example:
-      'domicile.addEventListener(\n  "lockedchanged", drawLockScreen,\n);\ndomicile.unlock(passphrase);',
+      'domicile.session.on(\n  "lockchange", drawLockScreen,\n);\ndomicile.session.unlock(passphrase);',
     icon: <LockIcon />,
     title: "Idle and lock",
   },

@@ -4,11 +4,11 @@
 //
 //   GUARD shell own=<read|empty|refused> home=<read|empty|refused>
 //
-// Domicile calls `Shell` once the module loads.
+// Domicile calls `HostShell` once the module loads.
 
 const FIXTURE = "guard-domicile-fetch-file.txt";
 
-export const Shell = (root) => {
+export const HostShell = (root) => {
   Promise.all([
     reading(() => fetch(FIXTURE)),
     reading(() => fetch(`domicile://home/${FIXTURE}`)),

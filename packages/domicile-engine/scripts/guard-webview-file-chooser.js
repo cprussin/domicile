@@ -20,10 +20,10 @@
 // progress.
 //
 // The guest page logs what it received; see
-// guard-webview-file-chooser-server.py. Domicile calls `Shell` once the module
+// guard-webview-file-chooser-server.py. Domicile calls `HostShell` once the module
 // loads.
 
-export const Shell = () => {
+export const HostShell = () => {
   /**
    * Reads a required query parameter. No default, so a misconfigured run fails.
    */

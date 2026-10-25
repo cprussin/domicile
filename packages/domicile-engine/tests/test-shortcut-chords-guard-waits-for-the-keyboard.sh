@@ -118,8 +118,8 @@ setTimeout(() => {
   process.exit(0);
 }, Number(capMs));
 
-const { Shell } = await import(modulePath);
-Shell(undefined, host);
+const { HostShell } = await import(modulePath);
+HostShell(undefined, host);
 EOF
 
 expect "the page grabs once the keyboard is there, however late" \

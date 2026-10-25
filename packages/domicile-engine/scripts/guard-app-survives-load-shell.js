@@ -12,10 +12,10 @@
 //   GUARD shell-loaded load=N   this module ran
 //   GUARD drawn app=<id> load=N an `<app>` for the first window is on the page
 //
-// Everything is inside `Shell`, which Domicile's document calls once the module
+// Everything is inside `HostShell`, which Domicile's document calls once the module
 // loads.
 
-export const Shell = (_root, desktop) => {
+export const HostShell = (_root, desktop) => {
   const say = (what) => {
     console.log(`GUARD ${what}`);
   };
