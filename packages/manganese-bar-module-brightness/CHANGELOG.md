@@ -1,5 +1,48 @@
 # @domicile-desktop/manganese-bar-module-brightness
 
+## 1.1.0
+
+### Minor Changes
+
+- 6bbc80b: The battery, Bluetooth, brightness and volume items hide only on a machine without that hardware. With the hardware and no service to read it, each shows a dimmed icon saying so. The system libraries add `hardware`, which looks in `/sys`, and `manganese-host` adds `watch-presence`.
+- 1ad2756: Volume, microphone and brightness keys show the new level in a notice on the focused screen.
+
+### Patch Changes
+
+- 3146073: Each package asks for the bun and Node its workspace does: `engines` is `bun >=1.4.2`, `node >=24`.
+- Updated dependencies [6bbc80b]
+- Updated dependencies [a88ce23]
+- Updated dependencies [56e1c22]
+- Updated dependencies [e42226f]
+- Updated dependencies [00e5da2]
+- Updated dependencies [b49fa3a]
+- Updated dependencies [35b8470]
+- Updated dependencies [6730912]
+- Updated dependencies [2a87739]
+- Updated dependencies [cd02e0e]
+- Updated dependencies [57b5b1f]
+- Updated dependencies [93f015d]
+- Updated dependencies [e1205bb]
+- Updated dependencies [8bc5b85]
+- Updated dependencies [3146073]
+- Updated dependencies [bbf849b]
+- Updated dependencies [4759ab2]
+- Updated dependencies [3bb9bd5]
+- Updated dependencies [0f4582e]
+- Updated dependencies [52a1d65]
+- Updated dependencies [3e5b976]
+- Updated dependencies [9fd298a]
+- Updated dependencies [c4fe915]
+- Updated dependencies [b39d80e]
+- Updated dependencies [21b82af]
+- Updated dependencies [427c184]
+- Updated dependencies [113dabe]
+- Updated dependencies [ee1cc17]
+  - @domicile-desktop/manganese-host@1.1.0
+  - @domicile-desktop/sdk@1.1.0
+  - @domicile-desktop/component-library@1.1.0
+  - @domicile-desktop/system-backlight@1.0.1
+
 ## 1.0.0
 
 ### Major Changes
