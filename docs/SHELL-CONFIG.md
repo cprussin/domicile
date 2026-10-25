@@ -261,6 +261,9 @@ An application that ignores the portal is not stopped.
 `theme.mode` is `"dark"` or `"light"`. There is no `"system"` value, because
 this config is the system setting. `"system"` is rejected.
 
+The shell's toggle and `domicile theme` change it until the desktop restarts
+([RUNNING-A-DESKTOP.md](RUNNING-A-DESKTOP.md#theme)).
+
 Applications read the rest through the settings portal
 (`org.freedesktop.appearance`), and the shell receives them too:
 

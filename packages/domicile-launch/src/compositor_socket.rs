@@ -1,10 +1,10 @@
-//! Asks the compositor for a screenshot, or to send the shell a command, over
-//! its chrome socket.
+//! Asks the compositor for a screenshot, to send the shell a command, or for
+//! its theme, over its chrome socket.
 //!
-//! Each request is the system call a page makes for it
-//! (`SystemRequest::Screenshot`, `SystemRequest::SendShell`), so the
-//! compositor has one path for both. The connection never says `hello`, so it
-//! is not a chrome: it hears only the reply.
+//! Each request is the message a page sends for it (`SystemRequest::Screenshot`,
+//! `SystemRequest::SendShell`, `ChromeMessage::SetTheme`), so the compositor
+//! has one path for each. The connection never says `hello`, so it is not a
+//! chrome: it hears only the reply.
 
 use std::io::{BufRead as _, BufReader, Write as _};
 use std::os::unix::net::UnixStream;
@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use domicile_protocol::{
-    ChromeMessage, HostMessage, SystemError, SystemErrorKind, SystemReply, SystemRequest,
+    ChromeMessage, HostMessage, SystemError, SystemErrorKind, SystemReply, SystemRequest, Theme,
 };
 
 use crate::control::Shot;
@@ -95,6 +95,31 @@ pub fn send_shell(
     }
 }
 
+/// Tells the compositor at `socket` to set the theme `to`, if given, and
+/// returns the desk's theme.
+///
+/// The compositor answers a connection's messages in order, so the
+/// `which_theme` sent after `set_theme` reports the new theme.
+pub fn theme(
+    socket: &Path,
+    to: Option<Theme>,
+    patience: Option<Duration>,
+) -> Result<Theme, CompositorError> {
+    let messages: Vec<ChromeMessage> = to
+        .map(|theme| ChromeMessage::SetTheme { theme })
+        .into_iter()
+        .chain([ChromeMessage::WhichTheme])
+        .collect();
+    let said = exchanged(socket, &messages, patience)?;
+    match serde_json::from_str::<HostMessage>(&said) {
+        Ok(HostMessage::Theme { theme }) => Ok(theme),
+        _ => Err(CompositorError::Unreadable {
+            path: socket.display().to_string(),
+            said,
+        }),
+    }
+}
+
 /// The compositor's reply to a call, and the line it came in.
 struct Answer {
     reply: SystemReply,
@@ -107,6 +132,26 @@ fn called(
     request: SystemRequest,
     patience: Option<Duration>,
 ) -> Result<Answer, CompositorError> {
+    let said = exchanged(
+        socket,
+        &[ChromeMessage::SystemRequest { id: CALL, request }],
+        patience,
+    )?;
+    match serde_json::from_str::<HostMessage>(&said) {
+        Ok(HostMessage::SystemReply { id: CALL, reply }) => Ok(Answer { reply, said }),
+        _ => Err(CompositorError::Unreadable {
+            path: socket.display().to_string(),
+            said,
+        }),
+    }
+}
+
+/// Sends `messages` and reads the one line the compositor answers with.
+fn exchanged(
+    socket: &Path,
+    messages: &[ChromeMessage],
+    patience: Option<Duration>,
+) -> Result<String, CompositorError> {
     let path = || socket.display().to_string();
     let unreachable = |why: std::io::Error| match why.kind() {
         // A timeout is `WouldBlock` or `TimedOut` depending on the platform,
@@ -126,10 +171,16 @@ fn called(
     })?;
     stream.set_read_timeout(patience).map_err(unreachable)?;
     stream.set_write_timeout(patience).map_err(unreachable)?;
-    let mut line = serde_json::to_string(&ChromeMessage::SystemRequest { id: CALL, request })
-        .expect("a system request always serializes");
-    line.push('\n');
-    stream.write_all(line.as_bytes()).map_err(unreachable)?;
+    let lines: String = messages
+        .iter()
+        .map(|message| {
+            let mut line =
+                serde_json::to_string(message).expect("a chrome message always serializes");
+            line.push('\n');
+            line
+        })
+        .collect();
+    stream.write_all(lines.as_bytes()).map_err(unreachable)?;
     let mut said = String::new();
     BufReader::new(stream)
         .read_line(&mut said)
@@ -139,16 +190,7 @@ fn called(
         // The compositor closed without replying.
         Err(CompositorError::NoAnswer { path: path() })
     } else {
-        match serde_json::from_str::<HostMessage>(said) {
-            Ok(HostMessage::SystemReply { id: CALL, reply }) => Ok(Answer {
-                reply,
-                said: said.to_string(),
-            }),
-            _ => Err(CompositorError::Unreadable {
-                path: path(),
-                said: said.to_string(),
-            }),
-        }
+        Ok(said.to_string())
     }
 }
 

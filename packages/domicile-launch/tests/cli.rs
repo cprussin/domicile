@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use domicile_launch::cli::{invocation, CliError, Invocation};
-use domicile_launch::control::{Request, Switch};
+use domicile_launch::control::{Request, Switch, ThemeChange};
 use domicile_launch::power::Power;
 
 fn run(args: &[&str]) -> Result<Invocation, CliError> {
@@ -324,6 +324,36 @@ fn disable_while_typing_refuses_anything_else() {
         run(&["disable-while-typing", "on", "now"]),
         Err(CliError::Extra {
             verb: "disable-while-typing on".to_string(),
+            extra: "now".to_string()
+        })
+    );
+}
+
+#[test]
+fn theme_takes_light_dark_toggle_or_nothing() {
+    let asked = |to| {
+        Ok(Invocation::Ask {
+            request: Request::Theme { to },
+        })
+    };
+    assert_eq!(run(&["theme"]), asked(None));
+    assert_eq!(run(&["theme", "light"]), asked(Some(ThemeChange::Light)));
+    assert_eq!(run(&["theme", "dark"]), asked(Some(ThemeChange::Dark)));
+    assert_eq!(run(&["theme", "toggle"]), asked(Some(ThemeChange::Toggle)));
+}
+
+#[test]
+fn theme_refuses_anything_else() {
+    assert_eq!(
+        run(&["theme", "blue"]),
+        Err(CliError::NotATheme {
+            said: "blue".to_string()
+        })
+    );
+    assert_eq!(
+        run(&["theme", "dark", "now"]),
+        Err(CliError::Extra {
+            verb: "theme dark".to_string(),
             extra: "now".to_string()
         })
     );

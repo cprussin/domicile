@@ -1,13 +1,14 @@
-//! Tests for asking the compositor for a screenshot, or to send the shell a
-//! command, over its chrome socket.
+//! Tests for asking the compositor for a screenshot, to send the shell a
+//! command, or for its theme, over its chrome socket.
 
 use std::io::{BufRead as _, BufReader, Write as _};
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use domicile_launch::compositor_socket::{screenshot, send_shell, CompositorError};
+use domicile_launch::compositor_socket::{screenshot, send_shell, theme, CompositorError};
 use domicile_launch::control::Shot;
+use domicile_protocol::Theme;
 
 /// Reply timeout: long enough for a loaded machine, short enough for a fast
 /// suite.
@@ -232,6 +233,80 @@ fn a_command_the_compositor_did_not_send_is_carried_back_in_its_own_words() {
         })
     );
     heard.join().expect("the compositor was listening");
+}
+
+#[test]
+fn the_compositor_is_asked_its_theme_and_says_it() {
+    let (_scratch, path) = scratch();
+    let heard = a_compositor_asked_its_theme(&path, "{\"type\":\"theme\",\"theme\":\"dark\"}\n");
+
+    assert_eq!(theme(&path, None, Some(BRIEFLY)), Ok(Theme::Dark));
+    assert_eq!(
+        heard.join().expect("the compositor was listening"),
+        vec!["{\"type\":\"which_theme\"}\n".to_string()]
+    );
+}
+
+#[test]
+fn the_compositor_is_told_the_theme_then_asked_it() {
+    let (_scratch, path) = scratch();
+    let heard = a_compositor_asked_its_theme(&path, "{\"type\":\"theme\",\"theme\":\"light\"}\n");
+
+    assert_eq!(
+        theme(&path, Some(Theme::Light), Some(BRIEFLY)),
+        Ok(Theme::Light)
+    );
+    assert_eq!(
+        heard.join().expect("the compositor was listening"),
+        vec![
+            "{\"type\":\"set_theme\",\"theme\":\"light\"}\n".to_string(),
+            "{\"type\":\"which_theme\"}\n".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn a_theme_the_compositor_did_not_name_is_carried_back() {
+    let (_scratch, path) = scratch();
+    let heard = a_compositor_asked_its_theme(&path, "{\"type\":\"locked\",\"locked\":true}\n");
+
+    assert_eq!(
+        theme(&path, None, Some(BRIEFLY)),
+        Err(CompositorError::Unreadable {
+            path: path.display().to_string(),
+            said: "{\"type\":\"locked\",\"locked\":true}".to_string()
+        })
+    );
+    heard.join().expect("the compositor was listening");
+}
+
+/// A fake compositor at `path` that reads lines up to `which_theme`, replies
+/// `with`, and returns the lines.
+fn a_compositor_asked_its_theme(
+    path: &Path,
+    with: &'static str,
+) -> std::thread::JoinHandle<Vec<String>> {
+    let listener = UnixListener::bind(path).expect("the compositor binds its chrome socket");
+    std::thread::spawn(move || {
+        let (stream, _) = listener.accept().expect("a supervisor dialed");
+        let mut reader = BufReader::new(stream.try_clone().expect("the connection is readable"));
+        let mut lines = Vec::new();
+        while lines
+            .last()
+            .is_none_or(|line: &String| !line.contains("which_theme"))
+        {
+            let mut line = String::new();
+            reader
+                .read_line(&mut line)
+                .expect("the supervisor wrote a line");
+            lines.push(line);
+        }
+        let mut answering = stream;
+        answering
+            .write_all(with.as_bytes())
+            .expect("the compositor answers");
+        lines
+    })
 }
 
 /// A fake compositor at `path` that reads one line and, `after` that long,

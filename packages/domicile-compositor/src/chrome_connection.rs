@@ -34,6 +34,7 @@ use crate::theme_turnover::chrome_key;
 pub enum ConnectionRequest {
     SearchFiles { query: String },
     SetTheme { theme: Theme },
+    WhichTheme,
 }
 
 /// Write a message's responses to the connection that asked, in order.
@@ -322,6 +323,9 @@ fn read_chrome_messages(
             }
             Ok(ChromeMessage::SetTheme { theme }) => {
                 answer_on_the_connection(hub, ConnectionRequest::SetTheme { theme })
+            }
+            Ok(ChromeMessage::WhichTheme) => {
+                answer_on_the_connection(hub, ConnectionRequest::WhichTheme)
             }
             // The Wayland thread runs the theme turnover and its deadline
             // timer.
@@ -630,6 +634,9 @@ fn answered_on_the_connection(hub: &ChromeHub, request: ConnectionRequest) -> Ve
             hub.take_up_the_theme(theme);
             Vec::new()
         }
+        // Answered here, after any `set_theme` this connection sent, so
+        // `domicile theme` reads back the theme it set.
+        ConnectionRequest::WhichTheme => vec![hub.host.lock().unwrap().describe_theme()],
         // A page has no filesystem, so the compositor searches for it. Safe
         // because `search_files` names no path; this side decides what is read.
         //

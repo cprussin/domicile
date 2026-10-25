@@ -133,6 +133,22 @@ domicile disable-while-typing         # prints on or off
 - A nested desktop refuses it: the host compositor reads the touchpad. Use its
   setting.
 
+## Theme
+
+`domicile theme` switches the desktop between light and dark from a terminal,
+as the shell's toggle does:
+
+```sh
+domicile theme toggle     # or light, or dark
+domicile theme            # prints light or dark
+```
+
+- Each prints the theme after it.
+- The compositor owns the theme, so it works with any shell, and while the
+  desk is locked.
+- It lasts until the desktop restarts. Set `theme.mode` in the
+  [config](SHELL-CONFIG.md#theme) to keep it.
+
 ## Host shortcuts in a window
 
 A nested desktop needs the Meta key, which your host compositor also uses.

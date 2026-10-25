@@ -29,7 +29,7 @@ use domicile_launch::command_socket::{
     uninstall_extension, visits,
 };
 use domicile_launch::components::{builder, components, our_shell, Components};
-use domicile_launch::compositor_socket::{screenshot, send_shell};
+use domicile_launch::compositor_socket::{screenshot, send_shell, theme};
 use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
 use domicile_launch::config_watch;
@@ -64,6 +64,7 @@ use domicile_launch::spawn::{
 use domicile_launch::splash::{lay_out, tell, the_page_ends, Progress, ENDED};
 use domicile_launch::supervise::{catch_interrupts, interrupted, Running, ASK_EVERY};
 use domicile_launch::uninstall_app::uninstall_app;
+use domicile_protocol::Theme;
 
 /// How long each startup milestone may take. A debug build on a loaded
 /// machine takes seconds.
@@ -431,6 +432,16 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         Response::Opened | Response::Sent => Ok(ExitCode::SUCCESS),
         Response::DisableWhileTyping { enabled } => {
             println!("{}", if enabled { "on" } else { "off" });
+            Ok(ExitCode::SUCCESS)
+        }
+        Response::Theme { theme } => {
+            println!(
+                "{}",
+                match theme {
+                    Theme::Light => "light",
+                    Theme::Dark => "dark",
+                }
+            );
             Ok(ExitCode::SUCCESS)
         }
         Response::Captured { file } => {
@@ -1035,6 +1046,7 @@ fn answer_a_command(
                     disable_while_typing(engine, enabled, ANSWER_WITHIN)
                         .map_err(|why| why.to_string())
                 },
+                theme: &|to| theme(chrome, to, Some(ANSWER_WITHIN)).map_err(|why| why.to_string()),
             },
         )
     }) {

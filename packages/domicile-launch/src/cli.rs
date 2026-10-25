@@ -6,7 +6,7 @@
 
 use std::path::PathBuf;
 
-use crate::control::{Request, Switch};
+use crate::control::{Request, Switch, ThemeChange};
 use crate::power::Power;
 
 /// An invalid `domicile` command line.
@@ -24,7 +24,8 @@ pub enum CliError {
          <module>, screenshot \
          [file], or \
          send-shell <command>…, or \
-         disable-while-typing [on|off|toggle]. Or \
+         disable-while-typing [on|off|toggle], or \
+         theme [light|dark|toggle]. Or \
          check-config <file> to check a config without running it, or \
          power-off or reboot to turn the computer off or restart it, or \
          log-out to end the login session, or \
@@ -117,6 +118,11 @@ pub enum CliError {
          the setting, and was given {said}."
     )]
     NotASwitch { said: String },
+    #[error(
+        "theme takes light, dark or toggle, or nothing to print the theme, \
+         and was given {said}."
+    )]
+    NotATheme { said: String },
     #[error(
         "check-config takes the config file to check, and was given \
          nothing:\n\n    \
@@ -271,6 +277,21 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                     }),
                 },
             },
+            Verb::Theming => match (args.next(), args.next()) {
+                (None, _) => Ok(Invocation::Ask {
+                    request: Request::Theme { to: None },
+                }),
+                (Some(said), extra) => match (theme_change(&said), extra) {
+                    (None, _) => Err(CliError::NotATheme { said }),
+                    (Some(_), Some(extra)) => Err(CliError::Extra {
+                        verb: format!("{first} {said}"),
+                        extra,
+                    }),
+                    (Some(to), None) => Ok(Invocation::Ask {
+                        request: Request::Theme { to: Some(to) },
+                    }),
+                },
+            },
             Verb::Capturing => match (args.next(), args.next()) {
                 (Some(_), Some(extra)) => Err(CliError::ExtraToSave { extra }),
                 (file, _) => Ok(Invocation::Screenshot { file }),
@@ -340,6 +361,8 @@ enum Verb {
     Checking,
     /// `disable-while-typing`, which takes a [`Switch`] or nothing.
     Switching,
+    /// `theme`, which takes a [`ThemeChange`] or nothing.
+    Theming,
     /// `power-off`, `reboot` or `log-out`, which take no arguments.
     Powering(Power),
 }
@@ -360,6 +383,7 @@ fn verb(word: &str) -> Option<Verb> {
         "send-shell" => Some(Verb::Sending),
         "check-config" => Some(Verb::Checking),
         "disable-while-typing" => Some(Verb::Switching),
+        "theme" => Some(Verb::Theming),
         "power-off" => Some(Verb::Powering(Power::Off)),
         "reboot" => Some(Verb::Powering(Power::Reboot)),
         "log-out" => Some(Verb::Powering(Power::LogOut)),
@@ -373,6 +397,16 @@ fn switch(word: &str) -> Option<Switch> {
         "on" => Some(Switch::On),
         "off" => Some(Switch::Off),
         "toggle" => Some(Switch::Toggle),
+        _ => None,
+    }
+}
+
+/// The [`ThemeChange`] `word` names, if any.
+fn theme_change(word: &str) -> Option<ThemeChange> {
+    match word {
+        "light" => Some(ThemeChange::Light),
+        "dark" => Some(ThemeChange::Dark),
+        "toggle" => Some(ThemeChange::Toggle),
         _ => None,
     }
 }

@@ -189,7 +189,7 @@ pub enum ChromeMessage {
     /// `domicile_host::clipboard`.
     CopyClipboardEntry { entry: u32 },
 
-    /// The user picked a theme from the shell's toggle.
+    /// The user picked a theme from the shell's toggle or `domicile theme`.
     ///
     /// The compositor applies it to the clients too (see
     /// `domicile_compositor::portals::settings`) and broadcasts
@@ -197,6 +197,13 @@ pub enum ChromeMessage {
     /// path sets the theme. Not written back to the config file, which is
     /// generated; the change lasts until the desktop restarts.
     SetTheme { theme: Theme },
+
+    /// Report the desk's theme. Answered with [`HostMessage::Theme`] on this
+    /// connection only.
+    ///
+    /// Sent by `domicile theme`, whose connection never says `hello` and so
+    /// hears no broadcast.
+    WhichTheme,
 
     /// This page has captured its old frame for `theme`; the windows may now
     /// switch.

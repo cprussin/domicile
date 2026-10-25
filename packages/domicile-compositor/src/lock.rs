@@ -333,8 +333,8 @@ pub enum Asked<'a> {
 /// - **Launcher searches** are refused on the connection (see
 ///   [`Asked::OnTheConnection`]) with no answer, so they reveal nothing about
 ///   the disk.
-/// - **Theme changes** are allowed. They open and read nothing, and keep the
-///   lock screen's colors current.
+/// - **Theme changes** and asking the theme are allowed. They open and read
+///   nothing, and keep the lock screen's colors current.
 /// - **System calls** are refused, except reads under `/sys`, the calls a lock
 ///   screen makes to show and adjust the battery, brightness and volume
 ///   (`Reach::Readout`), calls that stop what the shell already started, and
@@ -386,7 +386,9 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::DeskPointer { .. }
             | ClientRequest::DeskCursor { .. },
         )
-        | Asked::OnTheConnection(ConnectionRequest::SetTheme { .. })
+        | Asked::OnTheConnection(
+            ConnectionRequest::SetTheme { .. } | ConnectionRequest::WhichTheme,
+        )
         | Asked::System(
             Reach::ReadsTheKernel
             | Reach::Readout
@@ -979,12 +981,12 @@ mod tests {
             );
         }
         // Answered on the connection, but checked by the same `match`.
-        assert_eq!(
-            refused(Asked::OnTheConnection(&ConnectionRequest::SetTheme {
-                theme: Theme::Dark,
-            })),
-            None
-        );
+        for request in [
+            ConnectionRequest::SetTheme { theme: Theme::Dark },
+            ConnectionRequest::WhichTheme,
+        ] {
+            assert_eq!(refused(Asked::OnTheConnection(&request)), None);
+        }
     }
 
     #[test]

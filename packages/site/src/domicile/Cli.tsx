@@ -21,6 +21,9 @@ domicile open-app <url>
 # run one of your shell's commands
 domicile send-shell <word>…
 
+# switch between light and dark
+domicile theme toggle
+
 # write a PNG of the desktop
 domicile screenshot <file>`;
 
