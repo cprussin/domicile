@@ -525,6 +525,7 @@ const systemReplySchema = z.looseObject({
     z.looseObject({ kind: z.literal("copied") }),
     z.looseObject({ kind: z.literal("sent") }),
     z.looseObject({ kind: z.literal("set") }),
+    z.looseObject({ kind: z.literal("virtual_monitor"), output: z.string() }),
     z.looseObject({ error: systemErrorSchema, kind: z.literal("failed") }),
   ]),
   type: z.literal("system_reply"),

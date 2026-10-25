@@ -62,6 +62,7 @@ export const fakeSystem = (
         : Err({ kind: SystemErrorKind.IsADirectory, message: path }),
     );
   return {
+    addVirtualMonitor: unexpected,
     createDir: unexpected,
     dbusCall: (call) =>
       call.interface === SETTINGS && call.member === "ReadAll"

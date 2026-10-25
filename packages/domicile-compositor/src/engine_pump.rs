@@ -234,6 +234,9 @@ impl DomicileCompositor {
                     // unplugged.
                     self.engine_displays = displays.clone();
                     self.bind_the_pointers();
+                    self.hub
+                        .virtual_monitors
+                        .set_extendable(self.config.current().output.desktop().is_none());
                     match self.screens.replugged_into(
                         &displays,
                         &self.config.current().output,
@@ -412,6 +415,8 @@ impl DomicileCompositor {
                 // The new browser starts with empty clipboards, so restore
                 // them.
                 self.tell_the_engine_the_copies();
+                // And with no virtual monitors.
+                self.state_the_virtual_monitors();
                 info!(
                     shown = rejoined.shown.len(),
                     blank = rejoined.blank.len(),

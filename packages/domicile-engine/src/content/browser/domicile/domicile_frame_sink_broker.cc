@@ -246,6 +246,22 @@ void SetPointerTargets(std::vector<domicile::mojom::PointerTargetPtr> targets) {
       std::move(wanted));
 }
 
+// Sets the producer's virtual displays. Lives here for SetDisplayLayout's
+// reason; every platform but DRM ignores it.
+void SetVirtualDisplays(
+    std::vector<domicile::mojom::VirtualDisplayPtr> displays) {
+  std::vector<ui::DomicileVirtualDisplay> wanted;
+  wanted.reserve(displays.size());
+  for (const domicile::mojom::VirtualDisplayPtr& display : displays) {
+    wanted.push_back({.id = display->id,
+                      .mode = display->mode,
+                      .refresh_mhz = display->refresh_mhz,
+                      .name = display->name});
+  }
+  ui::OzonePlatform::GetInstance()->SetDomicileVirtualDisplays(
+      std::move(wanted));
+}
+
 // Sets the clipboard this process pastes from.
 //
 // Lives here because //components/domicile/browser cannot depend on //ui/ozone.
@@ -287,7 +303,8 @@ class DomicileBrowserService {
                 base::BindRepeating(&DisplayCaptureTarget),
                 base::BindRepeating(&domicile::FindBrowserWindowCaptureTarget),
                 base::BindRepeating(&SetPointerTargets),
-                base::BindRepeating(&GetSoftwareSharedImageInterface)),
+                base::BindRepeating(&GetSoftwareSharedImageInterface),
+                base::BindRepeating(&SetVirtualDisplays)),
         provider_(&broker_) {
     // Registered on every platform so copies made in a page reach the producer.
     // `SetClipboard` handles copies made outside. Unretained is safe: this is a

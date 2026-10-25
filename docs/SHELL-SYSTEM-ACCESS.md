@@ -38,6 +38,9 @@ export const Shell = async (root, domicile) => {
 - `setWindowStates()` and `windowRequests()` set a window's tiled,
   maximized and fullscreen states and hear clients ask for them; see
   [WRITING-A-SHELL.md](WRITING-A-SHELL.md#window-states).
+- `addVirtualMonitor()` adds a monitor with no connector, which the desk
+  extends onto, until `remove()` or the page goes away. Casting to a TV uses
+  it; see [CASTING-TO-TVS.md](architecture/CASTING-TO-TVS.md).
 - `shellCommands()` streams each command `domicile send-shell` sends.
   `bindKeys` listens for you and passes them to `onCommand`; see
   [KEYBINDINGS.md](architecture/KEYBINDINGS.md#commands-from-a-terminal).
@@ -130,7 +133,8 @@ recorded output.
 - Page to compositor: `system_request { id, request }`. `request` starts a
   call (`read_file`, `write_file`, `create_dir`, `read_dir`, `stat`, `watch`, `spawn`,
   `dbus_call`, `dbus_match`, `screenshot`, `preview_window`, `shell_commands`, `send_shell`,
-  `idle_warnings`, `unlock_refusals`, `set_window_states`, `window_requests`)
+  `idle_warnings`, `unlock_refusals`, `set_window_states`, `window_requests`,
+  `virtual_monitor`)
   or
   drives one running under the same `id` (`unwatch`, `stdin`, `close_stdin`,
   `kill`). `read_file` takes an
@@ -179,8 +183,9 @@ that trust from reaching anything else.
     - `set_window_states`, like `setAppBounds`
   - `stdin` is dropped; `unwatch`, `close_stdin` and `kill` are allowed
   - processes and watches started before the lock keep running
-- **Lifetime:** a page's processes, watches and matches end when its
-  connection closes, so a reload or `domicile load-shell` leaks nothing.
+- **Lifetime:** a page's processes, watches, matches and virtual monitors end
+  when its connection closes, so a reload or `domicile load-shell` leaks
+  nothing.
 
 ## Why
 

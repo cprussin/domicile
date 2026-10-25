@@ -23,8 +23,21 @@ namespace ui {
 
 class DrmScreen;
 
+// Returns a snapshot of `display` to read beside the connectors: a
+// `DISPLAY_CONNECTION_TYPE_NETWORK` display at its mode, named `display.name`,
+// on connector "virtual-<n>", where n is the id without its top bit. The
+// compositor names the display from n, so n must not change while it lives.
+//
+// A cast extends the desk onto it. The browser lays it out and draws it like a
+// connector; only a capture shows it. See
+// docs/architecture/CASTING-TO-TVS.md in the Domicile repository.
+std::unique_ptr<display::DisplaySnapshot> VirtualSnapshot(
+    const DomicileVirtualDisplay& display);
+
 // Builds the modeset request for the connected displays. A free function so
 // it can be unit tested.
+//
+// A virtual display is skipped: no CRTC drives it.
 //
 // A snapshot with no native mode is skipped. `DisplaysFromSnapshots` gives one
 // a fallback because a window must land somewhere, but a modeset must not ask
@@ -90,6 +103,11 @@ class DrmModeset : public display::NativeDisplayObserver {
   // and the screen and the modeset must come from one reading.
   void SetLayout(std::vector<DomicileDisplayLayout> layout);
 
+  // Sets the virtual displays, replacing the last list. Each joins every
+  // reading after the connectors; see `VirtualSnapshot`. Re-reads, as
+  // `SetLayout` does.
+  void SetVirtualDisplays(std::vector<DomicileVirtualDisplay> displays);
+
   // Modesets again even if the reading is unchanged.
   //
   // After a resume or a VT switch back, the CRTCs are reset or programmed by
@@ -115,6 +133,8 @@ class DrmModeset : public display::NativeDisplayObserver {
   std::vector<display::DisplayConfigurationParams> confirmed_;
   // The compositor's last layout; empty until it sends one.
   std::vector<DomicileDisplayLayout> layout_;
+  // The compositor's virtual displays, as snapshots. See `VirtualSnapshot`.
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> virtual_;
   // Whether `delegate_->Configure` is still running. A real modeset is
   // answered on a later task, so an answer that arrives while this is true
   // came from this process, not the hardware. See `OnDisplaysReceived`.

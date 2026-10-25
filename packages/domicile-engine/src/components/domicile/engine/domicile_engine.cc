@@ -1065,6 +1065,28 @@ struct DomicileEngine {
                        base::Unretained(this), std::move(wanted)));
   }
 
+  // Copies the records before posting, as ConfigureDisplays does.
+  void ConfigureVirtualDisplays(const DomicileVirtualDisplay* displays,
+                                uint32_t count) {
+    std::vector<domicile::mojom::VirtualDisplayPtr> wanted;
+    wanted.reserve(count);
+    // SAFETY: the ABI says `displays` points at `count` records valid for this
+    // call, and `domicile_virtual_displays_configure` has refused a null
+    // pointer with a nonzero count.
+    const auto records =
+        UNSAFE_BUFFERS(base::span(displays, static_cast<size_t>(count)));
+    for (const DomicileVirtualDisplay& display : records) {
+      CHECK(display.name) << "domicile: a virtual display has no name";
+      wanted.push_back(domicile::mojom::VirtualDisplay::New(
+          display.id, gfx::Size(display.width, display.height),
+          display.refresh_mhz, display.name));
+    }
+    thread_.task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&DomicileEngine::ConfigureVirtualDisplaysOnThread,
+                       base::Unretained(this), std::move(wanted)));
+  }
+
   // Blocks for the browser's answer, like CreateSurface.
   DomicileCaptureId StartCapture(int64_t display_id,
                                  const gfx::Size& size,
@@ -1252,6 +1274,13 @@ struct DomicileEngine {
       std::vector<domicile::mojom::PointerTargetPtr> wanted) {
     if (broker_) {
       broker_->ConfigurePointers(std::move(wanted));
+    }
+  }
+
+  void ConfigureVirtualDisplaysOnThread(
+      std::vector<domicile::mojom::VirtualDisplayPtr> wanted) {
+    if (broker_) {
+      broker_->ConfigureVirtualDisplays(std::move(wanted));
     }
   }
 
@@ -1824,6 +1853,16 @@ void domicile_pointers_configure(DomicileEngine* engine,
   // count binds no device.
   if (engine && (targets || count == 0)) {
     engine->ConfigurePointers(targets, count);
+  }
+}
+
+void domicile_virtual_displays_configure(DomicileEngine* engine,
+                                         const DomicileVirtualDisplay* displays,
+                                         uint32_t count) {
+  // A null array with a nonzero count is a caller bug. A null array with zero
+  // count removes every virtual display.
+  if (engine && (displays || count == 0)) {
+    engine->ConfigureVirtualDisplays(displays, count);
   }
 }
 

@@ -17,7 +17,7 @@ use domicile_protocol::{Passphrase, PortalAnswer, Theme, TrayAction, WindowState
 
 use crate::activation;
 use crate::chrome_hub::announce_open_apps;
-use crate::engine::Clipboard;
+use crate::engine::{Clipboard, VirtualDisplay};
 use crate::lock::Asked;
 use crate::locking::say_what_the_lock_refused;
 use crate::spawning::spawn_client;
@@ -104,6 +104,14 @@ pub enum ClientRequest {
     SetWindowStates {
         app_id: String,
         states: Vec<WindowState>,
+    },
+    /// A page added a virtual monitor. See [`crate::virtual_monitors`].
+    AddVirtualMonitor {
+        display: VirtualDisplay,
+    },
+    /// A page's virtual monitor ended.
+    RemoveVirtualMonitor {
+        id: i64,
     },
     /// The chrome asked the client of `app_id` to close its window.
     CloseApp {
@@ -467,6 +475,14 @@ impl DomicileCompositor {
                 // connection checked the id.
                 None => debug!(%app_id, "window states: a window with no toplevel"),
             },
+            ClientRequest::AddVirtualMonitor { display } => {
+                self.virtual_displays.push(display);
+                self.state_the_virtual_monitors();
+            }
+            ClientRequest::RemoveVirtualMonitor { id } => {
+                self.virtual_displays.retain(|display| display.id != id);
+                self.state_the_virtual_monitors();
+            }
             // A launch from a key or the launcher, so it may raise the
             // window of an app already running.
             ClientRequest::Spawn { command } => spawn_client(

@@ -384,7 +384,11 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::Activity
             // Reaches no client; a cast of the lock screen draws it.
             | ClientRequest::DeskPointer { .. }
-            | ClientRequest::DeskCursor { .. },
+            | ClientRequest::DeskCursor { .. }
+            // Queued by a `SystemRequest::VirtualMonitor` the lock already
+            // judged, or by its end.
+            | ClientRequest::AddVirtualMonitor { .. }
+            | ClientRequest::RemoveVirtualMonitor { .. },
         )
         | Asked::OnTheConnection(
             ConnectionRequest::SetTheme { .. } | ConnectionRequest::WhichTheme,

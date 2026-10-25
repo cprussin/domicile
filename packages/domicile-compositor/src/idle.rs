@@ -378,6 +378,8 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         | ClientRequest::SetOutputSize { .. }
         | ClientRequest::SetAppBounds { .. }
         | ClientRequest::SetWindowStates { .. }
+        | ClientRequest::AddVirtualMonitor { .. }
+        | ClientRequest::RemoveVirtualMonitor { .. }
         | ClientRequest::CloseApp { .. }
         | ClientRequest::Spawn { .. }
         | ClientRequest::ChromeHello { .. }

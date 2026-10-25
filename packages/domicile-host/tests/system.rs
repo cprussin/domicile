@@ -1461,3 +1461,122 @@ mod dbus {
         assert!(locked_out(1, &call("Greet", "", "[]")).is_some());
     }
 }
+
+/// Virtual monitors a page adds to cast the desk to a TV.
+mod virtual_monitors {
+    use std::sync::mpsc::Sender;
+
+    use domicile_host::system::{AddedMonitor, VirtualMonitor};
+    use domicile_protocol::SystemEnd;
+
+    use super::*;
+
+    fn a_tv() -> SystemRequest {
+        SystemRequest::VirtualMonitor {
+            name: "Living Room TV".into(),
+            width: 1920,
+            height: 1080,
+            refresh_mhz: 60_000,
+        }
+    }
+
+    /// Says on `gone` when it drops, as the compositor removes the monitor.
+    struct Lease(Sender<()>);
+
+    impl Drop for Lease {
+        fn drop(&mut self) {
+            self.0.send(()).unwrap();
+        }
+    }
+
+    /// A system that adds each monitor as `virtual-1`, and the monitors it
+    /// was asked for and removed.
+    fn adding(system: System) -> (System, Receiver<VirtualMonitor>, Receiver<()>) {
+        let (asked_for, asked) = channel();
+        let (removed, gone) = channel();
+        let system = system.adding_virtual_monitors_with(move |wanted| {
+            asked_for.send(wanted).unwrap();
+            Ok(AddedMonitor {
+                output: "virtual-1".into(),
+                lease: Box::new(Lease(removed.clone())),
+            })
+        });
+        (system, asked, gone)
+    }
+
+    #[test]
+    fn a_page_adds_a_monitor_until_it_stops() {
+        let (system, heard) = system_in(&std::env::temp_dir());
+        let (system, asked, gone) = adding(system);
+
+        system.handle(1, a_tv());
+
+        assert_eq!(
+            reply(&heard, 1),
+            SystemReply::VirtualMonitor {
+                output: "virtual-1".into()
+            }
+        );
+        assert_eq!(
+            asked.recv().unwrap(),
+            VirtualMonitor {
+                name: "Living Room TV".into(),
+                size: (1920, 1080),
+                refresh_mhz: 60_000,
+            }
+        );
+        assert!(gone.try_recv().is_err(), "the monitor stays while it runs");
+
+        system.handle(1, SystemRequest::Unwatch);
+
+        assert_eq!(
+            next(&heard),
+            HostMessage::SystemEnd {
+                id: 1,
+                end: SystemEnd::Stopped,
+            }
+        );
+        gone.recv().unwrap();
+    }
+
+    #[test]
+    fn a_page_that_goes_away_takes_its_monitor_with_it() {
+        let (system, heard) = system_in(&std::env::temp_dir());
+        let (system, _asked, gone) = adding(system);
+        system.handle(1, a_tv());
+        reply(&heard, 1);
+
+        drop(system);
+
+        gone.recv().unwrap();
+    }
+
+    #[test]
+    fn a_name_with_a_nul_is_refused() {
+        // The engine takes the name as a C string.
+        let (system, heard) = system_in(&std::env::temp_dir());
+        let (system, asked, _gone) = adding(system);
+
+        system.handle(
+            1,
+            SystemRequest::VirtualMonitor {
+                name: "TV\0".into(),
+                width: 1920,
+                height: 1080,
+                refresh_mhz: 60_000,
+            },
+        );
+
+        assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::InvalidInput);
+        assert!(asked.try_recv().is_err());
+    }
+
+    #[test]
+    fn a_system_that_adds_no_monitors_says_so() {
+        let (system, heard) = system_in(&std::env::temp_dir());
+
+        system.handle(1, a_tv());
+
+        assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::Other);
+    }
+}

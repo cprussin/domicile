@@ -1772,6 +1772,22 @@ pub enum SystemRequest {
     /// with [`SystemReply::Started`], then a [`SystemEvent::WindowRequest`]
     /// per request. [`SystemRequest::Unwatch`] ends it.
     WindowRequests,
+    /// Add a monitor with no connector, `width`×`height` pixels at
+    /// `refresh_mhz`, which the desk extends onto and only a capture shows:
+    /// casting to a TV. `name` becomes its description. Answered with
+    /// [`SystemReply::VirtualMonitor`]; a later [`HostMessage::Displays`]
+    /// lists it. [`SystemRequest::Unwatch`] removes it, as does the page going
+    /// away.
+    ///
+    /// Only on a tty. Nested, Domicile's window is the desktop, and this
+    /// fails with [`SystemErrorKind::Other`]. See
+    /// `docs/architecture/CASTING-TO-TVS.md`.
+    VirtualMonitor {
+        name: String,
+        width: u32,
+        height: u32,
+        refresh_mhz: u32,
+    },
 }
 
 /// An `xdg_toplevel` state the shell sets with
@@ -1862,6 +1878,8 @@ pub enum SystemReply {
     Sent,
     /// The window's states were replaced.
     Set,
+    /// The virtual monitor was added, as the `wl_output` named `output`.
+    VirtualMonitor { output: String },
     /// The call failed. Nothing else follows under this id.
     Failed { error: SystemError },
 }

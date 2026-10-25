@@ -1,7 +1,8 @@
 //! Files, watches, processes, D-Bus, screenshots, shell commands, idle
 //! warnings, the lock's refusals and window states for one chrome connection.
 //! The compositor takes the screenshots ([`System::screenshotting_with`]),
-//! sets window states ([`System::setting_window_states_with`]), shares the
+//! sets window states ([`System::setting_window_states_with`]), adds virtual
+//! monitors ([`System::adding_virtual_monitors_with`]), shares the
 //! shell commands ([`System::sharing_shell_commands`]), idle warnings
 //! ([`System::sharing_idle_warnings`]) and window requests
 //! ([`System::sharing_window_requests`]) between connections, and sends the
@@ -83,6 +84,29 @@ pub struct System {
     set_window_states: Option<SetWindowStates>,
     /// The pages that hear a client's window requests.
     window_requests: WindowRequests,
+    /// Adds virtual monitors; `None` on a system that adds none.
+    add_virtual_monitor: Option<AddVirtualMonitor>,
+}
+
+/// Adds a virtual monitor. See [`SystemRequest::VirtualMonitor`].
+pub type AddVirtualMonitor =
+    Arc<dyn Fn(VirtualMonitor) -> Result<AddedMonitor, SystemError> + Send + Sync>;
+
+/// A virtual monitor a page asked for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VirtualMonitor {
+    pub name: String,
+    /// Its mode, in pixels.
+    pub size: (u32, u32),
+    pub refresh_mhz: u32,
+}
+
+/// A virtual monitor that was added.
+pub struct AddedMonitor {
+    /// Its `wl_output` name.
+    pub output: String,
+    /// Removes the monitor when dropped.
+    pub lease: Box<dyn Send>,
 }
 
 /// Replaces the states the shell set on a window.
@@ -124,6 +148,8 @@ enum Running {
     Listening(Listener),
     /// The page hears idle warnings.
     IdleWarnings(idle_warnings::Listener),
+    /// The page's virtual monitor, removed when this drops.
+    VirtualMonitor(Box<dyn Send>),
 }
 
 /// What [`System::handle`] did with a request.
@@ -203,7 +229,8 @@ pub fn reach(request: &SystemRequest) -> Reach {
         | SystemRequest::Stdin { .. }
         | SystemRequest::Screenshot { .. }
         | SystemRequest::PreviewWindow { .. }
-        | SystemRequest::SendShell { .. } => Reach::Acts,
+        | SystemRequest::SendShell { .. }
+        | SystemRequest::VirtualMonitor { .. } => Reach::Acts,
     }
 }
 
@@ -231,7 +258,8 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::UnlockRefusals
         | SystemRequest::SendShell { .. }
         | SystemRequest::SetWindowStates { .. }
-        | SystemRequest::WindowRequests => Some(HostMessage::SystemReply {
+        | SystemRequest::WindowRequests
+        | SystemRequest::VirtualMonitor { .. } => Some(HostMessage::SystemReply {
             id,
             reply: SystemReply::Failed {
                 error: SystemError {
@@ -274,7 +302,8 @@ pub fn refused_to_an_app(id: u32, request: &SystemRequest) -> Option<HostMessage
         | SystemRequest::IdleWarnings
         | SystemRequest::UnlockRefusals
         | SystemRequest::SetWindowStates { .. }
-        | SystemRequest::WindowRequests => Some(HostMessage::SystemReply {
+        | SystemRequest::WindowRequests
+        | SystemRequest::VirtualMonitor { .. } => Some(HostMessage::SystemReply {
             id,
             reply: SystemReply::Failed {
                 error: SystemError {
@@ -315,6 +344,7 @@ impl System {
             unlock_refusals: UnlockRefusals::default(),
             set_window_states: None,
             window_requests: WindowRequests::default(),
+            add_virtual_monitor: None,
         }
     }
 
@@ -380,6 +410,15 @@ impl System {
     /// through `requests`.
     pub fn sharing_window_requests(mut self, requests: WindowRequests) -> System {
         self.window_requests = requests;
+        self
+    }
+
+    /// This system, adding virtual monitors through `add`.
+    pub fn adding_virtual_monitors_with(
+        mut self,
+        add: impl Fn(VirtualMonitor) -> Result<AddedMonitor, SystemError> + Send + Sync + 'static,
+    ) -> System {
+        self.add_virtual_monitor = Some(Arc::new(add));
         self
     }
 
@@ -573,6 +612,15 @@ impl System {
                         drop(listener);
                         Handled::Done
                     }
+                    Some(Running::VirtualMonitor(lease)) => {
+                        (self.tell)(HostMessage::SystemEnd {
+                            id,
+                            end: SystemEnd::Stopped,
+                        });
+                        drop(running);
+                        drop(lease);
+                        Handled::Done
+                    }
                     Some(process) => {
                         running.insert(id, process);
                         Handled::Malformed
@@ -605,7 +653,8 @@ impl System {
                     Running::Watch(_)
                     | Running::Match(_)
                     | Running::Listening(_)
-                    | Running::IdleWarnings(_),
+                    | Running::IdleWarnings(_)
+                    | Running::VirtualMonitor(_),
                 ) => Handled::Malformed,
                 None => Handled::NothingRunning,
             },
@@ -621,7 +670,8 @@ impl System {
                     Running::Watch(_)
                     | Running::Match(_)
                     | Running::Listening(_)
-                    | Running::IdleWarnings(_),
+                    | Running::IdleWarnings(_)
+                    | Running::VirtualMonitor(_),
                 ) => Handled::Malformed,
                 None => Handled::NothingRunning,
             },
@@ -737,6 +787,43 @@ impl System {
                         kind: SystemErrorKind::Other,
                         message: "this desktop sets no window states".into(),
                     }),
+                };
+                (self.tell)(HostMessage::SystemReply { id, reply });
+                Handled::Done
+            }
+            SystemRequest::VirtualMonitor {
+                name,
+                width,
+                height,
+                refresh_mhz,
+            } => {
+                let mut running = self.running.lock().unwrap();
+                let reply = match (running.entry(id), &self.add_virtual_monitor) {
+                    (Entry::Occupied(_), _) => failed(error_of(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("{id} is already running"),
+                    ))),
+                    (Entry::Vacant(_), _) if name.contains('\0') => failed(SystemError {
+                        kind: SystemErrorKind::InvalidInput,
+                        message: "a monitor's name holds a NUL".into(),
+                    }),
+                    (Entry::Vacant(_), None) => failed(SystemError {
+                        kind: SystemErrorKind::Other,
+                        message: "this desktop adds no virtual monitors".into(),
+                    }),
+                    (Entry::Vacant(vacant), Some(add)) => match add(VirtualMonitor {
+                        name,
+                        size: (width, height),
+                        refresh_mhz,
+                    }) {
+                        Ok(added) => {
+                            vacant.insert(Running::VirtualMonitor(added.lease));
+                            SystemReply::VirtualMonitor {
+                                output: added.output,
+                            }
+                        }
+                        Err(error) => failed(error),
+                    },
                 };
                 (self.tell)(HostMessage::SystemReply { id, reply });
                 Handled::Done
@@ -954,6 +1041,7 @@ impl Drop for System {
                 }
                 Running::Listening(listener) => drop(listener),
                 Running::IdleWarnings(listener) => drop(listener),
+                Running::VirtualMonitor(lease) => drop(lease),
             }
         }
     }
