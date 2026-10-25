@@ -168,6 +168,12 @@ type Props = {
    * behind a tab).
    */
   rect: Rect | undefined;
+  /**
+   * Whether the user is resizing windows with the pointer. Sets the
+   * `<webview>`'s `resizing` attribute, so the engine shows each new box
+   * without waiting for the page to draw at it.
+   */
+  resizing: boolean;
   /** The restack shuffle in progress, if any. See `shuffledBy`. */
   restack?: Restack | undefined;
   /** Eases the window into a new box; see `useSettling`. */
@@ -213,6 +219,7 @@ export const BrowserWindow = ({
   onReach,
   popupWindow,
   rect,
+  resizing,
   restack,
   settler,
   url,
@@ -676,6 +683,7 @@ export const BrowserWindow = ({
         <webview
           className={viewStyles}
           ref={setView}
+          resizing={resizing ? "" : undefined}
           // React sets attributes before insertion, when the engine reads it.
           // See `window`.
           window={window}
