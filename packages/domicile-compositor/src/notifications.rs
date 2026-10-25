@@ -212,11 +212,17 @@ pub type Launch = Box<dyn Fn(&[String], &str) + Send>;
 
 /// Start the notification server. Icons and applications are looked up under
 /// `data_dirs`, icons in the icon theme `theme`. `launch` starts an
-/// application that quit before its notification was pressed.
+/// application that quit before its notification was pressed. A desk
+/// `in_a_window` queues behind its host's server; see [`crate::bus_names`].
 ///
 /// Returns once the thread is spawned, like [`crate::tray::serve`].
 /// [`NotificationServer::listen`] says where the notifications go.
-pub fn serve(data_dirs: Vec<PathBuf>, theme: Option<String>, launch: Launch) -> NotificationServer {
+pub fn serve(
+    data_dirs: Vec<PathBuf>,
+    theme: Option<String>,
+    launch: Launch,
+    in_a_window: bool,
+) -> NotificationServer {
     let (told, events) = channel();
     let applications = applications(&data_dirs);
     let store = Arc::new(Store::new(data_dirs, theme));
@@ -225,6 +231,7 @@ pub fn serve(data_dirs: Vec<PathBuf>, theme: Option<String>, launch: Launch) -> 
         let starting = Starting {
             applications,
             launch,
+            in_a_window,
         };
         if let Err(why) = answer(serving, &events, &starting) {
             warn!(
@@ -347,7 +354,7 @@ fn answer(store: Arc<Store>, events: &Receiver<Event>, starting: &Starting) -> z
             store: Arc::clone(&store),
         },
     )?;
-    connection.request_name(SERVER_NAME)?;
+    crate::bus_names::take(&connection, SERVER_NAME, starting.in_a_window)?;
     debug!("this desktop is the notification server");
 
     let server = connection
@@ -397,6 +404,7 @@ struct Starting {
     /// Where their desktop entries are.
     applications: Vec<PathBuf>,
     launch: Launch,
+    in_a_window: bool,
 }
 
 impl Starting {

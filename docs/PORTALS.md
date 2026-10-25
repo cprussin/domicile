@@ -52,6 +52,18 @@ One request channel carries all dialogs. Each interface's backend builds on it.
     caught.
   - Check with `tr '\0' '\n' </proc/$(systemctl --user show -p MainPID
     --value xdg-desktop-portal)/environ | grep XDG_CURRENT_DESKTOP`.
+- **Several desktops share one session bus.** A second login session on
+  another tty, or a desktop nested in another, uses the same bus and user
+  manager.
+  - A login session takes the backend's, the notification server's and the
+    tray watcher's names from the desktop holding them. A nested desktop
+    queues behind its host. Every desktop stays queued, so a name goes to the
+    next desktop when its holder exits (`bus_names`).
+  - The compositor sets the activation environment each time it takes the
+    backend's name, so it replaces an exited session's display.
+  - A second login session's launcher gives the first its variables back when
+    it exits, if the first still runs, instead of stopping
+    `graphical-session.target` and the frontend (`graphical_session::end`).
 - **`Secret` goes to the keyring.** `gnome-keyring` or `oo7-portal` implements
   it. It has no UI, and the store must outlive the session.
   `domicile-portals.conf` routes it to the keyring.

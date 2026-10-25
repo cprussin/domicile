@@ -9,9 +9,15 @@
 //! [`end`] stops the session and unsets the environment, so later services do
 //! not find a dead socket or display.
 //!
+//! A second login session, on another tty, takes over the user manager's
+//! session from the first. [`begin`] returns the first's variables, and
+//! [`end`] gives them back while the first still runs instead of stopping the
+//! session under it.
+//!
 //! Only a desktop running as the login session does this. A nested desktop
 //! leaves the session to its host.
 
+use std::os::unix::net::UnixStream;
 use std::path::Path;
 
 use crate::control_socket::VARIABLE;
@@ -55,11 +61,19 @@ pub fn name(manager: &zbus::blocking::Connection) -> Result<(), zbus::Error> {
 }
 
 /// Exports the desktop's environment to `manager`, then starts [`TARGET`].
+///
+/// Returns the [`VARIABLES`] `manager` held when they named another desktop's
+/// control socket, for [`end`]. Empty when they named none or this desktop's.
 pub fn begin(
     manager: &zbus::blocking::Connection,
     wayland_display: &str,
     control: &Path,
-) -> Result<(), zbus::Error> {
+) -> Result<Vec<String>, zbus::Error> {
+    let held = held(manager)?;
+    let earlier = match socket(&held) {
+        Some(socket) if Path::new(socket) != control => held,
+        _ => Vec::new(),
+    };
     let values = [
         CURRENT_DESKTOP.to_string(),
         wayland_display.to_string(),
@@ -72,16 +86,61 @@ pub fn begin(
         .map(|(name, value)| format!("{name}={value}"))
         .collect();
     call(manager, "SetEnvironment", &(assignments,))?;
-    call(manager, "StartUnit", &(TARGET, "replace"))
+    call(manager, "StartUnit", &(TARGET, "replace"))?;
+    Ok(earlier)
 }
 
-/// Starts [`SHUTDOWN`], then unsets the environment from [`begin`].
+/// Ends the session of the desktop at `control`, which took it over from
+/// `earlier` (from [`begin`]).
 ///
-/// Uses `replace-irreversibly`, as niri does, so no later job can cancel the
-/// shutdown.
-pub fn end(manager: &zbus::blocking::Connection) -> Result<(), zbus::Error> {
+/// - Another desktop's control socket in `manager`: that desktop took the
+///   session over later, so it is left alone.
+/// - `earlier`'s desktop still answers: its variables are set again.
+/// - Otherwise starts [`SHUTDOWN`], then unsets the environment from
+///   [`begin`]. Uses `replace-irreversibly`, as niri does, so no later job can
+///   cancel the shutdown.
+pub fn end(
+    manager: &zbus::blocking::Connection,
+    control: &Path,
+    earlier: &[String],
+) -> Result<(), zbus::Error> {
+    let held = held(manager)?;
+    if socket(&held).is_some_and(|socket| Path::new(socket) != control) {
+        return Ok(());
+    }
+    if socket(earlier).is_some_and(|socket| UnixStream::connect(socket).is_ok()) {
+        return call(manager, "SetEnvironment", &(earlier,));
+    }
     call(manager, "StartUnit", &(SHUTDOWN, "replace-irreversibly"))?;
     call(manager, "UnsetEnvironment", &(VARIABLES.to_vec(),))
+}
+
+/// The assignments of [`VARIABLES`] in `manager`'s environment.
+fn held(manager: &zbus::blocking::Connection) -> Result<Vec<String>, zbus::Error> {
+    let environment: Vec<String> = zbus::blocking::Proxy::new(
+        manager,
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+    )?
+    .get_property("Environment")?;
+    Ok(environment
+        .into_iter()
+        .filter(|assignment| {
+            VARIABLES
+                .iter()
+                .any(|name| assignment.split_once('=').map(|(key, _)| key) == Some(*name))
+        })
+        .collect())
+}
+
+/// The control socket among `assignments`.
+fn socket(assignments: &[String]) -> Option<&str> {
+    assignments.iter().find_map(|assignment| {
+        assignment
+            .strip_prefix(VARIABLE)
+            .and_then(|rest| rest.strip_prefix('='))
+    })
 }
 
 fn call<B>(manager: &zbus::blocking::Connection, method: &str, body: &B) -> Result<(), zbus::Error>

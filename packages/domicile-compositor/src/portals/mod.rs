@@ -16,7 +16,6 @@
 //! unthemed and their dialogs unanswered; they never stop the compositor.
 
 use std::collections::HashMap;
-use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -441,7 +440,7 @@ pub fn shell_appearance(theme: &ThemeConfig) -> domicile_host::Appearances {
 
 /// Starts the portal thread with `theme` as the current theme and the
 /// config's `lockdown`, and sets the activation environment. See
-/// [`activation_environment`] for `ours` and `nested_in`. Portal notifications
+/// [`activation_environment`] for `ours` and `in_a_window`. Portal notifications
 /// go to `notifications`; `spawn` starts a client, such as the mail client.
 /// Restore tokens and global shortcut choices are kept under
 /// `$XDG_STATE_HOME/domicile/`. Screenshots are taken through `casting`.
@@ -453,12 +452,12 @@ pub fn serve(
     look: &ThemeConfig,
     lockdown: LockdownConfig,
     ours: &str,
-    nested_in: Option<&OsStr>,
+    in_a_window: bool,
     notifications: NotificationServer,
     spawn: impl Fn(&[String]) + Send + Sync + 'static,
     casting: ScreenCasting,
 ) -> Portals {
-    let environment = activation_environment(ours, nested_in);
+    let environment = activation_environment(ours, in_a_window);
     let (mut backends, changes) = Backends::new(
         notifications,
         Tokens::load(restore::path(
@@ -519,7 +518,8 @@ pub fn serve(
             appearance,
             starting,
             &backends,
-            &environment,
+            environment,
+            in_a_window,
             &changes,
         ) {
             warn!(
@@ -541,17 +541,20 @@ fn xdg_home(variable: &str, home: Option<&std::path::Path>, fallback: &str) -> O
         .or_else(|| home.map(|home| home.join(fallback)))
 }
 
-/// Sets the activation environment, serves the interfaces, and signals each
-/// change. Returns on failure or when every handle is dropped.
+/// Serves the interfaces, sets the activation environment each time this desk
+/// takes the name, and signals each change. Returns on failure or when every
+/// handle is dropped.
 ///
-/// Sets the environment before taking the name, so it is set even if another
-/// desk holds the name.
+/// The name comes back after a second login session on the bus exits (see
+/// [`crate::bus_names`]), and that session left its own display in the
+/// activation environment.
 fn answer(
     theme: Theme,
     appearance: Appearance,
     starting: Starting,
     backends: &Backends,
-    environment: &[(&str, String)],
+    environment: Vec<(&'static str, String)>,
+    in_a_window: bool,
     changes: &Receiver<Told>,
 ) -> Result<(), zbus::Error> {
     let home = std::env::var_os("HOME").map(PathBuf::from);
@@ -572,7 +575,6 @@ fn answer(
     )?
     .build()?;
     backends.shortcuts.signal_on(connection.inner().clone());
-    say_which_desktop(&connection, environment);
     let notification = connection
         .object_server()
         .interface::<_, Notification>(OBJECT_PATH)?;
@@ -581,7 +583,15 @@ fn answer(
         .on_portal_action(move |invoked: Invoked<OwnedValue>, token| {
             notification::invoked(&notification, invoked, token)
         });
-    connection.request_name(BUS_NAME)?;
+    let acquired = zbus::blocking::fdo::DBusProxy::new(&connection)?
+        .receive_name_acquired_with_args(&[(0, BUS_NAME)])?;
+    let saying = connection.clone();
+    thread::spawn(move || {
+        for _ in acquired {
+            say_which_desktop(&saying, &environment);
+        }
+    });
+    crate::bus_names::take(&connection, BUS_NAME, in_a_window)?;
     debug!(
         name = BUS_NAME,
         scheme = color_scheme(theme),
@@ -920,19 +930,19 @@ fn mail_client(spawn: impl Fn(&[String]) + Send + Sync + 'static) -> Open {
 /// The variables [`say_which_desktop`] sets for activated services.
 ///
 /// Sets `XDG_CURRENT_DESKTOP` and `WAYLAND_DISPLAY` (`ours`) only when this
-/// desk is the session. When nested in another session (`nested_in` is the
-/// compositor's own non-empty `WAYLAND_DISPLAY`), sets nothing: that session
-/// owns its activated apps and portal routing. The activation environment is
-/// per user, so the last session to start wins, as with
+/// desk is the session. A desk `in_a_window` of another session sets nothing:
+/// that session owns its activated apps and portal routing. The activation
+/// environment is per user, so the last session to take the name wins, as with
 /// `dbus-update-activation-environment`. The supervisor sets the same values
 /// in `domicile_launch::graphical_session`.
-fn activation_environment(ours: &str, nested_in: Option<&OsStr>) -> Vec<(&'static str, String)> {
-    match nested_in.filter(|display| !display.is_empty()) {
-        Some(_) => Vec::new(),
-        None => vec![
+fn activation_environment(ours: &str, in_a_window: bool) -> Vec<(&'static str, String)> {
+    if in_a_window {
+        Vec::new()
+    } else {
+        vec![
             ("XDG_CURRENT_DESKTOP", CURRENT_DESKTOP.to_string()),
             ("WAYLAND_DISPLAY", ours.to_string()),
-        ],
+        ]
     }
 }
 
@@ -2017,7 +2027,7 @@ mod tests {
         // Activated apps open on the `WAYLAND_DISPLAY` in the activation
         // environment, which another session may have set.
         assert_eq!(
-            activation_environment("wayland-1", None),
+            activation_environment("wayland-1", false),
             [
                 ("XDG_CURRENT_DESKTOP", CURRENT_DESKTOP.to_string()),
                 ("WAYLAND_DISPLAY", "wayland-1".to_string()),
@@ -2028,20 +2038,7 @@ mod tests {
     #[test]
     fn a_desk_in_a_window_leaves_its_sessions_activation_environment_alone() {
         // The outer session owns its activated apps and portal routing.
-        assert_eq!(
-            activation_environment("wayland-1", Some(OsStr::new("wayland-0"))),
-            []
-        );
-    }
-
-    #[test]
-    fn an_empty_display_is_no_session() {
-        // As in `domicile_launch::platform`, an empty `WAYLAND_DISPLAY` means
-        // the drm platform, so this desk is the session.
-        assert_eq!(
-            activation_environment("wayland-1", Some(OsStr::new(""))),
-            activation_environment("wayland-1", None)
-        );
+        assert_eq!(activation_environment("wayland-1", true), []);
     }
 
     #[test]

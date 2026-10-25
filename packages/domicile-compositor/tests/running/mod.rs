@@ -186,6 +186,11 @@ impl Compositor {
         &self.session.chrome_socket
     }
 
+    /// The compositor process, as the bus names it.
+    pub fn pid(&self) -> u32 {
+        self.child.id()
+    }
+
     /// Where this run keeps its caches, which is where its file index goes.
     pub fn cache_home(&self) -> PathBuf {
         self.runtime_dir.join("cache")

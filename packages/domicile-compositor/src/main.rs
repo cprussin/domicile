@@ -65,6 +65,7 @@ mod anchors;
 mod app_scope;
 mod blanking;
 mod buffer_transform;
+mod bus_names;
 mod casting;
 mod chrome_connection;
 mod chrome_hub;
@@ -894,6 +895,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Passphrase verdicts from the checking thread.
     let (verdicts, heard_verdicts) = channel::<Verdict>();
 
+    // Whether this desk queues behind its host's bus names. See `bus_names`.
+    let in_a_window = bus_names::in_a_window(std::env::var_os("WAYLAND_DISPLAY").as_deref());
     // Notifications, from the bus and from the portal. Published once the hub
     // exists. See `notifications`.
     let notification_server = notifications::serve(
@@ -918,6 +921,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 )
             })
         },
+        in_a_window,
     );
     // State shared by the Wayland thread and chrome connections.
     let (hub, outbound_rx) = ChromeHub::new(
@@ -933,7 +937,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             &config.theme,
             config.lockdown.clone(),
             &socket_name.to_string_lossy(),
-            std::env::var_os("WAYLAND_DISPLAY").as_deref(),
+            in_a_window,
             notification_server.clone(),
             {
                 let display = socket_name.clone();
@@ -1000,6 +1004,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             home_directory().as_deref(),
         ),
         config.theme.icon_theme.clone(),
+        in_a_window,
         move |items| {
             // Release the host before broadcasting.
             let told = publishing.host.lock().unwrap().set_tray(items);
