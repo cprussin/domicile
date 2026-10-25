@@ -35,7 +35,8 @@ There is no terminal key. Bind one with `exec`.
 
 Build commands with the exported helpers (`focus`, `move`, `workspace`,
 `moveToWorkspace`, `grow`, `mode`, `exec`, `searchClipboard`, `volume`,
-`micMute`, `brightness`, …). They use sway's names:
+`micMute`, `brightness`, `notifications`, `clearNotifications`,
+`idleInhibitor`, …). They use sway's names:
 
 | Command | Action |
 |---|---|
@@ -66,6 +67,9 @@ Manganese-only commands:
 | `volume up/down/mute` | Step the default output's volume, or toggle its mute. |
 | `mic mute` | Toggle the default microphone's mute. |
 | `brightness up/down` | Step the brightness. |
+| `notifications` | Toggle the notification drawer, on the screen with the keyboard. Unbound by default. |
+| `notifications clear` | Clear every notification, as the drawer's "Clear all" does. Unbound by default. |
+| `idle-inhibitor` | Toggle keeping the screens on, as the bar's eye does. Unbound by default. |
 
 - `mode(name)` comes from the SDK's `bindKeys`. Each monitor's page keeps its
   own mode. The `Mode` bar item, in no default bar, shows any mode other

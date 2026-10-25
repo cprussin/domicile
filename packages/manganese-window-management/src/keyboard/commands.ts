@@ -24,6 +24,12 @@ export const launcher = () => command("launcher");
 export const clipboard = () => command("clipboard");
 /** Open the newest copy as a site if it is a URL, else search for it. */
 export const searchClipboard = () => command("search-clipboard");
+/** Toggle the notification drawer. */
+export const notifications = () => command("notifications");
+/** Clear every notification. */
+export const clearNotifications = () => command("notifications", "clear");
+/** Toggle keeping the screens on. */
+export const idleInhibitor = () => command("idle-inhibitor");
 /** Take a screenshot, picking the area in a dialog. */
 export const screenshot = () => command("screenshot");
 /** Step the default output's volume, or toggle its mute. */
