@@ -92,8 +92,6 @@ Understood and not scheduled.
 - **Filter quality on lower-density displays is unmeasured.**
 - **The desk rasters what no monitor shows.**
   [DISPLAY-TILINGS.md](docs/architecture/DISPLAY-TILINGS.md#cost).
-- **No guard runs two CRTCs.**
-  [Several monitors](docs/HARDWARE-CHECKS.md#several-monitors).
 
 ### Browser windows
 

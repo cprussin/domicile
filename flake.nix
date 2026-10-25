@@ -1400,6 +1400,225 @@
                 raise
           '';
         };
+
+        # Manganese on two monitors: one 2D virtio-gpu card with two heads,
+        # started cold. Checks what docs/HARDWARE-CHECKS.md#several-monitors
+        # asks of a lit panel: a bar and a wallpaper on each, keyboard focus
+        # following the pointer across, `mod+2`, and an `exec` key opening its
+        # window on the monitor with the keyboard.
+        #
+        # Runs the pinned engine, as `tty-on-a-card-with-no-3d` does.
+        two-monitors-on-a-tty = pkgs.testers.runNixOSTest {
+          name = "two-monitors-on-a-tty";
+          extraPythonPackages = python: [ python.pillow ];
+          nodes.machine = {
+            imports = [ self.nixosModules.domicile ];
+            programs.domicile.enable = true;
+            virtualisation = {
+              memorySize = 4096;
+              cores = 2;
+              # Both heads lit from boot. `video0` names the card to
+              # `screendump`.
+              qemu.options = [
+                "-vga none"
+                "-device '${builtins.toJSON {
+                  driver = "virtio-gpu-pci";
+                  id = "video0";
+                  max_outputs = 2;
+                  outputs = [
+                    { name = "left"; xres = 1280; yres = 800; }
+                    { name = "right"; xres = 1280; yres = 800; }
+                  ];
+                }}'"
+              ];
+            };
+            users.users.alice = {
+              isNormalUser = true;
+              uid = 1000;
+              extraGroups = [ "domicile" "video" "input" ];
+            };
+            services.getty.autologinUser = "alice";
+            environment.loginShellInit =
+              let
+                # Two terminal keys, each a foot of its own color, so a screen
+                # shows which key opened what.
+                config = pkgs.writeText "domicile.tsx" ''
+                  import { runManganese } from "@domicile-desktop/manganese";
+                  import {
+                    DEFAULT_KEYBINDINGS,
+                    exec,
+                  } from "@domicile-desktop/manganese-window-management/keyboard/commands";
+
+                  const foot = (background: string) =>
+                    exec(
+                      "foot",
+                      `--override=colors-dark.background=''${background}`,
+                      `--override=colors-light.background=''${background}`,
+                      "sleep",
+                      "600",
+                    );
+
+                  export const Shell = runManganese({
+                    keybindings: {
+                      keybindings: {
+                        ...DEFAULT_KEYBINDINGS,
+                        "Meta+t": foot("3366cc"),
+                        "Meta+y": foot("cc6633"),
+                      },
+                    },
+                  });
+                '';
+              in
+              ''
+                if [ "$(tty)" = /dev/tty1 ]; then
+                  mkdir -p ~/.config/domicile
+                  cp ${config} ~/.config/domicile/domicile.tsx
+                  export DOMICILE_ENGINE_ARGS="--log-level=0 --vmodule=*domicile*=1,*/domicile/*=1,*evdev*=1"
+                  export RUST_LOG=domicile_compositor=debug
+                  exec ${self.packages.${system}.domicile}/bin/domicile >/tmp/domicile.log 2>&1
+                fi
+              '';
+            environment.systemPackages = [ pkgs.foot ];
+            # A relative mouse the test moves through `/run/pointer`, one
+            # `dx dy` per line. QEMU's PS/2 mouse reached the kernel with no
+            # events.
+            hardware.uinput.enable = true;
+            systemd.services.test-pointer = {
+              wantedBy = [ "multi-user.target" ];
+              before = [ "getty@tty1.service" ];
+              serviceConfig.ExecStart = pkgs.writers.writePython3 "test-pointer"
+                { libraries = [ pkgs.python3Packages.evdev ]; } ''
+                import os
+
+                from evdev import UInput, ecodes
+
+                pointer = UInput(
+                    {
+                        ecodes.EV_REL: [ecodes.REL_X, ecodes.REL_Y],
+                        ecodes.EV_KEY: [ecodes.BTN_LEFT, ecodes.BTN_RIGHT],
+                    },
+                    name="test pointer",
+                )
+                os.mkfifo("/run/pointer")
+                while True:
+                    with open("/run/pointer") as moves:
+                        for move in moves:
+                            dx, dy = (int(each) for each in move.split())
+                            pointer.write(ecodes.EV_REL, ecodes.REL_X, dx)
+                            pointer.write(ecodes.EV_REL, ecodes.REL_Y, dy)
+                            pointer.syn()
+              '';
+            };
+            fonts.enableDefaultPackages = true;
+          };
+          testScript = ''
+            import datetime as dt
+            import os
+            import tempfile
+            import time
+            from PIL import Image, ImageChops
+
+            BLUE = (0x33, 0x66, 0xCC)
+            ORANGE = (0xCC, 0x66, 0x33)
+            # Manganese's `TOP_BAR`, and the gradient it paints below itself.
+            BAR = 40
+            WAIT = dt.timedelta(seconds=300)
+
+            def screen(head, name):
+                """What head `head` shows, also kept as `name`.png."""
+                with tempfile.TemporaryDirectory() as directory:
+                    dump = os.path.join(directory, "screen.ppm")
+                    machine.send_monitor_command(f"screendump {dump} video0 {head}")
+                    image = Image.open(dump).convert("RGB")
+                image.save(os.path.join(machine.out_dir, f"{name}.png"))
+                return image
+
+            def shares(image):
+                """Each color in `image` and its share of the pixels."""
+                pixels = image.width * image.height
+                colors = image.getcolors(maxcolors=pixels)
+                assert colors is not None
+                return {color: count / pixels for count, color in colors}
+
+            def shows_a_photo(head):
+                """A photograph below the bar: many colors, none of them most."""
+                image = screen(head, f"wallpaper-{head}")
+                below = shares(image.crop((0, BAR, image.width, image.height)))
+                return len(below) > 1000 and max(below.values()) < 0.3
+
+            def the_clock_ticks_in_a_bar(head):
+                """The clock's seconds are the only change, and at the top."""
+                before = screen(head, f"bar-{head}")
+                time.sleep(1.5)
+                changed = ImageChops.difference(before, screen(head, f"bar-{head}")).getbbox()
+                return changed is not None and changed[3] <= BAR
+
+            def share_of(head, color, name):
+                return shares(screen(head, name)).get(color, 0)
+
+            def move_the_pointer(dx):
+                """Far enough to cross a whole monitor."""
+                machine.succeed(f"for _ in $(seq 30); do echo '{dx} 0' >/run/pointer; done")
+
+            def the_desk_spans_two_monitors():
+                machine.wait_until_succeeds(
+                    "grep -q 'composites on the CPU' /tmp/domicile.log", timeout=WAIT)
+                machine.wait_until_succeeds(
+                    "grep -q 'told the chrome about 2 display(s)' /tmp/domicile.log", timeout=WAIT)
+                for head in [0, 1]:
+                    retry(lambda _: shows_a_photo(head), timeout=WAIT)
+                    retry(lambda _: the_clock_ticks_in_a_bar(head), timeout=dt.timedelta(seconds=60))
+                # One presenter per CRTC.
+                machine.succeed("grep -q 'presenting the desk on display' /tmp/domicile.log")
+
+                # The pointer onto the right monitor takes the keyboard there,
+                # so the blue terminal opens on it.
+                move_the_pointer(100)
+                # Gives the shell time to move the keyboard to the pointer's screen.
+                time.sleep(2)
+                machine.send_key("meta_l-t")
+                retry(lambda _: share_of(1, BLUE, "blue") > 0.5, timeout=WAIT)
+                assert share_of(0, BLUE, "blue-left") == 0, "the blue terminal reached the left monitor"
+
+                # Back on the left monitor, `mod+2` sends the keyboard to the
+                # right one, which shows workspace 2, and moves no workspace.
+                # The orange terminal opens as a tab over the blue one.
+                move_the_pointer(-100)
+                time.sleep(2)
+                machine.send_key("meta_l-2")
+                machine.send_key("meta_l-y")
+                retry(lambda _: share_of(1, ORANGE, "orange") > 0.5, timeout=WAIT)
+                left = shares(screen(0, "orange-left"))
+                assert left.get(ORANGE, 0) == 0 and left.get(BLUE, 0) == 0, (
+                    "a terminal reached the left monitor")
+                assert shows_a_photo(0), "the left monitor left its empty workspace"
+                # Closing it shows the blue terminal, still drawing.
+                machine.send_key("meta_l-shift-q")
+                retry(lambda _: share_of(1, BLUE, "blue-again") > 0.5, timeout=WAIT)
+
+            machine.wait_for_unit("multi-user.target")
+            try:
+                the_desk_spans_two_monitors()
+            except Exception:
+                screens = [
+                    sorted(shares(screen(head, f"failed-{head}")).items(), key=lambda share: -share[1])[:4]
+                    for head in [0, 1]
+                ]
+                machine.execute("systemctl stop getty@tty1.service; pkill -u alice; sleep 3")
+                for command in [
+                    "grep -E 'FATAL|Check failed|ERROR:.*domicile' /tmp/domicile.log | tail -6 | cut -c1-200 || true",
+                    "grep -E ' (WARN|ERROR) ' /tmp/domicile.log | tail -6 | cut -c1-200 || true",
+                    "grep -E 'display\\(s\\)|presenting the desk|toplevel created' /tmp/domicile.log "
+                    "| tail -8 | cut -c1-200 || true",
+                    "grep -vE '^\\[' /tmp/domicile.log | head -20 | cut -c1-200",
+                    "grep -iE 'input device|handed over|evdev|cursor' /tmp/domicile.log | tail -20 | cut -c1-200 || true",
+                ]:
+                    print(f"$ {command}")
+                    print(machine.execute(f"{command} 2>&1")[1])
+                print("each monitor's biggest colors:", screens)
+                raise
+          '';
+        };
       };
 
       apps.${system} = {

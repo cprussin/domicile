@@ -25,7 +25,8 @@ env:
 jobs:
   packages:
     runs-on: ubuntu-latest
-    # Includes the tty VM test (`tty-on-a-card-with-no-3d` in flake.nix).
+    # Includes the tty VM tests (`tty-on-a-card-with-no-3d` and
+    # `two-monitors-on-a-tty` in flake.nix).
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
