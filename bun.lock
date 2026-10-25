@@ -306,6 +306,7 @@
         "@pandacss/dev": "catalog:",
         "@phosphor-icons/react": "catalog:",
         "react": "catalog:",
+        "zod": "catalog:",
       },
       "devDependencies": {
         "@cprussin/tsconfig": "catalog:",
@@ -318,7 +319,6 @@
         "@types/react-dom": "catalog:",
         "postcss": "catalog:",
         "typescript": "catalog:",
-        "zod": "catalog:",
       },
     },
     "packages/manganese-bar-module-cast": {

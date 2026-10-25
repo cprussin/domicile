@@ -1,16 +1,19 @@
 import type { Result } from "@cprussin/option-result";
 import { Popover } from "@domicile-desktop/component-library/Popover";
+import { Switch } from "@domicile-desktop/component-library/Switch";
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
 import { isAbsent } from "@domicile-desktop/manganese-host/watch-presence";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import { LightbulbIcon } from "@phosphor-icons/react/dist/ssr/Lightbulb";
 import { LightbulbFilamentIcon } from "@phosphor-icons/react/dist/ssr/LightbulbFilament";
+import { MoonIcon } from "@phosphor-icons/react/dist/ssr/Moon";
 import type { WheelEvent } from "react";
 
 import { css } from "../styled-system/css";
 import { BrightnessSlider } from "./BrightnessSlider";
-import type { SharedBacklight } from "./desk-backlight";
+import type { NightLight } from "./night-light";
+import type { SharedBacklight } from "./shared-backlight";
 import { useBrightness } from "./useBrightness";
 
 /** How far one wheel notch over the icon moves the brightness. */
@@ -21,21 +24,45 @@ type Props = {
   backlight: SharedBacklight;
   /** Whether the machine has a backlight, from `/sys`. */
   hardware: SharedWatch<Result<boolean, SystemError>>;
+  /** The desk's night light. */
+  nightLight: NightLight;
 };
 
 /**
  * The brightness control on the bar: a light bulb icon that reflects the level,
- * opens a slider, and responds to the wheel. See {@link useBrightness}.
+ * opens a slider and the night light switch, and responds to the wheel. See
+ * {@link useBrightness}.
  *
- * Until there is a level, a dimmed bulb alone on a machine with a backlight,
- * and nothing on one without, such as a desktop with external monitors.
+ * Until there is a level, a dimmed bulb alone on a machine with a backlight.
+ * On one without, such as a desktop with external monitors, a moon that opens
+ * the night light switch alone.
  */
-export const Brightness = ({ backlight, hardware }: Props) => {
+export const Brightness = ({ backlight, hardware, nightLight }: Props) => {
   const control = useBrightness(backlight);
   const present = useSharedWatch(hardware);
+  const nightLightOn = useSharedWatch(nightLight.on) ?? false;
 
   if (control === undefined) {
-    return isAbsent(present) ? undefined : (
+    return isAbsent(present) ? (
+      <Popover
+        align="center"
+        side="bottom"
+        tone="overPhoto"
+        trigger={
+          <button
+            aria-label={`Night light ${nightLightOn ? "on" : "off"}`}
+            className={triggerStyles}
+            type="button"
+          >
+            <MoonIcon size={15} weight={nightLightOn ? "fill" : "bold"} />
+          </button>
+        }
+      >
+        <span className={panelStyles}>
+          <NightLightSwitch nightLight={nightLight} on={nightLightOn} />
+        </span>
+      </Popover>
+    ) : (
       <span
         aria-label="Brightness unavailable"
         className={unavailableStyles}
@@ -68,11 +95,26 @@ export const Brightness = ({ backlight, hardware }: Props) => {
       >
         <span className={panelStyles}>
           <BrightnessSlider control={control} />
+          <NightLightSwitch nightLight={nightLight} on={nightLightOn} />
         </span>
       </Popover>
     );
   }
 };
+
+const NightLightSwitch = ({
+  nightLight,
+  on,
+}: {
+  nightLight: NightLight;
+  on: boolean;
+}) => (
+  <Switch
+    checked={on}
+    label="Night light"
+    onCheckedChange={nightLight.toggle}
+  />
+);
 
 // Not the library's `Button`: its ghost variant uses `muted` text, which is
 // unreadable over the wallpaper. This uses the bar's white, like the bell and
@@ -107,7 +149,9 @@ const unavailableStyles = css({
 });
 
 const panelStyles = css({
-  display: "block",
+  display: "flex",
+  flexDirection: "column",
+  gap: 3,
   inlineSize: 60,
 });
 

@@ -243,6 +243,9 @@ impl DomicileCompositor {
                     self.hub
                         .virtual_monitors
                         .set_extendable(self.config.current().output.desktop().is_none());
+                    if let Some(session) = self.engine.as_ref() {
+                        session.set_white_point(self.white_point);
+                    }
                     match self.screens.replugged_into(
                         &displays,
                         &self.config.current().output,

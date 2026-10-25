@@ -13,6 +13,7 @@ use tracing::{debug, warn};
 
 use domicile_host::clipboard::Contents;
 use domicile_host::theme_turnover::{Turnover, CAPTURE_WITHIN};
+use domicile_host::white_point::WhitePoint;
 use domicile_protocol::{KeymapChoice, Passphrase, PortalAnswer, Theme, TrayAction, WindowState};
 
 use crate::activation;
@@ -117,6 +118,11 @@ pub enum ClientRequest {
     /// [`DomicileCompositor::switch_the_keymap`].
     SelectKeymap {
         keymap: KeymapChoice,
+    },
+    /// The page set every monitor's white point. See
+    /// [`domicile_host::white_point`].
+    SetWhitePoint {
+        white_point: WhitePoint,
     },
     /// The chrome asked the client of `app_id` to close its window.
     CloseApp {
@@ -489,6 +495,12 @@ impl DomicileCompositor {
                 self.state_the_virtual_monitors();
             }
             ClientRequest::SelectKeymap { keymap } => self.switch_the_keymap(&keymap),
+            ClientRequest::SetWhitePoint { white_point } => {
+                self.white_point = white_point;
+                if let Some(session) = self.engine.as_ref() {
+                    session.set_white_point(white_point);
+                }
+            }
             // A launch from a key or the launcher, so it may raise the
             // window of an app already running.
             ClientRequest::Spawn { command } => spawn_client(

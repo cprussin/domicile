@@ -47,6 +47,7 @@ use crate::lock_screen_readouts::is_a_readout;
 use crate::priority;
 use crate::shell_commands::ShellCommands;
 use crate::unlock_refusals::UnlockRefusals;
+use crate::white_point::{white_point, WhitePoint, NEUTRAL, WARMEST};
 use crate::window_requests::WindowRequests;
 use crate::AppId;
 
@@ -94,6 +95,8 @@ pub struct System {
     select_keymap: Option<SelectKeymap>,
     /// Adds virtual monitors; `None` on a system that adds none.
     add_virtual_monitor: Option<AddVirtualMonitor>,
+    /// Sets every monitor's white point; `None` on a system that sets none.
+    set_white_point: Option<SetWhitePoint>,
 }
 
 /// Adds a virtual monitor. See [`SystemRequest::VirtualMonitor`].
@@ -123,6 +126,9 @@ pub type SelectKeymap = Arc<dyn Fn(KeymapChoice) -> Result<(), SystemError> + Se
 /// Replaces the states the shell set on a window.
 pub type SetWindowStates =
     Arc<dyn Fn(AppId, Vec<WindowState>) -> Result<(), SystemError> + Send + Sync>;
+
+/// Sets the white point every monitor draws with.
+pub type SetWhitePoint = Arc<dyn Fn(WhitePoint) -> Result<(), SystemError> + Send + Sync>;
 
 /// Takes a screenshot, into the file if one is given, and returns where it
 /// went. Blocks until it is kept, the dialog included.
@@ -194,6 +200,8 @@ pub enum Reach {
     Arranges,
     /// It switches the keymap, as a lock screen's keymap item does.
     Retypes,
+    /// It changes the colors every monitor draws, as a night light does.
+    Tints,
     /// Anything else.
     Acts,
 }
@@ -240,6 +248,7 @@ pub fn reach(request: &SystemRequest) -> Reach {
         | SystemRequest::Keymaps => Reach::Listens,
         SystemRequest::SetWindowStates { .. } => Reach::Arranges,
         SystemRequest::SelectKeymap { .. } => Reach::Retypes,
+        SystemRequest::SetColorTemperature { .. } => Reach::Tints,
         SystemRequest::WriteFile { .. }
         | SystemRequest::CreateDir { .. }
         | SystemRequest::Stdin { .. }
@@ -274,6 +283,7 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::UnlockRefusals
         | SystemRequest::SendShell { .. }
         | SystemRequest::SetWindowStates { .. }
+        | SystemRequest::SetColorTemperature { .. }
         | SystemRequest::WindowRequests
         | SystemRequest::VirtualMonitor { .. }
         | SystemRequest::Keymaps
@@ -320,6 +330,7 @@ pub fn refused_to_an_app(id: u32, request: &SystemRequest) -> Option<HostMessage
         | SystemRequest::IdleWarnings
         | SystemRequest::UnlockRefusals
         | SystemRequest::SetWindowStates { .. }
+        | SystemRequest::SetColorTemperature { .. }
         | SystemRequest::WindowRequests
         | SystemRequest::VirtualMonitor { .. }
         | SystemRequest::Keymaps
@@ -367,6 +378,7 @@ impl System {
             add_virtual_monitor: None,
             keymaps: Keymaps::default(),
             select_keymap: None,
+            set_white_point: None,
         }
     }
 
@@ -456,6 +468,15 @@ impl System {
         select: impl Fn(KeymapChoice) -> Result<(), SystemError> + Send + Sync + 'static,
     ) -> System {
         self.select_keymap = Some(Arc::new(select));
+        self
+    }
+
+    /// This system, setting every monitor's white point through `set`.
+    pub fn setting_white_points_with(
+        mut self,
+        set: impl Fn(WhitePoint) -> Result<(), SystemError> + Send + Sync + 'static,
+    ) -> System {
+        self.set_white_point = Some(Arc::new(set));
         self
     }
 
@@ -859,6 +880,26 @@ impl System {
                                 output: added.output,
                             }
                         }
+                        Err(error) => failed(error),
+                    },
+                };
+                (self.tell)(HostMessage::SystemReply { id, reply });
+                Handled::Done
+            }
+            SystemRequest::SetColorTemperature { kelvin } => {
+                let reply = match (&self.set_white_point, (WARMEST..=NEUTRAL).contains(&kelvin)) {
+                    (_, false) => failed(SystemError {
+                        kind: SystemErrorKind::InvalidInput,
+                        message: format!(
+                            "a color temperature is {WARMEST} to {NEUTRAL} kelvin, not {kelvin}"
+                        ),
+                    }),
+                    (None, true) => failed(SystemError {
+                        kind: SystemErrorKind::Other,
+                        message: "this desktop sets no color temperature".into(),
+                    }),
+                    (Some(set), true) => match set(white_point(kelvin)) {
+                        Ok(()) => SystemReply::Set,
                         Err(error) => failed(error),
                     },
                 };

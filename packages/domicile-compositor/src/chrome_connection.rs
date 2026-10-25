@@ -241,6 +241,13 @@ fn read_chrome_messages(
             hub.send_request(ClientRequest::SelectKeymap { keymap });
             Ok(())
         }
+    })
+    .setting_white_points_with({
+        let hub = hub.clone();
+        move |white_point| {
+            hub.send_request(ClientRequest::SetWhitePoint { white_point });
+            Ok(())
+        }
     });
     let mut ready = false;
     // Whether this connection is in the broadcast list. Separate from `ready`

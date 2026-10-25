@@ -1114,6 +1114,12 @@ struct DomicileEngine {
                        base::Unretained(this), std::move(wanted)));
   }
 
+  void SetWhitePoint(float red, float green, float blue) {
+    thread_.task_runner()->PostTask(
+        FROM_HERE, base::BindOnce(&DomicileEngine::SetWhitePointOnThread,
+                                  base::Unretained(this), red, green, blue));
+  }
+
   // Blocks for the browser's answer, like CreateSurface.
   DomicileCaptureId StartCapture(int64_t display_id,
                                  const gfx::Size& size,
@@ -1308,6 +1314,12 @@ struct DomicileEngine {
       std::vector<domicile::mojom::VirtualDisplayPtr> wanted) {
     if (broker_) {
       broker_->ConfigureVirtualDisplays(std::move(wanted));
+    }
+  }
+
+  void SetWhitePointOnThread(float red, float green, float blue) {
+    if (broker_) {
+      broker_->SetWhitePoint(red, green, blue);
     }
   }
 
@@ -1890,6 +1902,15 @@ void domicile_virtual_displays_configure(DomicileEngine* engine,
   // count removes every virtual display.
   if (engine && (displays || count == 0)) {
     engine->ConfigureVirtualDisplays(displays, count);
+  }
+}
+
+void domicile_displays_set_white_point(DomicileEngine* engine,
+                                       float red,
+                                       float green,
+                                       float blue) {
+  if (engine) {
+    engine->SetWhitePoint(red, green, blue);
   }
 }
 

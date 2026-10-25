@@ -507,6 +507,15 @@ describe(App, () => {
       });
     });
 
+    it("titles a group's card in words", async () => {
+      await renderApp("Shell", {
+        options: defineOptions({
+          nightLight: { warmth: option.number("Warmth", 50) },
+        }),
+      });
+      expect(screen.getByText("Night light")).toBeVisible();
+    });
+
     it("removes an option set back to its default", async () => {
       const { host, user } = await renderApp("Shell", {
         config: { shell_options: { clock: { seconds: false } } },

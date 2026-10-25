@@ -18,6 +18,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "ui/display/types/display_color_management.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/display/types/display_mode.h"
 #include "ui/display/types/display_snapshot.h"
@@ -179,6 +180,30 @@ void DrmModeset::Relight() {
       base::BindOnce(&DrmModeset::OnDisplaysReceived, base::Unretained(this)));
 }
 
+void DrmModeset::SetWhitePoint(const DomicileWhitePoint& white_point) {
+  VLOG(1) << "domicile: the compositor wants white drawn as (" << white_point.red
+          << ", " << white_point.green << ", " << white_point.blue << ")";
+  white_point_ = white_point;
+  ApplyWhitePoint();
+}
+
+void DrmModeset::ApplyWhitePoint() {
+  if (!white_point_.has_value()) {
+    return;
+  }
+  const DomicileWhitePoint& white = *white_point_;
+  // An empty curve clears the CRTC's ramp, where an identity ramp would keep
+  // one in the scanout path.
+  const display::GammaAdjustment adjustment =
+      white.red == 1.f && white.green == 1.f && white.blue == 1.f
+          ? display::GammaAdjustment()
+          : display::GammaAdjustment{.curve = display::GammaCurve::MakeScale(
+                                         white.red, white.green, white.blue)};
+  for (const int64_t id : display_ids_) {
+    delegate_->SetGammaAdjustment(id, adjustment);
+  }
+}
+
 void DrmModeset::OnConfigurationChanged() {
   // A hotplug. Re-read so the screen and modeset share one reading.
   delegate_->GetDisplays(
@@ -186,7 +211,9 @@ void DrmModeset::OnConfigurationChanged() {
 }
 
 void DrmModeset::OnDisplaySnapshotsInvalidated() {
-  // Nothing to drop: `OnDisplaysReceived` keeps no snapshots.
+  // `OnDisplaysReceived` keeps no snapshots, but the delegate's display hosts
+  // go with them, and a ramp for a display it no longer has reaches nothing.
+  display_ids_.clear();
 }
 
 bool ModesetWouldChangeAnything(
@@ -213,6 +240,12 @@ void DrmModeset::OnDisplaysReceived(
   // Update the screen first: a window needs somewhere to land even if the
   // modeset fails.
   screen_->OnDisplaysChanged(snapshots, layout_);
+
+  // Only connectors have a CRTC, and so a ramp.
+  display_ids_.clear();
+  for (const display::DisplaySnapshot* snapshot : connectors) {
+    display_ids_.push_back(snapshot->display_id());
+  }
 
   std::vector<display::DisplayConfigurationParams> params =
       ModesetParamsFromSnapshots(snapshots, layout_);
@@ -264,6 +297,7 @@ void DrmModeset::OnDisplaysReceived(
             }
             VLOG(1) << "domicile: the DRM thread confirmed the modeset";
             self->confirmed_ = std::move(asked);
+            self->ApplyWhitePoint();
           },
           weak_factory_.GetWeakPtr(), params),
       {display::ModesetFlag::kCommitModeset});
