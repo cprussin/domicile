@@ -346,9 +346,10 @@ Rules:
 - A float being dragged, or a window being resized, follows the pointer
   without easing. A dragged float carries all its windows, tabs and strip. A
   dragged tiled tab eases into each slot it moves to along its strip.
-- While an edge drag or a modifier resize runs, every `<app>` carries
-  `resizing`, so the engine does not wait for a client to draw each box. Every
-  window, since a tiled edge resizes the windows on both sides.
+- While an edge drag or a modifier resize runs, every `<app>` and `<webview>`
+  carries `resizing`, so the engine does not wait for a client or page to draw
+  each box. Every window, since a tiled edge resizes the windows on both
+  sides.
 - The title bar and contents scale about one shared center (`scaledAbout`).
 - Only windows new since the last render animate open.
 - Hidden windows (behind a tab, on another workspace) stay mounted, so client
