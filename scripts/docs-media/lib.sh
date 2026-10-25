@@ -110,8 +110,20 @@ settle() { # seconds
   sleep "$1"
 }
 
+# Fails the scene if the engine has exited since the desktop started.
+# `domicile` restarts it, so the capture would otherwise go on with a fresh
+# desktop. `scene_cleanup` prints why it exited.
+engine_alive() { # step
+  local log="$SCENE_TMP/domicile.log"
+  if grep -aq "the engine exited" "$log"; then
+    echo "the engine exited before $1." >&2
+    exit 1
+  fi
+}
+
 # The desktop at its own resolution, from the compositor.
 shot() { # name
+  engine_alive "shot $1"
   "$DOMICILE_BIN" screenshot "$MEDIA/$1.png"
   echo "wrote docs/media/$1.png"
 }
@@ -129,25 +141,30 @@ record() { # name, seconds
   wait "$recorder" || true
   ffmpeg -loglevel error -y -i "$webm" -an -c:v libx264 -pix_fmt yuv420p \
     -crf 28 -movflags +faststart "$MEDIA/$1.mp4"
+  engine_alive "the end of record $1"
   echo "wrote docs/media/$1.webm and docs/media/$1.mp4"
 }
 
-# Keys go to the nested sway, which hands them to the desktop's window. Fails
-# the scene if the engine died of them: `domicile` restarts it, so the capture
-# would otherwise go on with a fresh desktop.
+# Keys go to the nested sway, which hands them to the desktop's window.
 keys() { # wtype args...
+  engine_alive "keys $*"
   wtype "$@"
   sleep 1
-  if grep -aq "the engine exited" "$SCENE_TMP/domicile.log"; then
-    echo "the engine exited after keys $*. domicile said:" >&2
-    grep -a -B2 -A5 "the engine exited" "$SCENE_TMP/domicile.log" | tail -40 >&2
-    exit 1
-  fi
+  engine_alive "the end of keys $*"
 }
 
+# Stops what the scene started. First prints the engine's fatal lines if it
+# exited at any point: a scene can fail on its death at a step that does not
+# check for it, and the log's tail is mostly the stack trace.
+#
 # `|| true`: a stopped process's status is not the scene's, and `set -e` would
 # fail a scene that captured everything.
 scene_cleanup() {
+  if grep -aq "the engine exited" "$SCENE_TMP/domicile.log" 2>/dev/null; then
+    echo "the engine exited during the scene. Its fatal lines:" >&2
+    grep -aiE "fatal|check failed|received signal|the engine exited" \
+      "$SCENE_TMP/domicile.log" | head -20 >&2 || true
+  fi
   if [ ${#STARTED[@]} -gt 0 ]; then
     kill "${STARTED[@]}" 2>/dev/null || true
     wait "${STARTED[@]}" 2>/dev/null || true

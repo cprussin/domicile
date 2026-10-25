@@ -22,7 +22,11 @@ nested sway with these helpers (`scripts/docs-media/lib.sh`):
 | `settle <seconds>` | Waits for windows to map and draw. |
 | `shot <name>` | Writes `<name>.png` with `domicile screenshot`. |
 | `record <name> <seconds>` | Writes `<name>.webm` and `<name>.mp4`, muted. |
-| `keys <wtype args...>` | Types into the desktop. Fails the scene if the engine exits. |
+| `keys <wtype args...>` | Types into the desktop. |
+
+`shot`, `record` and `keys` fail the scene if the engine has exited:
+`domicile` restarts it, so the capture would go on with a fresh desktop. A
+scene whose engine exited prints the engine's fatal lines, however it ended.
 
 `foot`, `nvim`, `btop`, `wl-copy`, `grim` and JetBrains Mono are on `PATH` for every scene.
 
