@@ -9,6 +9,41 @@ use std::path::PathBuf;
 use crate::control::{Request, Switch, ThemeChange};
 use crate::power::Power;
 
+/// What `domicile --help` prints.
+///
+/// Every verb in [`verb`] needs a line here; `tests/cli.rs` checks both ways.
+pub const USAGE: &str = "\
+Run a desktop:
+
+  domicile [shell] [--config <file>]
+      Run a desktop on <shell>, or on the shell the config names. The config
+      is ~/.config/domicile/domicile.{ts,tsx,js,mjs,json} unless --config
+      names one.
+
+Ask the running desktop:
+
+  domicile which-shell                  Print the shell it serves
+  domicile load-shell <shell>           Serve another shell, or a new build
+  domicile open-url <url>               Open a browser window
+  domicile open-app <url>               Open a site as an app: no address bar
+  domicile run-app <module>             Run an app module in an app window
+  domicile screenshot [file]            Take the shell's screenshot, or write a PNG
+  domicile send-shell <word>...         Run a shell command, as a keybinding does
+  domicile theme [light|dark|toggle]    Set the theme, or print it
+  domicile disable-while-typing [on|off|toggle]
+                                        Set the touchpad setting, or print it
+  domicile power-off                    Ask, then turn the computer off
+  domicile reboot                       Ask, then restart the computer
+  domicile log-out                      Ask, then end the login session
+
+Without a desktop:
+
+  domicile check-config <file>          Fail with the reason a config is refused
+  domicile install-app <url>            Add a site to your applications
+  domicile uninstall-app <url>          Remove a site install-app added
+  domicile help                         Print this, as do --help and -h
+";
+
 /// An invalid `domicile` command line.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CliError {
@@ -19,18 +54,7 @@ pub enum CliError {
          A config is ~/.config/domicile/domicile.{{ts,tsx,js,mjs,json}}, or \
          --config <path>: a module's `Shell` export, or a JSON config's \
          \"shell\", is the shell when none is given.\n\
-         Or a command for the desktop already running: which-shell, \
-         load-shell <shell>, open-url <url>, open-app <url>, run-app \
-         <module>, screenshot \
-         [file], or \
-         send-shell <command>…, or \
-         disable-while-typing [on|off|toggle], or \
-         theme [light|dark|toggle]. Or \
-         check-config <file> to check a config without running it, or \
-         power-off or reboot to turn the computer off or restart it, or \
-         log-out to end the login session, or \
-         install-app <url> to add a site to your applications, or \
-         uninstall-app <url> to remove one.\n"
+         For a command for the running desktop, see domicile --help.\n"
     )]
     NoShell,
     #[error(
@@ -192,6 +216,8 @@ pub enum Invocation {
     /// Power off or reboot the computer, or log out, after a yes in the
     /// desktop's Access dialog.
     Power { power: Power },
+    /// Print [`USAGE`].
+    Help,
 }
 
 /// Parses the command line.
@@ -213,6 +239,18 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
             config: None,
         });
     };
+    let mut args = args.peekable();
+    if HELP.contains(&first.as_str())
+        || (verb(&first).is_some()
+            && args
+                .peek()
+                .is_some_and(|next| HELP.contains(&next.as_str())))
+    {
+        return match (first.as_str(), args.next()) {
+            ("help", Some(extra)) => Err(CliError::Extra { verb: first, extra }),
+            _ => Ok(Invocation::Help),
+        };
+    }
     if let Some(verb) = verb(&first) {
         return match verb {
             Verb::Asking(request) => match args.next() {
@@ -329,6 +367,9 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
     }
     Ok(Invocation::Run { shell, config })
 }
+
+/// The words that ask for [`USAGE`], first or right after a verb.
+const HELP: [&str; 3] = ["help", "--help", "-h"];
 
 /// The config file flag. Matches the compositor's flag in `arguments.rs`,
 /// which receives it.

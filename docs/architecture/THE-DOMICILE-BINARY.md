@@ -42,6 +42,7 @@ domicile check-config <file>      # exit 1 with the reason if the compositor ref
 domicile power-off                # ask in the Access dialog, then `systemctl poweroff`
 domicile reboot                   # ask in the Access dialog, then `systemctl reboot`
 domicile log-out                  # ask in the Access dialog, then `loginctl terminate-session`
+domicile --help                   # every verb; also -h, help, and <verb> --help
 ```
 
 Config file:

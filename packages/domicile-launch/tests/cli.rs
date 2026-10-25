@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use domicile_launch::cli::{invocation, CliError, Invocation};
+use domicile_launch::cli::{invocation, CliError, Invocation, USAGE};
 use domicile_launch::control::{Request, Switch, ThemeChange};
 use domicile_launch::power::Power;
 
@@ -357,6 +357,86 @@ fn theme_refuses_anything_else() {
             extra: "now".to_string()
         })
     );
+}
+
+#[test]
+fn help_is_asked_for_by_flag_word_or_after_a_verb() {
+    for line in [
+        &["--help"][..],
+        &["-h"],
+        &["help"],
+        &["theme", "--help"],
+        &["send-shell", "-h"],
+    ] {
+        assert_eq!(run(line), Ok(Invocation::Help), "{line:?}");
+    }
+}
+
+#[test]
+fn help_after_a_verb_s_first_argument_is_that_argument() {
+    // `exec` runs whatever follows, flags included.
+    assert_eq!(
+        run(&["send-shell", "exec", "foot", "--help"]),
+        Ok(Invocation::Ask {
+            request: Request::SendShell {
+                command: vec!["exec".to_string(), "foot".to_string(), "--help".to_string()]
+            }
+        })
+    );
+}
+
+#[test]
+fn help_takes_no_arguments() {
+    assert_eq!(
+        run(&["help", "theme"]),
+        Err(CliError::Extra {
+            verb: "help".to_string(),
+            extra: "theme".to_string()
+        })
+    );
+}
+
+#[test]
+fn the_usage_lists_every_verb_and_each_one_parses() {
+    let listed: Vec<String> = USAGE
+        .lines()
+        .filter_map(|line| line.trim_start().strip_prefix("domicile "))
+        .filter_map(|rest| rest.split_whitespace().next())
+        .filter(|word| !word.starts_with(['<', '[', '-']))
+        .map(str::to_string)
+        .collect();
+    for verb in [
+        "which-shell",
+        "load-shell",
+        "open-url",
+        "open-app",
+        "run-app",
+        "install-app",
+        "uninstall-app",
+        "screenshot",
+        "send-shell",
+        "check-config",
+        "disable-while-typing",
+        "theme",
+        "power-off",
+        "reboot",
+        "log-out",
+        "help",
+    ] {
+        assert!(
+            listed.contains(&verb.to_string()),
+            "{verb} is not in --help"
+        );
+    }
+    for verb in &listed {
+        assert!(
+            !matches!(
+                run(&[verb]),
+                Ok(Invocation::Run { .. }) | Err(CliError::TooMany { .. })
+            ),
+            "--help lists {verb}, which is not a verb"
+        );
+    }
 }
 
 #[test]

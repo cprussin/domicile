@@ -21,7 +21,7 @@ use std::time::{Duration, Instant};
 use domicile_launch::address::url_for;
 use domicile_launch::app_entry::app_entry;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
-use domicile_launch::cli::{invocation, CliError, Invocation};
+use domicile_launch::cli::{invocation, CliError, Invocation, USAGE};
 use domicile_launch::command_socket::{
     clear_browsing_data, clear_site_data, config_extensions, delete_history, disable_while_typing,
     extensions, history, load_shell, load_unpacked, media_devices, open_app, open_url, run_app,
@@ -133,6 +133,10 @@ fn run() -> Result<ExitCode, String> {
         }),
         Invocation::Check { config } => check(&config).map(|()| ExitCode::SUCCESS),
         Invocation::Power { power } => powered(power),
+        Invocation::Help => {
+            print!("{USAGE}");
+            Ok(ExitCode::SUCCESS)
+        }
         Invocation::InstallApp { url } => installed(&url),
         Invocation::UninstallApp { url } => uninstalled(&url),
     }
