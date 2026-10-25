@@ -340,8 +340,9 @@ pub enum Asked<'a> {
 ///   (`Reach::Readout`), calls that stop what the shell already started, and
 ///   listening for shell commands and window requests (`Reach::Listens`), so
 ///   a page reloaded while locked hears them after unlock, and setting window
-///   states (`Reach::Arranges`), like `SetAppBounds`. Sending a command is
-///   refused.
+///   states (`Reach::Arranges`), like `SetAppBounds`, and the monitors' color
+///   temperature (`Reach::Tints`), so a night light follows the clock. Sending
+///   a command is refused.
 ///   Processes and watches started before the lock keep running.
 pub fn refused(asked: Asked) -> Option<Refusal> {
     match asked {
@@ -371,6 +372,7 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::SetOutputSize { .. }
             | ClientRequest::SetAppBounds { .. }
             | ClientRequest::SetWindowStates { .. }
+            | ClientRequest::SetWhitePoint { .. }
             | ClientRequest::ChromeHello { .. }
             | ClientRequest::ClipboardCopied { .. }
             | ClientRequest::Unlock { .. }
@@ -392,7 +394,8 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | Reach::Readout
             | Reach::Stops
             | Reach::Listens
-            | Reach::Arranges,
+            | Reach::Arranges
+            | Reach::Tints,
         ) => None,
     }
 }
@@ -877,6 +880,11 @@ mod tests {
         assert_eq!(refused(Asked::System(Reach::Listens)), None);
         assert_eq!(refused(Asked::System(Reach::Arranges)), None);
         assert_eq!(
+            refused(Asked::System(Reach::Tints)),
+            None,
+            "a night light turns on at sunset whether or not anybody is at the desk"
+        );
+        assert_eq!(
             refused(Asked::System(Reach::Acts)),
             Some(Refusal::Command),
             "a file read, a write or a process is the desktop acting for \
@@ -921,6 +929,12 @@ mod tests {
                 ClientRequest::SetWindowStates {
                     app_id: "app-1".into(),
                     states: vec![domicile_protocol::WindowState::TiledLeft],
+                },
+            ),
+            (
+                "the page warming the monitors",
+                ClientRequest::SetWhitePoint {
+                    white_point: domicile_host::white_point::white_point(3400),
                 },
             ),
             (

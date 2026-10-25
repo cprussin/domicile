@@ -1138,6 +1138,76 @@ mod window_states {
     }
 }
 
+/// The color temperature the shell sets every monitor to, as a night light
+/// does.
+mod color_temperature {
+    use domicile_host::white_point::{white_point, WhitePoint};
+
+    use super::*;
+
+    #[test]
+    fn setting_a_temperature_hands_its_white_point_to_the_compositor() {
+        let (told, asked) = channel();
+        let (system, heard) = system_in(&std::env::temp_dir());
+        let system = system.setting_white_points_with(move |point| {
+            told.send(point).unwrap();
+            Ok(())
+        });
+
+        system.handle(1, SystemRequest::SetColorTemperature { kelvin: 3400 });
+
+        assert_eq!(reply(&heard, 1), SystemReply::Set);
+        assert_eq!(asked.recv().unwrap(), white_point(3400));
+    }
+
+    #[test]
+    fn a_temperature_out_of_range_is_refused() {
+        let (told, asked) = channel::<WhitePoint>();
+        let (system, heard) = system_in(&std::env::temp_dir());
+        let system = system.setting_white_points_with(move |point| {
+            told.send(point).unwrap();
+            Ok(())
+        });
+
+        system.handle(1, SystemRequest::SetColorTemperature { kelvin: 999 });
+        system.handle(2, SystemRequest::SetColorTemperature { kelvin: 6501 });
+
+        assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::InvalidInput);
+        assert_eq!(failure(reply(&heard, 2)), SystemErrorKind::InvalidInput);
+        assert!(asked.try_recv().is_err());
+    }
+
+    #[test]
+    fn a_system_that_sets_no_white_point_says_so() {
+        let (system, heard) = system_in(&std::env::temp_dir());
+
+        system.handle(1, SystemRequest::SetColorTemperature { kelvin: 3400 });
+
+        assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::Other);
+    }
+
+    /// A night light turns on at sunset whether or not the desktop is locked.
+    #[test]
+    fn setting_a_temperature_tints() {
+        assert_eq!(
+            reach(&SystemRequest::SetColorTemperature { kelvin: 3400 }),
+            Reach::Tints
+        );
+    }
+
+    #[test]
+    fn an_app_may_not_set_a_temperature() {
+        let Some(HostMessage::SystemReply {
+            id: 4,
+            reply: SystemReply::Failed { error },
+        }) = refused_to_an_app(4, &SystemRequest::SetColorTemperature { kelvin: 3400 })
+        else {
+            panic!("expected a failure");
+        };
+        assert_eq!(error.kind, SystemErrorKind::PermissionDenied);
+    }
+}
+
 /// What a refused request gets while the desktop is locked.
 mod locked {
     use super::*;

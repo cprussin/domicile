@@ -9,6 +9,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/display/types/display_color_management.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/ozone/platform/drm/domicile/drm_screen.h"
 #include "ui/ozone/public/ozone_platform.h"
@@ -335,6 +336,10 @@ class FakeDelegate : public display::NativeDisplayDelegate {
 
   bool was_asked() const { return !pending_.is_null(); }
   size_t asks() const { return asked_.size(); }
+  // Each `SetGammaAdjustment`, as the display it named and its curve.
+  const std::vector<std::pair<int64_t, display::GammaCurve>>& gamma() const {
+    return gamma_;
+  }
 
   void SetSnapshots(
       std::vector<raw_ptr<display::DisplaySnapshot, VectorExperimental>> s) {
@@ -371,7 +376,10 @@ class FakeDelegate : public display::NativeDisplayDelegate {
       const display::ColorTemperatureAdjustment&) override {}
   void SetColorCalibration(int64_t,
                            const display::ColorCalibration&) override {}
-  void SetGammaAdjustment(int64_t, const display::GammaAdjustment&) override {}
+  void SetGammaAdjustment(int64_t display_id,
+                          const display::GammaAdjustment& adjustment) override {
+    gamma_.emplace_back(display_id, adjustment.curve);
+  }
   void SetPrivacyScreen(int64_t,
                         bool,
                         display::SetPrivacyScreenCallback callback) override {
@@ -393,6 +401,7 @@ class FakeDelegate : public display::NativeDisplayDelegate {
   std::vector<std::vector<display::DisplayConfigurationParams>> asked_;
   display::ConfigureCallback pending_;
   std::optional<bool> inline_answer_;
+  std::vector<std::pair<int64_t, display::GammaCurve>> gamma_;
 };
 
 // The first `Configure` goes out before the GPU process has a DRM device, so
@@ -538,6 +547,97 @@ TEST(DrmModesetTest, ARelitScreenStillSuppressesTheHotplugItCauses) {
   EXPECT_EQ(fake->asks(), 2u)
       << "the CHANGE the relight's own Configure emits is still this driver's "
          "own echo";
+}
+
+// White as the curve draws it, per channel, out of 65535.
+std::vector<uint16_t> WhiteOf(const display::GammaCurve& curve) {
+  const display::GammaRampRGBEntry& white = curve.lut().back();
+  return {white.r, white.g, white.b};
+}
+
+// A night light warms every monitor the reading has.
+TEST(DrmModesetTest, AWhitePointReachesEveryDisplay) {
+  auto owned = std::make_unique<FakeDelegate>();
+  FakeDelegate* fake = owned.get();
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(SnapshotBuilder().Id(11).Build());
+  snapshots.push_back(SnapshotBuilder().Id(12).Build());
+  fake->SetSnapshots(Pointers(snapshots));
+
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager, nullptr);
+  DrmModeset modeset(std::move(owned), &screen);
+  modeset.Start();
+
+  modeset.SetWhitePoint({.red = 1.f, .green = 0.5f, .blue = 0.25f});
+
+  ASSERT_EQ(fake->gamma().size(), 2u);
+  EXPECT_EQ(fake->gamma()[0].first, 11);
+  EXPECT_EQ(fake->gamma()[1].first, 12);
+  EXPECT_EQ(WhiteOf(fake->gamma()[0].second),
+            (std::vector<uint16_t>{65535, 32768, 16384}));
+}
+
+// Colors as they are clear the ramp rather than write an identity one.
+TEST(DrmModesetTest, ANeutralWhitePointClearsTheRamp) {
+  auto owned = std::make_unique<FakeDelegate>();
+  FakeDelegate* fake = owned.get();
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(SnapshotBuilder().Id(11).Build());
+  fake->SetSnapshots(Pointers(snapshots));
+
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager, nullptr);
+  DrmModeset modeset(std::move(owned), &screen);
+  modeset.Start();
+
+  modeset.SetWhitePoint({.red = 1.f, .green = 1.f, .blue = 1.f});
+
+  ASSERT_EQ(fake->gamma().size(), 1u);
+  EXPECT_TRUE(fake->gamma()[0].second.IsDefaultIdentity());
+}
+
+// A resume or a console switch back can leave the CRTCs at another process's
+// ramp, so each confirmed modeset sets the white point again.
+TEST(DrmModesetTest, AConfirmedModesetSetsTheWhitePointAgain) {
+  auto owned = std::make_unique<FakeDelegate>();
+  FakeDelegate* fake = owned.get();
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(SnapshotBuilder().Id(11).Build());
+  fake->SetSnapshots(Pointers(snapshots));
+
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager, nullptr);
+  DrmModeset modeset(std::move(owned), &screen);
+  modeset.Start();
+  modeset.SetWhitePoint({.red = 1.f, .green = 0.5f, .blue = 0.25f});
+  ASSERT_EQ(fake->gamma().size(), 1u);
+
+  fake->Answer(true);
+
+  ASSERT_EQ(fake->gamma().size(), 2u);
+  EXPECT_EQ(WhiteOf(fake->gamma()[1].second),
+            (std::vector<uint16_t>{65535, 32768, 16384}));
+}
+
+// The browser's display hosts go with their snapshots, and a ramp for one
+// that is gone would reach nothing. The next reading names the displays.
+TEST(DrmModesetTest, AWhitePointWaitsForTheReadingAfterAnInvalidation) {
+  auto owned = std::make_unique<FakeDelegate>();
+  FakeDelegate* fake = owned.get();
+  std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
+  snapshots.push_back(SnapshotBuilder().Id(11).Build());
+  fake->SetSnapshots(Pointers(snapshots));
+
+  DrmWindowHostManager window_manager;
+  DrmScreen screen(&window_manager, nullptr);
+  DrmModeset modeset(std::move(owned), &screen);
+  modeset.Start();
+  fake->Answer(true);
+
+  modeset.OnDisplaySnapshotsInvalidated();
+  modeset.SetWhitePoint({.red = 1.f, .green = 0.5f, .blue = 0.25f});
+  EXPECT_TRUE(fake->gamma().empty());
 }
 
 }  // namespace

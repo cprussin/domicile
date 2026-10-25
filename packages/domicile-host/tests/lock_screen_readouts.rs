@@ -271,6 +271,41 @@ mod battery {
     }
 }
 
+mod ambient_light {
+    use super::*;
+
+    fn claim() -> SystemRequest {
+        SystemRequest::DbusCall {
+            bus: Bus::System,
+            destination: "net.hadess.SensorProxy".into(),
+            path: "/net/hadess/SensorProxy".into(),
+            interface: "net.hadess.SensorProxy".into(),
+            member: "ClaimLight".into(),
+            signature: "".into(),
+            body: "[]".into(),
+        }
+    }
+
+    #[test]
+    fn claiming_another_sensor_is_not() {
+        let misses: [Miss<Call>; 3] = [
+            ("the proximity sensor", |call| {
+                call.member = "ClaimProximity".into()
+            }),
+            ("the compass", |call| {
+                call.path = "/net/hadess/SensorProxy/Compass".into()
+            }),
+            ("other service", |call| {
+                call.destination = "org.example.Evil".into()
+            }),
+        ];
+        assert_eq!(reach(&claim()), Reach::Readout);
+        for (why, change) in misses {
+            assert_eq!(reach(&changed(claim(), change)), Reach::Acts, "{why}");
+        }
+    }
+}
+
 mod brightness {
     use super::*;
 

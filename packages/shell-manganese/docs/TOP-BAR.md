@@ -84,7 +84,7 @@ Every bar and the lock screen share one watch per system readout. See
   ([LOCK.md](../../../docs/LOCK.md#lock-screen-readouts)):
   - Bluetooth: the icon, named as on the desktop; not a button.
   - Volume: the default output's slider and mute; no mixer.
-  - Brightness and battery: as on the desktop.
+  - Brightness, the night light and battery: as on the desktop.
 - Panels draw over the lock screen and keep the keyboard until they close.
   Then it goes back to the passphrase.
 
@@ -212,9 +212,16 @@ Every bar and the lock screen share one watch per system readout. See
 ## Brightness
 
 - A light bulb icon: empty, lit filament or filled by level.
-- Hidden only with no backlight in `/sys/class/backlight`. Until there is a
+- With no backlight in `/sys/class/backlight`, a moon, filled while the night
+  light is on, that opens the night light switch alone. Until there is a
   level, a dimmed bulb, `Brightness unavailable`.
-- Click for a slider in a popover. Scroll over it to step by 5%.
+- Click for a slider and the night light switch in a popover. Scroll over it
+  to step by 5%.
+- The night light switch works as on macOS: against the schedule until its
+  next change (sunrise, or the custom end), or for good with no schedule.
+  It is kept across reloads (`night-light:v1` in `localStorage`).
+- Automatic brightness and the schedule are options
+  ([README](../README.md#configure)), on the Settings app's Shell page.
 - The level never goes to zero. See [Host readouts](HOST-READOUTS.md#brightness).
 - The slider shows the level `/sys` reports. During a drag it stays under the
   pointer.

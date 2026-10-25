@@ -252,3 +252,21 @@ code and the compositor logs one line at startup.
 - `DisplayList::UpdateDisplay` does not copy either field. This is safe: the
   display id comes from the EDID, so the same id is the same panel, with the
   same size and native mode.
+
+## Night light
+
+The shell sets a color temperature; the compositor scales every monitor's
+gamma ramp to that white.
+
+```
+set_color_temperature {kelvin}  →  domicile_host::white_point  →  domicile_displays_set_white_point
+  → FrameSinkBroker.SetWhitePoint  →  OzonePlatform::SetDomicileWhitePoint  →  DrmModeset::SetWhitePoint
+  → NativeDisplayDelegate::SetGammaAdjustment
+```
+
+- `kelvin` is 1000 to 6500. 6500 is neutral and clears the ramp.
+- A gamma ramp, not a color matrix, so it works on drivers without a CTM.
+- `DrmModeset` sets it again after each modeset, so a new monitor or a VT
+  switch keeps it. The compositor sends it again after an engine restart.
+- A nested desktop does nothing: the host compositor owns the screen.
+- Not yet: `wlr-gamma-control` for clients such as gammastep.

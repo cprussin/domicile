@@ -580,6 +580,15 @@ DOMICILE_ENGINE_EXPORT void domicile_pointers_configure(
     const DomicilePointerTarget* targets,
     uint32_t count);
 
+// Sets what each channel is multiplied by on every display, for a night
+// light. 1 leaves a channel as it is; each is 0 to 1. The browser keeps it and
+// sets it again after each modeset. Ignored off a tty.
+DOMICILE_ENGINE_EXPORT void domicile_displays_set_white_point(
+    DomicileEngine* engine,
+    float red,
+    float green,
+    float blue);
+
 // Sets the contents of one of the desktop's clipboards.
 //
 // The compositor reads every seat selection eagerly, so it pushes the bytes

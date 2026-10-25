@@ -7,6 +7,7 @@
 //! Chromium build. A missing library is still an error, never a silent
 //! fallback.
 
+use domicile_host::white_point::WhitePoint;
 use std::cell::{Cell, RefCell};
 use std::ffi::{c_char, c_int, c_void, CString, NulError};
 use std::os::fd::{AsRawFd as _, BorrowedFd, OwnedFd, RawFd};
@@ -1252,6 +1253,28 @@ impl Engine {
         // SAFETY: as above, and `devices` and `raw` outlive the call; the
         // engine copies them.
         unsafe { f(self.handle, raw.as_ptr(), raw.len() as u32) };
+    }
+
+    /// Sets the white point every monitor draws with, as a gamma ramp per
+    /// CRTC. Nested, the engine ignores it: the host session draws the
+    /// monitors.
+    pub fn set_white_point(&self, white_point: WhitePoint) {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, f32, f32, f32)> = match self.symbol(
+            b"domicile_displays_set_white_point\0",
+            "domicile_displays_set_white_point",
+        ) {
+            Ok(symbol) => symbol,
+            Err(_) => return,
+        };
+        // SAFETY: as above.
+        unsafe {
+            f(
+                self.handle,
+                white_point.red as f32,
+                white_point.green as f32,
+                white_point.blue as f32,
+            )
+        };
     }
 
     /// Releases an imported buffer after the client destroys its `wl_buffer`.

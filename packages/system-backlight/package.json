@@ -4,7 +4,7 @@
     "@domicile-desktop/sdk": "workspace:*",
     "zod": "catalog:"
   },
-  "description": "Screen brightness for a Domicile shell: reads /sys/class/backlight, watches it and sets it through logind, on @domicile-desktop/sdk/system.",
+  "description": "Screen brightness for a Domicile shell: reads /sys/class/backlight, watches it and sets it through logind, and reads the ambient light sensor through iio-sensor-proxy, on @domicile-desktop/sdk/system.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@domicile-desktop/test-support": "workspace:*",
@@ -23,6 +23,10 @@
     "./set-brightness": {
       "types": "./dist/set-brightness.d.ts",
       "default": "./dist/set-brightness.js"
+    },
+    "./watch-ambient-light": {
+      "types": "./dist/watch-ambient-light.d.ts",
+      "default": "./dist/watch-ambient-light.js"
     },
     "./watch-brightness": {
       "types": "./dist/watch-brightness.d.ts",

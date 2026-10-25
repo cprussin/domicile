@@ -1765,6 +1765,12 @@ pub enum SystemRequest {
     /// with [`SystemReply::Started`], then a [`SystemEvent::WindowRequest`]
     /// per request. [`SystemRequest::Unwatch`] ends it.
     WindowRequests,
+    /// Draw every monitor as if its white were a light of `kelvin`, as a
+    /// night light does; `6500` draws colors as they are. Answered with
+    /// [`SystemReply::Set`], or [`SystemErrorKind::InvalidInput`] outside
+    /// 1000 to 6500. Changes nothing on a nested desktop. See
+    /// `docs/SHELL-SYSTEM-ACCESS.md`.
+    SetColorTemperature { kelvin: u32 },
 }
 
 /// An `xdg_toplevel` state the shell sets with
@@ -1853,7 +1859,7 @@ pub enum SystemReply {
     Preview { frame: String },
     /// At least one page heard the command.
     Sent,
-    /// The window's states were replaced.
+    /// The window's states were replaced, or the color temperature set.
     Set,
     /// The call failed. Nothing else follows under this id.
     Failed { error: SystemError },
