@@ -212,7 +212,15 @@ fn read_chrome_messages(
             Ok(())
         }
     })
-    .sharing_window_requests(hub.window_requests.clone());
+    .sharing_window_requests(hub.window_requests.clone())
+    .adding_virtual_monitors_with({
+        let hub = hub.clone();
+        move |wanted| {
+            let queue = hub.clone();
+            hub.virtual_monitors
+                .add(wanted, move |request| queue.send_request(request))
+        }
+    });
     let mut ready = false;
     // Whether this connection is in the broadcast list. Separate from `ready`
     // because a socket can send `hello` twice, and the writer must not be added

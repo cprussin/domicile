@@ -628,3 +628,31 @@ fn the_shell_sets_window_states_and_hears_what_clients_ask_for() {
         );
     }
 }
+
+/// The shell adds a monitor with no connector to cast the desk to a TV.
+#[test]
+fn the_shell_adds_a_virtual_monitor() {
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":5,"request":{"call":"virtual_monitor","name":"Living Room TV","width":1920,"height":1080,"refresh_mhz":60000}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 5,
+            request: SystemRequest::VirtualMonitor {
+                name: "Living Room TV".into(),
+                width: 1920,
+                height: 1080,
+                refresh_mhz: 60_000,
+            },
+        }
+    );
+    assert_eq!(
+        host(&HostMessage::SystemReply {
+            id: 5,
+            reply: SystemReply::VirtualMonitor {
+                output: "virtual-1".into(),
+            },
+        }),
+        r#"{"type":"system_reply","id":5,"reply":{"kind":"virtual_monitor","output":"virtual-1"}}"#
+    );
+}

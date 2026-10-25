@@ -238,6 +238,21 @@ typedef struct DomicilePointerTarget {
   int64_t display_id;
 } DomicilePointerTarget;
 
+// A monitor with no connector, for `domicile_virtual_displays_configure`. The
+// desk extends onto it, and only a capture shows it.
+typedef struct DomicileVirtualDisplay {
+  // Its display id, picked by the compositor. Must not collide with a
+  // connector's EDID-derived id; the compositor sets the top bit.
+  int64_t id;
+  // Its mode, in physical pixels.
+  int32_t width;
+  int32_t height;
+  // Its refresh rate in mHz.
+  int32_t refresh_mhz;
+  // Its name, such as the TV it is cast to. Borrowed for the call.
+  const char* name;
+} DomicileVirtualDisplay;
+
 // How a frame reached the screen, for `presented`. The values are
 // wp_presentation_feedback.kind's.
 typedef uint32_t DomicilePresentedFlags;
@@ -578,6 +593,17 @@ DOMICILE_ENGINE_EXPORT void domicile_displays_configure(
 DOMICILE_ENGINE_EXPORT void domicile_pointers_configure(
     DomicileEngine* engine,
     const DomicilePointerTarget* targets,
+    uint32_t count);
+
+// Sets the virtual displays, replacing the last list.
+//
+// Each joins the next `displays` callback as a display on connector
+// `virtual-<n>`, n being its id without the top bit, laid out by
+// `domicile_displays_configure` like any other. No CRTC lights for it. Ignored off a tty. The records and strings are borrowed
+// for the call.
+DOMICILE_ENGINE_EXPORT void domicile_virtual_displays_configure(
+    DomicileEngine* engine,
+    const DomicileVirtualDisplay* displays,
     uint32_t count);
 
 // Sets the contents of one of the desktop's clipboards.
