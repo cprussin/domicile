@@ -363,6 +363,7 @@ export enum WindowActionKind {
   GroupFloated,
   GroupFullscreened,
   GroupGrabbed,
+  IdleInhibitorToggled,
   KeyPressed,
   LauncherDismissed,
   LauncherToggled,
@@ -371,6 +372,8 @@ export enum WindowActionKind {
   ModeSet,
   ModeSwapped,
   NewTabPressed,
+  NotificationsCleared,
+  NotificationsToggled,
   PageFullscreened,
   ParentFocused,
   PopupPlaced,
@@ -699,6 +702,11 @@ export const WindowAction = {
     kind: WindowActionKind.GroupGrabbed as const,
   }),
 
+  /** `idle-inhibitor`. The shell holds or lets go of the screens. */
+  IdleInhibitorToggled: () => ({
+    kind: WindowActionKind.IdleInhibitorToggled as const,
+  }),
+
   /**
    * A key ran a command. See {@link WindowState.pressed}.
    */
@@ -749,6 +757,19 @@ export const WindowAction = {
   NewTabPressed: (id: string) => ({
     id,
     kind: WindowActionKind.NewTabPressed as const,
+  }),
+
+  /** `notifications clear`. The shell clears the drawer. */
+  NotificationsCleared: () => ({
+    kind: WindowActionKind.NotificationsCleared as const,
+  }),
+
+  /**
+   * `notifications`. The shell opens the drawer on the screen with the
+   * keyboard, or closes it.
+   */
+  NotificationsToggled: () => ({
+    kind: WindowActionKind.NotificationsToggled as const,
   }),
 
   /**
@@ -1219,8 +1240,11 @@ const reduceAction = (
       // The compositor takes it, through the portal dialog.
       return state;
     }
-    case WindowActionKind.MediaKeyPressed: {
-      // The shell sets the volume or brightness; no window changes.
+    case WindowActionKind.MediaKeyPressed:
+    case WindowActionKind.NotificationsToggled:
+    case WindowActionKind.NotificationsCleared:
+    case WindowActionKind.IdleInhibitorToggled: {
+      // The shell carries these out; no window changes.
       return state;
     }
     case WindowActionKind.CommandExecuted: {

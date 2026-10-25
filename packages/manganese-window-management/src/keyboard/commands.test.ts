@@ -4,13 +4,26 @@ import { KeyActionKind } from "@domicile-desktop/sdk/key-action";
 import { parseCommand } from "./command";
 import {
   brightness,
+  clearNotifications,
   DEFAULT_KEYBINDINGS,
   exec,
+  idleInhibitor,
   micMute,
+  notifications,
   screenshot,
   searchClipboard,
   volume,
 } from "./commands";
+
+describe("manganese's command builders", () => {
+  it("build the notification and idle commands manganese parses", () => {
+    expect([notifications(), clearNotifications(), idleInhibitor()]).toEqual([
+      { args: ["notifications"], kind: KeyActionKind.SendShell },
+      { args: ["notifications", "clear"], kind: KeyActionKind.SendShell },
+      { args: ["idle-inhibitor"], kind: KeyActionKind.SendShell },
+    ]);
+  });
+});
 
 describe("manganese's default keys", () => {
   // Every default binding must parse, or that key does nothing.

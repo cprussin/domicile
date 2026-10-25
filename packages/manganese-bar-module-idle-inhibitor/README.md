@@ -21,6 +21,10 @@ a shell reload lets go of it. See
 [TOP-BAR.md](../shell-manganese/docs/TOP-BAR.md#idle-inhibitor) and
 [IDLE.md](../../docs/IDLE.md#idle-inhibitors).
 
+The `idle-inhibitor` command toggles the same inhibitor from a key or a
+terminal: `domicile send-shell idle-inhibitor`. The shell reaches it through
+`deskIdleInhibitor` in `./desk-idle-inhibitor`.
+
 ## Test
 
 ```sh

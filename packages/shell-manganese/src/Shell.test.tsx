@@ -349,6 +349,9 @@ const MANGANESE_KEYS: ShellKeybindings = {
     line("Return", true, "send-shell lock"),
     line("space", false, "send-shell launcher"),
     line("d", false, "send-shell launcher"),
+    line("n", false, "send-shell notifications"),
+    line("n", true, "send-shell notifications clear"),
+    line("i", false, "send-shell idle-inhibitor"),
     ...DIRECTIONS.map(([keysym, way]) =>
       line(keysym, false, `send-shell focus ${way}`),
     ),
@@ -1054,6 +1057,16 @@ describe("Shell", () => {
     });
   });
 
+  describe("the idle inhibitor", () => {
+    it("is held from `idle-inhibitor`, as from the bar's eye", () => {
+      renderShell();
+
+      press("i");
+
+      expect(screen.getByRole("button", { name: /Screens/ })).toBeDisabled();
+    });
+  });
+
   describe("the lock screen", () => {
     it("says why the compositor refused a passphrase, and how long to wait", async () => {
       renderShell();
@@ -1351,6 +1364,40 @@ describe("Shell", () => {
       await userEvent.click(
         await screen.findByRole("button", { name: "Clear all" }),
       );
+
+      expect(domicile.calls).toContainEqual(["dismissNotifications", [2, 1]]);
+    });
+
+    it("opens the drawer from `notifications`, on the screen with the keyboard", async () => {
+      renderShell([LEFT, RIGHT]);
+      clientAppears("one");
+      press("l");
+
+      press("n");
+
+      expect(await screen.findByRole("dialog")).toBeVisible();
+      expect(dialogBox()).toStrictEqual({ left: "1920px", width: "1280px" });
+    });
+
+    it("closes the drawer on a second `notifications`", async () => {
+      renderShell();
+      press("n");
+      await screen.findByRole("dialog");
+
+      press("n");
+
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog")).toBeNull();
+      });
+    });
+
+    it("clears them all from `notifications clear`", () => {
+      renderShell();
+      domicile.set({
+        notifications: [arrived(1, "Older"), arrived(2, "Newer")],
+      });
+
+      press("n", true);
 
       expect(domicile.calls).toContainEqual(["dismissNotifications", [2, 1]]);
     });

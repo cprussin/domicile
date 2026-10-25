@@ -11,6 +11,7 @@ import { deskBacklight } from "@domicile-desktop/manganese-bar-module-brightness
 import { useBrightnessKeys } from "@domicile-desktop/manganese-bar-module-brightness/useBrightnessKeys";
 import type { ClockOptions } from "@domicile-desktop/manganese-bar-module-clock/clock-options";
 import { ClockOptionsContext } from "@domicile-desktop/manganese-bar-module-clock/clock-options";
+import { deskIdleInhibitor } from "@domicile-desktop/manganese-bar-module-idle-inhibitor/desk-idle-inhibitor";
 import { PortalSignIn } from "@domicile-desktop/manganese-bar-module-network/PortalSignIn";
 import { useCaptivePortal } from "@domicile-desktop/manganese-bar-module-network/useCaptivePortal";
 import { popupShown } from "@domicile-desktop/manganese-bar-module-tray/extensions/shown";
@@ -193,7 +194,12 @@ export const Desktop = ({
   // page's life, because the toaster subscribes to it once.
   const [toasts] = useState(createToastManager);
   const notifications = useNotifications(domicile, toasts);
-  const { read } = notifications;
+  const { dismiss: dismissNotifications, read } = notifications;
+  // What `notifications clear` dismisses, as the drawer's "Clear all" does.
+  const notificationIds = useMemo(
+    () => notifications.items.map(({ id }) => id),
+    [notifications.items],
+  );
   const now = useNow();
   // The screen whose bell last opened the drawer. Kept after it closes, so the
   // drawer slides out on that screen. Opening it marks everything read and
@@ -288,23 +294,58 @@ export const Desktop = ({
   // pointer.
   const onAction = useCallback(
     (action: WindowAction) => {
-      if (action.kind === WindowActionKind.MediaKeyPressed) {
-        const level = pressMediaKey(
-          { brightness: brightnessKeys, volume: volumeKeys },
-          action.key,
-        );
-        if (level !== undefined) {
-          setLevelPress((last) => ({ count: (last?.count ?? 0) + 1, level }));
+      switch (action.kind) {
+        case WindowActionKind.MediaKeyPressed: {
+          const level = pressMediaKey(
+            { brightness: brightnessKeys, volume: volumeKeys },
+            action.key,
+          );
+          if (level !== undefined) {
+            setLevelPress((last) => ({
+              count: (last?.count ?? 0) + 1,
+              level,
+            }));
+          }
+          break;
         }
-      } else {
-        spendShift();
-        act(action);
-        // Moves the pointer with the keyboard; see `usePointerWarp`.
-        // Dispatched in the same turn so both land in one render.
-        act(WindowAction.KeyPressed());
+        // Like a media key, these change no window.
+        case WindowActionKind.NotificationsToggled: {
+          if (notificationsOpen) {
+            setNotificationsOpen(false);
+          } else {
+            openNotifications(windows.focused);
+          }
+          break;
+        }
+        case WindowActionKind.NotificationsCleared: {
+          dismissNotifications(notificationIds);
+          break;
+        }
+        case WindowActionKind.IdleInhibitorToggled: {
+          deskIdleInhibitor(domicile).toggle();
+          break;
+        }
+        default: {
+          spendShift();
+          act(action);
+          // Moves the pointer with the keyboard; see `usePointerWarp`.
+          // Dispatched in the same turn so both land in one render.
+          act(WindowAction.KeyPressed());
+        }
       }
     },
-    [act, brightnessKeys, spendShift, volumeKeys],
+    [
+      act,
+      brightnessKeys,
+      dismissNotifications,
+      domicile,
+      notificationIds,
+      notificationsOpen,
+      openNotifications,
+      spendShift,
+      volumeKeys,
+      windows.focused,
+    ],
   );
 
   // Memoized so the stage redraws only when what it shows changes.

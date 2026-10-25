@@ -27,7 +27,8 @@
     "node": ">=24"
   },
   "exports": {
-    ".": "./src/bar-item.tsx"
+    ".": "./src/bar-item.tsx",
+    "./desk-idle-inhibitor": "./src/desk-idle-inhibitor.ts"
   },
   "files": [
     "src/**",

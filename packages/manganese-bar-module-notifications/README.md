@@ -19,6 +19,9 @@ export const Shell = runManganese({
 It takes no props. It reads `useBar()` and `useNotificationsDrawer()` from `@domicile-desktop/manganese-notifications/notifications-context`. See
 [TOP-BAR.md](../shell-manganese/docs/TOP-BAR.md).
 
+The `notifications` and `notifications clear` commands open the drawer and
+clear it from a key or a terminal: `domicile send-shell notifications`.
+
 ## Test
 
 ```sh
