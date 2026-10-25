@@ -4,6 +4,7 @@
 #ifndef COMPONENTS_DOMICILE_ENGINE_SURFACE_SUBMITS_H_
 #define COMPONENTS_DOMICILE_ENGINE_SURFACE_SUBMITS_H_
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <vector>
@@ -83,6 +84,49 @@ class SurfaceSubmits {
 
   base::circular_deque<Queued> queued_;
   uint64_t next_ticket_ = 1;
+};
+
+// A surface's newest ready submit, held while viz has too many of the
+// surface's frames it has not drawn or discarded.
+//
+// The sink never asks for BeginFrames and viz acks a frame when it takes it,
+// not when it draws, so a client can submit faster than viz draws. Viz aborts
+// with more than 25 frames waiting for presentation
+// (CompositorFrameSinkSupport::DidPresentCompositorFrame). A newer submit
+// replaces the held one: viz would show only the newest at its next draw.
+class SurfaceBacklog {
+ public:
+  // Below viz's 25, with room for the frames sent before a draw's report.
+  static constexpr size_t kMostInViz = 16;
+
+  struct Offered {
+    Offered();
+    Offered(const Offered&);
+    Offered& operator=(const Offered&);
+    ~Offered();
+
+    // The submit to send now.
+    std::optional<SurfaceSubmit> send;
+    // The held submit the offered one replaced, which never reaches viz.
+    std::optional<SurfaceSubmit> replaced;
+  };
+
+  SurfaceBacklog();
+  SurfaceBacklog(const SurfaceBacklog&) = delete;
+  SurfaceBacklog& operator=(const SurfaceBacklog&) = delete;
+  ~SurfaceBacklog();
+
+  // `submit` is ready, and viz has `in_viz` of the surface's frames
+  // (SurfaceFrames::InViz). Sends it, or holds it. Either way it replaces any
+  // held one.
+  Offered Offer(const SurfaceSubmit& submit, size_t in_viz);
+
+  // Viz reported frames and now has `in_viz`. Returns the held submit once
+  // there is room for it.
+  std::optional<SurfaceSubmit> Take(size_t in_viz);
+
+ private:
+  std::optional<SurfaceSubmit> held_;
 };
 
 }  // namespace domicile

@@ -4,6 +4,7 @@
 #include "components/domicile/engine/surface_submits.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/check.h"
 
@@ -63,6 +64,34 @@ std::vector<SurfaceSubmit> SurfaceSubmits::TakeReady() {
     queued_.pop_front();
   }
   return ready;
+}
+
+SurfaceBacklog::Offered::Offered() = default;
+SurfaceBacklog::Offered::Offered(const Offered&) = default;
+SurfaceBacklog::Offered& SurfaceBacklog::Offered::operator=(const Offered&) =
+    default;
+SurfaceBacklog::Offered::~Offered() = default;
+
+SurfaceBacklog::SurfaceBacklog() = default;
+SurfaceBacklog::~SurfaceBacklog() = default;
+
+SurfaceBacklog::Offered SurfaceBacklog::Offer(const SurfaceSubmit& submit,
+                                              size_t in_viz) {
+  Offered offered;
+  if (in_viz < kMostInViz) {
+    offered.send = submit;
+    offered.replaced = std::exchange(held_, std::nullopt);
+    return offered;
+  }
+  offered.replaced = std::exchange(held_, submit);
+  return offered;
+}
+
+std::optional<SurfaceSubmit> SurfaceBacklog::Take(size_t in_viz) {
+  if (in_viz >= kMostInViz) {
+    return std::nullopt;
+  }
+  return std::exchange(held_, std::nullopt);
 }
 
 }  // namespace domicile
