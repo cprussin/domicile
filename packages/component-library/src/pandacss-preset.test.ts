@@ -38,7 +38,7 @@ describe("the domicile preset", () => {
     expect(
       at(
         at(domicilePreset, "globalCss"),
-        "html[data-theme-holding]::view-transition-new(root)",
+        "html[data-theme-flip-to][data-theme-holding]::view-transition-new(root)",
       ),
     ).toStrictEqual({ animationPlayState: "paused" });
   });

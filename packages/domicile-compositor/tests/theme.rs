@@ -93,6 +93,32 @@ fn a_chrome_that_never_captures_holds_the_windows_only_until_the_deadline() {
 }
 
 #[test]
+fn a_capture_with_nothing_to_turn_is_answered_at_once() {
+    // A shell that remembered another theme wipes to the desk's at boot, and
+    // holds its wipe, and with it the page's pointer input, until it hears the
+    // windows' theme. No turnover is waiting on that capture.
+    let compositor = Compositor::started_with(ONE_DISPLAY);
+    let mut chrome = compositor.chrome();
+    chrome
+        .wait_for(windows_theme(Theme::Dark))
+        .expect("the windows' theme rides with the handshake");
+
+    let captured = Instant::now();
+    chrome
+        .say(&ChromeMessage::ThemeCaptured { theme: Theme::Dark })
+        .expect("the chrome socket takes a capture");
+
+    chrome
+        .wait_for(windows_theme(Theme::Dark))
+        .expect("the windows' theme, unchanged, answers the capture");
+    assert!(
+        captured.elapsed() < HELD_AT_LEAST,
+        "answered on the capture, not on some deadline ({:?})",
+        captured.elapsed()
+    );
+}
+
+#[test]
 fn a_desk_that_comes_up_light_says_its_windows_are_light() {
     // The browser draws its own pages in the handshake's theme, so a light
     // config must reach it as light before anything is toggled.
