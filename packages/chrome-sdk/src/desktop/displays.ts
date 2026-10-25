@@ -28,7 +28,7 @@ export type Displays = {
    * Add a monitor with no connector, which the desk extends onto and only a
    * capture shows: casting to a TV. A later `list` has it. It lasts until
    * removed, or until the page goes away. See
-   * docs/architecture/CASTING-TO-TVS.md.
+   * docs/CASTING-TO-TVS.md.
    */
   addVirtual: System["addVirtualMonitor"];
   on: On<DisplaysListeners>;

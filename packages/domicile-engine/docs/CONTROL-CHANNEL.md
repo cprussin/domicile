@@ -358,7 +358,7 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
 | `components/domicile/browser/shell_source.{h,cc}` | the shell being served; set from the two switches, replaced by `load_shell` |
 | `components/domicile/browser/shell_window_wait.{h,cc}` | holds `load_shell`, `run_app` and `open_url` until the shell window's first page commits; unit tested |
 | `chrome/browser/domicile/domicile_browser_windows.{h,cc}` | the desk's browser windows; `open_url` opens one |
-| `chrome/browser/domicile/domicile_cast_sinks.{h,cc}` | the TVs to cast the desktop to, and the casts; see `docs/architecture/CASTING-TO-TVS.md` |
+| `chrome/browser/domicile/domicile_cast_sinks.{h,cc}` | the TVs to cast the desktop to, and the casts; see `docs/CASTING-TO-TVS.md` |
 | `components/domicile/browser/site_permissions.{h,cc}` | permission and setting names; unit tested |
 | `chrome/browser/domicile/domicile_extension_installer.{h,cc}` | loads, uninstalls and lists extensions for the extension commands |
 | `chrome/browser/domicile/domicile_history.{h,cc}` | the History app's commands, on the profile's history service, favicon service and browsing data remover |

@@ -158,7 +158,6 @@ not rules, and carry no authority level. Read the one for the area you work in.
 | [/docs/architecture/KEYBINDINGS.md](/docs/architecture/KEYBINDINGS.md) | A shell's keybindings as props: sway-style chords resolved against the compositor's keyboard layout and dispatched by the SDK. |
 | [/docs/architecture/WEB-APPS.md](/docs/architecture/WEB-APPS.md) | Web apps as desktop entries: `domicile open-app`, app windows without an address bar, and the plan for installing sites as apps. |
 | [/docs/architecture/APP-MODULES.md](/docs/architecture/APP-MODULES.md) | Apps as modules: `domicile run-app <entry.js>` calls `main(root, host)` on `domicile://app-<id>/`; History and Settings as app modules instead of extensions. |
-| [/docs/architecture/CASTING-TO-TVS.md](/docs/architecture/CASTING-TO-TVS.md) | Casting to TVs: Google Cast in the engine, Miracast as a host service, Extend onto a virtual monitor or Cast… through the share picker. |
 
 [`/ROADMAP.md`](/ROADMAP.md) lists open work and known gaps, each pointing at
 the doc with the detail. Read it before substantial work. Remove items when
@@ -186,6 +185,7 @@ How to use, configure and debug Domicile. No authority level.
 | [/docs/SHELL-IDLE-AND-LOCK.md](/docs/SHELL-IDLE-AND-LOCK.md) | Idle and lock for shell authors: the idle message, what is blocked while locked, drawing a lock screen. |
 | [/docs/SHELL-PACKAGING.md](/docs/SHELL-PACKAGING.md) | Packaging a shell: required Vite settings, inlined CSS, avoiding a theme flash, distributing, building with `domicile`. |
 | [/docs/DISPLAYS.md](/docs/DISPLAYS.md) | Displays on a tty: display-list sources, profiles, which connectors light, pointer crossing, tablets, rotation, shell windows per CRTC, monitor names. |
+| [/docs/CASTING-TO-TVS.md](/docs/CASTING-TO-TVS.md) | Casting to TVs: Google Cast in the engine, `domicile-miracast` for Miracast, Extend onto a virtual monitor or Cast… through the share picker. |
 | [/docs/IDLE.md](/docs/IDLE.md) | Idle blanking, `HostMessage::Idle`, idle inhibitors, and log lines to check on hardware. |
 | [/docs/LOCK.md](/docs/LOCK.md) | The screen lock: where it is enforced, request categories, ordering, verifiers, passphrase checks, fail-closed PAM, log lines. |
 | [/docs/TTY-SESSION.md](/docs/TTY-SESSION.md) | DRM master, console switching through logind, suspend, and input from logind. |

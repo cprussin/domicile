@@ -50,7 +50,7 @@ describe("inhibitIdle", () => {
   it("asks the Inhibit portal for an idle inhibitor", async () => {
     const bus = portal();
 
-    await inhibitIdle(bus);
+    await inhibitIdle(bus, "Kept awake from the bar");
 
     expect(bus.asked).toEqual([
       {
@@ -72,7 +72,7 @@ describe("inhibitIdle", () => {
   it("lets go by closing the request the portal returned", async () => {
     const bus = portal();
 
-    const release = held(await inhibitIdle(bus));
+    const release = held(await inhibitIdle(bus, "Kept awake from the bar"));
     expect(await release()).toStrictEqual(Ok("released"));
 
     expect(bus.asked[1]).toEqual({
@@ -85,6 +85,8 @@ describe("inhibitIdle", () => {
   });
 
   it("fails as the portal call failed", async () => {
-    expect(await inhibitIdle(portal(REFUSED))).toStrictEqual(Err(REFUSED));
+    expect(
+      await inhibitIdle(portal(REFUSED), "Kept awake from the bar"),
+    ).toStrictEqual(Err(REFUSED));
   });
 });

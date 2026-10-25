@@ -40,7 +40,7 @@ export const Shell = async (root, domicile) => {
   [WRITING-A-SHELL.md](WRITING-A-SHELL.md#window-states).
 - `addVirtualMonitor()` adds a monitor with no connector, which the desk
   extends onto, until `remove()` or the page goes away. Casting to a TV uses
-  it; see [CASTING-TO-TVS.md](architecture/CASTING-TO-TVS.md).
+  it; see [CASTING-TO-TVS.md](CASTING-TO-TVS.md).
 - `keymaps()` streams the config's keymaps and the active one;
   `selectKeymap()` switches to another
   ([SHELL-CONFIG.md](SHELL-CONFIG.md#keyboard)).
