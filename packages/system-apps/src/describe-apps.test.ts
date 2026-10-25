@@ -83,11 +83,38 @@ describe("describeApps", () => {
     expect(described.unwrapOr([])).toStrictEqual([
       { icon: undefined, id: "editor", name: "Editor" },
       { icon: undefined, id: "notes", name: "Notes" },
+      { icon: undefined, id: "org.example.Unknown", name: "Unknown" },
+    ]);
+  });
+
+  it("matches an id to an entry named differently", async () => {
+    const system = fakeSystem(
       {
-        icon: undefined,
-        id: "org.example.Unknown",
-        name: "org.example.Unknown",
+        "/share/applications/chromium-browser.desktop": entry(
+          "Chromium",
+          "chromium",
+        ),
+        "/share/applications/editor.desktop": `${entry("Editor")}StartupWMClass=org.example.TextEditor\n`,
+        "/share/applications/org.example.Viewer.desktop": entry("Viewer"),
+        "/share/icons/hicolor/scalable/apps/chromium.svg": "svg",
       },
+      ENVIRONMENT,
+    );
+
+    const described = await describeApps(system, [
+      "com.chromium.Chromium",
+      "org.example.TextEditor",
+      "org.example.viewer",
+    ]);
+
+    expect(described.unwrapOr([])).toStrictEqual([
+      {
+        icon: "data:image/svg+xml;base64,c3Zn",
+        id: "com.chromium.Chromium",
+        name: "Chromium",
+      },
+      { icon: undefined, id: "org.example.TextEditor", name: "Editor" },
+      { icon: undefined, id: "org.example.viewer", name: "Viewer" },
     ]);
   });
 });

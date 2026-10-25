@@ -32,6 +32,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use domicile_host::app_names::app;
 use domicile_host::mime_apps::launch_command;
 use domicile_host::notifications::{Application, Hints, Image, Notifications, Notified, Notify};
 use domicile_host::portal_notifications::{Invoked, PortalNotification, PortalNotifications};
@@ -159,10 +160,16 @@ impl NotificationServer {
         id: String,
         notification: PortalNotification<OwnedValue>,
     ) {
+        let app = app(&app_id, &self.store.applications);
         let notified = self.store.change(|held| {
-            let notified =
-                held.portal
-                    .add(&mut held.notifications, app_id, id, notification, now());
+            let notified = held.portal.add(
+                &mut held.notifications,
+                app,
+                app_id,
+                id,
+                notification,
+                now(),
+            );
             (
                 notified,
                 notified
@@ -211,10 +218,7 @@ pub type Launch = Box<dyn Fn(&[String], &str) + Send>;
 /// [`NotificationServer::listen`] says where the notifications go.
 pub fn serve(data_dirs: Vec<PathBuf>, theme: Option<String>, launch: Launch) -> NotificationServer {
     let (told, events) = channel();
-    let applications: Vec<PathBuf> = data_dirs
-        .iter()
-        .map(|dir| dir.join("applications"))
-        .collect();
+    let applications = applications(&data_dirs);
     let store = Arc::new(Store::new(data_dirs, theme));
     let serving = Arc::clone(&store);
     thread::spawn(move || {
@@ -233,11 +237,21 @@ pub fn serve(data_dirs: Vec<PathBuf>, theme: Option<String>, launch: Launch) -> 
     NotificationServer { told, store }
 }
 
+/// The `applications/` directory under each of `data_dirs`.
+fn applications(data_dirs: &[PathBuf]) -> Vec<PathBuf> {
+    data_dirs
+        .iter()
+        .map(|dir| dir.join("applications"))
+        .collect()
+}
+
 /// Passes a press on a portal notification, and its token, to the portal.
 type PortalAction = Box<dyn Fn(Invoked<OwnedValue>, String) + Send + Sync>;
 
 /// The notifications, and who is told when they change.
 struct Store {
+    /// Where the applications' desktop entries are.
+    applications: Vec<PathBuf>,
     held: Mutex<Held>,
     publish: OnceLock<Box<dyn Fn(Vec<Notification>) + Send + Sync>>,
     portal_actions: OnceLock<PortalAction>,
@@ -265,6 +279,7 @@ enum Pressed {
 impl Store {
     fn new(data_dirs: Vec<PathBuf>, theme: Option<String>) -> Self {
         Store {
+            applications: applications(&data_dirs),
             held: Mutex::new(Held {
                 notifications: Notifications::new(TrayIcons::new(data_dirs, theme)),
                 portal: PortalNotifications::default(),
@@ -768,6 +783,33 @@ mod tests {
                 .and_then(|shown| shown.icon)
         });
         assert_eq!(icon, Some("data:image/svg+xml;base64,PHN2Zy8+".into()));
+    }
+
+    #[test]
+    fn a_portal_notification_is_named_by_its_applications_entry() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("applications")).unwrap();
+        std::fs::write(
+            dir.path().join("applications/chromium-browser.desktop"),
+            "[Desktop Entry]\nType=Application\nName=Chromium\nExec=chromium\n",
+        )
+        .unwrap();
+        let server = NotificationServer::unserved(vec![dir.path().to_path_buf()]);
+
+        server.add_from_portal(
+            "com.chromium.Chromium".into(),
+            "update".into(),
+            from_the_portal("Update"),
+        );
+
+        let names = server.store.change(|held| {
+            held.notifications
+                .items()
+                .into_iter()
+                .map(|shown| shown.app_name)
+                .collect::<Vec<_>>()
+        });
+        assert_eq!(names, ["Chromium"]);
     }
 
     #[test]

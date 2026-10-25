@@ -11,6 +11,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use domicile_host::app_names::app;
 use tracing::warn;
 use zbus::blocking::object_server::InterfaceRef;
 use zbus::object_server::SignalEmitter;
@@ -34,6 +35,9 @@ pub struct Background {
     /// `$XDG_CONFIG_HOME`, where autostart entries go. `None` when neither it
     /// nor `HOME` is set.
     pub config_home: Option<PathBuf>,
+    /// Where desktop entries are, to name an application the frontend gave no
+    /// name for.
+    pub applications: Vec<PathBuf>,
 }
 
 #[zbus::interface(name = "org.freedesktop.impl.portal.Background")]
@@ -61,7 +65,11 @@ impl Background {
         app_id: String,
         name: String,
     ) -> (u32, HashMap<String, OwnedValue>) {
-        let shown = if name.is_empty() { &app_id } else { &name };
+        let shown = if name.is_empty() {
+            app(&app_id, &self.applications).name
+        } else {
+            name
+        };
         let summary = format!("{shown} is running in the background");
         let hints: HashMap<&str, Value<'_>> = HashMap::new();
         let notified = connection
@@ -211,6 +219,7 @@ mod tests {
                         Background {
                             apps: Arc::default(),
                             config_home,
+                            applications: Vec::new(),
                         },
                     )
                     .expect("served")
@@ -332,6 +341,38 @@ mod tests {
                 "org.example.Chat".to_string(),
                 "Chat is running in the background".to_string()
             )
+        );
+    }
+
+    #[test]
+    fn an_application_the_frontend_does_not_name_is_named_by_its_id() {
+        let (heard, notified) = channel();
+        let (_server, client) = served(None, heard);
+
+        let _: (u32, HashMap<String, OwnedValue>) = client
+            .call_method(
+                None::<&str>,
+                PATH,
+                Some(INTERFACE),
+                "NotifyBackground",
+                &(
+                    OwnedObjectPath::try_from("/org/freedesktop/portal/desktop/request/1_7/b")
+                        .expect("a path"),
+                    "org.example.Chat",
+                    "",
+                ),
+            )
+            .expect("NotifyBackground answered")
+            .body()
+            .deserialize()
+            .expect("its reply");
+
+        assert_eq!(
+            notified
+                .recv_timeout(Duration::from_secs(10))
+                .expect("the user was told")
+                .2,
+            "Chat is running in the background"
         );
     }
 

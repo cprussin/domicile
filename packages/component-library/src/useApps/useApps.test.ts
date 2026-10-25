@@ -17,6 +17,11 @@ const system = fakeSystem(
 describe("useApps", () => {
   it("names an application by its desktop entry, with its icon", async () => {
     const { result } = renderHook(() => useApps(system, ["us.zoom.Zoom"]));
+    // Its id, made readable, until the entry is read.
+    expect(result.current("us.zoom.Zoom")).toStrictEqual({
+      icon: undefined,
+      name: "Zoom",
+    });
 
     await waitFor(() => {
       expect(result.current("us.zoom.Zoom")).toStrictEqual({
@@ -36,7 +41,7 @@ describe("useApps", () => {
 
     expect(result.current("org.example.Unknown")).toStrictEqual({
       icon: undefined,
-      name: "org.example.Unknown",
+      name: "Unknown",
     });
   });
 

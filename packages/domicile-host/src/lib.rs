@@ -14,6 +14,7 @@ use domicile_protocol::{
     Notification, Owner, PortalRequest, PortalWallpaper, Theme, TrayItem,
 };
 
+pub mod app_names;
 pub mod autostart;
 pub mod base64;
 pub mod cast_grants;

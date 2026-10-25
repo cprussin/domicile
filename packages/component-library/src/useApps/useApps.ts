@@ -1,4 +1,5 @@
 import type { System } from "@domicile-desktop/sdk/system";
+import { appIdName } from "@domicile-desktop/system-apps/app-id-name";
 import type { DescribedApp } from "@domicile-desktop/system-apps/describe-apps";
 import { describeApps } from "@domicile-desktop/system-apps/describe-apps";
 import { useCallback, useEffect, useState } from "react";
@@ -13,7 +14,7 @@ export type App = {
 /**
  * Names each application by its desktop entry, with its icon, reading the
  * entries for `ids` again when they change. An id with no entry, or not read
- * yet, is named by itself; the empty id is "An application".
+ * yet, is named by its readable form; the empty id is "An application".
  */
 export const useApps = (
   system: System,
@@ -65,7 +66,10 @@ const app = (
 ): App => {
   const entry = described.get(appId);
   if (entry === undefined) {
-    return { icon: undefined, name: appId === "" ? "An application" : appId };
+    return {
+      icon: undefined,
+      name: appId === "" ? "An application" : appIdName(appId),
+    };
   } else {
     return { icon: entry.icon, name: entry.name };
   }

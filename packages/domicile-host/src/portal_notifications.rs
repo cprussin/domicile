@@ -7,6 +7,7 @@
 //! goes back to the portal with its target. See
 //! `docs/PORTALS.md`.
 
+use crate::app_names::App;
 use crate::notifications::{Hints, Icon, Notifications, Notified, Notify, DEFAULT_ACTION};
 
 /// An `AddNotification` call, parsed. `T` is an action's target.
@@ -81,13 +82,15 @@ impl<T> Default for PortalNotifications<T> {
 }
 
 impl<T> PortalNotifications<T> {
-    /// Add `notification` to `held`, replacing `app_id`'s `id` if held.
+    /// Add `notification` to `held` under `app`'s name and icon, replacing
+    /// `app_id`'s `id` if held.
     ///
     /// `Notified::evicted` may name a notification from either source; the
     /// caller asks [`Self::forget`] which.
     pub fn add(
         &mut self,
         held: &mut Notifications,
+        app: App,
         app_id: String,
         id: String,
         notification: PortalNotification<T>,
@@ -114,10 +117,9 @@ impl<T> PortalNotifications<T> {
             .any(|hint| hint == PERSISTENT);
         let notified = held.notify(
             Notify {
-                app_name: app_id.clone(),
+                app_name: app.name,
                 replaces_id,
-                // Desktop file ids usually name the application's icon too.
-                app_icon: app_id.clone(),
+                app_icon: app.icon,
                 summary: notification.title,
                 body: notification.body,
                 actions: labels,
@@ -224,6 +226,13 @@ mod tests {
         }
     }
 
+    fn example(app_id: &str) -> App {
+        App {
+            name: "Example".into(),
+            icon: app_id.into(),
+        }
+    }
+
     /// Add `notification` as `org.example.App`'s `id`.
     fn add(
         portal: &mut PortalNotifications<&'static str>,
@@ -234,6 +243,7 @@ mod tests {
         portal
             .add(
                 notifications,
+                example("org.example.App"),
                 "org.example.App".into(),
                 id.into(),
                 notification,
@@ -252,7 +262,7 @@ mod tests {
             notifications.items(),
             [Notification {
                 id: shown,
-                app_name: "org.example.App".into(),
+                app_name: "Example".into(),
                 summary: "Update".into(),
                 body: "Ready to install".into(),
                 icon: None,
@@ -280,6 +290,7 @@ mod tests {
         let other = portal
             .add(
                 &mut notifications,
+                example("org.example.Other"),
                 "org.example.Other".into(),
                 "update".into(),
                 sent("Other"),
