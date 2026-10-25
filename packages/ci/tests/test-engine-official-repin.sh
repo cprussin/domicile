@@ -55,21 +55,21 @@ setup() { # main's series
   git -C "$WORK/repo" config user.email ci@domicile.invalid
   git -C "$WORK/repo" config user.name "domicile CI"
   git -C "$WORK/repo" config push.negotiate false
-  mkdir -p "$WORK/repo/.github/scripts" "$WORK/repo/scripts" \
+  mkdir -p "$WORK/repo/.github/scripts" "$WORK/repo/packages/domicile-engine/scripts" \
            "$WORK/repo/packages/domicile-engine"
   cp "$REPIN" "$WORK/repo/.github/scripts/"
   printf '{\n  identity = "%s";\n}\n' "$1" >"$WORK/repo/$CHECKED"
   echo main >"$WORK/repo/marker"
 
   # A generator stub; the real one downloads and hashes a tarball.
-  cat >"$WORK/repo/scripts/update-engine-release.sh" <<'GEN'
+  cat >"$WORK/repo/packages/domicile-engine/scripts/update-engine-release.sh" <<'GEN'
 #!/usr/bin/env bash
 set -eu
 [ -z "${GENERATOR_FAILS:-}" ] || { echo "no such release" >&2; exit 1; }
 printf '{\n  identity = "%s";\n  url = "%s";\n}\n' \
   "$FAKE_IDENTITY" "$DOMICILE_ENGINE_TAG" >"$DOMICILE_ENGINE_PIN_FILE"
 GEN
-  chmod +x "$WORK/repo/scripts/update-engine-release.sh"
+  chmod +x "$WORK/repo/packages/domicile-engine/scripts/update-engine-release.sh"
 
   git -C "$WORK/repo" add -A
   git -C "$WORK/repo" commit -qm main

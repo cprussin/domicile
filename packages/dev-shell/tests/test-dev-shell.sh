@@ -11,8 +11,8 @@
 # the real loop runs below.
 set -u
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SCRIPT_UNDER_TEST="$ROOT/scripts/dev-shell.sh"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+SCRIPT_UNDER_TEST="$ROOT/packages/dev-shell/bin/dev-shell.sh"
 [ -x "$SCRIPT_UNDER_TEST" ] || { echo "no $SCRIPT_UNDER_TEST" >&2; exit 1; }
 
 # From the engine resolution to the end of the script.
@@ -146,7 +146,7 @@ expect "a shell that does not exist is named in the refusal" \
 
 # The reload loop, driven without a desktop. `dev-shell-reload.sh` takes the
 # binary, module, socket file and both coalescing windows as arguments.
-RELOAD="$ROOT/scripts/dev-shell-reload.sh"
+RELOAD="$ROOT/packages/dev-shell/bin/dev-shell-reload.sh"
 [ -x "$RELOAD" ] || { echo "no $RELOAD" >&2; exit 1; }
 
 # A `domicile` stub that records its arguments and answers `loaded` or a
@@ -285,9 +285,9 @@ RUN="$(awk '/^WORK="\$\(mktemp -d\)"$/,0' "$SCRIPT_UNDER_TEST")"
 }
 
 FIXTURE="$WORK/join"
-mkdir -p "$FIXTURE/bin" "$FIXTURE/checkout/scripts" "$FIXTURE/checkout/target/debug" \
+mkdir -p "$FIXTURE/bin" "$FIXTURE/checkout/packages/dev-shell/bin" "$FIXTURE/checkout/target/debug" \
          "$FIXTURE/page" "$FIXTURE/shell"
-ln -s "$RELOAD" "$FIXTURE/checkout/scripts/dev-shell-reload.sh"
+ln -s "$RELOAD" "$FIXTURE/checkout/packages/dev-shell/bin/dev-shell-reload.sh"
 : >"$FIXTURE/page/shell.js"
 
 # The watcher builds repeatedly once the desktop is up. The loop's starting

@@ -1,0 +1,12 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "test:shell": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/.github/scripts/docs-media-writeback.sh",
+        "$TURBO_ROOT$/packages/check-runner/**"
+      ]
+    }
+  }
+}

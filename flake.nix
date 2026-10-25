@@ -51,7 +51,7 @@
         bun
         biome
         nodejs_24
-        # For the engine release scripts (`scripts/update-engine-release.sh`,
+        # For the engine release scripts (`packages/domicile-engine/scripts/update-engine-release.sh`,
         # `.github/scripts/engine-release-*.sh`) and `spike-iframe.sh`. In the
         # core shell because the release workflow runs there.
         curl
@@ -688,7 +688,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-O+7ZvtseJ43n/tekEoUpBspFLeDV3Expz37u9ogWajw=";
+        outputHash = "sha256-GLQCa3snfHjqlmIVO70yi/ESLgmvmmA42gkgfscXbTw=";
       };
 
       # The production modules `shellWorkspace` ships, from
@@ -714,7 +714,7 @@
         dontFixup = true;
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-kPVrXudaWhjSIW40NhjDboBDtjlQttTHqeZGDSxg6XU=";
+        outputHash = "sha256-e/Nhkq6UtYeh5DXQnKYf2nvBbpx32I/WD3J+dvrxPj8=";
       };
 
 
