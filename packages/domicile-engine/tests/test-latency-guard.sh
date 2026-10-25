@@ -50,6 +50,7 @@ run_log() { # $1 floor, $2 commit-to-pixel ("" for none), $3 abandoned, $4 endin
     say "latency key to commit: min 1.40, median 1.40, max 1.40 ms over 60 (median 0.1 frames)"
     if [ -n "$2" ]; then
       spread "commit to pixel" "$2"
+      spread "commit to present" "$2"
       spread "key to pixel" "$2"
     else
       say "latency commit to pixel: nothing measured"
@@ -74,7 +75,6 @@ verdict() { # $1 log, $2 NEGATIVE
   (
     COMP_LOG="$1"
     NEGATIVE="$2"
-    MOST_FRAMES=2
     eval "$VERDICT"
   ) 2>/dev/null | grep -E '^(::error::|PASS:)' | head -1
 }
@@ -82,7 +82,6 @@ verdict_code() { # $1 log, $2 NEGATIVE
   (
     COMP_LOG="$1"
     NEGATIVE="$2"
-    MOST_FRAMES=2
     eval "$VERDICT"
   ) >/dev/null 2>&1
   echo $?
@@ -94,7 +93,7 @@ GOOD="$(run_log 16.67 16.68 0 completed)"
 expect "a frame that arrives in one display frame passes" \
   "0" "$(verdict_code "$GOOD" 0)"
 expect "and says what it was measured against" \
-  "PASS: a client's frame reaches the page in 16.68ms, within 2 display frames of 16.67ms." \
+  "PASS: a client's frame reaches the page in 16.68ms, within the probe's floor and one display frame: 33.34ms." \
   "$(verdict "$GOOD" 0)"
 
 # A frame over the threshold suggests an extra stage, such as a readback, an
@@ -102,7 +101,7 @@ expect "and says what it was measured against" \
 SLOW="$(run_log 16.67 50.10 0 completed)"
 expect "a frame that takes three display frames fails" "1" "$(verdict_code "$SLOW" 0)"
 expect "and names the frame it is measured against" \
-  "::error::guard-latency: commit to pixel is 50.10ms against a display frame of 16.67ms, more than 2x — a client's frame is waiting on a stage of its own somewhere between the commit and the page" \
+  "::error::guard-latency: commit to pixel is 50.10ms, more than the probe's floor and one display frame of 16.67ms (33.34ms) — a client's frame is waiting on a stage of its own somewhere between the commit and the page" \
   "$(verdict "$SLOW" 0)"
 
 # Boundary cases, since this is a float comparison in shell.
@@ -127,14 +126,22 @@ expect "a floor that sampled three frames does not excuse a slow one" \
 expect "nor does a floor that sampled low condemn a good one" \
   "0" "$(verdict_code "$(run_log 13.50 28.18 0 completed)" 0)"
 
-# The display frame is the interval the compositor advertises. The floor
-# measures the same interval, so a floor far below it means the advertised
-# rate is wrong. Contention only raises the floor, so this check fires in one
+# lyra's 120 Hz panel, where the probe costs two frames: on the panel
+# (2026-10-22), and nested in a session (2026-10-25).
+expect "a probe that costs two 120 Hz frames passes on the panel" \
+  "0" "$(verdict_code "$(run_log 17.92 20.64 0 completed 0 8.33)" 0)"
+expect "and nested" \
+  "0" "$(verdict_code "$(run_log 17.15 17.44 0 completed 0 8.33)" 0)"
+expect "while a frame more than that fails" \
+  "1" "$(verdict_code "$(run_log 17.15 25.70 0 completed 0 8.33)" 0)"
+
+# The display frame is the interval viz reports. A probe costs at least one,
+# so a floor far below it means the reported rate is wrong. Contention only raises the floor, so this check fires in one
 # direction only.
 expect "a display frame nowhere near the floor is not a bar at all" \
   "1" "$(verdict_code "$(run_log 4.20 28.18 0 completed 0 16.67)" 0)"
 expect "and says which two numbers disagree" \
-  "::error::guard-latency: the run reports a display frame of 16.67ms and priced its probe at 4.20ms — a probe round trip is one display frame, so the frame this would be measured against is not the one this desktop is drawing at" \
+  "::error::guard-latency: the run reports a display frame of 16.67ms and priced its probe at 4.20ms — a probe round trip is at least one display frame, so the frame this would be measured against is not the one this desktop is drawing at" \
   "$(verdict "$(run_log 4.20 28.18 0 completed 0 16.67)" 0)"
 
 # An unanswered round means the client did not respond to the key, so the

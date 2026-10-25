@@ -60,6 +60,8 @@ rm -f "$XDG_RUNTIME_DIR"/wayland-* 2>/dev/null || true
 # The output must fit the largest page any check uses, or the compositor
 # clamps the window. wlroots' default of 1280x720 is smaller than step 4's grid.
 OUTPUT_MODE="${OUTPUT_MODE:-1600x1200@60Hz}"
+# For checks that time against the output's frame. See `latency_frame_of_mode`.
+export UNDER_WAYLAND_OUTPUT_MODE="$OUTPUT_MODE"
 CONFIG="$(mktemp)"
 # No borders or gaps: the measurement finds the page by the first row that is
 # the page's background edge to edge, and a border adds a pixel at each end.

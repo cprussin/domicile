@@ -40,6 +40,7 @@ COMPLETE="$(cat <<'RUN'
 2026-09-07T14:00:00.2Z  INFO domicile::engine::spike: latency floor: min 16.60, median 16.67, max 17.90 ms over 60 (median 1.0 frames)
 2026-09-07T14:00:00.3Z  INFO domicile::engine::spike: latency key to commit: min 0.90, median 1.40, max 9.10 ms over 60 (median 0.1 frames)
 2026-09-07T14:00:00.4Z  INFO domicile::engine::spike: latency commit to pixel: min 16.61, median 16.68, max 34.10 ms over 60 (median 1.0 frames)
+2026-09-07T14:00:00.45Z  INFO domicile::engine::spike: latency commit to present: min 12.10, median 20.40, max 30.00 ms over 59 (median 1.2 frames)
 2026-09-07T14:00:00.5Z  INFO domicile::engine::spike: latency key to pixel: min 17.51, median 18.08, max 43.20 ms over 60 (median 1.1 frames)
 2026-09-07T14:00:00.6Z  INFO domicile::engine::spike: latency: 0 round(s) abandoned by the client
 2026-09-07T14:00:00.65Z  INFO domicile::engine::spike: latency: 2 round(s) where the client drew again while polling
@@ -58,6 +59,9 @@ expect "the floor's median comes off its own line" \
 # Every line has a `median`, so a wrong anchor would read the wrong one.
 expect "commit to pixel's median is not the floor's" \
   "16.68" "$(latency_median "commit to pixel" "$RUN_LOG")"
+
+expect "commit to present's median is not commit to pixel's" \
+  "20.40" "$(latency_median "commit to present" "$RUN_LOG")"
 
 expect "a two-word label reads as one label" \
   "1.40" "$(latency_median "key to commit" "$RUN_LOG")"
@@ -168,6 +172,27 @@ latency_within 27.99 2 16.67 && expect "a run whose floor sampled low still pass
   expect "a run whose floor sampled low still passes" ok FAILED
 latency_within 29.18 2 16.67 && expect "and so does the one whose floor sampled high" ok ok ||
   expect "and so does the one whose floor sampled high" ok FAILED
+
+# `commit to pixel` may take the probe's floor plus one display frame. The
+# floor counts for at most two frames, so a floor sampled during startup does
+# not raise the bar.
+expect "the allowance is the floor plus a frame" \
+  "23.33" "$(latency_allowance 15.00 8.33)"
+expect "and a floor over two frames counts as two" \
+  "50.01" "$(latency_allowance 48.71 16.67)"
+expect "an unread floor gives no allowance" \
+  "" "$(latency_allowance "nothing measured" 16.67)"
+
+# A headless output presents nothing, so the run takes its frame from the
+# mode `under-wayland.sh` set.
+expect "a mode's frame is its refresh rate's" \
+  "16.667" "$(latency_frame_of_mode 1600x1200@60Hz)"
+expect "and a fractional rate keeps its decimals" \
+  "8.333" "$(latency_frame_of_mode 2880x1920@120.000Hz)"
+expect "no mode gives no frame" \
+  "" "$(latency_frame_of_mode "")"
+expect "nor does a mode with no rate" \
+  "" "$(latency_frame_of_mode 1600x1200)"
 
 # Integer truncation would make both 16 and pass.
 latency_within 16.99 1 16.01 && expect "a difference in the decimals is seen" ok FAILED ||
