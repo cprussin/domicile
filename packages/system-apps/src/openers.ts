@@ -13,15 +13,19 @@ import { desktopEnvironment, setVariable } from "./environment";
 import { commandOf } from "./exec";
 import { installedApps } from "./installed";
 import { defaultApps } from "./mime-apps";
+import { allOk } from "./results";
+import { supertypesOf } from "./supertypes";
 
 /** What can open a file. */
 export type Openers = {
   /** The file's content type, by name. Nothing when no glob matches. */
   contentType: Option<string>;
   /**
-   * The installed applications for the type: its defaults from
-   * `mimeapps.list` in their order (see `./mime-apps`), then the rest whose
-   * `MimeType` lists it, by name. The first is the one to open it with.
+   * The installed applications for the type and its supertypes (see
+   * `./supertypes`), nearest first: every type's defaults from
+   * `mimeapps.list` in their order (see `./mime-apps`), then, type by type,
+   * the rest whose `MimeType` lists it, by name. The first is the one to
+   * open it with.
    */
   apps: DesktopEntry[];
   /** The argv that opens the file with `app`. */
@@ -32,7 +36,7 @@ export type Openers = {
  * What can open `path`: relative to home, as every system call's path is, or
  * absolute.
  *
- * Only `MimeType` and the defaults are read: aliases, subclasses and
+ * Only `MimeType`, the defaults and subclasses are read: aliases and
  * `mimeapps.list`'s added and removed associations are not. A launcher falls
  * back to `xdg-open` when this offers nothing.
  */
@@ -66,19 +70,26 @@ const appsFor = async (
   contentType: string,
 ): Promise<Result<DesktopEntry[], SystemError>> =>
   (await installedApps(domicile, dirs)).andThenAsync(async (installed) =>
-    (await defaultApps(domicile, contentType)).map((defaults) => {
-      const byId = new Map(installed.map((app) => [app.id, app]));
-      const first = [...new Set(defaults)].flatMap((id) => {
-        const app = byId.get(id);
-        return app === undefined ? [] : [app];
-      });
-      const rest = installed
-        .filter(
-          (app) => app.mimeTypes.includes(contentType) && !first.includes(app),
-        )
-        .toSorted((a, b) => a.name.localeCompare(b.name));
-      return [...first, ...rest];
-    }),
+    (await supertypesOf(domicile, dirs, contentType)).andThenAsync(
+      async (supertypes) => {
+        const types = [contentType, ...supertypes];
+        return allOk(
+          await Promise.all(types.map((type) => defaultApps(domicile, type))),
+        ).map((defaults) => {
+          const byId = new Map(installed.map((app) => [app.id, app]));
+          const first = defaults.flat().flatMap((id) => {
+            const app = byId.get(id);
+            return app === undefined ? [] : [app];
+          });
+          const rest = types.flatMap((type) =>
+            installed
+              .filter((app) => app.mimeTypes.includes(type))
+              .toSorted((a, b) => a.name.localeCompare(b.name)),
+          );
+          return [...new Set([...first, ...rest])];
+        });
+      },
+    ),
   );
 
 const homeOf = (variables: ReadonlyMap<string, string>): string => {

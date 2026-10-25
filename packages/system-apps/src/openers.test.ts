@@ -14,7 +14,13 @@ const ENVIRONMENT = {
   XDG_DATA_HOME: "/data",
 };
 
-const GLOBS = "50:text/plain:*.txt\n50:image/png:*.png\n";
+const GLOBS = [
+  "50:text/plain:*.txt",
+  "50:image/png:*.png",
+  "50:text/markdown:*.md",
+  "50:application/x-thing:*.thing",
+  "",
+].join("\n");
 
 const app = (name: string, exec: string, types: string): string =>
   `[Desktop Entry]\nType=Application\nName=${name}\nExec=${exec}\nMimeType=${types}\n`;
@@ -70,6 +76,41 @@ describe("openers", () => {
       "notes.desktop",
       "viewer.desktop",
       "aa.desktop",
+      "editor.desktop",
+    ]);
+  });
+
+  it("offers a type's defaults, then its supertypes', then what declares each", async () => {
+    const system = desktop({
+      "/config/mimeapps.list":
+        "[Default Applications]\ntext/plain=notes.desktop\ntext/markdown=viewer.desktop\n",
+      "/share/applications/marked.desktop": app(
+        "Marked",
+        "marked",
+        "text/markdown;",
+      ),
+      "notes.md": "",
+    });
+
+    expect(await ids(system, "notes.md")).toStrictEqual([
+      "viewer.desktop",
+      "notes.desktop",
+      "marked.desktop",
+      "editor.desktop",
+    ]);
+  });
+
+  it("follows `mime/subclasses` up to text/plain", async () => {
+    const system = desktop({
+      "/config/mimeapps.list":
+        "[Default Applications]\ntext/plain=notes.desktop\n",
+      "/share/mime/subclasses":
+        "application/x-thing application/x-base\napplication/x-base text/x-base\n",
+      "a.thing": "",
+    });
+
+    expect(await ids(system, "a.thing")).toStrictEqual([
+      "notes.desktop",
       "editor.desktop",
     ]);
   });
