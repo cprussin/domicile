@@ -43,6 +43,7 @@
 #include "third_party/blink/renderer/modules/domicile/domicile_app_event.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_clipboard_entry.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_browser_window.h"
+#include "third_party/blink/renderer/modules/domicile/domicile_cast_sink.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_display.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_extension.h"
 #include "third_party/blink/renderer/modules/domicile/domicile_notification.h"
@@ -136,6 +137,8 @@ DomicileHost::DomicileHost(LocalDOMWindow& window)
       tray_receiver_(this, &window),
       windows_(&window),
       windows_receiver_(this, &window),
+      cast_(&window),
+      cast_receiver_(this, &window),
       shell_fetch_(&window) {}
 
 DomicileHost::~DomicileHost() = default;
@@ -176,6 +179,13 @@ bool DomicileHost::EnsureBound() {
   window_->GetBrowserInterfaceBroker().GetInterface(
       windows_.BindNewPipeAndPassReceiver(task_runner));
   windows_->SetClient(windows_receiver_.BindNewPipeAndPassRemote(task_runner));
+
+  // The TVs, bound eagerly too: the shell shows a Cast item only while one is
+  // near, so it must hear of them unasked. Its client starts the browser's
+  // discovery. See cast_sinks.mojom.
+  window_->GetBrowserInterfaceBroker().GetInterface(
+      cast_.BindNewPipeAndPassReceiver(task_runner));
+  cast_->SetClient(cast_receiver_.BindNewPipeAndPassRemote(task_runner));
   return true;
 }
 
@@ -1645,6 +1655,52 @@ void DomicileHost::closeBrowserWindow(ScriptState*,
 
 namespace {
 
+// The browser's answer to startCasting(): the cast's route, or why there is
+// none.
+void Casting(ScriptPromiseResolver<IDLString>* resolver,
+             const String& route,
+             const String& error) {
+  if (route.empty()) {
+    resolver->RejectWithDOMException(DOMExceptionCode::kOperationError, error);
+    return;
+  }
+  resolver->Resolve(route);
+}
+
+}  // namespace
+
+ScriptPromise<IDLString> DomicileHost::startCasting(
+    ScriptState* script_state,
+    const String& id,
+    ExceptionState& exception_state) {
+  if (id.empty()) {
+    exception_state.ThrowTypeError("id must be a TV's id");
+    return EmptyPromise();
+  }
+  if (!Ready(exception_state)) {
+    return EmptyPromise();
+  }
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<IDLString>>(
+      script_state, exception_state.GetContext());
+  auto promise = resolver->Promise();
+  cast_->Cast(id, BindOnce(&Casting, WrapPersistent(resolver)));
+  return promise;
+}
+
+void DomicileHost::stopCasting(ScriptState*,
+                               const String& route,
+                               ExceptionState& exception_state) {
+  if (route.empty()) {
+    exception_state.ThrowTypeError("route must be a cast's route");
+    return;
+  }
+  if (Ready(exception_state)) {
+    cast_->Stop(route);
+  }
+}
+
+namespace {
+
 // The browser's answer to fetchWithCookies(): a response, or why there is
 // none.
 void Fetched(ScriptPromiseResolver<DomicileFetchResponse>* resolver,
@@ -1724,6 +1780,20 @@ void DomicileHost::WindowsChanged(
       std::move(listed));
   DispatchEvent(
       *Event::Create(domicile_event_names::Browserwindowschanged()));
+}
+
+// Stored, like WindowsChanged.
+void DomicileHost::SinksChanged(
+    Vector<domicile::mojom::blink::CastSinkPtr> sinks) {
+  HeapVector<Member<DomicileCastSink>> listed;
+  listed.reserve(sinks.size());
+  for (const auto& sink : sinks) {
+    listed.push_back(MakeGarbageCollected<DomicileCastSink>(
+        sink->id, sink->name, sink->route.empty() ? String() : sink->route));
+  }
+  cast_sinks_ =
+      MakeGarbageCollected<FrozenArray<DomicileCastSink>>(std::move(listed));
+  DispatchEvent(*Event::Create(domicile_event_names::Castsinkschanged()));
 }
 
 // A standard MessageEvent, so a line the page parses needs no event type of
@@ -1824,6 +1894,7 @@ ExecutionContext* DomicileHost::GetExecutionContext() const {
 void DomicileHost::Trace(Visitor* visitor) const {
   visitor->Trace(displays_);
   visitor->Trace(browser_windows_);
+  visitor->Trace(cast_sinks_);
   visitor->Trace(client_windows_);
   visitor->Trace(held_);
   visitor->Trace(file_search_);
@@ -1843,6 +1914,8 @@ void DomicileHost::Trace(Visitor* visitor) const {
   visitor->Trace(density_listener_);
   visitor->Trace(windows_);
   visitor->Trace(windows_receiver_);
+  visitor->Trace(cast_);
+  visitor->Trace(cast_receiver_);
   visitor->Trace(shell_fetch_);
   visitor->Trace(input_listeners_);
   EventTarget::Trace(visitor);

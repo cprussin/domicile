@@ -89,15 +89,18 @@ bar item ──casting(host).start(target, Extend | Pick)──▶ backend (engi
 ### Google Cast, in the engine
 
 - Chrome's Media Router discovers receivers (`_googlecast._tcp`) and runs
-  mirroring (`components/mirroring`, `media/cast`, Open Screen). The engine
-  turns it on and hides Chrome's Cast dialog.
-- The control channel carries the sinks to the shell (`castsinks` event) and
-  starts and stops mirroring routes (`startCasting`, `stopCasting`).
-- Mirroring captures the desktop through webrtc's PipeWire capturer, which
-  asks the portal (patch `0128`). For Extend, the shell answers that
-  request with the virtual monitor.
-- A page's Cast request goes to the shell's TV list instead of Chrome's
-  dialog.
+  mirroring (`components/mirroring`, `media/cast`, Open Screen).
+- `CastSinks` (`cast_sinks.mojom`), a browser pipe beside `BrowserWindows`,
+  bound for the shell's origin only. It lists the TVs that take a desktop
+  (`domicile.castSinks`, `castsinkschanged`) and starts and stops routes
+  (`startCasting`, `stopCasting`). Listening starts discovery.
+- A cast's source is the whole desktop, already chosen, so the Media Router
+  skips Chrome's picker (patch `0141`).
+- Mirroring captures through webrtc's PipeWire capturer, which asks the
+  portal (patch `0128`). The engine's portal app id is not its own pick, so
+  `engineCast` claims the next ScreenCast request from any app.
+- Later: a page's Cast button going to the shell's TV list, and hiding
+  Chrome's Cast dialog.
 
 ### Miracast, `domicile-miracast`
 
@@ -130,7 +133,7 @@ bar item ──casting(host).start(target, Extend | Pick)──▶ backend (engi
 - [x] virtual monitors: engine ABI and `DrmModeset`, `Screens`, `SystemRequest::VirtualMonitor` (#1524)
 - [x] the SDK's casts and the `Cast` bar item, against a fake backend; the
       shell answers Extend's portal request
-- [ ] engine: Media Router and mirroring wired to the control channel and the
-      portal
+- [x] engine: Media Router sinks and mirroring routes for the shell
+      (`CastSinks`), wired to the bar item
 - [ ] `domicile-miracast`: Wi-Fi Direct, MICE, WFD session, encoder
 - [ ] blanking hold, notification hold, launcher command
