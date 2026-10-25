@@ -1,5 +1,5 @@
 //! `domicile install-app <url>`: reads the site's web app manifest and writes
-//! a desktop entry that opens it with `domicile open-app`. See
+//! a desktop entry that opens it with `domicile open --app`. See
 //! `docs/architecture/WEB-APPS.md`.
 
 use std::path::{Path, PathBuf};

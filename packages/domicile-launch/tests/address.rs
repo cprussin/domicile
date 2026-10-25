@@ -1,4 +1,4 @@
-//! Tests for the URL `domicile open-url` sends the engine.
+//! Tests for the URL `domicile open` sends the engine.
 
 use std::path::Path;
 

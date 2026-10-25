@@ -154,7 +154,7 @@ type Props = {
    */
   popupWindow?: number | undefined;
   /**
-   * Whether this is an app window (`domicile open-app`), drawn without an
+   * Whether this is an app window (`domicile open --app`), drawn without an
    * address bar. See docs/architecture/WEB-APPS.md.
    */
   isApp?: boolean;

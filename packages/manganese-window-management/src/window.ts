@@ -90,7 +90,7 @@ export const ShellWindow = {
    * - `popupWindow`: the `chrome.windows` id of the extension popup window
    *   whose one tab this is. Drawn without an address bar, as in Chrome.
    * - `isPrivate`: whether the page is private. Its address bar says so.
-   * - `isApp`: whether this is an app window (`domicile open-app`). Drawn
+   * - `isApp`: whether this is an app window (`domicile open --app`). Drawn
    *   without an address bar.
    */
   Browser: (

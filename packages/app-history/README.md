@@ -5,7 +5,7 @@ The History app: an app module, `history.js`, that replaces the blocked
 [APP-MODULES.md](/docs/architecture/APP-MODULES.md).
 
 ```sh
-domicile run-app .vite/app/history.js
+domicile open --app .vite/app/history.js
 ```
 
 - Spawns `domicile-app-host` (`domicile_launch::app_host`) and speaks length-prefixed JSON with it over

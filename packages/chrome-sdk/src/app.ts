@@ -8,7 +8,7 @@ export type { AppDomicile } from "./desktop/app-desktop";
 /**
  * The function an app module exports as `main`.
  *
- * `domicile run-app <module>` opens an app window, and Domicile calls this
+ * `domicile open --app <module>` opens an app window, and Domicile calls this
  * with the window's root element and the app's desktop: files, processes and
  * D-Bus. The compositor fails anything else with `permission_denied`.
  */

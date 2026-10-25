@@ -422,9 +422,8 @@ fn a_link_an_app_opens_opens_in_this_desktop() {
 
 #[test]
 fn xdg_open_is_this_desktops_for_every_app_it_starts() {
-    // The shim directory goes first on `PATH`, so `xdg-open` opens links in
-    // this desktop whatever `mimeapps.list` says. The rest of the path still
-    // resolves.
+    // The shim directory goes first on `PATH`, so `xdg-open` is `domicile
+    // open`. The rest of the path still resolves.
     let inherited = |name: &str| (name == "PATH").then(|| "/usr/bin:/bin".to_string());
     let spawned = compositor(
         Path::new("/b/domicile-compositor"),

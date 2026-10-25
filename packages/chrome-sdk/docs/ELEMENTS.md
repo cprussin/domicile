@@ -95,7 +95,7 @@ once, when the view connects. The SDK provides types only.
     [Crashed pages](/docs/SHELL-BROWSER-WINDOWS.md#crashed-pages).
 - **Browser windows:** `domicile.browser.windows` is the desk's whole list;
   `browser.on("change")` reports changes. `browser.open(url)` and `browser.close(id)` are
-  for the shell's own UI. A link with `target="_blank"`, `domicile open-url`
+  for the shell's own UI. A link with `target="_blank"`, `domicile open`
   and an extension's `tabs.create` or `windows.create` open windows without
   the shell. See
   [SHELL-BROWSER-WINDOWS.md](/docs/SHELL-BROWSER-WINDOWS.md).

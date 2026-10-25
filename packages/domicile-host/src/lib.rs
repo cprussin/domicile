@@ -50,6 +50,7 @@ pub mod print_settings;
 pub mod priority;
 pub mod save_to_pdf;
 pub mod screenshot;
+pub mod shared_mime_info;
 pub mod shell_commands;
 pub mod system;
 pub mod theme_turnover;

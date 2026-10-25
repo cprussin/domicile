@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Checks a running desktop loads a new shell, opens URLs and apps, takes
 # screenshots and sends the shell commands on command, via `domicile
-# load-shell`, `BROWSER`, `domicile open-app`, `domicile-settings`,
+# load-shell`, `BROWSER`, `domicile open --app`, `domicile-settings`,
 # `domicile-history`, the `xdg-open` shim on its apps' PATH, `domicile
 # screenshot` with and without a file, and `domicile send-shell`.
 #
@@ -377,8 +377,8 @@ else
   FAILED=1
 fi
 
-echo "== open-app, Settings and History reach the engine as app windows =="
-for opener in "domicile open-app https://example.com/" domicile-settings domicile-history; do
+echo "== open --app, Settings and History reach the engine as app windows =="
+for opener in "domicile open --app https://example.com/" domicile-settings domicile-history; do
   WANT_URL="https://example.com/"
   # shellcheck disable=SC2086 # `opener` is a program and its arguments.
   if ! env DOMICILE_SOCK="$SOCK" DOMICILE_APP_MODULES="$WORK/app-modules" \
@@ -440,21 +440,27 @@ else
   FAILED=1
 fi
 
-echo "== and anything else reaches the xdg-open behind it =="
-# A stub system xdg-open, which handles non-URL arguments.
-mkdir -p "$WORK/system"
-cat >"$WORK/system/xdg-open" <<SYSTEM
+echo "== and a file opens with its type's default application =="
+# A desk of its own: one type, one application, which records what it ran on.
+mkdir -p "$WORK/desk/mime" "$WORK/desk/applications" "$WORK/desk-config"
+printf '50:application/pdf:*.pdf\n' >"$WORK/desk/mime/globs2"
+cat >"$WORK/viewer" <<VIEWER
 #!/bin/sh
-printf '%s\n' "\$@" >"$WORK/system-heard"
-SYSTEM
-chmod +x "$WORK/system/xdg-open"
-env DOMICILE_SOCK="$SOCK" PATH="$SHIMS:$WORK/system:$APP_PATH" xdg-open notes.pdf \
-  >"$WORK/deferred.log" 2>&1
-if [ "$(cat "$WORK/system-heard" 2>/dev/null)" = "notes.pdf" ]; then
-  echo "PASS: notes.pdf went to $WORK/system/xdg-open"
+printf '%s\n' "\$@" >"$WORK/viewer-heard"
+VIEWER
+chmod +x "$WORK/viewer"
+printf '[Desktop Entry]\nType=Application\nName=Viewer\nExec=%s %%f\nMimeType=application/pdf;\n' \
+  "$WORK/viewer" >"$WORK/desk/applications/viewer.desktop"
+touch "$WORK/notes.pdf"
+( cd "$WORK" && env DOMICILE_SOCK="$SOCK" PATH="$SHIMS:$APP_PATH" \
+    XDG_DATA_HOME="$WORK/desk" XDG_DATA_DIRS="$WORK/none" \
+    XDG_CONFIG_HOME="$WORK/desk-config" XDG_CONFIG_DIRS="$WORK/none" \
+    xdg-open notes.pdf >"$WORK/file.log" 2>&1 )
+if [ "$(cat "$WORK/viewer-heard" 2>/dev/null)" = "$WORK/notes.pdf" ]; then
+  echo "PASS: notes.pdf opened in $WORK/viewer"
 else
-  echo "FAIL: notes.pdf did not reach the xdg-open behind this desktop's:"
-  sed 's/^/    /' "$WORK/deferred.log"
+  echo "FAIL: notes.pdf did not open in its type's default:"
+  sed 's/^/    /' "$WORK/file.log"
   FAILED=1
 fi
 

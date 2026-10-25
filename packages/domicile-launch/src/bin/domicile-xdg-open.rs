@@ -1,13 +1,11 @@
-//! The desktop's `xdg-open`: opens links with `domicile open-url` and passes
-//! anything else to the next `xdg-open` on `PATH`.
+//! The desktop's `xdg-open`: `domicile open` on its one argument, so a file or
+//! link an app opens goes where the launcher would send it.
 //!
 //! `domicile_launch::spawn` puts this first on every app's `PATH`. The logic is
-//! in `domicile_launch::xdg_open`.
+//! in `domicile_launch::open`.
 
 use std::os::unix::process::CommandExt as _;
 use std::process::{Command, ExitCode};
-
-use domicile_launch::xdg_open::{link, underlying};
 
 fn main() -> ExitCode {
     let me = match std::env::current_exe() {
@@ -18,31 +16,15 @@ fn main() -> ExitCode {
         }
     };
     let args: Vec<_> = std::env::args_os().skip(1).collect();
-    let (program, why) = match link(&args) {
-        Some(url) => {
-            let domicile = me.with_file_name("domicile");
-            let why = Command::new(&domicile).arg("open-url").arg(url).exec();
-            (domicile, why)
-        }
-        None => {
-            // `current_exe` resolves symlinks, so compare canonical paths to
-            // skip this program.
-            let found = underlying(std::env::var("PATH").ok().as_deref(), &|candidate| {
-                candidate
-                    .canonicalize()
-                    .is_ok_and(|resolved| resolved != me)
-            });
-            let Some(found) = found else {
-                eprintln!(
-                    "xdg-open: this desktop opens links itself, and there is no other \
-                     xdg-open on PATH for anything else"
-                );
-                return ExitCode::FAILURE;
-            };
-            let why = Command::new(&found).args(&args).exec();
-            (found, why)
-        }
+    let [target] = args.as_slice() else {
+        eprintln!(
+            "xdg-open: takes one file, folder or address to open, and was given {}",
+            args.len()
+        );
+        return ExitCode::FAILURE;
     };
-    eprintln!("xdg-open: could not run {}: {why}", program.display());
+    let domicile = me.with_file_name("domicile");
+    let why = Command::new(&domicile).arg("open").arg(target).exec();
+    eprintln!("xdg-open: could not run {}: {why}", domicile.display());
     ExitCode::FAILURE
 }

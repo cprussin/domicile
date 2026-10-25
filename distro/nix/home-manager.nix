@@ -231,10 +231,10 @@
 
     # A verb is only a verb as the first word, and a line that starts with one
     # has said what it wants whatever follows -- `load-shell` takes a shell of
-    # its own and `open-url` and `open-app` an address, none of which is the
-    # configured shell being asked for.
+    # its own and `open` an address, none of which is the configured shell
+    # being asked for.
     case "''${1-}" in
-      which-shell|load-shell|open-url|open-app) named_one=1 ;;
+      which-shell|load-shell|open) named_one=1 ;;
     esac
 
     if [ -n "''${named_one-}" ]; then
@@ -755,7 +755,7 @@ in {
     webApps = lib.mkOption {
       description = ''
         Sites to install as apps, by the name launchers show. Each gets a
-        desktop entry that runs `domicile open-app <url>`, which opens the site
+        desktop entry that runs `domicile open --app <url>`, which opens the site
         in a window with no address bar. See docs/architecture/WEB-APPS.md.
       '';
       type = lib.types.attrsOf (lib.types.submodule {
@@ -826,7 +826,7 @@ in {
       lib.mapAttrs (name: app: {
         inherit name;
         inherit (app) icon;
-        exec = "${cfg.package}/bin/domicile open-app ${execArgument app.url}";
+        exec = "${cfg.package}/bin/domicile open --app ${execArgument app.url}";
       })
       cfg.webApps;
 

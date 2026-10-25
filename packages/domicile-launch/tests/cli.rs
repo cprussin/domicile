@@ -111,46 +111,35 @@ fn load_shell_takes_one_shell_and_the_extra_word_is_named() {
 }
 
 #[test]
-fn open_url_is_the_verb_that_takes_an_address() {
-    // What `BROWSER` runs. The target is kept as typed, like `load-shell`'s.
+fn open_takes_one_thing_to_open_as_typed() {
     assert_eq!(
-        run(&["open-url", "https://example.com/a?b=c"]).unwrap(),
+        run(&["open", "~/notes.org"]).unwrap(),
         Invocation::Open {
-            target: "https://example.com/a?b=c".to_string()
+            target: "~/notes.org".to_string()
         }
     );
-}
-
-#[test]
-fn run_app_is_the_verb_that_takes_an_app_module() {
+    assert_eq!(run(&["open"]), Err(CliError::NothingToOpen));
     assert_eq!(
-        run(&["run-app", "./notes/notes.js"]).unwrap(),
-        Invocation::RunApp {
-            entry: "./notes/notes.js".to_string()
-        }
-    );
-    assert_eq!(run(&["run-app"]), Err(CliError::NothingToRun));
-    assert_eq!(
-        run(&["run-app", "./a.js", "./b.js"]),
-        Err(CliError::ExtraToRun {
-            extra: "./b.js".to_string()
+        run(&["open", "a.txt", "b.txt"]),
+        Err(CliError::ExtraToOpen {
+            extra: "b.txt".to_string()
         })
     );
 }
 
 #[test]
-fn open_app_is_the_verb_that_takes_an_app_address() {
+fn open_with_app_opens_an_address_or_module_as_an_app() {
     assert_eq!(
-        run(&["open-app", "https://example.com/"]).unwrap(),
-        Invocation::OpenApp {
+        run(&["open", "--app", "https://example.com/"]).unwrap(),
+        Invocation::OpenAsApp {
             target: "https://example.com/".to_string()
         }
     );
-    assert_eq!(run(&["open-app"]), Err(CliError::NothingToOpenAsApp));
+    assert_eq!(run(&["open", "--app"]), Err(CliError::NothingToOpen));
     assert_eq!(
-        run(&["open-app", "https://a.example", "https://b.example"]),
-        Err(CliError::ExtraToOpenAsApp {
-            extra: "https://b.example".to_string()
+        run(&["open", "--app", "./a.js", "./b.js"]),
+        Err(CliError::ExtraToOpen {
+            extra: "./b.js".to_string()
         })
     );
 }
@@ -184,23 +173,6 @@ fn uninstall_app_is_the_verb_that_takes_an_app_address() {
     assert_eq!(
         run(&["uninstall-app", "https://a.example", "https://b.example"]),
         Err(CliError::ExtraToUninstall {
-            extra: "https://b.example".to_string()
-        })
-    );
-}
-
-#[test]
-fn open_url_with_nothing_to_open_is_refused() {
-    assert_eq!(run(&["open-url"]), Err(CliError::NothingToOpen));
-}
-
-#[test]
-fn open_url_takes_one_address_and_the_extra_word_is_named() {
-    // A caller passing two addresses expects two windows, so opening one
-    // would be wrong.
-    assert_eq!(
-        run(&["open-url", "https://a.example", "https://b.example"]),
-        Err(CliError::ExtraToOpen {
             extra: "https://b.example".to_string()
         })
     );
@@ -408,9 +380,7 @@ fn the_usage_lists_every_verb_and_each_one_parses() {
     for verb in [
         "which-shell",
         "load-shell",
-        "open-url",
-        "open-app",
-        "run-app",
+        "open",
         "install-app",
         "uninstall-app",
         "screenshot",

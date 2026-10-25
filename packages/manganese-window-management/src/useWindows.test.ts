@@ -246,7 +246,7 @@ describe("the desk's browser windows", () => {
   };
 
   it("are drawn as the engine lists them", () => {
-    // `domicile open-url`, a page's target="_blank" and the bar's `+` each
+    // `domicile open`, a page's target="_blank" and the bar's `+` each
     // reach the shell as a window the engine opened and listed.
     const { host, result } = desktop([LEFT, RIGHT]);
 
@@ -473,11 +473,10 @@ describe("a command", () => {
     expect(host.spawned).toEqual([["gedit", "--new-window"]]);
   });
 
-  it("opens a file the launcher chose with what opens it", async () => {
+  it("opens a file the launcher chose with what opens it", () => {
     const host = client();
     const displays = [LEFT, RIGHT];
-    const openFile = (_system: unknown, path: string) =>
-      Promise.resolve(["pager", `/home/me/${path}`]);
+    const openFile = (path: string) => ["pager", `/home/me/${path}`];
     const { result } = renderHook(() =>
       useWindows(
         host.domicile,
@@ -487,9 +486,8 @@ describe("a command", () => {
       ),
     );
 
-    await act(async () => {
+    act(() => {
       result.current.act(WindowAction.FileOpened("Notes/today.txt"));
-      await Promise.resolve();
     });
 
     expect(result.current.launcherOpen).toBe(false);

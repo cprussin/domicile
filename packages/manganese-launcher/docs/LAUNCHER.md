@@ -41,21 +41,21 @@ Browser address bars use the same rule.
 
 ## Opening a file
 
-- **Enter** opens a file with the first application `@domicile-desktop/system-apps/openers`
-  offers (`launcher/open-file.ts`): the type's default from `mimeapps.list`,
-  `domicile-mimeapps.list` first, as the AppChooser portal picks it; else an
-  installed entry whose `MimeType` lists the type.
-- Supertypes count too, nearest first: parents from `mime/subclasses`, and
-  `text/plain` for every `text/*`. Every type's defaults come before any
-  type's entries, so a `text/plain` default opens Markdown that has no
-  default of its own.
-- The type comes from shared-mime-info's `mime/globs2`, by name. A directory
-  is `inode/directory`.
-- A file nothing matches goes to `xdg-open`, which also reads aliases and
-  contents. `NoDisplay` and `Terminal` entries are never
-  offered, so their types go there too.
+- **Enter** runs `xdg-open` on the file (`window-management/open-command.ts`).
+  In a desktop that is `domicile open`, which opens it as a terminal or an
+  app would: see [docs/LAUNCHER.md](../../../docs/LAUNCHER.md#opening-files).
 - **Shift+Enter** asks which to open it with, in the AppChooser portal's dialog
   (`launcher/OpenWith.tsx`). Shift+Enter on any other row acts as Enter.
+- The dialog lists what `@domicile-desktop/system-apps/openers` offers, in the
+  order `domicile open` picks from: every type's defaults from
+  `mimeapps.list`, `domicile-mimeapps.list` first, the type's own before its
+  supertypes' (`mime/subclasses`, and `text/plain` for every `text/*`); then
+  installed entries whose `MimeType` lists one. The type comes from
+  shared-mime-info's `mime/globs2`, by name; a directory is
+  `inode/directory`. `NoDisplay` and `Terminal` entries are never offered.
+- The dialog does not read aliases, `[Added Associations]` or
+  `[Removed Associations]`, nor guess the type of a file no glob matches, as
+  `domicile open` does. So its first entry can differ from what Enter opens.
 - URLs and searches open as a page.
 
 ## Preview
