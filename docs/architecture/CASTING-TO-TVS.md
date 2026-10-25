@@ -1,0 +1,132 @@
+# Casting to TVs
+
+The user picks a TV in the bar, then either extends the desktop onto it or
+casts a window, a monitor or a region to it. v1 speaks Google Cast and
+Miracast.
+
+## Targets
+
+| Receiver | Protocol | v1 |
+|---|---|---|
+| Chromecast, Google TV, Android TV, Nest Hub, TVs with Cast built in | Google Cast mirroring | yes, in the engine |
+| Fire TV on Fire OS, Roku, Samsung, LG, Windows wireless displays | Miracast over Wi-Fi Direct | yes, `domicile-miracast` |
+| LG webOS, Windows, Microsoft adapters | Miracast over the LAN (MICE) | yes, `domicile-miracast` |
+| Apple TV, AirPlay TVs | AirPlay 2 | no |
+| Smart TVs as DLNA renderers | UPnP AV | no |
+| A TV running Moonlight | GameStream | no; ROADMAP item |
+
+- **AirPlay is out.** Mirroring is FairPlay-encrypted and no open sender
+  speaks it.
+- **DLNA is out.** Renderers buffer for seconds; fine for a video file, not a
+  desktop.
+- Fire TV sticks on Vega OS (2025 on) may lack Miracast. No Fire TV has Cast.
+
+## UX
+
+- **`Cast` bar item** (`manganese-bar-module-cast`). Its popover lists the
+  TVs found nearby, by name. Protocols are never shown. A TV that cannot be
+  reached says why ("Needs Wi-Fi Direct").
+- **Pick a TV, then:**
+  - **Extend desktop.** The TV becomes a monitor at its mode, placed right of
+    the others. It shows in Settings > Displays like any monitor.
+  - **Cast…** The share picker opens, titled "Cast to <TV>". Whatever is
+    picked (window, monitor, region) goes to the TV.
+- **Sound follows the source:** a window's own apps, or every app for a
+  monitor or region ([audio.rs](/packages/domicile-compositor/src/casting/audio.rs)).
+- **While casting,** the item is lit and the popover shows the TV, what is on
+  it, and **Stop casting**. Idle blanking is held off. Notification banners
+  are held while a monitor is cast.
+- **Miracast pairing:** the popover says "Accept on your TV", or asks for the
+  PIN the TV shows.
+- **A page's own Cast button** (YouTube) opens the same TV list.
+
+## Design
+
+Both backends take their picture from the ScreenCast portal. Neither touches
+the compositor's casting code.
+
+```
+bar item ──startCast(target, Extend | Pick)──▶ backend (engine Cast / domicile-miracast)
+                                                  │ ScreenCast portal
+                                Pick: share picker │ Extend: shell answers with virtual-N
+                                                  ▼
+                                    compositor casting/ ── PipeWire video + sound nodes
+                                                  ▼
+                                    backend encodes, sends to the TV
+```
+
+- **Extend** creates a virtual monitor, then starts the cast. The shell
+  answers the backend's ScreenCast request with that monitor, so no picker
+  shows. Restore tokens are per app, so they can't do this. Stopping the cast
+  removes the monitor.
+- **Cast…** starts the cast and the share picker asks.
+- **Targets** from both backends merge in the SDK: `useCastTargets()`,
+  `startCast(target, CastSource.Extend() | CastSource.Pick())`,
+  `stopCast(cast)`, `useCasts()`.
+
+### Virtual monitors
+
+- The shell asks for one with `SystemRequest::VirtualMonitor { name, mode }`.
+  The reply names its `wl_output`. It lives until the request ends (`Unwatch`, or the shell's page going away).
+- The compositor sends the list to the engine with
+  `domicile_virtual_displays_configure`. Each has an id the compositor picks.
+- The engine adds a `DisplaySnapshot` of type `NETWORK` for each to the DRM
+  reading, with connector `virtual-<n>`. `DrmScreen` lists it like any
+  display; `ModesetParamsFromSnapshots` skips it, so no CRTC lights.
+- `Screens` places it right of the other monitors, whatever profile matched.
+- A tty session only. Nested, the window is the desktop, so Extend is
+  unavailable.
+- The browser opens a desk window on it as on any display. Its GPU window has
+  no controller, so frames are acked without scanout, paced by viz's
+  synthetic begin-frame source at the receiver's rate.
+- The engine's display capture reads it like a real monitor, so monitor casts
+  of it need no change.
+
+### Google Cast, in the engine
+
+- Chrome's Media Router discovers receivers (`_googlecast._tcp`) and runs
+  mirroring (`components/mirroring`, `media/cast`, Open Screen). The engine
+  turns it on and hides Chrome's Cast dialog.
+- The control channel carries the sinks to the shell (`castsinks` event) and
+  starts and stops mirroring routes (`startCasting`, `stopCasting`).
+- Mirroring captures the desktop through webrtc's PipeWire capturer, which
+  asks the portal (patch `0128`). For Extend, the shell answers that
+  request with the virtual monitor.
+- A page's Cast request goes to the shell's TV list instead of Chrome's
+  dialog.
+
+### Miracast, `domicile-miracast`
+
+- A Rust D-Bus service (`net.domicile.Miracast`), started by the desktop's
+  systemd user units. The shell reaches it with `SystemRequest::DbusCall` and
+  `DbusMatch`, so it needs no protocol frames.
+- **Discovery and links:** NetworkManager's `WifiP2P` D-Bus API for Wi-Fi
+  Direct; mDNS `_display._tcp` for MICE.
+- **Session:** the WFD source side of RTSP (M1 to M16), then RTP carrying
+  MPEG-TS.
+- **Media:** GStreamer, `pipewiresrc` to H.264 (VA-API, else x264) and AAC,
+  into `mpegtsmux`.
+- **Failures shown, not hidden:** no P2P-capable card, `iwd` in place of
+  `wpa_supplicant`, a closed firewall port. Each makes the target say why.
+- GNOME Network Displays is the reference. It is GPL-3, so nothing is copied.
+
+## Key decisions
+
+- **Extend or Pick over a single mirror mode.** Pick covers a single window,
+  native or web; native windows are in every monitor frame because `<app>`
+  draws them in the page.
+- **Cast in the engine over a standalone sender.** Chrome already ships
+  discovery, the Cast channel, encoders and congestion control, and a page's
+  Cast button comes with it.
+- **The portal as the only source.** Both backends see what any portal app
+  sees, so the share picker is the whole source API.
+
+## Plan
+
+- [ ] virtual monitors: engine ABI and `DrmModeset`, `Screens`, `SystemRequest::VirtualMonitor` (#1524)
+- [ ] protocol frames, SDK hooks and the `Cast` bar item, against a fake
+      backend; the shell answers Extend's portal request
+- [ ] engine: Media Router and mirroring wired to the control channel and the
+      portal
+- [ ] `domicile-miracast`: Wi-Fi Direct, MICE, WFD session, encoder
+- [ ] blanking hold, notification hold, launcher command

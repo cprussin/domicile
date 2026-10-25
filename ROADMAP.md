@@ -38,9 +38,10 @@ item when it ships.
    Smithay/smithay#2217, which sends keymaps as read-only fds. Drop the patch
    and `flake.nix`'s `outputHashes` once a Smithay release contains it.
 
-4. **Cast the desktop to a TV.** A virtual monitor at the TV's mode, placed on
-   the desk, streamed to Moonlight (Sunshine or similar), with idle blanking
-   held off while it runs.
+4. **Cast to TVs.** Extend the desktop onto, or cast a window, monitor or
+   region to, a Google Cast or Miracast receiver, from a `Cast` bar item.
+   [CASTING-TO-TVS.md](docs/architecture/CASTING-TO-TVS.md). Moonlight
+   (Sunshine or similar) for low-latency play comes after.
 
 5. **Automatic brightness.** Set the backlight from the ambient light sensor,
    learning from manual changes (as wluma does).
