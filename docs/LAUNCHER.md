@@ -61,7 +61,9 @@ X-Domicile-Preview=/path/to/agenda-preview.svg
 
 ### Opening files
 
-Enter opens a file with its type's default application. Set one in
+Enter opens a file with its type's default application, else its
+supertype's: a `text/plain` default also opens Markdown, source code and
+other text. Set one in
 `~/.config/domicile-mimeapps.list` to apply only in Domicile, or in
 `~/.config/mimeapps.list`:
 

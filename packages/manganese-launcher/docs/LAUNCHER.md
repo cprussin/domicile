@@ -45,10 +45,14 @@ Browser address bars use the same rule.
   offers (`launcher/open-file.ts`): the type's default from `mimeapps.list`,
   `domicile-mimeapps.list` first, as the AppChooser portal picks it; else an
   installed entry whose `MimeType` lists the type.
+- Supertypes count too, nearest first: parents from `mime/subclasses`, and
+  `text/plain` for every `text/*`. Every type's defaults come before any
+  type's entries, so a `text/plain` default opens Markdown that has no
+  default of its own.
 - The type comes from shared-mime-info's `mime/globs2`, by name. A directory
   is `inode/directory`.
-- A file nothing matches goes to `xdg-open`, which also reads aliases,
-  subclasses and contents. `NoDisplay` and `Terminal` entries are never
+- A file nothing matches goes to `xdg-open`, which also reads aliases and
+  contents. `NoDisplay` and `Terminal` entries are never
   offered, so their types go there too.
 - **Shift+Enter** asks which to open it with, in the AppChooser portal's dialog
   (`launcher/OpenWith.tsx`). Shift+Enter on any other row acts as Enter.
