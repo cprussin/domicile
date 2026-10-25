@@ -156,6 +156,11 @@ rate the screen shows it.
 - **Frames viz never sees** answer at once and discard their feedback: an shm
   frame the compositor could not copy, a commit with no new buffer that
   leaves the window as shown, the chrome's own window.
+- **Viz behind:** viz acks a frame when it takes it, not when it draws it, so
+  a client can submit faster than viz draws. With 16 of a window's frames
+  waiting for presentation, the engine holds the newest submit until viz
+  reports one, and a newer submit replaces it, answered at once and discarded
+  (`SurfaceBacklog` in `surface_submits.h`). Viz aborts past 25.
 - **The deadline:** a frame the engine does not report within 250 ms is
   answered anyway and its feedback discarded, so no client waits for good.
 - **Older engines** lack `domicile_engine_reports_frames`. The compositor

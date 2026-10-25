@@ -80,5 +80,53 @@ TEST(SurfaceSubmitsTest, ARefusedFenceComesBackRefused) {
   EXPECT_EQ(BuffersOf(submits.Push(SubmitOf(2))), std::vector<uint64_t>{2});
 }
 
+TEST(SurfaceBacklogTest, ASubmitGoesAtOnceWhileVizHasRoom) {
+  SurfaceBacklog backlog;
+  const SurfaceBacklog::Offered offered =
+      backlog.Offer(SubmitOf(1), SurfaceBacklog::kMostInViz - 1);
+  ASSERT_TRUE(offered.send.has_value());
+  EXPECT_EQ(offered.send->buffer, 1u);
+  EXPECT_FALSE(offered.replaced.has_value());
+}
+
+// Viz aborts with more than 25 frames waiting to be presented.
+TEST(SurfaceBacklogTest, ASubmitWaitsWhileVizIsBehind) {
+  SurfaceBacklog backlog;
+  const SurfaceBacklog::Offered offered =
+      backlog.Offer(SubmitOf(1), SurfaceBacklog::kMostInViz);
+  EXPECT_FALSE(offered.send.has_value());
+  EXPECT_FALSE(offered.replaced.has_value());
+  EXPECT_FALSE(backlog.Take(SurfaceBacklog::kMostInViz).has_value());
+
+  const std::optional<SurfaceSubmit> taken =
+      backlog.Take(SurfaceBacklog::kMostInViz - 1);
+  ASSERT_TRUE(taken.has_value());
+  EXPECT_EQ(taken->buffer, 1u);
+  EXPECT_FALSE(backlog.Take(0).has_value());
+}
+
+// Viz would show only the newest at its next draw.
+TEST(SurfaceBacklogTest, ANewerSubmitReplacesTheWaitingOne) {
+  SurfaceBacklog backlog;
+  backlog.Offer(SubmitOf(1), SurfaceBacklog::kMostInViz);
+  const SurfaceBacklog::Offered offered =
+      backlog.Offer(SubmitOf(2), SurfaceBacklog::kMostInViz);
+  EXPECT_FALSE(offered.send.has_value());
+  ASSERT_TRUE(offered.replaced.has_value());
+  EXPECT_EQ(offered.replaced->buffer, 1u);
+  EXPECT_EQ(backlog.Take(0)->buffer, 2u);
+}
+
+// Frames go to viz in the order they were submitted, so the older one never
+// follows it.
+TEST(SurfaceBacklogTest, ASubmitWithRoomGoesInPlaceOfAWaitingOne) {
+  SurfaceBacklog backlog;
+  backlog.Offer(SubmitOf(1), SurfaceBacklog::kMostInViz);
+  const SurfaceBacklog::Offered offered = backlog.Offer(SubmitOf(2), 0);
+  EXPECT_EQ(offered.send->buffer, 2u);
+  EXPECT_EQ(offered.replaced->buffer, 1u);
+  EXPECT_FALSE(backlog.Take(0).has_value());
+}
+
 }  // namespace
 }  // namespace domicile
