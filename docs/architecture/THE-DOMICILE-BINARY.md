@@ -30,6 +30,7 @@ domicile which-shell              # ask the running desktop which shell it serve
 domicile load-shell <shell>       # replace the running desktop's shell
 domicile open <file|url>          # a web link in the running desktop; anything else with its type's default
 domicile open --app <url|module>  # a site, or an app module, in an app window (WEB-APPS.md, APP-MODULES.md)
+domicile open --which <file|url>  # print the desktop file id `open` would run; nothing for a web link
 domicile install-app <url>        # write a desktop entry from the site's web app manifest; needs no desktop
 domicile uninstall-app <url>      # remove the entry and icon install-app wrote, given its address or start URL
 domicile screenshot               # the shell's interactive screenshot (Print in manganese)
@@ -396,6 +397,9 @@ Several desktops per session:
   to `domicile-xdg-open`, which runs `domicile open`. Web links open in this
   desktop regardless of `mimeapps.list`; anything else opens with its type's
   default, as the launcher's Enter does.
+- The same directory holds the desktop's own `domicile`, so the launcher's
+  "Open with" asks this desktop's `open --which`, whatever `domicile` is
+  installed, and lists that app first.
 - Apps whose wrappers put another `xdg-open` first (nixpkgs wrappers often
   prefix `xdg-utils`) read `mimeapps.list` instead. The package ships
   `share/applications/domicile-mimeapps.list`, and the compositor's

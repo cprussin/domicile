@@ -2,7 +2,7 @@
 // opens it with.
 
 import type { Option, Result } from "@cprussin/option-result";
-import { Ok } from "@cprussin/option-result";
+import { None, Ok } from "@cprussin/option-result";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import type { AppsDesktop } from "./apps-desktop";
 
@@ -11,7 +11,7 @@ import { dataDirs } from "./data-dirs";
 import type { DesktopEntry } from "./desktop-entry";
 import { desktopEnvironment, setVariable } from "./environment";
 import { commandOf } from "./exec";
-import { installedApps } from "./installed";
+import { installedApp, installedApps } from "./installed";
 import { defaultApps } from "./mime-apps";
 import { allOk } from "./results";
 import { supertypesOf } from "./supertypes";
@@ -36,9 +36,11 @@ export type Openers = {
  * What can open `path`: relative to home, as every system call's path is, or
  * absolute.
  *
- * Only `MimeType`, the defaults and subclasses are read: aliases and
- * `mimeapps.list`'s added and removed associations are not. A launcher falls
- * back to `xdg-open` when this offers nothing.
+ * The application `domicile open` would run comes first, as
+ * `domicile open --which` says, so this agrees with what opening the file
+ * does. The rest come from `MimeType`, the defaults and subclasses only:
+ * aliases and `mimeapps.list`'s added and removed associations are not read.
+ * A launcher falls back to `xdg-open` when this offers nothing.
  */
 export const openers = async (
   domicile: AppsDesktop,
@@ -54,13 +56,37 @@ export const openers = async (
               None: () => Promise.resolve(Ok<DesktopEntry[], SystemError>([])),
               Some: (type) => appsFor(domicile, dirs, type),
             })
-          ).map((apps) => ({
-            apps,
-            command: (app: DesktopEntry) => commandFor(app, file),
-            contentType,
-          })),
+          ).andThenAsync(async (apps) =>
+            (await openedWith(domicile, dirs, file)).map((first) => ({
+              apps: first.match({
+                None: () => apps,
+                Some: (app) => [app, ...apps.filter(({ id }) => id !== app.id)],
+              }),
+              command: (app: DesktopEntry) => commandFor(app, file),
+              contentType,
+            })),
+          ),
       ),
     );
+  });
+
+/**
+ * The application `domicile open` would run for `file`, or nothing when it
+ * would run none. The `domicile` is the running desktop's own, first on its
+ * `PATH`.
+ */
+const openedWith = async (
+  domicile: AppsDesktop,
+  dirs: readonly string[],
+  file: string,
+): Promise<Result<Option<DesktopEntry>, SystemError>> =>
+  (
+    await domicile.processes.run(["domicile", "open", "--which", file])
+  ).andThenAsync(({ code, stdout }) => {
+    const id = stdout.trim();
+    return code !== 0 || id === ""
+      ? Promise.resolve(Ok(None<DesktopEntry>()))
+      : installedApp(domicile, dirs, id);
   });
 
 /** The installed applications for `contentType`, in `Openers.apps`'s order. */

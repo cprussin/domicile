@@ -108,12 +108,35 @@ pub fn app_opening(target: &str, here: &Path) -> Result<AppOpening, OpenError> {
 /// - Any other address opens with its scheme's handler,
 ///   `x-scheme-handler/<scheme>`.
 pub fn opening(target: &str, here: &Path, places: &Places) -> Result<Opening, OpenError> {
+    Ok(match resolved(target, here, places)? {
+        Resolved::Browse(url) => Opening::Browse(url),
+        Resolved::Run { argv, .. } => Opening::Run(argv),
+    })
+}
+
+/// The desktop file id of the application [`opening`] runs for `target`, or
+/// `None` for a web address, which browses. The launcher's "Open with" lists
+/// it first, so it agrees with what Enter opens.
+pub fn opener(target: &str, here: &Path, places: &Places) -> Result<Option<String>, OpenError> {
+    Ok(match resolved(target, here, places)? {
+        Resolved::Browse(_) => None,
+        Resolved::Run { id, .. } => Some(id),
+    })
+}
+
+/// [`opening`], with the application that runs.
+enum Resolved {
+    Browse(String),
+    Run { id: String, argv: Vec<String> },
+}
+
+fn resolved(target: &str, here: &Path, places: &Places) -> Result<Resolved, OpenError> {
     let scheme = has_scheme(target)
         .then(|| target.split_once(':'))
         .flatten()
         .map(|(scheme, _)| scheme.to_ascii_lowercase());
     match scheme.as_deref() {
-        Some("http" | "https") => Ok(Opening::Browse(target.to_string())),
+        Some("http" | "https") => Ok(Resolved::Browse(target.to_string())),
         Some("file") => file_opening(target, &here.join(file_path(target)), places),
         Some(scheme) => {
             let mime = format!("x-scheme-handler/{scheme}");
@@ -125,7 +148,7 @@ pub fn opening(target: &str, here: &Path, places: &Places) -> Result<Opening, Op
 }
 
 /// Opening the file or folder at `path`, which the user named `target`.
-fn file_opening(target: &str, path: &Path, places: &Places) -> Result<Opening, OpenError> {
+fn file_opening(target: &str, path: &Path, places: &Places) -> Result<Resolved, OpenError> {
     let mime = content_type(path, &places.data_dirs).map_err(|why| OpenError::Unreadable {
         path: target.to_string(),
         why: why.to_string(),
@@ -159,7 +182,7 @@ fn run(
     target: &str,
     handler: &Handler,
     command: Option<Vec<String>>,
-) -> Result<Opening, OpenError> {
+) -> Result<Resolved, OpenError> {
     let argv = command.ok_or_else(|| OpenError::UnreadableExec {
         id: handler.id.clone(),
         target: target.to_string(),
@@ -179,7 +202,10 @@ fn run(
             target: target.to_string(),
             program,
         }),
-        false => Ok(Opening::Run(argv)),
+        false => Ok(Resolved::Run {
+            id: handler.id.clone(),
+            argv,
+        }),
     }
 }
 

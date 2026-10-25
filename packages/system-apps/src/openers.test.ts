@@ -25,7 +25,14 @@ const GLOBS = [
 const app = (name: string, exec: string, types: string): string =>
   `[Desktop Entry]\nType=Application\nName=${name}\nExec=${exec}\nMimeType=${types}\n`;
 
-const desktop = (tree: Readonly<Record<string, Node>>) =>
+/**
+ * A desktop holding `tree`, whose `domicile open --which` prints `opener`, or
+ * fails when it is `undefined`, as when nothing opens the file.
+ */
+const desktop = (
+  tree: Readonly<Record<string, Node>>,
+  opener: string | undefined = undefined,
+) =>
   fakeDesktop(
     {
       "/share/applications/editor.desktop": app(
@@ -43,13 +50,20 @@ const desktop = (tree: Readonly<Record<string, Node>>) =>
       "a b.txt": "",
       ...tree,
     },
-    () => ({
-      code: 0,
-      stderr: "",
-      stdout: Object.entries(ENVIRONMENT)
-        .map(([name, value]) => `${name}=${value}\0`)
-        .join(""),
-    }),
+    (argv) =>
+      argv[0] === "domicile"
+        ? {
+            code: opener === undefined ? 1 : 0,
+            stderr: "",
+            stdout: opener === undefined ? "" : `${opener}\n`,
+          }
+        : {
+            code: 0,
+            stderr: "",
+            stdout: Object.entries(ENVIRONMENT)
+              .map(([name, value]) => `${name}=${value}\0`)
+              .join(""),
+          },
   );
 
 const ok = <T extends NonNullable<unknown>, E extends NonNullable<unknown>>(
@@ -112,6 +126,64 @@ describe("openers", () => {
     expect(await ids(system, "a.thing")).toStrictEqual([
       "notes.desktop",
       "editor.desktop",
+    ]);
+  });
+
+  it("offers what `domicile open` would run first, NoDisplay or not", async () => {
+    const system = desktop(
+      {
+        "/config/mimeapps.list":
+          "[Default Applications]\ntext/plain=notes.desktop\n",
+        "/share/applications/hidden.desktop": `${app("Hidden", "hidden %f", "")}NoDisplay=true\n`,
+      },
+      "hidden.desktop",
+    );
+
+    expect(await ids(system, "a b.txt")).toStrictEqual([
+      "hidden.desktop",
+      "notes.desktop",
+      "editor.desktop",
+    ]);
+  });
+
+  it("moves what `domicile open` would run to the front, once", async () => {
+    const system = desktop(
+      {
+        "/config/mimeapps.list":
+          "[Default Applications]\ntext/plain=notes.desktop\n",
+      },
+      "editor.desktop",
+    );
+
+    expect(await ids(system, "a b.txt")).toStrictEqual([
+      "editor.desktop",
+      "notes.desktop",
+    ]);
+  });
+
+  it("offers what `domicile open` would run for a file of no known type", async () => {
+    expect(
+      await ids(desktop({ "notes.org": "" }, "editor.desktop"), "notes.org"),
+    ).toStrictEqual(["editor.desktop"]);
+  });
+
+  it("asks `domicile open` about the file by its absolute path", async () => {
+    const asked: (readonly string[])[] = [];
+    const system = fakeDesktop({ "a b.txt": "" }, (argv) => {
+      asked.push(argv);
+      return {
+        code: argv[0] === "env" ? 0 : 1,
+        stderr: "",
+        stdout: argv[0] === "env" ? "HOME=/home/me\0" : "",
+      };
+    });
+    ok(await openers(system, "a b.txt"));
+
+    expect(asked).toContainEqual([
+      "domicile",
+      "open",
+      "--which",
+      "/home/me/a b.txt",
     ]);
   });
 

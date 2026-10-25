@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::Path;
 
-use domicile_launch::open::{app_opening, opening, AppOpening, OpenError, Opening, Places};
+use domicile_launch::open::{app_opening, opener, opening, AppOpening, OpenError, Opening, Places};
 
 /// A directory holding `files`, as relative paths and text.
 fn written(files: &[(&str, &str)]) -> tempfile::TempDir {
@@ -303,4 +303,24 @@ mod as_an_app {
             Err(OpenError::NoModule { .. })
         ));
     }
+}
+
+#[test]
+fn the_opener_is_the_application_opening_runs() {
+    let desk = desk();
+    let home = written(&[("a.png", ""), ("a.md", "# hi")]);
+    let places = places(desk.path(), "text/plain=editor.desktop\n");
+
+    assert_eq!(
+        opener("a.png", home.path(), &places),
+        Ok(Some("viewer.desktop".into()))
+    );
+    assert_eq!(
+        opener("a.md", home.path(), &places),
+        Ok(Some("editor.desktop".into()))
+    );
+    assert_eq!(
+        opener("https://example.com", home.path(), &places),
+        Ok(None)
+    );
 }

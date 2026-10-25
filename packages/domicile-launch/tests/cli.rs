@@ -128,6 +128,17 @@ fn open_takes_one_thing_to_open_as_typed() {
 }
 
 #[test]
+fn open_with_which_asks_what_would_open_it() {
+    assert_eq!(
+        run(&["open", "--which", "a.txt"]).unwrap(),
+        Invocation::Opener {
+            target: "a.txt".to_string()
+        }
+    );
+    assert_eq!(run(&["open", "--which"]), Err(CliError::NothingToOpen));
+}
+
+#[test]
 fn open_with_app_opens_an_address_or_module_as_an_app() {
     assert_eq!(
         run(&["open", "--app", "https://example.com/"]).unwrap(),

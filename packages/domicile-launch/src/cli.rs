@@ -27,6 +27,7 @@ Ask the running desktop:
   domicile open <file|folder|url>       Open with its default app, a link in
                                         a browser window
   domicile open --app <url|module>      Open a site or app module as an app
+  domicile open --which <file|url>      Print the app open would use
   domicile screenshot [file]            Take the shell's screenshot, or write a PNG
   domicile screen-record                Record the screen until the toolbar stops it
   domicile send-shell <word>...         Run a shell command, as a keybinding does
@@ -183,6 +184,10 @@ pub enum Invocation {
     ///
     /// Kept as typed, like [`Invocation::Open`]'s.
     OpenAsApp { target: String },
+    /// Print the desktop file id of the application [`Invocation::Open`]
+    /// would run for this, or nothing for a web address. The launcher lists
+    /// it first under "Open with".
+    Opener { target: String },
     /// Write a desktop entry that opens the site at `url` as an app. Needs no
     /// running desktop.
     InstallApp { url: String },
@@ -251,13 +256,16 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
             },
             Verb::Opening => {
                 let first = args.next();
-                let app = first.as_deref() == Some(APP);
-                let target = if app { args.next() } else { first };
+                let flag = first.clone().filter(|word| word == APP || word == WHICH);
+                let target = if flag.is_some() { args.next() } else { first };
                 match (target, args.next()) {
                     (None, _) => Err(CliError::NothingToOpen),
                     (Some(_), Some(extra)) => Err(CliError::ExtraToOpen { extra }),
-                    (Some(target), None) if app => Ok(Invocation::OpenAsApp { target }),
-                    (Some(target), None) => Ok(Invocation::Open { target }),
+                    (Some(target), None) => Ok(match flag.as_deref() {
+                        Some(APP) => Invocation::OpenAsApp { target },
+                        Some(_) => Invocation::Opener { target },
+                        None => Invocation::Open { target },
+                    }),
                 }
             }
             Verb::Installing => match (args.next(), args.next()) {
@@ -352,6 +360,9 @@ const HELP: [&str; 3] = ["help", "--help", "-h"];
 
 /// `open`'s flag for opening as an app.
 const APP: &str = "--app";
+
+/// `open`'s flag for printing what would open it, without opening it.
+const WHICH: &str = "--which";
 
 /// The config file flag. Matches the compositor's flag in `arguments.rs`,
 /// which receives it.
