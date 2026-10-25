@@ -222,7 +222,7 @@ echo "everything in the home, for the record:"
 find "$HOME_DIR" -type f 2>/dev/null | sed 's/^/  /'
 echo
 
-# The verdict. `scripts/test-webview-save-picker-guard.sh` runs this block
+# The verdict. `packages/domicile-engine/tests/test-webview-save-picker-guard.sh` runs this block
 # directly.
 FAILURE=""
 PASSED=""

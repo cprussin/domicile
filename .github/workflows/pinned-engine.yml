@@ -95,12 +95,12 @@ jobs:
       - name: Take the render node
         run: .github/scripts/engine-render-node-lock.sh take "$CARD_OWNER"
 
-      # The guard `check.sh engine` runs, pointed at the store path.
+      # The guard `test:engine` runs, pointed at the store path.
       # - `.#full`, not Chromium's toolchain shell: `engineRuntimeLibs` in
       #   flake.nix provides both the GL stack (for client dmabufs) and
       #   Chromium's runtime libraries (for `libdomicile_engine.so`).
       # - `DOMICILE_ENGINE_OUT=.`: the store path is itself the out directory.
-      #   `scripts/lib/engine-guard.sh` reads both variables.
+      #   `packages/domicile-engine/scripts/lib-engine-guard.sh` reads both variables.
       # - `DOMICILE_GUARD_CONTROL=0`: engine.yml already runs the guard with
       #   `NEGATIVE=1` to show it can fail.
       #
@@ -112,7 +112,7 @@ jobs:
           set -euo pipefail
           DOMICILE_CHROMIUM="$ENGINE" DOMICILE_ENGINE_OUT=. \
             DOMICILE_GUARD_CONTROL=0 \
-            nix develop .#full --command ./scripts/engine-guard-client-window.sh
+            nix develop .#full --command packages/domicile-engine/scripts/run-checks.sh guard-client-window
 
       # Always, including on cancel, so a canceled run does not leak the lock.
       # `drop` is a no-op unless this run holds it.

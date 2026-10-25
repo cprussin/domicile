@@ -10,7 +10,7 @@
 # dying browser can recreate a shared path after the next leg removed it. The
 # next leg's producer then joins the dying browser and waits forever.
 #
-# Checked by `scripts/test-each-engine-launch-has-its-own-broker-socket.sh`.
+# Checked by `packages/domicile-engine/tests/test-each-engine-launch-has-its-own-broker-socket.sh`.
 
 # Points `BROKER` at a new, unused path beside the first one it held, and
 # removes the path it held, which no producer will join again.

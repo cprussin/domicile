@@ -24,7 +24,7 @@
 // event_type_names.json5 -- which recompiled most of Blink for every name
 // added. Each is fired at a listener and at its on<name> handler: the handler
 // is keyed on the fork's name, so a name the list and the IDL disagree on is a
-// handler that never runs. scripts/test-engine-event-names.sh keeps this list
+// handler that never runs. packages/domicile-engine/tests/test-engine-event-names.sh keeps this list
 // and the fork's the same set, reading it at the top level of this file.
 const EVENT_NAMES = [
   "shortcut",

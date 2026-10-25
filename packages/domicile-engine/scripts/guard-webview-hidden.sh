@@ -174,7 +174,7 @@ echo
 echo "measured: $MEASURED"
 echo "  (mode shell page steps before-showing visible-at-hiding last)"
 
-# Which end to blame. `scripts/test-webview-hidden-guard.sh` runs this block
+# Which end to blame. `packages/domicile-engine/tests/test-webview-hidden-guard.sh` runs this block
 # directly. MEASURED is "<mode> <shell> <page> <steps> <before> <shown>
 # <after>".
 FAILURE=""

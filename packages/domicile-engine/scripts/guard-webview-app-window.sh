@@ -199,7 +199,7 @@ echo "sentinel: opened=$OPENED_SENTINEL recorded=$SAW_SENTINEL"
 echo "launched: listed=$SAW_LAUNCHED app=$LAUNCHED_APP"
 echo
 
-# The verdict. `scripts/test-webview-app-window-guard.sh` runs this block
+# The verdict. `packages/domicile-engine/tests/test-webview-app-window-guard.sh` runs this block
 # directly.
 #
 # The subject is an app window in the run and an ordinary one in the control.

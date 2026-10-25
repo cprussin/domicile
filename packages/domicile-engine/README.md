@@ -32,6 +32,8 @@ Domicile's Chromium fork, kept as a patch series on a pinned Chromium revision.
 | `scripts/extract.sh` | writes the checkout's commits back to `patches/` |
 | `scripts/build.sh` | `gn gen` and `autoninja` |
 | `scripts/guard-*`, `spike-*` | end-to-end checks; see [docs/GUARDS.md](docs/GUARDS.md) |
+| `scripts/run-checks.sh` | runs the unit tests and every guard against a built tree (`test:engine`) |
+| `tests/` | shell tests of the guards, their helpers and the series, needing no tree (`test:shell`) |
 | `engine-release.nix`, `engine-official.nix`, `engine-pin.nix` | the prebuilt engines the flake uses |
 
 ## Using a prebuilt engine
@@ -62,13 +64,20 @@ The engine builds only on `crux`, at `/build/chromium/src`.
   file from build output. See
   [BUILD-MACHINE.md](docs/BUILD-MACHINE.md#sharing-the-checkout-with-ci).
 - Make a patch against the series, not the bare pin. Patch N applies on top of
-  patches 1 to N-1. `scripts/test-patch-series-chain.sh` checks the chain.
+  patches 1 to N-1. `tests/test-patch-series-chain.sh` checks the chain.
 - Sharing the checkout with CI, the tree lock and the toolchain shell:
   [docs/BUILD-MACHINE.md](docs/BUILD-MACHINE.md).
 - First-time setup and build arguments:
   [docs/BUILDING-CHROMIUM.md](docs/BUILDING-CHROMIUM.md).
 - Moving the pin: [BUILD-MACHINE.md](docs/BUILD-MACHINE.md#moving-the-pin).
 - Tests: [docs/TESTING.md](docs/TESTING.md).
+
+## Test
+
+```sh
+bun run turbo test --filter @domicile-desktop/engine   # tests/, anywhere
+bun run turbo run test:engine --filter @domicile-desktop/engine   # on crux
+```
 
 ## More
 

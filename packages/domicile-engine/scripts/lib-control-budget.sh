@@ -11,7 +11,7 @@
 # watch. A multiple of it scales with machine speed, unlike a fixed constant.
 #
 # Each rule below prevents a control from stopping too early, and has a case
-# in `scripts/test-control-budget.sh`:
+# in `packages/domicile-engine/tests/test-control-budget.sh`:
 #
 #   - no note: the control waits its full budget (e.g. run alone, or the
 #     guard failed);

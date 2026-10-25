@@ -107,7 +107,7 @@ Details: [DISPLAY-TILINGS.md](DISPLAY-TILINGS.md).
 - A presenter needs no hierarchy to draw the page: its frames reference the
   page's surface
   ([measured](ENGINE-FORK-MEASUREMENTS.md#getting-a-surface-on-screen)).
-  `scripts/test-the-desk-page-ticks-at-the-host.sh` checks no
+  `packages/domicile-engine/tests/test-the-desk-page-ticks-at-the-host.sh` checks no
   fork code calls `AddChildFrameSink`.
 - A slower display draws the latest surface at its own vsync. A slide across a
   seam is one animation on one clock, sampled by two vsyncs.

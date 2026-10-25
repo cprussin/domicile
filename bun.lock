@@ -162,6 +162,13 @@
         "typescript": "catalog:",
       },
     },
+    "packages/domicile-engine": {
+      "name": "@domicile-desktop/engine",
+      "version": "0.0.1",
+      "devDependencies": {
+        "@domicile-desktop/check-runner": "workspace:*",
+      },
+    },
     "packages/e2e-harness": {
       "name": "@domicile-desktop/e2e-harness",
       "version": "0.0.1",
@@ -1208,6 +1215,8 @@
     "@domicile-desktop/component-library": ["@domicile-desktop/component-library@workspace:packages/component-library"],
 
     "@domicile-desktop/e2e-harness": ["@domicile-desktop/e2e-harness@workspace:packages/e2e-harness"],
+
+    "@domicile-desktop/engine": ["@domicile-desktop/engine@workspace:packages/domicile-engine"],
 
     "@domicile-desktop/manganese": ["@domicile-desktop/manganese@workspace:packages/shell-manganese"],
 

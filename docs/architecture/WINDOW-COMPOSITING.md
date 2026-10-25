@@ -272,7 +272,7 @@ Translucent chrome above an `<app>` should blur the window beneath it.
   filter, except protected content (`requires_overlay`). Source references:
   [ENGINE-FORK-CHROMIUM-NOTES.md](ENGINE-FORK-CHROMIUM-NOTES.md#backdrop-filters-and-overlay-promotion).
 - **The check:** `packages/domicile-engine/scripts/guard-css-and-resize.sh`
-  (run by `scripts/engine-guard-css-and-resize.sh` on `crux`) reruns
+  (run by `packages/domicile-engine/scripts/check-css-and-resize.sh` on `crux`) reruns
   `spike-css-page.html` with `?backdrop-filter=`.
   - Each test cell shows an `<app>` next to a `<div>`. With the filter on, both
     halves must still match.

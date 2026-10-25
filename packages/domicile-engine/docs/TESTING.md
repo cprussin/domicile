@@ -11,8 +11,8 @@ autoninja -C out/Domicile domicile_unittests ozone_unittests
 ./out/Domicile/domicile_unittests
 ```
 
-- `/scripts/engine-unit-tests.sh` and `/scripts/engine-drm-unit-tests.sh` hold
-  the `--gtest_filter` lists and a minimum test count for each.
+- `scripts/unit-tests.sh` and `scripts/drm-unit-tests.sh` hold the
+  `--gtest_filter` lists and a minimum test count for each.
 - A filter that matches nothing exits 0, so the minimum count is what catches a
   missing suite. Add a new suite to the filter and raise the count.
 
@@ -21,8 +21,13 @@ autoninja -C out/Domicile domicile_unittests ozone_unittests
 On `crux`, with a built tree:
 
 ```sh
-nix develop .#full --command ./scripts/check.sh engine
+nix develop .#full --command bun run turbo run test:engine --filter=@domicile-desktop/engine
 ```
 
-This runs the unit tests and every guard, in order, stopping at the first
-failure. The guards: [GUARDS.md](GUARDS.md).
+This is `scripts/run-checks.sh`: the unit tests and every guard, in order,
+stopping at the first failure. `run-checks.sh <check>` runs one, such as
+`guard-client-window`. The guards: [GUARDS.md](GUARDS.md).
+
+The package's `tests/` hold the shell tests of the guards, their helpers and
+the patch series. They need no tree and run in `test:shell`, on every pull
+request.

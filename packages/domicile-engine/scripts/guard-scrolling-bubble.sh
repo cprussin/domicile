@@ -223,7 +223,7 @@ echo "the reader stopped with $? after $(grep -c '^frame ' "$FRAMES_LOG") frame(
 # and in how many the bubble is not at the stripe: more than a pixel of
 # rounding from its top, or with no stripe at all.
 #
-# `scripts/test-scrolling-bubble-guard.sh` runs this function directly.
+# `packages/domicile-engine/tests/test-scrolling-bubble-guard.sh` runs this function directly.
 measure() { # the reader's frames
   awk -v bubble="#$BUBBLE" -v stripe="#$STRIPE" '
     /^frame / {
@@ -254,7 +254,7 @@ echo
 echo "measured: $MEASURED"
 echo "  (mode synced frames with-the-bubble stripe-tops off)"
 
-# Which end to blame. `scripts/test-scrolling-bubble-guard.sh` runs this block
+# Which end to blame. `packages/domicile-engine/tests/test-scrolling-bubble-guard.sh` runs this block
 # directly. MEASURED is "<mode> <synced> <frames> <with> <tops> <off>".
 FAILURE=""
 PASSED=""

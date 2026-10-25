@@ -176,7 +176,7 @@ echo
 echo "guest=$SAW_GUEST second=$SAW_SECOND refusal=$SAW_REFUSAL crash=$SAW_CRASH answered=$ANSWERED"
 echo
 
-# The verdict. `scripts/test-webview-browser-page-guard.sh` runs this block
+# The verdict. `packages/domicile-engine/tests/test-webview-browser-page-guard.sh` runs this block
 # directly.
 FAILURE=""
 PASSED=""

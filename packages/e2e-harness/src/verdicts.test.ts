@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { bailFaults } from "./verdicts";
@@ -36,16 +36,27 @@ const verdict = (pid: string): { status: number; out: string } => {
   return { out: run.stdout, status: run.status ?? -1 };
 };
 
+/** Where the workspace packages live, from this file. */
+const PACKAGES = join(import.meta.dir, "..", "..");
+
 /**
- * Every script in `scripts/`, as `[name, contents]`.
+ * Every script in `scripts/` and in each package's `tests/`, as
+ * `[name, contents]`.
  *
  * Includes `test-*.sh`, since any script can drive a compositor. Does not
  * recurse, which leaves out `lib/harness.sh` itself.
  */
 const shellScripts = (): [string, string][] =>
-  readdirSync(SCRIPTS)
-    .filter((name) => name.endsWith(".sh"))
-    .map((name) => [name, readFileSync(join(SCRIPTS, name), "utf8")]);
+  [SCRIPTS, ...readdirSync(PACKAGES).map((pkg) => join(PACKAGES, pkg, "tests"))]
+    .filter((dir) => existsSync(dir))
+    .flatMap((dir) =>
+      readdirSync(dir)
+        .filter((name) => name.endsWith(".sh"))
+        .map((name): [string, string] => [
+          name,
+          readFileSync(join(dir, name), "utf8"),
+        ]),
+    );
 
 describe("harness_fault", () => {
   it("blames the compositor when the compositor is gone", () => {
