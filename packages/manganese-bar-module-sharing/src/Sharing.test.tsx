@@ -9,6 +9,8 @@ import { Sharing } from "./Sharing";
 // Created outside render, since a new system reads again.
 const SYSTEM = fakeSystem(
   {
+    "/share/applications/org.gnome.TextEditor.desktop":
+      "[Desktop Entry]\nType=Application\nName=Text Editor\nExec=te\n",
     "/share/applications/us.zoom.Zoom.desktop":
       "[Desktop Entry]\nType=Application\nName=Zoom\nExec=zoom\nIcon=zoom\n",
     "/share/icons/hicolor/scalable/apps/zoom.svg": "<svg/>",
@@ -57,15 +59,40 @@ const ZOOM = {
   app_id: "us.zoom.Zoom",
   body: {
     sources: [
-      { id: "app-3", title: "Notes", type: "window" },
-      { id: "app-4", title: "", type: "window" },
+      {
+        app_id: "org.gnome.TextEditor",
+        id: "app-3",
+        title: "Notes",
+        type: "window",
+      },
+      { app_id: "", id: "app-4", title: "", type: "window" },
       { id: "7", title: "Meet", type: "browser_window" },
-      { name: "drm-1", type: "monitor" },
-      { position: [0, 0], size: [10, 10], type: "region" },
+      { description: "Dell Inc. DELL U2720Q", name: "DP-1", type: "monitor" },
+      { description: "", name: "drm-2", type: "monitor" },
+      { type: "desk" },
+      {
+        monitor: { description: "Dell Inc. DELL U2720Q", name: "DP-1" },
+        position: [0, 0],
+        size: [300, 200],
+        type: "region",
+      },
+      { position: [-500, 0], size: [10, 10], type: "region" },
     ],
   },
   id: 5,
   kind: "screen_cast",
+};
+
+/** Zoom sharing `sources` alone. */
+const zoomSharing = (...sources: object[]) => ({
+  ...ZOOM,
+  body: { sources },
+});
+
+const DELL = {
+  description: "Dell Inc. DELL U2720Q",
+  name: "DP-1",
+  type: "monitor",
 };
 
 const REMOTE = {
@@ -95,35 +122,115 @@ describe("Sharing", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
-  it("says who is recording, by the application's desktop entry", async () => {
-    const host = new FakeHost();
-    render(<Sharing host={host} system={SYSTEM} />);
-    host.capture([ZOOM]);
+  describe("the bar button", () => {
+    it("names what is shared and who shares it", async () => {
+      const host = new FakeHost();
+      render(<Sharing host={host} system={SYSTEM} />);
+      host.capture([zoomSharing(DELL)]);
 
-    expect(
-      await screen.findByRole("button", { name: "Zoom is sharing" }),
-    ).toBeInTheDocument();
+      const button = await screen.findByRole("button", {
+        name: "Sharing screen",
+      });
+      expect(button).toHaveTextContent("Sharing screen");
+      expect(button).toHaveAttribute("title", "Shared with Zoom");
+    });
+
+    it("names a region over every screen as all of them", async () => {
+      const host = new FakeHost();
+      render(<Sharing host={host} system={SYSTEM} />);
+      host.capture([zoomSharing({ type: "desk" })]);
+
+      expect(
+        await screen.findByRole("button", { name: "Sharing all screens" }),
+      ).toBeInTheDocument();
+    });
+
+    it("counts several sources of a kind", async () => {
+      const host = new FakeHost();
+      render(<Sharing host={host} system={SYSTEM} />);
+      host.capture([
+        zoomSharing(
+          { app_id: "", id: "app-3", title: "", type: "window" },
+          { id: "7", title: "Meet", type: "browser_window" },
+        ),
+      ]);
+
+      expect(
+        await screen.findByRole("button", { name: "Sharing 2 windows" }),
+      ).toBeInTheDocument();
+    });
+
+    it("counts sources of mixed kinds across applications", async () => {
+      const host = new FakeHost();
+      render(<Sharing host={host} system={SYSTEM} />);
+      host.capture([
+        zoomSharing(DELL),
+        {
+          ...zoomSharing({ position: [0, 0], size: [10, 10], type: "region" }),
+          app_id: "org.example.Meet",
+          id: 6,
+        },
+      ]);
+
+      const button = await screen.findByRole("button", {
+        name: "Sharing 2 things",
+      });
+      expect(button).toHaveAttribute("title", "Shared with Zoom and Meet");
+    });
   });
 
-  it("lists what each application records, and stops it", async () => {
-    const host = new FakeHost();
-    render(<Sharing host={host} system={SYSTEM} />);
-    host.capture([ZOOM]);
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Zoom is sharing" }),
-    );
+  describe("the panel", () => {
+    it("names each source and how much of it is shared", async () => {
+      const host = new FakeHost();
+      render(<Sharing host={host} system={SYSTEM} />);
+      host.capture([ZOOM]);
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Sharing 8 things" }),
+      );
 
-    expect(await screen.findByText("Notes")).toBeInTheDocument();
-    expect(
-      within(screen.getByText("Zoom")).getByRole("presentation"),
-    ).toHaveAttribute("src", "data:image/svg+xml;base64,PHN2Zy8+");
-    expect(screen.getByText("Untitled window")).toBeInTheDocument();
-    expect(screen.getByText("Browser: Meet")).toBeInTheDocument();
-    expect(screen.getByText("Screen drm-1")).toBeInTheDocument();
-    expect(screen.getByText("Region")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Stop sharing" }));
+      const list = await screen.findByRole("list", { name: "Shared by Zoom" });
+      expect(
+        within(list)
+          .getAllByRole("listitem")
+          .map((item) => item.textContent),
+      ).toEqual([
+        "NotesText Editor",
+        "Untitled windowWindow",
+        "MeetBrowser window",
+        "Dell Inc. DELL U2720QWhole screen · DP-1",
+        "Screen drm-2Whole screen",
+        "All screensEvery screen",
+        "Part of Dell Inc. DELL U2720Q300 × 200",
+        "Part of the desktop10 × 10",
+      ]);
+    });
 
-    expect(host.answers).toEqual([[5, { kind: "stop" }]]);
+    it("shows the sharing application's icon", async () => {
+      const host = new FakeHost();
+      render(<Sharing host={host} system={SYSTEM} />);
+      host.capture([zoomSharing(DELL)]);
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Sharing screen" }),
+      );
+
+      expect(
+        within(await screen.findByText("Zoom")).getByRole("presentation"),
+      ).toHaveAttribute("src", "data:image/svg+xml;base64,PHN2Zy8+");
+    });
+
+    it("stops an application sharing", async () => {
+      const host = new FakeHost();
+      render(<Sharing host={host} system={SYSTEM} />);
+      host.capture([zoomSharing(DELL)]);
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Sharing screen" }),
+      );
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Stop sharing" }),
+      );
+
+      expect(host.answers).toEqual([[5, { kind: "stop" }]]);
+    });
   });
 
   it("goes away when the capture ends", () => {

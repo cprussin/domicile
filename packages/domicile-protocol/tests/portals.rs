@@ -6,9 +6,9 @@
 use std::collections::BTreeMap;
 
 use domicile_protocol::{
-    AccessDialog, AccountDialog, AppChooserDialog, BoundShortcut, Captured, Capturing,
-    CapturingKind, CastPick, CastSource, ChosenTrigger, ChromeMessage, DeskRect, Devices,
-    FileChoice, FileChoiceOption, FileChooserAnswer, FileChooserDialog, FileChooserMode,
+    AccessDialog, AccountDialog, AppChooserDialog, BoundShortcut, Captured, CapturedMonitor,
+    Capturing, CapturingKind, CastPick, CastSource, ChosenTrigger, ChromeMessage, DeskRect,
+    Devices, FileChoice, FileChoiceOption, FileChooserAnswer, FileChooserDialog, FileChooserMode,
     FileFilter, FrozenDesk, HostMessage, Inhibited, Inhibition, InputCaptureDialog, LauncherDialog,
     LauncherType, PortalAnswer, PortalKind, PortalRequest, PortalWallpaper, ProposedShortcut,
     RemoteDesktopDialog, ScreenCastDialog, ShortcutsDialog, ShotArea, ShotRect, ShotWindow,
@@ -790,17 +790,24 @@ fn a_running_screen_cast_says_what_it_records() {
                 Captured::Window {
                     id: "app-3".into(),
                     title: "Notes".into(),
+                    app_id: "org.gnome.TextEditor".into(),
                 },
                 Captured::BrowserWindow {
                     id: "7".into(),
                     title: "Meet".into(),
                 },
-                Captured::Monitor {
+                Captured::Monitor(CapturedMonitor {
                     name: "drm-1".into(),
-                },
+                    description: "BOE NE135A1M-NY1".into(),
+                }),
+                Captured::Desk,
                 Captured::Region {
                     position: (10, -20),
                     size: (300, 200),
+                    monitor: Some(CapturedMonitor {
+                        name: "drm-2".into(),
+                        description: String::new(),
+                    }),
                 },
             ],
         },
@@ -809,7 +816,7 @@ fn a_running_screen_cast_says_what_it_records() {
 
     assert_eq!(
         written,
-        r#"{"id":5,"app_id":"us.zoom.Zoom","kind":"screen_cast","body":{"sources":[{"type":"window","id":"app-3","title":"Notes"},{"type":"browser_window","id":"7","title":"Meet"},{"type":"monitor","name":"drm-1"},{"type":"region","position":[10,-20],"size":[300,200]}]}}"#
+        r#"{"id":5,"app_id":"us.zoom.Zoom","kind":"screen_cast","body":{"sources":[{"type":"window","id":"app-3","title":"Notes","app_id":"org.gnome.TextEditor"},{"type":"browser_window","id":"7","title":"Meet"},{"type":"monitor","name":"drm-1","description":"BOE NE135A1M-NY1"},{"type":"desk"},{"type":"region","position":[10,-20],"size":[300,200],"monitor":{"name":"drm-2","description":""}}]}}"#
     );
 }
 /// A frozen 300x100 desk with one monitor and one window.

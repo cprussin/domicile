@@ -261,12 +261,18 @@ Every bar and the lock screen share one watch per system readout. See
 
 ## Sharing
 
-- Shown, in the warning color, while an application records the desktop
-  through the ScreenCast portal. Its name says who.
+- Shown while an application records the desktop through the ScreenCast
+  portal: a red pill saying what is shared ("Sharing screen", "Sharing 2
+  windows"). Hovering it names who.
 - Click lists each recording application, by its desktop entry's name and
-  icon, and what it records (a window's title, "Screen drm-1" or "Region"),
-  with a
-  **Stop sharing** button that ends that application's session.
+  icon, and each source it records:
+  - **A window:** its title and its application.
+  - **A browser window:** its page's title.
+  - **A screen:** its make and model, else "Screen" and its output name. A
+    region covering one whole screen shows as that screen.
+  - **All screens:** a region covering every screen.
+  - **Part of a screen:** a region, with its size.
+- Each application has a **Stop sharing** button that ends its session.
 - While the bar has this item, the portal dialogs' indicator leaves screen
   casts out, so each shows once. Without it, the indicator lists them.
 - See [PORTALS.md](../../../docs/PORTALS.md).

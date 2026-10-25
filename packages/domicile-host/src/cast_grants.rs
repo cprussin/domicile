@@ -130,17 +130,7 @@ impl Shared {
     /// The region at `position` and `size`, kept on the monitor of
     /// `monitors` it overlaps most. `None` when it overlaps none.
     pub fn region(position: (i32, i32), size: (i32, i32), monitors: &[Placed]) -> Option<Shared> {
-        let overlap = |monitor: &Placed| {
-            let width = (position.0 + size.0).min(monitor.position.0 + monitor.size.0)
-                - position.0.max(monitor.position.0);
-            let height = (position.1 + size.1).min(monitor.position.1 + monitor.size.1)
-                - position.1.max(monitor.position.1);
-            i64::from(width.max(0)) * i64::from(height.max(0))
-        };
-        let monitor = monitors
-            .iter()
-            .filter(|monitor| overlap(monitor) > 0)
-            .max_by_key(|monitor| overlap(monitor))?;
+        let monitor = mostly_on(position, size, monitors)?;
         Some(Shared::Region {
             monitor: monitor.name.clone(),
             offset: (
@@ -150,6 +140,22 @@ impl Shared {
             size,
         })
     }
+}
+
+/// The monitor of `monitors` the region at `position` and `size` overlaps
+/// most, or `None` when it overlaps none.
+pub fn mostly_on(position: (i32, i32), size: (i32, i32), monitors: &[Placed]) -> Option<&Placed> {
+    let overlap = |monitor: &Placed| {
+        let width = (position.0 + size.0).min(monitor.position.0 + monitor.size.0)
+            - position.0.max(monitor.position.0);
+        let height = (position.1 + size.1).min(monitor.position.1 + monitor.size.1)
+            - position.1.max(monitor.position.1);
+        i64::from(width.max(0)) * i64::from(height.max(0))
+    };
+    monitors
+        .iter()
+        .filter(|monitor| overlap(monitor) > 0)
+        .max_by_key(|monitor| overlap(monitor))
 }
 
 /// The tokens handed out.

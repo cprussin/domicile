@@ -403,9 +403,18 @@ export type ScreenCastBody = {
 export enum CapturedKind {
   Window,
   Monitor,
+  Desk,
   Region,
   BrowserWindow,
 }
+
+/** A monitor a screen cast records. */
+export type CapturedMonitor = {
+  /** Its `wl_output` name. */
+  name: string;
+  /** Its make and model, or empty when it reports none. */
+  description: string;
+};
 
 export const Captured = {
   /** A browser window's page, with its title when it was picked. */
@@ -413,18 +422,27 @@ export const Captured = {
     ...window,
     kind: CapturedKind.BrowserWindow as const,
   }),
-  /** A monitor, by `wl_output` name. */
-  Monitor: (monitor: { name: string }) => ({
+  /** A region that covers every monitor of a desktop with several. */
+  Desk: () => ({ kind: CapturedKind.Desk as const }),
+  /** A monitor, or a region that covers one exactly. */
+  Monitor: (monitor: CapturedMonitor) => ({
     ...monitor,
     kind: CapturedKind.Monitor as const,
   }),
-  /** A rectangle of the desktop, in page pixels. */
+  /**
+   * A rectangle of the desktop, in page pixels, with the monitor it is mostly
+   * on, or `undefined` when it is on none.
+   */
   Region: (region: {
     position: readonly [number, number];
     size: readonly [number, number];
+    monitor: CapturedMonitor | undefined;
   }) => ({ ...region, kind: CapturedKind.Region as const }),
-  /** A window, with its title when the cast started. */
-  Window: (window: { id: string; title: string }) => ({
+  /**
+   * A window, with its title and its application's Wayland app id when the
+   * cast started. The app id is empty when the window has none.
+   */
+  Window: (window: { appId: string; id: string; title: string }) => ({
     ...window,
     kind: CapturedKind.Window as const,
   }),
@@ -1067,16 +1085,28 @@ const castSourceSchema = z
     }
   });
 
+const capturedMonitorSchema = z.object({
+  description: z.string(),
+  name: z.string(),
+});
+
 const capturedSchema = z
   .discriminatedUnion("type", [
-    z.object({ id: z.string(), title: z.string(), type: z.literal("window") }),
+    z.object({
+      app_id: z.string(),
+      id: z.string(),
+      title: z.string(),
+      type: z.literal("window"),
+    }),
     z.object({
       id: z.string(),
       title: z.string(),
       type: z.literal("browser_window"),
     }),
-    z.object({ name: z.string(), type: z.literal("monitor") }),
+    capturedMonitorSchema.extend({ type: z.literal("monitor") }),
+    z.object({ type: z.literal("desk") }),
     z.object({
+      monitor: capturedMonitorSchema.optional(),
       position: pairSchema,
       size: pairSchema,
       type: z.literal("region"),
@@ -1085,13 +1115,23 @@ const capturedSchema = z
   .transform((source) => {
     switch (source.type) {
       case "window":
-        return Captured.Window({ id: source.id, title: source.title });
+        return Captured.Window({
+          appId: source.app_id,
+          id: source.id,
+          title: source.title,
+        });
       case "browser_window":
         return Captured.BrowserWindow({ id: source.id, title: source.title });
       case "monitor":
-        return Captured.Monitor({ name: source.name });
+        return Captured.Monitor({
+          description: source.description,
+          name: source.name,
+        });
+      case "desk":
+        return Captured.Desk();
       case "region":
         return Captured.Region({
+          monitor: source.monitor,
           position: source.position,
           size: source.size,
         });

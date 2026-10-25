@@ -258,8 +258,11 @@ One request channel carries all dialogs. Each interface's backend builds on it.
   pid the compositor does not know, and is then not heard. The code is
   `src/casting/audio.rs`.
 - **The shell shows active sharing.** `portal_requests` carries `capturing`:
-  each running session (id, app, what it holds). The shell stops one by
-  answering its id with `stop`. `<PortalDialogs />` draws the indicator;
+  each running session (id, app, what it holds). A screen cast names its
+  sources for people: a window with its app id, a monitor with its make and
+  model, and a region as the monitor it covers exactly, as `desk` when it
+  covers every monitor, else with the monitor it is mostly on. The shell
+  stops one by answering its id with `stop`. `<PortalDialogs />` draws the indicator;
   `omitScreenCasts` leaves screen casts to a shell that shows them itself, as
   manganese's bar does.
 - **The wallpaper rides the same push.** `PortalRequests` carries `wallpaper`:
