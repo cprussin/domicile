@@ -44,6 +44,18 @@ STARTED=()
 # compositor, so windows started after it are announced to it.
 desktop() { # shell module or package
   local log="$SCENE_TMP/domicile.log"
+  # A keyboard on the nested sway's seat for the whole scene, as a real
+  # session has, started before the engine binds the seat. Without it the seat
+  # gains a keyboard with each `keys` and loses it after, so the engine's
+  # window can miss its first keys and get a keyboard leave with no enter,
+  # which a DCHECK aborts. `-k Shift_L` gives wtype a keymap to upload.
+  wtype -k Shift_L -s 86400000 &
+  STARTED+=($!)
+  sleep 1
+  if ! kill -0 "${STARTED[-1]}" 2>/dev/null; then
+    echo "no keyboard could be put on the nested sway's seat" >&2
+    exit 1
+  fi
   # An empty config, so the desktop runs on defaults whatever crux's user
   # configured. `--no-sandbox` as every guard runs; see
   # packages/domicile-engine/docs/GUARDS.md. `--window-size` the output's, as
@@ -120,9 +132,17 @@ record() { # name, seconds
   echo "wrote docs/media/$1.webm and docs/media/$1.mp4"
 }
 
-# Keys go to the nested sway, which hands them to the desktop's window.
+# Keys go to the nested sway, which hands them to the desktop's window. Fails
+# the scene if the engine died of them: `domicile` restarts it, so the capture
+# would otherwise go on with a fresh desktop.
 keys() { # wtype args...
   wtype "$@"
+  sleep 1
+  if grep -aq "the engine exited" "$SCENE_TMP/domicile.log"; then
+    echo "the engine exited after keys $*. domicile said:" >&2
+    grep -a -B2 -A5 "the engine exited" "$SCENE_TMP/domicile.log" | tail -40 >&2
+    exit 1
+  fi
 }
 
 # `|| true`: a stopped process's status is not the scene's, and `set -e` would
