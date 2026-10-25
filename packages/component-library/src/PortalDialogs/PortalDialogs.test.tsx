@@ -1894,10 +1894,22 @@ describe("PortalDialogs", () => {
             app_id: "us.zoom.Zoom",
             body: {
               sources: [
-                { id: "app-3", title: "Notes", type: "window" },
-                { id: "app-4", title: "", type: "window" },
-                { name: "drm-1", type: "monitor" },
-                { position: [0, 0], size: [10, 10], type: "region" },
+                { app_id: "", id: "app-3", title: "Notes", type: "window" },
+                { app_id: "", id: "app-4", title: "", type: "window" },
+                { description: "", name: "drm-1", type: "monitor" },
+                {
+                  description: "Dell Inc. DELL U2720Q",
+                  name: "DP-1",
+                  type: "monitor",
+                },
+                { type: "desk" },
+                {
+                  monitor: { description: "", name: "drm-1" },
+                  position: [0, 0],
+                  size: [10, 10],
+                  type: "region",
+                },
+                { position: [-50, 0], size: [10, 10], type: "region" },
               ],
             },
             id: 7,
@@ -1914,7 +1926,7 @@ describe("PortalDialogs", () => {
       ).toEqual([
         "Remote control: Remote — keyboard, pointer, clipboard",
         "Input capture: Barrier — keyboard, pointer",
-        "Sharing: Zoom — Notes, Untitled window, Screen drm-1, Region",
+        "Sharing: Zoom — Notes, Untitled window, Screen drm-1, Dell Inc. DELL U2720Q, All screens, Part of Screen drm-1, Part of the desktop",
         "screenshot: An application",
       ]);
     });

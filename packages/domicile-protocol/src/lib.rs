@@ -1380,18 +1380,38 @@ pub enum CastPick {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Captured {
-    /// A window, by host app id, with its title when the capture started.
-    Window { id: String, title: String },
+    /// A window, by host app id, with its title and its application's
+    /// Wayland app id when the capture started. The app id is empty when
+    /// the window has none.
+    Window {
+        id: String,
+        title: String,
+        app_id: String,
+    },
     /// A browser window's page, by the engine's window id, with its title
     /// when it was picked.
     BrowserWindow { id: String, title: String },
-    /// A monitor, by `wl_output` name.
-    Monitor { name: String },
-    /// A rectangle of the desktop, in logical pixels.
+    /// A monitor, or a region that covers one exactly.
+    Monitor(CapturedMonitor),
+    /// A region that covers every monitor of a desktop with several.
+    Desk,
+    /// A rectangle of the desktop, in logical pixels, with the monitor it is
+    /// mostly on. `None` when it is on none.
     Region {
         position: (i32, i32),
         size: (i32, i32),
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        monitor: Option<CapturedMonitor>,
     },
+}
+
+/// A monitor a screen cast records, as the shell names it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CapturedMonitor {
+    /// Its `wl_output` name.
+    pub name: String,
+    /// Its make and model, or empty when it reports none.
+    pub description: String,
 }
 
 /// A print dialog: the printers CUPS offers, each with what it supports, and

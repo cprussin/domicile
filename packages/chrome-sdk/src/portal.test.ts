@@ -903,10 +903,26 @@ describe("watchCapturing", () => {
           app_id: "us.zoom.Zoom",
           body: {
             sources: [
-              { id: "app-3", title: "Notes", type: "window" },
+              {
+                app_id: "org.gnome.TextEditor",
+                id: "app-3",
+                title: "Notes",
+                type: "window",
+              },
               { id: "7", title: "Meet", type: "browser_window" },
-              { name: "drm-1", type: "monitor" },
-              { position: [10, -20], size: [300, 200], type: "region" },
+              {
+                description: "BOE NE135A1M-NY1",
+                name: "drm-1",
+                type: "monitor",
+              },
+              { type: "desk" },
+              {
+                monitor: { description: "", name: "drm-2" },
+                position: [10, -20],
+                size: [300, 200],
+                type: "region",
+              },
+              { position: [-500, 0], size: [300, 200], type: "region" },
             ],
           },
           id: 5,
@@ -921,10 +937,24 @@ describe("watchCapturing", () => {
         id: 5,
         kind: CapturingKind.ScreenCast,
         sources: [
-          Captured.Window({ id: "app-3", title: "Notes" }),
+          Captured.Window({
+            appId: "org.gnome.TextEditor",
+            id: "app-3",
+            title: "Notes",
+          }),
           Captured.BrowserWindow({ id: "7", title: "Meet" }),
-          Captured.Monitor({ name: "drm-1" }),
-          Captured.Region({ position: [10, -20], size: [300, 200] }),
+          Captured.Monitor({ description: "BOE NE135A1M-NY1", name: "drm-1" }),
+          Captured.Desk(),
+          Captured.Region({
+            monitor: { description: "", name: "drm-2" },
+            position: [10, -20],
+            size: [300, 200],
+          }),
+          Captured.Region({
+            monitor: undefined,
+            position: [-500, 0],
+            size: [300, 200],
+          }),
         ],
       },
     ]);

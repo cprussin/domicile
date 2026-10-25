@@ -17,10 +17,12 @@ use std::fs::File;
 use std::io::Read;
 use std::sync::{Arc, Mutex};
 
-use domicile_host::cast_grants::{matched, Grants, Open, Persist, Placed, Restored, Shared};
+use domicile_host::cast_grants::{
+    matched, mostly_on, Grants, Open, Persist, Placed, Restored, Shared,
+};
 use domicile_protocol::{
-    Captured, CapturingKind, CastPick, CastSource, FrozenDesk, PortalAnswer, PortalKind,
-    ScreenCastDialog,
+    Captured, CapturedMonitor, CapturingKind, CastPick, CastSource, FrozenDesk, PortalAnswer,
+    PortalKind, ScreenCastDialog,
 };
 use tracing::{info, warn};
 use zbus::object_server::ObjectServer;
@@ -238,6 +240,11 @@ impl ScreenCast {
             return (2, HashMap::new());
         };
         let monitors = placed(&listed);
+        let screens: Vec<Candidate> = listed
+            .iter()
+            .filter(|candidate| matches!(candidate.source, Source::Monitor(_)))
+            .cloned()
+            .collect();
         let open: Vec<Candidate> = listed
             .into_iter()
             .filter(|candidate| asked_for(&selected, &candidate.source))
@@ -290,7 +297,10 @@ impl ScreenCast {
         let capture = self.queue.begin(
             app_id,
             CapturingKind::ScreenCast {
-                sources: picked.iter().map(captured).collect(),
+                sources: picked
+                    .iter()
+                    .map(|candidate| captured(candidate, &screens))
+                    .collect(),
             },
             {
                 let casting = self.casting.clone();
@@ -858,22 +868,76 @@ fn placed(listed: &[Candidate]) -> Vec<Placed> {
         .collect()
 }
 
-/// What the shell's indicator lists for `candidate`.
-fn captured(candidate: &Candidate) -> Captured {
+/// What the shell's indicator lists for `candidate`. A region is named by
+/// the monitors of `screens` it covers.
+fn captured(candidate: &Candidate, screens: &[Candidate]) -> Captured {
     match &candidate.source {
         Source::Window(id) => Captured::Window {
             id: id.clone(),
             title: candidate.title.clone(),
+            app_id: candidate.app_id.clone(),
         },
         Source::BrowserWindow(id) => Captured::BrowserWindow {
             id: id.clone(),
             title: candidate.title.clone(),
         },
-        Source::Monitor(name) => Captured::Monitor { name: name.clone() },
-        Source::Region(region) => Captured::Region {
-            position: region.position,
-            size: region.size,
+        Source::Monitor(_) => Captured::Monitor(captured_monitor(candidate)),
+        Source::Region(region) => covered(*region, screens),
+    }
+}
+
+/// `region` as the monitor of `screens` it covers, as the desk when it covers
+/// all of several, else with the monitor it is mostly on.
+fn covered(region: Region, screens: &[Candidate]) -> Captured {
+    let bounds: Vec<Region> = screens
+        .iter()
+        .map(|screen| screen.bounds.expect("a monitor has bounds"))
+        .collect();
+    match bounds.iter().position(|bounds| *bounds == region) {
+        Some(index) => Captured::Monitor(captured_monitor(&screens[index])),
+        None if bounds.len() > 1 && around(&bounds) == region => Captured::Desk,
+        None => {
+            let placed = placed(screens);
+            let monitor = mostly_on(region.position, region.size, &placed).map(|on| {
+                captured_monitor(
+                    screens
+                        .iter()
+                        .find(|screen| screen.source == Source::Monitor(on.name.clone()))
+                        .expect("placed from these screens"),
+                )
+            });
+            Captured::Region {
+                position: region.position,
+                size: region.size,
+                monitor,
+            }
+        }
+    }
+}
+
+/// The smallest region around all of `regions`, which is not empty.
+fn around(regions: &[Region]) -> Region {
+    let (first, rest) = regions.split_first().expect("regions to surround");
+    rest.iter().fold(*first, |around, region| {
+        let left = around.position.0.min(region.position.0);
+        let top = around.position.1.min(region.position.1);
+        let right = (around.position.0 + around.size.0).max(region.position.0 + region.size.0);
+        let bottom = (around.position.1 + around.size.1).max(region.position.1 + region.size.1);
+        Region {
+            position: (left, top),
+            size: (right - left, bottom - top),
+        }
+    })
+}
+
+/// Monitor `screen` as the indicator names it.
+fn captured_monitor(screen: &Candidate) -> CapturedMonitor {
+    match &screen.source {
+        Source::Monitor(name) => CapturedMonitor {
+            name: name.clone(),
+            description: screen.title.clone(),
         },
+        other => panic!("{other:?} is not a monitor"),
     }
 }
 
@@ -917,8 +981,8 @@ mod tests {
     use std::time::Duration;
 
     use domicile_protocol::{
-        Captured, Capturing, CapturingKind, CastPick, CastSource, PortalAnswer, PortalKind,
-        PortalRequest, ScreenCastDialog,
+        Captured, CapturedMonitor, Capturing, CapturingKind, CastPick, CastSource, PortalAnswer,
+        PortalKind, PortalRequest, ScreenCastDialog,
     };
     use smithay::reexports::calloop::channel::{channel as calloop_channel, Event as Heard};
     use smithay::reexports::calloop::EventLoop;
@@ -1644,9 +1708,10 @@ mod tests {
         assert_eq!(read::<(i32, i32)>(stream, "size"), (1280, 800));
         assert_eq!(
             captured(&served),
-            [Captured::Monitor {
-                name: "drm-2".into()
-            }]
+            [Captured::Monitor(CapturedMonitor {
+                name: "drm-2".into(),
+                description: String::new(),
+            })]
         );
     }
 
@@ -1677,8 +1742,50 @@ mod tests {
             [Captured::Region {
                 position: (1800, 100),
                 size: (300, 200),
+                monitor: Some(CapturedMonitor {
+                    name: "drm-2".into(),
+                    description: String::new(),
+                }),
             }]
         );
+    }
+
+    #[test]
+    fn a_region_over_one_whole_monitor_is_listed_as_that_monitor() {
+        let served = served(Grants::default());
+        select(&served.client, vec![("types", Value::from(4u32))]);
+
+        pick(
+            &served,
+            vec![CastPick::Region {
+                position: (0, 0),
+                size: (1920, 1080),
+            }],
+        );
+
+        assert_eq!(
+            captured(&served),
+            [Captured::Monitor(CapturedMonitor {
+                name: "drm-1".into(),
+                description: "BOE NE135A1M-NY1".into(),
+            })]
+        );
+    }
+
+    #[test]
+    fn a_region_over_every_monitor_is_listed_as_the_desk() {
+        let served = served(Grants::default());
+        select(&served.client, vec![("types", Value::from(4u32))]);
+
+        pick(
+            &served,
+            vec![CastPick::Region {
+                position: (0, 0),
+                size: (3200, 1080),
+            }],
+        );
+
+        assert_eq!(captured(&served), [Captured::Desk]);
     }
 
     #[test]
@@ -1764,6 +1871,7 @@ mod tests {
                     sources: vec![Captured::Window {
                         id: "app-3".into(),
                         title: "Notes".into(),
+                        app_id: "org.gnome.TextEditor".into(),
                     }],
                 },
             }])
