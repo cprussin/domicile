@@ -411,6 +411,9 @@ class FrameSinkBrokerTest : public testing::Test {
         base::BindRepeating(&FrameSinkBrokerTest::RecordPointers,
                             base::Unretained(this)),
         base::BindRepeating(&FrameSinkBrokerTest::SoftwareInterface,
+                            base::Unretained(this)),
+        FrameSinkBroker::VirtualDisplaysSetter(),
+        base::BindRepeating(&FrameSinkBrokerTest::RecordWhitePoint,
                             base::Unretained(this)));
     page_ = broker_->NewEmbedRequester();
   }
@@ -461,6 +464,11 @@ class FrameSinkBrokerTest : public testing::Test {
     pointers_.push_back(std::move(targets));
   }
 
+  // Fake for the ozone platform that owns the CRTCs' gamma ramps.
+  void RecordWhitePoint(float red, float green, float blue) {
+    white_points_.push_back({red, green, blue});
+  }
+
   // Fake for the ozone platform that owns the clipboard.
   void RecordClipboard(mojom::Clipboard clipboard,
                        const FrameSinkBroker::ClipboardContents& contents) {
@@ -485,6 +493,9 @@ class FrameSinkBrokerTest : public testing::Test {
 
   // Every list of pointer targets the producer sent, in order.
   std::vector<std::vector<mojom::PointerTargetPtr>> pointers_;
+
+  // Every white point the producer sent, in order.
+  std::vector<std::vector<float>> white_points_;
 
   // Every clipboard the producer sent, in order.
   std::vector<std::pair<mojom::Clipboard, FrameSinkBroker::ClipboardContents>>
@@ -1187,6 +1198,19 @@ TEST_F(FrameSinkBrokerTest, AProducerSaysWhichDisplayEachTabletCovers) {
   ASSERT_EQ(pointers_[0].size(), 1u);
   EXPECT_EQ(pointers_[0][0]->device, "usb-0000:00:04.0-1/input0");
   EXPECT_EQ(pointers_[0][0]->display_id, 7);
+}
+
+TEST_F(FrameSinkBrokerTest, AProducerSetsTheWhitePoint) {
+  // A night light: only the producer's shell knows the time of day, and only
+  // the browser holds the CRTCs.
+  mojo::Remote<mojom::FrameSinkBroker> remote;
+  broker()->Bind(remote.BindNewPipeAndPassReceiver());
+
+  remote->SetWhitePoint(1.f, 0.75f, 0.5f);
+  RunUntilIdle();
+
+  ASSERT_EQ(white_points_.size(), 1u);
+  EXPECT_EQ(white_points_[0], (std::vector<float>{1.f, 0.75f, 0.5f}));
 }
 
 TEST_F(FrameSinkBrokerTest, AProducerSaysWhatIsOnEachClipboard) {

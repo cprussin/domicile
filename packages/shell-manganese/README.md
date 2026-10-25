@@ -57,6 +57,13 @@ in `src/options.ts`:
 - **`clock.seconds`**: whether the clock shows seconds. Default `true`.
 - **`keymap.hideDefault`**: whether the keymap item hides while the first
   keymap is active. Default `false`.
+- **`brightness.automatic`**: follow the room's light with the backlight, on a
+  machine with an ambient light sensor. Default `true`.
+- **`nightLight.schedule`**: `sunset to sunrise` (the default), `custom` or
+  `off`. Sunset is the time zone's principal city's.
+- **`nightLight.from`**, **`nightLight.to`**: a custom schedule's hours, by the
+  half hour. Default `22:00` to `07:00`.
+- **`nightLight.warmth`**: 0 to 100. Default `50`, about 3000K.
 
 It also exports `DEFAULT_BAR`, `options`, and `Shell`, which is `runManganese()` and is
 what `"shell": "@domicile-desktop/manganese"` loads. Bar items and the

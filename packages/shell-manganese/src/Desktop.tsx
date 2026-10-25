@@ -8,7 +8,9 @@ import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
 import type { HoldKeyboard } from "@domicile-desktop/manganese-bar/panel-keyboard";
 import { PanelKeyboardContext } from "@domicile-desktop/manganese-bar/panel-keyboard";
 import { deskBacklight } from "@domicile-desktop/manganese-bar-module-brightness/desk-backlight";
+import { useAutoBrightness } from "@domicile-desktop/manganese-bar-module-brightness/useAutoBrightness";
 import { useBrightnessKeys } from "@domicile-desktop/manganese-bar-module-brightness/useBrightnessKeys";
+import { useNightLight } from "@domicile-desktop/manganese-bar-module-brightness/useNightLight";
 import type { ClockOptions } from "@domicile-desktop/manganese-bar-module-clock/clock-options";
 import { ClockOptionsContext } from "@domicile-desktop/manganese-bar-module-clock/clock-options";
 import { deskIdleInhibitor } from "@domicile-desktop/manganese-bar-module-idle-inhibitor/desk-idle-inhibitor";
@@ -282,6 +284,8 @@ export const Desktop = ({
 
   const volumeKeys = useVolumeKeys(deskSound(domicile));
   const brightnessKeys = useBrightnessKeys(deskBacklight(domicile));
+  useAutoBrightness(domicile, shellOptions.brightness.automatic);
+  useNightLight(domicile, shellOptions.nightLight);
   // How many bar items' panels hold the keyboard; see `useKeepsKeyboard`.
   const [heldPanels, setHeldPanels] = useState(0);
   const holdKeyboard = useCallback(() => {

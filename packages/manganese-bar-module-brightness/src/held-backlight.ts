@@ -1,6 +1,6 @@
 import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { act } from "@testing-library/react";
-import type { SharedBacklight } from "./desk-backlight";
+import type { SharedBacklight } from "./shared-backlight";
 
 /**
  * A test-controlled backlight: `backlight` replaces the system's, `report`
@@ -10,6 +10,10 @@ export const heldBacklight = () => {
   const listeners: ((level: number) => void)[] = [];
   const asked: number[] = [];
   const backlight: SharedBacklight = {
+    adjust: (level) => {
+      asked.push(level);
+    },
+    chosen: () => () => undefined,
     level: sharedWatch((onLevel: (level: number) => void) => {
       listeners.push(onLevel);
       return () => undefined;

@@ -35,13 +35,7 @@ item when it ships.
    low-latency play, beside Google Cast and Miracast
    ([CASTING-TO-TVS.md](docs/CASTING-TO-TVS.md)).
 
-4. **Automatic brightness.** Set the backlight from the ambient light sensor,
-   learning from manual changes (as wluma does).
-
-5. **Night light.** Warm the colors after sunset. Needs gamma control per
-   monitor: a DRM gamma ramp on a tty, `wlr-gamma-control` for clients.
-
-6. **Screen recording.** Record a monitor, a region or a window to a video
+4. **Screen recording.** Record a monitor, a region or a window to a video
    file from the shell, with a way to stop it.
 
 ## In the engine fork (the agent on `crux`)
