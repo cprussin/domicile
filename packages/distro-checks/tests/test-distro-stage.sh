@@ -223,7 +223,7 @@ holds_line "and is the default for https" \
   "x-scheme-handler/https=domicile-open-url.desktop"
 
 echo "the launcher's entries"
-for entry in history settings screenshot shutdown reboot logout; do
+for entry in history settings screenshot screen-record shutdown reboot logout; do
   file="$USR/share/applications/domicile-$entry.desktop"
   icon="$(sed -n 's/^Icon=//p' "$file" 2>/dev/null)"
   preview="$(sed -n 's/^X-Domicile-Preview=//p' "$file" 2>/dev/null)"
@@ -236,6 +236,8 @@ for entry in history settings screenshot shutdown reboot logout; do
 done
 holds_line "Screenshot runs domicile screenshot" \
   "$USR/share/applications/domicile-screenshot.desktop" "Exec=/usr/bin/domicile screenshot"
+holds_line "Screen Record runs domicile screen-record" \
+  "$USR/share/applications/domicile-screen-record.desktop" "Exec=/usr/bin/domicile screen-record"
 holds_line "Shutdown runs domicile power-off" \
   "$USR/share/applications/domicile-shutdown.desktop" "Exec=/usr/bin/domicile power-off"
 holds_line "Reboot runs domicile reboot" \

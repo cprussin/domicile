@@ -15,6 +15,13 @@ set -euo pipefail
 
 DISTRO="$(cd "$(dirname "$0")" && pwd)"
 
+# The GStreamer plugins `domicile-recorder` loads, by the RPM distribution's
+# names. One line, so the list item expands to several.
+case "$2" in
+  opensuse) gstreamer="gstreamer-plugins-base\n      - gstreamer-plugins-good\n      - gstreamer-plugin-pipewire" ;;
+  *) gstreamer="gstreamer1-plugins-base\n      - gstreamer1-plugins-good\n      - pipewire-gstreamer" ;;
+esac
+
 drop=()
 [ "$#" -eq 4 ] || drop=(-e '/^ *# AppArmor 4 {$/,/^ *# AppArmor 4 }$/d')
 
@@ -24,6 +31,7 @@ config="$(sed "${drop[@]}" \
   -e "s|@pam@|$2|g" \
   -e "s|@version@|$3|g" \
   -e "s|@glibc@|$4|g" \
+  -e "s|\"@rpm-gstreamer@\"|$gstreamer|g" \
   "$DISTRO/nfpm.yaml")"
 if grep -nE '@[a-z]+@' <<<"$config"; then
   echo "nfpm-config.sh: distro/nfpm.yaml has a placeholder this does not fill" >&2

@@ -10,11 +10,13 @@ members = [
     "packages/domicile-test-client",
     "packages/domicile-compositor",
     "packages/domicile-miracast",
+    "packages/domicile-recorder",
 ]
 
 # domicile-compositor needs Smithay and native Wayland libraries, so plain
 # `cargo test` in the core shell skips it. Build it in the full shell:
 # `nix develop .#full -c cargo build -p domicile-compositor`.
+# domicile-recorder links GStreamer, so it is built there too.
 default-members = [
     "packages/domicile-config",
     "packages/domicile-scene",

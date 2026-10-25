@@ -1,0 +1,167 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sun, 25 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: what the shell hides is left out of desk captures
+
+A screen recording's toolbar shows on screen and must not show in the
+recording. The shell marks it with `RestrictionTarget.fromElement`.
+
+- The shell's restriction targets all get one id,
+  `viz::domicile::kHiddenFromCaptures`, which no page can mint: the
+  `SubCaptureTargetIdWebContentsHelper` gives it to `domicile://shell`
+  alone. Element Capture gives a marked element a render pass with that
+  `subtree_capture_id`.
+- `SurfaceAggregator` notes the remapped ids of those passes. After
+  aggregating, `viz::domicile::HideFromCaptures` gives each pass with
+  copy requests that shows one a copy without it, and moves the requests
+  there. The screen still draws the originals; display captures, screen
+  casts and screenshots read the copies.
+- //components/viz/service links
+  //components/viz/service/display/domicile:hidden_from_captures.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ components/viz/service/BUILD.gn               |  3 ++
+ .../viz/service/display/surface_aggregator.cc | 34 +++++++++++++++++++
+ .../viz/service/display/surface_aggregator.h  |  7 ++++
+ ...b_capture_target_id_web_contents_helper.cc | 14 ++++++++
+ 4 files changed, 58 insertions(+)
+
+diff --git a/components/viz/service/BUILD.gn b/components/viz/service/BUILD.gn
+index 42fc392..50b5c96 100644
+--- a/components/viz/service/BUILD.gn
++++ b/components/viz/service/BUILD.gn
+@@ -308,6 +308,9 @@ viz_component("service") {
+     "//components/version_info",
+     "//components/viz/client",
+     "//components/viz/common",
++
++    # Domicile: what the shell hides from captures of the desk.
++    "//components/viz/service/display/domicile:hidden_from_captures",
+     "//gpu/command_buffer/client",
+     "//gpu/config",
+     "//gpu/ipc/client",
+diff --git a/components/viz/service/display/surface_aggregator.cc b/components/viz/service/display/surface_aggregator.cc
+index 325de4e..6afb8a1 100644
+--- a/components/viz/service/display/surface_aggregator.cc
++++ b/components/viz/service/display/surface_aggregator.cc
+@@ -40,6 +40,8 @@
+ #include "components/viz/service/debugger/viz_debugger.h"
+ #include "components/viz/service/display/aggregated_frame.h"
+ #include "components/viz/service/display/display_resource_provider.h"
++#include "components/viz/service/display/domicile/hidden_from_captures.h"
++#include "components/viz/service/display/domicile/hidden_from_captures_id.h"
+ #include "components/viz/service/display/overlay_candidate.h"
+ #include "components/viz/service/display/renderer_utils.h"
+ #include "components/viz/service/display/resolved_frame_data.h"
+@@ -1009,6 +1011,12 @@ void SurfaceAggregator::EmitSurfaceContent(
+ 
+     MoveMatchingRequests(source.id, &copy_requests, &copy_pass->copy_requests);
+ 
++    // Domicile: the shell hid this pass from captures.
++    if (source.subtree_capture_id ==
++        SubtreeCaptureId(domicile::kHiddenFromCaptures)) {
++      hidden_from_captures_.insert(resolved_pass.remapped_id());
++    }
++
+     // Contributing passes aggregated in to the pass list need to take the
+     // transform of the surface quad into account to update their transform to
+     // the root surface.
+@@ -1565,6 +1573,12 @@ void SurfaceAggregator::CopyPasses(ResolvedFrameData& resolved_frame) {
+ 
+     MoveMatchingRequests(source.id, &copy_requests, &copy_pass->copy_requests);
+ 
++    // Domicile: the shell hid this pass from captures.
++    if (source.subtree_capture_id ==
++        SubtreeCaptureId(domicile::kHiddenFromCaptures)) {
++      hidden_from_captures_.insert(resolved_pass.remapped_id());
++    }
++
+     // We add an additional render pass for the transform if the root render
+     // pass has any copy requests.
+     apply_surface_transform_to_root_pass =
+@@ -2312,6 +2326,25 @@ AggregatedFrame SurfaceAggregator::Aggregate(
+ 
+   AddRootReadbackPass();
+ 
++  // Domicile: captures read the frame without what the shell hid from them.
++  // Copy ids last until a frame copies nothing, so an idle capture keeps its
++  // backings.
++  base::flat_map<AggregatedRenderPassId, AggregatedRenderPassId> copy_ids;
++  domicile::HideFromCaptures(
++      *dest_pass_list_, hidden_from_captures_,
++      [this, &copy_ids](AggregatedRenderPassId pass) {
++        auto kept = copies_without_hidden_.find(pass);
++        const AggregatedRenderPassId copy =
++            kept != copies_without_hidden_.end()
++                ? kept->second
++                : render_pass_id_generator_.GenerateNextId();
++        copy_ids.emplace(pass, copy);
++        return copy;
++      });
++  if (!copy_ids.empty()) {
++    copies_without_hidden_ = std::move(copy_ids);
++  }
++
+   ProcessAddedAndRemovedSurfaces();
+   contained_surfaces_.swap(previous_contained_surfaces_);
+   contained_frame_sinks_.swap(previous_contained_frame_sinks_);
+@@ -2373,6 +2406,7 @@ void SurfaceAggregator::ResetAfterAggregate() {
+   expected_display_time_ = base::TimeTicks();
+   display_trace_id_ = -1;
+   has_copy_requests_ = false;
++  hidden_from_captures_.clear();
+   resolved_surface_ranges_.clear();
+   contained_surfaces_.clear();
+   contained_frame_sinks_.clear();
+diff --git a/components/viz/service/display/surface_aggregator.h b/components/viz/service/display/surface_aggregator.h
+index aef13e7..cd4525e 100644
+--- a/components/viz/service/display/surface_aggregator.h
++++ b/components/viz/service/display/surface_aggregator.h
+@@ -424,6 +424,13 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator : public SurfaceObserver {
+   // This is valid during Aggregate after PrewalkSurface is called.
+   bool has_copy_requests_ = false;
+ 
++  // Domicile: the passes the shell hid from captures in the frame being
++  // aggregated, and the id of each pass's copy without them, kept from frame
++  // to frame. See //components/viz/service/display/domicile.
++  base::flat_set<AggregatedRenderPassId> hidden_from_captures_;
++  base::flat_map<AggregatedRenderPassId, AggregatedRenderPassId>
++      copies_without_hidden_;
++
+   // For each FrameSinkId, contains a vector of SurfaceRanges that will damage
+   // the display if they're damaged.
+   base::flat_map<FrameSinkId, std::vector<SurfaceRange>> damage_ranges_;
+diff --git a/content/browser/media/capture/sub_capture_target_id_web_contents_helper.cc b/content/browser/media/capture/sub_capture_target_id_web_contents_helper.cc
+index ba467f1..e8b3114 100644
+--- a/content/browser/media/capture/sub_capture_target_id_web_contents_helper.cc
++++ b/content/browser/media/capture/sub_capture_target_id_web_contents_helper.cc
+@@ -15,6 +15,8 @@
+ #include "base/token.h"
+ #include "base/uuid.h"
+ #include "build/build_config.h"
++#include "components/domicile/browser/shell_origin.h"
++#include "components/viz/service/display/domicile/hidden_from_captures_id.h"
+ #include "content/browser/renderer_host/render_frame_host_impl.h"
+ #include "content/common/content_export.h"
+ #include "content/public/browser/browser_thread.h"
+@@ -101,6 +103,18 @@ std::string SubCaptureTargetIdWebContentsHelper::ProduceId(Type type) {
+   std::vector<base::Token>& ids =
+       (type == Type::kCropTarget) ? crop_ids_ : restriction_ids_;
+ 
++  // Domicile: every element of the shell's gets the one id captures of the
++  // desk leave out. See
++  // //components/viz/service/display/domicile/hidden_from_captures.h.
++  if (type == Type::kRestrictionTarget &&
++      ::domicile::IsShellOrigin(
++          web_contents()->GetPrimaryMainFrame()->GetLastCommittedOrigin())) {
++    if (!IsAssociatedWith(viz::domicile::kHiddenFromCaptures, type)) {
++      ids.push_back(viz::domicile::kHiddenFromCaptures);
++    }
++    return viz::domicile::kHiddenFromCapturesGuid;
++  }
++
+   // Prevent Web-applications from producing an excessive number of IDs.
+   if (ids.size() >= kMaxIdsPerWebContents) {
+     return std::string();

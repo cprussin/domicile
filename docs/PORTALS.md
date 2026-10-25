@@ -326,6 +326,36 @@ One request channel carries all dialogs. Each interface's backend builds on it.
 - **USB is granted whole.** The dialog allows every device asked for or none.
   The spec allows a subset, but an app asks for the devices it needs.
 
+## Screen recording
+
+The shell records the screen itself, not through a portal. `domicile
+screen-record`, the Screen Record launcher entry and the SDK's
+`desktop().capture.screenRecord()` all send the `screen_record` system call
+(`portals::recording::for_the_shell`).
+
+- **The picker is the screen cast one.** Asked as `SHELL_APP_ID` for one
+  source of any kind: a screen, a window, a browser window or a region. The
+  dialog then says "Record your screen" and names nobody.
+- **The compositor casts it and `domicile-recorder` encodes it.** The pick is
+  cast with the pointer drawn in, as any screen cast is. The recorder, beside
+  the compositor, is a GStreamer pipeline: the cast's PipeWire node, and its
+  sound node (`domicile-sound-desk`, or the window's), to VP8 and Opus in a
+  WebM under `$XDG_VIDEOS_DIR/Screen recordings/`, named for when it started.
+  It takes `pause`, `resume` and `stop` on stdin.
+- **It is listed while it runs.** A `recording` capturing session carries its
+  sources, its file, and its time: `recorded_ms`, and `running_since_ms` unless
+  paused. The shell answers it `pause`, `resume`, `stop` or `discard`. A pause
+  leaves no gap in the file. Discard deletes the file and the call fails
+  `Canceled`. A source that goes, such as a closed window, ends the recording
+  and keeps what was recorded.
+- **The toolbar is left out of the recording.** `<PortalDialogs />` draws a
+  floating toolbar for it: the time, pause or resume, stop and discard. It
+  calls the SDK's `hideFromCaptures`, which makes it an Element Capture
+  `RestrictionTarget`. The engine gives every restriction target of the
+  shell's one id, and viz draws every capture of the desk without what has it
+  (`components/viz/service/display/domicile`, patch `0143`). It shows on screen
+  and in no recording, screen cast or screenshot.
+
 ## Interfaces
 
 | Interface | Compositor | Shell UI |

@@ -146,6 +146,7 @@ fn a_command_reaches_the_desktop_and_the_answer_comes_back() {
                 line,
                 &domicile_launch::control::Desktop {
                     capture: &|_| panic!("a question about this desktop reaches no engine"),
+                    record: &|| panic!("a question about this desktop records nothing"),
                     files: &domicile_launch::control::SettingsFiles::default(),
                     load: &|_, _| panic!("a question about this desktop reaches no engine"),
                     module: Path::new("/desktops/mine/shell.js"),
