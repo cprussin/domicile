@@ -12,7 +12,7 @@ use domicile_protocol::{
     FileFilter, FrozenDesk, HostMessage, Inhibited, Inhibition, InputCaptureDialog, LauncherDialog,
     LauncherType, PortalAnswer, PortalKind, PortalRequest, PortalWallpaper, ProposedShortcut,
     RemoteDesktopDialog, ScreenCastDialog, ShortcutsDialog, ShotArea, ShotRect, ShotWindow,
-    TakenChord, UsbDevice, UsbDialog, WallpaperDialog, WallpaperTarget,
+    TakenChord, UsbDevice, UsbDialog, WallpaperDialog, WallpaperTarget, SHELL_APP_ID,
 };
 
 fn access() -> PortalRequest {
@@ -979,4 +979,58 @@ fn a_frozen_desk_takes_only_its_own_answer_inside_the_frame() {
     assert!(!picking.accepts(&area(0, 0, 1, 1)));
     assert_eq!(area(0, 0, 1, 1).response(), 0);
     assert_eq!(PortalAnswer::PickColor { x: 0, y: 0 }.response(), 0);
+}
+
+/// A screen recording is listed while it runs, with its file and how long it
+/// has recorded, so a shell can draw its controls and a timer.
+#[test]
+fn a_screen_recording_is_listed_with_its_file_and_time() {
+    assert_eq!(
+        serde_json::to_string(&HostMessage::PortalRequests {
+            items: Vec::new(),
+            capturing: vec![Capturing {
+                id: 5,
+                app_id: SHELL_APP_ID.into(),
+                kind: CapturingKind::Recording {
+                    sources: vec![Captured::Monitor(CapturedMonitor {
+                        name: "DP-1".into(),
+                        description: "Dell U3219Q".into(),
+                    })],
+                    file: "/home/me/Videos/Screen recordings/a.webm".into(),
+                    recorded_ms: 1500,
+                    running_since_ms: Some(1_761_350_400_000),
+                },
+            }],
+            shortcuts: Vec::new(),
+            wallpaper: PortalWallpaper::default(),
+        })
+        .expect("serializes"),
+        r#"{"type":"portal_requests","items":[],"capturing":[{"id":5,"app_id":"domicile:shell","kind":"recording","body":{"sources":[{"type":"monitor","name":"DP-1","description":"Dell U3219Q"}],"file":"/home/me/Videos/Screen recordings/a.webm","recorded_ms":1500,"running_since_ms":1761350400000}}]}"#
+    );
+    assert_eq!(
+        serde_json::to_string(&CapturingKind::Recording {
+            sources: Vec::new(),
+            file: "/a.webm".into(),
+            recorded_ms: 1500,
+            running_since_ms: None,
+        })
+        .expect("serializes"),
+        r#"{"kind":"recording","body":{"sources":[],"file":"/a.webm","recorded_ms":1500}}"#,
+        "a paused recording has no running_since_ms"
+    );
+}
+
+/// The shell pauses, resumes, stops or discards a recording under its id.
+/// None of these answers a request.
+#[test]
+fn a_recording_is_controlled_under_its_id() {
+    for (sent, answer) in [
+        (r#"{"kind":"pause"}"#, PortalAnswer::Pause),
+        (r#"{"kind":"resume"}"#, PortalAnswer::Resume),
+        (r#"{"kind":"discard"}"#, PortalAnswer::Discard),
+    ] {
+        let parsed = serde_json::from_str::<PortalAnswer>(sent).expect("the SDK's own wire form");
+        assert_eq!(parsed, answer, "{sent}");
+        assert!(!access().kind.accepts(&parsed), "{sent} is for recordings");
+    }
 }

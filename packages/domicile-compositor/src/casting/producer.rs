@@ -863,7 +863,10 @@ impl Cast {
             match step {
                 Step::Ready { node } => {
                     info!(stream = ?self.id, node, "cast ready");
-                    self.hear(Event::Ready { node });
+                    self.hear(Event::Ready {
+                        node,
+                        sound: self.sound.clone(),
+                    });
                 }
                 Step::Fill(on) => {
                     self.state.borrow_mut().filling = on;

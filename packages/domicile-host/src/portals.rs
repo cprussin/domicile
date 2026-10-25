@@ -171,6 +171,45 @@ impl<W, S> Portals<W, S> {
             .map(|index| self.sessions.remove(index).1)
     }
 
+    /// What session `id` takes `answer` with. A stop fits any session; a
+    /// pause, resume or discard fits a recording. A stop or a discard takes
+    /// the session off the list.
+    pub fn control(&mut self, id: u32, answer: &PortalAnswer) -> Result<S, Refusal>
+    where
+        S: Clone,
+    {
+        let index = self
+            .sessions
+            .iter()
+            .position(|(session, _)| session.id == id)
+            .ok_or(Refusal::Unknown)?;
+        let recording = matches!(self.sessions[index].0.kind, CapturingKind::Recording { .. });
+        match answer {
+            PortalAnswer::Stop => Ok(self.sessions.remove(index).1),
+            PortalAnswer::Discard if recording => Ok(self.sessions.remove(index).1),
+            PortalAnswer::Pause | PortalAnswer::Resume if recording => {
+                Ok(self.sessions[index].1.clone())
+            }
+            _ => Err(Refusal::Mismatched),
+        }
+    }
+
+    /// Change session `id`'s listing while it runs, as a recording's pause
+    /// does.
+    pub fn revise_session(
+        &mut self,
+        id: u32,
+        revise: impl FnOnce(&mut CapturingKind),
+    ) -> Result<(), Unknown> {
+        let (session, _) = self
+            .sessions
+            .iter_mut()
+            .find(|(session, _)| session.id == id)
+            .ok_or(Unknown)?;
+        revise(&mut session.kind);
+        Ok(())
+    }
+
     /// Every running session, oldest first, for the chromes.
     pub fn capturing(&self) -> Vec<Capturing> {
         self.sessions
@@ -193,6 +232,7 @@ mod tests {
     use super::*;
     use domicile_protocol::{
         AccessDialog, AppChooserDialog, Capturing, Devices, Inhibited, Inhibition, PortalAnswer,
+        SHELL_APP_ID,
     };
 
     fn access() -> PortalKind {
@@ -421,6 +461,75 @@ mod tests {
         assert_eq!(portals.end(id), Some("stop it"));
         assert_eq!(portals.end(id), None);
         assert_eq!(portals.capturing(), []);
+    }
+
+    fn recording() -> CapturingKind {
+        CapturingKind::Recording {
+            sources: Vec::new(),
+            file: "/a.webm".into(),
+            recorded_ms: 0,
+            running_since_ms: Some(1),
+        }
+    }
+
+    #[test]
+    fn a_recording_takes_pauses_and_a_discard_ends_it() {
+        let mut portals = listening();
+        let id = portals.begin(SHELL_APP_ID.into(), recording(), "record");
+
+        assert_eq!(portals.control(id, &PortalAnswer::Pause), Ok("record"));
+        assert_eq!(portals.control(id, &PortalAnswer::Resume), Ok("record"));
+        assert_eq!(portals.capturing().len(), 1, "a pause leaves it listed");
+        assert_eq!(portals.control(id, &PortalAnswer::Discard), Ok("record"));
+        assert_eq!(portals.capturing(), [], "a discard ends it");
+        assert_eq!(
+            portals.control(id, &PortalAnswer::Pause),
+            Err(Refusal::Unknown)
+        );
+    }
+
+    #[test]
+    fn a_stop_ends_any_session_and_only_a_recording_pauses() {
+        let mut portals = listening();
+        let id = portals.begin("one".into(), remote_desktop(), "stop it");
+
+        assert_eq!(
+            portals.control(id, &PortalAnswer::Pause),
+            Err(Refusal::Mismatched)
+        );
+        assert_eq!(
+            portals.control(id, &PortalAnswer::Canceled),
+            Err(Refusal::Mismatched)
+        );
+        assert_eq!(portals.control(id, &PortalAnswer::Stop), Ok("stop it"));
+        assert_eq!(portals.capturing(), []);
+    }
+
+    #[test]
+    fn a_running_session_is_revised_in_place() {
+        let mut portals = listening();
+        let id = portals.begin(SHELL_APP_ID.into(), recording(), "record");
+
+        portals
+            .revise_session(id, |kind| {
+                if let CapturingKind::Recording {
+                    running_since_ms, ..
+                } = kind
+                {
+                    *running_since_ms = None;
+                }
+            })
+            .expect("it runs");
+
+        assert!(matches!(
+            portals.capturing()[0].kind,
+            CapturingKind::Recording {
+                running_since_ms: None,
+                ..
+            }
+        ));
+        portals.end(id);
+        assert_eq!(portals.revise_session(id, |_| ()), Err(Unknown));
     }
 
     #[test]

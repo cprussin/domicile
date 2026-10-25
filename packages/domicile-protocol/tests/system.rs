@@ -704,3 +704,16 @@ fn the_shell_hears_the_keymaps_and_switches_between_them() {
         );
     }
 }
+
+/// `domicile screen-record` asks for a recording. The shell's picker chooses
+/// what to record, and the reply names the file once the user stops it.
+#[test]
+fn a_screen_recording_is_answered_with_where_it_was_saved() {
+    assert_eq!(
+        chrome(r#"{"type":"system_request","id":12,"request":{"call":"screen_record"}}"#),
+        ChromeMessage::SystemRequest {
+            id: 12,
+            request: SystemRequest::ScreenRecord,
+        }
+    );
+}

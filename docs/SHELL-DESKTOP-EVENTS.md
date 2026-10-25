@@ -171,7 +171,9 @@ import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs
   shell's own, which a review flags as taken.
 - Without React, `watchPortalRequests` and `answerPortalRequest` in
   `@domicile-desktop/sdk/portal` give the requests, parsed, and send answers.
-  `watchCapturing` and `stopCapturing` do the same for running sessions.
+  `watchCapturing` and `stopCapturing` do the same for running sessions. The
+  shell's own screen recording also takes `pauseRecording`, `resumeRecording`
+  and `discardRecording`; see [PORTALS.md](PORTALS.md#screen-recording).
   `fireGlobalShortcuts` in `@domicile-desktop/sdk/global-shortcuts` fires the
   chords.
 - A shell must answer every request. One left unanswered keeps its application

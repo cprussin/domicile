@@ -467,13 +467,21 @@ pub fn shooting_windows(casting: Casting) -> ShootWindow {
 /// on each screenshot.
 pub fn in_pictures() -> Save {
     saving_into(|| {
-        let home = PathBuf::from(std::env::var_os("HOME").unwrap_or_else(|| "/".into()));
-        let config = std::env::var_os("XDG_CONFIG_HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| home.join(".config"));
-        let user_dirs = std::fs::read_to_string(config.join("user-dirs.dirs")).ok();
+        let (user_dirs, home) = user_dirs();
         screenshots_dir(user_dirs.as_deref(), &home)
     })
+}
+
+/// The contents of `user-dirs.dirs`, if there is one, and the home folder.
+pub(super) fn user_dirs() -> (Option<String>, PathBuf) {
+    let home = PathBuf::from(std::env::var_os("HOME").unwrap_or_else(|| "/".into()));
+    let config = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".config"));
+    (
+        std::fs::read_to_string(config.join("user-dirs.dirs")).ok(),
+        home,
+    )
 }
 
 /// A [`Save`] into the folder `dir` names, named for the local time.
@@ -484,7 +492,7 @@ fn saving_into(dir: impl Fn() -> PathBuf + Send + Sync + 'static) -> Save {
 }
 
 /// The local time now.
-fn now() -> Taken {
+pub(super) fn now() -> Taken {
     // SAFETY: `time` with a null argument only returns the time.
     let seconds = unsafe { libc::time(std::ptr::null_mut()) };
     // SAFETY: all-zero is a valid `tm`, filled below.

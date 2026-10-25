@@ -99,6 +99,17 @@ locked.
 - **`domicile screenshot <file>`** writes a PNG of the whole desk, every
   monitor at the highest density, to `<file>` and prints its path.
 
+## Screen recordings
+
+**`domicile screen-record`**, or Screen Record in the launcher, opens the
+shell's screen cast picker. Pick a monitor, a window or an area, and it
+records, with its sound, until the toolbar's Stop. The toolbar also pauses,
+resumes and discards it, and is left out of the recording. The WebM goes
+under `$XDG_VIDEOS_DIR/Screen recordings/` and its path is printed. Dismissing
+the picker or discarding prints `domicile: the screen recording was
+canceled` and exits 1. Refused while the desk is locked. See
+[PORTALS.md](PORTALS.md#screen-recording).
+
 ## Shell commands
 
 `domicile send-shell <word>…` runs a shell command from a terminal on the

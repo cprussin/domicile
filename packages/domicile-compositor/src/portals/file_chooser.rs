@@ -241,6 +241,9 @@ impl Asked {
             | PortalAnswer::Print { .. }
             | PortalAnswer::SaveToPdf { .. }
             | PortalAnswer::Stop
+            | PortalAnswer::Pause
+            | PortalAnswer::Resume
+            | PortalAnswer::Discard
             | PortalAnswer::DynamicLauncher { .. }
             | PortalAnswer::GlobalShortcuts { .. }
             | PortalAnswer::Screenshot { .. }

@@ -36,8 +36,10 @@ jobs:
       # tests run it. `dbus-daemon`: the portal tests run a private session
       # bus. libpipewire for casting, and libclang for the `pipewire` crate's
       # bindings. `pipewire`: the hidden-window cast test runs the daemon.
+      # libgstreamer and its base and good plugins: the recorder links it, and
+      # its tests record test sources to WebM.
       - name: Install the libraries the compositor links and loads
-        run: .github/scripts/apt-install.sh libxkbcommon-dev libwayland-dev libegl1 libegl-mesa0 libgles2 libgl1-mesa-dri libgbm1 wl-clipboard grim dbus-daemon libpipewire-0.3-dev pipewire libclang-dev
+        run: .github/scripts/apt-install.sh libxkbcommon-dev libwayland-dev libegl1 libegl-mesa0 libgles2 libgl1-mesa-dri libgbm1 wl-clipboard grim dbus-daemon libpipewire-0.3-dev pipewire libclang-dev libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good
 
       # This group needs no node_modules, so bun is not set up.
       - run: ./scripts/check.sh rust

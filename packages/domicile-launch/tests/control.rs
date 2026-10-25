@@ -230,6 +230,36 @@ fn a_compositor_that_could_not_take_the_screenshot_is_quoted() {
 }
 
 #[test]
+fn a_screen_recording_answers_with_its_file_once_it_stops() {
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"screen_record\"}",
+            &Desktop {
+                record: &|| Ok(Some(PathBuf::from("/home/me/Videos/rec.webm"))),
+                ..nothing_dialed()
+            },
+        ),
+        Response::Captured {
+            file: PathBuf::from("/home/me/Videos/rec.webm")
+        }
+    );
+}
+
+#[test]
+fn a_screen_recording_dismissed_or_discarded_is_canceled() {
+    assert_eq!(
+        reply_to(
+            "{\"type\":\"screen_record\"}",
+            &Desktop {
+                record: &|| Ok(None),
+                ..nothing_dialed()
+            },
+        ),
+        Response::Canceled
+    );
+}
+
+#[test]
 fn a_desktop_told_to_send_the_shell_a_command_tells_the_compositor() {
     let told = Cell::new(None);
     let answered = answered_sending(
@@ -828,6 +858,7 @@ fn nothing_dialed() -> Desktop<'static> {
         open_app: &|_| panic!("only open_app opens an app window"),
         run_app: &|_, _| panic!("only run_app runs an app module"),
         permissions: &|| panic!("only site_permissions lists site permissions"),
+        record: &|| panic!("only screen_record records anything"),
         send: &|_| panic!("only send_shell sends anything"),
         site_data: &|| panic!("only site_data lists site data"),
         theme: &|_| panic!("only theme reads or sets the theme"),

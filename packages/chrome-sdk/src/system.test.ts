@@ -580,6 +580,22 @@ describe("screenshots", () => {
   });
 });
 
+describe("screen recordings", () => {
+  it("says where the recording went once it is stopped", async () => {
+    const host = new FakeHost();
+    const recording = system(host).screenRecord();
+    host.reply(1, {
+      kind: "saved",
+      path: "/home/me/Videos/Screen recordings/a.webm",
+    });
+
+    expect(host.calls).toStrictEqual([[1, { call: "screen_record" }]]);
+    expect(await recording).toStrictEqual(
+      Ok("/home/me/Videos/Screen recordings/a.webm"),
+    );
+  });
+});
+
 describe("window previews", () => {
   it("draws a client's window by its host app id", async () => {
     const host = new FakeHost();

@@ -1,0 +1,16 @@
+[package]
+name = "domicile-recorder"
+description = "Records a screen cast's PipeWire nodes to a WebM file, for the compositor's screen recordings"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The pipeline: PipeWire in, VP8 and Opus out, muxed into WebM. Links
+# libgstreamer, so the crate is left out of `default-members`.
+gstreamer = "0.24"
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
