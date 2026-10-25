@@ -25,7 +25,7 @@ ENGINE_SCRIPTS="$ROOT/packages/domicile-engine/scripts"
 . "$ENGINE_SCRIPTS/lib-annotate.sh"
 
 # Exit status for a check that could not run, matching `check-runner`. See
-# `scripts/lib/nix-check.sh` for why each library defines its own.
+# `packages/distro-checks/lib/nix-check.sh` for why each library defines its own.
 readonly ENGINE_SKIPPED_STATUS=77
 
 # Sets `ENGINE_DIR` and `ENGINE_OUT`, or exits with a skip naming what is

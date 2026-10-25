@@ -137,6 +137,13 @@
         "react-dom": "catalog:",
       },
     },
+    "packages/distro-checks": {
+      "name": "@domicile-desktop/distro-checks",
+      "version": "0.0.1",
+      "devDependencies": {
+        "@domicile-desktop/check-runner": "workspace:*",
+      },
+    },
     "packages/domicile": {
       "name": "domicile",
       "version": "1.0.0",
@@ -1223,6 +1230,8 @@
     "@domicile-desktop/ci": ["@domicile-desktop/ci@workspace:packages/ci"],
 
     "@domicile-desktop/component-library": ["@domicile-desktop/component-library@workspace:packages/component-library"],
+
+    "@domicile-desktop/distro-checks": ["@domicile-desktop/distro-checks@workspace:packages/distro-checks"],
 
     "@domicile-desktop/e2e-harness": ["@domicile-desktop/e2e-harness@workspace:packages/e2e-harness"],
 
