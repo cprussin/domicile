@@ -40,12 +40,16 @@ const files = (
 
 const SITES = {
   defaults: {
+    "automatic-downloads": "ask",
     camera: "ask",
     clipboard: "ask",
+    "idle-detection": "ask",
+    "local-fonts": "ask",
     location: "ask",
     microphone: "ask",
     midi: "ask",
     notifications: "allow",
+    "window-management": "ask",
   },
   sites: [
     { origin: "https://meet.example", permission: "camera", setting: "allow" },

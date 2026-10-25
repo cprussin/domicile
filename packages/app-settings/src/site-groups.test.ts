@@ -5,12 +5,16 @@ import { siteName, sites, sitesWith } from "./site-groups";
 
 const SETTINGS: SiteSettings = {
   defaults: {
+    "automatic-downloads": "ask",
     camera: "ask",
     clipboard: "ask",
+    "idle-detection": "ask",
+    "local-fonts": "ask",
     location: "ask",
     microphone: "ask",
     midi: "ask",
     notifications: "allow",
+    "window-management": "ask",
   },
   sites: [
     {
@@ -45,24 +49,32 @@ describe(sites, () => {
         origin: "https://maps.example",
         own: 1,
         settings: {
+          "automatic-downloads": "ask",
           camera: "ask",
           clipboard: "ask",
+          "idle-detection": "ask",
+          "local-fonts": "ask",
           location: "block",
           microphone: "ask",
           midi: "ask",
           notifications: "allow",
+          "window-management": "ask",
         },
       },
       {
         origin: "https://meet.example",
         own: 2,
         settings: {
+          "automatic-downloads": "ask",
           camera: "allow",
           clipboard: "ask",
+          "idle-detection": "ask",
+          "local-fonts": "ask",
           location: "ask",
           microphone: "allow",
           midi: "ask",
           notifications: "allow",
+          "window-management": "ask",
         },
       },
     ]);

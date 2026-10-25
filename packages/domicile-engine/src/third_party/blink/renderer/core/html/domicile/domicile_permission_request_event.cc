@@ -22,6 +22,10 @@ constexpr char kLocation[] = "location";
 constexpr char kNotifications[] = "notifications";
 constexpr char kClipboard[] = "clipboard";
 constexpr char kMidi[] = "midi";
+constexpr char kWindowManagement[] = "window-management";
+constexpr char kLocalFonts[] = "local-fonts";
+constexpr char kIdleDetection[] = "idle-detection";
+constexpr char kAutomaticDownloads[] = "automatic-downloads";
 
 }  // namespace
 
@@ -42,6 +46,14 @@ String DomicilePermissionRequestEvent::PermissionName(
       return kClipboard;
     case WebViewPermission::kMidi:
       return kMidi;
+    case WebViewPermission::kWindowManagement:
+      return kWindowManagement;
+    case WebViewPermission::kLocalFonts:
+      return kLocalFonts;
+    case WebViewPermission::kIdleDetection:
+      return kIdleDetection;
+    case WebViewPermission::kAutomaticDownloads:
+      return kAutomaticDownloads;
   }
 }
 
@@ -51,7 +63,10 @@ DomicilePermissionRequestEvent::PermissionNamed(const String& name) {
   for (const WebViewPermission permission :
        {WebViewPermission::kCamera, WebViewPermission::kMicrophone,
         WebViewPermission::kLocation, WebViewPermission::kNotifications,
-        WebViewPermission::kClipboard, WebViewPermission::kMidi}) {
+        WebViewPermission::kClipboard, WebViewPermission::kMidi,
+        WebViewPermission::kWindowManagement, WebViewPermission::kLocalFonts,
+        WebViewPermission::kIdleDetection,
+        WebViewPermission::kAutomaticDownloads}) {
     if (name == PermissionName(permission)) {
       return permission;
     }

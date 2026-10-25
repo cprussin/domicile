@@ -37,12 +37,16 @@ const withInstalled = (installed: InstalledExtension[]) =>
     siteData: [],
     sites: {
       defaults: {
+        "automatic-downloads": "ask",
         camera: "ask",
         clipboard: "ask",
+        "idle-detection": "ask",
+        "local-fonts": "ask",
         location: "ask",
         microphone: "ask",
         midi: "ask",
         notifications: "ask",
+        "window-management": "ask",
       },
       sites: [],
     },

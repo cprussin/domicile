@@ -38,6 +38,8 @@ source_set("browser") {
     # target, finds a display's window with it, and a browser window's page.
     ":browser_window_capture_target",
     ":display_capture_target",
+    # Public for the same reason: //content fits a page's popup on its monitor.
+    ":desk_geometry",
     # Public for the same reason: //content binds a page to the broker only if
     # it is the shell.
     ":shell_origin",
@@ -412,6 +414,28 @@ source_set("file_choice") {
   deps = [ "//net" ]
 }
 
+# A file dialog for a page in no <webview>, asked of the compositor's
+# FileChooser portal backend over the session bus. Its own target so its
+# tests need no browser.
+source_set("portal_file_chooser") {
+  sources = [
+    "browser/portal_file_chooser.cc",
+    "browser/portal_file_chooser.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//components/domicile/mojom",
+  ]
+
+  deps = [
+    "//components/dbus",
+    "//dbus",
+    "//net",
+    "//url",
+  ]
+}
+
 # A <webview>'s downloads added up for the element. Its own target beside
 # :web_view_guest for the reason :file_choice is one: it needs no browser,
 # which is where its tests are.
@@ -572,6 +596,8 @@ source_set("site_permissions") {
 # chooses it. Its own target beside :web_view_guest so its tests need no guest.
 source_set("screen_capture") {
   sources = [
+    "browser/portal_picker.cc",
+    "browser/portal_picker.h",
     "browser/screen_capture.cc",
     "browser/screen_capture.h",
     "browser/screen_choice.cc",
@@ -581,10 +607,15 @@ source_set("screen_capture") {
   public_deps = [
     "//base",
     "//content/public/browser",
+    "//media/mojo/mojom",
     "//third_party/blink/public/common",
     "//third_party/webrtc_overrides:webrtc_component",
   ]
-  deps = [ "//media/mojo/mojom" ]
+  # The compositor's word on a pick, over the session bus.
+  deps = [
+    "//components/dbus",
+    "//dbus",
+  ]
 }
 
 # Whether an address is a page Chrome serves itself, which no <webview> is
@@ -996,6 +1027,8 @@ source_set("unit_tests") {
     "browser/portal_request_unittest.cc",
     "browser/private_pages_unittest.cc",
     "browser/render_process_unittest.cc",
+    "browser/portal_picker_unittest.cc",
+    "browser/portal_file_chooser_unittest.cc",
     "browser/screen_capture_unittest.cc",
     "browser/screen_choice_unittest.cc",
     "browser/shell_source_unittest.cc",
@@ -1064,6 +1097,7 @@ source_set("unit_tests") {
     ":page_matches",
     ":placeholder_stage",
     ":pointer_warp",
+    ":portal_file_chooser",
     ":portal_request",
     ":private_pages",
     ":render_process",
@@ -1102,6 +1136,8 @@ source_set("unit_tests") {
     "//components/domicile/spike:window_diff",
     "//components/viz/service",
     "//components/viz/test:test_support",
+    # The compositor's reply to a portal pick, read by :screen_capture.
+    "//dbus",
 
     # TestSharedImageInterface, the broker's GPU in its buffer tests.
     "//gpu:test_support",

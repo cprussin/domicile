@@ -831,6 +831,7 @@ fn export<'a>(
                 udev_data: PathBuf::from("/run/udev/data"),
             },
         )?
+        .serve_at(OBJECT_PATH, starting.screen_cast.picks())?
         .serve_at(OBJECT_PATH, starting.screen_cast)?
         .serve_at(
             OBJECT_PATH,

@@ -127,12 +127,16 @@ const started = async <T>(ask: (host: ReturnType<typeof spawnedHost>) => T) => {
 };
 
 const DEFAULTS = {
+  "automatic-downloads": "ask",
   camera: "ask",
   clipboard: "ask",
+  "idle-detection": "ask",
+  "local-fonts": "ask",
   location: "ask",
   microphone: "ask",
   midi: "ask",
   notifications: "allow",
+  "window-management": "ask",
 } as const;
 
 const FILES = {
