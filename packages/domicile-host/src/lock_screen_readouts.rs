@@ -1,5 +1,6 @@
 //! The system calls a locked desktop still runs, so a lock screen can show the
-//! battery and Bluetooth and adjust the brightness and volume.
+//! battery and Bluetooth and adjust the brightness and volume, and the
+//! brightness follows the room.
 //!
 //! [`READOUTS`] lists each call that `@domicile-desktop/system-battery`,
 //! `system-backlight`, `system-audio` and `system-bluetooth` make, field by
@@ -17,6 +18,8 @@ const UPOWER: &str = "org.freedesktop.UPower";
 const DISPLAY_DEVICE: &str = "/org/freedesktop/UPower/devices/DisplayDevice";
 const PROPERTIES: &str = "org.freedesktop.DBus.Properties";
 const BLUEZ: &str = "org.bluez";
+const SENSOR_PROXY: &str = "net.hadess.SensorProxy";
+const SENSORS: &str = "/net/hadess/SensorProxy";
 
 /// One word of an argv, or one value of a D-Bus body.
 #[derive(Clone, Copy)]
@@ -95,6 +98,30 @@ const READOUTS: &[Readout] = &[
         member: "SetBrightness",
         signature: "ssu",
         body: &[Word::Is("backlight"), Word::Name, Word::Whole],
+    },
+    // The ambient light sensor, for automatic brightness: iio-sensor-proxy's
+    // properties, a claim that keeps it reading, and changes to them.
+    Readout::Call {
+        destination: SENSOR_PROXY,
+        path: SENSORS,
+        interface: PROPERTIES,
+        member: "GetAll",
+        signature: "s",
+        body: &[Word::Is(SENSOR_PROXY)],
+    },
+    Readout::Call {
+        destination: SENSOR_PROXY,
+        path: SENSORS,
+        interface: SENSOR_PROXY,
+        member: "ClaimLight",
+        signature: "",
+        body: &[],
+    },
+    Readout::Match {
+        sender: SENSOR_PROXY,
+        path: Some(SENSORS),
+        interface: Some(PROPERTIES),
+        member: Some("PropertiesChanged"),
     },
     // The sound server's state, and its changes. Reads only.
     Readout::Spawn {

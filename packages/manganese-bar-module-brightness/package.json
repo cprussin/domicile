@@ -7,9 +7,10 @@
     "@domicile-desktop/system-backlight": "workspace:*",
     "@pandacss/dev": "catalog:",
     "@phosphor-icons/react": "catalog:",
-    "react": "catalog:"
+    "react": "catalog:",
+    "zod": "catalog:"
   },
-  "description": "A manganese bar item: the screen brightness and its slider.",
+  "description": "A manganese bar item: the screen brightness, its slider and the night light, with automatic brightness.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@domicile-desktop/test-support": "workspace:*",
@@ -20,8 +21,7 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "postcss": "catalog:",
-    "typescript": "catalog:",
-    "zod": "catalog:"
+    "typescript": "catalog:"
   },
   "engines": {
     "bun": ">=1.4.2",
@@ -31,7 +31,9 @@
     ".": "./src/bar-item.tsx",
     "./desk-backlight": "./src/desk-backlight.ts",
     "./fixture": "./src/fixture.ts",
-    "./useBrightnessKeys": "./src/useBrightnessKeys.ts"
+    "./useAutoBrightness": "./src/useAutoBrightness.ts",
+    "./useBrightnessKeys": "./src/useBrightnessKeys.ts",
+    "./useNightLight": "./src/useNightLight.ts"
   },
   "files": [
     "src/**",

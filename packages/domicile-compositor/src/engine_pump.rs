@@ -234,6 +234,9 @@ impl DomicileCompositor {
                     // unplugged.
                     self.engine_displays = displays.clone();
                     self.bind_the_pointers();
+                    if let Some(session) = self.engine.as_ref() {
+                        session.set_white_point(self.white_point);
+                    }
                     match self.screens.replugged_into(
                         &displays,
                         &self.config.current().output,

@@ -7,20 +7,13 @@ import type { SystemError } from "@domicile-desktop/sdk/system";
 import { system } from "@domicile-desktop/sdk/system";
 import { readBacklight } from "@domicile-desktop/system-backlight/read-backlight";
 import { hostBacklight } from "./host-backlight";
-
-/** The backlight's level, shared, and a way to change it. */
-export type SharedBacklight = {
-  /** 0 to 1. Never reported on a machine without a backlight. */
-  level: SharedWatch<number>;
-  /** Ask for a level from 0 to 1. `level` reports it once it is set. */
-  set: (level: number) => void;
-};
+import type { SharedBacklight } from "./shared-backlight";
+import { sharedBacklight } from "./shared-backlight";
 
 /** The backlight, watched once for every bar and the lock screen. */
-export const deskBacklight = perHost((domicile): SharedBacklight => {
-  const backlight = hostBacklight(domicile);
-  return { level: sharedWatch(backlight.watch), set: backlight.set };
-});
+export const deskBacklight = perHost(
+  (domicile): SharedBacklight => sharedBacklight(hostBacklight(domicile)),
+);
 
 /** Whether the machine has a backlight, looked for once for every bar and the lock screen. */
 export const deskBacklightHardware = perHost(

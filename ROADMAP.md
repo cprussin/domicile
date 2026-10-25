@@ -42,16 +42,10 @@ item when it ships.
    the desk, streamed to Moonlight (Sunshine or similar), with idle blanking
    held off while it runs.
 
-5. **Automatic brightness.** Set the backlight from the ambient light sensor,
-   learning from manual changes (as wluma does).
-
-6. **Night light.** Warm the colors after sunset. Needs gamma control per
-   monitor: a DRM gamma ramp on a tty, `wlr-gamma-control` for clients.
-
-7. **Screen recording.** Record a monitor, a region or a window to a video
+5. **Screen recording.** Record a monitor, a region or a window to a video
    file from the shell, with a way to stop it.
 
-8. **Keyboard layout switching.** Switch between several configured layouts
+6. **Keyboard layout switching.** Switch between several configured layouts
    (for example `us` and `dvp`) at runtime, from a key and from the bar.
 
 ## In the engine fork (the agent on `crux`)

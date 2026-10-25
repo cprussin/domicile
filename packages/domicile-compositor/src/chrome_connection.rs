@@ -212,7 +212,14 @@ fn read_chrome_messages(
             Ok(())
         }
     })
-    .sharing_window_requests(hub.window_requests.clone());
+    .sharing_window_requests(hub.window_requests.clone())
+    .setting_white_points_with({
+        let hub = hub.clone();
+        move |white_point| {
+            hub.send_request(ClientRequest::SetWhitePoint { white_point });
+            Ok(())
+        }
+    });
     let mut ready = false;
     // Whether this connection is in the broadcast list. Separate from `ready`
     // because a socket can send `hello` twice, and the writer must not be added

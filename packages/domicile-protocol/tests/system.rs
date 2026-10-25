@@ -628,3 +628,17 @@ fn the_shell_sets_window_states_and_hears_what_clients_ask_for() {
         );
     }
 }
+
+/// The shell warms every monitor, as a night light does.
+#[test]
+fn the_shell_sets_the_color_temperature() {
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":5,"request":{"call":"set_color_temperature","kelvin":3400}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 5,
+            request: SystemRequest::SetColorTemperature { kelvin: 3400 },
+        }
+    );
+}

@@ -315,6 +315,13 @@ export type System = {
     states: readonly WindowState[],
   ) => Promise<Result<"set", SystemError>>;
   /**
+   * Draw every monitor as if its white were a light of `kelvin`, 1000 to
+   * 6500, as a night light does; 6500 draws colors as they are. Lasts until
+   * the shell sets another, across reloads. Changes nothing on a nested
+   * desktop. Allowed while the desktop is locked.
+   */
+  setColorTemperature: (kelvin: number) => Promise<Result<"set", SystemError>>;
+  /**
    * Hear each maximize and fullscreen request a client makes. The compositor
    * grants none; grant one with {@link System.setWindowStates}. Allowed while
    * the desktop is locked.
@@ -417,6 +424,13 @@ export const system = (host: SystemHost): System => {
       }),
     screenshot: () =>
       oneShot(calls, { call: "screenshot" }, (reply) => keptOf(reply)),
+    setColorTemperature: (kelvin) =>
+      oneShot(
+        calls,
+        // The compositor reads a whole number.
+        { call: "set_color_temperature", kelvin: Math.round(kelvin) },
+        (reply) => (reply.kind === "set" ? "set" : unexpected(reply)),
+      ),
     setWindowStates: (appId, states) =>
       oneShot(
         calls,

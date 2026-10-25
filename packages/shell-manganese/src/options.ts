@@ -1,12 +1,35 @@
 import { defineOptions, option } from "@domicile-desktop/sdk/options";
 
+/** Every half hour of the day, as `HH:MM`, for the night light's hours. */
+const HALF_HOURS = Array.from(
+  { length: 48 },
+  (_, index) =>
+    `${String(Math.floor(index / 2)).padStart(2, "0")}:${index % 2 === 0 ? "00" : "30"}`,
+);
+
 /**
  * manganese's options, set under `shell_options` in the config or on the
  * Settings app's Shell page. See `docs/WRITING-A-SHELL.md#options`.
  */
 export const options = defineOptions({
+  brightness: {
+    automatic: option.toggle("Adjust brightness automatically", true),
+  },
   clock: {
     format: option.choice("Clock format", ["24h", "12h"], "24h"),
     seconds: option.toggle("Show seconds", true),
+  },
+  nightLight: {
+    // A custom schedule's hours, and sunset to sunrise's where the sun
+    // neither rises nor sets.
+    from: option.choice("Custom start", HALF_HOURS, "22:00"),
+    // Sunset in the time zone's principal city.
+    schedule: option.choice(
+      "Schedule",
+      ["sunset to sunrise", "custom", "off"],
+      "sunset to sunrise",
+    ),
+    to: option.choice("Custom end", HALF_HOURS, "07:00"),
+    warmth: option.number("Warmth (0 to 100)", 50, { max: 100, min: 0 }),
   },
 });

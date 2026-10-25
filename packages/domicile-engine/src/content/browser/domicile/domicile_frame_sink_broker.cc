@@ -246,6 +246,13 @@ void SetPointerTargets(std::vector<domicile::mojom::PointerTargetPtr> targets) {
       std::move(wanted));
 }
 
+// Sets every display's white point. Lives here for SetDisplayLayout's reason;
+// every platform but DRM ignores it.
+void SetWhitePoint(float red, float green, float blue) {
+  ui::OzonePlatform::GetInstance()->SetDomicileWhitePoint(
+      {.red = red, .green = green, .blue = blue});
+}
+
 // Sets the clipboard this process pastes from.
 //
 // Lives here because //components/domicile/browser cannot depend on //ui/ozone.
@@ -287,7 +294,8 @@ class DomicileBrowserService {
                 base::BindRepeating(&DisplayCaptureTarget),
                 base::BindRepeating(&domicile::FindBrowserWindowCaptureTarget),
                 base::BindRepeating(&SetPointerTargets),
-                base::BindRepeating(&GetSoftwareSharedImageInterface)),
+                base::BindRepeating(&GetSoftwareSharedImageInterface),
+                base::BindRepeating(&SetWhitePoint)),
         provider_(&broker_) {
     // Registered on every platform so copies made in a page reach the producer.
     // `SetClipboard` handles copies made outside. Unretained is safe: this is a

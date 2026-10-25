@@ -29,14 +29,14 @@ desktop treats it.
 | Input | `Key`, pointer motion, buttons, axis, leave; the same from EIS clients (`crate::eis`) | Dropped (`debug` log) |
 | Commands | `CloseApp`, `Spawn`, `CopyClipboardEntry`, tray, notifications | Refused (`warn` log) |
 | Reads on the connection | `SearchFiles` | Answered with nothing (`warn` log) |
-| System calls | `SystemRequest`, except reads under `/sys`, lock screen readouts, listening for shell commands, unlock refusals or window requests, setting window states, and calls that stop something running | A call that starts something is answered `locked`; `stdin` is dropped (`warn` log) |
+| System calls | `SystemRequest`, except reads under `/sys`, lock screen readouts, listening for shell commands, unlock refusals or window requests, setting window states or the color temperature, and calls that stop something running | A call that starts something is answered `locked`; `stdin` is dropped (`warn` log) |
 | Allowed | `ChromeHello`, `Lock`, `Unlock`, `KeyboardFocus`, output scale and size, window bounds and states, `ClipboardCopied`, theme | Handled normally |
 
 Why some requests are allowed:
 
 - `ChromeHello`: a reloaded page learns the desktop is locked from the answer.
-- `SetOutputScale`, `SetOutputSize`, `SetAppBounds`, `set_window_states`:
-  nothing replays them after unlock.
+- `SetOutputScale`, `SetOutputSize`, `SetAppBounds`, `set_window_states`,
+  `set_color_temperature`: nothing replays them after unlock.
 - `KeyboardFocus`: refusing it would leave the shell and the compositor disagreeing
   about focus after unlock. No key reaches the window while locked anyway.
 - `ClipboardCopied`: it is a client's copy, and the history must match pastes.
@@ -64,7 +64,7 @@ library sends; the libraries' tests and the allowlist's both check it.
 | Library | Call |
 |---|---|
 | `system-battery` | UPower `DisplayDevice` `GetAll` of `org.freedesktop.UPower.Device`; a match on its `PropertiesChanged` with every field set |
-| `system-backlight` | `udevadm monitor --kernel --subsystem-match=backlight`; logind `Session.SetBrightness("backlight", device, level)` on `session/auto` |
+| `system-backlight` | `udevadm monitor --kernel --subsystem-match=backlight`; logind `Session.SetBrightness("backlight", device, level)` on `session/auto`; iio-sensor-proxy's `GetAll`, `ClaimLight` and a match on its `PropertiesChanged`, for automatic brightness |
 | `system-audio` | `pactl -f json info`, `list` and `subscribe`; `pactl -- set-sink-volume NAME N` and `set-sink-mute NAME 0\|1` |
 | `system-bluetooth` | BlueZ `GetManagedObjects` on `/`: adapters' power, connected devices and their batteries; a match on every BlueZ signal |
 

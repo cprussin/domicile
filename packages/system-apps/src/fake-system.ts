@@ -94,6 +94,7 @@ export const fakeSystem = (
       return Promise.resolve(Ok(ran));
     },
     screenshot: unexpected,
+    setColorTemperature: unexpected,
     setWindowStates: unexpected,
     shellCommands: unexpected,
     spawn: (argv) => Promise.resolve(Ok(subprocess(spawned(argv)))),

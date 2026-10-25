@@ -64,6 +64,10 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   // dropped.
   using PointerTargetsSetter =
       base::RepeatingCallback<void(std::vector<mojom::PointerTargetPtr>)>;
+  // Sets every display's white point, as red, green and blue gains. Injected
+  // for the same reason. Empty when the embedder has no CRTC; the white point
+  // is then dropped.
+  using WhitePointSetter = base::RepeatingCallback<void(float, float, float)>;
   // Writes the producer's clipboard into `ui::OzonePlatform`'s clipboard.
   // Injected for the same reason. Empty when the embedder runs inside another
   // session; the contents are then dropped.
@@ -101,7 +105,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
           BrowserWindowCaptureTargetGetter(),
       PointerTargetsSetter set_pointer_targets = PointerTargetsSetter(),
       SharedImageInterfaceGetter get_software_shared_image_interface =
-          SharedImageInterfaceGetter());
+          SharedImageInterfaceGetter(),
+      WhitePointSetter set_white_point = WhitePointSetter());
 
   FrameSinkBroker(const FrameSinkBroker&) = delete;
   FrameSinkBroker& operator=(const FrameSinkBroker&) = delete;
@@ -194,6 +199,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       std::vector<mojom::DisplayLayoutPtr> layout) override;
   void ConfigurePointers(
       std::vector<mojom::PointerTargetPtr> targets) override;
+  void SetWhitePoint(float red, float green, float blue) override;
   void SetClipboard(mojom::Clipboard clipboard,
                     const ClipboardContents& contents) override;
   void ObserveClipboard(
@@ -270,6 +276,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   const BrowserWindowCaptureTargetGetter get_browser_window_capture_target_;
   // See PointerTargetsSetter.
   const PointerTargetsSetter set_pointer_targets_;
+  // See WhitePointSetter.
+  const WhitePointSetter set_white_point_;
 
   mojo::ReceiverSet<mojom::FrameSinkBroker> receivers_;
   base::RepeatingClosure producer_gone_;
