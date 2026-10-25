@@ -7,7 +7,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 /**
  * The requests among `requests` that a cast to a TV asked for, by id. Answers
  * the ones it can as each arrives, before it would show. See
- * docs/architecture/CASTING-TO-TVS.md.
+ * docs/CASTING-TO-TVS.md.
  */
 export const useCastClaims = (
   domicile: { readonly portals: Pick<Portals, "answer"> },

@@ -30,7 +30,7 @@ class DrmScreen;
 //
 // A cast extends the desk onto it. The browser lays it out and draws it like a
 // connector; only a capture shows it. See
-// docs/architecture/CASTING-TO-TVS.md in the Domicile repository.
+// docs/CASTING-TO-TVS.md in the Domicile repository.
 std::unique_ptr<display::DisplaySnapshot> VirtualSnapshot(
     const DomicileVirtualDisplay& display);
 

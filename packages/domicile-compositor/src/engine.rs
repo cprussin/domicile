@@ -240,7 +240,7 @@ impl Display {
 }
 
 /// A monitor with no connector, which the desk extends onto and only a capture
-/// shows. See `docs/architecture/CASTING-TO-TVS.md`.
+/// shows. See `docs/CASTING-TO-TVS.md`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VirtualDisplay {
     /// Its [`Display::id`]; see [`VirtualDisplay::id_of`].

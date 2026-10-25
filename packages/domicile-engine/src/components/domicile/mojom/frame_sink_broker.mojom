@@ -124,7 +124,7 @@ struct PointerTarget {
 };
 
 // A monitor with no connector, from the producer. The desk extends onto it
-// and only a capture shows it. See docs/architecture/CASTING-TO-TVS.md.
+// and only a capture shows it. See docs/CASTING-TO-TVS.md.
 struct VirtualDisplay {
   // Its `Display.id`, picked by the producer with the top bit set so it never
   // collides with a connector's.

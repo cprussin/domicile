@@ -1,5 +1,5 @@
 // The Google Cast TVs the browser's Media Router finds, and casts of the
-// desktop to them. See docs/architecture/CASTING-TO-TVS.md.
+// desktop to them. See docs/CASTING-TO-TVS.md.
 
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";

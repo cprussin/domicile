@@ -1,5 +1,5 @@
 // Miracast TVs, through the `domicile-miracast` service on the session bus.
-// See docs/architecture/CASTING-TO-TVS.md.
+// See docs/CASTING-TO-TVS.md.
 
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
