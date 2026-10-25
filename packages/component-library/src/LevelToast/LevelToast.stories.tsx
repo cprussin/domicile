@@ -1,3 +1,4 @@
+import { KeyboardIcon } from "@phosphor-icons/react/dist/ssr/Keyboard";
 import { SpeakerHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerHigh";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ComponentProps } from "react";
@@ -5,7 +6,7 @@ import { useState } from "react";
 import { flex } from "../../styled-system/patterns";
 import { Button } from "../Button/Button";
 
-import { LevelToast } from "./LevelToast";
+import { ChoiceToast, LevelToast } from "./LevelToast";
 
 /** A toast and buttons that change its level, since it fades out. */
 const Demo = (props: Omit<ComponentProps<typeof LevelToast>, "changes">) => {
@@ -83,6 +84,21 @@ export const Muted: StoryObj<typeof Demo> = {
     level: 0.6,
     muted: true,
   },
+};
+
+/** `ChoiceToast`: the same card naming a choice, such as a keymap. */
+export const Choice: StoryObj<typeof Demo> = {
+  render: () => (
+    <div className={stageStyles}>
+      <ChoiceToast
+        changes={1}
+        choice="us"
+        detail="English (US)"
+        icon={<KeyboardIcon size={28} weight="fill" />}
+        label="Keymap"
+      />
+    </div>
+  ),
 };
 
 const stageStyles = flex({

@@ -74,6 +74,7 @@ nothing else. `system(host)` from the SDK takes either host.
 | `read_file`, `write_file`, `create_dir`, `read_dir`, `stat`, `watch` | `screenshot`, `shell_commands`, `send_shell` |
 | `spawn` and its `stdin`, `close_stdin`, `kill` | `idle_warnings`, `unlock_refusals` |
 | `dbus_call`, `dbus_match`, `unwatch` | `set_window_states`, `window_requests` |
+| | `keymaps`, `select_keymap` |
 | | every other control channel member: input, focus, windows, lock, theme |
 
 - The engine dials the compositor's socket once per app document and says

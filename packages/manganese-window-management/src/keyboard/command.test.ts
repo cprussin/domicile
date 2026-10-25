@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Err, Ok } from "@cprussin/option-result";
+import { KeymapChoice } from "@domicile-desktop/sdk/keymap-choice";
 
 import { Axis, Direction } from "../direction";
 import { Layout } from "../tree/node";
@@ -57,8 +58,20 @@ describe("parseCommand", () => {
     ["resize grow up", WindowAction.WindowGrown(Direction.Up)],
     ["resize grow right", WindowAction.WindowGrown(Direction.Right)],
     ["exec kitty --hold", WindowAction.CommandExecuted(["kitty", "--hold"])],
+    ["keymap next", WindowAction.KeymapSelected(KeymapChoice.Next())],
+    ["keymap us", WindowAction.KeymapSelected(KeymapChoice.Named("us"))],
+    [
+      "keymap us intl",
+      WindowAction.KeymapSelected(KeymapChoice.Named("us intl")),
+    ],
   ])("reads `%s` as sway does", (command, action) => {
     expect(parsing(command)).toStrictEqual(Ok(action));
+  });
+
+  it("refuses `keymap` with no keymap", () => {
+    expect(parseCommand(["keymap"])).toStrictEqual(
+      Err("manganese: `keymap` names no keymap"),
+    );
   });
 
   it("refuses `exec` with nothing to run", () => {

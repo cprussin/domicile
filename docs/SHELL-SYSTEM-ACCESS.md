@@ -41,6 +41,9 @@ export const Shell = async (root, domicile) => {
 - `addVirtualMonitor()` adds a monitor with no connector, which the desk
   extends onto, until `remove()` or the page goes away. Casting to a TV uses
   it; see [CASTING-TO-TVS.md](architecture/CASTING-TO-TVS.md).
+- `keymaps()` streams the config's keymaps and the active one;
+  `selectKeymap()` switches to another
+  ([SHELL-CONFIG.md](SHELL-CONFIG.md#keyboard)).
 - `shellCommands()` streams each command `domicile send-shell` sends.
   `bindKeys` listens for you and passes them to `onCommand`; see
   [KEYBINDINGS.md](architecture/KEYBINDINGS.md#commands-from-a-terminal).
@@ -134,7 +137,7 @@ recorded output.
   call (`read_file`, `write_file`, `create_dir`, `read_dir`, `stat`, `watch`, `spawn`,
   `dbus_call`, `dbus_match`, `screenshot`, `preview_window`, `shell_commands`, `send_shell`,
   `idle_warnings`, `unlock_refusals`, `set_window_states`, `window_requests`,
-  `virtual_monitor`)
+  `virtual_monitor`, `keymaps`, `select_keymap`)
   or
   drives one running under the same `id` (`unwatch`, `stdin`, `close_stdin`,
   `kill`). `read_file` takes an
@@ -181,6 +184,8 @@ that trust from reaching anything else.
     - `idle_warnings`, so a lock screen can dim
     - `unlock_refusals`, which a lock screen needs while locked
     - `set_window_states`, like `setAppBounds`
+    - `keymaps` and `select_keymap`, so a lock screen shows and switches the
+      keymap the passphrase is typed on
   - `stdin` is dropped; `unwatch`, `close_stdin` and `kill` are allowed
   - processes and watches started before the lock keep running
 - **Lifetime:** a page's processes, watches, matches and virtual monitors end

@@ -70,6 +70,7 @@ export const fakeSystem = (
         : unexpected(),
     dbusMatch: unexpected,
     idleWarnings: unexpected,
+    keymaps: unexpected,
     previewWindow: unexpected,
     readDir: (path) =>
       Promise.resolve(
@@ -95,6 +96,7 @@ export const fakeSystem = (
       return Promise.resolve(Ok(ran));
     },
     screenshot: unexpected,
+    selectKeymap: unexpected,
     setWindowStates: unexpected,
     shellCommands: unexpected,
     spawn: (argv) => Promise.resolve(Ok(subprocess(spawned(argv)))),

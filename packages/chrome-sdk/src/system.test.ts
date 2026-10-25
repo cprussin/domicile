@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
+import { KeymapChoice } from "./keymap-choice";
 import { PreviewedWindow } from "./previewed-window";
 import type { SystemError, SystemHost } from "./system";
 import {
@@ -830,5 +831,52 @@ describe("ids", () => {
       });
 
     expect(host.calls.map(([id]) => id)).toStrictEqual([1, 2]);
+  });
+});
+
+describe("keymaps", () => {
+  // As the SDK hands them over: a missing description is `undefined`.
+  const LISTED = [
+    { description: "English (programmer Dvorak)", name: "dvp" },
+    { description: undefined, name: "us" },
+  ];
+
+  it("streams the keymaps and the one the desktop types on", async () => {
+    const host = new FakeHost();
+    const listening = system(host).keymaps();
+    host.reply(1, { kind: "started" });
+    const keymaps = started(await listening);
+    const wire = [
+      { description: "English (programmer Dvorak)", name: "dvp" },
+      { name: "us" },
+    ];
+    host.event(1, { active: "dvp", keymaps: wire, kind: "keymaps" });
+    host.event(1, { active: "us", keymaps: wire, kind: "keymaps" });
+    keymaps.stop();
+    host.end(1, { kind: "stopped" });
+
+    expect(host.calls).toStrictEqual([
+      [1, { call: "keymaps" }],
+      [1, { call: "unwatch" }],
+    ]);
+    expect(await Array.fromAsync(keymaps.items)).toStrictEqual([
+      { active: "dvp", keymaps: LISTED },
+      { active: "us", keymaps: LISTED },
+    ]);
+  });
+
+  it("switches to the next keymap or one by name", async () => {
+    const host = new FakeHost();
+    const next = system(host).selectKeymap(KeymapChoice.Next());
+    host.reply(1, { kind: "set" });
+    const named = system(host).selectKeymap(KeymapChoice.Named("us"));
+    host.reply(2, { kind: "set" });
+
+    expect(host.calls).toStrictEqual([
+      [1, { call: "select_keymap", keymap: { kind: "next" } }],
+      [2, { call: "select_keymap", keymap: { kind: "named", name: "us" } }],
+    ]);
+    expect(await next).toStrictEqual(Ok("set"));
+    expect(await named).toStrictEqual(Ok("set"));
   });
 });

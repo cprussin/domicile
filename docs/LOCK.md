@@ -51,6 +51,9 @@ Why some requests are allowed:
 - `shell_commands`, `window_requests`: they only listen. A page reloaded
   while locked still hears them after unlock. `send_shell` itself is refused.
 - `unlock_refusals`: it only listens, and a lock screen needs it while locked.
+- `keymaps`, `select_keymap`: a lock screen shows and switches the keymap the
+  passphrase is typed on. The switch reaches the windows too, which take no
+  keys while locked.
 
 ## Lock screen readouts
 

@@ -12,6 +12,7 @@ describe(readSettings, () => {
         idle: {},
         input: {
           keyboard: {
+            keymaps: [],
             xkb_layout: "us",
             xkb_model: "",
             xkb_options: [],

@@ -168,7 +168,7 @@ use crate::eis::barriers::Zone;
 use crate::engine_pump::poll_the_engine;
 use crate::file_indexing::{keep_the_index, kept_at, Heard};
 use crate::idle::Idle;
-use crate::keymap::compiled_keymap;
+use crate::keymap::{compiled_keymap, listed_keymaps};
 use crate::latency_run::spike_latency_point;
 use crate::lock::{Lock, Verdict};
 use crate::modifiers::Held;
@@ -184,6 +184,7 @@ use crate::windows::SizeLimits;
 use domicile_config::{Config, ConfigError, ConfigStore};
 use domicile_host::clipboard::{Contents, History};
 use domicile_host::data_dirs::data_dirs;
+use domicile_host::keymaps::Listed;
 use domicile_host::priority;
 use domicile_host::theme_turnover::Turnover;
 use domicile_launch::arguments::arguments;
@@ -219,7 +220,8 @@ mod grepped {
     ///
     /// Waited on by `tests/apps.rs`.
     pub const ARRIVED: &str = "app client connected";
-    /// [`retype_the_desktop`](crate::DomicileCompositor::retype_the_desktop)
+    /// [`take_up_the_keymaps`](crate::DomicileCompositor::take_up_the_keymaps)
+    /// or [`switch_the_keymap`](crate::DomicileCompositor::switch_the_keymap)
     /// kept the old keymap because the new one did not compile.
     ///
     /// A refused reload sends no message, so this line is the only sign of it.
@@ -795,10 +797,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     SecurityContextState::new::<DomicileCompositor, _>(&dh, sees_privileged_globals);
     // Advertise a keyboard and pointer.
     let mut seat: Seat<DomicileCompositor> = seat_state.new_wl_seat(&dh, "domicile");
-    // The seat's keymap is what every client receives. A keymap xkb cannot
-    // compile is fatal at startup rather than silently replaced. On reload,
-    // `retype_the_desktop` refuses it instead, since windows are open.
-    let keyboard = &config.input.keyboard;
+    // The seat's keymap is what every client receives: the config's first. A
+    // keymap xkb cannot compile is fatal at startup rather than silently
+    // replaced, the ones the desktop can switch to as well. On reload,
+    // `take_up_the_keymaps` refuses them instead, since windows are open.
+    let keymaps = config.input.keyboard.keymaps();
+    for keymap in &keymaps[1..] {
+        compiled_keymap(keymap)?;
+    }
+    let keyboard = &keymaps[0];
     seat.add_keyboard(
         XkbConfig {
             rules: &keyboard.xkb_rules,
@@ -818,7 +825,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Resolve keybindings on it. Fatal at startup like the keymap, so no
     // binding silently does nothing. A reload refuses instead; see
     // `rebind_the_keys`.
-    let keys = shell_config::keys(&config)?;
+    let keys = shell_config::keys(keyboard)?;
     seat.add_pointer();
 
     // Advertise an output per described display, or one following Domicile's
@@ -949,6 +956,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             },
         ),
     );
+    // Before any chrome connects, so a page that asks hears them at once.
+    hub.keymaps.list(Listed {
+        keymaps: listed_keymaps(&keymaps),
+        active: keyboard.name.clone(),
+    });
     // Before any chrome connects, so the handshake carries the desktop.
     {
         let mut host = hub.host.lock().unwrap();

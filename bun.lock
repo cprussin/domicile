@@ -445,6 +445,31 @@
         "typescript": "catalog:",
       },
     },
+    "packages/manganese-bar-module-keymap": {
+      "name": "@domicile-desktop/manganese-bar-module-keymap",
+      "version": "0.0.0",
+      "dependencies": {
+        "@domicile-desktop/component-library": "workspace:*",
+        "@domicile-desktop/manganese-bar": "workspace:*",
+        "@domicile-desktop/manganese-host": "workspace:*",
+        "@domicile-desktop/sdk": "workspace:*",
+        "@pandacss/dev": "catalog:",
+        "@phosphor-icons/react": "catalog:",
+        "react": "catalog:",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/test-support": "workspace:*",
+        "@pandacss/preset-panda": "catalog:",
+        "@testing-library/react": "catalog:",
+        "@testing-library/user-event": "catalog:",
+        "@types/bun": "catalog:",
+        "@types/react": "catalog:",
+        "@types/react-dom": "catalog:",
+        "postcss": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/manganese-bar-module-launcher-button": {
       "name": "@domicile-desktop/manganese-bar-module-launcher-button",
       "version": "1.0.0",
@@ -887,6 +912,7 @@
         "@domicile-desktop/manganese-bar-module-gmail": "workspace:*",
         "@domicile-desktop/manganese-bar-module-google-messages": "workspace:*",
         "@domicile-desktop/manganese-bar-module-idle-inhibitor": "workspace:*",
+        "@domicile-desktop/manganese-bar-module-keymap": "workspace:*",
         "@domicile-desktop/manganese-bar-module-launcher-button": "workspace:*",
         "@domicile-desktop/manganese-bar-module-network": "workspace:*",
         "@domicile-desktop/manganese-bar-module-notifications": "workspace:*",
@@ -1284,6 +1310,8 @@
     "@domicile-desktop/manganese-bar-module-google-messages": ["@domicile-desktop/manganese-bar-module-google-messages@workspace:packages/manganese-bar-module-google-messages"],
 
     "@domicile-desktop/manganese-bar-module-idle-inhibitor": ["@domicile-desktop/manganese-bar-module-idle-inhibitor@workspace:packages/manganese-bar-module-idle-inhibitor"],
+
+    "@domicile-desktop/manganese-bar-module-keymap": ["@domicile-desktop/manganese-bar-module-keymap@workspace:packages/manganese-bar-module-keymap"],
 
     "@domicile-desktop/manganese-bar-module-launcher-button": ["@domicile-desktop/manganese-bar-module-launcher-button@workspace:packages/manganese-bar-module-launcher-button"],
 

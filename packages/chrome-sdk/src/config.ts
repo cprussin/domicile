@@ -223,8 +223,37 @@ export type InputConfig = {
  * The string fields go to xkb verbatim, so sway's multi-layout form
  * (`xkb_layout = "us,de"`) works. Empty `xkb_rules` and `xkb_model` use the
  * libxkbcommon defaults. The default layout is `us`.
+ *
+ * To switch between layouts, list them in `keymaps` instead.
  */
 export type KeyboardConfig = {
+  /**
+   * Keymaps to switch between, the first the one the desktop starts on.
+   *
+   * Each is a whole keymap: an entry's unset fields take the defaults, not
+   * the fields above, which must stay unset. The shell switches with
+   * `keymap next` or `keymap <name>`. See `docs/SHELL-CONFIG.md`.
+   */
+  keymaps?: Keymap[];
+  xkb_layout?: string;
+  xkb_model?: string;
+  xkb_options?: string[];
+  xkb_rules?: string;
+  xkb_variant?: string;
+};
+
+/**
+ * One keymap the desktop can switch to, in `input.keyboard.keymaps`.
+ *
+ * The `xkb_*` fields are as in `input.keyboard`, with the same defaults.
+ */
+export type Keymap = {
+  /**
+   * What the shell shows and `keymap <name>` selects, such as `dvp`.
+   *
+   * Unique, and not `next`.
+   */
+  name?: string;
   xkb_layout?: string;
   xkb_model?: string;
   xkb_options?: string[];

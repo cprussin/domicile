@@ -1,12 +1,15 @@
 //! Files, watches, processes, D-Bus, screenshots, shell commands, idle
-//! warnings, the lock's refusals and window states for one chrome connection.
+//! warnings, the lock's refusals, window states and keymaps for one chrome
+//! connection.
 //! The compositor takes the screenshots ([`System::screenshotting_with`]),
 //! sets window states ([`System::setting_window_states_with`]), adds virtual
 //! monitors ([`System::adding_virtual_monitors_with`]), shares the
 //! shell commands ([`System::sharing_shell_commands`]), idle warnings
 //! ([`System::sharing_idle_warnings`]) and window requests
-//! ([`System::sharing_window_requests`]) between connections, and sends the
-//! refusals ([`System::sharing_unlock_refusals`]).
+//! ([`System::sharing_window_requests`]) between connections, sends the
+//! refusals ([`System::sharing_unlock_refusals`]), lists the keymaps
+//! ([`System::sharing_keymaps`]) and switches them
+//! ([`System::selecting_keymaps_with`]).
 //!
 //! [`System::handle`] runs a `ChromeMessage::SystemRequest` and sends every
 //! answer through the callback it was built with. Nothing here blocks the
@@ -28,8 +31,8 @@ use std::thread;
 use std::time::{Instant, UNIX_EPOCH};
 
 use domicile_protocol::{
-    Bus, DirEntry, FileType, HostMessage, PreviewedWindow, Signal, Stream, SystemEnd, SystemError,
-    SystemErrorKind, SystemEvent, SystemReply, SystemRequest, WindowState,
+    Bus, DirEntry, FileType, HostMessage, KeymapChoice, PreviewedWindow, Signal, Stream, SystemEnd,
+    SystemError, SystemErrorKind, SystemEvent, SystemReply, SystemRequest, WindowState,
 };
 use notify::{EventKindMask, RecursiveMode, Watcher};
 use zbus::blocking::{Connection, MessageIterator};
@@ -39,6 +42,7 @@ use crate::base64::{decoded, encoded};
 use crate::dbus_json::{self, NotABody};
 use crate::fanout::Listener;
 use crate::idle_warnings::{self, IdleWarnings};
+use crate::keymaps::Keymaps;
 use crate::lock_screen_readouts::is_a_readout;
 use crate::priority;
 use crate::shell_commands::ShellCommands;
@@ -84,6 +88,10 @@ pub struct System {
     set_window_states: Option<SetWindowStates>,
     /// The pages that hear a client's window requests.
     window_requests: WindowRequests,
+    /// The keymaps, and the pages that hear them change.
+    keymaps: Keymaps,
+    /// Switches the keymap; `None` on a system that switches none.
+    select_keymap: Option<SelectKeymap>,
     /// Adds virtual monitors; `None` on a system that adds none.
     add_virtual_monitor: Option<AddVirtualMonitor>,
 }
@@ -108,6 +116,9 @@ pub struct AddedMonitor {
     /// Removes the monitor when dropped.
     pub lease: Box<dyn Send>,
 }
+
+/// Switches every keyboard to the keymap a page chose.
+pub type SelectKeymap = Arc<dyn Fn(KeymapChoice) -> Result<(), SystemError> + Send + Sync>;
 
 /// Replaces the states the shell set on a window.
 pub type SetWindowStates =
@@ -144,7 +155,8 @@ enum Running {
     Watch(notify::RecommendedWatcher),
     /// A D-Bus match, on a connection of its own so closing it ends the match.
     Match(Connection),
-    /// The page hears shell commands or the lock's refusals.
+    /// The page hears shell commands, the lock's refusals, window requests
+    /// or the keymaps.
     Listening(Listener),
     /// The page hears idle warnings.
     IdleWarnings(idle_warnings::Listener),
@@ -180,6 +192,8 @@ pub enum Reach {
     Listens,
     /// It arranges windows, as `setAppBounds` does.
     Arranges,
+    /// It switches the keymap, as a lock screen's keymap item does.
+    Retypes,
     /// Anything else.
     Acts,
 }
@@ -222,8 +236,10 @@ pub fn reach(request: &SystemRequest) -> Reach {
         SystemRequest::ShellCommands
         | SystemRequest::IdleWarnings
         | SystemRequest::UnlockRefusals
-        | SystemRequest::WindowRequests => Reach::Listens,
+        | SystemRequest::WindowRequests
+        | SystemRequest::Keymaps => Reach::Listens,
         SystemRequest::SetWindowStates { .. } => Reach::Arranges,
+        SystemRequest::SelectKeymap { .. } => Reach::Retypes,
         SystemRequest::WriteFile { .. }
         | SystemRequest::CreateDir { .. }
         | SystemRequest::Stdin { .. }
@@ -259,7 +275,9 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::SendShell { .. }
         | SystemRequest::SetWindowStates { .. }
         | SystemRequest::WindowRequests
-        | SystemRequest::VirtualMonitor { .. } => Some(HostMessage::SystemReply {
+        | SystemRequest::VirtualMonitor { .. }
+        | SystemRequest::Keymaps
+        | SystemRequest::SelectKeymap { .. } => Some(HostMessage::SystemReply {
             id,
             reply: SystemReply::Failed {
                 error: SystemError {
@@ -303,7 +321,9 @@ pub fn refused_to_an_app(id: u32, request: &SystemRequest) -> Option<HostMessage
         | SystemRequest::UnlockRefusals
         | SystemRequest::SetWindowStates { .. }
         | SystemRequest::WindowRequests
-        | SystemRequest::VirtualMonitor { .. } => Some(HostMessage::SystemReply {
+        | SystemRequest::VirtualMonitor { .. }
+        | SystemRequest::Keymaps
+        | SystemRequest::SelectKeymap { .. } => Some(HostMessage::SystemReply {
             id,
             reply: SystemReply::Failed {
                 error: SystemError {
@@ -345,6 +365,8 @@ impl System {
             set_window_states: None,
             window_requests: WindowRequests::default(),
             add_virtual_monitor: None,
+            keymaps: Keymaps::default(),
+            select_keymap: None,
         }
     }
 
@@ -419,6 +441,21 @@ impl System {
         add: impl Fn(VirtualMonitor) -> Result<AddedMonitor, SystemError> + Send + Sync + 'static,
     ) -> System {
         self.add_virtual_monitor = Some(Arc::new(add));
+        self
+    }
+
+    /// This system, telling a page that listens the keymaps `keymaps` lists.
+    pub fn sharing_keymaps(mut self, keymaps: Keymaps) -> System {
+        self.keymaps = keymaps;
+        self
+    }
+
+    /// This system, switching the keymap through `select`.
+    pub fn selecting_keymaps_with(
+        mut self,
+        select: impl Fn(KeymapChoice) -> Result<(), SystemError> + Send + Sync + 'static,
+    ) -> System {
+        self.select_keymap = Some(Arc::new(select));
         self
     }
 
@@ -850,6 +887,48 @@ impl System {
                     }));
                 Ok((Running::Listening(listener), Box::new(|| {})))
             }),
+            SystemRequest::Keymaps => self.starting(id, |system| {
+                let hear = {
+                    let (tell, running) = (system.tell.clone(), Arc::downgrade(&system.running));
+                    move |listed: &crate::keymaps::Listed| {
+                        let Some(running) = running.upgrade() else {
+                            return;
+                        };
+                        // Under the lock, as for shell commands.
+                        let running = running.lock().unwrap();
+                        if matches!(running.get(&id), Some(Running::Listening(_))) {
+                            tell(HostMessage::SystemEvent {
+                                id,
+                                event: listed.event(),
+                            });
+                        }
+                    }
+                };
+                let listener = system.keymaps.listen(Arc::new(hear.clone()));
+                // A page hears the keymaps at once, so it need not wait for a
+                // switch.
+                let keymaps = system.keymaps.clone();
+                let already = move || {
+                    if let Some(listed) = keymaps.listed() {
+                        hear(&listed);
+                    }
+                };
+                Ok((Running::Listening(listener), Box::new(already)))
+            }),
+            SystemRequest::SelectKeymap { keymap } => {
+                let reply = match &self.select_keymap {
+                    Some(select) => match select(keymap) {
+                        Ok(()) => SystemReply::Set,
+                        Err(error) => failed(error),
+                    },
+                    None => failed(SystemError {
+                        kind: SystemErrorKind::Other,
+                        message: "this desktop switches no keymaps".into(),
+                    }),
+                };
+                (self.tell)(HostMessage::SystemReply { id, reply });
+                Handled::Done
+            }
         }
     }
 

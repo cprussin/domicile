@@ -228,6 +228,94 @@ describe(App, () => {
       });
     });
 
+    describe("keymaps", () => {
+      /** A keyboard that switches between dvp and us. */
+      const TWO = {
+        input: {
+          keyboard: {
+            keymaps: [{ name: "dvp", xkb_variant: "dvp" }, { name: "us" }],
+          },
+        },
+      };
+
+      it("adds a keymap to switch to, keeping the keyboard's as the first", async () => {
+        const { host, user } = await renderApp("Keyboard", {
+          config: { input: { keyboard: { xkb_variant: "dvp" } } },
+        });
+        await user.type(
+          screen.getByRole("textbox", { name: "New keymap name" }),
+          "us",
+        );
+        await user.click(screen.getByRole("button", { name: "Add keymap" }));
+        await waitFor(() => {
+          expect(written(host.writes).input.keyboard).toEqual(
+            TWO.input.keyboard,
+          );
+        });
+      });
+
+      it("refuses a keymap name the keyboard already has", async () => {
+        const { host, user } = await renderApp("Keyboard", { config: TWO });
+        await user.type(
+          screen.getByRole("textbox", { name: "New keymap name" }),
+          "us",
+        );
+        await user.click(screen.getByRole("button", { name: "Add keymap" }));
+        expect(
+          await screen.findByText("A keymap is already named us"),
+        ).toBeVisible();
+        expect(host.writes).toEqual([]);
+      });
+
+      it("sets a keymap's layout", async () => {
+        const { host, user } = await renderApp("Keyboard", { config: TWO });
+        const layout = screen.getByRole("textbox", { name: "us layout" });
+        await user.clear(layout);
+        await user.type(layout, "de");
+        await user.tab();
+        await waitFor(() => {
+          expect(written(host.writes).input.keyboard.keymaps[1]).toEqual({
+            name: "us",
+            xkb_layout: "de",
+          });
+        });
+      });
+
+      it("renames a keymap", async () => {
+        const { host, user } = await renderApp("Keyboard", { config: TWO });
+        const name = screen.getByRole("textbox", { name: "us name" });
+        await user.clear(name);
+        await user.type(name, "qwerty");
+        await user.tab();
+        await waitFor(() => {
+          expect(written(host.writes).input.keyboard.keymaps[1]).toEqual({
+            name: "qwerty",
+          });
+        });
+      });
+
+      it("moves a keymap first, which makes it the one the desktop starts on", async () => {
+        const { host, user } = await renderApp("Keyboard", { config: TWO });
+        await user.click(screen.getByRole("button", { name: "Move us up" }));
+        await waitFor(() => {
+          expect(written(host.writes).input.keyboard.keymaps).toEqual([
+            { name: "us" },
+            { name: "dvp", xkb_variant: "dvp" },
+          ]);
+        });
+      });
+
+      it("goes back to one keyboard when one keymap is left", async () => {
+        const { host, user } = await renderApp("Keyboard", { config: TWO });
+        await user.click(screen.getByRole("button", { name: "Remove us" }));
+        await waitFor(() => {
+          expect(written(host.writes).input.keyboard).toEqual({
+            xkb_variant: "dvp",
+          });
+        });
+      });
+    });
+
     it("blanks the screens after a time, and never once it is cleared", async () => {
       const { host, user } = await renderApp("Power & lock", {
         config: { idle: { blank_after_seconds: 300 } },

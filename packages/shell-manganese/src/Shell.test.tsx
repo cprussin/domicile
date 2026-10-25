@@ -359,6 +359,7 @@ const MANGANESE_KEYS: ShellKeybindings = {
       line(keysym, true, `send-shell move ${way}`),
     ),
     line("v", true, "send-shell clipboard"),
+    line("t", false, "send-shell keymap next"),
     line("b", false, "send-shell split h"),
     line("v", false, "send-shell split v"),
     line("s", false, "send-shell layout stacking"),
@@ -2496,6 +2497,62 @@ describe("Shell", () => {
       press("Return");
 
       expect(domicile.calls).toContainEqual(["spawn", ["kitty"]]);
+    });
+
+    it("switches the keymap with `keymap`, and says which it switched to", async () => {
+      renderShell();
+      /** Answer the system call `call` as the compositor would. */
+      const answer = (call: object, ...lines: object[]) => {
+        const [, id] =
+          domicile.calls.findLast(
+            ([method, , request]) =>
+              method === "callSystem" && request === JSON.stringify(call),
+          ) ?? [];
+        for (const line of lines) {
+          domicile.fake.dispatch("system", {
+            data: JSON.stringify({ id, ...line }),
+          });
+        }
+      };
+      const keymaps = (active: string) => ({
+        event: {
+          active,
+          keymaps: [
+            { description: "English (programmer Dvorak)", name: "dvp" },
+            { description: "English (US)", name: "us" },
+          ],
+          kind: "keymaps",
+        },
+        type: "system_event",
+      });
+      const settled = () => new Promise((done) => setTimeout(done, 0));
+      await act(async () => {
+        answer(
+          { call: "keymaps" },
+          {
+            reply: { kind: "started" },
+            type: "system_reply",
+          },
+        );
+        await settled();
+        answer({ call: "keymaps" }, keymaps("dvp"));
+        await settled();
+      });
+
+      await act(async () => {
+        press("t");
+        await settled();
+        answer(
+          { call: "select_keymap", keymap: { kind: "next" } },
+          { reply: { kind: "set" }, type: "system_reply" },
+        );
+        answer({ call: "keymaps" }, keymaps("us"));
+        await settled();
+      });
+
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "KeymapusEnglish (US)",
+      );
     });
 
     it("moves the focus with the direction keys", () => {

@@ -28,7 +28,65 @@ type Props = {
  * `animationend`, not a timer, so the duration lives only in the stylesheet.
  * The caller positions it; it ignores the pointer.
  */
-export const LevelToast = ({ changes, icon, label, level, muted }: Props) => {
+export const LevelToast = ({ changes, icon, label, level, muted }: Props) => (
+  <HeldToast
+    changes={changes}
+    icon={icon}
+    label={label}
+    muted={muted}
+    value={muted ? "Muted" : `${String(Math.round(level * 100))}%`}
+  >
+    <span
+      aria-valuemax={100}
+      aria-valuemin={0}
+      aria-valuenow={Math.round(level * 100)}
+      className={meterStyles}
+      data-muted={muted ? "" : undefined}
+      role="meter"
+      // Inline because the level is a runtime value Panda cannot extract.
+      style={{ "--level-toast-level": level } as CSSProperties}
+    />
+  </HeldToast>
+);
+
+type ChoiceProps = Pick<Props, "changes" | "icon" | "label"> & {
+  /** What was chosen, such as a keymap's name. */
+  choice: string;
+  /** A line under the label saying more of it, if any. */
+  detail?: string | undefined;
+};
+
+/**
+ * A toast like {@link LevelToast} naming a choice just made, such as the
+ * keymap a key switched to, with no meter.
+ */
+export const ChoiceToast = ({
+  changes,
+  choice,
+  detail,
+  icon,
+  label,
+}: ChoiceProps) => (
+  <HeldToast
+    changes={changes}
+    icon={icon}
+    label={label}
+    muted={false}
+    value={choice}
+  >
+    {detail !== undefined && <span className={detailStyles}>{detail}</span>}
+  </HeldToast>
+);
+
+/** The held, fading card both toasts are, with `children` under the label. */
+const HeldToast = ({
+  changes,
+  children,
+  icon,
+  label,
+  muted,
+  value,
+}: Omit<Props, "level"> & { children?: ReactNode; value: string }) => {
   const [goneAfter, setGoneAfter] = useState<number | undefined>();
 
   return goneAfter === changes ? undefined : (
@@ -49,20 +107,9 @@ export const LevelToast = ({ changes, icon, label, level, muted }: Props) => {
         <span className={readoutStyles}>
           <span className={labelRowStyles}>
             <span>{label}</span>
-            <span className={valueStyles}>
-              {muted ? "Muted" : `${String(Math.round(level * 100))}%`}
-            </span>
+            <span className={valueStyles}>{value}</span>
           </span>
-          <span
-            aria-valuemax={100}
-            aria-valuemin={0}
-            aria-valuenow={Math.round(level * 100)}
-            className={meterStyles}
-            data-muted={muted ? "" : undefined}
-            role="meter"
-            // Inline because the level is a runtime value Panda cannot extract.
-            style={{ "--level-toast-level": level } as CSSProperties}
-          />
+          {children}
         </span>
       </span>
     </output>
@@ -112,7 +159,7 @@ const readoutStyles = css({
   display: "flex",
   flex: 1,
   flexDirection: "column",
-  gap: 2.5,
+  gap: 0.5,
   minInlineSize: 0,
 });
 
@@ -147,6 +194,15 @@ const meterStyles = css({
   backgroundColor: "color-mix(in oklab, {colors.foreground} 14%, transparent)",
   blockSize: 2,
   borderRadius: "full",
+  marginBlockStart: 2,
   overflow: "hidden",
   position: "relative",
+});
+
+const detailStyles = css({
+  color: "muted",
+  fontSize: "sm",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 });

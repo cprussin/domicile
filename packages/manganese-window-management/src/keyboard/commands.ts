@@ -32,6 +32,8 @@ export const clearNotifications = () => command("notifications", "clear");
 export const idleInhibitor = () => command("idle-inhibitor");
 /** Take a screenshot, picking the area in a dialog. */
 export const screenshot = () => command("screenshot");
+/** Switch to the next of the config's keymaps, or to the one named. */
+export const keymap = (name: string) => command("keymap", name);
 /** Step the default output's volume, or toggle its mute. */
 export const volume = (change: "up" | "down" | "mute") =>
   command("volume", change);

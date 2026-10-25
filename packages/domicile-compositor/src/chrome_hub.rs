@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use domicile_host::idle_warnings::IdleWarnings;
 use domicile_host::ipc::{apply_chrome_message, to_line};
+use domicile_host::keymaps::Keymaps;
 use domicile_host::shell_commands::ShellCommands;
 use domicile_host::unlock_refusals::UnlockRefusals;
 use domicile_host::window_requests::WindowRequests;
@@ -97,6 +98,10 @@ pub struct ChromeHub {
     pub window_requests: WindowRequests,
     /// The virtual monitors pages add. See [`crate::virtual_monitors`].
     pub virtual_monitors: VirtualMonitors,
+    /// The keymaps and the one the desktop types on, shared by every
+    /// connection's `System`. The Wayland thread lists them; see
+    /// [`crate::DomicileCompositor::switch_the_keymap`].
+    pub keymaps: Keymaps,
 }
 
 impl ChromeHub {
@@ -128,6 +133,7 @@ impl ChromeHub {
             unlock_refusals: UnlockRefusals::default(),
             window_requests: WindowRequests::default(),
             virtual_monitors: VirtualMonitors::default(),
+            keymaps: Keymaps::default(),
         });
         (hub, outbound_rx)
     }

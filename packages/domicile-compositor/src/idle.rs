@@ -380,6 +380,8 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         | ClientRequest::SetWindowStates { .. }
         | ClientRequest::AddVirtualMonitor { .. }
         | ClientRequest::RemoveVirtualMonitor { .. }
+        // A key or a click, which already counted.
+        | ClientRequest::SelectKeymap { .. }
         | ClientRequest::CloseApp { .. }
         | ClientRequest::Spawn { .. }
         | ClientRequest::ChromeHello { .. }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
-import { LevelToast } from "./LevelToast";
+import { ChoiceToast, LevelToast } from "./LevelToast";
 
 /** Volume at `level`, after `changes` changes. */
 const volume = (
@@ -83,5 +83,44 @@ describe(LevelToast, () => {
 
       expect(screen.getByRole("status")).toHaveTextContent("Volume45%");
     });
+  });
+});
+
+describe(ChoiceToast, () => {
+  it("names the choice with no meter, and fades like the level", () => {
+    const { rerender } = render(
+      <ChoiceToast
+        changes={1}
+        choice="us"
+        icon={<svg data-testid="icon" />}
+        label="Keymap"
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Keymapus");
+    expect(screen.queryByRole("meter")).toBeNull();
+
+    fireEvent.animationEnd(screen.getByRole("status"));
+    expect(screen.queryByRole("status")).toBeNull();
+
+    rerender(
+      <ChoiceToast changes={2} choice="dvp" icon={<svg />} label="Keymap" />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Keymapdvp");
+  });
+
+  it("says more of the choice under the label", () => {
+    render(
+      <ChoiceToast
+        changes={1}
+        choice="us"
+        detail="English (US)"
+        icon={<svg />}
+        label="Keymap"
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "KeymapusEnglish (US)",
+    );
   });
 });

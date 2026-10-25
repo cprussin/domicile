@@ -35,7 +35,7 @@ There is no terminal key. Bind one with `exec`.
 
 Build commands with the exported helpers (`focus`, `move`, `workspace`,
 `moveToWorkspace`, `grow`, `mode`, `exec`, `searchClipboard`, `volume`,
-`micMute`, `brightness`, `notifications`, `clearNotifications`,
+`micMute`, `brightness`, `keymap`, `notifications`, `clearNotifications`,
 `idleInhibitor`, …). They use sway's names:
 
 | Command | Action |
@@ -70,6 +70,7 @@ Manganese-only commands:
 | `notifications` | Toggle the notification drawer, on the screen with the keyboard. Unbound by default. |
 | `notifications clear` | Clear every notification, as the drawer's "Clear all" does. Unbound by default. |
 | `idle-inhibitor` | Toggle keeping the screens on, as the bar's eye does. Unbound by default. |
+| `keymap next` / `keymap <name>` | Switch every keyboard to the next of `input.keyboard.keymaps`, wrapping, or to the one named. Unbound by default. |
 
 - `mode(name)` comes from the SDK's `bindKeys`. Each monitor's page keeps its
   own mode. The `Mode` bar item, in no default bar, shows any mode other
@@ -85,6 +86,9 @@ Manganese-only commands:
 - Each `volume`, `mic` and `brightness` press shows the new level in a toast
   at the bottom of the focused screen (`LevelNotice` in `shell-manganese`).
   Presses while it is up update it in place.
+- `keymap` shows the keymap it switched to, and xkb's name for its layout,
+  in the same kind of toast (`KeymapNotice`). The switch lasts until the desktop restarts, and works
+  while locked ([SHELL-CONFIG.md](../../../docs/SHELL-CONFIG.md#keyboard)).
 
 ## Key names
 

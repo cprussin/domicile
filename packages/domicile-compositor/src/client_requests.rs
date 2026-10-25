@@ -13,7 +13,7 @@ use tracing::{debug, warn};
 
 use domicile_host::clipboard::Contents;
 use domicile_host::theme_turnover::{Turnover, CAPTURE_WITHIN};
-use domicile_protocol::{Passphrase, PortalAnswer, Theme, TrayAction, WindowState};
+use domicile_protocol::{KeymapChoice, Passphrase, PortalAnswer, Theme, TrayAction, WindowState};
 
 use crate::activation;
 use crate::chrome_hub::announce_open_apps;
@@ -112,6 +112,11 @@ pub enum ClientRequest {
     /// A page's virtual monitor ended.
     RemoveVirtualMonitor {
         id: i64,
+    },
+    /// The page switched the keymap. See
+    /// [`DomicileCompositor::switch_the_keymap`].
+    SelectKeymap {
+        keymap: KeymapChoice,
     },
     /// The chrome asked the client of `app_id` to close its window.
     CloseApp {
@@ -483,6 +488,7 @@ impl DomicileCompositor {
                 self.virtual_displays.retain(|display| display.id != id);
                 self.state_the_virtual_monitors();
             }
+            ClientRequest::SelectKeymap { keymap } => self.switch_the_keymap(&keymap),
             // A launch from a key or the launcher, so it may raise the
             // window of an app already running.
             ClientRequest::Spawn { command } => spawn_client(

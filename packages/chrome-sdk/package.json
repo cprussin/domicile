@@ -166,6 +166,10 @@
       "types": "./dist/key-action.d.ts",
       "default": "./dist/key-action.js"
     },
+    "./keymap-choice": {
+      "types": "./dist/keymap-choice.d.ts",
+      "default": "./dist/keymap-choice.js"
+    },
     "./notification": {
       "types": "./dist/notification.d.ts",
       "default": "./dist/notification.js"

@@ -221,6 +221,26 @@ fn read_chrome_messages(
             hub.virtual_monitors
                 .add(wanted, move |request| queue.send_request(request))
         }
+    })
+    .sharing_keymaps(hub.keymaps.clone())
+    .selecting_keymaps_with({
+        let hub = hub.clone();
+        move |keymap| {
+            // Checked here so the page hears of a bad name. A reload that
+            // drops it before the Wayland thread gets this is logged there.
+            let listed = hub
+                .keymaps
+                .listed()
+                .expect("the keymaps are listed before any chrome connects");
+            if listed.chosen(&keymap).is_none() {
+                return Err(SystemError {
+                    kind: SystemErrorKind::NotFound,
+                    message: format!("no keymap {keymap:?}"),
+                });
+            }
+            hub.send_request(ClientRequest::SelectKeymap { keymap });
+            Ok(())
+        }
     });
     let mut ready = false;
     // Whether this connection is in the broadcast list. Separate from `ready`

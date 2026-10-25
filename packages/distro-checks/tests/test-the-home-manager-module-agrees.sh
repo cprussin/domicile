@@ -98,13 +98,14 @@ compare() { # what, rust file, rust struct, nix open pattern, nix indent
 }
 
 # `input.keyboard` and `output` are plain attrsets, so their options are one
-# level in. The three submodules in the `let` hold theirs in an
+# level in. The submodules in the `let` hold theirs in an
 # `options = {`, one level deeper.
 compare "extensions" "$LIB" ExtensionsConfig '^          extensions = \{$' '            '
 compare "idle" "$LIB" IdleConfig '^          idle = \{$' '            '
 compare "lock" "$LIB" LockConfig '^          lock = \{$' '            '
 compare "lockdown" "$LIB" LockdownConfig '^          lockdown = \{$' '            '
 compare "input.keyboard" "$LIB" KeyboardConfig '^          input\.keyboard = \{$' '            '
+compare "input.keyboard.keymaps[]" "$LIB" Keymap '^  keymap = lib\.types\.submodule \{$' '      '
 compare "input.pointers[]" "$POINTERS" PointerConfig '^  pointer = lib\.types\.submodule \{$' '      '
 compare "output" "$LIB" OutputConfig '^          output = \{$' '            '
 compare "output.displays[]" "$LIB" DisplayConfig '^  display = lib\.types\.submodule \{$' '      '

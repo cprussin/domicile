@@ -8,13 +8,16 @@ use std::time::Instant;
 
 use tracing::{debug, error, info, warn};
 
-use domicile_config::{ExtensionsConfig, IdleConfig, KeyboardConfig, LockConfig, Omit, ThemeMode};
+use domicile_config::{
+    ExtensionsConfig, IdleConfig, KeyboardConfig, Keymap, LockConfig, Omit, ThemeMode,
+};
+use domicile_host::keymaps::Listed;
 use domicile_host::Host;
-use domicile_protocol::Theme;
+use domicile_protocol::{KeymapChoice, Theme};
 
 use crate::file_indexing::Heard;
 use crate::idle::Idle;
-use crate::keymap::compiled_keymap;
+use crate::keymap::{compiled_keymap, listed_keymaps};
 use crate::portals::shell_appearance;
 use crate::restatement::Restatement;
 use crate::scale::output_scale;
@@ -62,7 +65,7 @@ impl DomicileCompositor {
     /// displays.
     pub fn adopt_the_rest_of_the_config(&mut self, restated: &Restatement) {
         if let Some(keyboard) = &restated.keyboard {
-            self.retype_the_desktop(keyboard);
+            self.take_up_the_keymaps(keyboard);
         }
         // After the keyboard, whose layout chords are resolved on.
         if restated.shell_config {
@@ -134,60 +137,130 @@ impl DomicileCompositor {
         }
     }
 
-    /// Compile the config's keymap and send it to every consumer.
+    /// Take up a reloaded keyboard's keymaps, staying on the active keymap
+    /// when the config still names it and going to the first when not.
     ///
-    /// One compilation feeds the seat (each client's `wl_keyboard.keymap`), the
-    /// browser process (over the chrome socket), and later chromes (stored
-    /// copy). See [`crate::keymap`].
+    /// Every keymap must compile, or none is taken up and the desktop keeps
+    /// typing on the keymap it has. At startup the same failure is fatal so
+    /// the desktop never runs on xkb's fallback.
+    pub fn take_up_the_keymaps(&mut self, keyboard: &KeyboardConfig) {
+        let keymaps = keyboard.keymaps();
+        let compiled: Result<Vec<String>, _> = keymaps.iter().map(compiled_keymap).collect();
+        let Ok(compiled) = compiled.map_err(|why| warn!(%why, "{}", grepped::KEYMAP_REFUSED))
+        else {
+            return;
+        };
+        let active = self.active_keymap_name();
+        let at = keymaps
+            .iter()
+            .position(|keymap| keymap.name == active)
+            .unwrap_or(0);
+        self.hub.keymaps.list(Listed {
+            keymaps: listed_keymaps(&keymaps),
+            active: keymaps[at].name.clone(),
+        });
+        self.retype_the_desktop(&keymaps[at], compiled[at].clone());
+    }
+
+    /// Switch every keyboard to the keymap `choice` picks, until the desktop
+    /// restarts.
     ///
-    /// A keymap that fails to compile is refused and logged, not fatal. At
-    /// startup it is fatal so the desktop never runs on xkb's fallback. On
-    /// reload the last good keymap stays.
-    pub fn retype_the_desktop(&mut self, keyboard: &KeyboardConfig) {
-        match compiled_keymap(keyboard) {
+    /// Retypes the desktop and the shell's keybindings, then tells the pages
+    /// listening. Switching to the active keymap does nothing.
+    pub fn switch_the_keymap(&mut self, choice: &KeymapChoice) {
+        let listed = self
+            .hub
+            .keymaps
+            .listed()
+            .expect("the keymaps are listed at startup");
+        let Some(name) = listed.chosen(choice) else {
+            // The connection checked it, so a reload dropped it since.
+            debug!(?choice, "keymap: a keymap the config no longer has");
+            return;
+        };
+        if name == listed.active {
+            return;
+        }
+        let keymap = self.keymap_named(&name);
+        match compiled_keymap(&keymap) {
             Err(why) => warn!(%why, "{}", grepped::KEYMAP_REFUSED),
-            Ok(keymap) => {
-                info!(
-                    layout = %keyboard.xkb_layout,
-                    variant = %keyboard.xkb_variant,
-                    "the desktop types on the keyboard the config now names"
-                );
-                // The seat first: Smithay writes the keymap and sends the new
-                // fd to each bound `wl_keyboard`.
-                //
-                // From the text, not `XkbConfig`, so the seat and the chrome
-                // get the same bytes from one compilation.
-                let typing = self
-                    .seat
-                    .get_keyboard()
-                    .expect("the seat was given a keyboard at startup");
-                typing
-                    .set_keymap_from_string(self, keymap.clone())
-                    .expect("xkb reads back the keymap text it has just written");
-                // Then the browser process. Store then broadcast, so the next
-                // chrome to connect gets the new keymap.
-                let told = {
-                    let mut host = self.hub.host.lock().unwrap();
-                    host.set_keymap(keymap);
-                    host.describe_keymap()
-                };
-                self.hub.broadcast(
-                    told.expect("a host that has just been given a keymap has one to state"),
-                );
+            Ok(compiled) => {
+                self.hub.keymaps.list(Listed {
+                    keymaps: listed.keymaps,
+                    active: name,
+                });
+                self.retype_the_desktop(&keymap, compiled);
+                self.rebind_the_keys();
             }
         }
     }
 
-    /// Resolve the reloaded config's keybindings and send them and the shell's
-    /// options to every chrome.
+    /// The name of the keymap the desktop types on.
+    fn active_keymap_name(&self) -> String {
+        self.hub
+            .keymaps
+            .listed()
+            .expect("the keymaps are listed at startup")
+            .active
+    }
+
+    /// The live config's keymap named `name`.
+    fn keymap_named(&self, name: &str) -> Keymap {
+        self.config
+            .current()
+            .input
+            .keyboard
+            .keymaps()
+            .into_iter()
+            .find(|keymap| keymap.name == name)
+            .expect("the listed keymaps are the live config's")
+    }
+
+    /// Send `keymap`, compiled as `compiled`, to every consumer.
     ///
-    /// A keysym the keymap cannot type is refused and logged, not fatal, as in
-    /// [`retype_the_desktop`]. The host keeps the last good keys for new
-    /// chromes. A keymap that does not compile is refused here too.
+    /// One compilation feeds the seat (each client's `wl_keyboard.keymap`), the
+    /// browser process (over the chrome socket), and later chromes (stored
+    /// copy). See [`crate::keymap`].
+    fn retype_the_desktop(&mut self, keymap: &Keymap, compiled: String) {
+        info!(
+            keymap = %keymap.name,
+            layout = %keymap.xkb_layout,
+            variant = %keymap.xkb_variant,
+            "the desktop types on the keymap the config names"
+        );
+        // The seat first: Smithay writes the keymap and sends the new
+        // fd to each bound `wl_keyboard`.
+        //
+        // From the text, not `XkbConfig`, so the seat and the chrome
+        // get the same bytes from one compilation.
+        let typing = self
+            .seat
+            .get_keyboard()
+            .expect("the seat was given a keyboard at startup");
+        typing
+            .set_keymap_from_string(self, compiled.clone())
+            .expect("xkb reads back the keymap text it has just written");
+        // Then the browser process. Store then broadcast, so the next
+        // chrome to connect gets the new keymap.
+        let told = {
+            let mut host = self.hub.host.lock().unwrap();
+            host.set_keymap(compiled);
+            host.describe_keymap()
+        };
+        self.hub
+            .broadcast(told.expect("a host that has just been given a keymap has one to state"));
+    }
+
+    /// Resolve the config's keybindings on the active keymap and send them and
+    /// the shell's options to every chrome.
     ///
-    /// [`retype_the_desktop`]: DomicileCompositor::retype_the_desktop
+    /// A keymap that does not compile is refused and logged, not fatal, as in
+    /// [`take_up_the_keymaps`]. The host keeps the last good keys for new
+    /// chromes.
+    ///
+    /// [`take_up_the_keymaps`]: DomicileCompositor::take_up_the_keymaps
     pub fn rebind_the_keys(&mut self) {
-        match shell_config::keys(self.config.current()) {
+        match shell_config::keys(&self.keymap_named(&self.active_keymap_name())) {
             Err(why) => warn!(%why, "{}", grepped::KEYS_REFUSED),
             Ok(resolved) => {
                 // Store then broadcast, as in `retype_the_desktop`.

@@ -10,6 +10,8 @@ import { Err, Ok } from "@cprussin/option-result";
 import { z } from "zod";
 
 import type { DomicileHost } from "./domicile-host";
+import type { KeymapChoice, Keymaps } from "./keymap-choice";
+import { wireKeymapChoice } from "./keymap-choice";
 import type { PreviewedWindow } from "./previewed-window";
 import { PreviewedWindowKind } from "./previewed-window";
 import type {
@@ -352,6 +354,17 @@ export type System = {
   addVirtualMonitor: (
     mode: VirtualMonitorMode,
   ) => Promise<Result<VirtualMonitor, SystemError>>;
+  /**
+   * Hear `input.keyboard`'s keymaps and the one the desktop types on, at once
+   * and on each switch or reload. Allowed while the desktop is locked.
+   */
+  keymaps: () => Promise<Result<Listening<Keymaps>, SystemError>>;
+  /**
+   * Switch every keyboard to another of the config's keymaps, until the
+   * desktop restarts. Fails {@link SystemErrorKind.NotFound} for a name the
+   * config does not have. Allowed while the desktop is locked.
+   */
+  selectKeymap: (choice: KeymapChoice) => Promise<Result<"set", SystemError>>;
 };
 
 /** What {@link system} needs of the desktop `Shell` is handed. */
@@ -419,6 +432,18 @@ export const system = (host: SystemHost): System => {
           ? (event.blanks_in_ms ?? undefined)
           : unexpected(event),
       ),
+    keymaps: () =>
+      listening(calls, { call: "keymaps" }, (event) =>
+        event.kind === "keymaps"
+          ? {
+              active: event.active,
+              keymaps: event.keymaps.map(({ description, name }) => ({
+                description,
+                name,
+              })),
+            }
+          : unexpected(event),
+      ),
     previewWindow: (window) =>
       oneShot(
         calls,
@@ -450,6 +475,12 @@ export const system = (host: SystemHost): System => {
       }),
     screenshot: () =>
       oneShot(calls, { call: "screenshot" }, (reply) => keptOf(reply)),
+    selectKeymap: (choice) =>
+      oneShot(
+        calls,
+        { call: "select_keymap", keymap: wireKeymapChoice(choice) },
+        (reply) => (reply.kind === "set" ? "set" : unexpected(reply)),
+      ),
     setWindowStates: (appId, states) =>
       oneShot(
         calls,

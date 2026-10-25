@@ -6,9 +6,9 @@
 use std::collections::BTreeMap;
 
 use domicile_protocol::{
-    Bus, ChromeMessage, DirEntry, FileType, HostMessage, PreviewedWindow, Signal, Stream,
-    SystemEnd, SystemError, SystemErrorKind, SystemEvent, SystemReply, SystemRequest,
-    UnlockRefusal, WindowRequest, WindowState,
+    Bus, ChromeMessage, DirEntry, FileType, HostMessage, KeymapChoice, ListedKeymap,
+    PreviewedWindow, Signal, Stream, SystemEnd, SystemError, SystemErrorKind, SystemEvent,
+    SystemReply, SystemRequest, UnlockRefusal, WindowRequest, WindowState,
 };
 
 fn chrome(json: &str) -> ChromeMessage {
@@ -655,4 +655,52 @@ fn the_shell_adds_a_virtual_monitor() {
         }),
         r#"{"type":"system_reply","id":5,"reply":{"kind":"virtual_monitor","output":"virtual-1"}}"#
     );
+}
+
+/// The shell hears the keymaps the desktop switches between, and switches it.
+#[test]
+fn the_shell_hears_the_keymaps_and_switches_between_them() {
+    assert_eq!(
+        chrome(r#"{"type":"system_request","id":5,"request":{"call":"keymaps"}}"#),
+        ChromeMessage::SystemRequest {
+            id: 5,
+            request: SystemRequest::Keymaps,
+        }
+    );
+    assert_eq!(
+        host(&HostMessage::SystemEvent {
+            id: 5,
+            event: SystemEvent::Keymaps {
+                keymaps: vec![
+                    ListedKeymap {
+                        name: "dvp".into(),
+                        description: Some("English (programmer Dvorak)".into()),
+                    },
+                    ListedKeymap {
+                        name: "odd".into(),
+                        description: None,
+                    },
+                ],
+                active: "odd".into(),
+            },
+        }),
+        r#"{"type":"system_event","id":5,"event":{"kind":"keymaps","keymaps":[{"name":"dvp","description":"English (programmer Dvorak)"},{"name":"odd"}],"active":"odd"}}"#
+    );
+    for (json, keymap) in [
+        (r#"{"kind":"next"}"#, KeymapChoice::Next),
+        (
+            r#"{"kind":"named","name":"us"}"#,
+            KeymapChoice::Named { name: "us".into() },
+        ),
+    ] {
+        assert_eq!(
+            chrome(&format!(
+                r#"{{"type":"system_request","id":6,"request":{{"call":"select_keymap","keymap":{json}}}}}"#
+            )),
+            ChromeMessage::SystemRequest {
+                id: 6,
+                request: SystemRequest::SelectKeymap { keymap },
+            }
+        );
+    }
 }

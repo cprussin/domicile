@@ -8,44 +8,46 @@
 //! This compiles separately from the seat because the chrome socket accepts
 //! connections before the compositor state exists, and Smithay's
 //! `KeyboardHandle::with_xkb_state` needs `&mut D`. Both compile the same
-//! [`KeyboardConfig`]; the browser must never read `input.keyboard` itself.
+//! [`Keymap`]; the browser must never read `input.keyboard` itself.
 
 use std::collections::BTreeMap;
 
-use domicile_config::KeyboardConfig;
+use domicile_config::Keymap;
+use domicile_protocol::ListedKeymap;
 use smithay::input::keyboard::xkb;
 
 /// xkb could not compile a keymap from the config.
 ///
 /// Fatal at startup, so the desktop never runs on a fallback layout. On a
 /// reload the new config is rejected instead, so a typo does not close every
-/// window. See `retype_the_desktop`.
+/// window. See `take_up_the_keymaps`.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error(
-    "xkb cannot compile a keymap for input.keyboard: rules={rules:?} model={model:?} \
-     layout={layout:?} variant={variant:?} options={options:?}"
+    "xkb cannot compile keymap {:?} of input.keyboard: rules={:?} model={:?} layout={:?} \
+     variant={:?} options={:?}",
+    .0.name,
+    .0.xkb_rules,
+    .0.xkb_model,
+    .0.xkb_layout,
+    .0.xkb_variant,
+    .0.xkb_options_string()
 )]
-pub struct UnknownLayout {
-    rules: String,
-    model: String,
-    layout: String,
-    variant: String,
-    options: String,
-}
+// Boxed so a `Result` carrying it stays small.
+pub struct UnknownLayout(Box<Keymap>);
 
-/// The config's keymap as `XKB_KEYMAP_FORMAT_TEXT_V1` text, the format a
+/// A config keymap as `XKB_KEYMAP_FORMAT_TEXT_V1` text, the format a
 /// `wl_keyboard.keymap` fd carries.
-pub fn compiled_keymap(config: &KeyboardConfig) -> Result<String, UnknownLayout> {
+pub fn compiled_keymap(config: &Keymap) -> Result<String, UnknownLayout> {
     compiled(config).map(|keymap| keymap.get_as_string(xkb::KEYMAP_FORMAT_TEXT_V1))
 }
 
-/// The config's compiled keymap, used to map keybinding keysyms to keys.
+/// A config keymap, compiled, used to map keybinding keysyms to keys.
 pub struct Keyboard {
     keymap: xkb::Keymap,
 }
 
 impl Keyboard {
-    pub fn compiled(config: &KeyboardConfig) -> Result<Keyboard, UnknownLayout> {
+    pub fn compiled(config: &Keymap) -> Result<Keyboard, UnknownLayout> {
         compiled(config).map(|keymap| Keyboard { keymap })
     }
 }
@@ -75,9 +77,32 @@ impl Keyboard {
     }
 }
 
+/// `keymaps` as `SystemEvent::Keymaps` lists them, each with xkb's name for
+/// its layouts.
+pub fn listed_keymaps(keymaps: &[Keymap]) -> Vec<ListedKeymap> {
+    keymaps
+        .iter()
+        .map(|keymap| ListedKeymap {
+            name: keymap.name.clone(),
+            description: described(keymap),
+        })
+        .collect()
+}
+
+/// xkb's names for `config`'s layouts, such as `English (programmer
+/// Dvorak)`, joined for a keymap of several. `None` when xkb names none, or
+/// cannot compile it.
+fn described(config: &Keymap) -> Option<String> {
+    let keymap = compiled(config).ok()?;
+    let names: Vec<&str> = (0..keymap.num_layouts())
+        .map(|layout| keymap.layout_get_name(layout))
+        .filter(|name| !name.is_empty())
+        .collect();
+    (!names.is_empty()).then(|| names.join(", "))
+}
+
 /// Compiles `config` with xkb.
-fn compiled(config: &KeyboardConfig) -> Result<xkb::Keymap, UnknownLayout> {
-    let options = config.xkb_options_string();
+fn compiled(config: &Keymap) -> Result<xkb::Keymap, UnknownLayout> {
     let context = xkb::Context::new(xkb::CONTEXT_NO_FLAGS);
     xkb::Keymap::new_from_names(
         &context,
@@ -85,16 +110,10 @@ fn compiled(config: &KeyboardConfig) -> Result<xkb::Keymap, UnknownLayout> {
         &config.xkb_model,
         &config.xkb_layout,
         &config.xkb_variant,
-        Some(options.clone()),
+        Some(config.xkb_options_string()),
         xkb::KEYMAP_COMPILE_NO_FLAGS,
     )
-    .ok_or_else(|| UnknownLayout {
-        rules: config.xkb_rules.clone(),
-        model: config.xkb_model.clone(),
-        layout: config.xkb_layout.clone(),
-        variant: config.xkb_variant.clone(),
-        options,
-    })
+    .ok_or_else(|| UnknownLayout(Box::new(config.clone())))
 }
 
 #[cfg(test)]
@@ -102,12 +121,32 @@ mod tests {
     use super::*;
 
     /// Programmer Dvorak with caps lock swapped for escape.
-    fn dvorak() -> KeyboardConfig {
-        KeyboardConfig {
+    fn dvorak() -> Keymap {
+        Keymap {
             xkb_variant: "dvp".into(),
             xkb_options: vec!["caps:swapescape".into()],
-            ..KeyboardConfig::default()
+            ..Keymap::default()
         }
+    }
+
+    #[test]
+    fn a_listed_keymap_carries_xkbs_name_for_its_layouts() {
+        let several = Keymap {
+            name: "both".into(),
+            xkb_layout: "us,de".into(),
+            ..Keymap::default()
+        };
+        let listed = listed_keymaps(&[dvorak(), several]);
+
+        assert_eq!(
+            listed[0].description.as_deref(),
+            Some("English (programmer Dvorak)")
+        );
+        assert_eq!(
+            listed[1].description.as_deref(),
+            Some("English (US), German"),
+            "a keymap of several layouts names each"
+        );
     }
 
     #[test]
@@ -136,7 +175,7 @@ mod tests {
     fn a_keyboard_nobody_configured_is_the_plain_one() {
         // An unconfigured keyboard is plain `us`. Checked on the compiled
         // keymap in case xkb reads an empty field as something else.
-        let keymap = compiled_keymap(&KeyboardConfig::default()).expect("plain us exists");
+        let keymap = compiled_keymap(&Keymap::default()).expect("plain us exists");
 
         assert_eq!(
             unshifted_on(&keymap, "AD01"),
@@ -153,9 +192,9 @@ mod tests {
     #[test]
     fn a_layout_xkb_cannot_compile_is_an_error_rather_than_a_fallback() {
         // A fallback keymap could differ between the clients and the browser.
-        let nonsense = KeyboardConfig {
+        let nonsense = Keymap {
             xkb_rules: "no-such-rules".into(),
-            ..KeyboardConfig::default()
+            ..Keymap::default()
         };
 
         assert!(compiled_keymap(&nonsense).is_err());
@@ -170,7 +209,7 @@ mod tests {
     const KEY_COMMA: u32 = 51;
 
     /// The key for `keysym` on the keyboard `config` names.
-    fn key_for(config: &KeyboardConfig, keysym: &str) -> Option<u32> {
+    fn key_for(config: &Keymap, keysym: &str) -> Option<u32> {
         Keyboard::compiled(config)
             .expect("the layout exists")
             .keys()
@@ -181,7 +220,7 @@ mod tests {
     #[test]
     fn a_keysym_is_the_key_it_is_on_in_the_layout_the_config_names() {
         // `l` is on a different key in each layout.
-        assert_eq!(key_for(&KeyboardConfig::default(), "l"), Some(KEY_L));
+        assert_eq!(key_for(&Keymap::default(), "l"), Some(KEY_L));
         assert_eq!(key_for(&dvorak(), "l"), Some(KEY_P));
         assert_eq!(key_for(&dvorak(), "Return"), Some(KEY_ENTER));
     }
@@ -198,17 +237,14 @@ mod tests {
         // `us` also has `parenleft` on a keypad key and `less` beside the left
         // Shift, both unshifted and both rare. The lowest key is in the main
         // block.
-        assert_eq!(
-            key_for(&KeyboardConfig::default(), "parenleft"),
-            Some(KEY_9)
-        );
-        assert_eq!(key_for(&KeyboardConfig::default(), "less"), Some(KEY_COMMA));
+        assert_eq!(key_for(&Keymap::default(), "parenleft"), Some(KEY_9));
+        assert_eq!(key_for(&Keymap::default(), "less"), Some(KEY_COMMA));
     }
 
     #[test]
     fn a_keysym_the_keyboard_cannot_type_is_not_in_the_table() {
-        assert_eq!(key_for(&KeyboardConfig::default(), "Retrun"), None);
-        assert_eq!(key_for(&KeyboardConfig::default(), "Greek_alpha"), None);
+        assert_eq!(key_for(&Keymap::default(), "Retrun"), None);
+        assert_eq!(key_for(&Keymap::default(), "Greek_alpha"), None);
     }
 
     /// The keysym name on the first level of the key named `name` in the

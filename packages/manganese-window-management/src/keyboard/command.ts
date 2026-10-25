@@ -3,7 +3,7 @@
 // - Commands use sway's syntax where sway has one (`focus left`, `layout
 //   tabbed`), so sway bindings can be copied over. `lock`, `launcher`,
 //   `clipboard`, `search-clipboard`, `screenshot`, `volume`, `mic`,
-//   `brightness`, `notifications`, `idle-inhibitor` and
+//   `brightness`, `keymap`, `notifications`, `idle-inhibitor` and
 //   `resize grow <direction>` are manganese's own.
 // - `exec <argv…>` runs the argv directly, not through `sh -c` as sway does.
 // - An unknown command is a config error, so it returns an `Err`, not a throw.
@@ -12,6 +12,7 @@
 
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
+import { KeymapChoice } from "@domicile-desktop/sdk/keymap-choice";
 
 import { Axis, Direction } from "../direction";
 import { Layout } from "../tree/node";
@@ -96,7 +97,28 @@ export const parseCommand = (
   args: readonly string[],
 ): Result<Action, string> => {
   const [verb, ...argv] = args;
-  return verb === "exec" ? parseExec(argv) : parseNamed(args);
+  switch (verb) {
+    case "exec":
+      return parseExec(argv);
+    case "keymap":
+      return parseKeymap(argv);
+    default:
+      return parseNamed(args);
+  }
+};
+
+/** Parse `keymap next` or `keymap <name>`; a name may hold spaces. */
+const parseKeymap = (words: readonly string[]): Result<Action, string> => {
+  const name = words.join(" ");
+  if (name === "") {
+    return Err("manganese: `keymap` names no keymap");
+  } else {
+    return Ok(
+      WindowAction.KeymapSelected(
+        name === "next" ? KeymapChoice.Next() : KeymapChoice.Named(name),
+      ),
+    );
+  }
 };
 
 /** Parse `exec`'s argv, which must not be empty. */

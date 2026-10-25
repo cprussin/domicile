@@ -1,15 +1,14 @@
 import { Button } from "@domicile-desktop/component-library/Button";
 import { Card } from "@domicile-desktop/component-library/Card";
-import { Input } from "@domicile-desktop/component-library/Input";
 import { Select } from "@domicile-desktop/component-library/Select";
 import { Switch } from "@domicile-desktop/component-library/Switch";
-import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
-import { useId, useState } from "react";
+import { useId } from "react";
 
 import { css } from "../../styled-system/css";
 import { flex, grid } from "../../styled-system/patterns";
+import { AddRow } from "../AddRow";
 import type { ConfigPath } from "../config-document";
 import type { ConfigEditor, ConfigPageProps } from "../config-editor";
 import type { Display, Placement, Profile, TRANSFORMS } from "../config-schema";
@@ -481,50 +480,6 @@ const NumberInput = ({
   />
 );
 
-type AddRowProps = {
-  label: string;
-  button: string;
-  placeholder: string;
-  onAdd: (name: string) => void;
-};
-
-/** A field and button that add a named item. */
-const AddRow = ({ button, label, onAdd, placeholder }: AddRowProps) => {
-  const [name, setName] = useState("");
-  const add = () => {
-    if (name.trim() !== "") {
-      onAdd(name.trim());
-      setName("");
-    }
-  };
-  return (
-    <div className={addStyles}>
-      <Input
-        aria-label={label}
-        onChange={(event) => {
-          setName(event.target.value);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            add();
-          }
-        }}
-        placeholder={placeholder}
-        size="sm"
-        value={name}
-      />
-      <Button
-        beforeIcon={<PlusIcon size={14} />}
-        onClick={add}
-        size="sm"
-        variant="outline"
-      >
-        {button}
-      </Button>
-    </div>
-  );
-};
-
 const hintStyles = css({ color: "muted", fontSize: "xs", margin: 0 });
 
 const placementStyles = grid({
@@ -556,11 +511,4 @@ const actionsStyles = flex({
   gap: 2,
   justify: "space-between",
   wrap: "wrap",
-});
-
-const addStyles = grid({
-  alignItems: "center",
-  flexGrow: 1,
-  gap: 2,
-  gridTemplateColumns: "minmax(0, 1fr) auto",
 });
