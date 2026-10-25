@@ -6,7 +6,7 @@ config, its shell's source, its extensions, its site permissions and site data. 
 [APP-MODULES.md](/docs/architecture/APP-MODULES.md).
 
 ```sh
-domicile run-app .vite/app/settings.js
+domicile open --app .vite/app/settings.js
 ```
 
 - Spawns `domicile-app-host` (`domicile_launch::app_host`) and speaks

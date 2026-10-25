@@ -1,7 +1,7 @@
 # App modules
 
 An app is a JavaScript module whose `main` export Domicile calls with a root
-element and the desktop, as it calls a shell's `Shell`. `domicile run-app
+element and the desktop, as it calls a shell's `Shell`. `domicile open --app
 /path/to/entry.js` opens it in an app window. History and Settings are app
 modules ([HISTORY.md](/docs/HISTORY.md), [SETTINGS.md](/docs/SETTINGS.md)),
 so Domicile installs no extensions of its own.
@@ -9,7 +9,7 @@ so Domicile installs no extensions of its own.
 ## Design
 
 ```
-domicile run-app ./dist/history.js
+domicile open --app ./dist/history.js
   ─▶ supervisor  {"type":"run_app","module":"/abs/dist/history.js"}          control socket
   ─▶ engine      {"type":"run_app","version":1,"root":"/abs/dist","module":"history.js"}  command socket
        registers app-<id> → /abs/dist
@@ -118,7 +118,7 @@ An app reaches Domicile's own state through programs it spawns. Each inherits
 
 - Domicile's apps are built into `libexec/domicile/app-modules/<name>/`, or
   `DOMICILE_APP_MODULES/<name>/`. `domicile-history` and `domicile-settings`
-  run `domicile run-app` on its `<name>.js`. Nothing is added to the profile.
+  run `domicile open --app` on its `<name>.js`. Nothing is added to the profile.
 - `domicile` links `domicile-app-host` into the apps' `PATH`, beside
   `xdg-open`.
 - Any other app ships a desktop entry:
@@ -127,7 +127,7 @@ An app reaches Domicile's own state through programs it spawns. Each inherits
   [Desktop Entry]
   Type=Application
   Name=Notes
-  Exec=domicile run-app /usr/share/notes/notes.js
+  Exec=domicile open --app /usr/share/notes/notes.js
   ```
 
 ## Key decisions
@@ -162,7 +162,7 @@ An app reaches Domicile's own state through programs it spawns. Each inherits
 - [x] compositor: app connections, system tier only
 - [x] engine: `domicile://app-<id>/`, the `main` runner, `DomicileAppHost`,
   `run_app`, guests pinned to an app
-- [x] supervisor: `domicile run-app`; SDK: `DomicileAppHost`, `system()`
+- [x] supervisor: `domicile open --app`; SDK: `DomicileAppHost`, `system()`
   takes it; an example app (`examples/minimal-app`)
 - [x] guard: `run_app` runs `main`, an app's system call crosses, and a
   `<webview>` not opened for the app cannot open its URL

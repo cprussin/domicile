@@ -1,4 +1,4 @@
-//! Turns the argument to `domicile open-url` into a URL.
+//! Turns the web address `domicile open` or `BROWSER` is given into a URL.
 //!
 //! Some programs (e.g. `cargo doc --open`) pass `BROWSER` a path instead of a
 //! URL. The engine does not share the caller's working directory, so relative

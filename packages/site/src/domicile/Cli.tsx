@@ -14,9 +14,9 @@ domicile load-shell ./dist/shell.js
 # or switch shells without logging out
 domicile load-shell @domicile-desktop/manganese`;
 
-const COMMANDS = `# open a browser window, or a site as an app
-domicile open-url <url>
-domicile open-app <url>
+const COMMANDS = `# open a file, folder or link, or a site as an app
+domicile open <file|url>
+domicile open --app <url>
 
 # run one of your shell's commands
 domicile send-shell <word>…

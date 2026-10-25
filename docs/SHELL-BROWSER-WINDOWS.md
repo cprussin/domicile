@@ -45,7 +45,7 @@ plus.addEventListener("click", () => {
   UI. The result arrives in the next list. Other windows open without you
   ([New windows](#new-windows)). A page may ask to stay before it closes
   ([Close requests](#close-requests)).
-- **`browser.openApp(url)`** opens an app window, as `domicile open-app` does,
+- **`browser.openApp(url)`** opens an app window, as `domicile open --app` does,
   for your own launcher. It is listed with `isApp: true`
   ([New windows](#new-windows)).
 - **Set `window` before the view enters the document.** The engine reads it
@@ -263,9 +263,9 @@ as a `keyboard.on("shortcut")` event. `domicile.keyboard.grab` grabs a chord by 
 The browser opens a window without you for:
 
 - a `target="_blank"` link, `window.open` or a middle click
-- `domicile open-url <url>`, which `BROWSER` (`domicile-open-url`) and
+- `domicile open <url>`, which `BROWSER` (`domicile-open-url`) and
   `xdg-open` run inside a desktop
-- `domicile open-app <url>`, which lists the window with `isApp`. Draw it
+- `domicile open --app <url>`, which lists the window with `isApp`. Draw it
   without an address bar, and with a read-only one while its page is off the
   origin it opened at ([WEB-APPS.md](architecture/WEB-APPS.md)).
 - an extension's `tabs.create` or `windows.create`

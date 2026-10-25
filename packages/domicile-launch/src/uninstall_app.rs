@@ -13,7 +13,7 @@ use crate::web_app::IconKind;
 pub enum UninstallAppError {
     #[error(
         "no app is installed from or opens {url}. For an app installed before \
-         uninstall-app, give the address after `domicile open-app` in its \
+         uninstall-app, give the address after `domicile open --app` in its \
          desktop entry."
     )]
     NotInstalled { url: String },

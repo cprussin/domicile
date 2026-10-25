@@ -44,7 +44,7 @@ pub struct Runtime {
     /// The engine profile, kept between runs. See [`crate::profile_path`].
     pub profile: PathBuf,
     /// A per-run directory put first on every app's `PATH`. Its `xdg-open` is
-    /// `domicile-xdg-open`; see [`crate::xdg_open`].
+    /// `domicile-xdg-open`, which runs `domicile open`; see [`crate::open`].
     pub shims: PathBuf,
     /// The session file the compositor writes once it is serving.
     ///
@@ -173,7 +173,7 @@ pub fn send_frames_in_memory(compositor: &mut Spawn) {
 /// - `DOMICILE_SOCK`: `domicile` commands in a terminal reach this desktop.
 /// - `BROWSER`: `domicile-open-url`, a single program because many readers
 ///   don't split the value.
-/// - `PATH`: [`Runtime::shims`] first, so `xdg-open` opens links here.
+/// - `PATH`: [`Runtime::shims`] first, so `xdg-open` is `domicile open`.
 /// - `XDG_DATA_DIRS`: `data` first, so GIO finds `domicile-mimeapps.list`.
 ///   A user's own `mimeapps.list` still wins. The portal does not see this;
 ///   see `ROADMAP.md`.

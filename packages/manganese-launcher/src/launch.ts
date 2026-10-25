@@ -20,7 +20,7 @@ export const Launch = {
    * Open `path` with the user's default application.
    *
    * Relative to home (as the host reports paths) or absolute. See
-   * `open-file.ts`.
+   * `open-command.ts` in window management.
    */
   Opened: (path: string) => ({ kind: LaunchKind.Opened as const, path }),
   /** Ask which application to open `path` with, as `Opened` reads it. */

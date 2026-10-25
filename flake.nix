@@ -305,7 +305,7 @@
       };
 
       # One of Domicile's own apps as an app module: its directory, which
-      # `domicile-<name>` runs with `domicile run-app`. See
+      # `domicile-<name>` runs with `domicile open --app`. See
       # docs/architecture/APP-MODULES.md.
       appModule = name: pkgs.stdenv.mkDerivation {
         pname = "domicile-app-${name}";
@@ -324,7 +324,7 @@
           cp -R "packages/app-${name}/.vite/app" "$out"
           runHook postInstall
         '';
-        # `domicile run-app` fails on a missing module.
+        # `domicile open --app` would fail on a missing module.
         doInstallCheck = true;
         installCheckPhase = ''
           [ -f "$out/${name}.js" ] || {
@@ -1044,8 +1044,8 @@
             # still appended.
             saw "--config /tmp/x ${desktops.simple}/shell.js" --config /tmp/x
 
-            # `open-url` takes an address, so nothing is appended.
-            saw "open-url https://example.com" open-url https://example.com
+            # `open` takes an address, so nothing is appended.
+            saw "open https://example.com" open https://example.com
             # Nor to `screenshot`'s file or `check-config`'s config.
             saw "screenshot shot.png" screenshot shot.png
             saw "check-config domicile.json" check-config domicile.json
@@ -1091,7 +1091,7 @@
             # A web app's entry opens its address in an app window. The
             # address is quoted, `$` escaped and `%` doubled, as the desktop
             # entry spec asks.
-            [ ${pkgs.lib.escapeShellArg appEntry.exec} = ${pkgs.lib.escapeShellArg ''${domicilePackage}/bin/domicile open-app "https://music.example/play?list=a%%20b&shuffle\\$1#top"''} ] || {
+            [ ${pkgs.lib.escapeShellArg appEntry.exec} = ${pkgs.lib.escapeShellArg ''${domicilePackage}/bin/domicile open --app "https://music.example/play?list=a%%20b&shuffle\\$1#top"''} ] || {
               echo "the Music web app's Exec is: "${pkgs.lib.escapeShellArg appEntry.exec} >&2
               exit 1
             }

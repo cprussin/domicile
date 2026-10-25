@@ -28,9 +28,8 @@ domicile <shell>                  # run a desktop with this shell
 domicile --config <path> <shell>  # ...with this compositor config
 domicile which-shell              # ask the running desktop which shell it serves
 domicile load-shell <shell>       # replace the running desktop's shell
-domicile open-url <url>           # open a URL in the running desktop (BROWSER)
-domicile open-app <url>           # open a URL as an app: no address bar (WEB-APPS.md)
-domicile run-app <module>         # run an app module in an app window (APP-MODULES.md)
+domicile open <file|url>          # a web link in the running desktop; anything else with its type's default
+domicile open --app <url|module>  # a site, or an app module, in an app window (WEB-APPS.md, APP-MODULES.md)
 domicile install-app <url>        # write a desktop entry from the site's web app manifest; needs no desktop
 domicile uninstall-app <url>      # remove the entry and icon install-app wrote, given its address or start URL
 domicile screenshot               # the shell's interactive screenshot (Print in manganese)
@@ -85,14 +84,14 @@ temp directory. The modules that spawn processes or bind sockets stay thin.
 | `arguments` | yes | the compositor's command line; every value explicit, no defaults |
 | `config_path` | yes | which config file a run uses: `--config`, the default location, or none, and which case it was |
 | `config_watch` | no | watches the config's directory and reports edits |
-| `xdg_open` | yes | `xdg-open` inside a desktop: http(s) goes to `open-url`, anything else to the next `xdg-open` on `PATH` |
+| `open` | yes | `open`: a web link browses; a file, folder or other link runs its type's default, supertypes counted (`domicile_host::mime_apps`, `domicile_host::shared_mime_info`) |
 | `install_app` | no | `install-app`: fetches the page, its manifest and icon through an injected fetch, and writes the entry and icon under the data home |
 | `uninstall_app` | no | `uninstall-app`: removes the entry and icons named after the start URL, or whose entry was installed from the URL, without the network |
 | `web_app` | yes | the page's manifest link, and the name, start URL and icon a manifest gives |
 | `web_address` | yes | resolves a manifest's and its icons' addresses against where they were found; origins |
 | `desktop_entry` | yes | the desktop entry `install-app` writes, escaped, its file name, and the address it was installed from |
-| `app_entry` | no | the module `run-app` names: its canonical directory and file name |
-| `address` | yes | what `open-url` sends the engine: a URL as given, or a path as a `file://` URL relative to the caller's directory |
+| `app_entry` | no | the module `open --app` names: its canonical directory and file name |
+| `address` | yes | what `open` sends the engine: a URL as given, or a path as a `file://` URL relative to the caller's directory |
 | `spawn` | yes | the engine and compositor commands as data, so flag lists are testable |
 | `session` | yes | what the compositor publishes once up, and waiting for it |
 | `milestones` | yes | what a run must reach to be a desktop, and the message when it doesn't |
@@ -349,8 +348,8 @@ running one. The first argument decides which.
   the socket.
 - The supervisor answers each connection on its own thread, since an
   interactive screenshot waits on the user.
-- The supervisor answers and routes. `load-shell`, `open-url`, `open-app`
-  and `run-app` go to the engine. `screenshot` and `send-shell` go to the compositor's chrome socket
+- The supervisor answers and routes. `load-shell` and `open`'s web links
+  and apps go to the engine. `screenshot` and `send-shell` go to the compositor's chrome socket
   as the `screenshot` and `send_shell` system calls a page makes
   (`domicile_launch::compositor_socket`). The connection never says `hello`,
   so it is not a chrome. See
@@ -364,9 +363,9 @@ running one. The first argument decides which.
 ```
 domicile which-shell ─▶ $DOMICILE_SOCK ─▶ supervisor
 domicile load-shell  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine ─▶ page
-domicile open-url    ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
-domicile open-app    ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
-domicile run-app     ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
+domicile open <url>  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
+domicile open <file> ─▶ its type's default, in the caller's place
+domicile open --app  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
 domicile screenshot  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor
 domicile send-shell  ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ compositor ─▶ every page
 domicile disable-while-typing ─▶ $DOMICILE_SOCK ─▶ supervisor ─▶ engine
@@ -389,11 +388,14 @@ Several desktops per session:
 ### Opening links
 
 - `BROWSER` is `domicile-open-url`, set on the compositor next to
-  `DOMICILE_SOCK`. It is a separate `[[bin]]` that execs `domicile open-url`,
-  because most programs run `BROWSER` as a single word.
+  `DOMICILE_SOCK`. It is a separate `[[bin]]`, because most programs run
+  `BROWSER` as a single word. It asks the desktop for a browser window
+  itself rather than running `domicile open`, which would send a local
+  `.html` file back to it.
 - The compositor's `PATH` starts with a run directory where `xdg-open` links
-  to `domicile-xdg-open`. Links open in this desktop regardless of
-  `mimeapps.list`; other targets go to the next `xdg-open` on `PATH`.
+  to `domicile-xdg-open`, which runs `domicile open`. Web links open in this
+  desktop regardless of `mimeapps.list`; anything else opens with its type's
+  default, as the launcher's Enter does.
 - Apps whose wrappers put another `xdg-open` first (nixpkgs wrappers often
   prefix `xdg-utils`) read `mimeapps.list` instead. The package ships
   `share/applications/domicile-mimeapps.list`, and the compositor's

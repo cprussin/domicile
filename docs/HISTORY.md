@@ -32,7 +32,7 @@ History page ─ spawn, stdio ─▶ domicile-app-host ─ DOMICILE_SOCK ─▶ 
 | Listing and searching | The engine's `history` command: the pages matching a search, last visited before a time, each with its favicon as a `data:` URL. `visits` gives the times a page was visited. |
 | Removing entries | The engine's `delete_history` command deletes visits by their times. |
 | Clearing browsing data | The engine's `clear_browsing_data` command clears the named data types since a time, for the named origins or every origin. |
-| Opening it | `domicile-history` runs `domicile run-app` on `history.js`. |
+| Opening it | `domicile-history` runs `domicile open --app` on `history.js`. |
 
 Times are milliseconds since the epoch, fractional, on every hop.
 
@@ -45,7 +45,7 @@ Times are milliseconds since the epoch, fractional, on every hop.
 - **Private browser windows record nothing**, as in Chrome: they are in the
   off-the-record profile, which has no history.
 - **App windows record nothing.** An app ([WEB-APPS.md](architecture/WEB-APPS.md))
-  is not browsing, so Settings, History and every `domicile open-app` window
+  is not browsing, so Settings, History and every `domicile open --app` window
   stay out of the history.
 - **Extension pages are hidden.** Chrome records `chrome-extension://` URLs,
   and the shell's window records `domicile://shell/`. The app hides every

@@ -173,8 +173,8 @@ class Desk {
 
   /**
    * Opens a browser window as the engine does unasked: for a page's
-   * target="_blank", `domicile open-url`, with `popupWindow` an extension's
-   * popup window, or with `isApp` `domicile open-app`.
+   * target="_blank", `domicile open`, with `popupWindow` an extension's
+   * popup window, or with `isApp` `domicile open --app`.
    */
   engineOpens(
     url: string,
@@ -2200,7 +2200,7 @@ describe("Shell", () => {
       expect(screen.getByText("Private")).toBeInTheDocument();
     });
 
-    // `domicile open-app`, as Settings and History open.
+    // `domicile open --app`, as Settings and History open.
     it("draws an app window without an address bar", () => {
       const { container } = renderShell();
 

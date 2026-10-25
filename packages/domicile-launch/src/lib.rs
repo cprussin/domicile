@@ -8,10 +8,11 @@
 //!   the [`splash`]. The engine loads each shell through [`serving`].
 //! - `domicile which-shell`: query a running desktop ([`control`],
 //!   [`control_socket`]).
-//! - `domicile load-shell` and `domicile open-url`: forwarded to the engine
-//!   ([`command`], [`command_socket`], [`address`]).
-//! - `domicile run-app`: an app module ([`app_entry`]), forwarded to the
-//!   engine like `load-shell`.
+//! - `domicile open`: a file, folder or link, opened with what opens its type
+//!   ([`open`]). Web links go to the engine ([`command`], [`command_socket`],
+//!   [`address`]), as does `load-shell`.
+//! - `domicile open --app`: a site or an app module ([`app_entry`]),
+//!   forwarded to the engine like `load-shell`.
 //! - `domicile screenshot`: forwarded to the compositor
 //!   ([`compositor_socket`]).
 //! - `domicile power-off`, `domicile reboot` and `domicile log-out`: asked in
@@ -55,6 +56,7 @@ pub mod install_app;
 pub mod media_devices;
 pub mod milestones;
 pub mod notification;
+pub mod open;
 pub mod platform;
 pub mod power;
 pub mod profile_claim;
@@ -74,4 +76,3 @@ pub mod supervise;
 pub mod uninstall_app;
 pub mod web_address;
 pub mod web_app;
-pub mod xdg_open;

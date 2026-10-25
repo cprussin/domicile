@@ -19,7 +19,7 @@ fn an_entry_opens_its_start_url_as_an_app() {
          Type=Application\n\
          Name=Music\n\
          Icon=/home/me/.local/share/domicile/app-icons/music.svg\n\
-         Exec=domicile open-app \"https://music.example/?source=app\"\n\
+         Exec=domicile open --app \"https://music.example/?source=app\"\n\
          X-Domicile-Installed-From=https://music.example\n"
     );
 }
@@ -50,7 +50,7 @@ fn a_value_is_escaped_so_the_entry_reads_back_as_given() {
     );
     assert!(
         entry.contains(
-            "Exec=domicile open-app \"https://m.example/?a=%%20&b=\\\\\"\\\\$\\\\`\\\\\\\\\"\n"
+            "Exec=domicile open --app \"https://m.example/?a=%%20&b=\\\\\"\\\\$\\\\`\\\\\\\\\"\n"
         ),
         "{entry}"
     );

@@ -32,7 +32,7 @@ fn list(group: &str, ids: &str) -> String {
 fn opened(config: &Path, lists: &[&str], applications: &Path) -> Option<Vec<String>> {
     let lists: Vec<PathBuf> = lists.iter().map(|name| config.join(name)).collect();
     default_handler(
-        "x-scheme-handler/mailto",
+        &["x-scheme-handler/mailto"],
         &lists,
         &[applications.to_path_buf()],
     )
@@ -158,6 +158,134 @@ mod choosing {
     }
 }
 
+mod supertypes {
+    use super::*;
+
+    /// The id of the handler for a type that `types` lists with its
+    /// supertypes, by `mimeapps.list` text `list` and `applications`.
+    fn chosen(types: &[&str], list: &str, applications: &[(&str, &str)]) -> Option<String> {
+        let applications = written(applications);
+        let config = written(&[("mimeapps.list", list)]);
+        default_handler(
+            types,
+            &[config.path().join("mimeapps.list")],
+            &[applications.path().to_path_buf()],
+        )
+        .map(|handler| handler.id)
+    }
+
+    #[test]
+    fn a_supertypes_default_beats_an_entry_that_only_declares_the_type() {
+        assert_eq!(
+            chosen(
+                &["text/markdown", "text/plain"],
+                "[Default Applications]\ntext/plain=editor.desktop\n",
+                &[
+                    ("editor.desktop", &handler("editor %F", "x-other")),
+                    ("marked.desktop", &handler("marked %F", "text/markdown")),
+                ],
+            ),
+            Some("editor.desktop".into())
+        );
+    }
+
+    #[test]
+    fn the_types_own_default_beats_a_supertypes() {
+        assert_eq!(
+            chosen(
+                &["text/markdown", "text/plain"],
+                "[Default Applications]\ntext/plain=editor.desktop\ntext/markdown=marked.desktop\n",
+                &[
+                    ("editor.desktop", &handler("editor %F", "x-other")),
+                    ("marked.desktop", &handler("marked %F", "x-other")),
+                ],
+            ),
+            Some("marked.desktop".into())
+        );
+    }
+
+    #[test]
+    fn without_defaults_an_entry_for_the_type_beats_one_for_a_supertype() {
+        // `handler` declares text/plain for every entry.
+        assert_eq!(
+            chosen(
+                &["text/markdown", "text/plain"],
+                "",
+                &[
+                    ("a-editor.desktop", &handler("editor %F", "x-other")),
+                    ("b-marked.desktop", &handler("marked %F", "text/markdown")),
+                ],
+            ),
+            Some("b-marked.desktop".into())
+        );
+    }
+
+    #[test]
+    fn an_entry_for_the_type_beats_an_association_added_for_a_supertype() {
+        assert_eq!(
+            chosen(
+                &["text/markdown", "text/plain"],
+                "[Added Associations]\ntext/plain=a-editor.desktop\n",
+                &[
+                    ("a-editor.desktop", &handler("editor %F", "x-other")),
+                    ("b-marked.desktop", &handler("marked %F", "text/markdown")),
+                ],
+            ),
+            Some("b-marked.desktop".into())
+        );
+    }
+
+    #[test]
+    fn an_association_removed_for_the_type_holds_for_its_supertypes() {
+        assert_eq!(
+            chosen(
+                &["text/markdown", "text/plain"],
+                "[Removed Associations]\ntext/markdown=a-editor.desktop\n",
+                &[
+                    ("a-editor.desktop", &handler("editor %F", "x-other")),
+                    ("b-viewer.desktop", &handler("viewer %F", "x-other")),
+                ],
+            ),
+            Some("b-viewer.desktop".into())
+        );
+    }
+
+    #[test]
+    fn a_higher_priority_added_association_beats_a_lower_removal() {
+        let applications = written(&[("foo.desktop", &handler("foo %F", "x-other"))]);
+        let config = written(&[
+            ("high.list", "[Added Associations]\ntext/x-a=foo.desktop\n"),
+            ("low.list", "[Removed Associations]\ntext/x-a=foo.desktop\n"),
+        ]);
+        let chosen = default_handler(
+            &["text/x-a"],
+            &[
+                config.path().join("high.list"),
+                config.path().join("low.list"),
+            ],
+            &[applications.path().to_path_buf()],
+        );
+
+        assert_eq!(chosen.map(|handler| handler.id), Some("foo.desktop".into()));
+    }
+
+    #[test]
+    fn a_terminal_entry_opens_nothing() {
+        let terminal = format!("{}Terminal=true\n", handler("vim %F", "x-other"));
+        assert_eq!(
+            chosen(
+                &["text/plain"],
+                "[Default Applications]\ntext/plain=a-vim.desktop\n",
+                &[
+                    ("a-vim.desktop", &terminal),
+                    ("b-editor.desktop", &handler("editor %F", "x-other")),
+                ],
+            ),
+            Some("b-editor.desktop".into())
+        );
+    }
+}
+
 mod commands {
     use super::*;
 
@@ -166,7 +294,7 @@ mod commands {
     fn run(exec: &str) -> Option<Vec<String>> {
         let applications = written(&[("mail.desktop", &handler(exec, "x-scheme-handler/mailto"))]);
         default_handler(
-            "x-scheme-handler/mailto",
+            &["x-scheme-handler/mailto"],
             &[],
             &[applications.path().to_path_buf()],
         )
@@ -187,6 +315,18 @@ mod commands {
         assert_eq!(
             run("mail %U"),
             Some(vec!["mail".into(), "mailto:a@example.com".into()])
+        );
+    }
+
+    #[test]
+    fn the_url_takes_the_place_of_only_the_first_code() {
+        assert_eq!(
+            run("mail %u --also %U"),
+            Some(vec![
+                "mail".into(),
+                "mailto:a@example.com".into(),
+                "--also".into(),
+            ])
         );
     }
 
@@ -216,6 +356,29 @@ mod commands {
                 r"c\d".into(),
                 "mailto:a@example.com".into(),
             ])
+        );
+    }
+
+    #[test]
+    fn a_file_takes_the_place_of_a_file_or_url_code() {
+        let command = |exec: &str| {
+            let applications = written(&[("edit.desktop", &handler(exec, "text/x-other"))]);
+            default_handler(&["text/x-other"], &[], &[applications.path().to_path_buf()])
+                .expect("a handler")
+                .file_command("/home/u/a b.txt")
+        };
+
+        assert_eq!(
+            command("edit -c %F"),
+            Some(vec!["edit".into(), "-c".into(), "/home/u/a b.txt".into()])
+        );
+        assert_eq!(
+            command("edit %u"),
+            Some(vec!["edit".into(), "/home/u/a b.txt".into()])
+        );
+        assert_eq!(
+            command("edit"),
+            Some(vec!["edit".into(), "/home/u/a b.txt".into()])
         );
     }
 

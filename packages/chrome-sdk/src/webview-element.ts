@@ -91,7 +91,7 @@ export type WebViewSecurity = (typeof WEBVIEW_SECURITY_LEVELS)[number];
  * - **`src`:** ignored on insert, since the page is already loaded. A later
  *   `src` navigates the window.
  * - **One view per window.** A second view of the same window is empty.
- * - **Opening:** `target="_blank"`, `window.open`, `domicile open-url`,
+ * - **Opening:** `target="_blank"`, `window.open`, `domicile open`,
  *   `chrome.tabs.create` and `chrome.windows.create` open windows without the
  *   shell. They appear in `DomicileHost.browserWindows`. The shell's own UI
  *   opens one with `DomicileHost.openBrowserWindow`.

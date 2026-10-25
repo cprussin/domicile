@@ -2,7 +2,8 @@
 //
 // - It runs through `sh` because the host returns paths relative to `$HOME`,
 //   and the page has no environment to read `$HOME` from.
-// - `xdg-open` picks the application from the user's MIME associations.
+// - `xdg-open` picks the application from the user's MIME associations. In a
+//   desktop it is `domicile open`.
 //   `exec` replaces `sh` rather than leaving it as a parent.
 // - The path is passed as quoted `$1`, never interpolated, so a file name like
 //   `; rm -rf ~` can't inject a command.
