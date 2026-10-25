@@ -386,6 +386,8 @@ export enum WindowActionKind {
   ScreenshotTaken,
   ScreensDescribed,
   SplitToggled,
+  VirtualMonitorAdded,
+  VirtualMonitorRemoved,
   WindowBarPressed,
   WindowClosed,
   WindowDropped,
@@ -848,6 +850,20 @@ export const WindowAction = {
   /** `layout toggle split`. */
   SplitToggled: () => ({ kind: WindowActionKind.SplitToggled as const }),
 
+  /** `virtual-monitor add`. The shell adds a monitor of `size`. */
+  VirtualMonitorAdded: (size: {
+    readonly width: number;
+    readonly height: number;
+  }) => ({
+    kind: WindowActionKind.VirtualMonitorAdded as const,
+    size,
+  }),
+
+  /** `virtual-monitor remove`. The shell removes the newest it added. */
+  VirtualMonitorRemoved: () => ({
+    kind: WindowActionKind.VirtualMonitorRemoved as const,
+  }),
+
   /**
    * The user pressed window `id`'s title bar or tab. Unlike
    * {@link WindowAction.WindowSelected}, it ends a `focus parent` selection
@@ -1258,7 +1274,9 @@ const reduceAction = (
     case WindowActionKind.NotificationsToggled:
     case WindowActionKind.NotificationsCleared:
     case WindowActionKind.IdleInhibitorToggled:
-    case WindowActionKind.NightLightToggled: {
+    case WindowActionKind.NightLightToggled:
+    case WindowActionKind.VirtualMonitorAdded:
+    case WindowActionKind.VirtualMonitorRemoved: {
       // The shell carries these out; no window changes.
       return state;
     }

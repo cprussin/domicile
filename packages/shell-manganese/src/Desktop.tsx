@@ -102,6 +102,7 @@ import { options } from "./options";
 import { Monitor } from "./screens/Monitor";
 import { NoScreens } from "./screens/NoScreens";
 import { showsSharing } from "./shows-sharing";
+import { deskVirtualMonitors } from "./virtual-monitors";
 
 type Props = {
   /** What the launcher offers beside files. */
@@ -359,6 +360,24 @@ export const Desktop = ({
         }
         case WindowActionKind.NightLightToggled: {
           deskNightLight(domicile).toggle();
+          break;
+        }
+        case WindowActionKind.VirtualMonitorAdded: {
+          deskVirtualMonitors(domicile)
+            .add(action.size)
+            .then((result) => {
+              result.match({
+                Err: logVirtualMonitorFailure,
+                Ok: () => undefined,
+              });
+            })
+            .catch(logVirtualMonitorFailure);
+          break;
+        }
+        case WindowActionKind.VirtualMonitorRemoved: {
+          deskVirtualMonitors(domicile)
+            .remove()
+            .match({ Err: logVirtualMonitorFailure, Ok: () => undefined });
           break;
         }
         default: {
@@ -668,6 +687,11 @@ export const Desktop = ({
 const logKeymapFailure = (error: unknown): void => {
   // biome-ignore lint/suspicious/noConsole: the desktop keeps the keymap it had
   console.error("could not switch the keymap", error);
+};
+
+const logVirtualMonitorFailure = (error: unknown): void => {
+  // biome-ignore lint/suspicious/noConsole: a key or terminal has no answer to show
+  console.error("could not add or remove a virtual monitor", error);
 };
 
 /** The lock screen's bar on monitor `screen`. */

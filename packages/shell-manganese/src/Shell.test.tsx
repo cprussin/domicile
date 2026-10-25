@@ -355,6 +355,8 @@ const MANGANESE_KEYS: ShellKeybindings = {
     line("n", true, "send-shell notifications clear"),
     line("i", false, "send-shell idle-inhibitor"),
     line("t", true, "send-shell night-light"),
+    line("m", false, "send-shell virtual-monitor add 2560x1440"),
+    line("m", true, "send-shell virtual-monitor remove"),
     ...DIRECTIONS.map(([keysym, way]) =>
       line(keysym, false, `send-shell focus ${way}`),
     ),
@@ -1083,6 +1085,39 @@ describe("Shell", () => {
       press("t", true);
 
       expect(label()).not.toBe(before);
+    });
+  });
+
+  describe("virtual monitors", () => {
+    it("are added by `virtual-monitor add` and removed by `virtual-monitor remove`", async () => {
+      renderShell();
+      press("m");
+      const [, id] =
+        domicile.calls.find(
+          ([method, , request]) =>
+            method === "callSystem" &&
+            typeof request === "string" &&
+            request.includes('"virtual_monitor"'),
+        ) ?? [];
+      expect(id).toBeDefined();
+      await act(async () => {
+        domicile.fake.dispatch("system", {
+          data: JSON.stringify({
+            id,
+            reply: { kind: "virtual_monitor", output: "virtual-1" },
+            type: "system_reply",
+          }),
+        });
+        await Promise.resolve();
+      });
+
+      press("m", true);
+
+      expect(domicile.calls).toContainEqual([
+        "callSystem",
+        id,
+        JSON.stringify({ call: "unwatch" }),
+      ]);
     });
   });
 

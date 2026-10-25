@@ -46,7 +46,8 @@ export const Shell: ShellModule = async (root, domicile) => {
   [WRITING-A-SHELL.md](WRITING-A-SHELL.md#window-states).
 - `displays.addVirtual()` adds a monitor with no connector, which the desk
   extends onto, until `remove()` or the page goes away. Casting to a TV uses
-  it; see [CASTING-TO-TVS.md](CASTING-TO-TVS.md).
+  it; see [CASTING-TO-TVS.md](CASTING-TO-TVS.md). Manganese's
+  `virtual-monitor add` command adds one from a key or a terminal.
 - `keyboard.keymaps()` streams the config's keymaps and the active one;
   `keyboard.selectKeymap()` switches to another
   ([SHELL-CONFIG.md](SHELL-CONFIG.md#keyboard)).

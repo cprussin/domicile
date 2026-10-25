@@ -4,7 +4,8 @@
 //   tabbed`), so sway bindings can be copied over. `lock`, `launcher`,
 //   `clipboard`, `search-clipboard`, `screenshot`, `volume`, `mic`,
 //   `brightness`, `keymap`, `notifications`, `idle-inhibitor`,
-//   `night-light` and `resize grow <direction>` are manganese's own.
+//   `night-light`, `virtual-monitor` and `resize grow <direction>` are
+//   manganese's own.
 // - `exec <argv…>` runs the argv directly, not through `sh -c` as sway does.
 // - An unknown command is a config error, so it returns an `Err`, not a throw.
 //
@@ -104,6 +105,8 @@ export const parseCommand = (
       return parseExec(argv);
     case "keymap":
       return parseKeymap(argv);
+    case "virtual-monitor":
+      return parseVirtualMonitor(args);
     default:
       return parseNamed(args);
   }
@@ -122,6 +125,38 @@ const parseKeymap = (words: readonly string[]): Result<Action, string> => {
     );
   }
 };
+
+/** A virtual monitor's size when `virtual-monitor add` names none. */
+const DEFAULT_VIRTUAL_MONITOR = { height: 1080, width: 1920 };
+
+/** Parse `virtual-monitor add [<width>x<height>]` or `virtual-monitor remove`. */
+const parseVirtualMonitor = (
+  args: readonly string[],
+): Result<Action, string> => {
+  const [, verb, size, ...rest] = args;
+  const dimensions = /^([1-9]\d*)x([1-9]\d*)$/.exec(size ?? "");
+  if (rest.length > 0) {
+    return virtualMonitorUsage(args);
+  } else if (verb === "remove" && size === undefined) {
+    return Ok(WindowAction.VirtualMonitorRemoved());
+  } else if (verb === "add" && size === undefined) {
+    return Ok(WindowAction.VirtualMonitorAdded(DEFAULT_VIRTUAL_MONITOR));
+  } else if (verb === "add" && dimensions !== null) {
+    return Ok(
+      WindowAction.VirtualMonitorAdded({
+        height: Number(dimensions[2]),
+        width: Number(dimensions[1]),
+      }),
+    );
+  } else {
+    return virtualMonitorUsage(args);
+  }
+};
+
+const virtualMonitorUsage = (args: readonly string[]): Result<Action, string> =>
+  Err(
+    `manganese: no command \`${args.join(" ")}\`; write \`virtual-monitor add [<width>x<height>]\` or \`virtual-monitor remove\``,
+  );
 
 /** Parse `exec`'s argv, which must not be empty. */
 const parseExec = (argv: readonly string[]): Result<Action, string> =>

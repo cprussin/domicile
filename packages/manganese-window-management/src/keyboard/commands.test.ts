@@ -12,8 +12,10 @@ import {
   micMute,
   nightLight,
   notifications,
+  removeVirtualMonitor,
   screenshot,
   searchClipboard,
+  virtualMonitor,
   volume,
 } from "./commands";
 
@@ -29,6 +31,21 @@ describe("manganese's command builders", () => {
       { args: ["notifications", "clear"], kind: KeyActionKind.SendShell },
       { args: ["idle-inhibitor"], kind: KeyActionKind.SendShell },
       { args: ["night-light"], kind: KeyActionKind.SendShell },
+    ]);
+  });
+
+  it("build the virtual monitor commands manganese parses", () => {
+    expect([
+      virtualMonitor(),
+      virtualMonitor({ height: 1440, width: 2560 }),
+      removeVirtualMonitor(),
+    ]).toEqual([
+      { args: ["virtual-monitor", "add"], kind: KeyActionKind.SendShell },
+      {
+        args: ["virtual-monitor", "add", "2560x1440"],
+        kind: KeyActionKind.SendShell,
+      },
+      { args: ["virtual-monitor", "remove"], kind: KeyActionKind.SendShell },
     ]);
   });
 });
