@@ -5,9 +5,9 @@
 //! the client acked, so naming that configure's box keeps an old buffer at its
 //! old size instead of stretching it over the new one.
 //!
-//! It also paces resizes: at most one size change per toplevel is unanswered.
-//! Newer boxes wait, and only the newest goes out when the client commits or
-//! after [`PATIENCE`].
+//! It also paces resizes: at most [`UNANSWERED`] size changes per toplevel are
+//! unanswered. Newer boxes wait, and only the newest goes out when the client
+//! answers one or after [`PATIENCE`].
 
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
@@ -18,6 +18,11 @@ use crate::engine::LAST_SHOWN_BOX;
 /// it the newest size goes out anyway, so a client that never commits still
 /// gets its final size.
 pub const PATIENCE: Duration = Duration::from_millis(500);
+
+/// How many size changes a toplevel may have unanswered. Chromium, and so
+/// Electron, draws up to three sizes at once and acks each only once its frame
+/// is ready, so it needs three to draw a new size every frame of a drag.
+const UNANSWERED: usize = 3;
 
 /// A size for a toplevel, at one of the engine's boxes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,16 +48,16 @@ pub enum Resized {
 /// The engine's configures sent to one toplevel and not yet answered, oldest
 /// first, and the resize waiting behind them.
 ///
-/// Paced as in mutter. During a drag the page lays the window out every frame,
+/// During a drag the page lays the window out every frame,
 /// and a client slower than that would fall further behind each frame.
 #[derive(Debug)]
 pub struct ConfigureAnswers<S> {
     sent: VecDeque<(S, u64, (u32, u32))>,
     /// The size last sent.
     size: Option<(u32, u32)>,
-    /// The serial of the size change the client has not answered, and when it
-    /// went out.
-    unanswered: Option<(S, Instant)>,
+    /// The serials of the size changes the client has not answered, and when
+    /// each went out, oldest first.
+    unanswered: VecDeque<(S, Instant)>,
     /// The newest resize, held until the client answers.
     waiting: Option<Resize>,
 }
@@ -62,22 +67,22 @@ impl<S: PartialOrd + Copy> ConfigureAnswers<S> {
         Self {
             sent: VecDeque::new(),
             size: None,
-            unanswered: None,
+            unanswered: VecDeque::new(),
             waiting: None,
         }
     }
 
     /// The engine laid the toplevel out at a new box. It goes out now unless
-    /// a size change is unanswered. A resize back to the size last sent goes
-    /// out at once: a client may not redraw for it, so nothing waits on it.
+    /// [`UNANSWERED`] size changes are. A resize back to the size last sent
+    /// goes out at once: a client may not redraw for it, so nothing waits on
+    /// it.
     pub fn resize(&mut self, resize: Resize, now: Instant) -> Resized {
-        match self.unanswered {
-            Some((_, since)) if self.size != Some(resize.size) && now < since + PATIENCE => {
-                match self.waiting.replace(resize) {
-                    Some(_) => Resized::Coalesced,
-                    None => Resized::Waits(since + PATIENCE),
-                }
-            }
+        self.give_up_on_overdue(now);
+        match self.oldest_unanswered_when_full() {
+            Some(since) if self.size != Some(resize.size) => match self.waiting.replace(resize) {
+                Some(_) => Resized::Coalesced,
+                None => Resized::Waits(since + PATIENCE),
+            },
             _ => {
                 self.waiting = None;
                 Resized::Send(resize)
@@ -93,29 +98,46 @@ impl<S: PartialOrd + Copy> ConfigureAnswers<S> {
         let changed = self.size != Some(resize.size);
         if changed {
             self.size = Some(resize.size);
-            self.unanswered = Some((serial, now));
+            self.unanswered.push_back((serial, now));
         }
         changed
     }
 
-    /// The client committed after acking `acked`. The resize to send now, if
-    /// one waited for this commit.
+    /// The client committed after acking `acked`, which answers every size
+    /// change up to it. The resize to send now, if one waited for this commit.
     pub fn committed(&mut self, acked: Option<S>) -> Option<Resize> {
-        match (self.unanswered, acked) {
-            (Some((serial, _)), Some(acked)) if serial <= acked => {
-                self.unanswered = None;
-                self.waiting.take()
-            }
-            _ => None,
+        let acked = acked?;
+        let before = self.unanswered.len();
+        self.unanswered.retain(|(serial, _)| *serial > acked);
+        if self.unanswered.len() < before {
+            self.waiting.take()
+        } else {
+            None
         }
     }
 
     /// The resize to send now because the client took too long to answer.
     pub fn overdue(&mut self, now: Instant) -> Option<Resize> {
-        match self.unanswered {
-            Some((_, since)) if now >= since + PATIENCE => self.waiting.take(),
-            _ => None,
+        self.give_up_on_overdue(now);
+        match self.oldest_unanswered_when_full() {
+            Some(_) => None,
+            None => self.waiting.take(),
         }
+    }
+
+    /// Stops counting the size changes the client left unanswered for
+    /// [`PATIENCE`], so a client that never answers gets at most
+    /// [`UNANSWERED`] sizes each [`PATIENCE`].
+    fn give_up_on_overdue(&mut self, now: Instant) {
+        self.unanswered.retain(|(_, since)| now < *since + PATIENCE);
+    }
+
+    /// When the oldest unanswered size change went out, if no more may.
+    fn oldest_unanswered_when_full(&self) -> Option<Instant> {
+        if self.unanswered.len() < UNANSWERED {
+            return None;
+        }
+        self.unanswered.front().map(|(_, since)| *since)
     }
 
     /// The box a commit answers, given the serial the client last acked. A
@@ -193,51 +215,76 @@ mod tests {
         }
     }
 
-    #[test]
-    fn a_resize_waits_for_the_client_to_answer_the_last_one() {
-        let start = Instant::now();
+    /// Three size changes sent, serials 10 to 12 at boxes 1 to 3, none
+    /// answered.
+    fn three_unanswered(start: Instant) -> ConfigureAnswers<u32> {
         let mut answers = ConfigureAnswers::new();
-        assert_eq!(
-            answers.resize(resize(1, (640, 480)), start),
-            Resized::Send(resize(1, (640, 480)))
-        );
-        answers.sent(10_u32, resize(1, (640, 480)), start);
+        for (serial, number, width) in [(10, 1, 640), (11, 2, 650), (12, 3, 660)] {
+            assert_eq!(
+                answers.resize(resize(number, (width, 480)), start),
+                Resized::Send(resize(number, (width, 480)))
+            );
+            answers.sent(serial, resize(number, (width, 480)), start);
+        }
+        answers
+    }
+
+    #[test]
+    fn a_resize_waits_while_three_are_unanswered() {
+        let start = Instant::now();
+        let mut answers = three_unanswered(start);
 
         assert_eq!(
-            answers.resize(resize(2, (650, 480)), start),
+            answers.resize(resize(4, (670, 480)), start),
             Resized::Waits(start + PATIENCE)
         );
         assert_eq!(
-            answers.resize(resize(3, (660, 480)), start),
+            answers.resize(resize(5, (680, 480)), start),
             Resized::Coalesced
         );
         // A commit that acked an older configure answers nothing.
         assert_eq!(answers.committed(Some(9)), None);
 
-        // Only the newest size goes out.
-        assert_eq!(answers.committed(Some(10)), Some(resize(3, (660, 480))));
+        // Answering the oldest makes room, and only the newest size goes out.
+        assert_eq!(answers.committed(Some(10)), Some(resize(5, (680, 480))));
         assert_eq!(answers.committed(Some(10)), None);
+    }
+
+    #[test]
+    fn a_commit_answers_every_configure_up_to_the_one_it_acked() {
+        let start = Instant::now();
+        let mut answers = three_unanswered(start);
+
+        assert_eq!(answers.committed(Some(12)), None);
+
+        // Room for three again.
+        for (serial, number, width) in [(13, 4, 670), (14, 5, 680), (15, 6, 690)] {
+            assert_eq!(
+                answers.resize(resize(number, (width, 480)), start),
+                Resized::Send(resize(number, (width, 480)))
+            );
+            answers.sent(serial, resize(number, (width, 480)), start);
+        }
+        assert_eq!(
+            answers.resize(resize(7, (700, 480)), start),
+            Resized::Waits(start + PATIENCE)
+        );
     }
 
     #[test]
     fn a_resize_to_the_size_last_sent_goes_out_at_once() {
         let start = Instant::now();
-        let mut answers = ConfigureAnswers::new();
-        answers.sent(10_u32, resize(1, (640, 480)), start);
-        answers.resize(resize(2, (650, 480)), start);
+        let mut answers = three_unanswered(start);
+        answers.resize(resize(4, (670, 480)), start);
 
         // The newest box replaces the one waiting, and names a size the
         // client may never redraw for, so nothing waits on it.
         assert_eq!(
-            answers.resize(resize(3, (640, 480)), start),
-            Resized::Send(resize(3, (640, 480)))
+            answers.resize(resize(5, (660, 480)), start),
+            Resized::Send(resize(5, (660, 480)))
         );
-        answers.sent(11, resize(3, (640, 480)), start);
+        answers.sent(13, resize(5, (660, 480)), start);
         assert_eq!(answers.committed(Some(10)), None);
-        assert_eq!(
-            answers.resize(resize(4, (700, 480)), start),
-            Resized::Send(resize(4, (700, 480)))
-        );
     }
 
     #[test]
@@ -252,20 +299,37 @@ mod tests {
     #[test]
     fn a_client_that_never_answers_gets_the_newest_size_after_a_while() {
         let start = Instant::now();
-        let mut answers = ConfigureAnswers::new();
-        answers.sent(10_u32, resize(1, (640, 480)), start);
-        answers.resize(resize(2, (650, 480)), start);
+        let mut answers = three_unanswered(start);
+        answers.resize(resize(4, (670, 480)), start);
 
         assert_eq!(answers.overdue(start + PATIENCE / 2), None);
         assert_eq!(
             answers.overdue(start + PATIENCE),
-            Some(resize(2, (650, 480)))
+            Some(resize(4, (670, 480)))
         );
         assert_eq!(answers.overdue(start + PATIENCE), None);
-        // And a resize past the patience goes out without waiting.
+    }
+
+    #[test]
+    fn configures_a_client_never_answered_stop_holding_resizes_back() {
+        let start = Instant::now();
+        let mut answers = three_unanswered(start);
+        answers.resize(resize(4, (670, 480)), start);
+        let late = start + PATIENCE;
+        answers.overdue(late);
+        answers.sent(13, resize(4, (670, 480)), late);
+
+        // The three it never answered no longer count; the one sent late does.
+        for (serial, number, width) in [(14, 5, 680), (15, 6, 690)] {
+            assert_eq!(
+                answers.resize(resize(number, (width, 480)), late),
+                Resized::Send(resize(number, (width, 480)))
+            );
+            answers.sent(serial, resize(number, (width, 480)), late);
+        }
         assert_eq!(
-            answers.resize(resize(3, (660, 480)), start + PATIENCE),
-            Resized::Send(resize(3, (660, 480)))
+            answers.resize(resize(7, (700, 480)), late),
+            Resized::Waits(late + PATIENCE)
         );
     }
 }
