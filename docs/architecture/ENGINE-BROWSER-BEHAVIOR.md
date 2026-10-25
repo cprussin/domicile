@@ -128,6 +128,21 @@ while it has the keyboard. See
 [KEYBINDINGS.md](KEYBINDINGS.md#key-decisions). This is the other direction
 from patch `0038`, which is the engine asking a host compositor.
 
+## Chrome's own pages and strings
+
+The engine leaves out Chrome's own UI, which the shell replaces.
+
+- Patch `0146`: Settings, the New Tab page, the password manager, What's New
+  and the WebUI gallery are not registered. Their paks, and those of tab
+  search, the side panels and Customize Chrome, are not in `resources.pak`.
+- Patch `0147`: every locale but en-US carries only the strings a desk can
+  show. `src/components/domicile/locales/foreign_allowlist.py` lists what it
+  drops. en-US keeps every string, and `ResourceBundle` reads it for a string
+  a locale lacks.
+  - A Chrome string the desk does show, dropped by mistake, appears in
+    English. Take its source or prefix off the lists.
+- `src/build/args/domicile_trim.gn`: no WebUI code caches.
+
 ## Guards
 
 - `guard-shell-shortcuts.sh`: keyboard.

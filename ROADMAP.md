@@ -29,15 +29,6 @@ item when it ships.
    low-latency play, beside Google Cast and Miracast
    ([CASTING-TO-TVS.md](docs/CASTING-TO-TVS.md)).
 
-## In the engine fork (the agent on `crux`)
-
-1. **Strip what a desktop never runs.** Tab strip, New Tab page, settings,
-   sign-in and sync. Keep PDFium. Measured: 19.6 MB of a 418 MB install,
-   5.4 MB of it code
-   ([ENGINE-FORK-MEASUREMENTS.md](docs/architecture/ENGINE-FORK-MEASUREMENTS.md#engine-size-by-subsystem)).
-   Which to cut is the maintainer's decision.
-
-
 ## Known gaps
 
 Understood and not scheduled.
