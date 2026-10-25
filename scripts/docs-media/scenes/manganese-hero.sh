@@ -1,5 +1,5 @@
 # The manganese page's hero: a terminal and a browser tiled side by side, then
-# the launcher opening over them.
+# the launcher opening over them and searching.
 
 desktop @domicile-desktop/manganese
 app foot --working-directory="$ROOT" -o font="JetBrains Mono:size=12" \
@@ -18,7 +18,6 @@ record manganese-hero 8 &
 recording=$!
 settle 3
 "$DOMICILE_BIN" send-shell launcher
-# No typing: wtype's keys reach the engine's window without a keyboard
-# enter, and the engine's DCHECK aborts it.
-settle 2
+settle 1
+keys -d 120 notes
 wait "$recording"

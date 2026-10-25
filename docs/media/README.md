@@ -22,7 +22,7 @@ nested sway with these helpers (`scripts/docs-media/lib.sh`):
 | `settle <seconds>` | Waits for windows to map and draw. |
 | `shot <name>` | Writes `<name>.png` with `domicile screenshot`. |
 | `record <name> <seconds>` | Writes `<name>.webm` and `<name>.mp4`, muted. |
-| `keys <wtype args...>` | Types into the desktop. |
+| `keys <wtype args...>` | Types into the desktop. Fails the scene if the engine exits. |
 
 `foot`, `nvim`, `btop` and JetBrains Mono are on `PATH` for every scene.
 
