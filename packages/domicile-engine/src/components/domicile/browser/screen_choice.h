@@ -4,10 +4,15 @@
 #ifndef COMPONENTS_DOMICILE_BROWSER_SCREEN_CHOICE_H_
 #define COMPONENTS_DOMICILE_BROWSER_SCREEN_CHOICE_H_
 
+#include <cstdint>
 #include <memory>
+#include <optional>
+#include <string>
 
 #include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
+#include "components/domicile/browser/portal_picker.h"
+#include "components/domicile/browser/screen_capture.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 #include "third_party/webrtc/modules/desktop_capture/delegated_source_list_controller.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
@@ -23,6 +28,10 @@ namespace domicile {
 // leaves the portal's restore token under the capturer's source id, which the
 // answer names; see PortalScreenCapture. Chrome's own picker does the same on
 // Wayland (NativeDesktopMediaList).
+//
+// The answer is the surface the user picked, with its sound when the page
+// asks for audio, as the compositor tells of the pick's node. A browser
+// window is captured as a tab instead.
 class ScreenChoice : public webrtc::DesktopCapturer::Callback,
                      public webrtc::DelegatedSourceListController::Observer {
  public:
@@ -31,10 +40,24 @@ class ScreenChoice : public webrtc::DesktopCapturer::Callback,
       base::OnceCallback<void(blink::mojom::StreamDevicesSetPtr,
                               blink::mojom::MediaStreamRequestResult)>;
 
-  // Opens the portal through `capturer`, which has a delegated source list.
-  // `answer` runs once, from a posted task, so it may destroy this; that ends
-  // the picker's own portal session.
-  ScreenChoice(std::unique_ptr<webrtc::DesktopCapturer> capturer,
+  // Asks the desktop what node `node`'s stream shows. See
+  // AskWhatThePortalPicked.
+  using Ask =
+      base::OnceCallback<void(uint32_t node, ToldWhatThePortalPicked told)>;
+
+  // The answer for browser window `window`'s page as a tab (see TabCapture),
+  // or null once it has closed.
+  using CaptureBrowserWindow =
+      base::OnceCallback<blink::mojom::StreamDevicesSetPtr(
+          const std::string& window)>;
+
+  // Opens the portal through `picker`. `audio` is whether the page asks for
+  // sound. `answer` runs once, from a posted task, so it may destroy this;
+  // that ends the picker's own portal session.
+  ScreenChoice(std::unique_ptr<PortalPicker> picker,
+               bool audio,
+               Ask ask,
+               CaptureBrowserWindow capture_browser_window,
                Answer answer);
 
   ScreenChoice(const ScreenChoice&) = delete;
@@ -52,6 +75,10 @@ class ScreenChoice : public webrtc::DesktopCapturer::Callback,
   void OnCancelled() override;
   void OnError() override;
 
+  // The desktop told what pick `source` shows.
+  void Told(webrtc::DesktopCapturer::SourceId source,
+            std::optional<PortalPick> pick);
+
   // Runs `answer_` with `devices` and `result` from a posted task, unless this
   // is destroyed first.
   void Reply(blink::mojom::StreamDevicesSetPtr devices,
@@ -59,7 +86,10 @@ class ScreenChoice : public webrtc::DesktopCapturer::Callback,
   void RunAnswer(blink::mojom::StreamDevicesSetPtr devices,
                  blink::mojom::MediaStreamRequestResult result);
 
-  std::unique_ptr<webrtc::DesktopCapturer> capturer_;
+  std::unique_ptr<PortalPicker> picker_;
+  const bool audio_;
+  Ask ask_;
+  CaptureBrowserWindow capture_browser_window_;
   Answer answer_;
   base::WeakPtrFactory<ScreenChoice> weak_factory_{this};
 };

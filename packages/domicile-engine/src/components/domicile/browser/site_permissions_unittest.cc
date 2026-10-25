@@ -32,11 +32,18 @@ TEST(SitePermissionsTest, EachKindIsAskedForAsItself) {
             mojom::WebViewPermission::kClipboard);
   EXPECT_EQ(PermissionForRequest(RequestType::kMidiSysex),
             mojom::WebViewPermission::kMidi);
+  EXPECT_EQ(PermissionForRequest(RequestType::kWindowManagement),
+            mojom::WebViewPermission::kWindowManagement);
+  EXPECT_EQ(PermissionForRequest(RequestType::kLocalFonts),
+            mojom::WebViewPermission::kLocalFonts);
+  EXPECT_EQ(PermissionForRequest(RequestType::kIdleDetection),
+            mojom::WebViewPermission::kIdleDetection);
+  EXPECT_EQ(PermissionForRequest(RequestType::kMultipleDownloads),
+            mojom::WebViewPermission::kAutomaticDownloads);
 }
 
 TEST(SitePermissionsTest, ARequestTheShellHasNoKindForIsNone) {
-  EXPECT_EQ(PermissionForRequest(RequestType::kWindowManagement),
-            std::nullopt);
+  EXPECT_EQ(PermissionForRequest(RequestType::kVrSession), std::nullopt);
 }
 
 TEST(SitePermissionsTest, EachKindIsStoredAsItsContentSetting) {
@@ -52,6 +59,14 @@ TEST(SitePermissionsTest, EachKindIsStoredAsItsContentSetting) {
             ContentSettingsType::CLIPBOARD_READ_WRITE);
   EXPECT_EQ(SettingsTypeFor(mojom::WebViewPermission::kMidi),
             ContentSettingsType::MIDI_SYSEX);
+  EXPECT_EQ(SettingsTypeFor(mojom::WebViewPermission::kWindowManagement),
+            ContentSettingsType::WINDOW_MANAGEMENT);
+  EXPECT_EQ(SettingsTypeFor(mojom::WebViewPermission::kLocalFonts),
+            ContentSettingsType::LOCAL_FONTS);
+  EXPECT_EQ(SettingsTypeFor(mojom::WebViewPermission::kIdleDetection),
+            ContentSettingsType::IDLE_DETECTION);
+  EXPECT_EQ(SettingsTypeFor(mojom::WebViewPermission::kAutomaticDownloads),
+            ContentSettingsType::AUTOMATIC_DOWNLOADS);
 }
 
 TEST(SitePermissionsTest, EverySettingRoundTrips) {

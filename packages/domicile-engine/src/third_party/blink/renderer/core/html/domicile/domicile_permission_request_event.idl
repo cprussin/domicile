@@ -14,7 +14,8 @@
   readonly attribute USVString origin;
 
   // What it asks for: "camera", "microphone", "location", "notifications",
-  // "clipboard" or "midi". Camera and microphone may come together. DOMStrings,
+  // "clipboard", "midi", "window-management", "local-fonts", "idle-detection"
+  // or "automatic-downloads". Camera and microphone may come together. DOMStrings,
   // not an IDL enum, as for HTMLWebViewElement's `security`.
   readonly attribute FrozenArray<DOMString> permissions;
 

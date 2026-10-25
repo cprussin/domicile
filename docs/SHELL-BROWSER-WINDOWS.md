@@ -352,7 +352,10 @@ popupView.addEventListener(WEBVIEW_CLOSE_EVENT, () => {
 
 `<input type="file">`, downloads, `showSaveFilePicker()` and the PDF viewer's
 save all fire `domicile-file-chooser`. The browser shows no dialog; you draw
-the picker.
+the picker. A dialog from the shell's own page asks the desktop's
+FileChooser portal instead, as an application's does
+([PORTALS.md](PORTALS.md)). A folder dropped on a page's `webkitdirectory`
+input uploads its files, with no picker.
 
 ```ts
 import { WEBVIEW_FILE_CHOOSER_EVENT } from "@domicile-desktop/sdk/webview-element";
@@ -412,8 +415,9 @@ frame.addEventListener(WEBVIEW_PERMISSION_REQUEST_EVENT, (event) => {
 - **`domicile-permission-request-withdrawn`:** the browser dropped the request,
   for example on navigation. Stop showing it.
 - **Permissions:** `camera`, `microphone`, `location`, `notifications`,
-  `clipboard` and `midi` (`WEBVIEW_PERMISSIONS`). A request for anything else
-  is ignored.
+  `clipboard`, `midi`, `window-management`, `local-fonts`, `idle-detection`
+  and `automatic-downloads` (`WEBVIEW_PERMISSIONS`). A request for anything
+  else is ignored.
 - **Hidden windows wait.** A request is asked when its window is shown.
 - **Site settings:** `view.sitePermissions()` maps each permission to `ask`,
   `allow` or `block` for the page's site, `{}` for a page that is not `http`,
@@ -432,14 +436,17 @@ frame.addEventListener(WEBVIEW_PERMISSION_REQUEST_EVENT, (event) => {
 - **Screen capture** (`getDisplayMedia`) asks no site permission. The
   desktop's ScreenCast portal asks, in the shell's picker
   ([PORTALS.md](PORTALS.md)). The page gets the window, browser window,
-  monitor or region picked, with the pointer (none over a browser window)
-  and no audio. A browser window is its page alone. A tab of its own is
-  refused.
+  monitor or region picked, with the pointer. Asking for `audio` gets the
+  source's sound: a window's app's, or every app's for a monitor or region.
+  A browser window is captured as a tab: its page alone, its sound,
+  `cropTo()` and its capture handle. `preferCurrentTab` opens the same
+  picker, where the page's own browser window is listed with the rest.
   - The promise waits for the pick. Canceling the picker rejects it with
     `NotAllowedError`.
   - The pick opens two portal sessions: the picker's, then the capture's,
     which restores the pick from its token without asking again.
-  - `displaySurface` is always `monitor`, whatever was picked.
+  - `displaySurface` is `window` for a window, `browser` for a browser
+    window, and `monitor` for a monitor or region.
 
 Manganese draws both in the address bar's site permissions panel
 (`window-management/browser/SitePermissions.tsx`).

@@ -2,12 +2,16 @@ import type { Permission, Setting } from "./host";
 
 /** Each permission as a person reads it. */
 export const PERMISSION_TITLES: Readonly<Record<Permission, string>> = {
+  "automatic-downloads": "Automatic downloads",
   camera: "Camera",
   clipboard: "Clipboard",
+  "idle-detection": "Your device use",
+  "local-fonts": "Fonts",
   location: "Location",
   microphone: "Microphone",
   midi: "MIDI devices",
   notifications: "Notifications",
+  "window-management": "Window management",
 };
 
 /** The choices for a site's setting. */
