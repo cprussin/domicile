@@ -14,16 +14,16 @@
 # the page. See `latency.rs` and
 # docs/architecture/ENGINE-FORK-MEASUREMENTS.md#keystroke-to-pixel.
 #
-# Asserts that `commit to pixel` is within MOST_FRAMES display frames, so the
-# embedding adds no stage of its own. A millisecond threshold would depend on
-# runner load. The probe is a `CopyOutputRequest` that forces a draw, so every
-# reading is at least one frame and quantized to it.
+# Asserts that `commit to pixel` is within the probe's floor plus one display
+# frame, so the embedding adds no stage of its own. See `latency_allowance`.
 #
-# The denominator is the compositor's advertised display frame, not the
-# sampled probe floor: the floor is sampled during startup and varied threefold
-# across CI runs. `css_parity.cc` reads viz's frame interval and agrees with the
-# advertised one. The floor is still checked against the frame, to catch an
-# advertised rate the display is not running at.
+# - The probe is a `CopyOutputRequest` that forces a draw, so each reading is
+#   at least one frame: about one at 60 Hz and two at 120 Hz.
+# - The display frame is the interval viz reports with each presented frame.
+#   The floor is checked against it, to catch a frame the display is not
+#   running at.
+# - `commit to present`, from viz's presentation feedback, is reported but not
+#   asserted. Nested, it includes the host compositor's own pass.
 set -u
 
 SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
@@ -59,10 +59,6 @@ APP_ID="${APP_ID:-app-1}"
 # as guard-client-window.sh does.
 NEGATIVE="${NEGATIVE:-0}"
 
-# Display frames `commit to pixel` may take. A clean run reads about 1.7; an
-# extra stage adds a frame.
-MOST_FRAMES="${MOST_FRAMES:-2}"
-
 # The engine's Ozone platform.
 #
 # - `wayland` (default, CI): nested in under-wayland.sh's headless wlroots, so
@@ -70,7 +66,7 @@ MOST_FRAMES="${MOST_FRAMES:-2}"
 # - `drm`: on a real panel, so the frame is a real CRTC's. See
 #   `latency_window_flags` and `latency_platform_refusal`.
 #
-# Neither measures presentation: the probe reads what viz drew, not the panel.
+# The probe reads what viz drew; `commit to present` is when viz presented it.
 PLATFORM="${PLATFORM:-wayland}"
 
 # Rounds, floor samples, polls per round. The control needs only three rounds;
@@ -155,6 +151,7 @@ LD_LIBRARY_PATH="$CHROMIUM/$OUT${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
 RUST_LOG="${RUST_LOG:-info,domicile_compositor=debug}" \
 DOMICILE_SPIKE_LATENCY=center \
 DOMICILE_SPIKE_LATENCY_BUDGET="$BUDGET" \
+DOMICILE_SPIKE_LATENCY_FRAME_MS="$(latency_frame_of_mode "${UNDER_WAYLAND_OUTPUT_MODE:-}")" \
   "$COMPOSITOR" \
     --chrome-socket "$COMP_SOCK" \
     --session "$COMP_SOCK.session" \
@@ -230,6 +227,7 @@ fi
 FRAME="$(latency_display_frame "$COMP_LOG")"
 FLOOR="$(latency_median floor "$COMP_LOG")"
 OURS="$(latency_median "commit to pixel" "$COMP_LOG")"
+PRESENT="$(latency_median "commit to present" "$COMP_LOG")"
 THEIRS="$(latency_median "key to commit" "$COMP_LOG")"
 WHOLE="$(latency_median "key to pixel" "$COMP_LOG")"
 ABANDONED="$(latency_abandoned "$COMP_LOG")"
@@ -239,7 +237,7 @@ SOON="$(latency_soon "$COMP_LOG")"
 UNDELIVERED="$(latency_undelivered "$COMP_LOG")"
 REDREW="$(latency_redrew "$COMP_LOG")"
 echo "ended: $ENDED; display frame ${FRAME:-none} ms; floor ${FLOOR:-none} ms;"
-echo "commit to pixel ${OURS:-none} ms;"
+echo "commit to pixel ${OURS:-none} ms; commit to present ${PRESENT:-none} ms;"
 echo "key to commit ${THEIRS:-none} ms; key to pixel ${WHOLE:-none} ms;"
 echo "abandoned ${ABANDONED:-none}; moved before the answer ${MOVED:-none};"
 echo "answered too late ${LATE:-none}; passed over too soon ${SOON:-none};"
@@ -337,26 +335,26 @@ if [ -z "$OURS" ] || [ -z "$FLOOR" ] || [ -z "$FRAME" ]; then
   exit 1
 fi
 
-# Check the advertised frame against the sampled floor. Load only raises the
-# floor, so a frame far above the floor means the advertised frame is wrong.
+# Check viz's frame against the sampled floor. Load only raises the floor, so a
+# frame far above the floor means the reported frame is wrong.
 if ! latency_within "$FRAME" 2 "$FLOOR"; then
   annotate "guard-latency: the run reports a display frame of ${FRAME}ms and" \
-       "priced its probe at ${FLOOR}ms — a probe round trip is one display" \
-       "frame, so the frame this would be measured against is not the one this" \
-       "desktop is drawing at"
+       "priced its probe at ${FLOOR}ms — a probe round trip is at least one" \
+       "display frame, so the frame this would be measured against is not the" \
+       "one this desktop is drawing at"
   grep -aE "latency" "$COMP_LOG" | tail -8 | sed 's/^/  /' >&2
   exit 1
 fi
 
 # The assertion.
-if latency_within "$OURS" "$MOST_FRAMES" "$FRAME"; then
-  echo "PASS: a client's frame reaches the page in ${OURS}ms, within ${MOST_FRAMES} display frames of ${FRAME}ms."
-  echo "No stage of its own, which is the claim. The probe's own floor, which"
-  echo "is the same quantity sampled rather than advertised: ${FLOOR}ms."
+ALLOWED="$(latency_allowance "$FLOOR" "$FRAME")"
+if latency_within "$OURS" 1 "$ALLOWED"; then
+  echo "PASS: a client's frame reaches the page in ${OURS}ms, within the probe's floor and one display frame: ${ALLOWED}ms."
   exit 0
 fi
-annotate "guard-latency: commit to pixel is ${OURS}ms against a display frame" \
-     "of ${FRAME}ms, more than ${MOST_FRAMES}x — a client's frame is waiting" \
-     "on a stage of its own somewhere between the commit and the page"
+annotate "guard-latency: commit to pixel is ${OURS}ms, more than the probe's" \
+     "floor and one display frame of ${FRAME}ms (${ALLOWED}ms) — a client's" \
+     "frame is waiting on a stage of its own somewhere between the commit and" \
+     "the page"
 grep -aE "latency" "$COMP_LOG" | tail -8 | sed 's/^/  /' >&2
 exit 1

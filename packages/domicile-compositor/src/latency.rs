@@ -13,7 +13,7 @@
 //! ```
 //!
 //! They are reported separately so a slow client cannot hide a regression in
-//! the compositor. Each probe costs a display frame, so the run first measures
+//! the compositor. Each probe costs at least a display frame, so the run first measures
 //! the probe alone (the floor) and reports it beside the results, as
 //! `css_parity.cc` does.
 //!
@@ -33,6 +33,13 @@
 //! `docs/architecture/ENGINE-FORK-MEASUREMENTS.md#keystroke-to-pixel`.
 
 use std::time::{Duration, Instant};
+
+/// Parses a display frame given in milliseconds. `None` unless it is a
+/// positive number.
+pub fn frame_from_ms(raw: &str) -> Option<Duration> {
+    let ms = raw.parse::<f64>().ok()?;
+    (ms > 0.0).then(|| Duration::from_secs_f64(ms / 1000.0))
+}
 
 /// What the driver should do next.
 ///
@@ -108,6 +115,9 @@ impl Spread {
 /// The results of a finished run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Report {
+    /// The display frame viz last reported. `None` if it never did, so a
+    /// run cannot divide by a guess.
+    pub frame: Option<Duration>,
     /// A probe round trip with nothing changing. Every other number includes
     /// at least this.
     pub floor: Option<Spread>,
@@ -126,6 +136,14 @@ pub struct Report {
     /// The sum of the two. Includes the probe's round trip, which a user does
     /// not wait for.
     pub key_to_pixel: Option<Spread>,
+    /// The client's commit to viz presenting its frame, from presentation
+    /// feedback.
+    ///
+    /// The same span as `commit_to_pixel` without the probe's round trip, and
+    /// it ends at the panel rather than at viz's output. Covers every frame
+    /// the client showed during the rounds, so a redraw counts as well as an
+    /// answer.
+    pub commit_to_present: Option<Spread>,
     /// Rounds where the color never changed within the poll budget: the client
     /// did not answer. This is what the negative control asserts.
     pub abandoned: usize,
@@ -368,9 +386,7 @@ impl Default for Budget {
 pub struct Latency {
     budget: Budget,
     /// One display frame, the unit for [`MAX_WAIT_FRAMES`].
-    ///
-    /// Passed in so the bound uses the same frame the report divides by.
-    frame: Duration,
+    frame: Option<Duration>,
     phase: Phase,
     round: usize,
     /// The probe's last color, which the next round watches for a change from.
@@ -379,6 +395,7 @@ pub struct Latency {
     key_to_commit: Vec<Duration>,
     commit_to_pixel: Vec<Duration>,
     key_to_pixel: Vec<Duration>,
+    commit_to_present: Vec<Duration>,
     abandoned: usize,
     moved_before_commit: usize,
     answered_too_late: usize,
@@ -391,14 +408,14 @@ impl Latency {
     /// # Panics
     ///
     /// If [`Budget::usable`] rejects `budget`.
-    pub fn new(budget: Budget, frame: Duration) -> Self {
+    pub fn new(budget: Budget) -> Self {
         assert!(
             budget.usable(),
             "a budget that cannot measure anything: {budget:?}"
         );
         Self {
             budget,
-            frame,
+            frame: None,
             phase: Phase::Floor {
                 taken: 0,
                 since: None,
@@ -412,6 +429,7 @@ impl Latency {
             key_to_commit: Vec::new(),
             commit_to_pixel: Vec::new(),
             key_to_pixel: Vec::new(),
+            commit_to_present: Vec::new(),
             abandoned: 0,
             moved_before_commit: 0,
             answered_too_late: 0,
@@ -443,6 +461,8 @@ impl Latency {
                 };
                 Step::Sample
             }
+            // Rounds are bounded in display frames.
+            Phase::Ready if self.frame.is_none() => Step::Wait,
             Phase::Ready => {
                 self.phase = Phase::Pressed {
                     at: now,
@@ -562,10 +582,13 @@ impl Latency {
                 // Checked when the commit arrives, not at a deadline. Otherwise
                 // the late commit would land in the next round looking like
                 // its answer.
-                if waited > self.frame * MAX_WAIT_FRAMES {
+                let frame = self
+                    .frame
+                    .expect("a round starts only once viz has reported its frame");
+                if waited > frame * MAX_WAIT_FRAMES {
                     self.answered_too_late += 1;
                     self.end_round();
-                } else if waited < self.frame / MIN_WAIT_FRAME_SHARE {
+                } else if waited < frame / MIN_WAIT_FRAME_SHARE {
                     // Skip it and keep the round open: the key's answer is
                     // still coming. Ending the round would press the next key
                     // early, and a client that draws both in one frame shows no
@@ -643,6 +666,26 @@ impl Latency {
         self.end_round();
     }
 
+    /// Viz reported its display frame interval.
+    pub fn refreshes_every(&mut self, frame: Duration) {
+        self.frame = Some(frame);
+    }
+
+    /// A frame of the watched client reached the screen `took` after its
+    /// commit, by viz's presentation feedback.
+    ///
+    /// Counted once the floor is done, so the page's own first frames are
+    /// left out. Feedback arrives after the probe saw the pixel, so the last
+    /// round's frame lands after the run ends and is not counted.
+    pub fn presented(&mut self, took: Duration) {
+        match self.phase {
+            Phase::Ready | Phase::Pressed { .. } | Phase::Polling { .. } => {
+                self.commit_to_present.push(took);
+            }
+            Phase::Floor { .. } | Phase::Done(_) => {}
+        }
+    }
+
     /// The run's results, or `None` while it is still running, so a partial
     /// median is never reported.
     pub fn report(&self) -> Option<Report> {
@@ -650,6 +693,8 @@ impl Latency {
             return None;
         };
         Some(Report {
+            frame: self.frame,
+            commit_to_present: Spread::of(&self.commit_to_present),
             floor: Spread::of(&self.floor),
             key_to_commit: Spread::of(&self.key_to_commit),
             commit_to_pixel: Spread::of(&self.commit_to_pixel),
@@ -678,7 +723,7 @@ impl Latency {
 mod tests {
     use std::time::{Duration, Instant};
 
-    use super::{Budget, Ended, Latency, Spread, Step};
+    use super::{frame_from_ms, Budget, Ended, Latency, Spread, Step};
 
     fn ms(count: u64) -> Duration {
         Duration::from_millis(count)
@@ -705,8 +750,10 @@ mod tests {
 
         fn of(budget: Budget) -> Self {
             let floor_samples = budget.floor_samples;
+            let mut latency = Latency::new(budget);
+            latency.refreshes_every(Duration::from_micros(16_667));
             Self {
-                latency: Latency::new(budget, Duration::from_micros(16_667)),
+                latency,
                 now: Instant::now(),
                 color: 0xFF00_0000,
                 floor_samples,
@@ -1509,5 +1556,66 @@ mod tests {
             driver.answer(ms(17));
         }
         assert_eq!(driver.latency.report(), None);
+    }
+
+    /// Rounds are bounded in display frames, so none starts before viz says
+    /// how long a frame is.
+    #[test]
+    fn no_round_starts_before_viz_reports_the_display_frame() {
+        let mut latency = Latency::new(Budget {
+            rounds: 1,
+            floor_samples: 2,
+            max_polls: 10,
+            ..Budget::default()
+        });
+        let mut now = Instant::now();
+        for _ in 0..=2 {
+            assert_eq!(latency.next(now), Step::Sample);
+            now += ms(9);
+            latency.sampled(now, 0xFF00_0000);
+        }
+        assert_eq!(latency.next(now), Step::Wait);
+        latency.refreshes_every(Duration::from_micros(8_333));
+        assert_eq!(latency.next(now), Step::Press);
+    }
+
+    /// The report divides by the frame viz reported, not an assumed one.
+    #[test]
+    fn a_report_carries_the_display_frame_viz_reported() {
+        let mut driver = Driver::new(1, 2, 10);
+        driver.latency.refreshes_every(Duration::from_micros(8_333));
+        driver.reach_first_press(ms(9));
+        driver.round(ms(5), ms(9));
+        assert_eq!(
+            driver.latency.report().unwrap().frame,
+            Some(Duration::from_micros(8_333))
+        );
+    }
+
+    /// Frames shown during the floor are the page settling, not answers.
+    #[test]
+    fn commit_to_present_counts_only_frames_shown_after_the_floor() {
+        let mut driver = Driver::new(2, 2, 10);
+        driver.latency.presented(ms(40));
+        driver.reach_first_press(ms(17));
+        driver.round(ms(5), ms(16));
+        driver.latency.presented(ms(12));
+        driver.round(ms(5), ms(16));
+        let present = driver.latency.report().unwrap().commit_to_present.unwrap();
+        assert_eq!((present.count, present.median), (1, ms(12)));
+    }
+
+    /// A harness names the frame of a display that presents nothing, such
+    /// as a headless output.
+    #[test]
+    fn a_frame_in_milliseconds_is_read_with_its_decimals() {
+        assert_eq!(frame_from_ms("16.667"), Some(Duration::from_micros(16_667)));
+    }
+
+    #[test]
+    fn a_frame_that_is_no_length_is_refused() {
+        for raw in ["", "0", "-16.667", "sixty"] {
+            assert_eq!(frame_from_ms(raw), None, "{raw:?} was accepted");
+        }
     }
 }
