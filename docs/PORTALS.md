@@ -124,7 +124,8 @@ One request channel carries all dialogs. Each interface's backend builds on it.
     drawn alone instead (`previewWindow`), and a part of it may be dragged
     over it: the pick's `area`, in the pixels of the frame the preview drew.
     The stream is that part of the window's frame alone, kept inside the
-    frame if the window shrinks. A part is not kept by a restore token.
+    frame if the window shrinks. A restore token keeps a part only while
+    the compositor runs (persist mode 1), so a page's capture restores it.
   - When the application may have a region, the list starts with
     "Everything", the whole desk as a region, picked as it opens.
 - **Input uses EIS.** RemoteDesktop and InputCapture hand out a libei socket

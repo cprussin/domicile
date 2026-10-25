@@ -372,12 +372,16 @@ impl ScreenCast {
         matched(shared, &there)?
             .into_iter()
             .map(|restored| {
-                let source = match restored {
-                    Restored::Window(id) => Source::Window(id),
-                    Restored::Monitor(name) => Source::Monitor(name),
-                    Restored::BrowserWindow { id, title } => {
-                        return asked_for(selected, &Source::BrowserWindow(id.clone()))
-                            .then(|| browser_window(id, title));
+                let (source, part) = match restored {
+                    Restored::Window { id, part } => (Source::Window(id), part),
+                    Restored::Monitor(name) => (Source::Monitor(name), None),
+                    Restored::BrowserWindow { id, title, part } => {
+                        return asked_for(selected, &Source::BrowserWindow(id.clone())).then(
+                            || Candidate {
+                                part,
+                                ..browser_window(id, title)
+                            },
+                        );
                     }
                     Restored::Region { position, size } => {
                         return asked_for(selected, &Source::Region(Region { position, size }))
@@ -386,7 +390,10 @@ impl ScreenCast {
                 };
                 open.iter()
                     .find(|candidate| candidate.source == source)
-                    .cloned()
+                    .map(|candidate| Candidate {
+                        part,
+                        ..candidate.clone()
+                    })
             })
             .collect()
     }
@@ -494,10 +501,11 @@ impl ScreenCast {
             .map(|candidate| match &candidate.source {
                 // A part is picked from a frame, which a restart does not
                 // keep.
-                _ if candidate.part.is_some() => None,
+                _ if candidate.part.is_some() && selected.persist == Persist::Saved => None,
                 Source::Window(_) => Some(Shared::Window {
                     app_id: candidate.app_id.clone(),
                     title: candidate.title.clone(),
+                    part: candidate.part,
                 }),
                 Source::Monitor(name) => Some(Shared::Monitor { name: name.clone() }),
                 Source::Region(region) => Shared::region(region.position, region.size, monitors),
@@ -506,6 +514,7 @@ impl ScreenCast {
                     (selected.persist != Persist::Saved).then(|| Shared::BrowserWindow {
                         id: id.clone(),
                         title: candidate.title.clone(),
+                        part: candidate.part,
                     })
                 }
             })
@@ -987,11 +996,15 @@ mod tests {
                     Heard::Msg(Request::Start {
                         stream,
                         source,
+                        part,
                         cursor,
                         mut listener,
                         ..
                     }) => {
-                        let _ = told.send(format!("start {source:?} {cursor:?}"));
+                        let part = part
+                            .map(|part| format!(" part {part:?}"))
+                            .unwrap_or_default();
+                        let _ = told.send(format!("start {source:?} {cursor:?}{part}"));
                         listener(Event::Ready { node: 42 });
                         listeners.insert(stream, listener);
                     }
@@ -1504,6 +1517,96 @@ mod tests {
 
         assert_eq!(response, 0);
         assert!(!results.contains_key("restore_data"));
+    }
+
+    #[test]
+    fn a_restore_token_shares_the_same_part_of_a_window_without_asking() {
+        // A page's capture restores the pick of its picker session this way.
+        let windows = |restore: Option<OwnedValue>| {
+            let mut options = vec![
+                ("types", Value::from(2u32)),
+                ("persist_mode", Value::from(1u32)),
+            ];
+            if let Some(restore) = restore {
+                options.push(("restore_data", Value::from(restore)));
+            }
+            options
+        };
+        for (part, cast) in [
+            (
+                notes_part(),
+                r#"start Window("app-3") Hidden part (1, 2, 3, 4)"#,
+            ),
+            (
+                CastPick::BrowserWindow {
+                    id: "7".into(),
+                    title: "Meet".into(),
+                    area: Some(domicile_protocol::ShotRect {
+                        x: 5,
+                        y: 6,
+                        width: 7,
+                        height: 8,
+                    }),
+                },
+                r#"start BrowserWindow("7") Hidden part (5, 6, 7, 8)"#,
+            ),
+        ] {
+            let served = served(Grants::default());
+            select(&served.client, windows(None));
+            let (_, results) = pick(&served, vec![part]);
+            heard(&served.casts);
+            let restore = results
+                .get("restore_data")
+                .expect("a token")
+                .try_clone()
+                .expect("cloned");
+            close(&served);
+            heard(&served.casts);
+
+            select(&served.client, windows(Some(restore)));
+            let (response, _) = start(&served.client).join().expect("Start returned");
+
+            assert_eq!(response, 0);
+            assert_eq!(heard(&served.casts), cast);
+            assert!(
+                served
+                    .published
+                    .try_iter()
+                    .all(|(items, _)| items.is_empty()),
+                "no dialog was shown"
+            );
+        }
+    }
+
+    #[test]
+    fn a_part_of_a_window_is_not_granted_past_a_restart() {
+        // It is in the pixels of a frame the restart does not keep.
+        let served = served(Grants::default());
+        select(
+            &served.client,
+            vec![
+                ("types", Value::from(2u32)),
+                ("persist_mode", Value::from(2u32)),
+            ],
+        );
+
+        let (response, results) = pick(&served, vec![notes_part()]);
+
+        assert_eq!(response, 0);
+        assert!(!results.contains_key("restore_data"));
+    }
+
+    /// A part of window `app-3` as the shell picks it.
+    fn notes_part() -> CastPick {
+        CastPick::Window {
+            id: "app-3".into(),
+            area: Some(domicile_protocol::ShotRect {
+                x: 1,
+                y: 2,
+                width: 3,
+                height: 4,
+            }),
+        }
     }
 
     /// Browser window `7`, "Meet", as the shell picks it.
