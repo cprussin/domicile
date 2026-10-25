@@ -369,6 +369,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -401,6 +402,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -436,6 +438,7 @@ describe("BrowserWindow", () => {
         onPageFullscreen={noFullscreen}
         onReach={() => undefined}
         rect={ON_SCREEN}
+        resizing={false}
         url="https://example.com"
         window="1"
       />,
@@ -467,6 +470,7 @@ describe("BrowserWindow", () => {
         onPageFullscreen={noFullscreen}
         onReach={() => undefined}
         rect={ON_SCREEN}
+        resizing={false}
         url="https://example.com"
         window="1"
       />,
@@ -497,6 +501,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -529,6 +534,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -574,6 +580,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -607,6 +614,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -643,6 +651,7 @@ describe("BrowserWindow", () => {
       onPageFullscreen: noFullscreen,
       onReach: () => undefined,
       rect: ON_SCREEN,
+      resizing: false,
     } as const;
 
     // The engine reads the `window` attribute once when the view is inserted.
@@ -711,6 +720,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url={url}
           window="1"
         />,
@@ -804,6 +814,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://login.example/sign-in"
           window="1"
         />,
@@ -843,9 +854,21 @@ describe("BrowserWindow", () => {
       onPageFullscreen: noFullscreen,
       onReach: () => undefined,
       rect: ON_SCREEN,
+      resizing: false,
       url: "https://example.com",
       window: "1",
     } as const;
+
+    // While resizing, the engine shows each box without waiting for the page.
+    it("marks its page while the user resizes it", () => {
+      const { container, rerender } = render(
+        <BrowserWindow {...windowProps} focused resizing />,
+      );
+      expect(view(container).hasAttribute("resizing")).toBe(true);
+
+      rerender(<BrowserWindow {...windowProps} focused resizing={false} />);
+      expect(view(container).hasAttribute("resizing")).toBe(false);
+    });
 
     it("answers the page with what is picked, and puts the picker away", async () => {
       const answers: string[] = [];
@@ -970,6 +993,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -1006,6 +1030,7 @@ describe("BrowserWindow", () => {
             onPageFullscreen={noFullscreen}
             onReach={() => undefined}
             rect={ON_SCREEN}
+            resizing={false}
             url="https://example.com"
             window="1"
           />,
@@ -1062,6 +1087,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -1090,6 +1116,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -1119,6 +1146,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -1152,6 +1180,7 @@ describe("BrowserWindow", () => {
         onPageFullscreen: noFullscreen,
         onReach: () => undefined,
         rect: ON_SCREEN,
+        resizing: false,
         url: "https://example.com",
         window: "1",
       } as const;
@@ -1184,6 +1213,7 @@ describe("BrowserWindow", () => {
         onPageFullscreen: noFullscreen,
         onReach: () => undefined,
         rect: ON_SCREEN,
+        resizing: false,
         url: "https://example.com",
         window: "1",
       } as const;
@@ -1219,6 +1249,7 @@ describe("BrowserWindow", () => {
         onPageFullscreen: noFullscreen,
         onReach: () => undefined,
         rect: ON_SCREEN,
+        resizing: false,
         url: "https://example.com",
         window: "1",
       } as const;
@@ -1252,6 +1283,7 @@ describe("BrowserWindow", () => {
         onPageFullscreen: noFullscreen,
         onReach: () => undefined,
         rect: ON_SCREEN,
+        resizing: false,
         url: "https://example.com",
         window: "1",
       } as const;
@@ -1293,6 +1325,7 @@ describe("BrowserWindow", () => {
               resolve();
             }}
             rect={ON_SCREEN}
+            resizing={false}
             url="https://example.com"
             window="1"
           />,
@@ -1324,6 +1357,7 @@ describe("BrowserWindow", () => {
               resolve();
             }}
             rect={ON_SCREEN}
+            resizing={false}
             url="https://example.com"
             window="1"
           />,
@@ -1363,6 +1397,7 @@ describe("BrowserWindow", () => {
               reaches.push("reach");
             }}
             rect={ON_SCREEN}
+            resizing={false}
             url="https://example.com"
             window="1"
           />,
@@ -1400,6 +1435,7 @@ describe("BrowserWindow", () => {
               resolve();
             }}
             rect={ON_SCREEN}
+            resizing={false}
             url="https://example.com"
             window="1"
           />,
@@ -1435,6 +1471,7 @@ describe("BrowserWindow", () => {
             onPageFullscreen={noFullscreen}
             onReach={() => undefined}
             rect={ON_SCREEN}
+            resizing={false}
             url="https://example.com"
             window="1"
           />,
@@ -1467,6 +1504,7 @@ describe("BrowserWindow", () => {
           reaches.push("reach");
         },
         rect: ON_SCREEN,
+        resizing: false,
         url: "https://example.com",
         window: "1",
       } as const;
@@ -1511,6 +1549,7 @@ describe("BrowserWindow", () => {
             reaches.push("reach");
           }}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -1557,6 +1596,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -1588,6 +1628,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -1622,6 +1663,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -1655,6 +1697,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -1694,6 +1737,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -1726,6 +1770,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -1757,6 +1802,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -1792,6 +1838,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -1829,6 +1876,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -1948,6 +1996,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -2025,6 +2074,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -2079,6 +2129,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -2147,6 +2198,7 @@ describe("BrowserWindow", () => {
             onPageFullscreen={noFullscreen}
             onReach={() => undefined}
             rect={ON_SCREEN}
+            resizing={false}
             url="https://example.com"
             window="1"
           />,
@@ -2197,6 +2249,7 @@ describe("BrowserWindow", () => {
             onPageFullscreen={noFullscreen}
             onReach={() => undefined}
             rect={ON_SCREEN}
+            resizing={false}
             url="https://example.com"
             window="1"
           />,
@@ -2253,6 +2306,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -2393,6 +2447,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -2432,6 +2487,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -2471,6 +2527,7 @@ describe("BrowserWindow", () => {
           onPageFullscreen={noFullscreen}
           onReach={() => undefined}
           rect={ON_SCREEN}
+          resizing={false}
           url="https://example.com"
           window="1"
         />,
@@ -2593,6 +2650,7 @@ describe("BrowserWindow", () => {
         onPageFullscreen={noFullscreen}
         onReach={() => undefined}
         rect={undefined}
+        resizing={false}
         url="https://example.com"
         window="1"
       />,
@@ -2623,6 +2681,7 @@ describe("BrowserWindow", () => {
       onPageFullscreen: noFullscreen,
       onReach: () => undefined,
       rect: ON_SCREEN,
+      resizing: false,
       url: "https://example.com",
       window: "1",
     } as const;
@@ -2655,6 +2714,7 @@ describe("BrowserWindow", () => {
         <BrowserWindow
           {...windowProps}
           rect={{ ...ON_SCREEN, width: 600 }}
+          resizing={false}
           settler={settler}
         />,
       );
@@ -2677,6 +2737,7 @@ describe("BrowserWindow", () => {
           {...windowProps}
           dragging
           rect={{ ...ON_SCREEN, x: 40 }}
+          resizing={false}
           settler={settler}
         />,
       );

@@ -75,6 +75,9 @@ Event names and full types are in `src/app-element.ts` and
 the desk's browser windows, which the engine owns; the engine reads `window`
 once, when the view connects. The SDK provides types only.
 
+- **Resize sync:** as an `<app>`'s, a new box holds the page's frame until
+  the page draws at it. Set the `resizing` attribute while the user drags an
+  edge: the page's latest frame then stretches to each box at once.
 - **Properties:** `src`, `goBack()`, `goForward()`, `stop()`, `reload()`,
   `canGoBack`, `canGoForward`, `loading`, `focus()`, `inspect()` (opens
   DevTools as a new window), `print()` (the desktop's print dialog).
