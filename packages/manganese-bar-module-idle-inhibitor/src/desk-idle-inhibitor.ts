@@ -6,5 +6,5 @@ import { inhibitIdle } from "./portal-inhibit";
 /** The idle inhibitor, held once for every bar. */
 export const deskIdleInhibitor = perHost((domicile) => {
   const { dbus } = domicile;
-  return idleInhibitor(() => inhibitIdle(dbus));
+  return idleInhibitor(() => inhibitIdle(dbus, "Kept awake from the bar"));
 });

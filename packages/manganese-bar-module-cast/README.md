@@ -18,7 +18,7 @@ export const Shell = runManganese({
 
 It takes no props. It reads `useDomicile()`. See
 [TOP-BAR.md](../shell-manganese/docs/TOP-BAR.md) and
-[CASTING-TO-TVS.md](../../docs/architecture/CASTING-TO-TVS.md).
+[CASTING-TO-TVS.md](../../docs/CASTING-TO-TVS.md).
 
 ## Test
 

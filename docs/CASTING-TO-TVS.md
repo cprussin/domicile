@@ -13,7 +13,7 @@ Miracast.
 | LG webOS, Windows, Microsoft adapters | Miracast over the LAN (MICE) | yes, `domicile-miracast` |
 | Apple TV, AirPlay TVs | AirPlay 2 | no |
 | Smart TVs as DLNA renderers | UPnP AV | no |
-| A TV running Moonlight | GameStream | no; ROADMAP item |
+| A TV running Moonlight | GameStream | no ([ROADMAP.md](/ROADMAP.md)) |
 
 - **AirPlay is out.** Mirroring is FairPlay-encrypted and no open sender
   speaks it.
@@ -34,11 +34,10 @@ Miracast.
 - **Sound follows the source:** a window's own apps, or every app for a
   monitor or region ([audio.rs](/packages/domicile-compositor/src/casting/audio.rs)).
 - **While casting,** the item is lit and the popover shows the TV, what is on
-  it, and **Stop casting**. Idle blanking is held off. Notification banners
-  are held while a monitor is cast.
-- **Miracast pairing:** the popover says "Accept on your TV", or asks for the
-  PIN the TV shows.
-- **A page's own Cast button** (YouTube) opens the same TV list.
+  it, and **Stop casting**. The shell holds off idle blanking through the
+  Inhibit portal and holds notification banners, which the TV could show;
+  notifications still reach the drawer
+  ([cast-holds.ts](/packages/shell-manganese/src/cast-holds.ts)).
 
 ## Design
 
@@ -100,8 +99,6 @@ bar item ──casting(host).start(target, Extend | Pick)──▶ backend (engi
 - Mirroring captures through webrtc's PipeWire capturer, which asks the
   portal (patch `0128`). The engine's portal app id is not its own pick, so
   `engineCast` claims the next ScreenCast request from any app.
-- Later: a page's Cast button going to the shell's TV list, and hiding
-  Chrome's Cast dialog.
 
 ### Miracast, `domicile-miracast`
 
@@ -139,13 +136,3 @@ bar item ──casting(host).start(target, Extend | Pick)──▶ backend (engi
   Cast button comes with it.
 - **The portal as the only source.** Both backends see what any portal app
   sees, so the share picker is the whole source API.
-
-## Plan
-
-- [x] virtual monitors: engine ABI and `DrmModeset`, `Screens`, `SystemRequest::VirtualMonitor` (#1524)
-- [x] the SDK's casts and the `Cast` bar item, against a fake backend; the
-      shell answers Extend's portal request
-- [x] engine: Media Router sinks and mirroring routes for the shell
-      (`CastSinks`), wired to the bar item
-- [x] `domicile-miracast`: Wi-Fi Direct, MICE, WFD session, encoder
-- [ ] blanking hold, notification hold, launcher command

@@ -1,6 +1,6 @@
 //! The ScreenCast portal, from which a cast takes its picture. The shell
 //! answers the request: with the TV's virtual monitor to extend the desk, or
-//! with the share picker. See docs/architecture/CASTING-TO-TVS.md.
+//! with the share picker. See docs/CASTING-TO-TVS.md.
 
 use std::collections::HashMap;
 use std::os::fd::OwnedFd;

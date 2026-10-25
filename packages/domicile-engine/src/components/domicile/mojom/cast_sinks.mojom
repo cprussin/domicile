@@ -4,7 +4,7 @@
 module domicile.mojom;
 
 // The TVs the engine casts the desktop to: the Google Cast receivers Chrome's
-// Media Router finds. See docs/architecture/CASTING-TO-TVS.md in the Domicile
+// Media Router finds. See docs/CASTING-TO-TVS.md in the Domicile
 // repository.
 //
 // - A cast mirrors the desktop: its picture is what the desktop's ScreenCast

@@ -1801,7 +1801,7 @@ pub enum SystemRequest {
     ///
     /// Only on a tty. Nested, Domicile's window is the desktop, and this
     /// fails with [`SystemErrorKind::Other`]. See
-    /// `docs/architecture/CASTING-TO-TVS.md`.
+    /// `docs/CASTING-TO-TVS.md`.
     VirtualMonitor {
         name: String,
         width: u32,
