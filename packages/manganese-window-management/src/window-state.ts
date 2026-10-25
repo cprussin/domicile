@@ -1878,10 +1878,10 @@ const dropNode = (
       nodeDropped(workspace, moving, target, edge),
     );
   } else {
-    const { node, rest } = nodeLifted(from, moving);
+    const { node, rest, selected } = nodeLifted(from, moving);
     const left = onWorkspace(state, from.name, () => rest);
     return onWorkspace({ ...left, focused: screen }, to.name, (workspace) =>
-      nodeArrived(workspace, node, target, edge),
+      nodeArrived(workspace, node, selected, target, edge),
     );
   }
 };

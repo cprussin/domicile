@@ -141,6 +141,10 @@ export const withCommandsOnWindow = (tiling: Tiling): Tiling => {
   return depth === tiling.depth ? tiling : { ...tiling, depth };
 };
 
+/** Whether commands target the node at `path`, as after `focus parent`. */
+export const selects = ({ depth, root }: Tiling, path: Path): boolean =>
+  root !== undefined && focusPathOf(root, depth).join() === path.join();
+
 /** `focus parent`: select the enclosing container, stopping at the root. */
 export const focusedParent = (tiling: Tiling): Tiling => ({
   ...tiling,

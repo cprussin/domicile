@@ -44,6 +44,7 @@ import {
   focusedWindowIn,
   focusPathOf,
   NOTHING_TILED,
+  selects,
   shownOver,
   windowsOf,
   withCommandsOn,
@@ -777,18 +778,20 @@ export const nodeDropped = (
       node,
     );
   } else {
-    return nodeArrived(nodeLifted(workspace, moving).rest, node, target, edge);
+    const { rest, selected } = nodeLifted(workspace, moving);
+    return nodeArrived(rest, node, selected, target, edge);
   }
 };
 
 /**
- * The node `moving` names, tiled or floating, taken out to drop elsewhere, and
- * the workspace without it. A float left empty goes.
+ * The node `moving` names, tiled or floating, taken out to drop elsewhere,
+ * whether it was selected, and the workspace without it. A float left empty
+ * goes.
  */
 export const nodeLifted = (
   workspace: Workspace,
   moving: NodeRef,
-): { node: LayoutNode; rest: Workspace } => {
+): { node: LayoutNode; rest: Workspace; selected: boolean } => {
   const from = floatOn(workspace, moving.id);
   const root = rootOfLayer(workspace, from, moving);
   const path = pathToRef(root, moving);
@@ -806,23 +809,27 @@ export const nodeLifted = (
                 ? rest.floatFocus
                 : focusIn(rest.floats.at(-1)),
           },
+    selected: selects(from ?? workspace.tiling, path),
   };
 };
 
 /**
  * `node`, dragged in from elsewhere, dropped on `target`'s `edge`, or its
  * middle when `edge` is `undefined` — see `arrivedOn`. The target may be tiled
- * or floating.
+ * or floating. A `selected` node stays selected.
  */
 export const nodeArrived = (
   workspace: Workspace,
   node: LayoutNode,
+  selected: boolean,
   target: NodeRef,
   edge: Direction | undefined,
 ): Workspace => {
   const to = floatOn(workspace, target.id);
   return landedIn(
-    inLayerOf(workspace, to, (tiling) => arrivedOn(tiling, node, target, edge)),
+    inLayerOf(workspace, to, (tiling) =>
+      arrivedOn(tiling, node, selected, target, edge),
+    ),
     to,
     node,
   );

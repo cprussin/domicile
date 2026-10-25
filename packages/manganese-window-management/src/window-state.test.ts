@@ -1614,6 +1614,14 @@ describe("a tab group dragged by its strip", () => {
       WindowAction.AppAppeared("term", "term"),
       WindowAction.ScreenHovered("left"),
     );
+  /** Mail beside kitty and the editor tabbed, the editor focused. */
+  const tabbedBesideMail = () =>
+    reduce(
+      desktop("mail", "kitty"),
+      WindowAction.ContainerSplit(Axis.Vertical),
+      WindowAction.AppAppeared("editor", "editor"),
+      WindowAction.LayoutSet(Layout.Tabbed),
+    );
   const GROUP = { id: APP("kitty"), up: 1 };
 
   it("holds the group a drag takes hold of, focusing its open tab alone", () => {
@@ -1675,6 +1683,83 @@ describe("a tab group dragged by its strip", () => {
       APP("kitty"),
       APP("editor"),
     ]);
+  });
+
+  it("leaves its open tab focused alone when dropped on another screen", () => {
+    const state = reduce(
+      twoScreens(),
+      WindowAction.GroupGrabbed(GROUP),
+      WindowAction.GroupDroppedOn(
+        GROUP,
+        { id: APP("term"), up: 0 },
+        Direction.Left,
+      ),
+    );
+
+    expect(focusedNodeOf(workspaceOn(state, "right").tiling)).toMatchObject({
+      kind: NodeKind.Window,
+    });
+  });
+
+  it("leaves its open tab focused alone when dropped on its own screen", () => {
+    const state = reduce(
+      tabbedBesideMail(),
+      WindowAction.GroupGrabbed(GROUP),
+      WindowAction.GroupDroppedOn(
+        GROUP,
+        { id: APP("mail"), up: 0 },
+        Direction.Left,
+      ),
+    );
+
+    expect(focusedNodeOf(workspaceHere(state).tiling)).toMatchObject({
+      kind: NodeKind.Window,
+    });
+  });
+
+  it("stays selected when dropped while selected", () => {
+    const state = reduce(
+      tabbedBesideMail(),
+      WindowAction.ParentFocused(),
+      WindowAction.GroupDroppedOn(
+        GROUP,
+        { id: APP("mail"), up: 0 },
+        Direction.Left,
+      ),
+    );
+
+    expect(focusedNodeOf(workspaceHere(state).tiling)).toMatchObject({
+      layout: Layout.Tabbed,
+    });
+  });
+
+  it("stays selected when dropped on another screen while selected", () => {
+    const state = reduce(
+      twoScreens(),
+      WindowAction.ParentFocused(),
+      WindowAction.GroupDroppedOn(
+        GROUP,
+        { id: APP("term"), up: 0 },
+        Direction.Left,
+      ),
+    );
+
+    expect(focusedNodeOf(workspaceOn(state, "right").tiling)).toMatchObject({
+      layout: Layout.Tabbed,
+    });
+  });
+
+  it("leaves its open tab focused alone when dropped on an empty screen", () => {
+    const state = reduce(
+      desktop("kitty", "editor"),
+      WindowAction.ScreensDescribed(sideBySide("left", "right")),
+      WindowAction.GroupGrabbed(GROUP),
+      WindowAction.GroupDroppedOnScreen(GROUP, "right"),
+    );
+
+    expect(focusedNodeOf(workspaceOn(state, "right").tiling)).toMatchObject({
+      kind: NodeKind.Window,
+    });
   });
 });
 
