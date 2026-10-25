@@ -1286,7 +1286,9 @@ fn session(session: &Path) -> Milestone {
 /// `domicile_launch::graphical_session`.
 ///
 /// - Each desktop registers again (its display may differ), but the session
-///   ends only once, when the run ends. Ending is irreversible, and a desktop
+///   ends only once, when the run ends. The session it took over from another
+///   run (see `graphical_session::begin`) is the one from its first
+///   registration. Ending is irreversible, and a desktop
 ///   restarted while the session is shutting down would be refused.
 /// - Only on the DRM platform. A nested desktop leaves this to its host.
 /// - Best effort: without a systemd user manager or `domicile-session.target`,
@@ -1298,6 +1300,8 @@ struct SaidSession {
     is_the_session: bool,
     scope_clients: bool,
     manager: Mutex<Option<zbus::blocking::Connection>>,
+    /// This run's control socket and the session it took over, once said.
+    took_over: Mutex<Option<(PathBuf, Vec<String>)>>,
 }
 
 impl SaidSession {
@@ -1309,6 +1313,7 @@ impl SaidSession {
             is_the_session,
             scope_clients: is_the_session && Self::a_user_manager_answers(),
             manager: Mutex::new(is_the_session.then(Self::named).flatten()),
+            took_over: Mutex::new(None),
         }
     }
 
@@ -1361,8 +1366,12 @@ impl SaidSession {
     fn say(&self, places: &Runtime) {
         if self.is_the_session {
             match Self::said(places) {
-                Ok(manager) => {
+                Ok((manager, earlier)) => {
                     *self.manager.lock().expect("nothing panics holding it") = Some(manager);
+                    self.took_over
+                        .lock()
+                        .expect("nothing panics holding it")
+                        .get_or_insert_with(|| (places.control.clone(), earlier));
                 }
                 Err(why) => eprintln!(
                     "domicile: the user manager was not told this desktop is the session, so \
@@ -1372,24 +1381,27 @@ impl SaidSession {
         }
     }
 
-    fn said(places: &Runtime) -> Result<zbus::blocking::Connection, String> {
+    fn said(places: &Runtime) -> Result<(zbus::blocking::Connection, Vec<String>), String> {
         let at = places.session.display();
         let published = std::fs::read_to_string(&places.session)
             .map_err(|why| format!("cannot read {at}: {why}"))?;
         let session: Session = serde_json::from_str(&published)
             .map_err(|why| format!("{at} is not a session: {why}"))?;
         let manager = notification::session_bus().map_err(|why| why.to_string())?;
-        graphical_session::begin(&manager, &session.wayland_display, &places.control)
+        let earlier = graphical_session::begin(&manager, &session.wayland_display, &places.control)
             .map_err(|why| why.to_string())?;
-        Ok(manager)
+        Ok((manager, earlier))
     }
 }
 
 impl Drop for SaidSession {
     fn drop(&mut self) {
         let manager = self.manager.get_mut().expect("nothing panics holding it");
-        if let Some(manager) = manager {
-            if let Err(why) = graphical_session::end(manager) {
+        let took_over = self.took_over.get_mut().expect("nothing panics holding it");
+        // A run that never said its desktop started no session to end, and
+        // stopping one could stop another run's.
+        if let (Some(manager), Some((control, earlier))) = (manager, took_over) {
+            if let Err(why) = graphical_session::end(manager, control, earlier) {
                 eprintln!("domicile: the user manager still holds this desktop's session: {why}");
             }
         }

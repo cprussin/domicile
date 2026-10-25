@@ -95,19 +95,21 @@ impl Tray {
 }
 
 /// Starts the watcher and host, calling `publish` whenever the tray changes.
-/// Icons are looked up under `data_dirs`, in the icon theme `theme`.
+/// Icons are looked up under `data_dirs`, in the icon theme `theme`. A desk
+/// `in_a_window` queues behind its host's watcher; see [`crate::bus_names`].
 ///
 /// Returns once the thread is spawned, so startup does not wait on the bus.
 pub fn serve(
     data_dirs: Vec<PathBuf>,
     theme: Option<String>,
+    in_a_window: bool,
     publish: impl Fn(Vec<TrayItem>) + Send + 'static,
 ) -> Tray {
     let (told, events) = channel();
     let heard = told.clone();
     thread::spawn(move || {
         let icons = TrayIcons::new(data_dirs, theme);
-        if let Err(why) = answer(heard, &events, icons, &publish) {
+        if let Err(why) = answer(heard, &events, icons, in_a_window, &publish) {
             warn!(
                 %why,
                 "the system tray is not being hosted; this desktop's applications \
@@ -124,6 +126,7 @@ fn answer(
     told: Sender<Event>,
     events: &Receiver<Event>,
     mut icons: TrayIcons,
+    in_a_window: bool,
     publish: &dyn Fn(Vec<TrayItem>),
 ) -> zbus::Result<()> {
     let connection = answering_within(Builder::session()?).build()?;
@@ -156,7 +159,7 @@ fn answer(
         told.clone(),
         owner,
     )?;
-    connection.request_name(WATCHER_NAME)?;
+    crate::bus_names::take(&connection, WATCHER_NAME, in_a_window)?;
     // Some items check for a host name before registering.
     connection.request_name(format!("org.kde.StatusNotifierHost-{}", std::process::id()))?;
     debug!("this desktop hosts the system tray");
