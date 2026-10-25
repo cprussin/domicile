@@ -30,7 +30,7 @@ use domicile_launch::command_socket::{
     uninstall_extension, visits,
 };
 use domicile_launch::components::{builder, components, our_shell, Components};
-use domicile_launch::compositor_socket::{screenshot, send_shell, theme};
+use domicile_launch::compositor_socket::{screen_record, screenshot, send_shell, theme};
 use domicile_launch::config_check::check;
 use domicile_launch::config_path::{config_file, is_module, ConfigFile};
 use domicile_launch::config_watch;
@@ -468,6 +468,8 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         // The user picks the area, however long that takes. A desktop that
         // dies hangs up, which ends the wait.
         Request::Screenshot { file: None } => None,
+        // The user stops it, however long that takes.
+        Request::ScreenRecord => None,
         _ => Some(ANSWER_WITHIN),
     };
     let answer = ask(&socket, request, patience).map_err(|why| why.to_string())?;
@@ -502,7 +504,10 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
         }
         // A failure, so `f=$(domicile screenshot) && …` stops here.
         Response::Canceled => {
-            eprintln!("domicile: the screenshot was canceled");
+            match request {
+                Request::ScreenRecord => eprintln!("domicile: the screen recording was canceled"),
+                _ => eprintln!("domicile: the screenshot was canceled"),
+            }
             Ok(ExitCode::FAILURE)
         }
         // Only `domicile-app-host` asks for these.
@@ -1045,6 +1050,8 @@ fn answer_a_command(
                     screenshot(chrome, file, file.map(|_| CAPTURE_WITHIN))
                         .map_err(|why| why.to_string())
                 },
+                // Until the user stops it, however long that takes.
+                record: &|| screen_record(chrome).map_err(|why| why.to_string()),
                 permissions: &|| {
                     site_permissions(engine, ANSWER_WITHIN).map_err(|why| why.to_string())
                 },

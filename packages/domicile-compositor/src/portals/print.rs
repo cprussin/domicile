@@ -233,7 +233,10 @@ impl Print {
             | PortalAnswer::GlobalShortcuts { .. }
             | PortalAnswer::Pressed
             | PortalAnswer::Released
-            | PortalAnswer::Stop => Err(2),
+            | PortalAnswer::Stop
+            | PortalAnswer::Pause
+            | PortalAnswer::Resume
+            | PortalAnswer::Discard => Err(2),
         }
     }
 }

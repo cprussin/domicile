@@ -1,0 +1,42 @@
+# Copyright 2026 Connor Prussin
+# SPDX-License-Identifier: MIT
+
+# What the shell hides from captures of the desk, such as a screen
+# recording's toolbar. Linked from //components/viz/service, which makes GN
+# load this file; tested from //components/domicile:unit_tests.
+
+# The restriction target id the shell's elements get. Its own target so
+# //content, which mints it, needs nothing else from viz.
+source_set("hidden_from_captures_id") {
+  sources = [ "hidden_from_captures_id.h" ]
+
+  public_deps = [ "//base" ]
+}
+
+source_set("hidden_from_captures") {
+  sources = [
+    "hidden_from_captures.cc",
+    "hidden_from_captures.h",
+  ]
+
+  public_deps = [
+    ":hidden_from_captures_id",
+    "//base",
+    "//components/viz/common",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [ "hidden_from_captures_unittest.cc" ]
+
+  deps = [
+    ":hidden_from_captures",
+    "//base",
+    "//base/test:test_support",
+    "//components/viz/common",
+    "//testing/gtest",
+    "//ui/gfx/geometry",
+  ]
+}

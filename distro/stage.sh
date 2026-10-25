@@ -123,6 +123,7 @@ launcher() { # id, directory holding <id>.svg and <id>-preview.svg
 launcher history "$WORKSPACE/packages/app-history/icons"
 launcher settings "$WORKSPACE/packages/app-settings/icons"
 launcher screenshot "$ROOT/distro/nix/launcher"
+launcher screen-record "$ROOT/distro/nix/launcher"
 launcher shutdown "$ROOT/distro/nix/launcher"
 launcher reboot "$ROOT/distro/nix/launcher"
 launcher logout "$ROOT/distro/nix/launcher"

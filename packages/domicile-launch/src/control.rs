@@ -50,6 +50,9 @@ pub enum Request {
     /// The client makes the path absolute, as for `LoadShell`. See
     /// `SystemRequest::Screenshot` for where the interactive one is saved.
     Screenshot { file: Option<PathBuf> },
+    /// Record the screen: the shell's picker, then until the user stops the
+    /// recording. See `SystemRequest::ScreenRecord`.
+    ScreenRecord,
     /// Send this command to the shell, as a `send-shell` keybinding would.
     SendShell { command: Vec<String> },
     /// Report the files the Settings app edits. Asked by
@@ -150,10 +153,11 @@ pub enum Response {
     /// back.
     Opened,
 
-    /// The compositor wrote the screenshot to this file.
+    /// The compositor wrote the screenshot or the recording to this file.
     Captured { file: PathBuf },
 
-    /// The user dismissed the shell's screenshot dialog.
+    /// The user dismissed the shell's screenshot or recording dialog, or
+    /// discarded the recording.
     Canceled,
 
     /// The user copied the screenshot to the clipboard from the shell's
@@ -251,6 +255,13 @@ pub type RunApp<'a> = &'a dyn Fn(&Path, &Path) -> Result<(), String>;
 ///
 /// [`crate::compositor_socket::screenshot`] in a desktop; a closure in tests.
 pub type Screenshot<'a> = &'a dyn Fn(Option<&Path>) -> Result<Shot, String>;
+
+/// Tells the compositor to record the screen, and waits for the file, or
+/// `None` when the user dismissed the picker or discarded the recording.
+///
+/// [`crate::compositor_socket::screen_record`] in a desktop; a closure in
+/// tests.
+pub type ScreenRecord<'a> = &'a dyn Fn() -> Result<Option<PathBuf>, String>;
 
 /// Tells the compositor to send the shell a command.
 ///
@@ -366,6 +377,7 @@ pub struct Desktop<'a> {
     pub open_app: OpenUrl<'a>,
     pub run_app: RunApp<'a>,
     pub capture: Screenshot<'a>,
+    pub record: ScreenRecord<'a>,
     pub send: SendShell<'a>,
     pub permissions: SitePermissions<'a>,
     pub set_permission: SetSitePermission<'a>,
@@ -427,6 +439,11 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
             Ok(Shot::Saved(file)) => Response::Captured { file },
             Ok(Shot::Copied) => Response::Copied,
             Ok(Shot::Canceled) => Response::Canceled,
+            Err(why) => Response::Refused { why },
+        }),
+        Ok(Request::ScreenRecord) => to_line(&match (desktop.record)() {
+            Ok(Some(file)) => Response::Captured { file },
+            Ok(None) => Response::Canceled,
             Err(why) => Response::Refused { why },
         }),
         Ok(Request::SendShell { command }) => to_line(&match (desktop.send)(&command) {

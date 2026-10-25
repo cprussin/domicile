@@ -58,6 +58,7 @@ mod lockdown;
 mod notification;
 mod print;
 mod queue;
+mod recording;
 mod remote_desktop;
 mod request;
 mod restore;
@@ -87,6 +88,7 @@ use lockdown::Lockdown;
 use notification::Notification;
 use print::Print;
 use queue::Queue;
+use recording::Recordings;
 use remote_desktop::{RemoteDesktop, Remotes};
 use restore::Tokens;
 use screencast::ScreenCast;
@@ -127,6 +129,8 @@ pub const CURRENT_DESKTOP: &str = "domicile";
 pub struct Portals {
     backends: Backends,
     shots: Shots,
+    /// `None` in unit tests that cast nothing.
+    recordings: Option<Recordings>,
 }
 
 /// What the portal thread is told to do on the bus.
@@ -177,6 +181,7 @@ impl Portals {
             )
             .0,
             shots: Shots::none(),
+            recordings: None,
         }
     }
 
@@ -286,6 +291,16 @@ impl Portals {
             &self.shots,
             file,
         ))
+    }
+
+    /// Records what the shell picks until it stops the recording, and
+    /// returns the file. Blocks until then. See [`recording::for_the_shell`].
+    pub fn screen_record(&self) -> Result<PathBuf, SystemError> {
+        let recordings = self.recordings.as_ref().ok_or_else(|| SystemError {
+            kind: domicile_protocol::SystemErrorKind::Other,
+            message: "this desktop casts nothing to record".into(),
+        })?;
+        recording::for_the_shell(&self.backends.queue, recordings)
     }
 
     /// Draws a window for the shell's picker to preview. Blocks until it is
@@ -499,6 +514,13 @@ pub fn serve(
     let portals = Portals {
         backends: backends.clone(),
         shots: shots.clone(),
+        recordings: Some(Recordings {
+            casting: casting.casting.clone(),
+            shoot: shots.shoot.clone(),
+            file: recording::in_videos(),
+            start: recording::beside_the_compositor(),
+            clock: recording::system_clock(),
+        }),
     };
     let appearance = Appearance::from(look);
     let open = mail_client(spawn);

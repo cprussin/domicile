@@ -19,6 +19,7 @@ import type {
   PrintBody,
   Printer,
   PrintOptions,
+  RecordingBody,
   ScreenCastBody,
   ShortcutsBody,
   ShotRect,
@@ -137,6 +138,21 @@ export const answerPortalRequest = (
 /** End capturing session `id`. */
 export const stopCapturing = (host: PortalHost, id: number): void => {
   answerPortalRequest(host, id, PortalAnswer.Stop());
+};
+
+/** Pause recording `id`. Its file leaves the pause out. */
+export const pauseRecording = (host: PortalHost, id: number): void => {
+  answerPortalRequest(host, id, PortalAnswer.Pause());
+};
+
+/** Resume paused recording `id`. */
+export const resumeRecording = (host: PortalHost, id: number): void => {
+  answerPortalRequest(host, id, PortalAnswer.Resume());
+};
+
+/** Stop recording `id` and delete its file. */
+export const discardRecording = (host: PortalHost, id: number): void => {
+  answerPortalRequest(host, id, PortalAnswer.Discard());
 };
 
 /** Each `portal_requests` push, parsed. */
@@ -374,6 +390,22 @@ const capturedSchema = z
   });
 
 const screenCastingSchema = z.object({ sources: z.array(capturedSchema) });
+
+const recordingSchema = z
+  .object({
+    file: z.string(),
+    recorded_ms: z.number(),
+    running_since_ms: z.number().optional(),
+    sources: z.array(capturedSchema),
+  })
+  .transform(
+    (recording): RecordingBody => ({
+      file: recording.file,
+      recordedMs: recording.recorded_ms,
+      runningSinceMs: recording.running_since_ms,
+      sources: recording.sources,
+    }),
+  );
 
 const shortcutsSchema = z
   .object({
@@ -718,6 +750,10 @@ const CAPTURING_KINDS: ReadonlyMap<string, ReadCapturing> = new Map<
     "screen_cast",
     (base, body) => Capturing.ScreenCast(base, screenCastingSchema.parse(body)),
   ],
+  [
+    "recording",
+    (base, body) => Capturing.Recording(base, recordingSchema.parse(body)),
+  ],
 ]);
 
 const itemSchema = z.object({
@@ -812,6 +848,12 @@ const wireAnswer = (answer: PortalAnswer): object => {
       };
     case PortalAnswerKind.Stop:
       return { kind: "stop" };
+    case PortalAnswerKind.Pause:
+      return { kind: "pause" };
+    case PortalAnswerKind.Resume:
+      return { kind: "resume" };
+    case PortalAnswerKind.Discard:
+      return { kind: "discard" };
     case PortalAnswerKind.Canceled:
       return { kind: "canceled" };
     case PortalAnswerKind.DynamicLauncher:

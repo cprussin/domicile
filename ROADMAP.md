@@ -35,9 +35,6 @@ item when it ships.
 5. **Night light.** Warm the colors after sunset. Needs gamma control per
    monitor: a DRM gamma ramp on a tty, `wlr-gamma-control` for clients.
 
-6. **Screen recording.** Record a monitor, a region or a window to a video
-   file from the shell, with a way to stop it.
-
 ## In the engine fork (the agent on `crux`)
 
 1. **Strip what a desktop never runs.** Tab strip, New Tab page, settings,
