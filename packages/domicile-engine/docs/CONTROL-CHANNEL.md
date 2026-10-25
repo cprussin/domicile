@@ -273,8 +273,8 @@ The supervisor connects, sends one JSON line, reads one reply, and closes.
   supervisor's 5-second wait for a reply. The supervisor asks again on
   `load_shell`'s refusal, "this engine has no shell window to load a shell
   into".
-- `domicile load-shell <path>` sends `load_shell`. `domicile open-url <url>`
-  sends `open_url`, and `domicile open-app <url>` sends it with `"app":true`.
+- `domicile load-shell <path>` sends `load_shell`. `domicile open <url>`
+  sends `open_url`, and `domicile open --app <url>` sends it with `"app":true`.
   `domicile screenshot <file>` goes to the compositor.
 - `run_app` serves the app module `module` under `root` at
   `domicile://app-<id>/` and opens an app window pinned to it

@@ -228,9 +228,9 @@ export class FakeDomicileHost {
   }
 
   /**
-   * The engine opened a browser window at `url`, as for `domicile open-url`,
+   * The engine opened a browser window at `url`, as for `domicile open`,
    * `target="_blank"`, with `popupWindow` an extension's popup window, or with
-   * `isApp` `domicile open-app`. `openBrowserWindow` calls this too, and
+   * `isApp` `domicile open --app`. `openBrowserWindow` calls this too, and
    * `openPrivateBrowserWindow` with `isPrivate`, and `openAppWindow` with
    * `isApp`. Ids count up from `"1"`; the
    * asked-for size is 0.

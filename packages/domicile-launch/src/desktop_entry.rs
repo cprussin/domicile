@@ -1,5 +1,5 @@
 //! The desktop entry `domicile install-app` writes: one that runs
-//! `domicile open-app` on the app's start URL.
+//! `domicile open --app` on the app's start URL.
 
 use std::path::Path;
 
@@ -27,7 +27,7 @@ pub fn desktop_entry(
          Type=Application\n\
          Name={}\n\
          {icon}\
-         Exec=domicile open-app {}\n\
+         Exec=domicile open --app {}\n\
          {INSTALLED_FROM}{}\n",
         escaped(name),
         escaped(&quoted(start_url)).replace('%', "%%"),

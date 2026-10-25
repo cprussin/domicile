@@ -19,6 +19,8 @@ libc.workspace = true
 zbus.workspace = true
 # Encodes screenshots (see `src/screenshot.rs`).
 png.workspace = true
+# Matches `mime/globs2` file name globs (see `src/shared_mime_info.rs`).
+globset.workspace = true
 
 [dev-dependencies]
 # A D-Bus service on a socket pair, so the tests need no bus daemon.

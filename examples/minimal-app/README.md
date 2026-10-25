@@ -13,7 +13,7 @@ See [APP-MODULES.md](/docs/architecture/APP-MODULES.md).
 Inside a running desktop:
 
 ```sh
-domicile run-app ./home.js
+domicile open --app ./home.js
 ```
 
 Each run opens another window. The app's address and storage come from this

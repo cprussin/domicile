@@ -24,9 +24,9 @@ Ask the running desktop:
 
   domicile which-shell                  Print the shell it serves
   domicile load-shell <shell>           Serve another shell, or a new build
-  domicile open-url <url>               Open a browser window
-  domicile open-app <url>               Open a site as an app: no address bar
-  domicile run-app <module>             Run an app module in an app window
+  domicile open <file|folder|url>       Open with its default app, a link in
+                                        a browser window
+  domicile open --app <url|module>      Open a site or app module as an app
   domicile screenshot [file]            Take the shell's screenshot, or write a PNG
   domicile send-shell <word>...         Run a shell command, as a keybinding does
   domicile theme [light|dark|toggle]    Set the theme, or print it
@@ -77,36 +77,20 @@ pub enum CliError {
     )]
     ExtraToLoad { extra: String },
     #[error(
-        "open-url takes the address to open, and was given nothing:\n\n    \
-         domicile open-url https://example.com\n"
+        "open takes the file, folder or address to open, and was given \
+         nothing:\n\n    \
+         domicile open ~/notes.org\n    \
+         domicile open https://example.com\n\n\
+         With --app it takes a site or app module to open as an app:\n\n    \
+         domicile open --app https://example.com\n    \
+         domicile open --app ./notes/notes.js\n"
     )]
     NothingToOpen,
     #[error(
-        "open-url takes one address, and it was given {extra} as well. One \
-         address is one browser window."
+        "open takes one thing to open, and it was given {extra} as well. One \
+         thing is one window."
     )]
     ExtraToOpen { extra: String },
-    #[error(
-        "open-app takes the address of the app to open, and was given \
-         nothing:\n\n    \
-         domicile open-app https://example.com\n"
-    )]
-    NothingToOpenAsApp,
-    #[error(
-        "open-app takes one address, and it was given {extra} as well. One \
-         address is one app window."
-    )]
-    ExtraToOpenAsApp { extra: String },
-    #[error(
-        "run-app takes the app module to run, and was given nothing:\n\n    \
-         domicile run-app ./notes/notes.js\n"
-    )]
-    NothingToRun,
-    #[error(
-        "run-app takes one module, and it was given {extra} as well. One \
-         module is one app window."
-    )]
-    ExtraToRun { extra: String },
     #[error(
         "install-app takes the address of the site to install, and was given \
          nothing:\n\n    \
@@ -187,19 +171,17 @@ pub enum Invocation {
     ///
     /// Kept as typed; `shell_path` resolves it against the filesystem.
     Load { shell: String },
-    /// Tell the running desktop to open this in a new browser window.
+    /// Open this file, folder or address with what opens its type; see
+    /// [`crate::open`]. A web address opens in a new browser window.
     ///
-    /// Kept as typed; [`crate::address`] makes it a URL.
+    /// Kept as typed; it is relative to the working directory.
     Open { target: String },
-    /// Tell the running desktop to open this in a new app window: a browser
-    /// window without an address bar.
+    /// Tell the running desktop to open this as an app: an existing file as
+    /// an app module ([`crate::app_entry`]), anything else as a site in a
+    /// browser window without an address bar ([`crate::address`]).
     ///
     /// Kept as typed, like [`Invocation::Open`]'s.
-    OpenApp { target: String },
-    /// Tell the running desktop to run this app module in a new app window.
-    ///
-    /// Kept as typed; [`crate::app_entry`] resolves it.
-    RunApp { entry: String },
+    OpenAsApp { target: String },
     /// Write a desktop entry that opens the site at `url` as an app. Needs no
     /// running desktop.
     InstallApp { url: String },
@@ -227,9 +209,9 @@ pub enum Invocation {
 /// - Verbs take precedence over a shell of the same name, because
 ///   `shell_path` treats a bare word as a path when such a file exists. Use
 ///   `./which-shell` to run a shell with a verb's name.
-/// - Each verb has a closed argument list and takes no flags. The running
-///   desktop already read its config, so a `--config` would be silently
-///   ignored.
+/// - Each verb has a closed argument list and takes no flags but `open`'s
+///   `--app`. The running desktop already read its config, so a `--config`
+///   would be silently ignored.
 /// - `--config` may come before or after the shell.
 pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, CliError> {
     let mut args = args.into_iter();
@@ -266,21 +248,17 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (Some(shell), None) => Ok(Invocation::Load { shell }),
                 (Some(_), Some(extra)) => Err(CliError::ExtraToLoad { extra }),
             },
-            Verb::Opening => match (args.next(), args.next()) {
-                (None, _) => Err(CliError::NothingToOpen),
-                (Some(target), None) => Ok(Invocation::Open { target }),
-                (Some(_), Some(extra)) => Err(CliError::ExtraToOpen { extra }),
-            },
-            Verb::OpeningApp => match (args.next(), args.next()) {
-                (None, _) => Err(CliError::NothingToOpenAsApp),
-                (Some(target), None) => Ok(Invocation::OpenApp { target }),
-                (Some(_), Some(extra)) => Err(CliError::ExtraToOpenAsApp { extra }),
-            },
-            Verb::RunningApp => match (args.next(), args.next()) {
-                (None, _) => Err(CliError::NothingToRun),
-                (Some(entry), None) => Ok(Invocation::RunApp { entry }),
-                (Some(_), Some(extra)) => Err(CliError::ExtraToRun { extra }),
-            },
+            Verb::Opening => {
+                let first = args.next();
+                let app = first.as_deref() == Some(APP);
+                let target = if app { args.next() } else { first };
+                match (target, args.next()) {
+                    (None, _) => Err(CliError::NothingToOpen),
+                    (Some(_), Some(extra)) => Err(CliError::ExtraToOpen { extra }),
+                    (Some(target), None) if app => Ok(Invocation::OpenAsApp { target }),
+                    (Some(target), None) => Ok(Invocation::Open { target }),
+                }
+            }
             Verb::Installing => match (args.next(), args.next()) {
                 (None, _) => Err(CliError::NothingToInstall),
                 (Some(url), None) => Ok(Invocation::InstallApp { url }),
@@ -371,6 +349,9 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
 /// The words that ask for [`USAGE`], first or right after a verb.
 const HELP: [&str; 3] = ["help", "--help", "-h"];
 
+/// `open`'s flag for opening as an app.
+const APP: &str = "--app";
+
 /// The config file flag. Matches the compositor's flag in `arguments.rs`,
 /// which receives it.
 const CONFIG: &str = "--config";
@@ -384,12 +365,8 @@ enum Verb {
     Asking(Request),
     /// `load-shell`, which takes a shell.
     Loading,
-    /// `open-url`, which takes an address.
+    /// `open`, which takes `--app` or nothing, then a target.
     Opening,
-    /// `open-app`, which takes an address.
-    OpeningApp,
-    /// `run-app`, which takes a module.
-    RunningApp,
     /// `install-app`, which takes an address.
     Installing,
     /// `uninstall-app`, which takes an address.
@@ -415,9 +392,7 @@ fn verb(word: &str) -> Option<Verb> {
     match word {
         "which-shell" => Some(Verb::Asking(Request::WhichShell)),
         "load-shell" => Some(Verb::Loading),
-        "open-url" => Some(Verb::Opening),
-        "open-app" => Some(Verb::OpeningApp),
-        "run-app" => Some(Verb::RunningApp),
+        "open" => Some(Verb::Opening),
         "install-app" => Some(Verb::Installing),
         "uninstall-app" => Some(Verb::Uninstalling),
         "screenshot" => Some(Verb::Capturing),

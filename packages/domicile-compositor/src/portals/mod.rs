@@ -907,7 +907,7 @@ fn mail_client(spawn: impl Fn(&[String]) + Send + Sync + 'static) -> Open {
             home.as_deref(),
             CURRENT_DESKTOP,
         );
-        let handler = default_handler("x-scheme-handler/mailto", &lists, &applications)
+        let handler = default_handler(&["x-scheme-handler/mailto"], &lists, &applications)
             .ok_or("no installed application opens mailto: links")?;
         let command = handler
             .command(url)

@@ -7,7 +7,7 @@
 #
 # Headless and software-composited: nothing is measured in pixels.
 #
-# `domicile open-app` sends `open_url` with `"app":true` to the engine's
+# `domicile open --app` sends `open_url` with `"app":true` to the engine's
 # command socket. DeskWindows opens the window with AttachAppTabHelpers, which
 # leaves out the HistoryTabHelper, and lists it `isApp`
 # (docs/architecture/WEB-APPS.md, docs/HISTORY.md).
@@ -145,7 +145,7 @@ SITE="http://127.0.0.1:$PORT"
 APP=true
 [ "$NEGATIVE" = "1" ] && APP=false
 
-# 2. The engine, with the command socket `domicile open-app` uses and the
+# 2. The engine, with the command socket `domicile open --app` uses and the
 #    extension that reads the history.
 rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \

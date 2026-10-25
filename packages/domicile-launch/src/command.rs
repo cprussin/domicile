@@ -1,4 +1,4 @@
-//! The protocol the supervisor uses to send `load-shell`, `open-url`, the
+//! The protocol the supervisor uses to send `load-shell`, `open`, the
 //! Settings app's site permissions, extensions, media devices and site data, the History
 //! app's history and browsing data, and `disable-while-typing` to the engine.
 //!

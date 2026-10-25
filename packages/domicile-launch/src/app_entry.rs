@@ -1,4 +1,4 @@
-//! The module `domicile run-app` is given, as the engine serves it: the
+//! The module `domicile open --app` is given, as the engine serves it: the
 //! directory it is in and its name there. See
 //! `docs/architecture/APP-MODULES.md`.
 

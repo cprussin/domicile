@@ -5,7 +5,7 @@ desktop @domicile-desktop/manganese
 app foot --working-directory="$ROOT" -o font="JetBrains Mono:size=12" \
   nvim packages/shell-manganese/src/Shell.tsx
 
-"$DOMICILE_BIN" open-url https://domicile-desktop.com/
+"$DOMICILE_BIN" open https://domicile-desktop.com/
 # Long enough for the wallpaper and the page to load.
 settle 8
 # Side by side, not manganese's default tabs.

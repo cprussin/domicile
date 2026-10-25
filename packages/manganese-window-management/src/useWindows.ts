@@ -14,7 +14,7 @@ import {
   useRef,
 } from "react";
 import type { FloatingRules } from "./floating/floating-rules";
-import { openFileCommand } from "./open-file";
+import { openCommand } from "./open-command";
 import type { PlacedScreen } from "./screens/screen-toward";
 import { appIdOf, appWindowId, browserIdOf } from "./window";
 import { windowChanges } from "./window-changes";
@@ -59,7 +59,7 @@ export const useWindows = (
   domicile: Domicile,
   displays: readonly Display[] | undefined,
   floating: FloatingRules,
-  openFile: typeof openFileCommand = openFileCommand,
+  openFile: typeof openCommand = openCommand,
 ): Windows => {
   const [state, dispatch] = useReducer(reduceWindows, NO_WINDOWS);
   // The state as last drawn, for `act` to read without depending on it. A new
@@ -87,14 +87,7 @@ export const useWindows = (
         takeScreenshot(domicile);
       }
       if (action.kind === WindowActionKind.FileOpened) {
-        openFile(domicile, action.path)
-          .then((argv) => {
-            domicile.processes.launch(argv);
-          })
-          .catch((error: unknown) => {
-            // biome-ignore lint/suspicious/noConsole: surfacing a file that did not open
-            console.error(`Could not open ${action.path}`, error);
-          });
+        domicile.processes.launch(openFile(action.path));
       }
       if (action.kind === WindowActionKind.AppLaunched) {
         domicile.processes.launch(action.command);

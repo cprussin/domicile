@@ -28,17 +28,27 @@ pub struct Handler {
 impl Handler {
     /// The argv that opens `url`, or `None` if its `Exec` is malformed.
     ///
-    /// `url` takes the place of `%u` or `%U`; other field codes are dropped.
-    /// Without either code, `url` goes last, as GIO does.
+    /// `url` takes the place of the first `%u` or `%U`; other field codes
+    /// are dropped. Without either code, `url` goes last, as GIO does.
     pub fn command(&self, url: &str) -> Option<Vec<String>> {
-        expanded(&self.exec, url).map(|(mut words, placed)| {
-            if !placed {
-                words.push(url.to_string());
-            }
-            words
-        })
+        placed(&self.exec, url, URL_CODES)
+    }
+
+    /// The argv that opens the local file `path`, or `None` if its `Exec` is
+    /// malformed.
+    ///
+    /// As [`Handler::command`], but `%f` and `%F` take `path` too: a local
+    /// path is a URL to `%u` as well.
+    pub fn file_command(&self, path: &str) -> Option<Vec<String>> {
+        placed(&self.exec, path, FILE_CODES)
     }
 }
+
+/// The field codes a URL takes the place of.
+const URL_CODES: &[char] = &['u', 'U'];
+
+/// The field codes a local file takes the place of.
+const FILE_CODES: &[char] = &['f', 'F', 'u', 'U'];
 
 /// The `mimeapps.list` files, highest priority first.
 ///
@@ -69,14 +79,25 @@ pub fn lists(
         .collect()
 }
 
-/// The application that opens `mime`, or `None` if none is installed.
+/// The application that opens a type, or `None` if none is installed.
 ///
-/// The first installed id under `[Default Applications]` in `lists`, then
-/// under `[Added Associations]`, then the first entry by id whose `MimeType`
-/// names `mime` and no list removes. Entries come from `application_dirs`.
-/// Unreadable lists are skipped, as the spec says.
+/// `mimes` is the type, then its supertypes nearest first (see
+/// [`crate::shared_mime_info::supertypes`]).
+///
+/// - Type by type, the first installed id under `[Default Applications]` in
+///   `lists`. Unlike GIO, every type's defaults come before any type's
+///   associations, so a user's `text/plain` default beats an app that only
+///   declares `text/markdown`.
+/// - Then type by type, as GIO does: each list's `[Added Associations]` ids,
+///   highest priority first, then entries by id whose `MimeType` names it.
+///   An id `[Removed Associations]` lists for the type, or for one before it,
+///   is skipped, unless a list of higher priority added it.
+///
+/// Entries come from `application_dirs`. `Terminal` entries are skipped: the
+/// desktop has no terminal to run them in. Unreadable lists are skipped, as
+/// the spec says.
 pub fn default_handler(
-    mime: &str,
+    mimes: &[&str],
     lists: &[PathBuf],
     application_dirs: &[PathBuf],
 ) -> Option<Handler> {
@@ -84,28 +105,40 @@ pub fn default_handler(
         .iter()
         .filter_map(|list| fs::read_to_string(list).ok())
         .collect();
-    let named = |group: &str| -> Vec<String> {
+    let named = |group: &str, mime: &str| -> Vec<String> {
         lists
             .iter()
             .flat_map(|list| listed(list, group, mime))
             .collect()
     };
-    let installed = installed(application_dirs);
-    let removed = named("[Removed Associations]");
-    let declaring = installed
-        .iter()
-        .filter(|handler| handler.declares(mime) && !removed.contains(&handler.handler.id))
-        .map(|handler| handler.handler.id.clone());
-    named("[Default Applications]")
+    let installed: Vec<Installed> = installed(application_dirs)
         .into_iter()
-        .chain(named("[Added Associations]"))
-        .chain(declaring)
-        .find_map(|id| {
+        .filter(|found| !found.terminal)
+        .collect();
+    let mut ids: Vec<String> = mimes
+        .iter()
+        .flat_map(|mime| named("[Default Applications]", mime))
+        .collect();
+    let mut removed = Vec::new();
+    for mime in mimes {
+        for list in &lists {
+            let added = listed(list, "[Added Associations]", mime);
+            ids.extend(added.into_iter().filter(|id| !removed.contains(id)));
+            removed.extend(listed(list, "[Removed Associations]", mime));
+        }
+        ids.extend(
             installed
                 .iter()
-                .find(|handler| handler.handler.id == id)
-                .map(|handler| handler.handler.clone())
-        })
+                .filter(|found| found.declares(mime) && !removed.contains(&found.handler.id))
+                .map(|found| found.handler.id.clone()),
+        );
+    }
+    ids.iter().find_map(|id| {
+        installed
+            .iter()
+            .find(|found| found.handler.id == *id)
+            .map(|found| found.handler.clone())
+    })
 }
 
 /// The argv that starts the application whose desktop file id is `name` plus
@@ -118,13 +151,14 @@ pub fn launch_command(name: &str, application_dirs: &[PathBuf]) -> Option<Vec<St
     installed(application_dirs)
         .into_iter()
         .find(|found| found.handler.id == id)
-        .and_then(|found| expanded(&found.handler.exec, "").map(|(words, _)| words))
+        .and_then(|found| expanded(&found.handler.exec, "", &[]).map(|(words, _)| words))
 }
 
 /// An installed handler and the types it declares.
 struct Installed {
     handler: Handler,
     mime_types: String,
+    terminal: bool,
 }
 
 impl Installed {
@@ -136,7 +170,7 @@ impl Installed {
 /// Every usable application under `dirs`, sorted by id.
 ///
 /// An id in an earlier directory hides the same id in later ones. Keeps
-/// `NoDisplay` and `Terminal` entries: they still open files.
+/// `NoDisplay` entries: they still open files.
 fn installed(dirs: &[PathBuf]) -> Vec<Installed> {
     let mut found: Vec<(String, PathBuf)> = Vec::new();
     for (id, path) in dirs.iter().flat_map(|dir| entry_files(dir, dir)) {
@@ -160,6 +194,7 @@ fn installed(dirs: &[PathBuf]) -> Vec<Installed> {
                     exec: exec.to_string(),
                 },
                 mime_types: keys.get("MimeType").unwrap_or(&"").to_string(),
+                terminal: keys.get("Terminal") == Some(&"true"),
             })
         })
         .collect()
@@ -231,11 +266,22 @@ pub(crate) fn entry_files(root: &Path, dir: &Path) -> Vec<(String, PathBuf)> {
         .collect()
 }
 
-/// Argv for `exec` with `url` in place of `%u` and `%U`, and whether it was
-/// placed. `None` if `exec` is malformed or empty.
+/// Argv for `exec` with `arg` in place of the first of `codes`, or after the
+/// last word when there is none, as GIO does. Other field codes are dropped.
+fn placed(exec: &str, arg: &str, codes: &[char]) -> Option<Vec<String>> {
+    expanded(exec, arg, codes).map(|(mut words, placed)| {
+        if !placed {
+            words.push(arg.to_string());
+        }
+        words
+    })
+}
+
+/// Argv for `exec` with `arg` in place of the first of `codes`, and whether it
+/// was placed. `None` if `exec` is malformed or empty.
 ///
 /// Unescapes strings, then quoting, in the spec's order.
-fn expanded(exec: &str, url: &str) -> Option<(Vec<String>, bool)> {
+fn expanded(exec: &str, arg: &str, codes: &[char]) -> Option<(Vec<String>, bool)> {
     let exec = unescaped(exec);
     let mut words = Vec::new();
     let mut word = String::new();
@@ -248,8 +294,8 @@ fn expanded(exec: &str, url: &str) -> Option<(Vec<String>, bool)> {
             ('\\', true) => word.push(chars.next()?),
             ('%', _) => match chars.next()? {
                 '%' => word.push('%'),
-                'u' | 'U' => {
-                    word.push_str(url);
+                code if codes.contains(&code) && !placed => {
+                    word.push_str(arg);
                     placed = true;
                 }
                 _ => {}

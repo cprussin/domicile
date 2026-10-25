@@ -1,7 +1,7 @@
 // The shell module guard-webview-app-window.sh loads. It draws every browser
 // window the desk lists in a `<webview window>`, and logs each window's
 // address and `isApp` as they change. The guard opens the subject and the
-// sentinel through the engine's command socket, as `domicile open-app` does.
+// sentinel through the engine's command socket, as `domicile open --app` does.
 // This module opens `<site>/launched` itself, with `openAppWindow` when the
 // address's `app` is `true` and `openBrowserWindow` otherwise (the control).
 //

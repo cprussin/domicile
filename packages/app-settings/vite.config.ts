@@ -3,7 +3,7 @@ import pandacssPostcssPlugin from "@pandacss/dev/postcss";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-// Builds the app module `settings.js`, which `domicile run-app` runs. The CSS
+// Builds the app module `settings.js`, which `domicile open --app` runs. The CSS
 // ships in the module, as a shell's does; see
 // `@domicile-desktop/component-library/vite-shell`. `base: "./"` makes emitted
 // URLs relative to the module's directory.

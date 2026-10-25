@@ -113,7 +113,7 @@ export const Shell = runManganese();
   - Exports are written over `settings`; `settings` fills in the rest.
   - `Shell` is bundled into the store and becomes `shell`.
 - `webApps` installs sites as apps. Each gets a desktop entry that runs
-  `domicile open-app <url>` ([WEB-APPS.md](/docs/architecture/WEB-APPS.md)):
+  `domicile open --app <url>` ([WEB-APPS.md](/docs/architecture/WEB-APPS.md)):
 
   ```nix
   programs.domicile.webApps.Music = {

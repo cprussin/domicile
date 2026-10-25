@@ -688,7 +688,7 @@ describe("BrowserWindow", () => {
     });
   });
 
-  // `domicile open-app`. See docs/architecture/WEB-APPS.md.
+  // `domicile open --app`. See docs/architecture/WEB-APPS.md.
   describe("an app window", () => {
     const renderApp = (url: string, fullscreen = false) =>
       render(

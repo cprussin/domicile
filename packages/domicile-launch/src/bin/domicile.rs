@@ -18,7 +18,8 @@ use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use domicile_launch::address::url_for;
+use domicile_host::data_dirs::data_dirs;
+use domicile_host::mime_apps::lists;
 use domicile_launch::app_entry::app_entry;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
 use domicile_launch::cli::{invocation, CliError, Invocation, USAGE};
@@ -45,6 +46,7 @@ use domicile_launch::history::CLEAR_WITHIN;
 use domicile_launch::install_app::{data_home, install_app, Fetched};
 use domicile_launch::milestones::{reach, Milestone};
 use domicile_launch::notification;
+use domicile_launch::open::{app_opening, opening, AppOpening, Opening, Places, DESKTOP};
 use domicile_launch::platform::platform;
 use domicile_launch::power::{confirmed, Power};
 use domicile_launch::profile_claim::claim;
@@ -108,18 +110,13 @@ fn run() -> Result<ExitCode, String> {
         Invocation::Run { shell, config } => desktop(shell.as_deref(), config.as_deref()),
         Invocation::Ask { request } => asked(&request),
         Invocation::Load { shell } => asked(&shell_to_load(&shell)?),
-        Invocation::Open { target } => asked(&Request::OpenUrl {
-            url: url_for(&target, &typed_in()?),
-        }),
-        Invocation::OpenApp { target } => asked(&Request::OpenApp {
-            url: url_for(&target, &typed_in()?),
-        }),
-        Invocation::RunApp { entry } => {
-            let app = app_entry(Path::new(&entry), &typed_in()?)?;
-            asked(&Request::RunApp {
-                root: app.root,
-                module: app.module,
-            })
+        Invocation::Open { target } => opened(&target),
+        Invocation::OpenAsApp { target } => {
+            let here = typed_in()?;
+            match app_opening(&target, &here).map_err(|why| why.to_string())? {
+                AppOpening::Module(entry) => ran_app(&entry, &here),
+                AppOpening::Address(url) => asked(&Request::OpenApp { url }),
+            }
         }
         // Absolute here, since the compositor does not share this working
         // directory.
@@ -140,6 +137,52 @@ fn run() -> Result<ExitCode, String> {
         Invocation::InstallApp { url } => installed(&url),
         Invocation::UninstallApp { url } => uninstalled(&url),
     }
+}
+
+/// Opens `target` with what opens its type, in this process's place, or in a
+/// browser window of the running desktop; see `domicile_launch::open`.
+fn opened(target: &str) -> Result<ExitCode, String> {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let data_dirs = data_dirs(
+        std::env::var_os("XDG_DATA_HOME"),
+        std::env::var_os("XDG_DATA_DIRS"),
+        home.as_deref(),
+    );
+    let applications: Vec<PathBuf> = data_dirs
+        .iter()
+        .map(|dir| dir.join("applications"))
+        .collect();
+    let places = Places {
+        lists: lists(
+            std::env::var_os("XDG_CONFIG_HOME"),
+            std::env::var_os("XDG_CONFIG_DIRS"),
+            &applications,
+            home.as_deref(),
+            DESKTOP,
+        ),
+        data_dirs,
+    };
+    match opening(target, &typed_in()?, &places).map_err(|why| why.to_string())? {
+        Opening::Browse(url) => asked(&Request::OpenUrl { url }),
+        Opening::Run(argv) => {
+            let (program, args) = argv
+                .split_first()
+                .expect("a handler's command has a program");
+            Err(format!(
+                "cannot run {program}: {}",
+                Command::new(program).args(args).exec()
+            ))
+        }
+    }
+}
+
+/// Runs the app module `entry`, relative to `here`, in an app window.
+fn ran_app(entry: &str, here: &Path) -> Result<ExitCode, String> {
+    let app = app_entry(Path::new(entry), here)?;
+    asked(&Request::RunApp {
+        root: app.root,
+        module: app.module,
+    })
 }
 
 /// Runs the command for `power` once the user says yes in the desktop's
@@ -1401,7 +1444,7 @@ impl Drop for SaidSession {
 }
 
 /// Links `program` as `name` in `shims`, first on the apps' `PATH`. See
-/// `domicile_launch::xdg_open`.
+/// `domicile_launch::open`.
 ///
 /// A symlink, not a copy, so the program can find `domicile` next to its real
 /// path.

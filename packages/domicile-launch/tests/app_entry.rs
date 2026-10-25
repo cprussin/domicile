@@ -1,4 +1,4 @@
-//! Tests for resolving the module `domicile run-app` is given.
+//! Tests for resolving the module `domicile open --app` is given.
 
 use std::path::{Path, PathBuf};
 

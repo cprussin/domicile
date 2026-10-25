@@ -121,7 +121,7 @@ wait_for_line 240 "listening on" "$SOCKET_LOG" || {
   exit 1
 }
 
-# 2. The engine, with the command socket `domicile run-app` uses.
+# 2. The engine, with the command socket `domicile open --app` uses.
 rm -f "$ENGINE_LOG"
 "$CHROMIUM/$OUT/chrome" \
   --ozone-platform=headless \
@@ -142,7 +142,7 @@ wait_for_line "$TRIES" "GUARD shell-loaded" "$ENGINE_LOG" ||
   echo "the shell never loaded; the verdict below says what that means" >&2
 sleep 1
 
-# 3. Run the app, as `domicile run-app` does.
+# 3. Run the app, as `domicile open --app` does.
 RUN="$(command_line "{\"type\":\"run_app\",\"version\":1,\"root\":\"$APP_ROOT\",\"module\":\"app.js\"}")"
 echo "run_app was answered: $RUN"
 wait_for_line "$TRIES" "GUARD app-answered" "$ENGINE_LOG" ||

@@ -58,7 +58,7 @@ fn a_site_is_installed_as_a_desktop_entry_and_its_icon() {
         fs::read_to_string(&entry).unwrap(),
         format!(
             "[Desktop Entry]\nType=Application\nName=Music\nIcon={}\n\
-             Exec=domicile open-app \"https://music.example/app/\"\n\
+             Exec=domicile open --app \"https://music.example/app/\"\n\
              X-Domicile-Installed-From=https://music.example\n",
             icon.display()
         )

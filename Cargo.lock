@@ -444,6 +444,7 @@ version = "0.0.0"
 dependencies = [
  "domicile-protocol",
  "domicile-scene",
+ "globset",
  "libc",
  "notify",
  "png",
@@ -459,6 +460,7 @@ name = "domicile-launch"
 version = "0.0.0"
 dependencies = [
  "domicile-config",
+ "domicile-host",
  "domicile-protocol",
  "libc",
  "notify",

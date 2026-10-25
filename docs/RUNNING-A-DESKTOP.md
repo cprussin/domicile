@@ -68,16 +68,18 @@ Settings live in `~/.config/domicile/domicile.json` (or `.ts`/`.js`). Reference:
 
 - Apps get `BROWSER=domicile-open-url`, which opens the URL in a desktop
   browser window.
-- Apps get Domicile's `xdg-open` first on `PATH`. It opens web links on
-  the desktop and passes everything else to your own `xdg-open`.
+- Apps get Domicile's `xdg-open` first on `PATH`. It runs `domicile open`,
+  so files open as the launcher opens them, and web links on the desktop.
 - GTK apps (via GIO) read `domicile-mimeapps.list`, which Domicile puts first
   on `XDG_DATA_DIRS`. A browser you set in your own `mimeapps.list` still
   wins.
 - A desktop that is the login session starts `domicile-session.target`, so the
   portal runs. Through it, Flatpak apps open links on the desktop and get the
   theme.
-- `domicile open-url <url>` does the same from a terminal on the desktop.
-  `domicile open-app <url>` opens it as an app, without an address bar
+- `domicile open <file|url>` does the same from a terminal on the desktop.
+  A file or folder opens with its type's default (see
+  [LAUNCHER.md](LAUNCHER.md#opening-files)). `domicile open --app <url>`
+  opens a site as an app, without an address bar
   ([WEB-APPS.md](architecture/WEB-APPS.md)). `domicile install-app <url>`
   adds a site to your applications from its web app manifest.
   `domicile uninstall-app <url>` removes it, given the same address.
