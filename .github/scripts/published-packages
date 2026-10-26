@@ -2,6 +2,7 @@
 # first, so a package is never on npm before what it needs. Read by
 # publish-packages.sh.
 chrome-sdk
+react
 system-apps
 system-audio
 system-backlight

@@ -29,6 +29,10 @@ export const main: AppMain = async (root, domicile) => {
 };
 ```
 
+With React, `mount(App)` from `@domicile-desktop/react/mount` is a `main`;
+`useAppDomicile()` is the desktop below it
+([With React](/docs/WRITING-A-SHELL.md#with-react)).
+
 - The module's directory is the app's root. Every file under it is served;
   nothing outside it is.
 - The engine writes the document, as for the shell

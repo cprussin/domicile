@@ -2,9 +2,9 @@
 // with Alt, and a terminal on Alt+Enter.
 
 import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs";
+import { useDomicile } from "@domicile-desktop/react/domicile-provider";
 import { APP_TAG_NAME } from "@domicile-desktop/sdk/app-element";
 import { bindKeys } from "@domicile-desktop/sdk/bind-keys";
-import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { ClientWindow } from "@domicile-desktop/sdk/desktop/windows";
 import { KeyAction } from "@domicile-desktop/sdk/key-action";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
@@ -114,16 +114,15 @@ type Drag = {
  * button stuck down.
  */
 export const Shell = ({
-  domicile,
   keybindings = SIMPLE_KEYS,
   report = logToConsole,
 }: {
-  domicile: Domicile;
   /** Key bindings. Defaults to Alt+Enter for a terminal. */
   keybindings?: ShellKeybindings | undefined;
   /** Reports unknown commands. Injectable for tests. */
   report?: typeof logToConsole;
 }) => {
+  const domicile = useDomicile();
   const shellChords = useMemo(() => ownedChords(keybindings), [keybindings]);
   const [windows, setWindows] = useState<readonly ShellWindow[]>([]);
   const [popups, setPopups] = useState<readonly Popup[]>([]);

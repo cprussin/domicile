@@ -1,0 +1,84 @@
+{
+  "dependencies": {
+    "@domicile-desktop/sdk": "workspace:*"
+  },
+  "description": "React for a Domicile shell or app: mount it on the desktop, read the desktop from context, and follow its state with hooks.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/test-support": "workspace:*",
+    "@testing-library/react": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "bun": ">=1.4.2",
+    "node": ">=24"
+  },
+  "exports": {
+    "./appearance": {
+      "types": "./dist/appearance.d.ts",
+      "default": "./dist/appearance.js"
+    },
+    "./displays": {
+      "types": "./dist/displays.d.ts",
+      "default": "./dist/displays.js"
+    },
+    "./domicile-provider": {
+      "types": "./dist/domicile-provider.d.ts",
+      "default": "./dist/domicile-provider.js"
+    },
+    "./fake-domicile": {
+      "types": "./dist/fake-domicile.d.ts",
+      "default": "./dist/fake-domicile.js"
+    },
+    "./mount": {
+      "types": "./dist/mount.d.ts",
+      "default": "./dist/mount.js"
+    },
+    "./portals": {
+      "types": "./dist/portals.d.ts",
+      "default": "./dist/portals.js"
+    },
+    "./session": {
+      "types": "./dist/session.d.ts",
+      "default": "./dist/session.js"
+    },
+    "./use-watch": {
+      "types": "./dist/use-watch.d.ts",
+      "default": "./dist/use-watch.js"
+    },
+    "./windows": {
+      "types": "./dist/windows.d.ts",
+      "default": "./dist/windows.js"
+    }
+  },
+  "files": [
+    "dist/**"
+  ],
+  "license": "MIT",
+  "name": "@domicile-desktop/react",
+  "peerDependencies": {
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cprussin/domicile.git",
+    "directory": "packages/react"
+  }
+}

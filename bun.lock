@@ -17,6 +17,7 @@
         "@base-ui/react": "catalog:",
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/component-library": "workspace:*",
+        "@domicile-desktop/react": "workspace:*",
         "@domicile-desktop/sdk": "workspace:*",
         "@phosphor-icons/react": "catalog:",
         "react": "catalog:",
@@ -46,6 +47,7 @@
         "@base-ui/react": "catalog:",
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/component-library": "workspace:*",
+        "@domicile-desktop/react": "workspace:*",
         "@domicile-desktop/sdk": "workspace:*",
         "@phosphor-icons/react": "catalog:",
         "react": "catalog:",
@@ -908,6 +910,28 @@
         "typescript": "catalog:",
       },
     },
+    "packages/react": {
+      "name": "@domicile-desktop/react",
+      "version": "0.0.0",
+      "dependencies": {
+        "@domicile-desktop/sdk": "workspace:*",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/test-support": "workspace:*",
+        "@testing-library/react": "catalog:",
+        "@types/bun": "catalog:",
+        "@types/react": "catalog:",
+        "@types/react-dom": "catalog:",
+        "react": "catalog:",
+        "react-dom": "catalog:",
+        "typescript": "catalog:",
+      },
+      "peerDependencies": {
+        "react": "catalog:",
+        "react-dom": "catalog:",
+      },
+    },
     "packages/shell-manganese": {
       "name": "@domicile-desktop/manganese",
       "version": "1.0.0",
@@ -966,6 +990,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
+        "@domicile-desktop/react": "workspace:*",
         "@domicile-desktop/sdk": "workspace:*",
         "react": "catalog:",
         "react-dom": "catalog:",
@@ -1370,6 +1395,8 @@
     "@domicile-desktop/manganese-wallpaper": ["@domicile-desktop/manganese-wallpaper@workspace:packages/manganese-wallpaper"],
 
     "@domicile-desktop/manganese-window-management": ["@domicile-desktop/manganese-window-management@workspace:packages/manganese-window-management"],
+
+    "@domicile-desktop/react": ["@domicile-desktop/react@workspace:packages/react"],
 
     "@domicile-desktop/sdk": ["@domicile-desktop/sdk@workspace:packages/chrome-sdk"],
 
