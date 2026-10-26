@@ -3,6 +3,7 @@
 
 #include "chrome/browser/domicile/domicile_cast_sinks.h"
 
+#include <limits>
 #include <map>
 #include <memory>
 #include <string>
@@ -27,7 +28,6 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "third_party/webrtc/modules/desktop_capture/desktop_capture_types.h"
 #include "url/origin.h"
 
 namespace domicile {
@@ -42,9 +42,17 @@ constexpr base::TimeDelta kCastTimeout = base::Seconds(60);
 // 0128), and its sound. The shell answers that request, so it picks what the
 // TV shows. A chosen desktop, so the Media Router shows no picker of its own
 // (patch 0141).
+//
+// A new screen id each cast. webrtc's PipeWire capturer keeps the portal's
+// restore token under the id it was given and hands it back next time, so
+// one id would recast the first pick without asking the shell. Ids count down
+// from the top, clear of the ones webrtc's RestoreTokenManager counts up from
+// 1.
 media_router::MediaSource::Id DesktopSource() {
+  static content::DesktopMediaID::Id next =
+      std::numeric_limits<content::DesktopMediaID::Id>::max();
   const content::DesktopMediaID screen(content::DesktopMediaID::TYPE_SCREEN,
-                                       webrtc::kFullDesktopScreenId);
+                                       next--);
   return media_router::MediaSource::ForDesktop(screen.ToString(),
                                                /*with_audio=*/true)
       .id();

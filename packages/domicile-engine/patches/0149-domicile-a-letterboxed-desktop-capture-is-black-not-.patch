@@ -1,0 +1,55 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Mon, 26 Oct 2026 03:47:52 +0000
+Subject: [PATCH] domicile: a letterboxed desktop capture is black, not green
+
+DesktopCaptureDevice scales a frame of another size into a new I420
+output frame. BasicDesktopFrame starts as zeros, which in I420 is green,
+and the scale fills only the letterboxed rect, so a cast of a monitor or
+window to a TV of another shape showed green bars.
+
+- The new frame starts I420 black (16, 128, 128), as
+  media::LetterboxVideoFrame clears the other path's frames.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on crux.
+---
+ .../media/capture/desktop_capture_device.cc       | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/content/browser/media/capture/desktop_capture_device.cc b/content/browser/media/capture/desktop_capture_device.cc
+index dbec458..ea002e3 100644
+--- a/content/browser/media/capture/desktop_capture_device.cc
++++ b/content/browser/media/capture/desktop_capture_device.cc
+@@ -57,6 +57,7 @@
+ #include "services/device/public/mojom/wake_lock.mojom.h"
+ #include "services/device/public/mojom/wake_lock_provider.mojom.h"
+ #include "third_party/libyuv/include/libyuv/convert.h"
++#include "third_party/libyuv/include/libyuv/planar_functions.h"
+ #include "third_party/libyuv/include/libyuv/scale.h"
+ #include "third_party/webrtc/modules/desktop_capture/cropped_desktop_frame.h"
+ #include "third_party/webrtc/modules/desktop_capture/cropping_window_capturer.h"
+@@ -929,6 +930,20 @@ void DesktopCaptureDevice::Core::OnCaptureResultLegacy(
+       if (!output_frame_) {
+         output_frame_ = std::make_unique<webrtc::BasicDesktopFrame>(
+             output_size, webrtc::FOURCC_I420);
++        // DOMICILE: a new frame is zeros, which in I420 is green, and the
++        // scale below fills only the letterboxed rect. Start it black, as
++        // media::LetterboxVideoFrame does for the other path.
++        const int width_uv = output_size.width() / 2;
++        const int plane_size_y = output_size.width() * output_size.height();
++        const int plane_size_uv = width_uv * (output_size.height() / 2);
++        uint8_t* data = output_frame_->data();
++        // SAFETY: libyuv interface requires raw pointers. The frame holds an
++        // I420 frame of `output_size`.
++        libyuv::I420Rect(data, output_size.width(),
++                         UNSAFE_BUFFERS(data + plane_size_y), width_uv,
++                         UNSAFE_BUFFERS(data + plane_size_y + plane_size_uv),
++                         width_uv, 0, 0, output_size.width(),
++                         output_size.height(), 16, 128, 128);
+       }
+       CHECK(output_frame_->size().equals(output_size),
+             base::NotFatalUntil::M160);
+-- 
+2.43.0
+
