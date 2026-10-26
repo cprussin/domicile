@@ -7,12 +7,13 @@
 #   shot <name>           write docs/media/<name>.png
 #   record <name> <secs>  write docs/media/<name>.webm and .mp4
 #   keys <wtype args...>  type into the desktop
+#   click <x> <y>         click the left button at a point on the output
+#   config <json>         the desktop's config, before `desktop`
 #
 # See docs/media/README.md.
 
-# The user-facing builds, as `nix run` gets them: the published engine and
-# this checkout's compositor.
-DOMICILE_BIN="$(nix build --no-link --print-out-paths "$ROOT#domicile")/bin/domicile"
+# `domicile`, built by `docs-media.sh`.
+: "${DOMICILE_BIN:?docs-media.sh builds domicile}"
 
 # Tools the scenes use, fetched once so a scene's timing does not include a
 # download.
@@ -75,7 +76,7 @@ desktop() { # shell module or package
     exit 1
   fi
   export DBUS_SESSION_BUS_ADDRESS="unix:path=$SCENE_TMP/bus"
-  # An empty config, so the desktop runs on defaults whatever crux's user
+  # The scene's own config (`config`, else none), whatever crux's user
   # configured. `--no-sandbox` as every guard runs; see
   # packages/domicile-engine/docs/GUARDS.md. `--window-size` the output's, as
   # guard-shell.sh passes: without it manganese's window drew at 945x1180 in
@@ -190,6 +191,73 @@ keys() { # wtype args...
   wtype "$@"
   sleep 1
   engine_alive "the end of keys $*"
+}
+
+# Python with pywayland, and the protocols `pointer.py` speaks, for `click`.
+POINTER_PYTHON="$(nix build --no-link --print-out-paths --impure --expr \
+  '(import (builtins.getFlake "nixpkgs") { }).python3.withPackages (ps: [ ps.pywayland ])')"
+# The scanner asks pkg-config for wayland.xml first, and fails outright when
+# there is no pkg-config at all; given none, it goes on to the files passed.
+POINTER_PKG_CONFIG="$(nix build --no-link --print-out-paths 'nixpkgs#pkg-config^out')"
+POINTER_XML=(
+  "$(nix build --no-link --print-out-paths 'nixpkgs#wayland-scanner^out')/share/wayland/wayland.xml"
+  "$(nix build --no-link --print-out-paths nixpkgs#wlr-protocols)/share/wlr-protocols/unstable/wlr-virtual-pointer-unstable-v1.xml"
+)
+
+# Starts `pointer.py`, a virtual pointer that stays on the nested sway's seat
+# until the scene ends, on fd 7. Not in `desktop`: with a pointer on the seat
+# sway draws a cursor, which recordings would show.
+pointer_start() {
+  mkdir -p "$SCENE_TMP/pointer/protocols"
+  PATH="$POINTER_PKG_CONFIG/bin:$PATH" "$POINTER_PYTHON/bin/pywayland-scanner" -o "$SCENE_TMP/pointer/protocols" \
+    -i "${POINTER_XML[@]}" >/dev/null
+  touch "$SCENE_TMP/pointer/protocols/__init__.py"
+  mkfifo "$SCENE_TMP/pointer.in"
+  "$POINTER_PYTHON/bin/python3" -I "$ROOT/packages/site/scripts/docs-media/pointer.py" \
+    "$SCENE_TMP/pointer" <"$SCENE_TMP/pointer.in" >"$SCENE_TMP/pointer.out" 2>&1 &
+  STARTED+=($!)
+  exec 7>"$SCENE_TMP/pointer.in"
+  pointer_wait ready
+}
+
+# Waits for `pointer.py` to print `$1` as many times as asked so far.
+POINTER_DONE=0
+pointer_wait() { # word
+  local want=1
+  if [ "$1" = done ]; then
+    POINTER_DONE=$((POINTER_DONE + 1))
+    want=$POINTER_DONE
+  fi
+  for _ in $(seq 1 40); do
+    [ "$(grep -cx "$1" "$SCENE_TMP/pointer.out" || true)" -ge "$want" ] && return 0
+    sleep 0.25
+  done
+  echo "the virtual pointer did not answer. It said:" >&2
+  cat "$SCENE_TMP/pointer.out" >&2
+  exit 1
+}
+
+# Clicks the left button at a point on the nested sway's output.
+#
+# `wlrctl pointer` adds a pointer to the seat and removes it as it exits, so
+# the engine's wl_pointer was gone before the click reached it.
+click() { # x, y
+  engine_alive "click $1 $2"
+  [ -p "$SCENE_TMP/pointer.in" ] || pointer_start
+  local size="${OUTPUT_MODE%@*}"
+  echo "move $1 $2 ${size/x/ }" >&7
+  pointer_wait done
+  sleep 0.3
+  echo click >&7
+  pointer_wait done
+  sleep 1
+  engine_alive "the end of click $1 $2"
+}
+
+# The config `desktop` starts on, in place of an empty one.
+config() { # json
+  mkdir -p "$SCENE_TMP/config/domicile"
+  echo "$1" >"$SCENE_TMP/config/domicile/domicile.json"
 }
 
 # Stops what the scene started. First prints the engine's fatal lines if it
