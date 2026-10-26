@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { dirname, join } from "node:path";
 import panda from "@pandacss/preset-panda";
 
 import { domicilePreset } from "./pandacss-preset";
@@ -65,6 +66,31 @@ describe("the domicile preset", () => {
     });
   });
 
+  it("sets the page's color scheme from the theme", () => {
+    const html = at(at(domicilePreset, "globalCss"), "html");
+    expect(at(html, "colorScheme")).toBe("dark");
+    expect(at(html, "&[data-theme=light]")).toStrictEqual({
+      colorScheme: "light",
+    });
+  });
+
+  it("keeps every package's global styles from replacing its own", async () => {
+    // Panda merges `globalCss` one selector deep, so a package's `html` rule
+    // drops the preset's, and with it the rule that hides outlines.
+    const own = selectors(domicilePreset);
+    const packages = join(dirname(import.meta.dir), "..");
+    const clashes: string[] = [];
+    for await (const path of new Bun.Glob("*/panda.config.ts").scan(packages)) {
+      const config: unknown = (await import(join(packages, path))).default;
+      clashes.push(
+        ...selectors(config)
+          .filter((selector) => own.includes(selector))
+          .map((selector) => `${path}: ${selector}`),
+      );
+    }
+    expect(clashes).toStrictEqual([]);
+  });
+
   it("lifts only an enabled element that is not picked on hover", () => {
     const hover = at(
       at(at(domicilePreset, "conditions"), "extend"),
@@ -116,6 +142,14 @@ describe("the domicile preset", () => {
     });
   });
 });
+
+/** The selectors `config`'s `globalCss` styles. */
+const selectors = (config: unknown): readonly string[] => {
+  const globalCss = at(config, "globalCss");
+  return typeof globalCss === "object" && globalCss !== null
+    ? Object.keys(globalCss)
+    : [];
+};
 
 /** The contrast of `foreground` on `background` in `theme`. */
 const textContrast = (theme: Theme, high: boolean): number =>

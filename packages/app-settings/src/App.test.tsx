@@ -557,6 +557,18 @@ describe(App, () => {
       });
     });
 
+    it("says whether an extension is on beside its switch", async () => {
+      const { user } = await renderApp("Extensions");
+      const toggle = await screen.findByRole("switch", {
+        name: "uBlock Origin Lite",
+      });
+      expect(toggle.closest("label")).toHaveTextContent("On");
+      await user.click(toggle);
+      await waitFor(() => {
+        expect(toggle.closest("label")).toHaveTextContent("Off");
+      });
+    });
+
     it("opens an extension's options", async () => {
       const { host, user } = await renderApp("Extensions");
       await user.click(

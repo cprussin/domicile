@@ -245,7 +245,7 @@ const ExtensionRow = ({
         <Switch
           aria-labelledby={nameId}
           checked={enabled}
-          label="On"
+          label={enabled ? "On" : "Off"}
           onCheckedChange={onEnabled}
         />
       </div>
