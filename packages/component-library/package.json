@@ -89,6 +89,7 @@
   "files": [
     "src/**",
     "styled-system/**",
+    "!styled-system/styles.css",
     "!src/**/*.test.ts",
     "!src/**/*.test.tsx",
     "!src/**/*.stories.tsx",
@@ -111,7 +112,7 @@
   },
   "scripts": {
     "build:storybook": "storybook build",
-    "prepare": "panda codegen --silent",
+    "prepare": "panda codegen --silent && panda cssgen --silent",
     "start:dev": "storybook dev -p 4000",
     "start:prod": "http-server storybook-static -p 4000",
     "test:types": "tsc --noEmit",

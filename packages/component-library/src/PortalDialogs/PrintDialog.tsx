@@ -17,16 +17,14 @@ import { PrinterIcon } from "@phosphor-icons/react/dist/ssr/Printer";
 import { useState } from "react";
 import { css } from "../../styled-system/css";
 import { grid } from "../../styled-system/patterns";
-import { focusOnAttach } from "../_control/focusOnAttach";
 import { Button } from "../Button/Button";
 import { Field } from "../Field/Field";
-import { FilePicker } from "../FilePicker/FilePicker";
 import { ChooserMode } from "../FilePicker/file-request";
 import type { Folders } from "../FilePicker/folders";
 import { Input } from "../Input/Input";
 import { ModalDialog } from "../ModalDialog/ModalDialog";
-import { useScreenRegion } from "../Screen/DisplayProvider";
 import { Select } from "../Select/Select";
+import { ModalFilePicker } from "./ModalFilePicker";
 import { pageRanges } from "./page-ranges";
 
 const SIDES = {
@@ -351,33 +349,28 @@ const PdfPicker = ({
   folders: Folders;
   options: PrintOptions;
   screen: string | undefined;
-}) => {
-  const region = useScreenRegion(screen);
-  return (
-    <div className={regionStyles} style={region}>
-      <FilePicker
-        ref={focusOnAttach}
-        request={{
-          accept: ["pdf"],
-          acceptLabel: "Save",
-          cancel: back,
-          choose: ([path]) => {
-            if (path === undefined) {
-              throw new Error("a save chose no file");
-            } else {
-              answer(Answer.SaveToPdf(path, options));
-            }
-          },
-          folders,
-          home: body.home,
-          mode: ChooserMode.Save,
-          suggestedName: pdfName(body.title),
-          title: "Save as PDF",
-        }}
-      />
-    </div>
-  );
-};
+}) => (
+  <ModalFilePicker
+    request={{
+      accept: ["pdf"],
+      acceptLabel: "Save",
+      cancel: back,
+      choose: ([path]) => {
+        if (path === undefined) {
+          throw new Error("a save chose no file");
+        } else {
+          answer(Answer.SaveToPdf(path, options));
+        }
+      },
+      folders,
+      home: body.home,
+      mode: ChooserMode.Save,
+      suggestedName: pdfName(body.title),
+      title: "Save as PDF",
+    }}
+    screen={screen}
+  />
+);
 
 const askerStyles = css({ color: "muted", fontSize: "sm", margin: 0 });
 
@@ -401,11 +394,6 @@ const pagesStyles = grid({
   columnGap: 3,
   columns: 2,
   gridColumn: "1 / -1",
-});
-
-const regionStyles = css({
-  inset: 0,
-  position: "fixed",
 });
 
 /** `printer` for people. */

@@ -9,12 +9,10 @@ import {
 } from "@domicile-desktop/sdk/portal";
 import { useState } from "react";
 import { css } from "../../styled-system/css";
-import { focusOnAttach } from "../_control/focusOnAttach";
-import { FilePicker } from "../FilePicker/FilePicker";
 import { ChooserMode } from "../FilePicker/file-request";
 import type { Folders } from "../FilePicker/folders";
-import { useScreenRegion } from "../Screen/DisplayProvider";
 import { Select } from "../Select/Select";
+import { ModalFilePicker } from "./ModalFilePicker";
 
 /** A boolean choice's answers, as the portal spells them. */
 const YES_NO = [
@@ -35,55 +33,50 @@ type Props = {
  * takes the keyboard on open.
  */
 export const FileChooserDialog = ({ answer, body, folders, screen }: Props) => {
-  const region = useScreenRegion(screen);
   const [choices, setChoices] = useState<ReadonlyMap<string, string>>(
     () => new Map(body.choices.map((choice) => [choice.id, choice.initial])),
   );
   return (
-    <div className={regionStyles} style={region}>
-      <FilePicker
-        ref={focusOnAttach}
-        request={{
-          accept: [],
-          acceptLabel: body.acceptLabel ?? acceptOf(body.mode),
-          cancel: () => {
-            answer(Answer.Canceled());
-          },
-          choose: (paths, filter) => {
-            answer(
-              Answer.FileChooser({ choices, currentFilter: filter, paths }),
-            );
-          },
-          controls: (
-            <>
-              {body.mode === FileChooserMode.SaveFiles && (
-                <span
-                  className={savesStyles}
-                >{`Saves ${body.files.join(", ")}`}</span>
-              )}
-              {body.choices.map((choice) => (
-                <Choice
-                  choice={choice}
-                  key={choice.id}
-                  onChange={(value) => {
-                    setChoices(new Map(choices).set(choice.id, value));
-                  }}
-                  value={choices.get(choice.id)}
-                />
-              ))}
-            </>
-          ),
-          currentFilter: body.currentFilter,
-          currentFolder: body.currentFolder,
-          filters: body.filters.length === 0 ? undefined : body.filters,
-          folders,
-          home: body.home,
-          mode: chooserModeOf(body),
-          suggestedName: body.currentName ?? "",
-          title: body.title,
-        }}
-      />
-    </div>
+    <ModalFilePicker
+      request={{
+        accept: [],
+        acceptLabel: body.acceptLabel ?? acceptOf(body.mode),
+        cancel: () => {
+          answer(Answer.Canceled());
+        },
+        choose: (paths, filter) => {
+          answer(Answer.FileChooser({ choices, currentFilter: filter, paths }));
+        },
+        controls: (
+          <>
+            {body.mode === FileChooserMode.SaveFiles && (
+              <span
+                className={savesStyles}
+              >{`Saves ${body.files.join(", ")}`}</span>
+            )}
+            {body.choices.map((choice) => (
+              <Choice
+                choice={choice}
+                key={choice.id}
+                onChange={(value) => {
+                  setChoices(new Map(choices).set(choice.id, value));
+                }}
+                value={choices.get(choice.id)}
+              />
+            ))}
+          </>
+        ),
+        currentFilter: body.currentFilter,
+        currentFolder: body.currentFolder,
+        filters: body.filters.length === 0 ? undefined : body.filters,
+        folders,
+        home: body.home,
+        mode: chooserModeOf(body),
+        suggestedName: body.currentName ?? "",
+        title: body.title,
+      }}
+      screen={screen}
+    />
   );
 };
 
@@ -115,11 +108,6 @@ const Choice = ({
     value={value}
   />
 );
-
-const regionStyles = css({
-  inset: 0,
-  position: "fixed",
-});
 
 const savesStyles = css({ color: "muted", fontSize: "sm" });
 
