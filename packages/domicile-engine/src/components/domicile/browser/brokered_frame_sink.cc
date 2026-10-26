@@ -132,6 +132,7 @@ void BrokeredFrameSink::Embed(const viz::FrameSinkId& parent_frame_sink_id,
 
   local_surface_id_ = local_surface_id;
   size_ = size;
+  scale_ = scale > 0 ? static_cast<float>(scale) : 1.f;
 
   if (observer_) {
     observer_->OnSurfaceEmbedded(local_surface_id, size, scale);
@@ -256,7 +257,8 @@ bool BrokeredFrameSink::SubmitBuffer(uint64_t buffer_id,
   viz::CompositorFrame frame;
   frame.metadata.begin_frame_ack =
       viz::BeginFrameAck::CreateManualAckWithDamage();
-  frame.metadata.device_scale_factor = 1.f;
+  // `size_` is in device pixels at the page's scale.
+  frame.metadata.device_scale_factor = scale_;
   frame.metadata.frame_token = ++next_frame_token_;
   frame.resource_list.push_back(buffer.resource);
   frame.render_pass_list.push_back(std::move(pass));

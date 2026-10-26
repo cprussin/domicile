@@ -315,7 +315,9 @@ class Surface : public mojom::SurfaceObserver,
     viz::CompositorFrame frame;
     frame.metadata.begin_frame_ack =
         viz::BeginFrameAck::CreateManualAckWithDamage();
-    frame.metadata.device_scale_factor = 1.f;
+    // The box is in device pixels at the page's scale. Unstretched while the
+    // window resizes, a frame at scale 1 would show that much bigger.
+    frame.metadata.device_scale_factor = shown.scale;
     frame.metadata.frame_token = ++next_frame_token_;
     frames_.Sent(frame.metadata.frame_token);
     viz::TransferableResource resource = iter->second.resource;
@@ -346,7 +348,8 @@ class Surface : public mojom::SurfaceObserver,
                          double scale) override {
     boxes_.push_back({.number = ++last_box_,
                       .local_surface_id = local_surface_id,
-                      .size = size});
+                      .size = size,
+                      .scale = scale > 0 ? static_cast<float>(scale) : 1.f});
     queue_->Push({.type = EngineEvent::Type::kConfigure,
                   .surface = id_,
                   .width = static_cast<uint32_t>(size.width()),
@@ -454,6 +457,7 @@ class Surface : public mojom::SurfaceObserver,
     uint64_t number = 0;
     viz::LocalSurfaceId local_surface_id;
     gfx::Size size;
+    float scale = 1.f;
   };
 
   viz::FrameSinkId frame_sink_id_;
