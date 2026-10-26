@@ -13,7 +13,7 @@ Miracast.
 | LG webOS, Windows, Microsoft adapters | Miracast over the LAN (MICE) | yes, `domicile-miracast` |
 | Apple TV, AirPlay TVs | AirPlay 2 | no |
 | Smart TVs as DLNA renderers | UPnP AV | no |
-| A TV running Moonlight | GameStream | no ([ROADMAP.md](/ROADMAP.md)) |
+| A TV running Moonlight | GameStream | no |
 
 - **AirPlay is out.** Mirroring is FairPlay-encrypted and no open sender
   speaks it.

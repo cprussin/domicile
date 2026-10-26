@@ -21,14 +21,6 @@ item when it ships.
      - Writing a desktop from scratch
        ([WRITING-A-SHELL.md](docs/WRITING-A-SHELL.md)).
 
-2. **Smithay from a fork.** `Cargo.toml` patches Smithay 0.7.0 with
-   Smithay/smithay#2217, which sends keymaps as read-only fds. Drop the patch
-   and `flake.nix`'s `outputHashes` once a Smithay release contains it.
-
-3. **Moonlight.** Cast to a TV running Moonlight (Sunshine or similar) for
-   low-latency play, beside Google Cast and Miracast
-   ([CASTING-TO-TVS.md](docs/CASTING-TO-TVS.md)).
-
 ## Known gaps
 
 Understood and not scheduled.
