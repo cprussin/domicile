@@ -98,6 +98,17 @@ else
     "a resizing <webview> stretches its guest, or html_app_element.cc does not unstretch for \`resizing\`"
 fi
 
+# Unstretched, a frame shows at its own scale. A native window's box is in
+# device pixels, so a frame at scale 1 shows that much bigger: zoomed in.
+SURFACE="$ENGINE/src/components/domicile/engine/domicile_engine.cc"
+if grep -q 'frame.metadata.device_scale_factor = shown.scale;' "$SURFACE" &&
+  ! grep -q 'frame.metadata.device_scale_factor = 1.f;' "$SURFACE"; then
+  ok "at the page's scale, not zoomed in"
+else
+  fail "at the page's scale, not zoomed in" \
+    "domicile_engine.cc submits a native window's frame at scale 1, not its box's"
+fi
+
 if [ "$FAILED" -gt 0 ]; then
   echo "$FAILED failed"
   exit 1
