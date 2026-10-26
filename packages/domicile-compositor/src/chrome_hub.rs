@@ -7,6 +7,7 @@ use std::os::unix::net::UnixStream;
 use std::sync::atomic::AtomicU32;
 use std::sync::{Arc, Mutex, OnceLock};
 
+use domicile_host::idle_holds::IdleHolds;
 use domicile_host::idle_warnings::IdleWarnings;
 use domicile_host::ipc::{apply_chrome_message, to_line};
 use domicile_host::keymaps::Keymaps;
@@ -89,6 +90,9 @@ pub struct ChromeHub {
     /// When the screens blank, while a warning runs, shared by every
     /// connection's `System`. Set by the compositor's idle clock.
     pub idle_warnings: IdleWarnings,
+    /// What holds the desktop awake, shared by every connection's `System`.
+    /// Set by the compositor's idle clock.
+    pub idle_holds: IdleHolds,
     /// The pages listening for the lock's refusals, shared by every
     /// connection's `System`. See [`crate::lock`].
     pub unlock_refusals: UnlockRefusals,
@@ -130,6 +134,7 @@ impl ChromeHub {
             eis: OnceLock::new(),
             shell_commands: ShellCommands::default(),
             idle_warnings: IdleWarnings::default(),
+            idle_holds: IdleHolds::default(),
             unlock_refusals: UnlockRefusals::default(),
             window_requests: WindowRequests::default(),
             virtual_monitors: VirtualMonitors::default(),

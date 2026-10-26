@@ -226,6 +226,7 @@ fn read_chrome_messages(
                 .add(wanted, move |request| queue.send_request(request))
         }
     })
+    .sharing_idle_holds(hub.idle_holds.clone())
     .sharing_keymaps(hub.keymaps.clone())
     .selecting_keymaps_with({
         let hub = hub.clone();
@@ -534,8 +535,8 @@ fn read_chrome_messages(
             }
             // Held per connection, since every chrome hears each move. See
             // `ChromeHub::syncs_frames`.
-            Ok(ChromeMessage::Activity) => {
-                hub.send_request(ClientRequest::Activity);
+            Ok(ChromeMessage::Activity { input }) => {
+                hub.send_request(ClientRequest::Activity { input });
                 Vec::new()
             }
             Ok(ChromeMessage::DeskPointer { at, windows }) => {

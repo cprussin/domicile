@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/no_destructor.h"
+#include "base/strings/strcat.h"
 
 namespace domicile {
 
@@ -19,8 +20,7 @@ DeskActivity& DeskActivity::Get() {
 DeskActivity::DeskActivity() = default;
 DeskActivity::~DeskActivity() = default;
 
-DeskActivity::ListenerId DeskActivity::AddListener(
-    base::RepeatingClosure heard) {
+DeskActivity::ListenerId DeskActivity::AddListener(Listener heard) {
   base::AutoLock held(lock_);
   const ListenerId id = next_id_++;
   listeners_.emplace_back(id, std::move(heard));
@@ -34,18 +34,25 @@ void DeskActivity::RemoveListener(ListenerId listener) {
   });
 }
 
-void DeskActivity::Heard() {
+void DeskActivity::Heard(const std::string& input) {
   // Run outside the lock, since a callback may re-enter this.
-  std::vector<base::RepeatingClosure> tell;
+  std::vector<Listener> tell;
   {
     base::AutoLock held(lock_);
     for (const auto& listener : listeners_) {
       tell.push_back(listener.second);
     }
   }
-  for (const base::RepeatingClosure& heard : tell) {
-    heard.Run();
+  for (const Listener& heard : tell) {
+    heard.Run(input);
   }
+}
+
+std::string DescribeInput(std::string_view event, std::string_view device) {
+  if (device.empty()) {
+    return std::string(event);
+  }
+  return base::StrCat({event, " from ", device});
 }
 
 }  // namespace domicile

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { DomicileProvider } from "@domicile-desktop/react/domicile-provider";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { IdleInhibitor } from "./bar-item";
@@ -25,10 +25,38 @@ describe("IdleInhibitor", () => {
     await userEvent.click(screen.getAllByRole("button")[0] as HTMLElement);
 
     expect(requests(fake)).toEqual([
+      { call: "idle_holds" },
       expect.objectContaining({ call: "dbus_call", member: "Inhibit" }),
     ]);
     for (const toggle of screen.getAllByRole("button")) {
       expect(toggle).toBeDisabled();
     }
+  });
+
+  it("names what else holds the desk awake, but not its own hold", async () => {
+    const fake = new FakeDomicileHost();
+    render(
+      <DomicileProvider domicile={fake.domicile}>
+        <IdleInhibitor />
+      </DomicileProvider>,
+    );
+    const say = (message: object) => {
+      fake.dispatch("system", { data: JSON.stringify({ id: 1, ...message }) });
+    };
+    await act(async () => {
+      say({ reply: { kind: "started" }, type: "system_reply" });
+      await new Promise((done) => setTimeout(done, 0));
+      say({
+        event: { holders: ["slack", "domicile"], kind: "idle_holds" },
+        type: "system_event",
+      });
+      await new Promise((done) => setTimeout(done, 0));
+    });
+
+    expect(
+      screen.getByRole("button", {
+        name: "Screens kept on by slack — click to keep them on too",
+      }),
+    ).toBeVisible();
   });
 });

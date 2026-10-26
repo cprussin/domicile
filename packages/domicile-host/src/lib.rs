@@ -33,6 +33,7 @@ pub mod global_shortcuts;
 pub mod home_walk;
 pub mod home_watch;
 mod icon_theme;
+pub mod idle_holds;
 pub mod idle_warnings;
 pub mod index_file;
 pub mod index_location;
@@ -871,7 +872,7 @@ impl Host {
             | ChromeMessage::Key { .. }
             | ChromeMessage::Unlock { .. }
             | ChromeMessage::Lock
-            | ChromeMessage::Activity
+            | ChromeMessage::Activity { .. }
             | ChromeMessage::DeskPointer { .. }
             | ChromeMessage::DeskCursor { .. }
             | ChromeMessage::SyncFrames

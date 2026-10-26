@@ -53,7 +53,9 @@ pub enum ClientRequest {
     },
     PointerLeave,
     /// Somebody used the desk; see [`ChromeMessage::Activity`](domicile_protocol::ChromeMessage::Activity).
-    Activity,
+    Activity {
+        input: Option<String>,
+    },
     /// Where the pointer is on the desk; see
     /// [`ChromeMessage::DeskPointer`](domicile_protocol::ChromeMessage::DeskPointer).
     DeskPointer {
@@ -198,10 +200,10 @@ pub enum ClientRequest {
     },
     /// The shell asked to lock now. See [`DomicileCompositor::shut_the_desk`].
     Lock,
-    /// Whether any application holds an idle inhibitor through the portal.
-    /// From the portal thread; see [`crate::portals`].
+    /// The applications holding idle inhibitors through the portal, one name
+    /// per inhibitor. From the portal thread; see [`crate::portals`].
     HeldAwakeByThePortal {
-        held: bool,
+        by: Vec<String>,
     },
 }
 
@@ -398,9 +400,9 @@ impl DomicileCompositor {
                 ),
             },
             ClientRequest::Unlock { passphrase } => self.offered_the_passphrase(&passphrase),
-            ClientRequest::HeldAwakeByThePortal { held } => self.held_awake_by_the_portal(held),
+            ClientRequest::HeldAwakeByThePortal { by } => self.held_awake_by_the_portal(by),
             // Counted by `keep_the_desktop_awake` above, and for nobody else.
-            ClientRequest::Activity => {}
+            ClientRequest::Activity { .. } => {}
             ClientRequest::DeskPointer { at, windows } => self.cast_desk_pointer(at, windows),
             ClientRequest::DeskCursor { image } => self.cast_desk_cursor(image),
             ClientRequest::Lock => {
