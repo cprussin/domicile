@@ -13,8 +13,10 @@
 #   deadline 0, so an interactive resize never waits on the client. Removing
 #   the attribute re-embeds with the default deadline.
 # - A <webview>'s guest keeps upstream's default deadline, except while the
-#   <webview> has `resizing` (patch 0145): then its guest's latest frame
-#   stretches to each new box at once, as an <app>'s does.
+#   <webview> has `resizing` (patch 0145): then its guest's latest frame shows
+#   in each new box at once, as an <app>'s does.
+# - While resizing, that frame shows at its own size, not stretched (patch
+#   0149), so it does not snap to the window's own frame on every arrival.
 #
 # Reads the series, not a Chromium tree, so it runs in the shell group.
 set -u
@@ -64,24 +66,36 @@ else
     "html_app_element.idl reflects no \`resizing\`, or no patch names the attribute"
 fi
 
-CHILD="$(grep -l '^diff --git a/third_party/blink/renderer/core/frame/child_frame_compositing_helper.cc' "$ENGINE"/patches/*.patch)"
-if [ -n "$CHILD" ] &&
-  grep -q '^+      surface_id, without_waiting ? cc::DeadlinePolicy::UseSpecifiedDeadline(0u)$' "$CHILD" &&
-  grep -q '^+                                  : cc::DeadlinePolicy::UseDefaultDeadline());$' "$CHILD"; then
+# Every patch to the child frame helper, read as one diff of the series.
+CHILD="$(grep -l '^diff --git a/third_party/blink/renderer/core/frame/child_frame_compositing_helper.cc' "$ENGINE"/patches/*.patch | xargs -r cat)"
+if grep -q '^+      surface_id, without_waiting ? cc::DeadlinePolicy::UseSpecifiedDeadline(0u)$' <<<"$CHILD" &&
+  grep -q '^+                                  : cc::DeadlinePolicy::UseDefaultDeadline());$' <<<"$CHILD"; then
   ok "a resized <webview> waits for its guest"
 else
   fail "a resized <webview> waits for its guest" \
     "no patch keeps the default deadline for a child frame not marked to skip it"
 fi
 
-if [ -n "$CHILD" ] &&
-  grep -q '^+  surface_layer_->SetStretchContentToFillBounds(without_waiting);$' "$CHILD" &&
-  grep -q '^+      IsA<HTMLWebViewElement>(owner) &&$' "$CHILD" &&
-  grep -q '^+          owner->FastHasAttribute(html_names::kResizingAttr));$' "$CHILD"; then
-  ok "unless it is resizing: then its guest stretches to the box at once"
+if grep -q '^+      IsA<HTMLWebViewElement>(owner) &&$' "$ENGINE"/patches/*.patch &&
+  grep -q '^+          owner->FastHasAttribute(html_names::kResizingAttr));$' "$ENGINE"/patches/*.patch; then
+  ok "unless it is resizing: then its guest shows at once"
 else
-  fail "unless it is resizing: then its guest stretches to the box at once" \
-    "no patch embeds a resizing <webview>'s guest with deadline 0 and stretched"
+  fail "unless it is resizing: then its guest shows at once" \
+    "no patch embeds a resizing <webview>'s guest with deadline 0"
+fi
+
+# Stretched, the latest frame snaps to the window's own on every arrival,
+# which reads as jitter during a drag. Each patch that adds the child frame's
+# stretch must be followed by one that removes it.
+added="$(grep -c '^+  surface_layer_->SetStretchContentToFillBounds(without_waiting);$' <<<"$CHILD")"
+removed="$(grep -c '^-  surface_layer_->SetStretchContentToFillBounds(without_waiting);$' <<<"$CHILD")"
+if [ "$added" -eq "$removed" ] &&
+  grep -q 'SetStretchContentToFillBounds($' "$APP" &&
+  grep -q 'params.new_value.IsNull());' "$APP"; then
+  ok "and a resizing window's frame shows unstretched"
+else
+  fail "and a resizing window's frame shows unstretched" \
+    "a resizing <webview> stretches its guest, or html_app_element.cc does not unstretch for \`resizing\`"
 fi
 
 if [ "$FAILED" -gt 0 ]; then

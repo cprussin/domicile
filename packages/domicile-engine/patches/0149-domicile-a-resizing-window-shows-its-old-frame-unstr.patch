@@ -1,0 +1,119 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Mon, 26 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a resizing window shows its old frame unstretched
+
+While an <app> or a <webview> has `resizing`, each new box shows at
+once with the window's latest frame. That frame was stretched to the
+box, then snapped to the window's own frame when it arrived: several
+times a second during a drag, which reads as jitter. Now it shows at
+its own size from the top left corner until the window catches up, as
+KDE and GNOME show a resizing window.
+
+- SurfaceLayerBridge::SetStretchContentToFillBounds, defaulting to
+  upstream's stretch. An <app> turns it off while `resizing`.
+- A resizing <webview>'s guest embeds unstretched, as other child
+  frames do.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on crux.
+---
+ .../core/frame/child_frame_compositing_helper.cc       |  1 -
+ .../core/frame/child_frame_compositing_helper.h        |  5 +++--
+ third_party/blink/renderer/core/frame/remote_frame.cc  |  2 +-
+ .../renderer/platform/graphics/surface_layer_bridge.cc | 10 +++++++++-
+ .../renderer/platform/graphics/surface_layer_bridge.h  |  5 +++++
+ 5 files changed, 18 insertions(+), 5 deletions(-)
+
+diff --git a/third_party/blink/renderer/core/frame/child_frame_compositing_helper.cc b/third_party/blink/renderer/core/frame/child_frame_compositing_helper.cc
+index f196674d..3a032345 100644
+--- a/third_party/blink/renderer/core/frame/child_frame_compositing_helper.cc
++++ b/third_party/blink/renderer/core/frame/child_frame_compositing_helper.cc
+@@ -63,7 +63,6 @@ void ChildFrameCompositingHelper::SetSurfaceId(
+   surface_layer_->SetSurfaceHitTestable(true);
+   surface_layer_->SetBackgroundColor(SkColors::kTransparent);
+ 
+-  surface_layer_->SetStretchContentToFillBounds(without_waiting);
+   surface_layer_->SetSurfaceId(
+       surface_id, without_waiting ? cc::DeadlinePolicy::UseSpecifiedDeadline(0u)
+                                   : cc::DeadlinePolicy::UseDefaultDeadline());
+diff --git a/third_party/blink/renderer/core/frame/child_frame_compositing_helper.h b/third_party/blink/renderer/core/frame/child_frame_compositing_helper.h
+index 4200f9aa..20d3fd32 100644
+--- a/third_party/blink/renderer/core/frame/child_frame_compositing_helper.h
++++ b/third_party/blink/renderer/core/frame/child_frame_compositing_helper.h
+@@ -33,8 +33,9 @@ class CORE_EXPORT ChildFrameCompositingHelper : public cc::ContentLayerClient {
+   ~ChildFrameCompositingHelper() override;
+ 
+   enum class AllowPaintHolding { kYes, kNo };
+-  // Domicile: `without_waiting` embeds with deadline 0 and stretches the
+-  // child's latest frame to the box, as an <app> does while resizing.
++  // Domicile: `without_waiting` embeds with deadline 0, so the child's latest
++  // frame shows at its own size until the child draws at the new box, as an
++  // <app>'s does while resizing.
+   void SetSurfaceId(const viz::SurfaceId& surface_id,
+                     AllowPaintHolding allow_paint_holding,
+                     bool without_waiting = false);
+diff --git a/third_party/blink/renderer/core/frame/remote_frame.cc b/third_party/blink/renderer/core/frame/remote_frame.cc
+index 5430cded..a0f99333 100644
+--- a/third_party/blink/renderer/core/frame/remote_frame.cc
++++ b/third_party/blink/renderer/core/frame/remote_frame.cc
+@@ -1036,7 +1036,7 @@ bool RemoteFrame::SynchronizeVisualProperties(
+ 
+   // Domicile: while the shell resizes a <webview>'s window (`resizing`), its
+   // box changes every frame. Waiting for the page each time would hold the
+-  // whole shell to the page's pace, so its latest frame stretches to the box
++  // whole shell to the page's pace, so its latest frame shows at its own size
+   // instead. See HTMLAppElement::Embed.
+   HTMLFrameOwnerElement* owner = DeprecatedLocalOwner();
+   compositing_helper_->SetSurfaceId(
+diff --git a/third_party/blink/renderer/platform/graphics/surface_layer_bridge.cc b/third_party/blink/renderer/platform/graphics/surface_layer_bridge.cc
+index 68a8d981..20bc8aee 100644
+--- a/third_party/blink/renderer/platform/graphics/surface_layer_bridge.cc
++++ b/third_party/blink/renderer/platform/graphics/surface_layer_bridge.cc
+@@ -119,6 +119,13 @@ void SurfaceLayerBridge::ClearObserver() {
+   observer_ = nullptr;
+ }
+ 
++void SurfaceLayerBridge::SetStretchContentToFillBounds(bool stretch) {
++  stretch_content_to_fill_bounds_ = stretch;
++  if (surface_layer_) {
++    surface_layer_->SetStretchContentToFillBounds(stretch);
++  }
++}
++
+ void SurfaceLayerBridge::SetContentsOpaque(bool opaque) {
+   embedder_expects_opaque_ = opaque;
+   UpdateSurfaceLayerOpacity();
+@@ -138,7 +145,8 @@ void SurfaceLayerBridge::CreateSurfaceLayer() {
+   surface_layer_->SetSurfaceId(current_surface_id_,
+                                cc::DeadlinePolicy::UseDefaultDeadline());
+ 
+-  surface_layer_->SetStretchContentToFillBounds(true);
++  surface_layer_->SetStretchContentToFillBounds(
++      stretch_content_to_fill_bounds_);
+   surface_layer_->SetIsDrawable(true);
+   surface_layer_->SetHitTestable(true);
+   surface_layer_->SetOverrideChildPaintFlags(true);
+diff --git a/third_party/blink/renderer/platform/graphics/surface_layer_bridge.h b/third_party/blink/renderer/platform/graphics/surface_layer_bridge.h
+index 26ddc80f..80044cda 100644
+--- a/third_party/blink/renderer/platform/graphics/surface_layer_bridge.h
++++ b/third_party/blink/renderer/platform/graphics/surface_layer_bridge.h
+@@ -49,6 +49,10 @@ class PLATFORM_EXPORT SurfaceLayerBridge
+                     const cc::DeadlinePolicy& deadline_policy =
+                         cc::DeadlinePolicy::UseSpecifiedDeadline(0u));
+ 
++  // Whether the surface's frame stretches to the layer's bounds (the default)
++  // or shows at its own size from the top left corner.
++  void SetStretchContentToFillBounds(bool stretch);
++
+   // Implementation of blink::mojom::blink::SurfaceEmbedder
+   void SetLocalSurfaceId(const viz::LocalSurfaceId& local_surface_id) override;
+   void OnOpacityChanged(bool is_opaque) override;
+@@ -122,6 +126,7 @@ class PLATFORM_EXPORT SurfaceLayerBridge
+   bool embedder_expects_opaque_ = false;
+   // Has the embedee submitted opaque frames without later non-opaque ones?
+   bool frames_are_opaque_ = false;
++  bool stretch_content_to_fill_bounds_ = true;
+ };
+ 
+ }  // namespace blink

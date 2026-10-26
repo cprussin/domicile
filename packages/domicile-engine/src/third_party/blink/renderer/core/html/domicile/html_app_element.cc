@@ -118,6 +118,13 @@ void HTMLAppElement::ParseAttribute(
     return;
   }
   if (params.name == html_names::kResizingAttr) {
+    // While resizing, the client's latest frame shows at its own size until
+    // it draws at the new box. Stretched, it would snap to the client's frame
+    // on every arrival.
+    if (surface_layer_bridge_) {
+      surface_layer_bridge_->SetStretchContentToFillBounds(
+          params.new_value.IsNull());
+    }
     // The last box of a resize may show before the client drew at it. Embed
     // it again with the default deadline, so the box and the window settle in
     // one frame.
@@ -159,6 +166,8 @@ bool HTMLAppElement::CreateLayer() {
   surface_layer_bridge_ = std::make_unique<::blink::SurfaceLayerBridge>(
       frame->GetPage()->GetChromeClient().GetFrameSinkId(frame), this,
       base::NullCallback());
+  surface_layer_bridge_->SetStretchContentToFillBounds(
+      !FastHasAttribute(html_names::kResizingAttr));
   // Placeholder so the element has a layer from its first frame.
   surface_layer_bridge_->CreateSolidColorLayer();
   SetNeedsCompositingUpdate();

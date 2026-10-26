@@ -197,8 +197,11 @@ on other Wayland compositors.
   patch `0102`). A first embed uses deadline 0.
 - **Interactive resize:** while an `<app>` has the `resizing` attribute (patch
   `0113`), a resize embeds with deadline 0, so a slow client cannot hold every
-  frame of a drag. Removing it re-embeds the box once with the default
-  deadline, if a resize happened meanwhile.
+  frame of a drag. The client's latest frame shows at its own size from the
+  top left corner, not stretched to the box (patch `0149`): stretched, it
+  would snap to the client's own frame on every arrival. Removing the
+  attribute re-embeds the box once with the default deadline, if a resize
+  happened meanwhile.
 - **The compositor** shows each commit at the box of the configure the client
   acked (`configure_box`, `domicile_surface_submit_for_box`,
   `configure_answers.rs`). An old buffer stays at its old surface instead of
@@ -212,7 +215,9 @@ on other Wayland compositors.
     frame of a drag. KWin sets no limit.
   - A client that never answers gets at most three sizes each `PATIENCE`.
 - **`<webview>`:** the guest keeps upstream's default deadline, as an
-  out-of-process `<iframe>` does.
+  out-of-process `<iframe>` does, except while the `<webview>` has `resizing`
+  (patch `0145`): then `RemoteFrame` embeds with deadline 0, and the guest's
+  latest frame shows at its own size until the page draws at the new box.
 - **Cost:** a client slower than the deadline slows the whole desktop during a
   resize without `resizing`. Past the deadline, viz shows the window's last frame stretched.
 - `packages/domicile-engine/tests/test-a-resized-window-holds-the-shell-until-it-draws.sh` checks
