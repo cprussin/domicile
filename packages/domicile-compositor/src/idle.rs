@@ -103,6 +103,22 @@ impl<S: StillThere + PartialEq> Idle<S> {
 
     /// Records input. `Some` only when this lights a dark desktop or calls a
     /// warning off.
+    /// How long the desk has gone without input as of `now`.
+    pub fn still_for(&self, now: Instant) -> Duration {
+        now.duration_since(self.stirred_at)
+    }
+
+    /// Whether input after `still` is worth a log line: the desk sat still
+    /// at least half its shortest timeout, so the input held off a blank or
+    /// lock that was getting close.
+    pub fn worth_noting(&self, still: Duration) -> bool {
+        [self.blank_after, self.lock_after]
+            .into_iter()
+            .flatten()
+            .min()
+            .is_some_and(|soonest| still >= soonest / 2)
+    }
+
     pub fn stirred(&mut self, now: Instant) -> Option<Blanking> {
         self.stirred_at = now;
         self.locked_at = None;
@@ -336,13 +352,23 @@ impl<S: StillThere + PartialEq> Idle<S> {
         })
     }
 
+    /// How many inhibitors are held, whether or not they hold.
+    pub fn inhibitors(&self) -> usize {
+        self.inhibitors.len()
+    }
+
+    /// The inhibitors holding the desktop awake. See [`holds`].
+    ///
+    /// Portal inhibitors are not among them: the portal reports those itself.
+    pub fn holding<'a>(&'a self, on_the_desktop: &'a [S]) -> impl Iterator<Item = &'a S> {
+        self.inhibitors
+            .iter()
+            .filter(|inhibitor| holds(*inhibitor, on_the_desktop))
+    }
+
     /// Whether an inhibitor holds the desktop awake.
     fn held(&self, on_the_desktop: &[S]) -> bool {
-        self.held_by_portals
-            || self
-                .inhibitors
-                .iter()
-                .any(|inhibitor| holds(inhibitor, on_the_desktop))
+        self.held_by_portals || self.holding(on_the_desktop).next().is_some()
     }
 }
 
@@ -356,7 +382,8 @@ fn holds<S: StillThere + PartialEq>(inhibitor: &S, on_the_desktop: &[S]) -> bool
     inhibitor.still_there() && on_the_desktop.contains(inhibitor)
 }
 
-/// Whether this request is user input that resets the idle timer.
+/// The input this request is, named for the log, or `None` for a request
+/// that is not user input. Input resets the idle timer.
 ///
 /// The chrome forwards all input, so every user action arrives here. The match
 /// is exhaustive so each new request gets an explicit decision.
@@ -366,12 +393,13 @@ fn holds<S: StillThere + PartialEq>(inhibitor: &S, on_the_desktop: &[S]) -> bool
 /// move: see [`ClientRequest::PointerMotion`]'s `moved`. Requests the shell makes on its
 /// own behalf do not count either, or a repainting clock would keep the
 /// screens on.
-pub fn somebody_is_here(request: &ClientRequest) -> bool {
+pub fn somebody_is_here(request: &ClientRequest) -> Option<&'static str> {
     match request {
-        ClientRequest::Key { .. }
-        | ClientRequest::Activity
-        | ClientRequest::PointerButton { .. }
-        | ClientRequest::PointerAxis { .. } => true,
+        ClientRequest::Key { .. } => Some("a key"),
+        // The browser's own input, which names no device.
+        ClientRequest::Activity { .. } => Some("input the browser saw"),
+        ClientRequest::PointerButton { .. } => Some("a click"),
+        ClientRequest::PointerAxis { .. } => Some("a scroll"),
         ClientRequest::PointerLeave
         | ClientRequest::KeyboardFocus { .. }
         | ClientRequest::SetOutputScale { .. }
@@ -405,16 +433,16 @@ pub fn somebody_is_here(request: &ClientRequest) -> bool {
         | ClientRequest::HeldAwakeByThePortal { .. }
         // The lock chord landed on the shell, and locking must not light the
         // screens.
-        | ClientRequest::Lock => false,
+        | ClientRequest::Lock => None,
         // The browser restates a still pointer after a window changes, and
         // turning the screens off changes them.
-        ClientRequest::PointerMotion { moved, .. } => *moved,
+        ClientRequest::PointerMotion { moved, .. } => moved.then_some("the pointer moving"),
         // The lock screen's own field forwards no `Key`s, so an unlock attempt
         // is the only sign someone is typing. Lighting on any attempt lets the
         // user see a rejection.
-        ClientRequest::Unlock { .. } => true,
+        ClientRequest::Unlock { .. } => Some("an unlock attempt"),
         // A theme change is the shell redrawing itself.
-        ClientRequest::TurnTheWindows { .. } | ClientRequest::ThemeCaptured { .. } => false,
+        ClientRequest::TurnTheWindows { .. } | ClientRequest::ThemeCaptured { .. } => None,
     }
 }
 
@@ -1008,6 +1036,42 @@ mod tests {
     }
 
     #[test]
+    fn the_desk_has_been_still_since_the_last_input() {
+        let start = Instant::now();
+        let mut idle = desk(start);
+        assert_eq!(idle.still_for(start + WARNING), WARNING);
+        idle.stirred(start + WARNING);
+        assert_eq!(idle.still_for(start + AFTER), AFTER - WARNING);
+    }
+
+    #[test]
+    fn input_is_worth_noting_once_the_desk_is_halfway_to_its_timeout() {
+        let idle = desk(Instant::now());
+        assert!(!idle.worth_noting(AFTER / 2 - Duration::from_millis(1)));
+        assert!(idle.worth_noting(AFTER / 2));
+    }
+
+    #[test]
+    fn the_inhibitors_holding_are_the_live_ones_with_a_window() {
+        // A shell names what holds the desktop awake, so it must list only
+        // what holds.
+        let start = Instant::now();
+        let mut idle = desk(start);
+        let film = Inhibitor::on(1);
+        let crashed = Inhibitor::on(2);
+        let showing = [Inhibitor::on(1), Inhibitor::on(2)];
+        idle.inhibited_by(film.clone(), start, &showing);
+        idle.inhibited_by(crashed.clone(), start, &showing);
+        idle.inhibited_by(Inhibitor::on(3), start, &showing);
+        crashed.the_client_died();
+        let holding: Vec<u32> = idle
+            .holding(&showing)
+            .map(|inhibitor| inhibitor.surface)
+            .collect();
+        assert_eq!(holding, vec![1]);
+    }
+
+    #[test]
     fn a_window_appearing_under_an_inhibitor_brings_a_dark_desk_back() {
         // An inhibitor taken before its window maps starts holding when the
         // window appears.
@@ -1160,8 +1224,10 @@ mod tests {
 
     #[test]
     fn a_hand_on_the_keyboard_or_the_pointer_is_somebody_here() {
-        for (what, request) in [
+        // Each is named, for the log line that says what woke the clock.
+        for (what, named, request) in [
             (
+                "a key",
                 "a key",
                 ClientRequest::Key {
                     keycode: 30,
@@ -1170,6 +1236,7 @@ mod tests {
             ),
             (
                 "the pointer moving over a window",
+                "the pointer moving",
                 ClientRequest::PointerMotion {
                     app_id: "app-1".into(),
                     x: 4.0,
@@ -1179,14 +1246,22 @@ mod tests {
             ),
             (
                 "a click",
+                "a click",
                 ClientRequest::PointerButton {
                     button: 272,
                     pressed: true,
                 },
             ),
-            ("a key typed into a browser window", ClientRequest::Activity),
+            (
+                "a key typed into a browser window",
+                "input the browser saw",
+                ClientRequest::Activity {
+                    input: Some("KeyPressed".into()),
+                },
+            ),
             (
                 "the wheel",
+                "a scroll",
                 ClientRequest::PointerAxis {
                     dx: 0.0,
                     dy: 1.0,
@@ -1195,7 +1270,11 @@ mod tests {
                 },
             ),
         ] {
-            assert!(somebody_is_here(&request), "{what} is somebody at the desk");
+            assert_eq!(
+                somebody_is_here(&request),
+                Some(named),
+                "{what} is somebody at the desk"
+            );
         }
     }
 
@@ -1326,8 +1405,9 @@ mod tests {
             ),
             ("the shell locking the desk", ClientRequest::Lock),
         ] {
-            assert!(
-                !somebody_is_here(&request),
+            assert_eq!(
+                somebody_is_here(&request),
+                None,
                 "{what} would keep every desktop awake forever"
             );
         }

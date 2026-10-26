@@ -44,4 +44,39 @@ describe("IdleInhibitorToggle", () => {
       css({ "& > svg": { opacity: "inactive" } }),
     );
   });
+
+  it("names what else keeps the screens on, open but not pressed", () => {
+    render(
+      <IdleInhibitorToggle
+        holders={["Slack", "mpv"]}
+        inhibitor={idleInhibitor(() => Promise.withResolvers<never>().promise)}
+      />,
+    );
+    const toggle = screen.getByRole("button", {
+      name: "Screens kept on by Slack and mpv — click to keep them on too",
+    });
+
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(toggle.className).not.toContain(
+      css({ "& > svg": { opacity: "inactive" } }),
+    );
+  });
+
+  it("names what else keeps the screens on while held", async () => {
+    render(
+      <IdleInhibitorToggle
+        holders={["mpv"]}
+        inhibitor={idleInhibitor(() =>
+          Promise.resolve(Ok(() => Promise.resolve(Ok("released" as const)))),
+        )}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button"));
+
+    expect(
+      screen.getByRole("button", {
+        name: "Screens kept on, also by mpv — click to stop keeping them on",
+      }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
 });

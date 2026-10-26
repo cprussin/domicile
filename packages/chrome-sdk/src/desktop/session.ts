@@ -23,6 +23,7 @@ export type Session = {
    */
   unlock: (passphrase: string) => void;
   idleWarnings: System["idleWarnings"];
+  idleHolds: System["idleHolds"];
   unlockRefusals: System["unlockRefusals"];
   on: On<SessionListeners>;
 };
@@ -39,11 +40,12 @@ export type SessionHost = Pick<
 
 export const session = (
   host: SessionHost,
-  calls: Pick<System, "idleWarnings" | "unlockRefusals">,
+  calls: Pick<System, "idleHolds" | "idleWarnings" | "unlockRefusals">,
 ): Session => ({
   get idle() {
     return host.idle ?? undefined;
   },
+  idleHolds: () => calls.idleHolds(),
   idleWarnings: () => calls.idleWarnings(),
   lock: () => {
     host.lock();

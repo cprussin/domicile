@@ -6,6 +6,8 @@
 
 #include <stdint.h>
 
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -39,19 +41,28 @@ class DeskActivity {
   DeskActivity& operator=(const DeskActivity&) = delete;
   ~DeskActivity();
 
+  // Hears what the input was, as `DescribeInput` names it.
+  using Listener = base::RepeatingCallback<void(const std::string& input)>;
+
   // Calls `heard` on each later `Heard`.
-  ListenerId AddListener(base::RepeatingClosure heard);
+  ListenerId AddListener(Listener heard);
   void RemoveListener(ListenerId listener);
 
-  // Somebody used the keyboard, the pointer or a touchpad.
-  void Heard();
+  // Somebody used the keyboard, the pointer or a touchpad. `input` names
+  // what, for the compositor's log.
+  void Heard(const std::string& input);
 
  private:
   base::Lock lock_;
   ListenerId next_id_ GUARDED_BY(lock_) = 1;
-  std::vector<std::pair<ListenerId, base::RepeatingClosure>> listeners_
-      GUARDED_BY(lock_);
+  std::vector<std::pair<ListenerId, Listener>> listeners_ GUARDED_BY(lock_);
 };
+
+// Names an input event for the compositor's log: the event's own name, and
+// the device it came from when the device is known, e.g. "MousePressed from
+// Logitech USB Receiver". A device that keeps the desk awake by itself is
+// found by its name.
+std::string DescribeInput(std::string_view event, std::string_view device);
 
 }  // namespace domicile
 

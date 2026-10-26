@@ -321,6 +321,8 @@ impl DomicileCompositor {
         }
         // The new clock starts lit, so a warning running is over.
         self.tell_the_shells_how_soon_the_screens_blank();
+        // Without a clock nothing holds; with a new one, the same as before.
+        self.tell_the_shells_what_holds_the_desktop_awake();
         if was_dark {
             debug!("the idle timeout changed while the screens were off; they come back on");
             // Tell the shells. They were told the desktop is idle, and the

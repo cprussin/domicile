@@ -597,6 +597,10 @@ struct DomicileCompositor {
     /// surface is [`StillThere`] and among
     /// [`surfaces_on_the_desktop`](DomicileCompositor::surfaces_on_the_desktop).
     idle: Option<Idle<WlSurface>>,
+    /// The applications holding the portal's idle inhibitors, one name per
+    /// inhibitor, which the shell is told along with the Wayland ones. See
+    /// [`DomicileCompositor::tell_the_shells_what_holds_the_desktop_awake`].
+    held_by_portal_apps: Vec<String>,
     /// Sends reloads to the file index thread. `None` without a home to index.
     ///
     /// Only `files.omit` changes go here. See
@@ -1061,8 +1065,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     );
     // Portal idle inhibitors, to the Wayland thread's idle clock.
     let waking = Arc::clone(&hub);
-    hub.portals.hold_idle_through(move |held| {
-        waking.send_request(ClientRequest::HeldAwakeByThePortal { held });
+    hub.portals.hold_idle_through(move |by| {
+        waking.send_request(ClientRequest::HeldAwakeByThePortal { by });
     });
     // The chords applications hold, which ride on the portal requests.
     let publishing = Arc::clone(&hub);
@@ -1312,6 +1316,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         engine_process: None,
         engine_disconnected: false,
         idle: Idle::after(&config.idle, Instant::now()),
+        held_by_portal_apps: Vec::new(),
         // Started below, after the event loop's sources.
         index: None,
         // Armed below by `arm_the_idle_clock`, the same path a reload uses.

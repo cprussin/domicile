@@ -1190,6 +1190,59 @@ mod window_states {
     }
 }
 
+/// What holds the desktop awake, which the compositor lists.
+mod idle_holds {
+    use domicile_host::idle_holds::IdleHolds;
+
+    use super::*;
+
+    fn heard_holders(heard: &Receiver<HostMessage>, id: u32) -> Vec<String> {
+        match next(heard) {
+            HostMessage::SystemEvent {
+                id: from,
+                event: SystemEvent::IdleHolds { holders },
+            } if from == id => holders,
+            other => panic!("expected idle holds for {id}, heard {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_page_listening_hears_the_holders_at_once_and_each_change() {
+        let holds = IdleHolds::default();
+        let (system, heard) = system_in(&std::env::temp_dir());
+        let page = system.sharing_idle_holds(holds.clone());
+
+        page.handle(7, SystemRequest::IdleHolds);
+        assert_eq!(reply(&heard, 7), SystemReply::Started);
+        assert_eq!(
+            heard_holders(&heard, 7),
+            Vec::<String>::new(),
+            "nothing holding is said too, so a page need not wait for a change"
+        );
+
+        holds.hold(vec!["mpv".into()]);
+        assert_eq!(heard_holders(&heard, 7), vec!["mpv".to_string()]);
+
+        holds.hold(vec!["mpv".into()]);
+        page.handle(7, SystemRequest::Unwatch);
+        assert_eq!(
+            next(&heard),
+            HostMessage::SystemEnd {
+                id: 7,
+                end: SystemEnd::Stopped,
+            },
+            "an unchanged list is not told again"
+        );
+        holds.hold(Vec::new());
+        assert!(heard.recv_timeout(Duration::from_millis(100)).is_err());
+    }
+
+    #[test]
+    fn hearing_the_holders_listens() {
+        assert_eq!(reach(&SystemRequest::IdleHolds), Reach::Listens);
+    }
+}
+
 /// The keymaps, which the compositor lists and switches between.
 mod keymaps {
     use domicile_host::keymaps::{Keymaps, Listed};

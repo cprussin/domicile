@@ -140,7 +140,7 @@ recorded output.
 - Page to compositor: `system_request { id, request }`. `request` starts a
   call (`read_file`, `write_file`, `create_dir`, `read_dir`, `stat`, `watch`, `spawn`,
   `dbus_call`, `dbus_match`, `screenshot`, `screen_record`, `preview_window`, `shell_commands`, `send_shell`,
-  `idle_warnings`, `unlock_refusals`, `set_window_states`, `window_requests`,
+  `idle_warnings`, `idle_holds`, `unlock_refusals`, `set_window_states`, `window_requests`,
   `virtual_monitor`, `keymaps`, `select_keymap`, `set_color_temperature`)
   or
   drives one running under the same `id` (`unwatch`, `stdin`, `close_stdin`,
@@ -186,6 +186,7 @@ that trust from reaching anything else.
     - `shell_commands` and `window_requests`, so a page reloaded while
       locked hears them after unlock
     - `idle_warnings`, so a lock screen can dim
+    - `idle_holds`, like `idle_warnings`
     - `unlock_refusals`, which a lock screen needs while locked
     - `set_window_states`, like `windows.setBounds`
     - `keymaps` and `select_keymap`, so a lock screen shows and switches the
