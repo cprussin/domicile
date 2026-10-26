@@ -1,6 +1,7 @@
 import type { Result } from "@cprussin/option-result";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import { Switch } from "@domicile-desktop/component-library/Switch";
+import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
 import { isAbsent } from "@domicile-desktop/manganese-host/watch-presence";
@@ -63,14 +64,19 @@ export const Brightness = ({ backlight, hardware, nightLight }: Props) => {
         </span>
       </Popover>
     ) : (
-      <span
-        aria-label="Brightness unavailable"
-        className={unavailableStyles}
-        role="img"
-        title="Brightness unavailable"
-      >
-        <LightbulbIcon size={15} weight="bold" />
-      </span>
+      <Tooltip
+        content="Brightness unavailable"
+        tone="overPhoto"
+        trigger={
+          <span
+            aria-label="Brightness unavailable"
+            className={unavailableStyles}
+            role="img"
+          >
+            <LightbulbIcon size={15} weight="bold" />
+          </span>
+        }
+      />
     );
   } else {
     const percent = Math.round(control.shown * 100);

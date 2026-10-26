@@ -1,6 +1,7 @@
 import { Result } from "@cprussin/option-result";
 import { Button } from "@domicile-desktop/component-library/Button";
 import { Switch } from "@domicile-desktop/component-library/Switch";
+import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import { useRequests } from "@domicile-desktop/manganese-host/useRequests";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type {
@@ -133,17 +134,22 @@ const DeviceRow = ({ device, failed, onAsk, pending }: DeviceRowProps) => (
       {primaryLabel(device)}
     </Button>
     {device.paired && (
-      <button
-        aria-label={`Forget ${device.name}`}
-        className={iconButtonStyles}
-        onClick={() => {
-          onAsk((host, actions) => actions.forget(host, device));
-        }}
-        title="Forget"
-        type="button"
-      >
-        <TrashIcon size={14} />
-      </button>
+      <Tooltip
+        content="Forget"
+        tone="overPhoto"
+        trigger={
+          <button
+            aria-label={`Forget ${device.name}`}
+            className={iconButtonStyles}
+            onClick={() => {
+              onAsk((host, actions) => actions.forget(host, device));
+            }}
+            type="button"
+          >
+            <TrashIcon size={14} />
+          </button>
+        }
+      />
     )}
     {failed !== undefined && <span className={errorStyles}>{failed}</span>}
   </li>

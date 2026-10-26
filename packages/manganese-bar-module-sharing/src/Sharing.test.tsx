@@ -139,7 +139,10 @@ describe("Sharing", () => {
         name: "Sharing screen",
       });
       expect(button).toHaveTextContent("Sharing screen");
-      expect(button).toHaveAttribute("title", "Shared with Zoom");
+      await userEvent.hover(button);
+      expect(
+        await screen.findByRole("tooltip", {}, { timeout: 2000 }),
+      ).toHaveTextContent("Shared with Zoom");
     });
 
     it("names a region over every screen as all of them", async () => {
@@ -182,7 +185,10 @@ describe("Sharing", () => {
       const button = await screen.findByRole("button", {
         name: "Sharing 2 things",
       });
-      expect(button).toHaveAttribute("title", "Shared with Zoom and Meet");
+      await userEvent.hover(button);
+      expect(
+        await screen.findByRole("tooltip", {}, { timeout: 2000 }),
+      ).toHaveTextContent("Shared with Zoom and Meet");
     });
   });
 

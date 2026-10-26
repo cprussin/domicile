@@ -96,7 +96,7 @@ describe("Brightness", () => {
     expect(screen.getByRole("switch", { name: "Night light" })).toBeChecked();
   });
 
-  it("says, dimmed, when a backlight has no level to show", () => {
+  it("says, dimmed, when a backlight has no level to show", async () => {
     const backlight = heldBacklight();
     const hardware = heldHardware();
 
@@ -112,6 +112,12 @@ describe("Brightness", () => {
     expect(
       screen.getByRole("img", { name: "Brightness unavailable" }).className,
     ).toContain(css({ opacity: "inactive" }));
+    await userEvent.hover(
+      screen.getByRole("img", { name: "Brightness unavailable" }),
+    );
+    expect(
+      await screen.findByRole("tooltip", {}, { timeout: 2000 }),
+    ).toHaveTextContent("Brightness unavailable");
   });
 
   it("opens a slider at the level the desk is at", async () => {

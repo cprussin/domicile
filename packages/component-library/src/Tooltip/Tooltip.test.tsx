@@ -23,6 +23,21 @@ describe(Tooltip, () => {
         "Full title",
       );
     });
+
+    it("says when it is drawn over a photograph, so the stylesheet can glass it", async () => {
+      render(
+        <Tooltip
+          content="Full title"
+          open
+          tone="overPhoto"
+          trigger={<Button>Tab</Button>}
+        />,
+      );
+      expect(await screen.findByRole("tooltip")).toHaveAttribute(
+        "data-tone",
+        "overPhoto",
+      );
+    });
   });
 
   describe("interactions", () => {

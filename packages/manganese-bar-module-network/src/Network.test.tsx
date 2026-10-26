@@ -186,17 +186,17 @@ describe("Network", () => {
       ).toBeVisible();
     });
 
-    it("shows only an icon, and names the link on hover", () => {
+    it("shows only an icon, and names the link on hover", async () => {
       const network = heldNetwork();
       render(<Item network={network.watch} />);
 
       network.report(online(Link.Wifi("Home", 0.72)));
 
       expect(screen.queryByText("Home")).not.toBeInTheDocument();
-      expect(screen.getByRole("button")).toHaveAttribute(
-        "title",
-        "Wi-Fi, strong signal: Home",
-      );
+      await userEvent.hover(screen.getByRole("button"));
+      expect(
+        await screen.findByRole("tooltip", {}, { timeout: 2000 }),
+      ).toHaveTextContent("Wi-Fi, strong signal: Home");
     });
 
     it("marks a wired link", () => {

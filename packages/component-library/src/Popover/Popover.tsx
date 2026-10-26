@@ -12,6 +12,7 @@ import { css, cva } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { useStableRef } from "../_control/useStableRef";
 import type { ExtendProps } from "../extend-props";
+import { Tooltip } from "../Tooltip/Tooltip";
 
 export const { createHandle } = BasePopover;
 
@@ -56,6 +57,8 @@ type Props = ExtendProps<
      * from a bar drawn over the wallpaper.
      */
     tone?: Tone | undefined;
+    /** Names the trigger while the pointer rests on it, in its tone. */
+    tooltip?: ReactNode | undefined;
     trigger?: ReactElement | undefined;
     /**
      * A wider cap, for a panel of controls whose names would otherwise be
@@ -87,6 +90,7 @@ const PopoverComponent = ({
   side = "bottom",
   title,
   tone = "card",
+  tooltip,
   trigger,
   wide = false,
   ...rootProps
@@ -120,7 +124,12 @@ const PopoverComponent = ({
       {...rootProps}
     >
       {trigger !== undefined && (
-        <BasePopover.Trigger ref={attachTrigger} render={trigger} />
+        <Trigger
+          attach={attachTrigger}
+          tone={tone}
+          tooltip={tooltip}
+          trigger={trigger}
+        />
       )}
       <BasePopover.Portal container={container} keepMounted={keepMounted}>
         <BasePopover.Positioner
@@ -296,4 +305,24 @@ const CloseOnFocusOut = ({
     };
   }, [actions, opener, popup, trigger, within]);
   return undefined;
+};
+
+/** The popover's trigger, inside its tooltip's when it has one. */
+const Trigger = ({
+  attach,
+  tone,
+  tooltip,
+  trigger,
+}: {
+  attach: RefCallback<HTMLElement>;
+  tone: Tone;
+  tooltip: ReactNode;
+  trigger: ReactElement;
+}) => {
+  const opener = <BasePopover.Trigger ref={attach} render={trigger} />;
+  return tooltip === undefined ? (
+    opener
+  ) : (
+    <Tooltip content={tooltip} tone={tone} trigger={opener} />
+  );
 };

@@ -26,7 +26,7 @@ describe(ThemeSwitch, () => {
       );
     });
 
-    it("uses a theme-specific aria-label that names the other one", () => {
+    it("uses a theme-specific name that names the other one, also on hover", async () => {
       render(
         <ThemeSwitch
           useTheme={() => ({
@@ -36,9 +36,12 @@ describe(ThemeSwitch, () => {
           })}
         />,
       );
-      expect(
+      await userEvent.hover(
         screen.getByRole("button", { name: "Light theme — click for dark" }),
-      ).toBeInTheDocument();
+      );
+      expect(
+        await screen.findByRole("tooltip", {}, { timeout: 2000 }),
+      ).toHaveTextContent("Light theme — click for dark");
     });
 
     it("calls the context's flip when clicked", async () => {

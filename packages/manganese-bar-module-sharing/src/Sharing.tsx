@@ -61,12 +61,9 @@ export const Sharing = ({ domicile }: Props) => {
       align="center"
       side="bottom"
       tone="overPhoto"
+      tooltip={who(apps, capturing)}
       trigger={
-        <button
-          className={triggerStyles}
-          title={who(apps, capturing)}
-          type="button"
-        >
+        <button className={triggerStyles} type="button">
           <ScreencastIcon aria-hidden size={15} weight="bold" />
           {`Sharing ${what(capturing.flatMap(({ sources }) => sources))}`}
         </button>

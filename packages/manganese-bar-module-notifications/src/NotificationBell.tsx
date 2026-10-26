@@ -1,4 +1,5 @@
 import { CountBadge } from "@domicile-desktop/component-library/CountBadge";
+import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import { BellSimpleIcon } from "@phosphor-icons/react/dist/ssr/BellSimple";
 
 import { css } from "../styled-system/css";
@@ -21,23 +22,28 @@ export const NotificationBell = ({ onOpen, unread }: Props) => {
   const label =
     unread === 0 ? "Notifications" : `Notifications, ${unread} unread`;
   return (
-    <button
-      aria-label={label}
-      className={buttonStyles}
-      data-unread={unread > 0 ? "" : undefined}
-      onClick={onOpen}
-      title={label}
-      type="button"
-    >
-      {/*
+    <Tooltip
+      content={label}
+      tone="overPhoto"
+      trigger={
+        <button
+          aria-label={label}
+          className={buttonStyles}
+          data-unread={unread > 0 ? "" : undefined}
+          onClick={onOpen}
+          type="button"
+        >
+          {/*
         Keyed on the count so each new arrival remounts it and replays the
         swing; an animation does not restart for a class it already has.
       */}
-      <span aria-hidden className={bellStyles} key={unread}>
-        <BellSimpleIcon size={15} weight="fill" />
-      </span>
-      <CountBadge count={unread} />
-    </button>
+          <span aria-hidden className={bellStyles} key={unread}>
+            <BellSimpleIcon size={15} weight="fill" />
+          </span>
+          <CountBadge count={unread} />
+        </button>
+      }
+    />
   );
 };
 

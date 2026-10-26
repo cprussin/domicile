@@ -110,14 +110,15 @@ describe("Cast", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
-  it("shows once a TV is near", () => {
+  it("shows once a TV is near", async () => {
     const { backend, report } = backendFinding([]);
     render(<Cast backends={[backend]} casting={heldCasting().casting} />);
     report([LIVING_ROOM]);
 
+    await userEvent.hover(screen.getByRole("button", { name: "Cast to a TV" }));
     expect(
-      screen.getByRole("button", { name: "Cast to a TV" }),
-    ).toBeInTheDocument();
+      await screen.findByRole("tooltip", {}, { timeout: 2000 }),
+    ).toHaveTextContent("Cast to a TV");
   });
 
   it("lists every backend's TVs, saying why one cannot be cast to", async () => {

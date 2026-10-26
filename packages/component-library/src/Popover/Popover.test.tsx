@@ -124,6 +124,40 @@ describe(Popover, () => {
       expect(screen.getByText("Body")).toBeInTheDocument();
     });
 
+    describe("with a tooltip", () => {
+      it("names its trigger while the pointer rests on it", async () => {
+        render(
+          <Popover
+            tooltip="Connection details"
+            trigger={<Button label="Details">i</Button>}
+          >
+            Body
+          </Popover>,
+        );
+
+        await userEvent.hover(screen.getByRole("button", { name: "Details" }));
+
+        expect(
+          await screen.findByRole("tooltip", {}, { timeout: 2000 }),
+        ).toHaveTextContent("Connection details");
+      });
+
+      it("still opens when its trigger is pressed", async () => {
+        render(
+          <Popover
+            tooltip="Connection details"
+            trigger={<Button>Details</Button>}
+          >
+            Body
+          </Popover>,
+        );
+
+        await userEvent.click(screen.getByRole("button", { name: "Details" }));
+
+        expect(screen.getByText("Body")).toBeInTheDocument();
+      });
+    });
+
     describe("with triggers elsewhere", () => {
       it("opens from a trigger that shares its handle", async () => {
         const handle = createHandle();

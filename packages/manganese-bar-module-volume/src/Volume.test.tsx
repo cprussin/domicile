@@ -65,7 +65,7 @@ describe("Volume", () => {
       expect(screen.queryByRole("button")).not.toBeInTheDocument();
     });
 
-    it("says, dimmed, when a sound card has no sound server", () => {
+    it("says, dimmed, when a sound card has no sound server", async () => {
       const sound = heldSound();
       const hardware = heldHardware();
       render(
@@ -88,6 +88,12 @@ describe("Volume", () => {
           screen.getByRole("img", { name: "Sound unavailable" }).className,
         ).toContain(css({ opacity: "inactive" }));
       }
+      await userEvent.hover(
+        screen.getByRole("img", { name: "Sound unavailable" }),
+      );
+      expect(
+        await screen.findByRole("tooltip", {}, { timeout: 2000 }),
+      ).toHaveTextContent("Sound unavailable");
     });
 
     it("says the default output's volume, and dims when it is muted", () => {

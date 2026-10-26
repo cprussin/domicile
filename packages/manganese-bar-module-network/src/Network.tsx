@@ -121,13 +121,13 @@ const Item = ({
       onOpenChange={setOpen}
       side="bottom"
       tone="overPhoto"
+      tooltip={label}
       trigger={
         <button
           className={triggerStyles({
             linked: link.kind !== LinkKind.None,
             online,
           })}
-          title={label}
           type="button"
         >
           <LinkIcon label={label} link={link} />

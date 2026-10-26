@@ -163,6 +163,12 @@ describe("Mixer", () => {
         screen.getByRole("slider", { name: "HDMI" }).focus();
       });
       await userEvent.keyboard("{ArrowLeft}");
+      await userEvent.hover(
+        screen.getByRole("button", { name: "Make HDMI the default" }),
+      );
+      expect(
+        await screen.findByRole("tooltip", {}, { timeout: 2000 }),
+      ).toHaveTextContent("Make it the default");
       await userEvent.click(
         screen.getByRole("button", { name: "Make HDMI the default" }),
       );

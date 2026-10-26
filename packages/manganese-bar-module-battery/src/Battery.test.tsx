@@ -4,6 +4,7 @@ import { Ok } from "@cprussin/option-result";
 import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import { act, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { css } from "../styled-system/css";
 import { Battery } from "./Battery";
 import { heldBattery } from "./held-battery";
@@ -66,7 +67,7 @@ describe("Battery", () => {
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
 
-  it("says, dimmed, when UPower reports no battery the machine has", () => {
+  it("says, dimmed, when UPower reports no battery the machine has", async () => {
     const battery = heldBattery();
     const hardware = heldHardware();
     render(<Battery battery={battery.battery} hardware={hardware.hardware} />);
@@ -77,9 +78,12 @@ describe("Battery", () => {
     ).toContain(css({ opacity: "inactive" }));
 
     battery.absent();
-    expect(
+    await userEvent.hover(
       screen.getByRole("img", { name: "Battery unavailable" }),
-    ).toBeVisible();
+    );
+    expect(
+      await screen.findByRole("tooltip", {}, { timeout: 2000 }),
+    ).toHaveTextContent("Battery unavailable");
   });
 
   it("shows the charge as a percent and as a meter", () => {

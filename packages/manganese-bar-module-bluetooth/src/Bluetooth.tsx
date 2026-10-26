@@ -1,5 +1,6 @@
 import type { Result } from "@cprussin/option-result";
 import { Popover } from "@domicile-desktop/component-library/Popover";
+import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
 import { isAbsent } from "@domicile-desktop/manganese-host/watch-presence";
@@ -80,14 +81,19 @@ const Unavailable = ({
   });
   const label = unavailableLabelOf(reading === undefined, failure);
   return (
-    <span
-      aria-label={label}
-      className={statusStyles({ failed: failure !== undefined, on: false })}
-      role="img"
-      title={label}
-    >
-      <Icon connected={false} on={false} />
-    </span>
+    <Tooltip
+      content={label}
+      tone="overPhoto"
+      trigger={
+        <span
+          aria-label={label}
+          className={statusStyles({ failed: failure !== undefined, on: false })}
+          role="img"
+        >
+          <Icon connected={false} on={false} />
+        </span>
+      }
+    />
   );
 };
 
@@ -110,14 +116,19 @@ const Status = ({ reading }: { reading: Reading }) => {
   const connected = reading.devices.filter((device) => device.connected);
   const label = labelOf(on, connected);
   return (
-    <span
-      aria-label={label}
-      className={statusStyles({ failed: false, on })}
-      role="img"
-      title={label}
-    >
-      <Icon connected={connected.length > 0} on={on} />
-    </span>
+    <Tooltip
+      content={label}
+      tone="overPhoto"
+      trigger={
+        <span
+          aria-label={label}
+          className={statusStyles({ failed: false, on })}
+          role="img"
+        >
+          <Icon connected={connected.length > 0} on={on} />
+        </span>
+      }
+    />
   );
 };
 
@@ -139,11 +150,11 @@ const Item = ({
       align="center"
       side="bottom"
       tone="overPhoto"
+      tooltip={label}
       trigger={
         <button
           aria-label={label}
           className={triggerStyles({ on })}
-          title={label}
           type="button"
         >
           <Icon connected={connected.length > 0} on={on} />

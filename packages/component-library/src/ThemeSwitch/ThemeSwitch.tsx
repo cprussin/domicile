@@ -2,6 +2,7 @@ import { MoonIcon } from "@phosphor-icons/react/dist/ssr/Moon";
 import { SunIcon } from "@phosphor-icons/react/dist/ssr/Sun";
 
 import { css, cx } from "../../styled-system/css";
+import { Tooltip } from "../Tooltip/Tooltip";
 import type { ThemeControl } from "./ThemeProvider";
 import { useTheme } from "./ThemeProvider";
 import type { Theme } from "./theme-core";
@@ -29,21 +30,26 @@ type Props = {
 export const ThemeSwitch = ({ useTheme: useThemeHook = useTheme }: Props) => {
   const { flip, theme } = useThemeHook();
   return (
-    <button
-      aria-label={LABELS[theme]}
-      className={buttonStyles}
-      data-theme-mode={theme}
-      onClick={flip}
-      title={LABELS[theme]}
-      type="button"
-    >
-      <span aria-hidden className={cx(slotStyles, sunSlotStyles)}>
-        <SunIcon size={16} weight="fill" />
-      </span>
-      <span aria-hidden className={cx(slotStyles, moonSlotStyles)}>
-        <MoonIcon size={16} weight="fill" />
-      </span>
-    </button>
+    <Tooltip
+      content={LABELS[theme]}
+      tone="overPhoto"
+      trigger={
+        <button
+          aria-label={LABELS[theme]}
+          className={buttonStyles}
+          data-theme-mode={theme}
+          onClick={flip}
+          type="button"
+        >
+          <span aria-hidden className={cx(slotStyles, sunSlotStyles)}>
+            <SunIcon size={16} weight="fill" />
+          </span>
+          <span aria-hidden className={cx(slotStyles, moonSlotStyles)}>
+            <MoonIcon size={16} weight="fill" />
+          </span>
+        </button>
+      }
+    />
   );
 };
 

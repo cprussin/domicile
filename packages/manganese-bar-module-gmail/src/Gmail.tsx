@@ -1,4 +1,5 @@
 import { CountBadge } from "@domicile-desktop/component-library/CountBadge";
+import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimple";
@@ -77,19 +78,24 @@ const Reading = ({
       );
     case InboxKind.Failed:
       return (
-        <button
-          aria-label={`${nickname}: could not read the inbox`}
-          className={itemStyles}
-          onClick={() => {
-            onOpen(inboxAddress(email));
-          }}
-          title={`${nickname}: could not read the inbox: ${inbox.reason}`}
-          type="button"
-        >
-          <EnvelopeSimpleIcon aria-hidden size={15} weight="bold" />
-          <span className={textStyles}>{nickname}</span>
-          <WarningCircleIcon aria-hidden size={15} weight="bold" />
-        </button>
+        <Tooltip
+          content={`${nickname}: could not read the inbox: ${inbox.reason}`}
+          tone="overPhoto"
+          trigger={
+            <button
+              aria-label={`${nickname}: could not read the inbox`}
+              className={itemStyles}
+              onClick={() => {
+                onOpen(inboxAddress(email));
+              }}
+              type="button"
+            >
+              <EnvelopeSimpleIcon aria-hidden size={15} weight="bold" />
+              <span className={textStyles}>{nickname}</span>
+              <WarningCircleIcon aria-hidden size={15} weight="bold" />
+            </button>
+          }
+        />
       );
   }
 };
@@ -115,23 +121,28 @@ const Count = ({
   total,
   unread,
 }: CountProps) => (
-  <button
-    aria-label={label}
-    className={itemStyles}
-    data-unread={unread > 0}
-    onClick={() => {
-      onOpen(inboxAddress(email));
-    }}
-    title={label}
-    type="button"
-  >
-    <EnvelopeSimpleIcon aria-hidden size={15} weight="bold" />
-    <span className={textStyles}>{nickname}</span>
-    <span className={figureStyles} data-figure="">
-      {total}
-    </span>
-    <CountBadge count={unread} />
-  </button>
+  <Tooltip
+    content={label}
+    tone="overPhoto"
+    trigger={
+      <button
+        aria-label={label}
+        className={itemStyles}
+        data-unread={unread > 0}
+        onClick={() => {
+          onOpen(inboxAddress(email));
+        }}
+        type="button"
+      >
+        <EnvelopeSimpleIcon aria-hidden size={15} weight="bold" />
+        <span className={textStyles}>{nickname}</span>
+        <span className={figureStyles} data-figure="">
+          {total}
+        </span>
+        <CountBadge count={unread} />
+      </button>
+    }
+  />
 );
 
 // Matches the network item's button. Unread mail lights the item as the idle
