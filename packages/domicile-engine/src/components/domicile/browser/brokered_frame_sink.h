@@ -201,6 +201,7 @@ class BrokeredFrameSink : public viz::HostFrameSinkClient,
   // is set.
   viz::LocalSurfaceId local_surface_id_;
   gfx::Size size_;
+  float scale_ = 1.f;
 
   base::flat_map<uint64_t, ImportedBuffer> buffers_;
   uint64_t next_buffer_id_ = 1;
