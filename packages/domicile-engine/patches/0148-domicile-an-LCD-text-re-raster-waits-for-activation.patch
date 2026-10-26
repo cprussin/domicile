@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Mon, 26 Oct 2026 01:57:41 +0000
+Subject: [PATCH] domicile: an LCD-text re-raster waits for activation
+
+The shell's renderer aborted on a DCHECK in
+CanRecreateHighResTilingForLCDTextAndRasterTransform: a sync tree that
+loses LCD text to non-opaque contents is never ready to activate. It can
+be: an impl-side transform animation that ends after the tree is ready
+moves the reason off kTransformAnimation with no commit.
+
+- That branch now waits for the activation, like the check below it.
+  The active tree requests an impl-side invalidation, and the next
+  pending tree re-rasters without LCD text.
+
+//cc/domicile's DomicileLcdTextActivationTest covers both halves.
+---
+ cc/layers/picture_layer_impl.cc | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/cc/layers/picture_layer_impl.cc b/cc/layers/picture_layer_impl.cc
+index c4270593..8ab3070b 100644
+--- a/cc/layers/picture_layer_impl.cc
++++ b/cc/layers/picture_layer_impl.cc
+@@ -1116,9 +1116,12 @@ bool PictureLayerImpl::CanRecreateHighResTilingForLCDTextAndRasterTransform(
+     // activate before we have invalidated the existing high rest tiling. This
+     // is important to avoid activating a tree with missing tiles which can
+     // cause flickering.
+-    DCHECK(!layer_tree_impl()->IsSyncTree() ||
+-           !layer_tree_impl()->IsReadyToActivate());
+-    return true;
++    // DOMICILE: an impl-side transform animation can end after the tree is
++    // ready to activate, which moves the reason here from the animation with
++    // no commit. Wait for the activation, as below; the active tree then asks
++    // for the invalidation that redoes the tiles.
++    return !layer_tree_impl()->IsSyncTree() ||
++           !layer_tree_impl()->IsReadyToActivate();
+   }
+   // Keep the non-ideal raster translation unchanged for transform animations
+   // to avoid re-rasterization during animation.
+-- 
+2.43.0
+
