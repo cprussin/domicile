@@ -2,7 +2,6 @@ import { css } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { CodeBlock } from "../code/CodeBlock";
 import type { Language } from "../code/highlight";
-import { repoFile } from "../page/repo";
 import { Section } from "../page/Section";
 import { Tabs } from "../page/Tabs";
 
@@ -74,10 +73,7 @@ export const Install = () => (
           <div className={panelStyles}>
             <CodeBlock code={distro.code} language={distro.language} />
             <p className={noteStyles}>{distro.note}</p>
-            <a
-              className={linkStyles}
-              href={repoFile("docs/RUNNING-A-DESKTOP.md")}
-            >
+            <a className={linkStyles} href="/docs/manganese/install">
               Full install guide →
             </a>
           </div>

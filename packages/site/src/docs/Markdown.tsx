@@ -1,3 +1,5 @@
+import { posix } from "node:path";
+
 import type { Nodes, RootContent } from "mdast";
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { gfmFromMarkdown } from "mdast-util-gfm";
@@ -6,6 +8,8 @@ import { gfm } from "micromark-extension-gfm";
 import { css } from "../../styled-system/css";
 import { CodeBlock } from "../code/CodeBlock";
 import type { Language } from "../code/highlight";
+import { Media } from "../media/Media";
+import { DocTabs } from "./DocTabs";
 import type { Routed } from "./links";
 import { resolveHref } from "./links";
 import { slugger } from "./slugger";
@@ -37,7 +41,57 @@ type Context = {
 
 const nodes = (children: readonly RootContent[], context: Context) =>
   // Siblings never reorder, so their positions are stable keys.
-  children.map((child, at) => <Node context={context} key={at} node={child} />);
+  tabbed(children).map((child, at) =>
+    "tabs" in child ? (
+      <DocTabs
+        key={at}
+        tabs={child.tabs.map((tab) => ({
+          content: <div className={bodyStyles}>{nodes(tab.body, context)}</div>,
+          label: tab.label,
+        }))}
+      />
+    ) : (
+      <Node context={context} key={at} node={child} />
+    ),
+  );
+
+/** A run of siblings between tab markers, one body per tab. */
+type TabRun = { tabs: { label: string; body: RootContent[] }[] };
+
+/**
+ * `children`, with each run of `<!-- tab: Label -->` sections, ended by
+ * `<!-- /tabs -->` or the end, gathered into one `TabRun`. On GitHub the
+ * markers are invisible and the sections read one after the other.
+ */
+const tabbed = (children: readonly RootContent[]): (RootContent | TabRun)[] => {
+  const out: (RootContent | TabRun)[] = [];
+  let run: TabRun | undefined;
+  for (const child of children) {
+    const marker = child.type === "html" ? markerOf(child.value) : undefined;
+    if (marker === "end") {
+      run = undefined;
+    } else if (marker !== undefined) {
+      if (run === undefined) {
+        run = { tabs: [] };
+        out.push(run);
+      }
+      run.tabs.push({ body: [], label: marker.label });
+    } else if (run === undefined) {
+      out.push(child);
+    } else {
+      run.tabs.at(-1)?.body.push(child);
+    }
+  }
+  return out;
+};
+
+const markerOf = (html: string): { label: string } | "end" | undefined => {
+  if (/^<!--\s*\/tabs\s*-->$/.test(html.trim())) {
+    return "end";
+  }
+  const label = /^<!--\s*tab:\s*(.+?)\s*-->$/.exec(html.trim())?.[1];
+  return label === undefined ? undefined : { label };
+};
 
 const Node = ({ node, context }: { node: RootContent; context: Context }) => {
   switch (node.type) {
@@ -149,8 +203,19 @@ const Node = ({ node, context }: { node: RootContent; context: Context }) => {
         </div>
       );
     }
+    case "image": {
+      // Only the captures in docs/media are on the site.
+      const name = /(?:^|\/)docs\/media\/([^/]+)\.png$/.exec(
+        posix.join(posix.dirname(context.from), node.url),
+      )?.[1];
+      return name === undefined ? undefined : (
+        <span className={pictureStyles}>
+          <Media alt={node.alt ?? ""} name={name} />
+        </span>
+      );
+    }
     default: {
-      // Raw HTML, images, footnotes and definitions: the docs use none.
+      // Raw HTML, footnotes and definitions: the docs use none.
       return undefined;
     }
   }
@@ -227,6 +292,8 @@ const linkStyles = css({
 });
 
 const blockStyles = css({ minInlineSize: 0 });
+
+const pictureStyles = css({ display: "block", marginBlock: 2 });
 
 const listStyles = css({
   display: "flex",

@@ -18,91 +18,50 @@ export type DocSection = {
 /** The repository, which `source` paths start from, at build time. */
 export const REPO_ROOT = join(process.cwd(), "..", "..");
 
-const WM = "packages/manganese-window-management/docs";
+const USE = "docs/use";
+
+const page = (slug: string, file: string, title: string): DocPage => ({
+  slug: `manganese/${slug}`,
+  source: `${USE}/${file}.md`,
+  title,
+});
 
 export const SECTIONS: readonly DocSection[] = [
   {
     pages: [
-      {
-        slug: "manganese/install",
-        source: "docs/RUNNING-A-DESKTOP.md",
-        title: "Install and run",
-      },
-      { slug: "manganese/keys", source: `${WM}/KEYS.md`, title: "Keys" },
+      page("install", "INSTALL", "Install"),
+      page("first-steps", "FIRST-STEPS", "First steps"),
+      page("keys", "KEYS", "Keys"),
     ],
     product: "manganese",
     title: "Get started",
   },
   {
     pages: [
-      {
-        slug: "manganese/windows",
-        source: `${WM}/WINDOW-MANAGEMENT.md`,
-        title: "Windows and workspaces",
-      },
-      {
-        slug: "manganese/launcher",
-        source: "packages/manganese-launcher/docs/LAUNCHER.md",
-        title: "The launcher",
-      },
-      {
-        slug: "manganese/top-bar",
-        source: "packages/shell-manganese/docs/TOP-BAR.md",
-        title: "The top bar",
-      },
-      { slug: "manganese/lock", source: "docs/LOCK.md", title: "Locking" },
-      {
-        slug: "manganese/idle",
-        source: "docs/IDLE.md",
-        title: "Idle and blanking",
-      },
-      {
-        slug: "manganese/displays",
-        source: "docs/DISPLAYS.md",
-        title: "Monitors",
-      },
-      {
-        slug: "manganese/casting",
-        source: "docs/CASTING-TO-TVS.md",
-        title: "Casting to TVs",
-      },
-      {
-        slug: "manganese/settings",
-        source: "docs/SETTINGS.md",
-        title: "Settings",
-      },
-      {
-        slug: "manganese/history",
-        source: "docs/HISTORY.md",
-        title: "History",
-      },
+      page("windows", "WINDOWS", "Windows and workspaces"),
+      page("browser", "BROWSER", "Browsing and web apps"),
+      page("launcher", "LAUNCHER", "The launcher"),
+      page("top-bar", "TOP-BAR", "The top bar"),
+      page("notifications", "NOTIFICATIONS", "Notifications"),
+      page("clipboard", "CLIPBOARD", "Clipboard"),
+      page("screenshots", "SCREENSHOTS", "Screenshots and recordings"),
+      page("lock", "LOCK-AND-IDLE", "Locking and sleep"),
+      page("monitors", "MONITORS", "Monitors and casting"),
     ],
     product: "manganese",
     title: "Use it",
   },
   {
     pages: [
-      {
-        slug: "manganese/config",
-        source: "docs/SHELL-CONFIG.md",
-        title: "The config file",
-      },
-      {
-        slug: "manganese/launcher-sources",
-        source: "docs/LAUNCHER.md",
-        title: "Launcher sources",
-      },
-      {
-        slug: "manganese/wallpaper",
-        source: "packages/manganese-wallpaper/docs/WALLPAPER.md",
-        title: "Theme and wallpaper",
-      },
+      page("settings", "CONFIGURE", "Settings and the config file"),
+      page("appearance", "APPEARANCE", "Appearance"),
     ],
     product: "manganese",
     title: "Make it yours",
   },
   {
     pages: [
+      page("troubleshooting", "TROUBLESHOOTING", "Troubleshooting"),
       {
         slug: "manganese/gpu-and-displays",
         source: "docs/TTY-DEBUGGING.md",

@@ -1,6 +1,7 @@
 # Running a desktop
 
-How to run, install and configure a Domicile desktop. You need Nix, or a
+How to run, install and configure a Domicile desktop, in detail. For a
+friendlier start, read the [user guide](use/README.md). You need Nix, or a
 [package for your distribution](#other-distributions), and either a Wayland
 session or a console login.
 

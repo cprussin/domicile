@@ -18,7 +18,9 @@ describe("the docs pages", () => {
 
 describe("pageAt", () => {
   test("finds a page by its route's segments", () => {
-    expect(pageAt(["manganese", "lock"])?.source).toBe("docs/LOCK.md");
+    expect(pageAt(["manganese", "lock"])?.source).toBe(
+      "docs/use/LOCK-AND-IDLE.md",
+    );
   });
 
   test("nothing at a route no page has", () => {
