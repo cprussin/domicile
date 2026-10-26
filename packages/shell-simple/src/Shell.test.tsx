@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
+import { FakeDomicile } from "@domicile-desktop/react/fake-domicile";
 import { APP_TAG_NAME } from "@domicile-desktop/sdk/app-element";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { KeyAction } from "@domicile-desktop/sdk/key-action";
@@ -52,13 +53,14 @@ const shell = (keybindings?: ShellKeybindings) => {
   const fake = new FakeDomicileHost();
   const reported: string[] = [];
   render(
-    <Shell
-      domicile={fake.domicile}
-      keybindings={keybindings}
-      report={(error) => {
-        reported.push(error);
-      }}
-    />,
+    <FakeDomicile fake={fake}>
+      <Shell
+        keybindings={keybindings}
+        report={(error) => {
+          reported.push(error);
+        }}
+      />
+    </FakeDomicile>,
   );
   const called = (method: string) => () =>
     fake.calls.filter(([name]) => name === method).map(([, first]) => first);

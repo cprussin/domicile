@@ -41,7 +41,8 @@ A JavaScript module whose `Shell` export is a function.
 - If the module fails to load, has no `Shell`, or `Shell` throws, the page
   shows the error.
 - The page draws nothing until `Shell` returns, so draw your first frame
-  before it does. With React, mount with `flushSync`. A shell that draws later
+  before it does. With React, `mount` does that
+  ([With React](#with-react)). A shell that draws later
   fades in from an empty white page.
 - The contract is framework-agnostic. `runManganese` is manganese's React
   adapter.
@@ -102,8 +103,8 @@ export const Shell: ShellModule = (root, domicile) => {
   `processes` and more). There is nothing to configure.
 - It is the only copy. The engine runs your module and calls `Shell` with
   the desktop; there is no `navigator.domicile` or `window.domicile`. Keep it
-  however you like (a React context, a variable) and pass it to what needs
-  it.
+  however you like (a variable, or with React, `<DomicileProvider>`) and pass
+  it to what needs it.
 - There is nothing to await and no version handshake. The browser process
   checks the protocol version and logs a mismatch. The first call binds the
   channel.
@@ -161,6 +162,43 @@ made of the host underneath.
 
 `@domicile-desktop/component-library` is the React and Panda CSS design
 system this repo's shells use. Shells do not need it.
+
+## With React
+
+`@domicile-desktop/react`, on npm, mounts a React shell and follows the
+desktop with hooks:
+
+```tsx
+import { mount } from "@domicile-desktop/react/mount";
+import { useWindows } from "@domicile-desktop/react/windows";
+import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
+
+const Taskbar = () => (
+  <ul>
+    {useWindows().map(({ appId, title }) => (
+      <li key={appId}>{title}</li>
+    ))}
+  </ul>
+);
+
+export const Shell: ShellModule = mount(Taskbar);
+```
+
+- `mount(App)` is a `Shell` (or an app's `main`). It draws `App` before
+  returning, in `StrictMode`, under `<DomicileProvider>`, and shows the error
+  in its place if `App` throws.
+- `<DomicileProvider domicile>` is what `mount` renders. Use it to mount
+  yourself.
+- `useDomicile()` is the desktop. `useAppDomicile()` is an app's.
+- Hooks follow the desktop's state: `useWindows`, `useFocusedWindow`,
+  `useDisplays`, `useAppearance`, `useIdle`, `useLocked`, and
+  `usePortalRequests` and the other portal parts. Each rerenders on change.
+- `useWatch(namespace, type, read)` follows any other attribute.
+- **Tests:** render under `<FakeDomicile fake={fake}>`
+  (`@domicile-desktop/react/fake-domicile`) and drive `fake`, a
+  `FakeDomicileHost`.
+
+See [the package's README](/packages/react/README.md).
 
 ## The smallest shell
 

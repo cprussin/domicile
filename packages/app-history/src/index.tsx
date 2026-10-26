@@ -7,9 +7,8 @@ import {
 } from "@domicile-desktop/component-library/media-theme-source";
 import { ThemeProvider } from "@domicile-desktop/component-library/ThemeProvider";
 import { applyTheme } from "@domicile-desktop/component-library/theme-core";
+import { mount } from "@domicile-desktop/react/mount";
 import type { AppMain } from "@domicile-desktop/sdk/app";
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
 
 import icon from "../icons/history.svg";
 import { App } from "./App";
@@ -29,11 +28,10 @@ export const main: AppMain = (root, domicile) => {
   link.rel = "icon";
   link.href = icon;
   document.head.append(link);
-  createRoot(root).render(
-    <StrictMode>
-      <ThemeProvider source={themes}>
-        <App browser={hostBrowser(spawnedHost(domicile.processes))} />
-      </ThemeProvider>
-    </StrictMode>,
-  );
+  const browser = hostBrowser(spawnedHost(domicile.processes));
+  mount(() => (
+    <ThemeProvider source={themes}>
+      <App browser={browser} />
+    </ThemeProvider>
+  ))(root, domicile);
 };

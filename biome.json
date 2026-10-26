@@ -244,6 +244,7 @@
       },
       "includes": [
         "packages/chrome-sdk/package.json",
+        "packages/react/package.json",
         "packages/shell-manganese/package.json",
         "packages/system-audio/package.json",
         "packages/system-backlight/package.json",

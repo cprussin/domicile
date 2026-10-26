@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "@domicile-desktop/component-library": "workspace:*",
+    "@domicile-desktop/react": "workspace:*",
     "@domicile-desktop/sdk": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:"
