@@ -41,6 +41,7 @@ export const DOCS: readonly LinkColumn[] = [
       { href: "/docs/reference/sdk", label: "@domicile-desktop/sdk" },
       { href: "/docs/reference/elements", label: "Elements: <app>, <webview>" },
       { href: "/docs/reference/config", label: "The config file" },
+      { href: "/docs/reference/cli", label: "The domicile command" },
       {
         href: repoFile("packages/shell-manganese/docs/SOURCE.md"),
         label: "Manganese's packages",

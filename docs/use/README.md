@@ -29,6 +29,7 @@ site: [domicile-desktop.com/docs](https://domicile-desktop.com/docs).
 **Help**
 
 - [Troubleshooting](TROUBLESHOOTING.md)
+- [Every `domicile` command](../CLI.md)
 
 Pages that show a setting give it twice, in tabs: the Settings app, and the
 config file. On GitHub the two follow one another.

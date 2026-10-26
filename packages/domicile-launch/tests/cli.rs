@@ -536,3 +536,22 @@ fn check_config_takes_one_config_and_the_extra_word_is_named() {
         })
     );
 }
+
+#[test]
+fn every_verb_in_the_usage_has_a_section_in_the_cli_reference() {
+    let reference = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/CLI.md"),
+    )
+    .expect("docs/CLI.md is the CLI reference");
+    let verbs = USAGE
+        .lines()
+        .filter_map(|line| line.trim_start().strip_prefix("domicile "))
+        .filter_map(|rest| rest.split_whitespace().next())
+        .filter(|word| !word.starts_with(['<', '[', '-']));
+    for verb in verbs {
+        assert!(
+            reference.contains(&format!("## `domicile {verb}")),
+            "docs/CLI.md has no section for {verb}"
+        );
+    }
+}
