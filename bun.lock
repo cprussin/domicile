@@ -980,6 +980,7 @@
         "@domicile-desktop/react": "workspace:*",
         "@domicile-desktop/sdk": "workspace:*",
         "@domicile-desktop/system-audio": "workspace:*",
+        "@domicile-desktop/system-backlight": "workspace:*",
         "@pandacss/dev": "catalog:",
         "@phosphor-icons/react": "catalog:",
         "react": "catalog:",
@@ -1124,6 +1125,7 @@
       "version": "1.0.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
+        "@domicile-desktop/react": "workspace:*",
         "@domicile-desktop/sdk": "workspace:*",
         "zod": "catalog:",
       },
@@ -1131,7 +1133,12 @@
         "@cprussin/tsconfig": "catalog:",
         "@domicile-desktop/test-support": "workspace:*",
         "@types/bun": "catalog:",
+        "@types/react": "catalog:",
+        "react": "catalog:",
         "typescript": "catalog:",
+      },
+      "peerDependencies": {
+        "react": "catalog:",
       },
     },
     "packages/system-battery": {

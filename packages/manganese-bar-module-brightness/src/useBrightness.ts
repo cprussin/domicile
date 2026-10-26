@@ -1,6 +1,6 @@
 import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
+import type { SharedBacklight } from "@domicile-desktop/system-backlight/shared-backlight";
 import { useEffect, useRef, useState } from "react";
-import type { SharedBacklight } from "./shared-backlight";
 
 /** The backlight as a control draws it. */
 export type BrightnessControl = {
