@@ -2,7 +2,7 @@
 // has one. See docs/TOP-BAR.md.
 
 import type { Option, Result } from "@cprussin/option-result";
-import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
+import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import type { Link, Network } from "@domicile-desktop/system-network/network";
 import { LinkKind } from "@domicile-desktop/system-network/network";

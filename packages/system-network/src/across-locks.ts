@@ -1,4 +1,3 @@
-import { watchHost } from "@domicile-desktop/manganese-host/watch-host";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 
 /**
@@ -16,17 +15,19 @@ export const watchAcrossLocks =
   (onValue: (value: T) => void): (() => void) => {
     const watch = { locked: false, stop: start(onValue) };
     const { session } = domicile;
-    const stopHearing = watchHost(
-      (changed) => session.on("lockchange", changed),
-      () => session.locked,
-      (locked) => {
+    const changed = () => {
+      // `undefined` until the compositor says.
+      const { locked } = session;
+      if (locked !== undefined) {
         if (watch.locked && !locked) {
           watch.stop();
           watch.stop = start(onValue);
         }
         watch.locked = locked;
-      },
-    );
+      }
+    };
+    changed();
+    const stopHearing = session.on("lockchange", changed);
     return () => {
       stopHearing();
       watch.stop();

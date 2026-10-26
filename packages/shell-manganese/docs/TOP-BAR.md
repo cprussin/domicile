@@ -55,7 +55,7 @@ Each item reads what it shows from context:
 
 - `useBar()` (`@domicile-desktop/manganese-bar/bar-context`): the bar's
   `screen` and whether the desktop is `locked`.
-- `useDomicile()` (`@domicile-desktop/manganese-host/domicile-context`): the
+- `useDomicile()` (`@domicile-desktop/react/domicile-provider`): the
   desktop. Readouts are watched once per desktop
   ([Host readouts](HOST-READOUTS.md#one-watch-per-desk)).
 - The launcher, notification drawer, tray and workspaces each have a context
@@ -120,7 +120,7 @@ Every bar and the lock screen share one watch per system readout. See
 
 - An item for hardware hides only when the machine has none. Each looks in
   `/sys` every 10 seconds (`watchPresence`,
-  `@domicile-desktop/manganese-host/watch-presence`), which works while
+  `@domicile-desktop/react/watch-presence`), which works while
   locked.
 - The theme selector, idle inhibitor and notification bell always show.
 

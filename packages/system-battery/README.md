@@ -39,6 +39,18 @@ watched.match({
 - `@domicile-desktop/sdk` for the system calls, `zod` to parse UPower's
   replies, `@cprussin/option-result` for `Result` and `Option`.
 
+## React
+
+`@domicile-desktop/system-battery/react`, for a shell on
+[`@domicile-desktop/react`](../react/README.md):
+
+- `useBattery()`: the reading, `undefined` until UPower answers.
+- `useHasBattery()`: whether `/sys` lists a battery, looked at every 10s.
+- `deskBattery(domicile)` and `deskBatteryHardware(domicile)`: the shared
+  watches behind them, one per desktop, for components that take a watch.
+- `followBattery(domicile, onReading)` (`./follow-battery`): the watch as
+  callbacks, logging failures.
+
 ## Test
 
 ```sh

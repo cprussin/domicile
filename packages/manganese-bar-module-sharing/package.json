@@ -2,6 +2,7 @@
   "dependencies": {
     "@domicile-desktop/component-library": "workspace:*",
     "@domicile-desktop/manganese-host": "workspace:*",
+    "@domicile-desktop/react": "workspace:*",
     "@domicile-desktop/sdk": "workspace:*",
     "@pandacss/dev": "catalog:",
     "@phosphor-icons/react": "catalog:",

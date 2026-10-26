@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@cprussin/option-result": "catalog:",
     "@domicile-desktop/sdk": "workspace:*"
   },
   "description": "React for a Domicile shell or app: mount it on the desktop, read the desktop from context, and follow its state with hooks.",
@@ -39,6 +40,10 @@
       "types": "./dist/mount.d.ts",
       "default": "./dist/mount.js"
     },
+    "./per-desktop": {
+      "types": "./dist/per-desktop.d.ts",
+      "default": "./dist/per-desktop.js"
+    },
     "./portals": {
       "types": "./dist/portals.d.ts",
       "default": "./dist/portals.js"
@@ -47,9 +52,21 @@
       "types": "./dist/session.d.ts",
       "default": "./dist/session.js"
     },
+    "./shared-watch": {
+      "types": "./dist/shared-watch.d.ts",
+      "default": "./dist/shared-watch.js"
+    },
+    "./use-shared-watch": {
+      "types": "./dist/use-shared-watch.d.ts",
+      "default": "./dist/use-shared-watch.js"
+    },
     "./use-watch": {
       "types": "./dist/use-watch.d.ts",
       "default": "./dist/use-watch.js"
+    },
+    "./watch-presence": {
+      "types": "./dist/watch-presence.d.ts",
+      "default": "./dist/watch-presence.js"
     },
     "./windows": {
       "types": "./dist/windows.d.ts",

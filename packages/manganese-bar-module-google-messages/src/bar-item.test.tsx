@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { BarContext } from "@domicile-desktop/manganese-bar/bar-context";
 import { PanelKeyboardContext } from "@domicile-desktop/manganese-bar/panel-keyboard";
-import { DomicileContext } from "@domicile-desktop/manganese-host/domicile-context";
+import { DomicileProvider } from "@domicile-desktop/react/domicile-provider";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import {
   WEBVIEW_FOCUS_REQUEST_EVENT,
@@ -30,7 +30,7 @@ const onBars = (
   screens: readonly string[],
   hold: () => () => void = ignoreKeyboard,
 ) => (
-  <DomicileContext value={fake.domicile}>
+  <DomicileProvider domicile={fake.domicile}>
     <PanelKeyboardContext value={hold}>
       {screens.map((name) => (
         <Bar key={name} screen={name}>
@@ -38,7 +38,7 @@ const onBars = (
         </Bar>
       ))}
     </PanelKeyboardContext>
-  </DomicileContext>
+  </DomicileProvider>
 );
 
 const Bar = ({ children, screen }: { children: ReactNode; screen: string }) => (

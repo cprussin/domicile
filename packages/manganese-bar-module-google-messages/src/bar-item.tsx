@@ -1,5 +1,5 @@
 import { useBar } from "@domicile-desktop/manganese-bar/bar-context";
-import { useDomicile } from "@domicile-desktop/manganese-host/domicile-context";
+import { useDomicile } from "@domicile-desktop/react/domicile-provider";
 import { useEffect, useSyncExternalStore } from "react";
 
 import { deskMessages } from "./desk-messages";

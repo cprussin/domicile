@@ -1,7 +1,7 @@
 import { CountBadge } from "@domicile-desktop/component-library/CountBadge";
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
-import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
-import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
+import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
+import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimple";
 import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
 import { css } from "../styled-system/css";

@@ -1,5 +1,5 @@
 import { createHandle } from "@domicile-desktop/component-library/Popover";
-import { perHost } from "@domicile-desktop/manganese-host/per-host";
+import { perDesktop } from "@domicile-desktop/react/per-desktop";
 
 import type { PageBars } from "./page-bars";
 import { pageBars } from "./page-bars";
@@ -16,7 +16,7 @@ export type DeskMessages = {
 };
 
 /** The item's shared state, once per desktop. */
-export const deskMessages = perHost(
+export const deskMessages = perDesktop(
   (): DeskMessages => ({
     bars: pageBars(),
     handle: createHandle(),

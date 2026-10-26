@@ -1,7 +1,10 @@
 import { useBar } from "@domicile-desktop/manganese-bar/bar-context";
-import { useDomicile } from "@domicile-desktop/manganese-host/domicile-context";
+import { useDomicile } from "@domicile-desktop/react/domicile-provider";
+import {
+  deskBluetooth,
+  deskBluetoothHardware,
+} from "@domicile-desktop/system-bluetooth/react";
 import { Bluetooth as Adapters } from "./Bluetooth";
-import { deskBluetooth, deskBluetoothHardware } from "./desk-bluetooth";
 
 /**
  * Bluetooth, whose panel controls adapters and devices. Only its state while

@@ -36,6 +36,17 @@ await setPowered(domicile, "/org/bluez/hci0", false);
 
 See [SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md).
 
+## React
+
+`@domicile-desktop/system-bluetooth/react`, for a shell on
+[`@domicile-desktop/react`](../react/README.md):
+
+- `useBluetooth()`: BlueZ's state, `undefined` until it answers.
+- `useHasBluetooth()`: whether `/sys` lists Bluetooth hardware, looked at
+  every 10s.
+- `deskBluetooth(domicile)` and `deskBluetoothHardware(domicile)`: the shared
+  watches behind them, one per desktop.
+
 ## Test
 
 ```sh

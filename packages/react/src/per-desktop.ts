@@ -5,7 +5,7 @@ import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
  * same value. For watches and stores that every bar, panel and the lock
  * screen share without a provider passing them down.
  */
-export const perHost = <T>(
+export const perDesktop = <T>(
   make: (domicile: Domicile) => T,
 ): ((domicile: Domicile) => T) => {
   const made = new WeakMap<Domicile, T>();

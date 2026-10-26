@@ -4,6 +4,7 @@
     "@domicile-desktop/component-library": "workspace:*",
     "@domicile-desktop/manganese-bar": "workspace:*",
     "@domicile-desktop/manganese-host": "workspace:*",
+    "@domicile-desktop/react": "workspace:*",
     "@domicile-desktop/sdk": "workspace:*",
     "@domicile-desktop/system-audio": "workspace:*",
     "@pandacss/dev": "catalog:",
@@ -29,7 +30,6 @@
   },
   "exports": {
     ".": "./src/bar-item.tsx",
-    "./desk-sound": "./src/desk-sound.ts",
     "./useVolumeKeys": "./src/useVolumeKeys.ts"
   },
   "files": [

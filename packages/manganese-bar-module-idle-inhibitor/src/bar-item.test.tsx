@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { DomicileContext } from "@domicile-desktop/manganese-host/domicile-context";
+import { DomicileProvider } from "@domicile-desktop/react/domicile-provider";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -16,10 +16,10 @@ describe("IdleInhibitor", () => {
   it("asks the desk's Inhibit portal, once for every bar", async () => {
     const fake = new FakeDomicileHost();
     render(
-      <DomicileContext value={fake.domicile}>
+      <DomicileProvider domicile={fake.domicile}>
         <IdleInhibitor />
         <IdleInhibitor />
-      </DomicileContext>,
+      </DomicileProvider>,
     );
 
     await userEvent.click(screen.getAllByRole("button")[0] as HTMLElement);

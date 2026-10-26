@@ -31,6 +31,17 @@ export const Shell = mount(Focused);
   - `./session`: `useIdle`, `useLocked`
   - `./portals`: `usePortalRequests`, `useCapturing`, `useBoundShortcuts`,
     `usePortalWallpaper`
+- Shared watches, for state a library watches (UPower, BlueZ, `pactl`):
+  - `./shared-watch`: `sharedWatch(start)` runs one watch for every
+    subscriber, from the first to the last.
+  - `./per-desktop`: `perDesktop(make)`, one value per desktop.
+  - `./use-shared-watch`: `useSharedWatch(watch)`, and `useDeskWatch(desk)`
+    for a `perDesktop` watch of the desktop above.
+  - `./watch-presence`: `watchPresence(read, onPresent)` looks for hardware
+    in `/sys` every 10 seconds; `isAbsent` says whether to hide for want of
+    it.
+  - The `system-*` packages' `/react` use these: `useBattery`,
+    `useBluetooth`, `useNetwork`, `useAudio` and more.
 - `./fake-domicile`: `<FakeDomicile fake>` for tests. `fake` is a
   `FakeDomicileHost` (`@domicile-desktop/sdk/fake-host`) the test drives;
   without it, a desktop no test drives.
@@ -38,6 +49,7 @@ export const Shell = mount(Focused);
 ## Dependencies
 
 - `@domicile-desktop/sdk` for the desktop's types and `FakeDomicileHost`.
+- `@cprussin/option-result` for `watchPresence`'s `Result`.
 - `react` and `react-dom` are peers: the shell's own copies.
 
 ## Test

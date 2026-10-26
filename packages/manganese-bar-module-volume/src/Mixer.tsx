@@ -9,13 +9,13 @@ import type {
   AudioDevice,
   AudioStream,
 } from "@domicile-desktop/system-audio/audio";
+import type { SoundControls } from "@domicile-desktop/system-audio/react";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle";
 import type { ReactNode } from "react";
 import { createContext, useContext, useState } from "react";
 import { css, cx } from "../styled-system/css";
 import { flex, hstack } from "../styled-system/patterns";
 import { ask } from "./ask";
-import type { SoundControls } from "./desk-sound";
 import type { Direction } from "./Level";
 import { Level } from "./Level";
 import { primary } from "./primary";

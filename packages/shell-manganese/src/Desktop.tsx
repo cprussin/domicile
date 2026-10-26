@@ -27,13 +27,10 @@ import { TrayContext } from "@domicile-desktop/manganese-bar-module-tray/tray-co
 import { trayEntries } from "@domicile-desktop/manganese-bar-module-tray/tray-entry";
 import { useTray } from "@domicile-desktop/manganese-bar-module-tray/useTray";
 import { useTrayOrder } from "@domicile-desktop/manganese-bar-module-tray/useTrayOrder";
-import { deskSound } from "@domicile-desktop/manganese-bar-module-volume/desk-sound";
 import { useVolumeKeys } from "@domicile-desktop/manganese-bar-module-volume/useVolumeKeys";
 import { Clipboard } from "@domicile-desktop/manganese-clipboard/Clipboard";
 import { useClipboard } from "@domicile-desktop/manganese-clipboard/useClipboard";
-import { DomicileContext } from "@domicile-desktop/manganese-host/domicile-context";
 import { sharedIconTheme } from "@domicile-desktop/manganese-host/followed-icon-theme";
-import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
 import { useShellOptions } from "@domicile-desktop/manganese-host/useShellOptions";
 import { appSearch } from "@domicile-desktop/manganese-launcher/app-search";
 import type { ApplicationsConfig } from "@domicile-desktop/manganese-launcher/applications-config";
@@ -86,10 +83,13 @@ import {
 } from "@domicile-desktop/manganese-window-management/window-state";
 import type { Workspaces } from "@domicile-desktop/manganese-window-management/workspaces-context";
 import { WorkspacesContext } from "@domicile-desktop/manganese-window-management/workspaces-context";
+import { DomicileProvider } from "@domicile-desktop/react/domicile-provider";
+import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import { previewFile } from "@domicile-desktop/sdk/file-preview";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { ownedChords } from "@domicile-desktop/sdk/own-keybindings";
+import { deskSound } from "@domicile-desktop/system-audio/react";
 import type { ReactNode } from "react";
 import { useCallback, useMemo, useState } from "react";
 import { useCastHolds } from "./cast-holds";
@@ -721,7 +721,7 @@ const BarProviders = ({
   tray: TrayState;
   workspaces: Workspaces;
 }) => (
-  <DomicileContext value={domicile}>
+  <DomicileProvider domicile={domicile}>
     <WorkspacesContext value={workspaces}>
       <LauncherContext value={launcher}>
         <NotificationsContext value={drawer}>
@@ -737,7 +737,7 @@ const BarProviders = ({
         </NotificationsContext>
       </LauncherContext>
     </WorkspacesContext>
-  </DomicileContext>
+  </DomicileProvider>
 );
 
 /**

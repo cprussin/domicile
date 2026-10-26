@@ -1,17 +1,16 @@
 // The config's icon theme, followed once per desktop and shared by the
 // launcher and tray menus.
 
+import { perDesktop } from "@domicile-desktop/react/per-desktop";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { IconThemeDesktop } from "@domicile-desktop/sdk/icon-theme";
 import { watchIconTheme } from "@domicile-desktop/sdk/icon-theme";
-
-import { perHost } from "./per-host";
 
 /** The icon theme as last read, or `undefined` for `hicolor` only. */
 export type IconTheme = () => Promise<string | undefined>;
 
 /** {@link followIconTheme} for `domicile`, started on first use. */
-export const sharedIconTheme: (domicile: Domicile) => IconTheme = perHost(
+export const sharedIconTheme: (domicile: Domicile) => IconTheme = perDesktop(
   (domicile) => followIconTheme(domicile),
 );
 

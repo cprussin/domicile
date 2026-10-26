@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
+import { sharedWatch } from "@domicile-desktop/react/shared-watch";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { css } from "../styled-system/css";

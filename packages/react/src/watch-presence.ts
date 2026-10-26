@@ -6,7 +6,7 @@ const EVERY_MS = 10_000;
 
 /**
  * Calls `onPresent` with `read` now and whenever it changes, and returns a
- * function that stops watching. For whether a bar item's hardware exists, read
+ * function that stops watching. For whether hardware exists, read
  * from `/sys`, which works while the desktop is locked.
  */
 export const watchPresence = (
@@ -34,7 +34,7 @@ export const watchPresence = (
       })
       .catch((error: unknown) => {
         // biome-ignore lint/suspicious/noConsole: surfacing a background failure; the next look reads again
-        console.error("Failed to look for a bar item's hardware", error);
+        console.error("Failed to look for hardware", error);
       });
   };
   look();
@@ -46,7 +46,7 @@ export const watchPresence = (
 };
 
 /**
- * Whether a bar item hides for want of its hardware: not looked for yet, or
+ * Whether hardware is absent: not looked for yet, or
  * not there. A failed look shows the item, since the hardware may be there.
  */
 export const isAbsent = (

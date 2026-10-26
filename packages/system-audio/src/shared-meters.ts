@@ -1,9 +1,5 @@
-import type { Meter } from "@domicile-desktop/system-audio/audio";
-import type {
-  Levels,
-  Meters,
-  SoundServer,
-} from "@domicile-desktop/system-audio/sound-server";
+import type { Meter } from "./audio";
+import type { Levels, Meters, SoundServer } from "./sound-server";
 
 /** One open mixer: the ids it meters and where their levels go. */
 type Mixer = {

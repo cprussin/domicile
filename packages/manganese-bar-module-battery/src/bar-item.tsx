@@ -1,6 +1,9 @@
-import { useDomicile } from "@domicile-desktop/manganese-host/domicile-context";
+import { useDomicile } from "@domicile-desktop/react/domicile-provider";
+import {
+  deskBattery,
+  deskBatteryHardware,
+} from "@domicile-desktop/system-battery/react";
 import { Battery as Charge } from "./Battery";
-import { deskBattery, deskBatteryHardware } from "./desk-battery";
 
 /** The battery charge. */
 export const Battery = () => {

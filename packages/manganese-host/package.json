@@ -2,11 +2,12 @@
   "dependencies": {
     "@cprussin/option-result": "catalog:",
     "@domicile-desktop/component-library": "workspace:*",
+    "@domicile-desktop/react": "workspace:*",
     "@domicile-desktop/sdk": "workspace:*",
     "@pandacss/dev": "catalog:",
     "react": "catalog:"
   },
-  "description": "Helpers every part of Domicile's manganese desktop shares: the desktop as React context, one value per desktop, and shared watches.",
+  "description": "Helpers every part of Domicile's manganese desktop shares.",
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@domicile-desktop/system-apps": "workspace:*",
@@ -25,20 +26,15 @@
     "node": ">=24"
   },
   "exports": {
-    "./domicile-context": "./src/domicile-context.ts",
     "./domicile-elements": {
       "types": "./src/domicile-elements.d.ts"
     },
     "./followed-icon-theme": "./src/followed-icon-theme.ts",
-    "./per-host": "./src/per-host.ts",
-    "./shared-watch": "./src/shared-watch.ts",
     "./superseded": "./src/superseded.ts",
     "./use-provided": "./src/use-provided.ts",
     "./useRequests": "./src/useRequests.ts",
-    "./useSharedWatch": "./src/useSharedWatch.ts",
     "./useShellOptions": "./src/useShellOptions.ts",
-    "./watch-host": "./src/watch-host.ts",
-    "./watch-presence": "./src/watch-presence.ts"
+    "./watch-host": "./src/watch-host.ts"
   },
   "files": [
     "src/**",

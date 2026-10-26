@@ -106,6 +106,17 @@ import { checkPortal } from "@domicile-desktop/system-network/portal";
 
 See [SHELL-SYSTEM-ACCESS.md](/docs/SHELL-SYSTEM-ACCESS.md).
 
+## React
+
+`@domicile-desktop/system-network/react`, for a shell on
+[`@domicile-desktop/react`](../react/README.md):
+
+- `useNetwork()`, `useNetworkInterfaces()`, `useAddresses()`, `useWifi()`:
+  each `undefined` until first read.
+- `deskNetwork(domicile)`: the shared watches behind them, one per desktop.
+  The network service refuses calls while the desktop is locked, so those
+  watches start again on unlock (`watchAcrossLocks`).
+
 ## Test
 
 ```sh

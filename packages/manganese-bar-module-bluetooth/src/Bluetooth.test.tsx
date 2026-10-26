@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
-import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
+import { sharedWatch } from "@domicile-desktop/react/shared-watch";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";

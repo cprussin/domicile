@@ -1,4 +1,4 @@
-import { useDomicile } from "@domicile-desktop/manganese-host/domicile-context";
+import { useDomicile } from "@domicile-desktop/react/domicile-provider";
 import { Sharing as Casts } from "./Sharing";
 
 /**

@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "@cprussin/option-result": "catalog:",
+    "@domicile-desktop/react": "workspace:*",
     "@domicile-desktop/sdk": "workspace:*",
     "zod": "catalog:"
   },
@@ -9,6 +10,8 @@
     "@cprussin/tsconfig": "catalog:",
     "@domicile-desktop/test-support": "workspace:*",
     "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "react": "catalog:",
     "typescript": "catalog:"
   },
   "engines": {
@@ -35,6 +38,10 @@
     "./sound-server": {
       "types": "./dist/sound-server.d.ts",
       "default": "./dist/sound-server.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "default": "./dist/react.js"
     }
   },
   "files": [
@@ -42,6 +49,9 @@
   ],
   "license": "MIT",
   "name": "@domicile-desktop/system-audio",
+  "peerDependencies": {
+    "react": "catalog:"
+  },
   "private": false,
   "publishConfig": {
     "access": "public"

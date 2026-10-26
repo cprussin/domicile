@@ -4,9 +4,9 @@ import { Err, None, Ok, Some } from "@cprussin/option-result";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import type { Listening, SystemError } from "@domicile-desktop/sdk/system";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
-import type { Battery } from "@domicile-desktop/system-battery/battery";
+import type { Battery } from "./battery";
 
-import { watchBattery } from "./watch-battery";
+import { followBattery } from "./follow-battery";
 
 type Watched = Result<Listening<Option<Battery>>, SystemError>;
 
@@ -62,14 +62,14 @@ const neverFails = (error: unknown) => {
 /** Let the library's promises settle. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-describe("watchBattery", () => {
+describe("followBattery", () => {
   it("reports each reading the library gives", async () => {
     const half = Some({ charge: 0.5, charging: false });
     const battery = library(watching([half, None()]).answer);
     const readings: Option<Battery>[] = [];
 
     await new Promise<void>((resolve) => {
-      watchBattery(
+      followBattery(
         new FakeDomicileHost().domicile,
         (reading) => {
           readings.push(reading);
@@ -86,7 +86,7 @@ describe("watchBattery", () => {
 
   it("stops the library's watch when stopped", async () => {
     const watch = watching([]);
-    const stop = watchBattery(
+    const stop = followBattery(
       new FakeDomicileHost().domicile,
       () => undefined,
       {
@@ -104,7 +104,7 @@ describe("watchBattery", () => {
   it("stops a watch that starts after it was stopped", async () => {
     const watch = watching([]);
 
-    watchBattery(new FakeDomicileHost().domicile, () => undefined, {
+    followBattery(new FakeDomicileHost().domicile, () => undefined, {
       fail: neverFails,
       watch: library(watch.answer).watch,
     })();
@@ -125,7 +125,7 @@ describe("watchBattery", () => {
     );
 
     for (let started = 0; started < 2; started += 1) {
-      watchBattery(new FakeDomicileHost().domicile, () => undefined, {
+      followBattery(new FakeDomicileHost().domicile, () => undefined, {
         fail: (error) => failures.push(error),
         watch: battery.watch,
       });

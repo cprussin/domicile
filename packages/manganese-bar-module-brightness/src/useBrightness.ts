@@ -1,4 +1,4 @@
-import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
+import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
 import { useEffect, useRef, useState } from "react";
 import type { SharedBacklight } from "./shared-backlight";
 
