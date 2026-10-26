@@ -45,8 +45,13 @@ pub enum LayoutError {
     Offscreen,
 }
 
-/// The stream of `target`, a rectangle of the desktop in logical pixels.
-pub fn layout(target: Rect, screens: &[Screen]) -> Result<Layout, LayoutError> {
+/// The stream of `target`, a rectangle of the desktop in logical pixels, at
+/// most `most_pixels` big when that is set: a bigger one is scaled down.
+pub fn layout(
+    target: Rect,
+    screens: &[Screen],
+    most_pixels: Option<u64>,
+) -> Result<Layout, LayoutError> {
     let touched: Vec<(&Screen, Rect)> = screens
         .iter()
         .filter_map(|screen| Some((screen, intersection(target, screen.desk)?)))
@@ -56,6 +61,13 @@ pub fn layout(target: Rect, screens: &[Screen]) -> Result<Layout, LayoutError> {
         .map(|(screen, _)| screen.scale)
         .reduce(f64::max)
         .ok_or(LayoutError::Offscreen)?;
+    let scale = match most_pixels {
+        Some(most) => {
+            let area = f64::from(target.2) * f64::from(target.3);
+            scale.min((most as f64 / area).sqrt())
+        }
+        None => scale,
+    };
     let pixels = |logical: i32| (f64::from(logical) * scale).round() as i32;
     let pieces = touched
         .iter()
@@ -169,7 +181,7 @@ mod tests {
     #[test]
     fn a_monitor_is_one_piece_at_its_own_density() {
         assert_eq!(
-            layout((1920, 0, 1280, 800), &desk()),
+            layout((1920, 0, 1280, 800), &desk(), None),
             Ok(Layout {
                 size: (2560, 1600),
                 pieces: vec![Piece {
@@ -184,7 +196,7 @@ mod tests {
     #[test]
     fn a_region_across_monitors_takes_the_highest_density() {
         assert_eq!(
-            layout((1800, 100, 240, 100), &desk()),
+            layout((1800, 100, 240, 100), &desk(), None),
             Ok(Layout {
                 size: (480, 200),
                 pieces: vec![
@@ -204,9 +216,38 @@ mod tests {
     }
 
     #[test]
+    fn a_stream_past_its_most_pixels_is_scaled_down() {
+        // The whole desk at 2x is 6400x2160; at most a quarter of that is
+        // 3200x1080, half the density.
+        assert_eq!(
+            layout((0, 0, 3200, 1080), &desk(), Some(3200 * 1080)),
+            Ok(Layout {
+                size: (3200, 1080),
+                pieces: vec![
+                    Piece {
+                        display: 1,
+                        from: (0, 0, 1920, 1080),
+                        to: (0, 0, 1920, 1080),
+                    },
+                    Piece {
+                        display: 2,
+                        from: (0, 0, 1280, 800),
+                        to: (1920, 0, 1280, 800),
+                    },
+                ],
+            })
+        );
+        // A stream within it keeps its density.
+        assert_eq!(
+            layout((1920, 0, 1280, 800), &desk(), Some(2560 * 1600)).map(|layout| layout.size),
+            Ok((2560, 1600))
+        );
+    }
+
+    #[test]
     fn a_region_on_no_monitor_is_refused() {
         assert_eq!(
-            layout((0, 2000, 100, 100), &desk()),
+            layout((0, 2000, 100, 100), &desk(), None),
             Err(LayoutError::Offscreen)
         );
     }

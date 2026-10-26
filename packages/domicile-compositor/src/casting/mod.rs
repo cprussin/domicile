@@ -135,6 +135,9 @@ pub enum Request {
         source: Source,
         /// Part of a window's frame, in its pixels; see [`Candidate::part`].
         part: Option<Rect>,
+        /// The most pixels a monitor or region's frames have, or `None` for
+        /// its full density.
+        most_pixels: Option<u64>,
         cursor: CursorMode,
         consumer: Consumer,
         listener: Listener,
@@ -189,11 +192,25 @@ impl Casting {
         cursor: CursorMode,
         listener: impl FnOnce(StreamId) -> Listener,
     ) -> StreamId {
+        self.start_at_most(source, part, None, cursor, listener)
+    }
+
+    /// [`Casting::start`], with a monitor or region scaled down to at most
+    /// `most_pixels` when it has more.
+    pub fn start_at_most(
+        &self,
+        source: Source,
+        part: Option<Rect>,
+        most_pixels: Option<u64>,
+        cursor: CursorMode,
+        listener: impl FnOnce(StreamId) -> Listener,
+    ) -> StreamId {
         let stream = StreamId(self.next.fetch_add(1, Ordering::Relaxed));
         self.send(Request::Start {
             stream,
             source,
             part,
+            most_pixels,
             cursor,
             consumer: Consumer::Pipewire,
             listener: listener(stream),
@@ -209,6 +226,7 @@ impl Casting {
             stream,
             source,
             part: None,
+            most_pixels: None,
             cursor,
             consumer: Consumer::Client,
             listener: Box::new(|_| {}),
