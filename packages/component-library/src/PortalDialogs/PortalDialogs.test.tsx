@@ -13,6 +13,7 @@ import type {
   Node,
 } from "@domicile-desktop/system-apps/fake-desktop";
 import { fakeDesktop } from "@domicile-desktop/system-apps/fake-desktop";
+import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
 import {
   act,
   fireEvent,
@@ -23,6 +24,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { token } from "../../styled-system/tokens";
 import { Button } from "../Button/Button";
 import { DisplayProvider } from "../Screen/DisplayProvider";
 import type { DisplaySource } from "../Screen/display-source";
@@ -959,6 +961,53 @@ describe("PortalDialogs", () => {
       expect(screen.getByRole("dialog").parentElement?.style.left).toBe(
         "1920px",
       );
+    });
+  });
+
+  // Like every other portal dialog: over every window, which stack above
+  // `z-index: auto`, and alone in the accessibility tree.
+  describe("file pickers are modal", () => {
+    loadEmittedStylesheet(
+      document,
+      new URL("../../styled-system/styles.css", import.meta.url),
+    );
+
+    /** The `z-index` of the box around the file picker. */
+    const pickerDepth = () =>
+      globalThis.getComputedStyle(
+        screen.getByRole("dialog").parentElement as HTMLElement,
+      ).zIndex;
+
+    it("draws a file chooser over the windows, alone", async () => {
+      const host = new FakeHost();
+      render(
+        <>
+          <Button>Behind</Button>
+          <PortalDialogs domicile={host.with(home())} />
+        </>,
+      );
+      host.push([fileChooser(1)]);
+      await listed();
+
+      expect(pickerDepth()).toBe(token("zIndex.modal"));
+      expect(screen.queryByRole("button", { name: "Behind" })).toBeNull();
+    });
+
+    it("draws a print's save picker over the windows, alone", async () => {
+      const user = userEvent.setup();
+      const host = new FakeHost();
+      render(
+        <>
+          <Button>Behind</Button>
+          <PortalDialogs domicile={host.with(home())} />
+        </>,
+      );
+      host.push([print(1, [])]);
+      await user.click(screen.getByRole("button", { name: "Save…" }));
+      await listed();
+
+      expect(pickerDepth()).toBe(token("zIndex.modal"));
+      expect(screen.queryByRole("button", { name: "Behind" })).toBeNull();
     });
   });
 
