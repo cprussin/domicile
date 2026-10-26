@@ -10,7 +10,7 @@ browser holds the CRTCs.
   (`SetDomicileWhitePoint`).
 - `DrmModeset` sets it on every display of the last reading as a gamma
   ramp (`NativeDisplayDelegate::SetGammaAdjustment`), so it works on
-  drivers with no CTM. Colors as they are clear the ramp. It sets it
+  drivers with no CTM. Colors as they are set an identity ramp. It sets it
   again after each confirmed modeset, since a resume or a console
   switch can leave another process's ramp on the CRTCs.
 - Every other platform ignores it: a nested desktop's monitors are the
