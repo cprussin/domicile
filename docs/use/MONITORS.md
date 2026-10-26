@@ -62,10 +62,12 @@ follows the room's light, is here too.
 ```json
 {
   "shell_options": {
-    "nightLight.schedule": "custom",
-    "nightLight.from": "21:30",
-    "nightLight.to": "07:00",
-    "nightLight.warmth": 60
+    "nightLight": {
+      "schedule": "custom",
+      "from": "21:30",
+      "to": "07:00",
+      "warmth": 60
+    }
   }
 }
 ```

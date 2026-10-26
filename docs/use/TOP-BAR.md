@@ -41,7 +41,7 @@ it shows seconds.
 <!-- tab: Config file -->
 
 ```json
-{ "shell_options": { "clock.format": "12h", "clock.seconds": false } }
+{ "shell_options": { "clock": { "format": "12h", "seconds": false } } }
 ```
 
 <!-- /tabs -->
