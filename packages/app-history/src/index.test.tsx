@@ -3,10 +3,11 @@ import { appDesktop } from "@domicile-desktop/sdk/desktop/app-desktop";
 import type { DomicileAppHost } from "@domicile-desktop/sdk/domicile-host";
 import { act, within } from "@testing-library/react";
 
+import icon from "../icons/history.svg";
 import { main } from "./index";
 
 describe(main, () => {
-  it("mounts the app into its root, names the window and starts the app host", async () => {
+  it("mounts the app into its root, names the window, gives it the app's icon and starts the app host", async () => {
     const calls: unknown[] = [];
     const host: DomicileAppHost = {
       addEventListener: () => {
@@ -25,6 +26,9 @@ describe(main, () => {
       await main(root, appDesktop(host));
     });
     expect(document.title).toBe("History");
+    expect(
+      document.head.querySelector('link[rel="icon"]')?.getAttribute("href"),
+    ).toBe(icon);
     expect(
       within(root).getByRole("searchbox", { name: "Search history" }),
     ).toBeInTheDocument();

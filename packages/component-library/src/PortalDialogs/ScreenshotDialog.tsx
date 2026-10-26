@@ -32,6 +32,8 @@ type Props = {
   /** The desktop's browser windows, as the engine lists them. */
   browserWindows: readonly BrowserWindow[];
   screen: string | undefined;
+  /** A browser window's page icon URL, if its page has one. */
+  pageIcon: (id: string) => string | undefined;
   /** Draws a window that is not on screen. */
   previewWindow: DrawPreview;
   /** The windows the shell draws on screen, read once as the dialog opens. */
@@ -86,6 +88,7 @@ export const ScreenshotDialog = ({
   asker,
   body,
   browserWindows,
+  pageIcon,
   previewWindow,
   screen,
   shownWindows,
@@ -116,6 +119,7 @@ export const ScreenshotDialog = ({
       ...browserChoice(
         id,
         title,
+        pageIcon(id),
         shownArea(body, shown, ShownWindowKind.Browser, id),
       ),
       pick: Pick.BrowserWindow(id),

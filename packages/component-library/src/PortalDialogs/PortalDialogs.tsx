@@ -34,6 +34,7 @@ import { InputCaptureDialog } from "./InputCaptureDialog";
 import { LauncherDialog } from "./LauncherDialog";
 import { PickColorDialog } from "./PickColorDialog";
 import { PrintDialog } from "./PrintDialog";
+import { pageIcon } from "./page-icon";
 import type { Recording } from "./RecordingToolbar";
 import { RecordingToolbar } from "./RecordingToolbar";
 import { RemoteDesktopDialog } from "./RemoteDesktopDialog";
@@ -215,6 +216,9 @@ export const PortalDialogs = memo(
 /** The windows this page draws. */
 const drawnOnPage = () => drawnWindows(document);
 
+/** A browser window's page icon, from its view on this page. */
+const pageIconOnPage = (id: string) => pageIcon(document, id);
+
 const isRecording = (session: Capturing): session is Recording =>
   session.kind === CapturingKind.Recording;
 
@@ -350,6 +354,7 @@ const Dialog = ({
           body={request.body}
           browserWindows={browserWindows}
           castTo={claim?.kind === CastClaimKind.Pick ? claim.to : undefined}
+          pageIcon={pageIconOnPage}
           previewWindow={domicile.capture.preview}
           record={request.appId === SHELL_APP_ID}
           screen={screen}
@@ -374,6 +379,7 @@ const Dialog = ({
           asker={request.appId === SHELL_APP_ID ? undefined : asker}
           body={request.body}
           browserWindows={browserWindows}
+          pageIcon={pageIconOnPage}
           previewWindow={domicile.capture.preview}
           screen={screen}
           shownWindows={shownWindows}

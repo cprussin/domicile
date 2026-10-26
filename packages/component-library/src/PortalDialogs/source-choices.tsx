@@ -1,8 +1,8 @@
 import type { FrozenDesk, ShotRect } from "@domicile-desktop/sdk/portal";
 import { PreviewedWindow } from "@domicile-desktop/sdk/previewed-window";
-import { GlobeIcon } from "@phosphor-icons/react/dist/ssr/Globe";
 import { MonitorIcon } from "@phosphor-icons/react/dist/ssr/Monitor";
 import type { App } from "../useApps/useApps";
+import { PageIcon } from "./PageIcon";
 import type { Choice } from "./SourcePicker";
 import { WindowIcon } from "./WindowIcon";
 
@@ -45,15 +45,16 @@ export const windowChoice = (
   preview: PreviewedWindow.App(id),
 });
 
-/** Browser window `id`, by its page's title. */
+/** Browser window `id`, by its page's title, with its page's icon. */
 export const browserChoice = (
   id: string,
   title: string,
+  icon: string | undefined,
   area: ShotRect | undefined,
 ): Choice => ({
   area,
   detail: "Browser",
-  icon: <GlobeIcon aria-hidden />,
+  icon: <PageIcon icon={icon} />,
   label: `Browser: ${titled(title)}`,
   name: titled(title),
   preview: PreviewedWindow.Browser(id),
