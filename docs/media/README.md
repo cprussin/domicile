@@ -23,8 +23,10 @@ nested sway with these helpers (`packages/site/scripts/docs-media/lib.sh`):
 | `shot <name>` | Writes `<name>.png` with `domicile screenshot`. |
 | `record <name> <seconds>` | Writes `<name>.webm` and `<name>.mp4`, muted. |
 | `keys <wtype args...>` | Types into the desktop. |
+| `click <x> <y>` | Clicks at a point on the output, with a virtual pointer. |
+| `config <json>` | The desktop's config, written before `desktop`. Without it the desktop has none. |
 
-`shot`, `record` and `keys` fail the scene if the engine has exited:
+`shot`, `record`, `keys` and `click` fail the scene if the engine has exited:
 `domicile` restarts it, so the capture would go on with a fresh desktop. A
 scene whose engine exited prints the engine's fatal lines, however it ended.
 
@@ -46,3 +48,7 @@ scene whose engine exited prints the engine's fatal lines, however it ended.
 | `tour-notifications.png`, `tour-notifications.webm`, `tour-notifications.mp4` | `tour-notifications` | Two toasts arriving, then the drawer opening. |
 | `tour-bar.png` | `tour-bar` | The bar from just left of the clock to the right edge, over a browser window. |
 | `tour-settings.png` | `tour-settings` | The Settings app beside nvim. |
+| `tour-extensions.png` | `tour-extensions` | uBlock Origin Lite's popup, open from the tray over a browser window. |
+| `tour-monitors.png`, `tour-monitors.webm`, `tour-monitors.mp4` | `tour-monitors` | Two monitors side by side, and a browser window moving from the left one to the right one. |
+| `configure-settings.png` | `configure-settings` | The Settings app's Shell page, with the clock set to 12-hour. |
+| `shell-quickstart.png` | `shell-quickstart` | The shell quickstart's example shell: nvim editing it, beside btop. |

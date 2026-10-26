@@ -60,6 +60,8 @@ domicile ./shell.tsx
 - It prints `XDG_RUNTIME_DIR` and `WAYLAND_DISPLAY`. Start an app with both
   set and it opens on your shell.
 
+![The quickstart shell: nvim and btop side by side](media/shell-quickstart.png)
+
 ## 4. Change it
 
 Edit `shell.tsx`, then, in a terminal on the desktop:

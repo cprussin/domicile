@@ -25,9 +25,18 @@ fi
 
 for name in "${names[@]}"; do
   [ -f "$SCENES/$name.sh" ] || { echo "no scene $name in $SCENES" >&2; exit 1; }
+done
+
+# The user-facing build, as `nix run` gets it: the published engine and this
+# checkout's compositor. Built once, before any scene writes to docs/media:
+# each capture dirties the tree, and building after one rebuilt the shells,
+# about four minutes a scene.
+DOMICILE_BIN="$(nix build --no-link --print-out-paths "$ROOT#domicile")/bin/domicile"
+export DOMICILE_BIN
+
+for name in "${names[@]}"; do
   echo "scene $name"
-  # Compresses the scene's recordings, below. Fetched once a scene is known to
-  # exist.
+  # Compresses the scene's recordings, below.
   FFMPEG="${FFMPEG:-$(nix build --no-link --print-out-paths 'nixpkgs#ffmpeg^bin')/bin/ffmpeg}"
   # In /tmp, since the engine puts a socket beside its profile and a deep
   # $TMPDIR passes the 107-byte socket path limit.
