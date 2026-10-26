@@ -7,6 +7,7 @@ export const DOCS: readonly LinkColumn[] = [
     links: [
       { href: "/docs/shells/quickstart", label: "Quickstart" },
       { href: "/docs/shells/from-manganese", label: "Start from manganese" },
+      { href: "/docs/apps/build", label: "Build an app" },
       {
         href: "/docs/shells/writing",
         label: "Concepts: shells, windows, focus, keys",
