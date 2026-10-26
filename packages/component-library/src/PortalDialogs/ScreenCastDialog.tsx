@@ -41,6 +41,8 @@ type Props = {
   /** The TV a cast that asked shows the pick on, titling the dialog for it. */
   castTo?: string | undefined;
   screen: string | undefined;
+  /** A browser window's page icon URL, if its page has one. */
+  pageIcon: (id: string) => string | undefined;
   /** Draws a window that is not on screen. */
   previewWindow: DrawPreview;
   /**
@@ -73,6 +75,7 @@ export const ScreenCastDialog = ({
   body,
   browserWindows,
   castTo,
+  pageIcon,
   previewWindow,
   record = false,
   screen,
@@ -142,6 +145,7 @@ export const ScreenCastDialog = ({
           ...browserChoice(
             id,
             title,
+            pageIcon(id),
             shownArea(body.desk, shown, ShownWindowKind.Browser, id),
           ),
           source: Source.BrowserWindow({ id, title }),

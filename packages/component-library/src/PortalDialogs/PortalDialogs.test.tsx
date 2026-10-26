@@ -394,6 +394,18 @@ const drawn = (
   return element;
 };
 
+/** Browser window `id`'s `<webview>`, showing a page whose icon is `favicon`. */
+const iconed = (id: string, favicon: string): HTMLElement => {
+  const element = drawn("webview", ["window", id], {
+    height: 0,
+    width: 0,
+    x: 0,
+    y: 0,
+  });
+  Object.defineProperty(element, "favicon", { value: favicon });
+  return element;
+};
+
 /** Browser window `id`, titled `title`, as the engine lists it. */
 const browserWindow = (id: string, title: string) => ({
   height: 0,
@@ -1564,6 +1576,32 @@ describe("PortalDialogs", () => {
       ).toBeInTheDocument();
     });
 
+    it("shows each browser window's page icon", () => {
+      const host = new FakeHost();
+      host.fake.set({
+        browserWindows: [
+          browserWindow("1", "Settings"),
+          browserWindow("2", "Blank"),
+        ],
+      });
+      const elements = [
+        iconed("1", "data:image/svg+xml,settings"),
+        iconed("2", ""),
+      ];
+      render(<PortalDialogs domicile={host.domicile} />);
+      host.push([frozen(1, "screenshot")]);
+      const settings = screen.getByRole("radio", { name: "Browser: Settings" });
+      const blank = screen.getByRole("radio", { name: "Browser: Blank" });
+      for (const element of elements) {
+        element.remove();
+      }
+
+      expect(
+        within(settings).getByRole("presentation").getAttribute("src"),
+      ).toBe("data:image/svg+xml,settings");
+      expect(within(blank).queryByRole("presentation")).not.toBeInTheDocument();
+    });
+
     it("saves a window the shell shows from its own frame, without what is over it", async () => {
       const host = new FakeHost();
       render(
@@ -2242,7 +2280,7 @@ describe("screen cast", () => {
   });
 
   describe("browser windows", () => {
-    it("offers each browser window's page alone, shown or not, and shares it", async () => {
+    it("offers each browser window's page alone, shown or not, with its icon, and shares it", async () => {
       const host = new FakeHost();
       host.fake.set({
         browserWindows: [
@@ -2250,10 +2288,17 @@ describe("screen cast", () => {
           browserWindow("8", "Docs"),
         ],
       });
+      const meet = iconed("7", "https://meet.example/icon.png");
       render(
         <PortalDialogs domicile={host.domicile} shownWindows={() => []} />,
       );
       host.push([screenCast(false, WINDOWS, false, { browser_windows: true })]);
+      expect(
+        within(screen.getByRole("radio", { name: "Browser: Meet" }))
+          .getByRole("presentation")
+          .getAttribute("src"),
+      ).toBe("https://meet.example/icon.png");
+      meet.remove();
       const windows = radiosNamed("Windows", [
         "Firefox: Notes",
         "Untitled window",

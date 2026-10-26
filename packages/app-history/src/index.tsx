@@ -11,6 +11,7 @@ import type { AppMain } from "@domicile-desktop/sdk/app";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
+import icon from "../icons/history.svg";
 import { App } from "./App";
 import { hostBrowser } from "./browser";
 import { spawnedHost } from "./host";
@@ -23,6 +24,11 @@ export const main: AppMain = (root, domicile) => {
   applyTheme(themes.theme ?? "dark");
   followReducedMotion();
   document.title = "History";
+  // The launcher's icon, which the shell draws for the window.
+  const link = document.createElement("link");
+  link.rel = "icon";
+  link.href = icon;
+  document.head.append(link);
   createRoot(root).render(
     <StrictMode>
       <ThemeProvider source={themes}>
