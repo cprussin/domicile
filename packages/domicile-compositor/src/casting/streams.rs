@@ -154,6 +154,8 @@ enum Shows {
     Desk {
         monitor: Option<String>,
         target: Rect,
+        /// The most pixels its frames have; see [`region::layout`].
+        most_pixels: Option<u64>,
         layout: Layout,
     },
 }
@@ -264,6 +266,7 @@ impl Streams {
                 stream,
                 source,
                 part,
+                most_pixels,
                 cursor,
                 consumer,
                 listener,
@@ -285,6 +288,7 @@ impl Streams {
                     stream,
                     source,
                     part,
+                    most_pixels,
                     cursor,
                     listener,
                     process,
@@ -323,13 +327,14 @@ impl Streams {
         stream: StreamId,
         source: Source,
         part: Option<Rect>,
+        most_pixels: Option<u64>,
         cursor: CursorMode,
         mut listener: Listener,
         process: Option<u32>,
         window_open: impl Fn(&str) -> bool,
         capturer: Option<&mut (dyn Capturer + 'static)>,
     ) {
-        let shows = match self.shows(stream, source, window_open, capturer) {
+        let shows = match self.shows(stream, source, most_pixels, window_open, capturer) {
             Ok(shows) => shows,
             Err(why) if self.clients.contains(&stream) => {
                 self.send(ToPipewire::End { stream, why });
@@ -389,6 +394,7 @@ impl Streams {
         &mut self,
         stream: StreamId,
         source: Source,
+        most_pixels: Option<u64>,
         window_open: impl Fn(&str) -> bool,
         capturer: Option<&mut (dyn Capturer + 'static)>,
     ) -> Result<Shows, Ended> {
@@ -419,7 +425,7 @@ impl Streams {
                     debug!(?stream, %name, "a cast of a monitor that is not plugged in");
                     return Err(Ended::SourceGone);
                 };
-                self.desk(stream, Some(name), target, capturer)
+                self.desk(stream, Some(name), target, most_pixels, capturer)
                     .map_err(Ended::Failed)
             }
             Source::Region(region) => {
@@ -429,7 +435,7 @@ impl Streams {
                     region.size.0,
                     region.size.1,
                 );
-                self.desk(stream, None, target, capturer)
+                self.desk(stream, None, target, most_pixels, capturer)
                     .map_err(Ended::Failed)
             }
         }
@@ -498,7 +504,7 @@ impl Streams {
         desk: Rect,
         capturer: &mut (dyn Capturer + 'static),
     ) -> Result<(Rect, Layout), String> {
-        let layout = region::layout(desk, &self.screens).map_err(|why| why.to_string())?;
+        let layout = region::layout(desk, &self.screens, None).map_err(|why| why.to_string())?;
         self.captures.show(
             stream,
             &self.capture_sizes(&layout),
@@ -521,6 +527,7 @@ impl Streams {
             let shows = Shows::Desk {
                 monitor: None,
                 target: shooting.desk,
+                most_pixels: None,
                 layout: shooting.layout.clone(),
             };
             let composed = view(
@@ -618,9 +625,11 @@ impl Streams {
         stream: StreamId,
         monitor: Option<String>,
         target: Rect,
+        most_pixels: Option<u64>,
         capturer: Option<&mut (dyn Capturer + 'static)>,
     ) -> Result<Shows, String> {
-        let layout = region::layout(target, &self.screens).map_err(|why| why.to_string())?;
+        let layout =
+            region::layout(target, &self.screens, most_pixels).map_err(|why| why.to_string())?;
         let capturer = capturer.ok_or("no engine is connected to capture the desktop")?;
         self.captures.show(
             stream,
@@ -631,6 +640,7 @@ impl Streams {
         Ok(Shows::Desk {
             monitor,
             target,
+            most_pixels,
             layout,
         })
     }
@@ -666,12 +676,15 @@ impl Streams {
             .collect();
         for stream in desk {
             let Some(Shows::Desk {
-                monitor, target, ..
+                monitor,
+                target,
+                most_pixels,
+                ..
             }) = self.casts.get(&stream).map(|cast| &cast.shows)
             else {
                 continue;
             };
-            let (monitor, target) = (monitor.clone(), *target);
+            let (monitor, target, most_pixels) = (monitor.clone(), *target, *most_pixels);
             let target = match &monitor {
                 Some(name) => match self.monitor(name) {
                     Some(target) => target,
@@ -682,7 +695,13 @@ impl Streams {
                 },
                 None => target,
             };
-            match self.desk(stream, monitor, target, capturer.as_deref_mut()) {
+            match self.desk(
+                stream,
+                monitor,
+                target,
+                most_pixels,
+                capturer.as_deref_mut(),
+            ) {
                 Ok(shows) => {
                     let cast = self.casts.get_mut(&stream).expect("listed above");
                     cast.shows = shows;
@@ -1770,7 +1789,8 @@ mod tests {
         let desk = |target: Rect| Shows::Desk {
             monitor: None,
             target,
-            layout: region::layout(target, &screens()).expect("on a monitor"),
+            most_pixels: None,
+            layout: region::layout(target, &screens(), None).expect("on a monitor"),
         };
 
         assert_eq!(density(&desk((0, 0, 1, 1)), &HashMap::new()), 1.0);
@@ -2214,6 +2234,7 @@ mod tests {
             .shows(
                 StreamId(4),
                 Source::BrowserWindow("1".into()),
+                None,
                 |_| false,
                 Some(&mut engine),
             )
@@ -2271,6 +2292,7 @@ mod tests {
             .shows(
                 StreamId(4),
                 Source::BrowserWindow("1".into()),
+                None,
                 |_| false,
                 Some(&mut engine),
             )
@@ -2320,6 +2342,7 @@ mod tests {
             .shows(
                 StreamId(4),
                 Source::BrowserWindow("1".into()),
+                None,
                 |_| false,
                 Some(&mut engine),
             )
@@ -2344,6 +2367,7 @@ mod tests {
             streams().shows(
                 StreamId(4),
                 Source::BrowserWindow("1".into()),
+                None,
                 |_| false,
                 None,
             ),
@@ -2400,7 +2424,8 @@ mod tests {
         let desk = Shows::Desk {
             monitor: None,
             target,
-            layout: region::layout(target, &screens()).expect("on a monitor"),
+            most_pixels: None,
+            layout: region::layout(target, &screens(), None).expect("on a monitor"),
         };
         assert_eq!(heard(&desk, None, false), Some(Heard::Everything));
     }
@@ -2417,6 +2442,7 @@ mod tests {
             stream,
             source: Source::Monitor(name.into()),
             part: None,
+            most_pixels: None,
             cursor: CursorMode::Hidden,
             consumer: Consumer::Client,
             listener: Box::new(|_| panic!("a client's cast has no listener")),
@@ -2466,6 +2492,7 @@ mod tests {
                 stream,
                 source: Source::Monitor("drm-1".into()),
                 part: None,
+                most_pixels: None,
                 cursor: CursorMode::Hidden,
                 consumer: Consumer::Client,
                 listener: Box::new(|_| {}),

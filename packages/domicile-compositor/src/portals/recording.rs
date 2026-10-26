@@ -34,6 +34,11 @@ use crate::reply::reply;
 /// The recorder's binary, beside the compositor's.
 const RECORDER: &str = "domicile-recorder";
 
+/// The most pixels a recorded monitor or region has: 4K's. The recorder
+/// encodes on the CPU, which keeps up with this many at full frame rate but
+/// not with a whole desk of high-density monitors.
+const MOST_PIXELS: u64 = 3840 * 2160;
+
 /// What a recording needs from the rest of the compositor.
 #[derive(Clone)]
 pub struct Recordings {
@@ -203,9 +208,10 @@ fn cast(
 ) -> Result<(StreamId, u32, Option<String>), SystemError> {
     let (ready, nodes) = reply();
     let mut ready = Some(ready);
-    let stream = casting.start(
+    let stream = casting.start_at_most(
         candidate.source.clone(),
         candidate.part,
+        Some(MOST_PIXELS),
         CursorMode::Embedded,
         |_| {
             Box::new(move |event| match event {
@@ -549,11 +555,14 @@ mod tests {
                         Arrived::Msg(Request::Start {
                             stream,
                             source,
+                            most_pixels,
                             cursor,
                             mut listener,
                             ..
                         }) => {
-                            let _ = did.send(format!("start {source:?} {cursor:?}"));
+                            let _ = did.send(format!(
+                                "start {source:?} {cursor:?} at most {most_pixels:?}"
+                            ));
                             listener(Event::Ready {
                                 node: 42,
                                 sound: Some("domicile-sound-desk".into()),
@@ -663,7 +672,10 @@ mod tests {
         let recording = recording(false);
         recording.pick(monitor());
 
-        assert_eq!(recording.did(), "start Monitor(\"drm-1\") Embedded");
+        assert_eq!(
+            recording.did(),
+            "start Monitor(\"drm-1\") Embedded at most Some(8294400)"
+        );
         let file = recording.folder.path().join("Screen recording.webm");
         assert_eq!(
             recording.did(),
