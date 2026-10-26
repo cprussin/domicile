@@ -3,7 +3,7 @@
   "buildCommand": "rm public/media && cp -R ../../docs/media public/media && next build",
   "git": {
     "deploymentEnabled": {
-      "*": false,
+      "**": false,
       "stable": true
     }
   },
