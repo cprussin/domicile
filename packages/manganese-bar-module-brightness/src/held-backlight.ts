@@ -1,6 +1,6 @@
 import { sharedWatch } from "@domicile-desktop/react/shared-watch";
+import type { SharedBacklight } from "@domicile-desktop/system-backlight/shared-backlight";
 import { act } from "@testing-library/react";
-import type { SharedBacklight } from "./shared-backlight";
 
 /**
  * A test-controlled backlight: `backlight` replaces the system's, `report`

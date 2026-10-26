@@ -1,8 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
+import { useAutoBrightness } from "@domicile-desktop/system-backlight/react";
 import { renderHook } from "@testing-library/react";
-
-import { useAutoBrightness } from "./useAutoBrightness";
 
 /** A sensor that counts its watches and their stops. */
 const sensor = () => {

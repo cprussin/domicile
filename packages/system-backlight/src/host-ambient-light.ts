@@ -1,6 +1,6 @@
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { Listening } from "@domicile-desktop/sdk/system";
-import { watchAmbientLight } from "@domicile-desktop/system-backlight/watch-ambient-light";
+import { watchAmbientLight } from "./watch-ambient-light";
 
 /**
  * Calls `onLux` with the room's light now and after each change, and returns

@@ -7,9 +7,7 @@ import { usePortalWallpaper } from "@domicile-desktop/component-library/usePorta
 import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
 import type { HoldKeyboard } from "@domicile-desktop/manganese-bar/panel-keyboard";
 import { PanelKeyboardContext } from "@domicile-desktop/manganese-bar/panel-keyboard";
-import { deskBacklight } from "@domicile-desktop/manganese-bar-module-brightness/desk-backlight";
 import { deskNightLight } from "@domicile-desktop/manganese-bar-module-brightness/desk-night-light";
-import { useAutoBrightness } from "@domicile-desktop/manganese-bar-module-brightness/useAutoBrightness";
 import { useBrightnessKeys } from "@domicile-desktop/manganese-bar-module-brightness/useBrightnessKeys";
 import { useNightLight } from "@domicile-desktop/manganese-bar-module-brightness/useNightLight";
 import type { ClockOptions } from "@domicile-desktop/manganese-bar-module-clock/clock-options";
@@ -90,6 +88,10 @@ import { previewFile } from "@domicile-desktop/sdk/file-preview";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { ownedChords } from "@domicile-desktop/sdk/own-keybindings";
 import { deskSound } from "@domicile-desktop/system-audio/react";
+import {
+  deskBacklight,
+  useAutoBrightness,
+} from "@domicile-desktop/system-backlight/react";
 import type { ReactNode } from "react";
 import { useCallback, useMemo, useState } from "react";
 import { useCastHolds } from "./cast-holds";

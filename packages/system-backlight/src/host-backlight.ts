@@ -1,7 +1,7 @@
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
-import { brightnessSetter } from "@domicile-desktop/system-backlight/set-brightness";
-import type { BrightnessWatch } from "@domicile-desktop/system-backlight/watch-brightness";
-import { watchBrightness } from "@domicile-desktop/system-backlight/watch-brightness";
+import { brightnessSetter } from "./set-brightness";
+import type { BrightnessWatch } from "./watch-brightness";
+import { watchBrightness } from "./watch-brightness";
 
 /** The backlight as the bar's brightness item uses it. */
 export type Backlight = {

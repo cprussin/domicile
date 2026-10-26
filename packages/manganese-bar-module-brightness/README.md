@@ -22,7 +22,8 @@ It takes no props. It reads `useDomicile()`; the backlight is watched once per d
 
 ## Automatic brightness and night light
 
-Run both once, on the desktop's page, as manganese's `Desktop` does:
+Run both once, on the desktop's page, as manganese's `Desktop` does.
+`useAutoBrightness` is `@domicile-desktop/system-backlight/react`'s:
 
 ```tsx
 useAutoBrightness(domicile, true);
@@ -34,7 +35,7 @@ useNightLight(domicile, {
 });
 ```
 
-- **Automatic brightness** (`src/auto-brightness.ts`) follows iio-sensor-proxy's
+- **Automatic brightness** (`system-backlight`'s `./auto-brightness`) follows iio-sensor-proxy's
   ambient light, as macOS does:
   - The level is `0.1 + 0.225·log10(1 + lux)`: dim in the dark, about half at
     100 lux, full in daylight.

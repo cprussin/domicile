@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "@cprussin/option-result": "catalog:",
+    "@domicile-desktop/react": "workspace:*",
     "@domicile-desktop/sdk": "workspace:*",
     "zod": "catalog:"
   },
@@ -9,6 +10,8 @@
     "@cprussin/tsconfig": "catalog:",
     "@domicile-desktop/test-support": "workspace:*",
     "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "react": "catalog:",
     "typescript": "catalog:"
   },
   "engines": {
@@ -31,6 +34,38 @@
     "./watch-brightness": {
       "types": "./dist/watch-brightness.d.ts",
       "default": "./dist/watch-brightness.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "default": "./dist/react.js"
+    },
+    "./shared-backlight": {
+      "types": "./dist/shared-backlight.d.ts",
+      "default": "./dist/shared-backlight.js"
+    },
+    "./fixture": {
+      "types": "./dist/fixture.d.ts",
+      "default": "./dist/fixture.js"
+    },
+    "./auto-brightness": {
+      "types": "./dist/auto-brightness.d.ts",
+      "default": "./dist/auto-brightness.js"
+    },
+    "./auto-brightness-curve": {
+      "types": "./dist/auto-brightness-curve.d.ts",
+      "default": "./dist/auto-brightness-curve.js"
+    },
+    "./learned-offset": {
+      "types": "./dist/learned-offset.d.ts",
+      "default": "./dist/learned-offset.js"
+    },
+    "./host-ambient-light": {
+      "types": "./dist/host-ambient-light.d.ts",
+      "default": "./dist/host-ambient-light.js"
+    },
+    "./host-backlight": {
+      "types": "./dist/host-backlight.d.ts",
+      "default": "./dist/host-backlight.js"
     }
   },
   "files": [
@@ -38,6 +73,9 @@
   ],
   "license": "MIT",
   "name": "@domicile-desktop/system-backlight",
+  "peerDependencies": {
+    "react": "catalog:"
+  },
   "private": false,
   "publishConfig": {
     "access": "public"

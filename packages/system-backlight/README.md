@@ -32,6 +32,28 @@ await set(0.5);
 - Every call resolves a `Result<…, SystemError>`. A level that is not a number
   throws.
 
+## Automatic brightness
+
+- `./auto-brightness`: `runAutoBrightness(backlight, light)` follows the
+  room's light until stopped, as macOS does. No React. The curve
+  (`./auto-brightness-curve`) and the user's learned offset
+  (`./learned-offset`, in `localStorage`) are beside it. See the
+  [brightness module](../manganese-bar-module-brightness/README.md#automatic-brightness-and-night-light)
+  for the rules.
+- `./host-ambient-light`: the ambient light sensor as callbacks.
+- `./host-backlight` and `./shared-backlight`: the level as callbacks, and
+  shared among readers so a level the user chose wins over an automatic one.
+
+## React
+
+`./react`, for a shell on [`@domicile-desktop/react`](../react/README.md):
+
+- `useBacklightLevel()`, `useHasBacklight()`: `undefined` until read.
+- `useAutoBrightness(domicile, enabled)`: runs automatic brightness while
+  mounted and enabled. Mount it once, on the desktop's page.
+- `deskBacklight(domicile)`, `deskBacklightHardware(domicile)`: the shared
+  watches, one per desktop.
+
 ## Requirements
 
 - `udevadm` on the compositor's `PATH` (systemd).

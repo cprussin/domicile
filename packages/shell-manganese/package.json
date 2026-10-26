@@ -30,6 +30,7 @@
     "@domicile-desktop/react": "workspace:*",
     "@domicile-desktop/sdk": "workspace:*",
     "@domicile-desktop/system-audio": "workspace:*",
+    "@domicile-desktop/system-backlight": "workspace:*",
     "@pandacss/dev": "catalog:",
     "@phosphor-icons/react": "catalog:",
     "react": "catalog:",

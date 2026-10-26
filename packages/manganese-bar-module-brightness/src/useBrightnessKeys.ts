@@ -1,6 +1,5 @@
+import type { SharedBacklight } from "@domicile-desktop/system-backlight/shared-backlight";
 import { useEffect, useMemo } from "react";
-
-import type { SharedBacklight } from "./shared-backlight";
 
 /** How far one press moves the brightness. Matches the wheel over the bar's icon. */
 const STEP = 0.05;

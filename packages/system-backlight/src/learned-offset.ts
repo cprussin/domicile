@@ -14,14 +14,19 @@ const offsetSchema = z.object({ offset: z.number().min(-1).max(1) });
  *
  * Parsed rather than cast: an unreadable value counts as nothing learned.
  */
-export const learnedOffset = (): number => {
-  const stored = globalThis.localStorage.getItem(OFFSET_KEY);
+export const learnedOffset = (
+  storage: Pick<Storage, "getItem"> = globalThis.localStorage,
+): number => {
+  const stored = storage.getItem(OFFSET_KEY);
   return stored === null ? 0 : parseOffset(stored);
 };
 
 /** Store `offset` for other pages and future loads. */
-export const learnOffset = (offset: number): void => {
-  globalThis.localStorage.setItem(OFFSET_KEY, JSON.stringify({ offset }));
+export const learnOffset = (
+  offset: number,
+  storage: Pick<Storage, "setItem"> = globalThis.localStorage,
+): void => {
+  storage.setItem(OFFSET_KEY, JSON.stringify({ offset }));
 };
 
 /** `stored` as an offset, or 0 if it is not one. */

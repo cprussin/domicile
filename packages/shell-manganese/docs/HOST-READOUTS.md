@@ -9,7 +9,7 @@ The page reads both itself through libraries, as it does the battery; see
 - The battery, backlight, sound, network and Bluetooth watches are made once
   per desktop (`perDesktop`, `@domicile-desktop/react/per-desktop`):
   `deskBattery`, `deskSound`, `deskNetwork` and `deskBluetooth` in their
-  `system-*` package's `/react`, and `deskBacklight` in the brightness module.
+  `system-*` package's `/react`, `deskBacklight` among them.
   Every bar and the lock screen read the same ones.
 - Each is a `sharedWatch` (`@domicile-desktop/react/shared-watch`): the first
   reader starts the library's watch, the last one stops it, and a late reader
@@ -33,7 +33,7 @@ The page reads both itself through libraries, as it does the battery; see
 - Read, watched and set by
   [`@domicile-desktop/system-backlight`](/packages/system-backlight/README.md)
   on the shell's system calls, which has the rules.
-- `manganese-bar-module-brightness/src/host-backlight.ts` wires it to the bar and logs failures to
+- `system-backlight/src/host-backlight.ts` wires it to the bar and logs failures to
   the console.
 - Automatic brightness reads iio-sensor-proxy's ambient light through the same
   library (`watchAmbientLight`), only while the desktop runs it

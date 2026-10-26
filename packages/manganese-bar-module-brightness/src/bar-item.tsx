@@ -1,6 +1,9 @@
 import { useDomicile } from "@domicile-desktop/react/domicile-provider";
+import {
+  deskBacklight,
+  deskBacklightHardware,
+} from "@domicile-desktop/system-backlight/react";
 import { Brightness as Level } from "./Brightness";
-import { deskBacklight, deskBacklightHardware } from "./desk-backlight";
 import { deskNightLight } from "./desk-night-light";
 
 /** The screen brightness and the night light. */

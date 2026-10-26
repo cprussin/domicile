@@ -6,15 +6,14 @@ import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
 import { isAbsent } from "@domicile-desktop/react/watch-presence";
 import type { SystemError } from "@domicile-desktop/sdk/system";
+import type { SharedBacklight } from "@domicile-desktop/system-backlight/shared-backlight";
 import { LightbulbIcon } from "@phosphor-icons/react/dist/ssr/Lightbulb";
 import { LightbulbFilamentIcon } from "@phosphor-icons/react/dist/ssr/LightbulbFilament";
 import { MoonIcon } from "@phosphor-icons/react/dist/ssr/Moon";
 import type { WheelEvent } from "react";
-
 import { css } from "../styled-system/css";
 import { BrightnessSlider } from "./BrightnessSlider";
 import type { NightLight } from "./night-light";
-import type { SharedBacklight } from "./shared-backlight";
 import { useBrightness } from "./useBrightness";
 
 /** How far one wheel notch over the icon moves the brightness. */

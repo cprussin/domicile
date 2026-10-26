@@ -3,10 +3,6 @@ import { standaloneThemeSource } from "@domicile-desktop/component-library/stand
 import { useBar } from "@domicile-desktop/manganese-bar/bar-context";
 import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
 import { useKeepsKeyboard } from "@domicile-desktop/manganese-bar/panel-keyboard";
-import {
-  answerSystemCalls,
-  THINKPAD_BACKLIGHT,
-} from "@domicile-desktop/manganese-bar-module-brightness/fixture";
 import { Clock } from "@domicile-desktop/manganese-bar-module-clock";
 import { LauncherButton } from "@domicile-desktop/manganese-bar-module-launcher-button";
 import { WorkspaceSwitcher } from "@domicile-desktop/manganese-bar-module-workspace-switcher";
@@ -40,6 +36,10 @@ import {
   WEBVIEW_GUEST_FOCUS_EVENT,
   WEBVIEW_PAGE_FULLSCREEN_CHANGE_EVENT,
 } from "@domicile-desktop/sdk/webview-element";
+import {
+  answerSystemCalls,
+  THINKPAD_BACKLIGHT,
+} from "@domicile-desktop/system-backlight/fixture";
 import {
   act,
   fireEvent,
