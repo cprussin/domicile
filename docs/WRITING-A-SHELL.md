@@ -5,6 +5,10 @@ wallpaper. It is a built web page. Domicile ships two shells (`manganese` and
 `simple`); neither is special. This guide covers writing one in its own
 repository.
 
+- New here? Start with [SHELL-QUICKSTART.md](SHELL-QUICKSTART.md): a React
+  shell in one file. Most shells use
+  [`@domicile-desktop/react`](#with-react). This guide's examples use the
+  `domicile` object `Shell` is handed; in React, `useDomicile()` returns it.
 - [`examples/minimal-shell`](/examples/minimal-shell) is the worked example.
   It pins the SDK published from a `stable` commit and runs on that commit.
   [`scripts/test-out-of-tree-shell.sh`](/scripts/test-out-of-tree-shell.sh)
@@ -134,6 +138,45 @@ export const Shell: ShellModule = (root, domicile) => {
 from. Invalid calls (an empty argv, a keycode of zero, a malformed chord)
 throw, because they are bugs in the page.
 
+## With React
+
+`@domicile-desktop/react`, on npm, mounts a React shell and follows the
+desktop with hooks:
+
+```tsx
+import { mount } from "@domicile-desktop/react/mount";
+import { useWindows } from "@domicile-desktop/react/windows";
+import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
+
+const Taskbar = () => (
+  <ul>
+    {useWindows().map(({ appId, title }) => (
+      <li key={appId}>{title}</li>
+    ))}
+  </ul>
+);
+
+export const Shell: ShellModule = mount(Taskbar);
+```
+
+- `mount(App)` is a `Shell` (or an app's `main`). It draws `App` before
+  returning, in `StrictMode`, under `<DomicileProvider>`, and shows the error
+  in its place if `App` throws.
+- `<DomicileProvider domicile>` is what `mount` renders. Use it to mount
+  yourself.
+- `useDomicile()` is the desktop. `useAppDomicile()` is an app's.
+- `/// <reference types="@domicile-desktop/react/elements" />` types `<app>`
+  and `<webview>` in JSX.
+- Hooks follow the desktop's state: `useWindows`, `useFocusedWindow`,
+  `useDisplays`, `useAppearance`, `useIdle`, `useLocked`, and
+  `usePortalRequests` and the other portal parts. Each rerenders on change.
+- `useWatch(namespace, type, read)` follows any other attribute.
+- **Tests:** render under `<FakeDomicile fake={fake}>`
+  (`@domicile-desktop/react/fake-domicile`) and drive `fake`, a
+  `FakeDomicileHost`.
+
+See [the package's README](/packages/react/README.md).
+
 ## The SDK
 
 `@domicile-desktop/sdk`, on npm, provides:
@@ -162,43 +205,6 @@ made of the host underneath.
 
 `@domicile-desktop/component-library` is the React and Panda CSS design
 system this repo's shells use. Shells do not need it.
-
-## With React
-
-`@domicile-desktop/react`, on npm, mounts a React shell and follows the
-desktop with hooks:
-
-```tsx
-import { mount } from "@domicile-desktop/react/mount";
-import { useWindows } from "@domicile-desktop/react/windows";
-import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
-
-const Taskbar = () => (
-  <ul>
-    {useWindows().map(({ appId, title }) => (
-      <li key={appId}>{title}</li>
-    ))}
-  </ul>
-);
-
-export const Shell: ShellModule = mount(Taskbar);
-```
-
-- `mount(App)` is a `Shell` (or an app's `main`). It draws `App` before
-  returning, in `StrictMode`, under `<DomicileProvider>`, and shows the error
-  in its place if `App` throws.
-- `<DomicileProvider domicile>` is what `mount` renders. Use it to mount
-  yourself.
-- `useDomicile()` is the desktop. `useAppDomicile()` is an app's.
-- Hooks follow the desktop's state: `useWindows`, `useFocusedWindow`,
-  `useDisplays`, `useAppearance`, `useIdle`, `useLocked`, and
-  `usePortalRequests` and the other portal parts. Each rerenders on change.
-- `useWatch(namespace, type, read)` follows any other attribute.
-- **Tests:** render under `<FakeDomicile fake={fake}>`
-  (`@domicile-desktop/react/fake-domicile`) and drive `fake`, a
-  `FakeDomicileHost`.
-
-See [the package's README](/packages/react/README.md).
 
 ## The smallest shell
 

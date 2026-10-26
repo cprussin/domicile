@@ -26,10 +26,7 @@ const DomicilePage = () => (
       brand={<DomicileMark />}
       links={[
         { href: "#docs", label: "Docs" },
-        {
-          href: repoFile("packages/chrome-sdk/README.md"),
-          label: "SDK reference",
-        },
+        { href: "/docs/reference/react", label: "API reference" },
         { href: "/manganese", label: "Manganese" },
         { href: REPO, label: "GitHub" },
       ]}

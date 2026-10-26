@@ -5,14 +5,11 @@ import { repoFile } from "../page/repo";
 export const DOCS: readonly LinkColumn[] = [
   {
     links: [
-      { href: "#quickstart", label: "Quickstart" },
+      { href: "/docs/shells/quickstart", label: "Quickstart" },
+      { href: "/docs/shells/from-manganese", label: "Start from manganese" },
       {
-        href: repoFile("docs/WRITING-A-SHELL.md"),
-        label: "Concepts: shells, elements, the connection",
-      },
-      {
-        href: repoFile("packages/chrome-sdk/docs/ELEMENTS.md"),
-        label: "Keyboard and focus",
+        href: "/docs/shells/writing",
+        label: "Concepts: shells, windows, focus, keys",
       },
       {
         href: repoFile("docs/architecture/ONE-PAGE-FOR-THE-DESK.md"),
@@ -24,41 +21,26 @@ export const DOCS: readonly LinkColumn[] = [
   },
   {
     links: [
+      { href: "/docs/shells/browser-windows", label: "Browser windows" },
+      { href: "/docs/shells/extensions", label: "Extensions" },
       {
-        href: repoFile("docs/WRITING-A-SHELL.md"),
-        label: "Windows and window states",
+        href: "/docs/shells/desktop-events",
+        label: "Displays, theme, tray, notifications",
       },
-      {
-        href: repoFile("docs/SHELL-BROWSER-WINDOWS.md"),
-        label: "Browser windows",
-      },
-      {
-        href: repoFile("docs/architecture/KEYBINDINGS.md"),
-        label: "Keybindings",
-      },
-      {
-        href: repoFile("docs/SHELL-DESKTOP-EVENTS.md"),
-        label: "Tray, notifications, dialogs",
-      },
-      { href: repoFile("docs/SHELL-IDLE-AND-LOCK.md"), label: "Idle and lock" },
-      { href: repoFile("docs/SHELL-SYSTEM-ACCESS.md"), label: "System access" },
-      { href: repoFile("docs/SHELL-PACKAGING.md"), label: "Packaging a shell" },
+      { href: "/docs/shells/dialogs", label: "Dialogs and portals" },
+      { href: "/docs/shells/idle-and-lock", label: "Idle and lock" },
+      { href: "/docs/shells/system-access", label: "System access" },
+      { href: "/docs/shells/packaging", label: "Packaging a shell" },
     ],
     title: "Guides",
     tone: "accent",
   },
   {
     links: [
-      { href: repoFile("packages/chrome-sdk/README.md"), label: "SDK API" },
-      {
-        href: repoFile("packages/chrome-sdk/docs/ELEMENTS.md"),
-        label: "Elements: <app>, <webview>",
-      },
-      { href: repoFile("docs/SHELL-CONFIG.md"), label: "The config file" },
-      {
-        href: repoFile("docs/architecture/THE-DOMICILE-BINARY.md"),
-        label: "The domicile command",
-      },
+      { href: "/docs/reference/react", label: "@domicile-desktop/react" },
+      { href: "/docs/reference/sdk", label: "@domicile-desktop/sdk" },
+      { href: "/docs/reference/elements", label: "Elements: <app>, <webview>" },
+      { href: "/docs/reference/config", label: "The config file" },
       {
         href: repoFile("packages/shell-manganese/docs/SOURCE.md"),
         label: "Manganese's packages",

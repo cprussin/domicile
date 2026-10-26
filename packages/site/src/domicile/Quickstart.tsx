@@ -1,8 +1,13 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import type { ReactNode } from "react";
 
 import { css } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { CodeBlock } from "../code/CodeBlock";
+import type { Language } from "../code/highlight";
+import { REPO_ROOT } from "../docs/pages";
 import { Media } from "../media/Media";
 import { Eyebrow } from "../page/Eyebrow";
 import { Section } from "../page/Section";
@@ -10,15 +15,19 @@ import { Section } from "../page/Section";
 // Above `STEPS`, which uses them as the module loads.
 const linkStyles = css({ color: "foreground", textDecoration: "underline" });
 
-const codeStyles = css({ fontFamily: "code" });
-
-const STEPS: readonly { title: string; code: string; note?: ReactNode }[] = [
+const STEPS: readonly {
+  title: string;
+  code: string;
+  language: Language;
+  note?: ReactNode;
+}[] = [
   {
     code: "sudo apt install domicile",
+    language: "bash",
     note: (
       <>
         Or dnf, zypper, the AUR or Nix. See{" "}
-        <a className={linkStyles} href="/manganese#install">
+        <a className={linkStyles} href="/docs/manganese/install">
           Install
         </a>
         .
@@ -27,25 +36,33 @@ const STEPS: readonly { title: string; code: string; note?: ReactNode }[] = [
     title: "Install Domicile",
   },
   {
-    code: "git clone https://github.com/cprussin/domicile\ncp -r domicile/examples/minimal-shell my-shell",
-    title: "Copy the example",
+    code: readFileSync(
+      join(REPO_ROOT, "examples/react-shell/shell.tsx"),
+      "utf8",
+    ),
+    language: "tsx",
+    note: "Each window is an <app> element. Put it where the window goes.",
+    title: "Write shell.tsx",
   },
   {
-    code: "cd my-shell && bun install && bun run build",
-    title: "Build it",
+    code: "domicile ./shell.tsx",
+    language: "bash",
+    note: "Domicile builds it, with React from its own install. No project needed.",
+    title: "Run it",
   },
   {
-    code: "domicile ./.vite/renderer/main_window/shell.js",
+    code: "domicile load-shell ./shell.tsx",
+    language: "bash",
     note: (
       <>
-        It opens in a window on your current desktop. Rebuild, then{" "}
-        <a className={linkStyles} href="#cli">
-          <code className={codeStyles}>domicile load-shell</code>
-        </a>{" "}
-        it.
+        After an edit. Windows stay open.{" "}
+        <a className={linkStyles} href="/docs/shells/quickstart">
+          The whole guide
+        </a>
+        .
       </>
     ),
-    title: "Run it",
+    title: "Change it",
   },
 ];
 
@@ -57,7 +74,7 @@ export const Quickstart = () => (
         {STEPS.map((step, at) => (
           <li className={stepStyles} key={step.title}>
             <Eyebrow>{`${String(at + 1).padStart(2, "0")} · ${step.title}`}</Eyebrow>
-            <CodeBlock code={step.code} language="bash" />
+            <CodeBlock code={step.code} language={step.language} />
             {step.note === undefined ? undefined : (
               <span className={noteStyles}>{step.note}</span>
             )}

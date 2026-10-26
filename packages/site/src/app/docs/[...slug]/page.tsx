@@ -3,13 +3,22 @@ import { join } from "node:path";
 
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import type { ReactNode } from "react";
 
 import { css } from "../../../../styled-system/css";
 import { grid } from "../../../../styled-system/patterns";
 import { Markdown } from "../../../docs/Markdown";
-import { PAGES, pageAt, REPO_ROOT, SECTIONS } from "../../../docs/pages";
+import {
+  PAGES,
+  pageAt,
+  productOf,
+  REPO_ROOT,
+  sectionsFor,
+} from "../../../docs/pages";
 import { Sidebar } from "../../../docs/Sidebar";
+import { DomicileMark } from "../../../domicile/DomicileMark";
 import { ManganeseMark } from "../../../manganese/ManganeseMark";
+import type { ProductName } from "../../../page/Accent";
 import { Accent } from "../../../page/Accent";
 import { REPO, repoFile } from "../../../page/repo";
 import { SiteFooter } from "../../../page/SiteFooter";
@@ -35,20 +44,18 @@ const DocPage = async ({ params }: Params) => {
   if (page === undefined) {
     notFound();
   }
+  const product = productOf(page.slug);
+  const chrome = CHROME[product];
   return (
-    <Accent product="manganese">
+    <Accent product={product}>
       <SiteHeader
-        action={{ href: "/manganese#install", label: "Install" }}
-        brand={<ManganeseMark />}
-        links={[
-          { href: "/manganese", label: "Manganese" },
-          { href: "/", label: "Domicile" },
-          { href: REPO, label: "GitHub" },
-        ]}
+        action={chrome.action}
+        brand={chrome.brand}
+        links={chrome.links}
       />
       <div className={layoutStyles}>
         <aside className={asideStyles}>
-          <Sidebar current={page.slug} sections={SECTIONS} />
+          <Sidebar current={page.slug} sections={sectionsFor(product)} />
         </aside>
         <main className={mainStyles}>
           <Markdown
@@ -67,12 +74,47 @@ const DocPage = async ({ params }: Params) => {
           { href: repoFile("LICENSE"), label: "MIT license" },
         ]}
       >
-        <span>
-          Manganese is the reference shell for <a href="/">Domicile</a>.
-        </span>
+        <span>{chrome.footer}</span>
       </SiteFooter>
     </Accent>
   );
+};
+
+type Link = { href: string; label: string };
+
+/** Each product's header and footer, as on its landing page. */
+const CHROME: Record<
+  ProductName,
+  { action: Link; brand: ReactNode; footer: ReactNode; links: Link[] }
+> = {
+  domicile: {
+    action: { href: "/docs/shells/quickstart", label: "Quickstart" },
+    brand: <DomicileMark />,
+    footer: (
+      <>
+        Domicile runs <a href="/manganese">manganese</a>, its reference shell.
+      </>
+    ),
+    links: [
+      { href: "/", label: "Domicile" },
+      { href: "/manganese", label: "Manganese" },
+      { href: REPO, label: "GitHub" },
+    ],
+  },
+  manganese: {
+    action: { href: "/docs/manganese/install", label: "Install" },
+    brand: <ManganeseMark />,
+    footer: (
+      <>
+        Manganese is the reference shell for <a href="/">Domicile</a>.
+      </>
+    ),
+    links: [
+      { href: "/manganese", label: "Manganese" },
+      { href: "/", label: "Domicile" },
+      { href: REPO, label: "GitHub" },
+    ],
+  },
 };
 
 export default DocPage;

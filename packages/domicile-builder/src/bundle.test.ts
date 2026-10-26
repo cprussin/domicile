@@ -92,4 +92,19 @@ describe("bundle", () => {
     const built = readFileSync(path.join(desk, "out", "shell.js"), "utf8");
     expect(built).toContain("rgb(1, 2, 3)");
   }, 120_000);
+
+  // The shell SHELL-QUICKSTART.md teaches, so the doc's code keeps building.
+  it("builds the React example shell, which imports only React and the SDK", async () => {
+    const entry = path.join(DOMICILE, "examples", "react-shell", "shell.tsx");
+    const out = path.join(
+      mkdtempSync(path.join(tmpdir(), "domicile-builder-")),
+      "out",
+    );
+
+    await bundle(entry, out, DOMICILE, [entry]);
+
+    const built = readFileSync(path.join(out, "shell.js"), "utf8");
+    expect(built).toMatch(/export\s*\{[^}]*\bas Shell\b/);
+    expect(built).toContain("royalblue");
+  }, 120_000);
 });
