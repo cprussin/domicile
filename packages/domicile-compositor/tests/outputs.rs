@@ -15,7 +15,11 @@
 
 mod running;
 
+use std::os::unix::net::UnixStream;
+
 use domicile_protocol::{ChromeMessage, HostMessage};
+use wayland_client::protocol::{wl_output, wl_registry};
+use wayland_client::{Connection, Dispatch, QueueHandle};
 
 use crate::running::Compositor;
 
@@ -233,4 +237,74 @@ fn a_window_takes_the_scale_of_the_screen_the_page_put_it_on() {
         client.trace()
     );
     assert_eq!(client.on_screens(), vec!["right".to_string()]);
+}
+
+/// A client that binds a display just as it goes away is not disconnected.
+///
+/// A client binds each `wl_output` it is told about, and the
+/// `global_remove` for one can cross that `bind` in flight. Unplugging a TV
+/// the desk extended onto then killed every client caught that way. The
+/// client here lists the outputs, the right display goes, and it binds them
+/// all before reading the removal.
+#[test]
+fn a_bind_that_crosses_a_displays_removal_does_not_kill_the_client() {
+    let compositor = Compositor::started_with(TWO_DISPLAYS);
+    let socket = UnixStream::connect(compositor.wayland_socket())
+        .expect("the apps' display takes a connection");
+    let connection = Connection::from_socket(socket).expect("a Wayland connection");
+    let mut queue = connection.new_event_queue();
+    let registry = connection.display().get_registry(&queue.handle(), ());
+    let mut late = LateBinder::default();
+    queue.roundtrip(&mut late).expect("globals listed");
+    assert_eq!(late.outputs.len(), 2, "both displays are advertised");
+
+    compositor.reconfigure(ONE_DISPLAY);
+    compositor.wait_for_log("taking up a reloaded desktop");
+    for (name, version) in &late.outputs {
+        let _: wl_output::WlOutput = registry.bind(*name, *version, &queue.handle(), ());
+    }
+
+    queue
+        .roundtrip(&mut late)
+        .expect("binding a display as it went away disconnected the client");
+}
+
+/// Lists the `wl_output`s it is told about without binding them.
+#[derive(Default)]
+struct LateBinder {
+    outputs: Vec<(u32, u32)>,
+}
+
+impl Dispatch<wl_registry::WlRegistry, ()> for LateBinder {
+    fn event(
+        late: &mut LateBinder,
+        _: &wl_registry::WlRegistry,
+        event: wl_registry::Event,
+        (): &(),
+        _: &Connection,
+        _: &QueueHandle<LateBinder>,
+    ) {
+        if let wl_registry::Event::Global {
+            name,
+            interface,
+            version,
+        } = event
+        {
+            if interface == "wl_output" {
+                late.outputs.push((name, version));
+            }
+        }
+    }
+}
+
+impl Dispatch<wl_output::WlOutput, ()> for LateBinder {
+    fn event(
+        _: &mut LateBinder,
+        _: &wl_output::WlOutput,
+        _: wl_output::Event,
+        (): &(),
+        _: &Connection,
+        _: &QueueHandle<LateBinder>,
+    ) {
+    }
 }

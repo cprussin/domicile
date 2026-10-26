@@ -1,7 +1,10 @@
 //! Outputs and scale: the `wl_output`s advertised for the desktop's displays, and
 //! which displays and scale each window is on.
 
+use std::time::Duration;
+
 use smithay::output::{Mode as OutputMode, Output, PhysicalProperties, Scale, Subpixel};
+use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
 use smithay::reexports::wayland_server::{protocol::wl_surface::WlSurface, DisplayHandle};
 use smithay::utils::Transform;
 use smithay::wayland::{
@@ -16,7 +19,7 @@ use domicile_config::Config;
 
 use crate::eis::barriers::Zone;
 use crate::screens::{pointer_targets, Advertised, Screens, Slot};
-use crate::{grepped, DomicileCompositor};
+use crate::{grepped, CalloopData, DomicileCompositor};
 
 /// The desktop a config describes, at startup.
 ///
@@ -28,6 +31,10 @@ pub fn screens_at_startup(config: &Config) -> Screens {
         None => Screens::nested(),
     }
 }
+
+/// How long a retired display's global stays bound-to before it is removed.
+/// See [`DomicileCompositor::retire_output`].
+const RETIRED_OUTPUT_GRACE: Duration = Duration::from_secs(5);
 
 /// An advertised `wl_output` and its global.
 ///
@@ -313,9 +320,7 @@ impl DomicileCompositor {
             let live = had[retired]
                 .take()
                 .expect("a retired output is one no slot kept");
-            // Remove the global. Dropping only the `Output` would leave it
-            // advertised for the rest of the run.
-            dh.remove_global::<DomicileCompositor>(live.global);
+            self.retire_output(dh, live);
         }
         self.outputs = outputs;
         self.screens = screens;
@@ -359,6 +364,31 @@ impl DomicileCompositor {
         self.hub
             .portals
             .displays(self.screens.outputs().map(Zone::from).collect());
+    }
+
+    /// Withdraw `live`'s global, and free it once clients have heard.
+    ///
+    /// Removing a global at once kills any client whose `bind` crossed the
+    /// `global_remove` in flight, and frees its name for the next display to
+    /// reuse, so a late bind can land on the wrong global. So it is
+    /// disabled now and removed after [`RETIRED_OUTPUT_GRACE`], as wlroots
+    /// does. Dropping only the `Output` would leave it advertised for the rest
+    /// of the run.
+    fn retire_output(&self, dh: &DisplayHandle, live: LiveOutput) {
+        dh.disable_global::<DomicileCompositor>(live.global.clone());
+        self.loop_handle
+            .insert_source(
+                Timer::from_duration(RETIRED_OUTPUT_GRACE),
+                move |_, _, data: &mut CalloopData| {
+                    data.display
+                        .handle()
+                        .remove_global::<DomicileCompositor>(live.global.clone());
+                    TimeoutAction::Drop
+                },
+            )
+            // Timers register nothing with the kernel, so inserting cannot
+            // fail.
+            .expect("the compositor's own loop takes a timer");
     }
 
     /// Tell every client which displays its windows and popups are on, and
