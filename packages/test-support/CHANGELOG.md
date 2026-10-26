@@ -1,5 +1,11 @@
 # @domicile-desktop/test-support
 
+## 0.0.2
+
+### Patch Changes
+
+- 3146073: Each package asks for the bun and Node its workspace does: `engines` is `bun >=1.4.2`, `node >=24`.
+
 ## 0.0.1
 
 ### Patch Changes
