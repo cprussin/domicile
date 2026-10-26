@@ -24,7 +24,7 @@ export const Shell = (root, domicile) => {
 
   const mounted = new Map();
   const show = () => {
-    const windows = domicile.windows.filter((w) => w.parent === null);
+    const windows = (domicile.windows.list ?? []).filter((w) => !w.parent);
     for (const [id, element] of mounted) {
       if (!windows.some((w) => w.appId === id)) {
         element.remove();
@@ -46,5 +46,5 @@ export const Shell = (root, domicile) => {
     });
   };
   show();
-  domicile.addEventListener("windowschanged", show);
+  domicile.windows.on("change", show);
 };

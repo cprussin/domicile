@@ -18,7 +18,7 @@ DOMICILE_BIN="$(nix build --no-link --print-out-paths "$ROOT#domicile")/bin/domi
 # download.
 TOOLS="$(nix build --no-link --print-out-paths \
   nixpkgs#foot nixpkgs#neovim nixpkgs#btop nixpkgs#wtype nixpkgs#wl-clipboard nixpkgs#grim \
-  nixpkgs#wf-recorder nixpkgs#ffmpeg nixpkgs#jetbrains-mono |
+  nixpkgs#libnotify nixpkgs#wf-recorder nixpkgs#ffmpeg nixpkgs#jetbrains-mono |
   sed 's#$#/bin#' | paste -sd:)"
 export PATH="$TOOLS:$PATH"
 
@@ -33,6 +33,10 @@ cat >"$FONTCONFIG_FILE" <<FONTS_EOF
   <cachedir>$SCENE_TMP/fontconfig</cachedir>
 </fontconfig>
 FONTS_EOF
+
+# A session bus for the desktop, as a login has: `notify-send` reaches the
+# desktop's notification server over it. Started by `desktop`.
+DBUS="$(nix build --no-link --print-out-paths 'nixpkgs#dbus^out')"
 
 # The display apps join, set by `desktop`.
 APPS_DISPLAY=""
@@ -56,6 +60,21 @@ desktop() { # shell module or package
     echo "no keyboard could be put on the nested sway's seat" >&2
     exit 1
   fi
+  # At its own address: the nested sway's bus, and other runs', are elsewhere.
+  "$DBUS/bin/dbus-daemon" --config-file="$DBUS/share/dbus-1/session.conf" \
+    --address="unix:path=$SCENE_TMP/bus" --nofork --nopidfile \
+    >"$SCENE_TMP/bus.log" 2>&1 &
+  STARTED+=($!)
+  for _ in $(seq 1 40); do
+    [ -S "$SCENE_TMP/bus" ] && break
+    sleep 0.25
+  done
+  if [ ! -S "$SCENE_TMP/bus" ]; then
+    echo "no session bus came up. dbus-daemon said:" >&2
+    cat "$SCENE_TMP/bus.log" >&2
+    exit 1
+  fi
+  export DBUS_SESSION_BUS_ADDRESS="unix:path=$SCENE_TMP/bus"
   # An empty config, so the desktop runs on defaults whatever crux's user
   # configured. `--no-sandbox` as every guard runs; see
   # packages/domicile-engine/docs/GUARDS.md. `--window-size` the output's, as
@@ -130,19 +149,39 @@ shot() { # name
 
 # The nested sway's output, which the desktop's window fills. A muted loop:
 # webm for browsers that play it, mp4 for the rest.
+#
+# Recorded lossless, then compressed at a constant 60 fps by `docs-media.sh`
+# once the desktop has stopped: compressing to VP9 while recording kept up
+# with 2 to 5 frames a second, and compressing beside a running desktop ran
+# the job past its 45 minutes.
 record() { # name, seconds
-  local webm="$MEDIA/$1.webm"
-  rm -f "$webm"
-  wf-recorder -o HEADLESS-1 -c libvpx-vp9 -p crf=40 -p b=0 -f "$webm" \
-    >>"$SCENE_TMP/record.log" 2>&1 &
+  local raw="$SCENE_TMP/raw/$1.mkv"
+  mkdir -p "$SCENE_TMP/raw"
+  rm -f "$raw"
+  wf-recorder -o HEADLESS-1 -c libx264 -p preset=ultrafast -p crf=0 \
+    -f "$raw" >>"$SCENE_TMP/record.log" 2>&1 &
   local recorder=$!
   sleep "$2"
   kill -INT "$recorder"
+  # wf-recorder writes out the frames it queued before it stops, and can wait
+  # for one more frame, which a still desktop never draws. Matroska reads back
+  # without its closing index. No `-r 60`: with it wf-recorder wrote no frames
+  # at all on crux-light, so `docs-media.sh` makes the rate constant.
+  for _ in $(seq 1 120); do
+    kill -0 "$recorder" 2>/dev/null || break
+    sleep 0.5
+  done
+  if kill -KILL "$recorder" 2>/dev/null; then
+    echo "wf-recorder had not stopped a minute after $1 ended: killed it" >&2
+  fi
   wait "$recorder" || true
-  ffmpeg -loglevel error -y -i "$webm" -an -c:v libx264 -pix_fmt yuv420p \
-    -crf 28 -movflags +faststart "$MEDIA/$1.mp4"
   engine_alive "the end of record $1"
-  echo "wrote docs/media/$1.webm and docs/media/$1.mp4"
+  if [ ! -s "$raw" ]; then
+    echo "wf-recorder wrote nothing for $1. It said:" >&2
+    tail -20 "$SCENE_TMP/record.log" >&2
+    exit 1
+  fi
+  echo "recorded $1"
 }
 
 # Keys go to the nested sway, which hands them to the desktop's window.

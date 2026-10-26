@@ -40,9 +40,8 @@ const ManganesePage = () => (
       <Hero />
       <Section>
         <Media
-          alt="Manganese tiling a terminal and a browser, then opening the launcher"
+          alt="Manganese tiling a terminal and a browser, opening Settings from the launcher, then showing a notification"
           name="manganese-hero"
-          shape="wide"
         />
       </Section>
       <Tour />
