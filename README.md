@@ -60,11 +60,11 @@ nix run github:cprussin/domicile/stable#manganese
 
 Tiling, workspaces, a bar, native apps, and browser windows. No clone or Chromium build required; that particular penance has already been paid.
 
-See [shell-manganese](packages/shell-manganese/README.md) for configuration and keys.
+The [user guide](docs/use/README.md) covers installing, using and setting it up. [shell-manganese](packages/shell-manganese/README.md) has its options for developers.
 
 [shell-simple](packages/shell-simple/README.md) is the same terrible idea with fewer opinions.
 
-Not on Nix? There are packages for Debian, Ubuntu, Fedora, openSUSE and Arch: [other distributions](docs/RUNNING-A-DESKTOP.md#other-distributions).
+Not on Nix? There are packages for Debian, Ubuntu, Fedora, openSUSE and Arch: [install](docs/use/INSTALL.md).
 
 ## License
 

@@ -1,64 +1,40 @@
 import type { LinkColumn } from "../page/LinkColumns";
-import { REPO, repoFile } from "../page/repo";
+import { REPO } from "../page/repo";
 
 /** manganese's user docs, by what a reader wants to do. */
 export const DOCS: readonly LinkColumn[] = [
   {
     links: [
-      { href: "#install", label: "Install" },
-      {
-        href: "/docs/manganese/install",
-        label: "Your first five minutes",
-      },
-      {
-        href: "/docs/manganese/keys",
-        label: "Keys cheat sheet",
-      },
+      { href: "/docs/manganese/install", label: "Install" },
+      { href: "/docs/manganese/first-steps", label: "First steps" },
+      { href: "/docs/manganese/keys", label: "Keys cheat sheet" },
     ],
     title: "Get started",
     tone: "accent",
   },
   {
     links: [
-      {
-        href: "/docs/manganese/windows",
-        label: "Windows and workspaces",
-      },
-      {
-        href: "/docs/manganese/launcher",
-        label: "The launcher",
-      },
-      {
-        href: repoFile("docs/architecture/WEB-APPS.md"),
-        label: "Web apps and extensions",
-      },
-      { href: "/docs/manganese/displays", label: "Several monitors" },
+      { href: "/docs/manganese/windows", label: "Windows and workspaces" },
+      { href: "/docs/manganese/browser", label: "Web apps and extensions" },
+      { href: "/docs/manganese/launcher", label: "The launcher" },
+      { href: "/docs/manganese/monitors", label: "Monitors and casting" },
     ],
     title: "Use it",
     tone: "accent",
   },
   {
     links: [
-      { href: "#configure", label: "Configure" },
-      {
-        href: "/docs/manganese/keys",
-        label: "Keybindings",
-      },
-      {
-        href: "/docs/manganese/top-bar",
-        label: "The top bar",
-      },
-      {
-        href: "/docs/manganese/wallpaper",
-        label: "Theme and wallpaper",
-      },
+      { href: "/docs/manganese/settings", label: "Settings" },
+      { href: "/docs/manganese/keys#add-your-own", label: "Keybindings" },
+      { href: "/docs/manganese/top-bar", label: "The top bar" },
+      { href: "/docs/manganese/appearance", label: "Theme and wallpaper" },
     ],
     title: "Make it yours",
     tone: "accent",
   },
   {
     links: [
-      { href: "/docs/manganese/install", label: "Troubleshooting" },
+      { href: "/docs/manganese/troubleshooting", label: "Troubleshooting" },
       {
         href: "/docs/manganese/gpu-and-displays",
         label: "GPU and display issues",

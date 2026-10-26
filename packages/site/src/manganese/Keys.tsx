@@ -2,7 +2,6 @@ import { Kbd } from "@domicile-desktop/component-library/Kbd";
 
 import { css } from "../../styled-system/css";
 import { flex, grid } from "../../styled-system/patterns";
-import { repoFile } from "../page/repo";
 import { Section } from "../page/Section";
 
 // manganese's defaults, from
@@ -26,10 +25,7 @@ export const Keys = () => (
         <h2 className={titleStyles}>Your fingers already know it</h2>
         <p className={ledeStyles}>Sway's keys, on Meta. Rebind any of them.</p>
       </div>
-      <a
-        className={linkStyles}
-        href={repoFile("packages/manganese-window-management/docs/KEYS.md")}
-      >
+      <a className={linkStyles} href="/docs/manganese/keys">
         The full cheat sheet →
       </a>
     </div>

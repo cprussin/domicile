@@ -60,4 +60,34 @@ describe("Markdown", () => {
     expect(html).toMatch(/<blockquote[^>]*><p[^>]*>careful<\/p><\/blockquote>/);
     expect(html).toContain("<hr");
   });
+
+  test("a picture from docs/media shows as its capture", () => {
+    const html = renderToStaticMarkup(
+      <Markdown
+        from="docs/use/LAUNCHER.md"
+        pages={PAGES}
+        source="![The launcher over a browser](../media/tour-launcher.png)"
+      />,
+    );
+    expect(html).toMatch(/<video[^>]*aria-label="The launcher over a browser"/);
+    expect(html).toContain('src="/media/tour-launcher.webm"');
+  });
+
+  test("tab markers make tabs, the first one open", () => {
+    const html = render(
+      [
+        "<!-- tab: Settings app -->",
+        "Open **Appearance**.",
+        "<!-- tab: Config file -->",
+        "Set `theme.mode`.",
+        "<!-- /tabs -->",
+        "After.",
+      ].join("\n\n"),
+    );
+    expect(html).toContain('role="tablist"');
+    expect(html).toMatch(/role="tab"[^>]*>Settings app</);
+    expect(html).toMatch(/role="tab"[^>]*>Config file</);
+    expect(html).toContain("Appearance");
+    expect(html).toMatch(/<p[^>]*>After\.<\/p>/);
+  });
 });
