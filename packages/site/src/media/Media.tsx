@@ -1,6 +1,7 @@
 import { css, cva, cx } from "../../styled-system/css";
 import { center } from "../../styled-system/patterns";
 import { captured } from "./captured";
+import { Video } from "./Video";
 
 type Props = {
   /** The capture's name in `docs/media/`, without an extension. */
@@ -12,26 +13,15 @@ type Props = {
 };
 
 /**
- * A captured screenshot or muted video loop. Until the scene has been
- * captured it shows what it will be.
+ * A captured screenshot, or a muted video loop that can play full screen.
+ * Until the scene has been captured it shows what it will be.
  */
 export const Media = ({ name, alt, shape = "screen" }: Props) => {
   const media = captured(name);
   switch (media.kind) {
     case "video": {
       return (
-        <video
-          aria-label={alt}
-          autoPlay
-          className={mediaStyles({ shape })}
-          loop
-          muted
-          playsInline
-          poster={media.poster}
-        >
-          <source src={media.webm} type="video/webm" />
-          <source src={media.mp4} type="video/mp4" />
-        </video>
+        <Video alt={alt} className={mediaStyles({ shape })} video={media} />
       );
     }
     case "picture": {

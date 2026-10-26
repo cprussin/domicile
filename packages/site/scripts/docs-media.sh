@@ -34,10 +34,14 @@ done
 DOMICILE_BIN="$(nix build --no-link --print-out-paths "$ROOT#domicile")/bin/domicile"
 export DOMICILE_BIN
 
+# Compresses the scenes' recordings, below, and draws their captions.
+FFMPEG="${FFMPEG:-$(nix build --no-link --print-out-paths 'nixpkgs#ffmpeg^bin')/bin/ffmpeg}"
+CAPTION_FONT="$(nix build --no-link --print-out-paths nixpkgs#inter)/share/fonts/truetype/InterVariable.ttf"
+# shellcheck source=packages/site/scripts/docs-media/captions.sh
+. "$ROOT/packages/site/scripts/docs-media/captions.sh"
+
 for name in "${names[@]}"; do
   echo "scene $name"
-  # Compresses the scene's recordings, below.
-  FFMPEG="${FFMPEG:-$(nix build --no-link --print-out-paths 'nixpkgs#ffmpeg^bin')/bin/ffmpeg}"
   # In /tmp, since the engine puts a socket beside its profile and a deep
   # $TMPDIR passes the 107-byte socket path limit.
   SCENE_TMP="$(mktemp -d /tmp/domicile-media.XXXXXX)"
@@ -55,11 +59,16 @@ for name in "${names[@]}"; do
   for raw in "$SCENE_TMP"/raw/*.mkv; do
     [ -e "$raw" ] || continue
     out="$MEDIA/$(basename "$raw" .mkv)"
-    "$FFMPEG" -nostdin -loglevel error -y -i "$raw" -an -r 60 -c:v libvpx-vp9 \
-      -crf 34 -b:v 0 -deadline good -cpu-used 4 -row-mt 1 -tile-columns 2 \
-      "$out.webm"
-    "$FFMPEG" -nostdin -loglevel error -y -i "$raw" -an -r 60 -c:v libx264 \
-      -preset slow -crf 23 -pix_fmt yuv420p -movflags +faststart "$out.mp4"
+    filter=(-vf null)
+    if [ -s "${raw%.mkv}.captions" ]; then
+      filter=(-vf "$(caption_filter "${raw%.mkv}.captions" "$CAPTION_FONT" "$SCENE_TMP/raw")")
+    fi
+    "$FFMPEG" -nostdin -loglevel error -y -i "$raw" "${filter[@]}" -an -r 60 \
+      -c:v libvpx-vp9 -crf 34 -b:v 0 -deadline good -cpu-used 4 -row-mt 1 \
+      -tile-columns 2 "$out.webm"
+    "$FFMPEG" -nostdin -loglevel error -y -i "$raw" "${filter[@]}" -an -r 60 \
+      -c:v libx264 -preset slow -crf 23 -pix_fmt yuv420p -movflags +faststart \
+      "$out.mp4"
     echo "wrote docs/media/$(basename "$out").webm and .mp4"
   done
   rm -rf "$SCENE_TMP"

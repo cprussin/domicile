@@ -6,6 +6,8 @@
 #   settle <seconds>      let windows map and draw
 #   shot <name>           write docs/media/<name>.png
 #   record <name> <secs>  write docs/media/<name>.webm and .mp4
+#   record_start <name>   the same, from now until `record_end`
+#   caption <text>        name the key about to be pressed, in the recording
 #   keys <wtype args...>  type into the desktop
 #   click <x> <y>         click the left button at a point on the output
 #   config <json>         the desktop's config, before `desktop`
@@ -86,7 +88,21 @@ desktop() { # shell module or package
   mkdir -p "$SCENE_TMP/home"/{Documents,Downloads,Music,Pictures,Projects/my-shell/src}
   echo "# Notes" >"$SCENE_TMP/home/Documents/notes.md"
   echo "export const Shell = () => {};" >"$SCENE_TMP/home/Projects/my-shell/src/shell.tsx"
+  # A terminal the launcher offers, in the scenes' font, for scenes that open
+  # one as a user would.
+  mkdir -p "$SCENE_TMP/home/.local/share/applications" "$SCENE_TMP/config/foot"
+  ln -sf "$(dirname "$(command -v foot)")/../share/applications/foot.desktop" \
+    "$SCENE_TMP/home/.local/share/applications/foot.desktop"
+  # Plain bash, not the login shell of whoever runs the scenes.
+  cat >"$SCENE_TMP/config/foot/foot.ini" <<'FOOT_EOF'
+[main]
+font=JetBrains Mono:size=12
+shell=bash --noprofile --norc
+[environment]
+PS1=\[\e[36m\]\W\[\e[0m\] \$\040
+FOOT_EOF
   HOME="$SCENE_TMP/home" \
+  XDG_DATA_HOME="$SCENE_TMP/home/.local/share" \
   XDG_CONFIG_HOME="$SCENE_TMP/config" \
   XDG_STATE_HOME="$SCENE_TMP/state" \
   DOMICILE_ENGINE_ARGS="--no-sandbox --disable-component-update --window-size=${size/x/,}" \
@@ -149,47 +165,82 @@ shot() { # name
 }
 
 # The nested sway's output, which the desktop's window fills. A muted loop:
-# webm for browsers that play it, mp4 for the rest.
+# webm for browsers that play it, mp4 for the rest. From `record_start` to
+# `record_end`, or for `record`'s seconds.
 #
 # Recorded lossless, then compressed at a constant 60 fps by `docs-media.sh`
 # once the desktop has stopped: compressing to VP9 while recording kept up
 # with 2 to 5 frames a second, and compressing beside a running desktop ran
 # the job past its 45 minutes.
 record() { # name, seconds
+  record_start "$1"
+  sleep "$2"
+  record_end
+}
+
+# The recording going on, its recorder and when it started, for `caption` and
+# `record_end`.
+RECORDING=""
+RECORDER=""
+RECORDING_AT=""
+
+record_start() { # name
   local raw="$SCENE_TMP/raw/$1.mkv"
   mkdir -p "$SCENE_TMP/raw"
-  rm -f "$raw"
+  rm -f "$raw" "$SCENE_TMP/raw/$1.captions"
   wf-recorder -o HEADLESS-1 -c libx264 -p preset=ultrafast -p crf=0 \
     -f "$raw" >>"$SCENE_TMP/record.log" 2>&1 &
-  local recorder=$!
-  sleep "$2"
-  kill -INT "$recorder"
+  RECORDER=$!
+  RECORDING="$1"
+  RECORDING_AT="$(date +%s.%N)"
+}
+
+record_end() {
+  local raw="$SCENE_TMP/raw/$RECORDING.mkv"
+  kill -INT "$RECORDER"
   # wf-recorder writes out the frames it queued before it stops, and can wait
   # for one more frame, which a still desktop never draws. Matroska reads back
   # without its closing index. No `-r 60`: with it wf-recorder wrote no frames
   # at all on crux-light, so `docs-media.sh` makes the rate constant.
   for _ in $(seq 1 120); do
-    kill -0 "$recorder" 2>/dev/null || break
+    kill -0 "$RECORDER" 2>/dev/null || break
     sleep 0.5
   done
-  if kill -KILL "$recorder" 2>/dev/null; then
-    echo "wf-recorder had not stopped a minute after $1 ended: killed it" >&2
+  if kill -KILL "$RECORDER" 2>/dev/null; then
+    echo "wf-recorder had not stopped a minute after $RECORDING ended: killed it" >&2
   fi
-  wait "$recorder" || true
-  engine_alive "the end of record $1"
+  wait "$RECORDER" || true
+  engine_alive "the end of record $RECORDING"
   if [ ! -s "$raw" ]; then
-    echo "wf-recorder wrote nothing for $1. It said:" >&2
+    echo "wf-recorder wrote nothing for $RECORDING. It said:" >&2
     tail -20 "$SCENE_TMP/record.log" >&2
     exit 1
   fi
-  echo "recorded $1"
+  echo "recorded $RECORDING"
+  RECORDING=""
+}
+
+# Shows `$1` at the foot of the recording from now, so a watcher sees which
+# key did what. Scenes then do it with `send-shell`: Meta chords typed with
+# `wtype -M logo` never reached the shell's bindings. `docs-media.sh` draws it; see `captions.sh`.
+caption() { # text
+  if [ -z "$RECORDING" ]; then
+    echo "caption \"$1\" outside a recording" >&2
+    exit 1
+  fi
+  printf '%s\t%s\n' \
+    "$(awk -v now="$(date +%s.%N)" -v at="$RECORDING_AT" 'BEGIN { printf "%.2f", now - at }')" \
+    "$1" >>"$SCENE_TMP/raw/$RECORDING.captions"
 }
 
 # Keys go to the nested sway, which hands them to the desktop's window.
+# `KEYS_SETTLE` is the pause after: recorded scenes shorten it and settle
+# where they want a pause.
+KEYS_SETTLE=1
 keys() { # wtype args...
   engine_alive "keys $*"
   wtype "$@"
-  sleep 1
+  sleep "$KEYS_SETTLE"
   engine_alive "the end of keys $*"
 }
 

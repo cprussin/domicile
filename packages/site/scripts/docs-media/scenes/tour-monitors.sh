@@ -14,12 +14,11 @@ app foot --working-directory="$ROOT" -o font="JetBrains Mono:size=12" \
   nvim packages/manganese-window-management/docs/WINDOW-MANAGEMENT.md
 "$DOMICILE_BIN" open https://domicile-desktop.com/
 settle 8
-record tour-monitors 8 &
-recording=$!
-settle 2
-# Workspace 2 is the right monitor's. `move right` would only split the two
-# windows, since they open tabbed.
+KEYS_SETTLE=0.2
+record_start tour-monitors
+settle 0.8
+caption "Meta+Shift+2 moves it to the other screen"
 "$DOMICILE_BIN" send-shell move container to workspace 2
-settle 4
+settle 2.5
 shot tour-monitors
-wait "$recording"
+record_end
