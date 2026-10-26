@@ -20,13 +20,19 @@ export const REPO_ROOT = join(process.cwd(), "..", "..");
 
 const USE = "docs/use";
 
-const page = (slug: string, file: string, title: string): DocPage => ({
-  slug: `manganese/${slug}`,
-  source: `${USE}/${file}.md`,
+/** A page, by its route, its file and its sidebar title. */
+const doc = (slug: string, source: string, title: string): DocPage => ({
+  slug,
+  source,
   title,
 });
 
-export const SECTIONS: readonly DocSection[] = [
+/** A user guide page, by its route under `manganese/` and its file's name. */
+const page = (slug: string, file: string, title: string): DocPage =>
+  doc(`manganese/${slug}`, `${USE}/${file}.md`, title);
+
+/** The user guide's sections. */
+const SECTIONS: readonly DocSection[] = [
   {
     pages: [
       page("install", "INSTALL", "Install"),
@@ -62,18 +68,102 @@ export const SECTIONS: readonly DocSection[] = [
   {
     pages: [
       page("troubleshooting", "TROUBLESHOOTING", "Troubleshooting"),
-      {
-        slug: "manganese/gpu-and-displays",
-        source: "docs/TTY-DEBUGGING.md",
-        title: "GPU and display issues",
-      },
+      doc(
+        "manganese/gpu-and-displays",
+        "docs/TTY-DEBUGGING.md",
+        "GPU and display issues",
+      ),
     ],
     product: "manganese",
     title: "Help",
   },
 ];
 
-export const PAGES: readonly DocPage[] = SECTIONS.flatMap(
+const AUTHOR_SECTIONS: readonly DocSection[] = [
+  {
+    pages: [
+      doc("shells/quickstart", "docs/SHELL-QUICKSTART.md", "Quickstart"),
+      doc(
+        "shells/from-manganese",
+        "docs/SHELL-FROM-MANGANESE.md",
+        "Start from manganese",
+      ),
+      doc("shells/writing", "docs/WRITING-A-SHELL.md", "How a shell works"),
+    ],
+    product: "domicile",
+    title: "Write a shell",
+  },
+  {
+    pages: [
+      doc(
+        "shells/browser-windows",
+        "docs/SHELL-BROWSER-WINDOWS.md",
+        "Browser windows",
+      ),
+      doc("shells/extensions", "docs/SHELL-EXTENSIONS.md", "Extensions"),
+      doc(
+        "shells/desktop-events",
+        "docs/SHELL-DESKTOP-EVENTS.md",
+        "Displays, theme, tray, notifications",
+      ),
+      doc(
+        "shells/idle-and-lock",
+        "docs/SHELL-IDLE-AND-LOCK.md",
+        "Idle and lock",
+      ),
+      doc(
+        "shells/system-access",
+        "docs/SHELL-SYSTEM-ACCESS.md",
+        "System access",
+      ),
+      doc("shells/dialogs", "docs/PORTALS.md", "Dialogs and portals"),
+      doc("shells/packaging", "docs/SHELL-PACKAGING.md", "Packaging"),
+    ],
+    product: "domicile",
+    title: "Guides",
+  },
+  {
+    pages: [
+      doc(
+        "reference/react",
+        "packages/react/README.md",
+        "@domicile-desktop/react",
+      ),
+      doc(
+        "reference/sdk",
+        "packages/chrome-sdk/README.md",
+        "@domicile-desktop/sdk",
+      ),
+      doc(
+        "reference/elements",
+        "packages/chrome-sdk/docs/ELEMENTS.md",
+        "<app> and <webview>",
+      ),
+      doc("reference/config", "docs/SHELL-CONFIG.md", "The config file"),
+    ],
+    product: "domicile",
+    title: "Reference",
+  },
+];
+
+const ALL_SECTIONS: readonly DocSection[] = [...SECTIONS, ...AUTHOR_SECTIONS];
+
+/** One product's sidebar sections. */
+export const sectionsFor = (product: ProductName): readonly DocSection[] =>
+  ALL_SECTIONS.filter((section) => section.product === product);
+
+/** The product whose section has the page at `slug`, a route a page has. */
+export const productOf = (slug: string): ProductName => {
+  const section = ALL_SECTIONS.find((candidate) =>
+    candidate.pages.some((page) => page.slug === slug),
+  );
+  if (section === undefined) {
+    throw new Error(`no docs page at /docs/${slug}`);
+  }
+  return section.product;
+};
+
+export const PAGES: readonly DocPage[] = ALL_SECTIONS.flatMap(
   (section) => section.pages,
 );
 
