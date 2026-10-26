@@ -89,6 +89,7 @@ const AUTHOR_SECTIONS: readonly DocSection[] = [
         "Start from manganese",
       ),
       doc("shells/writing", "docs/WRITING-A-SHELL.md", "How a shell works"),
+      doc("apps/build", "docs/BUILD-AN-APP.md", "Build an app"),
     ],
     product: "domicile",
     title: "Write a shell",
