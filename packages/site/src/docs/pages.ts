@@ -140,6 +140,7 @@ const AUTHOR_SECTIONS: readonly DocSection[] = [
         "<app> and <webview>",
       ),
       doc("reference/config", "docs/SHELL-CONFIG.md", "The config file"),
+      doc("reference/cli", "docs/CLI.md", "The domicile command"),
     ],
     product: "domicile",
     title: "Reference",
