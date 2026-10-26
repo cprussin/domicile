@@ -19,10 +19,16 @@ source_set("display_regions") {
 source_set("unit_tests") {
   testonly = true
 
-  sources = [ "display_regions_unittest.cc" ]
+  sources = [
+    "display_regions_unittest.cc",
+    "lcd_text_activation_unittest.cc",
+  ]
 
   deps = [
     ":display_regions",
+    "//base/test:test_support",
+    "//cc",
+    "//cc:test_support",
     "//testing/gtest",
     "//ui/gfx/geometry",
   ]
