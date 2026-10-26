@@ -16,7 +16,7 @@ edit in files Chromium already owns.
  2 files changed, 4 insertions(+)
 
 diff --git a/components/BUILD.gn b/components/BUILD.gn
-index 966c9b5f..cabfe525 100644
+index 8d0e1c1..31fbfa8 100644
 --- a/components/BUILD.gn
 +++ b/components/BUILD.gn
 @@ -233,6 +233,7 @@ test("components_unittests") {
@@ -28,10 +28,10 @@ index 966c9b5f..cabfe525 100644
      "//components/encrypted_messages:unit_tests",
      "//components/enterprise/device_trust/core/attestation:unit_tests",
 diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
-index 56de9c52..38122578 100644
+index 8cc4642..19975ce 100644
 --- a/content/browser/BUILD.gn
 +++ b/content/browser/BUILD.gn
-@@ -152,6 +152,7 @@ source_set("browser") {
+@@ -151,6 +151,7 @@ source_set("browser") {
      "//components/discardable_memory/common",
      "//components/discardable_memory/service",
      "//components/download/database",
@@ -39,7 +39,7 @@ index 56de9c52..38122578 100644
      "//components/download/public/common:public",
      "//components/embedder_support",
      "//components/embedder_support:user_agent",
-@@ -948,6 +949,8 @@ source_set("browser") {
+@@ -947,6 +948,8 @@ source_set("browser") {
      "dom_storage/dom_storage_context_wrapper.h",
      "dom_storage/session_storage_namespace_handle_impl.cc",
      "dom_storage/session_storage_namespace_handle_impl.h",

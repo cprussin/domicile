@@ -36,7 +36,7 @@ is what will say so, on the next patch that touches this file.
  1 file changed, 12 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index fadea3c0..bb7e47bd 100644
+index fadea3c..bb7e47b 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -5,6 +5,7 @@

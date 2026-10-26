@@ -28,7 +28,7 @@ The test is listed in ozone_unittests rather than evdev's own
  4 files changed, 21 insertions(+), 1 deletion(-)
 
 diff --git a/ui/events/ozone/evdev/BUILD.gn b/ui/events/ozone/evdev/BUILD.gn
-index 535a9a34..f23aa3c4 100644
+index 535a9a3..f23aa3c 100644
 --- a/ui/events/ozone/evdev/BUILD.gn
 +++ b/ui/events/ozone/evdev/BUILD.gn
 @@ -49,6 +49,8 @@ component("evdev") {
@@ -41,7 +41,7 @@ index 535a9a34..f23aa3c4 100644
      "event_converter_evdev.h",
      "event_converter_evdev_impl.cc",
 diff --git a/ui/events/ozone/evdev/libinput_event_converter.cc b/ui/events/ozone/evdev/libinput_event_converter.cc
-index d92469b0..0e6712ce 100644
+index d92469b..0e6712c 100644
 --- a/ui/events/ozone/evdev/libinput_event_converter.cc
 +++ b/ui/events/ozone/evdev/libinput_event_converter.cc
 @@ -18,6 +18,7 @@
@@ -71,7 +71,7 @@ index d92469b0..0e6712ce 100644
    DVLOG(3) << "Pointer axis h:" << h << ", v:" << v;
  
 diff --git a/ui/events/ozone/evdev/libinput_event_converter.h b/ui/events/ozone/evdev/libinput_event_converter.h
-index 175b4902..54ffd05d 100644
+index 175b490..54ffd05 100644
 --- a/ui/events/ozone/evdev/libinput_event_converter.h
 +++ b/ui/events/ozone/evdev/libinput_event_converter.h
 @@ -13,6 +13,7 @@
@@ -92,7 +92,7 @@ index 175b4902..54ffd05d 100644
  
  }  // namespace ui
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 6b2c736f..92943ab6 100644
+index 6b2c736..92943ab 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -265,6 +265,11 @@ source_set("gbm_unittests") {

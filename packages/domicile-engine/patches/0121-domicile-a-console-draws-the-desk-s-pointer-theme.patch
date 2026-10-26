@@ -30,7 +30,7 @@ job builds it on `crux`.
  4 files changed, 47 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 9a226b53..e4fec7e2 100644
+index 9a226b5..e4fec7e 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -21,6 +21,7 @@
@@ -56,7 +56,7 @@ index 9a226b53..e4fec7e2 100644
                  // of its <webview>s is told to, and no other page.
                  domicile::Page{frame->GetGlobalId().child_id.value(),
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index c0d823fa..4e74f1bb 100644
+index c0d823f..4e74f1b 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -179,6 +179,11 @@ source_set("gbm") {
@@ -83,7 +83,7 @@ index c0d823fa..4e74f1bb 100644
  }
  
 diff --git a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc
-index f1880f9e..53a39eb4 100644
+index f1880f9..53a39eb 100644
 --- a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc
 +++ b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.cc
 @@ -23,6 +23,7 @@ DesktopNativeCursorManager::DesktopNativeCursorManager() {
@@ -110,7 +110,7 @@ index f1880f9e..53a39eb4 100644
    // set and so before there is anything on screen to redraw.
    if (delegate_) {
 diff --git a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h
-index 11c04251..2108b892 100644
+index 11c0425..2108b89 100644
 --- a/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h
 +++ b/ui/views/widget/desktop_aura/desktop_native_cursor_manager.h
 @@ -9,6 +9,8 @@

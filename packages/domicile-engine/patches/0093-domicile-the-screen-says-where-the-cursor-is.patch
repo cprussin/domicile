@@ -25,7 +25,7 @@ job builds it on `crux`.
  5 files changed, 26 insertions(+), 1 deletion(-)
 
 diff --git a/ui/ozone/platform/drm/host/drm_cursor.cc b/ui/ozone/platform/drm/host/drm_cursor.cc
-index 4c0829fe..2e49417f 100644
+index 4c0829f..2e49417 100644
 --- a/ui/ozone/platform/drm/host/drm_cursor.cc
 +++ b/ui/ozone/platform/drm/host/drm_cursor.cc
 @@ -198,6 +198,12 @@ void DrmCursor::SetDomicileDeskHost(gfx::AcceleratedWidget host) {
@@ -42,7 +42,7 @@ index 4c0829fe..2e49417f 100644
                               const gfx::PointF& location) {
    TRACE_EVENT0("drmcursor", "DrmCursor::MoveCursorTo (window)");
 diff --git a/ui/ozone/platform/drm/host/drm_cursor.h b/ui/ozone/platform/drm/host/drm_cursor.h
-index b3f04859..246caced 100644
+index b3f0485..246cace 100644
 --- a/ui/ozone/platform/drm/host/drm_cursor.h
 +++ b/ui/ozone/platform/drm/host/drm_cursor.h
 @@ -99,6 +99,10 @@ class DrmCursor : public CursorDelegateEvdev {
@@ -57,7 +57,7 @@ index b3f04859..246caced 100644
    void MoveCursorTo(gfx::AcceleratedWidget window,
                      const gfx::PointF& location) override;
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
-index 1609a515..dae841e0 100644
+index 1609a51..dae841e 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.cc
 +++ b/ui/ozone/platform/drm/host/drm_window_host.cc
 @@ -20,6 +20,7 @@
@@ -86,7 +86,7 @@ index 1609a515..dae841e0 100644
    if (cursor_confined_bounds_ == bounds)
      return;
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.h b/ui/ozone/platform/drm/host/drm_window_host.h
-index d30729c1..700f0908 100644
+index d30729c..700f090 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.h
 +++ b/ui/ozone/platform/drm/host/drm_window_host.h
 @@ -111,6 +111,10 @@ class DrmWindowHost : public PlatformWindow,
@@ -101,7 +101,7 @@ index d30729c1..700f0908 100644
    void SendBoundsChange();
  
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index 65bd24f2..f972392f 100644
+index 65bd24f..f972392 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -103,7 +103,7 @@ class OzonePlatformDrm : public OzonePlatform {
