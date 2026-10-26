@@ -59,6 +59,22 @@ export default defineConfig({
           // The captures' shape: crux's nested output is 1920x1200.
           screen: { value: "16 / 10" },
         },
+        colors: {
+          // Other products' colors, from Simple Icons, for their logos.
+          brand: {
+            bitwarden: { value: "#175DDC" },
+            darkReader: { value: "#141E24" },
+            discord: { value: "#5865F2" },
+            // The logos are drawn in white on their color.
+            glyph: { value: "#FFFFFF" },
+            gmail: { value: "#EA4335" },
+            googleCalendar: { value: "#4285F4" },
+            googleTranslate: { value: "#4285F4" },
+            grammarly: { value: "#027E6F" },
+            npm: { value: "#CB3837" },
+            uBlockOrigin: { value: "#800000" },
+          },
+        },
         fonts: {
           // Set by `next/font` in `src/app/layout.tsx`.
           body: { value: "var(--font-inter), system-ui, sans-serif" },

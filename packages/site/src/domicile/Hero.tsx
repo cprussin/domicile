@@ -1,8 +1,9 @@
 import { css } from "../../styled-system/css";
 import { Hero as PageHero } from "../page/Hero";
 import { LinkButton } from "../page/LinkButton";
+import { SectionLinks } from "./SectionLinks";
 
-/** The Domicile page's opening: what it is, and where to start. */
+/** The Domicile page's opening: what it is, where to start, and what's on the page. */
 export const Hero = () => (
   <PageHero
     actions={
@@ -29,7 +30,9 @@ export const Hero = () => (
       label: "Build a Wayland compositor with web technologies",
     }}
     title="Your desktop is a web page."
-  />
+  >
+    <SectionLinks />
+  </PageHero>
 );
 
 const codeStyles = css({ color: "foreground", fontFamily: "code" });
