@@ -51,7 +51,7 @@ skip visible.
  2 files changed, 41 insertions(+), 2 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 0085c91e..08da04a9 100644
+index 0085c91..08da04a 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -268,6 +268,7 @@ source_set("gbm_unittests") {
@@ -63,7 +63,7 @@ index 0085c91e..08da04a9 100644
      # evdev's, not this platform's: `//ui/events/ozone/evdev:unittests` is
      # linked only into `events_unittests`, which no job here builds, and the
 diff --git a/ui/ozone/platform/drm/gpu/gbm_pixmap.cc b/ui/ozone/platform/drm/gpu/gbm_pixmap.cc
-index 3afd12cb..999a840d 100644
+index 3afd12c..999a840 100644
 --- a/ui/ozone/platform/drm/gpu/gbm_pixmap.cc
 +++ b/ui/ozone/platform/drm/gpu/gbm_pixmap.cc
 @@ -6,10 +6,15 @@

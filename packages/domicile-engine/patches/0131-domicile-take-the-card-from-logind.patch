@@ -41,7 +41,7 @@ covers the skipped flip.
  12 files changed, 123 insertions(+), 130 deletions(-)
 
 diff --git a/base/threading/thread_restrictions.h b/base/threading/thread_restrictions.h
-index cc087c7..343e61a 100644
+index 95bafac..a02ad74 100644
 --- a/base/threading/thread_restrictions.h
 +++ b/base/threading/thread_restrictions.h
 @@ -445,6 +445,7 @@ class FuchsiaPerfettoProducerConnector;
@@ -52,7 +52,7 @@ index cc087c7..343e61a 100644
  class ScopedAllowBlockingForGbmSurface;
  class SelectFileDialogLinux;
  class WindowResizeHelperMac;
-@@ -895,6 +896,7 @@ class BASE_EXPORT
+@@ -896,6 +897,7 @@ class BASE_EXPORT
    friend class mojo::core::ipcz_driver::MojoTrap;
    friend class net::NetworkConfigWatcherAppleThread;
    friend class ::tracing::EmergencyTraceFinalisationCoordinator;

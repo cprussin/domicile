@@ -21,7 +21,7 @@ job builds it on `crux`, and `guard-control-arrival.sh` fires the
  2 files changed, 9 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index a9e5a7a5..62cd1b35 100644
+index 0aa2b8d..071b54b 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
 @@ -331,6 +331,8 @@ generated_dictionary_sources_in_modules = [
@@ -45,7 +45,7 @@ index a9e5a7a5..62cd1b35 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_shortcut_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_theme_event.cc",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index b123fef5..7d49dc25 100644
+index b123fef..7d49dc2 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
 @@ -319,6 +319,9 @@ static_idl_files_in_modules = [

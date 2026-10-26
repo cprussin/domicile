@@ -23,7 +23,7 @@ job builds it on `crux`. guard-notification-server-late.sh covers it.
  1 file changed, 39 insertions(+), 3 deletions(-)
 
 diff --git a/chrome/browser/notifications/notification_platform_bridge_linux.cc b/chrome/browser/notifications/notification_platform_bridge_linux.cc
-index 1d4014d..4a97c2b 100644
+index c13df48..0c3f407 100644
 --- a/chrome/browser/notifications/notification_platform_bridge_linux.cc
 +++ b/chrome/browser/notifications/notification_platform_bridge_linux.cc
 @@ -49,6 +49,7 @@
@@ -34,7 +34,7 @@ index 1d4014d..4a97c2b 100644
  #include "base/types/expected.h"
  #include "base/version.h"
  #include "chrome/browser/browser_process.h"
-@@ -92,6 +93,11 @@ BASE_FEATURE(kWebNotificationPortalFallback, base::FEATURE_ENABLED_BY_DEFAULT);
+@@ -93,6 +94,11 @@ BASE_FEATURE(kWebNotificationPortalFallback, base::FEATURE_ENABLED_BY_DEFAULT);
  const char kFreedesktopNotificationsName[] = "org.freedesktop.Notifications";
  const char kFreedesktopNotificationsPath[] = "/org/freedesktop/Notifications";
  
@@ -94,7 +94,7 @@ index 1d4014d..4a97c2b 100644
    void OnServiceStarted(std::optional<bool> service_started) {
      CHECK_CURRENTLY_ON(content::BrowserThread::UI, base::NotFatalUntil::M161);
      if (!service_started.value_or(false)) {
-@@ -1633,6 +1664,11 @@ class NotificationPlatformBridgeLinuxImpl : public NotificationPlatformBridge {
+@@ -1612,6 +1643,11 @@ class NotificationPlatformBridgeLinuxImpl : public NotificationPlatformBridge {
    scoped_refptr<dbus::Bus> bus_;
    raw_ptr<dbus::ObjectProxy> notification_proxy_ = nullptr;
  

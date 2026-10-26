@@ -80,7 +80,7 @@ for the other end of it.
  2 files changed, 76 insertions(+), 1 deletion(-)
 
 diff --git a/third_party/blink/renderer/core/html/html_frame_element_base.h b/third_party/blink/renderer/core/html/html_frame_element_base.h
-index e72ada05..7beffa3a 100644
+index 4013a15..7008ae6 100644
 --- a/third_party/blink/renderer/core/html/html_frame_element_base.h
 +++ b/third_party/blink/renderer/core/html/html_frame_element_base.h
 @@ -60,6 +60,14 @@ class CORE_EXPORT HTMLFrameElementBase : public HTMLFrameOwnerElement {
@@ -107,7 +107,7 @@ index e72ada05..7beffa3a 100644
    bool IsURLAttribute(const Attribute&) const final;
    bool HasLegalLinkAttribute(const QualifiedName&) const final;
 diff --git a/third_party/blink/renderer/core/page/focus_controller.cc b/third_party/blink/renderer/core/page/focus_controller.cc
-index 2b1e74d7..3d55f3b6 100644
+index 2b1e74d..3d55f3b 100644
 --- a/third_party/blink/renderer/core/page/focus_controller.cc
 +++ b/third_party/blink/renderer/core/page/focus_controller.cc
 @@ -30,6 +30,7 @@

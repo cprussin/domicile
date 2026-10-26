@@ -14,7 +14,7 @@ socket in //chrome/browser/domicile is added.
  1 file changed, 1 insertion(+)
 
 diff --git a/chrome/browser/media/prefs/BUILD.gn b/chrome/browser/media/prefs/BUILD.gn
-index c5f0aaa2..a6216614 100644
+index c5f0aaa..a621661 100644
 --- a/chrome/browser/media/prefs/BUILD.gn
 +++ b/chrome/browser/media/prefs/BUILD.gn
 @@ -9,6 +9,7 @@ source_set("prefs") {

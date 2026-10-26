@@ -13,6 +13,7 @@
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/self_deleting.h"
 #include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/domicile/domicile_desk.h"
@@ -121,8 +122,9 @@ class ExtensionTray final
       public DeskObserver {
  public:
   ExtensionTray(content::RenderFrameHost& frame,
-                mojo::PendingReceiver<mojom::ExtensionTray> receiver)
-      : DocumentService(frame, std::move(receiver)),
+                mojo::PendingReceiver<mojom::ExtensionTray> receiver,
+                base::SelfDeletingPassKey key)
+      : DocumentService(frame, std::move(receiver), key),
         context_(frame.GetBrowserContext()) {
     registry_observation_.Observe(
         extensions::ExtensionRegistry::Get(context_));
@@ -131,13 +133,13 @@ class ExtensionTray final
     observing_desk_ = AddDeskObserver(context_, this);
   }
 
+ private:
   ~ExtensionTray() override {
     if (observing_desk_) {
       RemoveDeskObserver(context_, this);
     }
   }
 
- private:
   // mojom::ExtensionTray:
   void SetClient(
       mojo::PendingRemote<mojom::ExtensionTrayClient> client) override {
@@ -310,7 +312,7 @@ class ExtensionTray final
 void BindExtensionTray(content::RenderFrameHost* frame,
                        mojo::PendingReceiver<mojom::ExtensionTray> receiver) {
   // Self-owned; destroyed with the document.
-  new ExtensionTray(*frame, std::move(receiver));
+  base::MakeSelfDeleting<ExtensionTray>(*frame, std::move(receiver));
 }
 
 }  // namespace domicile

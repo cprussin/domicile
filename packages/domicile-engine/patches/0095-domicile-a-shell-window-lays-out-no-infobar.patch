@@ -17,7 +17,7 @@ job builds it on `crux`.
  1 file changed, 6 insertions(+), 15 deletions(-)
 
 diff --git a/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.cc b/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.cc
-index 9eb00149..278a843f 100644
+index 9eb0014..278a843 100644
 --- a/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.cc
 +++ b/chrome/browser/ui/views/frame/layout/browser_view_app_layout_impl.cc
 @@ -170,22 +170,13 @@ BrowserViewAppLayoutImpl::CalculateProposedLayout(

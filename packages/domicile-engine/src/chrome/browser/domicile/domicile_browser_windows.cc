@@ -17,6 +17,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/self_deleting.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
 #include "base/observer_list.h"
@@ -524,16 +525,17 @@ class BrowserWindowsService final
       public DeskWindows::Observer {
  public:
   BrowserWindowsService(content::RenderFrameHost& frame,
-                        mojo::PendingReceiver<mojom::BrowserWindows> receiver)
-      : DocumentService(frame, std::move(receiver)),
+                        mojo::PendingReceiver<mojom::BrowserWindows> receiver,
+                        base::SelfDeletingPassKey key)
+      : DocumentService(frame, std::move(receiver), key),
         windows_(&DeskWindows::For(
             Profile::FromBrowserContext(frame.GetBrowserContext()))) {
     windows_->AddObserver(this);
   }
 
+ private:
   ~BrowserWindowsService() override { windows_->RemoveObserver(this); }
 
- private:
   // mojom::BrowserWindows:
   void SetClient(
       mojo::PendingRemote<mojom::BrowserWindowsClient> client) override {
@@ -672,7 +674,7 @@ std::vector<PointerOverWindow> BrowserWindowsAt(const gfx::PointF& at) {
 void BindBrowserWindows(content::RenderFrameHost* frame,
                         mojo::PendingReceiver<mojom::BrowserWindows> receiver) {
   // Owns itself and dies with the document, like every DocumentService.
-  new BrowserWindowsService(*frame, std::move(receiver));
+  base::MakeSelfDeleting<BrowserWindowsService>(*frame, std::move(receiver));
 }
 
 }  // namespace domicile

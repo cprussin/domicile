@@ -22,7 +22,7 @@ accepts pid 0).
  1 file changed, 15 insertions(+)
 
 diff --git a/ui/ozone/platform/drm/gpu/drm_thread.cc b/ui/ozone/platform/drm/gpu/drm_thread.cc
-index 84a780fa..b46637f6 100644
+index 84a780f..b46637f 100644
 --- a/ui/ozone/platform/drm/gpu/drm_thread.cc
 +++ b/ui/ozone/platform/drm/gpu/drm_thread.cc
 @@ -5,6 +5,7 @@

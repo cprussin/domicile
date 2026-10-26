@@ -31,7 +31,7 @@ job builds it on `crux`.
  4 files changed, 48 insertions(+), 4 deletions(-)
 
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 4e74f1bb..16b3d0ef 100644
+index 4e74f1b..16b3d0e 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -136,6 +136,8 @@ source_set("gbm") {
@@ -52,7 +52,7 @@ index 4e74f1bb..16b3d0ef 100644
      "domicile/drm_screen_unittest.cc",
      "domicile/drm_sleep_unittest.cc",
 diff --git a/ui/ozone/platform/drm/host/drm_window_host.cc b/ui/ozone/platform/drm/host/drm_window_host.cc
-index dae841e0..d0eed1e1 100644
+index dae841e..d0eed1e 100644
 --- a/ui/ozone/platform/drm/host/drm_window_host.cc
 +++ b/ui/ozone/platform/drm/host/drm_window_host.cc
 @@ -389,11 +389,17 @@ bool DrmWindowHost::CanDispatchEvent(const PlatformEvent& event) {
@@ -90,7 +90,7 @@ index dae841e0..d0eed1e1 100644
              : located_event->location_f() -
                    gfx::Vector2dF(bounds_.OffsetFromOrigin());
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index 724d754f..3343075a 100644
+index 724d754..3343075 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -53,6 +53,7 @@
@@ -133,7 +133,7 @@ index 724d754f..3343075a 100644
    // that event source for as long as it lives. And after modeset_, which it
    // asks to light the screens again when the console comes back.
 diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
-index e0dbd227..b0c4c2c0 100644
+index e0dbd22..b0c4c2c 100644
 --- a/ui/ozone/public/ozone_platform.h
 +++ b/ui/ozone/public/ozone_platform.h
 @@ -96,6 +96,16 @@ struct DomicileDisplayLayout {

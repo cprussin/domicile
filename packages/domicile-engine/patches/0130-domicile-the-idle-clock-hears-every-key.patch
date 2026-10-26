@@ -21,7 +21,7 @@ job builds it on `crux`.
  1 file changed, 7 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
-index 7801ac3..ca1e8d6 100644
+index 0555c38..f7d7fa1 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
 @@ -6,6 +6,7 @@
@@ -32,7 +32,7 @@ index 7801ac3..ca1e8d6 100644
  #include "chrome/browser/domicile/domicile_file_dialogs.h"
  #include "chrome/browser/domicile/domicile_shell_windows.h"
  #include "components/domicile/browser/desktop_prefs.h"
-@@ -1774,6 +1775,12 @@ void ChromeBrowserMainParts::PostBrowserStart() {
+@@ -1779,6 +1780,12 @@ void ChromeBrowserMainParts::PostBrowserStart() {
    // somebody will want to point `load_shell` at.
    domicile::StartShellWindows();
  

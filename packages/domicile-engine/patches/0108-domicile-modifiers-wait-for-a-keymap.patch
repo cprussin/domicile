@@ -16,7 +16,7 @@ a keymap and a key, and checks the key carries no modifiers.
  1 file changed, 53 insertions(+)
 
 diff --git a/ui/ozone/platform/wayland/host/wayland_keyboard_unittest.cc b/ui/ozone/platform/wayland/host/wayland_keyboard_unittest.cc
-index babf7403..3a0c884e 100644
+index babf740..3a0c884 100644
 --- a/ui/ozone/platform/wayland/host/wayland_keyboard_unittest.cc
 +++ b/ui/ozone/platform/wayland/host/wayland_keyboard_unittest.cc
 @@ -225,6 +225,59 @@ TEST_F(WaylandKeyboardTest, CapsLockModifier) {

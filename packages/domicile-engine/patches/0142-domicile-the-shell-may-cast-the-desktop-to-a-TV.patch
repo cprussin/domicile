@@ -52,7 +52,7 @@ index abc0016..8a5a575 100644
    //
    // Gated at BIND time like the browser windows, and for their reason: a page
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index ee04f71..c6024e9 100644
+index 8a9068b..096fe9c 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
 @@ -2369,6 +2369,8 @@ generated_interface_sources_in_modules = [

@@ -25,10 +25,10 @@ engine job.
  4 files changed, 48 insertions(+), 1 deletion(-)
 
 diff --git a/third_party/blink/renderer/core/exported/web_view_impl.cc b/third_party/blink/renderer/core/exported/web_view_impl.cc
-index 4d475a9e..fbb8c8ca 100644
+index 320b4b6..bd6c601 100644
 --- a/third_party/blink/renderer/core/exported/web_view_impl.cc
 +++ b/third_party/blink/renderer/core/exported/web_view_impl.cc
-@@ -3244,6 +3244,34 @@ gfx::Size WebViewImpl::ContentsPreferredMinimumSize() {
+@@ -3253,6 +3253,34 @@ gfx::Size WebViewImpl::ContentsPreferredMinimumSize() {
    return gfx::Size(width_scaled, height_scaled);
  }
  
@@ -63,7 +63,7 @@ index 4d475a9e..fbb8c8ca 100644
  void WebViewImpl::UpdatePreferredSize() {
    // We don't always want to send the change messages over IPC, only if we've
    // been put in that mode by getting a |ViewMsg_EnablePreferredSizeChangedMode|
-@@ -3259,7 +3287,7 @@ void WebViewImpl::UpdatePreferredSize() {
+@@ -3268,7 +3296,7 @@ void WebViewImpl::UpdatePreferredSize() {
  
    gfx::Size size_in_dips =
        MainFrameImpl()->LocalRootFrameWidget()->BlinkSpaceToFlooredDIPs(
@@ -73,7 +73,7 @@ index 4d475a9e..fbb8c8ca 100644
    if (size_in_dips != preferred_size_in_dips_) {
      preferred_size_in_dips_ = size_in_dips;
 diff --git a/third_party/blink/renderer/core/exported/web_view_impl.h b/third_party/blink/renderer/core/exported/web_view_impl.h
-index 69954024..999e6140 100644
+index 6995402..999e614 100644
 --- a/third_party/blink/renderer/core/exported/web_view_impl.h
 +++ b/third_party/blink/renderer/core/exported/web_view_impl.h
 @@ -182,6 +182,8 @@ class CORE_EXPORT WebViewImpl final : public WebView,
@@ -86,7 +86,7 @@ index 69954024..999e6140 100644
    void SetZoomFactorForDeviceScaleFactor(float device_scale_factor,
                                           float text_scale_multiplier) override;
 diff --git a/third_party/blink/renderer/core/layout/layout_view.cc b/third_party/blink/renderer/core/layout/layout_view.cc
-index 9ecb81f8..44c9d454 100644
+index 9ecb81f..44c9d45 100644
 --- a/third_party/blink/renderer/core/layout/layout_view.cc
 +++ b/third_party/blink/renderer/core/layout/layout_view.cc
 @@ -232,6 +232,20 @@ LayoutUnit LayoutView::ComputeMinimumWidth() {
@@ -111,7 +111,7 @@ index 9ecb81f8..44c9d454 100644
    NOT_DESTROYED();
    if (new_child->Style().StyleType() == kPseudoIdViewTransition) {
 diff --git a/third_party/blink/renderer/core/layout/layout_view.h b/third_party/blink/renderer/core/layout/layout_view.h
-index 15c92d44..112f72d1 100644
+index 56e2338..46a57bb 100644
 --- a/third_party/blink/renderer/core/layout/layout_view.h
 +++ b/third_party/blink/renderer/core/layout/layout_view.h
 @@ -116,6 +116,9 @@ class CORE_EXPORT LayoutView : public LayoutBlockFlow {

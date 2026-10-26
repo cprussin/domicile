@@ -24,7 +24,7 @@ pin's.
  1 file changed, 7 insertions(+), 1 deletion(-)
 
 diff --git a/content/browser/find_request_manager.cc b/content/browser/find_request_manager.cc
-index 3101b588..9662285c 100644
+index 3101b58..9662285 100644
 --- a/content/browser/find_request_manager.cc
 +++ b/content/browser/find_request_manager.cc
 @@ -686,11 +686,17 @@ void FindRequestManager::FindInternal(const FindRequest& request) {

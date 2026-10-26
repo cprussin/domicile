@@ -22,12 +22,12 @@ engine job.
  2 files changed, 35 insertions(+)
 
 diff --git a/third_party/blink/renderer/core/exported/web_view_impl.cc b/third_party/blink/renderer/core/exported/web_view_impl.cc
-index ae5055c9..4d475a9e 100644
+index 5aca41e..320b4b6 100644
 --- a/third_party/blink/renderer/core/exported/web_view_impl.cc
 +++ b/third_party/blink/renderer/core/exported/web_view_impl.cc
-@@ -4087,6 +4087,30 @@ void WebViewImpl::MainFrameLayoutUpdated() {
-     observer.DidUpdateMainFrameLayout();
-   }
+@@ -4098,6 +4098,30 @@ void WebViewImpl::MainFrameLayoutUpdated() {
+   // `observers_`.
+   observers_.NotifyAllowReentrancy(&WebViewObserver::DidUpdateMainFrameLayout);
    needs_preferred_size_update_ = true;
 +
 +  // Domicile: a <webview>'s guest can lay out without committing a compositor
@@ -57,7 +57,7 @@ index ae5055c9..4d475a9e 100644
  
  void WebViewImpl::DidChangeContentsSize() {
 diff --git a/third_party/blink/renderer/core/exported/web_view_impl.h b/third_party/blink/renderer/core/exported/web_view_impl.h
-index 1c4e22e2..69954024 100644
+index 1c4e22e..6995402 100644
 --- a/third_party/blink/renderer/core/exported/web_view_impl.h
 +++ b/third_party/blink/renderer/core/exported/web_view_impl.h
 @@ -40,6 +40,7 @@

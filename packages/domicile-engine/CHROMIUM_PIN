@@ -1,4 +1,4 @@
 # The exact Chromium revision this series applies to. One line, nothing else.
 #
 # `git -C <chromium>/src rev-parse HEAD` prints the right value.
-355b1d2a963568301c53e99827839854c234a757
+911884162db9e5d8eb13baad7afb9a1f10afc962

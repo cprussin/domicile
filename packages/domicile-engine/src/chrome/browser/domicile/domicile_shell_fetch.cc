@@ -12,6 +12,7 @@
 
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/self_deleting.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
@@ -207,11 +208,14 @@ class ShellFetchService final
     : public content::DocumentService<mojom::ShellFetch> {
  public:
   ShellFetchService(content::RenderFrameHost& frame,
-                    mojo::PendingReceiver<mojom::ShellFetch> receiver)
-      : DocumentService(frame, std::move(receiver)),
+                    mojo::PendingReceiver<mojom::ShellFetch> receiver,
+                    base::SelfDeletingPassKey key)
+      : DocumentService(frame, std::move(receiver), key),
         partition_(frame.GetBrowserContext()->GetDefaultStoragePartition()) {}
 
  private:
+  ~ShellFetchService() override = default;
+
   // mojom::ShellFetch:
   void Fetch(const GURL& url,
              const std::string& method,
@@ -277,7 +281,7 @@ class ShellFetchService final
 void BindShellFetch(content::RenderFrameHost* frame,
                     mojo::PendingReceiver<mojom::ShellFetch> receiver) {
   // Owns itself and dies with the document, like every DocumentService.
-  new ShellFetchService(*frame, std::move(receiver));
+  base::MakeSelfDeleting<ShellFetchService>(*frame, std::move(receiver));
 }
 
 }  // namespace domicile

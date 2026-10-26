@@ -35,10 +35,10 @@ on `crux` with the rest of the engine job.
  6 files changed, 40 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
-index be4574f4..aee6b224 100644
+index 9bf5dfd..8bea5aa 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
-@@ -1614,6 +1614,10 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
+@@ -1615,6 +1615,10 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
    // drawn over the desktop. Before any window, so the shell's first page
    // already has none.
    domicile::TurnOffBrowserOffers(*profile->GetPrefs());
@@ -50,10 +50,10 @@ index be4574f4..aee6b224 100644
    for (auto& chrome_extra_part : chrome_extra_parts_) {
      chrome_extra_part->PostProfileInit(profile, is_initial_profile);
 diff --git a/chrome/browser/download/BUILD.gn b/chrome/browser/download/BUILD.gn
-index d9df6c2d..8fb78270 100644
+index 6f9c54b..aea019f 100644
 --- a/chrome/browser/download/BUILD.gn
 +++ b/chrome/browser/download/BUILD.gn
-@@ -213,6 +213,7 @@ source_set("impl") {
+@@ -214,6 +214,7 @@ source_set("impl") {
      "//chrome/browser/ui/select_file_policy",
      "//chrome/common:non_code_constants",
      "//components/background_fetch",
@@ -62,7 +62,7 @@ index d9df6c2d..8fb78270 100644
      "//components/enterprise/common/proto:connectors_proto_gen",
      "//components/enterprise/connectors/core",
 diff --git a/chrome/browser/download/chrome_download_manager_delegate.cc b/chrome/browser/download/chrome_download_manager_delegate.cc
-index 54418781..d946559e 100644
+index 85d0814..f00b9da 100644
 --- a/chrome/browser/download/chrome_download_manager_delegate.cc
 +++ b/chrome/browser/download/chrome_download_manager_delegate.cc
 @@ -4,6 +4,8 @@
@@ -74,7 +74,7 @@ index 54418781..d946559e 100644
  #include <algorithm>
  #include <memory>
  #include <optional>
-@@ -1831,6 +1833,34 @@ void ChromeDownloadManagerDelegate::ShowFilePickerForDownload(
+@@ -1833,6 +1835,34 @@ void ChromeDownloadManagerDelegate::ShowFilePickerForDownload(
      const base::FilePath& suggested_path,
      DownloadTargetDeterminerDelegate::ConfirmationCallback callback) {
    CHECK(download, base::NotFatalUntil::M161);
@@ -110,10 +110,10 @@ index 54418781..d946559e 100644
        download, suggested_path,
        base::BindOnce(
 diff --git a/third_party/blink/renderer/bindings/generated_in_core.gni b/third_party/blink/renderer/bindings/generated_in_core.gni
-index 8d27b14b..39338794 100644
+index f9a25b9..896eb92 100644
 --- a/third_party/blink/renderer/bindings/generated_in_core.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_core.gni
-@@ -1200,6 +1200,8 @@ generated_interface_sources_in_core = [
+@@ -1206,6 +1206,8 @@ generated_interface_sources_in_core = [
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_app_element.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_web_view_element.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_web_view_element.h",
@@ -123,10 +123,10 @@ index 8d27b14b..39338794 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_domicile_new_window_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/core/v8/v8_html_geolocation_element.cc",
 diff --git a/third_party/blink/renderer/bindings/idl_in_core.gni b/third_party/blink/renderer/bindings/idl_in_core.gni
-index 6f567e78..b42ced53 100644
+index 3c062e9..c2cd11a 100644
 --- a/third_party/blink/renderer/bindings/idl_in_core.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_core.gni
-@@ -461,6 +461,7 @@ static_idl_files_in_core = [
+@@ -460,6 +460,7 @@ static_idl_files_in_core = [
    "//third_party/blink/renderer/core/html/html_frame_set_element.idl",
    "//third_party/blink/renderer/core/html/domicile/html_app_element.idl",
    "//third_party/blink/renderer/core/html/domicile/html_web_view_element.idl",
@@ -135,7 +135,7 @@ index 6f567e78..b42ced53 100644
    "//third_party/blink/renderer/core/html/html_geolocation_element.idl",
    "//third_party/blink/renderer/core/html/html_head_element.idl",
 diff --git a/third_party/blink/renderer/core/html/build.gni b/third_party/blink/renderer/core/html/build.gni
-index c61bd887..a6f897c6 100644
+index c61bd88..a6f897c 100644
 --- a/third_party/blink/renderer/core/html/build.gni
 +++ b/third_party/blink/renderer/core/html/build.gni
 @@ -94,6 +94,8 @@ blink_core_sources_html = [

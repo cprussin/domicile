@@ -26,7 +26,7 @@ job builds it on `crux`.
  3 files changed, 41 insertions(+), 3 deletions(-)
 
 diff --git a/ui/base/cursor/cursor_factory.cc b/ui/base/cursor/cursor_factory.cc
-index 70fc2653..4dfc3085 100644
+index 70fc265..4dfc308 100644
 --- a/ui/base/cursor/cursor_factory.cc
 +++ b/ui/base/cursor/cursor_factory.cc
 @@ -70,6 +70,13 @@ scoped_refptr<PlatformCursor> CursorFactory::GetDefaultCursor(
@@ -44,7 +44,7 @@ index 70fc2653..4dfc3085 100644
      mojom::CursorType type,
      const SkBitmap& bitmap,
 diff --git a/ui/base/cursor/cursor_factory.h b/ui/base/cursor/cursor_factory.h
-index abcc292e..55deef38 100644
+index abcc292..55deef3 100644
 --- a/ui/base/cursor/cursor_factory.h
 +++ b/ui/base/cursor/cursor_factory.h
 @@ -10,6 +10,7 @@
@@ -76,7 +76,7 @@ index abcc292e..55deef38 100644
    // `type`. If that cursor is not available or the extraction of the data
    // fails, return `std::nullopt`.
 diff --git a/ui/wm/core/cursor_loader.cc b/ui/wm/core/cursor_loader.cc
-index 3439ce67..0c7fcf0a 100644
+index 3439ce6..0c7fcf0 100644
 --- a/ui/wm/core/cursor_loader.cc
 +++ b/ui/wm/core/cursor_loader.cc
 @@ -206,9 +206,26 @@ scoped_refptr<ui::PlatformCursor> CursorLoader::CursorFromType(

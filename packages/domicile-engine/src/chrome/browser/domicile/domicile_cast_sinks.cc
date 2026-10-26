@@ -13,6 +13,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/self_deleting.h"
 #include "base/time/time.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "components/media_router/browser/media_router.h"
@@ -65,14 +66,17 @@ class CastSinksService final
     : public content::DocumentService<mojom::CastSinks> {
  public:
   CastSinksService(content::RenderFrameHost& frame,
-                   mojo::PendingReceiver<mojom::CastSinks> receiver)
-      : DocumentService(frame, std::move(receiver)),
+                   mojo::PendingReceiver<mojom::CastSinks> receiver,
+                   base::SelfDeletingPassKey key)
+      : DocumentService(frame, std::move(receiver), key),
         router_(media_router::MediaRouterEnabled(frame.GetBrowserContext())
                     ? media_router::MediaRouterFactory::
                           GetApiForBrowserContext(frame.GetBrowserContext())
                     : nullptr) {}
 
  private:
+  ~CastSinksService() override = default;
+
   // The TVs that can show a desktop.
   class Sinks final : public media_router::MediaSinksObserver {
    public:
@@ -196,7 +200,7 @@ class CastSinksService final
 void BindCastSinks(content::RenderFrameHost* frame,
                    mojo::PendingReceiver<mojom::CastSinks> receiver) {
   // Owns itself and dies with the document, like every DocumentService.
-  new CastSinksService(*frame, std::move(receiver));
+  base::MakeSelfDeleting<CastSinksService>(*frame, std::move(receiver));
 }
 
 }  // namespace domicile

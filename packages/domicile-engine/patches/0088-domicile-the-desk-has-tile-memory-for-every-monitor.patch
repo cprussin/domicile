@@ -34,7 +34,7 @@ scripts/test-the-desk-has-tile-memory-for-every-monitor.sh.
  8 files changed, 47 insertions(+)
 
 diff --git a/cc/trees/client_layer_tree_host_impl.cc b/cc/trees/client_layer_tree_host_impl.cc
-index 053bf392..1e5e4790 100644
+index 053bf39..1e5e479 100644
 --- a/cc/trees/client_layer_tree_host_impl.cc
 +++ b/cc/trees/client_layer_tree_host_impl.cc
 @@ -170,6 +170,8 @@ void ClientLayerTreeHostImpl::PullLayerTreeHostPropertiesFrom(
@@ -47,7 +47,7 @@ index 053bf392..1e5e4790 100644
  
  void ClientLayerTreeHostImpl::RecordGpuRasterizationHistogram() {
 diff --git a/cc/trees/commit_state.cc b/cc/trees/commit_state.cc
-index 74dc2507..d5980ce7 100644
+index 74dc250..d5980ce 100644
 --- a/cc/trees/commit_state.cc
 +++ b/cc/trees/commit_state.cc
 @@ -30,6 +30,9 @@ CommitState::CommitState(const CommitState& prev)
@@ -61,7 +61,7 @@ index 74dc2507..d5980ce7 100644
        device_viewport_rect(prev.device_viewport_rect),
        visual_device_viewport_size(prev.visual_device_viewport_size),
 diff --git a/cc/trees/commit_state.h b/cc/trees/commit_state.h
-index b41d27a7..9d1a8494 100644
+index b41d27a..9d1a849 100644
 --- a/cc/trees/commit_state.h
 +++ b/cc/trees/commit_state.h
 @@ -102,6 +102,7 @@ struct CC_EXPORT CommitState {
@@ -73,10 +73,10 @@ index b41d27a7..9d1a8494 100644
    gfx::OverlayTransform display_transform_hint = gfx::OVERLAY_TRANSFORM_NONE;
    gfx::Rect device_viewport_rect;
 diff --git a/cc/trees/layer_tree_host.cc b/cc/trees/layer_tree_host.cc
-index ba2454fa..db9ac673 100644
+index cfa0ca3..0af1d28 100644
 --- a/cc/trees/layer_tree_host.cc
 +++ b/cc/trees/layer_tree_host.cc
-@@ -1657,6 +1657,14 @@ void LayerTreeHost::SetDomicileDisplayRegions(DomicileDisplayRegions regions) {
+@@ -1670,6 +1670,14 @@ void LayerTreeHost::SetDomicileDisplayRegions(DomicileDisplayRegions regions) {
    SetNeedsCommit();
  }
  
@@ -92,10 +92,10 @@ index ba2454fa..db9ac673 100644
      const gfx::DisplayColorSpaces& display_color_spaces) {
    if (pending_commit_state()->display_color_spaces == display_color_spaces)
 diff --git a/cc/trees/layer_tree_host.h b/cc/trees/layer_tree_host.h
-index 3cd88fb7..b7db51e2 100644
+index c13e605..dd3652d 100644
 --- a/cc/trees/layer_tree_host.h
 +++ b/cc/trees/layer_tree_host.h
-@@ -669,6 +669,9 @@ class CC_EXPORT LayerTreeHost : public MutatorHostDelegate {
+@@ -674,6 +674,9 @@ class CC_EXPORT LayerTreeHost : public MutatorHostDelegate {
    // DOMICILE: where this page is shown on monitors less dense than it is
    // rastered for. See cc/domicile/display_regions.h.
    void SetDomicileDisplayRegions(DomicileDisplayRegions regions);
@@ -106,10 +106,10 @@ index 3cd88fb7..b7db51e2 100644
    bool HasCompositorDrivenScrollAnimationForTesting() const {
      DCHECK(IsMainThread());
 diff --git a/cc/trees/layer_tree_host_impl.cc b/cc/trees/layer_tree_host_impl.cc
-index a7eee347..58fe3ac2 100644
+index 2d305d0..15de5c5 100644
 --- a/cc/trees/layer_tree_host_impl.cc
 +++ b/cc/trees/layer_tree_host_impl.cc
-@@ -4183,6 +4183,9 @@ void LayerTreeHostImpl::SetNeedsRedraw(bool animation_only,
+@@ -4184,6 +4184,9 @@ void LayerTreeHostImpl::SetNeedsRedraw(bool animation_only,
  
  ManagedMemoryPolicy LayerTreeHostImpl::ActualManagedMemoryPolicy() const {
    ManagedMemoryPolicy actual = cached_managed_memory_policy_;
@@ -119,7 +119,7 @@ index a7eee347..58fe3ac2 100644
    // The following may lower the cutoff, but should never raise it.
    if (debug_state_.rasterize_only_visible_content) {
      actual.priority_cutoff_when_visible =
-@@ -4196,6 +4199,14 @@ ManagedMemoryPolicy LayerTreeHostImpl::ActualManagedMemoryPolicy() const {
+@@ -4197,6 +4200,14 @@ ManagedMemoryPolicy LayerTreeHostImpl::ActualManagedMemoryPolicy() const {
    return actual;
  }
  
@@ -135,7 +135,7 @@ index a7eee347..58fe3ac2 100644
    active_tree_->ReleaseResources();
    if (pending_tree_) {
 diff --git a/cc/trees/layer_tree_host_impl.h b/cc/trees/layer_tree_host_impl.h
-index 6afe325e..43a7d614 100644
+index 6afe325..43a7d61 100644
 --- a/cc/trees/layer_tree_host_impl.h
 +++ b/cc/trees/layer_tree_host_impl.h
 @@ -683,6 +683,9 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
@@ -157,7 +157,7 @@ index 6afe325e..43a7d614 100644
    TileManager tile_manager_;
  
 diff --git a/third_party/blink/renderer/platform/widget/widget_base.cc b/third_party/blink/renderer/platform/widget/widget_base.cc
-index e981afbb..9313b3b7 100644
+index f7b62bc..8b3987d 100644
 --- a/third_party/blink/renderer/platform/widget/widget_base.cc
 +++ b/third_party/blink/renderer/platform/widget/widget_base.cc
 @@ -13,6 +13,8 @@
@@ -169,7 +169,7 @@ index e981afbb..9313b3b7 100644
  #include "base/task/common/task_annotator.h"
  #include "base/trace_event/trace_event.h"
  #include "build/build_config.h"
-@@ -1997,6 +1999,19 @@ void WidgetBase::UpdateDomicileDisplayRegions() {
+@@ -2031,6 +2033,19 @@ void WidgetBase::UpdateDomicileDisplayRegions() {
    }
    LayerTreeHost()->SetDomicileDisplayRegions(cc::DomicileDisplayRegionsOf(
        displays, widget_screen_rect_.origin(), GetOriginalDeviceScaleFactor()));

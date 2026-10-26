@@ -31,7 +31,7 @@ save from a page in a <webview>.
  5 files changed, 26 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
-index 49dd2e1d..ce359858 100644
+index 9f0054a..fdc3266 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
 @@ -6,6 +6,7 @@
@@ -42,7 +42,7 @@ index 49dd2e1d..ce359858 100644
  #include "chrome/browser/domicile/domicile_shell_windows.h"
  #include "components/domicile/browser/desktop_prefs.h"
  #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-@@ -1729,6 +1730,12 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
+@@ -1730,6 +1731,12 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
  
  void ChromeBrowserMainParts::PreBrowserStart() {
    TRACE_EVENT0("startup", "ChromeBrowserMainParts::PreBrowserStart");
@@ -56,7 +56,7 @@ index 49dd2e1d..ce359858 100644
      chrome_extra_part->PreBrowserStart();
    }
 diff --git a/chrome/browser/ui/select_file_policy/chrome_select_file_policy.cc b/chrome/browser/ui/select_file_policy/chrome_select_file_policy.cc
-index d981a088..32fdb1ce 100644
+index d981a08..32fdb1c 100644
 --- a/chrome/browser/ui/select_file_policy/chrome_select_file_policy.cc
 +++ b/chrome/browser/ui/select_file_policy/chrome_select_file_policy.cc
 @@ -86,6 +86,10 @@ void ChromeSelectFilePolicy::SelectFileDenied() {
@@ -71,7 +71,7 @@ index d981a088..32fdb1ce 100644
    CHECK(g_browser_process, base::NotFatalUntil::M162);
  
 diff --git a/chrome/browser/ui/select_file_policy/chrome_select_file_policy.h b/chrome/browser/ui/select_file_policy/chrome_select_file_policy.h
-index 993b89dc..0e1ed519 100644
+index 993b89d..0e1ed51 100644
 --- a/chrome/browser/ui/select_file_policy/chrome_select_file_policy.h
 +++ b/chrome/browser/ui/select_file_policy/chrome_select_file_policy.h
 @@ -26,6 +26,7 @@ class ChromeSelectFilePolicy : public ui::SelectFilePolicy {
@@ -83,7 +83,7 @@ index 993b89dc..0e1ed519 100644
    // Returns true if local state allows showing file pickers.
    static bool FileSelectDialogsAllowed();
 diff --git a/ui/shell_dialogs/select_file_policy.cc b/ui/shell_dialogs/select_file_policy.cc
-index 14bc3349..eb39dfbd 100644
+index 14bc334..eb39dfb 100644
 --- a/ui/shell_dialogs/select_file_policy.cc
 +++ b/ui/shell_dialogs/select_file_policy.cc
 @@ -8,4 +8,8 @@ namespace ui {
@@ -96,7 +96,7 @@ index 14bc3349..eb39dfbd 100644
 +
  }  // namespace ui
 diff --git a/ui/shell_dialogs/select_file_policy.h b/ui/shell_dialogs/select_file_policy.h
-index 2d0f1f6d..226f766d 100644
+index 2d0f1f6..226f766 100644
 --- a/ui/shell_dialogs/select_file_policy.h
 +++ b/ui/shell_dialogs/select_file_policy.h
 @@ -7,6 +7,10 @@

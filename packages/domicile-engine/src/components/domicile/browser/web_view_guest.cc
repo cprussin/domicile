@@ -20,6 +20,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/self_deleting.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/strings/string_util.h"
@@ -259,12 +260,15 @@ class WebViewGuestHost final
  public:
   WebViewGuestHost(content::RenderFrameHost& frame,
                    mojo::PendingReceiver<mojom::WebViewGuestHost> receiver,
-                   GuestCreatedCallback created)
-      : DocumentService(frame, std::move(receiver)),
+                   GuestCreatedCallback created,
+                   base::SelfDeletingPassKey key)
+      : DocumentService(frame, std::move(receiver), key),
         WebContentsObserver(content::WebContents::FromRenderFrameHost(&frame)),
         created_(std::move(created)) {}
 
  private:
+  ~WebViewGuestHost() override = default;
+
   // A CreateGuest whose placeholder is not ready yet.
   //
   // Holds the bad-message callback. It can only be taken during dispatch, and
@@ -2203,7 +2207,7 @@ content::WebContents* WebViewGuest::OpenURLFromTab(
   // `source` is always `guest_contents_`, the only WebContents this delegates
   // for.
   switch (params.disposition) {
-    case WindowOpenDisposition::CURRENT_TAB: {
+    case WindowOpenDisposition::kCurrentTab: {
       // LoadURLParams(params) keeps the referrer, transition, POST body and
       // initiator, so this continues the renderer's navigation.
       //
@@ -2225,10 +2229,10 @@ content::WebContents* WebViewGuest::OpenURLFromTab(
       return guest_contents_;
     }
 
-    case WindowOpenDisposition::NEW_FOREGROUND_TAB:
-    case WindowOpenDisposition::NEW_BACKGROUND_TAB:
-    case WindowOpenDisposition::NEW_POPUP:
-    case WindowOpenDisposition::NEW_WINDOW: {
+    case WindowOpenDisposition::kNewForegroundTab:
+    case WindowOpenDisposition::kNewBackgroundTab:
+    case WindowOpenDisposition::kNewPopup:
+    case WindowOpenDisposition::kNewWindow: {
       // Same as CreateCustomWebContents; middle and Ctrl clicks arrive here
       // instead.
       //
@@ -2424,7 +2428,7 @@ void BindWebViewGuestHost(
     mojo::PendingReceiver<mojom::WebViewGuestHost> receiver,
     GuestCreatedCallback created) {
   // A DocumentService deletes itself with the document.
-  new WebViewGuestHost(*frame, std::move(receiver), std::move(created));
+  base::MakeSelfDeleting<WebViewGuestHost>(*frame, std::move(receiver), std::move(created));
 }
 
 }  // namespace domicile

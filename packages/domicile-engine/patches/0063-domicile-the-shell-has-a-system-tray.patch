@@ -15,7 +15,7 @@ name in a generated-bindings list.
  2 files changed, 12 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index db876a41..d81f8475 100644
+index 08c920f..18b22f8 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
 @@ -333,6 +333,8 @@ generated_dictionary_sources_in_modules = [
@@ -48,7 +48,7 @@ index db876a41..d81f8475 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_locked_event.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_app_titled_event.h",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index 12a99aa3..3cec358d 100644
+index 12a99aa..3cec358 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
 @@ -317,6 +317,10 @@ static_idl_files_in_modules = [

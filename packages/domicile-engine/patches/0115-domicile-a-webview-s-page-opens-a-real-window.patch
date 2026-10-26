@@ -25,7 +25,7 @@ job builds it on `crux`.
  1 file changed, 11 insertions(+), 4 deletions(-)
 
 diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
-index 0c5cf794..b57c20d0 100644
+index 788df9d..f48a458 100644
 --- a/content/browser/web_contents/web_contents_impl.cc
 +++ b/content/browser/web_contents/web_contents_impl.cc
 @@ -5768,9 +5768,14 @@ FrameTree* WebContentsImpl::CreateNewWindow(
