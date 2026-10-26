@@ -34,7 +34,10 @@ fn chrome_messages_round_trip() {
     });
     chrome_round_trip(&ChromeMessage::SetDevicePixelRatio { ratio: 1.5 });
     chrome_round_trip(&ChromeMessage::FocusChrome);
-    chrome_round_trip(&ChromeMessage::Activity);
+    chrome_round_trip(&ChromeMessage::Activity { input: None });
+    chrome_round_trip(&ChromeMessage::Activity {
+        input: Some("KeyPressed from AT Translated Set 2 keyboard".into()),
+    });
     chrome_round_trip(&ChromeMessage::DeskPointer {
         at: Some((12.5, 3.0)),
         windows: vec![PointerOverWindow {

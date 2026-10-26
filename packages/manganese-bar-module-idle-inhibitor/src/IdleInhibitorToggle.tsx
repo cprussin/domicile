@@ -10,18 +10,19 @@ import { Inhibiting } from "./idle-inhibitor";
 type Props = {
   /** The desk's idle inhibitor. */
   inhibitor: IdleInhibitor;
+  /** What else keeps the screens on: windows and applications, by name. */
+  holders?: readonly string[] | undefined;
 };
 
 /**
  * An eye that keeps the screens on: closed and dimmed while they blank when
- * idle, open on a lit circle while held. Disabled until the portal answers.
+ * idle, open on a lit circle while held, and open alone while only something
+ * else holds them. Disabled until the portal answers.
  */
-export const IdleInhibitorToggle = ({ inhibitor }: Props) => {
+export const IdleInhibitorToggle = ({ inhibitor, holders = [] }: Props) => {
   const at = useSyncExternalStore(inhibitor.subscribe, inhibitor.current);
   const held = at === Inhibiting.On || at === Inhibiting.Taking;
-  const label = held
-    ? "Screens kept on — click to let them blank"
-    : "Screens blank when idle — click to keep them on";
+  const label = labelOf(held, holders);
   return (
     <Tooltip
       content={label}
@@ -30,13 +31,13 @@ export const IdleInhibitorToggle = ({ inhibitor }: Props) => {
         <button
           aria-label={label}
           aria-pressed={held}
-          className={toggleStyles({ held })}
+          className={toggleStyles({ open: held || holders.length > 0 })}
           data-inhibiting={held}
           disabled={at === Inhibiting.Taking || at === Inhibiting.Releasing}
           onClick={inhibitor.toggle}
           type="button"
         >
-          {held ? (
+          {held || holders.length > 0 ? (
             <EyeIcon size={15} weight="bold" />
           ) : (
             <EyeClosedIcon size={15} weight="bold" />
@@ -46,6 +47,21 @@ export const IdleInhibitorToggle = ({ inhibitor }: Props) => {
     />
   );
 };
+
+const labelOf = (held: boolean, holders: readonly string[]): string => {
+  const others = names.format(holders);
+  if (held) {
+    return holders.length > 0
+      ? `Screens kept on, also by ${others} — click to stop keeping them on`
+      : "Screens kept on — click to let them blank";
+  } else {
+    return holders.length > 0
+      ? `Screens kept on by ${others} — click to keep them on too`
+      : "Screens blank when idle — click to keep them on";
+  }
+};
+
+const names = new Intl.ListFormat("en-US", { type: "conjunction" });
 
 // Not the library's `Button`: its ghost variant uses `muted` text, which is
 // unreadable over the wallpaper. This uses the bar's white, like the bulb.
@@ -72,7 +88,7 @@ const toggleStyles = cva({
     transition: "background-color {durations.fast} {easings.default}",
   },
   variants: {
-    held: {
+    open: {
       // Dims the icon alone, so the hover background stays as strong.
       false: { "& > svg": { opacity: "inactive" } },
       true: {},

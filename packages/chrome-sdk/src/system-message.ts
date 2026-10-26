@@ -91,6 +91,10 @@ const systemEventSchema = z.looseObject({
       kind: z.literal("idle_warning"),
     }),
     z.looseObject({
+      holders: z.array(z.string()),
+      kind: z.literal("idle_holds"),
+    }),
+    z.looseObject({
       failures: z.number(),
       kind: z.literal("unlock_refused"),
       refusal: z.enum(["wrong_passphrase", "unverifiable", "too_soon"]),

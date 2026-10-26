@@ -205,7 +205,7 @@ class ControlChannel : public mojom::ControlChannel {
   void DeliverModifiers(Modifiers modifiers);
   // Somebody used the desk; see DeskActivity. Dropped while no compositor is
   // connected: the next one starts its idle clock fresh.
-  void SomebodyIsHere();
+  void SomebodyIsHere(const std::string& input);
   // The pointer moved on the desk; see DeskPointer. Dropped while no
   // compositor is connected, like SomebodyIsHere.
   void DeskPointerMoved(const DeskPointerAt& at);

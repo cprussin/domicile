@@ -130,6 +130,13 @@ export type System = {
     Result<Listening<number | undefined>, SystemError>
   >;
   /**
+   * Hear what holds the desktop awake: the windows and applications whose
+   * idle inhibitors keep the screens from blanking. The shell's own hold
+   * through the portal is `"domicile"`. Heard at once, then on each change.
+   * Allowed while the desktop is locked. See docs/IDLE.md.
+   */
+  idleHolds: () => Promise<Result<Listening<readonly string[]>, SystemError>>;
+  /**
    * Hear why each passphrase sent with `unlock` did not open the desk. Every
    * page listening hears every refusal. Allowed while the desktop is locked.
    */
@@ -239,6 +246,10 @@ export const system = (host: SystemHost): System => {
               })
             : unexpected(event),
         Listened.Missed(),
+      ),
+    idleHolds: () =>
+      listening(calls, { call: "idle_holds" }, (event) =>
+        event.kind === "idle_holds" ? event.holders : unexpected(event),
       ),
     idleWarnings: () =>
       listening(calls, { call: "idle_warnings" }, (event) =>
