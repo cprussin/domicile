@@ -12,7 +12,7 @@
     },
     "packages/app-history": {
       "name": "@domicile-desktop/app-history",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@base-ui/react": "catalog:",
         "@cprussin/option-result": "catalog:",
@@ -42,7 +42,7 @@
     },
     "packages/app-settings": {
       "name": "@domicile-desktop/app-settings",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "dependencies": {
         "@base-ui/react": "catalog:",
         "@cprussin/option-result": "catalog:",
@@ -72,7 +72,7 @@
     },
     "packages/check-runner": {
       "name": "@domicile-desktop/check-runner",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "bin": {
         "check-runner": "./bin/check-runner.sh",
       },
@@ -84,7 +84,7 @@
     },
     "packages/chrome-sdk": {
       "name": "@domicile-desktop/sdk",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "zod": "catalog:",
@@ -98,14 +98,14 @@
     },
     "packages/ci": {
       "name": "@domicile-desktop/ci",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "devDependencies": {
         "@domicile-desktop/check-runner": "workspace:*",
       },
     },
     "packages/component-library": {
       "name": "@domicile-desktop/component-library",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@base-ui/react": "catalog:",
         "@cprussin/option-result": "catalog:",
@@ -141,7 +141,7 @@
     },
     "packages/dev-shell": {
       "name": "@domicile-desktop/dev-shell",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "bin": {
         "dev-shell": "./bin/dev-shell.sh",
       },
@@ -151,14 +151,14 @@
     },
     "packages/distro-checks": {
       "name": "@domicile-desktop/distro-checks",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "devDependencies": {
         "@domicile-desktop/check-runner": "workspace:*",
       },
     },
     "packages/domicile": {
       "name": "domicile",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@domicile-desktop/app-history": "workspace:*",
         "@domicile-desktop/app-settings": "workspace:*",
@@ -170,7 +170,7 @@
     },
     "packages/domicile-builder": {
       "name": "@domicile-desktop/builder",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "bin": {
         "domicile-builder": "./src/main.ts",
       },
@@ -190,14 +190,14 @@
     },
     "packages/domicile-engine": {
       "name": "@domicile-desktop/engine",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "devDependencies": {
         "@domicile-desktop/check-runner": "workspace:*",
       },
     },
     "packages/e2e-harness": {
       "name": "@domicile-desktop/e2e-harness",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@domicile-desktop/sdk": "workspace:*",
         "zod": "catalog:",
@@ -211,7 +211,7 @@
     },
     "packages/manganese-address": {
       "name": "@domicile-desktop/manganese-address",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/sdk": "workspace:*",
@@ -233,7 +233,7 @@
     },
     "packages/manganese-bar": {
       "name": "@domicile-desktop/manganese-bar",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/manganese-host": "workspace:*",
@@ -255,7 +255,7 @@
     },
     "packages/manganese-bar-module-battery": {
       "name": "@domicile-desktop/manganese-bar-module-battery",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/component-library": "workspace:*",
@@ -281,7 +281,7 @@
     },
     "packages/manganese-bar-module-bluetooth": {
       "name": "@domicile-desktop/manganese-bar-module-bluetooth",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/component-library": "workspace:*",
@@ -308,7 +308,7 @@
     },
     "packages/manganese-bar-module-brightness": {
       "name": "@domicile-desktop/manganese-bar-module-brightness",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/component-library": "workspace:*",
@@ -335,7 +335,7 @@
     },
     "packages/manganese-bar-module-cast": {
       "name": "@domicile-desktop/manganese-bar-module-cast",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/manganese-host": "workspace:*",
@@ -360,7 +360,7 @@
     },
     "packages/manganese-bar-module-clock": {
       "name": "@domicile-desktop/manganese-bar-module-clock",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
         "@pandacss/dev": "catalog:",
@@ -381,7 +381,7 @@
     },
     "packages/manganese-bar-module-gmail": {
       "name": "@domicile-desktop/manganese-bar-module-gmail",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/component-library": "workspace:*",
@@ -407,7 +407,7 @@
     },
     "packages/manganese-bar-module-google-messages": {
       "name": "@domicile-desktop/manganese-bar-module-google-messages",
-      "version": "0.0.0",
+      "version": "1.0.0",
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/manganese-bar": "workspace:*",
@@ -433,7 +433,7 @@
     },
     "packages/manganese-bar-module-idle-inhibitor": {
       "name": "@domicile-desktop/manganese-bar-module-idle-inhibitor",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/component-library": "workspace:*",
@@ -459,7 +459,7 @@
     },
     "packages/manganese-bar-module-keymap": {
       "name": "@domicile-desktop/manganese-bar-module-keymap",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/manganese-bar": "workspace:*",
@@ -484,7 +484,7 @@
     },
     "packages/manganese-bar-module-launcher-button": {
       "name": "@domicile-desktop/manganese-bar-module-launcher-button",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/manganese-launcher": "workspace:*",
@@ -507,7 +507,7 @@
     },
     "packages/manganese-bar-module-mode": {
       "name": "@domicile-desktop/manganese-bar-module-mode",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/manganese-window-management": "workspace:*",
@@ -529,7 +529,7 @@
     },
     "packages/manganese-bar-module-network": {
       "name": "@domicile-desktop/manganese-bar-module-network",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/component-library": "workspace:*",
@@ -556,7 +556,7 @@
     },
     "packages/manganese-bar-module-notifications": {
       "name": "@domicile-desktop/manganese-bar-module-notifications",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/manganese-bar": "workspace:*",
@@ -580,7 +580,7 @@
     },
     "packages/manganese-bar-module-sharing": {
       "name": "@domicile-desktop/manganese-bar-module-sharing",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/manganese-host": "workspace:*",
@@ -605,7 +605,7 @@
     },
     "packages/manganese-bar-module-theme-switch": {
       "name": "@domicile-desktop/manganese-bar-module-theme-switch",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
         "@pandacss/dev": "catalog:",
@@ -626,7 +626,7 @@
     },
     "packages/manganese-bar-module-tray": {
       "name": "@domicile-desktop/manganese-bar-module-tray",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/component-library": "workspace:*",
@@ -654,7 +654,7 @@
     },
     "packages/manganese-bar-module-volume": {
       "name": "@domicile-desktop/manganese-bar-module-volume",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/component-library": "workspace:*",
@@ -681,7 +681,7 @@
     },
     "packages/manganese-bar-module-workspace-switcher": {
       "name": "@domicile-desktop/manganese-bar-module-workspace-switcher",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/manganese-bar": "workspace:*",
@@ -704,7 +704,7 @@
     },
     "packages/manganese-clipboard": {
       "name": "@domicile-desktop/manganese-clipboard",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/manganese-host": "workspace:*",
@@ -728,7 +728,7 @@
     },
     "packages/manganese-host": {
       "name": "@domicile-desktop/manganese-host",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/component-library": "workspace:*",
@@ -752,7 +752,7 @@
     },
     "packages/manganese-launcher": {
       "name": "@domicile-desktop/manganese-launcher",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/component-library": "workspace:*",
@@ -783,7 +783,7 @@
     },
     "packages/manganese-lock": {
       "name": "@domicile-desktop/manganese-lock",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/manganese-bar": "workspace:*",
@@ -810,7 +810,7 @@
     },
     "packages/manganese-notifications": {
       "name": "@domicile-desktop/manganese-notifications",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/manganese-bar": "workspace:*",
@@ -836,7 +836,7 @@
     },
     "packages/manganese-page-requests": {
       "name": "@domicile-desktop/manganese-page-requests",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/sdk": "workspace:*",
@@ -860,7 +860,7 @@
     },
     "packages/manganese-wallpaper": {
       "name": "@domicile-desktop/manganese-wallpaper",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
         "@pandacss/dev": "catalog:",
@@ -882,7 +882,7 @@
     },
     "packages/manganese-window-management": {
       "name": "@domicile-desktop/manganese-window-management",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/component-library": "workspace:*",
@@ -912,7 +912,7 @@
     },
     "packages/react": {
       "name": "@domicile-desktop/react",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "dependencies": {
         "@domicile-desktop/sdk": "workspace:*",
       },
@@ -934,7 +934,7 @@
     },
     "packages/shell-manganese": {
       "name": "@domicile-desktop/manganese",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/component-library": "workspace:*",
@@ -987,7 +987,7 @@
     },
     "packages/shell-simple": {
       "name": "@domicile-desktop/shell-simple",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/react": "workspace:*",
@@ -1013,7 +1013,7 @@
     },
     "packages/shell-splash": {
       "name": "@domicile-desktop/shell-splash",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/sdk": "workspace:*",
@@ -1039,7 +1039,7 @@
     },
     "packages/site": {
       "name": "@domicile-desktop/site",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@domicile-desktop/component-library": "workspace:*",
         "@phosphor-icons/react": "catalog:",
@@ -1069,7 +1069,7 @@
     },
     "packages/system-apps": {
       "name": "@domicile-desktop/system-apps",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/sdk": "workspace:*",
@@ -1084,7 +1084,7 @@
     },
     "packages/system-audio": {
       "name": "@domicile-desktop/system-audio",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/sdk": "workspace:*",
@@ -1099,7 +1099,7 @@
     },
     "packages/system-backlight": {
       "name": "@domicile-desktop/system-backlight",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/sdk": "workspace:*",
@@ -1114,7 +1114,7 @@
     },
     "packages/system-battery": {
       "name": "@domicile-desktop/system-battery",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/sdk": "workspace:*",
@@ -1129,7 +1129,7 @@
     },
     "packages/system-bluetooth": {
       "name": "@domicile-desktop/system-bluetooth",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/sdk": "workspace:*",
@@ -1144,7 +1144,7 @@
     },
     "packages/system-network": {
       "name": "@domicile-desktop/system-network",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "dependencies": {
         "@cprussin/option-result": "catalog:",
         "@domicile-desktop/sdk": "workspace:*",
@@ -1158,7 +1158,7 @@
     },
     "packages/test-support": {
       "name": "@domicile-desktop/test-support",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@happy-dom/global-registrator": "catalog:",
         "@testing-library/jest-dom": "catalog:",
