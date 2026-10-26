@@ -226,7 +226,7 @@ const PlacementRow = ({ editor, path, placement }: PlacementRowProps) => {
         aria-labelledby={nameId}
         checked={placement.enabled}
         disabled={disabled}
-        label="On"
+        label={placement.enabled ? "On" : "Off"}
         onCheckedChange={(enabled) => {
           set([...path, "enabled"], enabled ? undefined : false);
         }}

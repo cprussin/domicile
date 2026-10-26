@@ -4,10 +4,6 @@ import { defineConfig } from "@pandacss/dev";
 export default defineConfig({
   exclude: [],
   globalCss: {
-    html: {
-      _light: { colorScheme: "light" },
-      colorScheme: "dark",
-    },
     "html, body": {
       backgroundColor: "background",
       color: "foreground",
