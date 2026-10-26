@@ -657,6 +657,27 @@ fn the_shell_adds_a_virtual_monitor() {
     );
 }
 
+/// The shell hears what holds the desktop awake.
+#[test]
+fn the_shell_hears_what_holds_the_desktop_awake() {
+    assert_eq!(
+        chrome(r#"{"type":"system_request","id":5,"request":{"call":"idle_holds"}}"#),
+        ChromeMessage::SystemRequest {
+            id: 5,
+            request: SystemRequest::IdleHolds,
+        }
+    );
+    assert_eq!(
+        host(&HostMessage::SystemEvent {
+            id: 5,
+            event: SystemEvent::IdleHolds {
+                holders: vec!["mpv".into(), "slack".into()],
+            },
+        }),
+        r#"{"type":"system_event","id":5,"event":{"kind":"idle_holds","holders":["mpv","slack"]}}"#
+    );
+}
+
 /// The shell hears the keymaps the desktop switches between, and switches it.
 #[test]
 fn the_shell_hears_the_keymaps_and_switches_between_them() {

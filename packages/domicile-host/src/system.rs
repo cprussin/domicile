@@ -1,11 +1,12 @@
 //! Files, watches, processes, D-Bus, screenshots, shell commands, idle
-//! warnings, the lock's refusals, window states and keymaps for one chrome
-//! connection.
+//! warnings and holds, the lock's refusals, window states and keymaps for one
+//! chrome connection.
 //! The compositor takes the screenshots ([`System::screenshotting_with`]),
 //! sets window states ([`System::setting_window_states_with`]), adds virtual
 //! monitors ([`System::adding_virtual_monitors_with`]), shares the
 //! shell commands ([`System::sharing_shell_commands`]), idle warnings
-//! ([`System::sharing_idle_warnings`]) and window requests
+//! ([`System::sharing_idle_warnings`]), idle holds
+//! ([`System::sharing_idle_holds`]) and window requests
 //! ([`System::sharing_window_requests`]) between connections, sends the
 //! refusals ([`System::sharing_unlock_refusals`]), lists the keymaps
 //! ([`System::sharing_keymaps`]) and switches them
@@ -41,6 +42,7 @@ use zbus::zvariant::{Signature, Structure, StructureBuilder};
 use crate::base64::{decoded, encoded};
 use crate::dbus_json::{self, NotABody};
 use crate::fanout::Listener;
+use crate::idle_holds::{self, IdleHolds};
 use crate::idle_warnings::{self, IdleWarnings};
 use crate::keymaps::Keymaps;
 use crate::lock_screen_readouts::is_a_readout;
@@ -85,6 +87,8 @@ pub struct System {
     shell_commands: ShellCommands,
     /// The warning that the screens are about to blank.
     idle_warnings: IdleWarnings,
+    /// What holds the desktop awake, and the pages that hear it change.
+    idle_holds: IdleHolds,
     /// The pages that hear the lock refuse a passphrase.
     unlock_refusals: UnlockRefusals,
     /// Sets a window's states; `None` on a system that sets none.
@@ -167,8 +171,8 @@ enum Running {
     Watch(notify::RecommendedWatcher),
     /// A D-Bus match, on a connection of its own so closing it ends the match.
     Match(Connection),
-    /// The page hears shell commands, the lock's refusals, window requests
-    /// or the keymaps.
+    /// The page hears shell commands, the lock's refusals, window requests,
+    /// the keymaps or what holds the desktop awake.
     Listening(Listener),
     /// The page hears idle warnings.
     IdleWarnings(idle_warnings::Listener),
@@ -249,6 +253,7 @@ pub fn reach(request: &SystemRequest) -> Reach {
         },
         SystemRequest::ShellCommands
         | SystemRequest::IdleWarnings
+        | SystemRequest::IdleHolds
         | SystemRequest::UnlockRefusals
         | SystemRequest::WindowRequests
         | SystemRequest::Keymaps => Reach::Listens,
@@ -288,6 +293,7 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         | SystemRequest::PreviewWindow { .. }
         | SystemRequest::ShellCommands
         | SystemRequest::IdleWarnings
+        | SystemRequest::IdleHolds
         | SystemRequest::UnlockRefusals
         | SystemRequest::SendShell { .. }
         | SystemRequest::SetWindowStates { .. }
@@ -337,6 +343,7 @@ pub fn refused_to_an_app(id: u32, request: &SystemRequest) -> Option<HostMessage
         | SystemRequest::ShellCommands
         | SystemRequest::SendShell { .. }
         | SystemRequest::IdleWarnings
+        | SystemRequest::IdleHolds
         | SystemRequest::UnlockRefusals
         | SystemRequest::SetWindowStates { .. }
         | SystemRequest::SetColorTemperature { .. }
@@ -382,6 +389,7 @@ impl System {
             preview: None,
             shell_commands: ShellCommands::default(),
             idle_warnings: IdleWarnings::default(),
+            idle_holds: IdleHolds::default(),
             unlock_refusals: UnlockRefusals::default(),
             set_window_states: None,
             window_requests: WindowRequests::default(),
@@ -472,6 +480,13 @@ impl System {
         add: impl Fn(VirtualMonitor) -> Result<AddedMonitor, SystemError> + Send + Sync + 'static,
     ) -> System {
         self.add_virtual_monitor = Some(Arc::new(add));
+        self
+    }
+
+    /// This system, telling a page that listens what `holds` lists as holding
+    /// the desktop awake.
+    pub fn sharing_idle_holds(mut self, holds: IdleHolds) -> System {
+        self.idle_holds = holds;
         self
     }
 
@@ -985,6 +1000,30 @@ impl System {
                         hear(&listed);
                     }
                 };
+                Ok((Running::Listening(listener), Box::new(already)))
+            }),
+            SystemRequest::IdleHolds => self.starting(id, |system| {
+                let hear = {
+                    let (tell, running) = (system.tell.clone(), Arc::downgrade(&system.running));
+                    move |holders: &Vec<String>| {
+                        let Some(running) = running.upgrade() else {
+                            return;
+                        };
+                        // Under the lock, as for shell commands.
+                        let running = running.lock().unwrap();
+                        if matches!(running.get(&id), Some(Running::Listening(_))) {
+                            tell(HostMessage::SystemEvent {
+                                id,
+                                event: idle_holds::event(holders),
+                            });
+                        }
+                    }
+                };
+                let listener = system.idle_holds.listen(Arc::new(hear.clone()));
+                // A page hears the holders at once, even none, so it need not
+                // wait for a change.
+                let holds = system.idle_holds.clone();
+                let already = move || hear(&holds.holders());
                 Ok((Running::Listening(listener), Box::new(already)))
             }),
             SystemRequest::SelectKeymap { keymap } => {

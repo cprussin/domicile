@@ -665,6 +665,28 @@ describe("idle warnings", () => {
   });
 });
 
+describe("idle holds", () => {
+  it("streams what holds the desk awake, at once and on each change", async () => {
+    const host = new FakeHost();
+    const listening = system(host).idleHolds();
+    host.reply(1, { kind: "started" });
+    const holds = started(await listening);
+    host.event(1, { holders: [], kind: "idle_holds" });
+    host.event(1, { holders: ["mpv", "slack"], kind: "idle_holds" });
+    holds.stop();
+    host.end(1, { kind: "stopped" });
+
+    expect(host.calls).toStrictEqual([
+      [1, { call: "idle_holds" }],
+      [1, { call: "unwatch" }],
+    ]);
+    expect(await Array.fromAsync(holds.items)).toStrictEqual([
+      [],
+      ["mpv", "slack"],
+    ]);
+  });
+});
+
 describe("unlock refusals", () => {
   it("streams why each passphrase did not open the desk", async () => {
     const host = new FakeHost();
