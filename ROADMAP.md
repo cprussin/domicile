@@ -20,6 +20,8 @@ item when it ships.
      - Composing manganese's packages into a custom desktop.
      - Writing a desktop from scratch
        ([WRITING-A-SHELL.md](docs/WRITING-A-SHELL.md)).
+     - Writing an app. The Domicile page links the example and
+       [APP-MODULES.md](docs/architecture/APP-MODULES.md), which is the design.
 
 ## Known gaps
 

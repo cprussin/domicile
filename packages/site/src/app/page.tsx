@@ -1,4 +1,6 @@
 import { css } from "../../styled-system/css";
+import { Apps } from "../domicile/Apps";
+import { Batteries } from "../domicile/Batteries";
 import { Cli } from "../domicile/Cli";
 import { CssStrip } from "../domicile/CssStrip";
 import { DomicileMark } from "../domicile/DomicileMark";
@@ -36,6 +38,8 @@ const DomicilePage = () => (
       <Hero />
       <HeroMedia />
       <CssStrip />
+      <Batteries />
+      <Apps />
       <Platform />
       <Quickstart />
       <Cli />
