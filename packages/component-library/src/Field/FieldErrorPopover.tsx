@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
 import { css } from "../../styled-system/css";
+import { usePopupBoundary } from "../PopupBoundary/PopupBoundary";
 
 type Props = {
   anchor: HTMLElement | undefined;
@@ -23,6 +24,7 @@ export const FieldErrorPopover = ({ anchor, error }: Props) => {
       setShownError(error);
     }
   }, [error]);
+  const { boundary } = usePopupBoundary(false);
   return (
     <BasePopover.Root open={error !== undefined}>
       <BasePopover.Portal>
@@ -34,6 +36,7 @@ export const FieldErrorPopover = ({ anchor, error }: Props) => {
             fallbackAxisSide: "none",
             side: "none",
           }}
+          collisionBoundary={boundary}
           side="right"
           sideOffset={8}
         >

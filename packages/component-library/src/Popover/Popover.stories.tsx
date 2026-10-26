@@ -16,6 +16,7 @@ const meta = {
     children:
       "The connection to this site is encrypted. Nothing else on the network can read what is sent.",
     side: "bottom",
+    spansWindows: false,
     title: "Connection",
     tone: "card",
     tooltip: undefined,
@@ -48,6 +49,10 @@ const meta = {
       control: "inline-radio",
       options: SIDES,
       table: { category: "Style" },
+    },
+    spansWindows: {
+      control: "boolean",
+      table: { category: "Behavior" },
     },
     title: {
       control: "text",
@@ -91,6 +96,7 @@ export const Popover: StoryObj<typeof PopoverComponent> = {
     defaultOpen: false,
     flush: false,
     side: "bottom",
+    spansWindows: false,
     tone: "card",
   },
 };
@@ -101,6 +107,7 @@ export const OpenByDefault = {
     defaultOpen: true,
     flush: false,
     side: "bottom",
+    spansWindows: false,
     tone: "card",
   },
 } satisfies StoryObj<typeof PopoverComponent>;
@@ -111,6 +118,7 @@ export const AlignedToAnIndicator = {
     defaultOpen: true,
     flush: false,
     side: "bottom",
+    spansWindows: false,
     title: "Connection is encrypted",
     tone: "card",
     trigger: (
@@ -135,6 +143,7 @@ export const WithoutATitle = {
     defaultOpen: true,
     flush: false,
     side: "top",
+    spansWindows: false,
     title: undefined,
     tone: "card",
   },
@@ -147,6 +156,7 @@ export const Flush = {
     defaultOpen: true,
     flush: true,
     side: "bottom",
+    spansWindows: false,
     title: undefined,
     tone: "card",
   },
@@ -167,6 +177,7 @@ export const OverPhoto: StoryObj<typeof PopoverComponent> = {
     defaultOpen: true,
     flush: false,
     side: "bottom",
+    spansWindows: false,
     title: undefined,
     tone: "overPhoto",
   },
@@ -178,6 +189,7 @@ export const WithATooltip = {
     defaultOpen: false,
     flush: false,
     side: "bottom",
+    spansWindows: false,
     title: "Connection is encrypted",
     tone: "card",
     tooltip: "Connection",

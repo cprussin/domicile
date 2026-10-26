@@ -25,6 +25,7 @@
     },
     "./emitted-stylesheet": "./src/emitted-stylesheet.ts",
     "./lock-screen-readouts": "./src/lock-screen-readouts.ts",
+    "./popup-layout": "./src/popup-layout.ts",
     "./preload": "./src/preload.ts"
   },
   "files": [

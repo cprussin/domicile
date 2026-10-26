@@ -8,6 +8,7 @@ import { focusControlOnMouseDown } from "../_control/focus";
 import { PrefixIconStack } from "../_control/PrefixIconStack";
 import { wrapperBase } from "../_control/wrapperBase";
 import type { ExtendProps } from "../extend-props";
+import { usePopupBoundary } from "../PopupBoundary/PopupBoundary";
 
 export { SIZES, type Size } from "../control-sizes";
 
@@ -84,84 +85,89 @@ export const Autocomplete = <V,>({
   value,
   width,
   ...inputProps
-}: Props<V>) => (
-  <BaseAutocomplete.Root<Suggestion<V>>
-    autoHighlight={autoHighlight}
-    disabled={disabled}
-    items={suggestions}
-    itemToStringValue={(suggestion) => suggestion.text}
-    // `inline` skips base-ui's filtering; the caller already filtered
-    // `suggestions`.
-    mode="inline"
-    onValueChange={(next) => {
-      onValueChange?.(next);
-    }}
-    value={value}
-  >
-    {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: focuses the field when the wrapper's padding is clicked; mirrors native <label> behavior without a second label polluting the accessible name */}
-    {/* biome-ignore lint/a11y/noStaticElementInteractions: focuses the field when the wrapper's padding is clicked; mirrors native <label> behavior without a second label polluting the accessible name */}
-    <div
-      className={cx(
-        control({ size }),
-        wrapperBase,
-        wrapperStyles({ rounded, size }),
-      )}
-      onMouseDown={focusControlOnMouseDown}
-      style={controlSizingStyle({ width })}
+}: Props<V>) => {
+  const { attach, boundary } = usePopupBoundary(false);
+  return (
+    <BaseAutocomplete.Root<Suggestion<V>>
+      autoHighlight={autoHighlight}
+      disabled={disabled}
+      items={suggestions}
+      itemToStringValue={(suggestion) => suggestion.text}
+      // `inline` skips base-ui's filtering; the caller already filtered
+      // `suggestions`.
+      mode="inline"
+      onValueChange={(next) => {
+        onValueChange?.(next);
+      }}
+      value={value}
     >
-      {prefixButtons === undefined ? (
-        <PrefixIconStack prefixIcon={prefixIcon} size={size} />
-      ) : (
-        <span className={affixStyles}>{prefixButtons}</span>
-      )}
-      <BaseAutocomplete.Input
-        {...inputProps}
-        className={inputStyles}
-        data-control=""
-      />
-      {suffixButtons !== undefined && (
-        <span className={affixStyles}>{suffixButtons}</span>
-      )}
-    </div>
-    <BaseAutocomplete.Portal>
-      <BaseAutocomplete.Positioner
-        align="start"
-        className={positionerStyles}
-        side="bottom"
-        sideOffset={6}
+      {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: focuses the field when the wrapper's padding is clicked; mirrors native <label> behavior without a second label polluting the accessible name */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: focuses the field when the wrapper's padding is clicked; mirrors native <label> behavior without a second label polluting the accessible name */}
+      <div
+        className={cx(
+          control({ size }),
+          wrapperBase,
+          wrapperStyles({ rounded, size }),
+        )}
+        onMouseDown={focusControlOnMouseDown}
+        ref={attach}
+        style={controlSizingStyle({ width })}
       >
-        <BaseAutocomplete.Popup className={popupStyles}>
-          <BaseAutocomplete.Empty className={emptyStyles}>
-            {emptyMessage}
-          </BaseAutocomplete.Empty>
-          <BaseAutocomplete.List className={listStyles}>
-            {suggestions.map((suggestion, index) => (
-              <BaseAutocomplete.Item
-                className={itemStyles}
-                index={index}
-                key={index}
-                onClick={() => {
-                  onSuggestionTaken?.(suggestion.value);
-                }}
-                value={suggestion}
-              >
-                {suggestion.icon !== undefined && (
-                  <span className={itemIconStyles}>{suggestion.icon}</span>
-                )}
-                <span className={itemLabelStyles}>{suggestion.label}</span>
-                {suggestion.description !== undefined && (
-                  <span className={itemDescriptionStyles}>
-                    {suggestion.description}
-                  </span>
-                )}
-              </BaseAutocomplete.Item>
-            ))}
-          </BaseAutocomplete.List>
-        </BaseAutocomplete.Popup>
-      </BaseAutocomplete.Positioner>
-    </BaseAutocomplete.Portal>
-  </BaseAutocomplete.Root>
-);
+        {prefixButtons === undefined ? (
+          <PrefixIconStack prefixIcon={prefixIcon} size={size} />
+        ) : (
+          <span className={affixStyles}>{prefixButtons}</span>
+        )}
+        <BaseAutocomplete.Input
+          {...inputProps}
+          className={inputStyles}
+          data-control=""
+        />
+        {suffixButtons !== undefined && (
+          <span className={affixStyles}>{suffixButtons}</span>
+        )}
+      </div>
+      <BaseAutocomplete.Portal>
+        <BaseAutocomplete.Positioner
+          align="start"
+          className={positionerStyles}
+          collisionBoundary={boundary}
+          side="bottom"
+          sideOffset={6}
+        >
+          <BaseAutocomplete.Popup className={popupStyles}>
+            <BaseAutocomplete.Empty className={emptyStyles}>
+              {emptyMessage}
+            </BaseAutocomplete.Empty>
+            <BaseAutocomplete.List className={listStyles}>
+              {suggestions.map((suggestion, index) => (
+                <BaseAutocomplete.Item
+                  className={itemStyles}
+                  index={index}
+                  key={index}
+                  onClick={() => {
+                    onSuggestionTaken?.(suggestion.value);
+                  }}
+                  value={suggestion}
+                >
+                  {suggestion.icon !== undefined && (
+                    <span className={itemIconStyles}>{suggestion.icon}</span>
+                  )}
+                  <span className={itemLabelStyles}>{suggestion.label}</span>
+                  {suggestion.description !== undefined && (
+                    <span className={itemDescriptionStyles}>
+                      {suggestion.description}
+                    </span>
+                  )}
+                </BaseAutocomplete.Item>
+              ))}
+            </BaseAutocomplete.List>
+          </BaseAutocomplete.Popup>
+        </BaseAutocomplete.Positioner>
+      </BaseAutocomplete.Portal>
+    </BaseAutocomplete.Root>
+  );
+};
 
 const inputStyles = css({
   "&::placeholder": { color: "muted" },

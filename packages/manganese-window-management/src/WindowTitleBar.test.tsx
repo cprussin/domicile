@@ -43,6 +43,7 @@ const tabProps = {
   onMove: nothing,
   rect: TAB,
   strip: {
+    area: { ...TAB, height: 400, width: 600 },
     at: 0,
     box: { ...TAB, width: 600 },
     divided: false,

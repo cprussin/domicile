@@ -83,6 +83,7 @@ describe("placementsOf", () => {
       selected: false,
       soleTab: true,
       strip: {
+        area: { height: 1018, width: 1880, x: 20, y: 42 },
         at: 0,
         box: { height: TITLE_BAR, width: 1880, x: 20, y: 42 },
         divided: false,

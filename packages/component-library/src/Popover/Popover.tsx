@@ -6,12 +6,12 @@ import {
   useContext,
   useEffect,
   useRef,
-  useState,
 } from "react";
 import { css, cva } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { useStableRef } from "../_control/useStableRef";
 import type { ExtendProps } from "../extend-props";
+import { usePopupBoundary } from "../PopupBoundary/PopupBoundary";
 import { Tooltip } from "../Tooltip/Tooltip";
 
 export const { createHandle } = BasePopover;
@@ -51,6 +51,8 @@ type Props = ExtendProps<
      */
     keepMounted?: boolean | undefined;
     side?: Side | undefined;
+    /** Let the panel leave its `PopupBoundary`, such as its window, for its screen. */
+    spansWindows?: boolean | undefined;
     title?: ReactNode | undefined;
     /**
      * `overPhoto` is a translucent pill with white text, for panels opened
@@ -72,9 +74,10 @@ type Props = ExtendProps<
  * A non-modal panel anchored to its trigger, for detail the trigger has no
  * room for. Use `ModalDialog` when the user must respond first.
  *
- * Stays on the `<Screen>` region of the trigger that opened it, so on a
- * desktop of several monitors it never spans two. Triggers elsewhere open it
- * through a `handle` from `createHandle()`, as `Popover.Trigger`.
+ * Stays inside its `PopupBoundary`, else on the `<Screen>` region of the
+ * trigger that opened it, so it never spans two windows or two monitors.
+ * Triggers elsewhere open it through a `handle` from `createHandle()`, as
+ * `Popover.Trigger`.
  *
  * Closes on an outside press, Escape, or focus leaving it. The focus check
  * catches presses inside out-of-process frames, which the document can't
@@ -88,6 +91,7 @@ const PopoverComponent = ({
   keepMounted = false,
   onOpenChange,
   side = "bottom",
+  spansWindows = false,
   title,
   tone = "card",
   tooltip,
@@ -99,13 +103,13 @@ const PopoverComponent = ({
   const actions = actionsRef ?? ownActions;
   const [popupRef, setPopupRef] = useStableRef<HTMLDivElement>();
   const [triggerRef, setTriggerRef] = useStableRef<HTMLElement>();
-  const [screen, setScreen] = useState<Element | undefined>(undefined);
+  const { attach, boundary } = usePopupBoundary(spansWindows);
   const attachTrigger = useCallback<RefCallback<HTMLElement>>(
     (element) => {
-      setScreen(element?.closest("[data-screen]") ?? undefined);
+      attach(element);
       return setTriggerRef(element);
     },
-    [setTriggerRef],
+    [attach, setTriggerRef],
   );
   // The trigger that opened it, which may be outside this component.
   const opener = useRef<Element | undefined>(undefined);
@@ -117,7 +121,7 @@ const PopoverComponent = ({
       onOpenChange={(open, details) => {
         if (open && details.trigger !== undefined) {
           opener.current = details.trigger;
-          setScreen(details.trigger.closest("[data-screen]") ?? undefined);
+          attach(details.trigger);
         }
         onOpenChange?.(open, details);
       }}
@@ -135,7 +139,7 @@ const PopoverComponent = ({
         <BasePopover.Positioner
           align={align}
           className={positionerStyles}
-          collisionBoundary={screen}
+          collisionBoundary={boundary}
           onFocus={(event) => {
             within.current = event.nativeEvent;
           }}
@@ -194,7 +198,7 @@ const popupStyles = flex({
   },
   // Clips content to the panel's rounded corners.
   "&[data-flush]": {
-    maxInlineSize: "90vw",
+    maxInlineSize: "min(90vw, var(--available-width))",
     overflow: "hidden",
     paddingBlock: 0,
     paddingInline: 0,
@@ -219,7 +223,7 @@ const popupStyles = flex({
     textShadow: "textOverPhoto",
   },
   "&[data-wide]": {
-    maxInlineSize: "min(30rem, 90vw)",
+    maxInlineSize: "min(30rem, 90vw, var(--available-width))",
   },
   backgroundColor: "card",
   border: "1px solid {colors.border}",
@@ -227,7 +231,8 @@ const popupStyles = flex({
   boxShadow: "lifted",
   color: "foreground",
   direction: "column",
-  maxInlineSize: "min({spacing.88}, 90vw)",
+  // `--available-width` is the room its `PopupBoundary` leaves it.
+  maxInlineSize: "min({spacing.88}, 90vw, var(--available-width))",
   opacity: 1,
   outlineStyle: "none",
   paddingBlock: 3,

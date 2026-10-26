@@ -220,6 +220,7 @@ describe("useWindowMotion", () => {
       const MAIL = ShellWindow.App("mail", "mail");
       const windows = [TERMINAL, EDITOR, MAIL];
       const strip = {
+        area: { height: 830, width: 1200, x: 0, y: 32 },
         at: 0,
         box: { height: 30, width: 1200, x: 0, y: 32 },
         divided: false,
@@ -667,6 +668,7 @@ describe("useWindowMotion", () => {
               rect: bar,
               selected: false,
               strip: {
+                area: bar,
                 at: 0,
                 box: bar,
                 divided: false,

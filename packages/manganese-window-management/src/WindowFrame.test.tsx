@@ -1,5 +1,14 @@
-import { describe, expect, it } from "bun:test";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "bun:test";
+import { Button } from "@domicile-desktop/component-library/Button";
+import { Popover } from "@domicile-desktop/component-library/Popover";
+import {
+  drawAt,
+  drawPopups,
+  popupLeft,
+  undrawPopups,
+} from "@domicile-desktop/test-support/popup-layout";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { WindowFrame } from "./WindowFrame";
 import type { WindowMotion } from "./window-motion";
 
@@ -12,6 +21,32 @@ const noReach = () => {
 };
 
 describe("WindowFrame", () => {
+  afterEach(undrawPopups);
+
+  it("keeps popups opened in the window inside its frame", async () => {
+    render(
+      <WindowFrame
+        frame={{ height: 800, width: 400, x: 0, y: 0 }}
+        motion="resting"
+        onHover={noHover}
+        onReach={noReach}
+        rewound={0}
+        screen={undefined}
+      >
+        <Popover trigger={<Button>Site settings</Button>}>Body</Popover>
+      </WindowFrame>,
+    );
+    const trigger = screen.getByRole("button", { name: "Site settings" });
+    drawAt(trigger, { height: 28, width: 28, x: 360, y: 40 });
+    drawPopups("dialog", { height: 100, width: 300 });
+
+    await userEvent.click(trigger);
+
+    await waitFor(() => {
+      expect(popupLeft("dialog") + 300).toBeLessThanOrEqual(400);
+    });
+  });
+
   it("reports where the pointer crossed into any part of the window", () => {
     // `usePointerWarp` needs the position to tell a pointer move from a
     // window appearing under the pointer.

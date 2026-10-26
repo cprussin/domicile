@@ -60,6 +60,7 @@
     "./media-theme-source": "./src/ThemeSwitch/media-theme-source.ts",
     "./Notice": "./src/Notice/Notice.tsx",
     "./Popover": "./src/Popover/Popover.tsx",
+    "./PopupBoundary": "./src/PopupBoundary/PopupBoundary.tsx",
     "./PortalDialogs": "./src/PortalDialogs/PortalDialogs.tsx",
     "./Provider": "./src/Provider/Provider.tsx",
     "./pandacss-preset": "./src/pandacss-preset.ts",

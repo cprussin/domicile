@@ -313,6 +313,7 @@ describe("framesOf", () => {
       expect(strip(Layout.Tabbed, 1)).toEqual([
         {
           strip: {
+            area: AREA,
             at: 0,
             box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
             divided: false,
@@ -330,6 +331,7 @@ describe("framesOf", () => {
       expect(strip(Layout.Tabbed, 2)).toEqual([
         {
           strip: {
+            area: AREA,
             at: 0,
             box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
             divided: false,
@@ -345,6 +347,7 @@ describe("framesOf", () => {
         },
         {
           strip: {
+            area: AREA,
             at: 1,
             box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
             divided: false,
@@ -369,6 +372,7 @@ describe("framesOf", () => {
         Array.from({ length: 8 }, () => 116),
       );
       expect(crowded.at(-1)?.strip).toEqual({
+        area: AREA,
         at: 7,
         box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
         divided: true,
@@ -385,6 +389,7 @@ describe("framesOf", () => {
       expect(strip(Layout.Stacking, 2)).toEqual([
         {
           strip: {
+            area: AREA,
             at: 0,
             box: { height: TITLE_BAR * 2, width: 1000, x: 0, y: 0 },
             divided: false,
@@ -400,6 +405,7 @@ describe("framesOf", () => {
         },
         {
           strip: {
+            area: AREA,
             at: 1,
             box: { height: TITLE_BAR * 2, width: 1000, x: 0, y: 0 },
             divided: true,
@@ -485,6 +491,7 @@ describe("framesOf", () => {
         rect: { height: TITLE_BAR, width: 240, x: 0, y: 0 },
         selected: false,
         strip: {
+          area: AREA,
           at: 0,
           box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
           divided: false,
@@ -631,6 +638,7 @@ describe("framesOf", () => {
         rect: { height: TITLE_BAR, width: 240, x: 0, y: 0 },
         selected: false,
         strip: {
+          area: AREA,
           at: 0,
           box: { height: TITLE_BAR, width: 1000, x: 0, y: 0 },
           divided: false,

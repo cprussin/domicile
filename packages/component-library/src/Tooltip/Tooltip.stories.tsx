@@ -11,6 +11,7 @@ const meta = {
     content: "Rust Programming Language — A language empowering everyone",
     delay: undefined,
     side: "bottom",
+    spansWindows: false,
     tone: "card",
     trigger: <Button>Rust Programming…</Button>,
   },
@@ -40,6 +41,10 @@ const meta = {
       control: "inline-radio",
       options: SIDES,
       table: { category: "Style" },
+    },
+    spansWindows: {
+      control: "boolean",
+      table: { category: "Behavior" },
     },
     tone: {
       control: "inline-radio",
@@ -71,6 +76,7 @@ export const Tooltip: StoryObj<typeof TooltipComponent> = {
     defaultOpen: false,
     delay: undefined,
     side: "bottom",
+    spansWindows: false,
     tone: "card",
   },
 };
@@ -81,6 +87,7 @@ export const OpenByDefault = {
     defaultOpen: true,
     delay: undefined,
     side: "bottom",
+    spansWindows: false,
     tone: "card",
   },
 } satisfies StoryObj<typeof TooltipComponent>;
@@ -92,6 +99,7 @@ export const OverPhoto = {
     defaultOpen: true,
     delay: undefined,
     side: "bottom",
+    spansWindows: false,
     tone: "overPhoto",
     trigger: (
       <Button label="Bluetooth" size="sm" variant="ghost">

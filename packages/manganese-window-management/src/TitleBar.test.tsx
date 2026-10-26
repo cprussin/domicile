@@ -1,6 +1,12 @@
-import { describe, expect, it, mock } from "bun:test";
+import { afterEach, describe, expect, it, mock } from "bun:test";
 import { loadEmittedStylesheet } from "@domicile-desktop/test-support/emitted-stylesheet";
-import { fireEvent, render, screen } from "@testing-library/react";
+import {
+  drawAt,
+  drawPopups,
+  popupLeft,
+  undrawPopups,
+} from "@domicile-desktop/test-support/popup-layout";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { css } from "../styled-system/css";
 import { raised } from "./placement";
@@ -71,6 +77,7 @@ const face = (container: HTMLElement): HTMLElement => {
 
 /** A tab's place in a strip, for cases about a tab. */
 const MIDDLE_TAB = {
+  area: { height: 830, width: 1000, x: 0, y: 0 },
   at: 1,
   box: { height: 30, width: 1000, x: 0, y: 0 },
   divided: false,
@@ -368,6 +375,7 @@ describe("TitleBar", () => {
           {...props}
         />,
       );
+    afterEach(undrawPopups);
 
     // The strip draws the window's top edge along its bottom row. The open
     // tab covers it there to join its window; a stack's bars sit over each
@@ -472,6 +480,25 @@ describe("TitleBar", () => {
       const tooltip = await screen.findByRole("tooltip");
       expect(tooltip).toHaveTextContent("std - Rust");
       expect(tooltip).toHaveTextContent("The Rust standard library");
+    });
+
+    // Tabs sit outside their window's element, so their container's box is
+    // all that keeps the tooltip off the windows beside it.
+    it("keeps its tooltip inside its container", async () => {
+      const container = { height: 830, width: 400, x: 0, y: 0 };
+      const { container: drawn, getByText } = tab({
+        rect: { height: 30, width: 40, x: 360, y: 0 },
+        strip: { ...MIDDLE_TAB, area: container },
+        title: "std - Rust",
+      });
+      drawAt(face(drawn), { height: 30, width: 40, x: 360, y: 0 });
+      drawPopups("tooltip", { height: 40, width: 300 });
+
+      await userEvent.hover(getByText("std - Rust"));
+
+      await waitFor(() => {
+        expect(popupLeft("tooltip") + 300).toBeLessThanOrEqual(400);
+      });
     });
 
     it("shows only its whole title for a page with no description", async () => {
