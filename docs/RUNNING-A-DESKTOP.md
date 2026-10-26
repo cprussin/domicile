@@ -73,6 +73,9 @@ Settings live in `~/.config/domicile/domicile.json` (or `.ts`/`.js`). Reference:
 - GTK apps (via GIO) read `domicile-mimeapps.list`, which Domicile puts first
   on `XDG_DATA_DIRS`. A browser you set in your own `mimeapps.list` still
   wins.
+- PDFs, images and videos open in a desktop browser window too, through the
+  same `domicile-mimeapps.list`. A default of your own for the type still
+  wins.
 - A desktop that is the login session starts `domicile-session.target`, so the
   portal runs. Through it, Flatpak apps open links on the desktop and get the
   theme.

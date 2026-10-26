@@ -1,4 +1,5 @@
-# Makes `domicile-open-url.desktop` the default web link handler. GIO and
+# Makes `domicile-open-url.desktop` the default web link handler, and what
+# opens PDFs, images and videos: in a browser window, like a link. GIO and
 # `xdg-open` read this file only when `XDG_CURRENT_DESKTOP` is `domicile`, and
 # `domicile` puts the package's `share` first in every app's `XDG_DATA_DIRS`.
 # A user's own `mimeapps.list` still takes precedence.
@@ -6,3 +7,17 @@
 text/html=domicile-open-url.desktop
 x-scheme-handler/http=domicile-open-url.desktop
 x-scheme-handler/https=domicile-open-url.desktop
+application/pdf=domicile-open-url.desktop
+image/avif=domicile-open-url.desktop
+image/bmp=domicile-open-url.desktop
+image/gif=domicile-open-url.desktop
+image/jpeg=domicile-open-url.desktop
+image/png=domicile-open-url.desktop
+image/svg+xml=domicile-open-url.desktop
+image/vnd.microsoft.icon=domicile-open-url.desktop
+image/webp=domicile-open-url.desktop
+video/mp4=domicile-open-url.desktop
+video/ogg=domicile-open-url.desktop
+video/quicktime=domicile-open-url.desktop
+video/webm=domicile-open-url.desktop
+video/x-matroska=domicile-open-url.desktop
