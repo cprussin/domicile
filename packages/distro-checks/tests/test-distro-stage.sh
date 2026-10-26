@@ -221,6 +221,9 @@ holds_line "the link handler runs domicile-open-url" \
 holds_line "and is the default for https" \
   "$USR/share/applications/domicile-mimeapps.list" \
   "x-scheme-handler/https=domicile-open-url.desktop"
+holds_line "and for PDFs" \
+  "$USR/share/applications/domicile-mimeapps.list" \
+  "application/pdf=domicile-open-url.desktop"
 
 echo "the launcher's entries"
 for entry in history settings screenshot screen-record shutdown reboot logout; do

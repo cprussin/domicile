@@ -1,9 +1,10 @@
 # Registers `domicile-open-url` as the web link handler, so links open in a
-# browser window of the current desktop. Hidden from launchers.
+# browser window of the current desktop. PDFs, images and videos open there
+# too. Hidden from launchers.
 [Desktop Entry]
 Type=Application
 Name=Domicile
-Comment=Open a link in a browser window of this desktop
+Comment=Open a link, PDF, image or video in a browser window of this desktop
 Exec=@bin@/domicile-open-url %u
-MimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;
+MimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;application/pdf;image/avif;image/bmp;image/gif;image/jpeg;image/png;image/svg+xml;image/vnd.microsoft.icon;image/webp;video/mp4;video/ogg;video/quicktime;video/webm;video/x-matroska;
 NoDisplay=true
