@@ -68,7 +68,7 @@ describe("Keymap", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
-  it("names the keymap the desktop types on", () => {
+  it("names the keymap the desktop types on", async () => {
     const held = heldKeymaps();
     shown(held);
 
@@ -77,6 +77,10 @@ describe("Keymap", () => {
     expect(
       screen.getByRole("button", { name: "Keymap: us" }),
     ).toHaveTextContent("us");
+    await userEvent.hover(screen.getByRole("button", { name: "Keymap: us" }));
+    expect(
+      await screen.findByRole("tooltip", {}, { timeout: 2000 }),
+    ).toHaveTextContent("Keymap: us");
   });
 
   it("hides on the first keymap when asked to, and shows on any other", () => {

@@ -1,4 +1,5 @@
 import type { Option, Result } from "@cprussin/option-result";
+import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
 import { isAbsent } from "@domicile-desktop/manganese-host/watch-presence";
@@ -52,22 +53,27 @@ export const Battery = ({ battery, hardware }: Props) => {
 
 /** The outline alone, dimmed, as wide as the meter and its percentage. */
 const Unavailable = () => (
-  <div
-    aria-label="Battery unavailable"
-    className={cx(rootStyles({ charge: "fine" }), unavailableStyles)}
-    role="img"
-    title="Battery unavailable"
-  >
-    <svg aria-hidden className={meterStyles} viewBox="0 0 24 12">
-      <Outline />
-    </svg>
-    <span className={percentSlotStyles}>
-      <span aria-hidden className={percentSizerStyles}>
-        100%
-      </span>
-      <span className={percentStyles}>–</span>
-    </span>
-  </div>
+  <Tooltip
+    content="Battery unavailable"
+    tone="overPhoto"
+    trigger={
+      <div
+        aria-label="Battery unavailable"
+        className={cx(rootStyles({ charge: "fine" }), unavailableStyles)}
+        role="img"
+      >
+        <svg aria-hidden className={meterStyles} viewBox="0 0 24 12">
+          <Outline />
+        </svg>
+        <span className={percentSlotStyles}>
+          <span aria-hidden className={percentSizerStyles}>
+            100%
+          </span>
+          <span className={percentStyles}>–</span>
+        </span>
+      </div>
+    }
+  />
 );
 
 /** The meter's case and its terminal nub; the nub's left end hides under the case. */

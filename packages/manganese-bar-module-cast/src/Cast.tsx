@@ -39,11 +39,11 @@ export const Cast = ({ backends, casting }: Props) => {
       align="center"
       side="bottom"
       tone="overPhoto"
+      tooltip={label}
       trigger={
         <button
           aria-label={label}
           className={triggerStyles({ casting: casts.length > 0 })}
-          title={label}
           type="button"
         >
           <TelevisionSimpleIcon size={15} weight="bold" />

@@ -1,7 +1,8 @@
+import { BluetoothIcon } from "@phosphor-icons/react/dist/ssr/Bluetooth";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import { Button } from "../Button/Button";
-import { ALIGNMENTS, SIDES } from "../Popover/Popover";
+import { ALIGNMENTS, SIDES, TONES } from "../Popover/Popover";
 import { Tooltip as TooltipComponent } from "./Tooltip";
 
 const meta = {
@@ -10,6 +11,7 @@ const meta = {
     content: "Rust Programming Language — A language empowering everyone",
     delay: undefined,
     side: "bottom",
+    tone: "card",
     trigger: <Button>Rust Programming…</Button>,
   },
   argTypes: {
@@ -39,6 +41,11 @@ const meta = {
       options: SIDES,
       table: { category: "Style" },
     },
+    tone: {
+      control: "inline-radio",
+      options: TONES,
+      table: { category: "Style" },
+    },
     trigger: {
       control: false,
       table: { category: "Contents" },
@@ -64,6 +71,7 @@ export const Tooltip: StoryObj<typeof TooltipComponent> = {
     defaultOpen: false,
     delay: undefined,
     side: "bottom",
+    tone: "card",
   },
 };
 
@@ -73,5 +81,30 @@ export const OpenByDefault = {
     defaultOpen: true,
     delay: undefined,
     side: "bottom",
+    tone: "card",
+  },
+} satisfies StoryObj<typeof TooltipComponent>;
+
+export const OverPhoto = {
+  args: {
+    align: "center",
+    content: "Bluetooth: WH-1000XM4 (80%)",
+    defaultOpen: true,
+    delay: undefined,
+    side: "bottom",
+    tone: "overPhoto",
+    trigger: (
+      <Button label="Bluetooth" size="sm" variant="ghost">
+        <BluetoothIcon weight="bold" />
+      </Button>
+    ),
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "A pill under an item on a bar drawn onto the wallpaper, matching the bar's panels.",
+      },
+    },
   },
 } satisfies StoryObj<typeof TooltipComponent>;

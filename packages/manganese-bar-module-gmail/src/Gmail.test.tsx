@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { css } from "../styled-system/css";
 import { Gmail } from "./Gmail";
 import type { Inbox as InboxReading } from "./inbox";
@@ -155,14 +156,16 @@ describe("Gmail", () => {
   });
 
   describe("failed", () => {
-    it("warns, naming why", () => {
+    it("warns, naming why", async () => {
       shown(Inbox.Failed("Gmail's page answered 500"));
 
       const button = screen.getByRole("button", {
         name: "Work: could not read the inbox",
       });
-      expect(button).toHaveAttribute(
-        "title",
+      await userEvent.hover(button);
+      expect(
+        await screen.findByRole("tooltip", {}, { timeout: 2000 }),
+      ).toHaveTextContent(
         "Work: could not read the inbox: Gmail's page answered 500",
       );
     });

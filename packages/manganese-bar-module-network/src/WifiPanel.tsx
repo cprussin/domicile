@@ -2,6 +2,7 @@ import type { Option, Result } from "@cprussin/option-result";
 import { Button } from "@domicile-desktop/component-library/Button";
 import { Input } from "@domicile-desktop/component-library/Input";
 import { Switch } from "@domicile-desktop/component-library/Switch";
+import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import { useRequests } from "@domicile-desktop/manganese-host/useRequests";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { SystemError } from "@domicile-desktop/sdk/system";
@@ -94,18 +95,23 @@ const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
           }}
         />
         {wifi.enabled && (
-          <button
-            aria-label="Scan"
-            className={iconButtonStyles}
-            disabled={scanning}
-            onClick={() => {
-              requests.run("scan", () => actions.scanWifi(host, wifi));
-            }}
-            title="Scan"
-            type="button"
-          >
-            <ArrowClockwiseIcon size={14} />
-          </button>
+          <Tooltip
+            content="Scan"
+            tone="overPhoto"
+            trigger={
+              <button
+                aria-label="Scan"
+                className={iconButtonStyles}
+                disabled={scanning}
+                onClick={() => {
+                  requests.run("scan", () => actions.scanWifi(host, wifi));
+                }}
+                type="button"
+              >
+                <ArrowClockwiseIcon size={14} />
+              </button>
+            }
+          />
         )}
       </div>
       <Failure error={requests.failed("power")} />

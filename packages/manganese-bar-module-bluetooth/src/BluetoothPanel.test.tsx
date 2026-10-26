@@ -195,6 +195,12 @@ describe("BluetoothPanel", () => {
 
     it("forgets a paired device", async () => {
       const panel = shown(reading());
+      await userEvent.hover(
+        screen.getByRole("button", { name: "Forget MX Master 3" }),
+      );
+      expect(
+        await screen.findByRole("tooltip", {}, { timeout: 2000 }),
+      ).toHaveTextContent("Forget");
 
       await userEvent.click(
         screen.getByRole("button", { name: "Forget MX Master 3" }),

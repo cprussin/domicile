@@ -4,7 +4,7 @@ import { useCallback, useContext, useState } from "react";
 
 import { css } from "../../styled-system/css";
 import type { ExtendProps } from "../extend-props";
-import type { Alignment, Side } from "../Popover/Popover";
+import type { Alignment, Side, Tone } from "../Popover/Popover";
 import { PopoverContainer } from "../Popover/Popover";
 
 type Props = ExtendProps<
@@ -15,6 +15,11 @@ type Props = ExtendProps<
     /** How long the pointer rests on the trigger before it opens, in ms. */
     delay?: number | undefined;
     side?: Side | undefined;
+    /**
+     * `overPhoto` is a translucent pill with white text, for tooltips on a
+     * bar drawn over the wallpaper.
+     */
+    tone?: Tone | undefined;
     trigger: ReactElement;
   }
 >;
@@ -32,6 +37,7 @@ export const Tooltip = ({
   content,
   delay,
   side = "bottom",
+  tone = "card",
   trigger,
   ...rootProps
 }: Props) => {
@@ -51,7 +57,11 @@ export const Tooltip = ({
           side={side}
           sideOffset={6}
         >
-          <BaseTooltip.Popup className={popupStyles} role="tooltip">
+          <BaseTooltip.Popup
+            className={popupStyles}
+            data-tone={tone}
+            role="tooltip"
+          >
             {content}
           </BaseTooltip.Popup>
         </BaseTooltip.Positioner>
@@ -66,6 +76,16 @@ const popupStyles = css({
   "&[data-ending-style]": { opacity: 0 },
   // base-ui's attribute instead of Panda's `_starting`, as in `Popover`.
   "&[data-starting-style]": { opacity: 0 },
+  // As `Popover`'s pill, so a bar's tooltips match its panels.
+  "&[data-tone=overPhoto]": {
+    backdropFilter: "blur({spacing.3})",
+    backgroundColor: "panelOverPhoto",
+    border: "none",
+    borderRadius: "2xl",
+    color: "onPhoto",
+    paddingInline: 3,
+    textShadow: "textOverPhoto",
+  },
   backgroundColor: "card",
   border: "1px solid {colors.border}",
   borderRadius: "md",

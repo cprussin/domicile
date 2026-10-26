@@ -1,6 +1,7 @@
 import { Accordion } from "@domicile-desktop/component-library/Accordion";
 import type { SelectOption } from "@domicile-desktop/component-library/Select";
 import { Select } from "@domicile-desktop/component-library/Select";
+import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import type {
   Audio,
   AudioCard,
@@ -247,17 +248,22 @@ const Devices = ({ devices, direction, levels, server }: DevicesProps) =>
       {devices.map((device) => (
         <li className={rowStyles} key={device.id}>
           <span className={headStyles}>
-            <button
-              aria-label={`Make ${device.description} the default`}
-              className={iconButtonStyles}
-              onClick={() => {
-                ask(server.setDefault(device.id));
-              }}
-              title="Make it the default"
-              type="button"
-            >
-              <CheckCircleIcon size={14} />
-            </button>
+            <Tooltip
+              content="Make it the default"
+              tone="overPhoto"
+              trigger={
+                <button
+                  aria-label={`Make ${device.description} the default`}
+                  className={iconButtonStyles}
+                  onClick={() => {
+                    ask(server.setDefault(device.id));
+                  }}
+                  type="button"
+                >
+                  <CheckCircleIcon size={14} />
+                </button>
+              }
+            />
             <span className={nameStyles}>{device.description}</span>
             <Port device={device} server={server} />
           </span>

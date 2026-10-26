@@ -20,6 +20,10 @@ describe("IdleInhibitorToggle", () => {
     );
     const toggle = screen.getByRole("button", { name: OFF });
     expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await userEvent.hover(toggle);
+    expect(
+      await screen.findByRole("tooltip", {}, { timeout: 2000 }),
+    ).toHaveTextContent(OFF);
     expect(toggle.className).toContain(
       css({ "& > svg": { opacity: "inactive" } }),
     );

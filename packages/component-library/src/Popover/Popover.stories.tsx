@@ -18,6 +18,7 @@ const meta = {
     side: "bottom",
     title: "Connection",
     tone: "card",
+    tooltip: undefined,
     trigger: <Button beforeIcon={<InfoIcon />}>Details</Button>,
     wide: false,
   },
@@ -56,6 +57,10 @@ const meta = {
       control: "inline-radio",
       options: TONES,
       table: { category: "Style" },
+    },
+    tooltip: {
+      control: "text",
+      table: { category: "Contents" },
     },
     trigger: {
       control: false,
@@ -166,3 +171,28 @@ export const OverPhoto: StoryObj<typeof PopoverComponent> = {
     tone: "overPhoto",
   },
 };
+
+export const WithATooltip = {
+  args: {
+    align: "start",
+    defaultOpen: false,
+    flush: false,
+    side: "bottom",
+    title: "Connection is encrypted",
+    tone: "card",
+    tooltip: "Connection",
+    trigger: (
+      <Button label="Connection" size="sm" variant="ghost">
+        <LockIcon />
+      </Button>
+    ),
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "An icon-only trigger named while the pointer rests on it, as a bar's items are.",
+      },
+    },
+  },
+} satisfies StoryObj<typeof PopoverComponent>;

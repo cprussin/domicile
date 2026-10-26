@@ -1,3 +1,4 @@
+import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import { EyeIcon } from "@phosphor-icons/react/dist/ssr/Eye";
 import { EyeClosedIcon } from "@phosphor-icons/react/dist/ssr/EyeClosed";
 import { useSyncExternalStore } from "react";
@@ -22,22 +23,27 @@ export const IdleInhibitorToggle = ({ inhibitor }: Props) => {
     ? "Screens kept on — click to let them blank"
     : "Screens blank when idle — click to keep them on";
   return (
-    <button
-      aria-label={label}
-      aria-pressed={held}
-      className={toggleStyles({ held })}
-      data-inhibiting={held}
-      disabled={at === Inhibiting.Taking || at === Inhibiting.Releasing}
-      onClick={inhibitor.toggle}
-      title={label}
-      type="button"
-    >
-      {held ? (
-        <EyeIcon size={15} weight="bold" />
-      ) : (
-        <EyeClosedIcon size={15} weight="bold" />
-      )}
-    </button>
+    <Tooltip
+      content={label}
+      tone="overPhoto"
+      trigger={
+        <button
+          aria-label={label}
+          aria-pressed={held}
+          className={toggleStyles({ held })}
+          data-inhibiting={held}
+          disabled={at === Inhibiting.Taking || at === Inhibiting.Releasing}
+          onClick={inhibitor.toggle}
+          type="button"
+        >
+          {held ? (
+            <EyeIcon size={15} weight="bold" />
+          ) : (
+            <EyeClosedIcon size={15} weight="bold" />
+          )}
+        </button>
+      }
+    />
   );
 };
 

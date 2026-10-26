@@ -1,3 +1,4 @@
+import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour";
 
 import { css } from "../styled-system/css";
@@ -9,15 +10,20 @@ type Props = {
 
 /** The bar's launcher button, the pointer equivalent of `mod+Space`. */
 export const LauncherButton = ({ onOpen }: Props) => (
-  <button
-    aria-label="Launcher"
-    className={buttonStyles}
-    onClick={onOpen}
-    title="Launcher"
-    type="button"
-  >
-    <SquaresFourIcon aria-hidden size={15} />
-  </button>
+  <Tooltip
+    content="Launcher"
+    tone="overPhoto"
+    trigger={
+      <button
+        aria-label="Launcher"
+        className={buttonStyles}
+        onClick={onOpen}
+        type="button"
+      >
+        <SquaresFourIcon aria-hidden size={15} />
+      </button>
+    }
+  />
 );
 
 // Styled like the bell button. The negative margin cancels the bar's start

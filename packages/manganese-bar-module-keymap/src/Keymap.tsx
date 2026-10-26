@@ -38,13 +38,9 @@ export const Keymap = ({ hideDefault, keymaps, onSelect }: Props) => {
         open={open}
         side="bottom"
         tone="overPhoto"
+        tooltip={label}
         trigger={
-          <button
-            aria-label={label}
-            className={triggerStyles}
-            title={label}
-            type="button"
-          >
+          <button aria-label={label} className={triggerStyles} type="button">
             <KeyboardIcon size={15} weight="bold" />
             {listed.active}
           </button>

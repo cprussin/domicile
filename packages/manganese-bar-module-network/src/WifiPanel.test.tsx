@@ -201,6 +201,10 @@ describe("WifiPanel", () => {
     it("scans when shown, and again on request", async () => {
       const panel = await shown(Ok(Some(WIFI)));
       expect(panel.asked).toStrictEqual([["scan", DEVICE]]);
+      await userEvent.hover(screen.getByRole("button", { name: "Scan" }));
+      expect(
+        await screen.findByRole("tooltip", {}, { timeout: 2000 }),
+      ).toHaveTextContent("Scan");
 
       await userEvent.click(screen.getByRole("button", { name: "Scan" }));
 

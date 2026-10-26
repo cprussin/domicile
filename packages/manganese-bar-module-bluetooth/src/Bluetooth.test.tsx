@@ -220,7 +220,7 @@ describe("Bluetooth", () => {
     ).toBeVisible();
   });
 
-  it("names each connected device's battery, also as its tooltip", () => {
+  it("names each connected device's battery, also as its tooltip", async () => {
     const bluetooth = heldBluetooth();
     render(
       <Bluetooth
@@ -235,14 +235,17 @@ describe("Bluetooth", () => {
       reading(true, ["WH-1000XM4", "MX Master 3"], { "WH-1000XM4": 80 }),
     );
 
-    expect(
+    await userEvent.hover(
       screen.getByRole("button", {
         name: "Bluetooth: WH-1000XM4 (80%), MX Master 3",
       }),
-    ).toHaveAttribute("title", "Bluetooth: WH-1000XM4 (80%), MX Master 3");
+    );
+    expect(
+      await screen.findByRole("tooltip", {}, { timeout: 2000 }),
+    ).toHaveTextContent("Bluetooth: WH-1000XM4 (80%), MX Master 3");
   });
 
-  it("only shows what is connected on a locked desk", () => {
+  it("only shows what is connected on a locked desk", async () => {
     // A locked desk refuses power, pairing and connecting.
     const bluetooth = heldBluetooth();
     render(
@@ -258,9 +261,12 @@ describe("Bluetooth", () => {
     bluetooth.report(reading(true, ["WH-1000XM4"], { "WH-1000XM4": 80 }));
 
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
-    expect(
+    await userEvent.hover(
       screen.getByRole("img", { name: "Bluetooth: WH-1000XM4 (80%)" }),
-    ).toHaveAttribute("title", "Bluetooth: WH-1000XM4 (80%)");
+    );
+    expect(
+      await screen.findByRole("tooltip", {}, { timeout: 2000 }),
+    ).toHaveTextContent("Bluetooth: WH-1000XM4 (80%)");
 
     bluetooth.report(reading(false, []));
     expect(

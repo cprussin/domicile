@@ -1,5 +1,6 @@
 import type { Result } from "@cprussin/option-result";
 import { Popover } from "@domicile-desktop/component-library/Popover";
+import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
 import { isAbsent } from "@domicile-desktop/manganese-host/watch-presence";
@@ -55,14 +56,19 @@ export const Volume = ({
 
   if (audio === undefined) {
     return isAbsent(present) ? undefined : (
-      <span
-        aria-label="Sound unavailable"
-        className={unavailableStyles}
-        role="img"
-        title="Sound unavailable"
-      >
-        <SpeakerSlashIcon size={15} weight="bold" />
-      </span>
+      <Tooltip
+        content="Sound unavailable"
+        tone="overPhoto"
+        trigger={
+          <span
+            aria-label="Sound unavailable"
+            className={unavailableStyles}
+            role="img"
+          >
+            <SpeakerSlashIcon size={15} weight="bold" />
+          </span>
+        }
+      />
     );
   } else {
     const output = audio.outputs.find((device) => device.default);
