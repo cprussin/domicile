@@ -37,6 +37,7 @@ Domicile embeds Wayland surfaces directly into Chromium's layer tree. No screens
 
 [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) ·
 [ROADMAP.md](ROADMAP.md) ·
+[contributing](docs/contributing/README.md) ·
 [running a desktop](docs/RUNNING-A-DESKTOP.md)
 
 ## Write a shell

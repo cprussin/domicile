@@ -77,7 +77,10 @@ export const DOCS: readonly LinkColumn[] = [
         href: repoFile("docs/architecture/ENGINE-FORK.md"),
         label: "The engine fork",
       },
-      { href: repoFile("docs/DEVELOPING.md"), label: "Contributing" },
+      {
+        href: repoFile("docs/contributing/DEVELOPING.md"),
+        label: "Contributing",
+      },
       { href: repoFile("ROADMAP.md"), label: "Roadmap" },
     ],
     title: "Under the hood",
