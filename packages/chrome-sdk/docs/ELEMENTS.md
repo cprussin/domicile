@@ -17,7 +17,8 @@ Event names and full types are in `src/app-element.ts` and
 - **Resize sync:** a new box holds the page's frame until the client draws at
   it, up to viz's default deadline. Set the `resizing` attribute (or
   `element.resizing = true`) while the user drags an edge: each box then shows
-  at once, without waiting. Removing it waits once for the final size.
+  at once, without waiting, with the client's latest frame at its own size in
+  the top left corner until the client draws at the new box. Removing it waits once for the final size.
 - **Synced frames:** the `frame` attribute (or `element.frame`) names the
   synced frame of the window to show. Setting it holds the page's frame until
   the window has that frame, up to viz's default deadline. Unset, the
@@ -77,7 +78,8 @@ once, when the view connects. The SDK provides types only.
 
 - **Resize sync:** as an `<app>`'s, a new box holds the page's frame until
   the page draws at it. Set the `resizing` attribute while the user drags an
-  edge: the page's latest frame then stretches to each box at once.
+  edge: each box then shows at once, with the page's latest frame at its own
+  size in the top left corner until the page draws at the new box.
 - **Properties:** `src`, `goBack()`, `goForward()`, `stop()`, `reload()`,
   `canGoBack`, `canGoForward`, `loading`, `focus()`, `inspect()` (opens
   DevTools as a new window), `print()` (the desktop's print dialog).
