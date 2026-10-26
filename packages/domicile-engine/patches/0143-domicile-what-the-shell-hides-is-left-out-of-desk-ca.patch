@@ -29,10 +29,10 @@ job builds it on `crux`.
  4 files changed, 58 insertions(+)
 
 diff --git a/components/viz/service/BUILD.gn b/components/viz/service/BUILD.gn
-index 42fc392..50b5c96 100644
+index f26d694..3f52bc0 100644
 --- a/components/viz/service/BUILD.gn
 +++ b/components/viz/service/BUILD.gn
-@@ -308,6 +308,9 @@ viz_component("service") {
+@@ -299,6 +299,9 @@ viz_component("service") {
      "//components/version_info",
      "//components/viz/client",
      "//components/viz/common",
@@ -43,10 +43,10 @@ index 42fc392..50b5c96 100644
      "//gpu/config",
      "//gpu/ipc/client",
 diff --git a/components/viz/service/display/surface_aggregator.cc b/components/viz/service/display/surface_aggregator.cc
-index 325de4e..6afb8a1 100644
+index 9e25476..341cc9b 100644
 --- a/components/viz/service/display/surface_aggregator.cc
 +++ b/components/viz/service/display/surface_aggregator.cc
-@@ -40,6 +40,8 @@
+@@ -41,6 +41,8 @@
  #include "components/viz/service/debugger/viz_debugger.h"
  #include "components/viz/service/display/aggregated_frame.h"
  #include "components/viz/service/display/display_resource_provider.h"
@@ -81,7 +81,7 @@ index 325de4e..6afb8a1 100644
      // We add an additional render pass for the transform if the root render
      // pass has any copy requests.
      apply_surface_transform_to_root_pass =
-@@ -2312,6 +2326,25 @@ AggregatedFrame SurfaceAggregator::Aggregate(
+@@ -2310,6 +2324,25 @@ AggregatedFrame SurfaceAggregator::Aggregate(
  
    AddRootReadbackPass();
  
@@ -107,7 +107,7 @@ index 325de4e..6afb8a1 100644
    ProcessAddedAndRemovedSurfaces();
    contained_surfaces_.swap(previous_contained_surfaces_);
    contained_frame_sinks_.swap(previous_contained_frame_sinks_);
-@@ -2373,6 +2406,7 @@ void SurfaceAggregator::ResetAfterAggregate() {
+@@ -2371,6 +2404,7 @@ void SurfaceAggregator::ResetAfterAggregate() {
    expected_display_time_ = base::TimeTicks();
    display_trace_id_ = -1;
    has_copy_requests_ = false;

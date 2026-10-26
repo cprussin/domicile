@@ -12,10 +12,10 @@ third_party/blink/renderer/core/html/domicile/html_app_element.cc.
  1 file changed, 1 insertion(+)
 
 diff --git a/third_party/blink/renderer/core/html/html_attribute_names.json5 b/third_party/blink/renderer/core/html/html_attribute_names.json5
-index 8231e0e9..935fd8d2 100644
+index 2823353..3a32bde 100644
 --- a/third_party/blink/renderer/core/html/html_attribute_names.json5
 +++ b/third_party/blink/renderer/core/html/html_attribute_names.json5
-@@ -342,6 +342,7 @@
+@@ -341,6 +341,7 @@
      "referrerpolicy",
      "rel",
      "required",

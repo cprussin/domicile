@@ -19,17 +19,17 @@ SharedImage, without a copy.
 Verified: not built. This repository cannot build Chromium; the engine
 job builds it on `crux`.
 ---
- gpu/command_buffer/client/shared_image_interface.cc |  8 ++++++++
- gpu/command_buffer/client/shared_image_interface.h  | 10 ++++++++++
- gpu/ipc/client/client_shared_image_interface.cc     | 40 ++++++++++++++++++++++++++++++++++++++++
- gpu/ipc/client/client_shared_image_interface.h      |  5 +++++
+ .../client/shared_image_interface.cc          |  8 ++++
+ .../client/shared_image_interface.h           | 10 +++++
+ .../client/client_shared_image_interface.cc   | 40 +++++++++++++++++++
+ .../client/client_shared_image_interface.h    |  5 +++
  4 files changed, 63 insertions(+)
 
 diff --git a/gpu/command_buffer/client/shared_image_interface.cc b/gpu/command_buffer/client/shared_image_interface.cc
-index c46f5fd..6d6a9ed 100644
+index 2ffa516..227f60f 100644
 --- a/gpu/command_buffer/client/shared_image_interface.cc
 +++ b/gpu/command_buffer/client/shared_image_interface.cc
-@@ -113,6 +113,14 @@ void SharedImageInterface::CopyToGpuMemoryBuffer(const SyncToken& sync_token,
+@@ -114,6 +114,14 @@ void SharedImageInterface::CopyToGpuMemoryBuffer(
    NOTREACHED();
  }
  
@@ -45,7 +45,7 @@ index c46f5fd..6d6a9ed 100644
      std::vector<SyncToken> sync_tokens,
      const Mailbox& mailbox,
 diff --git a/gpu/command_buffer/client/shared_image_interface.h b/gpu/command_buffer/client/shared_image_interface.h
-index 0481cbe..d6eb187 100644
+index c7788ca..cf34075 100644
 --- a/gpu/command_buffer/client/shared_image_interface.h
 +++ b/gpu/command_buffer/client/shared_image_interface.h
 @@ -177,6 +177,16 @@ class GPU_COMMAND_BUFFER_CLIENT_EXPORT SharedImageInterface
@@ -66,7 +66,7 @@ index 0481cbe..d6eb187 100644
    // the CPU or through external devices, after |sync_token| has been released.
    virtual void UpdateSharedImage(const SyncToken& sync_token,
 diff --git a/gpu/ipc/client/client_shared_image_interface.cc b/gpu/ipc/client/client_shared_image_interface.cc
-index 545121c..4c0496b 100644
+index 0bb0691..0f45c0a 100644
 --- a/gpu/ipc/client/client_shared_image_interface.cc
 +++ b/gpu/ipc/client/client_shared_image_interface.cc
 @@ -4,6 +4,9 @@
@@ -79,7 +79,7 @@ index 545121c..4c0496b 100644
  #include "build/build_config.h"
  #include "components/viz/common/resources/shared_image_format_utils.h"
  #include "gpu/command_buffer/client/client_shared_image.h"
-@@ -231,6 +234,43 @@ ClientSharedImageInterface::CreateSharedImageForSoftwareCompositor(
+@@ -249,6 +252,43 @@ ClientSharedImageInterface::CreateSharedImageForSoftwareCompositor(
                                                   holder_, std::move(mapping));
  }
  
@@ -121,10 +121,10 @@ index 545121c..4c0496b 100644
 +}
 +
  void ClientSharedImageInterface::CopyToGpuMemoryBuffer(
-     const SyncToken& sync_token,
+     std::vector<SyncToken> sync_tokens,
      const Mailbox& mailbox) {
 diff --git a/gpu/ipc/client/client_shared_image_interface.h b/gpu/ipc/client/client_shared_image_interface.h
-index 116c724..017bcd2 100644
+index 44e6e60..5428d28 100644
 --- a/gpu/ipc/client/client_shared_image_interface.h
 +++ b/gpu/ipc/client/client_shared_image_interface.h
 @@ -79,6 +79,11 @@ class GPU_IPC_CLIENT_EXPORT ClientSharedImageInterface
@@ -136,6 +136,6 @@ index 116c724..017bcd2 100644
 +      const SharedImageInfo& si_info,
 +      base::UnsafeSharedMemoryRegion region,
 +      uint32_t stride) override;
-   void CopyToGpuMemoryBuffer(const SyncToken& sync_token,
+   void CopyToGpuMemoryBuffer(std::vector<SyncToken> sync_tokens,
                               const Mailbox& mailbox) override;
  #if BUILDFLAG(IS_WIN)

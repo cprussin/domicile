@@ -29,10 +29,10 @@ windows are <webview> guests, whose delegate is WebViewGuest.
  2 files changed, 22 insertions(+), 17 deletions(-)
 
 diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
-index 2ea58916..05d20cdb 100644
+index 7d6d906..bad1f5e 100644
 --- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
 +++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.cc
-@@ -312,23 +312,29 @@ content::KeyboardEventProcessingResult
+@@ -350,23 +350,29 @@ content::KeyboardEventProcessingResult
  BrowserWebContentsDelegate::PreHandleKeyboardEvent(
      content::WebContents* source,
      const input::NativeWebKeyboardEvent& event) {
@@ -74,7 +74,7 @@ index 2ea58916..05d20cdb 100644
  }
  
  void BrowserWebContentsDelegate::RequestPointerLock(
-@@ -392,11 +398,8 @@ void BrowserWebContentsDelegate::SetTopControlsGestureScrollInProgress(
+@@ -430,11 +436,8 @@ void BrowserWebContentsDelegate::SetTopControlsGestureScrollInProgress(
  }
  
  bool BrowserWebContentsDelegate::CanOverscrollContent() {
@@ -87,7 +87,7 @@ index 2ea58916..05d20cdb 100644
  }
  
  bool BrowserWebContentsDelegate::ShouldPreserveAbortedURLs(
-@@ -834,7 +837,7 @@ void BrowserWebContentsDelegate::ContentsMouseEvent(
+@@ -888,7 +891,7 @@ void BrowserWebContentsDelegate::ContentsMouseEvent(
  }
  
  void BrowserWebContentsDelegate::ContentsZoomChange(bool zoom_in) {
@@ -97,7 +97,7 @@ index 2ea58916..05d20cdb 100644
  
  bool BrowserWebContentsDelegate::TakeFocus(content::WebContents* source,
 diff --git a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h
-index 040961e3..2d613858 100644
+index e4357e0..8992ab7 100644
 --- a/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h
 +++ b/chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h
 @@ -59,6 +59,8 @@ class BrowserWebContentsDelegate : public content::WebContentsDelegate {

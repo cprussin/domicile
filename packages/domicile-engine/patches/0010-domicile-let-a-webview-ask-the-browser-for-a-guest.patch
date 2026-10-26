@@ -52,10 +52,10 @@ See components/domicile/browser/web_view_guest.h in the Domicile repository.
  5 files changed, 39 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index e6abeec6..8db46f9d 100644
+index ef07b99..23de01a 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -2710,6 +2710,7 @@ source_set("browser") {
+@@ -2703,6 +2703,7 @@ source_set("browser") {
      "//chrome/browser/domicile",
      "//components/domicile:control_channel",
      "//components/domicile:shell_scheme",
@@ -64,7 +64,7 @@ index e6abeec6..8db46f9d 100644
      "//components/download/content/factory",
      "//components/embedder_support:user_agent",
 diff --git a/chrome/browser/chrome_browser_interface_binders.cc b/chrome/browser/chrome_browser_interface_binders.cc
-index 5a21438e..bbf06325 100644
+index 5a21438..bbf0632 100644
 --- a/chrome/browser/chrome_browser_interface_binders.cc
 +++ b/chrome/browser/chrome_browser_interface_binders.cc
 @@ -5,6 +5,7 @@
@@ -107,7 +107,7 @@ index 5a21438e..bbf06325 100644
  
    map->Add<blink::mojom::ScriptToolHost>(
 diff --git a/third_party/blink/renderer/core/BUILD.gn b/third_party/blink/renderer/core/BUILD.gn
-index a96e9c9d..3a32269e 100644
+index a96e9c9..3a32269 100644
 --- a/third_party/blink/renderer/core/BUILD.gn
 +++ b/third_party/blink/renderer/core/BUILD.gn
 @@ -411,6 +411,11 @@ component("core") {
@@ -123,7 +123,7 @@ index a96e9c9d..3a32269e 100644
      "//components/performance_manager/public/mojom:mojom_blink",
      "//components/shared_highlighting/core/common",
 diff --git a/third_party/blink/renderer/core/DEPS b/third_party/blink/renderer/core/DEPS
-index db7a924b..0ac2815a 100644
+index db7a924..0ac2815 100644
 --- a/third_party/blink/renderer/core/DEPS
 +++ b/third_party/blink/renderer/core/DEPS
 @@ -69,6 +69,8 @@ include_rules = [
@@ -136,7 +136,7 @@ index db7a924b..0ac2815a 100644
      "+components/performance_manager/public/mojom/web_memory.mojom-blink.h",
      "+components/viz/common/frame_timing_details.h",
 diff --git a/third_party/blink/renderer/core/html/html_frame_element_base.h b/third_party/blink/renderer/core/html/html_frame_element_base.h
-index d143881c..e72ada05 100644
+index 33bbfef..4013a15 100644
 --- a/third_party/blink/renderer/core/html/html_frame_element_base.h
 +++ b/third_party/blink/renderer/core/html/html_frame_element_base.h
 @@ -52,7 +52,12 @@ class CORE_EXPORT HTMLFrameElementBase : public HTMLFrameOwnerElement {

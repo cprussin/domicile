@@ -37,7 +37,7 @@ needs a new event type and that invalidates the generated bindings.
  2 files changed, 6 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index 9cf4fb30..0bea6f22 100644
+index 80cb327..6b637cd 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
 @@ -329,6 +329,8 @@ generated_dictionary_sources_in_modules = [
@@ -59,7 +59,7 @@ index 9cf4fb30..0bea6f22 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_host.cc",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_host.h",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index 133807f0..3f00e776 100644
+index 133807f..3f00e77 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
 @@ -310,6 +310,8 @@ static_idl_files_in_modules = [

@@ -39,7 +39,7 @@ and both blobs are that file's.
  4 files changed, 27 insertions(+)
 
 diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
-index aee6b224..76557f64 100644
+index 8bea5aa..eefe3ec 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
 @@ -5,6 +5,7 @@
@@ -50,7 +50,7 @@ index aee6b224..76557f64 100644
  #include "chrome/browser/domicile/domicile_shell_windows.h"
  #include "components/domicile/browser/desktop_prefs.h"
  
-@@ -1618,6 +1619,9 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
+@@ -1619,6 +1620,9 @@ void ChromeBrowserMainParts::PostProfileInit(Profile* profile,
    // download saved to a folder nobody chose is a file the user never sees
    // arrive -- this desktop has no download shelf to show it on.
    profile->GetPrefs()->SetBoolean(prefs::kPromptForDownload, true);
@@ -61,7 +61,7 @@ index aee6b224..76557f64 100644
    for (auto& chrome_extra_part : chrome_extra_parts_) {
      chrome_extra_part->PostProfileInit(profile, is_initial_profile);
 diff --git a/chrome/browser/extensions/BUILD.gn b/chrome/browser/extensions/BUILD.gn
-index 1129b09f..b56c2e78 100644
+index b9cdb33..95a1739 100644
 --- a/chrome/browser/extensions/BUILD.gn
 +++ b/chrome/browser/extensions/BUILD.gn
 @@ -275,6 +275,8 @@ source_set("extensions") {
@@ -74,7 +74,7 @@ index 1129b09f..b56c2e78 100644
      "error_console/error_console.h",
      "error_console/error_console_factory.cc",
 diff --git a/chrome/browser/extensions/chrome_extension_function_details.cc b/chrome/browser/extensions/chrome_extension_function_details.cc
-index 1e1d95cf..dfedf25a 100644
+index 1e1d95c..dfedf25 100644
 --- a/chrome/browser/extensions/chrome_extension_function_details.cc
 +++ b/chrome/browser/extensions/chrome_extension_function_details.cc
 @@ -5,6 +5,7 @@
@@ -100,7 +100,7 @@ index 1e1d95cf..dfedf25a 100644
    if (function_->dispatcher()) {
      if (WindowController* window_controller =
 diff --git a/chrome/browser/extensions/extension_tab_util.cc b/chrome/browser/extensions/extension_tab_util.cc
-index 20c6eaf8..829facdd 100644
+index aeb80f6..40301ba 100644
 --- a/chrome/browser/extensions/extension_tab_util.cc
 +++ b/chrome/browser/extensions/extension_tab_util.cc
 @@ -24,6 +24,7 @@

@@ -525,7 +525,7 @@ class ShellWindows : public display::DisplayObserver {
     } else {
       FitTo(window, now->bounds());
     }
-    window->OpenGURL(url, WindowOpenDisposition::CURRENT_TAB);
+    window->OpenGURL(url, WindowOpenDisposition::kCurrentTab);
     // The last reconciliation ran before this window existed, so nothing
     // watches its page. The next one watches it, or presents it if it
     // already committed.

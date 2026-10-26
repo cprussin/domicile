@@ -25,22 +25,22 @@ libinput context, and evdev opens each device in its own: keyboards go to
 Verified: not built. This repository cannot build Chromium; the engine
 job builds it on `crux`.
 ---
- ui/events/ozone/evdev/BUILD.gn                      |  2 ++
- ui/events/ozone/evdev/event_converter_evdev.cc      |  2 ++
- ui/events/ozone/evdev/event_converter_evdev.h       |  7 +++++++
- ui/events/ozone/evdev/event_converter_evdev_impl.cc |  9 +++++++++
- ui/events/ozone/evdev/event_converter_evdev_impl.h  |  6 ++++++
- ui/events/ozone/evdev/input_controller_evdev.cc     |  9 +++++++++
- ui/events/ozone/evdev/input_controller_evdev.h      |  3 +++
- ui/events/ozone/evdev/input_device_factory_evdev.cc |  4 ++++
- ui/events/ozone/evdev/input_device_factory_evdev.h  |  5 +++++
- ui/events/ozone/evdev/input_device_settings_evdev.h |  3 +++
- ui/events/ozone/evdev/libinput_event_converter.cc   | 19 +++++++++++++++++++
- ui/events/ozone/evdev/libinput_event_converter.h    |  8 ++++++++
- ui/ozone/platform/drm/BUILD.gn                      |  1 +
- ui/ozone/platform/drm/ozone_platform_drm.cc         | 12 ++++++++++++
- ui/ozone/public/ozone_platform.cc                   |  4 ++++
- ui/ozone/public/ozone_platform.h                    |  6 ++++++
+ ui/events/ozone/evdev/BUILD.gn                |  2 ++
+ .../ozone/evdev/event_converter_evdev.cc      |  2 ++
+ ui/events/ozone/evdev/event_converter_evdev.h |  7 +++++++
+ .../ozone/evdev/event_converter_evdev_impl.cc |  9 +++++++++
+ .../ozone/evdev/event_converter_evdev_impl.h  |  6 ++++++
+ .../ozone/evdev/input_controller_evdev.cc     |  9 +++++++++
+ .../ozone/evdev/input_controller_evdev.h      |  3 +++
+ .../ozone/evdev/input_device_factory_evdev.cc |  4 ++++
+ .../ozone/evdev/input_device_factory_evdev.h  |  5 +++++
+ .../ozone/evdev/input_device_settings_evdev.h |  3 +++
+ .../ozone/evdev/libinput_event_converter.cc   | 19 +++++++++++++++++++
+ .../ozone/evdev/libinput_event_converter.h    |  8 ++++++++
+ ui/ozone/platform/drm/BUILD.gn                |  1 +
+ ui/ozone/platform/drm/ozone_platform_drm.cc   | 12 ++++++++++++
+ ui/ozone/public/ozone_platform.cc             |  4 ++++
+ ui/ozone/public/ozone_platform.h              |  6 ++++++
  16 files changed, 100 insertions(+)
 
 diff --git a/ui/events/ozone/evdev/BUILD.gn b/ui/events/ozone/evdev/BUILD.gn

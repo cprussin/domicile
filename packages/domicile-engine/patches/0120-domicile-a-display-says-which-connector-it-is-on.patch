@@ -31,7 +31,7 @@ job builds it on `crux`.
  10 files changed, 61 insertions(+), 4 deletions(-)
 
 diff --git a/ui/display/mojom/display_snapshot.mojom b/ui/display/mojom/display_snapshot.mojom
-index f2867668..79db6d06 100644
+index f286766..79db6d0 100644
 --- a/ui/display/mojom/display_snapshot.mojom
 +++ b/ui/display/mojom/display_snapshot.mojom
 @@ -56,4 +56,6 @@ struct DisplaySnapshot {
@@ -42,7 +42,7 @@ index f2867668..79db6d06 100644
 +  string domicile_connector;
  };
 diff --git a/ui/display/mojom/display_snapshot_mojom_traits.cc b/ui/display/mojom/display_snapshot_mojom_traits.cc
-index 0bec6d21..84c4908b 100644
+index 0bec6d2..84c4908 100644
 --- a/ui/display/mojom/display_snapshot_mojom_traits.cc
 +++ b/ui/display/mojom/display_snapshot_mojom_traits.cc
 @@ -186,6 +186,12 @@ bool StructTraits<display::mojom::DisplaySnapshotDataView,
@@ -59,7 +59,7 @@ index 0bec6d21..84c4908b 100644
  }
  
 diff --git a/ui/display/mojom/display_snapshot_mojom_traits.h b/ui/display/mojom/display_snapshot_mojom_traits.h
-index 15e8f377..80b02a46 100644
+index 15e8f37..80b02a4 100644
 --- a/ui/display/mojom/display_snapshot_mojom_traits.h
 +++ b/ui/display/mojom/display_snapshot_mojom_traits.h
 @@ -184,6 +184,11 @@ struct StructTraits<display::mojom::DisplaySnapshotDataView,
@@ -75,7 +75,7 @@ index 15e8f377..80b02a46 100644
                     std::unique_ptr<display::DisplaySnapshot>* out);
  };
 diff --git a/ui/display/types/display_snapshot.cc b/ui/display/types/display_snapshot.cc
-index f58fecf3..5dff7d67 100644
+index f58fecf..5dff7d6 100644
 --- a/ui/display/types/display_snapshot.cc
 +++ b/ui/display/types/display_snapshot.cc
 @@ -127,6 +127,7 @@ std::unique_ptr<DisplaySnapshot> DisplaySnapshot::Clone() const {
@@ -87,7 +87,7 @@ index f58fecf3..5dff7d67 100644
    return clone;
  }
 diff --git a/ui/display/types/display_snapshot.h b/ui/display/types/display_snapshot.h
-index 3415cf4a..0f6e8286 100644
+index 3415cf4..0f6e828 100644
 --- a/ui/display/types/display_snapshot.h
 +++ b/ui/display/types/display_snapshot.h
 @@ -143,6 +143,14 @@ class DISPLAY_TYPES_EXPORT DisplaySnapshot {
@@ -116,7 +116,7 @@ index 3415cf4a..0f6e8286 100644
  
  }  // namespace display
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 08da04a9..c0d823fa 100644
+index 08da04a..c0d823f 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -120,6 +120,8 @@ source_set("gbm") {
@@ -137,7 +137,7 @@ index 08da04a9..c0d823fa 100644
      "domicile/drm_fullscreen_unittest.cc",
      "domicile/drm_input_controller_unittest.cc",
 diff --git a/ui/ozone/platform/drm/common/drm_util.cc b/ui/ozone/platform/drm/common/drm_util.cc
-index f52391d2..85e22de0 100644
+index f52391d..85e22de 100644
 --- a/ui/ozone/platform/drm/common/drm_util.cc
 +++ b/ui/ozone/platform/drm/common/drm_util.cc
 @@ -40,6 +40,7 @@
@@ -170,7 +170,7 @@ index f52391d2..85e22de0 100644
  
  int GetFourCCFormatForOpaqueFramebuffer(viz::SharedImageFormat format) {
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index a4698d0b..724d754f 100644
+index a4698d0..724d754 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -9,12 +9,15 @@
@@ -227,7 +227,7 @@ index a4698d0b..724d754f 100644
    // And after event_factory_ozone_ for the same kind of reason: it observes
    // that event source for as long as it lives. And after modeset_, which it
 diff --git a/ui/ozone/public/ozone_platform.cc b/ui/ozone/public/ozone_platform.cc
-index 264fadd9..581d3054 100644
+index 264fadd..581d305 100644
 --- a/ui/ozone/public/ozone_platform.cc
 +++ b/ui/ozone/public/ozone_platform.cc
 @@ -135,6 +135,11 @@ PlatformClipboard* OzonePlatform::GetPlatformClipboard() {
@@ -243,7 +243,7 @@ index 264fadd9..581d3054 100644
    return nullptr;
  }
 diff --git a/ui/ozone/public/ozone_platform.h b/ui/ozone/public/ozone_platform.h
-index 53def9dc..e0dbd227 100644
+index 53def9d..e0dbd22 100644
 --- a/ui/ozone/public/ozone_platform.h
 +++ b/ui/ozone/public/ozone_platform.h
 @@ -401,6 +401,11 @@ class COMPONENT_EXPORT(OZONE) OzonePlatform {

@@ -23,7 +23,7 @@ the time the user picked a passkey.
  2 files changed, 15 insertions(+), 11 deletions(-)
 
 diff --git a/chrome/browser/webauthn/chrome_web_authentication_delegate.cc b/chrome/browser/webauthn/chrome_web_authentication_delegate.cc
-index 8d3bfe98..456b46e4 100644
+index 8d3bfe9..456b46e 100644
 --- a/chrome/browser/webauthn/chrome_web_authentication_delegate.cc
 +++ b/chrome/browser/webauthn/chrome_web_authentication_delegate.cc
 @@ -257,19 +257,15 @@ void ChromeWebAuthenticationDelegate::
@@ -54,7 +54,7 @@ index 8d3bfe98..456b46e4 100644
  
  content::WebAuthenticationRequestProxy*
 diff --git a/content/browser/webauth/authenticator_common_impl.cc b/content/browser/webauth/authenticator_common_impl.cc
-index 9bce4738..cc3bcaf7 100644
+index 9bce473..cc3bcaf 100644
 --- a/content/browser/webauth/authenticator_common_impl.cc
 +++ b/content/browser/webauth/authenticator_common_impl.cc
 @@ -1901,6 +1901,14 @@ void AuthenticatorCommonImpl::ContinueGetAssertionAfterRpIdCheck(

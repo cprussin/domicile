@@ -20,7 +20,7 @@ job builds it on `crux`.
  2 files changed, 3 insertions(+)
 
 diff --git a/third_party/blink/renderer/bindings/generated_in_modules.gni b/third_party/blink/renderer/bindings/generated_in_modules.gni
-index 6c46828a..a1a5e805 100644
+index f4dc386..db265fc 100644
 --- a/third_party/blink/renderer/bindings/generated_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/generated_in_modules.gni
 @@ -2448,6 +2448,8 @@ generated_interface_sources_in_modules = [
@@ -33,7 +33,7 @@ index 6c46828a..a1a5e805 100644
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_notification.h",
    "$root_gen_dir/third_party/blink/renderer/bindings/modules/v8/v8_domicile_notification_action.cc",
 diff --git a/third_party/blink/renderer/bindings/idl_in_modules.gni b/third_party/blink/renderer/bindings/idl_in_modules.gni
-index f82714ae..09dd33ba 100644
+index f82714a..09dd33b 100644
 --- a/third_party/blink/renderer/bindings/idl_in_modules.gni
 +++ b/third_party/blink/renderer/bindings/idl_in_modules.gni
 @@ -333,6 +333,7 @@ static_idl_files_in_modules = [

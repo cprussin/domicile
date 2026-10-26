@@ -42,7 +42,7 @@ job builds it on `crux`.
  9 files changed, 86 insertions(+), 5 deletions(-)
 
 diff --git a/ui/events/ozone/evdev/BUILD.gn b/ui/events/ozone/evdev/BUILD.gn
-index 1cd9816e..d1d1569a 100644
+index 1cd9816..d1d1569 100644
 --- a/ui/events/ozone/evdev/BUILD.gn
 +++ b/ui/events/ozone/evdev/BUILD.gn
 @@ -47,8 +47,11 @@ component("evdev") {
@@ -78,7 +78,7 @@ index 1cd9816e..d1d1569a 100644
  }
  
 diff --git a/ui/events/ozone/evdev/cursor_delegate_evdev.h b/ui/events/ozone/evdev/cursor_delegate_evdev.h
-index 48157a6a..85de2a9a 100644
+index 48157a6..85de2a9 100644
 --- a/ui/events/ozone/evdev/cursor_delegate_evdev.h
 +++ b/ui/events/ozone/evdev/cursor_delegate_evdev.h
 @@ -37,6 +37,11 @@ class COMPONENT_EXPORT(EVDEV) CursorDelegateEvdev {
@@ -94,7 +94,7 @@ index 48157a6a..85de2a9a 100644
    virtual void InitializeOnEvdev() = 0;
  };
 diff --git a/ui/events/ozone/evdev/event_device_info.cc b/ui/events/ozone/evdev/event_device_info.cc
-index c7ba170c..96c62fc0 100644
+index c7ba170..96c62fc 100644
 --- a/ui/events/ozone/evdev/event_device_info.cc
 +++ b/ui/events/ozone/evdev/event_device_info.cc
 @@ -740,6 +740,7 @@ bool EventDeviceInfo::HasDirect() const {
@@ -144,7 +144,7 @@ index c7ba170c..96c62fc0 100644
    return LegacyAbsoluteDeviceType::NONE;
  }
 diff --git a/ui/events/ozone/evdev/event_device_info.h b/ui/events/ozone/evdev/event_device_info.h
-index e4131d09..5d14b200 100644
+index e4131d0..5d14b20 100644
 --- a/ui/events/ozone/evdev/event_device_info.h
 +++ b/ui/events/ozone/evdev/event_device_info.h
 @@ -164,6 +164,10 @@ class COMPONENT_EXPORT(EVDEV) EventDeviceInfo {
@@ -168,7 +168,7 @@ index e4131d09..5d14b200 100644
    };
  
 diff --git a/ui/events/ozone/evdev/input_device_opener_evdev.cc b/ui/events/ozone/evdev/input_device_opener_evdev.cc
-index 93c5dd1f..a2f50767 100644
+index 93c5dd1..a2f5076 100644
 --- a/ui/events/ozone/evdev/input_device_opener_evdev.cc
 +++ b/ui/events/ozone/evdev/input_device_opener_evdev.cc
 @@ -17,6 +17,7 @@
@@ -194,7 +194,7 @@ index 93c5dd1f..a2f50767 100644
    if (devinfo.HasTouchscreen()) {
      return TouchEventConverterEvdev::Create(
 diff --git a/ui/ozone/platform/drm/BUILD.gn b/ui/ozone/platform/drm/BUILD.gn
-index 16b3d0ef..592bdd00 100644
+index 16b3d0e..592bdd0 100644
 --- a/ui/ozone/platform/drm/BUILD.gn
 +++ b/ui/ozone/platform/drm/BUILD.gn
 @@ -284,6 +284,7 @@ source_set("gbm_unittests") {
@@ -218,7 +218,7 @@ index 16b3d0ef..592bdd00 100644
      "//ui/gfx",
      "//ui/gfx/linux:drm",
 diff --git a/ui/ozone/platform/drm/host/drm_cursor.cc b/ui/ozone/platform/drm/host/drm_cursor.cc
-index 2e49417f..411e68aa 100644
+index 2e49417..411e68a 100644
 --- a/ui/ozone/platform/drm/host/drm_cursor.cc
 +++ b/ui/ozone/platform/drm/host/drm_cursor.cc
 @@ -204,6 +204,13 @@ std::optional<PointerHeard> DrmCursor::Heard() {
@@ -270,7 +270,7 @@ index 2e49417f..411e68aa 100644
    DCHECK_CALLED_ON_VALID_THREAD(evdev_thread_checker_);
    base::AutoLock lock(lock_);
 diff --git a/ui/ozone/platform/drm/host/drm_cursor.h b/ui/ozone/platform/drm/host/drm_cursor.h
-index 246caced..390a9f68 100644
+index 246cace..390a9f6 100644
 --- a/ui/ozone/platform/drm/host/drm_cursor.h
 +++ b/ui/ozone/platform/drm/host/drm_cursor.h
 @@ -8,6 +8,7 @@
@@ -309,7 +309,7 @@ index 246caced..390a9f68 100644
    const raw_ptr<DrmWindowHostManager> window_manager_
        GUARDED_BY_CONTEXT(ui_thread_checker_);  // Not owned.
 diff --git a/ui/ozone/platform/drm/ozone_platform_drm.cc b/ui/ozone/platform/drm/ozone_platform_drm.cc
-index 3343075a..10beb1a6 100644
+index 3343075..10beb1a 100644
 --- a/ui/ozone/platform/drm/ozone_platform_drm.cc
 +++ b/ui/ozone/platform/drm/ozone_platform_drm.cc
 @@ -192,7 +192,10 @@ class OzonePlatformDrm : public OzonePlatform {

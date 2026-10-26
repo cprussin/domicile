@@ -26,10 +26,10 @@ guard-shell-crash.sh crash each kind of page.
  3 files changed, 16 insertions(+)
 
 diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
-index 0d14966a..e95bffdf 100644
+index 0772e0c..9da2c59 100644
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -2283,6 +2283,8 @@ if (toolkit_views) {
+@@ -2264,6 +2264,8 @@ if (toolkit_views) {
        "//chrome/browser/ui/views/frame:browser_view_header",
        "//chrome/browser/ui/views/frame:contents_web_view",
        "//chrome/common",
@@ -39,7 +39,7 @@ index 0d14966a..e95bffdf 100644
        "//components/tabs:public",
        "//components/ui_metrics",
 diff --git a/chrome/browser/ui/sad_tab_helper.cc b/chrome/browser/ui/sad_tab_helper.cc
-index c0157e89..42231fa4 100644
+index c0157e8..42231fa 100644
 --- a/chrome/browser/ui/sad_tab_helper.cc
 +++ b/chrome/browser/ui/sad_tab_helper.cc
 @@ -10,6 +10,7 @@
@@ -64,7 +64,7 @@ index c0157e89..42231fa4 100644
      // If the renderer was terminated to prevent an browser OOM crash, discard
      // the tab instead of showing a sad tab, unless the tab is visible. The tab
 diff --git a/third_party/blink/renderer/core/frame/remote_frame.cc b/third_party/blink/renderer/core/frame/remote_frame.cc
-index a20f7c58..5b0aae0e 100644
+index d2efef9..024040c 100644
 --- a/third_party/blink/renderer/core/frame/remote_frame.cc
 +++ b/third_party/blink/renderer/core/frame/remote_frame.cc
 @@ -43,6 +43,7 @@
