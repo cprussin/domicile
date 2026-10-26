@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { css } from "../../styled-system/css";
+import { css, cx } from "../../styled-system/css";
 import { flex, grid, hstack } from "../../styled-system/patterns";
 import { BrandMark } from "./BrandMark";
 
@@ -49,7 +49,7 @@ type LinkProps = {
 
 /** One section's card. */
 const SectionLink = ({ href, picture, title, body }: LinkProps) => (
-  <a className={linkStyles} href={href}>
+  <a className={cx("group", linkStyles)} href={href}>
     <span aria-hidden="true" className={pictureStyles}>
       {picture}
     </span>
@@ -132,8 +132,16 @@ const linksStyles = grid({
   textAlign: "start",
 });
 
+// Lifts toward the pointer, with its title in the accent, so the card reads
+// as a link.
 const linkStyles = flex({
-  _hover: { borderColor: "borderStrong" },
+  _focusVisible: { outline: "2px solid {colors.accent}", outlineOffset: 2 },
+  _motionReduce: { "&:is(:hover, :focus-visible)": { transform: "none" } },
+  "&:is(:hover, :focus-visible)": {
+    borderColor: "accent",
+    boxShadow: "lifted",
+    transform: "translateY(-2px)",
+  },
   backgroundColor: "card",
   border: "1px solid {colors.border}",
   borderRadius: "xl",
@@ -142,7 +150,8 @@ const linkStyles = flex({
   minInlineSize: 0,
   padding: 3,
   paddingBlockEnd: 4,
-  transition: "border-color {durations.fast} {easings.out}",
+  transition:
+    "border-color {durations.fast} {easings.out}, box-shadow {durations.fast} {easings.out}, transform {durations.fast} {easings.out}",
 });
 
 const pictureStyles = css({
@@ -158,10 +167,13 @@ const pictureStyles = css({
 });
 
 const titleStyles = css({
+  _groupFocusVisible: { color: "accent" },
+  _groupHover: { color: "accent" },
   fontFamily: "display",
   fontSize: "lg",
   fontWeight: "semibold",
   paddingInline: 1,
+  transition: "color {durations.fast} {easings.out}",
 });
 
 const bodyStyles = css({
