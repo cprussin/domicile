@@ -97,4 +97,23 @@ describe("useStageScreens", () => {
     expect(after?.focusBox?.windows).toEqual(["app:foot"]);
     expect(after?.placements).toBe(before);
   });
+
+  it("stacks the floats of the screen with the keyboard over every other screen's", () => {
+    // A float hanging over the edge of its screen covers the next one's.
+    const floating = reduce(
+      BOTH,
+      WindowAction.FloatToggled(),
+      WindowAction.ScreenHovered("left"),
+      WindowAction.FloatToggled(),
+    );
+    const { rerender, result } = staged(floating);
+    const depths = () =>
+      result.current.map(({ screenful }) => screenful.placements[0]?.depth);
+
+    expect(depths()).toEqual([4, 2]);
+
+    rerender({ now: reduce(floating, WindowAction.ScreenHovered("right")) });
+
+    expect(depths()).toEqual([2, 4]);
+  });
 });

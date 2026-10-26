@@ -43,7 +43,7 @@ const desktop = (...appIds: readonly string[]): WindowState =>
 
 /** What the screen of `geometry` shows. */
 const placementsIn = (state: WindowState, geometry: Geometry) =>
-  placementsOf(workspaceOn(state, geometry.name), geometry);
+  placementsOf(workspaceOn(state, geometry.name), geometry, 0);
 
 const placementFor = (state: WindowState, appId: string) => {
   const { placements } = placementsIn(state, GEOMETRY);

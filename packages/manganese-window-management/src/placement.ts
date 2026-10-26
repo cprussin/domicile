@@ -160,10 +160,14 @@ export const GRABBING = 3000;
  * A fullscreen window or group is placed at {@link FULLSCREEN} over the normal
  * layout, which stays in place. That lets it animate from its tiled box and
  * back (see `settlingStyles`) while the other windows stay drawn underneath.
+ *
+ * @param below - how many floats other screens stack under this screen's. All
+ *   screens share one stacking order, and a float can hang onto the next one.
  */
 export const placementsOf = (
   workspace: Workspace,
   geometry: Geometry,
+  below: number,
 ): Screenful => {
   const { frames, tabs } = framesOf(
     workspace.tiling,
@@ -174,7 +178,7 @@ export const placementsOf = (
   const floating = workspace.floats
     .map((float) => onScreen(float, geometry.screen))
     .map((float, at) => ({
-      depth: FLOATING + 2 * at,
+      depth: FLOATING + 2 * (below + at),
       float,
       ...framesOf(float, rectOf(float), floatingGapOf(float)),
     }));

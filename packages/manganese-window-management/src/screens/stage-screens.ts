@@ -38,8 +38,9 @@ export type StageScreen = {
 /** Screens already laid out. */
 export type LaidOut = {
   /**
-   * By desk, then the workspace shown, then screen name. By desk because every
-   * screen's geometry depends on every display.
+   * By desk, then the workspace shown, then screen name and the floats under
+   * the screen's (see `floatsUnder`). By desk because every screen's geometry
+   * depends on every display.
    */
   byDesk: WeakMap<
     readonly Display[],
@@ -59,13 +60,17 @@ export type LaidOut = {
  * change or a float drag redraws only the windows whose placement changed.
  */
 export const stageScreensOf = (
-  { screens, workspaces }: Pick<WindowState, "screens" | "workspaces">,
+  {
+    focused,
+    screens,
+    workspaces,
+  }: Pick<WindowState, "focused" | "screens" | "workspaces">,
   desk: readonly Display[],
   laidOut: LaidOut,
 ): readonly StageScreen[] => {
   const shown = new Map(screens.map(({ current, name }) => [name, current]));
   const named = new Map(workspaces.map((found) => [found.name, found]));
-  return desk.flatMap((display) => {
+  const showing = desk.flatMap((display) => {
     const current = shown.get(display.name);
     const workspace = current === undefined ? undefined : named.get(current);
     if (current === undefined) {
@@ -73,9 +78,39 @@ export const stageScreensOf = (
     } else if (workspace === undefined) {
       throw new Error(`shell: no workspace ${current}`);
     } else {
-      return [stageScreenOn(display, desk, workspace, laidOut)];
+      return [{ display, workspace }];
     }
   });
+  return showing.map(({ display, workspace }, at) =>
+    stageScreenOn(
+      display,
+      desk,
+      workspace,
+      floatsUnder(showing, at, focused),
+      laidOut,
+    ),
+  );
+};
+
+/**
+ * How many floats the other screens stack under the floats of screen `at`.
+ *
+ * The screen with the keyboard stacks over every other, so a float dragged
+ * across an edge covers the next screen's floats. The others stack in desk
+ * order.
+ */
+const floatsUnder = (
+  showing: readonly { display: Display; workspace: Workspace }[],
+  at: number,
+  focused: string,
+): number => {
+  const onTop = showing[at]?.display.name === focused;
+  return showing
+    .filter(
+      ({ display }, other) =>
+        other !== at && display.name !== focused && (onTop || other < at),
+    )
+    .reduce((sum, { workspace }) => sum + workspace.floats.length, 0);
 };
 
 /** Screen `display` showing `workspace`, from `laidOut` when it has it. */
@@ -83,13 +118,15 @@ const stageScreenOn = (
   display: Display,
   desk: readonly Display[],
   workspace: Workspace,
+  below: number,
   laidOut: LaidOut,
 ): StageScreen => {
   const onDesk =
     laidOut.byDesk.get(desk) ??
     new WeakMap<Workspace, Map<string, StageScreen>>();
   const byScreen = onDesk.get(workspace) ?? new Map<string, StageScreen>();
-  const found = byScreen.get(display.name);
+  const key = `${display.name}/${below}`;
+  const found = byScreen.get(key);
   if (found === undefined) {
     const geometry = geometryOf(display, desk);
     const screen = sharedWith(laidOut.last.get(display.name), {
@@ -97,13 +134,10 @@ const stageScreenOn = (
       floats: workspace.floats.map((float) => onScreen(float, geometry.screen)),
       fullscreen: fullscreenOf(workspace),
       geometry,
-      screenful: placementsOf(workspace, geometry),
+      screenful: placementsOf(workspace, geometry, below),
     });
     // A cache, so mutated in place.
-    laidOut.byDesk.set(
-      desk,
-      onDesk.set(workspace, byScreen.set(display.name, screen)),
-    );
+    laidOut.byDesk.set(desk, onDesk.set(workspace, byScreen.set(key, screen)));
     laidOut.last.set(display.name, screen);
     return screen;
   } else {
