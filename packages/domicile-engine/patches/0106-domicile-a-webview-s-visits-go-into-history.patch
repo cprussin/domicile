@@ -17,7 +17,7 @@ job builds it on `crux`.
  2 files changed, 9 insertions(+), 1 deletion(-)
 
 diff --git a/chrome/browser/history/history_tab_helper.cc b/chrome/browser/history/history_tab_helper.cc
-index 1392d581..28d0e27c 100644
+index 1392d58..28d0e27 100644
 --- a/chrome/browser/history/history_tab_helper.cc
 +++ b/chrome/browser/history/history_tab_helper.cc
 @@ -683,7 +683,7 @@ void HistoryTabHelper::WebContentsDestroyed() {
@@ -30,7 +30,7 @@ index 1392d581..28d0e27c 100644
    }
  
 diff --git a/chrome/browser/history/history_tab_helper.h b/chrome/browser/history/history_tab_helper.h
-index aed6337c..121ab130 100644
+index aed6337..121ab13 100644
 --- a/chrome/browser/history/history_tab_helper.h
 +++ b/chrome/browser/history/history_tab_helper.h
 @@ -64,6 +64,11 @@ class HistoryTabHelper

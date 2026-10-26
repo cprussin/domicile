@@ -228,7 +228,7 @@ index cc61a86..1dd1abf 100644
    // changed, so we should update state for managing overlays.
    // |callback| will be run on origin thread.
 diff --git a/ui/ozone/platform/drm/gpu/gbm_surface_factory.cc b/ui/ozone/platform/drm/gpu/gbm_surface_factory.cc
-index d6b36b3..aa3cf68 100644
+index 836d51b..bb17940 100644
 --- a/ui/ozone/platform/drm/gpu/gbm_surface_factory.cc
 +++ b/ui/ozone/platform/drm/gpu/gbm_surface_factory.cc
 @@ -33,7 +33,10 @@

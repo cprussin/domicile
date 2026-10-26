@@ -18,7 +18,7 @@ job builds it on crux.
  1 file changed, 15 insertions(+)
 
 diff --git a/content/browser/media/capture/desktop_capture_device.cc b/content/browser/media/capture/desktop_capture_device.cc
-index dbec458..ea002e3 100644
+index 5866c4a..12334a1 100644
 --- a/content/browser/media/capture/desktop_capture_device.cc
 +++ b/content/browser/media/capture/desktop_capture_device.cc
 @@ -57,6 +57,7 @@
@@ -50,6 +50,3 @@ index dbec458..ea002e3 100644
        }
        CHECK(output_frame_->size().equals(output_size),
              base::NotFatalUntil::M160);
--- 
-2.43.0
-

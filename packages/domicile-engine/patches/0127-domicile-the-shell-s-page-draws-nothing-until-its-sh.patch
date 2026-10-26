@@ -21,7 +21,7 @@ draws nothing while a slow module loads.
  2 files changed, 26 insertions(+), 1 deletion(-)
 
 diff --git a/third_party/blink/renderer/core/loader/render_blocking_resource_manager.cc b/third_party/blink/renderer/core/loader/render_blocking_resource_manager.cc
-index d34dfe5e..4e47f808 100644
+index d34dfe5..4e47f80 100644
 --- a/third_party/blink/renderer/core/loader/render_blocking_resource_manager.cc
 +++ b/third_party/blink/renderer/core/loader/render_blocking_resource_manager.cc
 @@ -245,6 +245,21 @@ void RenderBlockingResourceManager::RemovePendingScript(
@@ -47,7 +47,7 @@ index d34dfe5e..4e47f808 100644
    if (!HasNonFontRenderBlockingResources() && HasRenderBlockingFonts()) {
      EnsureStartFontPreloadMaxFCPDelayTimer();
 diff --git a/third_party/blink/renderer/core/loader/render_blocking_resource_manager.h b/third_party/blink/renderer/core/loader/render_blocking_resource_manager.h
-index 53a983c3..4ade3c7d 100644
+index 53a983c..4ade3c7 100644
 --- a/third_party/blink/renderer/core/loader/render_blocking_resource_manager.h
 +++ b/third_party/blink/renderer/core/loader/render_blocking_resource_manager.h
 @@ -41,7 +41,8 @@ class CORE_EXPORT RenderBlockingResourceManager final

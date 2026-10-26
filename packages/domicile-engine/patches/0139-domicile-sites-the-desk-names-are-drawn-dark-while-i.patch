@@ -25,10 +25,10 @@ job builds it on `crux`.
  3 files changed, 29 insertions(+)
 
 diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
-index 0664a98..a8b753a 100644
+index b98cb57..de8103c 100644
 --- a/chrome/browser/BUILD.gn
 +++ b/chrome/browser/BUILD.gn
-@@ -2720,6 +2720,7 @@ source_set("browser") {
+@@ -2713,6 +2713,7 @@ source_set("browser") {
      "//components/domicile:color_scheme",
      "//components/domicile:control_channel",
      "//components/domicile:desktop_prefs",
@@ -62,7 +62,7 @@ index e4fec7e..abc0016 100644
                  // of its <webview>s is told to, and no other page.
                  domicile::Page{frame->GetGlobalId().child_id.value(),
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
-index 45a9a15..f36ee97 100644
+index 4dc6b26..749093b 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
 +++ b/chrome/browser/chrome_content_browser_client.cc
 @@ -4,6 +4,7 @@
@@ -73,9 +73,9 @@ index 45a9a15..f36ee97 100644
  #include "components/domicile/browser/shell_source.h"
  #include "components/domicile/browser/shell_url_loader_factory.h"
  #include "components/domicile/common/domicile_scheme.h"
-@@ -5037,6 +5038,13 @@ void ChromeContentBrowserClient::OverrideWebPreferences(
-       GetPreferredColorScheme(
-           *web_prefs, main_frame_site.GetSecurityPrincipal(), web_contents);
+@@ -5062,6 +5063,13 @@ void ChromeContentBrowserClient::OverrideWebPreferences(
+                               main_frame_site.GetSecurityPrincipal(),
+                               web_contents, *profile);
  
 +  // Domicile's engine fork: a site the desk's config names is drawn dark while
 +  // the desk is. See components/domicile/browser/force_dark.h.
@@ -87,7 +87,7 @@ index 45a9a15..f36ee97 100644
    web_prefs->root_scrollbar_theme_color =
        GetRootScrollbarThemeColor(web_contents);
  
-@@ -5179,6 +5187,19 @@ bool ChromeContentBrowserClient::OverrideWebPreferencesAfterNavigation(
+@@ -5206,6 +5214,19 @@ bool ChromeContentBrowserClient::OverrideWebPreferencesAfterNavigation(
        web_prefs->preferred_root_scrollbar_color_scheme !=
            old_preferred_root_scrollbar_color_scheme;
  
