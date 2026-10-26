@@ -99,6 +99,11 @@ bar item ──casting(host).start(target, Extend | Pick)──▶ backend (engi
 - Mirroring captures through webrtc's PipeWire capturer, which asks the
   portal (patch `0128`). The engine's portal app id is not its own pick, so
   `engineCast` claims the next ScreenCast request from any app.
+- Each cast's desktop has a new screen id. webrtc keeps the portal's restore
+  token per id, so a reused id would restore the last pick and never ask the
+  shell.
+- Patch `0149` letterboxes a capture of another shape in black. Upstream left
+  the bars as zeros, which is green in I420.
 
 ### Miracast, `domicile-miracast`
 
