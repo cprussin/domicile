@@ -2,7 +2,7 @@
 //!
 //! `DOMICILE_CAST_TEST_PATTERN` turns it on when no engine is connected, so
 //! monitor and region casts can be checked without one. See
-//! `docs/COMPOSITOR-DEBUGGING.md`.
+//! `docs/contributing/COMPOSITOR-DEBUGGING.md`.
 
 use std::collections::HashMap;
 use std::fs::File;

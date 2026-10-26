@@ -1,7 +1,7 @@
 //! The compositor's frame report: timings the Wayland thread records and the
 //! writer thread logs as one `frames` line every few seconds.
 //!
-//! How to read it: `docs/COMPOSITOR-DEBUGGING.md`.
+//! How to read it: `docs/contributing/COMPOSITOR-DEBUGGING.md`.
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};

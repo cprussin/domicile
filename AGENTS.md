@@ -131,7 +131,7 @@ every TS file you write or modify.
 | Doc | Covers |
 |---|---|
 | [/docs/guidelines/WORKSPACE.md](/docs/guidelines/WORKSPACE.md) | Tools (bun, turbo, biome), workspace layout across both languages, package READMEs, dependency policy, and the required-checks workflow you run before a PR. |
-| [/docs/DEVELOPING.md](/docs/DEVELOPING.md) | Running, testing and debugging from a checkout. Compositor debugging is in [COMPOSITOR-DEBUGGING.md](/docs/COMPOSITOR-DEBUGGING.md). |
+| [/docs/contributing/DEVELOPING.md](/docs/contributing/DEVELOPING.md) | Running, testing and debugging from a checkout. Compositor debugging is in [COMPOSITOR-DEBUGGING.md](/docs/contributing/COMPOSITOR-DEBUGGING.md). |
 
 ## Architecture & design docs
 
@@ -169,7 +169,7 @@ How to use, configure and debug Domicile. No authority level.
 
 | Doc | Covers |
 |---|---|
-| [/docs/RELEASING.md](/docs/RELEASING.md) | Branches, per-package versions, cutting a release, its secrets. |
+| [/docs/contributing/RELEASING.md](/docs/contributing/RELEASING.md) | Branches, per-package versions, cutting a release, its secrets. |
 | [/docs/media/README.md](/docs/media/README.md) | Docs screenshots and videos: scenes, their helpers, retaking them on `crux`. |
 | [/docs/RUNNING-A-DESKTOP.md](/docs/RUNNING-A-DESKTOP.md) | Running a desktop nested or on a tty, the pinned engine, launching clients, and the home-manager module. |
 | [/docs/SHELL-CONFIG.md](/docs/SHELL-CONFIG.md) | The desk config: file location, config modules, the home-manager module, what reloads, and the keyboard, idle, lock, theme and display sections. |
@@ -190,7 +190,7 @@ How to use, configure and debug Domicile. No authority level.
 | [/docs/LOCK.md](/docs/LOCK.md) | The screen lock: where it is enforced, request categories, ordering, verifiers, passphrase checks, fail-closed PAM, log lines. |
 | [/docs/TTY-SESSION.md](/docs/TTY-SESSION.md) | DRM master, console switching through logind, suspend, and input from logind. |
 | [/docs/TTY-DEBUGGING.md](/docs/TTY-DEBUGGING.md) | Seeing a modeset in logs, black screens with a clean log, and hosts where scanout and render cards differ. |
-| [/docs/COMPOSITOR-DEBUGGING.md](/docs/COMPOSITOR-DEBUGGING.md) | The compositor's frame report and slow-launch logs; rendering, Smithay and test-client pitfalls. |
+| [/docs/contributing/COMPOSITOR-DEBUGGING.md](/docs/contributing/COMPOSITOR-DEBUGGING.md) | The compositor's frame report and slow-launch logs; rendering, Smithay and test-client pitfalls. |
 | [/docs/HARDWARE-CHECKS.md](/docs/HARDWARE-CHECKS.md) | Steps and expected log lines for each check that needs a lit panel (suspend, console switch, crashes, idle, PAM lock, latency, several monitors). |
 
 ## Package docs

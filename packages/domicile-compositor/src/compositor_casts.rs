@@ -265,7 +265,7 @@ impl DomicileCompositor {
     /// Starts the `DOMICILE_CAST_WINDOW` cast once a window takes its title.
     ///
     /// For checking the producer without the ScreenCast portal; see
-    /// `docs/COMPOSITOR-DEBUGGING.md`. The stream's events are only logged.
+    /// `docs/contributing/COMPOSITOR-DEBUGGING.md`. The stream's events are only logged.
     pub fn cast_if_asked(&mut self, app_id: &str, title: Option<&str>) {
         if self
             .cast_on_title
@@ -287,7 +287,7 @@ impl DomicileCompositor {
     /// in, or at once for a region.
     ///
     /// For checking monitor and region casts without the ScreenCast portal;
-    /// see `docs/COMPOSITOR-DEBUGGING.md`. The stream's events are only
+    /// see `docs/contributing/COMPOSITOR-DEBUGGING.md`. The stream's events are only
     /// logged.
     pub fn cast_the_monitor_if_asked(&mut self) {
         let ready = self.cast_on_monitor.as_ref().is_some_and(|(spec, _)| {

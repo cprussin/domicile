@@ -24,7 +24,7 @@ commits commit_ms idle_ms response_ms response_worst_ms present_ms chromes
   `domicile_engine_reports_frames`, or frames viz discarded.
 - **Frames answered late:** `the engine did not report these frames in time`
   means frame callbacks went out at the 250 ms deadline instead of on viz's
-  ack. See [WINDOW-COMPOSITING.md](architecture/WINDOW-COMPOSITING.md#frame-pacing).
+  ack. See [WINDOW-COMPOSITING.md](../architecture/WINDOW-COMPOSITING.md#frame-pacing).
 
 Container numbers come from a software rasterizer; see `AGENTS.md`,
 *Checking your work*.
