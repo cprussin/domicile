@@ -46,10 +46,9 @@ jobs:
       - run: bun install --frozen-lockfile
       # With DOMICILE_WRITEBACK_TOKEN: a pull request GITHUB_TOKEN opens runs
       # no checks. See packages/domicile-engine/docs/RELEASES.md.
-      - uses: changesets/action@v1
+      - uses: changesets/action@v2.1.2
         with:
-          version: bun run version-packages
-          title: Version packages
-          commit: Version packages
-        env:
-          GITHUB_TOKEN: ${{ secrets.DOMICILE_WRITEBACK_TOKEN }}
+          version-script: bun run version-packages
+          pr-title: Version packages
+          commit-message: Version packages
+          github-token: ${{ secrets.DOMICILE_WRITEBACK_TOKEN }}
