@@ -1,0 +1,127 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Sun, 25 Oct 2026 04:27:20 +0000
+Subject: [PATCH] domicile: a foreign locale carries only the strings a desk
+ shows
+
+Chrome's own UI is 22 MB of the 46 MB its 54 foreign locales hold, and a
+desk never shows it: the shell draws its own pages, menus and dialogs.
+Web-facing strings (Blink's, error pages, interstitials, the PDF viewer,
+accessibility) stay in every language.
+
+- repack_locales takes `domicile_trim_foreign_locales`. It runs
+  //components/domicile/locales/foreign_allowlist.py over each source's
+  en-US .pak.info and packs every locale but en-US with that allowlist.
+  chrome_repack_locales turns it on.
+- en-US stays whole, and ResourceBundle::LoadLocaleResources loads it
+  after any other locale, so a trimmed string comes back in English
+  rather than tripping GetLocalizedStringImpl's CHECK. A missing en-US
+  pak is a CHECK of its own: nothing else could answer.
+
+foreign_allowlist.py is a new file under src/.
+---
+ chrome/chrome_repack_locales.gni    |  3 +++
+ tools/grit/repack.gni               | 37 +++++++++++++++++++++++++++++
+ ui/base/resource/resource_bundle.cc | 13 ++++++++++
+ 3 files changed, 53 insertions(+)
+
+diff --git a/chrome/chrome_repack_locales.gni b/chrome/chrome_repack_locales.gni
+index 226c91dd..7df394a3 100644
+--- a/chrome/chrome_repack_locales.gni
++++ b/chrome/chrome_repack_locales.gni
+@@ -20,6 +20,9 @@ template("chrome_repack_locales") {
+   repack_locales(target_name) {
+     forward_variables_from(invoker, "*", [ "additional_source_patterns" ])
+ 
++    # Chrome's own UI is not the desk's; see //components/domicile/locales.
++    domicile_trim_foreign_locales = true
++
+     # Each input pak file should also have a deps line.
+     source_patterns = [
+       "${root_gen_dir}/chrome/branded_strings_",
+diff --git a/tools/grit/repack.gni b/tools/grit/repack.gni
+index c52e0e50..10e1f6ff 100644
+--- a/tools/grit/repack.gni
++++ b/tools/grit/repack.gni
+@@ -134,6 +134,10 @@ template("repack") {
+ #   copy_data_to_bundle [optional]
+ #   repack_allowlist [optional]
+ #       Normal meaning.
++#   domicile_trim_foreign_locales [optional]
++#       Packs only the strings //components/domicile/locales keeps into every
++#       locale but en-US, which stays whole. ResourceBundle reads en-US for
++#       what a locale lacks.
+ template("repack_locales") {
+   if (defined(invoker.output_dir)) {
+     _output_dir = invoker.output_dir
+@@ -149,6 +153,32 @@ template("repack_locales") {
+   # Collects all targets the loop generates.
+   _locale_targets = []
+ 
++  _trim = defined(invoker.domicile_trim_foreign_locales) &&
++          invoker.domicile_trim_foreign_locales
++  if (_trim) {
++    _allowlist_target = "${target_name}_domicile_foreign_allowlist"
++    _allowlist = "$target_gen_dir/$_allowlist_target.txt"
++    action(_allowlist_target) {
++      forward_variables_from(invoker,
++                             [
++                               "deps",
++                               "testonly",
++                             ])
++      visibility = [ ":*" ]
++      script = "//components/domicile/locales/foreign_allowlist.py"
++      outputs = [ _allowlist ]
++
++      # Every id each source has in en-US. Read, not declared as inputs: grit
++      # writes the .info beside each pak without naming it as an output.
++      _infos = []
++      foreach(_pattern, invoker.source_patterns) {
++        _infos += [ "${_pattern}en-US.pak.info" ]
++      }
++      args = [ rebase_path(_allowlist, root_build_dir) ] +
++             rebase_path(_infos, root_build_dir)
++    }
++  }
++
+   # This loop iterates over the input locales and also keeps a counter so it
+   # can simultaneously iterate over the output locales (using GN's very
+   # limited looping capabilities).
+@@ -174,6 +204,13 @@ template("repack_locales") {
+                                  "testonly",
+                                ])
+         visibility = [ ":${invoker.target_name}" ]
++        if (_trim && _input_locale != "en-US" && !defined(repack_allowlist)) {
++          repack_allowlist = _allowlist
++          if (!defined(deps)) {
++            deps = []
++          }
++          deps += [ ":$_allowlist_target" ]
++        }
+         if (is_ios) {
+           output =
+               "$_output_dir/${_output_locale}${_gender_suffix}.lproj/locale.pak"
+diff --git a/ui/base/resource/resource_bundle.cc b/ui/base/resource/resource_bundle.cc
+index 1c25647f..41653e2f 100644
+--- a/ui/base/resource/resource_bundle.cc
++++ b/ui/base/resource/resource_bundle.cc
+@@ -563,6 +563,19 @@ std::string ResourceBundle::LoadLocaleResources(const std::string& pref_locale,
+   }
+ 
+   locale_resources_data_.push_back(std::move(data_pack));
++
++  // Every locale but en-US carries only the strings a desk can show (see
++  // //components/domicile/locales), so en-US answers for the rest. An
++  // overridden pak is a test's whole locale, with nothing to fall back to.
++  if (app_locale != "en-US" && GetOverriddenPakPath().empty()) {
++    const base::FilePath en_us_path = GetLocaleFilePath("en-US");
++    auto en_us = std::make_unique<DataPack>(k100Percent);
++    CHECK(en_us->LoadFromPath(en_us_path))
++        << "no en-US locale pak at " << en_us_path << " for " << app_locale
++        << " to fall back on";
++    locale_resources_data_.push_back(std::move(en_us));
++  }
++
+   loaded_locale_ = pref_locale;
+   return app_locale;
+ }

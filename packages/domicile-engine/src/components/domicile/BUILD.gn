@@ -1051,6 +1051,7 @@ source_set("unit_tests") {
     "common/display_transform_unittest.cc",
     "common/forwarded_keys_unittest.cc",
     "common/held_chords_unittest.cc",
+    "common/locale_fallback_unittest.cc",
     "common/synced_frame_unittest.cc",
     "common/theme_unittest.cc",
     "spike/window_diff_unittest.cc",
@@ -1177,6 +1178,8 @@ source_set("unit_tests") {
     # What the shell hides from captures of the desk, beside the viz code
     # that leaves it out.
     "//components/viz/service/display/domicile:unit_tests",
+    # The locale fallback's test reads its strings through ResourceBundle.
+    "//ui/base",
   ]
 }
 
