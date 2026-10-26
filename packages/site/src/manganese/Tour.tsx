@@ -1,5 +1,5 @@
 import { css } from "../../styled-system/css";
-import { flex, grid } from "../../styled-system/patterns";
+import { flex } from "../../styled-system/patterns";
 import { Media } from "../media/Media";
 import { Section } from "../page/Section";
 
@@ -37,19 +37,20 @@ const FEATURES: readonly {
   {
     body: "Any site can be an app window without an address bar, and without Electron.",
     media: "tour-web-apps",
-    shows: "A web app window tiled beside a native app",
+    shows: "A web app window tiled beside a terminal",
     title: "Web apps",
   },
   {
     body: "Workspaces, tray, volume, network, battery and the clock, see-through over your wallpaper.",
     media: "tour-bar",
-    shows: "The bar up close with the volume popover open",
+    shows:
+      "The clock and status icons at the right end of the bar, over a browser window",
     title: "The top bar",
   },
   {
     body: "Toasts, plus a drawer that keeps the ones you missed.",
     media: "tour-notifications",
-    shows: "A toast arriving, then the drawer opening",
+    shows: "Two toasts arriving, then the drawer opening",
     title: "Notifications",
   },
   {
@@ -79,7 +80,7 @@ const FEATURES: readonly {
   {
     body: "Apps for displays, theme and shell options, and for your browsing history.",
     media: "tour-settings",
-    shows: "The Settings app's Displays page",
+    shows: "The Settings app beside a terminal",
     title: "Settings and History",
   },
 ];
@@ -91,9 +92,9 @@ export const Tour = () => (
     lede="Plus a few things other desktops don't have."
     title="Everything a desktop needs"
   >
-    <div className={gridStyles}>
+    <div className={rowsStyles}>
       {FEATURES.map((feature) => (
-        <article className={cardStyles} key={feature.title}>
+        <article className={rowStyles} key={feature.title}>
           <div className={mediaStyles}>
             <Media alt={feature.shows} name={feature.media} />
           </div>
@@ -107,30 +108,34 @@ export const Tour = () => (
   </Section>
 );
 
-const gridStyles = grid({ gap: 5, minChildWidth: "18.75rem" });
+const rowsStyles = flex({ direction: "column", gap: 16 });
 
-const cardStyles = flex({
-  backgroundColor: "card",
-  border: "1px solid {colors.border}",
-  borderRadius: "xl",
-  direction: "column",
-  overflow: "hidden",
+// Each capture about two thirds of the page, beside its text, on alternating
+// sides. On a phone the text goes under it.
+const rowStyles = flex({
+  "&:nth-of-type(even)": { flexDirection: { md: "row-reverse" } },
+  align: "center",
+  direction: { base: "column", md: "row" },
+  gap: { base: 4, md: 10 },
 });
 
-const mediaStyles = css({ padding: 2 });
+const mediaStyles = css({
+  flex: { md: 2 },
+  inlineSize: "100%",
+  minInlineSize: 0,
+});
 
 const textStyles = flex({
   direction: "column",
-  gap: 1.5,
-  paddingBlockEnd: 5,
-  paddingBlockStart: 3,
-  paddingInline: 5,
+  flex: { md: 1 },
+  gap: 2,
+  inlineSize: "100%",
 });
 
 const titleStyles = css({
   fontFamily: "display",
-  fontSize: "xl",
+  fontSize: "2xl",
   fontWeight: "semibold",
 });
 
-const bodyStyles = css({ color: "muted", fontSize: "sm" });
+const bodyStyles = css({ color: "muted", fontSize: "md" });

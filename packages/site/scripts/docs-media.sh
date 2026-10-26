@@ -26,6 +26,9 @@ fi
 for name in "${names[@]}"; do
   [ -f "$SCENES/$name.sh" ] || { echo "no scene $name in $SCENES" >&2; exit 1; }
   echo "scene $name"
+  # Compresses the scene's recordings, below. Fetched once a scene is known to
+  # exist.
+  FFMPEG="${FFMPEG:-$(nix build --no-link --print-out-paths 'nixpkgs#ffmpeg^bin')/bin/ffmpeg}"
   # In /tmp, since the engine puts a socket beside its profile and a deep
   # $TMPDIR passes the 107-byte socket path limit.
   SCENE_TMP="$(mktemp -d /tmp/domicile-media.XXXXXX)"
@@ -38,5 +41,17 @@ for name in "${names[@]}"; do
       trap scene_cleanup EXIT
       . "$0"
     ' "$SCENES/$name.sh"
+  # Compressed with the desktop stopped, so the encoder has the machine.
+  # `-cpu-used 4`: about three times faster than VP9's default effort.
+  for raw in "$SCENE_TMP"/raw/*.mkv; do
+    [ -e "$raw" ] || continue
+    out="$MEDIA/$(basename "$raw" .mkv)"
+    "$FFMPEG" -nostdin -loglevel error -y -i "$raw" -an -r 60 -c:v libvpx-vp9 \
+      -crf 34 -b:v 0 -deadline good -cpu-used 4 -row-mt 1 -tile-columns 2 \
+      "$out.webm"
+    "$FFMPEG" -nostdin -loglevel error -y -i "$raw" -an -r 60 -c:v libx264 \
+      -preset slow -crf 23 -pix_fmt yuv420p -movflags +faststart "$out.mp4"
+    echo "wrote docs/media/$(basename "$out").webm and .mp4"
+  done
   rm -rf "$SCENE_TMP"
 done
