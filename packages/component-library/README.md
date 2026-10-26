@@ -37,6 +37,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `PortalDialogs` | Every dialog applications ask for through the desktop portal. Mount one per shell with `host={domicile}`; it refuses kinds it cannot draw. `omitScreenCasts` leaves screen casts out of its indicator. See [PORTALS.md](/docs/PORTALS.md). |
 | `source-name` | `sourceName`: how a screen cast's source is named. |
 | `Popover` | Non-modal panel anchored to the control that opened it. |
+| `PopupBoundary` | Keeps every popup inside it (tooltips, popovers, menus, lists) within a box, such as a window's frame. Outside one, popups stay on their `Screen`. `Popover` and `Tooltip` take `spansWindows` to leave it. |
 | `Provider` | base-ui `DirectionProvider` wrapper. Every app roots its tree in it. |
 | `Screen` | Renders its children once per selected display. |
 | `DisplayProvider` | Supplies the host's displays to `Screen`. |

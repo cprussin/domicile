@@ -1,4 +1,5 @@
 import { Button } from "@domicile-desktop/component-library/Button";
+import { PopupBoundary } from "@domicile-desktop/component-library/PopupBoundary";
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
 import { BrowsersIcon } from "@phosphor-icons/react/dist/ssr/Browsers";
@@ -242,11 +243,7 @@ export const TitleBar = ({
         ...collapsedAlong(tabbed),
       }}
     >
-      <TabTooltip
-        description={description}
-        tab={strip !== undefined}
-        title={title}
-      >
+      <TabTooltip description={description} strip={strip} title={title}>
         <div
           className={cx(
             strip === undefined
@@ -330,32 +327,37 @@ export const TitleBar = ({
  * Shows a tab's whole title and its page's description while the pointer
  * rests on it, since a tab is cut to its slot. A window's own bar spans the
  * window, so it shows `children` alone.
+ *
+ * A tab is drawn outside its window's element, so it keeps its popups inside
+ * its container itself.
  */
 const TabTooltip = ({
   children,
   description,
-  tab,
+  strip,
   title,
 }: {
   children: ReactElement;
   description: string | undefined;
-  tab: boolean;
+  strip: StripPlace | undefined;
   title: string;
 }) =>
-  tab ? (
-    <Tooltip
-      content={
-        <span className={summaryStyles}>
-          <span className={summaryTitleStyles}>{title}</span>
-          {description !== undefined && (
-            <span className={summaryDescriptionStyles}>{description}</span>
-          )}
-        </span>
-      }
-      trigger={children}
-    />
-  ) : (
+  strip === undefined ? (
     children
+  ) : (
+    <PopupBoundary box={strip.area}>
+      <Tooltip
+        content={
+          <span className={summaryStyles}>
+            <span className={summaryTitleStyles}>{title}</span>
+            {description !== undefined && (
+              <span className={summaryDescriptionStyles}>{description}</span>
+            )}
+          </span>
+        }
+        trigger={children}
+      />
+    </PopupBoundary>
   );
 
 /** Whether a tab plays `motion` along its strip, opening or leaving it. */

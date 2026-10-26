@@ -1,11 +1,12 @@
 import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
-import type { ReactElement, ReactNode, RefCallback } from "react";
-import { useCallback, useContext, useState } from "react";
+import type { ReactElement, ReactNode } from "react";
+import { useContext } from "react";
 
 import { css } from "../../styled-system/css";
 import type { ExtendProps } from "../extend-props";
 import type { Alignment, Side, Tone } from "../Popover/Popover";
 import { PopoverContainer } from "../Popover/Popover";
+import { usePopupBoundary } from "../PopupBoundary/PopupBoundary";
 
 type Props = ExtendProps<
   typeof BaseTooltip.Root,
@@ -15,6 +16,8 @@ type Props = ExtendProps<
     /** How long the pointer rests on the trigger before it opens, in ms. */
     delay?: number | undefined;
     side?: Side | undefined;
+    /** Let it leave its `PopupBoundary`, such as its window, for its screen. */
+    spansWindows?: boolean | undefined;
     /**
      * `overPhoto` is a translucent pill with white text, for tooltips on a
      * bar drawn over the wallpaper.
@@ -29,31 +32,29 @@ type Props = ExtendProps<
  * is on, its trigger. For detail the trigger has no room for, such as a cut
  * title. Use `Popover` for anything the user acts on.
  *
- * Stays on its trigger's `<Screen>` region, as `Popover` does, and draws in
- * the same container.
+ * Stays inside its `PopupBoundary` or its trigger's `<Screen>` region, as
+ * `Popover` does, and draws in the same container.
  */
 export const Tooltip = ({
   align = "center",
   content,
   delay,
   side = "bottom",
+  spansWindows = false,
   tone = "card",
   trigger,
   ...rootProps
 }: Props) => {
-  const [screen, setScreen] = useState<Element | undefined>(undefined);
-  const attachTrigger = useCallback<RefCallback<HTMLElement>>((element) => {
-    setScreen(element?.closest("[data-screen]") ?? undefined);
-  }, []);
+  const { attach, boundary } = usePopupBoundary(spansWindows);
   const container = useContext(PopoverContainer);
   return (
     <BaseTooltip.Root {...rootProps}>
-      <BaseTooltip.Trigger delay={delay} ref={attachTrigger} render={trigger} />
+      <BaseTooltip.Trigger delay={delay} ref={attach} render={trigger} />
       <BaseTooltip.Portal container={container}>
         <BaseTooltip.Positioner
           align={align}
           className={positionerStyles}
-          collisionBoundary={screen}
+          collisionBoundary={boundary}
           side={side}
           sideOffset={6}
         >
@@ -93,7 +94,8 @@ const popupStyles = css({
   color: "foreground",
   fontSize: "xs",
   lineHeight: "normal",
-  maxInlineSize: "min({spacing.88}, 90vw)",
+  // `--available-width` is the room its `PopupBoundary` leaves it.
+  maxInlineSize: "min({spacing.88}, 90vw, var(--available-width))",
   opacity: 1,
   paddingBlock: 1.5,
   paddingInline: 2.5,

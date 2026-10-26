@@ -9,8 +9,10 @@ import { control } from "../../styled-system/recipes";
 import { controlSizingStyle } from "../_control/controlSizingStyle";
 import { focusControlOnMouseDown } from "../_control/focus";
 import { PrefixIconStack } from "../_control/PrefixIconStack";
+import { useStableRef } from "../_control/useStableRef";
 import { wrapperBase } from "../_control/wrapperBase";
 import type { ExtendProps } from "../extend-props";
+import { usePopupBoundary } from "../PopupBoundary/PopupBoundary";
 
 export { SIZES, type Size } from "../control-sizes";
 
@@ -33,8 +35,7 @@ export type SelectOption<V> = {
 type CommonProps<V> = Partial<ControlVariant> & {
   /**
    * Area the list stays inside, shifting and narrowing to fit. Defaults to
-   * the viewport. On a multi-monitor desktop the viewport spans every
-   * monitor, so a panel passes its own span to keep lists on its monitor.
+   * its `PopupBoundary`, else its `<Screen>` region, as `Popover` does.
    */
   boundary?: Boundary | undefined;
   /**
@@ -97,7 +98,8 @@ export const Select = <V,>({
   >(undefined);
   // The popup anchors to the wrapper, not the trigger, so `--anchor-width`
   // is the visible field's width.
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  const { attach, boundary: around } = usePopupBoundary(false);
+  const [wrapperRef, setWrapperRef] = useStableRef<HTMLDivElement>(attach);
   return (
     <BaseSelect.Root<V>
       defaultValue={defaultValue}
@@ -160,7 +162,7 @@ export const Select = <V,>({
         }
         onClick={openTriggerOnWrapperClick}
         onMouseDown={focusControlOnMouseDown}
-        ref={wrapperRef}
+        ref={setWrapperRef}
         style={controlSizingStyle({ width })}
       >
         <PrefixIconStack prefixIcon={prefixIcon} size={size} />
@@ -184,7 +186,7 @@ export const Select = <V,>({
           alignItemWithTrigger={false}
           anchor={wrapperRef}
           className={positionerStyles}
-          collisionBoundary={boundary}
+          collisionBoundary={boundary ?? around}
           side="bottom"
           sideOffset={6}
         >

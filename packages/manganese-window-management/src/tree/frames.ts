@@ -51,6 +51,11 @@ export type Frame = {
 
 /** Where a tab sits in its container's tab strip. See `TitleBar`. */
 export type StripPlace = {
+  /**
+   * Its container's whole box: the strip and the window under it. Popups from
+   * its tabs stay inside it.
+   */
+  area: Rect;
   /** Its index in the strip, from the start. */
   at: number;
   /** The whole strip's box. Tabs in one strip share it. */
@@ -480,6 +485,7 @@ const stripPlaceOf = (
 ): StripPlace => {
   const count = container.children.length;
   return {
+    area,
     at,
     box: { ...area, height: TITLE_BAR * barsOf(container) },
     divided:

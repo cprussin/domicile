@@ -1,3 +1,4 @@
+import { PopupBoundary } from "@domicile-desktop/component-library/PopupBoundary";
 import type { ReactNode } from "react";
 
 import type { Spot } from "./pointer-warp";
@@ -8,7 +9,10 @@ import { clippedTo, screenClipStyles, slidAcross } from "./window-styles";
 type Props = {
   /** The window's contents or its bar. */
   children: ReactNode;
-  /** The window's frame, which the scratchpad slides lift. */
+  /**
+   * The window's frame, which the scratchpad slides lift and popups opened in
+   * the window stay inside.
+   */
   frame: Rect | undefined;
   /** The window's motion; a workspace switch clips it to its screen. */
   motion: WindowMotion;
@@ -38,6 +42,9 @@ export const WINDOW_FRAME = "data-window-frame";
 /**
  * Wraps a window's bar and contents to handle pointer hover and press for
  * every kind of window in one place.
+ *
+ * Keeps popups opened in the window inside its frame, so they never cover
+ * the windows beside it.
  *
  * Takes no space, stacking or pointer of its own (see `screenClipStyles`).
  * Its children inherit the slide distances from it, and it clips them to
@@ -69,6 +76,6 @@ export const WindowFrame = ({
           }
     }
   >
-    {children}
+    <PopupBoundary box={frame}>{children}</PopupBoundary>
   </div>
 );

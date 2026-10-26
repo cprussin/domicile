@@ -21,6 +21,8 @@ screen's recorded system requests.
 - **`@domicile-desktop/test-support/lock-screen-readouts`**: the lock screen's
   recorded system requests (`packages/domicile-protocol/wire/`) and a host that
   records what a library sends.
+- **`@domicile-desktop/test-support/popup-layout`**: fakes the layout base-ui's
+  positioner reads, so a test can check where a popup lands.
 
 ## Usage
 

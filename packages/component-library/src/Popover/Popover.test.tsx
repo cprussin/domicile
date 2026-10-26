@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import {
+  drawAt,
+  drawPopups,
+  popupLeft,
+  undrawPopups,
+} from "@domicile-desktop/test-support/popup-layout";
+import {
   act,
   render,
   screen,
@@ -203,7 +209,7 @@ describe(Popover, () => {
     });
 
     describe("on a desktop of several screens", () => {
-      afterEach(undrawPanels);
+      afterEach(undrawPopups);
 
       it("stays on the screen of the trigger that opened it", async () => {
         const handle = createHandle();
@@ -238,7 +244,7 @@ describe(Popover, () => {
           x: 600,
           y: 0,
         });
-        drawPanels({ height: 100, width: 300 });
+        drawPopups("dialog", { height: 100, width: 300 });
 
         await userEvent.click(elsewhere);
 
@@ -261,7 +267,7 @@ describe(Popover, () => {
           x: 0,
           y: 0,
         });
-        drawPanels({ height: 100, width: 300 });
+        drawPopups("dialog", { height: 100, width: 300 });
 
         await userEvent.click(trigger);
 
@@ -330,68 +336,5 @@ describe(Popover, () => {
   });
 });
 
-/** Lays `element` out at `rect`, as a browser would. */
-const drawAt = (
-  element: HTMLElement,
-  rect: { height: number; width: number; x: number; y: number },
-) => {
-  element.getBoundingClientRect = () => DOMRect.fromRect(rect);
-};
-
-const unpatched = Object.getOwnPropertyDescriptors(HTMLElement.prototype);
-// Defined on `Element`, so the override on `HTMLElement` shadows it.
-const elementRect = Element.prototype.getBoundingClientRect;
-
-/**
- * Lays every panel out at `size` in a 1920px-wide page, wider than the
- * trigger's screen. The positioner measures the element around the dialog.
- */
-const drawPanels = (size: { height: number; width: number }) => {
-  const isPanel = (element: HTMLElement) =>
-    element.querySelector(":scope > [role=dialog]") !== null;
-  Object.defineProperties(document.documentElement, {
-    clientHeight: { configurable: true, value: 1080 },
-    clientWidth: { configurable: true, value: 1920 },
-  });
-  Object.defineProperties(HTMLElement.prototype, {
-    getBoundingClientRect: {
-      configurable: true,
-      value(this: HTMLElement) {
-        return isPanel(this)
-          ? DOMRect.fromRect({ ...size, x: 0, y: 0 })
-          : elementRect.call(this);
-      },
-    },
-    offsetHeight: {
-      configurable: true,
-      get(this: HTMLElement) {
-        return isPanel(this) ? size.height : 0;
-      },
-    },
-    offsetWidth: {
-      configurable: true,
-      get(this: HTMLElement) {
-        return isPanel(this) ? size.width : 0;
-      },
-    },
-  });
-};
-
-const undrawPanels = () => {
-  delete (HTMLElement.prototype as Partial<HTMLElement>).getBoundingClientRect;
-  Object.defineProperties(HTMLElement.prototype, unpatched);
-  Reflect.deleteProperty(document.documentElement, "clientHeight");
-  Reflect.deleteProperty(document.documentElement, "clientWidth");
-};
-
-/** The open panel's right edge, from the positioner's transform. */
-const panelRight = () => {
-  const transform =
-    screen.getByRole("dialog").parentElement?.style.transform ?? "";
-  const x = /translate\((-?[\d.]+)px/.exec(transform)?.[1];
-  if (x === undefined) {
-    throw new Error(`the panel is not placed: "${transform}"`);
-  } else {
-    return Number(x) + 300;
-  }
-};
+/** The open panel's right edge. Panels are drawn 300px wide. */
+const panelRight = () => popupLeft("dialog") + 300;

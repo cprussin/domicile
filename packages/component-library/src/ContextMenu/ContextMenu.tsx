@@ -8,6 +8,7 @@ import type { KeyboardEvent, ReactNode } from "react";
 import { useMemo } from "react";
 import { css } from "../../styled-system/css";
 import type { ExtendProps } from "../extend-props";
+import { usePopupBoundary } from "../PopupBoundary/PopupBoundary";
 
 /** A point in the viewport, in CSS pixels. */
 export type Point = { x: number; y: number };
@@ -29,7 +30,7 @@ type Props = ExtendProps<
  * The caller sets `open` and `at`, and hears it close (a choice, Escape or an
  * outside press) through `onOpenChange`. The press may not be in this
  * document, as with a click in a `<webview>`. The menu takes the keyboard while
- * open.
+ * open. It stays inside its `PopupBoundary`, such as its window.
  *
  * A letter chooses the first enabled item in the open menu or submenu whose
  * mnemonic it is, and opens a submenu. Other letters go to base-ui's
@@ -45,6 +46,7 @@ const ContextMenuComponent = ({ at, children, label, ...rootProps }: Props) => {
     }),
     [at.x, at.y],
   );
+  const { boundary } = usePopupBoundary(false);
   return (
     // The context menu's root, not `Menu.Root`: a `Menu.Root` with no trigger
     // closes when one of its submenus opens.
@@ -54,6 +56,7 @@ const ContextMenuComponent = ({ at, children, label, ...rootProps }: Props) => {
           align="start"
           anchor={anchor}
           className={positionerStyles}
+          collisionBoundary={boundary}
           side="bottom"
           sideOffset={0}
         >
@@ -190,31 +193,37 @@ const Submenu = ({
   label,
   mnemonic,
   ...rootProps
-}: SubmenuProps) => (
-  <BaseMenu.SubmenuRoot {...rootProps}>
-    <BaseMenu.SubmenuTrigger
-      className={itemStyles}
-      data-mnemonic={mnemonicKey(label, mnemonic)}
-      disabled={disabled}
-    >
-      <Label icon={icon} mnemonic={mnemonic}>
-        {label}
-      </Label>
-      <CaretRightIcon className={caretStyles} />
-    </BaseMenu.SubmenuTrigger>
-    <BaseMenu.Portal>
-      <BaseMenu.Positioner className={positionerStyles}>
-        <BaseMenu.Popup
-          aria-label={label}
-          className={popupStyles}
-          onKeyDown={chooseByMnemonic}
+}: SubmenuProps) => {
+  const { boundary } = usePopupBoundary(false);
+  return (
+    <BaseMenu.SubmenuRoot {...rootProps}>
+      <BaseMenu.SubmenuTrigger
+        className={itemStyles}
+        data-mnemonic={mnemonicKey(label, mnemonic)}
+        disabled={disabled}
+      >
+        <Label icon={icon} mnemonic={mnemonic}>
+          {label}
+        </Label>
+        <CaretRightIcon className={caretStyles} />
+      </BaseMenu.SubmenuTrigger>
+      <BaseMenu.Portal>
+        <BaseMenu.Positioner
+          className={positionerStyles}
+          collisionBoundary={boundary}
         >
-          {children}
-        </BaseMenu.Popup>
-      </BaseMenu.Positioner>
-    </BaseMenu.Portal>
-  </BaseMenu.SubmenuRoot>
-);
+          <BaseMenu.Popup
+            aria-label={label}
+            className={popupStyles}
+            onKeyDown={chooseByMnemonic}
+          >
+            {children}
+          </BaseMenu.Popup>
+        </BaseMenu.Positioner>
+      </BaseMenu.Portal>
+    </BaseMenu.SubmenuRoot>
+  );
+};
 
 /** A line between groups of items. */
 const Separator = () => <BaseMenu.Separator className={separatorStyles} />;
