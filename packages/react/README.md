@@ -15,6 +15,8 @@ const Focused = () => <p>{useFocusedWindow() ?? "the shell"}</p>;
 export const Shell = mount(Focused);
 ```
 
+- `./elements`: JSX types for the engine's `<app>` and `<webview>`. Load
+  them once with `/// <reference types="@domicile-desktop/react/elements" />`.
 - `./mount`: `mount(App)` is a shell's `Shell` or an app's `main`. Draws `App`
   synchronously (the page draws nothing until `Shell` returns) in an element
   of its own with `display: contents`, under `StrictMode`, an error boundary
