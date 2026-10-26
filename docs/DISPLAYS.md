@@ -266,7 +266,8 @@ set_color_temperature {kelvin}  →  domicile_host::white_point  →  domicile_d
   → NativeDisplayDelegate::SetGammaAdjustment
 ```
 
-- `kelvin` is 1000 to 6500. 6500 is neutral and clears the ramp.
+- `kelvin` is 1000 to 6500. 6500 is neutral: an identity ramp. An empty
+  curve would leave the last ramp on the CRTC.
 - A gamma ramp, not a color matrix, so it works on drivers without a CTM.
 - `DrmModeset` sets it again after each modeset, so a new monitor or a VT
   switch keeps it. The compositor sends it again after an engine restart.

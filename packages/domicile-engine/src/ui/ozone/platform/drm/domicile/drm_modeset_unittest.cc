@@ -680,8 +680,9 @@ TEST(DrmModesetTest, AWhitePointReachesEveryDisplay) {
             (std::vector<uint16_t>{65535, 32768, 16384}));
 }
 
-// Colors as they are clear the ramp rather than write an identity one.
-TEST(DrmModesetTest, ANeutralWhitePointClearsTheRamp) {
+// Colors as they are write an identity ramp: an empty curve left the last warm
+// ramp on the CRTCs.
+TEST(DrmModesetTest, ANeutralWhitePointWritesAnIdentityRamp) {
   auto owned = std::make_unique<FakeDelegate>();
   FakeDelegate* fake = owned.get();
   std::vector<std::unique_ptr<display::DisplaySnapshot>> snapshots;
@@ -696,7 +697,9 @@ TEST(DrmModesetTest, ANeutralWhitePointClearsTheRamp) {
   modeset.SetWhitePoint({.red = 1.f, .green = 1.f, .blue = 1.f});
 
   ASSERT_EQ(fake->gamma().size(), 1u);
-  EXPECT_TRUE(fake->gamma()[0].second.IsDefaultIdentity());
+  EXPECT_FALSE(fake->gamma()[0].second.IsDefaultIdentity());
+  EXPECT_EQ(WhiteOf(fake->gamma()[0].second),
+            (std::vector<uint16_t>{65535, 65535, 65535}));
 }
 
 // A resume or a console switch back can leave the CRTCs at another process's

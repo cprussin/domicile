@@ -192,13 +192,11 @@ void DrmModeset::ApplyWhitePoint() {
     return;
   }
   const DomicileWhitePoint& white = *white_point_;
-  // An empty curve clears the CRTC's ramp, where an identity ramp would keep
-  // one in the scanout path.
-  const display::GammaAdjustment adjustment =
-      white.red == 1.f && white.green == 1.f && white.blue == 1.f
-          ? display::GammaAdjustment()
-          : display::GammaAdjustment{.curve = display::GammaCurve::MakeScale(
-                                         white.red, white.green, white.blue)};
+  // Neutral is an identity ramp, not an empty curve: an empty one left the
+  // last warm ramp on the CRTCs, so the night light never turned off.
+  const display::GammaAdjustment adjustment{
+      .curve = display::GammaCurve::MakeScale(white.red, white.green,
+                                              white.blue)};
   for (const int64_t id : display_ids_) {
     delegate_->SetGammaAdjustment(id, adjustment);
   }
