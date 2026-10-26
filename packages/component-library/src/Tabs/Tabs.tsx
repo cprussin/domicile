@@ -68,14 +68,20 @@ const rootStyles = flex({
   blockSize: "100%",
   direction: "column",
   minBlockSize: 0,
+  minInlineSize: 0,
 });
 
 const listStyles = flex({
-  borderBlockEnd: "1px solid {colors.border}",
+  // The bottom line as a shadow, not a border, so the indicator can cover it
+  // without leaving the list: a list that scrolls would clip it.
+  boxShadow: "inset 0 -1px 0 {colors.border}",
   direction: "row",
   gap: 1,
+  // Tabs that don't fit scroll sideways instead of widening the page.
+  overflowX: "auto",
   // base-ui measures the indicator's offset from this element.
   position: "relative",
+  scrollbarWidth: "none",
 });
 
 const tabStyles = cva({
@@ -103,6 +109,7 @@ const tabStyles = cva({
     borderRadius: "sm",
     color: "muted",
     cursor: "pointer",
+    flex: "none",
     fontWeight: "medium",
     transition:
       "color {durations.fast} {easings.out}, background-color {durations.fast} {easings.out}",
@@ -123,8 +130,8 @@ const indicatorStyles = css({
   backgroundColor: "accent",
   blockSize: "2px",
   inlineSize: "var(--active-tab-width)",
-  // Sit on the list's 1px bottom border so the accent bar covers it.
-  insetBlockEnd: "-1px",
+  // Over the list's bottom line.
+  insetBlockEnd: 0,
   insetInlineStart: 0,
   position: "absolute",
   transform: "translateX(var(--active-tab-left))",
