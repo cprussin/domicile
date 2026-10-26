@@ -1,5 +1,5 @@
-import { useDomicile } from "@domicile-desktop/manganese-host/domicile-context";
-import { deskNetwork } from "./desk-network";
+import { useDomicile } from "@domicile-desktop/react/domicile-provider";
+import { deskNetwork } from "@domicile-desktop/system-network/react";
 import { Network as Connection } from "./Network";
 
 /** The primary network connection, whose panel shows the wired ports and controls Wi-Fi. */

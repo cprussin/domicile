@@ -1,6 +1,6 @@
 import type { Result } from "@cprussin/option-result";
 import { Ok } from "@cprussin/option-result";
-import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
+import { sharedWatch } from "@domicile-desktop/react/shared-watch";
 import { Asked } from "@domicile-desktop/system-audio/asked";
 import type {
   Audio,

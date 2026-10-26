@@ -1,16 +1,49 @@
 import { describe, expect, it } from "bun:test";
-import type { Levels } from "@domicile-desktop/system-audio/sound-server";
-
-import { heldSound, laptop } from "./fixture";
+import type { Meter } from "./audio";
+import { Meter as Meters } from "./audio";
 import { sharedMeters } from "./shared-meters";
+import type { Levels } from "./sound-server";
 
-/** `ids` with their sources from the laptop. */
-const wanted = (...ids: string[]) =>
-  new Map(ids.map((id) => [id, laptop.meters.get(id) ?? noMeter(id)] as const));
-
-const noMeter = (id: string) => {
-  throw new Error(`the laptop has no meter for ${id}`);
+/** A sound server's meters the test drives: `levels` sends, and it records what it metered. */
+const heldSound = () => {
+  const listeners: ((levels: Levels) => void)[] = [];
+  /** Each set of ids metered, in order; empty once stopped. */
+  const metered: (readonly string[])[] = [];
+  const counts = { started: 0, stopped: 0 };
+  return {
+    levels: (levels: Levels) => {
+      for (const onLevels of listeners) {
+        onLevels(levels);
+      }
+    },
+    metered,
+    server: {
+      meters: (onLevels: (levels: Levels) => void) => {
+        counts.started += 1;
+        listeners.push(onLevels);
+        return {
+          meter: (wanted: ReadonlyMap<string, Meter>) => {
+            metered.push([...wanted.keys()]);
+          },
+          stop: () => {
+            counts.stopped += 1;
+            metered.push([]);
+          },
+        };
+      },
+    },
+    get started() {
+      return counts.started;
+    },
+    get stopped() {
+      return counts.stopped;
+    },
+  };
 };
+
+/** `ids`, each metered from a source of its own. */
+const wanted = (...ids: string[]) =>
+  new Map(ids.map((id) => [id, Meters.Source(id)] as const));
 
 describe("sharedMeters", () => {
   it("meters each id once for every mixer that shows it", () => {

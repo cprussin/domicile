@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { DomicileContext } from "@domicile-desktop/manganese-host/domicile-context";
+import { DomicileProvider } from "@domicile-desktop/react/domicile-provider";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -11,11 +11,11 @@ import { KeymapOptionsContext } from "./keymap-options";
 const onADesktopTyping = async (active: string, hideDefault: boolean) => {
   const fake = new FakeDomicileHost();
   render(
-    <DomicileContext value={fake.domicile}>
+    <DomicileProvider domicile={fake.domicile}>
       <KeymapOptionsContext value={{ hideDefault }}>
         <Keymap />
       </KeymapOptionsContext>
-    </DomicileContext>,
+    </DomicileProvider>,
   );
   const say = (message: object) => {
     fake.dispatch("system", { data: JSON.stringify({ id: 1, ...message }) });

@@ -1,4 +1,4 @@
-import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
+import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
 import { colorTemperature } from "./color-temperature";
 import type { Every } from "./every";
 import type { Override } from "./night-light-override";

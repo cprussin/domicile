@@ -1,4 +1,4 @@
-import { useDomicile } from "@domicile-desktop/manganese-host/domicile-context";
+import { useDomicile } from "@domicile-desktop/react/domicile-provider";
 
 import { deskIdleInhibitor } from "./desk-idle-inhibitor";
 import { IdleInhibitorToggle } from "./IdleInhibitorToggle";

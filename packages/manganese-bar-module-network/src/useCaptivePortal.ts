@@ -1,9 +1,8 @@
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import { checkPortal } from "@domicile-desktop/system-network/portal";
+import { deskNetwork } from "@domicile-desktop/system-network/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-
-import { deskNetwork } from "./desk-network";
 import type { PortalWatch } from "./portal-sign-in";
 import { followPortals } from "./portal-sign-in";
 

@@ -1,6 +1,6 @@
-import { perHost } from "@domicile-desktop/manganese-host/per-host";
-import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
-import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
+import { perDesktop } from "@domicile-desktop/react/per-desktop";
+import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
+import { sharedWatch } from "@domicile-desktop/react/shared-watch";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 
 import type { GoogleClient } from "./consent";
@@ -27,7 +27,7 @@ export type DeskAccount = {
  * soon after a Gmail window changes. Paused while the desk is locked, which
  * refuses the reads.
  */
-export const deskInbox = perHost((domicile) => {
+export const deskInbox = perDesktop((domicile) => {
   const accounts = new Map<string, DeskAccount>();
   return (email: string, client: GoogleClient): DeskAccount => {
     const known = accounts.get(email);

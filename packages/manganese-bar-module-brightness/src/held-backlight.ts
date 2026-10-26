@@ -1,4 +1,4 @@
-import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
+import { sharedWatch } from "@domicile-desktop/react/shared-watch";
 import { act } from "@testing-library/react";
 import type { SharedBacklight } from "./shared-backlight";
 

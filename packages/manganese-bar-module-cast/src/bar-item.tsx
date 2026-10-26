@@ -1,4 +1,4 @@
-import { useDomicile } from "@domicile-desktop/manganese-host/domicile-context";
+import { useDomicile } from "@domicile-desktop/react/domicile-provider";
 import { casting, engineCast } from "@domicile-desktop/sdk/cast";
 import { miracastCast } from "@domicile-desktop/sdk/miracast";
 import { useMemo } from "react";

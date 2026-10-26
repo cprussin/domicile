@@ -1,8 +1,7 @@
 import type { AudioDevice } from "@domicile-desktop/system-audio/audio";
+import type { DeskSound } from "@domicile-desktop/system-audio/react";
 import { useEffect, useMemo } from "react";
-
 import { ask } from "./ask";
-import type { DeskSound } from "./desk-sound";
 import { primary } from "./primary";
 
 /** How far one press moves the volume. Matches the wheel over the bar's icon. */

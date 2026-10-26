@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 
-import { perHost } from "./per-host";
+import { perDesktop } from "./per-desktop";
 
-describe("perHost", () => {
+describe("perDesktop", () => {
   it("makes one value for a desktop and hands it to every caller", () => {
     const made: unknown[] = [];
-    const of = perHost((domicile) => {
+    const of = perDesktop((domicile) => {
       made.push(domicile);
       return {};
     });
@@ -17,7 +17,7 @@ describe("perHost", () => {
   });
 
   it("makes a separate value for each desktop", () => {
-    const of = perHost(() => ({}));
+    const of = perDesktop(() => ({}));
 
     expect(of(new FakeDomicileHost().domicile)).not.toBe(
       of(new FakeDomicileHost().domicile),

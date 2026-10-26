@@ -1,6 +1,9 @@
 import { useBar } from "@domicile-desktop/manganese-bar/bar-context";
-import { useDomicile } from "@domicile-desktop/manganese-host/domicile-context";
-import { deskSound, deskSoundHardware } from "./desk-sound";
+import { useDomicile } from "@domicile-desktop/react/domicile-provider";
+import {
+  deskSound,
+  deskSoundHardware,
+} from "@domicile-desktop/system-audio/react";
 import { Volume as Control } from "./Volume";
 
 /**

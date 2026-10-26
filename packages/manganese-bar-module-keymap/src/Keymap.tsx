@@ -3,8 +3,8 @@ import {
   RadioRow,
 } from "@domicile-desktop/component-library/ChoiceRow";
 import { Popover } from "@domicile-desktop/component-library/Popover";
-import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
-import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
+import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
+import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
 import type { Keymaps } from "@domicile-desktop/sdk/keymap-choice";
 import { KeyboardIcon } from "@phosphor-icons/react/dist/ssr/Keyboard";
 import { useState } from "react";

@@ -4,7 +4,7 @@
 
 import type { Result } from "@cprussin/option-result";
 import { Err, Ok } from "@cprussin/option-result";
-import { perHost } from "@domicile-desktop/manganese-host/per-host";
+import { perDesktop } from "@domicile-desktop/react/per-desktop";
 import type { Displays } from "@domicile-desktop/sdk/desktop/displays";
 import type { SystemError, VirtualMonitor } from "@domicile-desktop/sdk/system";
 
@@ -62,6 +62,6 @@ export const virtualMonitors = (
 };
 
 /** The desk's virtual monitors, shared by every caller. */
-export const deskVirtualMonitors = perHost((domicile) =>
+export const deskVirtualMonitors = perDesktop((domicile) =>
   virtualMonitors(domicile.displays),
 );

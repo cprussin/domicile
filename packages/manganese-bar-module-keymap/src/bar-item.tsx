@@ -1,4 +1,4 @@
-import { useDomicile } from "@domicile-desktop/manganese-host/domicile-context";
+import { useDomicile } from "@domicile-desktop/react/domicile-provider";
 import { KeymapChoice } from "@domicile-desktop/sdk/keymap-choice";
 import { use, useCallback } from "react";
 

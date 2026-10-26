@@ -45,6 +45,19 @@ meters.meter(new Map([[id, audio.meters.get(id)]]));
 | `./audio-error` | `AudioError`: why a request was refused. |
 | `./asked` | `Asked`: what became of a request. |
 
+## React
+
+`@domicile-desktop/system-audio/react`, for a shell on
+[`@domicile-desktop/react`](../react/README.md):
+
+- `useAudio()`: the devices and streams, `undefined` until `pactl` answers.
+- `useHasSoundCard()`: whether `/sys` lists a sound card, looked at every
+  10s.
+- `deskSound(domicile)`: the shared `audio` watch and the `sound` requests,
+  one per desktop. Its `meters` are shared among open mixers by id
+  (`sharedMeters`), so a device shown twice is recorded once.
+- `deskSoundHardware(domicile)`: the watch behind `useHasSoundCard`.
+
 ## Test
 
 ```sh

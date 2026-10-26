@@ -7,13 +7,14 @@ The page reads both itself through libraries, as it does the battery; see
 ## One watch per desk
 
 - The battery, backlight, sound, network and Bluetooth watches are made once
-  per desktop (`perHost`, `@domicile-desktop/manganese-host/per-host`), each
-  in its bar module: `deskBattery`, `deskBacklight`, `deskSound`,
-  `deskNetwork`, `deskBluetooth`. Every bar and the lock screen read the same
-  ones.
-- Each is a `sharedWatch` (`@domicile-desktop/manganese-host/shared-watch`): the first reader
-  starts the library's watch, the last one stops it, and a late reader gets
-  the current value. Components read it with `useSharedWatch`.
+  per desktop (`perDesktop`, `@domicile-desktop/react/per-desktop`):
+  `deskBattery`, `deskSound`, `deskNetwork` and `deskBluetooth` in their
+  `system-*` package's `/react`, and `deskBacklight` in the brightness module.
+  Every bar and the lock screen read the same ones.
+- Each is a `sharedWatch` (`@domicile-desktop/react/shared-watch`): the first
+  reader starts the library's watch, the last one stops it, and a late reader
+  gets the current value. Components read it with `useSharedWatch`
+  (`@domicile-desktop/react/use-shared-watch`).
 - The desktop also holds the sound and backlight watches for the volume and
   brightness keys (`useVolumeKeys`, `useBrightnessKeys`), so those two run
   whether or not a bar shows them.
@@ -47,7 +48,7 @@ The page reads both itself through libraries, as it does the battery; see
 - Holds `pactl -f json subscribe` open and rereads `pactl -f json info` and
   `list` once a burst of changes settles.
 - **Meters**: one `parec` per metered device or stream, only while a mixer
-  shows it. Mixers on several bars share it (`manganese-bar-module-volume/src/shared-meters.ts`).
+  shows it. Mixers on several bars share it (`system-audio/src/shared-meters.ts`).
   It stops when the last mixer showing it closes or the page goes away.
 - `pactl` and `parec` come from the compositor's `PATH`. The flake's wrapper
   adds PulseAudio's.

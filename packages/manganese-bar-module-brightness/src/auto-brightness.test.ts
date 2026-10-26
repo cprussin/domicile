@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
+import { sharedWatch } from "@domicile-desktop/react/shared-watch";
 import type { OffsetStore } from "./auto-brightness";
 import { runAutoBrightness } from "./auto-brightness";
 import { brightnessFor } from "./auto-brightness-curve";

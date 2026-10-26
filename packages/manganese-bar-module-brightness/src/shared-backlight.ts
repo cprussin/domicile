@@ -1,5 +1,5 @@
-import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
-import { sharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
+import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
+import { sharedWatch } from "@domicile-desktop/react/shared-watch";
 
 import type { Backlight } from "./host-backlight";
 

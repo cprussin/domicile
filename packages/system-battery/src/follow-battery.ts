@@ -1,8 +1,8 @@
 import type { Option } from "@cprussin/option-result";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { Listening } from "@domicile-desktop/sdk/system";
-import type { Battery } from "@domicile-desktop/system-battery/battery";
-import { watchBattery as watchUPower } from "@domicile-desktop/system-battery/battery";
+import type { Battery } from "./battery";
+import { watchBattery as watchUPower } from "./battery";
 
 /** Injectable so tests can drive their own library and see failures. */
 type Dependencies = {
@@ -14,7 +14,7 @@ type Dependencies = {
  * Watches the battery through UPower: calls `onReading` with the current
  * reading and each change, and returns a function that stops watching.
  */
-export const watchBattery = (
+export const followBattery = (
   domicile: Domicile,
   onReading: (reading: Option<Battery>) => void,
   { fail = logFailure, watch = watchUPower }: Dependencies = {},
@@ -80,5 +80,5 @@ const failed = (fail: (error: unknown) => void, error: unknown) => {
 
 const logFailure = (error: unknown) => {
   // biome-ignore lint/suspicious/noConsole: the bar shows no battery, and this says why
-  console.error("manganese: no battery reading", error);
+  console.error("system-battery: no battery reading", error);
 };

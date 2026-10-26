@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "@cprussin/option-result": "catalog:",
+    "@domicile-desktop/react": "workspace:*",
     "@domicile-desktop/sdk": "workspace:*",
     "zod": "catalog:"
   },
@@ -8,6 +9,8 @@
   "devDependencies": {
     "@cprussin/tsconfig": "catalog:",
     "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "react": "catalog:",
     "typescript": "catalog:"
   },
   "engines": {
@@ -42,6 +45,10 @@
     "./wpa-supplicant": {
       "types": "./dist/wpa-supplicant.d.ts",
       "default": "./dist/wpa-supplicant.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "default": "./dist/react.js"
     }
   },
   "files": [
@@ -49,6 +56,9 @@
   ],
   "license": "MIT",
   "name": "@domicile-desktop/system-network",
+  "peerDependencies": {
+    "react": "catalog:"
+  },
   "private": false,
   "publishConfig": {
     "access": "public"

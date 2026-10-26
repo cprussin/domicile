@@ -1,9 +1,9 @@
 import type { Result } from "@cprussin/option-result";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
-import type { SharedWatch } from "@domicile-desktop/manganese-host/shared-watch";
-import { useSharedWatch } from "@domicile-desktop/manganese-host/useSharedWatch";
-import { isAbsent } from "@domicile-desktop/manganese-host/watch-presence";
+import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
+import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
+import { isAbsent } from "@domicile-desktop/react/watch-presence";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import type {

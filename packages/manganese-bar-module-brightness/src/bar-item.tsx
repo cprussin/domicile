@@ -1,4 +1,4 @@
-import { useDomicile } from "@domicile-desktop/manganese-host/domicile-context";
+import { useDomicile } from "@domicile-desktop/react/domicile-provider";
 import { Brightness as Level } from "./Brightness";
 import { deskBacklight, deskBacklightHardware } from "./desk-backlight";
 import { deskNightLight } from "./desk-night-light";
