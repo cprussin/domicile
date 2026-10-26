@@ -1,3 +1,5 @@
+/// <reference types="@domicile-desktop/react/elements" />
+
 // A minimal shell: one `<app>` per client the host announces, moved and resized
 // with Alt, and a terminal on Alt+Enter.
 
@@ -18,23 +20,6 @@ import {
   useRef,
   useState,
 } from "react";
-
-// `<app>` is the engine's tag. It has no hyphen, so it is not a custom element
-// and React has no JSX type for it. The focus event is not declared: React
-// treats a hyphenless tag as plain HTML and sets no `on…` prop for an unknown
-// event.
-declare module "react" {
-  // biome-ignore lint/style/noNamespace: React declares its JSX types as a namespace; augmenting IntrinsicElements has to match that shape
-  namespace JSX {
-    // biome-ignore lint/style/useConsistentTypeDefinitions: declaration merging into IntrinsicElements requires an interface
-    interface IntrinsicElements {
-      /** A Wayland client's window. `app-id` is the host's name for it. */
-      app: DetailedHTMLProps<HTMLAttributes<HTMLAppElement>, HTMLAppElement> & {
-        "app-id": string;
-      };
-    }
-  }
-}
 
 /** Offset between cascaded windows, and how many before the cascade wraps. */
 const CASCADE_STEP = 32;
