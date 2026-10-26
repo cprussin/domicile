@@ -11,8 +11,12 @@ use smithay::reexports::{
     },
     wayland_server::{protocol::wl_surface::WlSurface, Resource as _},
 };
-use smithay::wayland::{idle_inhibit::IdleInhibitHandler, shell::xdg::ToplevelSurface};
-use tracing::debug;
+use smithay::wayland::{
+    compositor::with_states,
+    idle_inhibit::IdleInhibitHandler,
+    shell::xdg::{ToplevelSurface, XdgToplevelSurfaceData},
+};
+use tracing::{debug, info};
 
 use crate::client_requests::ClientRequest;
 use crate::idle::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
@@ -53,13 +57,30 @@ impl DomicileCompositor {
     /// All input passes through the page and arrives here.
     /// [`crate::idle::somebody_is_here`] decides which requests count.
     pub fn keep_the_desktop_awake(&mut self, request: &ClientRequest) {
-        if !somebody_is_here(request) {
+        let Some(input) = somebody_is_here(request) else {
             return;
-        }
+        };
         let Some(idle) = self.idle.as_mut() else {
             return;
         };
-        match idle.stirred(Instant::now()) {
+        let now = Instant::now();
+        // Logging each restart would flood the journal; one that held off a
+        // close blank or lock shows what keeps a desk from going idle.
+        let still = idle.still_for(now);
+        if idle.worth_noting(still) {
+            // The browser names its own input, and the device it came from.
+            let detail = match request {
+                ClientRequest::Activity { input } => input.as_deref(),
+                _ => None,
+            };
+            info!(
+                input,
+                detail,
+                still_seconds = still.as_secs_f32(),
+                "input restarts the idle clock"
+            );
+        }
+        match idle.stirred(now) {
             Some(Blanking::ComeBack) => {
                 debug!("somebody is at this desktop again; its screens come back on");
                 self.tell_the_chromes_whether_anybody_is_here();
@@ -219,16 +240,21 @@ impl DomicileCompositor {
         };
         let edge = idle.inhibited_by(surface, Instant::now(), &on_the_desktop);
         self.the_inhibitors_changed(edge, "a client is holding this desktop awake");
+        self.tell_the_shells_what_holds_the_desktop_awake();
     }
 
-    /// Whether an application holds an idle inhibitor through the portal.
-    pub fn held_awake_by_the_portal(&mut self, held: bool) {
+    /// The applications holding idle inhibitors through the portal, one name
+    /// per inhibitor.
+    pub fn held_awake_by_the_portal(&mut self, by: Vec<String>) {
+        let held = !by.is_empty();
+        self.held_by_portal_apps = by;
         let on_the_desktop = self.surfaces_on_the_desktop();
         let Some(idle) = self.idle.as_mut() else {
             return;
         };
         let edge = idle.held_by_portals(held, Instant::now(), &on_the_desktop);
         self.the_inhibitors_changed(edge, "an application's portal inhibitor changed");
+        self.tell_the_shells_what_holds_the_desktop_awake();
     }
 
     /// A client released an idle inhibitor.
@@ -239,6 +265,7 @@ impl DomicileCompositor {
         };
         let edge = idle.uninhibited_by(surface, Instant::now(), &on_the_desktop);
         self.the_inhibitors_changed(edge, "nothing is holding this desktop awake now");
+        self.tell_the_shells_what_holds_the_desktop_awake();
     }
 
     /// Release inhibitors held by dead clients.
@@ -257,8 +284,15 @@ impl DomicileCompositor {
         let Some(idle) = self.idle.as_mut() else {
             return;
         };
+        let held = idle.inhibitors();
         let edge = idle.the_dead_let_go(Instant::now(), || desktop_surfaces(toplevels));
+        let let_go = idle.inhibitors() != held;
         self.the_inhibitors_changed(edge, "the client holding this desktop awake is gone");
+        // Listing the holders after every dispatch would cost a window list
+        // each time, so only when one went.
+        if let_go {
+            self.tell_the_shells_what_holds_the_desktop_awake();
+        }
     }
 
     /// Re-evaluate inhibitors after the windows changed.
@@ -272,6 +306,28 @@ impl DomicileCompositor {
         };
         let edge = idle.the_desktop_changed(Instant::now(), &on_the_desktop);
         self.the_inhibitors_changed(edge, why);
+        self.tell_the_shells_what_holds_the_desktop_awake();
+    }
+
+    /// Tell the shells what holds the desktop awake, and log it when that
+    /// changes. See `domicile_host::idle_holds`.
+    ///
+    /// The Wayland inhibitors holding are named by their window's app id, and
+    /// the portal's by the application holding each.
+    pub fn tell_the_shells_what_holds_the_desktop_awake(&self) {
+        let on_the_desktop = self.surfaces_on_the_desktop();
+        // Without a timeout there is nothing to hold off.
+        let holders: Vec<String> = match &self.idle {
+            Some(idle) => idle
+                .holding(&on_the_desktop)
+                .map(|surface| window_name(&self.toplevels, surface))
+                .chain(self.held_by_portal_apps.iter().cloned())
+                .collect(),
+            None => Vec::new(),
+        };
+        if self.hub.idle_holds.hold(holders.clone()) {
+            info!(?holders, "what holds this desktop awake changed");
+        }
     }
 
     /// Act on an inhibitor state change, logging `why`.
@@ -304,6 +360,22 @@ impl DomicileCompositor {
     pub fn surfaces_on_the_desktop(&self) -> Vec<WlSurface> {
         desktop_surfaces(&self.toplevels)
     }
+}
+
+/// The app id of the window on `surface`, or its id in this compositor for a
+/// client that set none.
+fn window_name(toplevels: &[(String, ToplevelSurface)], surface: &WlSurface) -> String {
+    let (id, toplevel) = toplevels
+        .iter()
+        .find(|(_, toplevel)| toplevel.wl_surface() == surface)
+        .expect("an inhibitor holds only on a window");
+    with_states(toplevel.wl_surface(), |states| {
+        states
+            .data_map
+            .get::<XdgToplevelSurfaceData>()
+            .and_then(|data| data.lock().unwrap().app_id.clone())
+    })
+    .unwrap_or_else(|| id.clone())
 }
 
 /// Every surface of `toplevels`.

@@ -168,6 +168,8 @@ source_set("domicile") {
     "//ui/display",
     # The pointer moves `StartDeskPointer` reports.
     "//ui/events",
+    # Names the device an input came from, for the idle clock's log.
+    "//ui/events/devices",
     # `gfx::NativeView`, which `display::Screen::GetDisplayNearestView` takes.
     "//ui/gfx:native_ui_types",
     # One page for the desk: its geometry, and a presenter window per extra

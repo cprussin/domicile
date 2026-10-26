@@ -746,9 +746,11 @@ void ControlChannel::DeliverModifiers(Modifiers modifiers) {
   }
 }
 
-void ControlChannel::SomebodyIsHere() {
+void ControlChannel::SomebodyIsHere(const std::string& input) {
   if (connected_) {
-    SendMessage(Typed("activity"));
+    base::DictValue message = Typed("activity");
+    message.Set("input", input);
+    SendMessage(std::move(message));
   }
 }
 

@@ -234,9 +234,9 @@ impl Portals {
         self.backends.pictures.listen(publish);
     }
 
-    /// Call `hold` with whether any application's idle inhibitor is held, on
-    /// each change.
-    pub fn hold_idle_through(&self, hold: impl Fn(bool) + Send + Sync + 'static) {
+    /// Call `hold` with the applications holding idle inhibitors, one name
+    /// per inhibitor, on each change.
+    pub fn hold_idle_through(&self, hold: impl Fn(Vec<String>) + Send + Sync + 'static) {
         self.backends.inhibitors.hold_idle_through(hold);
     }
 
@@ -1638,7 +1638,10 @@ mod tests {
             }]
         );
         assert_eq!(next(&served.published), []);
-        assert_eq!(held.try_iter().collect::<Vec<_>>(), [true, false]);
+        assert_eq!(
+            held.try_iter().collect::<Vec<_>>(),
+            [vec!["org.example.Editor".to_string()], vec![]]
+        );
     }
 
     /// Open a monitor at `session`.

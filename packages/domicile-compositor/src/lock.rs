@@ -386,7 +386,7 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             // From an application, like a Wayland idle inhibitor.
             | ClientRequest::HeldAwakeByThePortal { .. }
             // Reaches no client; it only stirs the idle clock.
-            | ClientRequest::Activity
+            | ClientRequest::Activity { .. }
             // Reaches no client; a cast of the lock screen draws it.
             | ClientRequest::DeskPointer { .. }
             | ClientRequest::DeskCursor { .. }
@@ -993,7 +993,10 @@ mod tests {
                 "the shell locking a desk already locked",
                 ClientRequest::Lock,
             ),
-            ("a key on the lock screen", ClientRequest::Activity),
+            (
+                "a key on the lock screen",
+                ClientRequest::Activity { input: None },
+            ),
             (
                 "the pointer moving over the lock screen",
                 ClientRequest::DeskPointer {

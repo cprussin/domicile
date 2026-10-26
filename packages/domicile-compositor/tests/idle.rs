@@ -165,6 +165,42 @@ fn a_film_holds_the_screens_on_until_the_client_playing_it_is_gone() {
     compositor.wait_for_log("this desktop's screens go dark");
 }
 
+/// A page listening hears the window holding the desktop awake by its app id,
+/// and hears nothing holds once the client is gone.
+#[test]
+fn a_page_hears_which_window_holds_the_desktop_awake() {
+    let compositor = Compositor::started_with(A_DESK_THAT_BLANKS);
+    let mut chrome = compositor.chrome();
+    chrome
+        .say(&ChromeMessage::SystemRequest {
+            id: 1,
+            request: SystemRequest::IdleHolds,
+        })
+        .expect("the chrome socket takes a system call");
+    let holders = |holders: &[&str]| {
+        let holders: Vec<String> = holders.iter().map(|name| name.to_string()).collect();
+        move |message: &HostMessage| {
+            matches!(
+                message,
+                HostMessage::SystemEvent {
+                    id: 1,
+                    event: SystemEvent::IdleHolds { holders: heard },
+                } if *heard == holders
+            )
+        }
+    };
+
+    let film = compositor.client_with("film", &["--hold-the-screens-on"]);
+    chrome
+        .wait_for(holders(&["dev.domicile.test-client"]))
+        .expect("the page hears the film hold the desktop awake");
+
+    drop(film);
+    chrome
+        .wait_for(holders(&[]))
+        .expect("the page hears nothing holds once the film is gone");
+}
+
 /// An inhibitor on a surface with no role takes effect when the surface
 /// becomes a window.
 ///

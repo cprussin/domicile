@@ -243,7 +243,12 @@ pub enum ChromeMessage {
     /// The browser sends it for its own input, at most every 200 ms. Input to
     /// a browser window or the shell's page reaches the compositor no other
     /// way, and the idle clock must hear it.
-    Activity,
+    Activity {
+        /// What the input was, for the log: the event, and the device it came
+        /// from when known, e.g. `"MouseMoved from Logitech USB Receiver"`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        input: Option<String>,
+    },
 
     /// Where the pointer is on the desk, in the shell page's CSS pixels,
     /// which are the desktop's logical pixels, or `None` off it, and each
@@ -1852,6 +1857,11 @@ pub enum SystemRequest {
     /// [`SystemEvent::Keymaps`] at once and on each change.
     /// [`SystemRequest::Unwatch`] ends it.
     Keymaps,
+    /// Report what holds the desktop awake: the idle inhibitors that keep the
+    /// screens from blanking and the desktop from locking. Answered with
+    /// [`SystemReply::Started`], then a [`SystemEvent::IdleHolds`] at once and
+    /// on each change. [`SystemRequest::Unwatch`] ends it. See `docs/IDLE.md`.
+    IdleHolds,
     /// Switch every keyboard to `keymap`, one of `input.keyboard`'s keymaps.
     /// Answered with [`SystemReply::Set`], or [`SystemErrorKind::NotFound`]
     /// for a name the config does not have. Lasts until the desktop restarts.
@@ -2035,6 +2045,10 @@ pub enum SystemEvent {
         keymaps: Vec<ListedKeymap>,
         active: String,
     },
+    /// What holds the desktop awake, one name per idle inhibitor: the
+    /// window's app id for a Wayland inhibitor, the application for a portal
+    /// one. Empty when nothing does.
+    IdleHolds { holders: Vec<String> },
     /// A D-Bus signal a match named, its body written as
     /// [`SystemReply::Returned`]'s is.
     Signal {

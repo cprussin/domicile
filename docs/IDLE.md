@@ -109,6 +109,33 @@ A shell holds one the same way: `dbusCall` to
 `org.freedesktop.portal.Inhibit.Inhibit`, and `Request.Close` on the returned
 handle to let go. Manganese's idle inhibitor bar item does this.
 
+### What holds the desktop awake
+
+- **`SystemRequest::IdleHolds` streams the holders**, as names. Each
+  `SystemEvent::IdleHolds` carries the full list, at once and on each change.
+  - A Wayland inhibitor is named by its window's app id, and only while it
+    holds.
+  - A portal inhibitor is named by its app id, or, for an unsandboxed
+    application, its process name (`/proc/<pid>/comm`). A shell page's own
+    hold is `domicile`.
+  - A desktop with no timeout lists none.
+- Manganese's eye opens while anything holds, and names the holders in its
+  tooltip.
+- Each change is logged at info, `what holds this desktop awake changed`.
+
+### Finding what keeps a desktop awake
+
+Input that restarts the clock after the desktop sat still for half its shortest
+timeout is logged at info, `input restarts the idle clock`, with what it was
+and how long the desktop had been still. For the browser's own input,
+`detail` names the event and the device, e.g. `MouseMoved from Logitech USB
+Receiver`. Where the compositor logs to the
+journal, read both lines with:
+
+```sh
+journalctl -b --grep 'idle clock|holds this desktop'
+```
+
 - **No new protocol:** the portal already reaches `crate::idle`.
 - **A reload lets go:** each page has its own D-Bus connection, which closes
   with the page, and xdg-desktop-portal closes the requests of a caller that
