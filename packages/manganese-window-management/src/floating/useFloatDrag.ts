@@ -23,8 +23,12 @@ type Drag = {
   from: { x: number; y: number };
   onDrop: () => void;
   onMove: (x: number, y: number) => void;
+  onPull: () => void;
   onResize: (box: Rect) => void;
 };
+
+/** The running drag's state, for its cursor. */
+type Held = { corner: Corner | undefined; pulled: boolean };
 
 /** The secondary button, which resizes without a second modifier. */
 const SECONDARY_BUTTON = 2;
@@ -43,9 +47,9 @@ export type Aimer = {
 export type FloatDrag = {
   /**
    * The running drag, if any, with the corner it resizes from (`undefined`
-   * for a move).
+   * for a move) and whether a move has been pulled.
    */
-  drag: { corner: Corner | undefined } | undefined;
+  drag: Held | undefined;
   /** Suppresses the context menu, since the right button resizes. */
   onContextMenu: (event: { preventDefault: () => void }) => void;
   onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
@@ -65,6 +69,8 @@ type Options = {
   /** The window was taken hold of, to resize it or else to move it. */
   onGrab: (resizing: boolean) => void;
   onMove: (x: number, y: number) => void;
+  /** A move first moved the window. Once per drag. */
+  onPull: () => void;
   /** The whole box, since dragging a top or left corner moves it too. */
   onResize: (box: Rect) => void;
   /**
@@ -96,15 +102,14 @@ export const useFloatDrag = ({
   onDrop,
   onGrab,
   onMove,
+  onPull,
   onResize,
   resizes,
 }: Options): FloatDrag => {
   // Stops the running drag without dropping it, so a second press (another
   // button) can take over.
   const running = useRef<(() => void) | undefined>(undefined);
-  const [drag, setDrag] = useState<{ corner: Corner | undefined } | undefined>(
-    undefined,
-  );
+  const [drag, setDrag] = useState<Held | undefined>(undefined);
 
   return {
     drag,
@@ -131,6 +136,10 @@ export const useFloatDrag = ({
             from: { x: event.clientX, y: event.clientY },
             onDrop,
             onMove,
+            onPull: () => {
+              setDrag({ corner, pulled: true });
+              onPull();
+            },
             onResize,
           },
           () => {
@@ -138,7 +147,7 @@ export const useFloatDrag = ({
             setDrag(undefined);
           },
         );
-        setDrag({ corner });
+        setDrag({ corner, pulled: false });
         onGrab(corner !== undefined);
       }
     },
@@ -155,10 +164,16 @@ export const useFloatDrag = ({
 const follow = (drag: Drag, ended: () => void): (() => void) => {
   // Mutable: the aim changes with every move, and the release reads it.
   let aim: Aim | undefined;
+  // Whether a move has moved the window yet.
+  let pulled = false;
   const moved = (event: PointerEvent) => {
     const dx = event.clientX - drag.from.x;
     const dy = event.clientY - drag.from.y;
     if (drag.corner === undefined) {
+      if (!pulled) {
+        pulled = true;
+        drag.onPull();
+      }
       drag.onMove(drag.box.x + dx, drag.box.y + dy);
       const now = drag.aimer?.at(event.clientX, event.clientY);
       // Report only changes, to avoid a redraw on every move.

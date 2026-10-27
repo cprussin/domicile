@@ -48,6 +48,8 @@ type Props = {
   onMotionEnded: () => void;
   onGrab: () => void;
   onMove: (x: number, y: number) => void;
+  /** A move of the window was pulled. See `useTileDrag`. */
+  onPull: () => void;
   /**
    * Where the bar is drawn. Taken from the placement, not the float, which a
    * fullscreen window does not use.
@@ -97,6 +99,7 @@ export const WindowTitleBar = ({
   onGrab,
   onMotionEnded,
   onMove,
+  onPull,
   rect,
   restack,
   strip,
@@ -116,6 +119,7 @@ export const WindowTitleBar = ({
     onDrop,
     onGrab,
     onMove,
+    onPull,
     onResize: doesNotResize,
     resizes: false,
   });
@@ -126,6 +130,7 @@ export const WindowTitleBar = ({
     onDrop,
     onDropOn,
     onGrab,
+    onPull,
     onStretch: doesNotStretch,
     resizes: false,
     targets,
@@ -139,6 +144,10 @@ export const WindowTitleBar = ({
       focus={focus}
       frame={frame}
       fullscreen={fullscreen}
+      // Only one of the two drags runs at a time.
+      grabbing={
+        floatDrag.drag?.pulled === true || tileDrag.drag?.pulled === true
+      }
       hanging={float?.scratchpad === true}
       icon={icon}
       motion={motion}

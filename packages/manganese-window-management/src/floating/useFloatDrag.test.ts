@@ -53,6 +53,7 @@ const dragging = (resizes = false) => {
     onDrop: mock(() => undefined),
     onGrab: mock(() => undefined),
     onMove: mock(() => undefined),
+    onPull: mock(() => undefined),
     onResize: mock(() => undefined),
   };
   const { rerender, result, unmount } = renderHook(
@@ -70,6 +71,21 @@ const dragging = (resizes = false) => {
 
 describe("useFloatDrag", () => {
   describe("moving", () => {
+    // The shell shows a grabbing pointer from then on, so a click shows none.
+    it("is pulled once the pointer first moves it", () => {
+      const { calls, grab, result } = dragging();
+      grab();
+      expect(calls.onPull).not.toHaveBeenCalled();
+      expect(result.current.drag).toEqual({ corner: undefined, pulled: false });
+
+      act(() => {
+        moveTo(1, 0);
+        moveTo(2, 0);
+      });
+      expect(calls.onPull).toHaveBeenCalledTimes(1);
+      expect(result.current.drag).toEqual({ corner: undefined, pulled: true });
+    });
+
     it("moves the window by the pointer's delta", () => {
       const { calls, grab } = dragging();
       grab();
@@ -178,6 +194,7 @@ describe("useFloatDrag", () => {
       grab(...BOTTOM_RIGHT);
       expect(result.current.drag).toStrictEqual({
         corner: { horizontal: Direction.Right, vertical: Direction.Down },
+        pulled: false,
       });
     });
   });
@@ -319,6 +336,7 @@ describe("useFloatDrag", () => {
           onDrop: () => undefined,
           onGrab: () => undefined,
           onMove: () => undefined,
+          onPull: () => undefined,
           onResize: () => undefined,
           resizes: false,
         }),

@@ -44,15 +44,26 @@ describe("useGrabCursor", () => {
     // The window moves under the pointer as it is resized, so the quarter the
     // pointer is over now says nothing about which corner is being dragged.
     const { hoverAt, result } = rendered({
-      drag: { corner: TOP_RIGHT },
+      drag: { corner: TOP_RIGHT, pulled: false },
       resizes: true,
     });
     hoverAt(110, 290);
     expect(result.current.cursor).toBe(GrabCursor.ResizeNesw);
   });
 
-  it("grabs while a move runs, even with Shift pressed since", () => {
-    const { result } = rendered({ drag: { corner: undefined }, resizes: true });
+  it("grabs once a move is pulled, even with Shift pressed since", () => {
+    const { rerender, result } = rendered({
+      drag: { corner: undefined, pulled: false },
+      resizes: true,
+    });
+    // A click moves nothing, so it shows no grabbing pointer.
+    expect(result.current.cursor).toBe(GrabCursor.Move);
+
+    rerender({
+      drag: { corner: undefined, pulled: true },
+      frame: FRAME,
+      resizes: true,
+    });
     expect(result.current.cursor).toBe(GrabCursor.Grabbing);
   });
 });
