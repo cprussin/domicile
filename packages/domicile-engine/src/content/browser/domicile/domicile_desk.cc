@@ -145,6 +145,11 @@ std::optional<display::ScreenInfos> DomicileDeskScreenInfosFor(
   return std::nullopt;
 }
 
+display::ScreenInfos DomicileFrameScreenInfos(display::ScreenInfos parent,
+                                              const gfx::Rect& bounds) {
+  return domicile::FrameScreenInfos(std::move(parent), bounds);
+}
+
 void SetDomicileDeskPageBounds(gfx::NativeWindow window,
                                std::optional<gfx::Rect> bounds) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
