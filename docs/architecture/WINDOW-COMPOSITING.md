@@ -342,7 +342,10 @@ a memfd of the window's (`memory_frames.rs`) and imports it with
 - The whole frame is copied, since each memfd misses the frames shown from the
   others. A 1080p frame is 8 MB.
 - The browser refuses a window in memory while it composites on the GPU.
-- Casts read dmabufs, so they miss these windows.
+- The compositor advertises no `zwp_linux_dmabuf_v1`, so GL clients fall back
+  to `wl_shm` too.
+- Window casts read dmabufs, so they miss these windows. Monitor casts read
+  the engine's display capture and show them.
 
 ### Damage
 
