@@ -3,13 +3,14 @@
 //!
 //! A page's connection numbers each one ([`VirtualMonitors::add`]) and queues
 //! a [`ClientRequest::AddVirtualMonitor`]. Its lease queues
-//! [`ClientRequest::RemoveVirtualMonitor`] when the page stops or goes away.
+//! [`ClientRequest::RemoveVirtualMonitor`] when the page stops or goes away,
+//! and [`ClientRequest::ResizeVirtualMonitor`] when the page resizes it.
 //! The Wayland thread keeps the list and tells the engine; the engine's next
 //! display report puts each on the desk (`Screens::extended_onto`).
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-use domicile_host::system::{AddedMonitor, VirtualMonitor};
+use domicile_host::system::{AddedMonitor, MonitorLease, VirtualMonitor};
 use domicile_protocol::{SystemError, SystemErrorKind};
 
 use crate::client_requests::ClientRequest;
@@ -86,10 +87,38 @@ impl DomicileCompositor {
     }
 }
 
-/// Removes its monitor when dropped.
+/// Resizes `id` in `displays`, keeping its place and name. False if it is
+/// gone.
+pub fn resize(
+    displays: &mut [VirtualDisplay],
+    id: i64,
+    mode: (u32, u32),
+    refresh_mhz: u32,
+) -> bool {
+    match displays.iter_mut().find(|display| display.id == id) {
+        Some(display) => {
+            display.mode = mode;
+            display.refresh_mhz = refresh_mhz;
+            true
+        }
+        None => false,
+    }
+}
+
+/// Resizes its monitor, and removes it when dropped.
 struct Lease {
     id: i64,
     send: Box<dyn Fn(ClientRequest) + Send>,
+}
+
+impl MonitorLease for Lease {
+    fn resize(&self, size: (u32, u32), refresh_mhz: u32) {
+        (self.send)(ClientRequest::ResizeVirtualMonitor {
+            id: self.id,
+            mode: size,
+            refresh_mhz,
+        });
+    }
 }
 
 impl Drop for Lease {
@@ -152,6 +181,70 @@ mod tests {
                 id: VirtualDisplay::id_of(1),
             }
         );
+    }
+
+    #[test]
+    fn a_lease_resizes_its_own_monitor() {
+        let monitors = extendable();
+        let (send, queued) = queue();
+        let added = monitors.add(a_tv(), send).expect("the desk extends");
+        queued.try_recv().unwrap();
+
+        added.lease.resize((1280, 720), 30_000);
+
+        assert_eq!(
+            queued.try_recv().unwrap(),
+            ClientRequest::ResizeVirtualMonitor {
+                id: VirtualDisplay::id_of(1),
+                mode: (1280, 720),
+                refresh_mhz: 30_000,
+            }
+        );
+    }
+
+    fn a_display(number: u32, mode: (u32, u32)) -> VirtualDisplay {
+        VirtualDisplay {
+            id: VirtualDisplay::id_of(number),
+            mode,
+            refresh_mhz: 60_000,
+            name: "Pane".into(),
+        }
+    }
+
+    #[test]
+    fn a_resize_changes_only_its_own_display() {
+        let mut displays = vec![a_display(1, (800, 600)), a_display(2, (640, 480))];
+
+        assert!(resize(
+            &mut displays,
+            VirtualDisplay::id_of(2),
+            (1024, 768),
+            30_000
+        ));
+
+        assert_eq!(displays[0], a_display(1, (800, 600)));
+        assert_eq!(
+            displays[1],
+            VirtualDisplay {
+                refresh_mhz: 30_000,
+                ..a_display(2, (1024, 768))
+            }
+        );
+    }
+
+    #[test]
+    fn a_resize_of_a_removed_display_changes_nothing() {
+        // The page let go of it while the resize was queued.
+        let mut displays = vec![a_display(1, (800, 600))];
+
+        assert!(!resize(
+            &mut displays,
+            VirtualDisplay::id_of(2),
+            (1024, 768),
+            30_000
+        ));
+
+        assert_eq!(displays, vec![a_display(1, (800, 600))]);
     }
 
     #[test]

@@ -1852,6 +1852,15 @@ pub enum SystemRequest {
         height: u32,
         refresh_mhz: u32,
     },
+    /// Resize the virtual monitor this id added to `width`×`height` pixels
+    /// at `refresh_mhz`. It keeps its `wl_output`, its windows and any
+    /// capture of it. No reply; a later [`HostMessage::Displays`] shows it.
+    /// Allowed while the desktop is locked.
+    ResizeVirtualMonitor {
+        width: u32,
+        height: u32,
+        refresh_mhz: u32,
+    },
     /// Report the keymaps the desktop switches between and which it types
     /// on. Answered with [`SystemReply::Started`], then a
     /// [`SystemEvent::Keymaps`] at once and on each change.

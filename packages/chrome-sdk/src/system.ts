@@ -225,6 +225,11 @@ export type VirtualMonitorMode = {
 export type VirtualMonitor = {
   /** Its `wl_output` name, as `domicile.displays` names it. */
   output: string;
+  /**
+   * Resize it in place: it keeps its `wl_output`, its windows and its casts.
+   * Allowed while the desktop is locked.
+   */
+  resize: (mode: Omit<VirtualMonitorMode, "name">) => void;
   remove: () => void;
   /**
    * `Ok` after {@link VirtualMonitor.remove}. `Err` when it went with its

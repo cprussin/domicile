@@ -71,6 +71,9 @@ bar item ──casting(host).start(target, Extend | Pick)──▶ backend (engi
 
 - The shell asks for one with `SystemRequest::VirtualMonitor { name, mode }`.
   The reply names its `wl_output`. It lives until the request ends (`Unwatch`, or the shell's page going away).
+- `SystemRequest::ResizeVirtualMonitor`, under the same id, resizes it in
+  place: same id, `wl_output`, windows and casts. A monitor cast
+  renegotiates its size.
 - The compositor sends the list to the engine with
   `domicile_virtual_displays_configure`. Each has an id the compositor picks.
 - The engine adds a `DisplaySnapshot` of type `NETWORK` for each to the DRM

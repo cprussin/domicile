@@ -64,9 +64,10 @@ device and no logind seat.
 
 ### 2. Resize in place
 
-- [ ] protocol and SDK: a virtual monitor's lease takes `resize`
-- [ ] compositor: `ClientRequest::ResizeVirtualMonitor`, same id and output
-- [ ] engine: headless updates the display; drm replaces its snapshot
+- [x] protocol and SDK: a virtual monitor's lease takes `resize`
+- [x] compositor: `ClientRequest::ResizeVirtualMonitor`, same id and output
+- [x] engine: headless updates the display; drm replaces its snapshot (both
+      already did: each takes the whole list again)
 - [ ] `domicile monitor`
 
 ### 3. EIS reaches the shell

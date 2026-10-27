@@ -394,7 +394,8 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             // Queued by a `SystemRequest::VirtualMonitor` the lock already
             // judged, or by its end.
             | ClientRequest::AddVirtualMonitor { .. }
-            | ClientRequest::RemoveVirtualMonitor { .. },
+            | ClientRequest::RemoveVirtualMonitor { .. }
+        | ClientRequest::ResizeVirtualMonitor { .. },
         )
         | Asked::OnTheConnection(
             ConnectionRequest::SetTheme { .. } | ConnectionRequest::WhichTheme,

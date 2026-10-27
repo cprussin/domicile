@@ -113,6 +113,9 @@ class FakeMonitors {
           this.removed.push(output);
           resolve(Ok("removed"));
         },
+        resize: () => {
+          /* never resized */
+        },
       }),
     );
   };
