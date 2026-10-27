@@ -23,8 +23,11 @@ export enum GrabCursor {
 }
 
 type Options = {
-  /** The active drag, if any, and the corner it resizes from. */
-  drag: { corner: Corner | undefined } | undefined;
+  /**
+   * The active drag, if any, the corner it resizes from, and whether a move
+   * has been pulled.
+   */
+  drag: { corner: Corner | undefined; pulled: boolean } | undefined;
   /** The window's frame; the quadrant under the pointer picks the corner. */
   frame: Rect;
   /** Whether a grab now would resize rather than move. */
@@ -34,8 +37,9 @@ type Options = {
 /**
  * The cursor a grab sheet shows.
  *
- * Before a drag it follows the hovered quadrant. During a drag it stays on the
- * grabbed corner, since the window moves under the pointer. State holds the
+ * Before a drag it follows the hovered quadrant. During a resize it stays on
+ * the grabbed corner, since the window moves under the pointer. A move shows
+ * `grabbing` only once pulled, so a click shows none. State holds the
  * cursor, not the corner, so moves within one quadrant do not re-render.
  */
 export const useGrabCursor = ({
@@ -66,10 +70,13 @@ const cursorFor = (
     return resizes ? hovered : GrabCursor.Move;
   } else {
     return drag.corner === undefined
-      ? GrabCursor.Grabbing
+      ? movingCursor(drag.pulled)
       : diagonalOf(drag.corner);
   }
 };
+
+const movingCursor = (pulled: boolean): GrabCursor =>
+  pulled ? GrabCursor.Grabbing : GrabCursor.Move;
 
 /** Top-left and bottom-right share a diagonal, as do the other two. */
 const diagonalOf = ({ horizontal, vertical }: Corner): GrabCursor =>

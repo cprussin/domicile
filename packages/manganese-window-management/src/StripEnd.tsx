@@ -26,6 +26,8 @@ type Props = {
   onGrab: () => void;
   /** A float's new top-left corner. */
   onMove: (x: number, y: number) => void;
+  /** A move of the group was pulled. See `useTileDrag`. */
+  onPull: () => void;
   /** The empty end, from the strip's corner. See `StripPlace.end`. */
   rect: Rect;
   /** What a tiled group can be dropped on, on every screen. */
@@ -48,6 +50,7 @@ export const StripEnd = ({
   onDropOn,
   onGrab,
   onMove,
+  onPull,
   rect,
   targets,
 }: Props) => {
@@ -57,6 +60,7 @@ export const StripEnd = ({
     onDrop,
     onGrab,
     onMove,
+    onPull,
     onResize: doesNotResize,
     resizes: false,
   });
@@ -67,6 +71,7 @@ export const StripEnd = ({
     onDrop,
     onDropOn,
     onGrab,
+    onPull,
     onStretch: doesNotResize,
     resizes: false,
     targets,
@@ -79,7 +84,7 @@ export const StripEnd = ({
       className={cx(
         endStyles,
         // It holds pointer capture during a drag, so its cursor shows.
-        drag.drag !== undefined && grabCursorStyles[GrabCursor.Grabbing],
+        drag.drag?.pulled === true && grabCursorStyles[GrabCursor.Grabbing],
       )}
       // Tells it from a window's grab sheet, for tests.
       data-group-handle

@@ -39,6 +39,7 @@ const stripProps = {
   onGrab: nothing,
   onMove: nothing,
   onNewTab: nothing,
+  onPull: nothing,
   targets: { floats: [], screens: [], tabs: [], windows: [] },
 } as const;
 

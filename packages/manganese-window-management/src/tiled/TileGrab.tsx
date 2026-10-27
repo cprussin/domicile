@@ -16,6 +16,7 @@ type Props = {
   onDrop: () => void;
   onDropOn: (aim: Aim) => void;
   onGrab: (resizing: boolean) => void;
+  onPull: () => void;
   onStretch: (edge: Direction, by: number) => void;
   /** Whether a drag started now resizes instead of moves. */
   resizes: boolean;

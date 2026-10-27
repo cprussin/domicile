@@ -1,9 +1,11 @@
 import { describe, expect, it, mock } from "bun:test";
 import { fireEvent, render } from "@testing-library/react";
 
+import { grabCursorStyles } from "./grab-cursor-styles";
 import { StripEnd } from "./StripEnd";
 import { Aim } from "./tiled/aim";
 import { Layout, LayoutNode } from "./tree/node";
+import { GrabCursor } from "./useGrabCursor";
 
 /** The empty end of a strip over "a" and "b", which a third of it shows. */
 const END = { height: 30, width: 400, x: 200, y: 0 };
@@ -40,6 +42,7 @@ const endProps = {
   onDropOn: nothing,
   onGrab: nothing,
   onMove: nothing,
+  onPull: nothing,
   rect: END,
   targets: {
     floats: [],
@@ -81,6 +84,28 @@ describe("StripEnd", () => {
       expect(onDropOn).toHaveBeenCalledWith(
         Aim.Window(OTHER.id, undefined, OTHER.frame),
       );
+    });
+
+    it("shows a grabbing pointer once the group moves, not on a press", () => {
+      const { container } = render(<StripEnd {...endProps} />);
+      const grabbing = () =>
+        endOf(container).className.includes(
+          grabCursorStyles[GrabCursor.Grabbing],
+        );
+      fireEvent.pointerDown(endOf(container), {
+        button: 0,
+        clientX: 300,
+        clientY: 10,
+        pointerId: 1,
+      });
+      expect(grabbing()).toBe(false);
+
+      fireEvent.pointerMove(window, {
+        clientX: 700,
+        clientY: 200,
+        pointerId: 1,
+      });
+      expect(grabbing()).toBe(true);
     });
 
     it("is not dropped on a window inside it", () => {

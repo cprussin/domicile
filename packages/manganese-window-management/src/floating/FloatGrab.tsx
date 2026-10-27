@@ -14,6 +14,7 @@ type Props = {
   onDrop: () => void;
   onGrab: (resizing: boolean) => void;
   onMove: (x: number, y: number) => void;
+  onPull: () => void;
   onResize: (box: Rect) => void;
   /** Whether a drag resizes the window instead of moving it. */
   resizes: boolean;

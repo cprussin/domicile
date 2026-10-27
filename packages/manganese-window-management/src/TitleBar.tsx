@@ -68,6 +68,8 @@ type Props = {
   dragging: boolean;
   /** The bar's focus state. See `title-focus.ts`. */
   focus: TitleFocus;
+  /** Whether a move of the window has been pulled. Shows `grabbing`. */
+  grabbing?: boolean | undefined;
   /**
    * For a tab standing for a nested container, that container's layout and
    * the windows it holds.
@@ -155,6 +157,7 @@ export const TitleBar = ({
   focus,
   frame,
   fullscreen,
+  grabbing = false,
   group,
   hanging = false,
   icon,
@@ -203,7 +206,7 @@ export const TitleBar = ({
         settlingStyles({ lowered }),
         dragging && heldStyles,
         // The bar holds pointer capture during a drag, so its cursor shows.
-        dragging && grabCursorStyles[GrabCursor.Grabbing],
+        grabbing && grabCursorStyles[GrabCursor.Grabbing],
       )}
       data-divided={strip?.divided || undefined}
       // Exposed as attributes so devtools and tests can read the state.

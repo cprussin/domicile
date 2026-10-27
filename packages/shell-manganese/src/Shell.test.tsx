@@ -1853,18 +1853,25 @@ describe("Shell", () => {
       });
     });
 
-    it("shows a grabbing pointer over the whole desk while a window moves", () => {
+    it("shows a grabbing pointer over the whole desk once a tab moves", () => {
       // The pointer leaves the bar for the gaps, the wallpaper and the top
       // bar, which each have their own cursor.
       const { container } = renderShell();
       clientAppears("one");
       clientAppears("two");
-      press("e");
+      press("w");
 
       fireEvent.pointerDown(barFor(container, "app:one"), {
         clientX: 100,
         clientY: TOP_BAR + TOP_GAP + TITLE_BAR / 2,
       });
+      // A click's jitter moves nothing, so it shows no grabbing pointer.
+      fireEvent.pointerMove(window, {
+        clientX: 103,
+        clientY: TOP_BAR + TOP_GAP + TITLE_BAR / 2 + 3,
+      });
+      expect(() => grabbingSheet(container)).toThrow();
+
       fireEvent.pointerMove(window, { clientX: 1800, clientY: 10 });
 
       expect(grabbingSheet(container).className).toContain(
@@ -3357,6 +3364,8 @@ describe("Shell", () => {
         clientX: LEFT.width - 50,
         clientY: 100,
       });
+      // The first move pulls the float, which puts the sheet up.
+      fireEvent.pointerMove(window, { clientX: LEFT.width - 40, clientY: 100 });
       const sheet = grabbingSheet(container);
       domicile.calls.length = 0;
       fireEvent.pointerMove(sheet, { clientX: LEFT.width + 10, clientY: 100 });

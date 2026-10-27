@@ -298,8 +298,8 @@ describe("TitleBar", () => {
     expect(transition()).toContain("step-end");
   });
 
-  it("shows a grabbing pointer while its window is being dragged", () => {
-    const { container } = render(<TitleBar {...barProps} dragging />);
+  it("shows a grabbing pointer while its window is being moved", () => {
+    const { container } = render(<TitleBar {...barProps} grabbing />);
 
     expect(globalThis.getComputedStyle(bar(container)).cursor).toBe("grabbing");
   });

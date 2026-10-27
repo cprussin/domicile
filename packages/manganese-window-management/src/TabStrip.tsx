@@ -68,6 +68,8 @@ type Props = {
   onGrab: () => void;
   /** A floating group's new top-left corner. */
   onMove: (x: number, y: number) => void;
+  /** A move of the group was pulled. See `StripEnd`. */
+  onPull: () => void;
   /** Opens a tab past the last one. */
   onNewTab: () => void;
   /** The open window's restack animation, which the strip plays too. */
@@ -117,6 +119,7 @@ const PlacedStrip = ({
   onGrab,
   onMove,
   onNewTab,
+  onPull,
   restack,
   settler,
   targets,
@@ -165,6 +168,7 @@ const PlacedStrip = ({
             onDropOn={onDropOn}
             onGrab={onGrab}
             onMove={onMove}
+            onPull={onPull}
             rect={within(end, box)}
             targets={targets}
           />

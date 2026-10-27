@@ -41,6 +41,7 @@ const tabProps = {
   onGrab: nothing,
   onMotionEnded: nothing,
   onMove: nothing,
+  onPull: nothing,
   rect: TAB,
   strip: {
     area: { ...TAB, height: 400, width: 600 },
@@ -145,6 +146,25 @@ describe("WindowTitleBar", () => {
           width: OTHER.frame.width / 2,
         }),
       );
+    });
+
+    it("shows a grabbing pointer once the tab moves, not on a press", () => {
+      const { container } = render(<WindowTitleBar {...tabProps} />);
+      const cursor = () => globalThis.getComputedStyle(bar(container)).cursor;
+      fireEvent.pointerDown(bar(container), {
+        button: 0,
+        clientX: 10,
+        clientY: 10,
+        pointerId: 1,
+      });
+      expect(cursor()).not.toBe("grabbing");
+
+      fireEvent.pointerMove(window, {
+        clientX: 620,
+        clientY: 200,
+        pointerId: 1,
+      });
+      expect(cursor()).toBe("grabbing");
     });
 
     it("is not started by the middle button, which closes it instead", () => {

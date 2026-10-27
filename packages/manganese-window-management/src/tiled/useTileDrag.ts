@@ -20,6 +20,7 @@ type Drag = {
   onAim: (aim: Aim | undefined) => void;
   onDrop: () => void;
   onDropOn: (aim: Aim) => void;
+  onPull: () => void;
   onStretch: (edge: Direction, by: number) => void;
   /**
    * Whether a move has gone {@link SLOP} from the press. Until then it does not
@@ -27,6 +28,9 @@ type Drag = {
    */
   pulled: boolean;
 };
+
+/** The running drag's state, for its cursor. */
+type Held = { corner: Corner | undefined; pulled: boolean };
 
 /** The secondary button, which resizes. */
 const SECONDARY_BUTTON = 2;
@@ -40,9 +44,9 @@ const SLOP = 8;
 export type TileDrag = {
   /**
    * The running drag, if any, with the corner it resizes from (`undefined`
-   * for a move).
+   * for a move) and whether a move has been pulled.
    */
-  drag: { corner: Corner | undefined } | undefined;
+  drag: Held | undefined;
   /** Suppresses the context menu, since the right button resizes. */
   onContextMenu: (event: { preventDefault: () => void }) => void;
   onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
@@ -59,6 +63,11 @@ type Options = {
   onDropOn: (aim: Aim) => void;
   /** The window was taken hold of, to resize it or else to move it. */
   onGrab: (resizing: boolean) => void;
+  /**
+   * A move went {@link SLOP} from the press, so it moves the window. Once per
+   * drag.
+   */
+  onPull: () => void;
   /** An edge dragged `by` pixels, rightwards or downwards. */
   onStretch: (edge: Direction, by: number) => void;
   /** Whether a drag started now resizes instead of moves. */
@@ -83,6 +92,7 @@ export const useTileDrag = ({
   onDrop,
   onDropOn,
   onGrab,
+  onPull,
   onStretch,
   resizes,
   targets,
@@ -90,9 +100,7 @@ export const useTileDrag = ({
   const running = useRef<Drag | undefined>(undefined);
   // The targets as drawn now: a tab moving along its strip moves the others.
   const targetsNow = useEffectEvent(() => targets);
-  const [drag, setDrag] = useState<{ corner: Corner | undefined } | undefined>(
-    undefined,
-  );
+  const [drag, setDrag] = useState<Held | undefined>(undefined);
 
   const held = drag !== undefined;
 
@@ -152,10 +160,14 @@ export const useTileDrag = ({
         onAim,
         onDrop,
         onDropOn,
+        onPull: () => {
+          setDrag({ corner, pulled: true });
+          onPull();
+        },
         onStretch,
         pulled: false,
       };
-      setDrag({ corner });
+      setDrag({ corner, pulled: false });
       onGrab(corner !== undefined);
     },
   };
@@ -194,6 +206,9 @@ const aimed = (
   x: number,
   y: number,
 ): Drag => {
+  if (!drag.pulled) {
+    drag.onPull();
+  }
   const aim = aimAt(targets, drag.dragged, x, y);
   // Once per slot: the targets update only after the move renders.
   if (aim?.kind === AimKind.Strip && !landsAlike(aim, drag.aim)) {

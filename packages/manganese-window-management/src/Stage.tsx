@@ -216,6 +216,26 @@ export const Stage = memo(
     // A border drag or a tiled resize grab resizes in place, so unlike a move
     // it does not fade the window. See `stageStyles`.
     const [stretching, setStretching] = useState(false);
+    // Whether the running move has been pulled, which shows the grabbing
+    // pointer: a click moves nothing, so it shows none. Each grab clears it.
+    const [pulled, setPulled] = useState(false);
+    const pull = useCallback(() => {
+      setPulled(true);
+    }, []);
+    const grabbed = useCallback(
+      (id: string) => {
+        setPulled(false);
+        onGrab(id);
+      },
+      [onGrab],
+    );
+    const groupGrabbed = useCallback(
+      (group: NodeRef) => {
+        setPulled(false);
+        onGroupGrab(group);
+      },
+      [onGroupGrab],
+    );
     // The window being moved, which fades. A tiled resize grab still sets
     // `draggingId`, which keeps its `TileGrab` mounted once the modifier is
     // let go.
@@ -397,13 +417,14 @@ export const Stage = memo(
                   on={screenNamed(desk, screen)}
                   onAim={setAim}
                   onDrop={onDrop}
-                  onGrab={onGrab}
+                  onGrab={grabbed}
                   onGroupDropOn={onGroupDropOn}
                   onGroupFloat={onGroupFloat}
                   onGroupFullscreen={onGroupFullscreen}
-                  onGroupGrab={onGroupGrab}
+                  onGroupGrab={groupGrabbed}
                   onMove={onMove}
                   onNewTab={onNewTab}
+                  onPull={pull}
                   restack={restack}
                   rewound={shownRewound}
                   strip={placement.strip}
@@ -425,13 +446,14 @@ export const Stage = memo(
                 on={screenNamed(desk, screen)}
                 onAim={setAim}
                 onDrop={onDrop}
-                onGrab={onGrab}
+                onGrab={grabbed}
                 onGroupDropOn={onGroupDropOn}
                 onGroupFloat={onGroupFloat}
                 onGroupFullscreen={onGroupFullscreen}
-                onGroupGrab={onGroupGrab}
+                onGroupGrab={groupGrabbed}
                 onMove={onMove}
                 onNewTab={onNewTab}
+                onPull={pull}
                 restack={restack}
                 rewound={0}
                 strip={tab.strip}
@@ -472,11 +494,12 @@ export const Stage = memo(
                   onDropOn={onDropOn}
                   onFloat={onFloat}
                   onFullscreen={onFullscreen}
-                  onGrab={onGrab}
+                  onGrab={grabbed}
                   onHover={onHover}
                   onMove={onMove}
                   onPlayedOut={onPlayedOut}
                   onPress={onBarPress}
+                  onPull={pull}
                   placement={placement}
                   restack={restack}
                   rewound={rewound}
@@ -579,7 +602,7 @@ export const Stage = memo(
             const on = screenNamed(desk, screen);
             const floating = desk.floats.get(window.id);
             const onGrabThis = () => {
-              onGrab(window.id);
+              grabbed(window.id);
             };
             if (placement === undefined || on === undefined) {
               return undefined;
@@ -604,6 +627,7 @@ export const Stage = memo(
                           setStretching(resizing);
                           onGrabThis();
                         }}
+                        onPull={pull}
                         onStretch={(edge, by) => {
                           onStretch(window.id, edge, by, on.geometry);
                         }}
@@ -631,6 +655,7 @@ export const Stage = memo(
                         onMove={(x, y) => {
                           onMove(window.id, x, y);
                         }}
+                        onPull={pull}
                         onResize={(box) => {
                           onResize(window.id, box, on.geometry);
                         }}
@@ -697,7 +722,7 @@ export const Stage = memo(
             </Sliding>
           )}
           {aim !== undefined && <DropIndicator aim={aim} />}
-          {movingId !== undefined && <GrabbingSheet />}
+          {movingId !== undefined && pulled && <GrabbingSheet />}
           {/*
           Last, so a popup wins the `z-index` tie at its window's depth but
           stays under windows stacked above.
@@ -933,6 +958,7 @@ type WindowBarProps = {
   onMove: (id: string, x: number, y: number) => void;
   onPlayedOut: WindowMotions["onPlayedOut"];
   onPress: (id: string) => void;
+  onPull: () => void;
   placement: Placement;
   restack: Restack | undefined;
   /** How far into its motion it starts. See `DrawnWindow.rewound`. */
@@ -965,6 +991,7 @@ const WindowBar = memo(
     onMove,
     onPlayedOut,
     onPress,
+    onPull,
     placement,
     restack,
     rewound,
@@ -1046,6 +1073,7 @@ const WindowBar = memo(
           onGrab={grabbed}
           onMotionEnded={ended}
           onMove={moved}
+          onPull={onPull}
           rect={placement.bar}
           restack={restack}
           strip={placement.strip}
@@ -1227,6 +1255,7 @@ type GroupStripProps = {
   onGroupGrab: (group: NodeRef) => void;
   onMove: (id: string, x: number, y: number) => void;
   onNewTab: (id: string) => void;
+  onPull: () => void;
   restack: Restack | undefined;
   rewound: number;
   strip: StripPlace;
@@ -1256,6 +1285,7 @@ const GroupStrip = memo(
     onGroupGrab,
     onMove,
     onNewTab,
+    onPull,
     restack,
     rewound,
     strip,
@@ -1314,6 +1344,7 @@ const GroupStrip = memo(
           onGrab={grabbed}
           onMove={moved}
           onNewTab={tabbed}
+          onPull={onPull}
           restack={restack}
           targets={targets}
         />

@@ -46,6 +46,7 @@ const dragging = (resizes = false) => {
     onDrop: mock(() => undefined),
     onDropOn: mock((_aim: Aim) => undefined),
     onGrab: mock((_resizing: boolean) => undefined),
+    onPull: mock(() => undefined),
     onStretch: mock((_edge: Direction, _by: number) => undefined),
   };
   const { result } = renderHook(() =>
@@ -137,6 +138,24 @@ describe("useTileDrag", () => {
       expect(calls.onDrop).toHaveBeenCalledTimes(1);
     });
 
+    // The shell shows a grabbing pointer from then on, so a click shows none.
+    it("is pulled once the pointer moves past a click's jitter", () => {
+      const { calls, grab, result } = dragging();
+      grab(520, 200);
+      act(() => {
+        moveTo(523, 203);
+      });
+      expect(calls.onPull).not.toHaveBeenCalled();
+      expect(result.current.drag).toEqual({ corner: undefined, pulled: false });
+
+      act(() => {
+        moveTo(750, 200);
+        moveTo(760, 200);
+      });
+      expect(calls.onPull).toHaveBeenCalledTimes(1);
+      expect(result.current.drag).toEqual({ corner: undefined, pulled: true });
+    });
+
     it("drops nowhere when the pointer barely moves, as in a click", () => {
       // A tab's strip is inside the open tab's window, so a click's jitter
       // would otherwise drop the tab beside it.
@@ -205,6 +224,7 @@ describe("useTileDrag", () => {
             onDrop: () => undefined,
             onDropOn,
             onGrab: () => undefined,
+            onPull: () => undefined,
             onStretch: () => undefined,
             resizes: false,
             targets,
@@ -278,6 +298,7 @@ describe("useTileDrag", () => {
       grab(10, 390);
       expect(result.current.drag).toStrictEqual({
         corner: { horizontal: Direction.Left, vertical: Direction.Down },
+        pulled: false,
       });
     });
 
