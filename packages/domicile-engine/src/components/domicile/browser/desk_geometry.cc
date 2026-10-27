@@ -4,6 +4,7 @@
 #include "components/domicile/browser/desk_geometry.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "cc/domicile/display_regions.h"
 #include "ui/display/mojom/screen_orientation.mojom-shared.h"
@@ -94,35 +95,66 @@ display::ScreenInfos DeskScreenInfos(const DeskGeometry& desk,
   return infos;
 }
 
-display::ScreenInfos PopupScreenInfos(display::ScreenInfos infos,
-                                      const gfx::Rect& popup) {
+namespace {
+
+// The monitor among `infos` that `box` overlaps most, or none.
+const display::ScreenInfo* MostOverlapped(const display::ScreenInfos& infos,
+                                          const gfx::Rect& box) {
   const display::ScreenInfo* on = nullptr;
   int overlap = 0;
   for (const display::ScreenInfo& monitor : infos.screen_infos) {
     if (monitor.label != cc::kDomicileDisplayLabel) {
       continue;
     }
-    if (monitor.rect.Contains(popup.origin())) {
-      on = &monitor;
-      break;
-    }
     gfx::Rect shared = monitor.rect;
-    shared.Intersect(popup);
+    shared.Intersect(box);
     const int area = shared.width() * shared.height();
     if (area > overlap) {
       overlap = area;
       on = &monitor;
     }
   }
-  if (on == nullptr) {
-    return infos;
-  }
-  const gfx::Rect rect = on->rect;
-  const gfx::Rect available_rect = on->available_rect;
+  return on;
+}
+
+// `infos` with the current screen's rects narrowed to `monitor`'s.
+display::ScreenInfos NarrowedTo(display::ScreenInfos infos,
+                                const display::ScreenInfo& monitor) {
+  const gfx::Rect rect = monitor.rect;
+  const gfx::Rect available_rect = monitor.available_rect;
   display::ScreenInfo& current = infos.mutable_current();
   current.rect = rect;
   current.available_rect = available_rect;
   return infos;
+}
+
+}  // namespace
+
+display::ScreenInfos PopupScreenInfos(display::ScreenInfos infos,
+                                      const gfx::Rect& popup) {
+  for (const display::ScreenInfo& monitor : infos.screen_infos) {
+    if (monitor.label == cc::kDomicileDisplayLabel &&
+        monitor.rect.Contains(popup.origin())) {
+      return NarrowedTo(std::move(infos), monitor);
+    }
+  }
+  const display::ScreenInfo* on = MostOverlapped(infos, popup);
+  return on == nullptr ? infos : NarrowedTo(std::move(infos), *on);
+}
+
+display::ScreenInfos FrameScreenInfos(display::ScreenInfos infos,
+                                      const gfx::Rect& frame) {
+  const display::ScreenInfo* on = MostOverlapped(infos, frame);
+  if (on == nullptr) {
+    return infos;
+  }
+  display::ScreenInfos told = NarrowedTo(std::move(infos), *on);
+  display::ScreenInfo& current = told.mutable_current();
+  current.orientation_type =
+      current.rect.width() >= current.rect.height()
+          ? display::mojom::ScreenOrientation::kLandscapePrimary
+          : display::mojom::ScreenOrientation::kPortraitPrimary;
+  return told;
 }
 
 std::optional<int64_t> WarpLandsOn(const std::vector<DeskPlace>& lit,
