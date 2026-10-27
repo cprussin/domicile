@@ -118,7 +118,7 @@ The compositor also serves `org.freedesktop.ScreenSaver` (`crate::screen_saver`)
 - **A hold from a process with windows holds only while one is shown**, like a
   Wayland inhibitor. A process with no windows, like the engine, always holds.
 - **A hold ends** with `UnInhibit`, or when its application leaves the bus.
-- A holder is named by the application name it passed.
+- A holder is found by the application name it passed.
 
 A shell holds one the same way: `dbusCall` to
 `org.freedesktop.portal.Inhibit.Inhibit`, and `Request.Close` on the returned
@@ -128,13 +128,16 @@ handle to let go. Manganese's idle inhibitor bar item does this.
 
 - **`SystemRequest::IdleHolds` streams the holders**, as names. Each
   `SystemEvent::IdleHolds` carries the full list, at once and on each change.
-  - A Wayland inhibitor is named by its window's app id, and only while it
-    holds.
-  - A portal inhibitor is named by its app id, or, for an unsandboxed
+  - **Every holder is named as a person knows it**, `Claude` and not
+    `com.anthropic.Claude`: by its desktop entry, through
+    `domicile_host::app_names`.
+  - A Wayland inhibitor is found by its window's app id, and listed only while
+    it holds.
+  - A portal inhibitor is found by its app id, or, for an unsandboxed
     application, its process name (`/proc/<pid>/comm`). A shell page's own
-    hold is `domicile`.
-  - A screen saver hold is named by the application name it passed, and only
-    while it holds.
+    hold is `domicile`, unnamed, so the shell can leave it out.
+  - A screen saver hold is found by the application name it passed, and listed
+    only while it holds.
   - A desktop with no timeout lists none.
 - Manganese's eye opens while anything holds, and names the holders in its
   tooltip.

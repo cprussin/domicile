@@ -32,7 +32,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use domicile_host::app_names::app;
+use domicile_host::app_names::{app, application_dirs};
 use domicile_host::mime_apps::launch_command;
 use domicile_host::notifications::{Application, Hints, Image, Notifications, Notified, Notify};
 use domicile_host::portal_notifications::{Invoked, PortalNotification, PortalNotifications};
@@ -224,7 +224,7 @@ pub fn serve(
     in_a_window: bool,
 ) -> NotificationServer {
     let (told, events) = channel();
-    let applications = applications(&data_dirs);
+    let applications = application_dirs(&data_dirs);
     let store = Arc::new(Store::new(data_dirs, theme));
     let serving = Arc::clone(&store);
     thread::spawn(move || {
@@ -242,14 +242,6 @@ pub fn serve(
         }
     });
     NotificationServer { told, store }
-}
-
-/// The `applications/` directory under each of `data_dirs`.
-fn applications(data_dirs: &[PathBuf]) -> Vec<PathBuf> {
-    data_dirs
-        .iter()
-        .map(|dir| dir.join("applications"))
-        .collect()
 }
 
 /// Passes a press on a portal notification, and its token, to the portal.
@@ -286,7 +278,7 @@ enum Pressed {
 impl Store {
     fn new(data_dirs: Vec<PathBuf>, theme: Option<String>) -> Self {
         Store {
-            applications: applications(&data_dirs),
+            applications: application_dirs(&data_dirs),
             held: Mutex::new(Held {
                 notifications: Notifications::new(TrayIcons::new(data_dirs, theme)),
                 portal: PortalNotifications::default(),

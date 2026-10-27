@@ -184,6 +184,7 @@ use crate::spawning::{chrome_display, home_directory, spawn_client};
 use crate::surface_commit::{LastBuffer, Role};
 use crate::windows::SizeLimits;
 use domicile_config::{Config, ConfigError, ConfigStore};
+use domicile_host::app_names::AppNames;
 use domicile_host::clipboard::{Contents, History};
 use domicile_host::data_dirs::data_dirs;
 use domicile_host::keymaps::Listed;
@@ -605,6 +606,9 @@ struct DomicileCompositor {
     /// What applications asked `org.freedesktop.ScreenSaver` to hold. See
     /// [`screen_saver`].
     held_by_screen_saver: Vec<screen_saver::Hold>,
+    /// Names for the applications a person is shown, such as what holds the
+    /// desktop awake.
+    app_names: AppNames,
     /// Sends reloads to the file index thread. `None` without a home to index.
     ///
     /// Only `files.omit` changes go here. See
@@ -1327,6 +1331,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         idle: Idle::after(&config.idle, Instant::now()),
         held_by_portal_apps: Vec::new(),
         held_by_screen_saver: Vec::new(),
+        app_names: AppNames::under(&data_dirs(
+            std::env::var_os("XDG_DATA_HOME"),
+            std::env::var_os("XDG_DATA_DIRS"),
+            home_directory().as_deref(),
+        )),
         // Started below, after the event loop's sources.
         index: None,
         // Armed below by `arm_the_idle_clock`, the same path a reload uses.

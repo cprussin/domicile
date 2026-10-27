@@ -1,6 +1,10 @@
-//! Applications named and drawn by their desktop entries, for a notification
-//! the portal sends under an application's id.
+//! Applications named and drawn by their desktop entries.
+//!
+//! Every application name the compositor shows a person goes through here:
+//! `Claude`, never `com.anthropic.Claude`. Shell pages name applications with
+//! the component library's `useApps`, which follows the same rules.
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
@@ -49,6 +53,49 @@ pub fn app(app_id: &str, application_dirs: &[PathBuf]) -> App {
                 icon: entry.icon.clone().unwrap_or_else(|| app_id.to_string()),
             },
         )
+}
+
+/// The `applications/` directory under each of `data_dirs`, where desktop
+/// entries are installed.
+pub fn application_dirs(data_dirs: &[PathBuf]) -> Vec<PathBuf> {
+    data_dirs
+        .iter()
+        .map(|dir| dir.join("applications"))
+        .collect()
+}
+
+/// Applications' names, each read from its desktop entry once.
+///
+/// For a caller that names often, like what holds the desktop awake on every
+/// window change: [`app`] reads every entry.
+pub struct AppNames {
+    application_dirs: Vec<PathBuf>,
+    named: HashMap<String, String>,
+}
+
+impl AppNames {
+    /// Names from the entries under `data_dirs`.
+    pub fn under(data_dirs: &[PathBuf]) -> AppNames {
+        AppNames {
+            application_dirs: application_dirs(data_dirs),
+            named: HashMap::new(),
+        }
+    }
+
+    /// `app_id`'s name, as [`app`] finds it. A name, such as an application
+    /// gives for itself, finds its entry the same way.
+    pub fn name(&mut self, app_id: &str) -> String {
+        let dirs = &self.application_dirs;
+        self.named
+            .entry(app_id.to_string())
+            .or_insert_with(|| app(app_id, dirs).name)
+            .clone()
+    }
+
+    /// The directories this reads.
+    pub fn application_dirs(&self) -> &[PathBuf] {
+        &self.application_dirs
+    }
 }
 
 /// A desktop entry's keys that name and draw its application.
@@ -153,6 +200,32 @@ mod tests {
         assert_eq!(named("com.chromium.Chromium", &dir).name, "Chromium");
         assert_eq!(named("com.chromium.Chromium", &dir).icon, "chromium");
         assert_eq!(named("org.example.TextEditor", &dir).name, "Editor");
+    }
+
+    #[test]
+    fn names_are_read_once() {
+        let dir = applications(&[("org.mozilla.firefox.desktop", &entry("Firefox", ""))]);
+        let mut names = AppNames {
+            application_dirs: vec![dir.path().to_path_buf()],
+            named: HashMap::new(),
+        };
+
+        assert_eq!(names.name("org.mozilla.firefox"), "Firefox");
+        fs::remove_file(dir.path().join("org.mozilla.firefox.desktop")).unwrap();
+        assert_eq!(names.name("org.mozilla.firefox"), "Firefox");
+        assert_eq!(names.name("mpv"), "Mpv");
+    }
+
+    #[test]
+    fn entries_are_under_each_data_dirs_applications() {
+        let names = AppNames::under(&["/home/me/.local/share".into(), "/usr/share".into()]);
+        assert_eq!(
+            names.application_dirs(),
+            [
+                PathBuf::from("/home/me/.local/share/applications"),
+                PathBuf::from("/usr/share/applications"),
+            ]
+        );
     }
 
     #[test]

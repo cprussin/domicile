@@ -168,11 +168,20 @@ fn a_film_holds_the_screens_on_until_the_client_playing_it_is_gone() {
     compositor.wait_for_log("this desktop's screens go dark");
 }
 
-/// A page listening hears the window holding the desktop awake by its app id,
-/// and hears nothing holds once the client is gone.
+/// A page listening hears the window holding the desktop awake by its
+/// application's name from its desktop entry, not its app id, and hears
+/// nothing holds once the client is gone.
 #[test]
-fn a_page_hears_which_window_holds_the_desktop_awake() {
-    let compositor = Compositor::started_with(A_DESK_THAT_BLANKS);
+fn a_page_hears_which_application_holds_the_desktop_awake() {
+    let home = tempfile::tempdir().expect("a home");
+    let applications = home.path().join(".local/share/applications");
+    std::fs::create_dir_all(&applications).expect("an applications directory");
+    std::fs::write(
+        applications.join("dev.domicile.test-client.desktop"),
+        "[Desktop Entry]\nType=Application\nName=Film\nExec=film\n",
+    )
+    .expect("the film's desktop entry");
+    let compositor = Compositor::started_in_a_home(A_DESK_THAT_BLANKS, Some(home.path()));
     let mut chrome = compositor.chrome();
     chrome
         .say(&ChromeMessage::SystemRequest {
@@ -195,7 +204,7 @@ fn a_page_hears_which_window_holds_the_desktop_awake() {
 
     let film = compositor.client_with("film", &["--hold-the-screens-on"]);
     chrome
-        .wait_for(holders(&["dev.domicile.test-client"]))
+        .wait_for(holders(&["Film"]))
         .expect("the page hears the film hold the desktop awake");
 
     drop(film);
