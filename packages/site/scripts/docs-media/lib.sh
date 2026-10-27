@@ -25,15 +25,23 @@ TOOLS="$(nix build --no-link --print-out-paths \
   sed 's#$#/bin#' | paste -sd:)"
 export PATH="$TOOLS:$PATH"
 
-# One font for every terminal, so captures do not depend on the machine's
-# fontconfig.
-FONTS="$(nix build --no-link --print-out-paths nixpkgs#jetbrains-mono)"
+# The same fonts on every machine, so captures do not depend on crux's
+# fontconfig: Inter for the desktop's text (`sans-serif` and `system-ui`),
+# JetBrains Mono for terminals and code, and Noto Color Emoji, which
+# Chromium falls back to for emoji.
+FONT_DIRS="$(nix build --no-link --print-out-paths nixpkgs#inter nixpkgs#jetbrains-mono \
+  nixpkgs#dejavu_fonts nixpkgs#noto-fonts-color-emoji |
+  sed 's#.*#  <dir>&/share/fonts</dir>#')"
 export FONTCONFIG_FILE="$SCENE_TMP/fonts.conf"
 cat >"$FONTCONFIG_FILE" <<FONTS_EOF
 <?xml version="1.0"?>
 <fontconfig>
-  <dir>$FONTS/share/fonts</dir>
+$FONT_DIRS
   <cachedir>$SCENE_TMP/fontconfig</cachedir>
+  <alias><family>sans-serif</family><prefer><family>Inter</family></prefer></alias>
+  <alias><family>system-ui</family><prefer><family>Inter</family></prefer></alias>
+  <alias><family>serif</family><prefer><family>DejaVu Serif</family></prefer></alias>
+  <alias><family>monospace</family><prefer><family>JetBrains Mono</family></prefer></alias>
 </fontconfig>
 FONTS_EOF
 

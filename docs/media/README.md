@@ -53,4 +53,5 @@ scene whose engine exited prints the engine's fatal lines, however it ended.
 | `tour-extensions.png` | `tour-extensions` | uBlock Origin Lite's popup, open from the tray over a browser window. |
 | `tour-monitors.png`, `tour-monitors.webm`, `tour-monitors.mp4` | `tour-monitors` | Two monitors side by side, and nvim moving from the left one to the right one, beside a browser window. |
 | `configure-settings.png` | `configure-settings` | The Settings app's Shell page, with the clock set to 12-hour. |
+| `quickstart.png`, `quickstart.webm`, `quickstart.mp4` | `quickstart` | The Domicile page's quickstart: the example shell beside btop, then a wider gap from an edit and `domicile load-shell`. Captions name each step. |
 | `shell-quickstart.png` | `shell-quickstart` | The shell quickstart's example shell: nvim editing it, beside btop. |
