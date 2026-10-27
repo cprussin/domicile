@@ -6,8 +6,10 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use domicile_launch::cli::MonitorMode;
 use domicile_launch::control::Lent;
 use domicile_launch::monitor_lending::{forward_sizes, lend};
+use domicile_protocol::Scale;
 
 const BRIEFLY: Duration = Duration::from_millis(200);
 
@@ -28,7 +30,7 @@ fn a_lent_monitor_follows_the_clients_sizes_and_goes_with_it() {
     client
         .write_all(
             b"{\"type\":\"resize_virtual_monitor\",\"width\":800,\"height\":600,\
-              \"refresh_mhz\":30000}\n",
+              \"refresh_mhz\":30000,\"scale\":1.5}\n",
         )
         .expect("the client resized it");
     drop(heard);
@@ -46,6 +48,7 @@ fn a_lent_monitor_follows_the_clients_sizes_and_goes_with_it() {
         "{lines:?}"
     );
     assert!(lines[1].contains("\"width\":800"), "{lines:?}");
+    assert!(lines[1].contains("\"scale\":1.5"), "{lines:?}");
 }
 
 #[test]
@@ -95,7 +98,7 @@ fn each_size_typed_resizes_and_anything_else_is_said_and_skipped() {
     let mut said = Vec::new();
 
     forward_sizes(
-        "1280x720\nhuge\n\n800x600@30\n".as_bytes(),
+        "1280x720\nhuge\n\n800x600@30 2\n".as_bytes(),
         &mut sent,
         &mut said,
     )
@@ -104,8 +107,8 @@ fn each_size_typed_resizes_and_anything_else_is_said_and_skipped() {
     assert_eq!(
         String::from_utf8(sent).expect("text"),
         "{\"type\":\"resize_virtual_monitor\",\"width\":1280,\"height\":720,\
-         \"refresh_mhz\":60000}\n{\"type\":\"resize_virtual_monitor\",\"width\":800,\
-         \"height\":600,\"refresh_mhz\":30000}\n"
+         \"refresh_mhz\":60000,\"scale\":1.0}\n{\"type\":\"resize_virtual_monitor\",\
+         \"width\":800,\"height\":600,\"refresh_mhz\":30000,\"scale\":2.0}\n"
     );
     let said = String::from_utf8(said).expect("text");
     assert!(said.contains("huge"), "{said}");
@@ -117,8 +120,11 @@ fn lent() -> (Lent, UnixStream) {
     (
         Lent {
             name: "Pane".to_string(),
-            size: (1280, 720),
-            refresh_mhz: 60_000,
+            mode: MonitorMode {
+                size: (1280, 720),
+                refresh_mhz: 60_000,
+                scale: Scale::ONE,
+            },
             lines: BufReader::new(desktop.try_clone().expect("readable")),
             client: desktop,
         },

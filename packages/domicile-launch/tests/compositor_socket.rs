@@ -6,15 +6,22 @@ use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use domicile_launch::cli::MonitorMode;
 use domicile_launch::compositor_socket::{
     screen_record, screenshot, send_shell, theme, virtual_monitor, CompositorError,
 };
 use domicile_launch::control::Shot;
-use domicile_protocol::Theme;
+use domicile_protocol::{Scale, Theme};
 
 /// Reply timeout: long enough for a loaded machine, short enough for a fast
 /// suite.
 const BRIEFLY: Duration = Duration::from_millis(200);
+
+const PANE: MonitorMode = MonitorMode {
+    size: (1280, 720),
+    refresh_mhz: 60_000,
+    scale: Scale::ONE,
+};
 
 #[test]
 fn the_compositor_is_asked_for_the_whole_desk_in_the_file_and_says_it_saved_it() {
@@ -329,11 +336,15 @@ fn a_virtual_monitor_is_added_resized_and_given_back() {
          \"output\":\"virtual-1\"}}\n",
     );
 
-    let held = virtual_monitor(&path, "Pane", (1280, 720), 60_000, Some(BRIEFLY))
-        .expect("the compositor added it");
+    let held =
+        virtual_monitor(&path, "Pane", PANE, Some(BRIEFLY)).expect("the compositor added it");
     assert_eq!(held.output(), "virtual-1");
-    held.resize((800, 600), 30_000)
-        .expect("the compositor took it");
+    held.resize(MonitorMode {
+        size: (800, 600),
+        refresh_mhz: 30_000,
+        scale: Scale::try_from(2.0).expect("a scale"),
+    })
+    .expect("the compositor took it");
     held.give_back();
 
     assert_eq!(
@@ -342,7 +353,7 @@ fn a_virtual_monitor_is_added_resized_and_given_back() {
             "{\"type\":\"system_request\",\"id\":1,\"request\":{\"call\":\"virtual_monitor\",\
              \"name\":\"Pane\",\"width\":1280,\"height\":720,\"refresh_mhz\":60000,\"scale\":1.0}}\n",
             "{\"type\":\"system_request\",\"id\":1,\"request\":{\"call\":\
-             \"resize_virtual_monitor\",\"width\":800,\"height\":600,\"refresh_mhz\":30000,\"scale\":1.0}}\n",
+             \"resize_virtual_monitor\",\"width\":800,\"height\":600,\"refresh_mhz\":30000,\"scale\":2.0}}\n",
         ]
     );
 }
@@ -356,7 +367,7 @@ fn a_compositor_that_will_not_add_a_monitor_is_quoted() {
          \"error\":{\"kind\":\"other\",\"message\":\"nested\"}}}\n",
     );
 
-    let refused = virtual_monitor(&path, "Pane", (1280, 720), 60_000, Some(BRIEFLY))
+    let refused = virtual_monitor(&path, "Pane", PANE, Some(BRIEFLY))
         .err()
         .expect("the compositor refused");
 
@@ -380,8 +391,8 @@ fn a_held_monitor_hears_its_compositor_go() {
              \"output\":\"virtual-1\"}}\n",
         ),
     );
-    let held = virtual_monitor(&path, "Pane", (1280, 720), 60_000, Some(BRIEFLY))
-        .expect("the compositor added it");
+    let held =
+        virtual_monitor(&path, "Pane", PANE, Some(BRIEFLY)).expect("the compositor added it");
     compositor
         .join()
         .expect("the compositor answered, then exited");

@@ -2,9 +2,12 @@
 
 use std::path::PathBuf;
 
-use domicile_launch::cli::{invocation, monitor_size, CliError, Invocation, USAGE};
+use domicile_launch::cli::{
+    invocation, monitor_mode, monitor_size, CliError, Invocation, MonitorMode, USAGE,
+};
 use domicile_launch::control::{Request, Switch, ThemeChange};
 use domicile_launch::power::Power;
+use domicile_protocol::Scale;
 
 fn run(args: &[&str]) -> Result<Invocation, CliError> {
     invocation(args.iter().map(|arg| (*arg).to_string()))
@@ -563,10 +566,64 @@ fn monitor_takes_a_name_and_a_size() {
         run(&["monitor", "Left pane", "1280x720"]),
         Ok(Invocation::Monitor {
             name: "Left pane".to_string(),
-            size: (1280, 720),
-            refresh_mhz: 60_000,
+            mode: MonitorMode {
+                size: (1280, 720),
+                refresh_mhz: 60_000,
+                scale: Scale::ONE,
+            },
         })
     );
+}
+
+#[test]
+fn a_monitor_may_take_a_scale_after_its_size() {
+    assert_eq!(
+        run(&["monitor", "TV", "3840x2160@30", "2"]),
+        Ok(Invocation::Monitor {
+            name: "TV".to_string(),
+            mode: MonitorMode {
+                size: (3840, 2160),
+                refresh_mhz: 30_000,
+                scale: Scale::try_from(2.0).expect("a scale"),
+            },
+        })
+    );
+}
+
+#[test]
+fn monitor_refuses_a_scale_it_cannot_read_and_names_it() {
+    for said in ["big", "0", "-1", "inf", "NaN"] {
+        assert_eq!(
+            run(&["monitor", "Pane", "1280x720", said]),
+            Err(CliError::NotAScale {
+                said: said.to_string()
+            }),
+            "{said}"
+        );
+    }
+}
+
+#[test]
+fn a_line_read_is_a_size_and_maybe_a_scale() {
+    assert_eq!(
+        monitor_mode("1280x720"),
+        Some(MonitorMode {
+            size: (1280, 720),
+            refresh_mhz: 60_000,
+            scale: Scale::ONE,
+        })
+    );
+    assert_eq!(
+        monitor_mode(" 800x600@30   1.5 "),
+        Some(MonitorMode {
+            size: (800, 600),
+            refresh_mhz: 30_000,
+            scale: Scale::try_from(1.5).expect("a scale"),
+        })
+    );
+    for said in ["", "huge", "800x600 big", "800x600 0", "800x600 2 again"] {
+        assert_eq!(monitor_mode(said), None, "{said}");
+    }
 }
 
 #[test]
@@ -612,11 +669,11 @@ fn monitor_needs_a_name_and_a_size() {
 }
 
 #[test]
-fn monitor_takes_nothing_after_its_size() {
+fn monitor_takes_nothing_after_its_scale() {
     assert_eq!(
-        run(&["monitor", "Pane", "1280x720", "again"]),
+        run(&["monitor", "Pane", "1280x720", "2", "again"]),
         Err(CliError::Extra {
-            verb: "monitor Pane 1280x720".to_string(),
+            verb: "monitor Pane 1280x720 2".to_string(),
             extra: "again".to_string()
         })
     );

@@ -40,9 +40,9 @@ device and no logind seat.
   point. They then take the path a real keyboard and pointer take: the shell
   sees keys first and clicks on the shell reach it. Nested runs keep today's
   path, since the host owns input there.
-- **`domicile monitor <name> <width>x<height>`** adds a monitor, prints its
-  output name, resizes it for each `<width>x<height>` line on stdin and
-  removes it when it exits.
+- **`domicile monitor <name> <width>x<height> [scale]`** adds a monitor,
+  prints its output name, resizes it for each `<width>x<height> [scale]` line
+  on stdin and removes it when it exits.
 
 ## Key decisions
 
@@ -76,7 +76,7 @@ device and no logind seat.
 - [x] protocol, SDK and compositor: a virtual monitor's own scale
 - [ ] engine: headless draws a virtual display at its layout scale
 - [x] `domicile monitor`
-- [ ] `domicile monitor` takes a scale
+- [x] `domicile monitor` takes a scale
 
 ### 3. EIS reaches the shell
 
