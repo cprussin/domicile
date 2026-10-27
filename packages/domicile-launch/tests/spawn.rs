@@ -165,18 +165,41 @@ fn the_engine_sizes_its_own_tile_memory() {
 fn a_nested_desktop_does_not_take_over_the_screen() {
     // A nested run is a window in someone else's session, so it must not go
     // fullscreen.
-    for platform in ["wayland", "headless"] {
-        let args = args_of(&engine(
-            Path::new("/l/engine"),
-            &shell(),
-            platform,
-            &runtime(),
-            None,
-        ));
-        assert!(
-            !args.contains(&"--start-fullscreen".to_string()),
-            "{platform}: {args:?}"
-        );
+    let args = args_of(&engine(
+        Path::new("/l/engine"),
+        &shell(),
+        "wayland",
+        &runtime(),
+        None,
+    ));
+    assert!(
+        !args.contains(&"--start-fullscreen".to_string()),
+        "{args:?}"
+    );
+    assert!(
+        !args.contains(&"--domicile-headless-desk".to_string()),
+        "{args:?}"
+    );
+}
+
+#[test]
+fn a_headless_desktop_is_a_desk_of_virtual_monitors() {
+    // Its monitors are the compositor's virtual ones, and until one comes the
+    // screen is a 1024x768 placeholder: headless's own default is 1x1. See
+    // docs/architecture/A-HEADLESS-DESKTOP.md.
+    let args = args_of(&engine(
+        Path::new("/l/engine"),
+        &shell(),
+        "headless",
+        &runtime(),
+        None,
+    ));
+    for wanted in [
+        "--domicile-headless-desk",
+        "--ozone-override-screen-size=1024,768",
+        "--start-fullscreen",
+    ] {
+        assert!(args.contains(&wanted.to_string()), "{wanted}: {args:?}");
     }
 }
 

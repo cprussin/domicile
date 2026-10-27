@@ -4,9 +4,11 @@
 # packages/domicile-engine/tests/test-a-fast-scroll-goes-further.sh and
 # packages/domicile-engine/tests/test-a-mouse-goes-through-libinput.sh; and the `AbsoluteMouse*`
 # suites of patch 0123; `TypingGuardTest`, see
-# packages/domicile-engine/tests/test-a-touchpad-rests-while-typing.sh), and one Wayland suite,
+# packages/domicile-engine/tests/test-a-touchpad-rests-while-typing.sh), one Wayland suite,
 # `WaylandKeyboardWithoutKeymapTest` (see
-# packages/domicile-engine/tests/test-modifiers-wait-for-a-keymap.sh).
+# packages/domicile-engine/tests/test-modifiers-wait-for-a-keymap.sh), and one
+# headless suite, `HeadlessDeskTest` (see
+# docs/architecture/A-HEADLESS-DESKTOP.md).
 #
 #   ./packages/domicile-engine/scripts/drm-unit-tests.sh        # the suites this fork wrote
 #   ./packages/domicile-engine/scripts/drm-unit-tests.sh all    # and upstream's, on the probe
@@ -56,6 +58,7 @@ SUITES=(
   AbsoluteMouseDeviceTest:2
   AbsoluteMouseConverterTest:7
   WaylandKeyboardWithoutKeymapTest:1
+  HeadlessDeskTest:5
 )
 
 cd "$ENGINE_OUT"

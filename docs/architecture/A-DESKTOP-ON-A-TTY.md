@@ -204,8 +204,10 @@ A nested run still uses the host's clipboard; `ROADMAP.md` tracks it.
 A card with no 3D (2D virtio-gpu, Hyper-V, simpledrm, vkms) gives the GPU
 process no GL. The desktop is composited on the CPU instead.
 
-- **Who decides:** `domicile-launch` (`software_compositing.rs`), once per run,
-  on drm only. The CPU composites when no render node has 3D: simpledrm, vkms,
+- **Who decides:** `domicile-launch` (`software_compositing.rs`), once per run.
+  A headless desktop always composites on the CPU
+  ([A-HEADLESS-DESKTOP.md](A-HEADLESS-DESKTOP.md)); a nested one never does.
+  On drm, the CPU composites when no render node has 3D: simpledrm, vkms,
   hyperv_drm and bochs have no render node, and virtio-gpu has 3D only with the
   `VIRTIO_GPU_F_VIRGL` feature bit (`device/features`, first character).
   `DOMICILE_SOFTWARE_COMPOSITING=yes` or `no` decides instead.
@@ -229,8 +231,8 @@ process no GL. The desktop is composited on the CPU instead.
   [WINDOW-COMPOSITING.md](WINDOW-COMPOSITING.md#wl_shm-clients-on-the-cpu).
 - `--disable-gpu-process-crash-limit` stays: a GPU process that fell back to
   software on its own would get dmabufs it cannot show.
-- **Not covered:** no vsync provider (viz's begin frames pace painting), casts
-  of a window in memory, and dmabuf clients, which the CPU path cannot show.
+- **Not covered:** no vsync provider (viz's begin frames pace painting) and
+  casts of a window in memory.
 
 ## Key decisions
 

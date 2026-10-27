@@ -78,7 +78,9 @@ gn gen "$OUT" --args="
 $CACHE_ARG" || exit 1
 
 # guard-css-and-resize.sh needs `domicile_css_parity`,
-# guard-webview-framing.sh needs `domicile_color_probe`, and
-# guard-display-capture.sh needs `domicile_capture_probe`.
+# guard-webview-framing.sh needs `domicile_color_probe`,
+# guard-display-capture.sh needs `domicile_capture_probe`, and
+# guard-headless-desk.sh needs `domicile_desk_probe`.
 exec autoninja -C "$OUT" chrome domicile_solid_color_submitter \
-  domicile_css_parity domicile_color_probe domicile_capture_probe
+  domicile_css_parity domicile_color_probe domicile_capture_probe \
+  domicile_desk_probe

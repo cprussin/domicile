@@ -1160,13 +1160,18 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let (screen_copy_requests, heard_screen_copy_requests) = channel::<casting::ToPipewire>();
 
     let mut dmabuf_state = DmabufState::new();
-    let dmabuf_global = gpu.as_mut().map(|gpu| {
-        let importer_device = gpu.importer.main_device();
-        let formats: Vec<_> = DmabufImporter::formats(gpu.renderer())
-            .into_iter()
-            .collect();
-        advertise_dmabuf(&mut dmabuf_state, &dh, importer_device, formats)
-    });
+    // An engine on the CPU shows no dmabuf, so clients are offered only
+    // `wl_shm`. Mesa then draws GL clients in memory too.
+    let dmabuf_global = gpu
+        .as_mut()
+        .filter(|_| !arguments.software_compositing)
+        .map(|gpu| {
+            let importer_device = gpu.importer.main_device();
+            let formats: Vec<_> = DmabufImporter::formats(gpu.renderer())
+                .into_iter()
+                .collect();
+            advertise_dmabuf(&mut dmabuf_state, &dh, importer_device, formats)
+        });
 
     // Load the engine if asked. Failure is fatal and names the library:
     // `dlopen` only keeps `cargo build` from needing Chromium, not a license to
