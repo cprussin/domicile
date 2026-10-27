@@ -297,6 +297,15 @@ void HTMLWebViewElement::DidNotifySubtreeInsertionsToDocument() {
   }
 }
 
+void HTMLWebViewElement::RemovedFrom(ContainerNode& insertion_point) {
+  HTMLFrameElementBase::RemovedFrom(insertion_point);
+  if (insertion_point.isConnected()) {
+    host_.reset();
+    guest_.reset();
+    client_receiver_.reset();
+  }
+}
+
 void HTMLWebViewElement::RequestGuest() {
   if (guest_.is_bound()) {
     return;
