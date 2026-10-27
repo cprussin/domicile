@@ -2807,6 +2807,7 @@ describe("screen cast", () => {
               ended: new Promise<never>(() => undefined),
               output: "drm-2",
               remove: () => undefined,
+              resize: () => undefined,
             }),
           ),
       };

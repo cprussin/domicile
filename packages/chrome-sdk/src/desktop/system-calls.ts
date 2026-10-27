@@ -598,6 +598,17 @@ const addVirtualMonitor = (
                         JSON.stringify({ call: "unwatch" }),
                       );
                     },
+                    resize: (size) => {
+                      calls.host.callSystem(
+                        id,
+                        JSON.stringify({
+                          call: "resize_virtual_monitor",
+                          height: size.height,
+                          refresh_mhz: size.refreshMhz,
+                          width: size.width,
+                        }),
+                      );
+                    },
                   })
                 : unexpected(reply),
             );

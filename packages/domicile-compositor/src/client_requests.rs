@@ -116,6 +116,13 @@ pub enum ClientRequest {
     RemoveVirtualMonitor {
         id: i64,
     },
+    /// A page resized its virtual monitor in place. See
+    /// [`crate::virtual_monitors::resize`].
+    ResizeVirtualMonitor {
+        id: i64,
+        mode: (u32, u32),
+        refresh_mhz: u32,
+    },
     /// The page switched the keymap. See
     /// [`DomicileCompositor::switch_the_keymap`].
     SelectKeymap {
@@ -504,6 +511,23 @@ impl DomicileCompositor {
             ClientRequest::RemoveVirtualMonitor { id } => {
                 self.virtual_displays.retain(|display| display.id != id);
                 self.state_the_virtual_monitors();
+            }
+            ClientRequest::ResizeVirtualMonitor {
+                id,
+                mode,
+                refresh_mhz,
+            } => {
+                if crate::virtual_monitors::resize(
+                    &mut self.virtual_displays,
+                    id,
+                    mode,
+                    refresh_mhz,
+                ) {
+                    self.state_the_virtual_monitors();
+                } else {
+                    // The page let go of it while the resize was in flight.
+                    debug!(id, "resize: a virtual monitor that is gone");
+                }
             }
             ClientRequest::SelectKeymap { keymap } => self.switch_the_keymap(&keymap),
             ClientRequest::SetWhitePoint { white_point } => {

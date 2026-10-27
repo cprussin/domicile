@@ -1773,7 +1773,7 @@ mod dbus {
 mod virtual_monitors {
     use std::sync::mpsc::Sender;
 
-    use domicile_host::system::{AddedMonitor, VirtualMonitor};
+    use domicile_host::system::{AddedMonitor, MonitorLease, VirtualMonitor};
     use domicile_protocol::SystemEnd;
 
     use super::*;
@@ -1787,34 +1787,62 @@ mod virtual_monitors {
         }
     }
 
-    /// Says on `gone` when it drops, as the compositor removes the monitor.
-    struct Lease(Sender<()>);
+    /// Says on `gone` when it drops, as the compositor removes the monitor,
+    /// and on `resized` each size it is given.
+    struct Lease {
+        gone: Sender<()>,
+        resized: Sender<((u32, u32), u32)>,
+    }
 
-    impl Drop for Lease {
-        fn drop(&mut self) {
-            self.0.send(()).unwrap();
+    impl MonitorLease for Lease {
+        fn resize(&self, size: (u32, u32), refresh_mhz: u32) {
+            self.resized.send((size, refresh_mhz)).unwrap();
         }
     }
 
-    /// A system that adds each monitor as `virtual-1`, and the monitors it
-    /// was asked for and removed.
-    fn adding(system: System) -> (System, Receiver<VirtualMonitor>, Receiver<()>) {
-        let (asked_for, asked) = channel();
+    impl Drop for Lease {
+        fn drop(&mut self) {
+            // A test that ends with the monitor up has stopped listening.
+            let _ = self.gone.send(());
+        }
+    }
+
+    /// What a system that adds monitors was asked to do.
+    struct Asked {
+        added: Receiver<VirtualMonitor>,
+        gone: Receiver<()>,
+        resized: Receiver<((u32, u32), u32)>,
+    }
+
+    /// A system that adds each monitor as `virtual-1`, and what it was asked.
+    fn adding(system: System) -> (System, Asked) {
+        let (added_one, added) = channel();
         let (removed, gone) = channel();
+        let (resized_one, resized) = channel();
         let system = system.adding_virtual_monitors_with(move |wanted| {
-            asked_for.send(wanted).unwrap();
+            added_one.send(wanted).unwrap();
             Ok(AddedMonitor {
                 output: "virtual-1".into(),
-                lease: Box::new(Lease(removed.clone())),
+                lease: Box::new(Lease {
+                    gone: removed.clone(),
+                    resized: resized_one.clone(),
+                }),
             })
         });
-        (system, asked, gone)
+        (
+            system,
+            Asked {
+                added,
+                gone,
+                resized,
+            },
+        )
     }
 
     #[test]
     fn a_page_adds_a_monitor_until_it_stops() {
         let (system, heard) = system_in(&std::env::temp_dir());
-        let (system, asked, gone) = adding(system);
+        let (system, asked) = adding(system);
 
         system.handle(1, a_tv());
 
@@ -1825,14 +1853,17 @@ mod virtual_monitors {
             }
         );
         assert_eq!(
-            asked.recv().unwrap(),
+            asked.added.recv().unwrap(),
             VirtualMonitor {
                 name: "Living Room TV".into(),
                 size: (1920, 1080),
                 refresh_mhz: 60_000,
             }
         );
-        assert!(gone.try_recv().is_err(), "the monitor stays while it runs");
+        assert!(
+            asked.gone.try_recv().is_err(),
+            "the monitor stays while it runs"
+        );
 
         system.handle(1, SystemRequest::Unwatch);
 
@@ -1843,26 +1874,82 @@ mod virtual_monitors {
                 end: SystemEnd::Stopped,
             }
         );
-        gone.recv().unwrap();
+        asked.gone.recv().unwrap();
+    }
+
+    #[test]
+    fn a_page_resizes_its_monitor_in_place() {
+        let (system, heard) = system_in(&std::env::temp_dir());
+        let (system, asked) = adding(system);
+        system.handle(1, a_tv());
+        reply(&heard, 1);
+
+        assert_eq!(
+            system.handle(
+                1,
+                SystemRequest::ResizeVirtualMonitor {
+                    width: 1280,
+                    height: 720,
+                    refresh_mhz: 30_000,
+                },
+            ),
+            Handled::Done
+        );
+
+        assert_eq!(asked.resized.recv().unwrap(), ((1280, 720), 30_000));
+        assert!(asked.gone.try_recv().is_err(), "the same monitor stays");
+    }
+
+    /// A resize arranges the desk, as `setAppBounds` does, so a monitor
+    /// keeps following its pane while the desk is locked.
+    #[test]
+    fn a_resize_arranges_and_drives_what_is_running() {
+        let resize = SystemRequest::ResizeVirtualMonitor {
+            width: 1280,
+            height: 720,
+            refresh_mhz: 30_000,
+        };
+        assert_eq!(reach(&resize), Reach::Arranges);
+        assert_eq!(locked_out(1, &resize), None);
+        assert!(refused_to_an_app(1, &resize).is_some());
+    }
+
+    #[test]
+    fn a_resize_with_no_monitor_reaches_nothing() {
+        let (system, _heard) = system_in(&std::env::temp_dir());
+        let (system, asked) = adding(system);
+
+        assert_eq!(
+            system.handle(
+                1,
+                SystemRequest::ResizeVirtualMonitor {
+                    width: 1280,
+                    height: 720,
+                    refresh_mhz: 30_000,
+                },
+            ),
+            Handled::NothingRunning
+        );
+        assert!(asked.resized.try_recv().is_err());
     }
 
     #[test]
     fn a_page_that_goes_away_takes_its_monitor_with_it() {
         let (system, heard) = system_in(&std::env::temp_dir());
-        let (system, _asked, gone) = adding(system);
+        let (system, asked) = adding(system);
         system.handle(1, a_tv());
         reply(&heard, 1);
 
         drop(system);
 
-        gone.recv().unwrap();
+        asked.gone.recv().unwrap();
     }
 
     #[test]
     fn a_name_with_a_nul_is_refused() {
         // The engine takes the name as a C string.
         let (system, heard) = system_in(&std::env::temp_dir());
-        let (system, asked, _gone) = adding(system);
+        let (system, asked) = adding(system);
 
         system.handle(
             1,
@@ -1875,7 +1962,7 @@ mod virtual_monitors {
         );
 
         assert_eq!(failure(reply(&heard, 1)), SystemErrorKind::InvalidInput);
-        assert!(asked.try_recv().is_err());
+        assert!(asked.added.try_recv().is_err());
     }
 
     #[test]
