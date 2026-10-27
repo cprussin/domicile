@@ -13,8 +13,9 @@
 //!   `domicile_host::idle_warnings`.
 //! - A `zwp_idle_inhibit_manager_v1` inhibitor vetoes blanking while its client
 //!   is alive and its surface has a window. See [`holds`].
-//! - An idle inhibitor from the Inhibit portal vetoes blanking while held. See
-//!   [`Idle::held_by_portals`].
+//! - An idle inhibitor from the Inhibit portal, or a hold through
+//!   `org.freedesktop.ScreenSaver`, vetoes blanking while held. See
+//!   [`Idle::held_by_applications`].
 //! - The shell gets the state, not the edge, since a reloaded page missed
 //!   earlier edges. See [`announced`].
 //! - `idle.lock_after_seconds` runs a second clock from the same input and
@@ -83,8 +84,9 @@ pub struct Idle<S> {
     /// A list, not a set: a surface can carry several inhibitors and a destroy
     /// names only the surface, so each destroy removes one entry.
     inhibitors: Vec<S>,
-    /// Whether an application holds an idle inhibitor through the portal.
-    held_by_portals: bool,
+    /// Whether an application holds the desktop awake through the portal or
+    /// the screen saver.
+    held_by_applications: bool,
 }
 
 impl<S: StillThere + PartialEq> Idle<S> {
@@ -97,7 +99,7 @@ impl<S: StillThere + PartialEq> Idle<S> {
             stirred_at: now,
             stage: Stage::Lit,
             inhibitors: Vec::new(),
-            held_by_portals: false,
+            held_by_applications: false,
         })
     }
 
@@ -191,16 +193,20 @@ impl<S: StillThere + PartialEq> Idle<S> {
         }
     }
 
-    /// Whether portal idle inhibitors are held. `Some` only on an edge.
+    /// Whether applications hold the desktop awake, through the portal or the
+    /// screen saver, after that or the windows changed. `Some` only on an
+    /// edge.
     ///
-    /// The portal names no surface, so these hold with no window showing.
-    pub fn held_by_portals(
+    /// These name no surface, so they hold with no window showing. A window
+    /// mapping or closing can also start or stop an inhibitor holding, with
+    /// no inhibitor request. See `holds`.
+    pub fn held_by_applications(
         &mut self,
         held: bool,
         now: Instant,
         on_the_desktop: &[S],
     ) -> Option<Blanking> {
-        self.held_by_portals = held;
+        self.held_by_applications = held;
         self.settle(now, on_the_desktop)
     }
 
@@ -222,22 +228,13 @@ impl<S: StillThere + PartialEq> Idle<S> {
         }
     }
 
-    /// Re-evaluates after windows were mapped or unmapped. `Some` only on an
-    /// edge.
-    ///
-    /// A window mapping or closing can start or stop an inhibitor holding,
-    /// with no inhibitor request. See `holds`.
-    pub fn the_desktop_changed(&mut self, now: Instant, on_the_desktop: &[S]) -> Option<Blanking> {
-        self.settle(now, on_the_desktop)
-    }
-
     /// Moves the inhibitors from `previous` into this timer.
     ///
     /// Used when a config reload replaces the timer. Clients do not resend
     /// inhibitors, so dropping them would blank the screen mid-video.
     pub fn takes_over_from(mut self, previous: &mut Idle<S>) -> Idle<S> {
         self.inhibitors = std::mem::take(&mut previous.inhibitors);
-        self.held_by_portals = previous.held_by_portals;
+        self.held_by_applications = previous.held_by_applications;
         self
     }
 
@@ -368,7 +365,7 @@ impl<S: StillThere + PartialEq> Idle<S> {
 
     /// Whether an inhibitor holds the desktop awake.
     fn held(&self, on_the_desktop: &[S]) -> bool {
-        self.held_by_portals || self.holding(on_the_desktop).next().is_some()
+        self.held_by_applications || self.holding(on_the_desktop).next().is_some()
     }
 }
 
@@ -431,6 +428,7 @@ pub fn somebody_is_here(request: &ClientRequest) -> Option<&'static str> {
         | ClientRequest::DeskCursor { .. }
         // An application, not a person.
         | ClientRequest::HeldAwakeByThePortal { .. }
+        | ClientRequest::HeldAwakeByTheScreenSaver { .. }
         // The lock chord landed on the shell, and locking must not light the
         // screens.
         | ClientRequest::Lock => None,
@@ -975,13 +973,13 @@ mod tests {
         idle.elapsed(start + AFTER, SHOWING_NOTHING);
 
         assert_eq!(
-            idle.held_by_portals(true, start + AFTER, SHOWING_NOTHING),
+            idle.held_by_applications(true, start + AFTER, SHOWING_NOTHING),
             Some(Blanking::ComeBack)
         );
         let mut reloaded = desk(start).takes_over_from(&mut idle);
         assert_eq!(reloaded.elapsed(start + AFTER, SHOWING_NOTHING), None);
         assert_eq!(
-            reloaded.held_by_portals(false, start + AFTER, SHOWING_NOTHING),
+            reloaded.held_by_applications(false, start + AFTER, SHOWING_NOTHING),
             Some(Blanking::GoDark)
         );
     }
@@ -1081,7 +1079,7 @@ mod tests {
         idle.elapsed(start + AFTER, SHOWING_NOTHING);
 
         assert_eq!(
-            idle.the_desktop_changed(start + AFTER, &showing(1)),
+            idle.held_by_applications(false, start + AFTER, &showing(1)),
             Some(Blanking::ComeBack)
         );
         assert!(!idle.dark());
@@ -1097,7 +1095,7 @@ mod tests {
         idle.elapsed(start + AFTER, &showing(1));
 
         assert_eq!(
-            idle.the_desktop_changed(start + AFTER, SHOWING_NOTHING),
+            idle.held_by_applications(false, start + AFTER, SHOWING_NOTHING),
             Some(Blanking::GoDark)
         );
         assert!(idle.dark());

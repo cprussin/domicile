@@ -120,6 +120,7 @@ mod presentations;
 mod reply;
 mod restatement;
 mod scale;
+mod screen_saver;
 mod screencopy;
 mod screens;
 mod seat;
@@ -601,6 +602,9 @@ struct DomicileCompositor {
     /// inhibitor, which the shell is told along with the Wayland ones. See
     /// [`DomicileCompositor::tell_the_shells_what_holds_the_desktop_awake`].
     held_by_portal_apps: Vec<String>,
+    /// What applications asked `org.freedesktop.ScreenSaver` to hold. See
+    /// [`screen_saver`].
+    held_by_screen_saver: Vec<screen_saver::Hold>,
     /// Sends reloads to the file index thread. `None` without a home to index.
     ///
     /// Only `files.omit` changes go here. See
@@ -1068,6 +1072,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     hub.portals.hold_idle_through(move |by| {
         waking.send_request(ClientRequest::HeldAwakeByThePortal { by });
     });
+    // Browsers' screen wake locks, to the same clock.
+    let waking = Arc::clone(&hub);
+    screen_saver::serve(in_a_window, move |by, change| {
+        waking.send_request(ClientRequest::HeldAwakeByTheScreenSaver { by, change });
+    });
     // The chords applications hold, which ride on the portal requests.
     let publishing = Arc::clone(&hub);
     hub.portals.listen_for_shortcuts(move |shortcuts| {
@@ -1317,6 +1326,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         engine_disconnected: false,
         idle: Idle::after(&config.idle, Instant::now()),
         held_by_portal_apps: Vec::new(),
+        held_by_screen_saver: Vec::new(),
         // Started below, after the event loop's sources.
         index: None,
         // Armed below by `arm_the_idle_clock`, the same path a reload uses.

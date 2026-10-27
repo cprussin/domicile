@@ -24,6 +24,7 @@ use tracing::{debug, info};
 use crate::client_requests::ClientRequest;
 use crate::held_frames::HeldFrames;
 use crate::idle::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
+use crate::screen_saver::{self, Change, Hold};
 use crate::{CalloopData, DomicileCompositor};
 
 /// Routes `zwp_idle_inhibitor_v1` requests to the idle clock.
@@ -251,15 +252,62 @@ impl DomicileCompositor {
     /// The applications holding idle inhibitors through the portal, one name
     /// per inhibitor.
     pub fn held_awake_by_the_portal(&mut self, by: Vec<String>) {
-        let held = !by.is_empty();
         self.held_by_portal_apps = by;
+        self.the_applications_holds_changed("an application's portal inhibitor changed");
+    }
+
+    /// What applications asked `org.freedesktop.ScreenSaver` to hold.
+    pub fn held_awake_by_the_screen_saver(&mut self, by: Vec<Hold>, change: Change) {
+        self.held_by_screen_saver = by;
+        self.the_applications_holds_changed(match change {
+            Change::Asked => "an application asked to keep the screens on",
+            Change::Gone => "an application that kept the screens on is gone",
+        });
+    }
+
+    /// Re-evaluate the holds of applications rather than windows, logging
+    /// `why` if the screens change.
+    fn the_applications_holds_changed(&mut self, why: &str) {
+        let held = !self.applications_holding().is_empty();
         let on_the_desktop = self.surfaces_on_the_desktop();
         let Some(idle) = self.idle.as_mut() else {
             return;
         };
-        let edge = idle.held_by_portals(held, Instant::now(), &on_the_desktop);
-        self.the_inhibitors_changed(edge, "an application's portal inhibitor changed");
+        let edge = idle.held_by_applications(held, Instant::now(), &on_the_desktop);
+        self.the_inhibitors_changed(edge, why);
         self.tell_the_shells_what_holds_the_desktop_awake();
+    }
+
+    /// The applications holding the desktop awake through the portal or the
+    /// screen saver, one name per hold. A screen saver hold from a process
+    /// with windows counts only while one is shown; see
+    /// [`screen_saver::still_holds`].
+    fn applications_holding(&self) -> Vec<String> {
+        let windows: Vec<(Option<u32>, bool)> = if self.held_by_screen_saver.is_empty() {
+            Vec::new()
+        } else {
+            self.toplevels
+                .iter()
+                .map(|(id, toplevel)| {
+                    let pid = toplevel
+                        .wl_surface()
+                        .client()
+                        .and_then(|client| client.get_credentials(&self.display_handle).ok())
+                        .and_then(|credentials| u32::try_from(credentials.pid).ok());
+                    (pid, !self.held_frames.is_hidden(id))
+                })
+                .collect()
+        };
+        self.held_by_portal_apps
+            .iter()
+            .cloned()
+            .chain(
+                self.held_by_screen_saver
+                    .iter()
+                    .filter(|hold| screen_saver::still_holds(hold.pid, &windows))
+                    .map(|hold| hold.app.clone()),
+            )
+            .collect()
     }
 
     /// A client released an idle inhibitor.
@@ -305,22 +353,17 @@ impl DomicileCompositor {
     /// Re-evaluate inhibitors after the windows changed.
     ///
     /// An inhibitor holds only while its surface is a window on the desktop,
-    /// and clients send no inhibitor request when a window maps or closes.
+    /// and clients send no inhibitor request when a window maps or closes. A
+    /// screen saver hold from a window's process changes with it too.
     pub fn the_windows_changed(&mut self, why: &str) {
-        let on_the_desktop = self.surfaces_on_the_desktop();
-        let Some(idle) = self.idle.as_mut() else {
-            return;
-        };
-        let edge = idle.the_desktop_changed(Instant::now(), &on_the_desktop);
-        self.the_inhibitors_changed(edge, why);
-        self.tell_the_shells_what_holds_the_desktop_awake();
+        self.the_applications_holds_changed(why);
     }
 
     /// Tell the shells what holds the desktop awake, and log it when that
     /// changes. See `domicile_host::idle_holds`.
     ///
     /// The Wayland inhibitors holding are named by their window's app id, and
-    /// the portal's by the application holding each.
+    /// the portal's and screen saver's by the application holding each.
     pub fn tell_the_shells_what_holds_the_desktop_awake(&self) {
         let on_the_desktop = self.surfaces_on_the_desktop();
         // Without a timeout there is nothing to hold off.
@@ -328,7 +371,7 @@ impl DomicileCompositor {
             Some(idle) => idle
                 .holding(&on_the_desktop)
                 .map(|surface| window_name(&self.toplevels, surface))
-                .chain(self.held_by_portal_apps.iter().cloned())
+                .chain(self.applications_holding())
                 .collect(),
             None => Vec::new(),
         };

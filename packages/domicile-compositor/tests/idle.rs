@@ -10,7 +10,10 @@ mod running;
 
 use domicile_protocol::{ChromeMessage, HostMessage, SystemEvent, SystemReply, SystemRequest};
 
+use crate::running::bus::Bus;
 use crate::running::Compositor;
+
+const SCREEN_SAVER: &str = "org.freedesktop.ScreenSaver";
 
 /// A desk with no idle timeout, which never blanks.
 const NOBODY_MENTIONED_IDLE: &str = r#"
@@ -274,6 +277,57 @@ fn a_hidden_window_holds_the_desktop_awake_only_while_shown() {
 
     placed(&mut chrome, &app_id, [640.0, 480.0]);
     compositor.wait_for_log("a window was shown; this desktop's screens come back on");
+}
+
+/// A browser holding a screen wake lock, as for a video call, asks
+/// `org.freedesktop.ScreenSaver` to keep the screens on. The screens go dark
+/// once it lets go, or once it is gone without letting go.
+#[test]
+fn a_video_call_in_a_browser_holds_the_screens_on_until_it_lets_go() {
+    let bus = Bus::started();
+    let compositor = Compositor::started_on_a_bus(A_DESK_THAT_BLANKS, &bus.address);
+    compositor.wait_for_log("nobody is at this desktop; its screens go dark");
+
+    let browser = bus.client_once(SCREEN_SAVER);
+    let cookie = inhibit(&browser);
+    compositor.wait_for_log(
+        "an application asked to keep the screens on; this desktop's screens come back on",
+    );
+    browser
+        .call_method(
+            Some(SCREEN_SAVER),
+            "/org/freedesktop/ScreenSaver",
+            Some(SCREEN_SAVER),
+            "UnInhibit",
+            &(cookie,),
+        )
+        .expect("UnInhibit answers");
+    compositor.wait_for_log(
+        "an application asked to keep the screens on; this desktop's screens go dark",
+    );
+
+    inhibit(&browser);
+    compositor.wait_for_log("this desktop's screens come back on");
+    drop(browser);
+    compositor.wait_for_log(
+        "an application that kept the screens on is gone; this desktop's screens go dark",
+    );
+}
+
+/// Asks the screen saver to stay off, as Chromium does, returning the cookie.
+fn inhibit(connection: &zbus::blocking::Connection) -> u32 {
+    connection
+        .call_method(
+            Some(SCREEN_SAVER),
+            "/org/freedesktop/ScreenSaver",
+            Some(SCREEN_SAVER),
+            "Inhibit",
+            &("Chromium", "WebRTC has active PeerConnections"),
+        )
+        .expect("Inhibit answers")
+        .body()
+        .deserialize()
+        .expect("a cookie")
 }
 
 /// The page put `app_id`'s window at the origin with `size`; an empty one
