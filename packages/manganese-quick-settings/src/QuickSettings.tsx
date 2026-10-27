@@ -7,7 +7,7 @@ import { GearSixIcon } from "@phosphor-icons/react/dist/ssr/GearSix";
 import type { ComponentType, MouseEvent, WheelEvent } from "react";
 import { useState } from "react";
 
-import { css } from "../styled-system/css";
+import { css, cva } from "../styled-system/css";
 import { flex, grid, hstack } from "../styled-system/patterns";
 import { DESK_PARTS } from "./desk-parts";
 
@@ -114,7 +114,10 @@ export const QuickSettings = ({
               <parts.NightLightTile />
               {!locked && <parts.DarkModeTile />}
             </span>
-            <parts.BrightnessRow />
+            {/* Clear of the volume's arrow, so the sliders end together. */}
+            <span className={brightnessStyles({ besideArrow: !locked })}>
+              <parts.BrightnessRow />
+            </span>
             <parts.SoundRow onMore={opener(Details.Sound)} />
             <span className={footerStyles}>
               <parts.BatteryStatus />
@@ -127,7 +130,7 @@ export const QuickSettings = ({
                   }}
                   type="button"
                 >
-                  <GearSixIcon aria-hidden size={16} />
+                  <GearSixIcon aria-hidden size={14} />
                   Settings
                 </button>
               )}
@@ -172,19 +175,37 @@ const triggerStyles = hstack({
   transition: "background-color {durations.fast} {easings.default}",
 });
 
-// As wide as the network and Bluetooth panels it opens.
-const panelStyles = css({ display: "block", inlineSize: 104 });
+// A popover's usual width, which its network and Bluetooth details fit. The
+// padding evens out the panel's, which is thinner above and below.
+const panelStyles = css({
+  display: "block",
+  inlineSize: 88,
+  paddingBlock: 1.5,
+});
 
 const mainStyles = flex({ direction: "column", gap: 3 });
 
 const tilesStyles = grid({ columns: 2, gap: 2 });
 
+// The volume's arrow and the gap before it.
+const brightnessStyles = cva({
+  base: { display: "flex" },
+  variants: {
+    besideArrow: {
+      false: {},
+      true: { paddingInlineEnd: 7 },
+    },
+  },
+});
+
+// Quieter than the controls above it.
 const footerStyles = hstack({
   _empty: { display: "none" },
   borderBlockStartColor: "color-mix(in oklab, currentcolor 12%, transparent)",
   borderBlockStartStyle: "solid",
   borderBlockStartWidth: "1px",
-  fontSize: "sm",
+  color: "color-mix(in oklab, currentcolor 80%, transparent)",
+  fontSize: "xs",
   gap: 2,
   paddingBlockStart: 2,
 });
@@ -205,8 +226,9 @@ const settingsStyles = hstack({
   color: "inherit",
   cursor: "pointer",
   flexShrink: 0,
-  fontSize: "sm",
+  fontSize: "xs",
   gap: 1.5,
+  marginInlineEnd: -2.5,
   marginInlineStart: "auto",
   paddingInline: 2.5,
   transition: "background-color {durations.fast} {easings.default}",

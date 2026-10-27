@@ -146,10 +146,11 @@ const muteStyles = css({
   transition: "background-color {durations.fast} {easings.default}",
 });
 
-// The same figure style as brightness, for the same reason.
+// The same figure style as brightness, so the two line up.
 const percentStyles = css({
-  fontSize: "0.625rem",
+  color: "color-mix(in oklab, currentcolor 75%, transparent)",
+  fontSize: "xs",
   fontVariantNumeric: "tabular-nums",
-  minInlineSize: 7,
+  minInlineSize: 9,
   textAlign: "end",
 });

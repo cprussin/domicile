@@ -173,10 +173,11 @@ const labelStyles = css({
   lineHeight: "tight",
 });
 
+// Softer than the label but still readable on the accent.
 const detailStyles = css({
+  color: "color-mix(in oklab, currentcolor 75%, transparent)",
   fontSize: "xs",
   lineHeight: "tight",
-  opacity: "inactive",
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
