@@ -4,6 +4,8 @@ import { Tabs } from "@domicile-desktop/component-library/Tabs";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
+import { css } from "../../styled-system/css";
+
 type Props = {
   /** Each tab's label, which is also what the reader's pick remembers. */
   tabs: readonly { label: string; content: ReactNode }[];
@@ -39,21 +41,26 @@ export const DocTabs = ({ tabs }: Props) => {
     };
   }, [named]);
 
+  // A plain block around the tabs, which fill their parent's height and may
+  // shrink below their content: a docs page's flex column would squeeze them,
+  // and the panel's code would overlap what follows.
   return (
-    <Tabs
-      onValueChange={(picked) => {
-        const label = String(picked);
-        setValue(label);
-        store(label);
-        window.dispatchEvent(new CustomEvent(PICKED, { detail: label }));
-      }}
-      tabs={tabs.map((tab) => ({
-        content: tab.content,
-        label: tab.label,
-        value: tab.label,
-      }))}
-      value={value}
-    />
+    <div className={frameStyles}>
+      <Tabs
+        onValueChange={(picked) => {
+          const label = String(picked);
+          setValue(label);
+          store(label);
+          window.dispatchEvent(new CustomEvent(PICKED, { detail: label }));
+        }}
+        tabs={tabs.map((tab) => ({
+          content: tab.content,
+          label: tab.label,
+          value: tab.label,
+        }))}
+        value={value}
+      />
+    </div>
   );
 };
 
@@ -74,3 +81,6 @@ const store = (label: string) => {
     // Not remembered; this page's tabs still follow.
   }
 };
+
+// The panel's first line clear of the tab bar.
+const frameStyles = css({ "& [role=tabpanel]": { paddingBlockStart: 4 } });
