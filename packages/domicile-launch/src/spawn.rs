@@ -175,8 +175,7 @@ pub fn send_frames_in_memory(compositor: &mut Spawn) {
 ///   don't split the value.
 /// - `PATH`: [`Runtime::shims`] first, so `xdg-open` is `domicile open`.
 /// - `XDG_DATA_DIRS`: `data` first, so GIO finds `domicile-mimeapps.list`.
-///   A user's own `mimeapps.list` still wins. The portal does not see this;
-///   see `ROADMAP.md`.
+///   A user's own `mimeapps.list` still wins. The portal does not see this.
 /// - `LD_LIBRARY_PATH`: the engine directory first, for the
 ///   `libdomicile_engine.so` the compositor `dlopen`s. The compositor removes
 ///   it again for its clients.

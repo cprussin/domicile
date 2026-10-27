@@ -63,8 +63,7 @@ Start a desktop with a browser window and a client open first. Expect:
 4. The shell never goes away, and the browser window keeps its page. The
    client's tab closes.
 
-The client does not come back; see
-[ROADMAP item 2](../ROADMAP.md#in-this-repository).
+The client does not come back.
 
 ## Dead engine with windows open
 

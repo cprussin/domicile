@@ -2,7 +2,7 @@
 //
 // What Enter would do comes first, as in Chromium, then matching visits.
 // Visits are only the addresses this shell sent the window to: the engine
-// reports no address for links followed inside a guest (see ROADMAP.md).
+// reports no address for links followed inside a guest.
 
 import type { TypedAddress } from "./typed-address";
 import { TypedAddressKind, typedAddress } from "./typed-address";

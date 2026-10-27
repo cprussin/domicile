@@ -575,12 +575,12 @@
         pname = "domicile-binaries";
         version = "0.0.0";
         # Include everything cargo can reach, not only `.rs` files:
-        # `include_str!` reads shaders, and tests read `scripts/` and
-        # `ROADMAP.md`. A narrower filter breaks with only "file missing".
+        # `include_str!` reads shaders, and tests read `scripts/`. A narrower
+        # filter breaks with only "file missing".
         src = pkgs.lib.fileset.toSource {
           root = ./.;
           fileset = pkgs.lib.fileset.unions
-            ([ ./Cargo.toml ./Cargo.lock ./ROADMAP.md ./scripts ]
+            ([ ./Cargo.toml ./Cargo.lock ./scripts ]
               ++ map (name: ./packages + "/${name}") rustCrates);
         };
         cargoLock = {
