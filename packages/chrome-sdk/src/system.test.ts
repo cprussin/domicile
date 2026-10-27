@@ -840,6 +840,7 @@ describe("virtual monitors", () => {
           height: 1080,
           name: "Living Room TV",
           refresh_mhz: 60_000,
+          scale: 1,
           width: 1920,
         },
       ],
@@ -862,8 +863,27 @@ describe("virtual monitors", () => {
         call: "resize_virtual_monitor",
         height: 720,
         refresh_mhz: 30_000,
+        scale: 1,
         width: 1280,
       },
+    ]);
+  });
+
+  it("gives the monitor a scale of its own", async () => {
+    const host = new FakeHost();
+    const adding = system(host).addVirtualMonitor({ ...aTv, scale: 1.25 });
+    host.reply(1, { kind: "virtual_monitor", output: "virtual-1" });
+    const monitor = started(await adding);
+    monitor.resize({
+      height: 720,
+      refreshMhz: 60_000,
+      scale: 1.5,
+      width: 1280,
+    });
+
+    expect(host.calls).toStrictEqual([
+      [1, expect.objectContaining({ scale: 1.25 })],
+      [1, expect.objectContaining({ scale: 1.5 })],
     ]);
   });
 

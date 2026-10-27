@@ -70,6 +70,7 @@ describe("addVirtual", () => {
           height: 1080,
           name: "Living room TV",
           refresh_mhz: 60_000,
+          scale: 1,
           width: 1920,
         },
       ],

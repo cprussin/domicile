@@ -19,6 +19,7 @@ use crate::buffer_transform::Sampled;
 use crate::dmabuf_descriptor::DmabufDescriptor;
 use domicile_config::{Desk, Transform};
 use domicile_host::clipboard::{Contents, TEXT_MIMES};
+use domicile_protocol::Scale;
 use libloading::{Library, Symbol};
 use smithay::utils::Transform as BufferTransform;
 use thiserror::Error;
@@ -249,6 +250,9 @@ pub struct VirtualDisplay {
     /// Its mode, in physical pixels.
     pub mode: (u32, u32),
     pub refresh_mhz: u32,
+    /// Device pixels per logical pixel. Not the engine's: the compositor lays
+    /// a scaled one out itself (`Screens::from_the_engine`).
+    pub scale: Scale,
     /// Its name, such as the TV it is cast to. Becomes the display's
     /// description.
     pub name: String,

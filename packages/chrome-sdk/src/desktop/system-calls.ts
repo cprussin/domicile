@@ -575,6 +575,7 @@ const addVirtualMonitor = (
         height: mode.height,
         name: mode.name,
         refresh_mhz: mode.refreshMhz,
+        scale: mode.scale ?? 1,
         width: mode.width,
       },
       {
@@ -605,6 +606,7 @@ const addVirtualMonitor = (
                           call: "resize_virtual_monitor",
                           height: size.height,
                           refresh_mhz: size.refreshMhz,
+                          scale: size.scale ?? 1,
                           width: size.width,
                         }),
                       );
