@@ -4,13 +4,10 @@
 use std::time::Instant;
 
 use domicile_protocol::HostMessage;
-use smithay::reexports::{
-    calloop::{
-        generic::Generic,
-        timer::{TimeoutAction, Timer},
-        Interest, LoopHandle, Mode, PostAction, RegistrationToken,
-    },
-    wayland_server::DisplayHandle,
+use smithay::reexports::calloop::{
+    generic::Generic,
+    timer::{TimeoutAction, Timer},
+    Interest, LoopHandle, Mode, PostAction, RegistrationToken,
 };
 use smithay::wayland::{
     selection::data_device::set_data_device_selection,
@@ -33,12 +30,47 @@ use crate::{engine, thread_priority};
 use crate::{CalloopData, DomicileCompositor};
 
 impl DomicileCompositor {
+    /// Lay the desk out again from the engine's last display report and the
+    /// virtual monitors' scales. `replugged_into` decides whether the engine
+    /// defines the desktop. `adopt_the_desktop` does nothing for an unchanged
+    /// list, which a modeset-triggered hotplug reports.
+    pub fn lay_out_the_engines_displays(&mut self) {
+        match self.screens.replugged_into(
+            &self.engine_displays,
+            &self.config.current().output,
+            &self.vendors,
+            &self.virtual_displays,
+        ) {
+            // The desktop stays: the config describes it, or the engine is
+            // mid-update. A monitor that arrives while the screens are dark
+            // comes up lit, so darken it again.
+            Ok(None) => self.keep_the_screens_dark(),
+            // `adopt_the_desktop` sets every connector's power, dark ones
+            // included.
+            Ok(Some(screens)) => {
+                let dh = self.display_handle.clone();
+                self.adopt_the_desktop(&dh, screens);
+            }
+            // A matching profile cannot be applied. Keep the current desktop,
+            // as `ConfigStore` does for an unparseable edit, and name the
+            // config problem.
+            Err(err) => {
+                tracing::warn!(
+                    %err,
+                    "the profile these monitors matched cannot be applied to them; \
+                     keeping the desktop that is up"
+                );
+                // Keep it dark too; the unplaced monitor came up lit.
+                self.keep_the_screens_dark();
+            }
+        }
+    }
+
     /// Run the engine's pending work and act on its events.
     ///
     /// Called only from the engine's calloop source, because the ABI's
-    /// callbacks fire inside `dispatch`. `dh` is needed to create `wl_output`s
-    /// when a display list rearranges the desktop.
-    fn pump_the_engine(&mut self, dh: &DisplayHandle) {
+    /// callbacks fire inside `dispatch`.
+    fn pump_the_engine(&mut self) {
         let Some(session) = self.engine.as_mut() else {
             return;
         };
@@ -246,32 +278,7 @@ impl DomicileCompositor {
                     if let Some(session) = self.engine.as_ref() {
                         session.set_white_point(self.white_point);
                     }
-                    match self.screens.replugged_into(
-                        &displays,
-                        &self.config.current().output,
-                        &self.vendors,
-                    ) {
-                        // The desktop stays: the config describes it, or the
-                        // engine is mid-update. A monitor that arrives while the
-                        // screens are dark comes up lit, so darken it again.
-                        Ok(None) => self.keep_the_screens_dark(),
-                        // `adopt_the_desktop` sets every connector's power,
-                        // dark ones included.
-                        Ok(Some(screens)) => self.adopt_the_desktop(dh, screens),
-                        // A matching profile cannot be applied. Keep the
-                        // current desktop, as `ConfigStore` does for an
-                        // unparseable edit, and name the config problem.
-                        Err(err) => {
-                            tracing::warn!(
-                                %err,
-                                "the profile these monitors matched cannot be applied to them; \
-                                 keeping the desktop that is up"
-                            );
-                            // Keep it dark too; the unplaced monitor came up
-                            // lit.
-                            self.keep_the_screens_dark();
-                        }
-                    }
+                    self.lay_out_the_engines_displays();
                 }
             }
         }
@@ -497,8 +504,7 @@ pub fn poll_the_engine(
     Ok(handle.insert_source(
         Generic::new(owned, Interest::READ, Mode::Level),
         |_, _, data: &mut CalloopData| {
-            let dh = data.display.handle();
-            data.state.pump_the_engine(&dh);
+            data.state.pump_the_engine();
             data.state.arm_the_hold_deadline();
             Ok(PostAction::Continue)
         },

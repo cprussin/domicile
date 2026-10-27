@@ -1774,9 +1774,13 @@ mod virtual_monitors {
     use std::sync::mpsc::Sender;
 
     use domicile_host::system::{AddedMonitor, MonitorLease, VirtualMonitor};
-    use domicile_protocol::SystemEnd;
+    use domicile_protocol::{Scale, SystemEnd};
 
     use super::*;
+
+    fn one_and_a_half() -> Scale {
+        Scale::try_from(1.5).unwrap()
+    }
 
     fn a_tv() -> SystemRequest {
         SystemRequest::VirtualMonitor {
@@ -1784,6 +1788,7 @@ mod virtual_monitors {
             width: 1920,
             height: 1080,
             refresh_mhz: 60_000,
+            scale: Scale::ONE,
         }
     }
 
@@ -1791,12 +1796,12 @@ mod virtual_monitors {
     /// and on `resized` each size it is given.
     struct Lease {
         gone: Sender<()>,
-        resized: Sender<((u32, u32), u32)>,
+        resized: Sender<((u32, u32), u32, Scale)>,
     }
 
     impl MonitorLease for Lease {
-        fn resize(&self, size: (u32, u32), refresh_mhz: u32) {
-            self.resized.send((size, refresh_mhz)).unwrap();
+        fn resize(&self, size: (u32, u32), refresh_mhz: u32, scale: Scale) {
+            self.resized.send((size, refresh_mhz, scale)).unwrap();
         }
     }
 
@@ -1811,7 +1816,7 @@ mod virtual_monitors {
     struct Asked {
         added: Receiver<VirtualMonitor>,
         gone: Receiver<()>,
-        resized: Receiver<((u32, u32), u32)>,
+        resized: Receiver<((u32, u32), u32, Scale)>,
     }
 
     /// A system that adds each monitor as `virtual-1`, and what it was asked.
@@ -1858,6 +1863,7 @@ mod virtual_monitors {
                 name: "Living Room TV".into(),
                 size: (1920, 1080),
                 refresh_mhz: 60_000,
+                scale: Scale::ONE,
             }
         );
         assert!(
@@ -1878,6 +1884,26 @@ mod virtual_monitors {
     }
 
     #[test]
+    fn a_page_adds_a_monitor_at_its_scale() {
+        let (system, heard) = system_in(&std::env::temp_dir());
+        let (system, asked) = adding(system);
+
+        system.handle(
+            1,
+            SystemRequest::VirtualMonitor {
+                name: "Pane".into(),
+                width: 806,
+                height: 539,
+                refresh_mhz: 60_000,
+                scale: one_and_a_half(),
+            },
+        );
+        reply(&heard, 1);
+
+        assert_eq!(asked.added.recv().unwrap().scale, one_and_a_half());
+    }
+
+    #[test]
     fn a_page_resizes_its_monitor_in_place() {
         let (system, heard) = system_in(&std::env::temp_dir());
         let (system, asked) = adding(system);
@@ -1891,12 +1917,16 @@ mod virtual_monitors {
                     width: 1280,
                     height: 720,
                     refresh_mhz: 30_000,
+                    scale: one_and_a_half(),
                 },
             ),
             Handled::Done
         );
 
-        assert_eq!(asked.resized.recv().unwrap(), ((1280, 720), 30_000));
+        assert_eq!(
+            asked.resized.recv().unwrap(),
+            ((1280, 720), 30_000, one_and_a_half())
+        );
         assert!(asked.gone.try_recv().is_err(), "the same monitor stays");
     }
 
@@ -1908,6 +1938,7 @@ mod virtual_monitors {
             width: 1280,
             height: 720,
             refresh_mhz: 30_000,
+            scale: Scale::ONE,
         };
         assert_eq!(reach(&resize), Reach::Arranges);
         assert_eq!(locked_out(1, &resize), None);
@@ -1926,6 +1957,7 @@ mod virtual_monitors {
                     width: 1280,
                     height: 720,
                     refresh_mhz: 30_000,
+                    scale: Scale::ONE,
                 },
             ),
             Handled::NothingRunning
@@ -1958,6 +1990,7 @@ mod virtual_monitors {
                 width: 1920,
                 height: 1080,
                 refresh_mhz: 60_000,
+                scale: Scale::ONE,
             },
         );
 

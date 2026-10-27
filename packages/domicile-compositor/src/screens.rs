@@ -15,10 +15,10 @@
 use domicile_config::{
     ConfigError, Connected, Desk, Desktop, InputConfig, Layout, OutputConfig, Transform,
 };
-use domicile_protocol::{DisplayInfo, DisplayTransform};
+use domicile_protocol::{DisplayInfo, DisplayTransform, Scale};
 use domicile_scene::{Bounds, Point};
 
-use crate::engine::{Connector, Display, Pointer};
+use crate::engine::{Connector, Display, Pointer, VirtualDisplay};
 use crate::pnp_ids::Vendors;
 
 /// The `wl_output` physical size for an output with no known size.
@@ -232,7 +232,56 @@ impl Screens {
     /// - Millimeters and refresh rate pass through, zeros included.
     /// - Positions are the engine's. Ozone lays displays out from the origin,
     ///   so there is nothing to normalize.
-    pub fn from_the_engine(displays: &[Display], vendors: &Vendors) -> Screens {
+    ///
+    /// The engine lays out pixels only. So when a virtual monitor in
+    /// `virtuals` is scaled, the compositor lays the desk out instead: each
+    /// other display where the engine put it, and the virtual ones extending
+    /// it at their scales (see [`Screens::extended_onto`]).
+    pub fn from_the_engine(
+        displays: &[Display],
+        vendors: &Vendors,
+        virtuals: &[VirtualDisplay],
+    ) -> Screens {
+        if virtuals.iter().all(|display| display.scale == Scale::ONE) {
+            return Screens::as_the_engine_placed(displays, vendors);
+        }
+        let monitors: Vec<Display> = displays
+            .iter()
+            .filter(|display| !display.is_virtual())
+            .cloned()
+            .collect();
+        let placed = if monitors.is_empty() {
+            Screens {
+                follows_the_window: false,
+                scanout: Vec::new(),
+                outputs: Vec::new(),
+                size: (0, 0),
+            }
+        } else {
+            Screens {
+                // A layout darkens each connector it leaves out.
+                scanout: monitors
+                    .iter()
+                    .map(|display| Connector {
+                        id: display.id,
+                        enabled: true,
+                        origin: display.position,
+                        transform: Transform::Normal,
+                        scale: 1.0,
+                        desk: Some(Desk {
+                            position: display.position,
+                            size: display.size,
+                        }),
+                    })
+                    .collect(),
+                ..Screens::as_the_engine_placed(&monitors, vendors)
+            }
+        };
+        placed.extended_onto(displays, virtuals)
+    }
+
+    /// Every display where the engine put it, unscaled and unrotated.
+    fn as_the_engine_placed(displays: &[Display], vendors: &Vendors) -> Screens {
         let outputs: Vec<Advertised> = displays
             .iter()
             .map(|display| {
@@ -311,7 +360,12 @@ impl Screens {
     /// The profile sets position, scale and rotation. The panel's own
     /// properties come from the engine's reading. Virtual displays, which no
     /// profile names, extend the desk; see [`Screens::extended_onto`].
-    pub fn from_the_layout(layout: &Layout, displays: &[Display], vendors: &Vendors) -> Screens {
+    pub fn from_the_layout(
+        layout: &Layout,
+        displays: &[Display],
+        vendors: &Vendors,
+        virtuals: &[VirtualDisplay],
+    ) -> Screens {
         let profiled = Screens {
             follows_the_window: false,
             // By the engine's id: an output name is this compositor's naming,
@@ -358,15 +412,16 @@ impl Screens {
                 as_coordinate(layout.size().1),
             ),
         };
-        profiled.extended_onto(displays)
+        profiled.extended_onto(displays, virtuals)
     }
 
     /// This profile's desktop with each virtual display in `displays` added
-    /// right of it, top-aligned, at scale 1.
+    /// right of it, top-aligned, at its scale in `virtuals` (1 if it has
+    /// none).
     ///
     /// On the engine's desktop each goes past the end of the connectors' row,
     /// where the engine places a display the layout does not name.
-    fn extended_onto(mut self, displays: &[Display]) -> Screens {
+    fn extended_onto(mut self, displays: &[Display], virtuals: &[VirtualDisplay]) -> Screens {
         let mode_of = |id: i64| {
             displays
                 .iter()
@@ -381,33 +436,39 @@ impl Screens {
             .max()
             .unwrap_or(0);
         for display in displays.iter().filter(|display| display.is_virtual()) {
-            let size = (as_coordinate(display.size.0), as_coordinate(display.size.1));
+            let scale = virtuals
+                .iter()
+                .find(|virtual_display| virtual_display.id == display.id)
+                .map_or(1.0, |virtual_display| virtual_display.scale.get());
+            let mode = (as_coordinate(display.size.0), as_coordinate(display.size.1));
+            let logical = logical_of(display.size, scale);
             let position = (self.size.0, 0);
             self.scanout.push(Connector {
                 id: display.id,
                 enabled: true,
                 origin: (row_end, 0),
                 transform: Transform::Normal,
-                scale: 1.0,
+                scale,
                 desk: Some(Desk {
                     position,
-                    size: display.size,
+                    size: logical,
                 }),
             });
+            let logical = (as_coordinate(logical.0), as_coordinate(logical.1));
             self.outputs.push(Advertised {
-                logical: size,
-                mode: size,
+                logical,
+                mode,
                 name: name_of(display),
                 position,
-                scale: 1.0,
+                scale,
                 transform: Transform::Normal,
                 description: display.description.clone(),
                 display: Some(display.id),
                 physical_mm: display.physical_mm,
                 refresh_mhz: display.refresh_mhz,
             });
-            row_end += size.0;
-            self.size = (self.size.0 + size.0, self.size.1.max(size.1));
+            row_end += mode.0;
+            self.size = (self.size.0 + logical.0, self.size.1.max(logical.1));
         }
         self
     }
@@ -512,12 +573,15 @@ impl Screens {
         output: &OutputConfig,
         displays: &[Display],
         vendors: &Vendors,
+        virtuals: &[VirtualDisplay],
     ) -> Result<Option<Screens>, ConfigError> {
         match output.desktop() {
             Some(desktop) => Ok(Some(Screens::described(&desktop))),
             // Not described, so the profile match or the engine's reading
             // decides.
-            None if !displays.is_empty() => self.replugged_into(displays, output, vendors),
+            None if !displays.is_empty() => {
+                self.replugged_into(displays, output, vendors, virtuals)
+            }
             None if self.follows_the_window() => Ok(None),
             None => Ok(Some(Screens::nested())),
         }
@@ -571,14 +635,17 @@ impl Screens {
         displays: &[Display],
         output: &OutputConfig,
         vendors: &Vendors,
+        virtuals: &[VirtualDisplay],
     ) -> Result<Option<Screens>, ConfigError> {
         if output.desktop().is_some() {
             Ok(None)
         } else {
             Ok(match output.layout(&connected(displays, vendors))? {
-                Some(layout) => Some(Screens::from_the_layout(&layout, displays, vendors)),
+                Some(layout) => Some(Screens::from_the_layout(
+                    &layout, displays, vendors, virtuals,
+                )),
                 None => {
-                    let read = Screens::from_the_engine(displays, vendors);
+                    let read = Screens::from_the_engine(displays, vendors, virtuals);
                     (!self.scanout.is_empty() || read.is_laid_out()).then_some(read)
                 }
             })
@@ -775,6 +842,16 @@ fn multiplied(logical: (i32, i32), scale: i32) -> (i32, i32) {
 /// `domicile_config` bounds the desktop extent and `size × scale <= i32::MAX`,
 /// so this never fails for a `Desktop`. Asserting beats a cast that would
 /// silently go negative.
+/// A virtual monitor's logical size: `pixels` divided by `scale`, from one
+/// pixel to the largest coordinate. Clamped rather than refused, as a
+/// profile's is, since the page asking has no config to fix.
+fn logical_of(pixels: (u32, u32), scale: f64) -> (u32, u32) {
+    let largest = f64::from(i32::MAX);
+    // In range before the cast, so it neither saturates nor truncates.
+    let divide = |measure: u32| (f64::from(measure) / scale).round().clamp(1.0, largest) as u32;
+    (divide(pixels.0), divide(pixels.1))
+}
+
 fn as_coordinate(measure: u32) -> i32 {
     i32::try_from(measure).expect("a validated desktop measures within an i32")
 }
@@ -788,7 +865,7 @@ fn as_measure(coordinate: i32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::VirtualDisplay;
+
     use domicile_config::{Config, Desk};
 
     fn desktop(text: &str) -> Desktop {
@@ -1087,7 +1164,7 @@ mod tests {
     /// laptop (1920x1280 at `0,1920`).
     fn monitor_over_laptop() -> Screens {
         Screens::nested()
-            .replugged_into(&two_plugged_in(), &output(HOME_OFFICE), &unspelled())
+            .replugged_into(&two_plugged_in(), &output(HOME_OFFICE), &unspelled(), &[])
             .expect("the profile should be applicable")
             .expect("a matched profile defines the desktop")
     }
@@ -1206,7 +1283,7 @@ mod tests {
 
     #[test]
     fn a_tty_casts_each_monitor_from_its_own_capture() {
-        let screens = Screens::from_the_engine(&two_plugged_in(), &unspelled());
+        let screens = Screens::from_the_engine(&two_plugged_in(), &unspelled(), &[]);
 
         let cast = screens.cast_screens();
 
@@ -1226,7 +1303,7 @@ mod tests {
 
     #[test]
     fn each_cast_screen_is_offered_by_name_and_panel() {
-        let screens = Screens::from_the_engine(&two_plugged_in(), &unspelled());
+        let screens = Screens::from_the_engine(&two_plugged_in(), &unspelled(), &[]);
         let desk = screens.outputs[1].position;
 
         let offered = screens.cast_monitors();
@@ -1288,6 +1365,7 @@ mod tests {
                 },
             ],
             &unspelled(),
+            &[],
         );
         assert_eq!(
             screens.outputs().cloned().collect::<Vec<_>>(),
@@ -1348,7 +1426,7 @@ mod tests {
     fn a_monitor_with_no_edid_name_is_named_after_its_connector() {
         // The laptop panel has an EDID name, so it keeps `drm-<id>` and the
         // profiles that name it.
-        let screens = Screens::from_the_engine(&panel_and_projector(), &unspelled());
+        let screens = Screens::from_the_engine(&panel_and_projector(), &unspelled(), &[]);
 
         assert_eq!(
             screens
@@ -1361,7 +1439,7 @@ mod tests {
 
     #[test]
     fn a_monitor_named_after_its_connector_is_cast_as_its_display() {
-        let screens = Screens::from_the_engine(&panel_and_projector(), &unspelled());
+        let screens = Screens::from_the_engine(&panel_and_projector(), &unspelled(), &[]);
 
         let cast = screens.cast_screens();
 
@@ -1396,6 +1474,7 @@ mod tests {
 "#
                 )),
                 &unspelled(),
+                &[],
             )
             .expect("the profile should be applicable")
             .expect("a matched profile defines the desktop");
@@ -1484,7 +1563,7 @@ mod tests {
         let described_in_the_config = output(&displays(&[LEFT]));
         assert_eq!(
             described(&[LEFT])
-                .replugged_into(&plugged_in(), &described_in_the_config, &unspelled())
+                .replugged_into(&plugged_in(), &described_in_the_config, &unspelled(), &[])
                 .expect("a described desktop is not a layout that failed"),
             None
         );
@@ -1493,7 +1572,7 @@ mod tests {
     #[test]
     fn a_desktop_nothing_described_is_the_engines_to_define() {
         let taken = Screens::nested()
-            .replugged_into(&plugged_in(), &unconfigured(), &unspelled())
+            .replugged_into(&plugged_in(), &unconfigured(), &unspelled(), &[])
             .expect("nothing here can fail to be applied")
             .expect("an undescribed desktop takes the engine's displays");
         assert_eq!(taken.size(), (2880, 1920));
@@ -1505,11 +1584,11 @@ mod tests {
         // Hotplugs after the first DRM reading still apply, even though the
         // desktop no longer follows the window.
         let one_monitor = Screens::nested()
-            .replugged_into(&plugged_in(), &unconfigured(), &unspelled())
+            .replugged_into(&plugged_in(), &unconfigured(), &unspelled(), &[])
             .expect("nothing here can fail to be applied")
             .expect("an undescribed desktop takes the engine's displays");
         let both = one_monitor
-            .replugged_into(&two_plugged_in(), &unconfigured(), &unspelled())
+            .replugged_into(&two_plugged_in(), &unconfigured(), &unspelled(), &[])
             .expect("nothing here can fail to be applied")
             .expect("a desktop the engine defined is still the engine's");
         assert_eq!(both.size(), (4800, 1920));
@@ -1526,10 +1605,15 @@ mod tests {
     #[test]
     fn a_reading_the_engine_has_not_laid_out_keeps_the_desktop() {
         // The engine lays out its own row, so its finished reading follows.
-        let one_monitor = Screens::from_the_engine(&plugged_in(), &unspelled());
+        let one_monitor = Screens::from_the_engine(&plugged_in(), &unspelled(), &[]);
         assert_eq!(
             one_monitor
-                .replugged_into(&projector_not_yet_placed(), &unconfigured(), &unspelled())
+                .replugged_into(
+                    &projector_not_yet_placed(),
+                    &unconfigured(),
+                    &unspelled(),
+                    &[]
+                )
                 .expect("nothing here can fail to be applied"),
             None
         );
@@ -1540,7 +1624,7 @@ mod tests {
         // The engine lays out by the profile's connectors until it hears the
         // empty list, so keeping the profile's desktop would never send it.
         let placed = Screens::nested()
-            .replugged_into(&two_plugged_in(), &output(HOME_OFFICE), &unspelled())
+            .replugged_into(&two_plugged_in(), &output(HOME_OFFICE), &unspelled(), &[])
             .expect("the profile should be applicable")
             .expect("a matched profile defines the desktop");
         let unplaced = placed
@@ -1548,6 +1632,7 @@ mod tests {
                 &projector_not_yet_placed(),
                 &output(HOME_OFFICE),
                 &unspelled(),
+                &[],
             )
             .expect("nothing here can fail to be applied")
             .expect("leaving a profile is always taken");
@@ -1560,7 +1645,7 @@ mod tests {
         // below it. The mode, millimeters and refresh rate come from the
         // engine.
         let placed = Screens::nested()
-            .replugged_into(&two_plugged_in(), &output(HOME_OFFICE), &unspelled())
+            .replugged_into(&two_plugged_in(), &output(HOME_OFFICE), &unspelled(), &[])
             .expect("the profile should be applicable")
             .expect("a matched profile defines the desktop");
         assert_eq!(
@@ -1607,7 +1692,7 @@ mod tests {
         // The connector settings the engine needs. Unlike `outputs`, these
         // include disabled displays and the CRTC positions.
         let placed = Screens::nested()
-            .replugged_into(&two_plugged_in(), &output(HOME_OFFICE), &unspelled())
+            .replugged_into(&two_plugged_in(), &output(HOME_OFFICE), &unspelled(), &[])
             .expect("the profile should be applicable")
             .expect("a matched profile defines the desktop");
         assert_eq!(
@@ -1650,7 +1735,7 @@ mod tests {
         // Empty means the hardware decides. When a profile that turned a panel
         // off stops matching, the empty list relights the panel.
         let unplanned = Screens::nested()
-            .replugged_into(&plugged_in(), &output(HOME_OFFICE), &unspelled())
+            .replugged_into(&plugged_in(), &output(HOME_OFFICE), &unspelled(), &[])
             .expect("a profile that does not match cannot fail to apply")
             .expect("an undescribed desktop is still the engine's to define");
         assert!(unplanned.scanout().is_empty());
@@ -1680,6 +1765,7 @@ mod tests {
 "#
                 )),
                 &unspelled(),
+                &[],
             )
             .expect("the profile should be applicable")
             .expect("a matched profile defines the desktop");
@@ -1702,7 +1788,7 @@ mod tests {
     fn a_monitors_maker_is_spelled_out_where_this_machine_has_a_table() {
         // `DEL` is in the table and `BOE` is not. An unknown code keeps its
         // three letters. This matches sway.
-        let spelled = Screens::from_the_engine(&two_plugged_in(), &desk_vendors());
+        let spelled = Screens::from_the_engine(&two_plugged_in(), &desk_vendors(), &[]);
         assert_eq!(
             spelled
                 .outputs()
@@ -1740,6 +1826,7 @@ mod tests {
 "#,
                 ),
                 &desk_vendors(),
+                &[],
             )
             .expect("the profile should be applicable")
             .expect("a matched profile defines the desktop");
@@ -1766,12 +1853,12 @@ mod tests {
     fn monitors_no_profile_names_are_left_where_the_engine_put_them() {
         // No profile matches this desk, so the engine's reading is used.
         let unplanned = Screens::nested()
-            .replugged_into(&plugged_in(), &output(HOME_OFFICE), &unspelled())
+            .replugged_into(&plugged_in(), &output(HOME_OFFICE), &unspelled(), &[])
             .expect("a profile that does not match cannot fail to apply")
             .expect("an undescribed desktop is still the engine's to define");
         assert_eq!(
             unplanned,
-            Screens::from_the_engine(&plugged_in(), &unspelled())
+            Screens::from_the_engine(&plugged_in(), &unspelled(), &[])
         );
     }
 
@@ -1798,6 +1885,7 @@ mod tests {
 "#,
                 ),
                 &unspelled(),
+                &[],
             )
             .expect_err("a profile that cannot be applied says so");
         assert!(
@@ -1879,7 +1967,7 @@ mod tests {
         let mut displays = plugged_in();
         displays.push(a_tv());
 
-        let screens = Screens::from_the_engine(&displays, &unspelled());
+        let screens = Screens::from_the_engine(&displays, &unspelled(), &[]);
 
         let tv = screens.outputs().last().expect("the TV is advertised");
         assert_eq!(tv.name, "virtual-1");
@@ -1894,7 +1982,7 @@ mod tests {
         displays.push(a_tv());
 
         let placed = Screens::nested()
-            .replugged_into(&displays, &output(HOME_OFFICE), &unspelled())
+            .replugged_into(&displays, &output(HOME_OFFICE), &unspelled(), &[])
             .expect("the profile should be applicable")
             .expect("a matched profile defines the desktop");
 
@@ -1931,6 +2019,163 @@ mod tests {
         );
     }
 
+    /// A pane of another desktop, as a headless engine reports it: at
+    /// `position` in the engine's row of pixels.
+    fn a_pane(number: u32, position: (i32, i32), size: (u32, u32)) -> Display {
+        Display {
+            id: VirtualDisplay::id_of(number),
+            description: "Pane".into(),
+            connector: format!("virtual-{number}"),
+            position,
+            size,
+            physical_mm: UNKNOWN_PHYSICAL_MM,
+            refresh_mhz: 60_000,
+        }
+    }
+
+    /// The compositor's own record of the pane, at `scale`.
+    fn pane_at(number: u32, size: (u32, u32), scale: f64) -> VirtualDisplay {
+        VirtualDisplay {
+            id: VirtualDisplay::id_of(number),
+            mode: size,
+            refresh_mhz: 60_000,
+            scale: Scale::try_from(scale).unwrap(),
+            name: "Pane".into(),
+        }
+    }
+
+    #[test]
+    fn a_virtual_monitor_takes_its_own_scale() {
+        // A headless desk of two panes, the second of a Windows window at
+        // 150%. The engine lays out pixels only, so the compositor lays the
+        // desk out instead, with each pane at its own scale.
+        let displays = [
+            a_pane(1, (0, 0), (1920, 1080)),
+            a_pane(2, (1920, 0), (1500, 900)),
+        ];
+        let virtuals = [pane_at(1, (1920, 1080), 1.0), pane_at(2, (1500, 900), 1.5)];
+
+        let screens = Screens::from_the_engine(&displays, &unspelled(), &virtuals);
+
+        assert_eq!(
+            screens.outputs().last(),
+            Some(&Advertised {
+                logical: (1000, 600),
+                mode: (1500, 900),
+                name: "virtual-2".into(),
+                position: (1920, 0),
+                scale: 1.5,
+                transform: Transform::Normal,
+                description: "Pane".into(),
+                display: Some(VirtualDisplay::id_of(2)),
+                physical_mm: UNKNOWN_PHYSICAL_MM,
+                refresh_mhz: 60_000,
+            })
+        );
+        assert_eq!(screens.size(), (2920, 1080));
+        assert_eq!(
+            screens.scanout(),
+            vec![
+                Connector {
+                    id: VirtualDisplay::id_of(1),
+                    enabled: true,
+                    origin: (0, 0),
+                    transform: Transform::Normal,
+                    scale: 1.0,
+                    desk: Some(Desk {
+                        position: (0, 0),
+                        size: (1920, 1080),
+                    }),
+                },
+                Connector {
+                    id: VirtualDisplay::id_of(2),
+                    enabled: true,
+                    origin: (1920, 0),
+                    transform: Transform::Normal,
+                    scale: 1.5,
+                    desk: Some(Desk {
+                        position: (1920, 0),
+                        size: (1000, 600),
+                    }),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn a_scaled_virtual_monitor_keeps_the_monitors_where_the_engine_put_them() {
+        // A layout darkens each connector it leaves out, so it names the
+        // plugged-in monitor too, where the engine had it.
+        let mut displays = plugged_in();
+        let monitor = displays[0].clone();
+        // Past the panel's 2880 pixels, as the engine places it.
+        displays.push(a_pane(1, (2880, 0), (1500, 900)));
+
+        let screens =
+            Screens::from_the_engine(&displays, &unspelled(), &[pane_at(1, (1500, 900), 1.5)]);
+
+        assert_eq!(
+            screens.scanout().first(),
+            Some(&Connector {
+                id: monitor.id,
+                enabled: true,
+                origin: monitor.position,
+                transform: Transform::Normal,
+                scale: 1.0,
+                desk: Some(Desk {
+                    position: monitor.position,
+                    size: monitor.size,
+                }),
+            })
+        );
+        assert_eq!(
+            screens
+                .outputs()
+                .map(|output| output.scale)
+                .collect::<Vec<_>>(),
+            vec![1.0, 1.5]
+        );
+    }
+
+    #[test]
+    fn unscaled_virtual_monitors_leave_the_engine_to_lay_out() {
+        let displays = [
+            a_pane(1, (0, 0), (1920, 1080)),
+            a_pane(2, (1920, 0), (1500, 900)),
+        ];
+
+        let screens = Screens::from_the_engine(
+            &displays,
+            &unspelled(),
+            &[pane_at(1, (1920, 1080), 1.0), pane_at(2, (1500, 900), 1.0)],
+        );
+
+        assert!(screens.scanout().is_empty());
+        assert_eq!(screens.size(), (3420, 1080));
+    }
+
+    #[test]
+    fn a_profile_extends_the_desk_onto_a_scaled_virtual_monitor() {
+        let mut displays = two_plugged_in();
+        displays.push(a_tv());
+        let tv = VirtualDisplay {
+            scale: Scale::try_from(2.0).unwrap(),
+            ..pane_at(1, (1920, 1080), 1.0)
+        };
+
+        let placed = Screens::nested()
+            .replugged_into(&displays, &output(HOME_OFFICE), &unspelled(), &[tv])
+            .expect("the profile should be applicable")
+            .expect("a matched profile defines the desktop");
+
+        let advertised = placed.outputs().last().expect("the TV is advertised");
+        assert_eq!(
+            (advertised.logical, advertised.mode, advertised.scale),
+            ((960, 540), (1920, 1080), 2.0)
+        );
+        assert_eq!(placed.size(), (2880, 3200));
+    }
+
     #[test]
     fn a_profile_cannot_name_a_virtual_monitor() {
         // Profiles describe the monitors on the desk. A TV comes and goes
@@ -1949,7 +2194,7 @@ mod tests {
     fn a_desktop_of_no_displays_is_refused_rather_than_sized_zero() {
         // `DrmScreen` reports `kDisplaylessBounds` rather than an empty list,
         // so an empty list is an engine bug.
-        let _ = Screens::from_the_engine(&[], &unspelled());
+        let _ = Screens::from_the_engine(&[], &unspelled(), &[]);
     }
 
     #[test]
@@ -2098,7 +2343,7 @@ mod tests {
         let config = output(&displays(&[LEFT]));
         let described = desktop(&displays(&[LEFT]));
         assert_eq!(
-            now.reloaded_into(&config, NOTHING_PLUGGED_IN, &unspelled())
+            now.reloaded_into(&config, NOTHING_PLUGGED_IN, &unspelled(), &[])
                 .expect("a described desktop cannot fail to be applied"),
             Some(Screens::described(&described))
         );
@@ -2108,8 +2353,8 @@ mod tests {
     fn a_reload_re_matches_the_monitors_the_engine_last_read() {
         // Saving a profile applies it at once, matched against the engine's
         // last reading.
-        let placed = Screens::from_the_engine(&two_plugged_in(), &unspelled())
-            .reloaded_into(&output(HOME_OFFICE), &two_plugged_in(), &unspelled())
+        let placed = Screens::from_the_engine(&two_plugged_in(), &unspelled(), &[])
+            .reloaded_into(&output(HOME_OFFICE), &two_plugged_in(), &unspelled(), &[])
             .expect("the profile should be applicable")
             .expect("a matched profile defines the desktop");
         assert_eq!(placed.size(), (1920, 3200));
@@ -2123,7 +2368,7 @@ mod tests {
         // directory triggers a reload, so this happens often.
         let now = Screens::following_the_window((1920, 1200), 2);
         assert_eq!(
-            now.reloaded_into(&unconfigured(), NOTHING_PLUGGED_IN, &unspelled())
+            now.reloaded_into(&unconfigured(), NOTHING_PLUGGED_IN, &unspelled(), &[])
                 .expect("an undescribed config cannot fail to be applied"),
             None
         );
@@ -2135,7 +2380,7 @@ mod tests {
         // which the window then corrects.
         let now = described(&[LEFT, RIGHT]);
         assert_eq!(
-            now.reloaded_into(&unconfigured(), NOTHING_PLUGGED_IN, &unspelled())
+            now.reloaded_into(&unconfigured(), NOTHING_PLUGGED_IN, &unspelled(), &[])
                 .expect("an undescribed config cannot fail to be applied"),
             Some(Screens::nested())
         );

@@ -30,6 +30,11 @@ device and no logind seat.
 - **Resizing.** A virtual monitor keeps its id and connector when resized, so
   its `wl_output`, its windows and any capture of it stay. A capture follows
   the new size (`domicile_display_capture_resize`).
+- **Scale.** A virtual monitor has its own scale, fractional like a Windows
+  window's 150%, set when added or resized. The engine lays out pixels only,
+  so with a scaled one the compositor lays out the desk and sends it as the
+  display layout (`Screens::from_the_engine`). A rescale alone changes no
+  mode, so the compositor lays out again without waiting for a report.
 - **Input.** When the engine owns input (drm, headless), EIS events go to the
   engine's `SystemInputInjector` instead of straight to the window under the
   point. They then take the path a real keyboard and pointer take: the shell
@@ -68,7 +73,10 @@ device and no logind seat.
 - [x] compositor: `ClientRequest::ResizeVirtualMonitor`, same id and output
 - [x] engine: headless updates the display; drm replaces its snapshot (both
       already did: each takes the whole list again)
+- [x] protocol, SDK and compositor: a virtual monitor's own scale
+- [ ] engine: headless draws a virtual display at its layout scale
 - [x] `domicile monitor`
+- [ ] `domicile monitor` takes a scale
 
 ### 3. EIS reaches the shell
 
