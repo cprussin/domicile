@@ -501,10 +501,10 @@ const captionStyles = css({
   overflowWrap: "anywhere",
 });
 
-// Aligned with the slider below, past its mute button. Ten pixels, the bar's
-// size, matching the slider figures.
+// Aligned with the slider below, past its mute button, in the slider
+// figures' size.
 const captionLineStyles = css({
-  fontSize: "0.625rem",
+  fontSize: "xs",
   paddingInlineStart: 8,
 });
 

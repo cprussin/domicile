@@ -1,12 +1,11 @@
 import { Slider } from "@domicile-desktop/component-library/Slider";
-import { LightbulbIcon } from "@phosphor-icons/react/dist/ssr/Lightbulb";
 import { LightbulbFilamentIcon } from "@phosphor-icons/react/dist/ssr/LightbulbFilament";
 
 import { css } from "../styled-system/css";
 import { hstack } from "../styled-system/patterns";
 import type { BrightnessControl } from "./useBrightness";
 
-/** The brightness slider between an unlit and a lit bulb, with the percentage. */
+/** The brightness slider after a bulb, with the percentage. */
 export const BrightnessSlider = ({
   control,
 }: {
@@ -15,7 +14,9 @@ export const BrightnessSlider = ({
   const percent = Math.round(control.shown * 100);
   return (
     <span className={rowStyles}>
-      <LightbulbIcon size={13} />
+      <span aria-hidden className={iconStyles}>
+        <LightbulbFilamentIcon size={14} />
+      </span>
       <Slider
         label="Brightness"
         max={100}
@@ -27,7 +28,6 @@ export const BrightnessSlider = ({
         step={1}
         value={percent}
       />
-      <LightbulbFilamentIcon size={15} />
       <span className={percentStyles}>{percent}%</span>
     </span>
   );
@@ -38,10 +38,20 @@ const rowStyles = hstack({
   inlineSize: "100%",
 });
 
-// 10px to match the bar and the battery figures; no font-size token fits.
+// As wide as the volume's mute button, so the two sliders start together.
+const iconStyles = css({
+  alignItems: "center",
+  display: "inline-flex",
+  flexShrink: 0,
+  inlineSize: 6,
+  justifyContent: "center",
+});
+
+// The same figure style as volume's, so the two line up.
 const percentStyles = css({
-  fontSize: "0.625rem",
+  color: "color-mix(in oklab, currentcolor 75%, transparent)",
+  fontSize: "xs",
   fontVariantNumeric: "tabular-nums",
-  minInlineSize: 6,
+  minInlineSize: 9,
   textAlign: "end",
 });
