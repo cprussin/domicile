@@ -1,5 +1,5 @@
 import { css } from "../../styled-system/css";
-import { flex } from "../../styled-system/patterns";
+import { flex, grid } from "../../styled-system/patterns";
 import { CodeBlock } from "../code/CodeBlock";
 import { DocTabs } from "../docs/DocTabs";
 import { Media } from "../media/Media";
@@ -54,7 +54,10 @@ app {
   border-radius: 12px;
 }`;
 
-/** The hero's code beside a capture of the desktop it draws. */
+/**
+ * The hero's code over a capture of the desktop it draws: the shell and its
+ * stylesheet side by side, each wide enough for its longest line.
+ */
 export const HeroMedia = () => (
   <section className={sectionStyles}>
     <div className={codeStyles}>
@@ -72,37 +75,37 @@ export const HeroMedia = () => (
           },
         ]}
       />
-      <CodeBlock code={STYLES} frame="bare" language="css" />
+      <div className={stylesStyles}>
+        <CodeBlock code={STYLES} frame="bare" language="css" />
+      </div>
     </div>
-    <div className={mediaStyles}>
-      <Media
-        alt="nvim on the left; GitHub over btop on the right, each window a page element"
-        name="hero"
-      />
-    </div>
+    <Media
+      alt="nvim on the left; GitHub over btop on the right, each window a page element"
+      name="hero"
+    />
   </section>
 );
 
 const sectionStyles = flex({
-  align: "stretch",
+  direction: "column",
   gap: 5,
   marginInline: "auto",
   maxInlineSize: "6xl",
   paddingBlockEnd: 24,
   paddingBlockStart: 4,
   paddingInline: 6,
-  wrap: "wrap",
 });
 
-const codeStyles = flex({
+// Side by side once the shell's longest line fits beside the stylesheet.
+const codeStyles = grid({
   backgroundColor: "syntax.ground",
   border: "1px solid {colors.border}",
   borderRadius: "2xl",
-  direction: "column",
-  flex: "1 1 26rem",
-  gap: 6,
-  minInlineSize: 0,
+  columnGap: 10,
+  gridTemplateColumns: { base: "minmax(0, 1fr)", lg: "minmax(0, 1fr) auto" },
   padding: 6,
+  rowGap: 6,
 });
 
-const mediaStyles = css({ flex: "999 1 35rem", minInlineSize: 0 });
+// Its first line level with the shell's, below the shell's tab bar.
+const stylesStyles = css({ paddingBlockStart: { base: 0, lg: "3.0625rem" } });

@@ -4,6 +4,9 @@ import { defineConfig } from "@pandacss/dev";
 export default defineConfig({
   exclude: [],
   globalCss: {
+    // In-page links glide to their section, unless motion is turned down.
+    // `:root`, not `html`: the preset has an `html` rule this would replace.
+    ":root": { _motionSafe: { scrollBehavior: "smooth" } },
     "html, body": {
       backgroundColor: "background",
       color: "foreground",

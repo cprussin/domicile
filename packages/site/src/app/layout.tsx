@@ -30,6 +30,8 @@ const RootLayout = ({ children }: { children: ReactNode }) => (
       spaceGrotesk.variable,
       jetbrainsMono.variable,
     )}
+    // Tells Next to jump on a route change rather than glide.
+    data-scroll-behavior="smooth"
     lang="en"
   >
     <body>{children}</body>

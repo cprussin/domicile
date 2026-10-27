@@ -67,34 +67,33 @@ const steps = (file: string, example: string): readonly Step[] => [
   },
 ];
 
-/** From nothing to a running shell. */
+/**
+ * From nothing to a running shell: the steps, wide enough for the shell's
+ * longest line, then a capture of them.
+ */
 export const Quickstart = () => (
   <Section id="quickstart" title="A shell in five minutes">
     <div className={layoutStyles}>
-      <div className={stepsStyles}>
-        <DocTabs
-          tabs={[
-            {
-              content: (
-                <Steps steps={steps("shell.tsx", "react-shell/shell.tsx")} />
-              ),
-              label: "React",
-            },
-            {
-              content: (
-                <Steps steps={steps("shell.js", "vanilla-shell/shell.js")} />
-              ),
-              label: "JavaScript",
-            },
-          ]}
-        />
-      </div>
-      <div className={mediaStyles}>
-        <Media
-          alt="The four steps, then a CSS edit and domicile load-shell"
-          name="quickstart"
-        />
-      </div>
+      <DocTabs
+        tabs={[
+          {
+            content: (
+              <Steps steps={steps("shell.tsx", "react-shell/shell.tsx")} />
+            ),
+            label: "React",
+          },
+          {
+            content: (
+              <Steps steps={steps("shell.js", "vanilla-shell/shell.js")} />
+            ),
+            label: "JavaScript",
+          },
+        ]}
+      />
+      <Media
+        alt="The four steps, then a CSS edit and domicile load-shell"
+        name="quickstart"
+      />
     </div>
   </Section>
 );
@@ -114,9 +113,11 @@ const Steps = ({ steps }: { steps: readonly Step[] }) => (
   </ol>
 );
 
-const layoutStyles = flex({ gap: 5, marginBlockStart: 6, wrap: "wrap" });
-
-const stepsStyles = css({ flex: "1 1 23.75rem", minInlineSize: 0 });
+const layoutStyles = flex({
+  direction: "column",
+  gap: 5,
+  marginBlockStart: 6,
+});
 
 const listStyles = flex({ direction: "column", gap: 4, listStyle: "none" });
 
@@ -130,5 +131,3 @@ const stepStyles = flex({
 });
 
 const noteStyles = css({ color: "muted", fontSize: "sm" });
-
-const mediaStyles = css({ flex: "999 1 28.75rem", minInlineSize: 0 });
