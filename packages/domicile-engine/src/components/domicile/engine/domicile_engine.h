@@ -239,6 +239,30 @@ typedef struct DomicilePointerTarget {
   int64_t display_id;
 } DomicilePointerTarget;
 
+// What a `DomicileDeskInput` is.
+typedef enum DomicileDeskInputKind {
+  // The pointer moved to `x`, `y`, a point on the desk.
+  DOMICILE_DESK_INPUT_POINTER = 0,
+  // Button `code`, an evdev code such as BTN_LEFT, went down or up.
+  DOMICILE_DESK_INPUT_BUTTON = 1,
+  // A scroll by `x`, `y` desk pixels: right and down are positive.
+  DOMICILE_DESK_INPUT_SCROLL = 2,
+  // Key `code`, an evdev code such as KEY_A, went down or up.
+  DOMICILE_DESK_INPUT_KEY = 3,
+} DomicileDeskInputKind;
+
+// One event of emulated input, for `domicile_input_inject`. Points are in
+// desk pixels, where `domicile_displays_configure` put the displays.
+typedef struct DomicileDeskInput {
+  // A DomicileDeskInputKind.
+  uint32_t kind;
+  double x;
+  double y;
+  uint32_t code;
+  // Nonzero for a press.
+  uint32_t pressed;
+} DomicileDeskInput;
+
 // A monitor with no connector, for `domicile_virtual_displays_configure`. The
 // desk extends onto it, and only a capture shows it.
 typedef struct DomicileVirtualDisplay {
@@ -616,6 +640,14 @@ DOMICILE_ENGINE_EXPORT void domicile_displays_set_white_point(
     float red,
     float green,
     float blue);
+
+// Delivers emulated input (EIS) to the desk, as the engine's own pointer and
+// keyboard would: the shell sees it first, and the engine forwards what lands
+// on a window as it forwards a real device's. Only a headless desk takes it;
+// elsewhere it is dropped, so the compositor delivers emulated input itself.
+// See docs/architecture/A-HEADLESS-DESKTOP.md.
+DOMICILE_ENGINE_EXPORT void domicile_input_inject(DomicileEngine* engine,
+                                                  const DomicileDeskInput* input);
 
 // Sets the contents of one of the desktop's clipboards.
 //

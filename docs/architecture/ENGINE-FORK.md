@@ -257,6 +257,7 @@ Calls (compositor → engine):
 | `domicile_surface_sync(engine, surface, frame)` | a commit whose popup or bubble the page moves: later submits go up at synced frame `frame` ([Synced frames](WINDOW-COMPOSITING.md#synced-frames)) |
 | `domicile_displays_configure(layout, count)` | output configuration |
 | `domicile_displays_set_white_point(engine, red, green, blue)` | `wlr-gamma-control`: every monitor's white, 0 to 1 per channel, for the night light ([DISPLAYS.md](../DISPLAYS.md#night-light)) |
+| `domicile_input_inject(engine, input)` | none: emulated input (EIS) delivered as the engine's own devices' would be, on a headless desk ([A-HEADLESS-DESKTOP.md](A-HEADLESS-DESKTOP.md)) |
 | `domicile_pointers_configure(targets, count)` | input-to-output mapping, as sway's `map_to_output` ([DISPLAYS.md](../DISPLAYS.md#tablets-and-touchscreens)) |
 | `domicile_clipboard_set_items(clipboard, items, count)` | `wl_data_offer.receive`. The compositor sends the selection it already read: its text and its image, each a `DomicileClipboardItem`. `domicile_clipboard_set(clipboard, text, length)` is the text-only form an older compositor calls. |
 | `domicile_display_capture_start(engine, display, width, height, max_fps)`, `_resize`, `_stop` | none: a screen cast of a monitor (see [Display capture](#display-capture)) |

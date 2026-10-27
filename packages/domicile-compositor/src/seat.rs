@@ -95,6 +95,22 @@ impl eis::Compositor for CalloopData {
             _ => None,
         }
     }
+
+    fn engine_takes_input(&self) -> bool {
+        self.state.engine_takes_input
+    }
+
+    /// Dropped while no engine is up, as the seat drops input with no focus.
+    fn inject_into_the_engine(&mut self, input: eis::DeskInput) {
+        let taken = self
+            .state
+            .engine
+            .as_ref()
+            .is_some_and(|engine| engine.inject_input(input));
+        if !taken {
+            debug!(?input, "no engine took emulated input");
+        }
+    }
 }
 
 /// Map a client's cursor request to the CSS keyword the chrome sets on its

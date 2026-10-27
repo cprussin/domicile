@@ -272,6 +272,32 @@ void SetWhitePoint(float red, float green, float blue) {
       {.red = red, .green = green, .blue = blue});
 }
 
+// Delivers emulated input to the desk. Lives here for SetDisplayLayout's
+// reason; every platform but a headless desk ignores it.
+void InjectInput(const domicile::mojom::DeskInput& input) {
+  ui::DomicileDeskInput::Kind kind = ui::DomicileDeskInput::Kind::kPointer;
+  switch (input.kind) {
+    case domicile::mojom::DeskInputKind::kPointer:
+      kind = ui::DomicileDeskInput::Kind::kPointer;
+      break;
+    case domicile::mojom::DeskInputKind::kButton:
+      kind = ui::DomicileDeskInput::Kind::kButton;
+      break;
+    case domicile::mojom::DeskInputKind::kScroll:
+      kind = ui::DomicileDeskInput::Kind::kScroll;
+      break;
+    case domicile::mojom::DeskInputKind::kKey:
+      kind = ui::DomicileDeskInput::Kind::kKey;
+      break;
+  }
+  ui::OzonePlatform::GetInstance()->InjectDomicileInput({.kind = kind,
+                                                         .x = input.x,
+                                                         .y = input.y,
+                                                         .code = input.code,
+                                                         .pressed =
+                                                             input.pressed});
+}
+
 // Sets the clipboard this process pastes from.
 //
 // Lives here because //components/domicile/browser cannot depend on //ui/ozone.
@@ -315,7 +341,8 @@ class DomicileBrowserService {
                 base::BindRepeating(&SetPointerTargets),
                 base::BindRepeating(&GetSoftwareSharedImageInterface),
                 base::BindRepeating(&SetVirtualDisplays),
-                base::BindRepeating(&SetWhitePoint)),
+                base::BindRepeating(&SetWhitePoint),
+                base::BindRepeating(&InjectInput)),
         provider_(&broker_) {
     // Registered on every platform so copies made in a page reach the producer.
     // `SetClipboard` handles copies made outside. Unretained is safe: this is a
