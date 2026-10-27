@@ -47,6 +47,7 @@ TOGETHER=(
   guard-notification-server-late
   guard-shell-web-apis
   guard-display-capture
+  guard-headless-desk
   guard-webview-content-script
   guard-extension-installer
   guard-extension-tray

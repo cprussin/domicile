@@ -63,6 +63,10 @@ const SCANOUT_PLATFORM: &str = "drm";
 /// The ozone platform that runs as a client of another compositor.
 const NESTED_PLATFORM: &str = "wayland";
 
+/// The ozone platform with no display at all. Its monitors are the
+/// compositor's virtual ones; see `docs/architecture/A-HEADLESS-DESKTOP.md`.
+const HEADLESS_PLATFORM: &str = "headless";
+
 /// The engine command line for `shell`.
 ///
 /// `--app` hides the browser's tab strip, address bar and shortcuts.
@@ -130,6 +134,14 @@ pub fn engine(
     if platform == SCANOUT_PLATFORM {
         args.push("--start-fullscreen".into());
         args.push("--disable-gpu-process-crash-limit".into());
+    }
+    // A headless desk lays its windows out over the compositor's virtual
+    // monitors, as drm does over CRTCs. Until one comes, the screen is a
+    // placeholder, and headless's own is 1x1.
+    if platform == HEADLESS_PLATFORM {
+        args.push("--domicile-headless-desk".into());
+        args.push("--ozone-override-screen-size=1024,768".into());
+        args.push("--start-fullscreen".into());
     }
     // When nested, ask the host compositor to pass its shortcuts through
     // (`zwp_keyboard_shortcuts_inhibit_unstable_v1`). Otherwise the host

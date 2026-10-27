@@ -1,10 +1,10 @@
-//! Deciding whether a desktop on a tty composites on the CPU, from a fake
-//! `/sys/class/drm`.
+//! Deciding whether a desktop composites on the CPU, from its platform and,
+//! on a tty, a fake `/sys/class/drm`.
 
 use std::os::unix::fs::symlink;
 use std::path::Path;
 
-use domicile_launch::software_compositing::{composites_on_the_cpu, Undecided};
+use domicile_launch::software_compositing::{composites_on_the_cpu, on_the_cpu, Undecided};
 
 /// Adds a render node whose device is driven by `driver`, with `features`
 /// as virtio lists them if given.
@@ -131,4 +131,35 @@ fn a_sysfs_that_cannot_be_listed_is_said_rather_than_guessed() {
         composites_on_the_cpu(None, Path::new("/nowhere")),
         Err(Undecided::Sysfs { .. })
     ));
+}
+
+#[test]
+fn a_headless_desktop_composites_on_the_cpu() {
+    // Headless imports no dmabufs, whatever cards there are.
+    let drm = tempfile::tempdir().expect("a directory");
+    render_node(drm.path(), "renderD128", "amdgpu", None);
+
+    assert!(on_the_cpu("headless", None, drm.path()).expect("decided"));
+    assert!(on_the_cpu("headless", Some("yes"), drm.path()).expect("decided"));
+}
+
+#[test]
+fn a_headless_desktop_on_the_gpu_is_refused() {
+    assert!(matches!(
+        on_the_cpu("headless", Some("no"), Path::new("/nowhere")),
+        Err(Undecided::HeadlessOnTheGpu)
+    ));
+}
+
+#[test]
+fn a_nested_desktop_draws_as_its_host_lets_it() {
+    assert!(!on_the_cpu("wayland", Some("yes"), Path::new("/nowhere")).expect("decided"));
+}
+
+#[test]
+fn a_tty_desktop_reads_the_cards() {
+    let drm = tempfile::tempdir().expect("a directory");
+    std::fs::create_dir(drm.path().join("card0")).expect("a card");
+
+    assert!(on_the_cpu("drm", None, drm.path()).expect("decided"));
 }
