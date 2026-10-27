@@ -76,6 +76,10 @@ Event names and full types are in `src/app-element.ts` and
 the desk's browser windows, which the engine owns; the engine reads `window`
 once, when the view connects. The SDK provides types only.
 
+- **Moving:** a view moved in the document, as React's `insertBefore` does,
+  connects again where it lands. A browser window shows there; a `src` view
+  loads `src` again, as an `<iframe>` does.
+
 - **Resize sync:** as an `<app>`'s, a new box holds the page's frame until
   the page draws at it. Set the `resizing` attribute while the user drags an
   edge: each box then shows at once, with the page's latest frame at its own
