@@ -22,6 +22,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 
 use domicile_config::{LockdownConfig, ThemeConfig};
+use domicile_host::app_names::application_dirs;
 use domicile_host::cast_grants::Grants;
 use domicile_host::clipboard::Contents;
 use domicile_host::cups::Cups;
@@ -82,6 +83,7 @@ use dynamic_launcher::DynamicLauncher;
 use email::{Email, Open};
 use file_chooser::FileChooser;
 use global_shortcuts::{GlobalShortcuts, Shortcuts};
+pub use inhibit::SHELL;
 use inhibit::{Inhibit, Inhibitors};
 use input_capture::{InputCapture, Inputs, Zones};
 use lockdown::Lockdown;
@@ -756,10 +758,7 @@ fn export<'a>(
     data_dirs: Vec<PathBuf>,
     home: String,
 ) -> zbus::Result<Builder<'a>> {
-    let applications = data_dirs
-        .iter()
-        .map(|dir| dir.join("applications"))
-        .collect();
+    let applications = application_dirs(&data_dirs);
     builder
         .serve_at(OBJECT_PATH, Settings { theme, appearance })?
         .serve_at(
@@ -924,14 +923,11 @@ fn screen_cast(queue: &Arc<Queue>, casting: ScreenCasting, shoot: Shoot) -> Scre
 fn mail_client(spawn: impl Fn(&[String]) + Send + Sync + 'static) -> Open {
     Box::new(move |url| {
         let home = std::env::var_os("HOME").map(PathBuf::from);
-        let applications: Vec<PathBuf> = data_dirs(
+        let applications = application_dirs(&data_dirs(
             std::env::var_os("XDG_DATA_HOME"),
             std::env::var_os("XDG_DATA_DIRS"),
             home.as_deref(),
-        )
-        .into_iter()
-        .map(|dir| dir.join("applications"))
-        .collect();
+        ));
         let lists = lists(
             std::env::var_os("XDG_CONFIG_HOME"),
             std::env::var_os("XDG_CONFIG_DIRS"),
