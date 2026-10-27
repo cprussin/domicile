@@ -9,6 +9,7 @@
 
 #include "content/public/browser/domicile_desk.h"
 #include "ui/display/screen_infos.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_ui_types.h"
 
 namespace content {
@@ -23,6 +24,14 @@ void DomicileDeskLaidOut(std::optional<std::vector<DomicileDeskDisplay>> lit);
 // `RenderWidgetHostViewBase::GetNewScreenInfosForUpdate`.
 std::optional<display::ScreenInfos> DomicileDeskScreenInfosFor(
     gfx::NativeView view);
+
+// The screen infos for a frame inside a desk page, such as a <webview>'s
+// page: `parent`'s, which a frame inherits, with the current screen narrowed
+// to the monitor `bounds` (in screen coordinates) is on. Outside a desk,
+// `parent` unchanged. Read by `RenderWidgetHostViewChildFrame::
+// UpdateScreenInfo`. See `domicile::FrameScreenInfos`.
+display::ScreenInfos DomicileFrameScreenInfos(display::ScreenInfos parent,
+                                              const gfx::Rect& bounds);
 
 }  // namespace content
 

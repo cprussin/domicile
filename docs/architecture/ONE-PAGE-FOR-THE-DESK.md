@@ -64,6 +64,9 @@ enters a gap, because pointer crossing follows `desk`.
   - The window handles rotation.
 - The page's `ScreenInfos` list every display. `current()` is the desk box at
   S (`WidgetBase::UpdateSurfaceAndScreenInfo`).
+- A frame in the page (a `<webview>`'s page) gets the monitor it overlaps
+  most as `current()`, at S (`FrameScreenInfos`, patch `0151`). Video players
+  size fullscreen video to `screen`, so the desk box would crop it.
 
 ### Input
 
