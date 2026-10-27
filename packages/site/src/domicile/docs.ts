@@ -66,7 +66,7 @@ export const DOCS: readonly LinkColumn[] = [
         href: repoFile("docs/contributing/DEVELOPING.md"),
         label: "Contributing",
       },
-      { href: repoFile("ROADMAP.md"), label: "Roadmap" },
+      { href: repoFile("KNOWN-GAPS.md"), label: "Known gaps" },
     ],
     title: "Under the hood",
     tone: "muted",

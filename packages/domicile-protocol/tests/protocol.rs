@@ -453,32 +453,6 @@ fn version_negotiation_rejects_mismatch() {
     assert!(negotiate(PROTOCOL_VERSION + 1).is_err());
 }
 
-/// `ROADMAP.md` states the version as a literal; this keeps it in sync with
-/// [`PROTOCOL_VERSION`].
-#[test]
-fn the_roadmap_states_the_version_this_build_speaks() {
-    // Reads a file outside the crate: this checks the repo's prose, not the
-    // protocol.
-    let roadmap = include_str!("../../../ROADMAP.md");
-    let stated: Vec<&str> = roadmap
-        .match_indices("`PROTOCOL_VERSION = ")
-        .map(|(at, _)| &roadmap[at..])
-        .collect();
-
-    // Exactly one mention, so no stale copy can hide elsewhere in the
-    // roadmap.
-    assert_eq!(
-        stated.len(),
-        1,
-        "ROADMAP.md states the protocol version {} times; it is one line",
-        stated.len()
-    );
-    assert!(
-        stated[0].starts_with(&format!("`PROTOCOL_VERSION = {PROTOCOL_VERSION}`")),
-        "ROADMAP.md does not say `PROTOCOL_VERSION = {PROTOCOL_VERSION}`; a bump left it behind"
-    );
-}
-
 /// `resize_app` is not a message, and is rejected rather than ignored.
 ///
 /// The engine reports window size through `xdg_toplevel.configure`. Rejection

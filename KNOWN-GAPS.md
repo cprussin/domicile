@@ -1,33 +1,9 @@
-# Domicile roadmap
+# Known gaps
 
-Open work and known gaps. Each item links to the doc with the detail. Remove an
-item when it ships.
+What Domicile doesn't do yet, or does with a catch. Each links to the doc with
+the detail, when there is one. Remove a gap when it's fixed.
 
-- No supported end-user release yet.
-- Wire protocol: `PROTOCOL_VERSION = 1`.
-- Checks that need a physical machine: [HARDWARE-CHECKS.md](docs/HARDWARE-CHECKS.md).
-
-## In this repository
-
-1. **Revisit the docs for users.** The site's docs pages
-   (`packages/site/src/docs/`) render today's markdown with a sidebar, and the
-   landing pages carry captures (`docs/media/`). Left:
-   - Rewrite the pages for users. Most still mix in how it works inside.
-   - A short getting started guide: installing and setup.
-   - Captures for the rest of the tour: web apps, extensions, the bar,
-     notifications, several monitors, Settings, and configuring.
-   - A short guide to customizing:
-     - Composing manganese's packages into a custom desktop.
-     - Writing a desktop from scratch
-       ([WRITING-A-SHELL.md](docs/WRITING-A-SHELL.md)).
-     - Writing an app. The Domicile page links the example and
-       [APP-MODULES.md](docs/architecture/APP-MODULES.md), which is the design.
-
-## Known gaps
-
-Understood and not scheduled.
-
-### Windows and clients
+## Windows and clients
 
 - **Clients only get 8-bit formats** (`FOURCCS` in `engine.rs`).
 - **A chrome repaint damages the whole output.**
@@ -39,7 +15,7 @@ Understood and not scheduled.
 - **Unknown: whether viz hit testing must agree with Domicile's.**
   [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#open-questions).
 
-### Displays
+## Displays
 
 - **Presentation is unmeasured.** Every measurement reads a
   `CopyOutputRequest`; nothing reads a lit CRTC. So overlay promotion
@@ -51,7 +27,7 @@ Understood and not scheduled.
 - **The desk rasters what no monitor shows.**
   [DISPLAY-TILINGS.md](docs/architecture/DISPLAY-TILINGS.md#cost).
 
-### Browser windows
+## Browser windows
 
 - **The shortcuts inhibitor (patch `0038`) is tested only on sway,** and
   only with a virtual keyboard. mutter may show an unseen permission dialog.
@@ -67,11 +43,11 @@ Understood and not scheduled.
 - **Resize cost is unmeasured.**
   [ENGINE-FORK.md](docs/architecture/ENGINE-FORK.md#embed-deadlines).
 
-### Clipboard
+## Clipboard
 
 - **A nested desktop's browser uses the host's clipboard.**
 
-### Session and portals
+## Session and portals
 
 - **The session portal setup is only checked at evaluation.** Nothing here
   runs a user manager, an unclean exit leaves stale environment variables,
@@ -79,12 +55,12 @@ Understood and not scheduled.
 - **Wayland capture lists no browser windows.** The toplevel list names
   Wayland windows only. [PORTALS.md](docs/PORTALS.md#wayland-capture).
 
-### Shell reload
+## Shell reload
 
 - **Hot-swapping the shell reloads the page,** so a shell loses state kept in
   its page.
 
-### Engine CI
+## Engine CI
 
 - **Engine CI is one machine.** `crux` runs one cold build at a time, and a
   build from scratch takes 4h 16m.
