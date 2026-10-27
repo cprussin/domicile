@@ -4,6 +4,7 @@ import { Provider } from "@domicile-desktop/component-library/Provider";
 import type { ThemeSource } from "@domicile-desktop/component-library/theme-source";
 import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
 import type { ApplicationsConfig } from "@domicile-desktop/manganese-launcher/applications-config";
+import type { Inbox } from "@domicile-desktop/manganese-notifications/inbox";
 import type { FloatingRules } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
 import { DEFAULT_KEYBINDINGS } from "@domicile-desktop/manganese-window-management/keyboard/commands";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
@@ -28,6 +29,8 @@ type Props = {
   domicile: Domicile;
   /** Which client windows open floating, besides dialogs. Defaults to none. */
   floating?: FloatingRules | undefined;
+  /** The inboxes listed in the notification drawer. Defaults to none. */
+  inboxes?: readonly Inbox[] | undefined;
   /** The keys this desktop binds, under the config's. Defaults to sway's. */
   keybindings?: ShellKeybindings | undefined;
   /**
@@ -48,6 +51,7 @@ export const Shell = ({
   displays,
   domicile,
   floating = NO_FLOATING_RULES,
+  inboxes = NO_INBOXES,
   keybindings = DEFAULT_SHELL_KEYBINDINGS,
   theme,
 }: Props) => (
@@ -58,6 +62,7 @@ export const Shell = ({
         bar={bar}
         domicile={domicile}
         floating={floating}
+        inboxes={inboxes}
         keybindings={keybindings}
       />
     </DisplayProvider>
@@ -66,6 +71,9 @@ export const Shell = ({
 
 /** No floating rules, defined once so the reference is stable. */
 const NO_FLOATING_RULES: FloatingRules = [];
+
+/** No inboxes, defined once so the reference is stable. */
+const NO_INBOXES: readonly Inbox[] = [];
 
 /** Manganese's default keybindings, defined once so the reference is stable. */
 const DEFAULT_SHELL_KEYBINDINGS: ShellKeybindings = {

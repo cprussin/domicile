@@ -22,6 +22,8 @@
     "@domicile-desktop/manganese-bar-module-workspace-switcher": "workspace:*",
     "@domicile-desktop/manganese-clipboard": "workspace:*",
     "@domicile-desktop/manganese-host": "workspace:*",
+    "@domicile-desktop/manganese-inbox-gmail": "workspace:*",
+    "@domicile-desktop/manganese-inbox-google-messages": "workspace:*",
     "@domicile-desktop/manganese-launcher": "workspace:*",
     "@domicile-desktop/manganese-lock": "workspace:*",
     "@domicile-desktop/manganese-notifications": "workspace:*",

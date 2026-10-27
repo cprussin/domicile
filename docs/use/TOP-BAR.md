@@ -67,5 +67,6 @@ export const Shell = runManganese({
 ```
 
 There are also items for a Gmail inbox and Google Messages, and you can write
-your own in React. The full list:
+your own in React. Gmail and Google Messages can go in the bell's panel
+instead ([Inboxes](NOTIFICATIONS.md#inboxes)). The full list:
 [TOP-BAR.md](../../packages/shell-manganese/docs/TOP-BAR.md).

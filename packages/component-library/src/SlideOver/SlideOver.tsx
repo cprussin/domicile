@@ -1,4 +1,5 @@
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
+import { CaretLeftIcon } from "@phosphor-icons/react/dist/ssr/CaretLeft";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import type { ReactElement, ReactNode } from "react";
 import { css, cva } from "../../styled-system/css";
@@ -21,6 +22,13 @@ type Props = ExtendProps<
     children: ReactNode;
     footer?: ReactNode | undefined;
     /**
+     * Keeps the panel in the page, hidden, while closed, so what it holds
+     * keeps running, such as a web page.
+     */
+    keepMounted?: boolean | undefined;
+    /** Shows a back button before the title, for a page within the panel. */
+    onBack?: (() => void) | undefined;
+    /**
      * Name of the display to slide in on and dim. Without it, a page spanning
      * several monitors uses the rightmost edge and dims them all. Needs a
      * `DisplayProvider`.
@@ -28,22 +36,27 @@ type Props = ExtendProps<
     screen?: string | undefined;
     title?: ReactNode | undefined;
     trigger?: ReactElement | undefined;
+    /** Wider, for a page with a list and its content side by side. */
+    wide?: boolean | undefined;
   }
 >;
 
 const SlideOverComponent = ({
   children,
   footer,
+  keepMounted = false,
+  onBack,
   screen,
   title,
   trigger,
+  wide = false,
   ...rootProps
 }: Props) => {
   const region = useScreenRegion(screen);
   return (
     <BaseDialog.Root {...rootProps}>
       {trigger !== undefined && <BaseDialog.Trigger render={trigger} />}
-      <BaseDialog.Portal>
+      <BaseDialog.Portal keepMounted={keepMounted}>
         {/*
         On the panel's screen only, as in `ModalDialog`. Data attribute for
         tests.
@@ -54,8 +67,16 @@ const SlideOverComponent = ({
           style={region}
         />
         <BaseDialog.Viewport className={viewportStyles} style={region}>
-          <BaseDialog.Popup className={popupStyles}>
+          <BaseDialog.Popup
+            className={popupStyles}
+            data-wide={wide ? "" : undefined}
+          >
             <header className={headerStyles}>
+              {onBack !== undefined && (
+                <Button label="Back" onClick={onBack} variant="ghost">
+                  <CaretLeftIcon />
+                </Button>
+              )}
               {title !== undefined && (
                 <BaseDialog.Title className={titleStyles}>
                   {title}
@@ -126,6 +147,7 @@ const popupStyles = flex({
     transform: "translateX(100%)",
     transition: "transform {durations.fast} {easings.in}",
   },
+  "&[data-wide]": { inlineSize: "min({spacing.240}, 92cqw)" },
   backgroundColor: "card",
   blockSize: "100%",
   borderInlineStartColor: "border",
@@ -147,8 +169,10 @@ const headerStyles = flex({
   paddingInline: 4,
 });
 
+// Fills the header between the back and close buttons.
 const titleStyles = css({
   color: "foreground",
+  flex: 1,
   fontSize: "md",
   fontWeight: "semibold",
   lineHeight: "snug",

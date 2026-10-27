@@ -34,26 +34,22 @@ describe("bundle", () => {
     expect(built).toContain("@layer utilities");
   }, 120_000);
 
-  // An item no default bar has still resolves from Domicile's install.
-  it("builds an entry with a bar item no default bar has", async () => {
+  // A package no default uses still resolves from Domicile's install.
+  it("builds an entry with an inbox no default has", async () => {
     const desk = mkdtempSync(path.join(tmpdir(), "domicile-builder-"));
     const entry = path.join(desk, "domicile.tsx");
     writeFileSync(
       entry,
-      `import { DEFAULT_BAR, runManganese } from "@domicile-desktop/manganese";
-         import { Gmail } from "@domicile-desktop/manganese-bar-module-gmail";
+      `import { runManganese } from "@domicile-desktop/manganese";
+         import { gmailInbox } from "@domicile-desktop/manganese-inbox-gmail";
          export const Shell = runManganese({
-           bar: {
-             ...DEFAULT_BAR,
-             right: [
-               <Gmail
-                 client={{ id: "id", secret: "secret" }}
-                 email="me@gmail.com"
-                 key="gmail"
-                 nickname="Work"
-               />,
-             ],
-           },
+           inboxes: [
+             gmailInbox({
+               client: { id: "id", secret: "secret" },
+               email: "me@gmail.com",
+               nickname: "Work",
+             }),
+           ],
          });`,
     );
 
@@ -61,7 +57,7 @@ describe("bundle", () => {
     await bundle(entry, out, DOMICILE, [entry]);
 
     expect(readFileSync(path.join(out, "shell.js"), "utf8")).toContain(
-      "Sign in to ",
+      "https://mail.google.com",
     );
   }, 120_000);
 

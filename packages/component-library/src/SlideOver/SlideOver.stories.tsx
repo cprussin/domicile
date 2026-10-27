@@ -6,6 +6,9 @@ import { SlideOver } from "./SlideOver";
 const meta = {
   args: {
     defaultOpen: false,
+    keepMounted: false,
+    onBack: undefined,
+    wide: false,
   },
   argTypes: {
     children: {
@@ -18,6 +21,13 @@ const meta = {
     },
     footer: {
       table: { category: "Contents" },
+    },
+    keepMounted: {
+      control: "boolean",
+      table: { category: "Behavior" },
+    },
+    onBack: {
+      table: { category: "Behavior" },
     },
     onOpenChange: {
       table: { category: "Behavior" },
@@ -32,6 +42,10 @@ const meta = {
     },
     trigger: {
       table: { category: "Contents" },
+    },
+    wide: {
+      control: "boolean",
+      table: { category: "Appearance" },
     },
   },
   component: SlideOver,

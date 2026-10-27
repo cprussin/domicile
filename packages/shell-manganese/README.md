@@ -45,6 +45,9 @@ A config module exports `Shell = runManganese(options)` (see
 - **`floating`**: rules for client windows that open floating, such as
   `[{ app: "pinentry" }, { app: "^Slack$", title: "^Huddle" }]`. See
   [WINDOW-MANAGEMENT.md](../manganese-window-management/docs/WINDOW-MANAGEMENT.md#opening-floating).
+- **`inboxes`**: inboxes listed in the notification drawer, such as
+  `[gmailInbox({ … }), messagesInbox()]`. See
+  [TOP-BAR.md](docs/TOP-BAR.md#inboxes).
 - **`keybindings`**: the key table. Defaults to `DEFAULT_KEYBINDINGS` from
   `@domicile-desktop/manganese-window-management/keyboard/commands`, sway's
   keys on Meta. See [KEYS.md](../manganese-window-management/docs/KEYS.md).

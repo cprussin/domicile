@@ -33,6 +33,8 @@ domicile ./shell.tsx
   ([WINDOW-MANAGEMENT.md](/packages/manganese-window-management/docs/WINDOW-MANAGEMENT.md#opening-floating)).
 - `applications`: the launcher's hidden apps and bookmarks
   ([LAUNCHER.md](LAUNCHER.md)).
+- `inboxes`: Gmail and Google Messages in the notification drawer
+  ([TOP-BAR.md](/packages/shell-manganese/docs/TOP-BAR.md#inboxes)).
 
 The same `Shell` export in `~/.config/domicile/domicile.tsx` makes it your
 desktop ([SHELL-CONFIG.md](SHELL-CONFIG.md#a-config-module)).

@@ -8,6 +8,7 @@ import {
 } from "@domicile-desktop/component-library/theme-core";
 import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
 import type { ApplicationsConfig } from "@domicile-desktop/manganese-launcher/applications-config";
+import type { Inbox } from "@domicile-desktop/manganese-notifications/inbox";
 import type { FloatingRules } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
 import { hostDisplays } from "@domicile-desktop/manganese-window-management/screens/host-displays";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
@@ -25,6 +26,7 @@ type MountOptions = {
   readonly applications: ApplicationsConfig;
   readonly bar?: BarLayout | undefined;
   readonly floating: FloatingRules;
+  readonly inboxes?: readonly Inbox[] | undefined;
   readonly keybindings?: ShellKeybindings | undefined;
 };
 
@@ -63,6 +65,7 @@ export const mountManganese = (
         displays={displays}
         domicile={domicile}
         floating={options.floating}
+        inboxes={options.inboxes}
         keybindings={options.keybindings}
         theme={theme}
       />,

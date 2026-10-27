@@ -8,6 +8,10 @@ import { LauncherButton } from "@domicile-desktop/manganese-bar-module-launcher-
 import { WorkspaceSwitcher } from "@domicile-desktop/manganese-bar-module-workspace-switcher";
 import type { ApplicationsConfig } from "@domicile-desktop/manganese-launcher/applications-config";
 import { answerOpening } from "@domicile-desktop/manganese-launcher/fixture";
+import {
+  Inbox,
+  InboxReading,
+} from "@domicile-desktop/manganese-notifications/inbox";
 import { useNotificationsDrawer } from "@domicile-desktop/manganese-notifications/notifications-context";
 import { grabCursorStyles } from "@domicile-desktop/manganese-window-management/grab-cursor-styles";
 import { DEFAULT_KEYBINDINGS } from "@domicile-desktop/manganese-window-management/keyboard/commands";
@@ -18,6 +22,7 @@ import {
 import { hostDisplays } from "@domicile-desktop/manganese-window-management/screens/host-displays";
 import { GrabCursor } from "@domicile-desktop/manganese-window-management/useGrabCursor";
 import { movingStyles } from "@domicile-desktop/manganese-window-management/window-styles";
+import { sharedWatch } from "@domicile-desktop/react/shared-watch";
 import { APP_TAG_NAME } from "@domicile-desktop/sdk/app-element";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { FileSearch } from "@domicile-desktop/sdk/desktop/files";
@@ -40,6 +45,7 @@ import {
   answerSystemCalls,
   THINKPAD_BACKLIGHT,
 } from "@domicile-desktop/system-backlight/fixture";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimple";
 import {
   act,
   fireEvent,
@@ -228,6 +234,26 @@ class Desk {
   }
 }
 
+/** An inbox with 2 unread conversations, and a page. */
+const FAKE_INBOXES: readonly Inbox[] = [
+  Inbox.Watched({
+    icon: EnvelopeSimpleIcon,
+    name: "Work",
+    open: () => undefined,
+    read: () =>
+      sharedWatch((onReading) => {
+        onReading(InboxReading.Counted(5, 2));
+        return () => undefined;
+      }),
+  }),
+  Inbox.Page({
+    countUnread: () => () => undefined,
+    icon: EnvelopeSimpleIcon,
+    name: "Fake inbox",
+    url: "https://chat.example.com/",
+  }),
+];
+
 let domicile: Desk;
 
 /**
@@ -240,6 +266,7 @@ const renderingShell = (
   desktop: readonly DomicileDisplay[] | undefined,
   bar?: BarLayout,
   keybindings: ShellKeybindings = MANGANESE_KEYS,
+  inboxes?: readonly Inbox[],
 ) => {
   domicile = new Desk();
   if (desktop !== undefined) {
@@ -254,6 +281,7 @@ const renderingShell = (
       bar={bar}
       displays={hostDisplays(client)}
       domicile={client}
+      inboxes={inboxes}
       keybindings={keybindings}
       theme={standaloneThemeSource()}
     />,
@@ -1492,6 +1520,36 @@ describe("Shell", () => {
       } finally {
         Element.prototype.getAnimations = getAnimations;
       }
+    });
+
+    it("adds the inboxes' unread conversations to the bell", async () => {
+      renderingShell([LEFT], undefined, MANGANESE_KEYS, FAKE_INBOXES);
+
+      expect(
+        await screen.findByRole("button", { name: "Notifications, 2 unread" }),
+      ).toBeVisible();
+    });
+
+    it("shows an inbox's page, and opens again on the notifications", async () => {
+      renderingShell([LEFT], undefined, MANGANESE_KEYS, FAKE_INBOXES);
+      await userEvent.click(
+        screen.getByRole("button", { name: "Notifications, 2 unread" }),
+      );
+
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Fake inbox" }),
+      );
+      expect(
+        await screen.findByRole("heading", { name: "Fake inbox" }),
+      ).toBeVisible();
+      await userEvent.click(screen.getByRole("button", { name: "Close" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Notifications, 2 unread" }),
+      );
+
+      expect(
+        await screen.findByRole("heading", { name: "Notifications" }),
+      ).toBeVisible();
     });
 
     it("is the far end of the bar", () => {
