@@ -1,6 +1,6 @@
 //! Control socket naming, ownership and client errors.
 
-use std::io::Write as _;
+use std::io::{BufRead as _, BufReader, Write as _};
 use std::os::unix::fs::PermissionsExt as _;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use domicile_launch::control::{Request, Response};
 use domicile_launch::control_socket::{
-    address, advertised, answer_one, ask, take, AskError, NotInADesktop, TakeError,
+    address, advertised, answer_one, ask, hold, serve_one, take, AskError, NotInADesktop, TakeError,
 };
 
 /// Read timeout: long enough not to flake under load, short enough to keep the
@@ -335,4 +335,80 @@ fn scratch() -> (tempfile::TempDir, PathBuf) {
     let scratch = tempfile::tempdir().expect("a scratch directory");
     let path = scratch.path().join("domicile-ipc.4242.sock");
     (scratch, path)
+}
+
+#[test]
+fn a_virtual_monitor_is_lent_the_connection_it_came_on() {
+    let (_scratch, path) = scratch();
+    let control = take(&path).expect("nothing was there");
+    let listener = control.listener().expect("the run's own listener");
+    let mut client = UnixStream::connect(&path).expect("a client");
+    client
+        .write_all(
+            b"{\"type\":\"virtual_monitor\",\"name\":\"Pane\",\"width\":1280,\
+              \"height\":720,\"refresh_mhz\":60000}\n{\"type\":\"resize_virtual_monitor\",\
+              \"width\":800,\"height\":600,\"refresh_mhz\":60000}\n",
+        )
+        .expect("it asked, then resized");
+    let (stream, _) = listener.accept().expect("the desktop took the connection");
+
+    serve_one(
+        stream,
+        BRIEFLY,
+        &|_| unreachable!("a monitor is lent, not answered"),
+        &|mut lent| {
+            assert_eq!(lent.name, "Pane");
+            assert_eq!(lent.size, (1280, 720));
+            assert_eq!(lent.refresh_mhz, 60_000);
+            let mut next = String::new();
+            lent.lines.read_line(&mut next).expect("the client went on");
+            assert!(next.contains("resize_virtual_monitor"), "{next}");
+            lent.client.write_all(b"lent\n").expect("the client hears");
+        },
+    )
+    .expect("the desktop lent it");
+
+    let mut heard = String::new();
+    BufReader::new(client)
+        .read_line(&mut heard)
+        .expect("the client heard back");
+    assert_eq!(heard, "lent\n");
+}
+
+#[test]
+fn a_held_request_keeps_its_connection_after_the_answer() {
+    let (_scratch, path) = scratch();
+    let control = take(&path).expect("nothing was there");
+    let listener = control.listener().expect("the run's own listener");
+    let desktop = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().expect("the client connected");
+        let mut lines = BufReader::new(stream.try_clone().expect("readable")).lines();
+        lines.next().expect("a request").expect("a line");
+        let mut answering = stream;
+        answering
+            .write_all(b"{\"type\":\"virtual_monitor\",\"output\":\"virtual-1\"}\n")
+            .expect("the desktop answered");
+        lines.next().expect("a second line").expect("a line")
+    });
+
+    let (answer, mut held) = hold(
+        &path,
+        &Request::ResizeVirtualMonitor {
+            width: 1,
+            height: 1,
+            refresh_mhz: 1,
+        },
+        Some(BRIEFLY),
+    )
+    .expect("the desktop answered");
+    held.write_all(b"more\n")
+        .expect("the connection is still open");
+
+    assert_eq!(
+        answer,
+        Response::VirtualMonitor {
+            output: "virtual-1".to_string()
+        }
+    );
+    assert_eq!(desktop.join().expect("the desktop read on"), "more");
 }

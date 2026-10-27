@@ -38,13 +38,14 @@ use domicile_launch::control::{
     answer, Desktop as ControlDesktop, Request, Response, SettingsFiles,
 };
 use domicile_launch::control_socket::{
-    address, advertised, answer_one, ask, take, Control, PATIENCE as ANSWER_WITHIN, VARIABLE,
+    address, advertised, ask, hold, serve_one, take, Control, PATIENCE as ANSWER_WITHIN, VARIABLE,
 };
 use domicile_launch::graphical_session;
 use domicile_launch::heard::Heard;
 use domicile_launch::history::CLEAR_WITHIN;
 use domicile_launch::install_app::{data_home, install_app, Fetched};
 use domicile_launch::milestones::{reach, Milestone};
+use domicile_launch::monitor_lending::{forward_sizes, lend};
 use domicile_launch::notification;
 use domicile_launch::open::{app_opening, opener, opening, AppOpening, Opening, Places, DESKTOP};
 use domicile_launch::platform::platform;
@@ -137,6 +138,11 @@ fn run() -> Result<ExitCode, String> {
         }),
         Invocation::Check { config } => check(&config).map(|()| ExitCode::SUCCESS),
         Invocation::Power { power } => powered(power),
+        Invocation::Monitor {
+            name,
+            size,
+            refresh_mhz,
+        } => monitored(name, size, refresh_mhz),
         Invocation::Help => {
             print!("{USAGE}");
             Ok(ExitCode::SUCCESS)
@@ -521,8 +527,10 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
             }
             Ok(ExitCode::FAILURE)
         }
+        // Only `domicile monitor` asks for this, and holds the connection.
+        Response::VirtualMonitor { .. }
         // Only `domicile-app-host` asks for these.
-        Response::SettingsFiles { .. }
+        | Response::SettingsFiles { .. }
         | Response::SitePermissions(_)
         | Response::Stored
         | Response::LoadedUnpacked { .. }
@@ -543,6 +551,45 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
             Ok(ExitCode::FAILURE)
         }
     }
+}
+
+/// Adds a virtual monitor and prints its output, then resizes it to each size
+/// on stdin. Ends, removing it, when stdin does; fails when the desktop takes
+/// it away first.
+fn monitored(name: String, size: (u32, u32), refresh_mhz: u32) -> Result<ExitCode, String> {
+    let socket =
+        advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
+    let request = Request::VirtualMonitor {
+        name,
+        width: size.0,
+        height: size.1,
+        refresh_mhz,
+    };
+    // As long as the desktop waits for the compositor to add it.
+    let (answer, held) = hold(&socket, &request, Some(ANSWER_WITHIN + ANSWER_WITHIN))
+        .map_err(|why| why.to_string())?;
+    match answer {
+        Response::VirtualMonitor { output } => println!("{output}"),
+        Response::Refused { why } => {
+            eprintln!("domicile: {why}");
+            return Ok(ExitCode::FAILURE);
+        }
+        answer => return Err(format!("the desktop answered {answer:?} to a monitor")),
+    }
+    held.set_read_timeout(None)
+        .map_err(|why| format!("cannot keep the monitor: {why}"))?;
+    let gone = held
+        .try_clone()
+        .map_err(|why| format!("cannot keep the monitor: {why}"))?;
+    // The desktop says nothing more: anything it does is a hang-up.
+    std::thread::spawn(move || {
+        let _ = std::io::Read::read(&mut &gone, &mut [0]);
+        eprintln!("domicile: the desktop took the monitor away");
+        std::process::exit(1);
+    });
+    forward_sizes(std::io::stdin().lock(), &held, std::io::stderr())
+        .map_err(|why| format!("the monitor's sizes did not reach the desktop: {why}"))?;
+    Ok(ExitCode::SUCCESS)
 }
 
 /// Runs desktops on `shell`, restarting them while [`Policy`] allows.
@@ -1035,89 +1082,109 @@ fn answer_a_command(
     engine: &Path,
     chrome: &Path,
 ) {
-    if let Err(why) = answer_one(stream, ANSWER_WITHIN, &|line| {
-        let page = served(serving);
-        answer(
-            line,
-            &ControlDesktop {
-                module: &page.root.join(&page.module),
-                files,
-                // Asked once: the client stops waiting after `ANSWER_WITHIN`,
-                // so a retry could load a shell after it reported a failure.
-                load: &|root, module| {
-                    let page = Shell {
-                        module: module.to_path_buf(),
-                        root: root.to_path_buf(),
-                    };
-                    load_the_shell(engine, &page, serving, &|| true)
+    let lending = |lent| lend(lent, chrome, ANSWER_WITHIN);
+    if let Err(why) = serve_one(
+        stream,
+        ANSWER_WITHIN,
+        &|line| {
+            let page = served(serving);
+            answer(
+                line,
+                &ControlDesktop {
+                    module: &page.root.join(&page.module),
+                    files,
+                    // Asked once: the client stops waiting after `ANSWER_WITHIN`,
+                    // so a retry could load a shell after it reported a failure.
+                    load: &|root, module| {
+                        let page = Shell {
+                            module: module.to_path_buf(),
+                            root: root.to_path_buf(),
+                        };
+                        load_the_shell(engine, &page, serving, &|| true)
+                    },
+                    open: &|url| {
+                        open_url(engine, url, ANSWER_WITHIN).map_err(|why| why.to_string())
+                    },
+                    open_app: &|url| {
+                        open_app(engine, url, ANSWER_WITHIN).map_err(|why| why.to_string())
+                    },
+                    run_app: &|root, module| {
+                        run_app(engine, root, module, ANSWER_WITHIN).map_err(|why| why.to_string())
+                    },
+                    // The interactive one waits for the user, however long that
+                    // takes.
+                    capture: &|file| {
+                        screenshot(chrome, file, file.map(|_| CAPTURE_WITHIN))
+                            .map_err(|why| why.to_string())
+                    },
+                    // Until the user stops it, however long that takes.
+                    record: &|| screen_record(chrome).map_err(|why| why.to_string()),
+                    permissions: &|| {
+                        site_permissions(engine, ANSWER_WITHIN).map_err(|why| why.to_string())
+                    },
+                    set_permission: &|site| {
+                        set_site_permission(engine, site, ANSWER_WITHIN)
+                            .map_err(|why| why.to_string())
+                    },
+                    send: &|command| {
+                        send_shell(chrome, command, Some(SEND_WITHIN))
+                            .map_err(|why| why.to_string())
+                    },
+                    load_unpacked: &|directory| {
+                        load_unpacked(engine, directory, ANSWER_WITHIN)
+                            .map_err(|why| why.to_string())
+                    },
+                    uninstall_extension: &|id| {
+                        uninstall_extension(engine, id, ANSWER_WITHIN)
+                            .map_err(|why| why.to_string())
+                    },
+                    config_extensions: &|| {
+                        config_extensions(engine, ANSWER_WITHIN).map_err(|why| why.to_string())
+                    },
+                    media_devices: &|| {
+                        media_devices(engine, ANSWER_WITHIN).map_err(|why| why.to_string())
+                    },
+                    set_media_device: &|kind, id| {
+                        set_media_device(engine, kind, id, ANSWER_WITHIN)
+                            .map_err(|why| why.to_string())
+                    },
+                    extensions: &|| {
+                        extensions(engine, ANSWER_WITHIN).map_err(|why| why.to_string())
+                    },
+                    set_extension_enabled: &|id, enabled| {
+                        set_extension_enabled(engine, id, enabled, ANSWER_WITHIN)
+                            .map_err(|why| why.to_string())
+                    },
+                    history: &|query| {
+                        history(engine, query, ANSWER_WITHIN).map_err(|why| why.to_string())
+                    },
+                    visits: &|url| {
+                        visits(engine, url, ANSWER_WITHIN).map_err(|why| why.to_string())
+                    },
+                    delete_history: &|times| {
+                        delete_history(engine, times, ANSWER_WITHIN).map_err(|why| why.to_string())
+                    },
+                    clear_browsing_data: &|data| {
+                        clear_browsing_data(engine, data, CLEAR_WITHIN)
+                            .map_err(|why| why.to_string())
+                    },
+                    // Both read every kind of storage from disk, as clearing does.
+                    site_data: &|| site_data(engine, CLEAR_WITHIN).map_err(|why| why.to_string()),
+                    clear_site_data: &|host| {
+                        clear_site_data(engine, host, CLEAR_WITHIN).map_err(|why| why.to_string())
+                    },
+                    disable_while_typing: &|enabled| {
+                        disable_while_typing(engine, enabled, ANSWER_WITHIN)
+                            .map_err(|why| why.to_string())
+                    },
+                    theme: &|to| {
+                        theme(chrome, to, Some(ANSWER_WITHIN)).map_err(|why| why.to_string())
+                    },
                 },
-                open: &|url| open_url(engine, url, ANSWER_WITHIN).map_err(|why| why.to_string()),
-                open_app: &|url| {
-                    open_app(engine, url, ANSWER_WITHIN).map_err(|why| why.to_string())
-                },
-                run_app: &|root, module| {
-                    run_app(engine, root, module, ANSWER_WITHIN).map_err(|why| why.to_string())
-                },
-                // The interactive one waits for the user, however long that
-                // takes.
-                capture: &|file| {
-                    screenshot(chrome, file, file.map(|_| CAPTURE_WITHIN))
-                        .map_err(|why| why.to_string())
-                },
-                // Until the user stops it, however long that takes.
-                record: &|| screen_record(chrome).map_err(|why| why.to_string()),
-                permissions: &|| {
-                    site_permissions(engine, ANSWER_WITHIN).map_err(|why| why.to_string())
-                },
-                set_permission: &|site| {
-                    set_site_permission(engine, site, ANSWER_WITHIN).map_err(|why| why.to_string())
-                },
-                send: &|command| {
-                    send_shell(chrome, command, Some(SEND_WITHIN)).map_err(|why| why.to_string())
-                },
-                load_unpacked: &|directory| {
-                    load_unpacked(engine, directory, ANSWER_WITHIN).map_err(|why| why.to_string())
-                },
-                uninstall_extension: &|id| {
-                    uninstall_extension(engine, id, ANSWER_WITHIN).map_err(|why| why.to_string())
-                },
-                config_extensions: &|| {
-                    config_extensions(engine, ANSWER_WITHIN).map_err(|why| why.to_string())
-                },
-                media_devices: &|| {
-                    media_devices(engine, ANSWER_WITHIN).map_err(|why| why.to_string())
-                },
-                set_media_device: &|kind, id| {
-                    set_media_device(engine, kind, id, ANSWER_WITHIN).map_err(|why| why.to_string())
-                },
-                extensions: &|| extensions(engine, ANSWER_WITHIN).map_err(|why| why.to_string()),
-                set_extension_enabled: &|id, enabled| {
-                    set_extension_enabled(engine, id, enabled, ANSWER_WITHIN)
-                        .map_err(|why| why.to_string())
-                },
-                history: &|query| {
-                    history(engine, query, ANSWER_WITHIN).map_err(|why| why.to_string())
-                },
-                visits: &|url| visits(engine, url, ANSWER_WITHIN).map_err(|why| why.to_string()),
-                delete_history: &|times| {
-                    delete_history(engine, times, ANSWER_WITHIN).map_err(|why| why.to_string())
-                },
-                clear_browsing_data: &|data| {
-                    clear_browsing_data(engine, data, CLEAR_WITHIN).map_err(|why| why.to_string())
-                },
-                // Both read every kind of storage from disk, as clearing does.
-                site_data: &|| site_data(engine, CLEAR_WITHIN).map_err(|why| why.to_string()),
-                clear_site_data: &|host| {
-                    clear_site_data(engine, host, CLEAR_WITHIN).map_err(|why| why.to_string())
-                },
-                disable_while_typing: &|enabled| {
-                    disable_while_typing(engine, enabled, ANSWER_WITHIN)
-                        .map_err(|why| why.to_string())
-                },
-                theme: &|to| theme(chrome, to, Some(ANSWER_WITHIN)).map_err(|why| why.to_string()),
-            },
-        )
-    }) {
+            )
+        },
+        &lending,
+    ) {
         eprintln!("domicile: a command went unanswered: {why}");
     }
 }

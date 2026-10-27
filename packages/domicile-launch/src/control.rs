@@ -1,7 +1,9 @@
 //! The protocol between `domicile <command>` and a running desktop.
 //!
 //! One JSON request line in, one response line out, per connection. This uses
-//! the same newline-delimited JSON framing as the host protocol.
+//! the same newline-delimited JSON framing as the host protocol. The one
+//! exception is [`Request::VirtualMonitor`], whose connection is held: see
+//! [`crate::monitor_lending`].
 //!
 //! Lines come from a socket, so [`answer`] parses them strictly and refuses
 //! anything else.
@@ -102,6 +104,21 @@ pub enum Request {
     Theme {
         #[serde(default)]
         to: Option<ThemeChange>,
+    },
+    /// Add a virtual monitor for as long as the connection is open. Answered
+    /// with [`Response::VirtualMonitor`]; each later line is a
+    /// [`Request::ResizeVirtualMonitor`]. See `domicile monitor`.
+    VirtualMonitor {
+        name: String,
+        width: u32,
+        height: u32,
+        refresh_mhz: u32,
+    },
+    /// Resize the monitor this connection holds. Not answered.
+    ResizeVirtualMonitor {
+        width: u32,
+        height: u32,
+        refresh_mhz: u32,
     },
 }
 
@@ -214,6 +231,9 @@ pub enum Response {
 
     /// The desktop's theme, after the request.
     Theme { theme: Theme },
+
+    /// The compositor added the virtual monitor, on this output.
+    VirtualMonitor { output: String },
 
     /// The request was unknown or could not be carried out.
     ///
@@ -398,6 +418,19 @@ pub struct Desktop<'a> {
     pub theme: Theming<'a>,
 }
 
+/// A [`Request::VirtualMonitor`] and the connection it came on, which
+/// [`crate::control_socket::serve_one`] lends to
+/// [`crate::monitor_lending::lend`].
+pub struct Lent {
+    pub name: String,
+    pub size: (u32, u32),
+    pub refresh_mhz: u32,
+    /// The client's lines after the request.
+    pub lines: std::io::BufReader<std::os::unix::net::UnixStream>,
+    /// Where the client hears back.
+    pub client: std::os::unix::net::UnixStream,
+}
+
 /// How a screenshot the compositor took ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Shot {
@@ -539,6 +572,16 @@ pub fn answer(line: &str, desktop: &Desktop) -> String {
         Ok(Request::Theme { to }) => to_line(&match themed(to, desktop.theme) {
             Ok(theme) => Response::Theme { theme },
             Err(why) => Response::Refused { why },
+        }),
+        // Lent the connection by `serve_one` instead; a lone line would
+        // remove the monitor as it answered.
+        Ok(Request::VirtualMonitor { .. }) => to_line(&Response::Refused {
+            why: "a virtual monitor lasts as long as its connection, which this \
+                  desktop was not lent"
+                .to_string(),
+        }),
+        Ok(Request::ResizeVirtualMonitor { .. }) => to_line(&Response::Refused {
+            why: "this connection holds no virtual monitor to resize".to_string(),
         }),
         Err(why) => to_line(&Response::Refused {
             why: format!(
