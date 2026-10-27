@@ -167,7 +167,8 @@ typedef struct DomicileCapturedFrame {
 // One display the browser scans out to.
 //
 // The engine holds DRM master, so on a tty this is the compositor's only source
-// of displays. Nested sessions never send these.
+// of displays. A headless desk (`--domicile-headless-desk`) sends its virtual
+// displays. Nested sessions never send these.
 //
 // `x`, `y`, `width` and `height` place the display on the browser's desktop, in
 // pixels. `physical_width_mm`, `physical_height_mm` and `refresh_mhz` use
@@ -599,8 +600,9 @@ DOMICILE_ENGINE_EXPORT void domicile_pointers_configure(
 //
 // Each joins the next `displays` callback as a display on connector
 // `virtual-<n>`, n being its id without the top bit, laid out by
-// `domicile_displays_configure` like any other. No CRTC lights for it. Ignored off a tty. The records and strings are borrowed
-// for the call.
+// `domicile_displays_configure` like any other. No CRTC lights for it. Ignored
+// off a tty and a headless desk, where these are the only displays. The
+// records and strings are borrowed for the call.
 DOMICILE_ENGINE_EXPORT void domicile_virtual_displays_configure(
     DomicileEngine* engine,
     const DomicileVirtualDisplay* displays,
@@ -647,8 +649,9 @@ DOMICILE_ENGINE_EXPORT void domicile_buffer_destroy(DomicileEngine* engine,
 // Captures what a display shows, for a screen cast. Returns the capture id, or
 // zero if no browser window shows that display.
 //
-// `display_id` is a DomicileDisplay::id. A nested or headless browser sends no
-// displays; zero names its only window.
+// `display_id` is a DomicileDisplay::id. A nested browser, or a headless one
+// without `--domicile-headless-desk`, sends no displays; zero names its only
+// window.
 //
 // Frames arrive through `captured`, `width` x `height`, only when the display
 // changed and at most `max_fps` a second. Blocks for the browser's answer.

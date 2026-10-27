@@ -16,18 +16,16 @@
 // Reads shared memory and linear dmabufs; a headless browser sends the first.
 
 #include <poll.h>
-#include <sys/mman.h>
 
 #include <cstdint>
 #include <cstdio>
 #include <string>
 
 #include "base/command_line.h"
-#include "base/compiler_specific.h"
-#include "base/containers/span.h"
 #include "base/memory/raw_ptr_exclusion.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
+#include "components/domicile/engine/captured_color.h"
 #include "components/domicile/engine/domicile_engine.h"
 
 namespace {
@@ -46,13 +44,6 @@ constexpr uint32_t kResizedWidth = 200;
 constexpr uint32_t kResizedHeight = 150;
 
 constexpr uint32_t kFramesPerSecond = 30;
-
-// DRM_FORMAT_ARGB8888 and DRM_FORMAT_ABGR8888.
-constexpr uint32_t kArgb8888 = 0x34325241;
-constexpr uint32_t kAbgr8888 = 0x34324241;
-
-// DRM_FORMAT_MOD_LINEAR.
-constexpr uint64_t kLinear = 0;
 
 // The exit statuses listed above.
 enum class Verdict {
@@ -77,45 +68,13 @@ struct Seen {
   int frames = 0;
 };
 
-// The 0xRRGGBB at the center of `record`'s content, or -1 if it cannot be
-// read.
-int64_t CenterColor(const DomicileCapturedFrame& record) {
-  if (record.plane_count != 1 ||
-      (record.memory == DOMICILE_CAPTURE_DMABUF && record.modifier != kLinear) ||
-      (record.fourcc != kArgb8888 && record.fourcc != kAbgr8888)) {
-    return -1;
-  }
-  const DomicileDmabufPlane plane = base::span(record.planes)[0];
-  const size_t length =
-      plane.offset + static_cast<size_t>(plane.stride) * record.height;
-  void* mapped = mmap(nullptr, length, PROT_READ, MAP_SHARED, plane.fd, 0);
-  if (mapped == MAP_FAILED) {
-    return -1;
-  }
-  // SAFETY: `mapped` is `length` bytes, mapped just above.
-  const auto bytes = UNSAFE_BUFFERS(
-      base::span(static_cast<const uint8_t*>(mapped), length));
-  const size_t x = static_cast<size_t>(record.content_x) +
-                   static_cast<size_t>(record.content_width) / 2;
-  const size_t y = static_cast<size_t>(record.content_y) +
-                   static_cast<size_t>(record.content_height) / 2;
-  const auto pixel = bytes.subspan(plane.offset + y * plane.stride + x * 4, 4u);
-  // ARGB8888 is B, G, R, A in memory; ABGR8888 is R, G, B, A.
-  const bool bgra = record.fourcc == kArgb8888;
-  const uint32_t red = bgra ? pixel[2] : pixel[0];
-  const uint32_t green = pixel[1];
-  const uint32_t blue = bgra ? pixel[0] : pixel[2];
-  munmap(mapped, length);
-  return (red << 16) | (green << 8) | blue;
-}
-
 void OnCaptured(void* user_data,
                 DomicileCaptureId capture,
                 uint64_t frame,
                 const DomicileCapturedFrame* record) {
   Seen* seen = static_cast<Seen*>(user_data);
   ++seen->frames;
-  const int64_t center = CenterColor(*record);
+  const int64_t center = domicile::CenterColor(*record);
   printf("frame %llu: %ux%u, content %dx%d at (%d,%d), center #%06llX\n",
          static_cast<unsigned long long>(frame), record->width, record->height,
          record->content_width, record->content_height, record->content_x,
