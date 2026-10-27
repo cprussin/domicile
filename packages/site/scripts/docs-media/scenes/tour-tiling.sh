@@ -12,11 +12,14 @@ XDG_CONFIG_HOME="$SCENE_TMP/btop-config" app foot \
 app foot --working-directory="$ROOT" -o font="JetBrains Mono:size=12" \
   sh -c 'ls --color=always packages; exec sh'
 settle 5
-record tour-tiling 10 &
-recording=$!
-settle 2
+KEYS_SETTLE=0.2
+record_start tour-tiling
+settle 0.8
+caption "Meta+E puts them side by side"
 "$DOMICILE_BIN" send-shell layout toggle split
-settle 4
+settle 1.6
+caption "Meta+Shift+Tab floats one"
 "$DOMICILE_BIN" send-shell floating toggle
-wait "$recording"
+settle 2
+record_end
 shot tour-tiling
