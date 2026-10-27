@@ -1572,6 +1572,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                         &data.state.config.current().output,
                         &data.state.engine_displays,
                         &data.state.vendors,
+                        &data.state.virtual_displays,
                     );
                     match rebuilt {
                         // No change: an undescribed config with no monitors

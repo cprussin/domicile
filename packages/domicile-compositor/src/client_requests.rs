@@ -14,7 +14,9 @@ use tracing::{debug, warn};
 use domicile_host::clipboard::Contents;
 use domicile_host::theme_turnover::{Turnover, CAPTURE_WITHIN};
 use domicile_host::white_point::WhitePoint;
-use domicile_protocol::{KeymapChoice, Passphrase, PortalAnswer, Theme, TrayAction, WindowState};
+use domicile_protocol::{
+    KeymapChoice, Passphrase, PortalAnswer, Scale, Theme, TrayAction, WindowState,
+};
 
 use crate::activation;
 use crate::chrome_hub::announce_open_apps;
@@ -23,6 +25,7 @@ use crate::lock::Asked;
 use crate::locking::say_what_the_lock_refused;
 use crate::spawning::spawn_client;
 use crate::surface_commit::window_geometry;
+use crate::virtual_monitors::Resized;
 use crate::DomicileCompositor;
 
 /// A chrome request that must run on the Wayland thread, where the seat and
@@ -122,6 +125,7 @@ pub enum ClientRequest {
         id: i64,
         mode: (u32, u32),
         refresh_mhz: u32,
+        scale: Scale,
     },
     /// The page switched the keymap. See
     /// [`DomicileCompositor::switch_the_keymap`].
@@ -516,19 +520,22 @@ impl DomicileCompositor {
                 id,
                 mode,
                 refresh_mhz,
-            } => {
-                if crate::virtual_monitors::resize(
-                    &mut self.virtual_displays,
-                    id,
-                    mode,
-                    refresh_mhz,
-                ) {
-                    self.state_the_virtual_monitors();
-                } else {
-                    // The page let go of it while the resize was in flight.
-                    debug!(id, "resize: a virtual monitor that is gone");
-                }
-            }
+                scale,
+            } => match crate::virtual_monitors::resize(
+                &mut self.virtual_displays,
+                id,
+                mode,
+                refresh_mhz,
+                scale,
+            ) {
+                // The engine reports the new mode, and the desk is laid out
+                // again then.
+                Resized::Mode => self.state_the_virtual_monitors(),
+                Resized::Scale => self.lay_out_the_engines_displays(),
+                Resized::Nothing => {}
+                // The page let go of it while the resize was in flight.
+                Resized::Gone => debug!(id, "resize: a virtual monitor that is gone"),
+            },
             ClientRequest::SelectKeymap { keymap } => self.switch_the_keymap(&keymap),
             ClientRequest::SetWhitePoint { white_point } => {
                 self.white_point = white_point;

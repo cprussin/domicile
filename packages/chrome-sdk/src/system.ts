@@ -219,6 +219,11 @@ export type VirtualMonitorMode = {
   width: number;
   height: number;
   refreshMhz: number;
+  /**
+   * Device pixels per logical pixel, such as 1.5: windows on it draw that
+   * much finer. 1 when left out. Must be above zero.
+   */
+  scale?: number;
 };
 
 /** A monitor with no connector, which the desk extends onto. */

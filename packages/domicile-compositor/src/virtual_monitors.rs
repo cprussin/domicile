@@ -11,7 +11,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use domicile_host::system::{AddedMonitor, MonitorLease, VirtualMonitor};
-use domicile_protocol::{SystemError, SystemErrorKind};
+use domicile_protocol::{Scale, SystemError, SystemErrorKind};
 
 use crate::client_requests::ClientRequest;
 use crate::engine::VirtualDisplay;
@@ -63,6 +63,7 @@ impl VirtualMonitors {
                 id,
                 mode: wanted.size,
                 refresh_mhz: wanted.refresh_mhz,
+                scale: wanted.scale,
                 name: wanted.name,
             },
         });
@@ -87,22 +88,42 @@ impl DomicileCompositor {
     }
 }
 
-/// Resizes `id` in `displays`, keeping its place and name. False if it is
-/// gone.
+/// How a resize changed a virtual monitor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Resized {
+    /// Its mode or refresh rate, which the engine reports back.
+    Mode,
+    /// Its scale alone, which the engine never reports: the compositor lays
+    /// the desk out again itself.
+    Scale,
+    /// Nothing.
+    Nothing,
+    /// A monitor that is gone.
+    Gone,
+}
+
+/// Resizes `id` in `displays`, keeping its place and name.
 pub fn resize(
     displays: &mut [VirtualDisplay],
     id: i64,
     mode: (u32, u32),
     refresh_mhz: u32,
-) -> bool {
-    match displays.iter_mut().find(|display| display.id == id) {
-        Some(display) => {
-            display.mode = mode;
-            display.refresh_mhz = refresh_mhz;
-            true
-        }
-        None => false,
-    }
+    scale: Scale,
+) -> Resized {
+    let Some(display) = displays.iter_mut().find(|display| display.id == id) else {
+        return Resized::Gone;
+    };
+    let resized = if (display.mode, display.refresh_mhz) != (mode, refresh_mhz) {
+        Resized::Mode
+    } else if display.scale != scale {
+        Resized::Scale
+    } else {
+        Resized::Nothing
+    };
+    display.mode = mode;
+    display.refresh_mhz = refresh_mhz;
+    display.scale = scale;
+    resized
 }
 
 /// Resizes its monitor, and removes it when dropped.
@@ -112,11 +133,12 @@ struct Lease {
 }
 
 impl MonitorLease for Lease {
-    fn resize(&self, size: (u32, u32), refresh_mhz: u32) {
+    fn resize(&self, size: (u32, u32), refresh_mhz: u32, scale: Scale) {
         (self.send)(ClientRequest::ResizeVirtualMonitor {
             id: self.id,
             mode: size,
             refresh_mhz,
+            scale,
         });
     }
 }
@@ -138,6 +160,7 @@ mod tests {
             name: "Living Room TV".into(),
             size: (1920, 1080),
             refresh_mhz: 60_000,
+            scale: Scale::ONE,
         }
     }
 
@@ -170,6 +193,7 @@ mod tests {
                     id: VirtualDisplay::id_of(1),
                     mode: (1920, 1080),
                     refresh_mhz: 60_000,
+                    scale: Scale::ONE,
                     name: "Living Room TV".into(),
                 },
             }
@@ -190,7 +214,7 @@ mod tests {
         let added = monitors.add(a_tv(), send).expect("the desk extends");
         queued.try_recv().unwrap();
 
-        added.lease.resize((1280, 720), 30_000);
+        added.lease.resize((1280, 720), 30_000, one_and_a_half());
 
         assert_eq!(
             queued.try_recv().unwrap(),
@@ -198,6 +222,7 @@ mod tests {
                 id: VirtualDisplay::id_of(1),
                 mode: (1280, 720),
                 refresh_mhz: 30_000,
+                scale: one_and_a_half(),
             }
         );
     }
@@ -207,20 +232,29 @@ mod tests {
             id: VirtualDisplay::id_of(number),
             mode,
             refresh_mhz: 60_000,
+            scale: Scale::ONE,
             name: "Pane".into(),
         }
+    }
+
+    fn one_and_a_half() -> Scale {
+        Scale::try_from(1.5).unwrap()
     }
 
     #[test]
     fn a_resize_changes_only_its_own_display() {
         let mut displays = vec![a_display(1, (800, 600)), a_display(2, (640, 480))];
 
-        assert!(resize(
-            &mut displays,
-            VirtualDisplay::id_of(2),
-            (1024, 768),
-            30_000
-        ));
+        assert_eq!(
+            resize(
+                &mut displays,
+                VirtualDisplay::id_of(2),
+                (1024, 768),
+                30_000,
+                Scale::ONE,
+            ),
+            Resized::Mode
+        );
 
         assert_eq!(displays[0], a_display(1, (800, 600)));
         assert_eq!(
@@ -237,14 +271,53 @@ mod tests {
         // The page let go of it while the resize was queued.
         let mut displays = vec![a_display(1, (800, 600))];
 
-        assert!(!resize(
-            &mut displays,
-            VirtualDisplay::id_of(2),
-            (1024, 768),
-            30_000
-        ));
+        assert_eq!(
+            resize(
+                &mut displays,
+                VirtualDisplay::id_of(2),
+                (1024, 768),
+                30_000,
+                Scale::ONE,
+            ),
+            Resized::Gone
+        );
 
         assert_eq!(displays, vec![a_display(1, (800, 600))]);
+    }
+
+    #[test]
+    fn a_rescale_alone_is_the_compositors_to_lay_out() {
+        // The engine reports modes, not scales, so nothing would come back
+        // to lay the desk out again by.
+        let mut displays = vec![a_display(1, (800, 600))];
+
+        assert_eq!(
+            resize(
+                &mut displays,
+                VirtualDisplay::id_of(1),
+                (800, 600),
+                60_000,
+                one_and_a_half(),
+            ),
+            Resized::Scale
+        );
+        assert_eq!(displays[0].scale, one_and_a_half());
+    }
+
+    #[test]
+    fn a_resize_to_the_same_mode_changes_nothing() {
+        let mut displays = vec![a_display(1, (800, 600))];
+
+        assert_eq!(
+            resize(
+                &mut displays,
+                VirtualDisplay::id_of(1),
+                (800, 600),
+                60_000,
+                Scale::ONE,
+            ),
+            Resized::Nothing
+        );
     }
 
     #[test]

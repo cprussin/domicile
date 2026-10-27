@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use domicile_protocol::{
     Bus, ChromeMessage, DirEntry, FileType, HostMessage, KeymapChoice, ListedKeymap,
-    PreviewedWindow, Signal, Stream, SystemEnd, SystemError, SystemErrorKind, SystemEvent,
+    PreviewedWindow, Scale, Signal, Stream, SystemEnd, SystemError, SystemErrorKind, SystemEvent,
     SystemReply, SystemRequest, UnlockRefusal, WindowRequest, WindowState,
 };
 
@@ -643,6 +643,8 @@ fn the_shell_adds_a_virtual_monitor() {
                 width: 1920,
                 height: 1080,
                 refresh_mhz: 60_000,
+                // Left out, so one device pixel a logical one.
+                scale: Scale::ONE,
             },
         }
     );
@@ -670,9 +672,62 @@ fn the_shell_resizes_a_virtual_monitor() {
                 width: 1280,
                 height: 720,
                 refresh_mhz: 30_000,
+                scale: Scale::ONE,
             },
         }
     );
+}
+
+/// A virtual monitor stands in for a window on another desktop, which can be
+/// at any density, such as Windows at 150%.
+#[test]
+fn a_virtual_monitor_takes_a_fractional_scale() {
+    let at = |scale: f64| Scale::try_from(scale).expect("a scale");
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":5,"request":{"call":"virtual_monitor","name":"Pane","width":806,"height":539,"refresh_mhz":60000,"scale":1.25}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 5,
+            request: SystemRequest::VirtualMonitor {
+                name: "Pane".into(),
+                width: 806,
+                height: 539,
+                refresh_mhz: 60_000,
+                scale: at(1.25),
+            },
+        }
+    );
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":5,"request":{"call":"resize_virtual_monitor","width":1280,"height":720,"refresh_mhz":60000,"scale":1.5}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 5,
+            request: SystemRequest::ResizeVirtualMonitor {
+                width: 1280,
+                height: 720,
+                refresh_mhz: 60_000,
+                scale: at(1.5),
+            },
+        }
+    );
+}
+
+/// A scale no monitor can have is no request at all.
+#[test]
+fn a_virtual_monitor_refuses_a_scale_of_nothing() {
+    for scale in [0.0, -1.5, f64::INFINITY] {
+        assert!(Scale::try_from(scale).is_err(), "{scale}");
+    }
+    let resize = |scale: &str| {
+        serde_json::from_str::<ChromeMessage>(&format!(
+            r#"{{"type":"system_request","id":5,"request":{{"call":"resize_virtual_monitor","width":1280,"height":720,"refresh_mhz":60000,"scale":{scale}}}}}"#
+        ))
+    };
+    assert!(resize("0").is_err());
+    assert!(resize("-2").is_err());
+    assert!(resize("2").is_ok());
 }
 
 /// The shell hears what holds the desktop awake.

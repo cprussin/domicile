@@ -12,7 +12,8 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use domicile_protocol::{
-    ChromeMessage, HostMessage, SystemError, SystemErrorKind, SystemReply, SystemRequest, Theme,
+    ChromeMessage, HostMessage, Scale, SystemError, SystemErrorKind, SystemReply, SystemRequest,
+    Theme,
 };
 
 use crate::control::Shot;
@@ -159,6 +160,8 @@ impl HeldMonitor {
                 width: size.0,
                 height: size.1,
                 refresh_mhz,
+                // `domicile monitor` takes no scale yet.
+                scale: Scale::ONE,
             },
         };
         let mut line = serde_json::to_string(&message).expect("a chrome message always serializes");
@@ -198,6 +201,7 @@ pub fn virtual_monitor(
         width: size.0,
         height: size.1,
         refresh_mhz,
+        scale: Scale::ONE,
     };
     let stream = connected(socket, patience)?;
     let said = said_over(

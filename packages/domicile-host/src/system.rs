@@ -32,8 +32,8 @@ use std::thread;
 use std::time::{Instant, UNIX_EPOCH};
 
 use domicile_protocol::{
-    Bus, DirEntry, FileType, HostMessage, KeymapChoice, PreviewedWindow, Signal, Stream, SystemEnd,
-    SystemError, SystemErrorKind, SystemEvent, SystemReply, SystemRequest, WindowState,
+    Bus, DirEntry, FileType, HostMessage, KeymapChoice, PreviewedWindow, Scale, Signal, Stream,
+    SystemEnd, SystemError, SystemErrorKind, SystemEvent, SystemReply, SystemRequest, WindowState,
 };
 use notify::{EventKindMask, RecursiveMode, Watcher};
 use zbus::blocking::{Connection, MessageIterator};
@@ -116,6 +116,7 @@ pub struct VirtualMonitor {
     /// Its mode, in pixels.
     pub size: (u32, u32),
     pub refresh_mhz: u32,
+    pub scale: Scale,
 }
 
 /// A virtual monitor that was added.
@@ -130,7 +131,7 @@ pub struct AddedMonitor {
 pub trait MonitorLease: Send {
     /// Gives the monitor a new mode. See
     /// [`SystemRequest::ResizeVirtualMonitor`].
-    fn resize(&self, size: (u32, u32), refresh_mhz: u32);
+    fn resize(&self, size: (u32, u32), refresh_mhz: u32, scale: Scale);
 }
 
 /// Switches every keyboard to the keymap a page chose.
@@ -735,9 +736,10 @@ impl System {
                 width,
                 height,
                 refresh_mhz,
+                scale,
             } => match self.running.lock().unwrap().get(&id) {
                 Some(Running::VirtualMonitor(lease)) => {
-                    lease.resize((width, height), refresh_mhz);
+                    lease.resize((width, height), refresh_mhz, scale);
                     Handled::Done
                 }
                 Some(_) => Handled::Malformed,
@@ -923,6 +925,7 @@ impl System {
                 width,
                 height,
                 refresh_mhz,
+                scale,
             } => {
                 let mut running = self.running.lock().unwrap();
                 let reply = match (running.entry(id), &self.add_virtual_monitor) {
@@ -942,6 +945,7 @@ impl System {
                         name,
                         size: (width, height),
                         refresh_mhz,
+                        scale,
                     }) {
                         Ok(added) => {
                             vacant.insert(Running::VirtualMonitor(added.lease));
