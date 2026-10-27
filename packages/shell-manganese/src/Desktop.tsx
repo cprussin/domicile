@@ -1,4 +1,5 @@
 import { useDisplays } from "@domicile-desktop/component-library/DisplayProvider";
+import { createHandle } from "@domicile-desktop/component-library/Popover";
 import { PortalDialogs } from "@domicile-desktop/component-library/PortalDialogs";
 import { useTheme } from "@domicile-desktop/component-library/ThemeProvider";
 import { createToastManager } from "@domicile-desktop/component-library/Toaster";
@@ -218,8 +219,10 @@ export const Desktop = ({
   );
   const now = useNow();
   // The screen whose bell last opened the drawer. Kept after it closes, so the
-  // drawer slides out on that screen. Opening it marks everything read and
-  // closes all toasts, which the drawer already shows.
+  // drawer closes under that bell. Opening it marks everything read and closes
+  // all toasts, which the drawer already shows. Every bar's bell opens it
+  // through the handle.
+  const [notificationsHandle] = useState(createHandle);
   const [notificationsOn, setNotificationsOn] = useState<string | undefined>(
     undefined,
   );
@@ -248,6 +251,11 @@ export const Desktop = ({
     onShow: showNotifications,
   });
   const { back: backToNotifications } = inboxDrawer;
+  // It opens again on the notifications, not the inbox it closed on.
+  const drawerClosed = useCallback(() => {
+    setNotificationsOpen(false);
+    backToNotifications();
+  }, [backToNotifications]);
 
   // Lock state belongs to the compositor, which is what blocks input. The page
   // cannot set it, and reloading the page does not unlock the desk.
@@ -366,8 +374,7 @@ export const Desktop = ({
         // Like a media key, these change no window.
         case WindowActionKind.NotificationsToggled: {
           if (notificationsOpen) {
-            setNotificationsOpen(false);
-            backToNotifications();
+            drawerClosed();
           } else {
             openNotifications(windows.focused);
           }
@@ -414,10 +421,10 @@ export const Desktop = ({
     },
     [
       act,
-      backToNotifications,
       brightnessKeys,
       dismissNotifications,
       domicile,
+      drawerClosed,
       notificationIds,
       notificationsOpen,
       openNotifications,
@@ -462,17 +469,6 @@ export const Desktop = ({
   const clipboardDismissed = useCallback(() => {
     act(WindowAction.ClipboardDismissed());
   }, [act]);
-  // Only a bell opens the drawer, so it reports only closing. It opens again
-  // on the notifications, not the inbox it closed on.
-  const drawerToggled = useCallback(
-    (open: boolean) => {
-      if (!open) {
-        setNotificationsOpen(false);
-        backToNotifications();
-      }
-    },
-    [backToNotifications],
-  );
   const { screens: deskScreens, workspaces } = windows;
   const screenOf = useCallback(
     (appId: string) => screenOfApp({ screens: deskScreens, workspaces }, appId),
@@ -493,10 +489,10 @@ export const Desktop = ({
   );
   const drawer = useMemo(
     () => ({
-      open: openNotifications,
+      handle: notificationsHandle,
       unread: notifications.unread + inboxDrawer.unread,
     }),
-    [inboxDrawer.unread, notifications.unread, openNotifications],
+    [inboxDrawer.unread, notifications.unread, notificationsHandle],
   );
   const trayState = useMemo(
     () => ({
@@ -670,15 +666,17 @@ export const Desktop = ({
         }
         screen={windows.focused}
       />
-      {/* Over the whole desktop, like the clipboard. */}
+      {/* Under the bell that opened it. */}
       <NotificationDrawer
+        handle={notificationsHandle}
         inboxes={inboxes.length === 0 ? undefined : inboxDrawer.drawer}
         items={notifications.items}
         now={now}
         onAction={notifications.invoke}
         onBack={backToNotifications}
+        onClose={drawerClosed}
         onDismiss={notifications.dismiss}
-        onOpenChange={drawerToggled}
+        onOpen={openNotifications}
         onReply={notifications.reply}
         open={notificationsOpen && !lock.locked}
         screen={notificationsOn}

@@ -64,26 +64,27 @@ export const InboxRow = ({
 
 const itemStyles = css({ listStyle: "none" });
 
-// As the drawer's notification cards: lit on hover.
+// Lit on hover, as the drawer's notification cards.
+// The focus ring is inset, so the scrolling list does not clip it.
 const rowStyles = hstack({
   _focusVisible: {
     outline: "{spacing.0.5} solid {colors.accent}",
-    outlineOffset: 0.5,
+    outlineOffset: "calc({spacing.0.5} * -1)",
   },
   _hover: {
     backgroundColor: "color-mix(in oklab, {colors.foreground} 7%, transparent)",
   },
   backgroundColor: "transparent",
-  borderRadius: "lg",
+  borderRadius: "md",
   borderStyle: "none",
   color: "foreground",
   cursor: "pointer",
   font: "inherit",
   fontSize: "sm",
-  gap: 3,
+  gap: 2.5,
   inlineSize: "full",
-  paddingBlock: 2,
-  paddingInline: 2,
+  paddingBlock: 1,
+  paddingInline: 1.5,
   textAlign: "start",
   transition: "background-color {durations.fast} {easings.default}",
 });
@@ -109,5 +110,6 @@ const warningStyles = css({ color: "warning", flexShrink: 0 });
 const figureStyles = css({
   color: "muted",
   flexShrink: 0,
+  fontSize: "xs",
   fontVariantNumeric: "tabular-nums",
 });

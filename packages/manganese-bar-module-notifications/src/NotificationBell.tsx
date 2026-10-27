@@ -1,24 +1,29 @@
 import { CountBadge } from "@domicile-desktop/component-library/CountBadge";
+import { Popover } from "@domicile-desktop/component-library/Popover";
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
+import type { NotificationsHandle } from "@domicile-desktop/manganese-notifications/notifications-context";
+import { bellId } from "@domicile-desktop/manganese-notifications/notifications-context";
 import { BellSimpleIcon } from "@phosphor-icons/react/dist/ssr/BellSimple";
 
 import { css } from "../styled-system/css";
 
 type Props = {
+  /** Opens the drawer under this bell. */
+  handle: NotificationsHandle;
+  /** The bar's monitor. */
+  screen: string;
   /** How many arrived since the drawer was last opened. */
   unread: number;
-  /** Open the drawer. */
-  onOpen: () => void;
 };
 
 /**
- * The bar's bell: opens the notification drawer and shows the unseen count.
+ * The bar's bell: opens the notification drawer under itself and shows the
+ * unseen count.
  *
- * It sits at the bar's far end because the drawer slides out from that edge. It
- * swings when the count goes up, to point back to notifications whose toasts
- * have gone.
+ * It swings when the count goes up, to point back to notifications whose
+ * toasts have gone.
  */
-export const NotificationBell = ({ onOpen, unread }: Props) => {
+export const NotificationBell = ({ handle, screen, unread }: Props) => {
   const label =
     unread === 0 ? "Notifications" : `Notifications, ${unread} unread`;
   return (
@@ -26,12 +31,14 @@ export const NotificationBell = ({ onOpen, unread }: Props) => {
       content={label}
       tone="overPhoto"
       trigger={
-        <button
+        <Popover.Trigger
           aria-label={label}
           className={buttonStyles}
+          // For `screenOfBell`.
+          data-bell-screen={screen}
           data-unread={unread > 0 ? "" : undefined}
-          onClick={onOpen}
-          type="button"
+          handle={handle}
+          id={bellId(screen)}
         >
           {/*
         Keyed on the count so each new arrival remounts it and replays the
@@ -41,7 +48,7 @@ export const NotificationBell = ({ onOpen, unread }: Props) => {
             <BellSimpleIcon size={15} weight="fill" />
           </span>
           <CountBadge count={unread} />
-        </button>
+        </Popover.Trigger>
       }
     />
   );

@@ -1,28 +1,49 @@
 import { describe, expect, it } from "bun:test";
-import { fireEvent, render, screen } from "@testing-library/react";
+import {
+  createHandle,
+  Popover,
+} from "@domicile-desktop/component-library/Popover";
+import { screenOfBell } from "@domicile-desktop/manganese-notifications/notifications-context";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { NotificationBell } from "./NotificationBell";
 
-describe("NotificationBell", () => {
-  it("is the notifications, and opens them", () => {
-    let opened = 0;
-    render(
-      <NotificationBell
-        onOpen={() => {
-          opened += 1;
+/** A bell on `left` with `unread`, and the drawer it opens. */
+const bell = (unread: number, opened: string[] = []) => {
+  const handle = createHandle();
+  return render(
+    <>
+      <NotificationBell handle={handle} screen="left" unread={unread} />
+      <Popover
+        handle={handle}
+        onOpenChange={(open, { trigger }) => {
+          if (open) {
+            opened.push(screenOfBell(trigger));
+          }
         }}
-        unread={0}
-      />,
+      >
+        Drawer
+      </Popover>
+    </>,
+  );
+};
+
+describe("NotificationBell", () => {
+  it("is the notifications, and opens them under itself", async () => {
+    const opened: string[] = [];
+    bell(0, opened);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Notifications" }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Notifications" }));
-
-    expect(opened).toBe(1);
+    expect(await screen.findByText("Drawer")).toBeVisible();
+    expect(opened).toEqual(["left"]);
   });
 
   it("says how many arrived since they were last opened", async () => {
-    render(<NotificationBell onOpen={() => undefined} unread={3} />);
+    bell(3);
 
     expect(
       screen.getByRole("button", { name: "Notifications, 3 unread" }),
@@ -36,7 +57,7 @@ describe("NotificationBell", () => {
   });
 
   it("stops counting where a badge has room", () => {
-    render(<NotificationBell onOpen={() => undefined} unread={42} />);
+    bell(42);
 
     expect(
       screen.getByRole("button", { name: "Notifications, 42 unread" }),

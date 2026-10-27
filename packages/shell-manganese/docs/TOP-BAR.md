@@ -311,8 +311,9 @@ button, and their controls in one panel, each labeled in words.
   the drawer.
 - Critical toasts stay up and have a red ring.
 - No toasts show while locked.
-- The bell shows the count since it was last opened. It opens a drawer of
-  every uncleared notification, where you can open, clear or clear all.
+- The bell shows the count since it was last opened. It opens a panel under
+  itself of every uncleared notification, where you can open, clear or clear
+  all.
 - The compositor keeps the history, so it survives a reload. See
   [NOTIFICATIONS.md](../../../docs/architecture/NOTIFICATIONS.md).
 

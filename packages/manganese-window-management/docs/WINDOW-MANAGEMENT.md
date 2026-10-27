@@ -370,7 +370,7 @@ Rules:
   depth-only animation.
 - A workspace switch clips each part of a window with CSS `clip` on its
   wrapper (`clippedTo`), not an animated `clip-path`. The clip is a static
-  rectangle like the notification drawer's `overflow: clip`, which the
+  rectangle like `SlideOver`'s `overflow: clip`, which the
   compositor applies to client surfaces too. Parts are `position: absolute`
   so the wrapper's clip reaches them; the wrapper has no `z-index`, so each
   part still stacks by its own.
