@@ -4,6 +4,12 @@ import { GRABBING } from "./placement";
 import { GrabCursor } from "./useGrabCursor";
 
 /**
+ * Marks the sheet, so document listeners can tell it from the bare desk. See
+ * `useScreenFollowsPointer`.
+ */
+export const GRABBING_SHEET = "data-grabbing";
+
+/**
  * A transparent sheet over the whole desktop while a window moves, so the
  * pointer shows `grabbing` over gaps, the wallpaper and the top bar too.
  *
@@ -15,7 +21,7 @@ export const GrabbingSheet = () => (
   <div
     aria-hidden
     className={cx(sheetStyles, grabCursorStyles[GrabCursor.Grabbing])}
-    data-grabbing
+    {...{ [GRABBING_SHEET]: "" }}
     style={{ zIndex: GRABBING }}
   />
 );

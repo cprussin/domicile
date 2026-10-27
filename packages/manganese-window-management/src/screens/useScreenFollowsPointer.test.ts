@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import type { Display } from "@domicile-desktop/component-library/display-source";
 import { fireEvent, renderHook } from "@testing-library/react";
+import { GRABBING_SHEET } from "../GrabbingSheet";
 import { WINDOW_FRAME } from "../WindowFrame";
 import { WindowAction } from "../window-state";
 import { useScreenFollowsPointer } from "./useScreenFollowsPointer";
@@ -48,6 +49,17 @@ describe("useScreenFollowsPointer", () => {
     document.body.append(frame);
 
     fireEvent.pointerMove(app, { clientX: 2000, clientY: 500 });
+
+    expect(acted).toEqual([]);
+  });
+
+  it("leaves the keyboard alone over the sheet a moving window puts over the desk", () => {
+    const acted = followingFromLeft();
+    const sheet = document.createElement("div");
+    sheet.setAttribute(GRABBING_SHEET, "");
+    document.body.append(sheet);
+
+    fireEvent.pointerMove(sheet, { clientX: 2000, clientY: 500 });
 
     expect(acted).toEqual([]);
   });

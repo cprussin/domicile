@@ -3342,6 +3342,31 @@ describe("Shell", () => {
       ).toBe(was + LEFT.width + 10);
     });
 
+    it("keeps a dragged float focused and on top while only the pointer is on the next screen", () => {
+      // The sheet that shows the grab cursor is under the pointer, not the
+      // window, so it must not read as the bare desk.
+      const { container } = renderShell([LEFT, RIGHT]);
+      pointerAt(2000, 500);
+      clientAppears("other");
+      press("Tab", true);
+      pointerAt(500, 500);
+      clientAppears("term");
+      press("Tab", true);
+
+      fireEvent.pointerDown(barFor(container, "app:term"), {
+        clientX: LEFT.width - 50,
+        clientY: 100,
+      });
+      const sheet = grabbingSheet(container);
+      domicile.calls.length = 0;
+      fireEvent.pointerMove(sheet, { clientX: LEFT.width + 10, clientY: 100 });
+
+      expect(domicile.calls).not.toContainEqual(["focusApp", "other"]);
+      expect(
+        Number(barFor(container, "app:term").style.zIndex),
+      ).toBeGreaterThan(Number(barFor(container, "app:other").style.zIndex));
+    });
+
     it("drags a browser window onto the next screen without loading its page again", async () => {
       // One `<webview>` throughout; a new one would reload the page.
       const { container } = renderShell([LEFT, RIGHT]);

@@ -1,5 +1,6 @@
 import type { Display } from "@domicile-desktop/component-library/display-source";
 import { useEffect } from "react";
+import { GRABBING_SHEET } from "../GrabbingSheet";
 import { WINDOW_FRAME } from "../WindowFrame";
 import { WindowAction } from "../window-state";
 import { screenUnder } from "./screen-under";
@@ -20,9 +21,10 @@ type Options = {
  * empty monitor has no window to enter, so the next window would open on the
  * old one.
  *
- * Ignored over windows, even where a window spills onto another screen.
- * Otherwise a float dragged half across would hand focus to the window under it
- * on every move.
+ * Ignored over windows, even where a window spills onto another screen, and
+ * over the sheet a moving window puts over the desk. Otherwise a float dragged
+ * half across would hand focus to the other screen, whose windows would then
+ * stack over it.
  *
  * Only acts when focus is on another screen, since this runs on every
  * `pointermove`.
@@ -36,7 +38,7 @@ export const useScreenFollowsPointer = ({
     const moved = (event: PointerEvent) => {
       if (
         event.target instanceof Element &&
-        event.target.closest(`[${WINDOW_FRAME}]`) !== null
+        event.target.closest(`[${WINDOW_FRAME}], [${GRABBING_SHEET}]`) !== null
       ) {
         return;
       }
