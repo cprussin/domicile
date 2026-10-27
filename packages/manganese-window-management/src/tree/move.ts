@@ -273,8 +273,14 @@ const entryInto = (container: Container, direction: Direction): Entry => {
   }
 };
 
-// Moves the node out of its branch to sit beside it in an outer container
-// running that way. The branch collapses as after a close.
+/**
+ * Moves the node out of its branch to sit beside it in an outer container
+ * running that way. The branch collapses as after a close.
+ *
+ * The node takes an even share and the rest keep their relative sizes, so
+ * moving on into a neighbor (see {@link joined}) restores their sizes. A node
+ * that empties its branch takes the branch's share.
+ */
 const movedOut = (
   root: LayoutNode,
   { container, index, path }: Ancestor,
@@ -294,8 +300,24 @@ const movedOut = (
     // Into the slot of an emptied branch, or past the branch.
     const at = kept !== undefined && isForward(direction) ? index + 1 : index;
     const children = [...siblings.slice(0, at), node, ...siblings.slice(at)];
-    return replacedAt(root, path, () => flattened(container, children, at));
+    const fractions =
+      kept === undefined
+        ? container.fractions
+        : withShareAt(container.fractions, at);
+    return replacedAt(root, path, () =>
+      flattened(container, children, at, fractions),
+    );
   }
+};
+
+/** The shares with an even share inserted at `at`, the rest scaled to fit. */
+const withShareAt = (
+  fractions: readonly number[],
+  at: number,
+): readonly number[] => {
+  const share = 1 / (fractions.length + 1);
+  const scaled = fractions.map((fraction) => fraction * (1 - share));
+  return [...scaled.slice(0, at), share, ...scaled.slice(at)];
 };
 
 /**
@@ -336,9 +358,10 @@ const flattened = (
   container: Container,
   children: readonly LayoutNode[],
   focused: number,
+  fractions: readonly number[],
 ): LayoutNode => {
   const [only] = children;
   return children.length === 1 && only?.kind === NodeKind.Container
     ? only
-    : Node.Container(container.layout, children, focused);
+    : Node.Container(container.layout, children, focused, fractions);
 };

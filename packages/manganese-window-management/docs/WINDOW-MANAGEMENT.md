@@ -13,6 +13,9 @@ Manganese uses sway's layout model. For the key bindings, see
   separates windows from the screen's edge.
 - A new window or tab opens just after the focused one. Closing a window
   gives its space to the rest.
+- A window moved out of a group into a split takes an even share, and the
+  rest keep their relative sizes. Moving it on into the next group gives the
+  split its old sizes back.
 - Closing the focused window focuses the one in its group focused most
   recently before it, as sway's focus stack does. Each window records when it
   last took focus, and keeps that when it moves.
