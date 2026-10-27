@@ -921,3 +921,26 @@ fn answered_sending(line: &str, send: SendShell) -> Response {
         },
     )
 }
+
+#[test]
+fn a_virtual_monitor_is_refused_on_a_connection_that_is_not_held() {
+    // `serve_one` lends it the connection; a lone line has no monitor to keep.
+    let refused = answered(
+        "{\"type\":\"virtual_monitor\",\"name\":\"Pane\",\"width\":1280,\
+         \"height\":720,\"refresh_mhz\":60000}",
+        Path::new("/shell.js"),
+        &|_, _| panic!("a monitor reaches no engine"),
+    );
+    assert!(matches!(refused, Response::Refused { .. }), "{refused:?}");
+}
+
+#[test]
+fn a_resize_with_no_monitor_held_is_refused() {
+    let refused = answered(
+        "{\"type\":\"resize_virtual_monitor\",\"width\":1280,\"height\":720,\
+         \"refresh_mhz\":60000}",
+        Path::new("/shell.js"),
+        &|_, _| panic!("a resize reaches no engine"),
+    );
+    assert!(matches!(refused, Response::Refused { .. }), "{refused:?}");
+}

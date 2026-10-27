@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use domicile_launch::compositor_socket::{
-    screen_record, screenshot, send_shell, theme, CompositorError,
+    screen_record, screenshot, send_shell, theme, virtual_monitor, CompositorError,
 };
 use domicile_launch::control::Shot;
 use domicile_protocol::Theme;
@@ -318,6 +318,95 @@ fn a_theme_the_compositor_did_not_name_is_carried_back() {
         })
     );
     heard.join().expect("the compositor was listening");
+}
+
+#[test]
+fn a_virtual_monitor_is_added_resized_and_given_back() {
+    let (_scratch, path) = scratch();
+    let heard = a_compositor_lending(
+        &path,
+        "{\"type\":\"system_reply\",\"id\":1,\"reply\":{\"kind\":\"virtual_monitor\",\
+         \"output\":\"virtual-1\"}}\n",
+    );
+
+    let held = virtual_monitor(&path, "Pane", (1280, 720), 60_000, Some(BRIEFLY))
+        .expect("the compositor added it");
+    assert_eq!(held.output(), "virtual-1");
+    held.resize((800, 600), 30_000)
+        .expect("the compositor took it");
+    held.give_back();
+
+    assert_eq!(
+        heard.join().expect("the compositor was listening"),
+        vec![
+            "{\"type\":\"system_request\",\"id\":1,\"request\":{\"call\":\"virtual_monitor\",\
+             \"name\":\"Pane\",\"width\":1280,\"height\":720,\"refresh_mhz\":60000}}\n",
+            "{\"type\":\"system_request\",\"id\":1,\"request\":{\"call\":\
+             \"resize_virtual_monitor\",\"width\":800,\"height\":600,\"refresh_mhz\":30000}}\n",
+        ]
+    );
+}
+
+#[test]
+fn a_compositor_that_will_not_add_a_monitor_is_quoted() {
+    let (_scratch, path) = scratch();
+    let heard = a_compositor_lending(
+        &path,
+        "{\"type\":\"system_reply\",\"id\":1,\"reply\":{\"kind\":\"failed\",\
+         \"error\":{\"kind\":\"other\",\"message\":\"nested\"}}}\n",
+    );
+
+    let refused = virtual_monitor(&path, "Pane", (1280, 720), 60_000, Some(BRIEFLY))
+        .err()
+        .expect("the compositor refused");
+
+    assert_eq!(
+        refused,
+        CompositorError::Refused {
+            why: "nested".to_string()
+        }
+    );
+    heard.join().expect("the compositor was listening");
+}
+
+#[test]
+fn a_held_monitor_hears_its_compositor_go() {
+    let (_scratch, path) = scratch();
+    let compositor = a_compositor(
+        &path,
+        Duration::ZERO,
+        Some(
+            "{\"type\":\"system_reply\",\"id\":1,\"reply\":{\"kind\":\"virtual_monitor\",\
+             \"output\":\"virtual-1\"}}\n",
+        ),
+    );
+    let held = virtual_monitor(&path, "Pane", (1280, 720), 60_000, Some(BRIEFLY))
+        .expect("the compositor added it");
+    compositor
+        .join()
+        .expect("the compositor answered, then exited");
+
+    // Returns: the compositor hung up, taking the monitor with it.
+    held.until_it_ends();
+}
+
+/// A fake compositor at `path` that reads the request, replies `with`, then
+/// reads until the supervisor gives the monitor back, and returns the lines.
+fn a_compositor_lending(path: &Path, with: &'static str) -> std::thread::JoinHandle<Vec<String>> {
+    let listener = UnixListener::bind(path).expect("the compositor binds its chrome socket");
+    std::thread::spawn(move || {
+        let (stream, _) = listener.accept().expect("a supervisor dialed");
+        let mut reader = BufReader::new(stream.try_clone().expect("the connection is readable"));
+        let mut first = String::new();
+        reader.read_line(&mut first).expect("the supervisor asked");
+        let mut answering = stream;
+        answering
+            .write_all(with.as_bytes())
+            .expect("the compositor answers");
+        std::iter::once(first)
+            .chain(reader.lines().map(|line| line.expect("a line") + "\n"))
+            .collect()
+    })
 }
 
 /// A fake compositor at `path` that reads lines up to `which_theme`, replies

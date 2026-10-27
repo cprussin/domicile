@@ -15,6 +15,8 @@
 //!   forwarded to the engine like `load-shell`.
 //! - `domicile screenshot`: forwarded to the compositor
 //!   ([`compositor_socket`]).
+//! - `domicile monitor`: a virtual monitor the compositor keeps while the
+//!   command runs, lent over the control socket ([`monitor_lending`]).
 //! - `domicile power-off`, `domicile reboot` and `domicile log-out`: asked in
 //!   the desktop's Access dialog ([`power`]).
 //! - `domicile install-app`: reads a site's web app manifest ([`web_app`],
@@ -55,6 +57,7 @@ pub mod history;
 pub mod install_app;
 pub mod media_devices;
 pub mod milestones;
+pub mod monitor_lending;
 pub mod notification;
 pub mod open;
 pub mod platform;

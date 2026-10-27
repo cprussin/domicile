@@ -13,7 +13,7 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crate::control::{parse_response, to_line, Request, Response};
+use crate::control::{parse_response, to_line, Lent, Request, Response};
 
 /// How long either end waits for the other.
 ///
@@ -129,11 +129,55 @@ pub fn answer_one(
     patience: Duration,
     answer: &dyn Fn(&str) -> String,
 ) -> std::io::Result<()> {
+    serve(stream, patience, answer, None)
+}
+
+/// [`answer_one`], lending the connection of a [`Request::VirtualMonitor`]
+/// to `lend`, which holds it as long as the client keeps it open.
+///
+/// `lend` is [`crate::monitor_lending::lend`] in a desktop.
+pub fn serve_one(
+    stream: UnixStream,
+    patience: Duration,
+    answer: &dyn Fn(&str) -> String,
+    lend: &dyn Fn(Lent),
+) -> std::io::Result<()> {
+    serve(stream, patience, answer, Some(lend))
+}
+
+/// [`serve_one`]; with no `lend`, `answer` refuses a monitor.
+fn serve(
+    stream: UnixStream,
+    patience: Duration,
+    answer: &dyn Fn(&str) -> String,
+    lend: Option<&dyn Fn(Lent)>,
+) -> std::io::Result<()> {
     stream.set_read_timeout(Some(patience))?;
     stream.set_write_timeout(Some(patience))?;
     let mut asking = BufReader::new(stream.try_clone()?);
     let mut line = String::new();
     asking.read_line(&mut line)?;
+    if let (
+        Some(lend),
+        Ok(Request::VirtualMonitor {
+            name,
+            width,
+            height,
+            refresh_mhz,
+        }),
+    ) = (lend, serde_json::from_str(line.trim()))
+    {
+        // The client resizes it whenever it likes.
+        stream.set_read_timeout(None)?;
+        lend(Lent {
+            name,
+            size: (width, height),
+            refresh_mhz,
+            lines: asking,
+            client: stream,
+        });
+        return Ok(());
+    }
     let mut answering = stream;
     answering.write_all(answer(&line).as_bytes())
 }
@@ -173,6 +217,27 @@ pub fn ask(
     request: &Request,
     patience: Option<Duration>,
 ) -> Result<Response, AskError> {
+    exchanged(path, request, patience, true).map(|(response, _)| response)
+}
+
+/// [`ask`], keeping the connection open after the response, as a
+/// [`Request::VirtualMonitor`] needs. Closing it ends what it holds.
+pub fn hold(
+    path: &Path,
+    request: &Request,
+    patience: Option<Duration>,
+) -> Result<(Response, UnixStream), AskError> {
+    exchanged(path, request, patience, false)
+}
+
+/// Sends `request` and reads the response. `finished` half-closes the
+/// connection after the request, so the desktop sees its end.
+fn exchanged(
+    path: &Path,
+    request: &Request,
+    patience: Option<Duration>,
+    finished: bool,
+) -> Result<(Response, UnixStream), AskError> {
     let mut stream = UnixStream::connect(path).map_err(|why| match why.kind() {
         // A missing socket, or a stale one left by a dead desktop.
         std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused => {
@@ -194,12 +259,15 @@ pub fn ask(
     stream
         .write_all(to_line(request).as_bytes())
         .map_err(|why| unreachable_desktop(path, &why))?;
-    // Half-close so the desktop sees the end of the request.
-    stream
-        .shutdown(std::net::Shutdown::Write)
-        .map_err(|why| unreachable_desktop(path, &why))?;
+    if finished {
+        stream
+            .shutdown(std::net::Shutdown::Write)
+            .map_err(|why| unreachable_desktop(path, &why))?;
+    }
+    // Nothing follows the response but a hang-up, so the reader buffers
+    // nothing the caller misses.
     let mut said = String::new();
-    BufReader::new(stream)
+    BufReader::new(&stream)
         .read_line(&mut said)
         .map_err(|why| unreachable_desktop(path, &why))?;
     match said.trim() {
@@ -207,10 +275,12 @@ pub fn ask(
         "" => Err(AskError::NoAnswer {
             path: path.display().to_string(),
         }),
-        line => parse_response(line).map_err(|_| AskError::Unreadable {
-            path: path.display().to_string(),
-            said: line.to_string(),
-        }),
+        line => parse_response(line)
+            .map(|response| (response, stream))
+            .map_err(|_| AskError::Unreadable {
+                path: path.display().to_string(),
+                said: line.to_string(),
+            }),
     }
 }
 

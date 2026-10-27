@@ -34,6 +34,8 @@ Ask the running desktop:
   domicile theme [light|dark|toggle]    Set the theme, or print it
   domicile disable-while-typing [on|off|toggle]
                                         Set the touchpad setting, or print it
+  domicile monitor <name> <W>x<H>[@Hz]  Add a monitor with no screen until stdin
+                                        ends; each line read resizes it
   domicile power-off                    Ask, then turn the computer off
   domicile reboot                       Ask, then restart the computer
   domicile log-out                      Ask, then end the login session
@@ -134,6 +136,13 @@ pub enum CliError {
     )]
     NotATheme { said: String },
     #[error(
+        "monitor takes a name and a size, and was given less:\n\n    \
+         domicile monitor \"Left pane\" 1280x720\n"
+    )]
+    NoMonitor,
+    #[error("{said} is not a size like 1280x720 or 1280x720@30.")]
+    NotASize { said: String },
+    #[error(
         "check-config takes the config file to check, and was given \
          nothing:\n\n    \
          domicile check-config ~/.config/domicile/domicile.json\n"
@@ -204,6 +213,12 @@ pub enum Invocation {
     /// Power off or reboot the computer, or log out, after a yes in the
     /// desktop's Access dialog.
     Power { power: Power },
+    /// Add a virtual monitor until stdin ends, resizing it to each size read.
+    Monitor {
+        name: String,
+        size: (u32, u32),
+        refresh_mhz: u32,
+    },
     /// Print [`USAGE`].
     Help,
 }
@@ -321,6 +336,21 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (Some(_), Some(extra)) => Err(CliError::ExtraToSave { extra }),
                 (file, _) => Ok(Invocation::Screenshot { file }),
             },
+            Verb::Monitoring => match (args.next(), args.next(), args.next()) {
+                (Some(name), Some(said), None) => match monitor_size(&said) {
+                    Some((size, refresh_mhz)) => Ok(Invocation::Monitor {
+                        name,
+                        size,
+                        refresh_mhz,
+                    }),
+                    None => Err(CliError::NotASize { said }),
+                },
+                (Some(name), Some(said), Some(extra)) => Err(CliError::Extra {
+                    verb: format!("{first} {name} {said}"),
+                    extra,
+                }),
+                _ => Err(CliError::NoMonitor),
+            },
             Verb::Checking => match (args.next(), args.next()) {
                 (None, _) => Err(CliError::NothingToCheck),
                 (Some(config), None) => Ok(Invocation::Check {
@@ -395,6 +425,8 @@ enum Verb {
     Theming,
     /// `power-off`, `reboot` or `log-out`, which take no arguments.
     Powering(Power),
+    /// `monitor`, which takes a name and a size.
+    Monitoring,
 }
 
 /// The verb `word` names, if any.
@@ -416,6 +448,7 @@ fn verb(word: &str) -> Option<Verb> {
         "power-off" => Some(Verb::Powering(Power::Off)),
         "reboot" => Some(Verb::Powering(Power::Reboot)),
         "log-out" => Some(Verb::Powering(Power::LogOut)),
+        "monitor" => Some(Verb::Monitoring),
         _ => None,
     }
 }
@@ -438,4 +471,31 @@ fn theme_change(word: &str) -> Option<ThemeChange> {
         "toggle" => Some(ThemeChange::Toggle),
         _ => None,
     }
+}
+
+/// The refresh rate of a size that names none, in millihertz.
+const REFRESH_MHZ: u32 = 60_000;
+
+/// The size `said` names, `<width>x<height>` with an optional `@<hertz>`, and
+/// its refresh rate in millihertz. None for anything else, or a zero.
+pub fn monitor_size(said: &str) -> Option<((u32, u32), u32)> {
+    let (size, hertz) = match said.split_once('@') {
+        Some((size, hertz)) => (size, Some(hertz)),
+        None => (said, None),
+    };
+    let (width, height) = size.split_once('x')?;
+    let (width, height) = (width.parse::<u32>().ok()?, height.parse::<u32>().ok()?);
+    let refresh_mhz = match hertz {
+        None => REFRESH_MHZ,
+        Some(hertz) => {
+            let hertz = hertz
+                .parse::<f64>()
+                .ok()
+                .filter(|hertz| hertz.is_finite())?;
+            // Rounded, so 59.94 is 59940 rather than 59939.
+            let millihertz = (hertz * 1000.0).round();
+            (millihertz >= 1.0 && millihertz <= f64::from(u32::MAX)).then_some(millihertz as u32)?
+        }
+    };
+    (width > 0 && height > 0).then_some(((width, height), refresh_mhz))
 }

@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use domicile_launch::cli::{invocation, CliError, Invocation, USAGE};
+use domicile_launch::cli::{invocation, monitor_size, CliError, Invocation, USAGE};
 use domicile_launch::control::{Request, Switch, ThemeChange};
 use domicile_launch::power::Power;
 
@@ -419,6 +419,7 @@ fn the_usage_lists_every_verb_and_each_one_parses() {
         "power-off",
         "reboot",
         "log-out",
+        "monitor",
         "help",
     ] {
         assert!(
@@ -554,4 +555,69 @@ fn every_verb_in_the_usage_has_a_section_in_the_cli_reference() {
             "docs/CLI.md has no section for {verb}"
         );
     }
+}
+
+#[test]
+fn monitor_takes_a_name_and_a_size() {
+    assert_eq!(
+        run(&["monitor", "Left pane", "1280x720"]),
+        Ok(Invocation::Monitor {
+            name: "Left pane".to_string(),
+            size: (1280, 720),
+            refresh_mhz: 60_000,
+        })
+    );
+}
+
+#[test]
+fn a_monitors_size_may_name_its_refresh_rate() {
+    assert_eq!(monitor_size("1280x720@30"), Some(((1280, 720), 30_000)));
+    assert_eq!(
+        monitor_size("1920x1080@59.94"),
+        Some(((1920, 1080), 59_940))
+    );
+}
+
+#[test]
+fn a_size_that_is_not_one_is_none() {
+    for said in [
+        "",
+        "1280",
+        "1280x",
+        "x720",
+        "0x720",
+        "1280x0",
+        "big",
+        "1280x720@",
+        "1280x720@0",
+    ] {
+        assert_eq!(monitor_size(said), None, "{said}");
+    }
+}
+
+#[test]
+fn monitor_refuses_a_size_it_cannot_read_and_names_it() {
+    assert_eq!(
+        run(&["monitor", "Pane", "huge"]),
+        Err(CliError::NotASize {
+            said: "huge".to_string()
+        })
+    );
+}
+
+#[test]
+fn monitor_needs_a_name_and_a_size() {
+    assert_eq!(run(&["monitor"]), Err(CliError::NoMonitor));
+    assert_eq!(run(&["monitor", "Pane"]), Err(CliError::NoMonitor));
+}
+
+#[test]
+fn monitor_takes_nothing_after_its_size() {
+    assert_eq!(
+        run(&["monitor", "Pane", "1280x720", "again"]),
+        Err(CliError::Extra {
+            verb: "monitor Pane 1280x720".to_string(),
+            extra: "again".to_string()
+        })
+    );
 }

@@ -68,7 +68,7 @@ device and no logind seat.
 - [x] compositor: `ClientRequest::ResizeVirtualMonitor`, same id and output
 - [x] engine: headless updates the display; drm replaces its snapshot (both
       already did: each takes the whole list again)
-- [ ] `domicile monitor`
+- [x] `domicile monitor`
 
 ### 3. EIS reaches the shell
 
