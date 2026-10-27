@@ -1,7 +1,7 @@
 import { css, cva, cx } from "../../styled-system/css";
 import { center } from "../../styled-system/patterns";
 import { captured } from "./captured";
-import { Video } from "./Video";
+import { FullScreen } from "./FullScreen";
 
 type Props = {
   /** The capture's name in `docs/media/`, without an extension. */
@@ -13,7 +13,8 @@ type Props = {
 };
 
 /**
- * A captured screenshot, or a muted video loop that can play full screen.
+ * A captured screenshot or muted video loop, either of which can show full
+ * screen.
  * Until the scene has been captured it shows what it will be.
  */
 export const Media = ({ name, alt, shape = "screen" }: Props) => {
@@ -21,14 +22,29 @@ export const Media = ({ name, alt, shape = "screen" }: Props) => {
   switch (media.kind) {
     case "video": {
       return (
-        <Video alt={alt} className={mediaStyles({ shape })} video={media} />
+        <FullScreen label="Watch full screen">
+          <video
+            aria-label={alt}
+            autoPlay
+            className={mediaStyles({ shape })}
+            loop
+            muted
+            playsInline
+            poster={media.poster}
+          >
+            <source src={media.webm} type="video/webm" />
+            <source src={media.mp4} type="video/mp4" />
+          </video>
+        </FullScreen>
       );
     }
     case "picture": {
       return (
-        // Captures are already sized for the page, so `next/image` would
-        // only re-encode them.
-        <img alt={alt} className={mediaStyles({ shape })} src={media.png} />
+        <FullScreen label="View full screen">
+          {/* Captures are already sized for the page, so `next/image` would
+              only re-encode them. */}
+          <img alt={alt} className={mediaStyles({ shape })} src={media.png} />
+        </FullScreen>
       );
     }
     case "missing": {
