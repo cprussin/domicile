@@ -15,10 +15,11 @@ device and no logind seat.
  EIS client ──────────────────────────▶ EIS server ──────┴── domicile_input_inject ──────▶ SystemInputInjector ──▶ desk host
 ```
 
-- **Monitors.** `OzonePlatformHeadless` takes the compositor's virtual
-  displays (`SetDomicileVirtualDisplays`) and keeps `HeadlessScreen`'s list to
-  match: added, updated in place, removed. With none, it reports one 1024x768
-  placeholder, as `DrmScreen` does with nothing plugged in.
+- **Monitors.** With `--domicile-headless-desk`, `OzonePlatformHeadless`
+  takes the compositor's virtual displays (`SetDomicileVirtualDisplays`) and
+  keeps `HeadlessScreen`'s list to match: added, updated in place, removed.
+  With none, it reports one 1024x768 placeholder on `HEADLESS-1`, as
+  `DrmScreen` does with nothing plugged in.
 - **The desk.** Headless drives its own displays, as drm does, so
   `ShellWindows`, `DomicileDisplayWatcher`, the display layout and the desk
   host all run there (see [ONE-PAGE-FOR-THE-DESK.md](ONE-PAGE-FOR-THE-DESK.md)).
@@ -26,7 +27,8 @@ device and no logind seat.
   are drawn inside their window and show in captures.
 - **Windows in memory.** Headless imports no dmabufs, so the engine always
   composites on the CPU and the compositor hands it windows in shared memory
-  ([A-DESKTOP-ON-A-TTY.md](A-DESKTOP-ON-A-TTY.md#software-output)).
+  ([A-DESKTOP-ON-A-TTY.md](A-DESKTOP-ON-A-TTY.md#software-output)). It
+  advertises no dmabuf, so GL clients draw in memory too.
 - **Resizing.** A virtual monitor keeps its id and connector when resized, so
   its `wl_output`, its windows and any capture of it stay. A capture follows
   the new size (`domicile_display_capture_resize`).
@@ -59,13 +61,15 @@ device and no logind seat.
 
 ### 1. A desk on headless
 
-- [ ] launcher: on headless, `--disable-gpu` and `--software-compositing yes`
-- [ ] engine: headless counts as driving its displays (`ShellWindows`,
+- [x] launcher: on headless, `--disable-gpu` and `--software-compositing yes`
+- [x] engine: headless counts as driving its displays (`ShellWindows`,
   `DomicileDisplayWatcher`)
-- [ ] engine: `OzonePlatformHeadless` virtual displays, connectors, display
-  layout, desk host and `presents_every_window = false`
-- [ ] guard: a headless engine with two virtual monitors, each capture showing
-  its slice of the desk
+- [x] engine: `OzonePlatformHeadless` virtual displays, connectors, display
+  layout and `presents_every_window = false` (patch `0152`)
+- [x] guard: a headless engine with two virtual monitors, each capture showing
+  its slice of the desk (`guard-headless-desk.sh`)
+- [x] compositor: no `zwp_linux_dmabuf_v1` with `--software-compositing`, so
+  GL clients draw in memory
 
 ### 2. Resize in place
 
