@@ -1,7 +1,8 @@
 # Install
 
-Domicile runs on Linux. Install it from your distribution's package manager,
-or with Nix, then log in to the **Domicile** session.
+Manganese comes with Domicile, the desktop it runs on. Domicile runs on Linux.
+Install it from your distribution's package manager, or with Nix, then log in
+to the **Domicile** session.
 
 <!-- tab: Debian and Ubuntu -->
 

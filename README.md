@@ -65,7 +65,7 @@ The [user guide](docs/use/README.md) covers installing, using and setting it up.
 
 [shell-simple](packages/shell-simple/README.md) is the same terrible idea with fewer opinions.
 
-Not on Nix? There are packages for Debian, Ubuntu, Fedora, openSUSE and Arch: [install](docs/use/INSTALL.md).
+Not on Nix? There are packages for Debian, Ubuntu, Fedora, openSUSE and Arch: [install](docs/INSTALL.md).
 
 ## License
 

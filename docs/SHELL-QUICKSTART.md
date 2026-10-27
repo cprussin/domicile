@@ -7,7 +7,7 @@ or in plain JavaScript.
 ## 1. Install Domicile
 
 Install it from your distribution's packages or Nix:
-[Install](use/INSTALL.md).
+[Install](INSTALL.md).
 
 ## 2. Write a shell
 
