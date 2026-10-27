@@ -269,6 +269,61 @@ describe("movedBy", () => {
     });
   });
 
+  describe("between two resized tab groups", () => {
+    /** Two tab groups at 70% and 30%, the left one showing its last tab. */
+    const groups = {
+      depth: 2,
+      root: LayoutNode.Container(
+        Layout.SplitH,
+        [
+          LayoutNode.Container(
+            Layout.Tabbed,
+            [LayoutNode.Window("a"), LayoutNode.Window("b")],
+            1,
+          ),
+          LayoutNode.Container(Layout.Tabbed, [
+            LayoutNode.Window("c"),
+            LayoutNode.Window("d"),
+          ]),
+        ],
+        0,
+        [0.7, 0.3],
+      ),
+    };
+
+    it("keeps the groups' relative sizes while the window sits between them", () => {
+      const between = movedBy(groups, Direction.Right);
+
+      expect(windowsOf(between)).toEqual(["a", "b", "c", "d"]);
+      // The groups keep seven to three; the window gets a third.
+      expect(between.root).toMatchObject({
+        fractions: [
+          expect.closeTo(0.7 * (2 / 3)),
+          expect.closeTo(1 / 3),
+          expect.closeTo(0.3 * (2 / 3)),
+        ],
+      });
+    });
+
+    it("gives the groups their sizes back once the window joins the other", () => {
+      const joined = movedBy(movedBy(groups, Direction.Right), Direction.Right);
+
+      expect(windowsOf(joined)).toEqual(["a", "b", "c", "d"]);
+      expect(joined.root).toMatchObject({
+        fractions: [expect.closeTo(0.7), expect.closeTo(0.3)],
+      });
+    });
+
+    it("gives a window that empties its group the group's share", () => {
+      const lone = movedBy(removed(groups, "a"), Direction.Right);
+
+      expect(lone.root).toMatchObject({
+        children: [{ id: "b" }, { layout: Layout.Tabbed }],
+        fractions: [expect.closeTo(0.7), expect.closeTo(0.3)],
+      });
+    });
+  });
+
   it("moves a selected container into the container beside it", () => {
     const row = {
       depth: 1,
