@@ -385,6 +385,7 @@ pub fn refused(asked: Asked) -> Option<Refusal> {
             | ClientRequest::ThemeCaptured { .. }
             // From an application, like a Wayland idle inhibitor.
             | ClientRequest::HeldAwakeByThePortal { .. }
+            | ClientRequest::HeldAwakeByTheScreenSaver { .. }
             // Reaches no client; it only stirs the idle clock.
             | ClientRequest::Activity { .. }
             // Reaches no client; a cast of the lock screen draws it.

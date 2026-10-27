@@ -107,7 +107,18 @@ An inhibitor holds only while its surface is a toplevel window
 
 The Inhibit portal's idle flag (`8`) blocks blanking the same way while the
 application holds it. It names no surface, so it holds with no window showing
-(`Idle::held_by_portals`).
+(`Idle::held_by_applications`).
+
+The compositor also serves `org.freedesktop.ScreenSaver` (`crate::screen_saver`):
+
+- **Browsers ask here for a screen wake lock** (a video call, a film), as do
+  Firefox, mpv and VLC. Chromium asks only when no GNOME session manager owns
+  its name. Browser windows in the engine are not Wayland clients, so this is
+  their only way to hold.
+- **A hold from a process with windows holds only while one is shown**, like a
+  Wayland inhibitor. A process with no windows, like the engine, always holds.
+- **A hold ends** with `UnInhibit`, or when its application leaves the bus.
+- A holder is named by the application name it passed.
 
 A shell holds one the same way: `dbusCall` to
 `org.freedesktop.portal.Inhibit.Inhibit`, and `Request.Close` on the returned
@@ -122,6 +133,8 @@ handle to let go. Manganese's idle inhibitor bar item does this.
   - A portal inhibitor is named by its app id, or, for an unsandboxed
     application, its process name (`/proc/<pid>/comm`). A shell page's own
     hold is `domicile`.
+  - A screen saver hold is named by the application name it passed, and only
+    while it holds.
   - A desktop with no timeout lists none.
 - Manganese's eye opens while anything holds, and names the holders in its
   tooltip.

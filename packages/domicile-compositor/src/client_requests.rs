@@ -205,6 +205,12 @@ pub enum ClientRequest {
     HeldAwakeByThePortal {
         by: Vec<String>,
     },
+    /// What applications asked `org.freedesktop.ScreenSaver` to hold, and
+    /// why that changed. From its thread; see [`crate::screen_saver`].
+    HeldAwakeByTheScreenSaver {
+        by: Vec<crate::screen_saver::Hold>,
+        change: crate::screen_saver::Change,
+    },
 }
 
 impl DomicileCompositor {
@@ -401,6 +407,9 @@ impl DomicileCompositor {
             },
             ClientRequest::Unlock { passphrase } => self.offered_the_passphrase(&passphrase),
             ClientRequest::HeldAwakeByThePortal { by } => self.held_awake_by_the_portal(by),
+            ClientRequest::HeldAwakeByTheScreenSaver { by, change } => {
+                self.held_awake_by_the_screen_saver(by, change)
+            }
             // Counted by `keep_the_desktop_awake` above, and for nobody else.
             ClientRequest::Activity { .. } => {}
             ClientRequest::DeskPointer { at, windows } => self.cast_desk_pointer(at, windows),
