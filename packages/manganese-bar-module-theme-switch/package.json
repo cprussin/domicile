@@ -2,6 +2,7 @@
   "dependencies": {
     "@domicile-desktop/component-library": "workspace:*",
     "@pandacss/dev": "catalog:",
+    "@phosphor-icons/react": "catalog:",
     "react": "catalog:"
   },
   "description": "A manganese bar item: the light and dark theme toggle.",
@@ -22,7 +23,8 @@
     "node": ">=24"
   },
   "exports": {
-    ".": "./src/bar-item.tsx"
+    ".": "./src/bar-item.tsx",
+    "./quick-settings": "./src/quick-settings.tsx"
   },
   "files": [
     "src/**",

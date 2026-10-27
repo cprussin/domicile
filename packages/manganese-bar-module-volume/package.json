@@ -30,6 +30,7 @@
   },
   "exports": {
     ".": "./src/bar-item.tsx",
+    "./quick-settings": "./src/quick-settings.tsx",
     "./useVolumeKeys": "./src/useVolumeKeys.ts"
   },
   "files": [

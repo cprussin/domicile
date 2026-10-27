@@ -58,6 +58,7 @@
   },
   "exports": {
     ".": "./src/index.tsx",
+    "./QuickSettings": "./src/quick-settings/QuickSettings.tsx",
     "./css": {
       "types": "./styled-system/css/index.d.ts",
       "default": "./styled-system/css/index.mjs"

@@ -19,6 +19,12 @@ export const Shell = runManganese({
 It takes no props. It reads `useDomicile()`; the network service is watched once per desktop. See
 [TOP-BAR.md](../shell-manganese/docs/TOP-BAR.md).
 
+## Quick settings
+
+`@domicile-desktop/manganese-bar-module-network/quick-settings` exports its parts
+for [`QuickSettings`](../shell-manganese/docs/TOP-BAR.md#quick-settings):
+`NetworkIndicator`, `NetworkToggles` and `NetworkDetails`.
+
 ## Test
 
 ```sh

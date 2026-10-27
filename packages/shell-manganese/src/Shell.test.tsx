@@ -981,14 +981,15 @@ describe("Shell", () => {
       expect(windowsOnScreen(container)).toEqual(["term"]);
     });
 
-    it("shows the brightness /sys says", async () => {
+    it("shows the brightness /sys says in quick settings", async () => {
       renderShell();
 
       await act(() => answerSystemCalls(domicile.fake, THINKPAD_BACKLIGHT));
+      fireEvent.click(screen.getByRole("button", { name: "Quick settings" }));
 
-      expect(
-        screen.getByRole("button", { name: "Brightness 60%" }),
-      ).toBeVisible();
+      expect(screen.getByRole("slider", { name: "Brightness" })).toHaveValue(
+        "60",
+      );
     });
 
     it("reads the volume from the sound server", async () => {
@@ -1051,40 +1052,45 @@ describe("Shell", () => {
       expect(screen.queryByRole("button", { name: "New window" })).toBeNull();
     });
 
-    it("carries the theme toggle", () => {
+    it("carries the dark mode tile in quick settings", () => {
       // No key does this. Two states and no `system`, since this bar is the
       // system.
       renderShell();
 
-      expect(
-        screen.getByRole("button", { name: "Dark theme — click for light" }),
-      ).toBeVisible();
+      fireEvent.click(screen.getByRole("button", { name: "Quick settings" }));
+
+      expect(screen.getByRole("button", { name: "Dark mode" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
       expect(screen.queryByLabelText(/system/i)).toBeNull();
     });
   });
 
   describe("the idle inhibitor", () => {
-    it("is held from `idle-inhibitor`, as from the bar's eye", () => {
+    it("is held from `idle-inhibitor`, as from the keep awake tile", () => {
       renderShell();
 
       press("i");
+      fireEvent.click(screen.getByRole("button", { name: "Quick settings" }));
 
-      expect(screen.getByRole("button", { name: /Screens/ })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Keep awake" })).toBeDisabled();
     });
   });
 
   describe("the night light", () => {
-    it("is toggled from `night-light`, as from the bar's switch", () => {
+    it("is toggled from `night-light`, as from its tile", () => {
       renderShell();
-      const label = () =>
+      fireEvent.click(screen.getByRole("button", { name: "Quick settings" }));
+      const pressed = () =>
         screen
-          .getByRole("button", { name: /^Night light/ })
-          .getAttribute("aria-label");
-      const before = label();
+          .getByRole("button", { name: "Night light" })
+          .getAttribute("aria-pressed");
+      const before = pressed();
 
       press("t", true);
 
-      expect(label()).not.toBe(before);
+      expect(pressed()).not.toBe(before);
     });
   });
 
@@ -1491,7 +1497,7 @@ describe("Shell", () => {
     it("is the far end of the bar", () => {
       renderShell();
 
-      const battery = screen.getByRole("button", { name: /theme/ });
+      const battery = screen.getByRole("button", { name: "Quick settings" });
       const bell = screen.getByRole("button", { name: "Notifications" });
       expect(
         battery.compareDocumentPosition(bell) &

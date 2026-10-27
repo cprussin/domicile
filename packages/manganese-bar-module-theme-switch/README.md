@@ -19,6 +19,12 @@ export const Shell = runManganese({
 It takes no props. It reads the component library's `ThemeProvider`. See
 [TOP-BAR.md](../shell-manganese/docs/TOP-BAR.md).
 
+## Quick settings
+
+`@domicile-desktop/manganese-bar-module-theme-switch/quick-settings` exports its parts
+for [`QuickSettings`](../shell-manganese/docs/TOP-BAR.md#quick-settings):
+`DarkModeTile`.
+
 ## Test
 
 ```sh

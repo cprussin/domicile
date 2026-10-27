@@ -168,6 +168,35 @@ describe("readBattery", () => {
     );
   });
 
+  it("reads the time left while the battery drains, when UPower knows it", async () => {
+    const left = await Promise.all(
+      [
+        { State: 2, TimeToEmpty: 10_800 },
+        { State: 2, TimeToEmpty: 0 },
+        { State: 1, TimeToEmpty: 10_800 },
+      ].map(async ({ State, TimeToEmpty }) =>
+        (
+          await readBattery(
+            upower(
+              displayDevice({
+                State: { signature: "u", value: State },
+                TimeToEmpty: { signature: "x", value: TimeToEmpty },
+              }),
+            ),
+          )
+        ).map((battery) =>
+          battery.map(({ secondsLeft }) => secondsLeft ?? "unknown"),
+        ),
+      ),
+    );
+
+    expect(left).toStrictEqual([
+      Ok(Some(10_800)),
+      Ok(Some("unknown")),
+      Ok(Some("unknown")),
+    ]);
+  });
+
   it("fails as the bus failed", async () => {
     expect(await readBattery(upower(LOCKED))).toStrictEqual(Err(LOCKED));
   });

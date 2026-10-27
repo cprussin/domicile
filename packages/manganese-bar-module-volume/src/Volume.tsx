@@ -5,21 +5,16 @@ import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
 import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
 import { isAbsent } from "@domicile-desktop/react/watch-presence";
 import type { SystemError } from "@domicile-desktop/sdk/system";
-import type { Audio, AudioDevice } from "@domicile-desktop/system-audio/audio";
+import type { Audio } from "@domicile-desktop/system-audio/audio";
 import type { SoundControls } from "@domicile-desktop/system-audio/react";
-import { SpeakerHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerHigh";
-import { SpeakerLowIcon } from "@phosphor-icons/react/dist/ssr/SpeakerLow";
-import { SpeakerNoneIcon } from "@phosphor-icons/react/dist/ssr/SpeakerNone";
 import { SpeakerSlashIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSlash";
-import type { WheelEvent } from "react";
 import { css, cva } from "../styled-system/css";
 import { ask } from "./ask";
 import { Level } from "./Level";
 import { Mixer } from "./Mixer";
 import { primary } from "./primary";
-
-/** How far one notch of the wheel over the icon moves the volume. */
-const WHEEL_STEP = 0.05;
+import { Speaker, speakerLabel } from "./Speaker";
+import { stepped } from "./stepped";
 
 type Props = {
   /** The sound server's state. */
@@ -79,7 +74,7 @@ export const Volume = ({
         tone="overPhoto"
         trigger={
           <button
-            aria-label={triggerLabel(output)}
+            aria-label={speakerLabel(output)}
             className={triggerStyles({ muted: output?.muted === true })}
             onAuxClick={(event) => {
               if (event.button === 1 && output !== undefined) {
@@ -132,41 +127,6 @@ const OutputLevel = ({
         }}
       />
     </span>
-  );
-};
-
-const triggerLabel = (output: AudioDevice | undefined) => {
-  if (output === undefined) {
-    return "Sound";
-  } else if (output.muted) {
-    return "Volume muted";
-  } else {
-    return `Volume ${Math.round(output.volume * 100)}%`;
-  }
-};
-
-/**
- * A speaker icon whose waves show the default output's rough volume, slashed
- * while muted or with no output.
- */
-const Speaker = ({ output }: { output: AudioDevice | undefined }) => {
-  if (output === undefined || output.muted) {
-    return <SpeakerSlashIcon size={15} weight="bold" />;
-  } else if (output.volume === 0) {
-    return <SpeakerNoneIcon size={15} weight="bold" />;
-  } else if (output.volume < 0.5) {
-    return <SpeakerLowIcon size={15} weight="bold" />;
-  } else {
-    return <SpeakerHighIcon size={15} weight="bold" />;
-  }
-};
-
-/** The output's volume after one wheel notch, rounded and clamped to 0–1. */
-const stepped = (output: AudioDevice, event: WheelEvent) => {
-  const step = event.deltaY < 0 ? WHEEL_STEP : -WHEEL_STEP;
-  return Math.min(
-    1,
-    Math.max(0, Math.round((output.volume + step) * 100) / 100),
   );
 };
 

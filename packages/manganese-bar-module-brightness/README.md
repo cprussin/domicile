@@ -59,6 +59,12 @@ useNightLight(domicile, {
     `domicile send-shell night-light`. The shell reaches it through
     `deskNightLight` in `./desk-night-light`.
 
+## Quick settings
+
+`@domicile-desktop/manganese-bar-module-brightness/quick-settings` exports its parts
+for [`QuickSettings`](../shell-manganese/docs/TOP-BAR.md#quick-settings):
+`BrightnessLevel` and `NightLight`.
+
 ## Test
 
 ```sh

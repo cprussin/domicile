@@ -3,7 +3,6 @@ import type { Option, Result } from "@cprussin/option-result";
 import { Err, None, Ok } from "@cprussin/option-result";
 import { PanelKeyboardContext } from "@domicile-desktop/manganese-bar/panel-keyboard";
 import type { SharedWatch } from "@domicile-desktop/react/shared-watch";
-import { sharedWatch } from "@domicile-desktop/react/shared-watch";
 import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import type { SystemError } from "@domicile-desktop/sdk/system";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
@@ -15,42 +14,12 @@ import { InterfaceKind } from "@domicile-desktop/system-network/interfaces";
 import type { Network as Reading } from "@domicile-desktop/system-network/network";
 import { Connectivity, Link } from "@domicile-desktop/system-network/network";
 import type { Wifi } from "@domicile-desktop/system-network/wifi";
-import { act, render, screen, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { css } from "../styled-system/css";
+import { held } from "./held-watch";
 import { heldWifiActions } from "./held-wifi-actions";
 import { Network } from "./Network";
-
-/**
- * A test-controlled watch: `watch` replaces the library's, and `report` sends
- * what it would.
- */
-const held = <T,>() => {
-  const listeners: ((value: T) => void)[] = [];
-  const watching = { started: 0, stopped: 0 };
-  return {
-    report: (value: T) => {
-      act(() => {
-        for (const onValue of listeners) {
-          onValue(value);
-        }
-      });
-    },
-    get started() {
-      return watching.started;
-    },
-    get stopped() {
-      return watching.stopped;
-    },
-    watch: sharedWatch((onValue: (value: T) => void) => {
-      watching.started += 1;
-      listeners.push(onValue);
-      return () => {
-        watching.stopped += 1;
-      };
-    }),
-  };
-};
 
 const heldNetwork = () => held<Result<Reading, SystemError>>();
 

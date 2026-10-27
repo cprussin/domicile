@@ -33,6 +33,8 @@ export type Battery = {
   charge: number;
   /** Whether a charger is connected: true while charging, full or held. */
   charging: boolean;
+  /** How long the charge lasts, while draining and once UPower estimates it. */
+  secondsLeft?: number;
 };
 
 /**
@@ -94,6 +96,8 @@ const deviceSchema = z.looseObject({
   IsPresent: z.object({ value: z.boolean() }),
   Percentage: z.object({ value: z.number() }),
   State: z.object({ value: z.number().int() }),
+  // Not on every UPower; 0 until it has an estimate.
+  TimeToEmpty: z.object({ value: z.number() }).optional(),
 });
 
 const readProperties = async (
@@ -154,11 +158,15 @@ const readings = (domicile: BusDesktop<"call">, properties: Properties) => {
 };
 
 const batteryOf = (properties: Properties): Option<Battery> => {
-  const { IsPresent, Percentage, State } = deviceSchema.parse(properties);
+  const { IsPresent, Percentage, State, TimeToEmpty } =
+    deviceSchema.parse(properties);
+  const draining = DRAINING.includes(State.value);
+  const secondsLeft = draining ? (TimeToEmpty?.value ?? 0) : 0;
   return IsPresent.value
     ? Some({
         charge: Percentage.value / 100,
-        charging: !DRAINING.includes(State.value),
+        charging: !draining,
+        ...(secondsLeft > 0 && { secondsLeft }),
       })
     : None();
 };

@@ -31,6 +31,7 @@
   "exports": {
     ".": "./src/bar-item.tsx",
     "./PortalSignIn": "./src/PortalSignIn.tsx",
+    "./quick-settings": "./src/quick-settings.tsx",
     "./useCaptivePortal": "./src/useCaptivePortal.ts"
   },
   "files": [

@@ -39,6 +39,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `Popover` | Non-modal panel anchored to the control that opened it. |
 | `PopupBoundary` | Keeps every popup inside it (tooltips, popovers, menus, lists) within a box, such as a window's frame. Outside one, popups stay on their `Screen`. `Popover` and `Tooltip` take `spansWindows` to leave it. |
 | `Provider` | base-ui `DirectionProvider` wrapper. Every app roots its tree in it. |
+| `QuickTile` | Quick settings tile: a labeled toggle in the accent color while on, with an arrow to its details. Drawn in `currentcolor`. |
 | `Screen` | Renders its children once per selected display. |
 | `DisplayProvider` | Supplies the host's displays to `Screen`. |
 | `display-source` | `Display` and `DisplaySource` types for `DisplayProvider`. |
