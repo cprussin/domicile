@@ -241,6 +241,12 @@ class CORE_EXPORT HTMLWebViewElement final
   // earliest point to request a guest.
   void DidNotifySubtreeInsertionsToDocument() override;
 
+  // Leaving the document removes the frame the page was attached to, and
+  // content detaches the page. Drops every pipe to the browser, so it hides
+  // the page and an element put back in the document (a move, as React's
+  // `insertBefore` does) asks for it again from its new frame.
+  void RemovedFrom(ContainerNode& insertion_point) override;
+
   // Requests a guest for the placeholder frame. Does nothing if there already
   // is one or there is no placeholder yet.
   void RequestGuest();
@@ -377,13 +383,15 @@ class CORE_EXPORT HTMLWebViewElement final
   // The `partition` attribute for CreateGuest, or empty if absent.
   String Partition() const;
 
-  // Kept open for the element's life: the browser may hold the request on
-  // this pipe until the placeholder frame arrives. See WebViewGuestHost in
+  // Kept open while the element is in the document: the browser may hold the
+  // request on this pipe until the placeholder frame arrives. Reset on
+  // removal, with the placeholder; see RemovedFrom. See WebViewGuestHost in
   // components/domicile/browser/web_view_guest.cc.
   HeapMojoRemote<domicile::mojom::blink::WebViewGuestHost> host_;
 
-  // Bound once. A later `src` reuses it, since the attach destroys the
-  // placeholder frame a second request would need.
+  // Bound once while in the document. A later `src` reuses it, since the
+  // attach destroys the placeholder frame a second request would need. Reset
+  // on removal; see RemovedFrom.
   HeapMojoRemote<domicile::mojom::blink::WebViewGuest> guest_;
 
   // Passed in CreateGuest, so the browser always has somewhere to report.

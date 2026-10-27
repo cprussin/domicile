@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""The page guard-webview-hidden.sh shows in a browser window.
+"""The page guard-webview-hidden.sh and guard-webview-moved.sh show in a
+browser window.
 
 The page logs its `document.visibilityState` on load and on every
 `visibilitychange`.
