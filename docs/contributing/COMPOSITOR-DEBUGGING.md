@@ -72,6 +72,12 @@ fills monitor and region casts with one color instead
   `SourceGone` when the window closes.
 - A stream offers dmabufs only when the compositor has an EGL renderer and
   libgbm; otherwise shm only.
+- `libgbm allocates nothing on the render node`: Mesa's `kms_swrast` (vgem,
+  as under WSL2, or `GBM_ALWAYS_SOFTWARE=1`) allocates dumb buffers, which
+  only a primary node takes. The compositor then allocates on the same
+  device's `/dev/dri/card<N>` and the warning names it; one that says "not on
+  its primary node either" names the step that failed (often the `video`
+  group).
 - The pointer is the built-in arrow. The engine draws the desk's pointer from
   its theme, so the compositor has no image of it.
 
