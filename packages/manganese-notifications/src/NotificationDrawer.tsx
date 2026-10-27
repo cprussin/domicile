@@ -1,17 +1,19 @@
-import { Button } from "@domicile-desktop/component-library/Button";
-import { SlideOver } from "@domicile-desktop/component-library/SlideOver";
+import { Popover } from "@domicile-desktop/component-library/Popover";
 import type { Notification } from "@domicile-desktop/sdk/notification";
 import { BellSimpleIcon } from "@phosphor-icons/react/dist/ssr/BellSimple";
 import { BroomIcon } from "@phosphor-icons/react/dist/ssr/Broom";
+import { CaretLeftIcon } from "@phosphor-icons/react/dist/ssr/CaretLeft";
 import { memo, useCallback } from "react";
 
-import { css } from "../styled-system/css";
-import { center, flex, vstack } from "../styled-system/patterns";
+import { css, cva } from "../styled-system/css";
+import { flex, hstack, vstack } from "../styled-system/patterns";
 import { InboxList } from "./InboxList";
 import { InboxPage } from "./InboxPage";
 import type { Inbox, InboxReading } from "./inbox";
 import { InboxKind } from "./inbox";
 import { NotificationCard } from "./NotificationCard";
+import type { NotificationsHandle } from "./notifications-context";
+import { bellId, screenOfBell } from "./notifications-context";
 
 /** The inboxes listed in the drawer, and what the shell knows of them. */
 export type DrawerInboxes = {
@@ -29,6 +31,8 @@ export type DrawerInboxes = {
 };
 
 type Props = {
+  /** Opens it under the bell pressed. */
+  handle: NotificationsHandle;
   /**
    * The inboxes, listed above the notifications. Their pages stay loaded
    * while the drawer is closed, so their counts stay current.
@@ -39,9 +43,11 @@ type Props = {
   /** The current time, for the relative timestamps. */
   now: number;
   open: boolean;
-  /** The screen it opens on: the one whose bell was pressed. */
+  /** The monitor whose bell it opens under. */
   screen: string | undefined;
-  onOpenChange: (open: boolean) => void;
+  /** The bell on monitor `screen` was pressed. */
+  onOpen: (screen: string) => void;
+  onClose: () => void;
   /** Leave an inbox's page for the list. */
   onBack: () => void;
   /** Clear `ids`. */
@@ -53,8 +59,8 @@ type Props = {
 };
 
 /**
- * The notification drawer, sliding out from the bell's edge. Each notification
- * can be pressed or cleared, or all cleared at once. A press closes the drawer,
+ * The notification drawer, a panel under the bell. Each notification can be
+ * pressed or cleared, or all cleared at once. A press closes the drawer,
  * which would cover the window it raises.
  *
  * A notification stays here after its toast is gone, until it is cleared or its
@@ -65,13 +71,15 @@ type Props = {
  */
 export const NotificationDrawer = memo(
   ({
+    handle,
     inboxes,
     items,
     now,
     onAction,
     onBack,
+    onClose,
     onDismiss,
-    onOpenChange,
+    onOpen,
     onReply,
     open,
     screen,
@@ -79,76 +87,104 @@ export const NotificationDrawer = memo(
     const page =
       inboxes?.shown === undefined ? undefined : inboxes.inboxes[inboxes.shown];
     return (
-      <SlideOver
-        footer={
-          items.length === 0 || page !== undefined ? undefined : (
-            <div className={footerStyles}>
-              <span className={countStyles}>
-                {items.length === 1
-                  ? "1 notification"
-                  : `${items.length} notifications`}
-              </span>
-              <Button
-                beforeIcon={<BroomIcon />}
-                onClick={() => {
-                  onDismiss(items.map(({ id }) => id));
-                }}
-                size="sm"
-                variant="ghost"
-              >
-                Clear all
-              </Button>
-            </div>
-          )
-        }
+      <Popover
+        align="end"
+        // A page draws its own padding, past the usual width cap.
+        flush={page !== undefined}
+        handle={handle}
         keepMounted={inboxes !== undefined}
-        onBack={page === undefined ? undefined : onBack}
-        onOpenChange={onOpenChange}
+        onOpenChange={(opened, { trigger }) => {
+          if (opened) {
+            onOpen(screenOfBell(trigger));
+          } else {
+            onClose();
+          }
+        }}
         open={open}
-        screen={screen}
-        title={page === undefined ? "Notifications" : page.name}
-        wide={page !== undefined}
+        triggerId={screen === undefined ? null : bellId(screen)}
       >
-        {/* Hidden, not unmounted, so the inboxes' pages keep running. */}
-        <div className={paneStyles} hidden={page !== undefined}>
-          {inboxes !== undefined && (
-            <>
-              <h3 className={headingStyles}>Inboxes</h3>
-              <ul className={inboxListStyles}>
-                <InboxList
-                  inboxes={inboxes.inboxes}
-                  onOpen={inboxes.onOpen}
-                  readings={inboxes.readings}
-                />
-              </ul>
-              <h3 className={headingStyles}>Recent</h3>
-            </>
-          )}
-          <Notifications
-            items={items}
-            now={now}
-            onAction={onAction}
-            onDismiss={onDismiss}
-            onOpenChange={onOpenChange}
-            onReply={onReply}
-          />
-        </div>
-        {inboxes?.inboxes.map((inbox, index) =>
-          inbox.kind === InboxKind.Page ? (
-            <Page
-              inbox={inbox}
-              index={index}
-              key={index}
-              onShow={inboxes.onShow}
-              onUnread={inboxes.onUnread}
-              shown={inboxes.shown === index}
+        <section
+          aria-labelledby={TITLE_ID}
+          className={drawerStyles({ page: page !== undefined })}
+        >
+          <header className={headerStyles}>
+            {page !== undefined && (
+              <button
+                aria-label="Back"
+                className={backStyles}
+                onClick={onBack}
+                type="button"
+              >
+                <CaretLeftIcon aria-hidden size={14} weight="bold" />
+              </button>
+            )}
+            <h2 className={titleStyles} id={TITLE_ID}>
+              {page === undefined ? "Notifications" : page.name}
+            </h2>
+          </header>
+          {/* Hidden, not unmounted, so the inboxes' pages keep running. */}
+          <div className={paneStyles} hidden={page !== undefined}>
+            {inboxes !== undefined && (
+              <>
+                <h3 className={headingStyles}>Inboxes</h3>
+                <ul className={inboxListStyles}>
+                  <InboxList
+                    inboxes={inboxes.inboxes}
+                    onOpen={inboxes.onOpen}
+                    readings={inboxes.readings}
+                  />
+                </ul>
+                <h3 className={headingStyles}>Recent</h3>
+              </>
+            )}
+            <Notifications
+              items={items}
+              now={now}
+              onAction={onAction}
+              onClose={onClose}
+              onDismiss={onDismiss}
+              onReply={onReply}
             />
-          ) : undefined,
-        )}
-      </SlideOver>
+            {items.length > 0 && (
+              <footer className={footerStyles}>
+                <span className={countStyles}>
+                  {items.length === 1
+                    ? "1 notification"
+                    : `${items.length.toString()} notifications`}
+                </span>
+                <button
+                  className={clearStyles}
+                  onClick={() => {
+                    onDismiss(items.map(({ id }) => id));
+                  }}
+                  type="button"
+                >
+                  <BroomIcon aria-hidden size={14} />
+                  Clear all
+                </button>
+              </footer>
+            )}
+          </div>
+          {inboxes?.inboxes.map((inbox, index) =>
+            inbox.kind === InboxKind.Page ? (
+              <Page
+                inbox={inbox}
+                index={index}
+                key={index}
+                onShow={inboxes.onShow}
+                onUnread={inboxes.onUnread}
+                shown={inboxes.shown === index}
+              />
+            ) : undefined,
+          )}
+        </section>
+      </Popover>
     );
   },
 );
+
+/** Names the drawer for assistive tech. One drawer per page. */
+const TITLE_ID = "notification-drawer-title";
 
 type PageProps = {
   inbox: Extract<Inbox, { kind: InboxKind.Page }>;
@@ -174,7 +210,7 @@ const Page = ({ inbox, index, onShow, onUnread, shown }: PageProps) => {
 
 type NotificationsProps = Pick<
   Props,
-  "items" | "now" | "onAction" | "onDismiss" | "onOpenChange" | "onReply"
+  "items" | "now" | "onAction" | "onClose" | "onDismiss" | "onReply"
 >;
 
 /** The notifications, or that there are none. */
@@ -182,14 +218,14 @@ const Notifications = ({
   items,
   now,
   onAction,
+  onClose,
   onDismiss,
-  onOpenChange,
   onReply,
 }: NotificationsProps) =>
   items.length === 0 ? (
     <div className={emptyStyles}>
       <span aria-hidden className={glowStyles}>
-        <BellSimpleIcon size={28} weight="duotone" />
+        <BellSimpleIcon size={20} weight="duotone" />
       </span>
       <span className={emptyTitleStyles}>You're all caught up</span>
       <span className={emptyBodyStyles}>
@@ -207,7 +243,7 @@ const Notifications = ({
             onAction={(key) => {
               onAction(notification.id, key);
               // Out of the way of the window the action raises.
-              onOpenChange(false);
+              onClose();
             }}
             onClose={() => {
               onDismiss([notification.id]);
@@ -221,45 +257,104 @@ const Notifications = ({
     </ul>
   );
 
-// Fills the drawer's body, for a page's full height.
+// The usual popover's width for the list, widened for a page's list and
+// conversation side by side. The list scrolls past most of the screen's
+// height.
+const drawerStyles = cva({
+  base: {
+    color: "foreground",
+    display: "flex",
+    flexDirection: "column",
+    fontSize: "sm",
+    gap: 2.5,
+    maxBlockSize: "80vh",
+  },
+  variants: {
+    page: {
+      false: { inlineSize: 80 },
+      true: {
+        blockSize: "min({spacing.160}, 80vh)",
+        inlineSize: "min({spacing.140}, 90vw)",
+        padding: 3,
+      },
+    },
+  },
+});
+
+const headerStyles = hstack({ gap: 1, minBlockSize: 6 });
+
+// The tray's hover circle, as quick settings' arrows.
+const backStyles = css({
+  _focusVisible: {
+    outline: "{spacing.0.5} solid {colors.accent}",
+    outlineOffset: 0.5,
+  },
+  _hover: {
+    backgroundColor: "color-mix(in oklab, currentcolor 12%, transparent)",
+  },
+  alignItems: "center",
+  backgroundColor: "transparent",
+  blockSize: 6,
+  borderRadius: "full",
+  borderStyle: "none",
+  color: "inherit",
+  cursor: "pointer",
+  display: "inline-flex",
+  flexShrink: 0,
+  inlineSize: 6,
+  justifyContent: "center",
+  padding: 0,
+});
+
+const titleStyles = css({
+  fontSize: "md",
+  fontWeight: "semibold",
+  lineHeight: "tight",
+  margin: 0,
+});
+
+// Fills the drawer's body; scrolls when the notifications outgrow it.
 const paneStyles = flex({
   "&[hidden]": { display: "none" },
   direction: "column",
   flex: 1,
+  gap: 1.5,
   minBlockSize: 0,
+  overflowY: "auto",
 });
 
+// The section labels used in the portal's source picker.
 const headingStyles = css({
   color: "muted",
   fontSize: "xs",
-  fontWeight: "semibold",
+  fontWeight: "medium",
+  letterSpacing: "wide",
   margin: 0,
-  paddingBlock: 1,
+  paddingBlockStart: 1,
+  textTransform: "uppercase",
 });
 
 const inboxListStyles = flex({
   direction: "column",
   gap: 0.5,
   margin: 0,
-  paddingBlockEnd: 2,
   paddingInline: 0,
 });
 
 const listStyles = flex({
   direction: "column",
-  gap: 2,
+  gap: 1.5,
   listStyle: "none",
   margin: 0,
-  paddingBlock: 1,
   paddingInline: 0,
 });
 
-// Each card on its own surface, lifted on hover. A card that arrives while the
+// Each card on its own tile, lit on hover. A card that arrives while the
 // drawer is open slides in like a toast.
 const rowStyles = css({
   _hover: {
-    backgroundColor: "color-mix(in oklab, {colors.foreground} 7%, transparent)",
-    borderColor: "color-mix(in oklab, {colors.foreground} 16%, transparent)",
+    backgroundColor:
+      "color-mix(in oklab, {colors.foreground} 10%, transparent)",
   },
   _starting: {
     opacity: 0,
@@ -269,9 +364,9 @@ const rowStyles = css({
   "&:has([data-urgency=critical])": {
     borderColor: "color-mix(in oklab, {colors.danger} 55%, transparent)",
   },
-  backgroundColor: "color-mix(in oklab, {colors.foreground} 4%, transparent)",
-  border: "1px solid color-mix(in oklab, {colors.foreground} 9%, transparent)",
-  borderRadius: "xl",
+  backgroundColor: "color-mix(in oklab, {colors.foreground} 6%, transparent)",
+  border: "1px solid transparent",
+  borderRadius: "lg",
   opacity: 1,
   overflow: "hidden",
   transform: "translateX(0)",
@@ -279,44 +374,62 @@ const rowStyles = css({
     "background-color {durations.fast} {easings.default}, border-color {durations.fast} {easings.default}, opacity {durations.slow} {easings.outQuart}, transform {durations.slow} {easings.outQuart}",
 });
 
-const footerStyles = flex({
-  align: "center",
-  flex: 1,
+// Quieter than the notifications above it, as quick settings' battery line.
+const footerStyles = hstack({
+  borderBlockStartColor: "border",
+  borderBlockStartStyle: "solid",
+  borderBlockStartWidth: "1px",
+  fontSize: "xs",
   justify: "space-between",
+  marginBlockStart: 1,
+  paddingBlockStart: 2,
 });
 
 const countStyles = css({
   color: "muted",
-  fontSize: "xs",
   fontVariantNumeric: "tabular-nums",
 });
 
-const emptyStyles = vstack({
-  flex: 1,
-  gap: 2,
-  justify: "center",
-  paddingBlock: 16,
-  textAlign: "center",
+// As quick settings' Settings button.
+const clearStyles = hstack({
+  _focusVisible: {
+    outline: "{spacing.0.5} solid {colors.accent}",
+    outlineOffset: 0.5,
+  },
+  _hover: {
+    backgroundColor: "color-mix(in oklab, currentcolor 12%, transparent)",
+  },
+  backgroundColor: "transparent",
+  blockSize: 7,
+  borderRadius: "full",
+  borderStyle: "none",
+  color: "muted",
+  cursor: "pointer",
+  flexShrink: 0,
+  fontSize: "xs",
+  gap: 1.5,
+  marginInlineEnd: -2.5,
+  paddingInline: 2.5,
+  transition: "background-color {durations.fast} {easings.default}",
 });
 
 // The empty state: no notifications is the normal case, not an error.
-const glowStyles = center({
-  backgroundImage:
-    "radial-gradient(circle, color-mix(in oklab, {colors.accent} 28%, transparent), transparent 70%)",
-  blockSize: 20,
-  color: "accent",
-  inlineSize: 20,
-  marginBlockEnd: 1,
+const emptyStyles = vstack({
+  color: "muted",
+  gap: 1,
+  paddingBlock: 6,
+  textAlign: "center",
 });
+
+const glowStyles = css({ color: "accent", display: "inline-flex" });
 
 const emptyTitleStyles = css({
   color: "foreground",
-  fontSize: "md",
+  fontSize: "sm",
   fontWeight: "semibold",
 });
 
 const emptyBodyStyles = css({
-  color: "muted",
-  fontSize: "sm",
-  maxInlineSize: 64,
+  fontSize: "xs",
+  maxInlineSize: 56,
 });

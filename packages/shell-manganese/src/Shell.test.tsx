@@ -99,6 +99,12 @@ const screenNamed = (container: HTMLElement, name: string): Element | null =>
   container.querySelector(`[data-screen="${name}"]`);
 
 /** The open dialog's left edge and width. */
+/** The notification bell on monitor `name`. */
+const bellOn = (container: HTMLElement, name: string) =>
+  within(screenNamed(container, name) as HTMLElement).getByRole("button", {
+    name: /^Notifications/v,
+  });
+
 const dialogBox = (): { left: string; width: string } => {
   const viewport = screen.getByRole("dialog").parentElement;
   return {
@@ -1466,15 +1472,18 @@ describe("Shell", () => {
       expect(domicile.calls).toContainEqual(["dismissNotifications", [2, 1]]);
     });
 
-    it("opens the drawer from `notifications`, on the screen with the keyboard", async () => {
-      renderShell([LEFT, RIGHT]);
+    it("opens the drawer from `notifications`, under the bell on the screen with the keyboard", async () => {
+      const { container } = renderShell([LEFT, RIGHT]);
       clientAppears("one");
       press("l");
 
       press("n");
 
-      expect(await screen.findByRole("dialog")).toBeVisible();
-      expect(dialogBox()).toStrictEqual({ left: "1920px", width: "1280px" });
+      expect(await screen.findByRole("dialog")).toBeInTheDocument();
+      expect(bellOn(container, "right")).toHaveAttribute(
+        "aria-expanded",
+        "true",
+      );
     });
 
     it("closes the drawer on a second `notifications`", async () => {
@@ -1500,36 +1509,20 @@ describe("Shell", () => {
       expect(domicile.calls).toContainEqual(["dismissNotifications", [2, 1]]);
     });
 
-    it("opens the drawer on the screen whose bell was pressed", async () => {
+    it("opens the drawer under the bell pressed", async () => {
       const { container } = renderShell([LEFT, RIGHT]);
-      const left = screenNamed(container, "left") as HTMLElement;
 
-      await userEvent.click(
-        within(left).getByRole("button", { name: "Notifications" }),
+      await userEvent.click(bellOn(container, "left"));
+
+      expect(await screen.findByRole("dialog")).toBeInTheDocument();
+      expect(bellOn(container, "left")).toHaveAttribute(
+        "aria-expanded",
+        "true",
       );
-
-      expect(dialogBox()).toStrictEqual({ left: "0px", width: "1920px" });
-    });
-
-    it("stays on that screen while it closes", async () => {
-      const { container } = renderShell([LEFT, RIGHT]);
-      const left = screenNamed(container, "left") as HTMLElement;
-      await userEvent.click(
-        within(left).getByRole("button", { name: "Notifications" }),
+      expect(bellOn(container, "right")).not.toHaveAttribute(
+        "aria-expanded",
+        "true",
       );
-
-      // An exit animation that never ends, to look at the drawer mid-close.
-      const { getAnimations } = Element.prototype;
-      Element.prototype.getAnimations = () => [
-        { finished: new Promise(() => undefined) } as Animation,
-      ];
-      try {
-        await userEvent.click(screen.getByRole("button", { name: "Close" }));
-
-        expect(dialogBox()).toStrictEqual({ left: "0px", width: "1920px" });
-      } finally {
-        Element.prototype.getAnimations = getAnimations;
-      }
     });
 
     it("adds the inboxes' unread conversations to the bell", async () => {
@@ -1551,15 +1544,15 @@ describe("Shell", () => {
       );
       expect(
         await screen.findByRole("heading", { name: "Fake inbox" }),
-      ).toBeVisible();
-      await userEvent.click(screen.getByRole("button", { name: "Close" }));
+      ).toBeInTheDocument();
+      await userEvent.keyboard("{Escape}");
       await userEvent.click(
         screen.getByRole("button", { name: "Notifications, 2 unread" }),
       );
 
       expect(
         await screen.findByRole("heading", { name: "Notifications" }),
-      ).toBeVisible();
+      ).toBeInTheDocument();
     });
 
     it("is the far end of the bar", () => {

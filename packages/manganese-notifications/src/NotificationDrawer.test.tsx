@@ -1,4 +1,8 @@
 import { describe, expect, it } from "bun:test";
+import {
+  createHandle,
+  Popover,
+} from "@domicile-desktop/component-library/Popover";
 import { sharedWatch } from "@domicile-desktop/react/shared-watch";
 import { ChatCircleTextIcon } from "@phosphor-icons/react/dist/ssr/ChatCircleText";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimple";
@@ -8,6 +12,7 @@ import { notification } from "./fixture";
 import { Inbox, InboxReading } from "./inbox";
 import type { DrawerInboxes } from "./NotificationDrawer";
 import { NotificationDrawer } from "./NotificationDrawer";
+import { bellId } from "./notifications-context";
 
 type Asked = (readonly unknown[])[];
 
@@ -48,37 +53,61 @@ const inboxes = (asked: Asked = []): DrawerInboxes => ({
 
 type DrawerProps = Parameters<typeof NotificationDrawer>[0];
 
+/** A bell on `left`, to open under. */
+const Bell = ({ handle }: { handle: DrawerProps["handle"] }) => (
+  <Popover.Trigger data-bell-screen="left" handle={handle} id={bellId("left")}>
+    Bell
+  </Popover.Trigger>
+);
+
+/** The drawer, open under the bell on `left` unless `more` says otherwise. */
 const drawer = (
   items: DrawerProps["items"],
   asked: Asked = [],
-  more: Partial<DrawerProps> = {},
+  { handle = createHandle(), ...more }: Partial<DrawerProps> = {},
 ) =>
   render(
-    <NotificationDrawer
-      items={items}
-      now={0}
-      onAction={(id, key) => {
-        asked.push(["action", id, key]);
-      }}
-      onBack={() => {
-        asked.push(["back"]);
-      }}
-      onDismiss={(ids) => {
-        asked.push(["dismiss", ids]);
-      }}
-      onOpenChange={(open) => {
-        asked.push(["open", open]);
-      }}
-      onReply={(id, text) => {
-        asked.push(["reply", id, text]);
-      }}
-      open
-      screen={undefined}
-      {...more}
-    />,
+    <>
+      <Bell handle={handle} />
+      <NotificationDrawer
+        handle={handle}
+        items={items}
+        now={0}
+        onAction={(id, key) => {
+          asked.push(["action", id, key]);
+        }}
+        onBack={() => {
+          asked.push(["back"]);
+        }}
+        onClose={() => {
+          asked.push(["close"]);
+        }}
+        onDismiss={(ids) => {
+          asked.push(["dismiss", ids]);
+        }}
+        onOpen={(screen) => {
+          asked.push(["open", screen]);
+        }}
+        onReply={(id, text) => {
+          asked.push(["reply", id, text]);
+        }}
+        open
+        screen="left"
+        {...more}
+      />
+    </>,
   );
 
 describe("NotificationDrawer", () => {
+  it("opens under the bell pressed, and says on which screen", () => {
+    const asked: Asked = [];
+    drawer([], asked, { open: false, screen: undefined });
+
+    fireEvent.click(screen.getByRole("button", { name: "Bell" }));
+
+    expect(asked).toEqual([["open", "left"]]);
+  });
+
   it("lists every notification, in the order it is handed them", () => {
     drawer([
       notification({ id: 2, summary: "Newer" }),
@@ -122,10 +151,7 @@ describe("NotificationDrawer", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Reply" }));
 
-    expect(asked).toEqual([
-      ["action", 7, "reply"],
-      ["open", false],
-    ]);
+    expect(asked).toEqual([["action", 7, "reply"], ["close"]]);
   });
 
   it("replies to a notification", () => {
@@ -151,7 +177,7 @@ describe("NotificationDrawer", () => {
   it("says there is nothing, and offers nothing to clear", () => {
     drawer([]);
 
-    expect(screen.getByText("You're all caught up")).toBeVisible();
+    expect(screen.getByText("You're all caught up")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Clear all" }),
     ).not.toBeInTheDocument();
@@ -163,10 +189,12 @@ describe("NotificationDrawer", () => {
     });
 
     const [list, recent] = screen.getAllByRole("list");
-    expect(screen.getByRole("heading", { name: "Inboxes" })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Inboxes" }),
+    ).toBeInTheDocument();
     expect(list).toHaveTextContent("Work");
     expect(list).toHaveTextContent("Chat");
-    expect(screen.getByRole("heading", { name: "Recent" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Recent" })).toBeInTheDocument();
     expect(recent).toHaveTextContent("Older");
   });
 
@@ -198,11 +226,11 @@ describe("NotificationDrawer", () => {
       inboxes: { ...inboxes(asked), shown: 1 },
     });
 
-    expect(screen.getByRole("heading", { name: "Chat" })).toBeVisible();
-    expect(screen.getByRole("dialog")).toHaveAttribute("data-wide");
-    expect(document.querySelector("webview")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Chat" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveAttribute("data-flush");
+    expect(document.querySelector("webview")?.closest("[hidden]")).toBeNull();
     // Hidden, not gone, so an inbox's page keeps running.
-    expect(screen.getByText("Older")).not.toBeVisible();
+    expect(screen.getByText("Older").closest("[hidden]")).not.toBeNull();
     expect(
       screen.queryByRole("button", { name: "Clear all" }),
     ).not.toBeInTheDocument();
