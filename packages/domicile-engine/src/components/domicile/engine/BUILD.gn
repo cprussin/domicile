@@ -242,6 +242,19 @@ executable("engine_color_probe") {
   ]
 }
 
+# Reads the color at a captured frame's center, for the capture probes.
+source_set("captured_color") {
+  sources = [
+    "captured_color.cc",
+    "captured_color.h",
+  ]
+
+  deps = [
+    ":domicile_engine",
+    "//base",
+  ]
+}
+
 # Captures the browser's window through the C ABI and reads the frames back.
 # Used by guard-display-capture.sh.
 executable("engine_capture_probe") {
@@ -250,6 +263,21 @@ executable("engine_capture_probe") {
   sources = [ "engine_capture_probe.cc" ]
 
   deps = [
+    ":captured_color",
+    ":domicile_engine",
+    "//base",
+  ]
+}
+
+# Lays a headless desk out on two virtual displays and captures each. Used by
+# guard-headless-desk.sh.
+executable("engine_desk_probe") {
+  output_name = "domicile_desk_probe"
+
+  sources = [ "engine_desk_probe.cc" ]
+
+  deps = [
+    ":captured_color",
     ":domicile_engine",
     "//base",
   ]
