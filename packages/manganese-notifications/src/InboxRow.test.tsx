@@ -24,10 +24,29 @@ describe(InboxRow, () => {
       name: "Work: 3 unread of 412 conversations",
     });
     expect(row).toHaveTextContent("Work");
-    expect(row).toHaveTextContent("412");
+    // The unread count in its place, not the total.
+    expect(row).toHaveTextContent("3");
+    expect(row).not.toHaveTextContent("412");
     await userEvent.click(row);
 
     expect(opened).toEqual(["Work"]);
+  });
+
+  it("shows the total when nothing is unread", () => {
+    render(
+      <InboxRow
+        figure="412"
+        icon={undefined}
+        label="Work: 412 conversations"
+        name="Work"
+        onOpen={() => undefined}
+        unread={0}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Work: 412 conversations" }),
+    ).toHaveTextContent("412");
   });
 
   it("warns when the inbox could not be read", () => {

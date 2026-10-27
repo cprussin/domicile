@@ -1,4 +1,4 @@
-import { css } from "../../styled-system/css";
+import { cva } from "../../styled-system/css";
 
 /** The highest count the badge shows before it switches to "N+". */
 const MOST_COUNTED = 9;
@@ -6,45 +6,68 @@ const MOST_COUNTED = 9;
 type Props = {
   /** How many are unread. Zero draws nothing. */
   count: number;
+  /** In line with text, such as at a row's end, rather than on a corner. */
+  inline?: boolean | undefined;
 };
 
 /**
  * An unread count in an accent pill, pinned to the top end corner of the
- * nearest positioned ancestor. It pops in when it appears.
+ * nearest positioned ancestor, or in line with text. It pops in when it
+ * appears.
  *
  * Hidden from assistive tech: the control it sits on names the count.
  */
-export const CountBadge = ({ count }: Props) =>
+export const CountBadge = ({ count, inline = false }: Props) =>
   count === 0 ? undefined : (
-    <span aria-hidden className={badgeStyles}>
+    <span
+      aria-hidden
+      className={badgeStyles({ inline })}
+      data-inline={inline ? "" : undefined}
+    >
       {count > MOST_COUNTED ? `${MOST_COUNTED.toString()}+` : count}
     </span>
   );
 
 // The bar's text shadow is removed because it smudges small figures.
-const badgeStyles = css({
-  _starting: {
-    transform: "scale(0)",
+const badgeStyles = cva({
+  base: {
+    _starting: {
+      transform: "scale(0)",
+    },
+    alignItems: "center",
+    backgroundColor: "accent",
+    borderRadius: "full",
+    color: "background",
+    display: "inline-flex",
+    flexShrink: 0,
+    fontVariantNumeric: "tabular-nums",
+    fontWeight: "bold",
+    justifyContent: "center",
+    lineHeight: "none",
+    pointerEvents: "none",
+    textShadow: "none",
+    transform: "scale(1)",
+    transition: "transform {durations.normal} {easings.outBack}",
   },
-  alignItems: "center",
-  backgroundColor: "accent",
-  blockSize: 3.5,
-  borderRadius: "full",
-  boxShadow: "lifted",
-  color: "background",
-  display: "inline-flex",
-  fontSize: "0.5625rem",
-  fontVariantNumeric: "tabular-nums",
-  fontWeight: "bold",
-  insetBlockStart: 0,
-  insetInlineEnd: 0,
-  justifyContent: "center",
-  lineHeight: "none",
-  minInlineSize: 3.5,
-  paddingInline: 0.75,
-  pointerEvents: "none",
-  position: "absolute",
-  textShadow: "none",
-  transform: "scale(1)",
-  transition: "transform {durations.normal} {easings.outBack}",
+  variants: {
+    inline: {
+      false: {
+        blockSize: 3.5,
+        boxShadow: "lifted",
+        fontSize: "0.5625rem",
+        insetBlockStart: 0,
+        insetInlineEnd: 0,
+        minInlineSize: 3.5,
+        paddingInline: 0.75,
+        position: "absolute",
+      },
+      // Larger, as it sits beside text of its own size.
+      true: {
+        blockSize: 4.5,
+        fontSize: "xs",
+        minInlineSize: 4.5,
+        paddingInline: 1.5,
+      },
+    },
+  },
 });

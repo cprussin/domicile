@@ -14,15 +14,15 @@ type Props = {
   /** The inbox's name, such as `Work`. */
   name: string;
   onOpen: () => void;
-  /** How many conversations are unread, in a badge on the icon. */
+  /** How many conversations are unread, in a pill in place of the figure. */
   unread: number;
   /** Marks an inbox that could not be read. */
   warning?: boolean | undefined;
 };
 
 /**
- * One inbox in the notification drawer's list: its icon with the unread
- * count, its name and a figure. A press opens it.
+ * One inbox in the notification drawer's list: its icon, its name, and the
+ * unread count, or a figure while nothing is unread. A press opens it.
  */
 export const InboxRow = ({
   figure,
@@ -40,11 +40,7 @@ export const InboxRow = ({
       onClick={onOpen}
       type="button"
     >
-      {/* Anchors the badge, as on the bar's buttons. */}
-      <span className={iconStyles}>
-        {icon}
-        <CountBadge count={unread} />
-      </span>
+      <span className={iconStyles}>{icon}</span>
       <span className={nameStyles} data-unread={unread > 0 ? "" : undefined}>
         {name}
       </span>
@@ -57,7 +53,11 @@ export const InboxRow = ({
           weight="bold"
         />
       )}
-      {figure !== undefined && <span className={figureStyles}>{figure}</span>}
+      {unread > 0 ? (
+        <CountBadge count={unread} inline />
+      ) : (
+        figure !== undefined && <span className={figureStyles}>{figure}</span>
+      )}
     </button>
   </li>
 );
@@ -89,12 +89,7 @@ const rowStyles = hstack({
   transition: "background-color {durations.fast} {easings.default}",
 });
 
-const iconStyles = css({
-  display: "inline-flex",
-  flexShrink: 0,
-  padding: 1,
-  position: "relative",
-});
+const iconStyles = css({ display: "inline-flex", flexShrink: 0 });
 
 const nameStyles = css({
   "&[data-unread]": { fontWeight: "semibold" },

@@ -64,14 +64,14 @@ describe(InboxList, () => {
     ).toHaveTextContent("Empty");
   });
 
-  it("shows the total, and the unread count in words", () => {
+  it("shows the unread count, and the total in words", () => {
     shown([InboxReading.Counted(12, 3)]);
 
     expect(
       screen.getByRole("button", {
         name: "Work: 3 unread of 12 conversations",
       }),
-    ).toHaveTextContent("12");
+    ).toHaveTextContent("3");
   });
 
   it("names a read inbox with nothing unread by its count", () => {

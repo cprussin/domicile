@@ -32,6 +32,40 @@ const levelToastHold = {
   "100%": { opacity: "0" },
 };
 
+/** A color token as this preset writes it. */
+type ColorToken = { value: string | Readonly<Record<string, unknown>> };
+
+/**
+ * Gives every color drawn from the palette its dark value inside a panel over
+ * the wallpaper, which is dark in either theme. A mix is declared again there
+ * too, since a custom property mixes the colors where it is declared, not
+ * where it is used.
+ */
+const darkOverPhoto = <Colors extends Record<string, ColorToken>>(
+  colors: Colors,
+): Colors =>
+  // `fromEntries` loses the keys' types; the names are unchanged.
+  Object.fromEntries(
+    Object.entries(colors).map(([name, token]) => {
+      const dark =
+        typeof token.value === "string" ? token.value : token.value.base;
+      return typeof dark === "string" && dark.includes("{colors.")
+        ? [
+            name,
+            {
+              ...token,
+              value: {
+                ...(typeof token.value === "string"
+                  ? { base: token.value }
+                  : token.value),
+                _onPhoto: dark,
+              },
+            },
+          ]
+        : [name, token];
+    }),
+  ) as Colors;
+
 export const domicilePreset = definePreset({
   conditions: {
     extend: {
@@ -46,6 +80,9 @@ export const domicilePreset = definePreset({
       // Panda's default `_light` matches a `light` class; we use
       // `data-theme="light"` on `<html>`.
       light: "[data-theme=light] &",
+      // A panel over the wallpaper, such as a bar's popover: dark whatever
+      // the theme. See `darkOverPhoto`.
+      onPhoto: "[data-tone=overPhoto] &",
       // Primary input is touch. Uses `pointer` because viewport width can't
       // tell a touchscreen monitor from a mouse-driven one.
       pointerCoarse: "@media (pointer: coarse)",
@@ -313,7 +350,7 @@ export const domicilePreset = definePreset({
         //
         // `_contrastHigh` moves text to the palette's ends and leans the
         // mixed grays toward the foreground.
-        colors: {
+        colors: darkOverPhoto({
           accent: {
             // Steps differ per theme so each has enough contrast with its
             // background. `pandacss-preset.test.ts` checks this.
@@ -368,7 +405,9 @@ export const domicilePreset = definePreset({
             value: {
               _contrastHigh:
                 "color-mix(in oklab, {colors.foreground} 80%, {colors.background})",
-              base: "color-mix(in oklab, {colors.foreground} 55%, {colors.background})",
+              // Readable on a tile on a card; `pandacss-preset.test.ts`
+              // checks this.
+              base: "color-mix(in oklab, {colors.foreground} 65%, {colors.background})",
             },
           },
           // Text and panels drawn over the wallpaper. Theme-independent
@@ -397,7 +436,7 @@ export const domicilePreset = definePreset({
           warning: {
             value: { _light: "{colors.amber.700}", base: "{colors.amber.500}" },
           },
-        },
+        }),
         shadows: {
           // A soft shadow for floating surfaces such as popups. Lighter in
           // light mode, where the dark value looks heavy.

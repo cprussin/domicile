@@ -230,6 +230,17 @@ when the foreground/background CSS variables flip, the derived tokens
 recompute automatically. **Don't add `_light` overrides to derived
 tokens** — let the math follow.
 
+### Panels over the wallpaper
+
+A panel over the wallpaper (`tone="overPhoto"` on `Popover` and `Tooltip`,
+which set `data-tone="overPhoto"`) is dark in either theme. The preset's
+`_onPhoto` condition gives everything inside it the dark theme's colors, so
+components drawn in one, such as buttons, fields and cards, need nothing of
+their own. `darkOverPhoto` in the preset adds it to every color token, and
+declares each derived token again there: a custom property mixes the
+variables where it is declared, so a mix declared only on `:root` would keep
+the page's theme.
+
 The rule is symmetric for consumers: any color you reach for must
 resolve through a semantic token (or a `color-mix(...)` of one). A
 literal palette reference like `{colors.neutral.900}` looks fine in
