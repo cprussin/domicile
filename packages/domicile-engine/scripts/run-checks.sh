@@ -97,6 +97,7 @@ TOGETHER=(
   guard-shell-crash
   guard-app-only-in-shell
   guard-domicile-fetch
+  guard-shell-pdf
   guard-app-module
   guard-video-codecs
 )
@@ -120,6 +121,7 @@ ONCE=(
   guard-held-moments
   guard-portal-requests
   guard-shell-handover
+  guard-shell-pdf
   guard-shell-script-src
   guard-shortcut-chords
   guard-video-codecs

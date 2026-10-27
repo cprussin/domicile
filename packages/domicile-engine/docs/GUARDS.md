@@ -30,6 +30,7 @@ inside the toolchain shell ([BUILD-MACHINE.md](BUILD-MACHINE.md#toolchain-shell)
 |---|---|
 | `under-wayland.sh` | runs another script under a nested wlroots compositor on the GPU, the only setup that can import a dmabuf |
 | `guard_webview_devtools.py` | sends keys and clicks to a running engine over the debugging port |
+| `guard-shell-pdf-viewer.py` | asks Chrome's PDF viewer frame, over the debugging port, whether it started |
 | `guard-webview-guest-page.py` | the guest page for the keyboard and click guards |
 | `lib-annotate.sh` | reports where a guard stopped as a GitHub annotation |
 | `lib-last-words.sh` | prints the end of an engine's log, reaching back to a crash's fatal line |
@@ -83,6 +84,7 @@ Headless.
 | `guard-notification-server-late.sh` | the browser connects to a notification server that takes its name after the browser looked, on a private bus (patch 0134) |
 | `guard-shell-script-src.sh` | an injected inline `<script>` and `onerror` do not run in the shell; a `<script src>` from the shell root does |
 | `guard-domicile-fetch.sh` | the shell `fetch()`es a file beside it and one from `domicile://home/` (patch 0126); a site in its `<webview>` reads neither with `fetch()`, a no-cors `fetch()` or `XMLHttpRequest` |
+| `guard-shell-pdf.sh` | Chrome's PDF viewer starts on a PDF from `domicile://home/` in the shell's `<iframe>`, as the launcher's preview shows one (patch 0154) |
 | `guard-video-codecs.sh` | the engine plays H.264 and AAC (`src/build/args/domicile_codecs.gn`); VP9 is the control |
 | `guard-display-capture.sh` | a display capture through the C ABI reads back the shell's color, before and after a resize |
 | `guard-shell-crash.sh` | a crashed shell ends the engine with a FATAL line saying the shell's renderer died and that this is a bug in Domicile (patch 0124) |
