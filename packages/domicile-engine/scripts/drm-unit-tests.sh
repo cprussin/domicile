@@ -7,7 +7,7 @@
 # packages/domicile-engine/tests/test-a-touchpad-rests-while-typing.sh), one Wayland suite,
 # `WaylandKeyboardWithoutKeymapTest` (see
 # packages/domicile-engine/tests/test-modifiers-wait-for-a-keymap.sh), and one
-# headless suite, `HeadlessDeskTest` (see
+# headless suites, `HeadlessDeskTest` and `HeadlessDeskInputTest` (see
 # docs/architecture/A-HEADLESS-DESKTOP.md).
 #
 #   ./packages/domicile-engine/scripts/drm-unit-tests.sh        # the suites this fork wrote
@@ -59,6 +59,7 @@ SUITES=(
   AbsoluteMouseConverterTest:7
   WaylandKeyboardWithoutKeymapTest:1
   HeadlessDeskTest:5
+  HeadlessDeskInputTest:10
 )
 
 cd "$ENGINE_OUT"

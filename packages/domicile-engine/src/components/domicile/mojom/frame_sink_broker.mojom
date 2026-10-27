@@ -140,6 +140,31 @@ struct VirtualDisplay {
   string name;
 };
 
+// One event of emulated input (EIS) for the desk, as a pointer and keyboard
+// of the engine's own would send it. See
+// docs/architecture/A-HEADLESS-DESKTOP.md.
+enum DeskInputKind {
+  // The pointer moved to `x`, `y`.
+  kPointer,
+  // Button `code`, an evdev code, went down or up.
+  kButton,
+  // A scroll by `x`, `y`: right and down are positive.
+  kScroll,
+  // Key `code`, an evdev code, went down or up.
+  kKey,
+};
+
+struct DeskInput {
+  DeskInputKind kind;
+
+  // A point on the desk, or a scroll, in desk pixels.
+  double x;
+  double y;
+
+  uint32 code;
+  bool pressed;
+};
+
 // Tells a producer what the displays are.
 //
 // No Wayland request matches this, because a Wayland compositor normally
@@ -329,6 +354,11 @@ interface FrameSinkBroker {
   // light: 1 leaves a channel as it is. The browser keeps it and sets it again
   // after each modeset. Ignored outside a tty, as `ConfigureDisplays` is.
   SetWhitePoint(float red, float green, float blue);
+
+  // Delivers emulated input to the desk, as the engine's own devices' would
+  // be: the shell sees it first. Ignored where the engine reads no input of
+  // its own, as nested.
+  InjectInput(DeskInput input);
 
   // Sets the contents of one of the desktop's clipboards.
   //

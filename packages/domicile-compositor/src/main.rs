@@ -498,6 +498,9 @@ struct DomicileCompositor {
     /// Whether the engine composites on the CPU, so shm frames go to it in
     /// memory. See [`crate::memory_frames`].
     software_compositing: bool,
+    /// Whether emulated input goes to the engine instead of the seat, as on
+    /// a headless desk. See [`crate::eis::Compositor::engine_takes_input`].
+    engine_takes_input: bool,
     /// Each toplevel's numbered configures, so a commit is shown at the box
     /// it was drawn for. See [`crate::configure_answers`].
     configure_answers: HashMap<String, ConfigureAnswers<Serial>>,
@@ -1302,6 +1305,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         shm_refused: OncePerWindow::default(),
         uploads: Uploads::default(),
         software_compositing: arguments.software_compositing,
+        engine_takes_input: arguments.engine_takes_input,
         configure_answers: HashMap::new(),
         shown: engine_damage::Shown::default(),
         size_limits: HashMap::new(),

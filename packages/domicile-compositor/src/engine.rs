@@ -17,6 +17,7 @@ use std::time::Duration;
 
 use crate::buffer_transform::Sampled;
 use crate::dmabuf_descriptor::DmabufDescriptor;
+use crate::eis::DeskInput;
 use domicile_config::{Desk, Transform};
 use domicile_host::clipboard::{Contents, TEXT_MIMES};
 use libloading::{Library, Symbol};
@@ -610,6 +611,37 @@ struct RawVirtualDisplay {
     refresh_mhz: i32,
     /// The name, borrowed for the call.
     name: *const c_char,
+}
+
+/// `DomicileDeskInput`, laid out as in the C header. 32 bytes, with four of
+/// padding before `x`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(C)]
+struct RawDeskInput {
+    /// `DomicileDeskInputKind`: 0 pointer, 1 button, 2 scroll, 3 key.
+    kind: u32,
+    x: f64,
+    y: f64,
+    code: u32,
+    pressed: u32,
+}
+
+impl From<DeskInput> for RawDeskInput {
+    fn from(input: DeskInput) -> RawDeskInput {
+        let (kind, x, y, code, pressed) = match input {
+            DeskInput::Pointer { x, y } => (0, x, y, 0, false),
+            DeskInput::Button { code, pressed } => (1, 0.0, 0.0, code, pressed),
+            DeskInput::Scroll { dx, dy } => (2, dx, dy, 0, false),
+            DeskInput::Key { code, pressed } => (3, 0.0, 0.0, code, pressed),
+        };
+        RawDeskInput {
+            kind,
+            x,
+            y,
+            code,
+            pressed: u32::from(pressed),
+        }
+    }
 }
 
 /// `DomicilePointerTarget`, laid out as in the C header. 16 bytes, no padding.
@@ -1359,6 +1391,20 @@ impl Engine {
                 white_point.blue as f32,
             )
         };
+    }
+
+    /// Hands one emulated event to the shell's window, on a headless desk.
+    /// Returns false for an engine older than `domicile_input_inject`.
+    pub fn inject_input(&self, input: DeskInput) -> bool {
+        let f: Symbol<unsafe extern "C" fn(*mut Handle, *const RawDeskInput)> =
+            match self.symbol(b"domicile_input_inject\0", "domicile_input_inject") {
+                Ok(symbol) => symbol,
+                Err(_) => return false,
+            };
+        let raw = RawDeskInput::from(input);
+        // SAFETY: as above, and `raw` outlives the call; the engine copies it.
+        unsafe { f(self.handle, &raw) };
+        true
     }
 
     /// Releases an imported buffer after the client destroys its `wl_buffer`.
@@ -2300,6 +2346,62 @@ mod tests {
         // 8 (id) + 16 (three `int32_t`, one `uint32_t`) + 8 (`double`) + 16
         // (desk). No padding: the `double` is already aligned.
         assert_eq!(std::mem::size_of::<RawLayout>(), 48);
+    }
+
+    #[test]
+    fn a_desk_input_is_the_record_the_c_header_declares() {
+        // 4 (kind) + 4 padding + 16 (two `double`s) + 8 (code, pressed).
+        assert_eq!(std::mem::size_of::<RawDeskInput>(), 32);
+    }
+
+    #[test]
+    fn each_desk_input_has_the_kind_the_c_header_numbers() {
+        assert_eq!(
+            RawDeskInput::from(DeskInput::Pointer { x: 1.5, y: 2.0 }),
+            RawDeskInput {
+                kind: 0,
+                x: 1.5,
+                y: 2.0,
+                code: 0,
+                pressed: 0
+            }
+        );
+        assert_eq!(
+            RawDeskInput::from(DeskInput::Button {
+                code: 0x110,
+                pressed: true
+            }),
+            RawDeskInput {
+                kind: 1,
+                x: 0.0,
+                y: 0.0,
+                code: 0x110,
+                pressed: 1
+            }
+        );
+        assert_eq!(
+            RawDeskInput::from(DeskInput::Scroll { dx: 0.0, dy: -15.0 }),
+            RawDeskInput {
+                kind: 2,
+                x: 0.0,
+                y: -15.0,
+                code: 0,
+                pressed: 0
+            }
+        );
+        assert_eq!(
+            RawDeskInput::from(DeskInput::Key {
+                code: 30,
+                pressed: false
+            }),
+            RawDeskInput {
+                kind: 3,
+                x: 0.0,
+                y: 0.0,
+                code: 30,
+                pressed: 0
+            }
+        );
     }
 
     #[test]

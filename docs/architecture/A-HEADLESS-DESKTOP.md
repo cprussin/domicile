@@ -12,7 +12,7 @@ device and no logind seat.
  domicile monitor / shell ──virtual_monitor, resize──▶ compositor ──virtual displays──▶ engine (ozone headless)
                                                          ▲                                │ one desk page,
  ScreenCast portal ◀── PipeWire ◀── display capture ─────┼────────────────────────────────┤ a presenter per monitor
- EIS client ──────────────────────────▶ EIS server ──────┴── domicile_input_inject ──────▶ SystemInputInjector ──▶ desk host
+ EIS client ──────────────────────────▶ EIS server ──────┴── domicile_input_inject ──────▶ HeadlessDeskInput ──▶ desk host
 ```
 
 - **Monitors.** With `--domicile-headless-desk`, `OzonePlatformHeadless`
@@ -32,11 +32,16 @@ device and no logind seat.
 - **Resizing.** A virtual monitor keeps its id and connector when resized, so
   its `wl_output`, its windows and any capture of it stay. A capture follows
   the new size (`domicile_display_capture_resize`).
-- **Input.** When the engine owns input (drm, headless), EIS events go to the
-  engine's `SystemInputInjector` instead of straight to the window under the
-  point. They then take the path a real keyboard and pointer take: the shell
-  sees keys first and clicks on the shell reach it. Nested runs keep today's
-  path, since the host owns input there.
+- **Input.** On headless the launcher passes the compositor
+  `--engine-takes-input yes`, and EIS events go to the engine
+  (`domicile_input_inject`) instead of the seat. `HeadlessDeskInput` makes
+  each one the event a real device's would and hands it to the shell's
+  window, so the shell sees keys first and clicks on the shell reach it.
+  - Points are desktop coordinates; a headless desk is at scale 1.
+  - Keys go through xkb with the compositor's keymap.
+  - No key repeat. A touch is the left button, one finger at a time.
+  - drm and nested keep the seat path. On drm the engine has a real seat too,
+    so moving EIS there is a follow-up.
 - **`domicile monitor <name> <width>x<height>`** adds a monitor, prints its
   output name, resizes it for each `<width>x<height>` line on stdin and
   removes it when it exits.
@@ -49,8 +54,12 @@ device and no logind seat.
   seat at every step. Headless needs none, so it runs in CI and in the cloud
   container.
 - **EIS through the engine over a second input path into the page.** The
-  injector reaches the desk host the way evdev does, so focus, shortcuts and
-  pointer crossing come for free on drm too.
+  injected events reach the desk host the way evdev's do, so focus, shortcuts
+  and pointer crossing come for free.
+- **EIS reaches the lock screen.** On headless, EIS is the only keyboard, so
+  a locked desk must take it. The shell's window gets it like a real hand's,
+  and passes on what is over an app as it does a real hand's, which the lock
+  still refuses.
 
 ## Plan
 
@@ -75,17 +84,16 @@ device and no logind seat.
 
 ### 3. EIS reaches the shell
 
-- [ ] engine: `domicile_input_inject` to `SystemInputInjector`; headless gets
-  an injector to the desk host and the xkb layout engine
-- [ ] compositor: EIS goes to the engine on drm and headless
-- [ ] e2e: an EIS click on the shell and a shell shortcut from EIS keys
+- [x] engine: `domicile_input_inject`; headless gets `HeadlessDeskInput` to
+  the desk host and the xkb layout engine (patch `0153`)
+- [x] compositor and launcher: on headless, EIS goes to the engine
+  (`--engine-takes-input yes`)
+- [x] guard: a click and a key injected on a headless desk reach the shell
+  (`guard-headless-desk.sh`)
+- [ ] drm: EIS through the engine too
 
 ## Open questions
 
-- **EIS on a locked desk.** Today the lock refuses all emulated input. On
-  headless, EIS is the only keyboard, so a locked desk could never unlock.
-  Recommend: EIS reaches the lock screen like a real keyboard; app windows
-  still get nothing while locked.
 - **Presenting into supplied buffers.** Recommend: measure frame-to-capture
   latency on headless first, and build it only if capture adds more than a
   frame.

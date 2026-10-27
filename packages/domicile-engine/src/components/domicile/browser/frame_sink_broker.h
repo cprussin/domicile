@@ -72,6 +72,9 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   // for the same reason. Empty when the embedder has no CRTC; the white point
   // is then dropped.
   using WhitePointSetter = base::RepeatingCallback<void(float, float, float)>;
+  // Delivers emulated input to the desk. Injected for the same reason. Empty
+  // when the engine reads no input of its own; the input is then dropped.
+  using InputInjector = base::RepeatingCallback<void(const mojom::DeskInput&)>;
   // Writes the producer's clipboard into `ui::OzonePlatform`'s clipboard.
   // Injected for the same reason. Empty when the embedder runs inside another
   // session; the contents are then dropped.
@@ -111,7 +114,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
       SharedImageInterfaceGetter get_software_shared_image_interface =
           SharedImageInterfaceGetter(),
       VirtualDisplaysSetter set_virtual_displays = VirtualDisplaysSetter(),
-      WhitePointSetter set_white_point = WhitePointSetter());
+      WhitePointSetter set_white_point = WhitePointSetter(),
+      InputInjector inject_input = InputInjector());
 
   FrameSinkBroker(const FrameSinkBroker&) = delete;
   FrameSinkBroker& operator=(const FrameSinkBroker&) = delete;
@@ -207,6 +211,7 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   void ConfigureVirtualDisplays(
       std::vector<mojom::VirtualDisplayPtr> displays) override;
   void SetWhitePoint(float red, float green, float blue) override;
+  void InjectInput(mojom::DeskInputPtr input) override;
   void SetClipboard(mojom::Clipboard clipboard,
                     const ClipboardContents& contents) override;
   void ObserveClipboard(
@@ -287,6 +292,8 @@ class FrameSinkBroker : public mojom::FrameSinkBroker {
   const VirtualDisplaysSetter set_virtual_displays_;
   // See WhitePointSetter.
   const WhitePointSetter set_white_point_;
+  // See InputInjector.
+  const InputInjector inject_input_;
 
   mojo::ReceiverSet<mojom::FrameSinkBroker> receivers_;
   base::RepeatingClosure producer_gone_;

@@ -158,6 +158,10 @@ One request channel carries all dialogs. Each interface's backend builds on it.
     shell reaches nothing: only the engine can deliver to the page.
   - The seat has no touchscreen, so a touch is the left button, one finger
     at a time.
+  - On a headless desk, emulated input goes to the engine instead, which
+    hands it to the shell's window as a real hand's, so it reaches the shell
+    and its lock screen. See
+    [A-HEADLESS-DESKTOP.md](architecture/A-HEADLESS-DESKTOP.md).
   - The legacy `NotifyPointerMotionAbsolute` and `NotifyTouch*` take a
     ScreenCast stream's coordinates. A session that shares no screen has no
     stream, so they are refused; EIS's absolute pointer covers the displays.
