@@ -83,6 +83,7 @@ TOGETHER=(
   guard-webview-passkey-extension
   guard-webview-survives-load-shell
   guard-webview-hidden
+  guard-webview-moved
   guard-webview-crash
   guard-desktop-geometry
   guard-windows-state
