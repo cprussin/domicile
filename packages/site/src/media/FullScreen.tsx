@@ -32,11 +32,12 @@ const showFullScreen = (element: Element): void => {
 
 /** A capture with a button in its corner that shows it full screen. */
 export const FullScreen = ({ label, children }: Props) => {
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLSpanElement>(null);
+  // Spans, since a docs page's picture sits in a paragraph.
   return (
-    <div className={cx("group", frameStyles)} ref={ref}>
+    <span className={cx("group", frameStyles)} ref={ref}>
       {children}
-      <div className={buttonStyles}>
+      <span className={buttonStyles}>
         <Button
           label={label}
           onClick={() => {
@@ -50,12 +51,12 @@ export const FullScreen = ({ label, children }: Props) => {
         >
           <ArrowsOutIcon />
         </Button>
-      </div>
-    </div>
+      </span>
+    </span>
   );
 };
 
-const frameStyles = css({ position: "relative" });
+const frameStyles = css({ display: "block", position: "relative" });
 
 // Out of the way until the capture is pointed at, except on touch screens,
 // which have no pointing.

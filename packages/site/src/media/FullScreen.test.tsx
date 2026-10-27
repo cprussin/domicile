@@ -22,3 +22,13 @@ test("a picture gets a button that shows it full screen", () => {
   expect(html).toMatch(/<img[^>]*alt="The lock screen"/);
   expect(html).toMatch(/<button[^>]*aria-label="View full screen"/);
 });
+
+// A docs page's picture sits in a paragraph, which can't hold a <div>.
+test("its markup can sit in a paragraph", () => {
+  const html = renderToStaticMarkup(
+    <FullScreen label="View full screen">
+      <img alt="The lock screen" src="/media/tour-lock.png" />
+    </FullScreen>,
+  );
+  expect(html).not.toContain("<div");
+});
