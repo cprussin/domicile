@@ -95,6 +95,17 @@ display::ScreenInfos DeskScreenInfos(const DeskGeometry& desk,
 display::ScreenInfos PopupScreenInfos(display::ScreenInfos infos,
                                       const gfx::Rect& popup);
 
+// The screens reported to a frame in the page, such as a <webview>'s page:
+// `infos` with the current screen narrowed to the monitor the frame overlaps
+// most, upright or on its side as that monitor is. Video players size
+// fullscreen video to `screen`, so the desk's box would crop it.
+//
+// `infos` and `frame` are as for `PopupScreenInfos`. The current screen keeps
+// its id and scale: the frame is drawn in the desk's window. `infos` are
+// unchanged when the frame is on no monitor.
+display::ScreenInfos FrameScreenInfos(display::ScreenInfos infos,
+                                      const gfx::Rect& frame);
+
 // The display in `lit` containing `at` (in `host`'s logical pixels), or `host`
 // if none does. `std::nullopt` if `host` is not on the desk.
 //

@@ -1,0 +1,52 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Tue, 27 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a frame gets the monitor it is on as its screen
+
+A <webview>'s page is a child frame of the desk page, and a child frame
+inherits its parent's screens. The desk page's current screen is the box
+around every monitor. With more than one monitor lit, that box is the
+wrong size and shape for a page's `screen`: a video player sizing
+fullscreen video to it draws the video wider than the window and crops
+its sides.
+
+- RenderWidgetHostViewChildFrame narrows the current screen to the
+  monitor its view overlaps most, upright or on its side as that monitor
+  is.
+- Its id and scale stay the desk's: the frame is drawn in the desk's
+  window.
+- Outside a desk the parent's screens are unchanged.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on crux.
+---
+ .../renderer_host/render_widget_host_view_child_frame.cc  | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/content/browser/renderer_host/render_widget_host_view_child_frame.cc b/content/browser/renderer_host/render_widget_host_view_child_frame.cc
+index 4ef3ad2..23556e7 100644
+--- a/content/browser/renderer_host/render_widget_host_view_child_frame.cc
++++ b/content/browser/renderer_host/render_widget_host_view_child_frame.cc
+@@ -22,6 +22,7 @@
+ #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
+ #include "components/viz/host/host_frame_sink_manager.h"
+ #include "content/browser/compositor/surface_utils.h"
++#include "content/browser/domicile/domicile_desk.h"
+ #include "content/browser/gpu/compositor_util.h"
+ #include "content/browser/renderer_host/cross_process_frame_connector.h"
+ #include "content/browser/renderer_host/frame_connector.h"
+@@ -584,8 +585,13 @@ void RenderWidgetHostViewChildFrame::UpdateCursor(const ui::Cursor& cursor) {
+ }
+ 
+ void RenderWidgetHostViewChildFrame::UpdateScreenInfo() {
++  // DOMICILE: a frame inherits its parent's screens, and a desk page's
++  // current screen is the whole desk. A frame gets the monitor it is on, as
++  // a browser window does, so a fullscreen video fits that monitor. See
++  // content/browser/domicile/domicile_desk.h.
+   if (frame_connector_)
+-    screen_infos_ = frame_connector_->GetScreenInfos();
++    screen_infos_ = DomicileFrameScreenInfos(frame_connector_->GetScreenInfos(),
++                                             GetViewBounds());
+ }
+ 
+ void RenderWidgetHostViewChildFrame::SendInitialPropertiesIfNeeded() {

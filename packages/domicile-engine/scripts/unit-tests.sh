@@ -25,7 +25,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # 16, ShellDocument 14, ShellSource 3, CursorShape 3, CommandProtocol 48,
 # DomicileDisplayList 8, DomicileKeyboardLayout 3, ShellWindows 8,
 # ShellWindowPlaces 7, LineFramer 4, DesktopPrefs 1, SurfaceCrop 3,
-# SurfaceTransform 3, SurfaceAlpha 2, ExtensionInstaller 3, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 20,
+# SurfaceTransform 3, SurfaceAlpha 2, ExtensionInstaller 3, ExtensionTrayEntry 3, DeskTabs 12, DeskGeometry 26,
 # DomicileDisplayRegions 27, DomicileDeskTargeter 4, PlaceholderStage 3,
 # SystemCall 6, PortalRequest 3, FileChoice 13, DisplayCapture 7,
 # CapturedFourcc 1, DisplayCaptureTarget 4, HeldChords 6, ForwardedKeys 5,
@@ -40,7 +40,8 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # DeskPointer 3, PageMatches 4, ForceDark 2, HiddenFromCaptures 7,
 # LocaleFallback 2, DomicileLcdTextActivation 2.
 #
-# 480, and it was 478 — a tree ready to activate keeping its LCD-text tiles
+# 483, and it was 480 — giving a frame the monitor it is on is three
+# DeskGeometry cases. Before that 480, and it was 478 — a tree ready to activate keeping its LCD-text tiles
 # is two DomicileLcdTextActivation cases. Before that 478, and it was 476 — falling back to en-US for a string a locale lacks is
 # two LocaleFallback cases. Before that 476, and it was 469 — what the shell hides from desk captures is seven
 # HiddenFromCaptures cases. Before that 469, and it was 463 — holding a window's frames while viz is behind is four
@@ -178,7 +179,7 @@ FILTER='FrameSinkBrokerTest.*:WindowDiffTest.*:EngineEventQueueTest.*:ShortcutRe
 # so the floor sat 12 below the truth and a whole suite could have stopped
 # linking with room to spare. That is the failure this exists to catch, so the
 # number is the real one.
-FLOOR=480
+FLOOR=483
 
 # From inside the out directory, because this is a component build and the
 # binary loads its own .so files from beside it.

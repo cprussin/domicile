@@ -11,6 +11,7 @@
 #include "cc/domicile/display_regions.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/display.h"
+#include "ui/display/mojom/screen_orientation.mojom-shared.h"
 #include "ui/display/screen_info.h"
 #include "ui/display/screen_infos.h"
 #include "ui/gfx/geometry/point.h"
@@ -228,6 +229,48 @@ TEST(DeskGeometryTest, APopupOnNoMonitorKeepsTheDesk) {
 
   const display::ScreenInfos told =
       PopupScreenInfos(infos, gfx::Rect(-500, -500, 10, 10));
+
+  EXPECT_EQ(told.current().rect, infos.current().rect);
+}
+
+TEST(DeskGeometryTest, AFrameGetsTheMonitorItIsOn) {
+  // A fullscreen <webview> on a rotated monitor. A video player sizes itself
+  // to `screen`, so the desk's would crop the video.
+  const display::ScreenInfos infos = DeskScreenInfos(
+      *DeskGeometryOf({kLaptop, kCenter, kRight}), {kLaptop, kCenter, kRight},
+      {});
+
+  const display::ScreenInfos told =
+      FrameScreenInfos(infos, gfx::Rect(1920, 0, 1800, 3200));
+
+  EXPECT_EQ(told.current().rect, gfx::Rect(1920, 0, 1800, 3200));
+  EXPECT_EQ(told.current().available_rect, gfx::Rect(1920, 0, 1800, 3200));
+  EXPECT_EQ(told.current().orientation_type,
+            display::mojom::ScreenOrientation::kPortraitPrimary);
+  // Still drawn at the desk's scale, in the desk's window.
+  EXPECT_EQ(told.current_display_id, infos.current_display_id);
+  EXPECT_EQ(told.current().device_scale_factor, 1.5f);
+  EXPECT_EQ(told.screen_infos.size(), infos.screen_infos.size());
+}
+
+TEST(DeskGeometryTest, AFrameAcrossASeamIsOnTheMonitorItOverlapsMost) {
+  // Its corner is on the laptop, most of it on the center monitor.
+  const display::ScreenInfos infos = DeskScreenInfos(
+      *DeskGeometryOf({kLaptop, kCenter, kRight}), {kLaptop, kCenter, kRight},
+      {});
+
+  const display::ScreenInfos told =
+      FrameScreenInfos(infos, gfx::Rect(1820, 1900, 1000, 800));
+
+  EXPECT_EQ(told.current().rect, gfx::Rect(1920, 0, 1800, 3200));
+}
+
+TEST(DeskGeometryTest, AFrameOnNoMonitorKeepsTheDesk) {
+  const display::ScreenInfos infos =
+      DeskScreenInfos(*DeskGeometryOf({kLaptop}), {kLaptop}, {});
+
+  const display::ScreenInfos told =
+      FrameScreenInfos(infos, gfx::Rect(-500, -500, 10, 10));
 
   EXPECT_EQ(told.current().rect, infos.current().rect);
 }
