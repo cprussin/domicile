@@ -1688,6 +1688,50 @@ pub enum PreviewedWindow {
     Browser { id: String },
 }
 
+/// A monitor's device pixels per logical pixel, such as 1.5. Always finite
+/// and above zero: a message with any other scale does not parse.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(try_from = "f64", into = "f64")]
+pub struct Scale(f64);
+
+impl Scale {
+    /// One device pixel a logical pixel.
+    pub const ONE: Scale = Scale(1.0);
+
+    pub fn get(self) -> f64 {
+        self.0
+    }
+}
+
+impl Default for Scale {
+    fn default() -> Self {
+        Scale::ONE
+    }
+}
+
+// Sound: a `Scale` is never NaN.
+impl Eq for Scale {}
+
+impl TryFrom<f64> for Scale {
+    type Error = String;
+
+    fn try_from(scale: f64) -> Result<Self, Self::Error> {
+        if scale.is_finite() && scale > 0.0 {
+            Ok(Scale(scale))
+        } else {
+            Err(format!(
+                "a scale must be finite and above zero, not {scale}"
+            ))
+        }
+    }
+}
+
+impl From<Scale> for f64 {
+    fn from(scale: Scale) -> f64 {
+        scale.0
+    }
+}
+
 /// What a [`ChromeMessage::SystemRequest`] asks for.
 ///
 /// A relative path is read from the home directory. Bytes travel as standard
@@ -1851,15 +1895,21 @@ pub enum SystemRequest {
         width: u32,
         height: u32,
         refresh_mhz: u32,
+        /// Device pixels per logical pixel; 1 when left out.
+        #[serde(default)]
+        scale: Scale,
     },
     /// Resize the virtual monitor this id added to `width`×`height` pixels
-    /// at `refresh_mhz`. It keeps its `wl_output`, its windows and any
-    /// capture of it. No reply; a later [`HostMessage::Displays`] shows it.
-    /// Allowed while the desktop is locked.
+    /// at `refresh_mhz` and `scale`. It keeps its `wl_output`, its windows
+    /// and any capture of it. No reply; a later [`HostMessage::Displays`]
+    /// shows it. Allowed while the desktop is locked.
     ResizeVirtualMonitor {
         width: u32,
         height: u32,
         refresh_mhz: u32,
+        /// Device pixels per logical pixel; 1 when left out.
+        #[serde(default)]
+        scale: Scale,
     },
     /// Report the keymaps the desktop switches between and which it types
     /// on. Answered with [`SystemReply::Started`], then a

@@ -340,9 +340,9 @@ fn a_virtual_monitor_is_added_resized_and_given_back() {
         heard.join().expect("the compositor was listening"),
         vec![
             "{\"type\":\"system_request\",\"id\":1,\"request\":{\"call\":\"virtual_monitor\",\
-             \"name\":\"Pane\",\"width\":1280,\"height\":720,\"refresh_mhz\":60000}}\n",
+             \"name\":\"Pane\",\"width\":1280,\"height\":720,\"refresh_mhz\":60000,\"scale\":1.0}}\n",
             "{\"type\":\"system_request\",\"id\":1,\"request\":{\"call\":\
-             \"resize_virtual_monitor\",\"width\":800,\"height\":600,\"refresh_mhz\":30000}}\n",
+             \"resize_virtual_monitor\",\"width\":800,\"height\":600,\"refresh_mhz\":30000,\"scale\":1.0}}\n",
         ]
     );
 }

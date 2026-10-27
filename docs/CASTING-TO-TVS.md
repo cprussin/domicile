@@ -74,6 +74,8 @@ bar item ──casting(host).start(target, Extend | Pick)──▶ backend (engi
 - `SystemRequest::ResizeVirtualMonitor`, under the same id, resizes it in
   place: same id, `wl_output`, windows and casts. A monitor cast
   renegotiates its size.
+- Both take a `scale`, 1 when left out, which `Screens` gives its
+  `wl_output` and the display layout.
 - The compositor sends the list to the engine with
   `domicile_virtual_displays_configure`. Each has an id the compositor picks.
 - The engine adds a `DisplaySnapshot` of type `NETWORK` for each to the DRM
