@@ -1,0 +1,235 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Tue, 27 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a headless desk shows the compositor's virtual
+ displays
+
+With --domicile-headless-desk, ozone headless is a desktop's screen on a
+machine with no display device or seat (WSL2). Frames leave through display
+capture; see docs/architecture/A-HEADLESS-DESKTOP.md in the Domicile
+repository.
+
+- OzonePlatformHeadless takes the compositor's virtual displays and
+  layout, as DRM does, and keeps HeadlessScreen's list to match
+  (`HeadlessDeskOf`, in domicile/headless_desk.h). With none, the screen
+  it started with stays as a placeholder on connector HEADLESS-1.
+- GetDomicileConnectors names each virtual display's connector
+  "virtual-<n>", as DrmModeset's VirtualSnapshot does.
+- presents_every_window is false with the switch, so popups and tooltips
+  are drawn inside their window, where a capture sees them.
+- headless_unittests builds HeadlessDeskTest.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on `crux`.
+---
+ ui/ozone/platform/headless/BUILD.gn           |  9 ++-
+ ui/ozone/platform/headless/headless_screen.cc | 23 +++++++
+ ui/ozone/platform/headless/headless_screen.h  |  4 ++
+ .../headless/ozone_platform_headless.cc       | 63 ++++++++++++++++++-
+ 4 files changed, 97 insertions(+), 2 deletions(-)
+
+diff --git a/ui/ozone/platform/headless/BUILD.gn b/ui/ozone/platform/headless/BUILD.gn
+index dc07e2b6..c2823a71 100644
+--- a/ui/ozone/platform/headless/BUILD.gn
++++ b/ui/ozone/platform/headless/BUILD.gn
+@@ -10,6 +10,8 @@ source_set("headless") {
+   sources = [
+     "client_native_pixmap_factory_headless.cc",
+     "client_native_pixmap_factory_headless.h",
++    "domicile/headless_desk.cc",
++    "domicile/headless_desk.h",
+     "headless_screen.cc",
+     "headless_screen.h",
+     "headless_surface_factory.cc",
+@@ -39,6 +41,7 @@ source_set("headless") {
+     "//ui/events",
+     "//ui/events/ozone/layout",
+     "//ui/events/platform",
++    "//ui/gfx",
+     "//ui/gfx/geometry",
+     "//ui/ozone:ozone_base",
+     "//ui/ozone/common",
+@@ -62,7 +65,10 @@ source_set("headless") {
+ 
+ source_set("headless_unittests") {
+   testonly = true
+-  sources = [ "headless_window_unittest.cc" ]
++  sources = [
++    "domicile/headless_desk_unittest.cc",
++    "headless_window_unittest.cc",
++  ]
+   deps = [
+     ":headless",
+     "//base",
+@@ -70,6 +76,7 @@ source_set("headless_unittests") {
+     "//testing/gtest",
+     "//ui/display:test_support",
+     "//ui/events:test_support",
++    "//ui/gfx",
+     "//ui/ozone:platform",
+     "//ui/ozone:test_support",
+   ]
+diff --git a/ui/ozone/platform/headless/headless_screen.cc b/ui/ozone/platform/headless/headless_screen.cc
+index 8d7bd278..69e8d2f1 100644
+--- a/ui/ozone/platform/headless/headless_screen.cc
++++ b/ui/ozone/platform/headless/headless_screen.cc
+@@ -240,4 +240,27 @@ bool HeadlessScreen::IsHeadless() const {
+   return true;
+ }
+ 
++void HeadlessScreen::SetDomicileDesk(
++    const std::vector<Display>& displays) {
++  CHECK(!displays.empty()) << "a screen always has a primary display";
++  // Primary first: DisplayList::AddDisplay DCHECKs it, as DrmScreen notes.
++  base::flat_set<int64_t> still_here;
++  DisplayList::Type type = DisplayList::Type::PRIMARY;
++  for (const Display& display : displays) {
++    display_list_.AddOrUpdateDisplay(display, type);
++    still_here.insert(display.id());
++    type = DisplayList::Type::NOT_PRIMARY;
++  }
++  // Collected first: RemoveDisplay erases from the list being read.
++  std::vector<int64_t> gone;
++  for (const Display& display : display_list_.displays()) {
++    if (!still_here.contains(display.id())) {
++      gone.push_back(display.id());
++    }
++  }
++  for (const int64_t id : gone) {
++    display_list_.RemoveDisplay(id);
++  }
++}
++
+ }  // namespace ui
+diff --git a/ui/ozone/platform/headless/headless_screen.h b/ui/ozone/platform/headless/headless_screen.h
+index 2dfb61ff..d6529774 100644
+--- a/ui/ozone/platform/headless/headless_screen.h
++++ b/ui/ozone/platform/headless/headless_screen.h
+@@ -51,6 +51,10 @@ class HeadlessScreen : public PlatformScreen,
+   void RemoveObserver(display::DisplayObserver* observer) override;
+   bool IsHeadless() const override;
+ 
++  // DOMICILE: replaces the display list with a desk's, primary first. See
++  // ui/ozone/platform/headless/domicile/headless_desk.h.
++  void SetDomicileDesk(const std::vector<display::Display>& displays);
++
+  private:
+   void CreateDisplayList();
+ 
+diff --git a/ui/ozone/platform/headless/ozone_platform_headless.cc b/ui/ozone/platform/headless/ozone_platform_headless.cc
+index 559973c1..6ac568e3 100644
+--- a/ui/ozone/platform/headless/ozone_platform_headless.cc
++++ b/ui/ozone/platform/headless/ozone_platform_headless.cc
+@@ -5,9 +5,14 @@
+ #include "ui/ozone/platform/headless/ozone_platform_headless.h"
+ 
+ #include <memory>
++#include <optional>
++#include <string>
++#include <vector>
+ 
+ #include "base/command_line.h"
++#include "base/containers/flat_map.h"
+ #include "base/files/file_path.h"
++#include "base/memory/raw_ptr.h"
+ #include "base/no_destructor.h"
+ #include "build/build_config.h"
+ #include "build/chromecast_buildflags.h"
+@@ -17,8 +22,10 @@
+ #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
+ #include "ui/events/ozone/layout/stub/stub_keyboard_layout_engine.h"
+ #include "ui/events/platform/platform_event_source.h"
++#include "ui/gfx/display_color_spaces.h"
+ #include "ui/ozone/common/bitmap_cursor_factory.h"
+ #include "ui/ozone/common/stub_overlay_manager.h"
++#include "ui/ozone/platform/headless/domicile/headless_desk.h"
+ #include "ui/ozone/platform/headless/headless_screen.h"
+ #include "ui/ozone/platform/headless/headless_surface_factory.h"
+ #include "ui/ozone/platform/headless/headless_window.h"
+@@ -100,7 +107,36 @@ class OzonePlatformHeadlessImpl : public OzonePlatformHeadless {
+   std::unique_ptr<PlatformScreen> CreateScreen() override {
+     return std::make_unique<HeadlessScreen>();
+   }
+-  void InitScreen(PlatformScreen* screen) override {}
++  void InitScreen(PlatformScreen* screen) override {
++    if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
++            kDomicileHeadlessDesk)) {
++      return;
++    }
++    // DOMICILE: the screen is Domicile's desk. What it shows before the
++    // compositor adds a display stays as the placeholder. See
++    // ui/ozone/platform/headless/domicile/headless_desk.h.
++    desk_screen_ = static_cast<HeadlessScreen*>(screen);
++    placeholder_ = desk_screen_->GetPrimaryDisplay();
++    ShowDesk();
++  }
++  // DOMICILE: where the compositor places each display.
++  void SetDomicileDisplayLayout(
++      const std::vector<DomicileDisplayLayout>& layout) override {
++    layout_ = layout;
++    ShowDesk();
++  }
++  // DOMICILE: the compositor's monitors, the only ones a headless desk has.
++  void SetDomicileVirtualDisplays(
++      std::vector<DomicileVirtualDisplay> displays) override {
++    virtual_ = std::move(displays);
++    ShowDesk();
++  }
++  base::flat_map<int64_t, std::string> GetDomicileConnectors() const override {
++    return connectors_;
++  }
++  const PlatformRuntimeProperties& GetPlatformRuntimeProperties() override {
++    return properties_;
++  }
+   std::unique_ptr<InputMethod> CreateInputMethod(
+       ImeKeyEventDispatcher* ime_key_event_dispatcher,
+       gfx::AcceleratedWidget widget) override {
+@@ -120,6 +156,12 @@ class OzonePlatformHeadlessImpl : public OzonePlatformHeadless {
+ #endif
+ 
+   bool InitializeUI(const InitParams& params) override {
++    // DOMICILE: a desk's captures show only the shell's windows, so a popup or
++    // tooltip is drawn inside its window, as on DRM. See
++    // PlatformRuntimeProperties::presents_every_window.
++    properties_.presents_every_window =
++        !base::CommandLine::ForCurrentProcess()->HasSwitch(
++            kDomicileHeadlessDesk);
+     window_manager_ = std::make_unique<HeadlessWindowManager>();
+     surface_factory_ = std::make_unique<HeadlessSurfaceFactory>(file_path_);
+     // This unbreaks tests that create their own.
+@@ -143,6 +185,18 @@ class OzonePlatformHeadlessImpl : public OzonePlatformHeadless {
+   }
+ 
+  private:
++  // DOMICILE: shows the desk the compositor's displays and layout make. Does
++  // nothing before `InitScreen`, or without the desk switch.
++  void ShowDesk() {
++    if (!desk_screen_) {
++      return;
++    }
++    HeadlessDesk desk = HeadlessDeskOf(*placeholder_, virtual_, layout_);
++    // Before the list changes, so its observers read the new connectors.
++    connectors_ = std::move(desk.connectors);
++    desk_screen_->SetDomicileDesk(desk.displays);
++  }
++
+   std::unique_ptr<KeyboardLayoutEngine> keyboard_layout_engine_;
+   std::unique_ptr<HeadlessWindowManager> window_manager_;
+   std::unique_ptr<HeadlessSurfaceFactory> surface_factory_;
+@@ -152,6 +206,13 @@ class OzonePlatformHeadlessImpl : public OzonePlatformHeadless {
+   std::unique_ptr<GpuPlatformSupportHost> gpu_platform_support_host_;
+   std::unique_ptr<OverlayManagerOzone> overlay_manager_;
+   base::FilePath file_path_;
++  PlatformRuntimeProperties properties_;
++  // DOMICILE: the desk's screen, set by `InitScreen` with the desk switch.
++  raw_ptr<HeadlessScreen> desk_screen_ = nullptr;
++  std::optional<display::Display> placeholder_;
++  std::vector<DomicileVirtualDisplay> virtual_;
++  std::vector<DomicileDisplayLayout> layout_;
++  base::flat_map<int64_t, std::string> connectors_;
+ };
+ 
+ }  // namespace
+-- 
+2.43.0
+
