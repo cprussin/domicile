@@ -3,10 +3,10 @@ import { Cast } from "@domicile-desktop/manganese-bar-module-cast";
 import { Keymap } from "@domicile-desktop/manganese-bar-module-keymap";
 import { Notifications } from "@domicile-desktop/manganese-bar-module-notifications";
 import { Sharing } from "@domicile-desktop/manganese-bar-module-sharing";
+import { QuickSettings } from "@domicile-desktop/manganese-quick-settings";
 import type { ReactNode } from "react";
 import { isValidElement } from "react";
 import { DEFAULT_BAR, LOCK_BAR } from "./default-bars";
-import { QuickSettings } from "./quick-settings/QuickSettings";
 
 /** The component each item renders. */
 const types = (items: readonly ReactNode[]) =>

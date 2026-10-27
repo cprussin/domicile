@@ -7,8 +7,8 @@ import { GearSixIcon } from "@phosphor-icons/react/dist/ssr/GearSix";
 import type { ComponentType, MouseEvent, WheelEvent } from "react";
 import { useState } from "react";
 
-import { css } from "../../styled-system/css";
-import { flex, grid, hstack } from "../../styled-system/patterns";
+import { css } from "../styled-system/css";
+import { flex, grid, hstack } from "../styled-system/patterns";
 import { DESK_PARTS } from "./desk-parts";
 
 /** A tile or slider with details: `onMore` opens them, absent while locked. */
