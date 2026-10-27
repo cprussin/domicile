@@ -13,6 +13,13 @@
 //!
 //! The seat has no touchscreen, so a touch is the pointer's left button: one
 //! finger at a time, and later fingers are ignored until it lifts.
+//!
+//! On a headless desk the engine takes emulated input instead (see
+//! [`Input::for_the_engine`]): with no other pointer or keyboard there, the
+//! shell, and its lock screen, must see it. The engine hands it to the
+//! shell's window, which passes what is over an app on as it does a real
+//! hand's, so the lock still refuses that. See
+//! `docs/architecture/A-HEADLESS-DESKTOP.md`.
 
 use std::collections::BTreeSet;
 
@@ -77,6 +84,20 @@ pub enum Emulated {
     TouchUp {
         id: u32,
     },
+}
+
+/// One event for the engine, as `domicile_input_inject` takes it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DeskInput {
+    /// The pointer moved to a desktop point. A headless desk is at scale 1,
+    /// so it is also the engine's.
+    Pointer { x: f64, y: f64 },
+    /// An evdev button code.
+    Button { code: u32, pressed: bool },
+    /// In logical units: one wheel detent is [`DETENT`].
+    Scroll { dx: f64, dy: f64 },
+    /// An evdev key code.
+    Key { code: u32, pressed: bool },
 }
 
 /// One client's input: where its pointer is, and the keys and buttons it holds
@@ -173,6 +194,105 @@ impl Input {
         keys.chain(buttons).chain(leave).collect()
     }
 
+    /// The engine's events for one event, on a desk where the engine takes
+    /// input.
+    pub fn for_the_engine(&mut self, emulated: Emulated, desk: &Desk) -> Vec<DeskInput> {
+        match emulated {
+            Emulated::Motion { dx, dy } => {
+                let from = self.pointer.unwrap_or_else(|| desk.middle());
+                let to = desk.held(from, Point::new(from.x + dx, from.y + dy));
+                self.pointer_to(to)
+            }
+            Emulated::MotionAbsolute { x, y } => self.engine_jump_to(x, y, desk),
+            Emulated::Button { button, pressed } => self.engine_button(button, pressed),
+            Emulated::Scroll { dx, dy } => vec![DeskInput::Scroll { dx, dy }],
+            Emulated::ScrollDiscrete { v120_x, v120_y } => vec![DeskInput::Scroll {
+                dx: f64::from(v120_x) / V120_PER_DETENT * DETENT,
+                dy: f64::from(v120_y) / V120_PER_DETENT * DETENT,
+            }],
+            Emulated::Key { keycode, pressed } => {
+                if pressed {
+                    self.keys.insert(keycode);
+                } else {
+                    self.keys.remove(&keycode);
+                }
+                vec![DeskInput::Key {
+                    code: keycode,
+                    pressed,
+                }]
+            }
+            Emulated::TouchDown { id, x, y } => match self.finger {
+                Some(_) => Vec::new(),
+                None => {
+                    self.finger = Some(id);
+                    let mut inputs = self.engine_jump_to(x, y, desk);
+                    inputs.extend(self.engine_button(BTN_LEFT, true));
+                    inputs
+                }
+            },
+            Emulated::TouchMotion { id, x, y } => {
+                if self.finger == Some(id) {
+                    self.engine_jump_to(x, y, desk)
+                } else {
+                    Vec::new()
+                }
+            }
+            Emulated::TouchUp { id } => {
+                if self.finger == Some(id) {
+                    self.finger = None;
+                    self.engine_button(BTN_LEFT, false)
+                } else {
+                    Vec::new()
+                }
+            }
+        }
+    }
+
+    /// [`Input::let_go`], for a desk where the engine takes input.
+    pub fn let_go_of_the_engine(&mut self) -> Vec<DeskInput> {
+        self.finger = None;
+        let keys = std::mem::take(&mut self.keys)
+            .into_iter()
+            .map(|code| DeskInput::Key {
+                code,
+                pressed: false,
+            });
+        let buttons = std::mem::take(&mut self.buttons)
+            .into_iter()
+            .map(|code| DeskInput::Button {
+                code,
+                pressed: false,
+            });
+        keys.chain(buttons).collect()
+    }
+
+    fn engine_jump_to(&mut self, x: f64, y: f64, desk: &Desk) -> Vec<DeskInput> {
+        match desk.at(x, y) {
+            Some(point) => self.pointer_to(point),
+            None => {
+                warn!(x, y, "an EIS client pointed off every display");
+                Vec::new()
+            }
+        }
+    }
+
+    fn pointer_to(&mut self, point: Point) -> Vec<DeskInput> {
+        self.pointer = Some(point);
+        vec![DeskInput::Pointer {
+            x: point.x,
+            y: point.y,
+        }]
+    }
+
+    fn engine_button(&mut self, code: u32, pressed: bool) -> Vec<DeskInput> {
+        if pressed {
+            self.buttons.insert(code);
+        } else {
+            self.buttons.remove(&code);
+        }
+        vec![DeskInput::Button { code, pressed }]
+    }
+
     fn jump_to(&mut self, x: f64, y: f64, desk: &Desk) -> Vec<ClientRequest> {
         match desk.at(x, y) {
             Some(point) => self.point_at(point, desk),
@@ -219,7 +339,7 @@ mod tests {
     use domicile_config::Transform;
     use domicile_scene::{Bounds, Point};
 
-    use super::{Emulated, Input, BTN_LEFT};
+    use super::{DeskInput, Emulated, Input, BTN_LEFT};
     use crate::client_requests::ClientRequest;
     use crate::eis::desk::{Desk, Window};
     use crate::screens::Advertised;
@@ -507,5 +627,170 @@ mod tests {
             ]
         );
         assert_eq!(input.let_go(), [], "and lets go once");
+    }
+
+    #[test]
+    fn for_the_engine_a_pointer_goes_to_its_desk_point_even_over_the_shell() {
+        let mut input = Input::default();
+        assert_eq!(
+            input.for_the_engine(Emulated::MotionAbsolute { x: 900.0, y: 120.0 }, &desk()),
+            [DeskInput::Pointer { x: 900.0, y: 120.0 }]
+        );
+        assert_eq!(
+            input.for_the_engine(Emulated::Motion { dx: 5.0, dy: -20.0 }, &desk()),
+            [DeskInput::Pointer { x: 905.0, y: 100.0 }]
+        );
+    }
+
+    #[test]
+    fn for_the_engine_a_relative_pointer_starts_in_the_middle_and_stops_at_the_edge() {
+        let mut input = Input::default();
+        assert_eq!(
+            input.for_the_engine(Emulated::Motion { dx: 1.0, dy: 1.0 }, &desk()),
+            [DeskInput::Pointer { x: 641.0, y: 401.0 }]
+        );
+        assert_eq!(
+            input.for_the_engine(
+                Emulated::Motion {
+                    dx: -10_000.0,
+                    dy: 0.0
+                },
+                &desk()
+            ),
+            [DeskInput::Pointer { x: 0.0, y: 401.0 }]
+        );
+    }
+
+    #[test]
+    fn for_the_engine_a_point_off_the_desk_reaches_nothing() {
+        let mut input = Input::default();
+        assert_eq!(
+            input.for_the_engine(
+                Emulated::MotionAbsolute {
+                    x: 5000.0,
+                    y: 120.0
+                },
+                &desk()
+            ),
+            []
+        );
+    }
+
+    #[test]
+    fn for_the_engine_keys_buttons_and_the_wheel_keep_their_codes() {
+        let mut input = Input::default();
+        assert_eq!(
+            input.for_the_engine(
+                Emulated::Key {
+                    keycode: 30,
+                    pressed: true
+                },
+                &desk()
+            ),
+            [DeskInput::Key {
+                code: 30,
+                pressed: true
+            }]
+        );
+        assert_eq!(
+            input.for_the_engine(
+                Emulated::Button {
+                    button: 0x111,
+                    pressed: true
+                },
+                &desk()
+            ),
+            [DeskInput::Button {
+                code: 0x111,
+                pressed: true
+            }]
+        );
+        assert_eq!(
+            input.for_the_engine(Emulated::Scroll { dx: 0.0, dy: 7.5 }, &desk()),
+            [DeskInput::Scroll { dx: 0.0, dy: 7.5 }]
+        );
+        assert_eq!(
+            input.for_the_engine(
+                Emulated::ScrollDiscrete {
+                    v120_x: 0,
+                    v120_y: -240
+                },
+                &desk()
+            ),
+            [DeskInput::Scroll { dx: 0.0, dy: -30.0 }]
+        );
+    }
+
+    #[test]
+    fn for_the_engine_a_finger_is_the_left_button_where_it_touches() {
+        let mut input = Input::default();
+        assert_eq!(
+            input.for_the_engine(
+                Emulated::TouchDown {
+                    id: 7,
+                    x: 900.0,
+                    y: 120.0
+                },
+                &desk()
+            ),
+            [
+                DeskInput::Pointer { x: 900.0, y: 120.0 },
+                DeskInput::Button {
+                    code: BTN_LEFT,
+                    pressed: true
+                }
+            ]
+        );
+        assert_eq!(
+            input.for_the_engine(
+                Emulated::TouchDown {
+                    id: 8,
+                    x: 10.0,
+                    y: 10.0
+                },
+                &desk()
+            ),
+            [],
+            "a second finger is ignored"
+        );
+        assert_eq!(
+            input.for_the_engine(Emulated::TouchUp { id: 7 }, &desk()),
+            [DeskInput::Button {
+                code: BTN_LEFT,
+                pressed: false
+            }]
+        );
+    }
+
+    #[test]
+    fn letting_go_of_the_engine_releases_everything_held() {
+        let mut input = Input::default();
+        for held in [
+            Emulated::MotionAbsolute { x: 110.0, y: 120.0 },
+            Emulated::Key {
+                keycode: 125,
+                pressed: true,
+            },
+            Emulated::Button {
+                button: 0x110,
+                pressed: true,
+            },
+        ] {
+            input.for_the_engine(held, &desk());
+        }
+        assert_eq!(
+            input.let_go_of_the_engine(),
+            [
+                DeskInput::Key {
+                    code: 125,
+                    pressed: false
+                },
+                DeskInput::Button {
+                    code: 0x110,
+                    pressed: false
+                },
+            ]
+        );
+        assert_eq!(input.let_go_of_the_engine(), [], "and lets go once");
     }
 }

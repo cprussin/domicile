@@ -9,7 +9,8 @@
 //! - [`devices`] decides which devices a client gets for its grant.
 //! - [`desk`] maps the displays to regions and points to windows.
 //! - [`translation`] turns events into the requests the engine's input
-//!   becomes, which the lock refuses on a locked desk.
+//!   becomes, which the lock refuses on a locked desk, or, on a headless
+//!   desk, into the engine's own input.
 //!
 //! The server runs on the Wayland loop, reading each socket only when it is
 //! readable, so a client never blocks the loop. [`Eis`] and [`Session`] can be
@@ -48,8 +49,8 @@ pub use self::capture::Captured;
 pub use self::desk::{Desk, Window};
 pub use self::devices::Capabilities;
 use self::devices::{devices, Kind};
-pub use self::translation::Emulated;
 use self::translation::Input;
+pub use self::translation::{DeskInput, Emulated};
 use crate::client_requests::ClientRequest;
 
 /// What the server needs from the compositor it runs in.
@@ -62,6 +63,41 @@ pub trait Compositor {
 
     /// The evdev key that types `keysym` on the desk's keyboard, if any.
     fn keycode(&self, keysym: u32) -> Option<u32>;
+
+    /// Whether emulated input goes to the engine, which hands it to the
+    /// shell's window, instead of down the seat's path. Only a headless
+    /// desk's does.
+    fn engine_takes_input(&self) -> bool;
+
+    /// Send an event to the engine.
+    fn inject_into_the_engine(&mut self, input: DeskInput);
+}
+
+/// Send `emulated` where the compositor takes emulated input.
+fn send(input: &mut Input, emulated: Emulated, compositor: &mut impl Compositor) {
+    let desk = compositor.desk();
+    if compositor.engine_takes_input() {
+        for event in input.for_the_engine(emulated, &desk) {
+            compositor.inject_into_the_engine(event);
+        }
+    } else {
+        for request in input.translate(emulated, &desk) {
+            compositor.inject(request);
+        }
+    }
+}
+
+/// Release everything `input` holds, where it was sent.
+fn let_go(input: &mut Input, compositor: &mut impl Compositor) {
+    if compositor.engine_takes_input() {
+        for event in input.let_go_of_the_engine() {
+            compositor.inject_into_the_engine(event);
+        }
+    } else {
+        for request in input.let_go() {
+            compositor.inject(request);
+        }
+    }
 }
 
 /// Opens EIS contexts. Cheap to clone; usable from any thread.
@@ -175,33 +211,24 @@ pub fn serve<D: Compositor + 'static>(
                     }
                     Order::Revoke { id } => {
                         if let Some(mut input) = emulated.remove(&id) {
-                            for request in input.let_go() {
-                                compositor.inject(request);
-                            }
+                            let_go(&mut input, compositor);
                         }
                         revoke(&loop_handle, &served, id, compositor);
                     }
                     Order::Emulate {
                         id,
                         emulated: event,
-                    } => {
-                        let desk = compositor.desk();
-                        for request in emulated.entry(id).or_default().translate(event, &desk) {
-                            compositor.inject(request);
-                        }
-                    }
+                    } => send(emulated.entry(id).or_default(), event, compositor),
                     Order::Keysym {
                         id,
                         keysym,
                         pressed,
                     } => match compositor.keycode(keysym) {
-                        Some(keycode) => {
-                            let desk = compositor.desk();
-                            let key = Emulated::Key { keycode, pressed };
-                            for request in emulated.entry(id).or_default().translate(key, &desk) {
-                                compositor.inject(request);
-                            }
-                        }
+                        Some(keycode) => send(
+                            emulated.entry(id).or_default(),
+                            Emulated::Key { keycode, pressed },
+                            compositor,
+                        ),
                         None => debug!(keysym, "no key on this keyboard types an emulated keysym"),
                     },
                 }
@@ -425,9 +452,7 @@ fn open<D: Compositor + 'static>(
                 }
             };
             if action == PostAction::Remove {
-                for request in this.input.let_go() {
-                    compositor.inject(request);
-                }
+                let_go(&mut this.input, compositor);
                 served.remove(&id);
             }
             if let Err(err) = connection.flush() {
@@ -472,9 +497,7 @@ fn revoke<D: Compositor>(
                 debug!(%err, "could not tell an EIS client its session closed");
             }
         }
-        for request in this.input.let_go() {
-            compositor.inject(request);
-        }
+        let_go(&mut this.input, compositor);
         handle.remove(this.token);
     }
 }
@@ -491,10 +514,7 @@ impl Served {
             _ if self.capture.is_some() => PostAction::Continue,
             other => {
                 if let Some(emulated) = emulated(&other) {
-                    let desk = compositor.desk();
-                    for request in self.input.translate(emulated, &desk) {
-                        compositor.inject(request);
-                    }
+                    send(&mut self.input, emulated, compositor);
                 }
                 PostAction::Continue
             }

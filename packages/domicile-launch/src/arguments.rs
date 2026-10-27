@@ -37,6 +37,11 @@ pub struct Arguments {
     /// Whether the engine composites on the CPU, so windows go to it in
     /// shared memory. See [`crate::software_compositing`].
     pub software_compositing: bool,
+    /// Whether emulated input (EIS) goes to the engine, which hands it to
+    /// the shell's window, instead of the seat. Only a headless desk's does,
+    /// since it has no other input. See
+    /// `docs/architecture/A-HEADLESS-DESKTOP.md`.
+    pub engine_takes_input: bool,
     /// Where PAM services are read from. `None` is the machine's
     /// `/etc/pam.d`; tests name a directory holding a service of their own.
     pub pam_confdir: Option<PathBuf>,
@@ -76,6 +81,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
     let mut expect_a_page = None;
     let mut scope_clients = None;
     let mut software_compositing = None;
+    let mut engine_takes_input = None;
     let mut pam_confdir = None;
     let mut launches = None;
 
@@ -99,6 +105,7 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             EXPECT_A_PAGE => &mut expect_a_page,
             SCOPE_CLIENTS => &mut scope_clients,
             SOFTWARE_COMPOSITING => &mut software_compositing,
+            ENGINE_TAKES_INPUT => &mut engine_takes_input,
             PAM_CONFDIR => &mut pam_confdir,
             LAUNCHES => &mut launches,
             _ => return Err(ArgumentError::Unknown { argument: flag }),
@@ -138,6 +145,10 @@ pub fn arguments(args: impl IntoIterator<Item = OsString>) -> Result<Arguments, 
             Some(value) => yes_or_no(SOFTWARE_COMPOSITING, &value)?,
             None => false,
         },
+        engine_takes_input: match engine_takes_input {
+            Some(value) => yes_or_no(ENGINE_TAKES_INPUT, &value)?,
+            None => false,
+        },
         pam_confdir: pam_confdir.map(PathBuf::from),
         launches: launches.map(PathBuf::from),
     })
@@ -150,6 +161,7 @@ const ENGINE_SOCKET: &str = "--engine-socket";
 const EXPECT_A_PAGE: &str = "--expect-a-page";
 const SCOPE_CLIENTS: &str = "--scope-clients";
 const SOFTWARE_COMPOSITING: &str = "--software-compositing";
+const ENGINE_TAKES_INPUT: &str = "--engine-takes-input";
 const PAM_CONFDIR: &str = "--pam-confdir";
 const LAUNCHES: &str = "--launches";
 
