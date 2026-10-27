@@ -31,11 +31,27 @@ Part of [WRITING-A-SHELL.md](WRITING-A-SHELL.md). Design:
 `domicile.extensions.list` is the full list; `extensions.on("change")`
 reports changes:
 
-```ts
+<!-- tab: React -->
+
+```tsx
+const Tray = () => {
+  const { extensions } = useDomicile();
+  const list = useWatch(extensions, "change", () => extensions.list) ?? [];
+  return list
+    .filter(({ enabled }) => enabled)
+    .map((extension) => <TrayIcon extension={extension} key={extension.id} />);
+};
+```
+
+<!-- tab: JavaScript -->
+
+```js
 domicile.extensions.on("change", () => {
   drawTray((domicile.extensions.list ?? []).filter(({ enabled }) => enabled));
 });
 ```
+
+<!-- /tabs -->
 
 | Field | What |
 |---|---|
@@ -60,7 +76,25 @@ does, so `scripting.executeScript` and `tab.url` work there. Then:
 - **A `popup`:** open a `<webview extensionpopup>` at that URL in a panel
   under the icon.
 
-```ts
+<!-- tab: React -->
+
+```tsx
+import { WEBVIEW_CLOSE_EVENT } from "@domicile-desktop/sdk/webview-element";
+
+const Popup = ({ extension, onClose }) => {
+  const viewRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const view = viewRef.current;
+    view?.addEventListener(WEBVIEW_CLOSE_EVENT, onClose);
+    return () => view?.removeEventListener(WEBVIEW_CLOSE_EVENT, onClose);
+  }, [onClose]);
+  return <webview extensionpopup="" ref={viewRef} src={extension.popup} />;
+};
+```
+
+<!-- tab: JavaScript -->
+
+```js
 import { WEBVIEW_CLOSE_EVENT } from "@domicile-desktop/sdk/webview-element";
 
 const view = document.createElement("webview");
@@ -69,6 +103,8 @@ view.setAttribute("src", extension.popup);
 view.addEventListener(WEBVIEW_CLOSE_EVENT, closePanel);
 panel.append(view);
 ```
+
+<!-- /tabs -->
 
 - **`extensionpopup`:** set it before appending. The engine reads it once.
   Without it the popup loads as a tab, and extensions that lay out by context

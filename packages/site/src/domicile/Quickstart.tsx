@@ -7,6 +7,7 @@ import { css } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { CodeBlock } from "../code/CodeBlock";
 import type { Language } from "../code/highlight";
+import { DocTabs } from "../docs/DocTabs";
 import { REPO_ROOT } from "../docs/pages";
 import { Media } from "../media/Media";
 import { Eyebrow } from "../page/Eyebrow";
@@ -15,12 +16,15 @@ import { Section } from "../page/Section";
 // Above `STEPS`, which uses them as the module loads.
 const linkStyles = css({ color: "foreground", textDecoration: "underline" });
 
-const STEPS: readonly {
+type Step = {
   title: string;
   code: string;
   language: Language;
   note?: ReactNode;
-}[] = [
+};
+
+/** The steps, with the shell in `file`, written as `example`. */
+const steps = (file: string, example: string): readonly Step[] => [
   {
     code: "sudo apt install domicile",
     language: "bash",
@@ -36,22 +40,19 @@ const STEPS: readonly {
     title: "Install Domicile",
   },
   {
-    code: readFileSync(
-      join(REPO_ROOT, "examples/react-shell/shell.tsx"),
-      "utf8",
-    ),
+    code: readFileSync(join(REPO_ROOT, "examples", example), "utf8"),
     language: "tsx",
     note: "Each window is an <app> element. Put it where the window goes.",
-    title: "Write shell.tsx",
+    title: `Write ${file}`,
   },
   {
-    code: "domicile ./shell.tsx",
+    code: `domicile ./${file}`,
     language: "bash",
-    note: "Domicile builds it, with React from its own install. No project needed.",
+    note: "Domicile builds it. No project needed.",
     title: "Run it",
   },
   {
-    code: "domicile load-shell ./shell.tsx",
+    code: `domicile load-shell ./${file}`,
     language: "bash",
     note: (
       <>
@@ -70,17 +71,24 @@ const STEPS: readonly {
 export const Quickstart = () => (
   <Section id="quickstart" title="A shell in five minutes">
     <div className={layoutStyles}>
-      <ol className={stepsStyles}>
-        {STEPS.map((step, at) => (
-          <li className={stepStyles} key={step.title}>
-            <Eyebrow>{`${String(at + 1).padStart(2, "0")} · ${step.title}`}</Eyebrow>
-            <CodeBlock code={step.code} language={step.language} />
-            {step.note === undefined ? undefined : (
-              <span className={noteStyles}>{step.note}</span>
-            )}
-          </li>
-        ))}
-      </ol>
+      <div className={stepsStyles}>
+        <DocTabs
+          tabs={[
+            {
+              content: (
+                <Steps steps={steps("shell.tsx", "react-shell/shell.tsx")} />
+              ),
+              label: "React",
+            },
+            {
+              content: (
+                <Steps steps={steps("shell.js", "vanilla-shell/shell.js")} />
+              ),
+              label: "JavaScript",
+            },
+          ]}
+        />
+      </div>
       <div className={mediaStyles}>
         <Media
           alt="The four steps, then a CSS edit and domicile load-shell"
@@ -91,15 +99,26 @@ export const Quickstart = () => (
   </Section>
 );
 
+/** The numbered steps. */
+const Steps = ({ steps }: { steps: readonly Step[] }) => (
+  <ol className={listStyles}>
+    {steps.map((step, at) => (
+      <li className={stepStyles} key={step.title}>
+        <Eyebrow>{`${String(at + 1).padStart(2, "0")} · ${step.title}`}</Eyebrow>
+        <CodeBlock code={step.code} language={step.language} />
+        {step.note === undefined ? undefined : (
+          <span className={noteStyles}>{step.note}</span>
+        )}
+      </li>
+    ))}
+  </ol>
+);
+
 const layoutStyles = flex({ gap: 5, marginBlockStart: 6, wrap: "wrap" });
 
-const stepsStyles = flex({
-  direction: "column",
-  flex: "1 1 23.75rem",
-  gap: 4,
-  listStyle: "none",
-  minInlineSize: 0,
-});
+const stepsStyles = css({ flex: "1 1 23.75rem", minInlineSize: 0 });
+
+const listStyles = flex({ direction: "column", gap: 4, listStyle: "none" });
 
 const stepStyles = flex({
   backgroundColor: "card",

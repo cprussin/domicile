@@ -95,11 +95,32 @@ tells you instead
 
 ## The connection
 
-```ts
-export const Shell: ShellModule = (root, domicile) => {
+Every example here is in React and in plain JavaScript: pick one with the tabs
+above it.
+
+<!-- tab: React -->
+
+```tsx
+import { useDomicile } from "@domicile-desktop/react/domicile-provider";
+import { mount } from "@domicile-desktop/react/mount";
+
+const Desktop = () => {
+  const domicile = useDomicile(); // the desktop
+  // …
+};
+
+export const Shell = mount(Desktop);
+```
+
+<!-- tab: JavaScript -->
+
+```js
+export const Shell = (root, domicile) => {
   // `domicile` is the desktop
 };
 ```
+
+<!-- /tabs -->
 
 - `domicile`, the second argument to `Shell`, is the desktop: one typed
   object, `Domicile` from `@domicile-desktop/sdk/shell`, with a namespace per
@@ -115,13 +136,24 @@ export const Shell: ShellModule = (root, domicile) => {
 - State is attributes on each namespace: `windows.list`, `windows.focused`,
   `displays.list`, `theme.current`, `session.locked`, `session.idle` and more.
   Each namespace's `on(type, listener)` says when they change, and returns a
-  function that stops listening. Read, then listen:
+  function that stops listening. Read, then listen. In React, a hook does
+  both:
 
-  ```ts
+  <!-- tab: React -->
+
+  ```tsx
+  const displays = useDisplays(); // rerenders on each change
+  ```
+
+  <!-- tab: JavaScript -->
+
+  ```js
   const show = () => draw(domicile.displays.list);
   show();
   domicile.displays.on("change", show);
   ```
+
+  <!-- /tabs -->
 
 - An attribute is `undefined` until the compositor has sent it.
 - Moments (`windows.on("focusrequest")`, `keyboard.on("shortcut")`) are
@@ -208,11 +240,25 @@ system this repo's shells use. Shells do not need it.
 
 ## The smallest shell
 
-```ts
-import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
+<!-- tab: React -->
 
-export const Shell: ShellModule = (root, domicile) => {
-  const mounted = new Map<string, HTMLElement>();
+```tsx
+/// <reference types="@domicile-desktop/react/elements" />
+
+import { mount } from "@domicile-desktop/react/mount";
+import { useWindows } from "@domicile-desktop/react/windows";
+
+const Desktop = () =>
+  useWindows().map(({ appId }) => <app app-id={appId} key={appId} />);
+
+export const Shell = mount(Desktop);
+```
+
+<!-- tab: JavaScript -->
+
+```js
+export const Shell = (root, domicile) => {
+  const mounted = new Map();
 
   const show = () => {
     const windows = domicile.windows.list ?? [];
@@ -237,20 +283,22 @@ export const Shell: ShellModule = (root, domicile) => {
 };
 ```
 
+<!-- /tabs -->
+
 This is a working desktop: every window full-screen, newest on top.
 
 - Domicile imports the module and then calls `Shell` once. Do no work at
   import time except CSS. Other exports are ignored. A missing or throwing
   `Shell` is reported on screen.
 - Remove the elements `windows.list` no longer lists, or every closed window
-  leaks an element.
+  leaks an element. React does this for you.
 - Domicile writes the document: a charset, a viewport, and a `<body>` with no
   margin that fills the window. You cannot supply one.
 - Only script files next to your module run: no inline scripts, `on…`
   attributes or `eval`. See
   [SHELL-PACKAGING.md](SHELL-PACKAGING.md#scripts).
 - `root` is the empty `<body>`. Create your own container in it and render
-  there. Errors are reported by appending to `root`, and a framework that owns
+  there, as `mount` does. Errors are reported by appending to `root`, and a framework that owns
   `root` would wipe them.
 - There is no `#root` element. `document.getElementById("root")` returns
   `null`, and the only symptom is a white window.
@@ -424,18 +472,43 @@ that client. A popup's press asks for its window. A `preventDefault()` on the
 `pointerdown` itself takes the whole press: the client gets none of it and
 nothing is asked. To apply your own policy:
 
-```ts
+<!-- tab: React -->
+
+```tsx
 import type { AppFocusRequest } from "@domicile-desktop/sdk/app-element";
 import { APP_FOCUS_REQUESTED_EVENT } from "@domicile-desktop/sdk/app-element";
 
+const useFocusPolicy = () => {
+  const domicile = useDomicile();
+  useEffect(() => {
+    const asked = (event: Event) => {
+      const { appId } = (event as CustomEvent<AppFocusRequest>).detail;
+      event.preventDefault();
+      if (myPolicySays(appId)) {
+        domicile.windows.focus(appId);
+      }
+    };
+    document.addEventListener(APP_FOCUS_REQUESTED_EVENT, asked);
+    return () => document.removeEventListener(APP_FOCUS_REQUESTED_EVENT, asked);
+  }, [domicile]);
+};
+```
+
+<!-- tab: JavaScript -->
+
+```js
+import { APP_FOCUS_REQUESTED_EVENT } from "@domicile-desktop/sdk/app-element";
+
 document.addEventListener(APP_FOCUS_REQUESTED_EVENT, (event) => {
-  const { appId } = (event as CustomEvent<AppFocusRequest>).detail;
+  const { appId } = event.detail;
   event.preventDefault();
   if (myPolicySays(appId)) {
     domicile.windows.focus(appId);
   }
 });
 ```
+
+<!-- /tabs -->
 
 Key events go to `document`, and the engine forwards them to the focused
 client. `domicile.windows.focus` moves both the compositor's seat and where the
@@ -463,18 +536,40 @@ keyboard. That is wrong for a title bar or drag handle you drew for a window.
 Before taking it, the engine fires a cancelable `domicile-focus-release-requested` on the
 `<app>` that holds the keyboard. Cancel it to keep focus on the window:
 
-```ts
+<!-- tab: React -->
+
+```tsx
 import type { AppFocusReleaseRequest } from "@domicile-desktop/sdk/app-element";
 import { APP_FOCUS_RELEASE_REQUESTED_EVENT } from "@domicile-desktop/sdk/app-element";
 
+useEffect(() => {
+  const asked = (event: Event) => {
+    const { appId, pressed } = (event as CustomEvent<AppFocusReleaseRequest>)
+      .detail;
+    if (isChromeFor(appId, pressed)) {
+      event.preventDefault();
+    }
+  };
+  document.addEventListener(APP_FOCUS_RELEASE_REQUESTED_EVENT, asked);
+  return () =>
+    document.removeEventListener(APP_FOCUS_RELEASE_REQUESTED_EVENT, asked);
+}, []);
+```
+
+<!-- tab: JavaScript -->
+
+```js
+import { APP_FOCUS_RELEASE_REQUESTED_EVENT } from "@domicile-desktop/sdk/app-element";
+
 document.addEventListener(APP_FOCUS_RELEASE_REQUESTED_EVENT, (event) => {
-  const { appId, pressed } = (event as CustomEvent<AppFocusReleaseRequest>)
-    .detail;
+  const { appId, pressed } = event.detail;
   if (isChromeFor(appId, pressed)) {
     event.preventDefault();
   }
 });
 ```
+
+<!-- /tabs -->
 
 `shell-manganese` tags each floating window's bar and drag sheet with its
 window and checks that here.
@@ -543,7 +638,43 @@ for it. A new page starts with every window shown.
 A shell's keys come from its own props. Each chord maps to a shell command or a
 binding mode, like sway:
 
-```ts
+<!-- tab: React -->
+
+```tsx
+import { bindKeys } from "@domicile-desktop/sdk/bind-keys";
+import { KeyAction } from "@domicile-desktop/sdk/key-action";
+
+const KEYS = {
+  keybindings: {
+    "Meta+l": KeyAction.SendShell(["focus", "right"]),
+    "Meta+r": KeyAction.Mode("resize"),
+  },
+  modes: {
+    resize: {
+      "Meta+l": KeyAction.SendShell(["grow", "right"]),
+      "Meta+Escape": KeyAction.Mode("default"),
+    },
+  },
+};
+
+const Keys = () => {
+  const domicile = useDomicile();
+  const [mode, setMode] = useState("default");
+  useEffect(
+    () =>
+      bindKeys(domicile, KEYS, {
+        onCommand: (args) => run(args), // ["focus", "right"]
+        onModeChanged: setMode, // "resize", "default"
+      }).unbind,
+    [domicile],
+  );
+  return mode === "default" ? null : <p>{mode}</p>;
+};
+```
+
+<!-- tab: JavaScript -->
+
+```js
 import { bindKeys } from "@domicile-desktop/sdk/bind-keys";
 import { KeyAction } from "@domicile-desktop/sdk/key-action";
 
@@ -567,6 +698,8 @@ bindKeys(
   },
 );
 ```
+
+<!-- /tabs -->
 
 - A chord is modifiers (`Meta`, `Shift`, `Ctrl`, `Alt`) plus an xkb keysym
   name, joined by `+`.
@@ -626,6 +759,34 @@ export const options = defineOptions({
 ```json
 { "shell_options": { "clock": { "format": "12h" }, "gaps": 4 } }
 ```
+
+Read them with `watchShellOptions`:
+
+<!-- tab: React -->
+
+```tsx
+import type { OptionValues } from "@domicile-desktop/sdk/options";
+import { watchShellOptions } from "@domicile-desktop/sdk/options";
+
+const useOptions = () => {
+  const domicile = useDomicile();
+  const [values, setValues] = useState<OptionValues<typeof options>>();
+  useEffect(() => watchShellOptions(domicile, options, setValues), [domicile]);
+  return values; // undefined until the first read, in the effect
+};
+```
+
+<!-- tab: JavaScript -->
+
+```js
+import { watchShellOptions } from "@domicile-desktop/sdk/options";
+
+watchShellOptions(domicile, options, (values) => {
+  main.style.gap = `${values.gaps}px`;
+});
+```
+
+<!-- /tabs -->
 
 - Kinds: `toggle`, `choice`, `number` (with an optional `min` and `max`),
   `text` and `list` (of text). A plain object is a group. Each option has a

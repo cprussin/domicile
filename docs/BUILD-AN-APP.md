@@ -30,7 +30,9 @@ leave its site open in a browser window. Design:
 
 An app module exports `main`, which Domicile calls with an element to draw in
 and the desktop, as it calls a shell's `Shell`. With React, `mount` is a
-`main`:
+`main`; in plain JavaScript, `main` draws into the element itself:
+
+<!-- tab: React -->
 
 ```tsx
 // src/main.tsx: a note, kept in ~/notes.txt.
@@ -65,9 +67,30 @@ const Notes = () => {
 export const main = mount(Notes);
 ```
 
-- `useAppDomicile()` is what the app may use: `files`, `processes` and
-  `dbus` ([SHELL-SYSTEM-ACCESS.md](SHELL-SYSTEM-ACCESS.md)). A relative path
-  starts at the home folder. An app hears no desktop events and cannot
+<!-- tab: JavaScript -->
+
+```js
+// src/main.js: a note, kept in ~/notes.txt.
+const PATH = "notes.txt";
+
+export const main = async (root, domicile) => {
+  const read = await domicile.files.readText(PATH);
+  const text = document.createElement("textarea");
+  text.value = read.unwrapOr("");
+  text.style.cssText = "block-size: 100vh; inline-size: 100%";
+  text.addEventListener("blur", () => {
+    domicile.files.write(PATH, text.value).catch(console.error);
+  });
+  root.append(text);
+};
+```
+
+<!-- /tabs -->
+
+- `useAppDomicile()`, or `main`'s second argument, is what the app may use:
+  `files`, `processes` and `dbus`
+  ([SHELL-SYSTEM-ACCESS.md](SHELL-SYSTEM-ACCESS.md)). A relative path starts
+  at the home folder. An app hears no desktop events and cannot
   touch windows, input or the lock.
 - Each call answers a `Result`: `Ok` with the answer, `Err` with why.
 - `prefers-color-scheme` and `prefers-reduced-motion` follow the desktop.

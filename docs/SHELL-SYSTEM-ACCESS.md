@@ -13,16 +13,33 @@ shell page ─ domicile.files, … ────▶ engine (opaque relay) ──�
 
 ## Page API
 
-```ts
-import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
+<!-- tab: React -->
 
-export const Shell: ShellModule = async (root, domicile) => {
+```tsx
+const Battery = () => {
+  const { files } = useDomicile();
+  const [charge, setCharge] = useState<string>();
+  useEffect(() => {
+    files
+      .readText("/sys/class/power_supply/BAT0/capacity")
+      .then((read) => setCharge(read.unwrapOr(undefined)));
+  }, [files]);
+  return <span>{charge}%</span>;
+};
+```
+
+<!-- tab: JavaScript -->
+
+```js
+export const Shell = async (root, domicile) => {
   const charge = await domicile.files.readText(
     "/sys/class/power_supply/BAT0/capacity",
   );
   const changes = await domicile.processes.spawn(["pactl", "subscribe"]);
 };
 ```
+
+<!-- /tabs -->
 
 - Each call resolves a `Result<T, SystemError>`. A process's output and a
   watch's changes are `ReadableStream`s. The SDK's types are the reference.

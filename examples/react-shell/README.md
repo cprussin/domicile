@@ -10,3 +10,6 @@ domicile ./shell.tsx
 
 Domicile builds it, with `@domicile-desktop/*` and React from its own install,
 so it needs no project. `packages/domicile-builder`'s tests build it.
+
+[`vanilla-shell`](/examples/vanilla-shell) is the same shell in plain
+JavaScript.

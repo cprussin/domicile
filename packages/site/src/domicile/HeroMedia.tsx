@@ -1,20 +1,43 @@
 import { css } from "../../styled-system/css";
 import { flex } from "../../styled-system/patterns";
 import { CodeBlock } from "../code/CodeBlock";
+import { DocTabs } from "../docs/DocTabs";
 import { Media } from "../media/Media";
 
 // The shell in `packages/site/scripts/docs-media/scenes/hero/shell.js`, as a reader would
 // write it, beside what it draws.
 const SHELL = `// shell.tsx
-const Shell = ({ windows: [left, right] }) => (
-  <main>
-    <app app-id={left.appId} />
+const Desktop = () => {
+  const [left, right] = useWindows();
+  return (
+    <main>
+      <app app-id={left?.appId} />
+      <section>
+        <webview src="https://github.com/cprussin/domicile" />
+        <app app-id={right?.appId} />
+      </section>
+    </main>
+  );
+};
+
+export const Shell = mount(Desktop);`;
+
+const VANILLA_SHELL = `// shell.js
+export const Shell = (root, domicile) => {
+  root.innerHTML = \`<main>
+    <app></app>
     <section>
-      <webview src="https://github.com/cprussin/domicile" />
-      <app app-id={right.appId} />
+      <webview src="https://github.com/cprussin/domicile"></webview>
+      <app></app>
     </section>
-  </main>
-);`;
+  </main>\`;
+  const apps = root.querySelectorAll("app");
+  domicile.windows.on("change", () => {
+    domicile.windows.list.forEach((w, at) =>
+      apps[at]?.setAttribute("app-id", w.appId),
+    );
+  });
+};`;
 
 const STYLES = `/* shell.css */
 main {
@@ -35,7 +58,20 @@ app {
 export const HeroMedia = () => (
   <section className={sectionStyles}>
     <div className={codeStyles}>
-      <CodeBlock code={SHELL} frame="bare" language="tsx" />
+      <DocTabs
+        tabs={[
+          {
+            content: <CodeBlock code={SHELL} frame="bare" language="tsx" />,
+            label: "React",
+          },
+          {
+            content: (
+              <CodeBlock code={VANILLA_SHELL} frame="bare" language="tsx" />
+            ),
+            label: "JavaScript",
+          },
+        ]}
+      />
       <CodeBlock code={STYLES} frame="bare" language="css" />
     </div>
     <div className={mediaStyles}>

@@ -8,12 +8,28 @@ tray icons, notifications and application dialogs. Part of [WRITING-A-SHELL.md](
 The shell is one page covering the bounding box of every display, in logical
 pixels. Each display is a rectangle in it.
 
-```ts
+<!-- tab: React -->
+
+```tsx
+import { useDisplays } from "@domicile-desktop/react/displays";
+
+// DomicileDisplay: { name, x, y, width, height, scale, modeWidth, modeHeight, transform }
+const Bars = () =>
+  (useDisplays() ?? []).map((display) => ( // undefined until described
+    <Bar display={display} key={display.name} />
+  ));
+```
+
+<!-- tab: JavaScript -->
+
+```js
 // DomicileDisplay: { name, x, y, width, height, scale, modeWidth, modeHeight, transform }
 const show = () => layOut(domicile.displays.list); // undefined until described
 show();
 domicile.displays.on("change", show);
 ```
+
+<!-- /tabs -->
 
 - On a tty the engine shows the page on every monitor, rotated and scaled per
   the config. Pointer events are always in page pixels. The shell does nothing
@@ -76,12 +92,34 @@ Apps' tray icons (StatusNotifierItem, hosted by the compositor on the session
 bus) are `domicile.tray.items`, the full list; `tray.on("change")` reports
 changes.
 
-```ts
+<!-- tab: React -->
+
+```tsx
+const Tray = () => {
+  const { tray } = useDomicile();
+  // { id, title, icon, bus, menu, itemIsMenu }
+  const items = useWatch(tray, "change", () => tray.items) ?? [];
+  return items.map(({ id, icon, title }) => (
+    <button
+      key={id}
+      onClick={() => tray.activate(id, "primary")} // or "secondary", "context"
+    >
+      <img alt={title} src={icon} />
+    </button>
+  ));
+};
+```
+
+<!-- tab: JavaScript -->
+
+```js
 domicile.tray.on("change", () => {
   drawTray(domicile.tray.items ?? []); // { id, title, icon, bus, menu, itemIsMenu }
 });
 domicile.tray.activate(id, "primary"); // or "secondary", "context"
 ```
+
+<!-- /tabs -->
 
 - The app decides what a click does.
 - `icon` is a `data:` URL or `""`. `menu` is the item's
@@ -98,7 +136,28 @@ App notifications, and sites' Web Notifications, are
 `domicile.notifications.list`: every uncleared notification, oldest first.
 `notifications.on("change")` reports changes.
 
-```ts
+<!-- tab: React -->
+
+```tsx
+const Notifications = () => {
+  const { notifications } = useDomicile();
+  // { id, appName, summary, body, icon, urgency, actions, clickable, timeoutMs, time }
+  const list = useWatch(notifications, "change", () => notifications.list) ?? [];
+  return list.map(({ id, summary }) => (
+    <div key={id}>
+      {/* a click (if clickable), or an action's key */}
+      <button onClick={() => notifications.invoke(id, "default")}>{summary}</button>
+      {/* clear; the app is told */}
+      <button onClick={() => notifications.dismiss([id])}>×</button>
+    </div>
+  ));
+};
+// notifications.reply(id, "On my way"): the text of an "inline-reply" action's field
+```
+
+<!-- tab: JavaScript -->
+
+```js
 domicile.notifications.on("change", () => {
   // { id, appName, summary, body, icon, urgency, actions, clickable, timeoutMs, time }
   draw(domicile.notifications.list ?? []);
@@ -107,6 +166,8 @@ domicile.notifications.invoke(id, "default"); // a click (if clickable), or an a
 domicile.notifications.reply(id, "On my way"); // the text of an "inline-reply" action's field
 domicile.notifications.dismiss([id]);          // clear; the app is told
 ```
+
+<!-- /tabs -->
 
 - The shell decides which are new. The first list is history.
 - The shell decides how long a toast stays up. A notification stays in the
