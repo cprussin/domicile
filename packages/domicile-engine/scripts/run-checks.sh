@@ -176,6 +176,8 @@ one() { # name, args...
   case "$name" in
     guard-client-window-in-memory)
       SOFTWARE=1 engine_guard_and_control_under_wayland guard-client-window.sh ;;
+    guard-client-window-in-memory-on-headless)
+      SOFTWARE=1 HEADLESS=1 engine_guard_and_control guard-client-window.sh ;;
     guard-shell-manganese)
       engine_guard_and_control_under_wayland guard-shell.sh manganese ;;
     *)
