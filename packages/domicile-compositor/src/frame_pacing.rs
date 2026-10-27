@@ -178,7 +178,11 @@ impl DomicileCompositor {
 
     /// Stop the window `app_id` drawing: the page hid it. See
     /// [`crate::held_frames`].
+    ///
+    /// A hidden window's idle inhibitor stops holding; see
+    /// [`DomicileCompositor::surfaces_on_the_desktop`].
     pub fn hide(&mut self, app_id: &str, toplevel: &ToplevelSurface) {
+        let was_hidden = self.held_frames.is_hidden(app_id);
         if self.held_frames.hide(app_id) {
             debug!(%app_id, "hidden: frames held");
             self.suspend(app_id, toplevel, true);
@@ -186,15 +190,22 @@ impl DomicileCompositor {
                 self.start_trickling();
             }
         }
+        if !was_hidden {
+            self.the_windows_changed("a window was hidden");
+        }
     }
 
     /// Let the window `app_id` draw again, starting with the frames it was
     /// held at.
     pub fn show(&mut self, app_id: &str, toplevel: &ToplevelSurface) {
+        let was_hidden = self.held_frames.is_hidden(app_id);
         if let Some(held) = self.held_frames.show(app_id) {
             debug!(%app_id, held = held.len(), "shown: frames released");
             self.suspend(app_id, toplevel, false);
             self.send_frames(held);
+        }
+        if was_hidden {
+            self.the_windows_changed("a window was shown");
         }
     }
 
@@ -228,9 +239,14 @@ impl DomicileCompositor {
     /// Show every hidden window: a new page has reported no boxes, and may
     /// never.
     pub fn show_every_window(&mut self) {
-        for (app_id, held) in self.held_frames.show_all() {
+        let shown = self.held_frames.show_all();
+        let any = !shown.is_empty();
+        for (app_id, held) in shown {
             self.suspend(&app_id, &self.hidden_toplevel(&app_id), false);
             self.send_frames(held);
+        }
+        if any {
+            self.the_windows_changed("every window was shown");
         }
     }
 
