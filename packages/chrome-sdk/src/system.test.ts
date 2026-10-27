@@ -849,6 +849,24 @@ describe("virtual monitors", () => {
     expect(await monitor.ended).toStrictEqual(Ok("removed"));
   });
 
+  it("resizes the monitor in place", async () => {
+    const host = new FakeHost();
+    const adding = system(host).addVirtualMonitor(aTv);
+    host.reply(1, { kind: "virtual_monitor", output: "virtual-1" });
+    const monitor = started(await adding);
+    monitor.resize({ height: 720, refreshMhz: 30_000, width: 1280 });
+
+    expect(host.calls.at(-1)).toStrictEqual([
+      1,
+      {
+        call: "resize_virtual_monitor",
+        height: 720,
+        refresh_mhz: 30_000,
+        width: 1280,
+      },
+    ]);
+  });
+
   it("says the desk cannot extend", async () => {
     const host = new FakeHost();
     const adding = system(host).addVirtualMonitor(aTv);

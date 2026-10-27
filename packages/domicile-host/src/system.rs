@@ -123,7 +123,14 @@ pub struct AddedMonitor {
     /// Its `wl_output` name.
     pub output: String,
     /// Removes the monitor when dropped.
-    pub lease: Box<dyn Send>,
+    pub lease: Box<dyn MonitorLease>,
+}
+
+/// A page's hold on its virtual monitor, which removes it when dropped.
+pub trait MonitorLease: Send {
+    /// Gives the monitor a new mode. See
+    /// [`SystemRequest::ResizeVirtualMonitor`].
+    fn resize(&self, size: (u32, u32), refresh_mhz: u32);
 }
 
 /// Switches every keyboard to the keymap a page chose.
@@ -177,7 +184,7 @@ enum Running {
     /// The page hears idle warnings.
     IdleWarnings(idle_warnings::Listener),
     /// The page's virtual monitor, removed when this drops.
-    VirtualMonitor(Box<dyn Send>),
+    VirtualMonitor(Box<dyn MonitorLease>),
 }
 
 /// What [`System::handle`] did with a request.
@@ -257,7 +264,9 @@ pub fn reach(request: &SystemRequest) -> Reach {
         | SystemRequest::UnlockRefusals
         | SystemRequest::WindowRequests
         | SystemRequest::Keymaps => Reach::Listens,
-        SystemRequest::SetWindowStates { .. } => Reach::Arranges,
+        SystemRequest::SetWindowStates { .. } | SystemRequest::ResizeVirtualMonitor { .. } => {
+            Reach::Arranges
+        }
         SystemRequest::SelectKeymap { .. } => Reach::Retypes,
         SystemRequest::SetColorTemperature { .. } => Reach::Tints,
         SystemRequest::WriteFile { .. }
@@ -313,7 +322,8 @@ pub fn locked_out(id: u32, request: &SystemRequest) -> Option<HostMessage> {
         SystemRequest::Unwatch
         | SystemRequest::Stdin { .. }
         | SystemRequest::CloseStdin
-        | SystemRequest::Kill { .. } => None,
+        | SystemRequest::Kill { .. }
+        | SystemRequest::ResizeVirtualMonitor { .. } => None,
     }
 }
 
@@ -349,6 +359,7 @@ pub fn refused_to_an_app(id: u32, request: &SystemRequest) -> Option<HostMessage
         | SystemRequest::SetColorTemperature { .. }
         | SystemRequest::WindowRequests
         | SystemRequest::VirtualMonitor { .. }
+        | SystemRequest::ResizeVirtualMonitor { .. }
         | SystemRequest::Keymaps
         | SystemRequest::SelectKeymap { .. } => Some(HostMessage::SystemReply {
             id,
@@ -720,6 +731,18 @@ impl System {
                     None => Handled::NothingRunning,
                 }
             }
+            SystemRequest::ResizeVirtualMonitor {
+                width,
+                height,
+                refresh_mhz,
+            } => match self.running.lock().unwrap().get(&id) {
+                Some(Running::VirtualMonitor(lease)) => {
+                    lease.resize((width, height), refresh_mhz);
+                    Handled::Done
+                }
+                Some(_) => Handled::Malformed,
+                None => Handled::NothingRunning,
+            },
             SystemRequest::Stdin { data } => match self.running.lock().unwrap().get(&id) {
                 Some(Running::Process {
                     stdin: Some(stdin), ..

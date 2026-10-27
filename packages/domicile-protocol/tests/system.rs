@@ -657,6 +657,24 @@ fn the_shell_adds_a_virtual_monitor() {
     );
 }
 
+/// The shell resizes a virtual monitor it added, under the id that added it.
+#[test]
+fn the_shell_resizes_a_virtual_monitor() {
+    assert_eq!(
+        chrome(
+            r#"{"type":"system_request","id":5,"request":{"call":"resize_virtual_monitor","width":1280,"height":720,"refresh_mhz":30000}}"#
+        ),
+        ChromeMessage::SystemRequest {
+            id: 5,
+            request: SystemRequest::ResizeVirtualMonitor {
+                width: 1280,
+                height: 720,
+                refresh_mhz: 30_000,
+            },
+        }
+    );
+}
+
 /// The shell hears what holds the desktop awake.
 #[test]
 fn the_shell_hears_what_holds_the_desktop_awake() {

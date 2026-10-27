@@ -32,6 +32,9 @@ const fakeDesk = () => {
           removed.push(output);
           ends.get(output)?.();
         },
+        resize: () => {
+          /* never resized */
+        },
       }),
     );
   };
