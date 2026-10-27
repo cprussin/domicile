@@ -8,14 +8,41 @@ browsing context. A browser window in a shell is an address bar you draw over a
 Part of [WRITING-A-SHELL.md](WRITING-A-SHELL.md). Extensions are in
 [SHELL-EXTENSIONS.md](SHELL-EXTENSIONS.md).
 
+Each example is in React and in plain JavaScript. React ignores `on…` props on
+`<webview>`, as on `<app>`, so the React examples listen in an effect, on a
+ref to the element.
+
 ## The engine owns browser windows
 
 The browser holds each browser window's page, so it outlives your document.
 After `domicile load-shell`, the new shell gets every window with its scroll,
 form input, history and playing media intact.
 
-```ts
-const drawn = new Map<string, HTMLElement>();
+<!-- tab: React -->
+
+```tsx
+import { useDomicile } from "@domicile-desktop/react/domicile-provider";
+import { useWatch } from "@domicile-desktop/react/use-watch";
+
+const BrowserWindows = () => {
+  const { browser } = useDomicile();
+  const windows = useWatch(browser, "change", () => browser.windows) ?? [];
+  return (
+    <>
+      {windows.map(({ id }) => (
+        // React sets `window` before the view enters the document.
+        <webview key={id} window={id} />
+      ))}
+      <button onClick={() => browser.open("https://example.com")}>+</button>
+    </>
+  );
+};
+```
+
+<!-- tab: JavaScript -->
+
+```js
+const drawn = new Map();
 
 const show = () => {
   for (const { id } of domicile.browser.windows ?? []) {
@@ -34,6 +61,8 @@ plus.addEventListener("click", () => {
   domicile.browser.open("https://example.com");
 });
 ```
+
+<!-- /tabs -->
 
 - **`browser.windows`** is the whole list, oldest first, `undefined` until
   the engine lists it. `browser.on("change")` fires when a window opens, closes,
@@ -60,7 +89,26 @@ A page's own navigation (a link, `location`, a form) fires
 `domicile-will-navigate` (`WEBVIEW_WILL_NAVIGATE_EVENT`) first, as Electron's
 `will-navigate`:
 
-```ts
+<!-- tab: React -->
+
+```tsx
+import { WEBVIEW_WILL_NAVIGATE_EVENT } from "@domicile-desktop/sdk/webview-element";
+
+useEffect(() => {
+  const view = viewRef.current; // the <webview>
+  const navigating = (event) => {
+    if (!allowed(event.url)) {
+      event.preventDefault(); // stays on the page; nothing is requested
+    }
+  };
+  view?.addEventListener(WEBVIEW_WILL_NAVIGATE_EVENT, navigating);
+  return () => view?.removeEventListener(WEBVIEW_WILL_NAVIGATE_EVENT, navigating);
+}, []);
+```
+
+<!-- tab: JavaScript -->
+
+```js
 import { WEBVIEW_WILL_NAVIGATE_EVENT } from "@domicile-desktop/sdk/webview-element";
 
 view.addEventListener(WEBVIEW_WILL_NAVIGATE_EVENT, (event) => {
@@ -69,6 +117,8 @@ view.addEventListener(WEBVIEW_WILL_NAVIGATE_EVENT, (event) => {
   }
 });
 ```
+
+<!-- /tabs -->
 
 - Answer synchronously: the navigation waits for dispatch to return.
 - Only the main frame asks. `src`, `goBack`, `goForward`, `reload` and the
@@ -158,7 +208,28 @@ stale state.
 | `pageFullscreen` | `domicile-page-fullscreen-change` | Whether the page is fullscreen; see [Fullscreen](#fullscreen) |
 | `renderProcessGone`, `renderProcessExitCode` | `domicile-render-process-change` | Why the page's renderer went away, or `""`; see [Crashed pages](#crashed-pages) |
 
-```ts
+<!-- tab: React -->
+
+```tsx
+import { WEBVIEW_HISTORY_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-element";
+
+const [history, setHistory] = useState({ back: false, forward: false });
+
+useEffect(() => {
+  const view = viewRef.current; // the <webview>
+  const readHistory = () =>
+    setHistory({ back: view.canGoBack, forward: view.canGoForward });
+  readHistory();
+  view.addEventListener(WEBVIEW_HISTORY_CHANGE_EVENT, readHistory);
+  return () => view.removeEventListener(WEBVIEW_HISTORY_CHANGE_EVENT, readHistory);
+}, []);
+
+// <button disabled={!history.back}>…
+```
+
+<!-- tab: JavaScript -->
+
+```js
 import { WEBVIEW_HISTORY_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-element";
 
 const readHistory = () => {
@@ -169,6 +240,8 @@ const readHistory = () => {
 readHistory();
 view.addEventListener(WEBVIEW_HISTORY_CHANGE_EVENT, readHistory);
 ```
+
+<!-- /tabs -->
 
 - **`url` vs `src`:** `src` is where you last sent the view. `url` is where
   the page is now, after links and redirects. Show `url` in the address bar.
@@ -188,13 +261,32 @@ A click inside the guest is invisible to your page, but its focus is not:
 - `domicile-guest-focus` (`WEBVIEW_GUEST_FOCUS_EVENT`) also fires when the
   guest regains focus with your document. Use it to raise the window:
 
-```ts
+<!-- tab: React -->
+
+```tsx
+import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile-desktop/sdk/webview-element";
+
+useEffect(() => {
+  const frame = frameRef.current; // the browser window's element
+  const focused = () => {
+    raise(frame);
+  };
+  frame?.addEventListener(WEBVIEW_GUEST_FOCUS_EVENT, focused);
+  return () => frame?.removeEventListener(WEBVIEW_GUEST_FOCUS_EVENT, focused);
+}, []);
+```
+
+<!-- tab: JavaScript -->
+
+```js
 import { WEBVIEW_GUEST_FOCUS_EVENT } from "@domicile-desktop/sdk/webview-element";
 
 frame.addEventListener(WEBVIEW_GUEST_FOCUS_EVENT, () => {
   raise(frame);
 });
 ```
+
+<!-- /tabs -->
 
 `frame.contains(document.activeElement)` tells you whether a browser window
 (page or address bar) has focus.
@@ -297,7 +389,30 @@ Manganese fills the screen with the window while its page is fullscreen
 A page whose renderer dies (a crash, a kill, out of memory) stays in its view
 until you reload it:
 
-```ts
+<!-- tab: React -->
+
+```tsx
+import { WEBVIEW_RENDER_PROCESS_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-element";
+
+const [gone, setGone] = useState("");
+
+useEffect(() => {
+  const view = viewRef.current; // the <webview>
+  const readGone = () => setGone(view.renderProcessGone);
+  readGone();
+  view.addEventListener(WEBVIEW_RENDER_PROCESS_CHANGE_EVENT, readGone);
+  return () =>
+    view.removeEventListener(WEBVIEW_RENDER_PROCESS_CHANGE_EVENT, readGone);
+}, []);
+
+// gone === "" ? null : (
+//   <Card reason={gone} onRetry={() => viewRef.current?.reload()} />
+// )
+```
+
+<!-- tab: JavaScript -->
+
+```js
 import { WEBVIEW_RENDER_PROCESS_CHANGE_EVENT } from "@domicile-desktop/sdk/webview-element";
 
 const showCard = () => {
@@ -308,6 +423,8 @@ showCard();
 view.addEventListener(WEBVIEW_RENDER_PROCESS_CHANGE_EVENT, showCard);
 retry.addEventListener("click", () => view.reload());
 ```
+
+<!-- /tabs -->
 
 - **`renderProcessGone`** is `crashed`, `killed`, `oom`, `abnormal-exit`,
   `clean-exit`, `launch-failed` or `memory-eviction`
@@ -340,13 +457,32 @@ Chrome tab does:
 In a view of your own (a `<webview src>` with no `window`), the element fires
 `domicile-close` and nothing closes until you remove it:
 
-```ts
+<!-- tab: React -->
+
+```tsx
+import { WEBVIEW_CLOSE_EVENT } from "@domicile-desktop/sdk/webview-element";
+
+useEffect(() => {
+  const popupView = popupViewRef.current; // your own <webview src>
+  const closed = () => {
+    setPopupOpen(false); // unmounts the view
+  };
+  popupView?.addEventListener(WEBVIEW_CLOSE_EVENT, closed);
+  return () => popupView?.removeEventListener(WEBVIEW_CLOSE_EVENT, closed);
+}, []);
+```
+
+<!-- tab: JavaScript -->
+
+```js
 import { WEBVIEW_CLOSE_EVENT } from "@domicile-desktop/sdk/webview-element";
 
 popupView.addEventListener(WEBVIEW_CLOSE_EVENT, () => {
   popupView.remove();
 });
 ```
+
+<!-- /tabs -->
 
 ## File pickers
 
@@ -357,7 +493,28 @@ FileChooser portal instead, as an application's does
 ([PORTALS.md](PORTALS.md)). A folder dropped on a page's `webkitdirectory`
 input uploads its files, with no picker.
 
-```ts
+<!-- tab: React -->
+
+```tsx
+import { WEBVIEW_FILE_CHOOSER_EVENT } from "@domicile-desktop/sdk/webview-element";
+
+useEffect(() => {
+  const frame = frameRef.current; // the browser window's element
+  const choosing = (event) => {
+    event.preventDefault(); // claim it
+    showPicker(event.mode, event.accept, event.suggestedName).then(
+      (paths) => event.choose(paths),
+      () => event.cancel(),
+    );
+  };
+  frame?.addEventListener(WEBVIEW_FILE_CHOOSER_EVENT, choosing);
+  return () => frame?.removeEventListener(WEBVIEW_FILE_CHOOSER_EVENT, choosing);
+}, []);
+```
+
+<!-- tab: JavaScript -->
+
+```js
 import { WEBVIEW_FILE_CHOOSER_EVENT } from "@domicile-desktop/sdk/webview-element";
 
 frame.addEventListener(WEBVIEW_FILE_CHOOSER_EVENT, (event) => {
@@ -368,6 +525,8 @@ frame.addEventListener(WEBVIEW_FILE_CHOOSER_EVENT, (event) => {
   );
 });
 ```
+
+<!-- /tabs -->
 
 - **`preventDefault()`:** claims it. Unclaimed choosers are canceled when
   dispatch returns.
@@ -394,7 +553,28 @@ frame.addEventListener(WEBVIEW_FILE_CHOOSER_EVENT, (event) => {
 The browser draws no permission prompt. A site asking for a permission it has
 no stored choice for fires `domicile-permission-request`:
 
-```ts
+<!-- tab: React -->
+
+```tsx
+import { WEBVIEW_PERMISSION_REQUEST_EVENT } from "@domicile-desktop/sdk/webview-element";
+
+useEffect(() => {
+  const frame = frameRef.current; // the browser window's element
+  const asked = (event) => {
+    event.preventDefault(); // claim it
+    ask(event.origin, event.permissions).then(
+      (allowed) => (allowed ? event.allow() : event.deny()),
+      () => event.dismiss(),
+    );
+  };
+  frame?.addEventListener(WEBVIEW_PERMISSION_REQUEST_EVENT, asked);
+  return () => frame?.removeEventListener(WEBVIEW_PERMISSION_REQUEST_EVENT, asked);
+}, []);
+```
+
+<!-- tab: JavaScript -->
+
+```js
 import { WEBVIEW_PERMISSION_REQUEST_EVENT } from "@domicile-desktop/sdk/webview-element";
 
 frame.addEventListener(WEBVIEW_PERMISSION_REQUEST_EVENT, (event) => {
@@ -405,6 +585,8 @@ frame.addEventListener(WEBVIEW_PERMISSION_REQUEST_EVENT, (event) => {
   );
 });
 ```
+
+<!-- /tabs -->
 
 - **`preventDefault()`:** claims it. Unclaimed requests are ignored: the page
   gets nothing and nothing is stored.
@@ -456,7 +638,28 @@ The browser draws no device chooser. A page asking for a device through
 WebHID, WebUSB or Web Serial, such as a hardware wallet, fires
 `domicile-device-request`:
 
-```ts
+<!-- tab: React -->
+
+```tsx
+import { WEBVIEW_DEVICE_REQUEST_EVENT } from "@domicile-desktop/sdk/webview-element";
+
+useEffect(() => {
+  const frame = frameRef.current; // the browser window's element
+  const asked = (event) => {
+    event.preventDefault(); // claim it
+    pick(event.title, () => event.devices()).then(
+      (id) => event.choose([id]),
+      () => event.cancel(),
+    );
+  };
+  frame?.addEventListener(WEBVIEW_DEVICE_REQUEST_EVENT, asked);
+  return () => frame?.removeEventListener(WEBVIEW_DEVICE_REQUEST_EVENT, asked);
+}, []);
+```
+
+<!-- tab: JavaScript -->
+
+```js
 import { WEBVIEW_DEVICE_REQUEST_EVENT } from "@domicile-desktop/sdk/webview-element";
 
 frame.addEventListener(WEBVIEW_DEVICE_REQUEST_EVENT, (event) => {
@@ -467,6 +670,8 @@ frame.addEventListener(WEBVIEW_DEVICE_REQUEST_EVENT, (event) => {
   );
 });
 ```
+
+<!-- /tabs -->
 
 - **`preventDefault()`:** claims it. Unclaimed requests are canceled: the page
   gets no device.
@@ -490,7 +695,28 @@ The browser draws no dialog. A page's `alert()`, `confirm()` or `prompt()`,
 or a `beforeunload` handler that asks to stay, pauses it and fires
 `domicile-dialog`:
 
-```ts
+<!-- tab: React -->
+
+```tsx
+import { WEBVIEW_DIALOG_EVENT } from "@domicile-desktop/sdk/webview-element";
+
+useEffect(() => {
+  const frame = frameRef.current; // the browser window's element
+  const asked = (event) => {
+    event.preventDefault(); // claim it
+    show(event.dialogType, event.message, event.defaultValue).then(
+      (value) => event.accept(value),
+      () => event.dismiss(),
+    );
+  };
+  frame?.addEventListener(WEBVIEW_DIALOG_EVENT, asked);
+  return () => frame?.removeEventListener(WEBVIEW_DIALOG_EVENT, asked);
+}, []);
+```
+
+<!-- tab: JavaScript -->
+
+```js
 import { WEBVIEW_DIALOG_EVENT } from "@domicile-desktop/sdk/webview-element";
 
 frame.addEventListener(WEBVIEW_DIALOG_EVENT, (event) => {
@@ -501,6 +727,8 @@ frame.addEventListener(WEBVIEW_DIALOG_EVENT, (event) => {
   );
 });
 ```
+
+<!-- /tabs -->
 
 - **`preventDefault()`:** claims it. Unclaimed dialogs are dismissed:
   `confirm()` returns false and `prompt()` null. An unclaimed `beforeunload`

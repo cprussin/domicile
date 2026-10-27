@@ -126,14 +126,35 @@ once, when the view connects. The SDK provides types only.
 Read modifiers from your own `KeyboardEvent`s. The page sees every key press,
 whichever window has focus:
 
-```ts
-const follow = (event: KeyboardEvent) => {
+<!-- tab: React -->
+
+```tsx
+const [altHeld, setAltHeld] = useState(false);
+useEffect(() => {
+  const follow = (event: KeyboardEvent) => setAltHeld(event.altKey);
+  document.addEventListener("keydown", follow);
+  document.addEventListener("keyup", follow);
+  return () => {
+    document.removeEventListener("keydown", follow);
+    document.removeEventListener("keyup", follow);
+  };
+}, []);
+// Let clicks reach the page while Alt is held.
+// <app style={{ pointerEvents: altHeld ? "none" : undefined }} … />
+```
+
+<!-- tab: JavaScript -->
+
+```js
+const follow = (event) => {
   // Let clicks reach the page while Alt is held.
   portal.style.pointerEvents = event.altKey ? "none" : "";
 };
 document.addEventListener("keydown", follow);
 document.addEventListener("keyup", follow);
 ```
+
+<!-- /tabs -->
 
 Do not use the host's `altKey`, `ctrlKey`, `shiftKey` and `metaKey` for this.
 They report the compositor's seat, which only sees keys forwarded while a

@@ -103,4 +103,20 @@ describe("bundle", () => {
     expect(built).toMatch(/export\s*\{[^}]*\bas Shell\b/);
     expect(built).toContain("royalblue");
   }, 120_000);
+
+  // The same shell in plain JavaScript, which the quickstart's other tab
+  // teaches.
+  it("builds the plain JavaScript example shell", async () => {
+    const entry = path.join(DOMICILE, "examples", "vanilla-shell", "shell.js");
+    const out = path.join(
+      mkdtempSync(path.join(tmpdir(), "domicile-builder-")),
+      "out",
+    );
+
+    await bundle(entry, out, DOMICILE, [entry]);
+
+    const built = readFileSync(path.join(out, "shell.js"), "utf8");
+    expect(built).toMatch(/export\s*\{[^}]*\bas Shell\b/);
+    expect(built).toContain("royalblue");
+  }, 120_000);
 });

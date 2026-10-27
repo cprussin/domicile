@@ -1,9 +1,25 @@
 import { css } from "../../styled-system/css";
 import { flex, grid } from "../../styled-system/patterns";
 import { CodeBlock } from "../code/CodeBlock";
+import { DocTabs } from "../docs/DocTabs";
 import { LinkButton } from "../page/LinkButton";
 import { repoFile } from "../page/repo";
 import { Section } from "../page/Section";
+
+const REACT_MODULE = `// notes.tsx
+const Notes = () => {
+  const { files } = useAppDomicile();
+  const [notes, setNotes] = useState("");
+  useEffect(() => {
+    // A relative path is read from the home directory.
+    files.readText("notes.md").then((read) =>
+      setNotes(read.unwrapOr("No notes yet")),
+    );
+  }, [files]);
+  return notes;
+};
+
+export const main = mount(Notes);`;
 
 const MODULE = `// notes.js
 export const main = async (root, domicile) => {
@@ -44,7 +60,20 @@ export const Apps = () => (
   >
     <div className={showStyles}>
       <div className={codeStyles}>
-        <CodeBlock code={MODULE} frame="bare" language="tsx" />
+        <DocTabs
+          tabs={[
+            {
+              content: (
+                <CodeBlock code={REACT_MODULE} frame="bare" language="tsx" />
+              ),
+              label: "React",
+            },
+            {
+              content: <CodeBlock code={MODULE} frame="bare" language="tsx" />,
+              label: "JavaScript",
+            },
+          ]}
+        />
         <CodeBlock code={ENTRY} frame="bare" language="bash" />
       </div>
       <div aria-hidden="true" className={windowStyles}>

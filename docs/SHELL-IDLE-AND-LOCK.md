@@ -11,7 +11,21 @@ What a shell does when the screens blank and when the desktop locks. Part of
 After `idle.blank_after_seconds` without input, the screens turn off and
 `domicile.session.idle` becomes `true`:
 
-```ts
+<!-- tab: React -->
+
+```tsx
+import { useIdle } from "@domicile-desktop/react/session";
+
+const Desktop = () => {
+  // true: the screens are off. false: input turned them back on.
+  const idle = useIdle() === true;
+  return <main className={idle ? "idle" : undefined}>…</main>;
+};
+```
+
+<!-- tab: JavaScript -->
+
+```js
 const idle = () => {
   // true: the screens are off. false: input turned them back on.
   document.body.classList.toggle("idle", domicile.session.idle === true);
@@ -19,6 +33,8 @@ const idle = () => {
 idle();
 domicile.session.on("idlechange", idle);
 ```
+
+<!-- /tabs -->
 
 - Use this attribute to detect idle. Only the compositor sees all input. The
   page stays visible while the screens are off, so `visibilityState` and idle
@@ -37,7 +53,39 @@ domicile.session.on("idlechange", idle);
 With `idle.warn_before_seconds` set, the compositor warns the shell before the
 screens go dark:
 
-```ts
+<!-- tab: React -->
+
+```tsx
+const useDimmed = () => {
+  const { session } = useDomicile();
+  const [dimmed, setDimmed] = useState(false);
+  useEffect(() => {
+    let stop = () => {};
+    session.idleWarnings().then((warnings) =>
+      warnings.match({
+        Err: (error) => console.error("no idle warnings", error),
+        Ok: async ({ items }) => {
+          const reader = items.getReader();
+          stop = () => reader.cancel();
+          for (;;) {
+            const { done, value: blanksInMs } = await reader.read();
+            if (done) return;
+            // A number: the screens go dark in that many milliseconds.
+            // `undefined`: input called it off, or the screens went dark.
+            setDimmed(blanksInMs !== undefined);
+          }
+        },
+      }),
+    );
+    return () => stop();
+  }, [session]);
+  return dimmed;
+};
+```
+
+<!-- tab: JavaScript -->
+
+```js
 // Awaited: both arms return a promise.
 await (await domicile.session.idleWarnings()).match({
   Err: async (error) => {
@@ -53,6 +101,8 @@ await (await domicile.session.idleWarnings()).match({
 });
 ```
 
+<!-- /tabs -->
+
 - Any input during the warning keeps the screens on, so a dim that wakes on a
   key needs no code of its own.
 - A page that listens during a warning hears it at once.
@@ -66,7 +116,32 @@ input, before the machine sleeps, when logind locks the session, or when the
 shell calls `session.lock()`. That timeout is separate from
 blanking. The user's password unlocks it, checked by PAM.
 
-```ts
+<!-- tab: React -->
+
+```tsx
+import { useLocked } from "@domicile-desktop/react/session";
+
+const Desktop = () => {
+  const { session } = useDomicile();
+  return useLocked() === true ? (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        session.unlock(String(new FormData(event.currentTarget).get("passphrase")));
+      }}
+    >
+      <input name="passphrase" type="password" />
+    </form>
+  ) : (
+    // lock now; the lock screen goes up when `locked` is true
+    <button onClick={() => session.lock()}>Lock</button>
+  );
+};
+```
+
+<!-- tab: JavaScript -->
+
+```js
 domicile.session.on("lockchange", () => {
   setLocked(domicile.session.locked === true);
 });
@@ -74,6 +149,8 @@ domicile.session.on("lockchange", () => {
 domicile.session.unlock(typed); // submit a passphrase
 domicile.session.lock();        // lock now; the lock screen goes up when `locked` is true
 ```
+
+<!-- /tabs -->
 
 The compositor enforces the lock. While `locked` is `true`:
 
@@ -102,8 +179,35 @@ the page in devtools does not unlock the desktop.
 - To say why, listen with `session.unlockRefusals()`. Each refusal arrives
   before its `lockchange`:
 
-  ```ts
-  const hear = async (items: ReadableStream<UnlockRefused>) => {
+  <!-- tab: React -->
+
+  ```tsx
+  useEffect(() => {
+    let stop = () => {};
+    session.unlockRefusals().then((refusals) =>
+      refusals.match({
+        Err: (error) => console.error(error),
+        Ok: async ({ items }) => {
+          const reader = items.getReader();
+          stop = () => reader.cancel();
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) return;
+            // value.refusal: WrongPassphrase, Unverifiable (the check could not
+            // run) or TooSoon (sent during the wait, so not checked).
+            setRefused(value);
+          }
+        },
+      }),
+    );
+    return () => stop();
+  }, [session]);
+  ```
+
+  <!-- tab: JavaScript -->
+
+  ```js
+  const hear = async (items) => {
     for await (const { refusal, failures, retryInMs } of items) {
       // refusal: WrongPassphrase, Unverifiable (the check could not run) or
       // TooSoon (sent during the wait, so not checked).
@@ -113,10 +217,12 @@ the page in devtools does not unlock the desktop.
   (await domicile.session.unlockRefusals()).match({
     Err: (error) => console.error(error),
     Ok: ({ items }) => {
-      hear(items).catch((error: unknown) => console.error(error));
+      hear(items).catch((error) => console.error(error));
     },
   });
   ```
+
+  <!-- /tabs -->
 
 - After 3 refused passphrases the compositor waits before checking another,
   starting at 5 seconds and doubling up to 5 minutes. `retryInMs` is the wait
