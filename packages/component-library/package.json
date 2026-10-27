@@ -64,6 +64,7 @@
     "./PortalDialogs": "./src/PortalDialogs/PortalDialogs.tsx",
     "./Provider": "./src/Provider/Provider.tsx",
     "./pandacss-preset": "./src/pandacss-preset.ts",
+    "./QuickTile": "./src/QuickTile/QuickTile.tsx",
     "./Screen": "./src/Screen/Screen.tsx",
     "./Select": "./src/Select/Select.tsx",
     "./SlideOver": "./src/SlideOver/SlideOver.tsx",

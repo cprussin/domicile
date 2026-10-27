@@ -11,6 +11,7 @@ The engine serves this page over `domicile://` and hands `Shell` the desktop.
 | `Shell.tsx` | Providers and the `DisplayProvider` for every screen. |
 | `Desktop.tsx` | Window state, keys, desktop-wide panels, the contexts bar items read, and one `Monitor` per screen. |
 | `default-bars.tsx` | `DEFAULT_BAR` and the lock screen's `LOCK_BAR`. |
+| `quick-settings/` | `QuickSettings`, the bar item that gathers the hardware items' icons and tiles into one panel. |
 | `shows-sharing.ts` | Whether a bar has the sharing item, so the portal dialogs leave screen casts to it. |
 | `mount-manganese.tsx` | Mounts the chrome for `runManganese`'s `Shell`. |
 | `mount-point.ts` | Creates the element the chrome mounts into. |

@@ -6,10 +6,7 @@ import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
 import { isAbsent } from "@domicile-desktop/react/watch-presence";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { SystemError } from "@domicile-desktop/sdk/system";
-import type {
-  Device,
-  Bluetooth as Reading,
-} from "@domicile-desktop/system-bluetooth/bluetooth";
+import type { Bluetooth as Reading } from "@domicile-desktop/system-bluetooth/bluetooth";
 import { BluetoothIcon } from "@phosphor-icons/react/dist/ssr/Bluetooth";
 import { BluetoothConnectedIcon } from "@phosphor-icons/react/dist/ssr/BluetoothConnected";
 import { BluetoothSlashIcon } from "@phosphor-icons/react/dist/ssr/BluetoothSlash";
@@ -17,6 +14,7 @@ import { cva } from "../styled-system/css";
 import { BluetoothPanel } from "./BluetoothPanel";
 import type { BluetoothActions } from "./bluetooth-actions";
 import { BLUETOOTH_ACTIONS } from "./bluetooth-actions";
+import { labelOf, unavailableLabelOf } from "./bluetooth-labels";
 
 type Props = {
   /** The desk's Bluetooth, from BlueZ. */
@@ -95,19 +93,6 @@ const Unavailable = ({
       }
     />
   );
-};
-
-const unavailableLabelOf = (
-  reading: boolean,
-  failure: string | undefined,
-): string => {
-  if (reading) {
-    return "Reading Bluetooth";
-  } else if (failure === undefined) {
-    return "Bluetooth off";
-  } else {
-    return `Bluetooth unavailable: ${failure}`;
-  }
 };
 
 /** The icon alone, on a locked desktop. */
@@ -228,17 +213,3 @@ const statusStyles = cva({
     },
   },
 });
-
-/** Its name and tooltip: whether it is on, and each connected device's battery. */
-const labelOf = (on: boolean, connected: Device[]): string => {
-  if (!on) {
-    return "Bluetooth off";
-  } else if (connected.length === 0) {
-    return "Bluetooth on";
-  } else {
-    return `Bluetooth: ${connected.map(deviceLabelOf).join(", ")}`;
-  }
-};
-
-const deviceLabelOf = ({ battery, name }: Device): string =>
-  battery === undefined ? name : `${name} (${battery}%)`;

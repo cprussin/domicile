@@ -19,6 +19,12 @@ export const Shell = runManganese({
 It takes no props. It reads `useDomicile()` and `useBar()`; BlueZ is watched once per desktop. See
 [TOP-BAR.md](../shell-manganese/docs/TOP-BAR.md).
 
+## Quick settings
+
+`@domicile-desktop/manganese-bar-module-bluetooth/quick-settings` exports its parts
+for [`QuickSettings`](../shell-manganese/docs/TOP-BAR.md#quick-settings):
+`BluetoothIndicator`, `BluetoothToggle` and `BluetoothDevices`.
+
 ## Test
 
 ```sh

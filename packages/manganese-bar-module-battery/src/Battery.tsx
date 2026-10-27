@@ -9,9 +9,7 @@ import { LightningIcon } from "@phosphor-icons/react/dist/ssr/Lightning";
 import { useId } from "react";
 import { css, cva, cx } from "../styled-system/css";
 import { hstack } from "../styled-system/patterns";
-
-/** At or below this percentage the readout turns red. */
-const DANGEROUS_PERCENT = 10;
+import { DANGEROUS_PERCENT } from "./low-charge";
 
 /** At or below this percentage the readout also flashes. */
 const FLASHING_PERCENT = 5;

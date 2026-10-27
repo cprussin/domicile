@@ -29,7 +29,8 @@
   },
   "exports": {
     ".": "./src/bar-item.tsx",
-    "./panda-preset": "./src/panda-preset.ts"
+    "./panda-preset": "./src/panda-preset.ts",
+    "./quick-settings": "./src/quick-settings.tsx"
   },
   "files": [
     "src/**",

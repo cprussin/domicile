@@ -25,6 +25,12 @@ The `idle-inhibitor` command toggles the same inhibitor from a key or a
 terminal: `domicile send-shell idle-inhibitor`. The shell reaches it through
 `deskIdleInhibitor` in `./desk-idle-inhibitor`.
 
+## Quick settings
+
+`@domicile-desktop/manganese-bar-module-idle-inhibitor/quick-settings` exports its parts
+for [`QuickSettings`](../shell-manganese/docs/TOP-BAR.md#quick-settings):
+`KeepAwakeIndicator` and `KeepAwake`.
+
 ## Test
 
 ```sh

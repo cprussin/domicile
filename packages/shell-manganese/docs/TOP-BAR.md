@@ -16,6 +16,7 @@ package's default export path:
 | `Tray` | `@domicile-desktop/manganese-bar-module-tray` |
 | `WorkspaceSwitcher` | `@domicile-desktop/manganese-bar-module-workspace-switcher` |
 | `Clock` | `@domicile-desktop/manganese-bar-module-clock` |
+| `QuickSettings` | `@domicile-desktop/manganese/QuickSettings` |
 | `Keymap` | `@domicile-desktop/manganese-bar-module-keymap` |
 | `ThemeSwitch` | `@domicile-desktop/manganese-bar-module-theme-switch` |
 | `IdleInhibitor` | `@domicile-desktop/manganese-bar-module-idle-inhibitor` |
@@ -74,19 +75,21 @@ Every bar and the lock screen share one watch per system readout. See
 - **left**: launcher button, tray, workspaces
 - **center**: clock
 - **right**: sharing indicator (while recorded), Cast (while a TV is near or
-  cast to), keymap (with several keymaps), theme selector, idle
-  inhibitor, brightness, volume, Bluetooth, network, battery, notification
-  bell
+  cast to), keymap (with several keymaps), quick settings, notification bell
+
+The theme selector, idle inhibitor, brightness, volume, Bluetooth, network and
+battery items are still exported, for a bar that wants them one by one.
 
 ## On the lock screen
 
-- The lock screen draws the same bar on every screen, with only the keymap,
-  brightness, volume, Bluetooth and battery (`LOCK_BAR`, `src/default-bars.tsx`). The
-  `bar` option does not change it.
-- Each item offers only what a locked desktop allows
+- The lock screen draws the same bar on every screen, with only the keymap
+  and quick settings (`LOCK_BAR`, `src/default-bars.tsx`). The `bar` option
+  does not change it.
+- Each offers only what a locked desktop allows
   ([LOCK.md](../../../docs/LOCK.md#lock-screen-readouts)):
-  - Bluetooth: the icon, named as on the desktop; not a button.
-  - Volume: the default output's slider and mute; no mixer.
+  - Quick settings: no network, keep awake or dark mode, and no details.
+    The Bluetooth tile shows the state and can't be pressed. The volume
+    slider and mute work; there is no mixer.
   - Keymap, brightness, the night light and battery: as on the desktop.
 - Panels draw over the lock screen and keep the keyboard until they close.
   Then it goes back to the passphrase.
@@ -122,7 +125,39 @@ Every bar and the lock screen share one watch per system readout. See
   `/sys` every 10 seconds (`watchPresence`,
   `@domicile-desktop/react/watch-presence`), which works while
   locked.
-- The theme selector, idle inhibitor and notification bell always show.
+- The theme selector, idle inhibitor, quick settings and notification bell
+  always show.
+
+## Quick settings
+
+One item for the computer's settings: the hardware items' icons in one
+button, and their controls in one panel, each labeled in words.
+
+- **The button** holds, left to right:
+  - an eye, while the screens are kept on: on a lit circle while this desktop
+    keeps them on;
+  - the network icon, as the network item draws it;
+  - the Bluetooth icon, only while a device is connected, or in `warning`
+    when BlueZ fails;
+  - the speaker, dimmed while muted;
+  - the battery, as the battery item draws it.
+- An icon for hardware the machine lacks is left out, as each item hides.
+- Scroll over the button to step the volume by 5%. Middle-click to mute or
+  unmute it.
+- **The panel**, a `Drilldown` in a popover:
+  - Tiles (`QuickTile`): Wi-Fi, Wired (with a cable in, or without Wi-Fi),
+    Bluetooth, Keep awake, Night light, Dark mode. A press switches the tile.
+    An arrow opens its details.
+  - The brightness slider, and the volume slider with an arrow to the mixer.
+  - The battery in words, such as `Battery 78%, about 3 h 20 min left`. Red
+    while low.
+  - **Settings**, which runs `domicile-settings` as the launcher does, and
+    closes the panel. Not on the lock screen.
+- **Details** slide in over the tiles, with a back button: the network item's
+  panel (wired ports and Wi-Fi), the Bluetooth panel, or the mixer.
+- The panel keeps the keyboard while open, for a Wi-Fi password.
+- Each part is its item package's `quick-settings` export, and reads the same
+  desk watches as the item.
 
 ## Network
 
