@@ -174,8 +174,8 @@ Patch 0056 attaches helpers to every tab guest on creation:
 The browser gets no focus notification for an inner `WebContents`, so the
 element reports it (`WebViewGuest.Focused`).
 
-Chrome's lookups walk browser windows. Patch 0057 adds one hook call to each
-of four lookups, declared in
+Chrome's lookups walk browser windows. Patches 0057 and 0154 add one hook
+call to each of these, declared in
 `chrome/browser/extensions/domicile_desk_hooks.h`:
 
 | Lookup | Desk answer |
@@ -184,6 +184,7 @@ of four lookups, declared in
 | `ExtensionTabUtil::CreateTabObject` | its index and `active` |
 | `ExtensionTabUtil::ForEachTab` | every guest too |
 | `ChromeExtensionFunctionDetails::GetCurrentWindowController` | the desk, since the shell's own window is not a desk window |
+| `SendExecuteMimeTypeHandlerEvent` (patch 0154) | no tab id for a stream outside a guest, so the PDF viewer in the shell asks `chrome.tabs` nothing |
 
 - `tabs.query` and the mutations below are the desk's own
   `ExtensionFunction`s. They replace Chrome's by name in
