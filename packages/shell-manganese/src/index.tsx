@@ -1,17 +1,22 @@
-// Manganese's entry point. `runManganese` builds a `Shell` that takes the
-// desktop it is handed and mounts the React chrome; `Shell` is the default
-// build. Bar items, commands and the rest live in the `manganese-*` packages.
+// Manganese's entry point. `runManganese` builds a `Shell` that mounts the
+// React chrome with `@domicile-desktop/react`; `Shell` is the default build. Bar items, commands and the rest live in the `manganese-*` packages.
 // Importing this module only installs its stylesheet.
 
+import {
+  applyTheme,
+  DEFAULT_THEME,
+} from "@domicile-desktop/component-library/theme-core";
 import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
 import type { ApplicationsOptions } from "@domicile-desktop/manganese-launcher/applications-config";
 import { applicationsConfigSchema } from "@domicile-desktop/manganese-launcher/applications-config";
 import type { Inbox } from "@domicile-desktop/manganese-notifications/inbox";
 import type { FloatingOptions } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
 import { floatingRulesSchema } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
+import { mount } from "@domicile-desktop/react/mount";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import type { Shell as ShellModule } from "@domicile-desktop/sdk/shell";
-import { mountManganese } from "./mount-manganese";
+import { Manganese } from "./Manganese";
+import { rememberedTheme } from "./theme/remembered-theme";
 
 import "./global.css";
 
@@ -57,8 +62,23 @@ export const runManganese = (options: ManganeseOptions = {}): ShellModule => {
   // Parsed when the config is built, so a bad bookmark or pattern fails it.
   const applications = applicationsConfigSchema.parse(options.applications);
   const floating = floatingRulesSchema.parse(options.floating);
+  const App = () => (
+    <Manganese
+      applications={applications}
+      bar={options.bar}
+      floating={floating}
+      inboxes={options.inboxes}
+      keybindings={options.keybindings}
+    />
+  );
   return (root, domicile) => {
-    mountManganese(root, domicile, { ...options, applications, floating });
+    // The last-seen theme, so the first paint has no theme flash (the
+    // stylesheet ships below; see
+    // `@domicile-desktop/component-library/vite-shell`). The compositor owns
+    // the theme (`theme.mode`) and corrects this guess. Defaults to dark, as
+    // `theme.mode` does.
+    applyTheme(rememberedTheme() ?? DEFAULT_THEME);
+    mount(App)(root, domicile);
   };
 };
 

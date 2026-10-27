@@ -7,13 +7,12 @@ The engine serves this page over `domicile://` and hands `Shell` the desktop.
 
 | Path | Contents |
 |---|---|
-| `index.tsx` | `runManganese(options)`, the default `Shell` and `DEFAULT_BAR`. |
+| `index.tsx` | `runManganese(options)`, which mounts `Manganese` with `@domicile-desktop/react`'s `mount`; the default `Shell` and `DEFAULT_BAR`. |
+| `Manganese.tsx` | `Shell` with the desktop's theme and appearance. |
 | `Shell.tsx` | Providers and the `DisplayProvider` for every screen. |
 | `Desktop.tsx` | Window state, keys, desktop-wide panels, the contexts bar items read, and one `Monitor` per screen. |
 | `default-bars.tsx` | `DEFAULT_BAR` and the lock screen's `LOCK_BAR`. |
 | `shows-sharing.ts` | Whether a bar has the sharing item, so the portal dialogs leave screen casts to it. |
-| `mount-manganese.tsx` | Mounts the chrome for `runManganese`'s `Shell`. |
-| `mount-point.ts` | Creates the element the chrome mounts into. |
 | `screens/` | `Monitor` (a screen's bar) and `NoScreens`. |
 | `theme/` | Theme from the host or the last session. |
 
