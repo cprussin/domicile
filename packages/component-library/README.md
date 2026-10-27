@@ -23,7 +23,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `Button` | Button or link, with variants and sizes. |
 | `Card` | Raised surface with optional title and footer. |
 | `ChoiceRow` | Rows of a pick list, with icon, name and detail, framed while picked: `RadioRow` in `ChoiceList` for one, `CheckboxRow` for several. Take the panel's white text in an `overPhoto` popover. |
-| `CountBadge` | Unread count in an accent pill, pinned to the corner of its positioned parent. Shows "9+" past nine. |
+| `CountBadge` | Unread count in an accent pill, pinned to the corner of its positioned parent, or `inline` beside text. Shows "9+" past nine. |
 | `Drilldown` | View that slides a second panel in from the side, with a back button. |
 | `Field` | Label, control and validation message. |
 | `FilePicker` | Keyboard-first file picker over its positioned parent. |
@@ -36,7 +36,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `ContextMenu` | Menu opened at a point, such as a right click's. Parts: `Item`, `CheckboxItem`, `RadioGroup` and `RadioItem`, `Submenu`, `Separator`. Items take an `icon` and a `mnemonic`, whose letter chooses them. |
 | `PortalDialogs` | Every dialog applications ask for through the desktop portal. Mount one per shell with `host={domicile}`; it refuses kinds it cannot draw. `omitScreenCasts` leaves screen casts out of its indicator. See [PORTALS.md](/docs/PORTALS.md). |
 | `source-name` | `sourceName`: how a screen cast's source is named. |
-| `Popover` | Non-modal panel anchored to the control that opened it. |
+| `Popover` | Non-modal panel anchored to the control that opened it. `tone="overPhoto"` is a see-through panel for the bar, dark in either theme. |
 | `PopupBoundary` | Keeps every popup inside it (tooltips, popovers, menus, lists) within a box, such as a window's frame. Outside one, popups stay on their `Screen`. `Popover` and `Tooltip` take `spansWindows` to leave it. |
 | `Provider` | base-ui `DirectionProvider` wrapper. Every app roots its tree in it. |
 | `QuickTile` | Quick settings tile: a labeled toggle in the accent color while on, with an arrow to its details. Drawn in `currentcolor`. |

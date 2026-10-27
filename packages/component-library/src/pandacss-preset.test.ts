@@ -33,6 +33,18 @@ describe("the domicile preset", () => {
     expect(unreadableOn("base")).toStrictEqual([]);
   });
 
+  it("keeps a panel over the wallpaper dark in either theme", () => {
+    // The panel is dark whatever the theme, so what is drawn on it takes the
+    // dark theme's colors. Mixed colors are declared again so they mix the
+    // panel's colors, not the page's.
+    expect(withoutPanelColors()).toStrictEqual([]);
+  });
+
+  it("draws muted text legibly on a tile on a card, in either theme", () => {
+    expect(mutedOnTile("_light")).toBeGreaterThanOrEqual(READABLE);
+    expect(mutedOnTile("base")).toBeGreaterThanOrEqual(READABLE);
+  });
+
   it("holds the theme wipe at its start while windows turn", () => {
     // `flipThemeWithAnimation` sets `data-theme-holding` until the windows
     // have repainted behind the old frame.
@@ -191,6 +203,124 @@ const unreadableOn = (theme: Theme): readonly string[] => {
   );
 };
 
+/**
+ * The contrast of `muted` on the faintest surface text sits on: a tile of
+ * `foreground` at 6% on a `card`, as the notification drawer draws its
+ * notifications.
+ */
+const mutedOnTile = (theme: Theme): number => {
+  const foreground = colorFor("foreground", theme);
+  const background = colorFor("background", theme);
+  const card = mixed(foreground, 0.06, background);
+  return contrast(
+    mixed(foreground, mutedShare(), background),
+    mixed(foreground, 0.06, card),
+  );
+};
+
+/**
+ * The color tokens a panel over the wallpaper doesn't redeclare as the dark
+ * theme's: each per-theme color takes its dark value, and each mix its own.
+ */
+const withoutPanelColors = (): readonly string[] => {
+  const colors = at(
+    at(at(at(domicilePreset, "theme"), "extend"), "semanticTokens"),
+    "colors",
+  );
+  const names =
+    typeof colors === "object" && colors !== null ? Object.keys(colors) : [];
+  return names.filter((name) => {
+    const value = at(at(colors, name), "value");
+    const dark = typeof value === "string" ? value : at(value, "base");
+    const mixes = typeof dark === "string" && dark.includes("{colors.");
+    return mixes && at(value, "_onPhoto") !== dark;
+  });
+};
+
+/** How much `foreground` `muted` mixes into `background`, from 0 to 1. */
+const mutedShare = (): number => {
+  const value = at(
+    at(
+      at(
+        at(at(at(domicilePreset, "theme"), "extend"), "semanticTokens"),
+        "colors",
+      ),
+      "muted",
+    ),
+    "value",
+  );
+  const share =
+    /\{colors\.foreground\} (?<percent>\d+)%, \{colors\.background\}/u.exec(
+      String(at(value, "base")),
+    )?.groups?.percent;
+  if (share === undefined) {
+    throw new Error("muted is not a mix of foreground into background");
+  } else {
+    return Number(share) / 100;
+  }
+};
+
+/** `share` of `one` mixed into `other` in oklab, as `color-mix` does. */
+const mixed = (one: string, share: number, other: string): string => {
+  const [first, second] = [oklab(one), oklab(other)];
+  return hexOf(
+    first.map(
+      (channel, index) => channel * share + (second[index] ?? 0) * (1 - share),
+    ),
+  );
+};
+
+/** The oklab `[L, a, b]` of a `#rrggbb` color. */
+const oklab = (hex: string): number[] => {
+  const [red = 0, green = 0, blue = 0] = linear(hex);
+  const [long, medium, short] = [
+    0.412_221_470_8 * red + 0.536_332_536_3 * green + 0.051_445_992_9 * blue,
+    0.211_903_498_2 * red + 0.680_699_545_1 * green + 0.107_396_956_6 * blue,
+    0.088_302_461_9 * red + 0.281_718_837_6 * green + 0.629_978_700_5 * blue,
+  ].map(Math.cbrt) as [number, number, number];
+  return [
+    0.210_454_255_3 * long + 0.793_617_785 * medium - 0.004_072_046_8 * short,
+    1.977_998_495_1 * long - 2.428_592_205 * medium + 0.450_593_709_9 * short,
+    0.025_904_037_1 * long + 0.782_771_766_2 * medium - 0.808_675_766 * short,
+  ];
+};
+
+/** The `#rrggbb` of an oklab `[L, a, b]`. */
+const hexOf = ([lightness = 0, greenRed = 0, blueYellow = 0]: number[]) => {
+  const [long, medium, short] = [
+    lightness + 0.396_337_777_4 * greenRed + 0.215_803_757_3 * blueYellow,
+    lightness - 0.105_561_345_8 * greenRed - 0.063_854_172_8 * blueYellow,
+    lightness - 0.089_484_177_5 * greenRed - 1.291_485_548 * blueYellow,
+  ].map((channel) => channel ** 3) as [number, number, number];
+  return `#${[
+    4.076_741_662_1 * long - 3.307_711_591_3 * medium + 0.230_969_929_2 * short,
+    -1.268_438_004_6 * long +
+      2.609_757_401_1 * medium -
+      0.341_319_396_5 * short,
+    -0.004_196_086_3 * long - 0.703_418_614_7 * medium + 1.707_614_701 * short,
+  ]
+    .map((channel) => {
+      const clamped = Math.min(1, Math.max(0, channel));
+      const encoded =
+        clamped <= 0.003_130_8
+          ? clamped * 12.92
+          : 1.055 * clamped ** (1 / 2.4) - 0.055;
+      return Math.round(encoded * 255)
+        .toString(16)
+        .padStart(2, "0");
+    })
+    .join("")}`;
+};
+
+/** The linear-light channels of a `#rrggbb` color, from 0 to 1. */
+const linear = (hex: string): number[] =>
+  [1, 3, 5].map((start) => {
+    const channel = Number.parseInt(hex.slice(start, start + 2), 16) / 255;
+    return channel <= 0.039_28
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+
 /** The hex value of color `name` in `theme`. */
 const colorFor = (name: string, theme: Theme): string => {
   const colors = at(
@@ -246,11 +376,6 @@ const contrast = (one: string, other: string): number => {
 
 /** WCAG relative luminance of a `#rrggbb` color. */
 const luminance = (hex: string): number => {
-  const [red, green, blue] = [1, 3, 5].map((at) => {
-    const channel = Number.parseInt(hex.slice(at, at + 2), 16) / 255;
-    return channel <= 0.039_28
-      ? channel / 12.92
-      : ((channel + 0.055) / 1.055) ** 2.4;
-  });
+  const [red, green, blue] = linear(hex);
   return 0.2126 * (red ?? 0) + 0.7152 * (green ?? 0) + 0.0722 * (blue ?? 0);
 };

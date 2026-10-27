@@ -101,6 +101,7 @@ export const NotificationDrawer = memo(
           }
         }}
         open={open}
+        tone="overPhoto"
         triggerId={screen === undefined ? null : bellId(screen)}
       >
         <section
@@ -262,7 +263,6 @@ const Notifications = ({
 // height.
 const drawerStyles = cva({
   base: {
-    color: "foreground",
     display: "flex",
     flexDirection: "column",
     fontSize: "sm",
@@ -270,8 +270,10 @@ const drawerStyles = cva({
     maxBlockSize: "80vh",
   },
   variants: {
+    // The padding evens out the panel's, which is thinner above and below,
+    // as in quick settings.
     page: {
-      false: { inlineSize: 80 },
+      false: { inlineSize: 80, paddingBlock: 1.5 },
       true: {
         blockSize: "min({spacing.160}, 80vh)",
         inlineSize: "min({spacing.140}, 90vw)",
