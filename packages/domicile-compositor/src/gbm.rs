@@ -6,6 +6,9 @@
 //!
 //! Each buffer is exported and its gbm object destroyed at once. The dmabuf fd
 //! keeps the memory alive.
+//!
+//! A device that cannot allocate on its render node, such as vgem under WSL2,
+//! is opened on its primary node instead (see [`crate::primary_node`]).
 
 use std::ffi::{c_int, c_void, CString};
 use std::fs::File;
@@ -16,7 +19,9 @@ use libloading::Library;
 use smithay::backend::allocator::dmabuf::{Dmabuf, DmabufFlags};
 use smithay::backend::allocator::{Fourcc, Modifier};
 use thiserror::Error;
+use tracing::warn;
 
+use crate::primary_node::{primary_node_of, DeviceNumber, NoPrimaryNode};
 use crate::uploads::Shape;
 
 /// The libgbm soname on Mesa and NVIDIA installs.
@@ -50,6 +55,23 @@ pub enum NoGbm {
     Device { node: PathBuf },
 }
 
+/// Why the primary node gave no device that allocates.
+#[derive(Debug, Error)]
+enum NoFallback {
+    #[error(transparent)]
+    NoNode(#[from] NoPrimaryNode),
+    #[error("cannot open {node}; is this user in the video group? {source}")]
+    Open {
+        node: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error(transparent)]
+    NoGbm(#[from] NoGbm),
+    #[error("libgbm allocates nothing on {node} either")]
+    Refused { node: PathBuf },
+}
+
 /// Why a buffer could not be allocated.
 #[derive(Debug, Error)]
 pub enum AllocationError {
@@ -79,9 +101,44 @@ impl std::fmt::Debug for Gbm {
 }
 
 impl Gbm {
-    /// Opens a device on `node` through the libgbm named `library`.
+    /// Opens a device on the render node `node` through the libgbm named
+    /// `library`.
+    ///
+    /// If it cannot allocate there, as `kms_swrast` cannot on vgem, the
+    /// device's primary node is tried. Either way the warning says so. On a
+    /// GPU with a GBM driver the probe passes and the primary node is never
+    /// opened, so a tty desk, where the engine holds DRM master, is never
+    /// raced for it.
     pub fn open(library: &str, node: &Path) -> Result<Gbm, NoGbm> {
         let functions = Functions::load(library)?;
+        let render = Gbm::on(functions, node)?;
+        if render.allocates() {
+            return Ok(render);
+        }
+        match Gbm::on_the_primary_node_of(library, node) {
+            Ok((primary, gbm)) => {
+                warn!(
+                    render = %node.display(),
+                    primary = %primary.display(),
+                    "libgbm allocates nothing on the render node, as Mesa's kms_swrast \
+                     cannot; allocating on the same device's primary node instead"
+                );
+                Ok(gbm)
+            }
+            Err(why) => {
+                warn!(
+                    render = %node.display(),
+                    %why,
+                    "libgbm allocates nothing on the render node, and not on its primary \
+                     node either; shared-memory windows will be blank"
+                );
+                Ok(render)
+            }
+        }
+    }
+
+    /// A device on `node`, opened read-write.
+    fn on(functions: Functions, node: &Path) -> Result<Gbm, NoGbm> {
         let file = File::options()
             .read(true)
             .write(true)
@@ -90,6 +147,11 @@ impl Gbm {
                 node: node.to_path_buf(),
                 source,
             })?;
+        Gbm::over(functions, file, node)
+    }
+
+    /// A device over the open node `file`, which it keeps.
+    fn over(functions: Functions, file: File, node: &Path) -> Result<Gbm, NoGbm> {
         // SAFETY: a live fd, kept open beside the device for its whole life.
         let device = unsafe { (functions.create_device)(file.as_raw_fd()) };
         if device.is_null() {
@@ -103,6 +165,52 @@ impl Gbm {
                 _node: file,
             })
         }
+    }
+
+    /// A device on the primary node of the device behind the render node
+    /// `render`, if it allocates, and the node.
+    fn on_the_primary_node_of(library: &str, render: &Path) -> Result<(PathBuf, Gbm), NoFallback> {
+        let number = DeviceNumber::of(render).ok_or(NoPrimaryNode::NotADevice)?;
+        let primary = primary_node_of(
+            number,
+            Path::new("/sys"),
+            Path::new("/dev/dri"),
+            DeviceNumber::of,
+        )?;
+        let file = File::options()
+            .read(true)
+            .write(true)
+            .open(&primary)
+            .map_err(|source| NoFallback::Open {
+                node: primary.clone(),
+                source,
+            })?;
+        // The first to open a primary node with no master becomes it. Off a
+        // tty nothing else wants master, but holding it would still stop a
+        // later DRM client taking it.
+        //
+        // SAFETY: an ioctl with no argument on a live fd.
+        unsafe { libc::ioctl(file.as_raw_fd(), DRM_IOCTL_DROP_MASTER) };
+        let gbm = Gbm::over(Functions::load(library)?, file, &primary)?;
+        if gbm.allocates() {
+            Ok((primary, gbm))
+        } else {
+            Err(NoFallback::Refused { node: primary })
+        }
+    }
+
+    /// Whether a small renderable buffer allocates: the probe for a device
+    /// that opens but allocates nothing.
+    fn allocates(&self) -> bool {
+        // SAFETY: a live device.
+        let bo =
+            unsafe { (self.functions.bo_create)(self.device, 64, 64, ARGB8888, USE_RENDERING) };
+        if bo.is_null() {
+            return false;
+        }
+        // SAFETY: the object allocated above, destroyed once.
+        unsafe { (self.functions.bo_destroy)(bo) };
+        true
     }
 
     /// Allocates a renderable buffer of `shape` with one of `modifiers`, or the
@@ -188,6 +296,12 @@ impl Drop for Gbm {
 
 /// `GBM_BO_USE_RENDERING`: the copy is drawn into the buffer by the GPU.
 const USE_RENDERING: u32 = 1 << 2;
+
+/// `GBM_FORMAT_ARGB8888`, the probe's format.
+const ARGB8888: u32 = u32::from_le_bytes(*b"AR24");
+
+/// `DRM_IOCTL_DROP_MASTER`: `_IO('d', 0x1f)`.
+const DRM_IOCTL_DROP_MASTER: libc::c_ulong = 0x641f;
 
 type CreateDevice = unsafe extern "C" fn(fd: c_int) -> *mut c_void;
 type DeviceDestroy = unsafe extern "C" fn(device: *mut c_void);
