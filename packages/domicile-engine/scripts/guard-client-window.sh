@@ -16,10 +16,14 @@
 # (`--software-compositing yes`), and the client is foot, which draws only in
 # shared memory. See docs/architecture/A-DESKTOP-ON-A-TTY.md#software-output.
 #
+# HEADLESS=1, with SOFTWARE=1, runs that path with no host compositor: the
+# engine is on ozone headless, as on a headless desktop, which has no other
+# path. See docs/architecture/A-HEADLESS-DESKTOP.md.
+#
 # Processes, started in this order:
 #
 #   sway        nested compositor from under-wayland.sh; headless Ozone cannot
-#               import a dmabuf
+#               import a dmabuf. Not with HEADLESS=1.
 #   chrome      the engine on an embedding page, listening on
 #               --domicile-broker-socket
 #   compositor  domicile-compositor, the producer on that socket
@@ -54,9 +58,11 @@ CLIENT_APP_ID="${CLIENT_APP_ID:-app-1}"
 # NEGATIVE=1 starts no client, so the assertion must fail.
 NEGATIVE="${NEGATIVE:-0}"
 SOFTWARE="${SOFTWARE:-0}"
+HEADLESS="${HEADLESS:-0}"
 # The control waits a multiple of its own guard's time. See lib-control-budget.sh.
 BUDGET=client-window
 [ "$SOFTWARE" = "1" ] && BUDGET=client-window-in-memory
+[ "$HEADLESS" = "1" ] && BUDGET=client-window-on-headless
 
 # Client lifetime in seconds. Must outlast the poll: the probe runs on the
 # submit path, so a client killed mid-poll reads as "nothing drew".
@@ -78,6 +84,7 @@ STARTED=()
 # own files so it does not overwrite the run's.
 WHICH=""
 [ "$SOFTWARE" = "1" ] && WHICH="-in-memory"
+[ "$HEADLESS" = "1" ] && WHICH="$WHICH-on-headless"
 [ "$NEGATIVE" = "1" ] && WHICH="$WHICH-negative"
 LOG_COPY="${LOG_COPY:-/tmp/domicile-client-window$WHICH-compositor.log}"
 ENGINE_LOG_COPY="${ENGINE_LOG_COPY:-/tmp/domicile-client-window$WHICH-engine.log}"
@@ -122,9 +129,13 @@ else
   skip "guard-client-window: no $CLIENT_NAME to draw with, and no nix to fetch one"
   exit 77
 fi
+# Wayland with GPU: headless Ozone has no CreateNativePixmapFromHandle, and a
+# dmabuf import needs a GPU. Headless takes only windows in memory.
+PLATFORM=wayland
+[ "$HEADLESS" = "1" ] && PLATFORM=headless
 ENGINE_SWITCHES=()
 COMPOSITOR_SWITCHES=()
-if [ "$SOFTWARE" = "1" ]; then
+if [ "$SOFTWARE" = "1" ] || [ "$HEADLESS" = "1" ]; then
   ENGINE_SWITCHES=(--disable-gpu)
   COMPOSITOR_SWITCHES=(--software-compositing yes)
 fi
@@ -132,10 +143,8 @@ fi
 fresh_broker
 rm -rf "$PROFILE"; mkdir -p "$PROFILE"
 
-# Wayland with GPU: headless Ozone has no CreateNativePixmapFromHandle, and a
-# dmabuf import needs a GPU.
 "$OUT/chrome" \
-  --ozone-platform=wayland \
+  --ozone-platform="$PLATFORM" \
   --no-sandbox --password-store=basic --no-first-run --disable-component-update \
   --user-data-dir="$PROFILE" \
   --window-size=1024,768 \

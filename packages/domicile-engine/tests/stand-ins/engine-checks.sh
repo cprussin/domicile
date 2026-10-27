@@ -15,11 +15,12 @@ stand_in_engine_checks() { # repo
   done
   stand_in_script "$repo" check-css-and-resize guard-css-and-resize
   stand_in_script "$repo" check-latency guard-latency
-  # Names the check, not the guard script: `run-checks.sh` runs two checks
-  # through another guard's script, with `SOFTWARE=1` or an argument.
+  # Names the check, not the guard script: `run-checks.sh` runs three checks
+  # through another guard's script, with `SOFTWARE=1`, `HEADLESS=1` or an
+  # argument.
   cat >"$scripts/lib-engine-guard.sh" <<LIB
 require_engine_out() { :; }
-stand_in() { "$repo/stand-in.sh" "\${1%.sh}\${SOFTWARE:+-in-memory}\${2:+-\$2}"; }
+stand_in() { "$repo/stand-in.sh" "\${1%.sh}\${SOFTWARE:+-in-memory}\${HEADLESS:+-on-headless}\${2:+-\$2}"; }
 engine_guard() { stand_in "\$@"; }
 engine_guard_and_control() { stand_in "\$@"; }
 engine_guard_and_control_under_wayland() { stand_in "\$@"; }
