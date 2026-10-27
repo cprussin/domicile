@@ -5,6 +5,8 @@
 
 #include "base/check.h"
 #include "base/functional/callback.h"
+#include "chrome/browser/extensions/extension_tab_util.h"
+#include "content/public/browser/web_contents.h"
 
 namespace extensions::domicile_desk {
 namespace {
@@ -34,6 +36,17 @@ void AmendTab(content::WebContents& contents, api::tabs::Tab& tab) {
   if (g_desk) {
     g_desk->AmendTab(contents, tab);
   }
+}
+
+bool IsTab(content::WebContents& contents) {
+  content::BrowserContext* context = contents.GetBrowserContext();
+  if (WindowFor(context) == nullptr) {
+    return true;
+  }
+  content::WebContents* found = nullptr;
+  return FindTab(ExtensionTabUtil::GetTabId(&contents), context,
+                 /*window=*/nullptr, &found, /*index=*/nullptr) &&
+         found == &contents;
 }
 
 void ForEachTab(
