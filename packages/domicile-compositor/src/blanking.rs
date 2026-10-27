@@ -9,7 +9,10 @@ use smithay::reexports::{
         timer::{TimeoutAction, Timer},
         InsertError,
     },
-    wayland_server::{protocol::wl_surface::WlSurface, Resource as _},
+    wayland_server::{
+        protocol::{wl_callback::WlCallback, wl_surface::WlSurface},
+        Resource as _,
+    },
 };
 use smithay::wayland::{
     compositor::with_states,
@@ -19,6 +22,7 @@ use smithay::wayland::{
 use tracing::{debug, info};
 
 use crate::client_requests::ClientRequest;
+use crate::held_frames::HeldFrames;
 use crate::idle::{announced, darkened, somebody_is_here, Blanking, Idle, StillThere};
 use crate::{CalloopData, DomicileCompositor};
 
@@ -134,7 +138,8 @@ impl DomicileCompositor {
         let Some(idle) = self.idle.as_mut() else {
             return;
         };
-        if idle.lock_due(Instant::now(), || desktop_surfaces(toplevels)) {
+        let held_frames = &self.held_frames;
+        if idle.lock_due(Instant::now(), || desktop_surfaces(toplevels, held_frames)) {
             self.shut_the_desk(why);
         }
     }
@@ -285,7 +290,9 @@ impl DomicileCompositor {
             return;
         };
         let held = idle.inhibitors();
-        let edge = idle.the_dead_let_go(Instant::now(), || desktop_surfaces(toplevels));
+        let held_frames = &self.held_frames;
+        let edge =
+            idle.the_dead_let_go(Instant::now(), || desktop_surfaces(toplevels, held_frames));
         let let_go = idle.inhibitors() != held;
         self.the_inhibitors_changed(edge, "the client holding this desktop awake is gone");
         // Listing the holders after every dispatch would cost a window list
@@ -356,9 +363,9 @@ impl DomicileCompositor {
         }
     }
 
-    /// Every toplevel surface on the desktop. See [`desktop_surfaces`].
+    /// Every toplevel surface the page shows. See [`desktop_surfaces`].
     pub fn surfaces_on_the_desktop(&self) -> Vec<WlSurface> {
-        desktop_surfaces(&self.toplevels)
+        desktop_surfaces(&self.toplevels, &self.held_frames)
     }
 }
 
@@ -378,14 +385,21 @@ fn window_name(toplevels: &[(String, ToplevelSurface)], surface: &WlSurface) -> 
     .unwrap_or_else(|| id.clone())
 }
 
-/// Every surface of `toplevels`.
+/// Every surface of `toplevels` the page shows.
 ///
 /// The idle clock needs it because an inhibitor on any other surface holds
-/// nothing. Cloned (a refcount) because the clock is borrowed mutably
-/// alongside.
-fn desktop_surfaces(toplevels: &[(String, ToplevelSurface)]) -> Vec<WlSurface> {
+/// nothing. A window the page hides, on another workspace or behind a tab, is
+/// left out: the protocol lets an inhibitor go once its surface is not visible,
+/// and an app in the background, like a chat app animating, would otherwise
+/// keep the screens on unseen. Cloned (a refcount) because the clock is
+/// borrowed mutably alongside.
+fn desktop_surfaces(
+    toplevels: &[(String, ToplevelSurface)],
+    held_frames: &HeldFrames<WlCallback>,
+) -> Vec<WlSurface> {
     toplevels
         .iter()
+        .filter(|(id, _)| !held_frames.is_hidden(id))
         .map(|(_, toplevel)| toplevel.wl_surface().clone())
         .collect()
 }

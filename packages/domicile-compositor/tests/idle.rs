@@ -250,3 +250,40 @@ fn the_screens_go_dark_when_the_window_holding_them_on_is_closed() {
         "the client outlived its window, so what let the screens go was the window and not a death",
     );
 }
+
+/// A window the page hides, on another workspace or behind a tab, stops
+/// holding the desktop awake, and holds it again when shown. The protocol lets
+/// an inhibitor go once its surface is not visible.
+#[test]
+fn a_hidden_window_holds_the_desktop_awake_only_while_shown() {
+    let compositor = Compositor::started_with(A_DESK_THAT_BLANKS);
+    compositor.wait_for_log("nobody is at this desktop; its screens go dark");
+
+    let mut chrome = compositor.chrome();
+    let _film = compositor.client_with("film", &["--hold-the-screens-on"]);
+    compositor.wait_for_log("a client is holding this desktop awake");
+    let appeared = chrome
+        .wait_for(|message| matches!(message, HostMessage::AppAppeared { .. }))
+        .expect("the film's window is announced to the chrome");
+    let HostMessage::AppAppeared { app_id, .. } = appeared else {
+        unreachable!("the wait matched on this variant")
+    };
+
+    placed(&mut chrome, &app_id, [0.0, 0.0]);
+    compositor.wait_for_log("a window was hidden; this desktop's screens go dark");
+
+    placed(&mut chrome, &app_id, [640.0, 480.0]);
+    compositor.wait_for_log("a window was shown; this desktop's screens come back on");
+}
+
+/// The page put `app_id`'s window at the origin with `size`; an empty one
+/// hides it.
+fn placed(chrome: &mut domicile_test_chrome::Chrome, app_id: &str, size: [f64; 2]) {
+    chrome
+        .say(&ChromeMessage::SetAppBounds {
+            app_id: app_id.to_string(),
+            position: [0.0, 0.0],
+            size,
+        })
+        .expect("the chrome reports where it put the window");
+}

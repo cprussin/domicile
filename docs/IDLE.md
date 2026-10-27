@@ -95,11 +95,15 @@ An inhibitor holds only while its surface is a toplevel window
 |---|---|
 | The client is alive | `WlSurface::is_alive`, checked after each round of client events. A crashed client sends no release |
 | The surface is a mapped toplevel | The window list `new_toplevel` and `toplevel_destroyed` maintain |
+| The page shows the window | `crate::held_frames`: a window on another workspace or behind a tab is hidden. The protocol lets an inhibitor go once its surface is not visible |
 
 - An inhibitor taken before its window maps starts holding when the window
   appears.
 - An inhibitor whose window closes stops holding at once.
 - An inhibitor on a subsurface holds nothing.
+- An inhibitor on a hidden window stops holding, and holds again when the
+  window is shown. An app in the background, like a chat app animating, keeps
+  nothing on.
 
 The Inhibit portal's idle flag (`8`) blocks blanking the same way while the
 application holds it. It names no surface, so it holds with no window showing
