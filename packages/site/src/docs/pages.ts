@@ -82,6 +82,7 @@ const SECTIONS: readonly DocSection[] = [
 const AUTHOR_SECTIONS: readonly DocSection[] = [
   {
     pages: [
+      doc("install", "docs/INSTALL.md", "Install"),
       doc("shells/quickstart", "docs/SHELL-QUICKSTART.md", "Quickstart"),
       doc(
         "shells/from-manganese",

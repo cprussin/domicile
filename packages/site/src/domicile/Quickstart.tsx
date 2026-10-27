@@ -31,7 +31,7 @@ const steps = (file: string, example: string): readonly Step[] => [
     note: (
       <>
         Or dnf, zypper, the AUR or Nix. See{" "}
-        <a className={linkStyles} href="/docs/manganese/install">
+        <a className={linkStyles} href="/docs/install">
           Install
         </a>
         .

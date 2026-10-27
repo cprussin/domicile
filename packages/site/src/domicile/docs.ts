@@ -5,6 +5,7 @@ import { repoFile } from "../page/repo";
 export const DOCS: readonly LinkColumn[] = [
   {
     links: [
+      { href: "/docs/install", label: "Install" },
       { href: "/docs/shells/quickstart", label: "Quickstart" },
       { href: "/docs/shells/from-manganese", label: "Start from manganese" },
       { href: "/docs/apps/build", label: "Build an app" },
