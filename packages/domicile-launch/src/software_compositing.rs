@@ -1,4 +1,9 @@
-//! Whether a desktop on a tty composites on the CPU.
+//! Whether a desktop composites on the CPU.
+//!
+//! - Nested, the engine draws as its host lets it, so never.
+//! - Headless, always: ozone headless imports no dmabufs. See
+//!   `docs/architecture/A-HEADLESS-DESKTOP.md`.
+//! - On a tty, it depends on the card, below.
 //!
 //! A card with no 3D (2D virtio-gpu, Hyper-V, simpledrm, vkms) gives the engine
 //! no GL. The engine then composites in software and scans out dumb buffers,
@@ -38,6 +43,30 @@ pub enum Undecided {
         path: String,
         source: std::io::Error,
     },
+    #[error(
+        "{VARIABLE} is no, but a headless engine shows no window from the GPU: \
+         it imports no dmabufs. Unset it"
+    )]
+    HeadlessOnTheGpu,
+}
+
+/// Whether the CPU composites on `platform`, the engine's ozone platform.
+/// `overridden` and `sys_class_drm` are as [`composites_on_the_cpu`] takes
+/// them.
+pub fn on_the_cpu(
+    platform: &str,
+    overridden: Option<&str>,
+    sys_class_drm: &Path,
+) -> Result<bool, Undecided> {
+    match platform {
+        "drm" => composites_on_the_cpu(overridden, sys_class_drm),
+        "headless" => match overridden.filter(|value| !value.is_empty()) {
+            None | Some("yes") => Ok(true),
+            Some("no") => Err(Undecided::HeadlessOnTheGpu),
+            Some(value) => Err(Undecided::BadOverride(value.to_owned())),
+        },
+        _ => Ok(false),
+    }
 }
 
 /// Whether the CPU composites, from `overridden` (the variable's value) or

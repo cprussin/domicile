@@ -85,4 +85,20 @@ int64_t ShellWindowPlaces::Of(uintptr_t window) const {
                                 : known->second.display;
 }
 
+std::vector<ShellWindowBounds> ShellWindowsToFit(
+    const ShellWindowPlaces& places,
+    const std::vector<ShellWindowBounds>& windows,
+    const std::vector<display::Display>& displays) {
+  std::vector<ShellWindowBounds> misfits;
+  for (const ShellWindowBounds& one : windows) {
+    const auto on = std::ranges::find(displays, places.Of(one.window),
+                                      &display::Display::id);
+    if (on != displays.end() && on->bounds() != one.pixels) {
+      misfits.push_back(
+          ShellWindowBounds{.window = one.window, .pixels = on->bounds()});
+    }
+  }
+  return misfits;
+}
+
 }  // namespace domicile
