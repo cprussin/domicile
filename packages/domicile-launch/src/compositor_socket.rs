@@ -12,10 +12,10 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use domicile_protocol::{
-    ChromeMessage, HostMessage, Scale, SystemError, SystemErrorKind, SystemReply, SystemRequest,
-    Theme,
+    ChromeMessage, HostMessage, SystemError, SystemErrorKind, SystemReply, SystemRequest, Theme,
 };
 
+use crate::cli::MonitorMode;
 use crate::control::Shot;
 
 /// The id the one call goes under.
@@ -153,15 +153,14 @@ impl HeldMonitor {
     }
 
     /// Resizes it in place.
-    pub fn resize(&self, size: (u32, u32), refresh_mhz: u32) -> Result<(), CompositorError> {
+    pub fn resize(&self, mode: MonitorMode) -> Result<(), CompositorError> {
         let message = ChromeMessage::SystemRequest {
             id: CALL,
             request: SystemRequest::ResizeVirtualMonitor {
-                width: size.0,
-                height: size.1,
-                refresh_mhz,
-                // `domicile monitor` takes no scale yet.
-                scale: Scale::ONE,
+                width: mode.size.0,
+                height: mode.size.1,
+                refresh_mhz: mode.refresh_mhz,
+                scale: mode.scale,
             },
         };
         let mut line = serde_json::to_string(&message).expect("a chrome message always serializes");
@@ -192,16 +191,15 @@ impl HeldMonitor {
 pub fn virtual_monitor(
     socket: &Path,
     name: &str,
-    size: (u32, u32),
-    refresh_mhz: u32,
+    mode: MonitorMode,
     patience: Option<Duration>,
 ) -> Result<HeldMonitor, CompositorError> {
     let request = SystemRequest::VirtualMonitor {
         name: name.to_owned(),
-        width: size.0,
-        height: size.1,
-        refresh_mhz,
-        scale: Scale::ONE,
+        width: mode.size.0,
+        height: mode.size.1,
+        refresh_mhz: mode.refresh_mhz,
+        scale: mode.scale,
     };
     let stream = connected(socket, patience)?;
     let said = said_over(

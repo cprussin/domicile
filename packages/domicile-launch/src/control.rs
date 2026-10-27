@@ -10,7 +10,7 @@
 
 use std::path::{Path, PathBuf};
 
-use domicile_protocol::Theme;
+use domicile_protocol::{Scale, Theme};
 use serde::{Deserialize, Serialize};
 
 use crate::extensions::InstalledExtension;
@@ -113,12 +113,16 @@ pub enum Request {
         width: u32,
         height: u32,
         refresh_mhz: u32,
+        #[serde(default)]
+        scale: Scale,
     },
     /// Resize the monitor this connection holds. Not answered.
     ResizeVirtualMonitor {
         width: u32,
         height: u32,
         refresh_mhz: u32,
+        #[serde(default)]
+        scale: Scale,
     },
 }
 
@@ -423,8 +427,7 @@ pub struct Desktop<'a> {
 /// [`crate::monitor_lending::lend`].
 pub struct Lent {
     pub name: String,
-    pub size: (u32, u32),
-    pub refresh_mhz: u32,
+    pub mode: crate::cli::MonitorMode,
     /// The client's lines after the request.
     pub lines: std::io::BufReader<std::os::unix::net::UnixStream>,
     /// Where the client hears back.

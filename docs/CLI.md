@@ -87,15 +87,15 @@ Set whether a touchpad ignores the pointer while you type, or print it. On by
 default, and on again when the desktop restarts. A desktop in a window
 refuses it: the host reads the touchpad.
 
-## `domicile monitor <name> <W>x<H>[@Hz]`
+## `domicile monitor <name> <W>x<H>[@Hz] [scale]`
 
 Add a monitor with no screen, like a pane of another program the desktop is
 shown in, and print its output (`virtual-1`). Each line read from stdin,
 like `1024x768` or `1024x768@30`, resizes it in place: its windows stay. It
 is removed when stdin ends. Exits 1 if the desktop takes it away first. Only a
 desktop on a tty or headless has monitors to add to
-([A-HEADLESS-DESKTOP.md](architecture/A-HEADLESS-DESKTOP.md)). 60 Hz unless
-given.
+([A-HEADLESS-DESKTOP.md](architecture/A-HEADLESS-DESKTOP.md)). 60 Hz and
+scale 1 unless given. A line may give a scale too, like `3840x2160 2`.
 
 ## `domicile power-off`
 

@@ -13,7 +13,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::cli::monitor_size;
+use crate::cli::{monitor_mode, MonitorMode};
 use crate::compositor_socket::virtual_monitor;
 use crate::control::{to_line, Lent, Request, Response};
 
@@ -23,12 +23,11 @@ use crate::control::{to_line, Lent, Request, Response};
 pub fn lend(lent: Lent, chrome: &Path, patience: Duration) {
     let Lent {
         name,
-        size,
-        refresh_mhz,
+        mode,
         lines,
         mut client,
     } = lent;
-    let held = match virtual_monitor(chrome, &name, size, refresh_mhz, Some(patience)) {
+    let held = match virtual_monitor(chrome, &name, mode, Some(patience)) {
         Ok(held) => Arc::new(held),
         Err(why) => {
             // The client may be gone already; there is no one else to tell.
@@ -66,8 +65,14 @@ pub fn lend(lent: Lent, chrome: &Path, patience: Duration) {
                     width,
                     height,
                     refresh_mhz,
+                    scale,
                 }) => {
-                    if held.resize((width, height), refresh_mhz).is_err() {
+                    let mode = MonitorMode {
+                        size: (width, height),
+                        refresh_mhz,
+                        scale,
+                    };
+                    if held.resize(mode).is_err() {
                         break;
                     }
                 }
@@ -87,7 +92,7 @@ pub fn lend(lent: Lent, chrome: &Path, patience: Duration) {
 }
 
 /// Sends a [`Request::ResizeVirtualMonitor`] to `to` for each size in
-/// `typed`, one per line as [`monitor_size`] reads it. A line that is not a
+/// `typed`, one per line as [`monitor_mode`] reads it. A line that is not a
 /// size is reported on `said` and skipped; a blank one is skipped.
 pub fn forward_sizes(
     typed: impl BufRead,
@@ -100,18 +105,20 @@ pub fn forward_sizes(
         if line.is_empty() {
             continue;
         }
-        match monitor_size(line) {
-            Some(((width, height), refresh_mhz)) => to.write_all(
+        match monitor_mode(line) {
+            Some(mode) => to.write_all(
                 to_line(&Request::ResizeVirtualMonitor {
-                    width,
-                    height,
-                    refresh_mhz,
+                    width: mode.size.0,
+                    height: mode.size.1,
+                    refresh_mhz: mode.refresh_mhz,
+                    scale: mode.scale,
                 })
                 .as_bytes(),
             )?,
             None => writeln!(
                 said,
-                "domicile: '{line}' is not a size like 1280x720 or 1280x720@30, so it was skipped"
+                "domicile: '{line}' is not a size like 1280x720, 1280x720@30 or \
+                 3840x2160 2, so it was skipped"
             )?,
         }
     }

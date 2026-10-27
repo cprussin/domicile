@@ -6,10 +6,12 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use domicile_launch::cli::MonitorMode;
 use domicile_launch::control::{Request, Response};
 use domicile_launch::control_socket::{
     address, advertised, answer_one, ask, hold, serve_one, take, AskError, NotInADesktop, TakeError,
 };
+use domicile_protocol::Scale;
 
 /// Read timeout: long enough not to flake under load, short enough to keep the
 /// suite fast.
@@ -346,7 +348,7 @@ fn a_virtual_monitor_is_lent_the_connection_it_came_on() {
     client
         .write_all(
             b"{\"type\":\"virtual_monitor\",\"name\":\"Pane\",\"width\":1280,\
-              \"height\":720,\"refresh_mhz\":60000}\n{\"type\":\"resize_virtual_monitor\",\
+              \"height\":720,\"refresh_mhz\":60000,\"scale\":2.0}\n{\"type\":\"resize_virtual_monitor\",\
               \"width\":800,\"height\":600,\"refresh_mhz\":60000}\n",
         )
         .expect("it asked, then resized");
@@ -358,8 +360,14 @@ fn a_virtual_monitor_is_lent_the_connection_it_came_on() {
         &|_| unreachable!("a monitor is lent, not answered"),
         &|mut lent| {
             assert_eq!(lent.name, "Pane");
-            assert_eq!(lent.size, (1280, 720));
-            assert_eq!(lent.refresh_mhz, 60_000);
+            assert_eq!(
+                lent.mode,
+                MonitorMode {
+                    size: (1280, 720),
+                    refresh_mhz: 60_000,
+                    scale: Scale::try_from(2.0).expect("a scale"),
+                }
+            );
             let mut next = String::new();
             lent.lines.read_line(&mut next).expect("the client went on");
             assert!(next.contains("resize_virtual_monitor"), "{next}");
@@ -397,6 +405,7 @@ fn a_held_request_keeps_its_connection_after_the_answer() {
             width: 1,
             height: 1,
             refresh_mhz: 1,
+            scale: Scale::ONE,
         },
         Some(BRIEFLY),
     )

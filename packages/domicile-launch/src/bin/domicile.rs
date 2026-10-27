@@ -22,7 +22,7 @@ use domicile_host::data_dirs::data_dirs;
 use domicile_host::mime_apps::lists;
 use domicile_launch::app_entry::app_entry;
 use domicile_launch::build_progress::{bar, heard, Heard as BuilderHeard, Step};
-use domicile_launch::cli::{invocation, CliError, Invocation, USAGE};
+use domicile_launch::cli::{invocation, CliError, Invocation, MonitorMode, USAGE};
 use domicile_launch::command_socket::{
     clear_browsing_data, clear_site_data, config_extensions, delete_history, disable_while_typing,
     extensions, history, load_shell, load_unpacked, media_devices, open_app, open_url, run_app,
@@ -138,11 +138,7 @@ fn run() -> Result<ExitCode, String> {
         }),
         Invocation::Check { config } => check(&config).map(|()| ExitCode::SUCCESS),
         Invocation::Power { power } => powered(power),
-        Invocation::Monitor {
-            name,
-            size,
-            refresh_mhz,
-        } => monitored(name, size, refresh_mhz),
+        Invocation::Monitor { name, mode } => monitored(name, mode),
         Invocation::Help => {
             print!("{USAGE}");
             Ok(ExitCode::SUCCESS)
@@ -556,14 +552,15 @@ fn asked(request: &Request) -> Result<ExitCode, String> {
 /// Adds a virtual monitor and prints its output, then resizes it to each size
 /// on stdin. Ends, removing it, when stdin does; fails when the desktop takes
 /// it away first.
-fn monitored(name: String, size: (u32, u32), refresh_mhz: u32) -> Result<ExitCode, String> {
+fn monitored(name: String, mode: MonitorMode) -> Result<ExitCode, String> {
     let socket =
         advertised(std::env::var(VARIABLE).ok().as_deref()).map_err(|why| why.to_string())?;
     let request = Request::VirtualMonitor {
         name,
-        width: size.0,
-        height: size.1,
-        refresh_mhz,
+        width: mode.size.0,
+        height: mode.size.1,
+        refresh_mhz: mode.refresh_mhz,
+        scale: mode.scale,
     };
     // As long as the desktop waits for the compositor to add it.
     let (answer, held) = hold(&socket, &request, Some(ANSWER_WITHIN + ANSWER_WITHIN))

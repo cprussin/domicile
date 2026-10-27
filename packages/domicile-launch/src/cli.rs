@@ -6,6 +6,8 @@
 
 use std::path::PathBuf;
 
+use domicile_protocol::Scale;
+
 use crate::control::{Request, Switch, ThemeChange};
 use crate::power::Power;
 
@@ -34,7 +36,8 @@ Ask the running desktop:
   domicile theme [light|dark|toggle]    Set the theme, or print it
   domicile disable-while-typing [on|off|toggle]
                                         Set the touchpad setting, or print it
-  domicile monitor <name> <W>x<H>[@Hz]  Add a monitor with no screen until stdin
+  domicile monitor <name> <W>x<H>[@Hz] [scale]
+                                        Add a monitor with no screen until stdin
                                         ends; each line read resizes it
   domicile power-off                    Ask, then turn the computer off
   domicile reboot                       Ask, then restart the computer
@@ -142,6 +145,8 @@ pub enum CliError {
     NoMonitor,
     #[error("{said} is not a size like 1280x720 or 1280x720@30.")]
     NotASize { said: String },
+    #[error("{said} is not a scale like 2 or 1.5.")]
+    NotAScale { said: String },
     #[error(
         "check-config takes the config file to check, and was given \
          nothing:\n\n    \
@@ -214,11 +219,7 @@ pub enum Invocation {
     /// desktop's Access dialog.
     Power { power: Power },
     /// Add a virtual monitor until stdin ends, resizing it to each size read.
-    Monitor {
-        name: String,
-        size: (u32, u32),
-        refresh_mhz: u32,
-    },
+    Monitor { name: String, mode: MonitorMode },
     /// Print [`USAGE`].
     Help,
 }
@@ -336,17 +337,25 @@ pub fn invocation(args: impl IntoIterator<Item = String>) -> Result<Invocation, 
                 (Some(_), Some(extra)) => Err(CliError::ExtraToSave { extra }),
                 (file, _) => Ok(Invocation::Screenshot { file }),
             },
-            Verb::Monitoring => match (args.next(), args.next(), args.next()) {
-                (Some(name), Some(said), None) => match monitor_size(&said) {
-                    Some((size, refresh_mhz)) => Ok(Invocation::Monitor {
+            Verb::Monitoring => match (args.next(), args.next(), args.next(), args.next()) {
+                (Some(name), Some(size), scale, None) => {
+                    let (size, refresh_mhz) =
+                        monitor_size(&size).ok_or(CliError::NotASize { said: size })?;
+                    let scale = match scale {
+                        None => Scale::ONE,
+                        Some(said) => scale_of(&said).ok_or(CliError::NotAScale { said })?,
+                    };
+                    Ok(Invocation::Monitor {
                         name,
-                        size,
-                        refresh_mhz,
-                    }),
-                    None => Err(CliError::NotASize { said }),
-                },
-                (Some(name), Some(said), Some(extra)) => Err(CliError::Extra {
-                    verb: format!("{first} {name} {said}"),
+                        mode: MonitorMode {
+                            size,
+                            refresh_mhz,
+                            scale,
+                        },
+                    })
+                }
+                (Some(name), Some(size), Some(scale), Some(extra)) => Err(CliError::Extra {
+                    verb: format!("{first} {name} {size} {scale}"),
                     extra,
                 }),
                 _ => Err(CliError::NoMonitor),
@@ -425,7 +434,7 @@ enum Verb {
     Theming,
     /// `power-off`, `reboot` or `log-out`, which take no arguments.
     Powering(Power),
-    /// `monitor`, which takes a name and a size.
+    /// `monitor`, which takes a name, a size and maybe a scale.
     Monitoring,
 }
 
@@ -471,6 +480,36 @@ fn theme_change(word: &str) -> Option<ThemeChange> {
         "toggle" => Some(ThemeChange::Toggle),
         _ => None,
     }
+}
+
+/// What a virtual monitor is asked to be.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MonitorMode {
+    pub size: (u32, u32),
+    /// In millihertz.
+    pub refresh_mhz: u32,
+    pub scale: Scale,
+}
+
+/// The mode `said` names: a size as [`monitor_size`] reads it, then
+/// optionally a scale, like `3840x2160@30 2`. None for anything else.
+pub fn monitor_mode(said: &str) -> Option<MonitorMode> {
+    let mut words = said.split_whitespace();
+    let (size, refresh_mhz) = monitor_size(words.next()?)?;
+    let scale = match words.next() {
+        None => Scale::ONE,
+        Some(word) => scale_of(word)?,
+    };
+    words.next().is_none().then_some(MonitorMode {
+        size,
+        refresh_mhz,
+        scale,
+    })
+}
+
+/// The scale `said` names, a number above zero like `2` or `1.5`.
+fn scale_of(said: &str) -> Option<Scale> {
+    Scale::try_from(said.parse::<f64>().ok()?).ok()
 }
 
 /// The refresh rate of a size that names none, in millihertz.

@@ -13,6 +13,7 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use crate::cli::MonitorMode;
 use crate::control::{parse_response, to_line, Lent, Request, Response};
 
 /// How long either end waits for the other.
@@ -164,6 +165,7 @@ fn serve(
             width,
             height,
             refresh_mhz,
+            scale,
         }),
     ) = (lend, serde_json::from_str(line.trim()))
     {
@@ -171,8 +173,11 @@ fn serve(
         stream.set_read_timeout(None)?;
         lend(Lent {
             name,
-            size: (width, height),
-            refresh_mhz,
+            mode: MonitorMode {
+                size: (width, height),
+                refresh_mhz,
+                scale,
+            },
             lines: asking,
             client: stream,
         });
