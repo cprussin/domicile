@@ -55,19 +55,25 @@
 namespace domicile {
 namespace {
 
-// Must match ui/ozone/public/ozone_switches.cc. Copied to avoid a dependency
-// on //ui/ozone for two strings.
+// Must match ui/ozone/public/ozone_switches.cc and
+// ui/ozone/platform/headless/domicile/headless_desk.h. Copied to avoid a
+// dependency on //ui/ozone for three strings.
 constexpr char kScanoutPlatform[] = "drm";
 constexpr char kOzonePlatformSwitch[] = "ozone-platform";
+constexpr char kHeadlessDeskSwitch[] = "domicile-headless-desk";
 
-// Whether this engine drives the displays (DRM), as opposed to a nested run.
+// Whether this engine drives the displays (DRM or a headless desk), as
+// opposed to a nested run.
 //
 // A nested run's screens are the host session's monitors. Opening windows on
 // them would be wrong, and the compositor would not recognize them, so the
 // shell would get no screens. `DomicileDisplayWatcher` uses the same gate.
 bool ScansOut() {
-  return base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-             kOzonePlatformSwitch) == kScanoutPlatform;
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  return command_line.GetSwitchValueASCII(kOzonePlatformSwitch) ==
+             kScanoutPlatform ||
+         command_line.HasSwitch(kHeadlessDeskSwitch);
 }
 
 // The desk's page geometry and the places it is laid out on.

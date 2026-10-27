@@ -60,7 +60,7 @@ use domicile_launch::serving::serve;
 use domicile_launch::session::Session;
 use domicile_launch::shell_path::Shell;
 use domicile_launch::shell_source::{shell_source, ShellSource};
-use domicile_launch::software_compositing::{self, composites_on_the_cpu};
+use domicile_launch::software_compositing::{self, on_the_cpu};
 use domicile_launch::spawn::{
     composite_on_the_cpu, compositor, engine, send_frames_in_memory, Runtime,
 };
@@ -755,15 +755,14 @@ fn desktop(shell: Option<&str>, flag: Option<&Path>) -> Result<ExitCode, String>
     )
     .map_err(|why| why.to_string())?;
     println!("the engine is taking the {platform} platform");
-    // Only drm scans out itself; a nested engine draws as its host lets it.
-    let on_the_cpu = platform == "drm"
-        && composites_on_the_cpu(
-            env(software_compositing::VARIABLE).as_deref(),
-            Path::new("/sys/class/drm"),
-        )
-        .map_err(|why| why.to_string())?;
+    let on_the_cpu = on_the_cpu(
+        &platform,
+        env(software_compositing::VARIABLE).as_deref(),
+        Path::new("/sys/class/drm"),
+    )
+    .map_err(|why| why.to_string())?;
     if on_the_cpu {
-        println!("no card here has 3D, so the engine composites on the CPU");
+        println!("the engine composites on the CPU");
     }
 
     // Install before starting components. Each runs in its own process
