@@ -18,8 +18,8 @@ The engine serves this page over `domicile://` and hands `Shell` the desktop.
 | `screens/` | `Monitor` (a screen's bar) and `NoScreens`. |
 | `theme/` | Theme from the host or the last session. |
 
-`package.json` also depends on items no default bar uses, such as
-`manganese-bar-module-gmail` and `manganese-bar-module-google-messages`. A
+`package.json` also depends on packages no default uses, such as
+`manganese-bar-module-gmail` and `manganese-inbox-gmail`. A
 config's `@domicile-desktop/*` imports resolve from this package in Domicile's
 install, so an item it does not depend on cannot be imported.
 

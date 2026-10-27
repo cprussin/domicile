@@ -28,7 +28,8 @@
     "node": ">=24"
   },
   "exports": {
-    ".": "./src/bar-item.tsx"
+    ".": "./src/bar-item.tsx",
+    "./watch-unread": "./src/watch-unread.ts"
   },
   "files": [
     "src/**",

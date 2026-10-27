@@ -28,7 +28,11 @@
     "node": ">=24"
   },
   "exports": {
-    ".": "./src/bar-item.tsx"
+    ".": "./src/bar-item.tsx",
+    "./addresses": "./src/addresses.ts",
+    "./consent": "./src/consent.ts",
+    "./desk-inbox": "./src/desk-inbox.ts",
+    "./inbox": "./src/inbox.ts"
   },
   "files": [
     "src/**",

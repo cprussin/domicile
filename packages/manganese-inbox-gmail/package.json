@@ -1,0 +1,46 @@
+{
+  "dependencies": {
+    "@domicile-desktop/manganese-bar-module-gmail": "workspace:*",
+    "@domicile-desktop/manganese-notifications": "workspace:*",
+    "@domicile-desktop/react": "workspace:*",
+    "@domicile-desktop/sdk": "workspace:*",
+    "@phosphor-icons/react": "catalog:"
+  },
+  "description": "Manganese's Gmail inbox: one account's conversation count in the notification drawer, read with the Gmail API.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/test-support": "workspace:*",
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "react": "catalog:",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "bun": ">=1.4.2",
+    "node": ">=24"
+  },
+  "exports": {
+    ".": "./src/gmail-inbox.ts"
+  },
+  "files": [
+    "src/**",
+    "!src/**/*.test.ts"
+  ],
+  "license": "MIT",
+  "name": "@domicile-desktop/manganese-inbox-gmail",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "directory": "packages/manganese-inbox-gmail",
+    "type": "git",
+    "url": "git+https://github.com/cprussin/domicile.git"
+  },
+  "scripts": {
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}

@@ -17,6 +17,25 @@ describe(SlideOver, () => {
     expect(screen.queryByText("Body")).not.toBeInTheDocument();
   });
 
+  it("keeps the body mounted while closed when asked, such as a page that must keep running", () => {
+    render(
+      <SlideOver keepMounted open={false} title="Transcript">
+        Body
+      </SlideOver>,
+    );
+    expect(screen.getByText("Body")).toBeInTheDocument();
+    expect(screen.getByText("Body")).not.toBeVisible();
+  });
+
+  it("says when it is wide, so the stylesheet can widen it", () => {
+    render(
+      <SlideOver open title="Transcript" wide>
+        Body
+      </SlideOver>,
+    );
+    expect(screen.getByRole("dialog")).toHaveAttribute("data-wide");
+  });
+
   it("renders the title, body, and close button when open", () => {
     render(
       <SlideOver open title="Transcript">
@@ -68,6 +87,32 @@ describe(SlideOver, () => {
     expect(screen.queryByText("Body")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Open" }));
     expect(await screen.findByText("Body")).toBeInTheDocument();
+  });
+
+  it("goes back from a page within it, when it has one", async () => {
+    const asked: string[] = [];
+    const { rerender } = render(
+      <SlideOver open title="Transcript">
+        Body
+      </SlideOver>,
+    );
+    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+
+    rerender(
+      <SlideOver
+        onBack={() => {
+          asked.push("back");
+        }}
+        open
+        title="Transcript"
+      >
+        Body
+      </SlideOver>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+
+    expect(asked).toEqual(["back"]);
+    expect(screen.getByRole("heading", { name: "Transcript" })).toBeVisible();
   });
 
   it("closes when the close button is clicked", async () => {

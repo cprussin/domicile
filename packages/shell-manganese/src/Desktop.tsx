@@ -42,6 +42,7 @@ import { useOpeningApps } from "@domicile-desktop/manganese-launcher/useOpeningA
 import { Lock } from "@domicile-desktop/manganese-lock/Lock";
 import { LockBar } from "@domicile-desktop/manganese-lock/LockBar";
 import { useLocked } from "@domicile-desktop/manganese-lock/useLocked";
+import type { Inbox } from "@domicile-desktop/manganese-notifications/inbox";
 import { NotificationDrawer } from "@domicile-desktop/manganese-notifications/NotificationDrawer";
 import { NotificationToasts } from "@domicile-desktop/manganese-notifications/NotificationToasts";
 import type { NotificationsDrawer } from "@domicile-desktop/manganese-notifications/notifications-context";
@@ -96,6 +97,7 @@ import type { ReactNode } from "react";
 import { useCallback, useMemo, useState } from "react";
 import { useCastHolds } from "./cast-holds";
 import { LOCK_BAR } from "./default-bars";
+import { useInboxDrawer } from "./inbox-drawer";
 import { KeymapNotice } from "./KeymapNotice";
 import type { LevelPress } from "./LevelNotice";
 import { LevelNotice } from "./LevelNotice";
@@ -114,6 +116,8 @@ type Props = {
   domicile: Domicile;
   /** Which client windows open floating, besides dialogs. */
   floating: FloatingRules;
+  /** The inboxes listed in the notification drawer, if any. */
+  inboxes: readonly Inbox[];
   /** The keys this desktop binds, merged under the config's. */
   keybindings: ShellKeybindings;
 };
@@ -131,6 +135,7 @@ export const Desktop = ({
   bar,
   domicile,
   floating,
+  inboxes,
   keybindings,
 }: Props) => {
   const displays = useDisplays();
@@ -228,6 +233,21 @@ export const Desktop = ({
     },
     [read, toasts],
   );
+  const closeNotifications = useCallback(() => {
+    setNotificationsOpen(false);
+  }, []);
+  // An inbox's page opens the drawer on the screen with the keyboard, as on a
+  // press of its notification.
+  const showNotifications = useCallback(() => {
+    openNotifications(windows.focused);
+  }, [openNotifications, windows.focused]);
+  const inboxDrawer = useInboxDrawer({
+    domicile,
+    inboxes,
+    onClose: closeNotifications,
+    onShow: showNotifications,
+  });
+  const { back: backToNotifications } = inboxDrawer;
 
   // Lock state belongs to the compositor, which is what blocks input. The page
   // cannot set it, and reloading the page does not unlock the desk.
@@ -347,6 +367,7 @@ export const Desktop = ({
         case WindowActionKind.NotificationsToggled: {
           if (notificationsOpen) {
             setNotificationsOpen(false);
+            backToNotifications();
           } else {
             openNotifications(windows.focused);
           }
@@ -393,6 +414,7 @@ export const Desktop = ({
     },
     [
       act,
+      backToNotifications,
       brightnessKeys,
       dismissNotifications,
       domicile,
@@ -440,12 +462,17 @@ export const Desktop = ({
   const clipboardDismissed = useCallback(() => {
     act(WindowAction.ClipboardDismissed());
   }, [act]);
-  // Only a bell opens the drawer, so it reports only closing.
-  const drawerToggled = useCallback((open: boolean) => {
-    if (!open) {
-      setNotificationsOpen(false);
-    }
-  }, []);
+  // Only a bell opens the drawer, so it reports only closing. It opens again
+  // on the notifications, not the inbox it closed on.
+  const drawerToggled = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        setNotificationsOpen(false);
+        backToNotifications();
+      }
+    },
+    [backToNotifications],
+  );
   const { screens: deskScreens, workspaces } = windows;
   const screenOf = useCallback(
     (appId: string) => screenOfApp({ screens: deskScreens, workspaces }, appId),
@@ -465,8 +492,11 @@ export const Desktop = ({
     [act],
   );
   const drawer = useMemo(
-    () => ({ open: openNotifications, unread: notifications.unread }),
-    [notifications.unread, openNotifications],
+    () => ({
+      open: openNotifications,
+      unread: notifications.unread + inboxDrawer.unread,
+    }),
+    [inboxDrawer.unread, notifications.unread, openNotifications],
   );
   const trayState = useMemo(
     () => ({
@@ -642,9 +672,11 @@ export const Desktop = ({
       />
       {/* Over the whole desktop, like the clipboard. */}
       <NotificationDrawer
+        inboxes={inboxes.length === 0 ? undefined : inboxDrawer.drawer}
         items={notifications.items}
         now={now}
         onAction={notifications.invoke}
+        onBack={backToNotifications}
         onDismiss={notifications.dismiss}
         onOpenChange={drawerToggled}
         onReply={notifications.reply}

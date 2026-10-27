@@ -3,13 +3,37 @@ import { SlideOver } from "@domicile-desktop/component-library/SlideOver";
 import type { Notification } from "@domicile-desktop/sdk/notification";
 import { BellSimpleIcon } from "@phosphor-icons/react/dist/ssr/BellSimple";
 import { BroomIcon } from "@phosphor-icons/react/dist/ssr/Broom";
-import { memo } from "react";
+import { memo, useCallback } from "react";
 
 import { css } from "../styled-system/css";
 import { center, flex, vstack } from "../styled-system/patterns";
+import { InboxList } from "./InboxList";
+import { InboxPage } from "./InboxPage";
+import type { Inbox, InboxReading } from "./inbox";
+import { InboxKind } from "./inbox";
 import { NotificationCard } from "./NotificationCard";
 
+/** The inboxes listed in the drawer, and what the shell knows of them. */
+export type DrawerInboxes = {
+  inboxes: readonly Inbox[];
+  /** Each inbox's reading, by its place in `inboxes`. */
+  readings: readonly (InboxReading | undefined)[];
+  /** The place of the inbox whose page the drawer shows, if any. */
+  shown: number | undefined;
+  /** Opens the inbox at `index`, as its row was pressed. */
+  onOpen: (index: number) => void;
+  /** Shows the page at `index`, which asked to be shown. */
+  onShow: (index: number) => void;
+  /** The page at `index` counted `unread` unread conversations. */
+  onUnread: (index: number, unread: number) => void;
+};
+
 type Props = {
+  /**
+   * The inboxes, listed above the notifications. Their pages stay loaded
+   * while the drawer is closed, so their counts stay current.
+   */
+  inboxes?: DrawerInboxes | undefined;
   /** Every uncleared notification, in display order. */
   items: readonly Notification[];
   /** The current time, for the relative timestamps. */
@@ -18,6 +42,8 @@ type Props = {
   /** The screen it opens on: the one whose bell was pressed. */
   screen: string | undefined;
   onOpenChange: (open: boolean) => void;
+  /** Leave an inbox's page for the list. */
+  onBack: () => void;
   /** Clear `ids`. */
   onDismiss: (ids: readonly number[]) => void;
   /** Press `key` on `id`. */
@@ -33,82 +59,191 @@ type Props = {
  *
  * A notification stays here after its toast is gone, until it is cleared or its
  * application withdraws it. See docs/architecture/NOTIFICATIONS.md.
+ *
+ * Inboxes are listed above the notifications. An inbox with a page, such as
+ * Messages, draws it here, widened, in place of the list.
  */
 export const NotificationDrawer = memo(
   ({
+    inboxes,
     items,
     now,
     onAction,
+    onBack,
     onDismiss,
     onOpenChange,
     onReply,
     open,
     screen,
-  }: Props) => (
-    <SlideOver
-      footer={
-        items.length === 0 ? undefined : (
-          <div className={footerStyles}>
-            <span className={countStyles}>
-              {items.length === 1
-                ? "1 notification"
-                : `${items.length} notifications`}
-            </span>
-            <Button
-              beforeIcon={<BroomIcon />}
-              onClick={() => {
-                onDismiss(items.map(({ id }) => id));
-              }}
-              size="sm"
-              variant="ghost"
-            >
-              Clear all
-            </Button>
-          </div>
-        )
-      }
-      onOpenChange={onOpenChange}
-      open={open}
-      screen={screen}
-      title="Notifications"
-    >
-      {items.length === 0 ? (
-        <div className={emptyStyles}>
-          <span aria-hidden className={glowStyles}>
-            <BellSimpleIcon size={28} weight="duotone" />
-          </span>
-          <span className={emptyTitleStyles}>You're all caught up</span>
-          <span className={emptyBodyStyles}>
-            What your applications and sites have to say will be here.
-          </span>
+  }: Props) => {
+    const page =
+      inboxes?.shown === undefined ? undefined : inboxes.inboxes[inboxes.shown];
+    return (
+      <SlideOver
+        footer={
+          items.length === 0 || page !== undefined ? undefined : (
+            <div className={footerStyles}>
+              <span className={countStyles}>
+                {items.length === 1
+                  ? "1 notification"
+                  : `${items.length} notifications`}
+              </span>
+              <Button
+                beforeIcon={<BroomIcon />}
+                onClick={() => {
+                  onDismiss(items.map(({ id }) => id));
+                }}
+                size="sm"
+                variant="ghost"
+              >
+                Clear all
+              </Button>
+            </div>
+          )
+        }
+        keepMounted={inboxes !== undefined}
+        onBack={page === undefined ? undefined : onBack}
+        onOpenChange={onOpenChange}
+        open={open}
+        screen={screen}
+        title={page === undefined ? "Notifications" : page.name}
+        wide={page !== undefined}
+      >
+        {/* Hidden, not unmounted, so the inboxes' pages keep running. */}
+        <div className={paneStyles} hidden={page !== undefined}>
+          {inboxes !== undefined && (
+            <>
+              <h3 className={headingStyles}>Inboxes</h3>
+              <ul className={inboxListStyles}>
+                <InboxList
+                  inboxes={inboxes.inboxes}
+                  onOpen={inboxes.onOpen}
+                  readings={inboxes.readings}
+                />
+              </ul>
+              <h3 className={headingStyles}>Recent</h3>
+            </>
+          )}
+          <Notifications
+            items={items}
+            now={now}
+            onAction={onAction}
+            onDismiss={onDismiss}
+            onOpenChange={onOpenChange}
+            onReply={onReply}
+          />
         </div>
-      ) : (
-        <ul className={listStyles}>
-          {items.map((notification) => (
-            <li className={rowStyles} key={notification.id}>
-              <NotificationCard
-                closeLabel="Clear"
-                notification={notification}
-                now={now}
-                onAction={(key) => {
-                  onAction(notification.id, key);
-                  // Out of the way of the window the action raises.
-                  onOpenChange(false);
-                }}
-                onClose={() => {
-                  onDismiss([notification.id]);
-                }}
-                onReply={(text) => {
-                  onReply(notification.id, text);
-                }}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
-    </SlideOver>
-  ),
+        {inboxes?.inboxes.map((inbox, index) =>
+          inbox.kind === InboxKind.Page ? (
+            <Page
+              inbox={inbox}
+              index={index}
+              key={index}
+              onShow={inboxes.onShow}
+              onUnread={inboxes.onUnread}
+              shown={inboxes.shown === index}
+            />
+          ) : undefined,
+        )}
+      </SlideOver>
+    );
+  },
 );
+
+type PageProps = {
+  inbox: Extract<Inbox, { kind: InboxKind.Page }>;
+  index: number;
+  shown: boolean;
+} & Pick<DrawerInboxes, "onShow" | "onUnread">;
+
+/** The page at `index`, told its place, so its watches start once. */
+const Page = ({ inbox, index, onShow, onUnread, shown }: PageProps) => {
+  const show = useCallback(() => {
+    onShow(index);
+  }, [index, onShow]);
+  const count = useCallback(
+    (unread: number) => {
+      onUnread(index, unread);
+    },
+    [index, onUnread],
+  );
+  return (
+    <InboxPage inbox={inbox} onShow={show} onUnread={count} shown={shown} />
+  );
+};
+
+type NotificationsProps = Pick<
+  Props,
+  "items" | "now" | "onAction" | "onDismiss" | "onOpenChange" | "onReply"
+>;
+
+/** The notifications, or that there are none. */
+const Notifications = ({
+  items,
+  now,
+  onAction,
+  onDismiss,
+  onOpenChange,
+  onReply,
+}: NotificationsProps) =>
+  items.length === 0 ? (
+    <div className={emptyStyles}>
+      <span aria-hidden className={glowStyles}>
+        <BellSimpleIcon size={28} weight="duotone" />
+      </span>
+      <span className={emptyTitleStyles}>You're all caught up</span>
+      <span className={emptyBodyStyles}>
+        What your applications and sites have to say will be here.
+      </span>
+    </div>
+  ) : (
+    <ul className={listStyles}>
+      {items.map((notification) => (
+        <li className={rowStyles} key={notification.id}>
+          <NotificationCard
+            closeLabel="Clear"
+            notification={notification}
+            now={now}
+            onAction={(key) => {
+              onAction(notification.id, key);
+              // Out of the way of the window the action raises.
+              onOpenChange(false);
+            }}
+            onClose={() => {
+              onDismiss([notification.id]);
+            }}
+            onReply={(text) => {
+              onReply(notification.id, text);
+            }}
+          />
+        </li>
+      ))}
+    </ul>
+  );
+
+// Fills the drawer's body, for a page's full height.
+const paneStyles = flex({
+  "&[hidden]": { display: "none" },
+  direction: "column",
+  flex: 1,
+  minBlockSize: 0,
+});
+
+const headingStyles = css({
+  color: "muted",
+  fontSize: "xs",
+  fontWeight: "semibold",
+  margin: 0,
+  paddingBlock: 1,
+});
+
+const inboxListStyles = flex({
+  direction: "column",
+  gap: 0.5,
+  margin: 0,
+  paddingBlockEnd: 2,
+  paddingInline: 0,
+});
 
 const listStyles = flex({
   direction: "column",

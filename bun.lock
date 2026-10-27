@@ -764,6 +764,42 @@
         "typescript": "catalog:",
       },
     },
+    "packages/manganese-inbox-gmail": {
+      "name": "@domicile-desktop/manganese-inbox-gmail",
+      "version": "0.0.0",
+      "dependencies": {
+        "@domicile-desktop/manganese-bar-module-gmail": "workspace:*",
+        "@domicile-desktop/manganese-notifications": "workspace:*",
+        "@domicile-desktop/react": "workspace:*",
+        "@domicile-desktop/sdk": "workspace:*",
+        "@phosphor-icons/react": "catalog:",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/test-support": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/react": "catalog:",
+        "react": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/manganese-inbox-google-messages": {
+      "name": "@domicile-desktop/manganese-inbox-google-messages",
+      "version": "0.0.0",
+      "dependencies": {
+        "@domicile-desktop/manganese-bar-module-google-messages": "workspace:*",
+        "@domicile-desktop/manganese-notifications": "workspace:*",
+        "@phosphor-icons/react": "catalog:",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/test-support": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/react": "catalog:",
+        "react": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/manganese-launcher": {
       "name": "@domicile-desktop/manganese-launcher",
       "version": "1.0.0",
@@ -829,6 +865,8 @@
         "@domicile-desktop/component-library": "workspace:*",
         "@domicile-desktop/manganese-bar": "workspace:*",
         "@domicile-desktop/manganese-host": "workspace:*",
+        "@domicile-desktop/manganese-page-requests": "workspace:*",
+        "@domicile-desktop/react": "workspace:*",
         "@domicile-desktop/sdk": "workspace:*",
         "@pandacss/dev": "catalog:",
         "@phosphor-icons/react": "catalog:",
@@ -973,6 +1011,8 @@
         "@domicile-desktop/manganese-bar-module-workspace-switcher": "workspace:*",
         "@domicile-desktop/manganese-clipboard": "workspace:*",
         "@domicile-desktop/manganese-host": "workspace:*",
+        "@domicile-desktop/manganese-inbox-gmail": "workspace:*",
+        "@domicile-desktop/manganese-inbox-google-messages": "workspace:*",
         "@domicile-desktop/manganese-launcher": "workspace:*",
         "@domicile-desktop/manganese-lock": "workspace:*",
         "@domicile-desktop/manganese-notifications": "workspace:*",
@@ -1431,6 +1471,10 @@
     "@domicile-desktop/manganese-clipboard": ["@domicile-desktop/manganese-clipboard@workspace:packages/manganese-clipboard"],
 
     "@domicile-desktop/manganese-host": ["@domicile-desktop/manganese-host@workspace:packages/manganese-host"],
+
+    "@domicile-desktop/manganese-inbox-gmail": ["@domicile-desktop/manganese-inbox-gmail@workspace:packages/manganese-inbox-gmail"],
+
+    "@domicile-desktop/manganese-inbox-google-messages": ["@domicile-desktop/manganese-inbox-google-messages@workspace:packages/manganese-inbox-google-messages"],
 
     "@domicile-desktop/manganese-launcher": ["@domicile-desktop/manganese-launcher@workspace:packages/manganese-launcher"],
 

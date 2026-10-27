@@ -1,0 +1,44 @@
+{
+  "dependencies": {
+    "@domicile-desktop/manganese-bar-module-google-messages": "workspace:*",
+    "@domicile-desktop/manganese-notifications": "workspace:*",
+    "@phosphor-icons/react": "catalog:"
+  },
+  "description": "Manganese's Google Messages inbox: the page in the notification drawer, with a count of its unread conversations.",
+  "devDependencies": {
+    "@cprussin/tsconfig": "catalog:",
+    "@domicile-desktop/test-support": "workspace:*",
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "react": "catalog:",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "bun": ">=1.4.2",
+    "node": ">=24"
+  },
+  "exports": {
+    ".": "./src/messages-inbox.ts"
+  },
+  "files": [
+    "src/**",
+    "!src/**/*.test.ts"
+  ],
+  "license": "MIT",
+  "name": "@domicile-desktop/manganese-inbox-google-messages",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "directory": "packages/manganese-inbox-google-messages",
+    "type": "git",
+    "url": "git+https://github.com/cprussin/domicile.git"
+  },
+  "scripts": {
+    "test:types": "tsc --noEmit",
+    "test:unit": "bun test"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}

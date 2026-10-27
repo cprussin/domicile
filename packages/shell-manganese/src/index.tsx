@@ -6,6 +6,7 @@
 import type { BarLayout } from "@domicile-desktop/manganese-bar/bar-layout";
 import type { ApplicationsOptions } from "@domicile-desktop/manganese-launcher/applications-config";
 import { applicationsConfigSchema } from "@domicile-desktop/manganese-launcher/applications-config";
+import type { Inbox } from "@domicile-desktop/manganese-notifications/inbox";
 import type { FloatingOptions } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
 import { floatingRulesSchema } from "@domicile-desktop/manganese-window-management/floating/floating-rules";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
@@ -38,6 +39,12 @@ export type ManganeseOptions = {
    * `docs/WINDOW-MANAGEMENT.md`.
    */
   readonly floating?: FloatingOptions;
+  /**
+   * Inboxes listed in the notification drawer, above the notifications, such
+   * as `[gmailInbox({ … }), messagesInbox()]`. Their unread conversations
+   * count toward the bell. Defaults to none. See `docs/TOP-BAR.md#inboxes`.
+   */
+  readonly inboxes?: readonly Inbox[];
   /**
    * Shell keybindings, below any the config binds. Defaults to
    * `DEFAULT_KEYBINDINGS` (sway's, on Meta).

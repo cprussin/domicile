@@ -316,6 +316,43 @@ button, and their controls in one panel, each labeled in words.
 - The compositor keeps the history, so it survives a reload. See
   [NOTIFICATIONS.md](../../../docs/architecture/NOTIFICATIONS.md).
 
+## Inboxes
+
+`runManganese({ inboxes: [...] })` lists inboxes in the notification drawer,
+under **Inboxes**, above the notifications. None by default. Each is plain
+data: a name, an icon, how it is read and what a press does.
+
+```ts
+import { runManganese } from "@domicile-desktop/manganese";
+import { gmailInbox } from "@domicile-desktop/manganese-inbox-gmail";
+import { messagesInbox } from "@domicile-desktop/manganese-inbox-google-messages";
+
+export const Shell = runManganese({
+  inboxes: [
+    gmailInbox({ client: { id, secret }, email: "me@gmail.com", nickname: "Work" }),
+    messagesInbox(),
+  ],
+});
+```
+
+- Each row shows the inbox's unread conversations in a badge on its icon,
+  and its conversation count where known. They add to the bell's count.
+  Opening the drawer clears only the notifications' part.
+- **`Inbox.Watched`** (`@domicile-desktop/manganese-notifications/inbox`): read
+  from outside, as a `SharedWatch<InboxReading>`; a press runs its `open`,
+  then closes the drawer. `gmailInbox` is one: a press opens the inbox in a
+  browser window, or signs the account in. It reads as the
+  [Gmail](#gmail) item does.
+- **`Inbox.Page`**: a page shown in the drawer, widened, with a back button,
+  in place of the list. It loads with the shell and stays loaded while
+  hidden, so its notifications keep coming; its unread count comes from the
+  page. Pressing one of its notifications opens the drawer on it. Its
+  permission requests are asked above it. `messagesInbox` is one, kept as the
+  [Google Messages](#google-messages) item keeps its page. Use one or the
+  other: Messages runs one web session at a time.
+- The drawer opens on the notifications, not on a page it closed on.
+- Not on the lock screen, as the drawer is not.
+
 ## Sharing
 
 - Shown while an application records the desktop through the ScreenCast
