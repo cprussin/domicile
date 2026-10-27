@@ -16,7 +16,7 @@ package's default export path:
 | `Tray` | `@domicile-desktop/manganese-bar-module-tray` |
 | `WorkspaceSwitcher` | `@domicile-desktop/manganese-bar-module-workspace-switcher` |
 | `Clock` | `@domicile-desktop/manganese-bar-module-clock` |
-| `QuickSettings` | `@domicile-desktop/manganese/QuickSettings` |
+| `QuickSettings` | `@domicile-desktop/manganese-quick-settings` |
 | `Keymap` | `@domicile-desktop/manganese-bar-module-keymap` |
 | `ThemeSwitch` | `@domicile-desktop/manganese-bar-module-theme-switch` |
 | `IdleInhibitor` | `@domicile-desktop/manganese-bar-module-idle-inhibitor` |

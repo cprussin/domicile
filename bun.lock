@@ -910,6 +910,37 @@
         "typescript": "catalog:",
       },
     },
+    "packages/manganese-quick-settings": {
+      "name": "@domicile-desktop/manganese-quick-settings",
+      "version": "0.0.0",
+      "dependencies": {
+        "@domicile-desktop/component-library": "workspace:*",
+        "@domicile-desktop/manganese-bar": "workspace:*",
+        "@domicile-desktop/manganese-bar-module-battery": "workspace:*",
+        "@domicile-desktop/manganese-bar-module-bluetooth": "workspace:*",
+        "@domicile-desktop/manganese-bar-module-brightness": "workspace:*",
+        "@domicile-desktop/manganese-bar-module-idle-inhibitor": "workspace:*",
+        "@domicile-desktop/manganese-bar-module-network": "workspace:*",
+        "@domicile-desktop/manganese-bar-module-theme-switch": "workspace:*",
+        "@domicile-desktop/manganese-bar-module-volume": "workspace:*",
+        "@domicile-desktop/react": "workspace:*",
+        "@pandacss/dev": "catalog:",
+        "@phosphor-icons/react": "catalog:",
+        "react": "catalog:",
+      },
+      "devDependencies": {
+        "@cprussin/tsconfig": "catalog:",
+        "@domicile-desktop/test-support": "workspace:*",
+        "@pandacss/preset-panda": "catalog:",
+        "@testing-library/react": "catalog:",
+        "@testing-library/user-event": "catalog:",
+        "@types/bun": "catalog:",
+        "@types/react": "catalog:",
+        "@types/react-dom": "catalog:",
+        "postcss": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/manganese-wallpaper": {
       "name": "@domicile-desktop/manganese-wallpaper",
       "version": "1.0.0",
@@ -1016,6 +1047,7 @@
         "@domicile-desktop/manganese-launcher": "workspace:*",
         "@domicile-desktop/manganese-lock": "workspace:*",
         "@domicile-desktop/manganese-notifications": "workspace:*",
+        "@domicile-desktop/manganese-quick-settings": "workspace:*",
         "@domicile-desktop/manganese-wallpaper": "workspace:*",
         "@domicile-desktop/manganese-window-management": "workspace:*",
         "@domicile-desktop/react": "workspace:*",
@@ -1483,6 +1515,8 @@
     "@domicile-desktop/manganese-notifications": ["@domicile-desktop/manganese-notifications@workspace:packages/manganese-notifications"],
 
     "@domicile-desktop/manganese-page-requests": ["@domicile-desktop/manganese-page-requests@workspace:packages/manganese-page-requests"],
+
+    "@domicile-desktop/manganese-quick-settings": ["@domicile-desktop/manganese-quick-settings@workspace:packages/manganese-quick-settings"],
 
     "@domicile-desktop/manganese-wallpaper": ["@domicile-desktop/manganese-wallpaper@workspace:packages/manganese-wallpaper"],
 

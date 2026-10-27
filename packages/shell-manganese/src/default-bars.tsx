@@ -9,7 +9,7 @@ import { Notifications } from "@domicile-desktop/manganese-bar-module-notificati
 import { Sharing } from "@domicile-desktop/manganese-bar-module-sharing";
 import { Tray } from "@domicile-desktop/manganese-bar-module-tray";
 import { WorkspaceSwitcher } from "@domicile-desktop/manganese-bar-module-workspace-switcher";
-import { QuickSettings } from "./quick-settings/QuickSettings";
+import { QuickSettings } from "@domicile-desktop/manganese-quick-settings";
 
 /**
  * Manganese's default bar.
