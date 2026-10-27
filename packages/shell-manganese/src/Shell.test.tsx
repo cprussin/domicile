@@ -19,9 +19,9 @@ import {
   SURFACE_TUCK,
   TITLE_BAR,
 } from "@domicile-desktop/manganese-window-management/rect";
-import { hostDisplays } from "@domicile-desktop/manganese-window-management/screens/host-displays";
 import { GrabCursor } from "@domicile-desktop/manganese-window-management/useGrabCursor";
 import { movingStyles } from "@domicile-desktop/manganese-window-management/window-styles";
+import { DomicileProvider } from "@domicile-desktop/react/domicile-provider";
 import { sharedWatch } from "@domicile-desktop/react/shared-watch";
 import { APP_TAG_NAME } from "@domicile-desktop/sdk/app-element";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
@@ -257,7 +257,8 @@ const FAKE_INBOXES: readonly Inbox[] = [
 let domicile: Desk;
 
 /**
- * Renders the chrome on `desktop`.
+ * Renders the chrome on `desktop`, in strict mode as `mount` draws it unless
+ * `strict` is false.
  *
  * The desktop is described before the first render by default, as after a
  * completed handshake. Pass `undefined` to test the gap.
@@ -267,6 +268,7 @@ const renderingShell = (
   bar?: BarLayout,
   keybindings: ShellKeybindings = MANGANESE_KEYS,
   inboxes?: readonly Inbox[],
+  strict = true,
 ) => {
   domicile = new Desk();
   if (desktop !== undefined) {
@@ -276,15 +278,16 @@ const renderingShell = (
   // A standalone theme, so these tests do not depend on the host theme
   // protocol; `host-theme.test.ts` covers that.
   const rendered = render(
-    <Shell
-      applications={NO_APPLICATIONS}
-      bar={bar}
-      displays={hostDisplays(client)}
-      domicile={client}
-      inboxes={inboxes}
-      keybindings={keybindings}
-      theme={standaloneThemeSource()}
-    />,
+    <DomicileProvider domicile={client}>
+      <Shell
+        applications={NO_APPLICATIONS}
+        bar={bar}
+        inboxes={inboxes}
+        keybindings={keybindings}
+        theme={standaloneThemeSource()}
+      />
+    </DomicileProvider>,
+    { reactStrictMode: strict },
   );
   return rendered;
 };
@@ -292,6 +295,13 @@ const renderingShell = (
 /** The chrome on an already described desktop. */
 const renderShell = (desktop: readonly DomicileDisplay[] = [LEFT]) =>
   renderingShell(desktop);
+
+/**
+ * The chrome on `desktop`, outside strict mode, for tests that count what it
+ * asks the desktop for. Strict mode runs every effect twice in development.
+ */
+const renderCountedShell = (desktop: readonly DomicileDisplay[] = [LEFT]) =>
+  renderingShell(desktop, undefined, MANGANESE_KEYS, undefined, false);
 
 /** The chrome before any desktop is described, or with no host at all. */
 const renderUndescribedShell = () => renderingShell(undefined);
@@ -1042,7 +1052,7 @@ describe("Shell", () => {
     it("asks the system once for every bar and the lock screen", async () => {
       // One `pactl subscribe`, `udevadm monitor` and D-Bus match for the
       // desk, not one per bar and one more for the lock screen.
-      renderShell([LEFT, RIGHT]);
+      renderCountedShell([LEFT, RIGHT]);
       await act(() => new Promise((settled) => setTimeout(settled, 0)));
 
       const requests = domicile.calls.flatMap(([method, , request]) =>
@@ -3877,7 +3887,7 @@ describe("the launcher", () => {
     // Unlike files, read before opening so late results do not push rows
     // down. See `launcher/useOpeningApps.ts`. A read starts by asking the
     // desktop's environment where applications are installed.
-    renderShell();
+    renderCountedShell();
     const reads = () =>
       domicile.calls.filter(
         ([call, , request]) =>

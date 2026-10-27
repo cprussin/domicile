@@ -82,9 +82,8 @@ import {
 } from "@domicile-desktop/manganese-window-management/window-state";
 import type { Workspaces } from "@domicile-desktop/manganese-window-management/workspaces-context";
 import { WorkspacesContext } from "@domicile-desktop/manganese-window-management/workspaces-context";
-import { DomicileProvider } from "@domicile-desktop/react/domicile-provider";
+import { useDomicile } from "@domicile-desktop/react/domicile-provider";
 import { useSharedWatch } from "@domicile-desktop/react/use-shared-watch";
-import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import { previewFile } from "@domicile-desktop/sdk/file-preview";
 import type { ShellKeybindings } from "@domicile-desktop/sdk/own-keybindings";
 import { ownedChords } from "@domicile-desktop/sdk/own-keybindings";
@@ -113,7 +112,6 @@ type Props = {
   applications: ApplicationsConfig;
   /** The layout of every monitor's bar. */
   bar: BarLayout;
-  domicile: Domicile;
   /** Which client windows open floating, besides dialogs. */
   floating: FloatingRules;
   /** The inboxes listed in the notification drawer, if any. */
@@ -133,11 +131,11 @@ type Props = {
 export const Desktop = ({
   applications,
   bar,
-  domicile,
   floating,
   inboxes,
   keybindings,
 }: Props) => {
+  const domicile = useDomicile();
   const displays = useDisplays();
   // What the config sets under `shell_options`.
   const shellOptions = useShellOptions(domicile, options);
@@ -548,7 +546,6 @@ export const Desktop = ({
   return (
     <BarProviders
       clock={shellOptions.clock}
-      domicile={domicile}
       drawer={drawer}
       holdKeyboard={holdKeyboard}
       keymap={shellOptions.keymap}
@@ -737,7 +734,6 @@ const lockBar = (screen: string) => (
 const BarProviders = ({
   children,
   clock,
-  domicile,
   drawer,
   holdKeyboard,
   keymap,
@@ -747,7 +743,6 @@ const BarProviders = ({
 }: {
   children: ReactNode;
   clock: ClockOptions;
-  domicile: Domicile;
   drawer: NotificationsDrawer;
   holdKeyboard: HoldKeyboard;
   keymap: KeymapOptions;
@@ -755,23 +750,21 @@ const BarProviders = ({
   tray: TrayState;
   workspaces: Workspaces;
 }) => (
-  <DomicileProvider domicile={domicile}>
-    <WorkspacesContext value={workspaces}>
-      <LauncherContext value={launcher}>
-        <NotificationsContext value={drawer}>
-          <TrayContext value={tray}>
-            <PanelKeyboardContext value={holdKeyboard}>
-              <ClockOptionsContext value={clock}>
-                <KeymapOptionsContext value={keymap}>
-                  {children}
-                </KeymapOptionsContext>
-              </ClockOptionsContext>
-            </PanelKeyboardContext>
-          </TrayContext>
-        </NotificationsContext>
-      </LauncherContext>
-    </WorkspacesContext>
-  </DomicileProvider>
+  <WorkspacesContext value={workspaces}>
+    <LauncherContext value={launcher}>
+      <NotificationsContext value={drawer}>
+        <TrayContext value={tray}>
+          <PanelKeyboardContext value={holdKeyboard}>
+            <ClockOptionsContext value={clock}>
+              <KeymapOptionsContext value={keymap}>
+                {children}
+              </KeymapOptionsContext>
+            </ClockOptionsContext>
+          </PanelKeyboardContext>
+        </TrayContext>
+      </NotificationsContext>
+    </LauncherContext>
+  </WorkspacesContext>
 );
 
 /**
