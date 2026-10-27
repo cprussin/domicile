@@ -64,6 +64,9 @@ bool FindTab(int tab_id,
              content::WebContents** contents,
              int* index);
 void AmendTab(content::WebContents& contents, api::tabs::Tab& tab);
+// Whether `contents` is a tab to chrome.tabs. On a desk only a desk tab is,
+// so the shell is not; off a desk every WebContents is Chrome's to count.
+bool IsTab(content::WebContents& contents);
 void ForEachTab(
     const base::RepeatingCallback<void(content::WebContents*)>& callback);
 
