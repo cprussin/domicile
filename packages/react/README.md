@@ -21,6 +21,10 @@ export const Shell = mount(Focused);
   synchronously (the page draws nothing until `Shell` returns) in an element
   of its own with `display: contents`, under `StrictMode`, an error boundary
   that shows what threw, and `<DomicileProvider>`.
+- `./nested-shell`: `<NestedShell shell>` runs another shell, such as an npm
+  package's `Shell` or `runManganese()`, inside this one, on the same desktop.
+  It sizes against the element it is placed in. Both shells see every window
+  and bind keys, so draw windows and bind keys in only one of them.
 - `./domicile-provider`: `<DomicileProvider domicile>`, `useDomicile()` (a
   shell's `Domicile`; throws under an app's) and `useAppDomicile()`.
 - `./use-watch`: `useWatch(namespace, type, read)`, `read` again on each

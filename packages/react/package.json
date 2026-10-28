@@ -43,6 +43,10 @@
       "types": "./dist/mount.d.ts",
       "default": "./dist/mount.js"
     },
+    "./nested-shell": {
+      "types": "./dist/nested-shell.d.ts",
+      "default": "./dist/nested-shell.js"
+    },
     "./per-desktop": {
       "types": "./dist/per-desktop.d.ts",
       "default": "./dist/per-desktop.js"
