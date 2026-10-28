@@ -35,29 +35,40 @@ export const evaluate = async (
 /**
  * Write the `options` export of the shell `entry` to `out` as JSON. A shell
  * without one has no options, and nothing is written.
+ *
+ * Only a shell that exports `options` is run: any other may need a page at
+ * import, such as a library that adds styles to `document`.
  */
 export const extractOptions = async (
   entry: string,
   out: string,
   domicile: string,
 ): Promise<void> => {
-  const { options } = await exportsOf(entry, domicile);
-  if (options !== undefined) {
+  const module = await bundled(entry, domicile);
+  const { exports } = new Bun.Transpiler({ loader: "js" }).scan(
+    await Bun.file(module).text(),
+  );
+  if (exports.includes("options")) {
+    const { options } = await import(module);
     writeFileSync(out, `${JSON.stringify(options)}\n`);
   }
 };
 
 /**
- * The exports of the module `entry`.
- *
- * The module is bundled first, so Domicile's packages and React resolve as in
- * a shell build and stylesheet imports are empty. Importing it starts no
- * desktop, because nothing calls `Shell`.
+ * The exports of the module `entry`. Importing it starts no desktop, because
+ * nothing calls `Shell`.
  */
 const exportsOf = async (
   entry: string,
   domicile: string,
-): Promise<Record<string, unknown>> => {
+): Promise<Record<string, unknown>> =>
+  await import(await bundled(entry, domicile));
+
+/**
+ * The module `entry`, bundled to one file so Domicile's packages and React
+ * resolve as in a shell build and stylesheet imports are empty.
+ */
+const bundled = async (entry: string, domicile: string): Promise<string> => {
   const scratch = mkdtempSync(path.join(tmpdir(), "domicile-config-"));
   const built = await Bun.build({
     entrypoints: [entry],
@@ -72,7 +83,7 @@ const exportsOf = async (
       `domicile-builder: ${entry} did not build: ${built.logs.map(String).join("\n")}`,
     );
   } else {
-    return await import(output.path);
+    return output.path;
   }
 };
 

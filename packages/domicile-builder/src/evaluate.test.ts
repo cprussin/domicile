@@ -72,4 +72,19 @@ describe("extractOptions", () => {
 
     expect(existsSync(out)).toBe(false);
   }, 60_000);
+
+  it("runs no code of a shell that declares none, which may need a page", async () => {
+    const desk = mkdtempSync(path.join(tmpdir(), "domicile-options-"));
+    const entry = path.join(desk, "shell.ts");
+    writeFileSync(
+      entry,
+      `document.head.append("styles");
+       export const Shell = () => undefined;`,
+    );
+    const out = path.join(desk, "options.json");
+
+    await extractOptions(entry, out, DOMICILE);
+
+    expect(existsSync(out)).toBe(false);
+  }, 60_000);
 });
