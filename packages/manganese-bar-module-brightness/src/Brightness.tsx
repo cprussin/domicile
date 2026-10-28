@@ -125,9 +125,7 @@ const NightLightSwitch = ({
 // unreadable over the wallpaper. This uses the bar's white, like the bell and
 // theme toggle.
 const triggerStyles = css({
-  _hover: {
-    backgroundColor: "color-mix(in oklab, white 16%, transparent)",
-  },
+  _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
   alignItems: "center",
   backgroundColor: "transparent",
   blockSize: 7,

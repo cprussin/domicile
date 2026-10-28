@@ -57,9 +57,7 @@ export const NotificationBell = ({ handle, screen, unread }: Props) => {
 // Matches the theme toggle: round, borderless, in the bar's white, lit on
 // hover.
 const buttonStyles = css({
-  _hover: {
-    backgroundColor: "color-mix(in oklab, white 16%, transparent)",
-  },
+  _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
   alignItems: "center",
   backgroundColor: "transparent",
   blockSize: 7,

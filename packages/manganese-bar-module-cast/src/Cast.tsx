@@ -226,9 +226,7 @@ const labelOf = (casts: readonly Running[]): string =>
 // unreadable over the wallpaper. Matches the Bluetooth item.
 const triggerStyles = cva({
   base: {
-    _hover: {
-      backgroundColor: "color-mix(in oklab, white 16%, transparent)",
-    },
+    _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
     alignItems: "center",
     backgroundColor: "transparent",
     blockSize: 7,

@@ -171,9 +171,7 @@ const detailOf = (
 
 // The other bar items' hover circle, stretched around several icons.
 const triggerStyles = hstack({
-  _hover: {
-    backgroundColor: "color-mix(in oklab, white 16%, transparent)",
-  },
+  _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
   backgroundColor: "transparent",
   blockSize: 7,
   borderRadius: "full",

@@ -134,6 +134,29 @@ describe("the domicile preset", () => {
     expect(lifts("<button data-checked></button>")).toBe(false);
   });
 
+  it("keeps a button lit while the popup it opened is open", () => {
+    const lit = at(
+      at(at(domicilePreset, "conditions"), "extend"),
+      "hoverOrOpen",
+    );
+    if (typeof lit !== "string") {
+      throw new Error("no hoverOrOpen condition");
+    }
+    // happy-dom matches no `:hover`, so the test asks only about the popup.
+    const lights = (html: string) => {
+      const parent = document.createElement("div");
+      parent.innerHTML = html;
+      const element = parent.firstElementChild;
+      if (element === null) {
+        throw new Error(`no element in ${html}`);
+      }
+      return element.matches(lit.replace("&", "*").replace(":hover, ", ""));
+    };
+
+    expect(lights("<button data-popup-open></button>")).toBe(true);
+    expect(lights("<button></button>")).toBe(false);
+  });
+
   it("keeps a control's outline, so its focus ring fades out", () => {
     // `control` transitions `outline-color`; with no outline, the ring would
     // vanish at once on blur.

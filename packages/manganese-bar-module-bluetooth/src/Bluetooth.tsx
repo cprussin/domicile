@@ -169,9 +169,7 @@ const Icon = ({ connected, on }: { connected: boolean; on: boolean }) => {
 // unreadable over the wallpaper. Matches the volume control.
 const triggerStyles = cva({
   base: {
-    _hover: {
-      backgroundColor: "color-mix(in oklab, white 16%, transparent)",
-    },
+    _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
     alignItems: "center",
     backgroundColor: "transparent",
     blockSize: 7,
