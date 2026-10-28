@@ -5,11 +5,16 @@
 //! (`src/activation.rs`). Unit tests cover the forwarding. These check real
 //! requests on each side of that line, and that the shell's answer moves the
 //! seat.
+//!
+//! A press on a notification also lets the app that sent it ask: some apps
+//! (Electron before 42, so Slack) raise their window with a token of their
+//! own instead of the one the press hands them.
 
 mod running;
 
 use domicile_protocol::{ChromeMessage, HostMessage};
 
+use crate::running::bus::Bus;
 use crate::running::Compositor;
 
 const ONE_DISPLAY: &str = r#"
@@ -151,6 +156,55 @@ fn a_window_not_heard_wants_attention_until_it_has_the_keyboard() {
             urgent: false,
         }
     );
+}
+
+/// Pressing an app's notification lets it raise its window with a token of
+/// its own, made before the keyboard last moved.
+#[test]
+fn a_pressed_notifications_app_is_heard_asking_with_its_own_token() {
+    let bus = Bus::started();
+    let compositor = Compositor::started_on_a_bus(ONE_DISPLAY, &bus.address);
+    compositor.wait_for_log("this desktop is the notification server");
+    let mut chrome = compositor.chrome();
+    let _chat = compositor.client_on_a_bus(
+        "chat",
+        &["--notify", "New message", "--ask-for-focus-when-left"],
+        &bus.address,
+    );
+    let chat_id = appeared(&mut chrome);
+    let id = notified(&mut chrome);
+    let _other = compositor.client("other");
+    let other_id = appeared(&mut chrome);
+    focus(&mut chrome, &chat_id);
+
+    chrome
+        .say(&ChromeMessage::InvokeNotificationAction {
+            id,
+            action: "default".into(),
+        })
+        .expect("the chrome socket takes a press");
+    // The keyboard leaving `chat` makes it ask, with its old enter's serial.
+    focus(&mut chrome, &other_id);
+
+    assert_eq!(
+        chrome
+            .wait_for(|message| matches!(message, HostMessage::FocusRequested { .. }))
+            .expect("the pressed notification's app is heard"),
+        HostMessage::FocusRequested { app_id: chat_id }
+    );
+}
+
+/// The id of the first notification the chrome is told about.
+fn notified(chrome: &mut domicile_test_chrome::Chrome) -> u32 {
+    let listed = chrome
+        .wait_for(
+            |message| matches!(message, HostMessage::Notifications { items } if !items.is_empty()),
+        )
+        .expect("a notification sent is listed to the chrome");
+    let HostMessage::Notifications { items } = listed else {
+        unreachable!("the wait matched on this variant")
+    };
+    items[0].id
 }
 
 /// Gives `app_id` the keyboard and waits for the chrome to be told.

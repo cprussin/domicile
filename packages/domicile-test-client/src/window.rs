@@ -67,6 +67,9 @@ pub enum ClientError {
 
     #[error("could not make a buffer to draw into: {0}")]
     NoBuffer(String),
+
+    #[error("could not notify: {0}")]
+    NotNotified(#[from] zbus::Error),
 }
 
 /// The initial window size, in surface pixels.
@@ -240,6 +243,11 @@ pub fn run(asked: &Arguments) -> Result<std::convert::Infallible, ClientError> {
         .map_err(|err| ClientError::Lost(err.to_string()))?;
 
     client.open(&handle)?;
+    let _notified = asked
+        .notify
+        .as_deref()
+        .map(crate::notification::notify)
+        .transpose()?;
     loop {
         queue
             .blocking_dispatch(&mut client)

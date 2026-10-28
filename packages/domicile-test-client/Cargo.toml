@@ -31,3 +31,5 @@ wayland-protocols-misc = { version = "0.3", features = ["client"] }
 # Generates Domicile's own `domicile_anchor_v1`, from the compositor's
 # `protocols/`, for `tests/anchors.rs`.
 wayland-scanner = "0.31"
+# Sends `--notify`'s notification.
+zbus.workspace = true

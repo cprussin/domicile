@@ -61,6 +61,8 @@ pub struct Notify {
     pub icon: Option<Icon>,
     /// The bus name it came from, if it came over the bus.
     pub sender: Option<String>,
+    /// The process that bus name belongs to, as the bus knows it.
+    pub pid: Option<u32>,
 }
 
 /// The application that sent a notification, for starting it again.
@@ -134,6 +136,7 @@ struct Entry {
     shown: Notification,
     resident: bool,
     application: Option<Application>,
+    pid: Option<u32>,
 }
 
 impl Notifications {
@@ -177,6 +180,7 @@ impl Notifications {
             });
         let entry = Entry {
             resident: notify.hints.resident,
+            pid: notify.pid,
             shown: self.shown(id, notify, now),
             application,
         };
@@ -233,6 +237,11 @@ impl Notifications {
             .find(|entry| entry.shown.id == id)?
             .application
             .as_ref()
+    }
+
+    /// The process that sent `id`, if it came over the bus.
+    pub fn pid(&self, id: u32) -> Option<u32> {
+        self.entries.iter().find(|entry| entry.shown.id == id)?.pid
     }
 
     /// Reply to `id`, which [`Self::invoke`] answers as an action.
@@ -952,6 +961,21 @@ mod tests {
                     desktop_entry: "org.example.Chat".into(),
                 })
             );
+        }
+
+        #[test]
+        fn a_notification_knows_the_process_that_sent_it() {
+            // So a press can let that process raise its own window.
+            let mut notifications = held(Vec::new());
+            let Notified { id, .. } = notifications.notify(
+                Notify {
+                    pid: Some(4242),
+                    ..from_chat(None)
+                },
+                0,
+            );
+
+            assert_eq!(notifications.pid(id), Some(4242));
         }
 
         #[test]
