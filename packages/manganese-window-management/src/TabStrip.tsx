@@ -1,5 +1,5 @@
+import { AnimatedPlusIcon } from "@domicile-desktop/component-library/AnimatedPlusIcon";
 import { Button } from "@domicile-desktop/component-library/Button";
-import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 import { useRef } from "react";
 
 import { cva, cx } from "../styled-system/css";
@@ -239,7 +239,7 @@ const NewTab = ({
       style={{ insetInlineStart: `${at.x.toString()}px` }}
     >
       <Button label="New tab" onClick={onNewTab} size="xs" variant="ghost">
-        <PlusIcon size={12} />
+        <AnimatedPlusIcon size={12} />
       </Button>
     </span>
   );

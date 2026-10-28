@@ -1,4 +1,5 @@
 import { css } from "../../styled-system/css";
+import { DIAGONALS } from "../_icon/diagonals";
 import { IconFrame } from "../_icon/IconFrame";
 import { IconPart } from "../_icon/IconPart";
 import { SQUARES_REGULAR } from "../_icon/phosphor-parts";
@@ -18,11 +19,12 @@ export const AnimatedSquaresIcon = ({ label, size }: Props) => (
     {SQUARES_REGULAR.squares.map((d, index) => (
       <IconPart
         d={d}
+        direction={DIAGONALS[index]}
         hoverStyles={squareSpreadStyles}
         key={d}
         name="square"
         order={index}
-        stateStyles={SQUARE_STYLES[index]}
+        stateStyles={squarePressStyles}
       />
     ))}
   </IconFrame>
@@ -31,36 +33,16 @@ export const AnimatedSquaresIcon = ({ label, size }: Props) => (
 const squareSpreadStyles = css({
   _controlHover: {
     animation:
-      "iconSquareSpread {durations.slowest} {easings.in-out} calc(var(--part-order) * {durations.fastest} / 2)",
+      "iconPartSpread {durations.slowest} {easings.in-out} calc(var(--part-order) * {durations.fastest} / 2)",
   },
+  "--spread": "9px",
 });
 
-// Each square moves along its own diagonal, out while pointed at and in
-// while pressed: top start, top end, bottom start, bottom end. Physical,
-// since the icon does not mirror.
-const SQUARE_STYLES = [
-  css({
-    _controlActive: { transform: "translate(5px, 5px)" },
-    "--spread-x": "-9px",
-    "--spread-y": "-9px",
-    transition: "transform {durations.fast} {easings.out}",
-  }),
-  css({
-    _controlActive: { transform: "translate(-5px, 5px)" },
-    "--spread-x": "9px",
-    "--spread-y": "-9px",
-    transition: "transform {durations.fast} {easings.out}",
-  }),
-  css({
-    _controlActive: { transform: "translate(5px, -5px)" },
-    "--spread-x": "-9px",
-    "--spread-y": "9px",
-    transition: "transform {durations.fast} {easings.out}",
-  }),
-  css({
-    _controlActive: { transform: "translate(-5px, -5px)" },
-    "--spread-x": "9px",
-    "--spread-y": "9px",
-    transition: "transform {durations.fast} {easings.out}",
-  }),
-];
+// Each square moves in along its diagonal while pressed.
+const squarePressStyles = css({
+  _controlActive: {
+    transform:
+      "translate(calc(var(--part-x) * -5px), calc(var(--part-y) * -5px))",
+  },
+  transition: "transform {durations.fast} {easings.out}",
+});

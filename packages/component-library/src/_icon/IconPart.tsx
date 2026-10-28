@@ -8,6 +8,11 @@ type Props = {
   /** The animation each cue plays. */
   cueStyles?: string | undefined;
   d: string;
+  /**
+   * The way it moves in motions that move parts apart, from -1 to 1 on each
+   * axis, as `--part-x` and `--part-y`.
+   */
+  direction?: readonly [number, number] | undefined;
   /** The animation played while the control the icon is in is pointed at. */
   hoverStyles?: string | undefined;
   /** What the part is, for styles and tests: "clapper", "arc". */
@@ -31,6 +36,7 @@ export const IconPart = ({
   cue = 0,
   cueStyles,
   d,
+  direction = [0, 0],
   hoverStyles,
   name,
   order = 0,
@@ -46,6 +52,8 @@ export const IconPart = ({
       {
         "--part-order": order,
         "--part-origin": `${origin[0].toString()}px ${origin[1].toString()}px`,
+        "--part-x": direction[0],
+        "--part-y": direction[1],
       } as CSSProperties
     }
   >

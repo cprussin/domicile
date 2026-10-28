@@ -13,6 +13,25 @@ export const iconKeyframes = {
     "0%, 100%": { opacity: "0.25" },
     "50%": { opacity: "1" },
   },
+  // A plus's arm reaches out along its direction, and back.
+  iconArmReach: {
+    "0%, 100%": { transform: "none" },
+    "50%": {
+      transform:
+        "scale(calc(1 + var(--part-x) * 0.18), calc(1 + var(--part-y) * 0.18))",
+    },
+  },
+  // An arm swings `--swing` the way its direction says, and back: an X
+  // snipping, a caret's point sharpening.
+  iconArmSwing: {
+    "0%, 100%": { transform: "none" },
+    "50%": { transform: "rotate(calc(var(--part-x) * var(--swing)))" },
+  },
+  // A reload arrow winds forward, and back.
+  iconArrowWind: {
+    "0%, 100%": { transform: "none" },
+    "50%": { transform: "rotate(40deg)" },
+  },
   // The bell's clapper, lagging the swing.
   iconBellClapper: {
     "0%, 100%": { transform: "none" },
@@ -73,10 +92,21 @@ export const iconKeyframes = {
     "0%, 100%": { opacity: "1" },
     "50%": { opacity: "0.25" },
   },
+  // A download's arrow drops into its tray.
+  iconDownloadDrop: {
+    "0%": { opacity: "0", transform: "translateY(-60px)" },
+    "70%": { opacity: "1", transform: "translateY(10px)" },
+    "100%": { opacity: "1", transform: "none" },
+  },
   // The gear turns one tooth. Its six teeth make the end look like the start.
   iconGearTurn: {
     "0%": { transform: "none" },
     "100%": { transform: "rotate(60deg)" },
+  },
+  // A lock's keyhole swells as its shackle shuts.
+  iconKeyholePulse: {
+    "0%, 100%": { transform: "none" },
+    "50%": { transform: "scale(1.35)" },
   },
   // A key presses down.
   iconKeyPress: {
@@ -103,6 +133,15 @@ export const iconKeyframes = {
     "35%": { transform: "rotate(-12deg)" },
     "70%": { transform: "rotate(5deg)" },
   },
+  // A part moves `--spread` out along its direction (see `IconPart`), and
+  // back.
+  iconPartSpread: {
+    "0%, 100%": { transform: "none" },
+    "50%": {
+      transform:
+        "translate(calc(var(--part-x) * var(--spread)), calc(var(--part-y) * var(--spread)))",
+    },
+  },
   // The eye's pupil looks one way, then the other.
   iconPupilGlance: {
     "0%, 100%": { transform: "none" },
@@ -123,10 +162,21 @@ export const iconKeyframes = {
     "0%, 100%": { transform: "none" },
     "50%": { transform: "scale(0.88)" },
   },
-  // A launcher square moves out along `--spread-x` and `--spread-y`, and back.
-  iconSquareSpread: {
+  // A lock's shackle lifts a little, and back.
+  iconShackleLift: {
     "0%, 100%": { transform: "none" },
-    "50%": { transform: "translate(var(--spread-x), var(--spread-y))" },
+    "50%": { transform: "translateY(-14px)" },
+  },
+  // A lock's shackle snaps shut from open.
+  iconShackleShut: {
+    "0%": { transform: "translateY(-30px)" },
+    "70%": { transform: "translateY(4px)" },
+    "100%": { transform: "none" },
+  },
+  // A download's tray gives under the arrow landing in it.
+  iconTrayGive: {
+    "0%, 100%": { transform: "none" },
+    "70%": { transform: "scaleY(0.86)" },
   },
   // A speaker wave pulls in, for quieter.
   iconWavePull: {

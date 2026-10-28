@@ -46,4 +46,15 @@ describe(IconPart, () => {
     expect(container.querySelector("[data-cued]")).not.toBeNull();
     expect(pathOf(container)).not.toBe(first);
   });
+
+  it("gives its direction to its styles", () => {
+    const { container } = render(
+      <svg>
+        <IconPart d="M1 1Z" direction={[-1, 1]} name="square" />
+      </svg>,
+    );
+    const part = container.querySelector<SVGGElement>("[data-part=square]");
+    expect(part?.style.getPropertyValue("--part-x")).toBe("-1");
+    expect(part?.style.getPropertyValue("--part-y")).toBe("1");
+  });
 });

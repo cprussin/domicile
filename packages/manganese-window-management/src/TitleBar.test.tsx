@@ -536,6 +536,36 @@ describe("TitleBar", () => {
       expect(getByRole("img", { name: "Column of 3" }).textContent).toBe("3");
     });
 
+    it("builds in a group's new layout", () => {
+      const group = { layout: Layout.SplitV, windows: ["a", "b", "c"] };
+      const { getByRole, rerender } = tab({ group });
+      rerender(
+        <TitleBar
+          {...barProps}
+          group={{ ...group, layout: Layout.Stacking }}
+          strip={MIDDLE_TAB}
+          tabbed={Layout.Tabbed}
+        />,
+      );
+
+      const mark = getByRole("img", { name: "Stack of 3" });
+      expect(
+        [...mark.querySelectorAll("[data-state=shown]")].map((part) =>
+          part.getAttribute("data-part"),
+        ),
+      ).toEqual(["row", "row"]);
+    });
+
+    // Its icons move when their own button is pointed at, so the tab must
+    // not be a control itself.
+    it("is no control around its buttons", () => {
+      const { container } = tab({
+        group: { layout: Layout.SplitV, windows: ["a", "b", "c"] },
+      });
+
+      expect(face(container).closest("button, a, [role=button]")).toBeNull();
+    });
+
     // A group's tab is named after its open window, so a window moved out of
     // it hands the tab to a new element.
     it("takes over from its group's tab before a window left the group", () => {
@@ -659,6 +689,23 @@ describe("TitleBar", () => {
       expect(queryByRole("button", { name: "Maximize" })).toBeNull();
       expect(queryByRole("button", { name: "Restore" })).not.toBeNull();
     });
+
+    it("turns its corners in, in the same drawing, once its window has the screen", () => {
+      const { container, getByRole, rerender } = render(
+        <TitleBar {...barProps} />,
+      );
+      const svg = getByRole("button", { name: "Maximize" }).querySelector(
+        "svg",
+      );
+      rerender(<TitleBar {...barProps} fullscreen />);
+
+      const restore = getByRole("button", { name: "Restore" });
+      expect(restore.querySelector("svg")).toBe(svg);
+      expect(container.querySelector("[data-part=corner-in]")).toHaveAttribute(
+        "data-state",
+        "shown",
+      );
+    });
   });
 
   describe("the button that floats the window", () => {
@@ -687,6 +734,22 @@ describe("TitleBar", () => {
 
       expect(queryByRole("button", { name: "Float" })).toBeNull();
       expect(queryByRole("button", { name: "Tile" })).not.toBeNull();
+    });
+
+    it("gathers its windows into squares, in the same drawing, once its window floats", () => {
+      const { container, getByRole, rerender } = render(
+        <TitleBar {...barProps} />,
+      );
+      const svg = getByRole("button", { name: "Float" }).querySelector("svg");
+      rerender(<TitleBar {...barProps} floating />);
+
+      expect(getByRole("button", { name: "Tile" }).querySelector("svg")).toBe(
+        svg,
+      );
+      expect(container.querySelector("[data-part=square]")).toHaveAttribute(
+        "data-state",
+        "shown",
+      );
     });
   });
 });

@@ -38,5 +38,9 @@ The component library has animated versions of some icons, such as
 - Keep one rendered across state changes, so the change animates. Don't
   switch between icons for each state.
 - To add one, split the icon in `src/_icon/phosphor-parts.ts`; its test
-  checks the parts join back into Phosphor's icon.
+  checks the parts join back into Phosphor's icon. Where Phosphor merges the
+  parts into one outline, as with `X`, draw them again in
+  `src/_icon/redrawn-parts.ts` from the same strokes and boxes.
+- Parts that move apart take a `direction`, such as the corners in
+  `src/_icon/diagonals.ts`, so one keyframe serves each of them.
 

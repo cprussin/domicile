@@ -1,3 +1,4 @@
+import { AnimatedSlidersIcon } from "@domicile-desktop/component-library/AnimatedSlidersIcon";
 import { Button } from "@domicile-desktop/component-library/Button";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import type { SelectOption } from "@domicile-desktop/component-library/Select";
@@ -14,7 +15,6 @@ import type {
   WebViewPermission,
   WebViewPermissionSetting,
 } from "@domicile-desktop/sdk/webview-element";
-import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/ssr/SlidersHorizontal";
 import { useCallback, useEffect, useState } from "react";
 import { css } from "../../styled-system/css";
 import { hstack, vstack } from "../../styled-system/patterns";
@@ -86,7 +86,7 @@ export const SitePermissions = ({
       }
       trigger={
         <Button label="Site permissions" size="sm" variant="ghost">
-          <SlidersHorizontalIcon size={14} />
+          <AnimatedSlidersIcon size={14} />
         </Button>
       }
       wide
