@@ -85,6 +85,7 @@ TOGETHER=(
   guard-webview-survives-load-shell
   guard-webview-hidden
   guard-webview-moved
+  guard-webview-paused
   guard-webview-crash
   guard-desktop-geometry
   guard-windows-state

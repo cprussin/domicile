@@ -1,0 +1,256 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: domicile CI <ci@domicile.invalid>
+Date: Wed, 28 Oct 2026 00:00:00 +0000
+Subject: [PATCH] domicile: a <webview> paused on a dialog does not slow the
+ shell
+
+A <webview>'s page embeds with the default deadline whenever its visual
+properties change, so the shell's frame waits for the page to draw. Two
+change every frame of an animation: the part of the frame on screen
+(`compositor_viewport`), as a window slides across a screen's edge in a
+workspace switch, and its scale (the raster scale and its size in the local root), as a
+window grows or shrinks.
+A page paused on `alert()`, `confirm()` or `prompt()` draws nothing, so
+each frame of the shell waited out the deadline: the switch ran at a
+third of its frame rate.
+
+- A <webview> rasters its whole page, so its compositing rect no longer
+  follows the screen's edge.
+- A change of scale alone embeds with deadline 0: the page's latest
+  frame is right, only less sharp until the page draws again.
+
+Verified: not built. This repository cannot build Chromium; the engine
+job builds it on crux.
+---
+ ...ew-paused-on-a-dialog-does-not-slow-.patch | 117 ++++++++++++++++++
+ .../blink/renderer/core/frame/remote_frame.cc |  32 +++--
+ .../renderer/core/frame/remote_frame_view.cc  |  10 ++
+ 3 files changed, 149 insertions(+), 10 deletions(-)
+ create mode 100644 out/0001-domicile-a-webview-paused-on-a-dialog-does-not-slow-.patch
+
+diff --git a/out/0001-domicile-a-webview-paused-on-a-dialog-does-not-slow-.patch b/out/0001-domicile-a-webview-paused-on-a-dialog-does-not-slow-.patch
+new file mode 100644
+index 0000000..8cccbe0
+--- /dev/null
++++ b/out/0001-domicile-a-webview-paused-on-a-dialog-does-not-slow-.patch
+@@ -0,0 +1,117 @@
++From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
++From: domicile CI <ci@domicile.invalid>
++Date: Wed, 28 Oct 2026 00:00:00 +0000
++Subject: [PATCH] domicile: a <webview> paused on a dialog does not slow the
++ shell
++
++A <webview>'s page embeds with the default deadline whenever its visual
++properties change, so the shell's frame waits for the page to draw. Two
++change every frame of an animation: the part of the frame on screen
++(`compositor_viewport`), as a window slides across a screen's edge in a
++workspace switch, and the raster scale, as a window grows or shrinks.
++A page paused on `alert()`, `confirm()` or `prompt()` draws nothing, so
++each frame of the shell waited out the deadline: the switch ran at a
++third of its frame rate.
++
++- A <webview> rasters its whole page, so its compositing rect no longer
++  follows the screen's edge.
++- A change of raster scale alone embeds with deadline 0: the page's
++  latest frame is right, only less sharp until the page draws again.
++
++Verified: not built. This repository cannot build Chromium; the engine
++job builds it on crux.
++---
++ .../blink/renderer/core/frame/remote_frame.cc | 26 +++++++++++++------
++ .../renderer/core/frame/remote_frame_view.cc  | 10 +++++++
++ 2 files changed, 28 insertions(+), 8 deletions(-)
++
++diff --git a/third_party/blink/renderer/core/frame/remote_frame.cc b/third_party/blink/renderer/core/frame/remote_frame.cc
++index cccda18..7b299df 100644
++--- a/third_party/blink/renderer/core/frame/remote_frame.cc
+++++ b/third_party/blink/renderer/core/frame/remote_frame.cc
++@@ -992,7 +992,13 @@ bool RemoteFrame::SynchronizeVisualProperties(
++         view_->GetCompositingScaleFactor();
++   }
++ 
++-  bool synchronized_props_changed =
+++  // Domicile: the raster scale, kept apart from the changes to what the page
+++  // draws, for the <webview> below.
+++  const bool raster_scale_changed =
+++      sent_visual_properties_ &&
+++      sent_visual_properties_->compositing_scale_factor !=
+++          pending_visual_properties_.compositing_scale_factor;
+++  const bool page_draws_anew =
++       !sent_visual_properties_ ||
++       sent_visual_properties_->auto_resize_enabled !=
++           pending_visual_properties_.auto_resize_enabled ||
++@@ -1012,8 +1018,6 @@ bool RemoteFrame::SynchronizeVisualProperties(
++           pending_visual_properties_.css_zoom_factor ||
++       sent_visual_properties_->page_scale_factor !=
++           pending_visual_properties_.page_scale_factor ||
++-      sent_visual_properties_->compositing_scale_factor !=
++-          pending_visual_properties_.compositing_scale_factor ||
++       sent_visual_properties_->cursor_accessibility_scale_factor !=
++           pending_visual_properties_.cursor_accessibility_scale_factor ||
++       sent_visual_properties_->is_pinch_gesture_active !=
++@@ -1024,6 +1028,7 @@ bool RemoteFrame::SynchronizeVisualProperties(
++           pending_visual_properties_.compositor_viewport ||
++       sent_visual_properties_->root_widget_viewport_segments !=
++           pending_visual_properties_.root_widget_viewport_segments;
+++  bool synchronized_props_changed = page_draws_anew || raster_scale_changed;
++   if (synchronized_props_changed)
++     parent_local_surface_id_allocator_->GenerateId();
++   pending_visual_properties_.local_surface_id = GetLocalSurfaceId();
++@@ -1034,15 +1039,20 @@ bool RemoteFrame::SynchronizeVisualProperties(
++   DCHECK(surface_id.is_valid());
++   DCHECK(!remote_process_gone_);
++ 
++-  // Domicile: while the shell resizes a <webview>'s window (`resizing`), its
++-  // box changes every frame. Waiting for the page each time would hold the
++-  // whole shell to the page's pace, so its latest frame shows at its own size
++-  // instead. See HTMLAppElement::Embed.
+++  // Domicile: a <webview> waits for its page only when the page's latest
+++  // frame would be wrong in the box. While the shell resizes the window
+++  // (`resizing`), its box changes every frame; waiting each time would hold
+++  // the whole shell to the page's pace, so that frame shows at its own size
+++  // instead (see HTMLAppElement::Embed). A new raster scale alone, as a window
+++  // grows or shrinks in an animation, leaves that frame right but less sharp,
+++  // so it shows at once too. A page paused on a dialog draws nothing until
+++  // answered, and each wait held the shell for the whole deadline.
++   HTMLFrameOwnerElement* owner = DeprecatedLocalOwner();
++   compositing_helper_->SetSurfaceId(
++       surface_id, allow_paint_holding,
++       IsA<HTMLWebViewElement>(owner) &&
++-          owner->FastHasAttribute(html_names::kResizingAttr));
+++          (owner->FastHasAttribute(html_names::kResizingAttr) ||
+++           !page_draws_anew));
++ 
++   bool rect_changed = !sent_visual_properties_ ||
++                       sent_visual_properties_->rect_in_local_root !=
++diff --git a/third_party/blink/renderer/core/frame/remote_frame_view.cc b/third_party/blink/renderer/core/frame/remote_frame_view.cc
++index ce4ff7f..5ebc498 100644
++--- a/third_party/blink/renderer/core/frame/remote_frame_view.cc
+++++ b/third_party/blink/renderer/core/frame/remote_frame_view.cc
++@@ -19,6 +19,7 @@
++ #include "third_party/blink/renderer/core/frame/local_frame_view.h"
++ #include "third_party/blink/renderer/core/frame/remote_frame.h"
++ #include "third_party/blink/renderer/core/frame/remote_frame_client.h"
+++#include "third_party/blink/renderer/core/html/domicile/html_web_view_element.h"
++ #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
++ #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
++ #include "third_party/blink/renderer/core/layout/layout_view.h"
++@@ -178,6 +179,15 @@ gfx::Rect RemoteFrameView::ComputeCompositingRect() const {
++   LayoutEmbeddedContent* owner_layout_object =
++       remote_frame_->OwnerLayoutObject();
++ 
+++  // Domicile: a <webview> rasters its whole page. Its box is a window, no
+++  // bigger than the desk, and the part on screen changes every frame as the
+++  // window slides across a screen's edge, as in a workspace switch. Each
+++  // change would be a new surface for the shell to wait for (see
+++  // RemoteFrame::SynchronizeVisualProperties).
+++  if (IsA<HTMLWebViewElement>(remote_frame_->DeprecatedLocalOwner())) {
+++    return gfx::Rect(Size());
+++  }
+++
++   // For main frames we constrain the rect that gets painted to the viewport.
++   // If the local frame root is an OOPIF itself, then we use the root's
++   // intersection rect. This represents a conservative maximum for the area
+diff --git a/third_party/blink/renderer/core/frame/remote_frame.cc b/third_party/blink/renderer/core/frame/remote_frame.cc
+index cccda18..d97c6d0 100644
+--- a/third_party/blink/renderer/core/frame/remote_frame.cc
++++ b/third_party/blink/renderer/core/frame/remote_frame.cc
+@@ -992,7 +992,17 @@ bool RemoteFrame::SynchronizeVisualProperties(
+         view_->GetCompositingScaleFactor();
+   }
+ 
+-  bool synchronized_props_changed =
++  // Domicile: how the frame is scaled on screen, kept apart from the changes
++  // to what the page draws, for the <webview> below. A transform's scale
++  // changes the raster scale and the frame's size in the local root, not its
++  // own size.
++  const bool scale_changed =
++      sent_visual_properties_ &&
++      (sent_visual_properties_->compositing_scale_factor !=
++           pending_visual_properties_.compositing_scale_factor ||
++       sent_visual_properties_->rect_in_local_root.size() !=
++           pending_visual_properties_.rect_in_local_root.size());
++  const bool page_draws_anew =
+       !sent_visual_properties_ ||
+       sent_visual_properties_->auto_resize_enabled !=
+           pending_visual_properties_.auto_resize_enabled ||
+@@ -1002,8 +1012,6 @@ bool RemoteFrame::SynchronizeVisualProperties(
+           pending_visual_properties_.max_size_for_auto_resize ||
+       sent_visual_properties_->local_frame_size !=
+           pending_visual_properties_.local_frame_size ||
+-      sent_visual_properties_->rect_in_local_root.size() !=
+-          pending_visual_properties_.rect_in_local_root.size() ||
+       sent_visual_properties_->screen_infos !=
+           pending_visual_properties_.screen_infos ||
+       sent_visual_properties_->zoom_level !=
+@@ -1012,8 +1020,6 @@ bool RemoteFrame::SynchronizeVisualProperties(
+           pending_visual_properties_.css_zoom_factor ||
+       sent_visual_properties_->page_scale_factor !=
+           pending_visual_properties_.page_scale_factor ||
+-      sent_visual_properties_->compositing_scale_factor !=
+-          pending_visual_properties_.compositing_scale_factor ||
+       sent_visual_properties_->cursor_accessibility_scale_factor !=
+           pending_visual_properties_.cursor_accessibility_scale_factor ||
+       sent_visual_properties_->is_pinch_gesture_active !=
+@@ -1024,6 +1030,7 @@ bool RemoteFrame::SynchronizeVisualProperties(
+           pending_visual_properties_.compositor_viewport ||
+       sent_visual_properties_->root_widget_viewport_segments !=
+           pending_visual_properties_.root_widget_viewport_segments;
++  bool synchronized_props_changed = page_draws_anew || scale_changed;
+   if (synchronized_props_changed)
+     parent_local_surface_id_allocator_->GenerateId();
+   pending_visual_properties_.local_surface_id = GetLocalSurfaceId();
+@@ -1034,15 +1041,20 @@ bool RemoteFrame::SynchronizeVisualProperties(
+   DCHECK(surface_id.is_valid());
+   DCHECK(!remote_process_gone_);
+ 
+-  // Domicile: while the shell resizes a <webview>'s window (`resizing`), its
+-  // box changes every frame. Waiting for the page each time would hold the
+-  // whole shell to the page's pace, so its latest frame shows at its own size
+-  // instead. See HTMLAppElement::Embed.
++  // Domicile: a <webview> waits for its page only when the page's latest
++  // frame would be wrong in the box. While the shell resizes the window
++  // (`resizing`), its box changes every frame; waiting each time would hold
++  // the whole shell to the page's pace, so that frame shows at its own size
++  // instead (see HTMLAppElement::Embed). A new scale alone, as a window grows
++  // or shrinks in an animation, leaves that frame right but less sharp, so it
++  // shows at once too. A page paused on a dialog draws nothing until
++  // answered, and each wait held the shell for the whole deadline.
+   HTMLFrameOwnerElement* owner = DeprecatedLocalOwner();
+   compositing_helper_->SetSurfaceId(
+       surface_id, allow_paint_holding,
+       IsA<HTMLWebViewElement>(owner) &&
+-          owner->FastHasAttribute(html_names::kResizingAttr));
++          (owner->FastHasAttribute(html_names::kResizingAttr) ||
++           !page_draws_anew));
+ 
+   bool rect_changed = !sent_visual_properties_ ||
+                       sent_visual_properties_->rect_in_local_root !=
+diff --git a/third_party/blink/renderer/core/frame/remote_frame_view.cc b/third_party/blink/renderer/core/frame/remote_frame_view.cc
+index ce4ff7f..5ebc498 100644
+--- a/third_party/blink/renderer/core/frame/remote_frame_view.cc
++++ b/third_party/blink/renderer/core/frame/remote_frame_view.cc
+@@ -19,6 +19,7 @@
+ #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+ #include "third_party/blink/renderer/core/frame/remote_frame.h"
+ #include "third_party/blink/renderer/core/frame/remote_frame_client.h"
++#include "third_party/blink/renderer/core/html/domicile/html_web_view_element.h"
+ #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
+ #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
+ #include "third_party/blink/renderer/core/layout/layout_view.h"
+@@ -178,6 +179,15 @@ gfx::Rect RemoteFrameView::ComputeCompositingRect() const {
+   LayoutEmbeddedContent* owner_layout_object =
+       remote_frame_->OwnerLayoutObject();
+ 
++  // Domicile: a <webview> rasters its whole page. Its box is a window, no
++  // bigger than the desk, and the part on screen changes every frame as the
++  // window slides across a screen's edge, as in a workspace switch. Each
++  // change would be a new surface for the shell to wait for (see
++  // RemoteFrame::SynchronizeVisualProperties).
++  if (IsA<HTMLWebViewElement>(remote_frame_->DeprecatedLocalOwner())) {
++    return gfx::Rect(Size());
++  }
++
+   // For main frames we constrain the rect that gets painted to the viewport.
+   // If the local frame root is an OOPIF itself, then we use the root's
+   // intersection rect. This represents a conservative maximum for the area
