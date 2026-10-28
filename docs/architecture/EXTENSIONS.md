@@ -140,15 +140,13 @@ interface DomicileExtension {
     `tabs.query({active: true, currentWindow: true})` returns the desk's
     active tab. Some extensions depend on this: Bitwarden sets a 380px body
     width only when `tabs.getCurrent()` finds no tab.
-- **Panel size** fits the popup's content, like Chrome's bubble. The guest
-  runs in preferred-size mode (`WebViewGuest::PrimaryPageChanged`) and reports
-  max-content width and document height as `contentWidth` / `contentHeight`
-  and `domicile-content-size-change` (`WebViewGuestClient.ContentSizeChanged`).
-  Patches:
-  - 0080: report size from a guest's main frame.
-  - 0081: report after any layout, not only on commit.
-  - 0082: use max-content width. Min-content width of a fluid page is its
-    longest word.
+- **Panel size** fits the popup's content, like Chrome's bubble. The guest's
+  page runs in Blink's auto-resize mode between Chrome's popup bounds, 25x25
+  and 800x600 (`WebViewGuest::EnableAutoResize`), as `ExtensionViewViews`
+  does. Each size it takes reaches the element as `contentWidth` /
+  `contentHeight` and `domicile-content-size-change`
+  (`WebViewGuestClient.ContentSizeChanged`). The tray shows the panel once the
+  page has loaded, as `ExtensionPopup` does.
 
 SDK side: the `DomicileHost` types in `packages/chrome-sdk`, and the tray
 and popup panel in `packages/manganese-bar-module-tray/src/extensions/`.

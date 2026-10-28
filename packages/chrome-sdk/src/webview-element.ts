@@ -574,10 +574,11 @@ declare global {
     /** The 1-based index of the selected match, or 0 if none. */
     readonly findActiveMatch: number;
     /**
-     * The content's preferred size in CSS pixels: max-content width and
-     * document height at the current width. Used to size extension popups.
-     * Cap the width, since text can make it very wide. Both 0 before layout.
-     * Changes fire {@link WEBVIEW_CONTENT_SIZE_CHANGE_EVENT}.
+     * The size an `extensionpopup` view's page sized itself to, in CSS pixels,
+     * as Chrome sizes its toolbar popup: between 25x25 and 800x600, growing
+     * while the page loads. Size the view to it. Both 0 before the first
+     * layout, and always 0 without `extensionpopup`. Changes fire
+     * {@link WEBVIEW_CONTENT_SIZE_CHANGE_EVENT}.
      */
     readonly contentWidth: number;
     readonly contentHeight: number;

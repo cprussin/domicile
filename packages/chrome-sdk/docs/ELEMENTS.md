@@ -98,7 +98,7 @@ once, when the view connects. The SDK provides types only.
     under it. The shell draws the menu; `event.run(action)` does the browser's
     part of an item.
   - `domicile-content-size-change`: `contentWidth` / `contentHeight` changed.
-    Use it to size extension popups.
+    Use it to size an `extensionpopup` view.
   - `domicile-render-process-change`: the page's renderer died or came back.
     `renderProcessGone` says why, or is `""`; `reload()` recovers it. See
     [Crashed pages](/docs/SHELL-BROWSER-WINDOWS.md#crashed-pages).
