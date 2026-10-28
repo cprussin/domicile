@@ -62,7 +62,8 @@ use domicile_launch::shell_path::Shell;
 use domicile_launch::shell_source::{shell_source, ShellSource};
 use domicile_launch::software_compositing::{self, on_the_cpu};
 use domicile_launch::spawn::{
-    composite_on_the_cpu, compositor, engine, send_frames_in_memory, Runtime,
+    composite_on_the_cpu, compositor, engine, let_the_engine_take_input, send_frames_in_memory,
+    Runtime, HEADLESS_PLATFORM,
 };
 use domicile_launch::splash::{lay_out, tell, the_page_ends, Progress, ENDED};
 use domicile_launch::supervise::{catch_interrupts, interrupted, Running, ASK_EVERY};
@@ -984,6 +985,9 @@ fn start_a_compositor(
     );
     if desktop.on_the_cpu {
         send_frames_in_memory(&mut spawn);
+    }
+    if desktop.platform == HEADLESS_PLATFORM {
+        let_the_engine_take_input(&mut spawn);
     }
     running
         .start_overheard("compositor", &spawn, heard)

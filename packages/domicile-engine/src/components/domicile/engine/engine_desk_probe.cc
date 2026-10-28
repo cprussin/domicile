@@ -6,10 +6,14 @@
 // `--left` for its first 640 pixels and `--right` past them.
 //
 // The left display is 640x480 at 0,0 and the right one 320x240 at 640,0, so
-// each capture's center shows one side of the page. Exit status:
+// each capture's center shows one side of the page.
+//
+// With `--clicked` and `--typed`, it then drives the desk as an EIS client
+// would through the compositor: a click on the right display must turn it
+// `--clicked`, and the A key the left one `--typed`. Exit status:
 //
 //   0  both displays came on their connectors and show their color
-//   1  a display shows another color
+//   1  a display shows another color, before or after the input
 //   2  the displays never came, or a display gave no frame at its size
 //   3  the probe could not run
 
@@ -36,6 +40,12 @@ constexpr char kSocketSwitch[] = "domicile-broker-socket";
 constexpr char kLeftSwitch[] = "left";
 constexpr char kRightSwitch[] = "right";
 constexpr char kForSecondsSwitch[] = "for-seconds";
+constexpr char kClickedSwitch[] = "clicked";
+constexpr char kTypedSwitch[] = "typed";
+
+// evdev codes.
+constexpr uint32_t kBtnLeft = 0x110;
+constexpr uint32_t kKeyA = 30;
 
 constexpr int kDefaultSeconds = 60;
 constexpr uint32_t kFramesPerSecond = 30;
@@ -187,6 +197,41 @@ Verdict Capture(Seen* seen, const Wanted& wanted, base::TimeTicks deadline) {
   return Verdict::kNoFrame;
 }
 
+void Inject(Seen* seen, DomicileDeskInput input) {
+  domicile_input_inject(seen->engine, &input);
+}
+
+// Clicks the right display, then types A, each checked on its display.
+Verdict DriveTheDesk(Seen* seen,
+                     uint32_t clicked,
+                     uint32_t typed,
+                     base::TimeTicks deadline) {
+  Wanted& left = seen->wanted[0];
+  Wanted& right = seen->wanted[1];
+  Inject(seen, {.kind = DOMICILE_DESK_INPUT_POINTER,
+                .x = right.x + right.width / 2.0,
+                .y = right.height / 2.0});
+  for (uint32_t pressed : {1u, 0u}) {
+    Inject(seen, {.kind = DOMICILE_DESK_INPUT_BUTTON,
+                  .code = kBtnLeft,
+                  .pressed = pressed});
+  }
+  printf("clicked the middle of display %s\n", right.name.c_str());
+  right.color = clicked;
+  Verdict verdict = Capture(seen, right, deadline);
+  if (verdict != Verdict::kFound) {
+    return verdict;
+  }
+  for (uint32_t pressed : {1u, 0u}) {
+    Inject(
+        seen,
+        {.kind = DOMICILE_DESK_INPUT_KEY, .code = kKeyA, .pressed = pressed});
+  }
+  printf("typed A\n");
+  left.color = typed;
+  return Capture(seen, left, deadline);
+}
+
 // Runs the probe on a connected engine.
 Verdict Probe(Seen* seen, base::TimeTicks deadline) {
   std::vector<DomicileVirtualDisplay> virtuals;
@@ -256,6 +301,9 @@ int main(int argc, char** argv) {
   };
   const std::string socket = command_line.GetSwitchValueASCII(kSocketSwitch);
   int seconds = kDefaultSeconds;
+  const bool drives = command_line.HasSwitch(kClickedSwitch);
+  uint32_t clicked = 0;
+  uint32_t typed = 0;
   if (socket.empty() ||
       !base::HexStringToUInt(command_line.GetSwitchValueASCII(kLeftSwitch),
                              &seen.wanted[0].color) ||
@@ -263,10 +311,16 @@ int main(int argc, char** argv) {
                              &seen.wanted[1].color) ||
       (command_line.HasSwitch(kForSecondsSwitch) &&
        !base::StringToInt(command_line.GetSwitchValueASCII(kForSecondsSwitch),
-                          &seconds))) {
+                          &seconds)) ||
+      (drives &&
+       (!base::HexStringToUInt(command_line.GetSwitchValueASCII(kClickedSwitch),
+                               &clicked) ||
+        !base::HexStringToUInt(command_line.GetSwitchValueASCII(kTypedSwitch),
+                               &typed)))) {
     fprintf(stderr, "%s",
             "usage: domicile_desk_probe --domicile-broker-socket=<path> "
-            "--left=RRGGBB --right=RRGGBB [--for-seconds=60]\n");
+            "--left=RRGGBB --right=RRGGBB [--clicked=RRGGBB --typed=RRGGBB] "
+            "[--for-seconds=60]\n");
     return static_cast<int>(Verdict::kUnusable);
   }
 
@@ -281,8 +335,12 @@ int main(int argc, char** argv) {
             socket.c_str());
     return static_cast<int>(Verdict::kUnusable);
   }
-  const Verdict verdict =
-      Probe(&seen, base::TimeTicks::Now() + base::Seconds(seconds));
+  const base::TimeTicks deadline =
+      base::TimeTicks::Now() + base::Seconds(seconds);
+  Verdict verdict = Probe(&seen, deadline);
+  if (verdict == Verdict::kFound && drives) {
+    verdict = DriveTheDesk(&seen, clicked, typed, deadline);
+  }
   domicile_engine_destroy(seen.engine);
   return static_cast<int>(verdict);
 }

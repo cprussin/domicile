@@ -65,7 +65,7 @@ const NESTED_PLATFORM: &str = "wayland";
 
 /// The ozone platform with no display at all. Its monitors are the
 /// compositor's virtual ones; see `docs/architecture/A-HEADLESS-DESKTOP.md`.
-const HEADLESS_PLATFORM: &str = "headless";
+pub const HEADLESS_PLATFORM: &str = "headless";
 
 /// The engine command line for `shell`.
 ///
@@ -175,6 +175,14 @@ pub fn composite_on_the_cpu(engine: &mut Spawn) {
 /// engine that composites on the CPU. See [`crate::software_compositing`].
 pub fn send_frames_in_memory(compositor: &mut Spawn) {
     compositor.args.push("--software-compositing".into());
+    compositor.args.push("yes".into());
+}
+
+/// Makes a [`compositor`] hand emulated input to the engine, for a headless
+/// desk, whose only input it is. See
+/// `docs/architecture/A-HEADLESS-DESKTOP.md`.
+pub fn let_the_engine_take_input(compositor: &mut Spawn) {
+    compositor.args.push("--engine-takes-input".into());
     compositor.args.push("yes".into());
 }
 

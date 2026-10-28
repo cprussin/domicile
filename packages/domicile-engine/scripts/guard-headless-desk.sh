@@ -12,6 +12,11 @@
 # 640 pixels one color and the rest another (guard-split-color.js), so each
 # display must show its own color.
 #
+# Then the probe drives the desk as the compositor does an EIS client's input
+# (`domicile_input_inject`): a click on the right display must turn it
+# CLICKED, and the A key the left one TYPED, so the shell takes the desk's
+# input.
+#
 # NEGATIVE=1 runs the control: the shell's colors swap, and the probe must
 # say a display shows the wrong one.
 #
@@ -31,6 +36,8 @@ fi
 NEGATIVE="${NEGATIVE:-0}"
 LEFT="${LEFT:-3B7A57}"
 RIGHT="${RIGHT:-8E4585}"
+CLICKED="${CLICKED:-D2691E}"
+TYPED="${TYPED:-4682B4}"
 FOR_SECONDS="${FOR_SECONDS:-90}"
 
 OUT="${OUT:-out/Domicile}"
@@ -59,6 +66,7 @@ if [ "$NEGATIVE" = "1" ]; then
 else
   PAINTED="left=$LEFT&right=$RIGHT"
 fi
+PAINTED="$PAINTED&clicked=$CLICKED&typed=$TYPED"
 
 rm -f "$ENGINE_LOG" "$PROBE_LOG"
 "$CHROMIUM/$OUT/chrome" \
@@ -92,13 +100,14 @@ done
   LD_LIBRARY_PATH="$CHROMIUM/$OUT${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
   ./domicile_desk_probe \
   --domicile-broker-socket="$BROKER" \
-  --left="$LEFT" --right="$RIGHT" --for-seconds="$FOR_SECONDS") >"$PROBE_LOG" 2>&1
+  --left="$LEFT" --right="$RIGHT" --clicked="$CLICKED" --typed="$TYPED" \
+  --for-seconds="$FOR_SECONDS") >"$PROBE_LOG" 2>&1
 MEASURED="$NEGATIVE $?"
 
 case "$MEASURED" in
 "0 0")
   cat "$PROBE_LOG"
-  echo "PASS: each virtual display of a headless desk shows its own part of the shell"
+  echo "PASS: each virtual display of a headless desk shows its own part of the shell, and the shell takes the desk's input"
   exit 0
   ;;
 "1 1")
@@ -107,7 +116,7 @@ case "$MEASURED" in
   exit 0
   ;;
 "0 1")
-  FAILURE="a display shows the other display's color, or neither: the desk is not laid out across them"
+  FAILURE="a display shows the wrong color: the desk is not laid out across them, or the shell did not take a click or a key (see which in the probe's log)"
   ;;
 "1 0")
   FAILURE="the control passed with the colors swapped, so the probe reads something other than the page"

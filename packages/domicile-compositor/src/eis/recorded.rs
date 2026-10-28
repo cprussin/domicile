@@ -14,7 +14,7 @@ use reis::enumflags2::BitFlags;
 use reis::event::{Connection, Device, EiEvent};
 use smithay::reexports::calloop::EventLoop;
 
-use super::{serve, Compositor, Desk, Eis, Window};
+use super::{serve, Compositor, Desk, DeskInput, Eis, Window};
 use crate::client_requests::ClientRequest;
 use crate::screens::Advertised;
 
@@ -31,6 +31,10 @@ pub struct Recorded {
     /// What was injected, unless it is sent to `forward`.
     pub injected: Vec<ClientRequest>,
     forward: Option<Sender<ClientRequest>>,
+    /// Whether emulated input goes to the engine, as on a headless desk.
+    pub engine_takes_input: bool,
+    /// What went to the engine.
+    pub engine_injected: Vec<DeskInput>,
 }
 
 impl Compositor for Recorded {
@@ -81,6 +85,14 @@ impl Compositor for Recorded {
     fn keycode(&self, keysym: u32) -> Option<u32> {
         (keysym == KEYSYM_A).then_some(30)
     }
+
+    fn engine_takes_input(&self) -> bool {
+        self.engine_takes_input
+    }
+
+    fn inject_into_the_engine(&mut self, input: DeskInput) {
+        self.engine_injected.push(input);
+    }
 }
 
 /// EIS served on a loop of its own thread for a while.
@@ -101,8 +113,8 @@ pub fn in_the_background() -> Background {
         let (eis, captures) = serve(&event_loop.handle()).unwrap();
         opened.send(eis).unwrap();
         let mut compositor = Recorded {
-            injected: Vec::new(),
             forward: Some(forward),
+            ..Recorded::default()
         };
         let started = Instant::now();
         while started.elapsed() < SERVING {

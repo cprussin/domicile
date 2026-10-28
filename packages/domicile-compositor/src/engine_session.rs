@@ -10,6 +10,7 @@ use std::path::Path;
 use std::time::Instant;
 
 use crate::buffer_transform::Sampled;
+use crate::eis::DeskInput;
 use crate::frame_descriptor::FrameDescriptor;
 use domicile_host::clipboard::Contents;
 use smithay::reexports::wayland_server::backend::ObjectId;
@@ -351,6 +352,13 @@ impl EngineSession {
     /// See [`crate::engine::Engine::set_white_point`].
     pub fn set_white_point(&self, white_point: WhitePoint) {
         self.engine.set_white_point(white_point);
+    }
+
+    /// Hands one emulated event to the shell's window.
+    ///
+    /// See [`crate::engine::Engine::inject_input`].
+    pub fn inject_input(&self, input: DeskInput) -> bool {
+        self.engine.inject_input(input)
     }
 
     /// Tells the browser what is on one of the desktop's two clipboards.

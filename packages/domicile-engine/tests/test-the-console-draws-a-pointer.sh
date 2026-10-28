@@ -27,6 +27,12 @@ fail() { printf '  FAIL  %s\n    %s\n' "$1" "$2"; FAILED=$((FAILED + 1)); }
 
 added="$(cat "$PATCHES"/*.patch 2>/dev/null | grep -a '^+' || true)"
 in_patches() { case "$added" in (*"$1"*) return 0 ;; (*) return 1 ;; esac }
+# Only the lines added to the DRM platform's files: headless keeps upstream's
+# factory without the desk switch.
+drm_added="$(cat "$PATCHES"/*.patch 2>/dev/null | awk '
+  /^\+\+\+ / { drm = index($0, "ui/ozone/platform/drm/") > 0; next }
+  drm && /^\+/ { print }' || true)"
+in_drm_patches() { case "$drm_added" in (*"$1"*) return 0 ;; (*) return 1 ;; esac }
 
 # Domicile-owned files live in `src/`, never in a patch.
 for f in drm_cursor_factory.h drm_cursor_factory.cc drm_cursor_factory_unittest.cc; do
@@ -65,7 +71,7 @@ else
     "no patch constructs DrmCursorFactory, so ozone_platform_drm.cc still builds a BitmapCursorFactory"
 fi
 
-if in_patches "std::make_unique<BitmapCursorFactory>()"; then
+if in_drm_patches "std::make_unique<BitmapCursorFactory>()"; then
   fail "no patch puts the blank-cursor factory back" \
     "a patch constructs BitmapCursorFactory for this platform, which is the bug this replaced"
 else

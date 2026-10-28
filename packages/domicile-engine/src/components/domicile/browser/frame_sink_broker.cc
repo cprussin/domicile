@@ -52,7 +52,8 @@ FrameSinkBroker::FrameSinkBroker(
     PointerTargetsSetter set_pointer_targets,
     SharedImageInterfaceGetter get_software_shared_image_interface,
     VirtualDisplaysSetter set_virtual_displays,
-    WhitePointSetter set_white_point)
+    WhitePointSetter set_white_point,
+    InputInjector inject_input)
     : host_frame_sink_manager_(host_frame_sink_manager),
       allocate_frame_sink_id_(std::move(allocate_frame_sink_id)),
       get_shared_image_interface_(std::move(get_shared_image_interface)),
@@ -65,7 +66,8 @@ FrameSinkBroker::FrameSinkBroker(
           std::move(get_browser_window_capture_target)),
       set_pointer_targets_(std::move(set_pointer_targets)),
       set_virtual_displays_(std::move(set_virtual_displays)),
-      set_white_point_(std::move(set_white_point)) {
+      set_white_point_(std::move(set_white_point)),
+      inject_input_(std::move(inject_input)) {
   CHECK(host_frame_sink_manager);
   CHECK(allocate_frame_sink_id_);
   receivers_.set_disconnect_handler(base::BindRepeating(
@@ -276,6 +278,14 @@ void FrameSinkBroker::SetWhitePoint(float red, float green, float blue) {
     return;
   }
   set_white_point_.Run(red, green, blue);
+}
+
+void FrameSinkBroker::InjectInput(mojom::DeskInputPtr input) {
+  if (!inject_input_) {
+    // Nested, the host session delivers input.
+    return;
+  }
+  inject_input_.Run(*input);
 }
 
 void FrameSinkBroker::SetClipboard(mojom::Clipboard clipboard,
