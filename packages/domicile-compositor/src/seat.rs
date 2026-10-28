@@ -69,6 +69,7 @@ impl SeatHandler for DomicileCompositor {
         set_primary_focus(&self.display_handle, seat, client);
         self.activate(focused);
         self.report_running_apps(focused);
+        self.read_notifications(focused);
     }
 }
 
@@ -250,6 +251,40 @@ impl DomicileCompositor {
                     window.as_ref() == Some(toplevel.wl_surface()),
                 )
             }));
+    }
+
+    /// Clear the notifications of the application whose window has the
+    /// keyboard (`focused`): looking at it reads them. The chrome's own
+    /// surfaces are no application's window.
+    fn read_notifications(&self, focused: Option<&WlSurface>) {
+        let Some(window) = focused.map(|on| self.window_under_menus(on)) else {
+            return;
+        };
+        let Some((_, toplevel)) = self
+            .toplevels
+            .iter()
+            .find(|(_, toplevel)| toplevel.wl_surface() == &window)
+        else {
+            return;
+        };
+        let Some(notifications) = self.hub.notifications.get() else {
+            return;
+        };
+        let pid = window
+            .client()
+            .and_then(|client| client.get_credentials(&self.display_handle).ok())
+            .and_then(|credentials| u32::try_from(credentials.pid).ok());
+        let app_id = with_states(toplevel.wl_surface(), |states| {
+            states
+                .data_map
+                .get::<XdgToplevelSurfaceData>()
+                .unwrap()
+                .lock()
+                .unwrap()
+                .app_id
+                .clone()
+        });
+        notifications.seen(pid, &app_id.unwrap_or_default());
     }
 
     /// The running applications as the keyboard stands, for a window that

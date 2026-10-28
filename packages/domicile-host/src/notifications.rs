@@ -244,6 +244,36 @@ impl Notifications {
         self.entries.iter().find(|entry| entry.shown.id == id)?.pid
     }
 
+    /// The notifications `pid` sent over the bus, oldest first.
+    pub fn sent_by(&self, pid: u32) -> Vec<u32> {
+        self.entries
+            .iter()
+            .filter(|entry| entry.pid == Some(pid))
+            .map(|entry| entry.shown.id)
+            .collect()
+    }
+
+    /// The other notifications from `id`'s application: those its process
+    /// sent under the same name, which for a page is its origin. None for a
+    /// notification with no known process.
+    pub fn alongside(&self, id: u32) -> Vec<u32> {
+        let Some(sent) = self.entries.iter().find(|entry| entry.shown.id == id) else {
+            return Vec::new();
+        };
+        if sent.pid.is_none() {
+            return Vec::new();
+        }
+        self.entries
+            .iter()
+            .filter(|entry| {
+                entry.shown.id != id
+                    && entry.pid == sent.pid
+                    && entry.shown.app_name == sent.shown.app_name
+            })
+            .map(|entry| entry.shown.id)
+            .collect()
+    }
+
     /// Reply to `id`, which [`Self::invoke`] answers as an action.
     pub fn reply(&mut self, id: u32) -> Option<bool> {
         self.invoke(id, INLINE_REPLY_ACTION)
@@ -976,6 +1006,50 @@ mod tests {
             );
 
             assert_eq!(notifications.pid(id), Some(4242));
+        }
+
+        #[test]
+        fn a_process_names_the_notifications_it_sent() {
+            // So looking at its window clears them.
+            let mut notifications = held(Vec::new());
+            let sent = |pid| Notify {
+                pid: Some(pid),
+                ..from_chat(None)
+            };
+            let first = notifications.notify(sent(4242), 0).id;
+            notifications.notify(sent(7), 0);
+            let second = notifications.notify(sent(4242), 0).id;
+            notifications.notify(from_chat(None), 0);
+
+            assert_eq!(notifications.sent_by(4242), [first, second]);
+        }
+
+        #[test]
+        fn a_notification_names_the_others_from_its_application() {
+            // So pressing one clears them all. Every site's come from the
+            // engine's process, so a site is told apart by its origin.
+            let mut notifications = held(Vec::new());
+            let from = |pid, origin: Option<&str>| Notify {
+                pid: Some(pid),
+                hints: Hints {
+                    origin_name: origin.map(String::from),
+                    ..Hints::default()
+                },
+                ..from_chat(None)
+            };
+            let chat = notifications
+                .notify(from(9, Some("chat.example.com")), 0)
+                .id;
+            notifications.notify(from(9, Some("mail.example.com")), 0);
+            notifications.notify(from(4242, None), 0);
+            let again = notifications
+                .notify(from(9, Some("chat.example.com")), 0)
+                .id;
+            let unknown = notifications.notify(from_chat(None), 0).id;
+
+            assert_eq!(notifications.alongside(chat), [again]);
+            assert_eq!(notifications.alongside(unknown), Vec::<u32>::new());
+            assert_eq!(notifications.alongside(999), Vec::<u32>::new());
         }
 
         #[test]

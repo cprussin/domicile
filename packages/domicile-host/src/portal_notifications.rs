@@ -155,6 +155,32 @@ impl<T> PortalNotifications<T> {
             .is_some()
     }
 
+    /// The history ids of `app_id`'s notifications, oldest first. The empty
+    /// id, which the portal gives every application it cannot name, names
+    /// none.
+    pub fn of(&self, app_id: &str) -> Vec<u32> {
+        self.owned
+            .iter()
+            .filter(|owned| !app_id.is_empty() && owned.app_id == app_id)
+            .map(|owned| owned.shown)
+            .collect()
+    }
+
+    /// The other notifications from `shown`'s application. None if `shown`
+    /// did not come from the portal.
+    pub fn alongside(&self, shown: u32) -> Vec<u32> {
+        self.owned
+            .iter()
+            .find(|owned| owned.shown == shown)
+            .map(|sent| {
+                self.of(&sent.app_id)
+                    .into_iter()
+                    .filter(|other| *other != shown)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     /// Whether `shown` came from the portal.
     pub fn owns(&self, shown: u32) -> bool {
         self.owned.iter().any(|owned| owned.shown == shown)
@@ -275,6 +301,50 @@ mod tests {
             }]
         );
         assert!(portal.owns(shown));
+    }
+
+    #[test]
+    fn an_application_names_its_own() {
+        let (mut portal, mut notifications) = (PortalNotifications::default(), held());
+        let update = add(&mut portal, &mut notifications, "update", sent("Update"));
+        portal.add(
+            &mut notifications,
+            example("org.example.Other"),
+            "org.example.Other".into(),
+            "update".into(),
+            sent("Update"),
+            10,
+        );
+        let mail = add(&mut portal, &mut notifications, "mail", sent("Mail"));
+
+        assert_eq!(portal.of("org.example.App"), [update, mail]);
+        portal.add(
+            &mut notifications,
+            example("unknown"),
+            String::new(),
+            "update".into(),
+            sent("Update"),
+            10,
+        );
+        assert_eq!(portal.of(""), Vec::<u32>::new());
+    }
+
+    #[test]
+    fn a_notification_names_its_applications_others() {
+        let (mut portal, mut notifications) = (PortalNotifications::default(), held());
+        let update = add(&mut portal, &mut notifications, "update", sent("Update"));
+        portal.add(
+            &mut notifications,
+            example("org.example.Other"),
+            "org.example.Other".into(),
+            "update".into(),
+            sent("Update"),
+            10,
+        );
+        let mail = add(&mut portal, &mut notifications, "mail", sent("Mail"));
+
+        assert_eq!(portal.alongside(update), [mail]);
+        assert_eq!(portal.alongside(999), Vec::<u32>::new());
     }
 
     #[test]

@@ -62,8 +62,8 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key)
 - **The compositor keeps the history.**
   - It sends the full list on every change and on connect, so a reload keeps
     it and every monitor's page sees the same list.
-  - It keeps a notification until the user clears it or its application closes
-    it, up to 100.
+  - It keeps a notification until the user clears it, reads it or its
+    application closes it, up to 100.
   - Only toasts expire; notifications do not.
 - **The shell decides what to toast.** A new id, or a replaced one (its `time`
   changed), shows a toast. The first list a page receives is history and shows
@@ -101,6 +101,15 @@ shell ─ dismissNotifications(ids) / invokeNotificationAction(id, key)
 - **A site raises its own window.** Its `client.focus()` or `window.focus()`
   fires `domicile-focus-request` on the `<webview>`
   (`WebViewGuest::ActivateContents`), and the shell raises it.
+- **Looking at an application reads its notifications,** and clears them as
+  the user clearing them would. Slack, like most Linux applications, never
+  closes its own once read in the app.
+  - Its window getting the keyboard reads all of them: those its process sent
+    over the bus, and the portal's for its app id. The chrome's own surfaces
+    are no application's window, so a site's are not read this way.
+  - Pressing one reads the rest of its application's, as GNOME does. The
+    application is the sending process and its name, which for a page is its
+    origin, so this covers sites too. For the portal, it is the app id.
 - **Dismissing a toast** only hides the toast. **Clearing** a notification
   sends `NotificationClosed` (reason 2) to the application.
 - **When locked,** the shell shows no toasts and no drawer, and the compositor
