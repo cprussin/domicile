@@ -434,11 +434,12 @@ interface WebViewGuestClient {
   // asks. See //chrome/browser/domicile/domicile_desk.h.
   FocusRequested();
 
-  // The content's preferred size in CSS pixels: its max-content width and its
-  // document height at the laid-out width.
+  // The size an extension popup's page sized itself to, in CSS pixels: Blink's
+  // auto-resize, between 25x25 and 800x600, as in Chrome's toolbar popup. While
+  // the page loads it only grows. Past the maximum, the page scrolls.
   //
-  // Used to size extension popups, as Chrome does. Sent only when it changes; a
-  // fresh guest sends it after its first layout.
+  // Sent only for an `extension_popup` guest, after its first layout and on
+  // every change.
   ContentSizeChanged(int32 width, int32 height);
 
   // The user opened a context menu (right click or menu key) and the page did

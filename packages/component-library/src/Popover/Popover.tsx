@@ -67,6 +67,11 @@ type Props = ExtendProps<
      * cut short — a mixer's devices, say.
      */
     wide?: boolean | undefined;
+    /**
+     * Lay the panel out without showing it, for a body that is not ready to
+     * be seen, such as a page still loading.
+     */
+    withheld?: boolean | undefined;
   }
 >;
 
@@ -97,6 +102,7 @@ const PopoverComponent = ({
   tooltip,
   trigger,
   wide = false,
+  withheld = false,
   ...rootProps
 }: Props) => {
   const ownActions = useRef<BasePopover.Root.Actions | null>(null);
@@ -151,6 +157,7 @@ const PopoverComponent = ({
             data-flush={flush ? "" : undefined}
             data-tone={tone}
             data-wide={wide ? "" : undefined}
+            data-withheld={withheld ? "" : undefined}
             // The keyboard lands on the first control; a pointer leaves
             // focus on the panel, so no control shows a focus ring it
             // didn't ask for.
@@ -230,6 +237,13 @@ const popupStyles = flex({
   },
   "&[data-wide]": {
     maxInlineSize: "min(30rem, 90vw, var(--available-width))",
+  },
+  // Opacity rather than `visibility`, so an embedded page keeps drawing.
+  // Showing it plays the opening transition.
+  "&[data-withheld]": {
+    opacity: 0,
+    pointerEvents: "none",
+    transform: "scale(0.96)",
   },
   backgroundColor: "card",
   border: "1px solid {colors.border}",

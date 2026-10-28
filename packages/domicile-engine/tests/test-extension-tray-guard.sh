@@ -110,8 +110,8 @@ expect "a popup that never closed is a failure" "fail" \
 expect "and blames the close" "yes" "$(says "tray 1 1 1 1 1 0 1" "CloseContents")"
 expect "a popup whose size never arrived is a failure" "fail" \
   "$(verdict "tray 1 1 1 1 1 1 0")"
-expect "and blames the preferred size" "yes" \
-  "$(says "tray 1 1 1 1 1 1 0" "UpdatePreferredSize")"
+expect "and blames the auto-resize" "yes" \
+  "$(says "tray 1 1 1 1 1 1 0" "ResizeDueToAutoResize")"
 
 echo
 echo "the control — the list empty, a page that never closes"
@@ -169,14 +169,12 @@ expect "and asks runtime.getContexts first" "yes" \
   "$(grep -qF 'runtime.getContexts({})' "$FIXTURE/popup.js" && echo yes || echo no)"
 WIDTH="$(sed -n 's/^readonly WIDTH="\([0-9]*\)"$/\1/p' "$GUARD")"
 HEIGHT="$(sed -n 's/^readonly HEIGHT="\([0-9]*\)"$/\1/p' "$GUARD")"
-# A fluid layout, like Bitwarden's popup in a tab: two halves of WIDTH side by
-# side with no fixed width. Its min-content width is half its natural width,
-# so sizing from the narrower value gives a strip.
-HALF=$((WIDTH / 2))
-expect "and lays its popup out fluid, at the size the guard reads" "2 1 0" \
-  "$(grep -oF "display: inline-block; width: ${HALF}px; height: ${HEIGHT}px" "$FIXTURE/popup.html" | wc -l) \
-$(grep -cF "<body style=\"margin: 0\">" "$FIXTURE/popup.html") \
-$(grep -cF "width: ${WIDTH}px" "$FIXTURE/popup.html")"
+# Sized as Phantom's popup is: a minimum on the body, and a line longer than
+# it. Chrome's popup is as wide as the minimum and wraps the line; one sized
+# from the line's whole length is too wide.
+expect "and sizes its popup by a minimum, at the size the guard reads" "1 1" \
+  "$(grep -cF "<body style=\"margin: 0; min-width: ${WIDTH}px; min-height: ${HEIGHT}px\">" "$FIXTURE/popup.html") \
+$(grep -c '<p style="margin: 0">.\{60,\}</p>' "$FIXTURE/popup.html")"
 CONTEXT="$(sed -n 's/^readonly CONTEXT="\(.*\)"$/\1/p' "$GUARD")"
 expect "the guard expects the popup to be a POPUP, as Chrome's is" "POPUP" \
   "$CONTEXT"

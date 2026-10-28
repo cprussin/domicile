@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import type { Domicile } from "@domicile-desktop/sdk/desktop/desktop";
 import type { Extension } from "@domicile-desktop/sdk/extension";
 import {
@@ -6,6 +6,7 @@ import {
   WEBVIEW_CONTENT_SIZE_CHANGE_EVENT,
   WEBVIEW_DEVICE_REQUEST_EVENT,
   WEBVIEW_DIALOG_EVENT,
+  WEBVIEW_LOADING_CHANGE_EVENT,
   WEBVIEW_PERMISSION_REQUEST_EVENT,
 } from "@domicile-desktop/sdk/webview-element";
 import {
@@ -58,6 +59,13 @@ const recordingDomicile = (activated: string[]): Domicile =>
   }) as unknown as Domicile;
 
 const NO_DOMICILE = recordingDomicile([]);
+
+// Drops the view's state a test gave every element.
+afterEach(() => {
+  for (const name of ["contentHeight", "contentWidth", "loading"]) {
+    Reflect.deleteProperty(HTMLElement.prototype, name);
+  }
+});
 
 /**
  * The popup's view, portaled to the body, once base-ui has positioned it (a
@@ -219,6 +227,54 @@ describe("ExtensionAction", () => {
           "230px",
           "170px",
         ]);
+      });
+    });
+    it("shows the popup only once its page has loaded and sized itself, as Chrome does", async () => {
+      // A fresh view, as the engine's starts: nothing loading, no size. On the
+      // prototype, because the view reads them as it mounts.
+      Object.defineProperties(HTMLElement.prototype, {
+        contentHeight: { configurable: true, value: 0 },
+        contentWidth: { configurable: true, value: 0 },
+        loading: { configurable: true, value: false },
+      });
+      render(
+        <ExtensionAction
+          domicile={NO_DOMICILE}
+          extension={blocker}
+          onOpen={() => undefined}
+          opened={BLOCKER}
+        />,
+      );
+      const view = await popupView();
+      const panel = screen.getByRole("dialog");
+      const withheld = () => panel.hasAttribute("data-withheld");
+      const before = withheld();
+
+      // The page starts loading, then sizes itself while it loads.
+      Object.defineProperty(view, "loading", {
+        configurable: true,
+        value: true,
+      });
+      fireEvent(view, new Event(WEBVIEW_LOADING_CHANGE_EVENT));
+      Object.defineProperties(view, {
+        contentHeight: { configurable: true, value: 170 },
+        contentWidth: { configurable: true, value: 230 },
+      });
+      fireEvent(view, new Event(WEBVIEW_CONTENT_SIZE_CHANGE_EVENT));
+      await waitFor(() => {
+        expect(view.style.inlineSize).toBe("230px");
+      });
+      const whileLoading = withheld();
+
+      Object.defineProperty(view, "loading", {
+        configurable: true,
+        value: false,
+      });
+      fireEvent(view, new Event(WEBVIEW_LOADING_CHANGE_EVENT));
+
+      expect([before, whileLoading]).toStrictEqual([true, true]);
+      await waitFor(() => {
+        expect(withheld()).toBe(false);
       });
     });
   });

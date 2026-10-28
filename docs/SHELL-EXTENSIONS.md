@@ -110,8 +110,10 @@ panel.append(view);
   Without it the popup loads as a tab, and extensions that lay out by context
   (for example, Bitwarden) render as a full page.
 - **Size:** size the view to `contentWidth` and `contentHeight` (0 until laid
-  out), announced in `domicile-content-size-change`. Cap them at the panel's
-  maximum. The width includes a vertical scrollbar's gutter.
+  out), announced in `domicile-content-size-change`. The page sizes itself as
+  in Chrome, between 25x25 and 800x600, and scrolls past that.
+- **Showing:** show the panel once the page has sized itself and `loading` is
+  false, as Chrome does. While it loads it is still growing.
 - **Keyboard:** take it with `windows.focusShell` while the panel is open, and give
   it back on close ([Who gets the keyboard](WRITING-A-SHELL.md#who-gets-the-keyboard)).
 - **Closing:** close the panel on `domicile-close` (the popup called
