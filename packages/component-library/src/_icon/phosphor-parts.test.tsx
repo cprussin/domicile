@@ -1,10 +1,14 @@
 import { describe, expect, it } from "bun:test";
 import type { Icon, IconWeight } from "@phosphor-icons/react";
+import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowClockwise";
 import { BellSimpleIcon } from "@phosphor-icons/react/dist/ssr/BellSimple";
 import { BluetoothIcon } from "@phosphor-icons/react/dist/ssr/Bluetooth";
 import { BluetoothConnectedIcon } from "@phosphor-icons/react/dist/ssr/BluetoothConnected";
 import { ChatCircleTextIcon } from "@phosphor-icons/react/dist/ssr/ChatCircleText";
 import { CheckIcon } from "@phosphor-icons/react/dist/ssr/Check";
+import { CornersInIcon } from "@phosphor-icons/react/dist/ssr/CornersIn";
+import { CornersOutIcon } from "@phosphor-icons/react/dist/ssr/CornersOut";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr/DownloadSimple";
 import { EyeIcon } from "@phosphor-icons/react/dist/ssr/Eye";
 import { EyeClosedIcon } from "@phosphor-icons/react/dist/ssr/EyeClosed";
 import { GearSixIcon } from "@phosphor-icons/react/dist/ssr/GearSix";
@@ -12,9 +16,11 @@ import { KeyboardIcon } from "@phosphor-icons/react/dist/ssr/Keyboard";
 import { LightningIcon } from "@phosphor-icons/react/dist/ssr/Lightning";
 import { MicrophoneIcon } from "@phosphor-icons/react/dist/ssr/Microphone";
 import { MoonIcon } from "@phosphor-icons/react/dist/ssr/Moon";
+import { RowsIcon } from "@phosphor-icons/react/dist/ssr/Rows";
 import { SpeakerHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerHigh";
 import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour";
 import { SunIcon } from "@phosphor-icons/react/dist/ssr/Sun";
+import { TabsIcon } from "@phosphor-icons/react/dist/ssr/Tabs";
 import { WifiHighIcon } from "@phosphor-icons/react/dist/ssr/WifiHigh";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -94,6 +100,32 @@ const SOURCES: [string, readonly string[], Icon, IconWeight][] = [
   ["GEAR_REGULAR", [parts.GEAR_REGULAR.gear], GearSixIcon, "regular"],
   ["LIGHTNING_FILL", [parts.LIGHTNING_FILL.bolt], LightningIcon, "fill"],
   ["CHECK_BOLD", [parts.CHECK_BOLD.check], CheckIcon, "bold"],
+  [
+    "CORNERS_OUT_REGULAR",
+    parts.CORNERS_OUT_REGULAR.corners,
+    CornersOutIcon,
+    "regular",
+  ],
+  [
+    "CORNERS_IN_REGULAR",
+    parts.CORNERS_IN_REGULAR.corners,
+    CornersInIcon,
+    "regular",
+  ],
+  ["ROWS_REGULAR", parts.ROWS_REGULAR.rows, RowsIcon, "regular"],
+  ["TABS_REGULAR", [parts.TABS_REGULAR.tabs], TabsIcon, "regular"],
+  [
+    "ARROW_CLOCKWISE_REGULAR",
+    [parts.ARROW_CLOCKWISE_REGULAR.arrow],
+    ArrowClockwiseIcon,
+    "regular",
+  ],
+  [
+    "DOWNLOAD_REGULAR",
+    Object.values(parts.DOWNLOAD_REGULAR),
+    DownloadSimpleIcon,
+    "regular",
+  ],
 ];
 
 describe("phosphor parts", () => {

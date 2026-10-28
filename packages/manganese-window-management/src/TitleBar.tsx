@@ -1,16 +1,12 @@
+import { AnimatedCloseIcon } from "@domicile-desktop/component-library/AnimatedCloseIcon";
+import { AnimatedFloatIcon } from "@domicile-desktop/component-library/AnimatedFloatIcon";
+import type { GroupLayout } from "@domicile-desktop/component-library/AnimatedLayoutIcon";
+import { AnimatedLayoutIcon } from "@domicile-desktop/component-library/AnimatedLayoutIcon";
+import { AnimatedMaximizeIcon } from "@domicile-desktop/component-library/AnimatedMaximizeIcon";
 import { Button } from "@domicile-desktop/component-library/Button";
 import { PopupBoundary } from "@domicile-desktop/component-library/PopupBoundary";
 import { Tooltip } from "@domicile-desktop/component-library/Tooltip";
 import { AppWindowIcon } from "@phosphor-icons/react/dist/ssr/AppWindow";
-import { BrowsersIcon } from "@phosphor-icons/react/dist/ssr/Browsers";
-import { CornersInIcon } from "@phosphor-icons/react/dist/ssr/CornersIn";
-import { CornersOutIcon } from "@phosphor-icons/react/dist/ssr/CornersOut";
-import { RowsIcon } from "@phosphor-icons/react/dist/ssr/Rows";
-import { SquareSplitHorizontalIcon } from "@phosphor-icons/react/dist/ssr/SquareSplitHorizontal";
-import { SquareSplitVerticalIcon } from "@phosphor-icons/react/dist/ssr/SquareSplitVertical";
-import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour";
-import { TabsIcon } from "@phosphor-icons/react/dist/ssr/Tabs";
-import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import type { ReactElement, PointerEvent as ReactPointerEvent } from "react";
 import { useRef, useState } from "react";
 
@@ -44,6 +40,14 @@ import {
 
 /** The middle button, as `MouseEvent.button` numbers it. */
 const MIDDLE_BUTTON = 1;
+
+/** How a tab's group mark draws each layout. */
+const GROUP_LAYOUTS: Record<Layout, GroupLayout> = {
+  [Layout.SplitH]: "row",
+  [Layout.SplitV]: "column",
+  [Layout.Stacking]: "stack",
+  [Layout.Tabbed]: "tabs",
+};
 
 /** What a tab's group mark calls each layout. */
 const GROUP_NAMES: Record<Layout, string> = {
@@ -296,11 +300,7 @@ export const TitleBar = ({
                   size="sm"
                   variant="ghost"
                 >
-                  {floating ? (
-                    <SquaresFourIcon size={14} />
-                  ) : (
-                    <BrowsersIcon size={14} />
-                  )}
+                  <AnimatedFloatIcon floating={floating} size={14} />
                 </Button>
                 <Button
                   label={fullscreen ? "Restore" : "Maximize"}
@@ -308,16 +308,12 @@ export const TitleBar = ({
                   size="sm"
                   variant="ghost"
                 >
-                  {fullscreen ? (
-                    <CornersInIcon size={14} />
-                  ) : (
-                    <CornersOutIcon size={14} />
-                  )}
+                  <AnimatedMaximizeIcon maximized={fullscreen} size={14} />
                 </Button>
               </span>
             )}
             <Button label="Close" onClick={onClose} size="sm" variant="ghost">
-              <XIcon size={14} />
+              <AnimatedCloseIcon size={14} />
             </Button>
           </span>
         </div>
@@ -402,7 +398,7 @@ const GroupMark = ({
     className={groupMarkStyles}
     role="img"
   >
-    <GroupIcon layout={layout} />
+    <AnimatedLayoutIcon layout={GROUP_LAYOUTS[layout]} size={14} />
     {windows}
   </span>
 );
@@ -430,23 +426,6 @@ const WindowIcon = ({ icon }: { icon: string | undefined }) => {
       )}
     </span>
   );
-};
-
-const GroupIcon = ({ layout }: { layout: Layout }) => {
-  switch (layout) {
-    case Layout.SplitH: {
-      return <SquareSplitHorizontalIcon size={14} />;
-    }
-    case Layout.SplitV: {
-      return <SquareSplitVerticalIcon size={14} />;
-    }
-    case Layout.Stacking: {
-      return <RowsIcon size={14} />;
-    }
-    case Layout.Tabbed: {
-      return <TabsIcon size={14} />;
-    }
-  }
 };
 
 // Fills the slot with the bar's own box.

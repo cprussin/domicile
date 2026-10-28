@@ -38,6 +38,16 @@ const control = (name: string): HTMLElement =>
   screen.getByRole("button", { name });
 
 describe("AddressBar", () => {
+  it("shuts its lock when a page turns out to be secure", () => {
+    const { rerender } = render(
+      <AddressBar {...BAR} security={ConnectionSafety.Unstated} />,
+    );
+    expect(document.querySelector("[data-part=shackle]")).toBeNull();
+    rerender(<AddressBar {...BAR} />);
+
+    expect(document.querySelector("[data-part=shackle]")).not.toBeNull();
+  });
+
   it("shows where the window was sent", () => {
     render(<AddressBar {...BAR} />);
 
@@ -117,6 +127,17 @@ describe("AddressBar", () => {
 
       expect(calls).toStrictEqual(["stop"]);
       expect(screen.queryByRole("button", { name: "Reload" })).toBeNull();
+    });
+
+    it("spins its arrow into the X, in the same drawing, as a page starts arriving", () => {
+      const { rerender } = render(<AddressBar {...BAR} />);
+      const svg = control("Reload").querySelector("svg");
+      rerender(<AddressBar {...BAR} loading />);
+
+      expect(control("Stop").querySelector("svg")).toBe(svg);
+      expect(
+        control("Stop").querySelector("[data-part=arrow]"),
+      ).toHaveAttribute("data-state", "hidden");
     });
   });
 

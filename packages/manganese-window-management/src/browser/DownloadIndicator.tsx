@@ -1,7 +1,7 @@
 import { AnimatedCheckIcon } from "@domicile-desktop/component-library/AnimatedCheckIcon";
+import { AnimatedCloseIcon } from "@domicile-desktop/component-library/AnimatedCloseIcon";
+import { AnimatedDownloadIcon } from "@domicile-desktop/component-library/AnimatedDownloadIcon";
 import { Button } from "@domicile-desktop/component-library/Button";
-import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr/DownloadSimple";
-import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 
 import { hstack } from "../../styled-system/patterns";
 import type { Downloads } from "./downloads";
@@ -46,7 +46,10 @@ const DownloadProgress = ({ downloads }: { downloads: Downloads }) => {
       data-size-unknown={percent === undefined ? "" : undefined}
       role="progressbar"
     >
-      <DownloadSimpleIcon size={14} />
+      <AnimatedDownloadIcon
+        cue={downloads.count + downloads.completed}
+        size={14}
+      />
       {percent === undefined ? undefined : `${percent}%`}
     </div>
   );
@@ -72,7 +75,7 @@ const FinishedDownloads = ({
       size="xs"
       variant="ghost"
     >
-      <XIcon size={12} weight="bold" />
+      <AnimatedCloseIcon size={12} weight="bold" />
     </Button>
   </div>
 );

@@ -1,8 +1,6 @@
+import { AnimatedFloatIcon } from "@domicile-desktop/component-library/AnimatedFloatIcon";
+import { AnimatedMaximizeIcon } from "@domicile-desktop/component-library/AnimatedMaximizeIcon";
 import { Button } from "@domicile-desktop/component-library/Button";
-import { BrowsersIcon } from "@phosphor-icons/react/dist/ssr/Browsers";
-import { CornersInIcon } from "@phosphor-icons/react/dist/ssr/CornersIn";
-import { CornersOutIcon } from "@phosphor-icons/react/dist/ssr/CornersOut";
-import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour";
 
 import { css } from "../styled-system/css";
 import { hstack } from "../styled-system/patterns";
@@ -45,7 +43,7 @@ export const StripButtons = ({
         size="xs"
         variant="ghost"
       >
-        {floating ? <SquaresFourIcon size={12} /> : <BrowsersIcon size={12} />}
+        <AnimatedFloatIcon floating={floating} size={12} />
       </Button>
       <Button
         label={fullscreen ? "Restore group" : "Maximize group"}
@@ -53,11 +51,7 @@ export const StripButtons = ({
         size="xs"
         variant="ghost"
       >
-        {fullscreen ? (
-          <CornersInIcon size={12} />
-        ) : (
-          <CornersOutIcon size={12} />
-        )}
+        <AnimatedMaximizeIcon maximized={fullscreen} size={12} />
       </Button>
     </span>
   </div>

@@ -1,3 +1,7 @@
+import { AnimatedCaretIcon } from "@domicile-desktop/component-library/AnimatedCaretIcon";
+import { AnimatedMinusIcon } from "@domicile-desktop/component-library/AnimatedMinusIcon";
+import { AnimatedPlusIcon } from "@domicile-desktop/component-library/AnimatedPlusIcon";
+import { AnimatedReloadIcon } from "@domicile-desktop/component-library/AnimatedReloadIcon";
 import type { Suggestion } from "@domicile-desktop/component-library/Autocomplete";
 import { Autocomplete } from "@domicile-desktop/component-library/Autocomplete";
 import { Button } from "@domicile-desktop/component-library/Button";
@@ -14,16 +18,10 @@ import type {
   WebViewPermission,
   WebViewPermissionSetting,
 } from "@domicile-desktop/sdk/webview-element";
-import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowClockwise";
-import { CaretLeftIcon } from "@phosphor-icons/react/dist/ssr/CaretLeft";
-import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
 import { ClockCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ClockCounterClockwise";
 import { DetectiveIcon } from "@phosphor-icons/react/dist/ssr/Detective";
 import { GlobeSimpleIcon } from "@phosphor-icons/react/dist/ssr/GlobeSimple";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
-import { MinusIcon } from "@phosphor-icons/react/dist/ssr/Minus";
-import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
-import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import type { CSSProperties, FormEvent } from "react";
 import { useState } from "react";
 import { css } from "../../styled-system/css";
@@ -160,7 +158,7 @@ export const AddressBar = ({
           size="sm"
           variant="ghost"
         >
-          <CaretLeftIcon size={16} />
+          <AnimatedCaretIcon pointing="left" size={16} />
         </Button>
         <Button
           disabled={!canGoForward}
@@ -170,7 +168,7 @@ export const AddressBar = ({
           size="sm"
           variant="ghost"
         >
-          <CaretRightIcon size={16} />
+          <AnimatedCaretIcon pointing="right" size={16} />
         </Button>
         {/* One button for Reload and Stop, since only one applies at a time. */}
         <Button
@@ -180,7 +178,7 @@ export const AddressBar = ({
           size="sm"
           variant="ghost"
         >
-          {loading ? <XIcon size={16} /> : <ArrowClockwiseIcon size={16} />}
+          <AnimatedReloadIcon loading={loading} size={16} />
         </Button>
       </div>
       {isPrivate && (
@@ -230,7 +228,7 @@ export const AddressBar = ({
           size="xs"
           variant="ghost"
         >
-          <MinusIcon size={12} weight="bold" />
+          <AnimatedMinusIcon size={12} />
         </Button>
         <span aria-hidden className={dividerStyles} />
         {/* The zoom level; pressing it resets to 100%. Fixed width so the
@@ -256,7 +254,7 @@ export const AddressBar = ({
           size="xs"
           variant="ghost"
         >
-          <PlusIcon size={12} weight="bold" />
+          <AnimatedPlusIcon size={12} weight="bold" />
         </Button>
       </div>
       {downloads.count === 0 && downloads.completed === 0 ? undefined : (

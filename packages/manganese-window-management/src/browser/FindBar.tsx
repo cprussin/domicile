@@ -1,8 +1,7 @@
+import { AnimatedCaretIcon } from "@domicile-desktop/component-library/AnimatedCaretIcon";
+import { AnimatedCloseIcon } from "@domicile-desktop/component-library/AnimatedCloseIcon";
 import { Button } from "@domicile-desktop/component-library/Button";
 import { Input } from "@domicile-desktop/component-library/Input";
-import { CaretDownIcon } from "@phosphor-icons/react/dist/ssr/CaretDown";
-import { CaretUpIcon } from "@phosphor-icons/react/dist/ssr/CaretUp";
-import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
 import type { KeyboardEvent, Ref } from "react";
 import { useState } from "react";
 
@@ -100,7 +99,7 @@ export const FindBar = ({ onClose, onFind, ref, view }: Props) => {
         size="sm"
         variant="ghost"
       >
-        <CaretUpIcon size={16} />
+        <AnimatedCaretIcon pointing="up" size={16} />
       </Button>
       <Button
         disabled={nothingToStep}
@@ -112,7 +111,7 @@ export const FindBar = ({ onClose, onFind, ref, view }: Props) => {
         size="sm"
         variant="ghost"
       >
-        <CaretDownIcon size={16} />
+        <AnimatedCaretIcon pointing="down" size={16} />
       </Button>
       <Button
         label="Close find bar"
@@ -121,7 +120,7 @@ export const FindBar = ({ onClose, onFind, ref, view }: Props) => {
         size="sm"
         variant="ghost"
       >
-        <XIcon size={16} />
+        <AnimatedCloseIcon size={16} />
       </Button>
     </search>
   );

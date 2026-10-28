@@ -1,8 +1,8 @@
+import { AnimatedLockIcon } from "@domicile-desktop/component-library/AnimatedLockIcon";
 import { Button } from "@domicile-desktop/component-library/Button";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import { ConnectionSafety } from "@domicile-desktop/manganese-address/connection-safety";
 import { InfoIcon } from "@phosphor-icons/react/dist/ssr/Info";
-import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock";
 import { QuestionIcon } from "@phosphor-icons/react/dist/ssr/Question";
 import { WarningIcon } from "@phosphor-icons/react/dist/ssr/Warning";
 import { WarningOctagonIcon } from "@phosphor-icons/react/dist/ssr/WarningOctagon";
@@ -113,7 +113,7 @@ const INDICATORS: Readonly<
     body: "The browser validated this site's certificate, and what passes between here and it is encrypted. That is a statement about the connection and not about the site: a page can be reached securely and still not be worth trusting.",
     mark: (
       <span className={secureMarkStyles}>
-        <LockIcon size={14} />
+        <AnimatedLockIcon size={14} />
       </span>
     ),
     title: "Connection is secure",
