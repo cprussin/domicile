@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
 
 import type { Theme } from "./theme-core";
 import {
@@ -23,12 +24,15 @@ import type { ThemeSource } from "./theme-source";
  *
  * `flip` only sends a request ({@link ThemeSource.setTheme}). `theme` changes,
  * with animation, when the source reports the new theme. `flipping` is true
- * from that report until the animation ends and `theme` commits.
+ * from that report until the animation ends and `theme` commits. `painted`
+ * is the theme the page is drawn in: it changes as the wipe starts, so what
+ * reads it wipes over to its new state with the rest of the screen.
  */
 export type ThemeControl = {
   theme: Theme;
   flip: () => void;
   flipping: boolean;
+  painted: Theme;
 };
 
 const ThemeContext = createContext<ThemeControl | undefined>(undefined);
@@ -50,10 +54,11 @@ export const ThemeProvider = ({
 }: PropsWithChildren<{ source: ThemeSource }>) => {
   const [theme, setTheme] = useState<Theme>(source.theme ?? DEFAULT_THEME);
   const [flipping, setFlipping] = useState(false);
+  const [painted, setPainted] = useState(theme);
 
-  // The theme on `<html>`, which leads the committed state by the length of
-  // the wipe. Lets the effect below skip reports that change nothing.
-  const painted = useRef(theme);
+  // The theme the source reported last, which leads `painted` by the wait
+  // before the wipe. Lets the effect below skip reports that change nothing.
+  const reported = useRef(theme);
 
   // Idempotent; the wipe or the page's entry point may have applied it
   // already.
@@ -63,14 +68,18 @@ export const ThemeProvider = ({
 
   useEffect(() => {
     const told = (next: Theme) => {
-      const previous = painted.current;
+      const previous = reported.current;
       // Sources replay their current theme on registration, so an unchanged
       // theme is common and must not animate.
       if (previous !== next) {
-        painted.current = next;
+        reported.current = next;
         setFlipping(true);
         flipThemeWithAnimation({
           applyNextTheme: () => {
+            // Rendered now, so the wipe's new frame holds it.
+            flushSync(() => {
+              setPainted(next);
+            });
             applyTheme(next);
           },
           commitTheme: () => {
@@ -96,8 +105,8 @@ export const ThemeProvider = ({
   }, [source, theme]);
 
   const value = useMemo(
-    () => ({ flip, flipping, theme }),
-    [flip, flipping, theme],
+    () => ({ flip, flipping, painted, theme }),
+    [flip, flipping, painted, theme],
   );
   return (
     <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>

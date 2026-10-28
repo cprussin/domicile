@@ -12,10 +12,11 @@ const isLight = () =>
 
 // Shows the theme and flips it on click.
 const Probe = () => {
-  const { flip, flipping, theme } = useTheme();
+  const { flip, flipping, painted, theme } = useTheme();
   return (
     <button
       data-flipping={flipping}
+      data-painted={painted}
       data-testid="theme"
       onClick={flip}
       type="button"
@@ -256,6 +257,33 @@ describe(ThemeProvider, () => {
         expect(probe).toHaveAttribute("data-flipping", "false");
       });
       expect(probe).toHaveTextContent("light");
+    });
+
+    it("paints the new theme into the wipe, committing it once the wipe ends", async () => {
+      // What reads `painted` is drawn in the new theme's frame, so it wipes
+      // over to its new state with the rest of the screen.
+      const turning = renderTurning();
+      const probe = screen.getByTestId("theme");
+
+      await userEvent.click(probe);
+      await waitFor(() => {
+        expect(wipe.start).toBeDefined();
+      });
+      expect(probe).toHaveAttribute("data-painted", "light");
+      expect(probe).toHaveTextContent("dark");
+
+      wipe.start?.(true);
+      await waitFor(() => {
+        expect(turning.done).toBeDefined();
+      });
+      turning.done?.();
+      await act(async () => {
+        wipe.end?.();
+        await Promise.resolve();
+      });
+      await waitFor(() => {
+        expect(probe).toHaveTextContent("light");
+      });
     });
 
     it("turns the windows when the wipe is skipped", async () => {

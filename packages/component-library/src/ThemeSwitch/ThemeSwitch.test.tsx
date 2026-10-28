@@ -17,6 +17,7 @@ describe(ThemeSwitch, () => {
           useTheme={() => ({
             flip: () => undefined,
             flipping: false,
+            painted: "dark",
             theme: "dark",
           })}
         />,
@@ -32,6 +33,7 @@ describe(ThemeSwitch, () => {
           useTheme={() => ({
             flip: () => undefined,
             flipping: false,
+            painted: "light",
             theme: "light",
           })}
         />,
@@ -48,7 +50,12 @@ describe(ThemeSwitch, () => {
       const flip = mock();
       render(
         <ThemeSwitch
-          useTheme={() => ({ flip, flipping: false, theme: "dark" })}
+          useTheme={() => ({
+            flip,
+            flipping: false,
+            painted: "dark",
+            theme: "dark",
+          })}
         />,
       );
       await userEvent.click(screen.getByRole("button"));
