@@ -77,6 +77,9 @@ export const domicilePreset = definePreset({
       // place, a selected tab or option, a checked row.
       hoverEnabled:
         "&:hover:not(:disabled):not([data-disabled]):not([aria-current]):not([aria-selected=true]):not([data-checked])",
+      // Under the pointer, or while the popup it opened is open, so a bar
+      // panel reads as coming from its button.
+      hoverOrOpen: "&:is(:hover, [data-popup-open])",
       // Panda's default `_light` matches a `light` class; we use
       // `data-theme="light"` on `<html>`.
       light: "[data-theme=light] &",
@@ -404,6 +407,10 @@ export const domicilePreset = definePreset({
           },
           fillHover: {
             value: "color-mix(in oklab, currentcolor 14%, transparent)",
+          },
+          // A bar button lit under the pointer or while its panel is open.
+          fillOverPhoto: {
+            value: "color-mix(in oklab, white 16%, transparent)",
           },
           foreground: {
             value: {

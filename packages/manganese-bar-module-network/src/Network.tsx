@@ -138,9 +138,7 @@ const Item = ({
 // Matches the volume item's button.
 const triggerStyles = cva({
   base: {
-    _hover: {
-      backgroundColor: "color-mix(in oklab, white 16%, transparent)",
-    },
+    _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
     alignItems: "center",
     backgroundColor: "transparent",
     blockSize: 7,

@@ -78,9 +78,7 @@ const shows = (listed: Keymaps, hideDefault: boolean): boolean =>
 // unreadable over the wallpaper. Capitals, like the mode item, since the
 // bar's text is always white.
 const triggerStyles = css({
-  _hover: {
-    backgroundColor: "color-mix(in oklab, white 16%, transparent)",
-  },
+  _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
   alignItems: "center",
   backgroundColor: "transparent",
   blockSize: 7,

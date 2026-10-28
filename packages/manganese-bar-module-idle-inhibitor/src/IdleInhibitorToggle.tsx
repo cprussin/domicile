@@ -68,9 +68,7 @@ const names = new Intl.ListFormat("en-US", { type: "conjunction" });
 const toggleStyles = cva({
   base: {
     _disabled: { cursor: "progress" },
-    _hover: {
-      backgroundColor: "color-mix(in oklab, white 16%, transparent)",
-    },
+    _hover: { backgroundColor: "fillOverPhoto" },
     "&[data-inhibiting=true]": {
       backgroundColor: "color-mix(in oklab, white 24%, transparent)",
     },

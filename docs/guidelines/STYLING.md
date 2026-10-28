@@ -188,6 +188,7 @@ Stick to the **semantic** color tokens defined by the domicile preset:
 | `backdrop` | Modal/popover backdrop overlay |
 | `skeleton` | Loading skeleton fills |
 | `onPhoto` / `panelOverPhoto` | Lettering and a frosted panel drawn straight onto the wallpaper. The panel is darker in light mode, so its text reads over a white wallpaper |
+| `fillOverPhoto` | A bar button lit under the pointer or while its panel is open |
 | `textSoft` / `textFaint` | A second line or figure / a section label, drawn from `currentcolor` |
 | `fill` / `fillHover` / `divider` | A tile, row or card on a panel / under the pointer / a rule, drawn from `currentcolor` |
 
@@ -481,6 +482,8 @@ Prefer Panda's built-in condition keys to writing raw selectors:
 The domicile preset also defines `_activeEnabled` and `_hoverEnabled`
 (active/hover but only when the element is also enabled), which is what
 buttons use to avoid hover/active styles firing on a disabled control.
+`_hoverOrOpen` matches hover or `[data-popup-open]`, so a bar button stays
+lit while the panel it opened is open.
 
 `_contrastHigh` matches `theme.contrast: "high"` (`data-contrast="high"` on
 `<html>`). Panda's own `_highContrast` matches forced colors instead.

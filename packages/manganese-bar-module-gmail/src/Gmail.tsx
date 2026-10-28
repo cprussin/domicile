@@ -148,9 +148,7 @@ const Count = ({
 // Matches the network item's button. Unread mail lights the item as the idle
 // inhibitor lights when on, and sets the count in semibold.
 const itemStyles = hstack({
-  _hover: {
-    backgroundColor: "color-mix(in oklab, white 16%, transparent)",
-  },
+  _hover: { backgroundColor: "fillOverPhoto" },
   "&[data-unread=true]": {
     backgroundColor: "color-mix(in oklab, white 24%, transparent)",
     // Clears the total from the badge on the end corner.

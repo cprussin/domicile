@@ -169,9 +169,7 @@ const triggerId = (screen: string) => `google-messages-${screen}`;
 
 // Round, like the bar's other icon buttons, lit while there are new messages.
 const itemStyles = css({
-  _hover: {
-    backgroundColor: "color-mix(in oklab, white 16%, transparent)",
-  },
+  _hoverOrOpen: { backgroundColor: "fillOverPhoto" },
   "&[data-unread=true]": {
     backgroundColor: "color-mix(in oklab, white 24%, transparent)",
   },
