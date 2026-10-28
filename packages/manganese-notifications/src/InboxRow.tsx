@@ -5,7 +5,9 @@ import type { ReactNode } from "react";
 import { css } from "../styled-system/css";
 
 type Props = {
-  /** A short figure at the row's end, such as the conversation count. */
+  /** A second line, such as the conversation count. */
+  detail?: string | undefined;
+  /** A short figure at the row's end while nothing is unread, such as "Sign in". */
   figure?: string | undefined;
   icon: ReactNode;
   /** The row's name for assistive tech, with its counts in words. */
@@ -20,10 +22,12 @@ type Props = {
 };
 
 /**
- * One inbox in the notification drawer's list: its icon, its name, and the
- * unread count, or a figure while nothing is unread. A press opens it.
+ * One inbox in the notification drawer's list: its icon, its name over a
+ * detail, and the unread count, or a figure while nothing is unread. A press
+ * opens it.
  */
 export const InboxRow = ({
+  detail,
   figure,
   icon,
   label,
@@ -33,6 +37,7 @@ export const InboxRow = ({
   warning = false,
 }: Props) => (
   <ListRow
+    detail={detail}
     end={
       <>
         {warning && (

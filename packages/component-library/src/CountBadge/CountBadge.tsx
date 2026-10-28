@@ -3,6 +3,9 @@ import { cva } from "../../styled-system/css";
 /** The highest count the badge shows before it switches to "N+". */
 const MOST_COUNTED = 9;
 
+/** The same, in line with text, where the pill can widen. */
+const MOST_COUNTED_INLINE = 99;
+
 type Props = {
   /** How many are unread. Zero draws nothing. */
   count: number;
@@ -17,16 +20,18 @@ type Props = {
  *
  * Hidden from assistive tech: the control it sits on names the count.
  */
-export const CountBadge = ({ count, inline = false }: Props) =>
-  count === 0 ? undefined : (
+export const CountBadge = ({ count, inline = false }: Props) => {
+  const most = inline ? MOST_COUNTED_INLINE : MOST_COUNTED;
+  return count === 0 ? undefined : (
     <span
       aria-hidden
       className={badgeStyles({ inline })}
       data-inline={inline ? "" : undefined}
     >
-      {count > MOST_COUNTED ? `${MOST_COUNTED.toString()}+` : count}
+      {count > most ? `${most.toString()}+` : count}
     </span>
   );
+};
 
 // The bar's text shadow is removed because it smudges small figures.
 const badgeStyles = cva({

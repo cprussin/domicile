@@ -46,11 +46,16 @@ const shownAs = (name: string, reading: InboxReading | undefined) => {
     case InboxReadingKind.SignedOut:
       return { figure: "Sign in", label: `Sign in to ${name}`, unread: 0 };
     case InboxReadingKind.Counted:
-      return {
-        figure: reading.total === 0 ? "Empty" : reading.total.toString(),
-        label: countLabel(name, reading.total, reading.unread),
-        unread: reading.unread,
-      };
+      return reading.total === 0
+        ? { figure: "Empty", label: `${name}: empty`, unread: 0 }
+        : {
+            detail: conversations(
+              reading.total,
+              reading.total.toLocaleString(),
+            ),
+            label: countLabel(name, reading.total, reading.unread),
+            unread: reading.unread,
+          };
     case InboxReadingKind.Unread:
       return {
         label:
@@ -69,13 +74,12 @@ const shownAs = (name: string, reading: InboxReading | undefined) => {
   }
 };
 
-/** The counts in words, for the row's name. */
-const countLabel = (name: string, total: number, unread: number) => {
-  if (total === 0) {
-    return `${name}: empty`;
-  } else if (unread === 0) {
-    return `${name}: ${total.toString()} conversations`;
-  } else {
-    return `${name}: ${unread.toString()} unread of ${total.toString()} conversations`;
-  }
-};
+/** The counts of a nonempty inbox in words, for the row's name. */
+const countLabel = (name: string, total: number, unread: number) =>
+  unread === 0
+    ? `${name}: ${conversations(total)}`
+    : `${name}: ${unread.toString()} unread of ${conversations(total)}`;
+
+/** `total` conversations, with `total` written as `written`. */
+const conversations = (total: number, written = total.toString()) =>
+  total === 1 ? `${written} conversation` : `${written} conversations`;
