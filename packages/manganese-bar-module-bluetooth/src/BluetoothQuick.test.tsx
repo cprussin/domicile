@@ -1,9 +1,15 @@
 import { describe, expect, it } from "bun:test";
 import { Err, Ok } from "@cprussin/option-result";
+import { FakeDomicileHost } from "@domicile-desktop/sdk/fake-host";
 import { SystemErrorKind } from "@domicile-desktop/sdk/system";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { BluetoothGlyph, BluetoothTile } from "./BluetoothQuick";
+import {
+  BluetoothDetails,
+  BluetoothGlyph,
+  BluetoothTile,
+} from "./BluetoothQuick";
+import { heldActions } from "./held-actions";
 import { heldBluetooth, heldHardware, reading } from "./held-bluetooth";
 
 describe(BluetoothGlyph, () => {
@@ -129,5 +135,38 @@ describe(BluetoothTile, () => {
     expect(screen.queryByRole("button")).toBeNull();
     expect(screen.getByText("Unavailable")).toBeVisible();
     expect(screen.queryByText(/gone/)).toBeNull();
+  });
+});
+
+describe(BluetoothDetails, () => {
+  const details = () => {
+    const bluetooth = heldBluetooth();
+    render(
+      <BluetoothDetails
+        actions={heldActions().actions}
+        bluetooth={bluetooth.bluetooth}
+        host={new FakeDomicileHost().domicile}
+      />,
+    );
+    return bluetooth;
+  };
+
+  it("says it is checking until BlueZ answers", () => {
+    details();
+    expect(screen.getByRole("status")).toHaveTextContent("Checking Bluetooth…");
+  });
+
+  it("says plainly that BlueZ failed, with its words in the tooltip", () => {
+    details().report(Err({ kind: SystemErrorKind.Dbus, message: "gone" }));
+    const note = screen.getByRole("status");
+    expect(note).toHaveTextContent("Couldn't read Bluetooth");
+    expect(note).toHaveAttribute("title", "gone");
+  });
+
+  it("lists the devices once BlueZ answers", () => {
+    details().report(reading(true, ["WH-1000XM4"]));
+    expect(screen.getByRole("region", { name: "Connected" })).toHaveTextContent(
+      "WH-1000XM4",
+    );
   });
 });

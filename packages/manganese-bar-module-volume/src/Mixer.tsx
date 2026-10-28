@@ -4,6 +4,7 @@ import {
   ChoiceList,
   RadioRow,
 } from "@domicile-desktop/component-library/ChoiceRow";
+import { EmptyState } from "@domicile-desktop/component-library/EmptyState";
 import { List, ListRow } from "@domicile-desktop/component-library/ListRow";
 import { PanelSection } from "@domicile-desktop/component-library/PanelSection";
 import type { SelectOption } from "@domicile-desktop/component-library/Select";
@@ -21,6 +22,7 @@ import { HeadphonesIcon } from "@phosphor-icons/react/dist/ssr/Headphones";
 import { MicrophoneIcon } from "@phosphor-icons/react/dist/ssr/Microphone";
 import { MonitorIcon } from "@phosphor-icons/react/dist/ssr/Monitor";
 import { SpeakerHighIcon } from "@phosphor-icons/react/dist/ssr/SpeakerHigh";
+import { SpeakerSlashIcon } from "@phosphor-icons/react/dist/ssr/SpeakerSlash";
 import { createContext, useContext, useState } from "react";
 import { css, cx } from "../styled-system/css";
 import { flex, hstack } from "../styled-system/patterns";
@@ -107,6 +109,18 @@ export const Mixer = ({ audio, server }: Props) => {
   return (
     <Panel.Provider value={panel}>
       <div className={mainStyles} ref={setPanel}>
+        {output === undefined && input === undefined && (
+          <EmptyState
+            // With a card, the way to sound may be its profile, turned off.
+            hint={
+              audio.cards.length === 0
+                ? "Plug some in and they'll show up here."
+                : undefined
+            }
+            icon={SpeakerSlashIcon}
+            title="No speakers or microphones"
+          />
+        )}
         {output !== undefined && (
           <PanelSection label="Output">
             <Default

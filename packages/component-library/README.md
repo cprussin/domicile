@@ -26,6 +26,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `CountBadge` | Unread count in an accent pill, pinned to the corner of its positioned parent, or `inline` beside text. Shows "9+" past nine. |
 | `DetailList` | Terms and values in two columns, such as a connection's addresses. Long values wrap in their column. |
 | `Drilldown` | View that slides a second `Panel` in from the side, with a back button. |
+| `EmptyState` | A panel or section with nothing to show: an icon in a soft circle, what is missing, and a hint on what would fill it. |
 | `Field` | Label, control and validation message. |
 | `FilePicker` | Keyboard-first file picker over its positioned parent. |
 | `IconButton` | Round, quiet button that shows only an icon: a back arrow, a details arrow, a mute button. Drawn in `currentcolor`. |
@@ -34,6 +35,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `Kbd` | Keyboard key cap. |
 | `list-walk` | Arrow-key movement of a highlight through a list while focus stays in an input. |
 | `ListRow` | Row of a panel's `List`: icon, label over a detail, and something at the end. One button, or a `filled` tile holding its own buttons. `disclosure` folds what goes under it behind a toggle. |
+| `Loading` | A spinner and what it waits for: centered in a waiting panel, on one line under a list, or alone at a row's end. |
 | `ModalDialog` | Modal dialog with `title`, `footer` and `trigger` props. |
 | `Notice` | Pill that briefly shows a change, such as a zoom level or volume, with an optional level meter. Key it per change. |
 | `ContextMenu` | Menu opened at a point, such as a right click's. Parts: `Item`, `CheckboxItem`, `RadioGroup` and `RadioItem`, `Submenu`, `Separator`. Items take an `icon` and a `mnemonic`, whose letter chooses them. |
@@ -41,7 +43,7 @@ Each export is `@domicile-desktop/component-library/<name>`.
 | `Panel` | Titled panel: a `PanelHeader`, then its content a step apart. `PanelAction` puts the content's controls in the header. |
 | `PanelFooter` | A panel's last line under a rule: a summary and an action. |
 | `PanelHeader` | A panel's title, with a back button when one level in and controls at the end. |
-| `PanelNote` | One line on how a panel stands; `warning` says a refusal plainly, with the service's words in its tooltip. |
+| `PanelNote` | One line on how a panel stands beside its rows; `warning` says a refusal plainly, with the service's words in its tooltip. |
 | `PanelSection` | A group in a panel under a small label, such as Inboxes or Paired. |
 | `source-name` | `sourceName`: how a screen cast's source is named. |
 | `Popover` | Non-modal panel anchored to the control that opened it. `tone="overPhoto"` is a see-through panel for the bar, dark in either theme. |

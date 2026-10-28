@@ -12,28 +12,27 @@ type Props = {
 
 /**
  * The drawer's list of inboxes: each one's name and counts. An inbox read from
- * outside is left out until its first reading.
+ * outside shows a spinner until its first reading; a page has no count until
+ * it has unread conversations, so it shows none.
  */
 export const InboxList = ({ inboxes, onOpen, readings }: Props) => (
   <>
     {inboxes.map((inbox, index) => {
       const reading = readings[index];
-      if (inbox.kind === InboxKind.Watched && reading === undefined) {
-        return undefined;
-      } else {
-        const Icon = inbox.icon;
-        return (
-          <InboxRow
-            icon={<Icon size={15} weight="bold" />}
-            key={index}
-            name={inbox.name}
-            onOpen={() => {
-              onOpen(index);
-            }}
-            {...shownAs(inbox.name, reading)}
-          />
-        );
-      }
+      const Icon = inbox.icon;
+      return (
+        <InboxRow
+          icon={<Icon size={15} weight="bold" />}
+          key={index}
+          name={inbox.name}
+          onOpen={() => {
+            onOpen(index);
+          }}
+          {...(inbox.kind === InboxKind.Watched && reading === undefined
+            ? { checking: true, label: `${inbox.name}: checking`, unread: 0 }
+            : shownAs(inbox.name, reading))}
+        />
+      );
     })}
   </>
 );

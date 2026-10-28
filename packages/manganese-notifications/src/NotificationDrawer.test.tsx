@@ -177,7 +177,9 @@ describe("NotificationDrawer", () => {
   it("says there is nothing, and offers nothing to clear", () => {
     drawer([]);
 
-    expect(screen.getByText("You're all caught up")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "You're all caught up",
+    );
     expect(
       screen.queryByRole("button", { name: "Clear all" }),
     ).not.toBeInTheDocument();

@@ -1,11 +1,12 @@
 import { Button } from "@domicile-desktop/component-library/Button";
+import { EmptyState } from "@domicile-desktop/component-library/EmptyState";
 import { List } from "@domicile-desktop/component-library/ListRow";
 import { PanelFooter } from "@domicile-desktop/component-library/PanelFooter";
 import { PanelHeader } from "@domicile-desktop/component-library/PanelHeader";
-import { PanelNote } from "@domicile-desktop/component-library/PanelNote";
 import { PanelSection } from "@domicile-desktop/component-library/PanelSection";
 import { Popover } from "@domicile-desktop/component-library/Popover";
 import type { Notification } from "@domicile-desktop/sdk/notification";
+import { BellSimpleIcon } from "@phosphor-icons/react/dist/ssr/BellSimple";
 import { BroomIcon } from "@phosphor-icons/react/dist/ssr/Broom";
 import { memo, useCallback } from "react";
 
@@ -225,7 +226,7 @@ const Notifications = ({
   onReply,
 }: NotificationsProps) =>
   items.length === 0 ? (
-    <PanelNote>You're all caught up</PanelNote>
+    <EmptyState icon={BellSimpleIcon} title="You're all caught up" />
   ) : (
     <ul className={listStyles}>
       {items.map((notification) => (

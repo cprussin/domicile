@@ -2,9 +2,11 @@ import type { Option, Result } from "@cprussin/option-result";
 import { Button } from "@domicile-desktop/component-library/Button";
 import type { Detail } from "@domicile-desktop/component-library/DetailList";
 import { DetailList } from "@domicile-desktop/component-library/DetailList";
+import { EmptyState } from "@domicile-desktop/component-library/EmptyState";
 import { IconButton } from "@domicile-desktop/component-library/IconButton";
 import { Input } from "@domicile-desktop/component-library/Input";
 import { List, ListRow } from "@domicile-desktop/component-library/ListRow";
+import { Loading } from "@domicile-desktop/component-library/Loading";
 import { PanelNote } from "@domicile-desktop/component-library/PanelNote";
 import { PanelSection } from "@domicile-desktop/component-library/PanelSection";
 import { Switch } from "@domicile-desktop/component-library/Switch";
@@ -20,6 +22,8 @@ import type {
 } from "@domicile-desktop/system-network/wifi";
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowClockwise";
 import { LockSimpleIcon } from "@phosphor-icons/react/dist/ssr/LockSimple";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr/MagnifyingGlass";
+import { WifiSlashIcon } from "@phosphor-icons/react/dist/ssr/WifiSlash";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { hstack } from "../styled-system/patterns";
@@ -52,7 +56,7 @@ export const WifiPanel = ({ actions, addresses, host, wifi }: Props) => {
   if (wifi === undefined) {
     return (
       <PanelSection label="Wi-Fi">
-        <PanelNote>Reading Wi-Fi…</PanelNote>
+        <Loading>Checking Wi-Fi…</Loading>
       </PanelSection>
     );
   } else {
@@ -99,6 +103,8 @@ const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
     );
   };
   const others = wifi.networks.filter((network) => !network.connected);
+  // Nothing else in range, and not looking for more.
+  const alone = !scanning && others.length === 0;
   return (
     <PanelSection
       action={
@@ -144,51 +150,63 @@ const Controls = ({ actions, addresses, host, wifi }: ControlsProps) => {
             host={host}
             wifi={{ backend, device, interface: name }}
           />
-          <List label="Networks">
-            {wifi.connection !== undefined && (
-              <Connection
-                addresses={addresses}
-                connection={wifi.connection}
-                failed={requests.failed("disconnect")}
-                onDisconnect={() => {
-                  requests.run("disconnect", () =>
-                    actions.disconnectWifi(host, wifi),
-                  );
-                }}
-                pending={requests.pending("disconnect")}
-                wifi={wifi}
-              />
-            )}
-            {others.map((network) => (
-              <NetworkRow
-                asking={asking === network.path}
-                failed={requests.failed(network.path)}
-                key={network.path}
-                network={network}
-                onJoin={(passphrase) => {
-                  join(network, passphrase);
-                }}
-                onPick={() => {
-                  if (needsPassphrase(network)) {
-                    setAsking(network.path);
-                  } else {
-                    join(network, undefined);
-                  }
-                }}
-                pending={requests.pending(network.path)}
-              />
-            ))}
-          </List>
-          {scanning && <PanelNote>Scanning…</PanelNote>}
-          {!scanning && others.length === 0 && (
-            <PanelNote>No other networks in range</PanelNote>
+          {alone && wifi.connection === undefined ? (
+            <EmptyState
+              hint="Move closer to your router, or try again in a moment."
+              icon={MagnifyingGlassIcon}
+              title="No networks found"
+            />
+          ) : (
+            <List label="Networks">
+              {wifi.connection !== undefined && (
+                <Connection
+                  addresses={addresses}
+                  connection={wifi.connection}
+                  failed={requests.failed("disconnect")}
+                  onDisconnect={() => {
+                    requests.run("disconnect", () =>
+                      actions.disconnectWifi(host, wifi),
+                    );
+                  }}
+                  pending={requests.pending("disconnect")}
+                  wifi={wifi}
+                />
+              )}
+              {others.map((network) => (
+                <NetworkRow
+                  asking={asking === network.path}
+                  failed={requests.failed(network.path)}
+                  key={network.path}
+                  network={network}
+                  onJoin={(passphrase) => {
+                    join(network, passphrase);
+                  }}
+                  onPick={() => {
+                    if (needsPassphrase(network)) {
+                      setAsking(network.path);
+                    } else {
+                      join(network, undefined);
+                    }
+                  }}
+                  pending={requests.pending(network.path)}
+                />
+              ))}
+            </List>
+          )}
+          {scanning && <Loading layout="row">Looking for networks…</Loading>}
+          {alone && wifi.connection !== undefined && (
+            <PanelNote>No other networks nearby</PanelNote>
           )}
           <Failure error={requests.failed("scan")}>
             Couldn't look for networks
           </Failure>
         </>
       ) : (
-        <PanelNote>Wi-Fi is off</PanelNote>
+        <EmptyState
+          hint="Turn it on to see networks nearby."
+          icon={WifiSlashIcon}
+          title="Wi-Fi is off"
+        />
       )}
     </PanelSection>
   );

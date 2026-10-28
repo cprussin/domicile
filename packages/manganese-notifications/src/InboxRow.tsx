@@ -1,10 +1,13 @@
 import { CountBadge } from "@domicile-desktop/component-library/CountBadge";
 import { ListRow } from "@domicile-desktop/component-library/ListRow";
+import { Loading } from "@domicile-desktop/component-library/Loading";
 import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
 import type { ReactNode } from "react";
 import { css } from "../styled-system/css";
 
 type Props = {
+  /** Whether its first count is still on its way, shown as a spinner. */
+  checking?: boolean | undefined;
   /** A second line, such as the conversation count. */
   detail?: string | undefined;
   /** A short figure at the row's end while nothing is unread, such as "Sign in". */
@@ -27,6 +30,7 @@ type Props = {
  * opens it.
  */
 export const InboxRow = ({
+  checking = false,
   detail,
   figure,
   icon,
@@ -49,6 +53,7 @@ export const InboxRow = ({
             weight="bold"
           />
         )}
+        {checking && <Loading layout="glyph">Checking</Loading>}
         {unread > 0 ? (
           <CountBadge count={unread} inline />
         ) : (

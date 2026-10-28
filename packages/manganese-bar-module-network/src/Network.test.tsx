@@ -311,7 +311,9 @@ describe("Network", () => {
       );
       wifi.report(Ok(None()));
 
-      expect(screen.getByText("No network devices")).toBeVisible();
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "No Wi-Fi or network port",
+      );
       expect(
         screen.queryByRole("region", { name: "Wired" }),
       ).not.toBeInTheDocument();

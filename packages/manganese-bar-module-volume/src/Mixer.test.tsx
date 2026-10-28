@@ -27,6 +27,32 @@ const change = () =>
 
 describe("Mixer", () => {
   describe("at a glance", () => {
+    it("says what to do with nothing to play or record on", () => {
+      mixer(heldSound(), {
+        ...laptop,
+        cards: [],
+        inputs: [],
+        outputs: [],
+        playback: [],
+        recording: [],
+      });
+
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "No speakers or microphonesPlug some in and they'll show up here.",
+      );
+    });
+
+    it("leaves the sound cards to turn on when they are off", () => {
+      mixer(heldSound(), { ...laptop, inputs: [], outputs: [] });
+
+      expect(screen.getByRole("status")).toHaveTextContent(
+        /^No speakers or microphones$/,
+      );
+      expect(
+        screen.getByRole("button", { name: "Sound cards" }),
+      ).toBeInTheDocument();
+    });
+
     it("has the default output and microphone, each with a meter", () => {
       const sound = heldSound();
       mixer(sound);

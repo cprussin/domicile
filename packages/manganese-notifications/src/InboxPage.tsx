@@ -1,8 +1,12 @@
 /// <reference types="@domicile-desktop/manganese-host/domicile-elements" />
 
+import { Loading } from "@domicile-desktop/component-library/Loading";
 import { PermissionAsk } from "@domicile-desktop/manganese-page-requests/PermissionAsk";
 import { usePermissionRequest } from "@domicile-desktop/manganese-page-requests/usePermissionRequest";
-import { WEBVIEW_FOCUS_REQUEST_EVENT } from "@domicile-desktop/sdk/webview-element";
+import {
+  WEBVIEW_FOCUS_REQUEST_EVENT,
+  WEBVIEW_LOADING_CHANGE_EVENT,
+} from "@domicile-desktop/sdk/webview-element";
 import { useEffect, useState } from "react";
 
 import { css } from "../styled-system/css";
@@ -27,6 +31,8 @@ export const InboxPage = ({ inbox, onShow, onUnread, shown }: Props) => {
   // `null` because React passes it to a callback ref on unmount.
   const [view, setView] = useState<HTMLWebViewElement | null>(null);
   const request = usePermissionRequest(view);
+  // Loading from the start: the page is asked for as the view mounts.
+  const [loading, setLoading] = useState(true);
   const { countUnread, url } = inbox;
 
   useEffect(() => {
@@ -44,6 +50,20 @@ export const InboxPage = ({ inbox, onShow, onUnread, shown }: Props) => {
     () => (view === null ? undefined : countUnread(view, onUnread)),
     [countUnread, onUnread, view],
   );
+
+  useEffect(() => {
+    if (view === null) {
+      return undefined;
+    } else {
+      const changed = () => {
+        setLoading(view.loading);
+      };
+      view.addEventListener(WEBVIEW_LOADING_CHANGE_EVENT, changed);
+      return () => {
+        view.removeEventListener(WEBVIEW_LOADING_CHANGE_EVENT, changed);
+      };
+    }
+  }, [view]);
 
   // A page loaded before the network was up stays offline until reloaded,
   // and the drawer has no reload button.
@@ -71,8 +91,20 @@ export const InboxPage = ({ inbox, onShow, onUnread, shown }: Props) => {
           />
         </div>
       )}
-      {/* No partition: the engine denies notifications to a page in one. */}
-      <webview className={viewStyles} ref={setView} src={url} />
+      <div className={stackStyles}>
+        {/* No partition: the engine denies notifications to a page in one. */}
+        <webview
+          className={viewStyles}
+          data-loading={loading ? "" : undefined}
+          ref={setView}
+          src={url}
+        />
+        {loading && (
+          <div className={coverStyles}>
+            <Loading>{`Opening ${inbox.name}…`}</Loading>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -88,7 +120,19 @@ const pageStyles = flex({
 
 const askStyles = css({ paddingBlockEnd: 2 });
 
+// The view and, in its place while it loads, what it is waiting for. The view
+// stays in the layout, hidden, so it keeps loading.
+const stackStyles = flex({
+  direction: "column",
+  flex: 1,
+  minBlockSize: 0,
+  position: "relative",
+});
+
+const coverStyles = flex({ inset: 0, position: "absolute" });
+
 const viewStyles = css({
+  "&[data-loading]": { opacity: 0 },
   borderStyle: "none",
   display: "block",
   flex: 1,

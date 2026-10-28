@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   WEBVIEW_FOCUS_REQUEST_EVENT,
+  WEBVIEW_LOADING_CHANGE_EVENT,
   WEBVIEW_PERMISSION_REQUEST_EVENT,
 } from "@domicile-desktop/sdk/webview-element";
 import { ChatCircleTextIcon } from "@phosphor-icons/react/dist/ssr/ChatCircleText";
@@ -61,6 +62,18 @@ describe(InboxPage, () => {
     drawn(true);
 
     expect(page()).toBeVisible();
+  });
+
+  it("says it is opening the page until it has loaded", () => {
+    drawn(true);
+    expect(screen.getByRole("status")).toHaveTextContent("Opening Chat…");
+
+    act(() => {
+      Object.assign(page(), { loading: false });
+      page().dispatchEvent(new Event(WEBVIEW_LOADING_CHANGE_EVENT));
+    });
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("asks to be shown when the page asks, as on a press of its notification", () => {
